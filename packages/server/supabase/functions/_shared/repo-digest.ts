@@ -789,19 +789,18 @@ export async function buildRepoDigestFromTree(opts: {
 
 /**
  * Stable cache key input for one digest: the options that change the output
- * plus the resolved seed list (a report's linked files can change between
- * calls, so the report id alone is not a key).
+ * plus the scope (`repo`, `path`, or `report:<id>`). It is computed before the
+ * report's linked files are resolved, so a repeat click skips that work; the
+ * route bounds how long a report digest stays fresh instead.
  */
-export function digestCacheKeyInput(opts: RepoDigestOptions, seeds: readonly string[], scopeKey: string): string {
+export function digestCacheKeyInput(opts: RepoDigestOptions, scopeKey: string): string {
   return JSON.stringify({
-    // The scope changes the text's header even when no seeds resolve.
     k: scopeKey,
     b: clampDigestBudget(opts.budgetTokens ?? DEFAULT_DIGEST_BUDGET_TOKENS),
     i: [...(opts.include ?? [])].map((s) => s.trim()).filter(Boolean).sort(),
     e: [...(opts.exclude ?? [])].map((s) => s.trim()).filter(Boolean).sort(),
     p: opts.pathPrefix ? normalizeRepoPathForDigest(opts.pathPrefix) : '',
-    s: [...seeds].map(normalizeRepoPathForDigest),
-    v: 1,
+    v: 2,
   })
 }
 

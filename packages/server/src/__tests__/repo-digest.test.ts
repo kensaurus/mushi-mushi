@@ -229,15 +229,20 @@ describe('treePathSet', () => {
 })
 
 describe('digestCacheKeyInput', () => {
-  it('ignores glob order and whitespace but not the seeds', () => {
-    const a = digestCacheKeyInput({ include: ['b', ' a'], budgetTokens: 1e9 }, ['x.ts'], 'repo')
-    const b = digestCacheKeyInput({ include: ['a', 'b'], budgetTokens: MAX_DIGEST_BUDGET_TOKENS }, ['./x.ts'], 'repo')
+  it('ignores glob order, whitespace and the clamped budget form', () => {
+    const a = digestCacheKeyInput({ include: ['b', ' a'], budgetTokens: 1e9 }, 'repo')
+    const b = digestCacheKeyInput({ include: ['a', 'b'], budgetTokens: MAX_DIGEST_BUDGET_TOKENS }, 'repo')
     expect(a).toBe(b)
-    expect(digestCacheKeyInput({}, ['y.ts'], 'repo')).not.toBe(digestCacheKeyInput({}, ['x.ts'], 'repo'))
+    expect(digestCacheKeyInput({ budgetTokens: 25_000 }, 'repo')).not.toBe(digestCacheKeyInput({ budgetTokens: 50_000 }, 'repo'))
   })
-  it('keeps a report digest with no linked files apart from the whole-repo digest', () => {
-    // Same options and no seeds, but the text's Scope line differs.
-    expect(digestCacheKeyInput({}, [], 'report:r1')).not.toBe(digestCacheKeyInput({}, [], 'repo'))
+  it('keeps each scope apart: repo, folder, and each report', () => {
+    const keys = new Set([
+      digestCacheKeyInput({}, 'repo'),
+      digestCacheKeyInput({ pathPrefix: 'src' }, 'path'),
+      digestCacheKeyInput({}, 'report:r1'),
+      digestCacheKeyInput({}, 'report:r2'),
+    ])
+    expect(keys.size).toBe(4)
   })
 })
 

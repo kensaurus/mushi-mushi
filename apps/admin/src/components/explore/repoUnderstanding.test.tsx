@@ -166,6 +166,37 @@ describe('ExploreDiagramPublishCard', () => {
     expect(button('Publish').disabled).toBe(true)
   })
 
+  it('offers an update when the live page shows an older diagram', async () => {
+    apiFetch.mockResolvedValue(preview(false))
+    act(() =>
+      root.render(
+        createElement(ExploreDiagramPublishCard, {
+          projectId: 'p1',
+          publication: { published: true, url: 'https://kensaur.us/mushi-mushi/r/acme/shop', commit_sha: 'c'.repeat(40), repo_private: false, published_at: '', outdated: true },
+          onChanged: vi.fn(),
+        }),
+      ),
+    )
+    expect(container.textContent).toContain('shows an older version of this diagram')
+    await act(async () => button('Update public page').click())
+    await flush()
+    expect(apiFetch).toHaveBeenCalledWith('/v1/admin/projects/p1/codebase/diagram/publish-preview', { cache: 'no-store' })
+    expect(container.querySelector('[data-testid="diagram-publish-preview"]')).not.toBeNull()
+  })
+
+  it('offers only unpublish when the live page is current', async () => {
+    act(() =>
+      root.render(
+        createElement(ExploreDiagramPublishCard, {
+          projectId: 'p1',
+          publication: { published: true, url: 'https://kensaur.us/mushi-mushi/r/acme/shop', commit_sha: 'c'.repeat(40), repo_private: false, published_at: '', outdated: false },
+          onChanged: vi.fn(),
+        }),
+      ),
+    )
+    expect([...container.querySelectorAll('button')].map((b) => b.textContent?.trim())).toEqual(['Unpublish'])
+  })
+
   it('offers unpublish once live', async () => {
     apiFetchMutate.mockResolvedValue({ ok: true, data: { published: false } })
     const onChanged = vi.fn()

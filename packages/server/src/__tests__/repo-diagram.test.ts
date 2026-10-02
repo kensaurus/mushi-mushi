@@ -16,6 +16,7 @@ import {
   layoutDiagram,
   publicDiagramPayload,
   publicPayloadHash,
+  publicationOutdated,
   validateDiagram,
   MAX_DIAGRAM_NODES,
   type RawDiagram,
@@ -146,6 +147,34 @@ describe('publicDiagramPayload', () => {
     expect(h1).toMatch(/^[0-9a-f]{64}$/)
     expect(h1).not.toBe(h2)
     expect(await publicPayloadHash(publicDiagramPayload(row))).toBe(h1)
+  })
+})
+
+describe('publicationOutdated', () => {
+  const graph = layoutDiagram(validateDiagram(RAW, TREE).graph)
+  const row = { repo_owner: 'acme', repo_name: 'shop', commit_sha: 'c'.repeat(40), updated_at: '2026-10-02T00:00:00Z', graph }
+
+  async function published() {
+    // Published with GitHub's spelling of the names.
+    const payload = publicDiagramPayload({ ...row, repo_owner: 'Acme', repo_name: 'Shop' })
+    return { payload, payload_hash: await publicPayloadHash(payload) }
+  }
+
+  it('is current when the latest diagram is the one that was published', async () => {
+    expect(await publicationOutdated(await published(), row)).toBe(false)
+  })
+
+  it('is outdated after a Redraw at the same commit (same row id, new graph)', async () => {
+    const redrawn = { ...row, updated_at: '2026-10-02T01:00:00Z', graph: { ...graph, nodes: graph.nodes.slice(1) } }
+    expect(await publicationOutdated(await published(), redrawn)).toBe(true)
+  })
+
+  it('is outdated after a diagram for a newer commit', async () => {
+    expect(await publicationOutdated(await published(), { ...row, commit_sha: 'd'.repeat(40) })).toBe(true)
+  })
+
+  it('is not outdated when there is no diagram to compare', async () => {
+    expect(await publicationOutdated(await published(), null)).toBe(false)
   })
 })
 

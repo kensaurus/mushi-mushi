@@ -88,7 +88,7 @@ export function ExploreDiagramPublishCard({ projectId, publication, onChanged }:
                 {publication.url}
               </a>{' '}
               · commit <span className="font-mono">{publication.commit_sha.slice(0, 7)}</span>
-              {publication.outdated && ' · shows an older diagram. Publish again to update it.'}
+              {publication.outdated && ' · shows an older version of this diagram. Update it to show the latest one.'}
             </p>
           ) : (
             <p className="text-xs text-fg-muted">
@@ -102,7 +102,7 @@ export function ExploreDiagramPublishCard({ projectId, publication, onChanged }:
           <div className="flex flex-wrap gap-2">
             {(!publication.published || publication.outdated) && (
               <Btn size="sm" variant="ghost" onClick={() => void loadPreview()} loading={busy}>
-                {publication.published ? 'Preview the update' : 'Preview public page'}
+                {publication.published ? 'Update public page' : 'Preview public page'}
               </Btn>
             )}
             {publication.published && (
