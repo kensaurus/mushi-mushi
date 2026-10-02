@@ -179,7 +179,11 @@ describe('reconcileStuckFixingReports', () => {
     const scan = findQueries(queries, 'reports', 'select')[0]
     expect(eqValue(scan, 'status')).toBe('fixing')
     expect(scan.filters.find((f) => f.method === 'lt')?.args).toEqual(['updated_at', '2026-10-02T08:30:00.000Z'])
-    expect(scan.filters.find((f) => f.method === 'order')?.args).toEqual(['updated_at', { ascending: true }])
+    expect(scan.filters.filter((f) => f.method === 'order').map((f) => f.args)).toEqual([
+      ['updated_at', { ascending: true }],
+      ['id', { ascending: true }],
+    ])
+    expect(scan.filters.find((f) => f.method === 'range')?.args).toEqual([0, 49])
   })
 
   it('reverts a closed-PR report to its pre-fix status, guarded on fixing, and tells plugins', async () => {
@@ -235,6 +239,42 @@ describe('reconcileStuckFixingReports', () => {
     expect(eqValue(update, 'status')).toBe('fixing')
   })
 
+  it('reaches a stuck report behind more than a page of reports waiting on open PRs', async () => {
+    const reports = Array.from({ length: 60 }, (_, i) => ({
+      ...REPORT,
+      id: `open-${String(i).padStart(2, '0')}`,
+      updated_at: HOURS_AGO(30 - i * 0.01),
+    }))
+    reports.push({ ...REPORT, id: 'stuck', updated_at: HOURS_AGO(1) })
+    const live = new Set(reports.map((r) => r.id))
+    const { db, queries } = createFakeDb((q) => {
+      if (q.table === 'reports' && q.op === 'select') {
+        const [from, to] = q.filters.find((f) => f.method === 'range')!.args as [number, number]
+        return { data: reports.filter((r) => live.has(r.id)).slice(from, to + 1) }
+      }
+      if (q.table === 'fix_attempts' && q.op === 'select') {
+        const ids = q.filters.find((f) => f.method === 'in')!.args[1] as string[]
+        return {
+          data: ids.map((id) => ({ ...ROW, id: `fa-${id}`, report_id: id, pr_state: id === 'stuck' ? 'closed' : 'open' })),
+        }
+      }
+      if (q.table === 'reports' && q.op === 'update') {
+        const id = eqValue(q, 'id') as string
+        live.delete(id)
+        return { data: { id } }
+      }
+      return { data: null }
+    })
+    const summary = await reconcileStuckFixingReports(db, NOW)
+    expect(summary).toEqual({ scanned: 61, finalized: 0, reverted: 1, flagged: 0 })
+    expect(live.has('stuck')).toBe(false)
+    const pages = findQueries(queries, 'reports', 'select').map((q) => q.filters.find((f) => f.method === 'range')!.args)
+    expect(pages).toEqual([
+      [0, 49],
+      [50, 99],
+    ])
+  })
+
   it('ignores attempts from another project that share the report id', async () => {
     const foreign = { ...ROW, project_id: 'proj-other', pr_state: 'open' }
     const { db } = scripted({ attempts: [foreign] })
@@ -272,9 +312,19 @@ describe('fix_attempts_stuck_reaper migration', () => {
     'utf8',
   )
 
-  it('fails in-edge jobs stuck running, leaving cloud-agent jobs to agent-status-poll', () => {
+  it('fails in-edge jobs stuck running, leaving every long-lived handoff alone', () => {
     expect(sql).toMatch(/WHERE\s+j\.status = 'running'\s+AND\s+COALESCE\(j\.started_at, j\.created_at\) < now\(\) - interval '30 minutes'/)
-    expect(sql).toMatch(/fa\.id IS NULL OR COALESCE\(fa\.agent, ''\) NOT IN \('cursor_cloud', 'github_cloud_agent'\)/)
+    const dead = sql.slice(sql.indexOf('WITH dead AS'), sql.indexOf('FOR UPDATE OF j SKIP LOCKED'))
+    expect(dead).toMatch(/fa\.id IS NULL/)
+    // Cloud kinds: the list must cover every CloudAgentKind in agent-adapters.ts.
+    const adapters = readFileSync(resolve(__dirname, '../../supabase/functions/_shared/agent-adapters.ts'), 'utf8')
+    const kinds = adapters.match(/export type CloudAgentKind = ([^\n]+)/)![1].match(/'([a-z_]+)'/g)!.map((k) => k.slice(1, -1))
+    expect(kinds.length).toBeGreaterThan(0)
+    for (const kind of kinds) expect(dead).toContain(`'${kind}'`)
+    // Any attempt that handed work to something outliving the worker.
+    for (const col of ['cursor_agent_id', 'github_task_id', 'claude_dispatch_event_id', 'claude_workflow_run_id', 'external_agent_ref']) {
+      expect(dead).toContain(`fa.${col} IS NULL`)
+    }
   })
 
   it('fails jobs the sweeper re-sent for an hour', () => {

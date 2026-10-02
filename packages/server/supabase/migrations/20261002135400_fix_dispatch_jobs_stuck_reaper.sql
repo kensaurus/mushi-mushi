@@ -15,9 +15,12 @@
 --
 -- The edge runtime stops a worker after minutes, so this reaper now:
 --   1. fails dispatch jobs 'running' > 30 min that belong to an in-edge
---      attempt (or have no attempt at all: the worker died before creating
---      one). Cloud-agent jobs (cursor_cloud, github_cloud_agent) are left to
---      agent-status-poll, which expires them after 24 h;
+--      attempt (claude_code and its aliases rest_worker / rest_fix_worker /
+--      llm), or have no attempt at all (the worker died before creating
+--      one). Cloud-agent jobs (cursor_cloud, github_cloud_agent,
+--      anthropic_managed) and any attempt with an external run reference are
+--      left to agent-status-poll (24 h expiry) and the vendor callbacks.
+--      codex / mcp never hold a job: the worker stamps them skipped at once;
 --   2. fails dispatch jobs still 'queued' after 60 min (the sweeper re-sent
 --      them ~60 times; nothing is going to pick them up);
 --   3. then reaps attempts exactly as before, which now sees those jobs as
@@ -27,7 +30,10 @@
 --   SELECT id, status, started_at FROM public.fix_dispatch_jobs j
 --   WHERE j.status = 'running' AND COALESCE(j.started_at, j.created_at) < now() - interval '40 minutes'
 --     AND NOT EXISTS (SELECT 1 FROM public.fix_attempts fa WHERE fa.id = j.fix_attempt_id
---                     AND fa.agent IN ('cursor_cloud', 'github_cloud_agent'));
+--                     AND (fa.agent IN ('cursor_cloud', 'github_cloud_agent', 'anthropic_managed')
+--                          OR fa.cursor_agent_id IS NOT NULL OR fa.github_task_id IS NOT NULL
+--                          OR fa.claude_dispatch_event_id IS NOT NULL OR fa.claude_workflow_run_id IS NOT NULL
+--                          OR fa.external_agent_ref IS NOT NULL));
 --   SELECT id FROM public.fix_dispatch_jobs WHERE status = 'queued' AND created_at < now() - interval '70 minutes';
 -- And the function body carries the new step:
 --   SELECT pg_get_functiondef('public.fix_attempts_stuck_reaper()'::regprocedure) LIKE '%worker stopped%';
@@ -45,14 +51,26 @@ DECLARE
   v_count   integer := 0;
 BEGIN
   -- 1. In-edge jobs whose worker stopped. A job with no attempt never reached
-  --    a cloud agent, so it is in-edge by definition.
+  --    a cloud agent, so it is in-edge by definition. Anything handed to work
+  --    that outlives the worker is left alone: a cloud agent kind, or an
+  --    attempt carrying an external run reference (Cursor agent, GitHub
+  --    task, Claude Actions run, generic external ref) — agent-status-poll
+  --    and the vendors' callbacks own those.
   WITH dead AS (
     SELECT j.id
     FROM   public.fix_dispatch_jobs j
     LEFT   JOIN public.fix_attempts fa ON fa.id = j.fix_attempt_id
     WHERE  j.status = 'running'
       AND  COALESCE(j.started_at, j.created_at) < now() - interval '30 minutes'
-      AND  (fa.id IS NULL OR COALESCE(fa.agent, '') NOT IN ('cursor_cloud', 'github_cloud_agent'))
+      AND  (
+             fa.id IS NULL
+          OR (    COALESCE(fa.agent, '') NOT IN ('cursor_cloud', 'github_cloud_agent', 'anthropic_managed')
+              AND fa.cursor_agent_id IS NULL
+              AND fa.github_task_id IS NULL
+              AND fa.claude_dispatch_event_id IS NULL
+              AND fa.claude_workflow_run_id IS NULL
+              AND fa.external_agent_ref IS NULL)
+           )
     FOR UPDATE OF j SKIP LOCKED
   )
   UPDATE public.fix_dispatch_jobs j
