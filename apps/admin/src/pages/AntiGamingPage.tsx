@@ -31,7 +31,7 @@ import {
   Tooltip,
 } from '../components/ui'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
-import { KpiTile, type KpiDelta } from '../components/charts'
+import { KpiTile } from '../components/charts'
 import { SetupNudge } from '../components/SetupNudge'
 import { ConfigHelp } from '../components/ConfigHelp'
 import { PromptDialog } from '../components/ConfirmDialog'
@@ -327,14 +327,18 @@ export function AntiGamingPage() {
   const eventGroups = useMemo(() => groupEvents(events), [events])
   const collapsedCount = events.length - eventGroups.length
 
-  const stats = useMemo(() => {
-    const flagged = allDevices.filter((d) => d.flagged_as_suspicious).length
-    const crossAccount = allDevices.filter((d) => d.cross_account_flagged).length
-    const totalReports = allDevices.reduce((sum, d) => sum + d.report_count, 0)
-    return { total: allDevices.length, flagged, crossAccount, totalReports }
-  }, [allDevices])
+  // Counts come from the same project-scoped stats as the status banner. The
+  // device list spans every owned project and, under the default "flagged"
+  // filter, holds only flagged devices, so counting it showed "16 flagged"
+  // under a banner saying "4 flagged" and made Tracked equal Flagged. Its
+  // per-period deltas came from that population too, so they are gone.
+  const stats = {
+    total: shellStats.trackedDevices,
+    flagged: shellStats.flaggedDevices,
+    crossAccount: shellStats.crossAccountDevices,
+    totalReports: shellStats.totalReports,
+  }
 
-  const deltas = useMemo(() => buildDeltas(allDevices, events), [allDevices, events])
 
   async function unflag(deviceId: string) {
     setBusy(deviceId)
@@ -450,21 +454,18 @@ export function AntiGamingPage() {
         <KpiTile
           label="Tracked devices"
           value={stats.total}
-          delta={deltas.tracked}
           meaning="Distinct device fingerprints the SDK has seen submitting reports. A growing number means broader reach; a flat one means the SDK isn't installed widely."
         />
         <KpiTile
           label="Flagged"
           value={stats.flagged}
           accent={stats.flagged > 0 ? 'danger' : undefined}
-          delta={deltas.flagged}
           meaning="Devices our heuristics or you have marked as abusive. Their reports still ingest but won't dispatch fixes automatically."
         />
         <KpiTile
           label="Cross-account"
           value={stats.crossAccount}
           accent={stats.crossAccount > 0 ? 'warn' : undefined}
-          delta={deltas.crossAccount}
           meaning="Devices that have submitted reports under more than one reporter token in the same window. A common abuse signal — but also fires for shared NAT."
         />
         <KpiTile
@@ -877,63 +878,6 @@ function DeviceCard({ device: d, isExpanded, isBusy, onToggleExpand, onFlag, onU
       )}
     </Card>
   )
-}
-
-interface AntiGamingDeltas {
-  tracked: KpiDelta | null
-  flagged: KpiDelta | null
-  crossAccount: KpiDelta | null
-}
-
-const DAY_MS = 24 * 60 * 60 * 1000
-
-function buildDeltas(devices: ReporterDevice[], events: AntiGamingEvent[]): AntiGamingDeltas {
-  return {
-    tracked: deltaFromTimestamps(devices.map((d) => d.created_at)),
-    flagged: deltaFromTimestamps(
-      events
-        .filter((e) => e.event_type === 'multi_account' || e.event_type === 'manual_flag')
-        .map((e) => e.created_at),
-      { invertTone: true },
-    ),
-    crossAccount: deltaFromTimestamps(
-      events.filter((e) => e.event_type === 'multi_account').map((e) => e.created_at),
-      { invertTone: true },
-    ),
-  }
-}
-
-function deltaFromTimestamps(
-  timestamps: string[],
-  opts: { invertTone?: boolean } = {},
-): KpiDelta | null {
-  if (timestamps.length === 0) return null
-  const now = Date.now()
-  const todayCutoff = now - DAY_MS
-  const sevenDayCutoff = now - 7 * DAY_MS
-  let today = 0
-  let priorWindow = 0
-  for (const ts of timestamps) {
-    const t = new Date(ts).getTime()
-    if (Number.isNaN(t)) continue
-    if (t >= todayCutoff) today += 1
-    else if (t >= sevenDayCutoff) priorWindow += 1
-  }
-  if (today === 0 && priorWindow === 0) return null
-  const sevenDayAvg = priorWindow / 6
-  const diff = today - sevenDayAvg
-  const direction: KpiDelta['direction'] = diff > 0.5 ? 'up' : diff < -0.5 ? 'down' : 'flat'
-  // For abuse counters, "up" is bad, "down" is good. Plain counters keep the
-  // natural read.
-  const tone: KpiDelta['tone'] = opts.invertTone
-    ? direction === 'up' ? 'danger' : direction === 'down' ? 'ok' : 'muted'
-    : direction === 'up' ? 'ok' : direction === 'down' ? 'warn' : 'muted'
-  const formattedDiff = Math.abs(diff) >= 1 ? Math.round(Math.abs(diff)).toString() : Math.abs(diff).toFixed(1)
-  return {
-    value: direction === 'flat' ? 'flat vs 7d avg' : `${formattedDiff} vs 7d avg`,
-    direction,
-    tone,
-  }
 }
 
 // ─── Withheld tester redemption row ──────────────────────────────────────────
