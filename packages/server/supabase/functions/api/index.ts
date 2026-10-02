@@ -71,6 +71,7 @@ import { registerSlackEventsRoutes } from './routes/slack-events.ts';
 import { registerTelegramAdminRoutes } from './routes/telegram-admin.ts';
 import { registerIntakeVoiceRoutes } from './routes/intake-voice.ts';
 import { registerPushRoutes } from './routes/push.ts';
+import { registerSentryImportRoutes } from './routes/sentry-import.ts';
 
 ensureSentry('api');
 
@@ -626,6 +627,7 @@ registerSlackEventsRoutes(app);
 registerTelegramAdminRoutes(app);
 registerIntakeVoiceRoutes(app);
 registerPushRoutes(app);
+registerSentryImportRoutes(app);
 
 registerA2ATaskRoutes(app);
 
