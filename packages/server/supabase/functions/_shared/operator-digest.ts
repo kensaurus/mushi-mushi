@@ -107,12 +107,20 @@ export function composeDigest(data: DigestData, consoleUrl: string): ComposedDig
   }
 }
 
-/** Read what the digest needs for every project of the organization. */
+function failOnReadError(what: string, res: { error?: { message?: string } | null }): void {
+  if (res.error) throw new Error(`digest: could not read ${what}: ${res.error.message ?? 'unknown error'}`)
+}
+
+/** Read what the digest needs for every project of the organization. Throws when a read fails. */
 export async function collectDigest(db: Db, organizationId: string, now: Date): Promise<DigestData> {
-  const [{ data: org }, { data: projects }] = await Promise.all([
+  const [orgRes, projectsRes] = await Promise.all([
     db.from('organizations').select('name').eq('id', organizationId).maybeSingle(),
     db.from('projects').select('id, name, slug').eq('organization_id', organizationId).limit(100),
   ])
+  failOnReadError('organization', orgRes)
+  failOnReadError('projects', projectsRes)
+  const org = orgRes.data
+  const projects = projectsRes.data
   const rows = (projects ?? []) as Array<{ id: string; name: string | null; slug: string | null }>
   const ids = rows.map((p) => p.id)
   const day = new Date(now.getTime() - 86400_000).toISOString()
@@ -127,16 +135,20 @@ export async function collectDigest(db: Db, organizationId: string, now: Date): 
       db.from('llm_invocations').select('project_id, cost_usd, created_at').in('project_id', ids).gte('created_at', week).limit(50000),
     ])
     : [empty, empty, empty, empty, empty]
+  // A failed read must not turn into "nothing new": the callers catch this and send nothing.
+  for (const [name, res] of [['reports', reports], ['open reports', openReports], ['hole-check runs', runs], ['releases', releases], ['spend', spend]] as const) failOnReadError(name, res)
 
-  const latestRun = new Map<string, { id: string; project_id: string; failed: boolean }>()
+  const latestRun = new Map<string, { id: string; project_id: string; failed: boolean; skipped: boolean }>()
   for (const r of ((runs as { data: unknown }).data ?? []) as Array<{ id: string; project_id: string; gate: string; status: string; summary: { errored?: number } | null }>) {
     const key = `${r.project_id}:${r.gate}`
-    if (!latestRun.has(key)) latestRun.set(key, { id: r.id, project_id: r.project_id, failed: r.status === 'error' || Number(r.summary?.errored ?? 0) > 0 })
+    if (!latestRun.has(key)) latestRun.set(key, { id: r.id, project_id: r.project_id, failed: r.status === 'error' || Number(r.summary?.errored ?? 0) > 0, skipped: r.status === 'skipped' })
   }
   const runIds = [...latestRun.values()].map((r) => r.id)
-  const { data: findings } = runIds.length
+  const findingsRes = runIds.length
     ? await db.from('gate_findings').select('project_id, severity').in('gate_run_id', runIds).eq('allowlisted', false).limit(5000)
-    : { data: [] }
+    : { data: [], error: null }
+  failOnReadError('hole-check findings', findingsRes)
+  const findings = findingsRes.data
 
   const count = (list: unknown, id: string) => ((list as { data: unknown }).data as Array<{ project_id: string }> ?? []).filter((r) => r.project_id === id).length
   return {
@@ -157,7 +169,8 @@ export async function collectDigest(db: Db, organizationId: string, now: Date): 
         radar: {
           error: f.filter((x) => x.severity === 'error').length,
           warn: f.filter((x) => x.severity === 'warn').length,
-          checked: [...latestRun.values()].some((r) => r.project_id === p.id && !r.failed),
+          // A skipped run (every check undecided) did not check anything.
+          checked: [...latestRun.values()].some((r) => r.project_id === p.id && !r.failed && !r.skipped),
           failed: [...latestRun.values()].some((r) => r.project_id === p.id && r.failed),
         },
         draftReleases: rel.filter((r) => r.status === 'draft').length,

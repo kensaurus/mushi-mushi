@@ -187,7 +187,15 @@ function errMessage(err: unknown): string {
 /** Repo facts for the store-policy rules, read at the default-branch head. */
 async function repoPolicyResults(db: Db, projectId: string, deps: RadarRunDeps, now: Date): Promise<{ results: DetectorResult[]; commitSha: string | null }> {
   const unknown = (reason: string): DetectorResult[] => POLICY_RULES.map((ruleId) => ({ ruleId, state: 'unknown' as const, reason, findings: [] }))
-  const repo = await deps.resolveRepo(db, projectId).catch((err): RecipeRepoResolution => ({ ok: false, repoConnected: true, tokenAvailable: true, reason: errMessage(err) }))
+  // A read that threw is a failed check (`error`), never "could not decide".
+  const failed = (reason: string): DetectorResult[] => POLICY_RULES.map((ruleId) => ({ ruleId, state: 'error' as const, reason, findings: [] }))
+  let repo: RecipeRepoResolution
+  try {
+    repo = await deps.resolveRepo(db, projectId)
+  } catch (err) {
+    return { results: failed(`Could not read the repo: ${errMessage(err)}`), commitSha: null }
+  }
+  // No repo or no token connected: nothing to read, so the rules stay undecided.
   if (!repo.ok) return { results: unknown(`Could not read the repo: ${repo.reason}`), commitSha: null }
   try {
     const head = await deps.getDefaultHead(repo.repo)
@@ -203,7 +211,7 @@ async function repoPolicyResults(db: Db, projectId: string, deps: RadarRunDeps, 
     }
     return { results: evaluateStorePolicy(extractRepoFacts(files), now), commitSha: head.sha }
   } catch (err) {
-    return { results: unknown(`Could not read the repo: ${errMessage(err)}`), commitSha: null }
+    return { results: failed(`Could not read the repo: ${errMessage(err)}`), commitSha: null }
   }
 }
 
@@ -310,6 +318,8 @@ export interface CiRadarPush {
   commitSha: string | null
   /** Rules the CI step actually ran; a rule it ran with no finding is `ok`. */
   scanned: RadarRuleId[]
+  /** Rules the CI step ran over only part of the repo (a file limit): never `ok`. */
+  partial?: RadarRuleId[]
   findings: RadarFinding[]
   /** Build-config files (paths matching isRepoScanPath) for the store-policy rules. */
   files: Record<string, string>
@@ -321,10 +331,13 @@ export async function recordCiRadar(db: Db, projectId: string, push: CiRadarPush
   for (const ruleId of CI_ONLY_RULES) {
     if (!push.scanned.includes(ruleId)) continue
     const findings = push.findings.filter((f) => f.ruleId === ruleId)
+    const partial = push.partial?.includes(ruleId) ?? false
     results.push({
       ruleId,
-      state: findings.length ? 'finding' : 'ok',
-      reason: findings.length ? `Your CI found ${findings.length} place${findings.length === 1 ? '' : 's'} to fix.` : 'Your CI scanned the repo and found nothing.',
+      state: findings.length ? 'finding' : partial ? 'unknown' : 'ok',
+      reason: findings.length
+        ? `Your CI found ${findings.length} place${findings.length === 1 ? '' : 's'} to fix${partial ? ' in the part of the repo it scanned' : ''}.`
+        : partial ? 'Your CI scanned only part of the repo (it hit the file limit), so this is not a pass.' : 'Your CI scanned the repo and found nothing.',
       findings,
     })
   }

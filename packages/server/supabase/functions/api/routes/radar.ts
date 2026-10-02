@@ -67,6 +67,8 @@ async function projectAccess(c: Context, db: Db): Promise<{ ok: true; projectId:
 const ciPushSchema = z.object({
   commitSha: z.string().regex(/^[0-9a-f]{7,64}$/i).optional(),
   scanned: z.array(z.enum(RADAR_RULE_IDS)).max(20).default([]),
+  /** Scanned rules that covered only part of the repo (the CLI's file limit). */
+  partial: z.array(z.enum(RADAR_RULE_IDS)).max(20).default([]),
   findings: z.array(z.object({
     ruleId: z.enum(RADAR_RULE_IDS),
     filePath: z.string().min(1).max(400),
@@ -196,7 +198,7 @@ export function registerRadarRoutes(app: Hono<{ Variables: Variables }>, deps: R
       return jsonError(c, 'NOTHING_TO_RECORD', 'Send `scanned` rules or build-config `files`.', 400)
     }
     try {
-      const run = await recordCiRadar(db, projectId, { commitSha: body.commitSha ?? null, scanned, findings, files }, deps.run.now())
+      const run = await recordCiRadar(db, projectId, { commitSha: body.commitSha ?? null, scanned, partial: body.partial.filter((r) => scanned.includes(r)), findings, files }, deps.run.now())
       return c.json({ ok: true, data: { runId: run.runId, gate: RADAR_CI_GATE, status: run.status, results: run.results } })
     } catch (err) {
       rlog.error('radar ingest failed', { projectId, err: (err as Error)?.message })

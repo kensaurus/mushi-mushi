@@ -80,6 +80,8 @@ export function toIngestBody(scan: LocalRadarScan, commitSha: string | null): Re
   return {
     ...(commitSha && /^[0-9a-f]{7,64}$/i.test(commitSha) ? { commitSha } : {}),
     scanned: ['storage_sql_delete'],
+    // Over the file limit the scan covered only part of the repo: Mushi must not record a pass.
+    ...(scan.truncated ? { partial: ['storage_sql_delete'] } : {}),
     findings: scan.findings.slice(0, 200).map((f) => ({ ruleId: f.ruleId, filePath: f.filePath, line: f.line })),
     files: scan.configFiles,
   }

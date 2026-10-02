@@ -39,5 +39,11 @@ describe('scanLocalRepo', () => {
     const body = toIngestBody(scanLocalRepo(root), 'abcdef1234')
     expect(body).toEqual({ commitSha: 'abcdef1234', scanned: ['storage_sql_delete'], findings: [{ ruleId: 'storage_sql_delete', filePath: 'x.sql', line: 1 }], files: {} })
     expect(toIngestBody(scanLocalRepo(root), 'not-a-sha')).not.toHaveProperty('commitSha')
+    expect(body).not.toHaveProperty('partial')
+  })
+
+  it('marks the rule partial when the scan hit the file limit, so Mushi never records a pass', () => {
+    const body = toIngestBody({ scannedFiles: 20_000, truncated: true, findings: [], configFiles: {} }, null)
+    expect(body).toMatchObject({ scanned: ['storage_sql_delete'], partial: ['storage_sql_delete'] })
   })
 })

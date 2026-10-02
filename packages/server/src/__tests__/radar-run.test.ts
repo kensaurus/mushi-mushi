@@ -316,6 +316,15 @@ describe('radar routes', () => {
     expect(f.message).toContain('supabase/migrations/1.sql:9')
     expect(String(f.message)).not.toContain('IGNORE')
   })
+
+  it('CI ingest: a scan that hit the file limit is never recorded as a pass', async () => {
+    const db = seed()
+    const { app } = harness(db)
+    const r = await app.call('POST', '/v1/ingest/radar', { body: { scanned: ['storage_sql_delete'], partial: ['storage_sql_delete'] }, vars: { projectId: P_A } })
+    expect(r.status).toBe(200)
+    expect(r.body.data.status).not.toBe('pass')
+    expect(r.body.data.results.find((x: { ruleId: string }) => x.ruleId === 'storage_sql_delete')).toMatchObject({ state: 'unknown' })
+  })
 })
 
 describe('a check that failed to run is never a pass', () => {
@@ -343,5 +352,27 @@ describe('a check that failed to run is never a pass', () => {
     const col = portfolio.radarColumn([stored as never], [])
     expect(col.status).toBe('error')
     expect(col.errored).toBe(summary.errored)
+  })
+})
+
+describe('a repo read that threw is a failed check', () => {
+  it('listTree throwing makes the store-policy rules error and the run error', async () => {
+    const db = seed()
+    const repo = { ref: { owner: 'k', repo: 'glot' }, token: 't', repoUrl: '', defaultBranchHint: 'main' }
+    const summary = await run.runRadar(db as never, P_A, deps({
+      resolveRepo: vi.fn(async () => ({ ok: true as const, repo })) as never,
+      getDefaultHead: vi.fn(async () => ({ branch: 'main', sha: 'abc1234' })) as never,
+      listTree: vi.fn(async () => { throw new Error('GitHub answered 502') }) as never,
+    }) as never)
+    expect(summary.status).toBe('error')
+    expect(summary.errored).toBeGreaterThan(0)
+    expect(summary.results.filter((r) => r.state === 'error').every((r) => /502/.test(r.reason))).toBe(true)
+  })
+
+  it('a resolveRepo that throws is error too; no repo connected stays undecided', async () => {
+    const thrown = await run.runRadar(seed() as never, P_A, deps({ resolveRepo: vi.fn(async () => { throw new Error('vault down') }) as never }) as never)
+    expect(thrown.errored).toBeGreaterThan(0)
+    const none = await run.runRadar(seed() as never, P_A, deps() as never)
+    expect(none.errored).toBe(0)
   })
 })
