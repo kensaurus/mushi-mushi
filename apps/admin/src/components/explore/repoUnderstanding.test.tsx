@@ -197,6 +197,42 @@ describe('ExploreDiagramPublishCard', () => {
     expect(container.querySelector('[data-testid="diagram-publish-preview"]')).not.toBeNull()
   })
 
+  it('shows the README badge and the Markdown copy once live', async () => {
+    const badge = '[![Architecture diagram](https://img.shields.io/badge/architecture-diagram-c2410c)](https://kensaur.us/mushi-mushi/r/acme/shop)'
+    act(() =>
+      root.render(
+        createElement(ExploreDiagramPublishCard, {
+          projectId: 'p1',
+          publication: {
+            published: true,
+            url: 'https://kensaur.us/mushi-mushi/r/acme/shop',
+            markdown_url: 'https://kensaur.us/mushi-mushi/r/acme/shop.md',
+            badge_markdown: badge,
+            commit_sha: 'c'.repeat(40),
+            repo_private: false,
+            published_at: '',
+            outdated: false,
+          },
+          onChanged: vi.fn(),
+        }),
+      ),
+    )
+    const block = container.querySelector('[data-testid="diagram-publish-badge"]')!
+    expect(block.textContent).toContain(badge)
+    expect(block.querySelector('a')?.getAttribute('href')).toBe('https://kensaur.us/mushi-mushi/r/acme/shop.md')
+  })
+
+  it('warns when the search-friendly page could not be saved', async () => {
+    apiFetch.mockResolvedValue(preview(false))
+    apiFetchMutate.mockResolvedValue({ ok: true, data: { url: 'https://kensaur.us/mushi-mushi/r/acme/shop', static_page: 'failed' } })
+    act(() => root.render(createElement(ExploreDiagramPublishCard, { projectId: 'p1', publication: { published: false }, onChanged: vi.fn() })))
+    await act(async () => button('Preview public page').click())
+    await flush()
+    await act(async () => button('Publish').click())
+    await flush()
+    expect(toast.warn).toHaveBeenCalledWith('Public page is live, but not yet for search engines', 'The search-friendly version could not be saved. Publish again to retry.')
+  })
+
   it('offers only unpublish when the live page is current', async () => {
     act(() =>
       root.render(

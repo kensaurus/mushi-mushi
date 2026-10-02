@@ -25,6 +25,9 @@
   credentials that will be quarantined until they pass a provider probe.
 - [Reporter data processing](./reporter-data-processing.md) — the DPA / 委託
   template for host apps whose end users file reports through the widget.
+- [Public architecture-diagram pages](./public-diagram-pages.md) — the
+  crawlable `/r/<owner>/<repo>` pages: S3 page store setup, who can publish,
+  takedowns, and why diagrams are not redrawn on push.
 
 ## BYOK validation migration gate
 

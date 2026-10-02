@@ -9,8 +9,8 @@
 import { useState } from 'react'
 import { apiFetch, apiFetchMutate } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
-import type { DiagramPublication, DiagramPublishPreview } from '../../lib/repoUnderstanding'
-import { Btn, Card, Checkbox } from '../ui'
+import { publishToast, type DiagramPublication, type DiagramPublishPreview, type StaticPageStatus } from '../../lib/repoUnderstanding'
+import { Btn, Card, Checkbox, CopyButton } from '../ui'
 
 interface Props {
   projectId: string
@@ -41,7 +41,7 @@ export function ExploreDiagramPublishCard({ projectId, publication, onChanged }:
   const publish = async () => {
     if (!preview) return
     setBusy(true)
-    const res = await apiFetchMutate<{ url: string }>(`${base}/publish`, {
+    const res = await apiFetchMutate<{ url: string; static_page?: StaticPageStatus }>(`${base}/publish`, {
       method: 'POST',
       body: JSON.stringify({
         diagram_id: preview.diagram_id,
@@ -59,7 +59,9 @@ export function ExploreDiagramPublishCard({ projectId, publication, onChanged }:
       toast.error('Could not publish', res.error?.message)
       return
     }
-    toast.success('Public page is live', res.data?.url)
+    const t = publishToast(res.data?.static_page)
+    if (t.tone === 'warn') toast.warn(t.title, t.description)
+    else toast.success(t.title, t.description)
     setPreview(null)
     onChanged()
   }
@@ -97,6 +99,26 @@ export function ExploreDiagramPublishCard({ projectId, publication, onChanged }:
             </p>
           )}
         </div>
+
+        {publication.published && publication.badge_markdown && (
+          <div className="space-y-1" data-testid="diagram-publish-badge">
+            <div className="flex items-center gap-1.5 text-xs text-fg-secondary">
+              Add a badge to your README
+              <CopyButton value={publication.badge_markdown} label="Copy badge Markdown" />
+            </div>
+            <code className="block overflow-x-auto rounded-sm border border-edge-subtle bg-surface-overlay/40 px-2 py-1 font-mono text-2xs text-fg-muted">
+              {publication.badge_markdown}
+            </code>
+            {publication.markdown_url && (
+              <p className="text-xs text-fg-muted">
+                Markdown copy for AI agents:{' '}
+                <a className="text-brand underline" href={publication.markdown_url} target="_blank" rel="noreferrer">
+                  {publication.markdown_url}
+                </a>
+              </p>
+            )}
+          </div>
+        )}
 
         {!preview && (
           <div className="flex flex-wrap gap-2">
