@@ -2320,7 +2320,7 @@
     },
     "import_sentry_issues": {
       "title": "Import Sentry issues",
-      "description": "Pull existing Sentry issues into Mushi's report queue: by issueIds (numeric ids or short ids like WEB-12, at most 10) or by a Sentry search query (default is:unresolved) within the project's configured Sentry project, limit 1-10. Each issue goes through the same path as a Sentry webhook delivery: deduped per issue, linked, classified. An issue already linked to a report answers linked and is never reopened. Returns { items: [{ input, issueId, shortId, outcome, reportId, error? }], created, linked, failed, indexing }. Write; idempotent; spends classification budget per new report. Needs the Sentry org slug, project slug and an auth token (event:read, project:read) in Integrations → Sentry. Use for issues that existed before the webhook was wired; then call triage_issue on a created report.",
+      "description": "Pull existing Sentry issues into Mushi's report queue: by issueIds (numeric ids or short ids like WEB-12, at most 10) or by a Sentry search query (default is:unresolved) within the project's configured Sentry project, limit 1-10. For a backlog, add sinceDays (1-90) and call again with cursor set to the returned nextCursor until it is null; sentryProject picks another of the project's Sentry projects. Each issue goes through the same path as a Sentry webhook delivery: deduped per issue, linked, classified. An issue already linked to a report answers linked and is never reopened. Returns { items: [{ input, issueId, shortId, outcome, reportId, error? }], created, linked, failed, indexing, sentryProject, sentryProjects, nextCursor }. Write; idempotent; spends classification budget per new report. Needs the Sentry org slug, project slug and an auth token (event:read, project:read) in Integrations → Sentry. Use for issues that existed before the webhook was wired; then call triage_issue on a created report.",
       "scope": "mcp:write",
       "annotations": {
         "title": "Import Sentry issues",
@@ -2351,6 +2351,22 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 10
+          },
+          "sinceDays": {
+            "description": "Only issues seen in the last N days (1-90). Search mode only.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 90
+          },
+          "cursor": {
+            "description": "nextCursor from the previous import, to fetch the next page of a backlog. Search mode only.",
+            "type": "string",
+            "pattern": "^[0-9][0-9.:-]{0,63}$"
+          },
+          "sentryProject": {
+            "description": "Which of the project's Sentry projects to search (default: the primary one). Search mode only.",
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,49}$"
           },
           "projectId": {
             "description": "Project UUID. Defaults to configured project. (`project_id` is accepted too.)",
@@ -2466,6 +2482,35 @@
             ],
             "additionalProperties": {},
             "description": "Whether stack-frame files were queued for codebase indexing"
+          },
+          "sentryProject": {
+            "description": "The Sentry project a search ran in (null for issueIds)",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sentryProjects": {
+            "description": "This project's Sentry projects, primary first",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "nextCursor": {
+            "description": "Pass back as cursor to import the next page; null when the backlog is done",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
