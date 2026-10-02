@@ -733,19 +733,34 @@ export async function buildRepoDigest(opts: {
   pinned?: { sha: string; ref: string }
 }): Promise<RepoDigest> {
   const pinned = opts.pinned ?? (await resolveCommitSha(opts))
-  const { entries, truncated } = await fetchTreeAtSha({ ...opts, sha: pinned.sha })
-  const plan = planRepoDigest(entries, opts.options)
+  const tree = await fetchTreeAtSha({ ...opts, sha: pinned.sha })
+  return buildRepoDigestFromTree({ ...opts, pinned, tree })
+}
+
+/** Plan, fetch and assemble from a tree the caller already read (it needed the tree to resolve seeds). */
+export async function buildRepoDigestFromTree(opts: {
+  token: string
+  owner: string
+  repo: string
+  pinned: { sha: string; ref: string }
+  tree: { entries: readonly RepoTreeEntry[]; truncated: boolean }
+  options?: RepoDigestOptions
+  scopeLabel?: string
+  fetchImpl?: FetchLike
+  deadlineMs?: number
+}): Promise<RepoDigest> {
+  const plan = planRepoDigest(opts.tree.entries, opts.options)
   const contents = await fetchDigestContents({
     ...opts,
-    sha: pinned.sha,
+    sha: opts.pinned.sha,
     paths: plan.selected.map((f) => f.path),
   })
   return assembleRepoDigest(plan, contents, {
     owner: opts.owner,
     repo: opts.repo,
-    sha: pinned.sha,
-    ref: pinned.ref,
-    treeTruncated: truncated,
+    sha: opts.pinned.sha,
+    ref: opts.pinned.ref,
+    treeTruncated: opts.tree.truncated,
     scopeLabel: opts.scopeLabel ?? 'whole repo',
   })
 }
