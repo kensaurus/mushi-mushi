@@ -17,6 +17,23 @@
         "types": "./dist/index.d.cts",
         "default": "./dist/index.cjs"
       }
+    },
+    "./reporter-ui": {
+      "import": {
+        "types": "./dist/reporter-ui.d.ts",
+        "default": "./dist/reporter-ui.js"
+      },
+      "require": {
+        "types": "./dist/reporter-ui.d.cts",
+        "default": "./dist/reporter-ui.cjs"
+      }
+    }
+  },
+  "typesVersions": {
+    "*": {
+      "reporter-ui": [
+        "./dist/reporter-ui.d.ts"
+      ]
     }
   },
   "files": [
