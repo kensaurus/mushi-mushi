@@ -312,6 +312,41 @@ describe('reporter inbox requests', () => {
     expect(headers['X-Mushi-Internal']).toBe('reporter-poll');
   });
 
+  it('reporter 5xx never opens the circuit breaker for report submission', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) =>
+      String(url).includes('/v1/reporter/')
+        ? new Response(JSON.stringify({ error: { message: 'inbox down' } }), { status: 503 })
+        : new Response(JSON.stringify({ reportId: 'rpt_ok' }), { status: 200 }));
+    const client = createApiClient({ ...opts, circuitBreaker: { threshold: 2, cooldownMs: 60_000 } });
+
+    for (let i = 0; i < 6; i++) {
+      const res = await client.listReporterComments('r1', 'tok');
+      expect(res.ok).toBe(false);
+    }
+    const submit = await client.submitReport({ id: 'r', projectId: 'proj_test', category: 'bug', description: 'Save button does nothing at all' } as never);
+    // Reached the network and succeeded — not fast-failed with CIRCUIT_OPEN,
+    // which is what routes a report into the offline queue.
+    expect(submit).toMatchObject({ ok: true, data: { reportId: 'rpt_ok' } });
+    expect(fetchSpy.mock.calls.some(([u]) => String(u).endsWith('/v1/reports'))).toBe(true);
+  });
+
+  it('control: the same number of submission 5xx DOES open it, and reporter reads still go out', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) =>
+      String(url).endsWith('/v1/reports')
+        ? new Response('{}', { status: 503 })
+        : new Response(JSON.stringify({ ok: true, data: { comments: [] } }), { status: 200 }));
+    const client = createApiClient({ ...opts, circuitBreaker: { threshold: 2, cooldownMs: 60_000 } });
+    const report = { id: 'r', projectId: 'proj_test', category: 'bug', description: 'Save button does nothing at all' } as never;
+
+    await client.submitReport(report);
+    await client.submitReport(report);
+    expect((await client.submitReport(report)).error?.code).toBe('CIRCUIT_OPEN');
+    // An open breaker doesn't block the reporter inbox either.
+    const before = fetchSpy.mock.calls.length;
+    expect(await client.listReporterComments('r1', 'tok')).toMatchObject({ ok: true });
+    expect(fetchSpy.mock.calls.length).toBe(before + 1);
+  });
+
   it('never queues a reporter reply for pagehide replay', async () => {
     vi.resetModules();
     const fresh = await import('./api-client');
