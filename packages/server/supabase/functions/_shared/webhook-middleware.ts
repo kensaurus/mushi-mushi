@@ -324,6 +324,39 @@ export function createWebhookMiddleware(source: WebhookSource) {
   }
 
   /**
+   * True when a delivery with this delivery id, OR with this exact body, was
+   * already *accepted* for this source in the last 24 hours (current row
+   * excluded). For sources that sign the body but not the delivery-id header,
+   * the body hash is the key a caller cannot rotate.
+   *
+   * Two equality queries rather than one `.or()` filter, so a header value is
+   * never spliced into PostgREST filter syntax. A failed lookup throws: the
+   * caller answers 500 and the sender retries, instead of the check silently
+   * passing.
+   */
+  async function hasAcceptedDuplicate(
+    currentRowId: string,
+    key: { deliveryId?: string | null; bodyHash: string },
+  ): Promise<boolean> {
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+    const lookups: Array<['delivery_id' | 'body_hash', string]> = [['body_hash', key.bodyHash]]
+    if (key.deliveryId) lookups.unshift(['delivery_id', key.deliveryId])
+    for (const [column, value] of lookups) {
+      const { count, error } = await db
+        .from('webhook_audit_log')
+        .select('id', { count: 'exact', head: true })
+        .eq('webhook_source', source)
+        .eq(column, value)
+        .eq('outcome', 'accepted')
+        .gte('created_at', since)
+        .neq('id', currentRowId)
+      if (error) throw new Error(`replay lookup failed: ${error.message}`)
+      if ((count ?? 0) > 0) return true
+    }
+    return false
+  }
+
+  /**
    * Enforce per-source-IP rate limit. Uses an in-memory sliding window
    * (cheap, no DB round-trip). Throws `RateLimitError` (status 429) if over
    * budget.
@@ -348,7 +381,7 @@ export function createWebhookMiddleware(source: WebhookSource) {
     }
   }
 
-  return { audit, checkReplay, checkRateLimit }
+  return { audit, checkReplay, hasAcceptedDuplicate, checkRateLimit }
 }
 
 /** Thrown when a webhook delivery was already processed within the last 24h */
