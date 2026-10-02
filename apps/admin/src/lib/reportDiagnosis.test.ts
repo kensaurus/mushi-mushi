@@ -62,6 +62,12 @@ describe('reportDiagnosisView', () => {
     expect(reportDiagnosisView({})).toEqual({ kind: 'pending' })
   })
 
+  it('an auto-fix block stamp is not a diagnosis failure', () => {
+    expect(
+      reportDiagnosisView({ processing_error: 'autofix_blocked: feature request', stage1_classification: {} }),
+    ).toEqual({ kind: 'stage1_only' })
+  })
+
   it('an empty stage 2 object is not a diagnosis', () => {
     expect(reportDiagnosisView({ stage2_analysis: { code_context: { status: 'disabled' } }, stage1_classification: {} }).kind).toBe(
       'stage1_only',

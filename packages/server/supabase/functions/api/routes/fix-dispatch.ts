@@ -36,6 +36,7 @@ import { getPlan, listPlans } from '../../_shared/plans.ts';
 import { estimateCallCostUsd } from '../../_shared/pricing.ts';
 import { ANTHROPIC_SONNET } from '../../_shared/models.ts';
 import { dbError, ownedProjectIds, callerProjectIds, callerCanAccessProject } from '../shared.ts';
+import { featureRequestDispatchBlock } from '../../_shared/report-category.ts';
 import {
   canManageProjectSdkConfig,
   coerceSdkConfigUpdate,
@@ -129,7 +130,7 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
       // into a PR on the caller's repo and flip its status.
       const { data: ownReport, error: reportErr } = await db
         .from('reports')
-        .select('id')
+        .select('id, user_category, user_intent, category, stage1_classification, stage2_analysis')
         .eq('id', body.reportId)
         .eq('project_id', body.projectId)
         .maybeSingle();
@@ -139,6 +140,13 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
           { ok: false, error: { code: 'REPORT_NOT_FOUND', message: 'Report not found in this project' } },
           404,
         );
+      }
+
+      // The reporter filed a feature request: no auto-fix until a human
+      // re-categorizes it as a bug (featureRequestDispatchBlock).
+      const featureBlock = featureRequestDispatchBlock(ownReport);
+      if (featureBlock) {
+        return c.json({ ok: false, error: { code: 'FEATURE_REQUEST', message: featureBlock } }, 409);
       }
 
       const { data: settings, error: settingsErr } = await db

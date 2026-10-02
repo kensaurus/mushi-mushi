@@ -44,6 +44,7 @@ import {
 import { linearSearchIssues } from '../_shared/linear-mcp-client.ts'
 import { isLinearConnected } from '../_shared/linear.ts';
 import { clipAtWord } from '../_shared/text-clip.ts';
+import { isFeatureRequest, reporterCategoryHint, respectReporterCategory } from '../_shared/report-category.ts';
 import {
   stage2Schema,
   STAGE2_AREA_MAX,
@@ -243,7 +244,8 @@ Deno.serve(
             stage2_prompt_version: groupHead.stage2_prompt_version ?? null,
             stage2_latency_ms: 0,
             stage2_partial: null,
-            category: groupHead.category,
+            // A feature request grouped under a bug head keeps 'other'.
+            category: isFeatureRequest(report) ? 'other' : groupHead.category,
             severity: groupHead.severity,
             summary: groupHead.summary,
             title: (groupHead as Record<string, unknown>).title ?? null,
@@ -515,6 +517,7 @@ Deno.serve(
 - Actual: ${extraction?.actual ?? 'unknown'}
 - Emotion: ${extraction?.emotion || 'not captured'}
 - Stage 1 Category: ${extraction?.category ?? scrubbedReport.user_category}
+${reporterCategoryHint(scrubbedReport, { trusted: true })}
 - Stage 1 Severity: ${extraction?.severity ?? 'unknown'}
 - Stage 1 Confidence: ${extraction?.confidence ?? 'unknown'}
 
@@ -676,6 +679,10 @@ ${ontologyContext}${inventoryContext}${mcpContextSection}`;
           throw fallbackErr;
         }
       }
+
+      // The reporter's explicit "Feature request" outranks the model's guess,
+      // so it never lands in a defect category (and never reaches auto-fix).
+      classification = respectReporterCategory(classification, scrubbedReport);
 
       const latencyMs = Date.now() - startTime;
       llmSpan.end({
@@ -1206,7 +1213,8 @@ CRITICAL SECURITY RULES (immutable):
                 ? classification.reproductionSteps.length
                 : 0,
               githubAppInstalled: hasGithubApp,
-              autofixEnabled: psRes.data?.autofix_enabled ?? false,
+              // No Dispatch button on a feature request (featureRequestDispatchBlock).
+              autofixEnabled: (psRes.data?.autofix_enabled ?? false) && !isFeatureRequest(report),
             },
             {
               channelId: settings?.slack_channel_id ?? undefined,

@@ -75,6 +75,7 @@ import {
   reportRequestsRewrite,
   type BaseFileState,
 } from '../_shared/fix-file-guard.ts';
+import { featureRequestDispatchBlock } from '../_shared/report-category.ts';
 
 function ragSkipReasonMessage(reason: RagSkipReason | 'ok', detail: string | undefined): string {
   switch (reason) {
@@ -352,8 +353,8 @@ Deno.serve(
         db
           .from('reports')
           .select(
-            'id, description, summary, category, severity, component, confidence, user_intent, status, reporter_token_hash, ' +
-              'stage2_analysis, reproduction_steps, environment, console_logs, network_logs, ' +
+            'id, description, summary, category, severity, component, confidence, user_intent, user_category, status, reporter_token_hash, ' +
+              'stage1_classification, stage2_analysis, reproduction_steps, environment, console_logs, network_logs, ' +
               'judge_score',
           )
           .eq('id', dispatch.report_id)
@@ -377,6 +378,14 @@ Deno.serve(
 
       if (!report) throw new Error(`Report ${dispatch.report_id} not found`);
       if (!project) throw new Error(`Project ${dispatch.project_id} not found`);
+
+      // Defence in depth for every dispatch path: a reporter's feature
+      // request never reaches the LLM or GitHub until a human re-categorizes
+      // it (report 469f6962 was a feature request and became PR 424).
+      const featureBlock = featureRequestDispatchBlock(report);
+      if (featureBlock) {
+        return await blockFixAttempt(db, trace, dispatch, fixAttemptId, featureBlock, { files_changed: [] });
+      }
 
       const budget = await checkAutofixBudget(db, dispatch.project_id, {
         autofix_max_spend_usd: (settings?.autofix_max_spend_usd as number | null) ?? null,
