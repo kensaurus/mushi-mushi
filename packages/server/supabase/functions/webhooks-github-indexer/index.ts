@@ -23,6 +23,7 @@ import { requireServiceRoleAuth } from '../_shared/auth.ts';
 import { unverifiedGithubInstallsAllowed } from '../_shared/github-install-trust.ts';
 import { finalizeFixMerge } from '../_shared/fix-merge.ts';
 import { classifyIndexerError } from '../_shared/sweep-error-classifier.ts';
+import { fetchRepoTreeWithBranchFallback } from '../_shared/github-branch.ts';
 import { envInt } from '../_shared/env-int.ts';
 import { createWebhookMiddleware, ReplayAttackError, RateLimitError } from '../_shared/webhook-middleware.ts';
 import {
@@ -893,6 +894,9 @@ async function handleSweep(
             .update({
               last_index_attempt_at: new Date().toISOString(),
               last_index_error: msg.slice(0, 500),
+              // The tree fetch on GitHub's default branch did succeed, so the
+              // branch truth is known even though embeddings failed.
+              ...(stats.correctedBranch ? { default_branch: stats.correctedBranch } : {}),
             })
             .eq('id', repo.id);
           summary.push({ repo: repo.repo_url, ok: false, error: msg });
@@ -906,6 +910,9 @@ async function handleSweep(
                 stats.failed > 0
                   ? (stats.lastError ?? 'partial: some chunks failed').slice(0, 500)
                   : (stats.partial?.slice(0, 500) ?? null),
+              // Persist the branch GitHub actually serves so the next sweep,
+              // the fix-worker base and the console all agree.
+              ...(stats.correctedBranch ? { default_branch: stats.correctedBranch } : {}),
             })
             .eq('id', repo.id);
           summary.push({ repo: repo.repo_url, ok: true, ...stats });
@@ -978,22 +985,22 @@ async function sweepIndexRepo(
   lastError?: string;
   /** Set when the sweep could not cover the whole repo (file cap / GitHub tree truncation). */
   partial?: string;
+  /** Set when the configured branch 404'd and GitHub's default branch was used instead. */
+  correctedBranch?: string;
 }> {
-  const treeRes = await fetch(
-    `https://api.github.com/repos/${owner}/${repo}/git/trees/${encodeURIComponent(branch)}?recursive=1`,
-    {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: 'application/vnd.github+json',
-        'X-GitHub-Api-Version': '2022-11-28',
-      },
-    },
-  );
-  if (!treeRes.ok) throw new Error(`tree fetch ${treeRes.status}`);
-  const tree = (await treeRes.json()) as {
-    tree?: Array<{ path: string; type: string }>;
-    truncated?: boolean;
-  };
+  // A stale default_branch ('main' on a 'master' repo) used to throw
+  // "tree fetch 404" on every sweep; the helper retries once with GitHub's
+  // real default and reports it so the success update can persist it.
+  const resolved = await fetchRepoTreeWithBranchFallback({ token, owner, repo, branch });
+  if (resolved.correctedFrom) {
+    log.warn('sweep: configured branch not found, indexed GitHub default branch instead', {
+      repo: `${owner}/${repo}`,
+      configured: resolved.correctedFrom,
+      githubDefault: resolved.branch,
+    });
+  }
+  branch = resolved.branch;
+  const tree = resolved.tree;
   const files = (tree.tree ?? []).filter((t) => t.type === 'blob' && shouldIndex(t.path));
   let inserted = 0;
   let skipped = 0;
@@ -1115,7 +1122,14 @@ async function sweepIndexRepo(
   } else if (files.length > cap) {
     partial = `partial: indexed ${cap} of ${files.length} eligible files (MUSHI_REPO_INDEX_SWEEP_FILE_CAP=${cap})`;
   }
-  return { inserted, skipped, failed, lastError, partial };
+  return {
+    inserted,
+    skipped,
+    failed,
+    lastError,
+    partial,
+    ...(resolved.correctedFrom ? { correctedBranch: resolved.branch } : {}),
+  };
 }
 
 app.post('/webhooks-github-indexer', async (c) => {

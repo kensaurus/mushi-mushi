@@ -62,7 +62,18 @@ import {
   formatCodeContext,
   type RagSkipReason,
 } from '../_shared/rag.ts';
-import { createPrFromFiles, generateFixBranchName } from '../_shared/github-pr.ts';
+import {
+  createPrFromFiles,
+  fetchBaseFileState,
+  generateFixBranchName,
+  resolveBaseBranch,
+} from '../_shared/github-pr.ts';
+import {
+  assessFixFiles,
+  fixReviewPassed,
+  reportRequestsRewrite,
+  type BaseFileState,
+} from '../_shared/fix-file-guard.ts';
 
 function ragSkipReasonMessage(reason: RagSkipReason | 'ok', detail: string | undefined): string {
   switch (reason) {
@@ -930,6 +941,25 @@ ${
         }
       }
 
+      // ---- 6c. Review gate ----------------------------------------------------
+      // The model flags its own low-confidence output with needsHumanReview.
+      // That used to be stored as review_passed=false and the PR opened anyway
+      // (PR #424, a blind rewrite of apps/docs/app/layout.tsx). A flagged fix
+      // never reaches GitHub; the proposal stays on the attempt for a human.
+      if (!fixReviewPassed(fix)) {
+        const reason = `review_failed: the fix model flagged its own change for human review. ${fix.rationale}`.slice(0, 450);
+        return await blockFixAttempt(db, trace, dispatch, fixAttemptId, reason, {
+          files_changed: fix.files.map((f) => f.path),
+          lines_changed: totalLines,
+          summary: fix.summary,
+          rationale: fix.rationale,
+          llm_model: usedModel,
+          llm_input_tokens: inputTokens,
+          llm_output_tokens: outputTokens,
+          review_passed: false,
+        });
+      }
+
       // ---- 7. Get GitHub token + open draft PR ------------------------------
       const ghToken = await resolveGithubToken(db, project.owner_id ?? null, dispatch.project_id);
       if (!ghToken) {
@@ -949,7 +979,7 @@ ${
           llm_model: usedModel,
           llm_input_tokens: inputTokens,
           llm_output_tokens: outputTokens,
-          review_passed: !fix.needsHumanReview,
+          review_passed: fixReviewPassed(fix),
         });
         await db
           .from('fix_dispatch_jobs')
@@ -975,6 +1005,47 @@ ${
         });
       }
 
+      // ---- 7b. Blind-write guard ---------------------------------------------
+      // Every file is a full-content replacement, so read what the base branch
+      // holds first. A file we cannot read is never written; a "modify" that
+      // deletes most of the file is a rewrite and is dropped unless the report
+      // asked for one. New files pass only when GitHub says the path is absent.
+      const base = await resolveBaseBranch(ghToken, repo.owner, repo.repo, repo.defaultBranch, {
+        info: (msg, ctx) => log.info(msg, ctx as Record<string, unknown>),
+        warn: (msg, ctx) => log.warn(msg, ctx as Record<string, unknown>),
+      });
+      const baseStates = new Map<string, BaseFileState>();
+      for (const f of fix.files) {
+        baseStates.set(f.path, await fetchBaseFileState(ghToken, repo.owner, repo.repo, base.branch, f.path));
+      }
+      const fileAssessment = assessFixFiles(fix.files, baseStates, {
+        allowRewrite: reportRequestsRewrite([
+          report.description as string | undefined,
+          report.summary as string | undefined,
+          report.user_intent as string | undefined,
+        ]),
+      });
+      if (fileAssessment.blockReason) {
+        return await blockFixAttempt(db, trace, dispatch, fixAttemptId, fileAssessment.blockReason, {
+          files_changed: fix.files.map((f) => f.path),
+          lines_changed: totalLines,
+          summary: fix.summary,
+          rationale: fix.rationale,
+          llm_model: usedModel,
+          llm_input_tokens: inputTokens,
+          llm_output_tokens: outputTokens,
+          review_passed: fixReviewPassed(fix),
+        });
+      }
+      const prFiles = fileAssessment.kept;
+      const prLines = prFiles.reduce((n, f) => n + f.contents.split('\n').length, 0);
+      for (const d of fileAssessment.dropped) {
+        specValidationWarnings.push({
+          code: 'FILE_DROPPED',
+          message: `${d.path} was not written: ${d.reason}.`,
+        });
+      }
+
       const prSpan = trace.span('github.pr');
       const prBranch = generateFixBranchName(
         dispatch.report_id,
@@ -986,11 +1057,11 @@ ${
           token: ghToken,
           owner: repo.owner,
           repo: repo.repo,
-          defaultBranch: repo.defaultBranch,
+          defaultBranch: base.branch,
           branch: prBranch,
           title: fix.summary,
-          body: buildPrBody(fix, dispatch.report_id),
-          files: fix.files,
+          body: buildPrBody({ ...fix, files: prFiles }, dispatch.report_id),
+          files: prFiles,
           labels: ['mushi-autofix'],
         },
         {
@@ -1007,14 +1078,14 @@ ${
         pr_url: prResult.url,
         pr_number: prResult.number,
         commit_sha: prResult.commitSha,
-        files_changed: fix.files.map((f) => f.path),
-        lines_changed: totalLines,
+        files_changed: prFiles.map((f) => f.path),
+        lines_changed: prLines,
         summary: fix.summary,
         rationale: fix.rationale,
         llm_model: usedModel,
         llm_input_tokens: inputTokens,
         llm_output_tokens: outputTokens,
-        review_passed: !fix.needsHumanReview,
+        review_passed: fixReviewPassed(fix),
         ...(specValidationWarnings.length > 0
           ? { spec_validation_warnings: specValidationWarnings }
           : {}),
@@ -1829,6 +1900,41 @@ async function stampReportAutofixBlocked(
       error: error.message,
     });
   }
+}
+
+/**
+ * Stop an attempt at a pre-PR guard (review gate, blind-write guard). Same
+ * shape as the context-floor gate: the attempt keeps what the model proposed
+ * so a human can read it, the dispatch and report say why, nothing touches
+ * GitHub, and the response is a 200 because the guard did its job.
+ * `validation_rejected` is in the fix_attempts.failure_category CHECK and in
+ * EXPECTED_FAILURE_CATEGORIES, so this never pages Sentry.
+ */
+async function blockFixAttempt(
+  db: ReturnType<typeof getServiceClient>,
+  trace: { end: () => Promise<unknown> },
+  dispatch: { id: string; report_id: string },
+  fixAttemptId: string,
+  reason: string,
+  fields: Record<string, unknown>,
+): Promise<Response> {
+  rootLog.child('fix-worker').warn('Fix blocked before PR', { dispatchId: dispatch.id, reason });
+  await completeAttempt(db, fixAttemptId, {
+    ...fields,
+    status: 'failed',
+    error: reason,
+    failure_category: 'validation_rejected',
+  });
+  await db
+    .from('fix_dispatch_jobs')
+    .update({ status: 'failed', error: reason.slice(0, 500), finished_at: new Date().toISOString() })
+    .eq('id', dispatch.id);
+  await stampReportAutofixBlocked(db, dispatch.report_id, reason);
+  await trace.end();
+  return new Response(JSON.stringify({ ok: true, blocked: true, reason, fixAttemptId }), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  });
 }
 
 async function completeAttempt(

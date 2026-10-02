@@ -72,3 +72,32 @@ export function classifyIndexerError(err: unknown): SweepErrorKind {
   }
   return 'unknown';
 }
+
+/**
+ * True when a repo's most recent index attempt failed outright.
+ *
+ * `last_index_error` alone is not the signal: successful sweeps also write
+ * benign notes there ("partial: indexed 300 of 1844 eligible files"). A failed
+ * sweep never advances `last_indexed_at`, while a successful one writes both
+ * timestamps from separate `Date()` calls a few ms apart, hence the allowance.
+ *
+ * Used by the GitHub integration probe so a dead index shows as a degraded
+ * GitHub card instead of hiding behind a healthy repo-access check (the
+ * mushi-mushi repo failed "tree fetch 404" from 2026-06-20 to 2026-10-02 while
+ * the card stayed green).
+ */
+export function isCodebaseIndexFailing(
+  row: {
+    last_index_error: string | null
+    last_indexed_at: string | null
+    last_index_attempt_at: string | null
+  },
+  allowanceMs = 60_000,
+): boolean {
+  if (!row.last_index_error || !row.last_index_attempt_at) return false
+  if (!row.last_indexed_at) return true
+  const attempted = Date.parse(row.last_index_attempt_at)
+  const indexed = Date.parse(row.last_indexed_at)
+  if (!Number.isFinite(attempted) || !Number.isFinite(indexed)) return false
+  return attempted - indexed > allowanceMs
+}
