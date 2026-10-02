@@ -71,6 +71,7 @@ import {
 import { reporterShouldShowToast, reporterToastMessage, resolveReporterLocale } from '@mushi-mushi/core/reporter-ui'
 import { readReporterFlag, writeReporterFlag } from './storage/reporter-flags'
 import { MushiUpdateToast } from './components/MushiUpdateToast'
+import { resolveExpoSensors, resolveNetInfo, resolveViewShot } from './optional-modules'
 import { setupConsoleCapture } from './capture/console-capture'
 import { setupNetworkCapture } from './capture/network-capture'
 import { getDeviceInfo } from './capture/device-info'
@@ -136,6 +137,18 @@ export interface MushiRNConfig {
      */
     minDescriptionLength?: number
   }
+  /**
+   * Optional native modules, passed in instead of loaded. When set, the SDK
+   * uses them and never loads that package itself — the safest option for
+   * Metro configs that disallow optional requires. Each one is also picked up
+   * automatically when installed.
+   * - `netInfo`: `@react-native-community/netinfo` — resend queued reports when the network returns.
+   * - `viewShot`: `react-native-view-shot` — attach a screenshot.
+   * - `expoSensors`: `expo-sensors` — shake to report.
+   */
+  netInfo?: unknown
+  viewShot?: unknown
+  expoSensors?: unknown
   /** How reporters hear back outside the sheet (Plan 018 §4). No native push. */
   notifications?: {
     /** One "the developer replied" / "your bug is fixed" toast when the app returns to the foreground. Default true. */
@@ -338,13 +351,6 @@ function resolveScreenshotHint(v: boolean | string | undefined): string | null {
   return DEFAULT_SCREENSHOT_HINT
 }
 
-type ExpoSensorsModule = {
-  Accelerometer: {
-    setUpdateInterval(ms: number): void
-    addListener(listener: (event: { x: number; y: number; z: number }) => void): { remove(): void }
-  }
-}
-
 /** Map a breadcrumb category to the repro-timeline `kind` enum.
  *  Lifecycle/console crumbs carry a human `message`, so they render as `log`
  *  rows (the admin TimelineCard reads `payload.message` for `log`); navigation
@@ -509,33 +515,22 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
     }
   }, [])
 
-  // Added: network-aware delivery (Phase 2.4)
-  // Uses require() instead of new Function('s','return import(s)') — Hermes
-  // (RN 0.76+, AOT-only) rejects dynamic import() inside Function constructor
-  // bodies with "SyntaxError: Invalid expression encountered" at evaluation
-  // time, even if the constructed function is never called. require() is the
-  // correct sync-optional-dep pattern for Metro + Hermes environments.
+  // Network-aware delivery (Phase 2.4). Optional native modules load through
+  // ./optional-modules.ts: the host's injected module first, else a literal
+  // require() (never dynamic import() — Hermes rejects it inside Function bodies).
   useEffect(() => {
     let unsubscribe: (() => void) | undefined
     try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const NetInfo = (require('@react-native-community/netinfo') as {
-        default: {
-          addEventListener: (
-            cb: (state: { isConnected: boolean | null; isInternetReachable: boolean | null }) => void,
-          ) => () => void
-        }
-      }).default
-      unsubscribe = NetInfo.addEventListener((state) => {
+      unsubscribe = resolveNetInfo(config.netInfo)?.addEventListener((state) => {
         if (state.isConnected && state.isInternetReachable) {
           queueRef.current?.flush().catch(() => {})
         }
       })
     } catch {
-      // @react-native-community/netinfo is an optional peer dep — web / test envs won't have it
+      // netinfo is an optional peer dep — web / test envs won't have it
     }
     return () => unsubscribe?.()
-  }, [])
+  }, [config.netInfo])
 
   const open = useCallback(() => {
     setSheetPreferredTab('report')
@@ -557,11 +552,7 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
     // Capture a screenshot of the current app state BEFORE the sheet overlays it.
     // react-native-view-shot is an optional peer dep — fall through immediately when
     // it isn't installed. The sheet opens after capture resolves (typ. <150 ms).
-    let vshot: { captureScreen(opts: Record<string, unknown>): Promise<string> } | null = null
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      vshot = require('react-native-view-shot') as { captureScreen(opts: Record<string, unknown>): Promise<string> }
-    } catch { /* optional dep not installed */ }
+    const vshot = resolveViewShot(config.viewShot)
 
     if (!vshot) {
       setSheetScreenshot(null)
@@ -574,7 +565,7 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
       .then((url: string) => { setSheetScreenshot(url) })
       .catch(() => { setSheetScreenshot(null) })
       .finally(() => { setSheetVisible(true) })
-  }, [config.capture?.screenshot])
+  }, [config.capture?.screenshot, config.viewShot])
   const openAssistant = useCallback(() => {
     if (!config.assistant?.enabled) return
     setSheetPreferredTab('assistant')
@@ -593,13 +584,11 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
     let lastShake = 0
     const threshold = config.widget?.shakeThreshold ?? 2.7
 
-    // require() instead of new Function dynamic import — same Hermes rationale
-    // as the NetInfo effect above. expo-sensors is an optional peer dep;
-    // bare React Native apps that don't install it stay dependency-light.
+    // expo-sensors is an optional peer dep; bare React Native apps that don't
+    // install it stay dependency-light (see ./optional-modules.ts).
     try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const mod = require('expo-sensors') as ExpoSensorsModule
-      if (!disposed) {
+      const mod = resolveExpoSensors(config.expoSensors)
+      if (mod && !disposed) {
         mod.Accelerometer.setUpdateInterval(120)
         const sub = mod.Accelerometer.addListener((evt) => {
           const g = Math.sqrt(evt.x * evt.x + evt.y * evt.y + evt.z * evt.z)
@@ -619,7 +608,7 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
       disposed = true
       cleanup?.()
     }
-  }, [config.widget?.trigger, config.widget?.shakeThreshold, open])
+  }, [config.widget?.trigger, config.widget?.shakeThreshold, config.expoSensors, open])
 
   const submitReport = useCallback(
     async (data: { description: string; category: string; userCategory?: string; screenshotDataUrl?: string }) => {
