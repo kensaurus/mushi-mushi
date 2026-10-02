@@ -173,6 +173,13 @@ describe('resolveLinkedSentryIssues', () => {
     expect(state.stamped).toEqual([])
   })
 
+  it('leaves non-numeric sentry links alone', async () => {
+    state.links = [{ id: 'l9', external_id: 'evt-abc123' }]
+    const result = await rb.resolveLinkedSentryIssues(makeDb(state), input, { credentials: creds, fetchImpl: async () => json({}) })
+    expect(result.skipped).toBe('no_links')
+    expect(state.stamped).toEqual([])
+  })
+
   it('is a no-op without open Sentry links', async () => {
     state.links = []
     const result = await rb.resolveLinkedSentryIssues(makeDb(state), input, { credentials: creds })

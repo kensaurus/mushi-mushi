@@ -197,7 +197,11 @@ export async function resolveLinkedSentryIssues(
   } = {},
 ): Promise<SentryResolveBackResult> {
   const { projectId, reportId, fixAttemptId, prUrl } = input;
-  const links = await loadSentryLinks(db, projectId, reportId, true);
+  // Only numeric Sentry issue ids (what ingest links). Any other `sentry`
+  // link shape is left to resolveExternalIssue.
+  const links = (await loadSentryLinks(db, projectId, reportId, true)).filter((l) =>
+    /^\d+$/.test(l.external_id),
+  );
   if (links.length === 0) return { resolved: [], failed: [], skipped: 'no_links' };
 
   const creds = await (deps.credentials ?? loadSentryCredentials)(db, projectId);
