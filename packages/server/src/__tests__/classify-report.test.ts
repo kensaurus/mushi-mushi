@@ -284,6 +284,32 @@ CRITICAL SECURITY RULES (immutable):
     })
   })
 
+  describe('first_diagnosis_ready activation event', () => {
+    let src: string
+    beforeAll(async () => {
+      const { readFile } = await import('node:fs/promises')
+      const { fileURLToPath } = await import('node:url')
+      src = await readFile(
+        fileURLToPath(new URL('../../supabase/functions/classify-report/index.ts', import.meta.url)),
+        'utf8',
+      )
+    })
+
+    it('emits once per project, only after the Stage 2 writeback succeeded', () => {
+      expect(src).toContain("eventName: 'first_diagnosis_ready'")
+      expect(src).toContain('dedupKey: `first_diagnosis_ready:${projectId}`')
+      expect(src.indexOf("eventName: 'first_diagnosis_ready'")).toBeGreaterThan(
+        src.indexOf('throw new Error(`Stage 2 writeback failed'),
+      )
+    })
+
+    it('skips test reports and projects that already had a real diagnosis', () => {
+      expect(src).toContain('if (!isNonRealReport(report.custom_metadata')
+      expect(src).toContain("stage2_model.is.null,stage2_model.neq.precomputed")
+      expect(src).toContain("log.error('first_diagnosis_ready: prior-diagnosis lookup failed")
+    })
+  })
+
   describe('idle-timeout handoff (MUSHI-MUSHI-SERVER-1R)', () => {
     let src: string
     beforeAll(async () => {

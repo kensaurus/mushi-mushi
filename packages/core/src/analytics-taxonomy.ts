@@ -73,6 +73,7 @@ export const MUSHI_EVENTS = {
   project_created: { surface: 'server', required: ['project_id'] },
   key_minted: { surface: 'server', required: ['project_id'] },
   first_report_received: { surface: 'server', required: ['project_id'] },
+  first_diagnosis_ready: { surface: 'server', required: ['project_id'] },
   fix_merged: { surface: 'server', required: ['project_id'] },
   upgrade_completed: { surface: 'server', required: ['project_id', 'plan'] },
   // ── Growth loop (widget "Bug reports by Mushi" mark) ─────────────────────
