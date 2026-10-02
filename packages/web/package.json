@@ -144,8 +144,17 @@
     },
     {
       "name": "On-demand chunks: screenshot markup + tab share (gzipped)",
-      "path": "dist/chunks/*.js",
+      "path": [
+        "dist/chunks/screenshot-annotation-*.js",
+        "dist/chunks/display-capture-*.js"
+      ],
       "limit": "2.5 KB",
+      "gzip": true
+    },
+    {
+      "name": "On-demand chunk: Your reports, opt-ins, overflow views (gzipped)",
+      "path": "dist/chunks/widget-views-*.js",
+      "limit": "5.5 KB",
       "gzip": true
     },
     {

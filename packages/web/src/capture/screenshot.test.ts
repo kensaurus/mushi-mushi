@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { createScreenshotCapture, FREEZE_ANIMATIONS_CSS } from './screenshot';
+import { createScreenshotCapture } from './screenshot';
 
 /**
  * The widget turns these reasons into actionable copy ("blocked by another
@@ -58,6 +58,53 @@ describe('createScreenshotCapture failure reasons', () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(spy.src()).toMatch(/^data:image\/svg\+xml;charset=utf-8,(%0A|%20)*%3Csvg/i);
     expect(spy.src()).not.toMatch(/^blob:/);
+  });
+
+  it('freezes animations after every page style, so entrance animations cannot blank the capture', async () => {
+    // Live QA (console, Chrome): fade-in keyframes start at opacity 0 and never
+    // run inside an SVG <img>, so the whole page captured transparent.
+    const style = document.createElement('style');
+    style.textContent = '@keyframes fade-in{from{opacity:0}} .animate-in{animation:fade-in .3s}';
+    document.head.append(style);
+    const card = document.createElement('div');
+    card.className = 'animate-in';
+    card.textContent = 'Settled content';
+    document.body.append(card);
+    vi.useFakeTimers();
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ scale: vi.fn() } as never);
+    const spy = interceptImage();
+
+    void createScreenshotCapture().take();
+    await vi.advanceTimersByTimeAsync(0);
+    const svg = decodeURIComponent(spy.src().replace(/^data:image\/svg\+xml;charset=utf-8,/, ''));
+    const freeze = '*,*::before,*::after{animation:none!important;transition:none!important}';
+    expect(svg).toContain('Settled content');
+    expect(svg.lastIndexOf(freeze)).toBeGreaterThan(svg.lastIndexOf('@keyframes fade-in'));
+    // Nothing that styles the page comes after the freeze rule.
+    expect(svg.slice(svg.lastIndexOf(freeze)).indexOf('<style')).toBe(-1);
+    style.remove();
+    card.remove();
+  });
+
+  it('paints the page background across the whole capture, so short pages are not half black', async () => {
+    document.body.style.backgroundColor = 'rgb(246, 247, 249)';
+    vi.useFakeTimers();
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ scale: vi.fn() } as never);
+    const spy = interceptImage();
+
+    void createScreenshotCapture().take();
+    await vi.advanceTimersByTimeAsync(0);
+    const svg = decodeURIComponent(spy.src().replace(/^data:image\/svg\+xml;charset=utf-8,/, ''));
+    const root = svg.match(/<html[^>]*style="([^"]*)"/)?.[1] ?? '';
+    expect(root).toContain('background-color: rgb(246, 247, 249)');
+    expect(root).toContain(`min-height: ${window.innerHeight}px`);
+    document.body.style.backgroundColor = '';
+  });
+
+  it('asks for a readback-friendly canvas (no Canvas2D getImageData warning)', async () => {
+    const getContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+    await createScreenshotCapture().take();
+    expect(getContext).toHaveBeenCalledWith('2d', { willReadFrequently: true });
   });
 
   it("reports 'csp' when the host's img-src blocks data: images", async () => {
@@ -125,28 +172,6 @@ describe('screenshot redaction before capture', () => {
     expect(svg).toContain('Visible copy');
     // The live page is untouched — only the serialized clone is redacted.
     expect((document.querySelector('input[type="password"]') as HTMLInputElement).value).toBe('hunter2-secret');
-  });
-
-  it('freezes animations after the page CSS, so fade-in content is not captured at opacity 0', async () => {
-    vi.useFakeTimers();
-    const pageStyle = document.createElement('style');
-    pageStyle.textContent = '@keyframes enter{from{opacity:0}} .card{animation:enter .3s both}';
-    document.head.appendChild(pageStyle);
-    document.body.innerHTML = '<div class="card">Fades in</div>';
-    const getContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ scale: vi.fn() } as never);
-    let src = '';
-    vi.spyOn(HTMLImageElement.prototype, 'src', 'set').mockImplementation((v: string) => { src = v; });
-
-    void createScreenshotCapture().take();
-    await vi.advanceTimersByTimeAsync(0);
-    const svg = decodeURIComponent(src.replace(/^data:image\/svg\+xml;charset=utf-8,/, ''));
-    pageStyle.remove();
-
-    const freezeAt = svg.lastIndexOf(FREEZE_ANIMATIONS_CSS);
-    expect(freezeAt).toBeGreaterThan(-1);
-    // Later in the document than the page's own animation rule, so it overrides it.
-    expect(freezeAt).toBeGreaterThan(svg.indexOf('animation:enter'));
-    expect(getContext).toHaveBeenCalledWith('2d', { willReadFrequently: true });
   });
 });
 

@@ -10,7 +10,8 @@ import { createRequire } from 'node:module';
 import { TextDecoder as NodeTextDecoder, TextEncoder as NodeTextEncoder } from 'node:util';
 import { describe, it, expect, vi } from 'vitest';
 import { getWidgetStyles } from './styles';
-import { renderView, type ViewRegions } from './widget-render';
+import { renderKit, renderView, type RenderKit, type ViewRegions } from './widget-render';
+import type * as Views from './widget-views';
 import { MushiWidget, type WidgetCallbacks } from './widget';
 
 const require = createRequire(import.meta.url);
@@ -77,7 +78,12 @@ describe('build-time template whitespace strip', () => {
     Object.defineProperty(window, 'matchMedia', {
       writable: true, configurable: true, value: vi.fn().mockReturnValue({ matches: false }),
     });
-    const built = await bundleWithPlugin<{ renderView: typeof renderView }>('./widget-render.ts');
+    const built = await bundleWithPlugin<{ renderView: typeof renderView; renderKit: RenderKit }>('./widget-render.ts');
+    // The on-demand views chunk ships through the same plugin: compare it too.
+    const builtViews = await bundleWithPlugin<typeof Views>('./widget-views.ts');
+    builtViews.initViews(built.renderKit);
+    const sourceViews = await import('./widget-views');
+    sourceViews.initViews(renderKit);
     const cb: WidgetCallbacks = {
       onSubmit: () => {}, onOpen: () => {}, onClose: () => {}, onScreenshotRequest: () => {},
       onReporterReportsRequest: () => Promise.resolve([]),
@@ -93,9 +99,14 @@ describe('build-time template whitespace strip', () => {
     for (const go of steps) {
       go();
       const ctx = { ...ctxOf(), submittedAt: new Date(0) };
-      expect(wsAll(built.renderView(ctx))).toBe(wsAll(renderView(ctx)));
+      const src = { ...ctx, views: sourceViews };
+      const out = { ...ctx, views: builtViews };
+      expect(wsAll(built.renderView(out))).toBe(wsAll(renderView(src)));
       for (const step of ['success', 'report-detail', 'reports', 'account', 'assistant', 'roadmap', 'leaderboard', 'cross-app-reports'] as const) {
-        expect(wsAll(built.renderView({ ...ctx, step }))).toBe(wsAll(renderView({ ...ctx, step })));
+        const shipped = wsAll(built.renderView({ ...out, step }));
+        expect(shipped).toBe(wsAll(renderView({ ...src, step })));
+        // The real view rendered, not the loading state.
+        expect(shipped).not.toContain('Loading reports');
       }
     }
     w.destroy();

@@ -647,7 +647,12 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
    * and one per 24 hours; hosts turn it off with `notifications.toast: false`.
    */
   function scheduleUpdateToast(): void {
-    if (bootstrapConfig.notifications?.toast === false || !deviceHasReports(projectId) || !toastAllowed(projectId)) return;
+    if (!deviceHasReports(projectId)) return;
+    // This device has reports: warm the Your reports chunk at idle.
+    const idleWarm = (globalThis as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => void }).requestIdleCallback;
+    if (idleWarm) idleWarm(() => void widget.preloadViews(), { timeout: 8000 });
+    else setTimeout(() => void widget.preloadViews(), 3000);
+    if (bootstrapConfig.notifications?.toast === false || !toastAllowed(projectId)) return;
     const run = async () => {
       // A malformed feed counts as no feed: fall back to the list.
       const feed = await emitReporterUpdates();
@@ -657,7 +662,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       await widget.refreshReporterInboxQuiet();
       const shown = updates
         ? widget.showUpdatesFeedToast(updates, lastReporterReports)
-        : widget.showUpdatesToast(lastReporterReports);
+        : await widget.showUpdatesToast(lastReporterReports);
       if (shown) recordToastShown(projectId);
     };
     const idle = (globalThis as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => void }).requestIdleCallback;

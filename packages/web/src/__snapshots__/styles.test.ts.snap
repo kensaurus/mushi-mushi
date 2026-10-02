@@ -256,14 +256,16 @@ exports[`getWidgetStyles > matches stable CSS snapshot markers 1`] = `
     .mushi-notice:empty, .mushi-lead:empty, .mushi-footer:empty, .mushi-brand:empty { display: none; }
     .mushi-outdated { margin: 8px 12px 0; padding: 8px 10px; border-radius: 8px; background: var(--_surface); font-size: 12px; }
 
-    .mushi-header { display: flex; align-items: center; gap: 2px; min-height: 56px; padding: 6px 6px 6px 16px; border-bottom: 1px solid var(--_border); }
+    .mushi-header { display: flex; align-items: center; gap: 8px; min-height: 56px; padding: 6px 6px 6px 16px; border-bottom: 1px solid var(--_border); }
     .mushi-title { flex: 1; min-width: 0; margin: 0; font-size: 16px; font-weight: 600; line-height: 1.25; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere; }
     .mushi-title:focus { outline: none; }
     .mushi-header-host-icon { width: 20px; height: 20px; margin-right: 8px; border-radius: 4px; object-fit: contain; }
     .mushi-header .mushi-icon-btn:first-child { margin-left: -10px; }
+    .mushi-header .mushi-icon-btn:last-child { margin-right: -4px; }
+    .mushi-beta-receipt { display: flex; flex-direction: column; gap: 2px; align-items: center; }
     .mushi-icon-btn { display: inline-flex; align-items: center; justify-content: center; flex: none; min-width: 44px; min-height: 44px; border: 0; border-radius: 10px; background: none; color: var(--_muted); font: inherit; font-size: 17px; cursor: pointer; }
     .mushi-icon-btn:hover { background: var(--_surface); color: var(--_fg); }
-    .mushi-pill-btn { display: inline-flex; align-items: center; gap: 6px; flex: none; min-height: 44px; margin: 0 2px; padding: 0 12px; border: 1px solid var(--_border); border-radius: 999px; background: none; color: var(--_fg); font: inherit; font-size: 13px; white-space: nowrap; cursor: pointer; }
+    .mushi-pill-btn { display: inline-flex; align-items: center; gap: 6px; flex: none; min-height: 44px; padding: 0 12px; border: 1px solid var(--_border); border-radius: 999px; background: none; color: var(--_fg); font: inherit; font-size: 13px; white-space: nowrap; cursor: pointer; }
     .mushi-pill-btn:hover { background: var(--_surface); }
     .mushi-badge { padding: 1px 7px; border-radius: 999px; background: var(--_fg); color: var(--_bg); font-size: 11px; font-weight: 600; }
     .mushi-menu-wrap { position: relative; }
