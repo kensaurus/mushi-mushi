@@ -162,6 +162,31 @@ describe('runRadar', () => {
   })
 })
 
+describe('connector-backed radar rules', () => {
+  it('reads Supabase facts from the current snapshot, and says not checked when a connector is missing', async () => {
+    const db = seed({
+      connector_snapshots: [{
+        kind: 'supabase', project_id: P_A, is_current: true, ok: true, error: null,
+        snapshot: { observedAt: NOW.toISOString(), elements: {}, resources: [], facts: {
+          secretRpcs: [{ schema: 'public', name: 'get_secret', args: '', security_definer: true, anon_execute: true, public_execute: false, reads_secrets: true }],
+          buckets: [], functions: [], billedStorageBytes: null, pitrEnabled: null,
+        } },
+      }],
+    })
+    const summary = await run.runRadar(db as never, P_A, deps() as never)
+    expect(summary.results.find((r) => r.ruleId === 'rpc_secret_reachable_by_anon')).toMatchObject({ state: 'finding' })
+    expect(summary.results.find((r) => r.ruleId === 'pitr_disabled')?.state).toBe('unknown')
+    expect(summary.results.find((r) => r.ruleId === 'key_shared_across_apps')).toMatchObject({ state: 'unknown' })
+    expect(summary.status).toBe('fail')
+  })
+
+  it('a failed connector snapshot reads as error, never ok', async () => {
+    const db = seed({ connector_snapshots: [{ kind: 'revenuecat', project_id: P_A, is_current: true, ok: false, error: 'RevenueCat rejected the credential.', snapshot: null }] })
+    const summary = await run.runRadar(db as never, P_A, deps() as never)
+    expect(summary.results.filter((r) => r.ruleId.startsWith('revenuecat_')).every((r) => r.state === 'error')).toBe(true)
+  })
+})
+
 describe('recordCiRadar and readRadar', () => {
   it('lists every rule, answers each from the newest run, and never shows a rule that did not run as ok', async () => {
     const db = seed()
@@ -171,7 +196,10 @@ describe('recordCiRadar and readRadar', () => {
       files: {},
     }, NOW)
     const view = await run.readRadar(db as never, P_A)
-    expect(view.detectors.map((d) => d.ruleId)).toHaveLength(9)
+    const { RADAR_RULE_IDS } = await import('../../supabase/functions/_shared/radar/types.ts')
+    expect(view.detectors.map((d) => d.ruleId)).toEqual([...RADAR_RULE_IDS])
+    // Connector-backed checks with no connector say how to turn them on.
+    expect(view.detectors.find((d) => d.ruleId === 'rpc_secret_reachable_by_anon')).toMatchObject({ state: 'unknown' })
     const storage = view.detectors.find((d) => d.ruleId === 'storage_sql_delete')!
     expect(storage).toMatchObject({ state: 'finding', from: 'radar_ci' })
     expect(storage.findings[0]).toMatchObject({ filePath: 'supabase/x.sql', line: 3 })

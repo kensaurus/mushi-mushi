@@ -49,6 +49,17 @@ export const RADAR_RULE_IDS = [
   'storage_sql_delete',
   'play_target_sdk_behind',
   'ios_sdk_behind',
+  // Plan 020 Phase 2 — read through connectors (ADR 0017).
+  'rpc_secret_reachable_by_anon',
+  'storage_orphaned_bytes',
+  'edge_fn_unauthenticated_paid',
+  'pitr_disabled',
+  'storage_not_backed_up',
+  'key_shared_across_apps',
+  // Plan 020 Phase 3 — revenuecat connector.
+  'revenuecat_project_split',
+  'revenuecat_app_missing',
+  'revenuecat_offering_missing',
 ] as const
 export type RadarRuleId = (typeof RADAR_RULE_IDS)[number]
 
@@ -56,7 +67,9 @@ export interface RadarRuleMeta {
   id: RadarRuleId
   title: string
   /** Where the detector reads from. */
-  source: 'public_probe' | 'repo_scan' | 'host_ci'
+  source: 'public_probe' | 'repo_scan' | 'host_ci' | 'connector'
+  /** For connector-backed rules: the connector kind that must be connected. */
+  connector?: 'supabase' | 'llm_usage' | 'revenuecat'
   /** The bug it prevents — the drift-test line (ADR 0017). */
   prevents: string
 }
@@ -71,6 +84,15 @@ export const RADAR_RULES: Readonly<Record<RadarRuleId, RadarRuleMeta>> = {
   storage_sql_delete: { id: 'storage_sql_delete', title: 'No storage deletes through SQL', source: 'host_ci', prevents: 'Files stay in the bucket and keep billing after their rows are deleted.' },
   play_target_sdk_behind: { id: 'play_target_sdk_behind', title: 'Android target SDK meets Google Play', source: 'repo_scan', prevents: 'Google Play refuses the next update, or hides the app from new users.' },
   ios_sdk_behind: { id: 'ios_sdk_behind', title: 'iOS build meets App Store upload rules', source: 'repo_scan', prevents: 'App Store Connect refuses the next build upload.' },
+  rpc_secret_reachable_by_anon: { id: 'rpc_secret_reachable_by_anon', title: 'No secret-reading function open to anyone', source: 'connector', connector: 'supabase', prevents: 'Anyone with your public key calls a function that reads secrets.' },
+  storage_orphaned_bytes: { id: 'storage_orphaned_bytes', title: 'No orphaned storage', source: 'connector', connector: 'supabase', prevents: 'You keep paying for files whose rows are gone.' },
+  edge_fn_unauthenticated_paid: { id: 'edge_fn_unauthenticated_paid', title: 'Paid edge functions need auth', source: 'connector', connector: 'supabase', prevents: 'Strangers spend your AI and API credits through an open function.' },
+  pitr_disabled: { id: 'pitr_disabled', title: 'Point-in-time recovery on', source: 'connector', connector: 'supabase', prevents: 'A bad migration or delete cannot be undone.' },
+  storage_not_backed_up: { id: 'storage_not_backed_up', title: 'Storage files backed up', source: 'connector', connector: 'supabase', prevents: 'Database backups do not include Storage files; lost files stay lost.' },
+  key_shared_across_apps: { id: 'key_shared_across_apps', title: 'AI spend tied to each app', source: 'connector', connector: 'llm_usage', prevents: 'Spend you cannot tie to an app cannot be capped, and one leaked key hits every app.' },
+  revenuecat_project_split: { id: 'revenuecat_project_split', title: 'Shared purchases in one RevenueCat project', source: 'connector', connector: 'revenuecat', prevents: 'A purchase in one app does not unlock the other app it was sold for.' },
+  revenuecat_app_missing: { id: 'revenuecat_app_missing', title: 'Store app registered in RevenueCat', source: 'connector', connector: 'revenuecat', prevents: 'Purchases from an unregistered store app are never seen.' },
+  revenuecat_offering_missing: { id: 'revenuecat_offering_missing', title: 'A current RevenueCat offering', source: 'connector', connector: 'revenuecat', prevents: 'The paywall has nothing to show.' },
 }
 
 /**

@@ -29,6 +29,8 @@ import { setActiveProjectIdSnapshot } from '../lib/activeProject'
 import type { PortfolioCard, PortfolioFindingsResponse, PortfolioResponse } from '../lib/portfolioTypes'
 import { formatUsd, kindLabel, radarLabel, sdkLabel, sortPortfolioCards } from '../components/portfolio/portfolioView'
 import { DigestCard } from '../components/portfolio/DigestCard'
+import { ConnectorsCard } from '../components/portfolio/ConnectorsCard'
+import { SharedResourcesCard } from '../components/portfolio/SharedResourcesCard'
 
 export function PortfolioPage() {
   const orgId = useActiveOrgId()
@@ -119,6 +121,16 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
           <DigestCard orgId={orgId} projects={page.data.cards.map((c) => ({ projectId: c.projectId, name: c.name }))} />
         </PanelErrorBoundary>
       )}
+      {page.data && page.data.cards.length > 0 && (
+        <PanelErrorBoundary label="Shared resources">
+          <SharedResourcesCard orgId={orgId} names={names} />
+        </PanelErrorBoundary>
+      )}
+      {page.data && page.data.cards.length > 0 && (
+        <PanelErrorBoundary label="Connected sources">
+          <ConnectorsCard orgId={orgId} projects={page.data.cards.map((c) => ({ projectId: c.projectId, name: c.name }))} />
+        </PanelErrorBoundary>
+      )}
     </div>
   )
 }
@@ -198,6 +210,21 @@ function FindingsSections({ findings, names }: { findings: PageDataState<Portfol
           </ul>
         )}
       </Section>
+      {data.crossProject.length > 0 && (
+        <Section title="Across your apps">
+          <ul className="flex flex-col gap-2">
+            {data.crossProject.map((f) => (
+              <li key={f.id} className="flex flex-col gap-1 rounded-md border border-edge-subtle p-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <p className="text-sm text-fg">{f.message}</p>
+                  <p className="truncate text-xs text-fg-muted">{f.projectIds.map(name).join(', ')}</p>
+                </div>
+                {f.suggestedFix && <CopyButton value={`${f.message}\n\nFix: ${f.suggestedFix}`} label="Copy fix prompt" />}
+              </li>
+            ))}
+          </ul>
+        </Section>
+      )}
       <Section title="Mushi SDK versions">
         {behind.length === 0 ? (
           <p className="text-sm text-fg-muted">Every app that reported is on the latest Mushi SDK.</p>

@@ -20,7 +20,7 @@ interface RadarDetectorView {
   ruleId: string
   title: string
   prevents: string
-  source: 'public_probe' | 'repo_scan' | 'host_ci'
+  source: 'public_probe' | 'repo_scan' | 'host_ci' | 'connector'
   state: DetectorState
   reason: string
   checkedAt: string | null

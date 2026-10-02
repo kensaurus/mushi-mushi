@@ -31,6 +31,7 @@ import {
   type SdkVersionRow,
 } from '../../_shared/portfolio.ts'
 import type {
+  CrossProjectFinding,
   PortfolioCard,
   PortfolioFindingsResponse,
   PortfolioRadarColumn,
@@ -337,12 +338,22 @@ export async function buildPortfolioFindings(db: Db, deps: PortfolioRouteDeps, o
   const ids = [...projectIds].sort()
   const [runs, sdk, presence] = await Promise.all([loadLatestRuns(db, ids), loadSdk(db, ids), loadPresence(db, ids)])
   const findings = await loadOpenFindings(db, runs)
+  const { data: cross } = await db
+    .from('portfolio_findings')
+    .select('id, rule_id, severity, project_ids, resource_key, message, suggested_fix')
+    .eq('organization_id', orgId)
+    .eq('status', 'open')
+    .limit(500)
   return {
     organizationId: orgId,
     generatedAt: deps.compose.now().toISOString(),
     groups: groupRepeatedFindings(findings),
     sdkSkew: sdkSkew(ids, sdk.observations, sdk.latest),
     holes: integrationHoles(presence),
+    // A cross-project finding is shown only when the caller can see every project it names.
+    crossProject: ((cross ?? []) as Array<{ id: string; rule_id: string; severity: CrossProjectFinding['severity']; project_ids: string[]; resource_key: string | null; message: string; suggested_fix: { text?: string } | null }>)
+      .filter((f) => f.project_ids.every((p) => ids.includes(p)))
+      .map((f) => ({ id: f.id, ruleId: f.rule_id, severity: f.severity, projectIds: f.project_ids, resourceKey: f.resource_key, message: f.message, suggestedFix: f.suggested_fix?.text ?? null })),
   }
 }
 

@@ -705,7 +705,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/concepts/app-recipe",
     markdown: "concepts/app-recipe.md",
     keywords: ["concepts", "app-recipe", "app", "recipe", "design", "system"],
-    headings: ["The five states", "mushi.recipe.json", "The design system page", "Directions", "The deviance check", "The deviance score", "Hole checks", "In your editor"],
+    headings: ["The five states", "mushi.recipe.json", "The design system page", "Directions", "The deviance check", "The deviance score", "Hole checks", "Connected sources"],
     excerpt: "The App Recipe records what your app is made of, so a diagnosis can say what changed and a fix can respect your design system.",
   },
   {

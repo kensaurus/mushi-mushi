@@ -180,3 +180,28 @@ describe('integrations', () => {
   })
   it('healthy is ok', () => expect(state({ key: 'integrations', configured: [{ kind: 'slack', health: 'ok', checkedAt: HOUR_AGO }] })).toBe('ok'))
 })
+
+describe('Phase 2 inputs (deploy probes, ci_drift, env_drift)', () => {
+  const now = new Date('2026-10-02T12:00:00Z')
+  const fresh = '2026-10-02T06:00:00Z'
+
+  it('declared deploy targets: never probed is unknown, a failed probe is error, drift and ok need a fresh observation', () => {
+    const base = { key: 'deploy' as const, releaseCount: 0, appVersions: [], targetsDeclared: 2 }
+    expect(deriveElementState({ ...base, observations: [] }, now).state).toBe('unknown')
+    expect(deriveElementState({ ...base, observations: [{ targetId: 'web', ok: false, observedAt: fresh, error: 'HTTP 503' }] }, now)).toMatchObject({ state: 'error' })
+    expect(deriveElementState({ ...base, observations: [{ targetId: 'web', ok: true, observedAt: '2026-09-20T00:00:00Z', error: null }] }, now).state).toBe('unknown')
+    expect(deriveElementState({ ...base, observations: [{ targetId: 'web', ok: true, observedAt: fresh, error: null }], driftFindings: 1 }, now).state).toBe('drift')
+    expect(deriveElementState({ ...base, observations: [{ targetId: 'web', ok: true, observedAt: fresh, error: null }], driftFindings: 0 }, now).state).toBe('unknown')
+    expect(deriveElementState({ ...base, targetsDeclared: 1, observations: [{ targetId: 'web', ok: true, observedAt: fresh, error: null }], driftFindings: 0 }, now).state).toBe('ok')
+  })
+
+  it('a green CI run with open workflow findings is drift, not ok', () => {
+    const run = { status: 'completed', conclusion: 'success', updatedAt: fresh, name: 'CI' }
+    expect(deriveElementState({ key: 'ci', repoConnected: true, tokenAvailable: true, fetchError: null, run, driftFindings: 2 }, now).state).toBe('drift')
+    expect(deriveElementState({ key: 'ci', repoConnected: true, tokenAvailable: true, fetchError: null, run }, now).state).toBe('ok')
+  })
+
+  it('declared env names out of step make env drift even when the Mushi vars are present', () => {
+    expect(deriveElementState({ key: 'env', repoConnected: true, tokenAvailable: true, fetchError: null, required: ['A'], missing: [], driftFindings: 1 }, now).state).toBe('drift')
+  })
+})

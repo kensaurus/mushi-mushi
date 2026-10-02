@@ -199,6 +199,33 @@ The public checks read a `store` block in `mushi.recipe.json`:
 }
 ```
 
+## Connected sources
+
+Each part of the recipe can read from a source. GitHub, Supabase and Sentry use
+the connection each app already has. Others are added once per team on the
+**Portfolio** page:
+
+| Source | What Mushi reads | Credential |
+|--------|------------------|------------|
+| App Store Connect | App versions, review state, the latest build | A team API key. Apple keys cannot be limited to one app. |
+| Google Play Console | Tracks, releases and rollout % | A service account with "View app information". |
+| AI provider spend | 30 days of OpenAI or Anthropic cost, per app | An admin key that can read the cost report. |
+| RevenueCat | Entitlements, offerings and apps | A read-only v2 key. |
+| Your own endpoint | Whatever your endpoint returns, signed by Mushi | A signing secret, not a key to your system. |
+
+Every source is read-only by default. Credentials go to Vault and are never
+shown again. A source that an outside party refuses, such as an App Store
+account whose agreement nobody accepted, shows **Blocked** with the step to
+take. Releasing (a Play rollout %, promoting a track) needs a separate write
+key and a person's approval for each action.
+
+## Push from CI instead
+
+For a repo Mushi has no token for, push the recipe from your existing CI job:
+`POST /v1/ingest/recipe` takes `mushi.recipe.json` and the token files, and
+`POST /v1/ingest/recipe/events` takes build and deploy events from any CI,
+including Jenkins or a cron on a server.
+
 ## In your editor
 
 | MCP tool | Returns |

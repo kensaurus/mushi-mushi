@@ -559,6 +559,21 @@ const BASE_TOOLS: Record<string, HostedTool> = {
       return apiCall(`/v1/admin/orgs/${encodeURIComponent(org)}/portfolio/findings`, { headers: ctx.authHeaders })
     },
   },
+  get_recipe_drift: {
+    scope: 'mcp:read',
+    handler: async (args, ctx) => {
+      const pid = (args.projectId as string | undefined) ?? ctx.projectIdHint
+      if (!pid) throw new McpError(ERR_INVALID_PARAMS, 'projectId is required for get_recipe_drift')
+      return apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/recipe/drift`, { headers: ctx.authHeaders })
+    },
+  },
+  list_connectors: {
+    scope: 'mcp:read',
+    handler: async (args, ctx) => {
+      const org = typeof args.organizationId === 'string' && args.organizationId ? args.organizationId : 'current'
+      return apiCall(`/v1/admin/orgs/${encodeURIComponent(org)}/connectors`, { headers: ctx.authHeaders })
+    },
+  },
   get_radar: {
     scope: 'mcp:read',
     handler: async (args, ctx) => {
@@ -1833,6 +1848,8 @@ const UNTRUSTED_TOOLS: ReadonlySet<string> = new Set([
   'get_portfolio',
   'list_portfolio_findings',
   'get_radar',
+  'get_recipe_drift',
+  'list_connectors',
 ])
 
 /**

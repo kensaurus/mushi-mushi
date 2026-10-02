@@ -15,6 +15,10 @@ import type { RecipeRepo, RecipeRepoResolution } from '../recipe-github.ts'
 import { runPublicProbes, type ProbeFetcher } from './public-probes.ts'
 import { evaluateStorePolicy } from './store-policy.ts'
 import { extractRepoFacts, isRepoScanPath } from './repo-scan.ts'
+import { supabaseRadarResults } from '../connectors/supabase.ts'
+import { llmUsageConnector } from '../connectors/llm-usage.ts'
+import { revenuecatConnector } from '../connectors/revenuecat.ts'
+import type { ConnectorSnapshot } from '../connectors/types.ts'
 import {
   RADAR_RULE_IDS,
   RADAR_RULES,
@@ -86,6 +90,57 @@ export function targetFromManifest(manifest: unknown): PublicProbeTarget {
     siteUrls: [...siteUrls].slice(0, 10),
     privacyUrl: httpsUrl(store.privacyUrl) ?? (str(store.privacyUrl) ? String(store.privacyUrl) : null),
   }
+}
+
+// ── connector-backed rules ───────────────────────────────────────────────────
+
+const CONNECTOR_TITLE: Record<string, string> = { supabase: 'Supabase', llm_usage: 'AI provider spend', revenuecat: 'RevenueCat' }
+
+/**
+ * Radar results from the connectors' current snapshots (recipe-collector runs
+ * them earlier each day). No snapshot → `unknown` with the connect step; a
+ * failed snapshot → `error`; never `ok` from nothing.
+ */
+export async function connectorRadarResults(db: Db, projectId: string, manifest: unknown): Promise<DetectorResult[]> {
+  const kinds = ['supabase', 'llm_usage', 'revenuecat'] as const
+  const { data } = await db
+    .from('connector_snapshots')
+    .select('kind, ok, error, snapshot')
+    .eq('project_id', projectId)
+    .eq('is_current', true)
+    .in('kind', [...kinds])
+  const snaps = (data ?? []) as Array<{ kind: string; ok: boolean; error: string | null; snapshot: ConnectorSnapshot | null }>
+  const out: DetectorResult[] = []
+  for (const kind of kinds) {
+    const rules = RADAR_RULE_IDS.filter((id) => RADAR_RULES[id].connector === kind)
+    const snap = snaps.find((x) => x.kind === kind)
+    if (!snap) {
+      for (const ruleId of rules) out.push({ ruleId, state: 'unknown', reason: `Not checked: connect ${CONNECTOR_TITLE[kind]} to check this.`, findings: [] })
+      continue
+    }
+    if (!snap.ok || !snap.snapshot) {
+      for (const ruleId of rules) out.push({ ruleId, state: 'error', reason: `${CONNECTOR_TITLE[kind]} could not be read: ${(snap.error ?? 'unknown error').slice(0, 200)}`, findings: [] })
+      continue
+    }
+    if (kind === 'supabase') {
+      for (const r of supabaseRadarResults(snap.snapshot.facts as Record<string, unknown>)) {
+        if ((rules as readonly string[]).includes(r.ruleId)) out.push(r as unknown as DetectorResult)
+      }
+      continue
+    }
+    const connector = kind === 'llm_usage' ? llmUsageConnector : revenuecatConnector
+    const drift = connector.detectDrift ? connector.detectDrift(null, snap.snapshot, kind === 'revenuecat' ? { [projectId]: manifest } : manifest) : []
+    for (const ruleId of rules) {
+      const hits = drift.filter((d) => d.ruleId === ruleId)
+      out.push({
+        ruleId,
+        state: hits.length ? 'finding' : 'ok',
+        reason: hits.length ? `${hits.length} to fix.` : `Checked through ${CONNECTOR_TITLE[kind]}; nothing found.`,
+        findings: hits.map((d) => ({ ruleId, severity: d.severity, message: d.message, target: null, filePath: d.filePath ?? null, fix: d.suggestedFix?.text ?? 'Open the connector page for detail.' })),
+      })
+    }
+  }
+  return out
 }
 
 // ── scheduled run ────────────────────────────────────────────────────────────
@@ -209,7 +264,9 @@ export async function runRadar(db: Db, projectId: string, deps: RadarRunDeps, tr
   const now = deps.now()
   const { data: snap } = await db.from('app_recipe_snapshots').select('manifest').eq('project_id', projectId).eq('is_current', true).maybeSingle()
   const target = targetFromManifest((snap as { manifest?: unknown } | null)?.manifest ?? null)
+  const manifest = (snap as { manifest?: unknown } | null)?.manifest ?? null
   const results: DetectorResult[] = await runPublicProbes(target, deps.fetcher, now)
+  results.push(...await connectorRadarResults(db, projectId, manifest))
 
   const ci = await latestRun(db, projectId, RADAR_CI_GATE)
   const ciFresh = ci?.completed_at && now.getTime() - Date.parse(ci.completed_at) < CI_FACTS_FRESH_DAYS * 86400_000 &&
@@ -261,7 +318,7 @@ export interface RadarDetectorView {
   ruleId: RadarRuleId
   title: string
   prevents: string
-  source: 'public_probe' | 'repo_scan' | 'host_ci'
+  source: 'public_probe' | 'repo_scan' | 'host_ci' | 'connector'
   state: DetectorState
   reason: string
   checkedAt: string | null

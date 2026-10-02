@@ -109,4 +109,16 @@ export interface PortfolioFindingsResponse {
   groups: FindingGroup[]
   sdkSkew: SdkSkewEntry[]
   holes: IntegrationHole[]
+  /** Rules that are genuinely cross-project (shared auth, deep links, shared channels…), Phase P2. */
+  crossProject: CrossProjectFinding[]
+}
+
+interface CrossProjectFinding {
+  id: string
+  ruleId: string
+  severity: 'info' | 'warn' | 'error'
+  projectIds: string[]
+  resourceKey: string | null
+  message: string
+  suggestedFix: string | null
 }

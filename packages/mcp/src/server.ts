@@ -248,7 +248,7 @@ const REPORT_STATUSES = [
 const REPORT_CATEGORIES = ['bug', 'slow', 'visual', 'confusing', 'other'] as const;
 const REPORT_SEVERITIES = ['critical', 'high', 'medium', 'low'] as const;
 
-/** gate_runs.gate CHECK constraint (migrations 20260612061520 and 20261002130100_recipe_gate_types). */
+/** gate_runs.gate CHECK constraint (migrations 20260612061520, 20261002130100_recipe_gate_types, 20261002160000_radar_gates_and_digest). */
 const GATE_IDS = [
   'dead_handler',
   'mock_leak',
@@ -264,6 +264,9 @@ const GATE_IDS = [
   'ci_drift',
   'deploy_drift',
   'env_drift',
+  'radar',
+  'radar_ci',
+  'store_review',
 ] as const;
 /** gate_findings.severity CHECK constraint (migration 20260504000000). */
 const GATE_FINDING_SEVERITIES = ['info', 'warn', 'error'] as const;
@@ -1397,6 +1400,36 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     async (args) => {
       const org = encodeURIComponent(args.organizationId ?? 'current');
       return jsonText(await apiCall(`/v1/admin/orgs/${org}/portfolio/findings`));
+    },
+  );
+
+  server.registerTool(
+    'get_recipe_drift',
+    {
+      title: titleOf('get_recipe_drift'),
+      description: descOf('get_recipe_drift'),
+      annotations: annotationsFor('get_recipe_drift'),
+      inputSchema: z.object({
+        projectId: z.string().optional().describe('Project UUID — defaults to the server-configured project when omitted'),
+      }),
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      return jsonText(await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/recipe/drift`));
+    },
+  );
+
+  server.registerTool(
+    'list_connectors',
+    {
+      title: titleOf('list_connectors'),
+      description: descOf('list_connectors'),
+      annotations: annotationsFor('list_connectors'),
+      inputSchema: ORG_ID_INPUT,
+    },
+    async (args) => {
+      const org = encodeURIComponent(args.organizationId ?? 'current');
+      return jsonText(await apiCall(`/v1/admin/orgs/${org}/connectors`));
     },
   );
 
