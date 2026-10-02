@@ -138,6 +138,9 @@ describe('MCP protocol handshake', () => {
       'remove_byok_key',
       'approve_qa_story',
       'reply_to_reporter',
+      // Plan 018: reporter loop
+      'request_reporter_info',
+      'release_reporter_update',
       // Phase 5: notification + full-stack audit write tools
       'test_notification_channel',
       'run_fullstack_audit',

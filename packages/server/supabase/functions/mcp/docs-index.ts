@@ -1614,7 +1614,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/sdks/react-native",
     markdown: "sdks/react-native.md",
     keywords: ["sdks", "react-native", "react", "native", "@mushi-mushi/react-native"],
-    headings: ["Install", "Mount the provider", "Submit a report from a screen", "Offline queue", "What gets captured (v0.19+)", "Screenshots (react-native-view-shot)", "Manual breadcrumbs", "Reporter identity contract"],
+    headings: ["Install", "Mount the provider", "Submit a report from a screen", "Offline queue", "What gets captured (v0.19+)", "Screenshots (react-native-view-shot)", "Theming the report sheet", "Manual breadcrumbs"],
     excerpt: "Reference for @mushi-mushi/react-native — MushiProvider, hooks, shake-to-report, screenshots, identity and the offline queue for React Native and Expo.",
   },
   {

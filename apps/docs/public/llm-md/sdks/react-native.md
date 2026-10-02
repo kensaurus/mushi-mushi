@@ -93,11 +93,15 @@ Reports submitted while offline are buffered in `AsyncStorage` (key
 `@mushi:offline_queue`, default cap 50 items) and replayed on the next
 provider mount or whenever you call `useMushi().flush()`.
 
+
+
+
   For **pure-native** projects with no JS bundle, use the
   [iOS](/quickstart/ios) or [Android](/quickstart/android) SDKs directly.
   **Capacitor** users have a [dedicated plugin](/sdks/capacitor); see
   [Capacitor → React Native migration](/migrations/capacitor-to-react-native)
   if you're moving from one to the other.
+
 
 See [Quickstart → React Native](/quickstart/react-native) for the end-to-end setup.
 
@@ -167,6 +171,23 @@ The SDK captures **before** the bottom sheet overlays the screen. Users see a
 
 Console operators can override the caption via **Projects → SDK install →
 Screenshot privacy caption** (runtime config — no app rebuild).
+
+### Theming the report sheet
+
+The report sheet takes the host's look through `widget.theme`. Every token is optional; unset tokens use neutral defaults with an ink accent, and when only `accent` is set the text on it is picked for contrast.
+
+```tsx
+<MushiProvider
+  config={{
+    widget: {
+      theme: { accent: '#C9A227', fontFamily: 'Georgia', radius: 8 },
+      // also: bg, fg, muted, surface, border, accentFg, success, error
+    },
+  }}
+>
+```
+
+"Your reports" shows the same status labels as the web widget ("Received", "Looking into it", "Fix in progress", "Fixed in v1.4"), from `@mushi-mushi/core/reporter-ui`. A thread that fails or does not answer within 12 s shows Retry, and opening a thread marks its updates read.
 
 On finance/health apps, keeping capture on with a clear caption is often better
 than disabling screenshots entirely. For screens that must never be captured,
