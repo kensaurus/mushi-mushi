@@ -130,6 +130,29 @@ export function blogPostingJsonLd(post: BlogPostMeta): Record<string, unknown> {
   }
 }
 
+/** Canonical URL of the investors page (content/investors.mdx). */
+export const INVESTORS_URL = `${DOCS_SITE}/investors`
+
+/**
+ * schema.org AboutPage for /investors — rendered by <InvestorsJsonLd /> from
+ * the page itself (the catch-all route only emits JSON-LD for blog posts).
+ * The founder is the blog byline, nothing more: everything else about them
+ * is the owner's to publish.
+ */
+export const INVESTORS_ABOUT_PAGE_JSONLD = {
+  '@context': 'https://schema.org',
+  '@type': 'AboutPage',
+  name: 'Mushi Mushi — for investors',
+  url: INVESTORS_URL,
+  description: MUSHI_TAGLINE_V2.pitch,
+  about: { '@id': ORGANIZATION_ID },
+  publisher: { '@id': ORGANIZATION_ID },
+  mainEntity: {
+    '@id': ORGANIZATION_ID,
+    founder: { '@type': 'Person', name: BLOG_AUTHOR_NAME, url: 'https://github.com/kensaurus' },
+  },
+} as const
+
 /** schema.org SoftwareApplication — landing page only (content/index.mdx). */
 export const SOFTWARE_APPLICATION_JSONLD = {
   '@context': 'https://schema.org',

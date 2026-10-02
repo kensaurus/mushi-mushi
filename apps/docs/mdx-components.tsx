@@ -22,6 +22,7 @@ import { SdkEnvMatrix } from './components/SdkEnvMatrix'
 import { EvolutionDiagram } from './components/EvolutionDiagram'
 import { LoopComparison } from './components/LoopComparison'
 import { PricingEstimator } from './components/PricingEstimator'
+import { InvestorsJsonLd } from './components/InvestorsJsonLd'
 import {
   CinematicEditorialHero,
   ProofPinSection,
@@ -31,6 +32,9 @@ import {
   ComparisonScrub,
   LandingJsonLd,
   LandingFaq,
+  RealDiagnosisCard,
+  MediatorMap,
+  PricingStrip,
 } from './components/landing'
 
 export const useMDXComponents = (components?: Record<string, unknown>) => ({
@@ -62,6 +66,7 @@ export const useMDXComponents = (components?: Record<string, unknown>) => ({
   EvolutionDiagram,
   LoopComparison,
   PricingEstimator,
+  InvestorsJsonLd,
   CinematicEditorialHero,
   ProofPinSection,
   DiagnosisScrollStage,
@@ -70,5 +75,8 @@ export const useMDXComponents = (components?: Record<string, unknown>) => ({
   ComparisonScrub,
   LandingJsonLd,
   LandingFaq,
+  RealDiagnosisCard,
+  MediatorMap,
+  PricingStrip,
   ...(components ?? {}),
 })

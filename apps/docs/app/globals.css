@@ -235,6 +235,18 @@ main table {
   display: table !important;
 }
 
+/* Below 768px a wide table scrolls inside its own box instead of widening
+ * the page. `display: table` above overrides Nextra's own overflow-x
+ * styling, which let /pricing (966px) and /security (600px) scroll the
+ * whole page sideways at a 390px viewport. */
+@media (max-width: 767px) {
+  main table {
+    display: block !important;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
 main thead {
   border-top: 2px solid var(--mushi-ink) !important;
   border-bottom: 1px solid var(--mushi-rule) !important;
@@ -1644,6 +1656,351 @@ html:has(.landing-cinematic-hero) {
 
 .landing-closing-link:hover {
   border-bottom-color: var(--mushi-vermillion);
+}
+
+/* ---------------------------------------------------------------------------
+ * Real diagnosis card (<RealDiagnosisCard />) — the user's words on the left,
+ * Mushi's read on the right, provenance underneath. Stacks below 768px.
+ * ------------------------------------------------------------------------- */
+.landing-real-diagnosis {
+  margin: 1.25rem 0 2.5rem;
+  display: grid;
+  grid-template-columns: 1fr;
+  border: 1px solid var(--mushi-rule);
+  border-radius: 0.6rem;
+  overflow: hidden;
+  background: color-mix(in oklch, var(--mushi-paper) 92%, white);
+}
+
+.dark .landing-real-diagnosis {
+  background: color-mix(in oklch, var(--mushi-dark-paper) 88%, black);
+}
+
+@media (min-width: 768px) {
+  .landing-real-diagnosis {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  }
+}
+
+.landing-real-diagnosis__report,
+.landing-real-diagnosis__read {
+  padding: 1.25rem 1.35rem;
+  display: grid;
+  gap: 0.6rem;
+  align-content: start;
+  min-width: 0;
+}
+
+.landing-real-diagnosis__report {
+  border-bottom: 1px solid var(--mushi-rule);
+  background: var(--mushi-paper-wash);
+}
+
+@media (min-width: 768px) {
+  .landing-real-diagnosis__report {
+    border-bottom: none;
+    border-right: 1px solid var(--mushi-rule);
+  }
+}
+
+.landing-real-diagnosis__label {
+  font-family: var(--mushi-font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--mushi-vermillion);
+}
+
+.landing-real-diagnosis__quote {
+  margin: 0;
+  padding: 0;
+  border: none;
+  font-size: 0.98rem;
+  line-height: 1.6;
+  font-style: italic;
+  color: var(--mushi-ink);
+}
+
+.landing-real-diagnosis__title {
+  margin: 0;
+  font-family: var(--mushi-font-display);
+  font-size: 1.2rem;
+  line-height: 1.3;
+  font-weight: 600;
+  color: var(--mushi-ink);
+}
+
+.dark .landing-real-diagnosis__quote,
+.dark .landing-real-diagnosis__title {
+  color: var(--mushi-dark-ink);
+}
+
+.landing-real-diagnosis__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.landing-real-diagnosis__chips li {
+  font-family: var(--mushi-font-mono);
+  font-size: 0.75rem;
+  padding: 0.15rem 0.55rem;
+  border: 1px solid var(--mushi-rule);
+  border-radius: 999px;
+  color: var(--mushi-ink-muted);
+}
+
+.dark .landing-real-diagnosis__chips li {
+  color: var(--mushi-dark-ink-muted);
+}
+
+.landing-real-diagnosis__chips strong {
+  color: var(--mushi-vermillion);
+  font-weight: 600;
+}
+
+.landing-real-diagnosis__fields {
+  margin: 0.25rem 0 0;
+  display: grid;
+  gap: 0.2rem;
+}
+
+.landing-real-diagnosis__fields dt {
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin-top: 0.5rem;
+  color: var(--mushi-ink);
+}
+
+.dark .landing-real-diagnosis__fields dt {
+  color: var(--mushi-dark-ink);
+}
+
+.landing-real-diagnosis__fields dd {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.55;
+  color: var(--mushi-ink-muted);
+  overflow-wrap: anywhere;
+}
+
+.dark .landing-real-diagnosis__fields dd {
+  color: var(--mushi-dark-ink-muted);
+}
+
+.landing-real-diagnosis__next {
+  margin-top: 0.5rem;
+  font-weight: 600;
+  color: var(--mushi-vermillion);
+  text-decoration: none;
+}
+
+.landing-real-diagnosis__next:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.landing-real-diagnosis__provenance {
+  grid-column: 1 / -1;
+  padding: 0.75rem 1.35rem;
+  border-top: 1px solid var(--mushi-rule);
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--mushi-ink-muted);
+}
+
+.dark .landing-real-diagnosis__provenance {
+  color: var(--mushi-dark-ink-muted);
+}
+
+/* ---------------------------------------------------------------------------
+ * Mediator map (<MediatorMap />) — in · queue · out. Three columns at 1024px,
+ * one column with the queue between the lists below that.
+ * ------------------------------------------------------------------------- */
+.landing-mediator {
+  margin: 1.25rem 0 2rem;
+}
+
+.landing-mediator__grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: 1fr;
+  align-items: stretch;
+}
+
+@media (min-width: 1024px) {
+  .landing-mediator__grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 0.7fr) minmax(0, 1fr);
+    gap: 1.25rem;
+  }
+}
+
+.landing-mediator__heading {
+  margin: 0 0 0.6rem !important;
+  font-family: var(--mushi-font-mono);
+  font-size: 0.72rem !important;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--mushi-ink-muted);
+}
+
+.dark .landing-mediator__heading {
+  color: var(--mushi-dark-ink-muted);
+}
+
+.landing-mediator__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.landing-mediator__link {
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--mushi-rule);
+  border-radius: 0.5rem;
+  text-decoration: none;
+  transition: border-color 160ms ease;
+}
+
+.landing-mediator__link:hover {
+  border-color: var(--mushi-vermillion);
+}
+
+.landing-mediator__label {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--mushi-ink);
+}
+
+.dark .landing-mediator__label {
+  color: var(--mushi-dark-ink);
+}
+
+.landing-mediator__detail {
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: var(--mushi-ink-muted);
+}
+
+.dark .landing-mediator__detail {
+  color: var(--mushi-dark-ink-muted);
+}
+
+.landing-mediator__core {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 0.6rem;
+  padding: 1.25rem;
+  text-align: center;
+  border: 1px solid color-mix(in oklch, var(--mushi-vermillion) 35%, var(--mushi-rule));
+  border-radius: 0.6rem;
+  background: color-mix(in oklch, var(--mushi-vermillion) 5%, transparent);
+}
+
+.landing-mediator__core p {
+  margin: 0;
+  max-width: 22ch;
+  font-family: var(--mushi-font-display);
+  font-size: 1.05rem;
+  line-height: 1.35;
+  color: var(--mushi-ink);
+}
+
+.dark .landing-mediator__core p {
+  color: var(--mushi-dark-ink);
+}
+
+.landing-mediator__stamp {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 999px;
+  border: 2px solid var(--mushi-vermillion);
+  color: var(--mushi-vermillion);
+  font-family: var(--mushi-font-display);
+  font-weight: 700;
+}
+
+.landing-mediator__gating {
+  margin: 0.9rem 0 0;
+  font-size: 0.85rem;
+  color: var(--mushi-ink-muted);
+}
+
+.dark .landing-mediator__gating {
+  color: var(--mushi-dark-ink-muted);
+}
+
+/* ---------------------------------------------------------------------------
+ * Landing pricing strip (<PricingStrip />) — four plans, then /pricing.
+ * ------------------------------------------------------------------------- */
+.landing-pricing {
+  margin: 3rem 0 2rem;
+}
+
+.landing-pricing__tiers {
+  margin: 0 0 1.25rem;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (min-width: 1024px) {
+  .landing-pricing__tiers {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.landing-pricing__tier {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--mushi-rule);
+  border-radius: 0.5rem;
+  min-width: 0;
+}
+
+.landing-pricing__name {
+  font-family: var(--mushi-font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--mushi-ink-muted);
+}
+
+.landing-pricing__price {
+  font-family: var(--mushi-font-display);
+  font-size: 1.35rem;
+  font-weight: 600;
+  color: var(--mushi-ink);
+}
+
+.landing-pricing__quota {
+  font-size: 0.85rem;
+  line-height: 1.4;
+  color: var(--mushi-ink-muted);
+}
+
+.dark .landing-pricing__name,
+.dark .landing-pricing__quota {
+  color: var(--mushi-dark-ink-muted);
+}
+
+.dark .landing-pricing__price {
+  color: var(--mushi-dark-ink);
 }
 
 @media (prefers-reduced-motion: reduce) {

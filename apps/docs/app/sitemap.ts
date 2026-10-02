@@ -24,13 +24,29 @@ function frontMatterOf(item: PageMapItem): FrontMatter {
  * single 404. So a folder counts only when it has an index child, and its
  * front matter (for `<lastmod>`) is that index page's.
  */
+/**
+ * A page whose front matter sets `robots.index: false` (e.g. /investors while
+ * it still carries owner placeholders) must not be submitted — a sitemap URL
+ * marked noindex is a Search Console error.
+ */
+function isNoindex(frontMatter: FrontMatter): boolean {
+  const robots = frontMatter?.robots
+  return typeof robots === 'object' && robots !== null && (robots as { index?: unknown }).index === false
+}
+
 function collectRoutes(items: PageMapItem[], acc: Map<string, Date | undefined>): void {
   for (const item of items) {
     const children = 'children' in item && Array.isArray(item.children) ? item.children : null
     // A leaf is always a page. A folder is one only if it has an index child.
     const index = children?.find((c) => 'name' in c && c.name === 'index')
     const isPage = !children || index !== undefined
-    if (isPage && 'route' in item && item.route.startsWith('/') && !item.route.includes('#')) {
+    if (
+      isPage &&
+      'route' in item &&
+      item.route.startsWith('/') &&
+      !item.route.includes('#') &&
+      !isNoindex(frontMatterOf(index ?? item))
+    ) {
       acc.set(item.route, lastModifiedFromFrontMatter(frontMatterOf(index ?? item)))
     }
     if (children) {
