@@ -1,6 +1,6 @@
 {
   "$schema": "https://design-tokens.github.io/community-group/format/2025.10/schema.json",
-  "$description": "glot.it art direction Pha Khram: semantic roles and scales.",
+  "$description": "Pha Khram semantic roles. us.kensaur.mushi.cssVar is the glot CSS variable each role sets; us.kensaur.glot.alsoSets lists legacy variables the scoped layer also points at the role; us.kensaur.glot.contrast records WCAG 2.x ratios, recomputed and asserted by `npm run tokens:direction -- --check` and __tests__/pha-khram-tokens.test.ts.",
   "color": {
     "$type": "color",
     "surface": {
@@ -13,12 +13,19 @@
               "capacitor"
             ],
             "cssVar": "--color-bg",
-            "ts": "colors.bg"
+            "ts": "phaKhram.color.surface.base"
+          },
+          "us.kensaur.glot": {
+            "alsoSets": [
+              "--register-canvas",
+              "--active-domain-bg",
+              "--color-surface-app"
+            ]
           }
         }
       },
       "raised": {
-        "$value": "{color.palette.cotton}",
+        "$value": "{color.palette.raised}",
         "$extensions": {
           "us.kensaur.mushi": {
             "platforms": [
@@ -26,12 +33,34 @@
               "capacitor"
             ],
             "cssVar": "--color-surface",
-            "ts": "colors.surface"
+            "ts": "phaKhram.color.surface.raised"
+          },
+          "us.kensaur.glot": {
+            "alsoSets": [
+              "--color-surface-elevated"
+            ]
+          }
+        }
+      },
+      "raisedHover": {
+        "$value": "{color.palette.raised-hover}",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "platforms": [
+              "web",
+              "capacitor"
+            ],
+            "cssVar": "--color-surface-hover"
+          },
+          "us.kensaur.glot": {
+            "alsoSets": [
+              "--color-surface-active"
+            ]
           }
         }
       },
       "sunken": {
-        "$value": "{color.palette.raised}",
+        "$value": "{color.palette.sunken}",
         "$extensions": {
           "us.kensaur.mushi": {
             "platforms": [
@@ -53,12 +82,28 @@
               "capacitor"
             ],
             "cssVar": "--color-text-primary",
-            "ts": "colors.textPrimary"
+            "ts": "phaKhram.color.text.primary"
+          },
+          "us.kensaur.glot": {
+            "contrast": [
+              {
+                "against": "{color.surface.base}",
+                "min": 4.5,
+                "ratio": 15.14,
+                "use": "body text on canvas"
+              },
+              {
+                "against": "{color.surface.raised}",
+                "min": 4.5,
+                "ratio": 12.2,
+                "use": "body text on raised"
+              }
+            ]
           }
         }
       },
       "secondary": {
-        "$value": "{color.palette.muted-on-canvas}",
+        "$value": "{color.palette.muted}",
         "$extensions": {
           "us.kensaur.mushi": {
             "platforms": [
@@ -66,32 +111,58 @@
               "capacitor"
             ],
             "cssVar": "--color-text-secondary",
-            "ts": "colors.textSecondary"
+            "ts": "phaKhram.color.text.secondary"
+          },
+          "us.kensaur.glot": {
+            "alsoSets": [
+              "--color-muted"
+            ],
+            "contrast": [
+              {
+                "against": "{color.surface.base}",
+                "min": 4.5,
+                "ratio": 8.63,
+                "use": "secondary text on canvas"
+              },
+              {
+                "against": "{color.surface.raised}",
+                "min": 4.5,
+                "ratio": 6.95,
+                "use": "secondary text on raised"
+              }
+            ]
           }
         }
       },
-      "onRaised": {
-        "$value": "{color.palette.ink}"
-      },
-      "onRaisedSecondary": {
-        "$value": "{color.palette.ink-2}"
-      }
-    },
-    "action": {
-      "primary": {
-        "$value": "{color.palette.signal}",
+      "tertiary": {
+        "$value": "{color.palette.tertiary}",
         "$extensions": {
           "us.kensaur.mushi": {
             "platforms": [
               "web",
               "capacitor"
             ],
-            "cssVar": "--color-cta",
-            "ts": "colors.cta"
+            "cssVar": "--color-text-tertiary"
+          },
+          "us.kensaur.glot": {
+            "contrast": [
+              {
+                "against": "{color.surface.base}",
+                "min": 4.5,
+                "ratio": 6.47,
+                "use": "tertiary text on canvas"
+              },
+              {
+                "against": "{color.surface.raised}",
+                "min": 4.5,
+                "ratio": 5.22,
+                "use": "tertiary text on raised"
+              }
+            ]
           }
         }
       },
-      "onPrimary": {
+      "onAction": {
         "$value": "{color.palette.on-signal}",
         "$extensions": {
           "us.kensaur.mushi": {
@@ -100,12 +171,82 @@
               "capacitor"
             ],
             "cssVar": "--color-on-cta",
-            "ts": "colors.ctaForeground"
+            "ts": "phaKhram.color.text.onAction"
+          },
+          "us.kensaur.glot": {
+            "contrast": [
+              {
+                "against": "{color.action.primary}",
+                "min": 4.5,
+                "ratio": 4.93,
+                "use": "label on the lac-red action"
+              }
+            ]
           }
         }
-      }
-    },
-    "feedback": {
+      },
+      "onHighlight": {
+        "$value": "{color.palette.ink}",
+        "$description": "Text and icons on luminous or coral fills (selection, correct marks).",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "platforms": [
+              "web",
+              "capacitor"
+            ],
+            "cssVar": "--color-text-inverse"
+          },
+          "us.kensaur.glot": {
+            "contrast": [
+              {
+                "against": "{color.palette.luminous}",
+                "min": 4.5,
+                "ratio": 9.56,
+                "use": "ink on luminous"
+              },
+              {
+                "against": "{color.palette.signal-text}",
+                "min": 4.5,
+                "ratio": 7.97,
+                "use": "ink on coral"
+              }
+            ]
+          }
+        }
+      },
+      "signal": {
+        "$value": "{color.palette.signal-text}",
+        "$description": "Lac red as text or icon.",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "platforms": [
+              "web",
+              "capacitor"
+            ],
+            "cssVar": "--color-cta-foreground"
+          },
+          "us.kensaur.glot": {
+            "alsoSets": [
+              "--color-error",
+              "--color-error-foreground"
+            ],
+            "contrast": [
+              {
+                "against": "{color.surface.base}",
+                "min": 4.5,
+                "ratio": 7.97,
+                "use": "lac-red text on canvas"
+              },
+              {
+                "against": "{color.surface.raised}",
+                "min": 4.5,
+                "ratio": 6.42,
+                "use": "lac-red text on raised"
+              }
+            ]
+          }
+        }
+      },
       "reward": {
         "$value": "{color.palette.reward}",
         "$extensions": {
@@ -114,8 +255,147 @@
               "web",
               "capacitor"
             ],
-            "cssVar": "--color-accent",
-            "ts": "colors.accent"
+            "cssVar": "--color-accent-text"
+          },
+          "us.kensaur.glot": {
+            "contrast": [
+              {
+                "against": "{color.surface.base}",
+                "min": 4.5,
+                "ratio": 8.16,
+                "use": "turmeric text on canvas"
+              },
+              {
+                "against": "{color.surface.raised}",
+                "min": 4.5,
+                "ratio": 6.57,
+                "use": "turmeric text on raised"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "action": {
+      "primary": {
+        "$value": "{color.palette.signal}",
+        "$description": "The one filled action per view. Fill only on canvas (2.73:1 on raised).",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "platforms": [
+              "web",
+              "capacitor"
+            ],
+            "cssVar": "--color-cta",
+            "ts": "phaKhram.color.action.primary"
+          },
+          "us.kensaur.glot": {
+            "contrast": [
+              {
+                "against": "{color.surface.base}",
+                "min": 3,
+                "ratio": 3.39,
+                "use": "action fill vs canvas (UI)"
+              }
+            ]
+          }
+        }
+      },
+      "primaryHover": {
+        "$value": "{color.palette.signal-hover}",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "platforms": [
+              "web",
+              "capacitor"
+            ],
+            "cssVar": "--color-cta-hover"
+          },
+          "us.kensaur.glot": {
+            "contrast": [
+              {
+                "against": "{color.surface.base}",
+                "min": 3,
+                "ratio": 3.67,
+                "use": "hover fill vs canvas (UI)"
+              }
+            ]
+          }
+        }
+      },
+      "shadow": {
+        "$value": "{color.palette.sunken}",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "platforms": [
+              "web",
+              "capacitor"
+            ],
+            "cssVar": "--color-cta-shadow"
+          }
+        }
+      }
+    },
+    "feedback": {
+      "positive": {
+        "$value": "{color.palette.luminous}",
+        "$description": "Selection and positive state: the luminous thread.",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "platforms": [
+              "web",
+              "capacitor"
+            ],
+            "cssVar": "--color-success"
+          },
+          "us.kensaur.glot": {
+            "alsoSets": [
+              "--color-success-foreground",
+              "--color-info",
+              "--color-info-foreground"
+            ],
+            "contrast": [
+              {
+                "against": "{color.surface.base}",
+                "min": 4.5,
+                "ratio": 9.56,
+                "use": "luminous text on canvas"
+              },
+              {
+                "against": "{color.surface.raised}",
+                "min": 4.5,
+                "ratio": 7.7,
+                "use": "luminous text on raised"
+              }
+            ]
+          }
+        }
+      },
+      "reward": {
+        "$value": "{color.palette.reward}",
+        "$description": "Earned reward moments only; stroke or text, never a fill.",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "platforms": [
+              "web",
+              "capacitor"
+            ],
+            "cssVar": "--color-accent"
+          },
+          "us.kensaur.glot": {
+            "alsoSets": [
+              "--color-accent-hover",
+              "--color-warning",
+              "--color-warning-foreground"
+            ],
+            "contrast": [
+              {
+                "against": "{color.surface.base}",
+                "min": 3,
+                "ratio": 8.16,
+                "use": "reward stroke vs canvas (UI)"
+              }
+            ]
           }
         }
       }
@@ -123,18 +403,36 @@
     "line": {
       "default": {
         "$value": "{color.palette.thread}",
+        "$description": "1px warp/weft hairline.",
         "$extensions": {
           "us.kensaur.mushi": {
             "platforms": [
               "web",
               "capacitor"
             ],
-            "cssVar": "--color-border"
+            "cssVar": "--color-border",
+            "ts": "phaKhram.color.line.default"
+          },
+          "us.kensaur.glot": {
+            "contrast": [
+              {
+                "against": "{color.surface.base}",
+                "min": 3,
+                "ratio": 4.83,
+                "use": "hairline vs canvas (UI)"
+              },
+              {
+                "against": "{color.surface.raised}",
+                "min": 3,
+                "ratio": 3.89,
+                "use": "hairline vs raised (UI)"
+              }
+            ]
           }
         }
       },
       "strong": {
-        "$value": "{color.palette.cotton}",
+        "$value": "{color.palette.cotton-2}",
         "$extensions": {
           "us.kensaur.mushi": {
             "platforms": [
@@ -142,13 +440,102 @@
               "capacitor"
             ],
             "cssVar": "--color-border-strong"
+          },
+          "us.kensaur.glot": {
+            "contrast": [
+              {
+                "against": "{color.surface.base}",
+                "min": 3,
+                "ratio": 11.1,
+                "use": "strong line vs canvas (UI)"
+              }
+            ]
+          }
+        }
+      },
+      "focus": {
+        "$value": "{color.palette.luminous}",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "platforms": [
+              "web",
+              "capacitor"
+            ],
+            "cssVar": "--color-focus-ring",
+            "ts": "phaKhram.color.line.focus"
+          },
+          "us.kensaur.glot": {
+            "contrast": [
+              {
+                "against": "{color.surface.base}",
+                "min": 3,
+                "ratio": 9.56,
+                "use": "focus ring vs canvas (UI)"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "dye": {
+      "$description": "Row dye = memory strength. Decorative on the loom canvas; the HUD states the same numbers in text.",
+      "bare": {
+        "$value": "{color.vat.bare}",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "platforms": [
+              "web",
+              "capacitor"
+            ],
+            "cssVar": "--loom-dye-bare",
+            "ts": "phaKhram.color.dye.bare"
+          }
+        }
+      },
+      "pale": {
+        "$value": "{color.vat.pale}",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "platforms": [
+              "web",
+              "capacitor"
+            ],
+            "cssVar": "--loom-dye-pale",
+            "ts": "phaKhram.color.dye.pale"
+          }
+        }
+      },
+      "mid": {
+        "$value": "{color.vat.mid}",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "platforms": [
+              "web",
+              "capacitor"
+            ],
+            "cssVar": "--loom-dye-mid",
+            "ts": "phaKhram.color.dye.mid"
+          }
+        }
+      },
+      "deep": {
+        "$value": "{color.vat.deep}",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "platforms": [
+              "web",
+              "capacitor"
+            ],
+            "cssVar": "--loom-dye-deep",
+            "ts": "phaKhram.color.dye.deep"
           }
         }
       }
     },
     "tone": {
       "mid": {
-        "$value": "{color.toneInk.mid}",
+        "$value": "{color.tone-on-canvas.mid}",
+        "$description": "Always paired with a contour glyph; colour is never the only cue.",
         "$extensions": {
           "us.kensaur.mushi": {
             "platforms": [
@@ -156,13 +543,29 @@
               "capacitor"
             ],
             "cssVar": "--color-tone-mid",
-            "ts": "toneColors.mid"
+            "ts": "phaKhram.color.tone.mid"
+          },
+          "us.kensaur.glot": {
+            "contrast": [
+              {
+                "against": "{color.surface.base}",
+                "min": 4.5,
+                "ratio": 10.91,
+                "use": "mid tone on canvas"
+              },
+              {
+                "against": "{color.surface.raised}",
+                "min": 4.5,
+                "ratio": 8.79,
+                "use": "mid tone on raised"
+              }
+            ]
           }
-        },
-        "$description": "Always paired with a contour glyph; colour is never the only cue"
+        }
       },
       "low": {
-        "$value": "{color.toneInk.low}",
+        "$value": "{color.tone-on-canvas.low}",
+        "$description": "Always paired with a contour glyph; colour is never the only cue.",
         "$extensions": {
           "us.kensaur.mushi": {
             "platforms": [
@@ -170,13 +573,29 @@
               "capacitor"
             ],
             "cssVar": "--color-tone-low",
-            "ts": "toneColors.low"
+            "ts": "phaKhram.color.tone.low"
+          },
+          "us.kensaur.glot": {
+            "contrast": [
+              {
+                "against": "{color.surface.base}",
+                "min": 4.5,
+                "ratio": 8.08,
+                "use": "low tone on canvas"
+              },
+              {
+                "against": "{color.surface.raised}",
+                "min": 4.5,
+                "ratio": 6.51,
+                "use": "low tone on raised"
+              }
+            ]
           }
-        },
-        "$description": "Always paired with a contour glyph; colour is never the only cue"
+        }
       },
       "falling": {
-        "$value": "{color.toneInk.falling}",
+        "$value": "{color.tone-on-canvas.falling}",
+        "$description": "Always paired with a contour glyph; colour is never the only cue.",
         "$extensions": {
           "us.kensaur.mushi": {
             "platforms": [
@@ -184,13 +603,29 @@
               "capacitor"
             ],
             "cssVar": "--color-tone-falling",
-            "ts": "toneColors.falling"
+            "ts": "phaKhram.color.tone.falling"
+          },
+          "us.kensaur.glot": {
+            "contrast": [
+              {
+                "against": "{color.surface.base}",
+                "min": 4.5,
+                "ratio": 8.6,
+                "use": "falling tone on canvas"
+              },
+              {
+                "against": "{color.surface.raised}",
+                "min": 4.5,
+                "ratio": 6.93,
+                "use": "falling tone on raised"
+              }
+            ]
           }
-        },
-        "$description": "Always paired with a contour glyph; colour is never the only cue"
+        }
       },
       "high": {
-        "$value": "{color.toneInk.high}",
+        "$value": "{color.tone-on-canvas.high}",
+        "$description": "Always paired with a contour glyph; colour is never the only cue.",
         "$extensions": {
           "us.kensaur.mushi": {
             "platforms": [
@@ -198,13 +633,29 @@
               "capacitor"
             ],
             "cssVar": "--color-tone-high",
-            "ts": "toneColors.high"
+            "ts": "phaKhram.color.tone.high"
+          },
+          "us.kensaur.glot": {
+            "contrast": [
+              {
+                "against": "{color.surface.base}",
+                "min": 4.5,
+                "ratio": 9.94,
+                "use": "high tone on canvas"
+              },
+              {
+                "against": "{color.surface.raised}",
+                "min": 4.5,
+                "ratio": 8.01,
+                "use": "high tone on raised"
+              }
+            ]
           }
-        },
-        "$description": "Always paired with a contour glyph; colour is never the only cue"
+        }
       },
       "rising": {
-        "$value": "{color.toneInk.rising}",
+        "$value": "{color.tone-on-canvas.rising}",
+        "$description": "Always paired with a contour glyph; colour is never the only cue.",
         "$extensions": {
           "us.kensaur.mushi": {
             "platforms": [
@@ -212,50 +663,88 @@
               "capacitor"
             ],
             "cssVar": "--color-tone-rising",
-            "ts": "toneColors.rising"
+            "ts": "phaKhram.color.tone.rising"
+          },
+          "us.kensaur.glot": {
+            "contrast": [
+              {
+                "against": "{color.surface.base}",
+                "min": 4.5,
+                "ratio": 9.02,
+                "use": "rising tone on canvas"
+              },
+              {
+                "against": "{color.surface.raised}",
+                "min": 4.5,
+                "ratio": 7.27,
+                "use": "rising tone on raised"
+              }
+            ]
           }
-        },
-        "$description": "Always paired with a contour glyph; colour is never the only cue"
-      },
-      "markOnBase": {
-        "$value": "{color.palette.tone-mark-on-canvas}",
-        "$description": "Tone contour drawn directly on the indigo canvas (9.15:1)"
+        }
       }
     }
   },
   "font": {
     "family": {
       "$type": "fontFamily",
-      "display": {
+      "thai": {
         "$value": [
           "IBM Plex Sans Thai Looped",
           "sans-serif"
         ],
-        "$description": "looped; heads visible at 64px"
-      },
-      "body": {
-        "$value": [
-          "IBM Plex Sans Thai Looped",
-          "sans-serif"
-        ],
-        "$description": "looped Thai + Plex Latin in one family",
+        "$description": "All Thai lesson text. Looped forms keep letter heads visible for learners.",
         "$extensions": {
           "us.kensaur.mushi": {
+            "cssVar": "--loom-font-thai",
             "platforms": [
               "web",
               "capacitor"
-            ],
-            "cssVar": "--font-sans",
-            "ts": "fontFamily.sans"
+            ]
+          },
+          "us.kensaur.glot": {
+            "nextFontVar": "--font-plex-thai-looped"
           }
         }
       },
-      "label": {
+      "ui": {
+        "$value": [
+          "IBM Plex Sans",
+          "IBM Plex Sans Thai Looped",
+          "sans-serif"
+        ],
+        "$description": "UI and Latin text.",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "cssVar": "--loom-font-ui",
+            "platforms": [
+              "web",
+              "capacitor"
+            ]
+          },
+          "us.kensaur.glot": {
+            "nextFontVar": "--font-plex-sans"
+          }
+        }
+      },
+      "mono": {
         "$value": [
           "IBM Plex Mono",
           "monospace"
         ],
-        "$description": "counters, row numbers, romanisation tone marks"
+        "$description": "Counters, row numbers, romanisation tone marks.",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "cssVar": "--loom-font-mono",
+            "platforms": [
+              "web",
+              "capacitor"
+            ]
+          },
+          "us.kensaur.glot": {
+            "nextFontVar": "--font-plex-mono"
+          }
+        }
       }
     },
     "weight": {
@@ -295,14 +784,23 @@
           "value": 64,
           "unit": "px"
         },
-        "$description": "The Thai word under study; looped face so letter heads stay visible"
+        "$description": "The Thai word under study.",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "cssVar": "--loom-size-prompt",
+            "platforms": [
+              "web",
+              "capacitor"
+            ]
+          }
+        }
       }
     },
     "lineHeight": {
       "$type": "number",
       "thaiBody": {
         "$value": 1.6,
-        "$description": "Never below 1.5 for Thai body: stacked tone marks and vowels"
+        "$description": "Never below 1.5 for Thai: stacked tone marks and vowels."
       },
       "thaiDisplay": {
         "$value": 1.5
@@ -318,7 +816,14 @@
           "value": 0,
           "unit": "px"
         },
-        "$description": "Never letterspace Thai"
+        "$description": "Never letterspace Thai."
+      },
+      "label": {
+        "$value": {
+          "value": 0.6,
+          "unit": "px"
+        },
+        "$description": "Mono labels only."
       }
     }
   },
@@ -326,7 +831,7 @@
     "$type": "typography",
     "prompt": {
       "$value": {
-        "fontFamily": "{font.family.display}",
+        "fontFamily": "{font.family.thai}",
         "fontWeight": "{font.weight.bold}",
         "fontSize": "{font.size.prompt}",
         "lineHeight": "{font.lineHeight.thaiDisplay}",
@@ -335,7 +840,7 @@
     },
     "title": {
       "$value": {
-        "fontFamily": "{font.family.display}",
+        "fontFamily": "{font.family.thai}",
         "fontWeight": "{font.weight.bold}",
         "fontSize": "{font.size.title}",
         "lineHeight": "{font.lineHeight.thaiDisplay}",
@@ -344,7 +849,7 @@
     },
     "body": {
       "$value": {
-        "fontFamily": "{font.family.body}",
+        "fontFamily": "{font.family.ui}",
         "fontWeight": "{font.weight.regular}",
         "fontSize": "{font.size.body}",
         "lineHeight": "{font.lineHeight.thaiBody}",
@@ -353,16 +858,15 @@
     },
     "label": {
       "$value": {
-        "fontFamily": "{font.family.label}",
+        "fontFamily": "{font.family.mono}",
         "fontWeight": "{font.weight.semibold}",
         "fontSize": "{font.size.label}",
         "lineHeight": "{font.lineHeight.latin}",
-        "letterSpacing": "{font.letterSpacing.none}"
+        "letterSpacing": "{font.letterSpacing.label}"
       }
     }
   },
   "space": {
-    "$type": "dimension",
     "1": {
       "$value": {
         "value": 4,
@@ -399,26 +903,70 @@
         "unit": "px"
       }
     },
+    "$type": "dimension",
     "target": {
       "min": {
         "$value": {
           "value": 44,
           "unit": "px"
         },
-        "$description": "WCAG 2.5.5 / Apple HIG floor"
+        "$description": "WCAG 2.5.5 / Apple HIG floor.",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "cssVar": "--loom-target-min",
+            "platforms": [
+              "web",
+              "capacitor"
+            ]
+          }
+        }
       },
       "primary": {
         "$value": {
           "value": 56,
           "unit": "px"
         },
-        "$description": "Primary action and answer tiles in the lesson loop"
+        "$description": "Primary action and answer tiles.",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "cssVar": "--loom-target-primary",
+            "platforms": [
+              "web",
+              "capacitor"
+            ]
+          }
+        }
       }
     },
     "hud": {
       "$value": {
         "value": 52,
         "unit": "px"
+      },
+      "$extensions": {
+        "us.kensaur.mushi": {
+          "cssVar": "--loom-hud-height",
+          "platforms": [
+            "web",
+            "capacitor"
+          ]
+        }
+      }
+    },
+    "grid": {
+      "$value": {
+        "value": 24,
+        "unit": "px"
+      },
+      "$description": "Pitch of the warp/weft hairline layout grid.",
+      "$extensions": {
+        "us.kensaur.mushi": {
+          "cssVar": "--loom-grid",
+          "platforms": [
+            "web",
+            "capacitor"
+          ]
+        }
       }
     }
   },
@@ -428,12 +976,15 @@
       "$value": {
         "value": 2,
         "unit": "px"
-      }
-    },
-    "card": {
-      "$value": {
-        "value": 2,
-        "unit": "px"
+      },
+      "$extensions": {
+        "us.kensaur.mushi": {
+          "cssVar": "--loom-radius",
+          "platforms": [
+            "web",
+            "capacitor"
+          ]
+        }
       }
     },
     "round": {
@@ -441,7 +992,25 @@
         "value": 9999,
         "unit": "px"
       },
-      "$description": "True circles only (audio button, rivets)"
+      "$description": "True circles only (audio button)."
+    }
+  },
+  "border": {
+    "$type": "dimension",
+    "hairline": {
+      "$value": {
+        "value": 1,
+        "unit": "px"
+      },
+      "$extensions": {
+        "us.kensaur.mushi": {
+          "cssVar": "--loom-hairline",
+          "platforms": [
+            "web",
+            "capacitor"
+          ]
+        }
+      }
     }
   },
   "motion": {
@@ -451,41 +1020,68 @@
         "$value": {
           "value": 120,
           "unit": "ms"
+        },
+        "$description": "Correct beat-up; the reduced-motion crossfade.",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "cssVar": "--loom-dur-quick",
+            "platforms": [
+              "web",
+              "capacitor"
+            ]
+          }
         }
       },
       "base": {
         "$value": {
           "value": 220,
           "unit": "ms"
+        },
+        "$description": "Wrong-answer slack wobble; feedback enter.",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "cssVar": "--loom-dur-base",
+            "platforms": [
+              "web",
+              "capacitor"
+            ]
+          }
         }
       },
-      "advance": {
+      "shuttle": {
         "$value": {
           "value": 280,
           "unit": "ms"
         },
-        "$description": "Item-to-item transition in the lesson loop"
+        "$description": "Item-to-item shuttle sweep.",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "cssVar": "--loom-dur-shuttle",
+            "platforms": [
+              "web",
+              "capacitor"
+            ]
+          }
+        }
       }
     },
     "easing": {
       "$type": "cubicBezier",
-      "standard": {
+      "shuttle": {
         "$value": [
           0.2,
           0.8,
           0.2,
           1
-        ]
-      }
-    }
-  },
-  "border": {
-    "width": {
-      "$type": "dimension",
-      "outline": {
-        "$value": {
-          "value": 1,
-          "unit": "px"
+        ],
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "cssVar": "--loom-ease",
+            "platforms": [
+              "web",
+              "capacitor"
+            ]
+          }
         }
       }
     }

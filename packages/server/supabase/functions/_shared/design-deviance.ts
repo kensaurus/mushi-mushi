@@ -92,7 +92,8 @@ export function buildDevianceContext(
     }
     if (t.type === 'dimension' && t.px != null) {
       const segs = t.path.split('.')
-      if (SPACE_GROUP_RE.test(segs[0] ?? '')) spacing.push({ token: t, px: t.px })
+      // Any segment, so prefixed exports (`primitive.space.4`) count too.
+      if (segs.some((s) => SPACE_GROUP_RE.test(s))) spacing.push({ token: t, px: t.px })
       if (segs.some((s) => RADIUS_SEG_RE.test(s))) radius.push({ token: t, px: t.px })
     }
   }

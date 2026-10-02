@@ -1,34 +1,65 @@
 {
   "version": 1,
-  "x-fixture-note": "Test fixture written by Mushi, not by glot.it. glot has not chosen a direction yet; pha-khram is the fixture's choice. Token files are copied from glot branch design/art-direction at 927bf34c9 (unpushed).",
-  "app": { "name": "glot.it", "kind": "app", "platforms": ["web", "android", "ios"] },
+  "app": {
+    "name": "glot.it",
+    "kind": "app",
+    "platforms": ["web", "android", "ios"],
+    "ids": { "bundleId": "com.glotit.app", "androidPackage": "com.glotit.app" }
+  },
+  "links": {
+    "domains": ["kensaur.us"],
+    "deepLinks": { "schemes": ["com.glotit.app"], "universalLinkDomains": ["kensaur.us"], "appLinks": [] },
+    "auth": { "provider": "supabase", "ref": "ixrdttionueowivjdlyb" }
+  },
   "design": {
     "tokens": [
       { "path": "packages/design-tokens/tokens/directions/pha-khram/primitive.tokens.json", "role": "source", "format": "dtcg-2025.10" },
       { "path": "packages/design-tokens/tokens/directions/pha-khram/semantic.tokens.json", "role": "source", "format": "dtcg-2025.10" },
       { "path": "packages/design-tokens/tokens/directions/pha-khram/component.tokens.json", "role": "source", "format": "dtcg-2025.10" },
-      { "path": "packages/design-tokens/dtcg/tokens.json", "role": "export", "format": "dtcg-2025.10", "generator": "pnpm tokens:dtcg" }
+      { "path": "packages/design-tokens/dtcg/tokens.json", "role": "export", "format": "dtcg-2025.10", "generator": "npm run tokens:dtcg" }
     ],
-    "components": { "globs": ["design-system/primitives/**/*.tsx", "packages/ui-mobile/src/**/*.tsx"] },
+    "css": [
+      { "path": "app/styles/globals/theme-pha-khram.css", "role": "export" },
+      { "path": "packages/design-tokens/src/cross-platform-tokens.css", "role": "export" }
+    ],
+    "components": { "globs": ["design-system/primitives/**/*.tsx", "design-system/loom/**/*.tsx"] },
+    "assets": [
+      { "path": "assets/icon-only.png", "kind": "icon" },
+      { "path": "assets/icon-foreground.png", "kind": "icon" },
+      { "path": "assets/icon-background.png", "kind": "icon" },
+      { "path": "app/icon.svg", "kind": "icon" }
+    ],
     "literalScan": {
-      "globs": ["app/**/*.{ts,tsx,css}", "components/**/*.{ts,tsx,css}", "features/**/*.{ts,tsx,css}"],
-      "ignore": ["**/*.test.*", "**/__tests__/**", "design-system/**"]
-    },
-    "contrast": [
-      { "fg": "color.text.primary", "bg": "color.surface.base", "use": "body text on the page" },
-      { "fg": "color.text.secondary", "bg": "color.surface.base", "use": "secondary text on the page" },
-      { "fg": "color.text.onRaised", "bg": "color.surface.raised", "use": "body text on cards" },
-      { "fg": "color.text.onRaisedSecondary", "bg": "color.surface.raised", "use": "secondary text on cards" },
-      { "fg": "color.action.onPrimary", "bg": "color.action.primary", "use": "CTA label" },
-      { "fg": "color.feedback.reward", "bg": "color.surface.base", "large": true, "use": "reward accent, large text only" },
-      { "fg": "color.tone.mid", "bg": "color.surface.raised", "use": "tone colours on cards" },
-      { "fg": "color.tone.high", "bg": "color.surface.raised", "use": "tone colours on cards" }
-    ],
-    "rules": {
-      "raw_interactive_element": { "enabled": true, "severity": "info", "primitives": { "button": "Button" } }
+      "globs": ["app/**/*.{ts,tsx,css}", "components/**/*.tsx", "features/**/*.tsx", "design-system/loom/**/*.tsx"],
+      "ignore": ["**/*.test.*", "app/styles/globals/theme-*.css", "design-system/directions/**"]
     }
   },
-  "data": { "provider": "supabase", "migrationsDir": "supabase/migrations" },
+  "data": { "provider": "supabase", "projectRef": "ixrdttionueowivjdlyb", "migrationsDir": "supabase/migrations" },
   "routes": { "inventory": "inventory.yaml" },
-  "change": { "allowPaths": ["mushi.recipe.json", "packages/design-tokens/tokens/**", "inventory.yaml", ".env.example"] }
+  "ci": {
+    "provider": "github-actions",
+    "defaultBranch": "main",
+    "workflows": {
+      "ci.yml": { "role": "pr-gate" },
+      "deploy.yml": { "role": "deploy-web" },
+      "build-mobile-capacitor.yml": { "role": "build-mobile" }
+    }
+  },
+  "deploy": {
+    "targets": [
+      { "id": "web-prod", "kind": "cloudfront-s3", "environment": "production", "url": "https://kensaur.us/glot-it", "probe": { "type": "version_json", "url": "https://kensaur.us/glot-it/version.json" }, "workflow": "deploy.yml", "maxLagHours": 24 },
+      { "id": "android-play", "kind": "capacitor-android", "environment": "production", "probe": { "type": "sdk_heartbeat" }, "workflow": "build-mobile-capacitor.yml" },
+      { "id": "ios-app-store", "kind": "capacitor-ios", "environment": "production", "probe": { "type": "sdk_heartbeat" }, "workflow": "build-mobile-capacitor.yml" }
+    ]
+  },
+  "env": {
+    "environments": ["production"],
+    "required": [
+      { "name": "NEXT_PUBLIC_MUSHI_PROJECT_ID", "in": ["github-actions"], "environments": ["production"] },
+      { "name": "NEXT_PUBLIC_MUSHI_API_KEY", "in": ["github-actions"], "environments": ["production"] },
+      { "name": "NEXT_PUBLIC_SUPABASE_URL", "in": ["github-actions"], "environments": ["production"] }
+    ]
+  },
+  "integrations": { "sentry": { "project": "glot-it" } },
+  "change": { "allowPaths": ["mushi.recipe.json", "packages/design-tokens/tokens/**", "inventory.yaml"] }
 }

@@ -103,7 +103,7 @@ const TOKEN_FILE = 'packages/design-tokens/tokens/directions/pha-khram/semantic.
 const PRIMITIVE_FILE = 'packages/design-tokens/tokens/directions/pha-khram/primitive.tokens.json'
 
 function glotSnapshot(projectId: string) {
-  const parsed = schema.parseRecipeManifest(glotFile('mushi.recipe.json'))
+  const parsed = schema.parseRecipeManifest(readFileSync(resolve(__dirname, 'fixtures/recipe/glot-extended.recipe.json'), 'utf8'))
   if (!parsed.ok) throw new Error('fixture manifest invalid')
   const plan = sets.planTokenSets(parsed.manifest.design!.tokens! as never, [
     'packages/design-tokens/tokens/directions/nang-lamp/primitive.tokens.json',
@@ -259,10 +259,10 @@ describe('GET /design (glot.it Pha Khram fixture)', () => {
     expect(d.reason).toMatch(/never run/)
     expect(d.sets.map((s: any) => [s.name, s.active])).toEqual([['pha-khram', true], ['nang-lamp', false], ['export', false]])
     expect(d.shownSet).toBe('pha-khram')
-    expect(d.tokens.length).toBe(87)
-    expect(d.tokens.find((t: any) => t.path === 'font.family.body').display).toContain('Thai')
+    expect(d.tokens.length).toBe(122)
+    expect(d.tokens.find((t: any) => t.path === 'font.family.thai').display).toContain('Thai')
     expect(d.contrast).toHaveLength(8)
-    expect(d.contrast.every((p: any) => p.pass === true)).toBe(true)
+    expect(d.contrast.filter((p: any) => p.pass === false).map((p: any) => p.ratio)).toEqual([2.73])
     expect(d.components).toEqual([{ name: 'Button', file: 'design-system/primitives/Button.tsx' }])
     expect(d.editable).toMatchObject({ enabled: true, manifestWritable: true })
     expect(d.editable.tokenFiles).toContain(TOKEN_FILE)
@@ -283,7 +283,7 @@ describe('GET /design (glot.it Pha Khram fixture)', () => {
     const d = res.body.data as any
     expect(d.tokens.every((t: any) => t.group === 'color')).toBe(true)
     expect(d.nameMap['--color-cta']).toBe('color.action.primary')
-    expect(d.nameMap['colors.cta']).toBe('color.action.primary')
+    expect(d.nameMap['phaKhram.color.action.primary']).toBe('color.action.primary')
   })
 
   it('GET /design/excerpt stays under 4 KB and leads with mapped tokens', async () => {

@@ -18,6 +18,7 @@ import { directionOf, judgingSet, planTokenSets } from '../../supabase/functions
 
 const GLOT = resolve(__dirname, 'fixtures/recipe/glot')
 const glotText = readFileSync(resolve(GLOT, 'mushi.recipe.json'), 'utf8')
+const extendedText = readFileSync(resolve(__dirname, 'fixtures/recipe/glot-extended.recipe.json'), 'utf8')
 const glot = (() => {
   const r = parseRecipeManifest(glotText)
   if (!r.ok) throw new Error(JSON.stringify(r.issues))
@@ -25,10 +26,12 @@ const glot = (() => {
 })()
 
 describe('parseRecipeManifest', () => {
-  it('accepts the glot fixture and keeps unknown keys', () => {
+  it("accepts glot.it's own committed manifest with no issues, and keeps unknown keys", () => {
     const r = parseRecipeManifest(glotText)
-    expect(r.ok).toBe(true)
-    if (r.ok) expect((r.manifest as Record<string, unknown>)['x-fixture-note']).toBeDefined()
+    expect(r).toMatchObject({ ok: true, issues: [] })
+    if (r.ok) expect((r.manifest as Record<string, unknown>).deploy).toBeDefined()
+    const ext = parseRecipeManifest(extendedText)
+    expect(ext.ok && (ext.manifest as Record<string, unknown>)['x-fixture-note']).toBeTruthy()
   })
   it('rejects invalid JSON, a wrong version, an oversized file and anything shaped like a secret', () => {
     expect(parseRecipeManifest('{').ok).toBe(false)
@@ -61,7 +64,9 @@ describe('effectiveDesignRules', () => {
     ])
   })
   it('layers manifest rules over the defaults', () => {
-    const raw = effectiveDesignRules(glot).find((r) => r.id === 'raw_interactive_element')!
+    const ext = parseRecipeManifest(extendedText)
+    if (!ext.ok) throw new Error('extended fixture invalid')
+    const raw = effectiveDesignRules(ext.manifest).find((r) => r.id === 'raw_interactive_element')!
     expect(raw).toMatchObject({ enabled: true, fromManifest: true, primitives: { button: 'Button' } })
   })
 })
@@ -202,14 +207,14 @@ describe('design-change', () => {
   })
 
   it('writes rule overrides into design.rules of the manifest', () => {
-    const r = applyRulesEdit(glotText, { off_scale_radius: { severity: 'warn', allowValues: [' 18px ', ''] }, off_token_color: { enabled: false } })
+    const r = applyRulesEdit(extendedText, { off_scale_radius: { severity: 'warn', allowValues: [' 18px ', ''] }, off_token_color: { enabled: false } })
     expect(r.ok).toBe(true)
     if (!r.ok) return
     const doc = JSON.parse(r.text)
     expect(doc.design.rules.off_scale_radius).toEqual({ severity: 'warn', allowValues: ['18px'] })
     expect(doc.design.rules.off_token_color).toEqual({ enabled: false })
     expect(doc.design.rules.raw_interactive_element.primitives).toEqual({ button: 'Button' })
-    expect(applyRulesEdit(glotText, { nope: { enabled: true } } as never).ok).toBe(false)
+    expect(applyRulesEdit(extendedText, { nope: { enabled: true } } as never).ok).toBe(false)
   })
 
   it('an unchanged file has an empty diff', () => {
