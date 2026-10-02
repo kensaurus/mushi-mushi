@@ -1,0 +1,400 @@
+/**
+ * FILE: apps/admin/src/lib/recipeTypes.ts
+ * PURPOSE: Mirror of packages/server/supabase/functions/_shared/recipe-types.ts
+ *          (App Recipe and design-plane wire types, Plan 019). Keep the two
+ *          in step; the server file is the source of truth.
+ *
+ * Routes (all under adminOrApiKey; writes need mcp:write or an owner/admin JWT):
+ *   GET  /v1/admin/projects/:id/recipe                    → RecipeResponse
+ *   GET  /v1/admin/projects/:id/recipe/elements/:element  → RecipeElementDetail
+ *   POST /v1/admin/projects/:id/recipe/refresh            → RecipeRefreshResult
+ *   GET  /v1/admin/projects/:id/recipe/history            → RecipeHistoryResponse
+ *   GET  /v1/admin/projects/:id/design[?direction=]       → DesignPlaneResponse
+ *   GET  /v1/admin/projects/:id/design/tokens[?group=&type=&direction=] → DesignTokensResponse
+ *   GET  /v1/admin/projects/:id/design/deviance[?limit=]  → DesignDevianceResponse
+ *   POST /v1/admin/projects/:id/design/deviance/run       → DesignDevianceRunResult
+ *   POST /v1/admin/projects/:id/design/changes            → DesignChangeResult
+ *   GET  /v1/admin/projects/:id/design/excerpt[?files=]   → DesignExcerpt
+ *
+ * Every route answers `{ ok: true, data: <type> }`.
+ */
+
+// ── The five states ──────────────────────────────────────────────────────────
+
+export const RECIPE_ELEMENT_KEYS = [
+  'schema',
+  'design',
+  'routes',
+  'gates',
+  'ci',
+  'deploy',
+  'env',
+  'integrations',
+] as const
+export type RecipeElementKey = (typeof RECIPE_ELEMENT_KEYS)[number]
+
+/**
+ * `unknown` means "configured but never observed, or observed too long ago".
+ * It is never rendered as green. `not_connected` means nothing is configured.
+ */
+export type ElementState = 'ok' | 'drift' | 'unknown' | 'not_connected' | 'error'
+
+export type RecipeLane = 'sources' | 'build' | 'deploy' | 'runtime'
+
+export interface RecipeLink {
+  label: string
+  /** Console path (`/code-health`) or absolute https URL. */
+  to: string
+}
+
+export interface RecipeElementSummary {
+  key: RecipeElementKey
+  label: string
+  lane: RecipeLane
+  state: ElementState
+  /** One plain-English line: why this state. */
+  reason: string
+  lastCheckedAt: string | null
+  /** A few key facts for the card (counts, versions, names). */
+  facts: Record<string, string | number | boolean | null>
+  findingsCount: number
+  links: RecipeLink[]
+}
+
+export interface RecipeIssue {
+  severity: 'info' | 'warn' | 'error'
+  code: string
+  message: string
+  path?: string | null
+  file?: string | null
+}
+
+export interface RecipeManifestStatus {
+  present: boolean
+  path: string | null
+  commitSha: string | null
+  capturedAt: string | null
+  validationErrors: RecipeIssue[]
+}
+
+export interface RecipeResponse {
+  projectId: string
+  organizationId: string | null
+  generatedAt: string
+  /** Worst state across elements: error > drift > unknown > not_connected > ok. */
+  worst: ElementState
+  elements: Record<RecipeElementKey, RecipeElementSummary>
+  manifest: RecipeManifestStatus
+  snapshotHash: string | null
+}
+
+export interface RecipeElementDetail {
+  element: RecipeElementSummary
+  /** Element-specific detail; shapes are documented per element in recipe.ts. */
+  detail: Record<string, unknown>
+}
+
+export interface RecipeRefreshResult {
+  ok: boolean
+  state: ElementState
+  reason: string
+  snapshotId: string | null
+  tokensHash: string | null
+  manifestPresent: boolean
+  tokenCount: number
+  issues: RecipeIssue[]
+}
+
+export interface RecipeHistoryEntry {
+  id: string
+  capturedAt: string
+  commitSha: string | null
+  source: 'repo_file' | 'ci_ingest' | 'derived' | 'connector'
+  tokensHash: string
+  isCurrent: boolean
+  tokenCount: number
+  validationErrorCount: number
+}
+
+export interface RecipeHistoryResponse {
+  snapshots: RecipeHistoryEntry[]
+  /** Token-level diff between the two newest snapshots (null when < 2). */
+  latestDiff: TokenDiff | null
+}
+
+export interface TokenDiff {
+  fromSnapshotId: string
+  toSnapshotId: string
+  added: string[]
+  removed: string[]
+  changed: Array<{ path: string; from: string; to: string }>
+}
+
+// ── Design tokens ────────────────────────────────────────────────────────────
+
+/** DTCG 2025.10 `$type` values Mushi understands; anything else is kept as-is. */
+export type TokenType =
+  | 'color'
+  | 'dimension'
+  | 'fontFamily'
+  | 'fontWeight'
+  | 'duration'
+  | 'cubicBezier'
+  | 'number'
+  | 'strokeStyle'
+  | 'border'
+  | 'transition'
+  | 'shadow'
+  | 'gradient'
+  | 'typography'
+  | string
+
+export interface DesignToken {
+  /** Dot-joined path, e.g. `color.action.primary`. */
+  path: string
+  type: TokenType | null
+  /** Resolved, normalized 2025.10 value (aliases followed). */
+  value: unknown
+  /** Human display string: a `#RRGGBB` hex, `16px`, `IBM Plex Sans Thai Looped, sans-serif`, `220ms`. */
+  display: string
+  /** `#RRGGBB` (or `#RRGGBBAA`) for colors, else null. */
+  hex: string | null
+  /** Pixel value for px/rem dimensions (rem × 16), else null. */
+  px: number | null
+  /** Immediate alias target when the raw `$value` was `{a.b}`. */
+  aliasOf: string | null
+  cssVar: string | null
+  ts: string | null
+  rn: string | null
+  description: string | null
+  /** Repo path of the file that defines it. */
+  file: string
+  role: 'source' | 'export'
+  /** First path segment (`color`, `space`, …). */
+  group: string
+}
+
+export interface DesignTokenSet {
+  name: string
+  /** True for the set the manifest points at. */
+  active: boolean
+  /** `direction` for directions/<name>/, `export` for generated files, `default` otherwise. */
+  kind: 'direction' | 'export' | 'default'
+  files: Array<{ path: string; role: 'source' | 'export'; generator: string | null }>
+  tokenCount: number
+}
+
+export interface ContrastPairResult {
+  fg: string
+  bg: string
+  fgHex: string | null
+  bgHex: string | null
+  ratio: number | null
+  /** Required ratio: 4.5 (AA normal text) unless the pair declares `large` (3.0) or `min`. */
+  min: number
+  pass: boolean | null
+  use: string | null
+  /** Why ratio is null (unresolved token, non-color). */
+  problem: string | null
+}
+
+export interface DesignComponentEntry {
+  name: string
+  file: string
+}
+
+export const DESIGN_RULE_IDS = [
+  'off_token_color',
+  'off_token_font',
+  'off_scale_spacing',
+  'off_scale_radius',
+  'contrast_below_aa',
+  'raw_interactive_element',
+] as const
+export type DesignRuleId = (typeof DESIGN_RULE_IDS)[number]
+
+export type FindingSeverity = 'info' | 'warn' | 'error'
+
+export interface DesignRuleConfig {
+  id: DesignRuleId
+  enabled: boolean
+  severity: FindingSeverity
+  /** Literal values never flagged by this rule (a hex such as `#RRGGBB`, `1px`). */
+  allowValues: string[]
+  /** File globs this rule skips. */
+  allowFiles: string[]
+  /** raw_interactive_element only: element → primitive component name. */
+  primitives?: Record<string, string>
+  /** True when the value comes from the repo's mushi.recipe.json, false for Mushi's default. */
+  fromManifest: boolean
+}
+
+export interface DevianceBreakdownEntry {
+  rule: DesignRuleId
+  enabled: boolean
+  /** False when the rule has nothing to judge (no contrast pairs declared). */
+  applicable: boolean
+  severity: FindingSeverity
+  weight: number
+  count: number
+  /** Findings per 1,000 scanned lines (literal rules); failing share (contrast). */
+  density: number | null
+  /** 0..1 */
+  penalty: number
+}
+
+export type DevianceRunStatus = 'running' | 'pass' | 'warn' | 'fail' | 'error'
+
+export interface DevianceRun {
+  runId: string
+  status: DevianceRunStatus
+  /** 0 (on-system) … 100 (off-system). Null when the scan could not judge anything. */
+  score: number | null
+  scannedFiles: number
+  scannedLines: number
+  /** Files that matched the scan globs before the cap was applied. */
+  matchedFiles: number
+  /** True when the file or byte cap stopped the scan early. */
+  truncated: boolean
+  commitSha: string | null
+  startedAt: string
+  completedAt: string | null
+  breakdown: DevianceBreakdownEntry[]
+  /** True finding counts per rule (stored rows are capped). */
+  counts: Partial<Record<DesignRuleId, number>>
+  storedFindings: number
+  error: string | null
+}
+
+export interface DevianceSuggestion {
+  token: string
+  cssVar: string | null
+  ts: string | null
+  value: string
+  /** Colour: OKLab ΔE×100; spacing/radius: px difference. */
+  distance: number | null
+}
+
+export interface DevianceFinding {
+  id?: string
+  rule_id: DesignRuleId
+  severity: FindingSeverity
+  file_path: string | null
+  line: number | null
+  col: number | null
+  value: string
+  message: string
+  suggestion: DevianceSuggestion | null
+}
+
+export interface DesignEditability {
+  enabled: boolean
+  /** Why editing is off: no manifest, export-only tokens, no GitHub token. */
+  reason: string | null
+  /** Repo paths a token edit may write (role: source ∩ change.allowPaths). */
+  tokenFiles: string[]
+  /** Whether mushi.recipe.json itself is writable (needed for rules edits). */
+  manifestWritable: boolean
+}
+
+export interface DesignPlaneResponse {
+  projectId: string
+  state: ElementState
+  reason: string
+  snapshot: {
+    id: string
+    capturedAt: string
+    commitSha: string | null
+    source: RecipeHistoryEntry['source']
+    tokensHash: string
+  } | null
+  manifest: RecipeManifestStatus
+  sets: DesignTokenSet[]
+  /** The set whose tokens are in `tokens` (query `direction`, else the active one). */
+  shownSet: string | null
+  activeSet: string | null
+  tokens: DesignToken[]
+  issues: RecipeIssue[]
+  contrast: ContrastPairResult[]
+  components: DesignComponentEntry[]
+  rules: DesignRuleConfig[]
+  editable: DesignEditability
+  deviance: {
+    latest: DevianceRun | null
+    trend: Array<{ at: string; score: number | null; status: DevianceRunStatus }>
+    topFindings: DevianceFinding[]
+  }
+  /** Newest failed refresh or scan that is newer than the snapshot. */
+  lastError: { at: string; message: string } | null
+}
+
+export interface DesignTokensResponse {
+  projectId: string
+  set: string | null
+  tokens: DesignToken[]
+  /** cssVar / ts name → token path, for agents writing code. */
+  nameMap: Record<string, string>
+  total: number
+}
+
+export interface DesignDevianceResponse {
+  projectId: string
+  latest: DevianceRun | null
+  trend: Array<{ at: string; score: number | null; status: DevianceRunStatus }>
+  findings: DevianceFinding[]
+  rules: DesignRuleConfig[]
+}
+
+export interface DesignDevianceRunResult {
+  refresh: RecipeRefreshResult
+  run: DevianceRun | null
+}
+
+// ── Changes (always a draft PR, never a direct write) ───────────────────────
+
+export interface TokenEdit {
+  /** Token path in the active (or named) set. */
+  path: string
+  /** New value: `#RRGGBB` for colors, `12px` / `220ms` for dimensions and durations, a number, or a family list. */
+  value: string | number | string[]
+  set?: string
+}
+
+export type DesignChangeRequest =
+  | { kind: 'tokens'; edits: TokenEdit[]; dryRun?: boolean; title?: string }
+  | {
+      kind: 'rules'
+      rules: Partial<Record<DesignRuleId, Partial<Pick<DesignRuleConfig, 'enabled' | 'severity' | 'allowValues' | 'allowFiles' | 'primitives'>>>>
+      dryRun?: boolean
+      title?: string
+    }
+
+export interface DesignFileChange {
+  path: string
+  /** Unified diff of the change (single hunk per edit region). */
+  diff: string
+  additions: number
+  deletions: number
+}
+
+export interface DesignChangeResult {
+  dryRun: boolean
+  files: DesignFileChange[]
+  /** Paths the change wanted to write but the allowlist refused. */
+  denied: Array<{ path: string; reason: string }>
+  pr: { url: string; number: number; branch: string; draft: true } | null
+}
+
+// ── Excerpt for get_fix_context ──────────────────────────────────────────────
+
+export interface DesignExcerpt {
+  state: ElementState
+  set: string | null
+  /** Most useful tokens first (mapped semantic colours, type, spacing, radius). */
+  tokens: Array<{ path: string; value: string; cssVar: string | null; ts: string | null }>
+  /** Open deviance findings in the requested files. */
+  findings: Array<{ file: string; line: number | null; rule: DesignRuleId; value: string; use: string | null }>
+  score: number | null
+  note: string
+  truncated: boolean
+}
