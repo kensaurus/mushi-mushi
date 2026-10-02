@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { Card } from '../../components/ui'
 import { SelectField, Btn } from '../ui'
 import { STATUS_LABELS, SEVERITY_LABELS } from '../../lib/tokens'
-import { normalizeReportStatus } from '../../lib/reportStatus'
 import { IconArrowRight, IconExternalLink } from '../icons'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
@@ -16,13 +15,13 @@ import { dispatchConfirmBody } from '../../lib/dispatchConfirm'
 
 // One option per label: 'resolved' is the legacy spelling of 'fixed' (both
 // read "Fixed"), so listing both showed "Fixed" twice. A legacy row selects
-// the canonical option via selectableStatus().
+// the option that shares its label via selectableStatus().
 const STATUS_OPTS = ['new', 'classified', 'fixing', 'fixed', 'verified', 'reopened', 'dismissed']
 
 function selectableStatus(status: string): string {
   if (STATUS_OPTS.includes(status)) return status
-  const canonical = normalizeReportStatus(status)
-  return STATUS_OPTS.includes(canonical) ? canonical : status
+  const label = STATUS_LABELS[status]
+  return STATUS_OPTS.find((s) => STATUS_LABELS[s] === label) ?? status
 }
 const SEV_OPTS = ['critical', 'high', 'medium', 'low']
 

@@ -14,7 +14,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
-export type JudgeRunEmptyReason = 'no_projects' | 'judge_disabled' | 'nothing_to_grade'
+type JudgeRunEmptyReason = 'no_projects' | 'judge_disabled' | 'nothing_to_grade'
 
 export interface JudgeRunResponse {
   dispatched: number
@@ -57,7 +57,7 @@ export function describeJudgeRun(data: JudgeRunResponse | null | undefined): Jud
 }
 
 /** How long the Run button keeps its "you were sent here for this" ring. */
-export const JUDGE_RUN_PREFILL_HIGHLIGHT_MS = 4_000
+const JUDGE_RUN_PREFILL_HIGHLIGHT_MS = 4_000
 
 /**
  * Consumes `?action=run`: strips it from the URL, focuses the element with
