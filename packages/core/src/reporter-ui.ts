@@ -604,7 +604,9 @@ function isCanonical(status: string): status is ReporterCanonicalStatus {
 /** True when the row is a feature request rather than a bug. */
 export function isReporterIdea(input: Pick<ReporterStatusInput, 'user_category'>): boolean {
   const cat = (input.user_category ?? '').trim().toLowerCase().replace(/[\s-]+/g, '_');
-  return cat === 'feature_request' || cat === 'idea';
+  // The web widget and the ingest path send 'feature'; older clients sent
+  // 'Feature request'. The server's isFeatureRequest() accepts the same set.
+  return cat === 'feature' || cat === 'feature_request' || cat === 'idea';
 }
 
 /**
@@ -724,7 +726,7 @@ export function reporterChipToReport(
   chip: ReporterCategory | null,
 ): { category: 'bug' | 'slow' | 'visual' | 'confusing' | 'other'; userCategory?: string } {
   if (!chip) return { category: 'other' };
-  if (chip === 'idea') return { category: 'other', userCategory: 'Feature request' };
+  if (chip === 'idea') return { category: 'other', userCategory: 'feature' };
   return { category: chip };
 }
 
