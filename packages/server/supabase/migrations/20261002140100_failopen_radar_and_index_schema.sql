@@ -65,4 +65,9 @@ ALTER TABLE public.project_codebase_files
 COMMENT ON COLUMN public.project_codebase_files.imports IS
   'Relative import specifiers of the whole file (same list on each chunk of the file). Feeds graph import edges.';
 
+-- 4. The monthly LLM budget is now enforced on the shared LLM path
+--    (_shared/llm-budget.ts); it used to be display-only.
+COMMENT ON COLUMN public.project_settings.monthly_llm_budget_usd IS
+  'Monthly LLM budget in USD. Enforced: once this UTC month''s llm_invocations spend (BYOK and platform key alike) reaches it, generation calls stop with llm_budget_exceeded until the 1st. NULL = no budget.';
+
 NOTIFY pgrst, 'reload schema';
