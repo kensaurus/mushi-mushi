@@ -107,6 +107,18 @@ export const githubConnector: RecipeConnector = {
       if (res.status === 200) for (const s of (res.body?.[kind] ?? []) as Array<{ name: string }>) names.push(s.name)
     }
 
+    // Declared migrations: filenames under the manifest's data.migrationsDir at the head SHA.
+    let migrationFiles: string[] | null = null
+    const migDir = typeof ctx.config.migrationsDir === 'string' ? ctx.config.migrationsDir.replace(/^\/+|\/+$/g, '') : null
+    if (migDir && /^[\w./-]{1,200}$/.test(migDir) && !migDir.includes('..')) {
+      const list = await gh(ctx, `/repos/${r.owner}/${r.repo}/contents/${migDir.split('/').map(encodeURIComponent).join('/')}?ref=${headSha}`)
+      if (list.status === 200 && Array.isArray(list.body)) {
+        migrationFiles = (list.body as Array<{ type: string; name: string }>).filter((x) => x.type === 'file' && /\.sql$/i.test(x.name)).map((x) => x.name).sort()
+      } else if (list.status === 404) {
+        migrationFiles = []
+      }
+    }
+
     const latest = runs.find((x) => x.status === 'completed') ?? null
     return {
       observedAt: ctx.now().toISOString(),
@@ -115,7 +127,7 @@ export const githubConnector: RecipeConnector = {
         env: { summary: { actionsNames: names.length } },
       },
       resources: [{ kind: 'repo', externalId: `${r.owner}/${r.repo}`, role: 'source' }],
-      facts: { branch, headSha, headCommittedAt, workflowFiles, runs, actionsNames: names },
+      facts: { branch, headSha, headCommittedAt, workflowFiles, runs, actionsNames: names, migrationsDir: migDir, migrationFiles },
       cursor: runs[0]?.run_id ? String(runs[0].run_id) : undefined,
     }
   },

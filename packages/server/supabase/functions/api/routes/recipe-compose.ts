@@ -256,10 +256,23 @@ export async function composeRecipe(db: Db, deps: ComposeDeps, projectId: string
     .limit(1)
     .maybeSingle()
   const schemaRun = latest.find((r) => r.gate === 'schema_drift') ?? null
+  // Phase 2: the Supabase connector's snapshot counts as a schema read too.
+  const { data: supaSnap } = await db
+    .from('connector_snapshots')
+    .select('observed_at, ok')
+    .eq('project_id', projectId)
+    .eq('kind', 'supabase')
+    .eq('is_current', true)
+    .eq('ok', true)
+    .maybeSingle()
+  const schemaReadAt = [(schemaSnap as { captured_at?: string } | null)?.captured_at, (supaSnap as { observed_at?: string } | null)?.observed_at]
+    .filter((x): x is string => Boolean(x))
+    .sort()
+    .pop() ?? null
   const schemaState = deriveElementState({
     key: 'schema',
     linked: Boolean(settings.supabase_project_ref),
-    latestSnapshotAt: (schemaSnap as { captured_at?: string } | null)?.captured_at ?? null,
+    latestSnapshotAt: schemaReadAt,
     openDriftFindings: schemaRun ? findingCounts.get(schemaRun.id) ?? 0 : 0,
     lastRunStatus: schemaRun?.status ?? null,
   }, now)
@@ -382,7 +395,7 @@ export async function composeRecipe(db: Db, deps: ComposeDeps, projectId: string
 
   const designRun = design.latestCompleted ? toDevianceRun(design.latestCompleted, now) : null
   const elements: Record<RecipeElementKey, RecipeElementSummary> = {
-    schema: summary('schema', schemaState, (schemaSnap as { captured_at?: string } | null)?.captured_at ?? null,
+    schema: summary('schema', schemaState, schemaReadAt,
       { linked: Boolean(settings.supabase_project_ref) }, schemaRun ? findingCounts.get(schemaRun.id) ?? 0 : 0,
       [{ label: 'Drift', to: '/drift' }]),
     design: summary('design', design.state, design.latestScan?.completed_at ?? snapshot?.captured_at ?? null, {

@@ -138,7 +138,7 @@ export function registerRecipeIngestRoutes(app: Hono<{ Variables: Variables }>, 
     }, 'ci')
 
     let findingsStored = 0
-    if (body.findings) {
+    if (result.ok && body.findings) {
       const now = deps.now().toISOString()
       const status = body.findings.length ? 'warn' : 'pass'
       const { data: run, error } = await db.from('gate_runs').insert({
@@ -158,6 +158,8 @@ export function registerRecipeIngestRoutes(app: Hono<{ Variables: Variables }>, 
         }
       }
     }
+    // A rejected push must fail the CI step, not pass it with a 200.
+    if (!result.ok) return jsonError(c, 'RECIPE_REJECTED', result.reason, 422, { state: result.state, issues: result.issues })
     return c.json({ ok: true, data: { ...result, findingsStored } })
   })
 

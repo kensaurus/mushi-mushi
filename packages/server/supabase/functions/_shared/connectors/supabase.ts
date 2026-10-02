@@ -15,7 +15,6 @@
  * config: { projectRef }  readCredential: the PAT.
  */
 
-import { schemaMigrationDrift } from '../recipe-drift.ts'
 import {
   evaluateBackups,
   evaluateOrphanedStorage,
@@ -162,15 +161,11 @@ export const supabaseConnector: RecipeConnector = {
       },
     }
   },
-  detectDrift(_prev, next, manifest) {
+  detectDrift(_prev, next) {
     const f = next.facts as Record<string, any>
     const out: DriftFinding[] = []
-    const declared = (manifest as { data?: { declaredMigrations?: unknown } } | null)?.data?.declaredMigrations
-    if (Array.isArray(declared) && Array.isArray(f.appliedVersions)) {
-      for (const d of schemaMigrationDrift({ declared: declared.map(String), applied: f.appliedVersions })) {
-        out.push({ gate: d.gate, ruleId: d.ruleId, severity: d.severity, message: d.message, filePath: d.filePath ?? null, suggestedFix: d.suggestedFix })
-      }
-    }
+    // Declared-vs-applied migrations need the repo's file list, so recipe-phase2 joins
+    // this connector's appliedVersions with the GitHub connector's migrationFiles.
     const radar = supabaseRadarResults(f)
     for (const r of radar) {
       for (const x of r.findings) out.push({ gate: 'radar', ruleId: x.ruleId, severity: x.severity, message: x.message, filePath: x.filePath ?? null, suggestedFix: { kind: 'prompt', text: x.fix } })

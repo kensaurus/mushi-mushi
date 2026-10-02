@@ -14,7 +14,7 @@
  */
 
 import type { getServiceClient } from './db.ts'
-import { budgetDrift, deployDrift, type DeployObservation, type DriftFinding as RecipeDriftFinding } from './recipe-drift.ts'
+import { budgetDrift, deployDrift, schemaMigrationDrift, type DeployObservation, type DriftFinding as RecipeDriftFinding } from './recipe-drift.ts'
 import { loadConnectorEntries, runConnector, type ConnectorRunResult, type RuntimeDeps } from './connectors/runtime.ts'
 import type { DriftFinding } from './connectors/types.ts'
 import { publicFetch } from './safe-fetch.ts'
@@ -167,6 +167,8 @@ export async function collectProjectPhase2(db: Db, projectId: string, deps: Phas
   const github = results.find((r) => r.kind === 'github' && r.snapshot)?.snapshot?.facts as { headSha?: string; headCommittedAt?: string | null; runs?: Array<Record<string, unknown>> } | undefined
   const findings = results.flatMap((r) => r.findings)
 
+  findings.push(...migrationDrift(results))
+
   // ci_workflow_runs from the GitHub snapshot.
   if (github?.runs?.length) {
     const repo = (results.find((r) => r.kind === 'github')?.snapshot?.resources ?? []).find((x) => x.kind === 'repo')?.externalId ?? 'unknown'
@@ -214,6 +216,18 @@ export async function collectProjectPhase2(db: Db, projectId: string, deps: Phas
     deployObservations: observations.length,
     resourceUses,
   }
+}
+
+/**
+ * Declared (the GitHub connector's migration files) vs applied (the Supabase
+ * connector's schema_migrations) — the "migration is in the repo but was never
+ * applied" failure. Needs both sources read; otherwise nothing is claimed.
+ */
+export function migrationDrift(results: readonly Pick<ConnectorRunResult, 'kind' | 'snapshot'>[]): DriftFinding[] {
+  const files = (results.find((r) => r.kind === 'github' && r.snapshot)?.snapshot?.facts as { migrationFiles?: string[] | null } | undefined)?.migrationFiles ?? null
+  const applied = (results.find((r) => r.kind === 'supabase' && r.snapshot)?.snapshot?.facts as { appliedVersions?: string[] | null } | undefined)?.appliedVersions ?? null
+  if (!Array.isArray(files) || !Array.isArray(applied)) return []
+  return schemaMigrationDrift({ declared: files, applied }).map(toConnectorFinding)
 }
 
 function toConnectorFinding(d: RecipeDriftFinding): DriftFinding {

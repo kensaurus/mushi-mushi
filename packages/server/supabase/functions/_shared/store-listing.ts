@@ -12,7 +12,7 @@
 import { z } from 'npm:zod@3'
 import type { DetectorState, RadarSeverity } from './radar/types.ts'
 
-export type ListingRuleId = 'listing_drift' | 'listing_locale_missing' | 'listing_limit_exceeded'
+export type ListingRuleId = 'listing_drift' | 'listing_locale_out_of_sync' | 'listing_limit_exceeded'
 
 export interface ListingFinding {
   ruleId: ListingRuleId
@@ -181,7 +181,7 @@ export function compareListing(repo: ParsedListing, live: { ios: Record<string, 
     const storeName = platform === 'ios' ? 'App Store' : 'Google Play'
     for (const locale of Object.keys(mine)) {
       if (!theirs[locale]) {
-        missing.push({ ruleId: 'listing_locale_missing', severity: 'warn', message: `${locale} is in the repo but not live on ${storeName}.`, target: `${platform}:${locale}`, fix: 'Let your CI publish the listing, or add the language in the store console.' })
+        missing.push({ ruleId: 'listing_locale_out_of_sync', severity: 'warn', message: `${locale} is in the repo but not live on ${storeName}.`, target: `${platform}:${locale}`, fix: 'Let your CI publish the listing, or add the language in the store console.' })
         continue
       }
       for (const [field, value] of Object.entries(mine[locale])) {
@@ -195,7 +195,7 @@ export function compareListing(repo: ParsedListing, live: { ios: Record<string, 
       }
     }
     for (const locale of Object.keys(theirs)) {
-      if (!mine[locale]) missing.push({ ruleId: 'listing_locale_missing', severity: 'info', message: `${locale} is live on ${storeName} but not in the repo.`, target: `${platform}:${locale}`, fix: 'Run `mushi store pull` to copy it into the repo so it is not lost on the next publish.' })
+      if (!mine[locale]) missing.push({ ruleId: 'listing_locale_out_of_sync', severity: 'info', message: `${locale} is live on ${storeName} but not in the repo.`, target: `${platform}:${locale}`, fix: 'Run `mushi store pull` to copy it into the repo so it is not lost on the next publish.' })
     }
   }
   const unknownReason = unreadable ? 'The live listing could not be read.' : 'No listing files found in the repo.'
@@ -205,9 +205,9 @@ export function compareListing(repo: ParsedListing, live: { ios: Record<string, 
       ? { ruleId: 'listing_drift', state: 'ok', reason: `Compared ${compared} field${compared === 1 ? '' : 's'}; the live listing matches the repo.`, findings: [] }
       : { ruleId: 'listing_drift', state: 'unknown', reason: unknownReason, findings: [] }
   const missingResult: ListingResult = missing.length
-    ? { ruleId: 'listing_locale_missing', state: 'finding', reason: `${missing.length} language${missing.length === 1 ? '' : 's'} differ between the repo and the store.`, findings: missing }
+    ? { ruleId: 'listing_locale_out_of_sync', state: 'finding', reason: `${missing.length} language${missing.length === 1 ? '' : 's'} differ between the repo and the store.`, findings: missing }
     : compared > 0 && unreadable === 0
-      ? { ruleId: 'listing_locale_missing', state: 'ok', reason: 'The same languages are in the repo and live.', findings: [] }
-      : { ruleId: 'listing_locale_missing', state: 'unknown', reason: unknownReason, findings: [] }
+      ? { ruleId: 'listing_locale_out_of_sync', state: 'ok', reason: 'The same languages are in the repo and live.', findings: [] }
+      : { ruleId: 'listing_locale_out_of_sync', state: 'unknown', reason: unknownReason, findings: [] }
   return [driftResult, missingResult]
 }

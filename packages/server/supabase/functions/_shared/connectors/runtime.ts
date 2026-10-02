@@ -68,7 +68,7 @@ export async function loadConnectorEntries(db: Db, projectId: string, deps: Runt
   const repo = await resolveRecipeRepo(db, projectId).catch(() => null)
   out.push({
     connector: getConnector('github'), instanceId: null, bindings: [],
-    ctx: { ...base, readCredential: repo?.ok ? repo.repo.token : null, writeCredential: null, config: repo?.ok ? { owner: repo.repo.ref.owner, repo: repo.repo.ref.repo, defaultBranchHint: repo.repo.defaultBranchHint } : {} },
+    ctx: { ...base, readCredential: repo?.ok ? repo.repo.token : null, writeCredential: null, config: repo?.ok ? { owner: repo.repo.ref.owner, repo: repo.repo.ref.repo, defaultBranchHint: repo.repo.defaultBranchHint, migrationsDir: (manifest as { data?: { migrationsDir?: unknown } } | null)?.data?.migrationsDir ?? null } : {} },
   })
   const { data: settings } = await db.from('project_settings').select('supabase_project_ref').eq('project_id', projectId).maybeSingle()
   const ref = (settings as { supabase_project_ref?: string | null } | null)?.supabase_project_ref ?? null
