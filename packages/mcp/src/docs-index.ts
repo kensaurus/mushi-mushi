@@ -31,7 +31,7 @@ function docUrl(route: string): string {
   return route === '/' ? MUSHI_DOCS_BASE : MUSHI_DOCS_BASE + route
 }
 
-/** 203 pages, generated from llms.txt. */
+/** 204 pages, generated from llms.txt. */
 export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
   {
     title: "Mushi Mushi — know why your AI-built app broke, with the fix ready",
@@ -689,6 +689,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     keywords: ["concepts", "anti-gaming", "anti", "gaming", "reputation"],
     headings: ["Reporter reputation", "Anti-gaming detection", "Report fatigue prevention"],
     excerpt: "How Mushi keeps bug reports honest — reporter reputation against spam and point farming, and prompt-fatigue limits so real users are not nagged.",
+  },
+  {
+    title: "App recipe and design system",
+    url: docUrl("/concepts/app-recipe"),
+    route: "/concepts/app-recipe",
+    markdown: "concepts/app-recipe.md",
+    keywords: ["concepts", "app-recipe", "app", "recipe", "design", "system"],
+    headings: ["The five states", "mushi.recipe.json", "The design system page", "Directions", "The deviance check", "The deviance score", "In your editor"],
+    excerpt: "The App Recipe is the record of what your app is made of — schema, design tokens, routes, gates, CI, deploy, env names and integrations — kept so a diagnosis can say what changed…",
   },
   {
     title: "Architecture",
