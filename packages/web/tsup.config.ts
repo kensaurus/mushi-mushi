@@ -1,8 +1,25 @@
-import { defineConfig } from 'tsup';
+import { defineConfig, type Options } from 'tsup';
+import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const pkg = require('./package.json') as { version: string };
+
+/**
+ * styles.ts documents its CSS with comments INSIDE the stylesheet template
+ * string. No JS minifier touches string contents, so they shipped to every
+ * end user (~4 kB gzipped). Strip them at build time; the source keeps them.
+ * Every `/*` in that file is a comment (CSS or JS), so the regex is safe there.
+ */
+const stripWidgetCssComments: NonNullable<Options['esbuildPlugins']>[number] = {
+  name: 'strip-widget-css-comments',
+  setup(build) {
+    build.onLoad({ filter: /[\\/]src[\\/]styles\.ts$/ }, async (args) => ({
+      contents: (await readFile(args.path, 'utf8')).replace(/\/\*[\s\S]*?\*\//g, ''),
+      loader: 'ts',
+    }));
+  },
+};
 
 export default defineConfig([
   {
@@ -17,6 +34,7 @@ export default defineConfig([
     define: {
       __MUSHI_SDK_VERSION__: JSON.stringify(pkg.version),
     },
+    esbuildPlugins: [stripWidgetCssComments],
     external: ['@mushi-mushi/core', '@sentry/browser', '@sentry/react'],
   },
   // Universal loader: a self-initializing IIFE for the "no build step"
@@ -37,6 +55,7 @@ export default defineConfig([
     define: {
       __MUSHI_SDK_VERSION__: JSON.stringify(pkg.version),
     },
+    esbuildPlugins: [stripWidgetCssComments],
     external: ['@sentry/browser', '@sentry/react'],
   },
 ]);
