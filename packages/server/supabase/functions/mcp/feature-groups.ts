@@ -90,6 +90,9 @@ export const TOOL_FEATURE_MAP: Record<string, FeatureGroup> = {
   refresh_ci: 'fixes',
   reopen_report: 'fixes',
   reply_to_reporter: 'fixes',
+  request_reporter_info: 'fixes',
+  list_reporter_outbox: 'fixes',
+  release_reporter_update: 'fixes',
 
   // rewards
   list_top_contributors: 'rewards',

@@ -2415,6 +2415,27 @@
         ]
       }
     },
+    "list_reporter_outbox": {
+      "title": "List held reporter updates",
+      "description": "List pipeline messages waiting for review before they reach reporters (projects in review mode hold \"fix in progress\", \"fixed\", \"shipped in vX\" and \"closed\" messages). Each row has { id, report_id, report_title, notification_type, text, body_override, created_at }; text is exactly what the reporter will see. Read-only. Use before release_reporter_update; an empty list means nothing is waiting (or the project sends updates automatically).",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "List held reporter updates",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "description": "Project UUID. Defaults to configured project. (`project_id` is accepted too.)",
+            "type": "string"
+          }
+        }
+      },
+      "returnsUntrusted": true
+    },
     "list_skills": {
       "title": "List agent skills",
       "description": "List the agent skills in the catalog, optionally filtered by category or search text. Returns { skills: [{ slug, title, description, category, chain_slugs }] }. Read-only. Use to find the right skill slug before start_skill_pipeline; use get_skill to read one skill's full instructions.",
@@ -2777,6 +2798,44 @@
         "additionalProperties": false
       }
     },
+    "release_reporter_update": {
+      "title": "Release or discard a held reporter update",
+      "description": "Send (action=release, the default) or drop (action=discard) one held reporter message from list_reporter_outbox; bodyOverride replaces its text before sending. Returns { delivered, skipped, failed }. Write; messages a real end user — confirm with the user first. Idempotent in effect: a message that is no longer held returns CONFLICT instead of sending twice.",
+      "scope": "mcp:write",
+      "annotations": {
+        "title": "Release or discard a held reporter update",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "messageId": {
+            "type": "string",
+            "description": "Held message id from list_reporter_outbox"
+          },
+          "action": {
+            "description": "release (default) sends it; discard drops it",
+            "type": "string",
+            "enum": [
+              "release",
+              "discard"
+            ]
+          },
+          "bodyOverride": {
+            "description": "Replacement text to send instead",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          }
+        },
+        "required": [
+          "messageId"
+        ]
+      }
+    },
     "remove_byok_key": {
       "title": "Remove an API key",
       "description": "Permanently remove one pooled BYOK credential by key id from the authenticated project, including its Vault secret. Write; destructive; idempotent.",
@@ -2880,6 +2939,41 @@
         "required": [
           "reportId",
           "message"
+        ]
+      }
+    },
+    "request_reporter_info": {
+      "title": "Ask the reporter a question",
+      "description": "Ask the end-user who filed a report a question: it appears in their in-app \"Your reports\" thread, marks the report \"Waiting on you\", and the waiting state clears when they answer (their reply reaches Slack and the console). Returns { comment_id, awaiting_reporter }. Write; messages a real end user and is NOT idempotent — each call posts another question, so confirm the wording with the user first. Fails with NO_REPORTER for reports that came from an integration. Use when you need reproduction details; use reply_to_reporter for a plain reply.",
+      "scope": "mcp:write",
+      "annotations": {
+        "title": "Ask the reporter a question",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "reportId": {
+            "type": "string",
+            "description": "Report id to ask about (`report_id` is accepted too.)"
+          },
+          "question": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "description": "The question, shown to the reporter verbatim"
+          },
+          "authorName": {
+            "description": "Display name for the sender (default: \"Developer\")",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reportId",
+          "question"
         ]
       }
     },
@@ -3442,7 +3536,7 @@
     },
     "transition_status": {
       "title": "Move report between states",
-      "description": "Move a report to a new workflow state, enforcing the same transition rules as the admin UI. Valid targets: classified, grouped, fixing, fixed, verified, reopened, dismissed. Returns { report } with the updated status. Write; idempotent (setting the current status is a no-op); rejects illegal transitions. Use to dismiss a duplicate or mark fixed; use merge_fix to mark fixed via a merged PR, or reopen_report for the reopened path.",
+      "description": "Move a report to a new workflow state, enforcing the same transition rules as the admin UI. Valid targets: classified, grouped, fixing, fixed, verified, reopened, dismissed. When dismissing, closedReason (duplicate, not_reproducible, wont_fix, working_as_intended, spam) sets what the reporter is told — spam closes silently, and duplicate needs the report grouped under another one first; reporterMessage posts your note to the reporter verbatim. Returns { ok }. Write; idempotent (setting the current status is a no-op); rejects illegal transitions. Use to dismiss a duplicate or mark fixed; use merge_fix to mark fixed via a merged PR, or reopen_report for the reopened path.",
       "scope": "mcp:write",
       "annotations": {
         "title": "Move report between states",
@@ -3478,6 +3572,22 @@
           "reason": {
             "description": "Reason for the transition (audit trail)",
             "type": "string"
+          },
+          "closedReason": {
+            "description": "When dismissing: what the reporter is told (spam closes silently)",
+            "type": "string",
+            "enum": [
+              "duplicate",
+              "not_reproducible",
+              "wont_fix",
+              "working_as_intended",
+              "spam"
+            ]
+          },
+          "reporterMessage": {
+            "description": "Optional note posted to the reporter verbatim",
+            "type": "string",
+            "maxLength": 10000
           }
         },
         "required": [

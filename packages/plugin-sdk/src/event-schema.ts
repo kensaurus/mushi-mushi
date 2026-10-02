@@ -21,6 +21,7 @@ export const KNOWN_EVENTS: ReadonlySet<MushiEventName> = new Set<MushiEventName>
   'report.status_changed',
   'report.commented',
   'report.dedup_grouped',
+  'report.reporter_replied',
   'fix.requested',
   'fix.proposed',
   'fix.applied',
