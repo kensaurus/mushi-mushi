@@ -407,11 +407,14 @@ export function registerReporterInboxRoutes(
 
     // Followed canonical reports surface under the reporter's own report id.
     const rows = (data ?? []) as ReporterNotificationRow[];
-    const { data: follows } = await db
+    const { data: follows, error: followErr } = await db
       .from('reporter_report_follows')
       .select('report_id, source_report_id')
       .eq('project_id', projectId)
       .eq('reporter_token_hash', auth.tokenHash);
+    // Without the follow map a canonical report's id would leak out as
+    // report_id — another reporter's report, which 404s for this one.
+    if (followErr) return dbError(c, followErr);
     const ownByCanonical = new Map<string, string>();
     for (const f of (follows ?? []) as Array<{ report_id: string; source_report_id: string | null }>) {
       if (f.source_report_id) ownByCanonical.set(f.report_id, f.source_report_id);
