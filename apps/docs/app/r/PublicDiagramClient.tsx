@@ -8,6 +8,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react'
+import { getLoadedMushi } from '@/components/MushiSiteAnalytics'
 import {
   canvasSize,
   diagramSignupHref,
@@ -17,7 +18,7 @@ import {
   NODE_W,
   parseRepoFromLocation,
   PUBLIC_API_URL,
-  reportDiagramHref,
+  reportWrongDiagram,
   type PublicDiagram,
 } from '@/lib/public-diagram'
 
@@ -99,6 +100,27 @@ function SignupLink({ href }: { href: string }) {
   )
 }
 
+function ReportDiagramButton({
+  diagram,
+  node,
+}: {
+  diagram: PublicDiagram
+  node: { label: string; path: string | null } | null
+}) {
+  const onClick = () => {
+    const outcome = reportWrongDiagram(
+      { owner: diagram.owner, repo: diagram.repo, sha: diagram.sha, nodePath: node?.path ?? null, nodeLabel: node?.label ?? null },
+      getLoadedMushi(),
+    )
+    if (outcome.via === 'email') window.location.href = outcome.href
+  }
+  return (
+    <button type="button" className="underline underline-offset-2" onClick={onClick}>
+      {node ? `Report a problem with “${node.label}”` : 'Report a wrong or unwanted diagram'}
+    </button>
+  )
+}
+
 function DiagramView({
   diagram,
   selectedId,
@@ -131,9 +153,7 @@ function DiagramView({
           a part does.
         </p>
         <p className="text-xs text-mushi-ink-muted">
-          <a className="underline underline-offset-2" href={reportDiagramHref(diagram.owner, diagram.repo, diagram.sha)}>
-            Report a wrong diagram
-          </a>
+          <ReportDiagramButton diagram={diagram} node={selected} />
         </p>
       </header>
 

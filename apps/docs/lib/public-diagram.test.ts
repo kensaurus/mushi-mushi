@@ -3,7 +3,7 @@
  * rejected), edge geometry, and links that keep sign-ups attributable.
  */
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   canvasSize,
   diagramSignupHref,
@@ -11,7 +11,8 @@ import {
   NODE_H,
   NODE_W,
   parseRepoFromLocation,
-  reportDiagramHref,
+  diagramReportMailto,
+  reportWrongDiagram,
   type PublicDiagramNode,
 } from './public-diagram'
 
@@ -52,9 +53,38 @@ describe('links', () => {
   it('tags the sign-up with the page and repo', () => {
     expect(diagramSignupHref('acme', 'shop')).toBe('https://kensaur.us/mushi-mushi/admin/signup?src=diagram%3Aacme%2Fshop')
   })
-  it('opens a prefilled issue naming the repo and commit', () => {
-    const href = reportDiagramHref('acme', 'shop', 'abcdef1234')
-    expect(href).toMatch(/^https:\/\/github\.com\/kensaurus\/mushi-mushi\/issues\/new\?title=/)
-    expect(decodeURIComponent(href)).toContain('commit abcdef1')
+})
+
+describe('reportWrongDiagram', () => {
+  const target = { owner: 'acme', repo: 'shop', sha: 'a'.repeat(40), nodePath: 'apps/web', nodeLabel: 'Web UI' }
+
+  it("files it in Mushi's own queue when the SDK is loaded, with repo, commit and part", () => {
+    const setMetadata = vi.fn()
+    const report = vi.fn()
+    expect(reportWrongDiagram(target, { setMetadata, report })).toEqual({ via: 'sdk' })
+    expect(setMetadata).toHaveBeenCalledWith('public_diagram', {
+      repo: 'acme/shop',
+      sha: 'a'.repeat(40),
+      node_path: 'apps/web',
+      node_label: 'Web UI',
+      page: 'https://kensaur.us/mushi-mushi/r/acme/shop',
+    })
+    expect(report).toHaveBeenCalledWith({ category: 'other' })
+  })
+
+  it('falls back to a private email, never a public issue', () => {
+    const out = reportWrongDiagram(target, null)
+    expect(out.via).toBe('email')
+    const href = out.via === 'email' ? out.href : ''
+    expect(href).toMatch(/^mailto:kensaurus@gmail\.com\?subject=/)
+    expect(href).not.toContain('github.com')
+    const decoded = decodeURIComponent(href)
+    expect(decoded).toContain('Wrong or unwanted diagram: acme/shop')
+    expect(decoded).toContain(`Commit: ${'a'.repeat(40)}`)
+    expect(decoded).toContain('Part: Web UI (apps/web)')
+  })
+
+  it('leaves the part line out when no part is selected', () => {
+    expect(decodeURIComponent(diagramReportMailto({ owner: 'a', repo: 'b', sha: 'c'.repeat(40) }))).not.toContain('Part:')
   })
 })

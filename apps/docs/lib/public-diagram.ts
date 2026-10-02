@@ -125,9 +125,60 @@ export function diagramSignupHref(owner: string, repo: string): string {
   return `https://kensaur.us/mushi-mushi/admin/signup?src=${encodeURIComponent(tag)}`
 }
 
-/** Anyone can flag a wrong or unwanted diagram; the issue reaches the maintainers. */
-export function reportDiagramHref(owner: string, repo: string, sha: string): string {
-  const title = `Wrong or unwanted public diagram: ${owner}/${repo}`
-  const body = `The public diagram at https://kensaur.us/mushi-mushi/r/${owner}/${repo} (commit ${sha.slice(0, 7)}) is wrong or should not be public.\n\nWhat is wrong:\n`
-  return `https://github.com/kensaurus/mushi-mushi/issues/new?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`
+/** docs/adr/0015: the product inbox (same address as the site footer). */
+export const DIAGRAM_REPORT_EMAIL = 'kensaurus@gmail.com'
+
+export interface DiagramReportTarget {
+  owner: string
+  repo: string
+  sha: string
+  /** The part being reported, when one is selected. */
+  nodePath?: string | null
+  nodeLabel?: string | null
+}
+
+/**
+ * Private fallback when the Mushi SDK is not loaded: an email to the product
+ * inbox. Never a public issue: a takedown request can itself contain what
+ * someone wants removed.
+ */
+export function diagramReportMailto(t: DiagramReportTarget): string {
+  const subject = `Wrong or unwanted diagram: ${t.owner}/${t.repo}`
+  const lines = [
+    `Page: https://kensaur.us/mushi-mushi/r/${t.owner}/${t.repo}`,
+    `Commit: ${t.sha}`,
+    ...(t.nodeLabel || t.nodePath ? [`Part: ${t.nodeLabel ?? ''}${t.nodePath ? ` (${t.nodePath})` : ''}`] : []),
+    '',
+    'What is wrong, or why it should not be public:',
+    '',
+  ]
+  return `mailto:${DIAGRAM_REPORT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(lines.join('\n'))}`
+}
+
+/** The slice of the Mushi SDK this needs (MushiSiteAnalytics' getLoadedMushi). */
+export interface DiagramReportSdk {
+  setMetadata: (key: string, value: unknown) => void
+  report: (options?: { category?: string }) => void
+}
+
+/**
+ * Report a wrong or unwanted diagram privately. With the SDK loaded, the
+ * report goes into Mushi's own queue (category `other`) carrying the repo,
+ * commit and part as metadata, and the visitor describes the problem in the
+ * widget. Without it, the caller opens the returned mailto.
+ */
+export function reportWrongDiagram(
+  t: DiagramReportTarget,
+  sdk: DiagramReportSdk | null,
+): { via: 'sdk' } | { via: 'email'; href: string } {
+  if (!sdk) return { via: 'email', href: diagramReportMailto(t) }
+  sdk.setMetadata('public_diagram', {
+    repo: `${t.owner}/${t.repo}`,
+    sha: t.sha,
+    node_path: t.nodePath ?? null,
+    node_label: t.nodeLabel ?? null,
+    page: `https://kensaur.us/mushi-mushi/r/${t.owner}/${t.repo}`,
+  })
+  sdk.report({ category: 'other' })
+  return { via: 'sdk' }
 }
