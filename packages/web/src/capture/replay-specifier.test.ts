@@ -10,8 +10,13 @@ import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
+type EsbuildApi = {
+  build(options: Record<string, unknown>): Promise<{ outputFiles: Array<{ text: string }> }>
+}
+
+// esbuild is tsup's dependency, not this package's, so resolve it through tsup.
 const require = createRequire(import.meta.url)
-const esbuild = require(createRequire(require.resolve('tsup')).resolve('esbuild')) as typeof import('esbuild')
+const esbuild = require(createRequire(require.resolve('tsup')).resolve('esbuild')) as EsbuildApi
 
 describe('replay rrweb specifier', () => {
   it('survives a minifying bundle as a dynamic import', async () => {

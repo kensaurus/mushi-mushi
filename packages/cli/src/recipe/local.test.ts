@@ -82,7 +82,8 @@ describe('starterManifest', () => {
     const m = starterManifest(repo(files)) as { design?: { tokens: Array<{ path: string }> }; data?: { migrationsDir: string } }
     expect(m.design?.tokens.map((t) => t.path)).toEqual(['packages/design-tokens/dtcg/tokens.json'])
     expect(m.data?.migrationsDir).toBe('supabase/migrations')
-  })
+    // Writes 5,000+ files to disk; the default 5 s timed out under the parallel turbo run.
+  }, 60_000)
 
   it('in a git checkout, lists tracked files only, as recipe check and the server do', () => {
     const root = repo({ 'package.json': JSON.stringify({ name: 'g' }), 'tokens/brand.tokens.json': TOKENS })
