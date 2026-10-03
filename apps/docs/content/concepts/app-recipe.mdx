@@ -287,8 +287,10 @@ same rule ids, over your tracked files, so it reports the same findings and the
 same score. With `--push` it sends the scan along with the recipe. Mushi does
 not take the CLI's word for it: it applies your rules' severities, judges
 contrast from the tokens itself, computes the score, and records the
-`design.deviance_score` metric. A push from a CLI older than this engine is kept
-but never replaces the score shown in the console. Update the server before the
+`design.deviance_score` metric. Only a push of your default branch becomes the
+score shown in the console; a pull-request run keeps its findings and the CI
+gate but never replaces it. A push from a CLI older than this engine is kept
+but never replaces the score shown in the console either. Update the server before the
 CLI if you self-host.
 
 ```yaml
