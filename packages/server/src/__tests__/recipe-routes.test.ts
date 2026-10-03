@@ -64,6 +64,7 @@ class FakeApp {
   }
   get(path: string, ...h: Handler[]) { this.add('GET', path, h) }
   post(path: string, ...h: Handler[]) { this.add('POST', path, h) }
+  put(path: string, ...h: Handler[]) { this.add('PUT', path, h) }
   async call(method: string, url: string, opts: { body?: unknown; vars?: Record<string, unknown> } = {}): Promise<JsonResult> {
     const [path, qs] = url.split('?')
     for (const [key, r] of this.routes) {
@@ -190,6 +191,7 @@ const READ_ROUTES = (pid: string) => [
   `/v1/admin/projects/${pid}/design/tokens`,
   `/v1/admin/projects/${pid}/design/deviance`,
   `/v1/admin/projects/${pid}/design/excerpt`,
+  `/v1/admin/projects/${pid}/design/settings`,
 ]
 const WRITE_ROUTES = (pid: string) => [
   `/v1/admin/projects/${pid}/recipe/refresh`,
@@ -413,6 +415,82 @@ describe('deviance runs', () => {
     const ex = (await app.call('GET', `/v1/admin/projects/${P_A}/design/excerpt?files=app/page.tsx`)).body.data as any
     expect(ex.findings).toEqual([{ file: 'app/page.tsx', line: 4, rule: 'off_token_color', value: '#E8387F', use: '--color-cta' }])
     expect(ex.score).toBe(21)
+  })
+
+  it('a newer push from an old CLI (ci_scan, no score) never blanks the shown score or findings', async () => {
+    const run = { id: 'run-2', project_id: P_A, gate: 'design_drift', status: 'warn', started_at: '2026-10-02T11:30:00Z', completed_at: '2026-10-02T11:31:00Z', summary: { phase: 'scan', score: 21, scannedFiles: 3, scannedLines: 900, matchedFiles: 3, breakdown: [], counts: { off_token_color: 1 } }, findings_count: 1, commit_sha: 'abc' }
+    const legacy = { id: 'run-ci', project_id: P_A, gate: 'design_drift', status: 'warn', started_at: '2026-10-02T11:50:00Z', completed_at: '2026-10-02T11:50:00Z', summary: { phase: 'ci_scan', source: 'ci', score: null, scannedFiles: 9, storedFindings: 1 }, findings_count: 1, commit_sha: 'def' }
+    const finding = { id: 'f1', gate_run_id: 'run-2', project_id: P_A, severity: 'warn', rule_id: 'off_token_color', message: 'Colour #E8387F is not in your tokens.', file_path: 'app/page.tsx', line: 4, col: 9, allowlisted: false, suggested_fix: { value: '#E8387F', suggestion: null } }
+    const legacyFinding = { id: 'f2', gate_run_id: 'run-ci', project_id: P_A, severity: 'warn', rule_id: 'off_token_literal', message: 'x', file_path: 'app/x.tsx', line: 1, col: null, allowlisted: false, suggested_fix: null }
+    const { app } = harness(seed({ app_recipe_snapshots: [glotSnapshot(P_A)], gate_runs: [legacy, run], gate_findings: [finding, legacyFinding] }))
+    const d = (await app.call('GET', `/v1/admin/projects/${P_A}/design`)).body.data as { deviance: { latest: { runId: string; score: number } } }
+    expect(d.deviance.latest).toMatchObject({ runId: 'run-2', score: 21 })
+    const dev = (await app.call('GET', `/v1/admin/projects/${P_A}/design/deviance`)).body.data as { latest: { runId: string }; findings: Array<{ rule_id: string }> }
+    expect(dev.latest.runId).toBe('run-2')
+    expect(dev.findings.map((f) => f.rule_id)).toEqual(['off_token_color'])
+  })
+
+  it('design settings: off by default, owners and admins change them, members cannot', async () => {
+    const db = seed({ project_settings: [{ project_id: P_A, autofix_enabled: false }] })
+    const { app } = harness(db)
+    const got = await app.call('GET', `/v1/admin/projects/${P_A}/design/settings`)
+    expect(got.body.data).toEqual({ threshold: 40, failCi: false, autofix: false, autofixEnabled: false, canEdit: true })
+    expect((await app.call('GET', `/v1/admin/projects/${P_A}/design/settings`, { vars: { userId: 'member-a' } })).body.data).toMatchObject({ canEdit: false })
+
+    const member = await app.call('PUT', `/v1/admin/projects/${P_A}/design/settings`, { body: { failCi: true }, vars: { userId: 'member-a' } })
+    expect(member.status).toBe(403)
+    expect((await app.call('PUT', `/v1/admin/projects/${P_A}/design/settings`, { body: { threshold: 101 } })).status).toBe(400)
+    expect((await app.call('PUT', `/v1/admin/projects/${P_A}/design/settings`, { body: {} })).status).toBe(400)
+    expect((await app.call('PUT', `/v1/admin/projects/${P_A}/design/settings`, { body: { failCi: true, extra: 1 } })).status).toBe(400)
+
+    const put = await app.call('PUT', `/v1/admin/projects/${P_A}/design/settings`, { body: { threshold: 25, failCi: true, autofix: true } })
+    expect(put.status).toBe(200)
+    expect(put.body.data).toEqual({ threshold: 25, failCi: true, autofix: true, autofixEnabled: false, canEdit: true })
+    expect(db.table('project_settings')[0]).toMatchObject({ design_deviance_threshold: 25, design_deviance_fail_ci: true, design_drift_autofix: true })
+    // Another organization's project stays invisible.
+    expect((await app.call('PUT', `/v1/admin/projects/${P_B}/design/settings`, { body: { failCi: true } })).status).toBe(404)
+  })
+
+  it('any number of PR pushes, public-key pushes and refresh errors newer than the last scan never blank the score', async () => {
+    const run = { id: 'run-2', project_id: P_A, gate: 'design_drift', status: 'warn', started_at: '2026-10-02T11:30:00Z', completed_at: '2026-10-02T11:31:00Z', summary: { phase: 'scan', score: 21, scannedFiles: 3, scannedLines: 900 }, findings_count: 1, commit_sha: 'abc' }
+    const finding = { id: 'f1', gate_run_id: 'run-2', project_id: P_A, severity: 'warn', rule_id: 'off_token_color', message: 'Colour #E8387F is not in your tokens.', file_path: 'app/page.tsx', line: 4, col: 9, allowlisted: false, suggested_fix: { value: '#E8387F', suggestion: null } }
+    const phases = ['ci_branch_scan', 'ci_untrusted_scan', 'ci_scan', 'refresh']
+    // 320 newer rows: more than every read window (30 scans, 300 gate runs).
+    const noise = Array.from({ length: 320 }, (_, i) => ({
+      id: `noise-${i}`, project_id: P_A, gate: 'design_drift', status: phases[i % 4] === 'refresh' ? 'error' : 'pass',
+      started_at: `2026-10-02T12:${String(Math.floor(i / 60)).padStart(2, '0')}:${String(i % 60).padStart(2, '0')}Z`, completed_at: '2026-10-02T12:59:00Z',
+      summary: { phase: phases[i % 4], score: 0, error: 'refresh failed' }, findings_count: 0, commit_sha: 'pr',
+    }))
+    const { app } = harness(seed({ app_recipe_snapshots: [glotSnapshot(P_A)], gate_runs: [...noise, run], gate_findings: [finding] }))
+    const d = (await app.call('GET', `/v1/admin/projects/${P_A}/design`)).body.data as { state: string; deviance: { latest: { runId: string; score: number }; trend: Array<{ score: number }> } }
+    expect(d.deviance.latest).toMatchObject({ runId: 'run-2', score: 21 })
+    expect(d.deviance.trend.map((t) => t.score)).toEqual([21])
+    const dev = (await app.call('GET', `/v1/admin/projects/${P_A}/design/deviance`)).body.data as { latest: { runId: string }; findings: Array<{ rule_id: string }>; trend: unknown[] }
+    expect(dev.latest.runId).toBe('run-2')
+    expect(dev.findings.map((f) => f.rule_id)).toEqual(['off_token_color'])
+    expect(dev.trend).toHaveLength(1)
+    const recipeRes = (await app.call('GET', `/v1/admin/projects/${P_A}/recipe`)).body.data as { elements: { design: { findingsCount: number } } }
+    expect(recipeRes.elements.design.findingsCount).toBe(1)
+  })
+
+  it('an API key may change the threshold or turn the design auto-fix off, never on', async () => {
+    const db = seed({ project_settings: [{ project_id: P_A, design_drift_autofix: true }] })
+    const { app } = harness(db)
+    const key = { authMethod: 'apiKey' }
+    const on = await app.call('PUT', `/v1/admin/projects/${P_A}/design/settings`, { body: { autofix: true }, vars: key })
+    expect(on.status).toBe(403)
+    expect(String((on.body as { error?: { message?: string } }).error?.message)).toMatch(/signed-in owner or admin/)
+    expect((await app.call('PUT', `/v1/admin/projects/${P_A}/design/settings`, { body: { threshold: 30, failCi: true }, vars: key })).status).toBe(200)
+    expect((await app.call('PUT', `/v1/admin/projects/${P_A}/design/settings`, { body: { autofix: false }, vars: key })).status).toBe(200)
+    expect(db.table('project_settings')[0]).toMatchObject({ design_deviance_threshold: 30, design_deviance_fail_ci: true, design_drift_autofix: false })
+  })
+
+  it('a CI push scored with the shared engine (phase scan, source ci) is the latest scan', async () => {
+    const run = { id: 'run-2', project_id: P_A, gate: 'design_drift', status: 'warn', started_at: '2026-10-02T11:30:00Z', completed_at: '2026-10-02T11:31:00Z', summary: { phase: 'scan', score: 21, scannedFiles: 3, scannedLines: 900 }, findings_count: 1, commit_sha: 'abc' }
+    const ci = { id: 'run-ci', project_id: P_A, gate: 'design_drift', status: 'pass', started_at: '2026-10-02T11:50:00Z', completed_at: '2026-10-02T11:50:00Z', summary: { phase: 'scan', source: 'ci', score: 4, scannedFiles: 12, scannedLines: 2400 }, findings_count: 0, commit_sha: 'def' }
+    const { app } = harness(seed({ app_recipe_snapshots: [glotSnapshot(P_A)], gate_runs: [ci, run] }))
+    const d = (await app.call('GET', `/v1/admin/projects/${P_A}/design`)).body.data as { deviance: { latest: { runId: string; score: number } } }
+    expect(d.deviance.latest).toMatchObject({ runId: 'run-ci', score: 4 })
   })
 })
 

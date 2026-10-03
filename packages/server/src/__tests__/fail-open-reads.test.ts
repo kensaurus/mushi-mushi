@@ -220,19 +220,20 @@ describe('composeRecipe never composes from a failed read', () => {
     expect(response.elements.gates).toMatchObject({ state: 'drift', reason: '1 open finding across the latest gate runs.' })
   })
 
-  it('reads the newest finished run per gate; a design refresh is not a scan, a run with no phase is', async () => {
+  it('reads the newest finished run per gate; for design_drift only a deviance scan counts (not a refresh, an old-CLI push or a run with no phase)', async () => {
     const db = makeFakeDb({
       gate_runs: [
         { id: 'scan-old', project_id: P, gate: 'design_drift', status: 'fail', summary: { phase: 'scan' }, started_at: '2026-09-01T00:00:00Z' },
         { id: 'no-phase', project_id: P, gate: 'design_drift', status: 'warn', summary: null, started_at: '2026-09-02T00:00:00Z' },
         { id: 'refresh-new', project_id: P, gate: 'design_drift', status: 'pass', summary: { phase: 'refresh' }, started_at: '2026-10-02T00:00:00Z' },
+        { id: 'old-cli-push', project_id: P, gate: 'design_drift', status: 'warn', summary: { phase: 'ci_scan' }, started_at: '2026-10-01T00:00:00Z' },
         { id: 'queued', project_id: P, gate: 'ci_drift', status: 'queued', started_at: '2026-10-02T00:00:00Z' },
         { id: 'ci-done', project_id: P, gate: 'ci_drift', status: 'skipped', started_at: '2026-09-30T00:00:00Z' },
         { id: 'other-project', project_id: 'someone-else', gate: 'env_drift', status: 'fail', started_at: '2026-10-02T00:00:00Z' },
       ],
     })
     const runs = await compose.loadLatestGateRuns(db as never, P, ['design_drift', 'ci_drift', 'env_drift'])
-    expect(runs.map((r) => r.id).sort()).toEqual(['ci-done', 'no-phase'])
+    expect(runs.map((r) => r.id).sort()).toEqual(['ci-done', 'scan-old'])
     await expect(compose.loadLatestGateRuns(makeFakeDb({}, failing('gate_runs')) as never, P, ['ci_drift'])).rejects.toThrow(/gate_runs \(ci_drift\)/)
   })
 

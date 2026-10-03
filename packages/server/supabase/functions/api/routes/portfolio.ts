@@ -49,7 +49,7 @@ import { DESIGN_GATE } from '../../_shared/design-plane.ts'
 import { RADAR_CI_GATE, RADAR_GATE } from '../../_shared/radar/run.ts'
 import { jsonError, OPEN_REPORT_STATUSES } from '../shared.ts'
 import type { Variables } from '../types.ts'
-import { composeRecipe, isScanRun, latestPerGate, type ComposeDeps } from './recipe-compose.ts'
+import { composeRecipe, latestPerGate, loadLatestDesignScans, type ComposeDeps } from './recipe-compose.ts'
 import { defaultRecipeDeps } from './recipe.ts'
 
 const plog = log.child('portfolio')
@@ -151,11 +151,10 @@ interface RunRow {
   completed_at: string | null
 }
 
-/** Latest completed run per (project, gate). Design refresh runs never count as the latest scan. */
+/** Latest completed run per (project, gate), for every gate but design_drift (read separately, scans only). */
 function latestRunsByProject(runs: readonly RunRow[]): RunRow[] {
   const byProject = new Map<string, RunRow[]>()
   for (const r of runs) {
-    if (r.gate === DESIGN_GATE && !isScanRun(r)) continue
     const list = byProject.get(r.project_id) ?? []
     list.push(r)
     byProject.set(r.project_id, list)
@@ -196,20 +195,26 @@ function noteTruncated(errs: ReadErrors, part: PortfolioReadPart, message: strin
 
 async function loadLatestRuns(db: Db, projectIds: string[], errs: ReadErrors): Promise<RunRow[]> {
   if (projectIds.length === 0) return []
-  const read = await readAllPages<RunRow>(
-    (from, to, count) => db
-      .from('gate_runs')
-      .select('id, project_id, gate, status, summary, started_at, completed_at', { count })
-      .in('project_id', projectIds)
-      .order('started_at', { ascending: false })
-      .order('id', { ascending: true })
-      .range(from, to),
-    { what: 'gate_runs', maxRows: MAX_RUN_ROWS },
-  )
+  // design_drift is read per project, latest scan only: refresh errors and PR
+  // pushes (many per day) must never stand in for, or bury, a project's scan.
+  const [read, designScans] = await Promise.all([
+    readAllPages<RunRow>(
+      (from, to, count) => db
+        .from('gate_runs')
+        .select('id, project_id, gate, status, summary, started_at, completed_at', { count })
+        .in('project_id', projectIds)
+        .neq('gate', DESIGN_GATE)
+        .order('started_at', { ascending: false })
+        .order('id', { ascending: true })
+        .range(from, to),
+      { what: 'gate_runs', maxRows: MAX_RUN_ROWS },
+    ),
+    loadLatestDesignScans(db, projectIds),
+  ])
   if (read.truncated) {
     noteTruncated(errs, 'gate_runs', `Only the newest ${MAX_RUN_ROWS.toLocaleString('en-US')} check runs were read; a check that last ran before them is missing from the cards.`)
   }
-  return latestRunsByProject(read.rows)
+  return [...latestRunsByProject(read.rows), ...designScans]
 }
 
 async function loadOpenFindings(db: Db, runs: readonly RunRow[], errs: ReadErrors): Promise<OpenFindingRow[]> {

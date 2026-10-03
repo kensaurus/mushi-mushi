@@ -33,7 +33,8 @@ import { judgingSet, type StoredTokens } from '../../_shared/design-sets.ts'
 import { applyActivateDirection, applyDeclareDirection, applyRulesEdit, applyTokenEdits, buildDuplicateDirection, DIRECTION_NAME_RE, unifiedDiff, type TokenFileEdit } from '../../_shared/design-change.ts'
 import { effectiveDesignRules, isWritablePath, RECIPE_MANIFEST_MAX_BYTES, RECIPE_MANIFEST_PATH } from '../../_shared/recipe-schema.ts'
 import { directionOf, MAX_ASSET_BYTES, MAX_TOKEN_FILE_BYTES } from '../../_shared/design-sets.ts'
-import { DESIGN_RULE_IDS, RECIPE_ELEMENT_KEYS, type DesignChangeResult, type DesignDevianceRunResult, type DesignTokensResponse, type DevianceRun, type RecipeElementKey, type RecipeHistoryResponse } from '../../_shared/recipe-types.ts'
+import { DESIGN_RULE_IDS, RECIPE_ELEMENT_KEYS, type DesignActionSettingsView, type DesignChangeResult, type DesignDevianceRunResult, type DesignTokensResponse, type DevianceRun, type RecipeElementKey, type RecipeHistoryResponse } from '../../_shared/recipe-types.ts'
+import { loadDesignActionSettings } from '../../_shared/design-actions.ts'
 import { inferStack, requiredCiVarNames } from './project-ci-secrets.ts'
 import { callerCanAccessProject, dbError, jsonError } from '../shared.ts'
 import type { Variables } from '../types.ts'
@@ -42,8 +43,7 @@ import {
   composeDesignPlane,
   composeDirections,
   composeRecipe,
-  isScanRun,
-  loadDesignRuns,
+  loadDesignScans,
   loadRunFindings,
   toDevianceRun,
   type ComposeDeps,
@@ -147,6 +147,12 @@ const changeSchema = z.discriminatedUnion('kind', [
     title: z.string().max(120).optional(),
   }),
 ])
+
+const designSettingsSchema = z.object({
+  threshold: z.number().int().min(0).max(100).optional(),
+  failCi: z.boolean().optional(),
+  autofix: z.boolean().optional(),
+}).strict()
 
 export function registerRecipeRoutes(app: Hono<{ Variables: Variables }>, deps: RecipeRouteDeps = defaultRecipeDeps): void {
   // ── GET /v1/admin/projects/:id/recipe ──────────────────────────────────────
@@ -275,9 +281,9 @@ export function registerRecipeRoutes(app: Hono<{ Variables: Variables }>, deps: 
     const access = await projectAccess(c, db)
     if (!access.ok) return access.response
     const limit = Math.min(Math.max(Number(c.req.query('limit') ?? 25) || 25, 1), 200)
-    const [runs, snapshot] = await Promise.all([loadDesignRuns(db, access.projectId), deps.loadSnapshot(db, access.projectId)])
+    const [scanRows, snapshot] = await Promise.all([loadDesignScans(db, access.projectId), deps.loadSnapshot(db, access.projectId)])
     const now = deps.now()
-    const scans = runs.filter(isScanRun).map((r) => toDevianceRun(r, now))
+    const scans = scanRows.map((r) => toDevianceRun(r, now))
     const latest = scans.find((r) => r.status !== 'running') ?? null
     const findings = latest && latest.status !== 'error' ? await loadRunFindings(db, latest.runId, limit) : []
     return c.json({
@@ -299,8 +305,8 @@ export function registerRecipeRoutes(app: Hono<{ Variables: Variables }>, deps: 
     const access = await projectAccess(c, db)
     if (!access.ok) return access.response
     const now = deps.now()
-    const runs = await loadDesignRuns(db, access.projectId, 5)
-    const recent = runs.filter(isScanRun).map((r) => toDevianceRun(r, now)).find((r) => r.status !== 'error')
+    const scans = await loadDesignScans(db, access.projectId, 5)
+    const recent = scans.map((r) => toDevianceRun(r, now)).find((r) => r.status !== 'error')
     if (recent && now.getTime() - Date.parse(recent.startedAt) < REFRESH_COOLDOWN_MS) {
       return jsonError(c, 'RATE_LIMITED', recent.status === 'running' ? 'A deviance check is already running.' : 'A deviance check ran in the last 5 minutes. Try again shortly.', 429)
     }
@@ -320,6 +326,45 @@ export function registerRecipeRoutes(app: Hono<{ Variables: Variables }>, deps: 
       commitSha: started.commitSha, startedAt: started.startedAt, completedAt: null, breakdown: [], counts: {}, storedFindings: 0, error: null,
     }
     return c.json({ ok: true, data: { refresh, run } satisfies DesignDevianceRunResult }, 202)
+  })
+
+  // ── GET|PUT /v1/admin/projects/:id/design/settings ─────────────────────────
+  // What the deviance score may do on its own (off by default): fail the CI
+  // check above the threshold, and auto-dispatch a fix for new findings.
+  app.get('/v1/admin/projects/:id/design/settings', deps.adminOrApiKeyRead, async (c) => {
+    const db = deps.getServiceClient()
+    const access = await projectAccess(c, db)
+    if (!access.ok) return access.response
+    const read = await loadDesignActionSettings(db, access.projectId)
+    if (!read.ok) return dbError(c, { message: read.error })
+    const data: DesignActionSettingsView = { ...read.settings, canEdit: access.role === 'owner' || access.role === 'admin' }
+    return c.json({ ok: true, data })
+  })
+
+  app.put('/v1/admin/projects/:id/design/settings', deps.adminOrApiKeyWrite, async (c) => {
+    const db = deps.getServiceClient()
+    const access = await projectAccess(c, db, { needAdmin: true })
+    if (!access.ok) return access.response
+    const parsed = designSettingsSchema.safeParse(await c.req.json().catch(() => null))
+    if (!parsed.success) return jsonError(c, 'VALIDATION_ERROR', parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ').slice(0, 300), 400)
+    const p = parsed.data
+    // Turning the design auto-fix on lets the project spend on its own. Like
+    // the project's own auto-fix switch (POST /autofix/toggle, jwtAuth), only a
+    // signed-in owner or admin may do it; an API key may still turn it off.
+    if (p.autofix === true && c.get('authMethod') === 'apiKey') {
+      return jsonError(c, 'FORBIDDEN', 'Turning on the design auto-fix needs a signed-in owner or admin (console: Design system → When the score is too high). An API key can only turn it off.', 403)
+    }
+    const patch: Record<string, unknown> = {}
+    if (p.threshold !== undefined) patch.design_deviance_threshold = p.threshold
+    if (p.failCi !== undefined) patch.design_deviance_fail_ci = p.failCi
+    if (p.autofix !== undefined) patch.design_drift_autofix = p.autofix
+    if (Object.keys(patch).length === 0) return jsonError(c, 'VALIDATION_ERROR', 'Send threshold, failCi or autofix.', 400)
+    const { error } = await db.from('project_settings').upsert({ project_id: access.projectId, ...patch }, { onConflict: 'project_id' })
+    if (error) return dbError(c, error)
+    const read = await loadDesignActionSettings(db, access.projectId)
+    if (!read.ok) return dbError(c, { message: read.error })
+    const data: DesignActionSettingsView = { ...read.settings, canEdit: true }
+    return c.json({ ok: true, data })
   })
 
   // ── GET /v1/admin/projects/:id/design/excerpt ──────────────────────────────

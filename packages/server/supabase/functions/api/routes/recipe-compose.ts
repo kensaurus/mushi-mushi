@@ -15,6 +15,7 @@ import { judgingSet, toSetSummary, type StoredTokens } from '../../_shared/desig
 import { effectiveDesignRules, isWritablePath, RECIPE_MANIFEST_PATH, type RecipeManifest } from '../../_shared/recipe-schema.ts'
 import { evaluateContrast } from '../../_shared/design-deviance.ts'
 import { DESIGN_GATE, STUCK_SCAN_MS, type SnapshotRow } from '../../_shared/design-plane.ts'
+import { DESIGN_PHASE_PATH, DESIGN_SCAN_PHASE } from '../../_shared/design-actions.ts'
 import type { RecipeRepoResolution, RecipeRepo } from '../../_shared/recipe-github.ts'
 import type { WorkflowRunSnapshot } from '../../_shared/github.ts'
 import { assetMime } from '../../_shared/design-assets.ts'
@@ -137,8 +138,17 @@ export async function openFindingCounts(db: Db, runIds: string[]): Promise<Map<s
   return out
 }
 
+/**
+ * Whether a design_drift run is a deviance scan the score and the deviance
+ * list may come from: `phase: 'scan'` (a server scan, or a trusted CI push of
+ * the default branch). Not a scan: a failed refresh (`refresh`), a push from
+ * a CLI older than the shared rule engine (`ci_scan`), a CI push of another
+ * branch (`ci_branch_scan`) and a push with a public key (`ci_untrusted_scan`).
+ * Every read below filters on the same phase in SQL, so any number of those
+ * rows can never push the latest scan out of a read window.
+ */
 export function isScanRun(r: Pick<GateRunRow, 'summary'>): boolean {
-  return (r.summary as { phase?: string } | null)?.phase !== 'refresh'
+  return (r.summary as { phase?: string } | null)?.phase === DESIGN_SCAN_PHASE
 }
 
 /** The gates the recipe reads: every live gate except the radar hole checks (Plan 020), which have their own column. */
@@ -149,8 +159,9 @@ export const RECIPE_GATES: readonly string[] = GATE_IDS.filter((g) => !RADAR_GAT
  * A shared "newest N runs" page would let busy gates (daily radar runs,
  * per-push CI runs) push an older failing gate out, and that gate would read
  * as never run. Same filters as latestPerGate + isScanRun, in the query:
- * running / queued runs are skipped, and a design refresh is not a scan (a
- * run with no phase is one, as in isScanRun). A failed read throws (P-1).
+ * running / queued runs are skipped, and only a deviance scan counts for
+ * design_drift (the same read as loadLatestDesignScans). A failed read
+ * throws (P-1).
  */
 export async function loadLatestGateRuns(db: Db, projectId: string, gates: readonly string[]): Promise<GateRunRow[]> {
   const reads = await Promise.all(gates.map(async (gate) => {
@@ -160,7 +171,7 @@ export async function loadLatestGateRuns(db: Db, projectId: string, gates: reado
       .eq('project_id', projectId)
       .eq('gate', gate)
       .not('status', 'in', '(running,queued)')
-    if (gate === DESIGN_GATE) q = q.or('summary->>phase.is.null,summary->>phase.neq.refresh')
+    if (gate === DESIGN_GATE) q = q.eq(DESIGN_PHASE_PATH, DESIGN_SCAN_PHASE)
     const { data, error } = await q.order('started_at', { ascending: false }).limit(1).maybeSingle()
     if (error) throw new Error(`gate_runs (${gate}): ${error.message}`)
     return (data as GateRunRow | null) ?? null
@@ -191,16 +202,56 @@ export function toDevianceRun(r: GateRunRow, now: Date = new Date()): DevianceRu
   }
 }
 
-export async function loadDesignRuns(db: Db, projectId: string, limit = 30): Promise<GateRunRow[]> {
+const RUN_COLUMNS = 'id, gate, status, started_at, completed_at, summary, findings_count, commit_sha'
+
+/** The newest design_drift deviance scans (running ones included), newest first; filtered to scans in SQL. */
+export async function loadDesignScans(db: Db, projectId: string, limit = 30): Promise<GateRunRow[]> {
   const { data, error } = await db
     .from('gate_runs')
-    .select('id, gate, status, started_at, completed_at, summary, findings_count, commit_sha')
+    .select(RUN_COLUMNS)
     .eq('project_id', projectId)
     .eq('gate', DESIGN_GATE)
+    .eq(DESIGN_PHASE_PATH, DESIGN_SCAN_PHASE)
     .order('started_at', { ascending: false })
     .limit(limit)
   if (error) throw new Error(`gate_runs read failed: ${error.message}`)
   return (data ?? []) as GateRunRow[]
+}
+
+/** The newest errored design_drift run of any phase (a failed refresh, scan or CI push), or null. */
+async function loadLatestDesignError(db: Db, projectId: string): Promise<GateRunRow | null> {
+  const { data, error } = await db
+    .from('gate_runs')
+    .select(RUN_COLUMNS)
+    .eq('project_id', projectId)
+    .eq('gate', DESIGN_GATE)
+    .eq('status', 'error')
+    .order('started_at', { ascending: false })
+    .limit(1)
+  if (error) throw new Error(`gate_runs read failed: ${error.message}`)
+  return ((data ?? []) as GateRunRow[])[0] ?? null
+}
+
+/**
+ * The latest completed deviance scan of each project (none for a project
+ * that never finished one), for readers that merge design_drift with other
+ * gates. One query per project, so one busy project never hides another's.
+ */
+export async function loadLatestDesignScans(db: Db, projectIds: readonly string[]): Promise<Array<GateRunRow & { project_id: string }>> {
+  const rows = await Promise.all(projectIds.map(async (projectId) => {
+    const { data, error } = await db
+      .from('gate_runs')
+      .select(`${RUN_COLUMNS}, project_id`)
+      .eq('project_id', projectId)
+      .eq('gate', DESIGN_GATE)
+      .eq(DESIGN_PHASE_PATH, DESIGN_SCAN_PHASE)
+      .not('status', 'in', '(running,queued)')
+      .order('started_at', { ascending: false })
+      .limit(1)
+    if (error) throw new Error(`gate_runs read failed: ${error.message}`)
+    return ((data ?? []) as Array<GateRunRow & { project_id: string }>)[0] ?? null
+  }))
+  return rows.filter((r): r is GateRunRow & { project_id: string } => r !== null)
 }
 
 export async function loadRunFindings(db: Db, runId: string, limit: number): Promise<DevianceFinding[]> {
@@ -232,11 +283,9 @@ export async function loadRunFindings(db: Db, runId: string, limit: number): Pro
 
 /** The design inputs shared by the recipe card and the design page. */
 export async function loadDesignState(db: Db, projectId: string, snapshot: SnapshotRow | null, repo: RecipeRepoResolution | null, now: Date) {
-  const runs = await loadDesignRuns(db, projectId)
-  const scans = runs.filter(isScanRun)
+  const [scans, latestError] = await Promise.all([loadDesignScans(db, projectId), loadLatestDesignError(db, projectId)])
   const latestScan = scans[0] ?? null
   const latestCompleted = scans.find((r) => toDevianceRun(r, now).status !== 'running') ?? null
-  const latestError = runs.find((r) => r.status === 'error') ?? null
   const lastError = latestError
     ? { at: latestError.completed_at ?? latestError.started_at, message: String((latestError.summary as { error?: string } | null)?.error ?? 'unknown error') }
     : null
@@ -260,7 +309,7 @@ export async function loadDesignState(db: Db, projectId: string, snapshot: Snaps
     openFindings,
     score: latestCompleted ? toDevianceRun(latestCompleted, now).score : null,
   }
-  return { runs, scans, latestScan, latestCompleted, lastError, openFindings, set, state: deriveElementState(input, now), input }
+  return { scans, latestScan, latestCompleted, lastError, openFindings, set, state: deriveElementState(input, now), input }
 }
 
 // ── The recipe ───────────────────────────────────────────────────────────────
@@ -293,7 +342,14 @@ export async function composeRecipe(db: Db, deps: ComposeDeps, projectId: string
   const settings = (settingsRes.data ?? {}) as Record<string, string | null>
   const manifest = (snapshot?.manifest ?? null) as RecipeManifest | null
 
-  const latest = await loadLatestGateRuns(db, projectId, RECIPE_GATES)
+  // Newest finished run per gate, read per gate (P-1). design_drift is read on
+  // its own, latest SCAN only, so refreshes, CI pushes of other branches and
+  // pushes from older CLIs never bury the shown score.
+  const [gateRuns, designScans] = await Promise.all([
+    loadLatestGateRuns(db, projectId, RECIPE_GATES.filter((g) => g !== DESIGN_GATE)),
+    loadLatestDesignScans(db, [projectId]),
+  ])
+  const latest: GateRunRow[] = [...gateRuns, ...designScans]
   const findingCounts = await openFindingCounts(db, latest.map((r) => r.id))
   /** Open findings of an element's own drift gate (Phase 2); undefined when that gate never ran. */
   const driftOf = (gate: string): number | undefined => {
@@ -656,7 +712,7 @@ export async function composeDirections(
   const sets = stored?.sets ?? []
   const directionSets = sets.some((s) => s.kind === 'direction') ? sets.filter((s) => s.kind === 'direction') : sets.filter((s) => s.active && s.kind !== 'export')
   const pairs = manifest?.design?.contrast ?? []
-  const runs = directionSets.some((s) => s.active) ? (await loadDesignRuns(db, projectId)).filter(isScanRun).map((r) => toDevianceRun(r, now)) : []
+  const runs = directionSets.some((s) => s.active) ? (await loadDesignScans(db, projectId)).map((r) => toDevianceRun(r, now)) : []
   const lastRun = runs.find((r) => r.status !== 'running') ?? null
 
   const directions: DesignDirection[] = []

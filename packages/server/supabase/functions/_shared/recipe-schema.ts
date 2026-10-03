@@ -12,7 +12,7 @@
 import { z } from 'npm:zod@3'
 import { matchAny, matchGlob, normalizeRepoPath } from './recipe-glob.ts'
 import { scanForSecrets } from './secret-scan.ts'
-import type { DesignRuleConfig, DesignRuleId, FindingSeverity, RecipeIssue } from './recipe-types.ts'
+import type { RecipeIssue } from './recipe-types.ts'
 import { DESIGN_RULE_IDS } from './recipe-types.ts'
 
 export const RECIPE_MANIFEST_PATH = 'mushi.recipe.json'
@@ -211,34 +211,8 @@ export function parseRecipeManifest(text: string): ManifestParse {
 
 // ── Design rules ─────────────────────────────────────────────────────────────
 
-/** Mushi's defaults. raw_interactive_element is opt-in because it needs primitives. */
-export const DEFAULT_DESIGN_RULES: Readonly<Record<DesignRuleId, { enabled: boolean; severity: FindingSeverity; allowValues: string[] }>> = {
-  off_token_color: { enabled: true, severity: 'warn', allowValues: [] },
-  off_token_font: { enabled: true, severity: 'warn', allowValues: [] },
-  off_scale_spacing: { enabled: true, severity: 'info', allowValues: ['0', '0px'] },
-  off_scale_radius: { enabled: true, severity: 'info', allowValues: ['0', '0px', '50%', '100%'] },
-  contrast_below_aa: { enabled: true, severity: 'error', allowValues: [] },
-  raw_interactive_element: { enabled: false, severity: 'info', allowValues: [] },
-}
-
-/** Manifest rules layered over the defaults, in DESIGN_RULE_IDS order. */
-export function effectiveDesignRules(manifest: RecipeManifest | null): DesignRuleConfig[] {
-  const declared = (manifest?.design?.rules ?? {}) as Record<string, z.infer<typeof ruleSchema>>
-  return DESIGN_RULE_IDS.map((id) => {
-    const d = DEFAULT_DESIGN_RULES[id]
-    const m = declared[id]
-    const cfg: DesignRuleConfig = {
-      id,
-      enabled: m?.enabled ?? d.enabled,
-      severity: m?.severity ?? d.severity,
-      allowValues: m?.allowValues ?? d.allowValues,
-      allowFiles: m?.allowFiles ?? [],
-      fromManifest: m !== undefined,
-    }
-    if (id === 'raw_interactive_element') cfg.primitives = m?.primitives ?? {}
-    return cfg
-  })
-}
+// Defaults and layering live in design-rules.ts (the engine shared with the CLI).
+export { DEFAULT_DESIGN_RULES, effectiveDesignRules } from './design-rules.ts'
 
 // ── The write allowlist (Plan 019 §2 `change`, §6) ──────────────────────────
 

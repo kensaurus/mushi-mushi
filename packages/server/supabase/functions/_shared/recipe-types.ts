@@ -20,7 +20,36 @@
  *   GET  /v1/design-assets/:projectId?path=&exp=&sig=      → the asset bytes (HMAC-signed URL, no auth header)
  *
  * Every route answers `{ ok: true, data: <type> }`.
+ *
+ * The token, rule and finding types live in design-engine-types.ts (the
+ * engine shared with `mushi recipe check`) and are re-exported here.
  */
+
+import type {
+  ContrastPairResult,
+  DesignRuleConfig,
+  DesignRuleId,
+  DesignToken,
+  DevianceBreakdownEntry,
+  DevianceFinding,
+  FindingSeverity,
+  RecipeIssue,
+  TokenSetKind,
+} from './design-engine-types.ts'
+
+export { DESIGN_RULE_IDS } from './design-engine-types.ts'
+export type {
+  ContrastPairResult,
+  DesignRuleConfig,
+  DesignRuleId,
+  DesignToken,
+  DevianceBreakdownEntry,
+  DevianceFinding,
+  DevianceSuggestion,
+  FindingSeverity,
+  RecipeIssue,
+  TokenType,
+} from './design-engine-types.ts'
 
 // ── The five states ──────────────────────────────────────────────────────────
 
@@ -62,14 +91,6 @@ export interface RecipeElementSummary {
   facts: Record<string, string | number | boolean | null>
   findingsCount: number
   links: RecipeLink[]
-}
-
-export interface RecipeIssue {
-  severity: 'info' | 'warn' | 'error'
-  code: string
-  message: string
-  path?: string | null
-  file?: string | null
 }
 
 export interface RecipeManifestStatus {
@@ -135,117 +156,21 @@ export interface TokenDiff {
 
 // ── Design tokens ────────────────────────────────────────────────────────────
 
-/** DTCG 2025.10 `$type` values Mushi understands; anything else is kept as-is. */
-export type TokenType =
-  | 'color'
-  | 'dimension'
-  | 'fontFamily'
-  | 'fontWeight'
-  | 'duration'
-  | 'cubicBezier'
-  | 'number'
-  | 'strokeStyle'
-  | 'border'
-  | 'transition'
-  | 'shadow'
-  | 'gradient'
-  | 'typography'
-  | string
-
-export interface DesignToken {
-  /** Dot-joined path, e.g. `color.action.primary`. */
-  path: string
-  type: TokenType | null
-  /** Resolved, normalized 2025.10 value (aliases followed). */
-  value: unknown
-  /** Human display string: a `#RRGGBB` hex, `16px`, `IBM Plex Sans Thai Looped, sans-serif`, `220ms`. */
-  display: string
-  /** `#RRGGBB` (or `#RRGGBBAA`) for colors, else null. */
-  hex: string | null
-  /** Pixel value for px/rem dimensions (rem × 16), else null. */
-  px: number | null
-  /** Immediate alias target when the raw `$value` was `{a.b}`. */
-  aliasOf: string | null
-  cssVar: string | null
-  ts: string | null
-  rn: string | null
-  description: string | null
-  /** Repo path of the file that defines it. */
-  file: string
-  role: 'source' | 'export'
-  /** First path segment (`color`, `space`, …). */
-  group: string
-}
-
 export interface DesignTokenSet {
   name: string
   /** True for the set the manifest points at. */
   active: boolean
   /** `direction` for directions/<name>/, `export` for generated files, `default` otherwise. */
-  kind: 'direction' | 'export' | 'default'
+  kind: TokenSetKind
   files: Array<{ path: string; role: 'source' | 'export'; generator: string | null }>
   tokenCount: number
   /** design.directions[].note, when declared. */
   note?: string | null
 }
 
-export interface ContrastPairResult {
-  fg: string
-  bg: string
-  fgHex: string | null
-  bgHex: string | null
-  ratio: number | null
-  /** Required ratio: 4.5 (AA normal text) unless the pair declares `large` (3.0) or `min`. */
-  min: number
-  pass: boolean | null
-  use: string | null
-  /** Why ratio is null (unresolved token, non-color). */
-  problem: string | null
-}
-
 export interface DesignComponentEntry {
   name: string
   file: string
-}
-
-export const DESIGN_RULE_IDS = [
-  'off_token_color',
-  'off_token_font',
-  'off_scale_spacing',
-  'off_scale_radius',
-  'contrast_below_aa',
-  'raw_interactive_element',
-] as const
-export type DesignRuleId = (typeof DESIGN_RULE_IDS)[number]
-
-export type FindingSeverity = 'info' | 'warn' | 'error'
-
-export interface DesignRuleConfig {
-  id: DesignRuleId
-  enabled: boolean
-  severity: FindingSeverity
-  /** Literal values never flagged by this rule (a hex such as `#RRGGBB`, `1px`). */
-  allowValues: string[]
-  /** File globs this rule skips. */
-  allowFiles: string[]
-  /** raw_interactive_element only: element → primitive component name. */
-  primitives?: Record<string, string>
-  /** True when the value comes from the repo's mushi.recipe.json, false for Mushi's default. */
-  fromManifest: boolean
-}
-
-export interface DevianceBreakdownEntry {
-  rule: DesignRuleId
-  enabled: boolean
-  /** False when the rule has nothing to judge (no contrast pairs declared). */
-  applicable: boolean
-  severity: FindingSeverity
-  weight: number
-  count: number
-  /** Findings per 1,000 scanned lines (literal rules); failing share (contrast). */
-  density: number | null
-  /** 0..1 */
-  penalty: number
 }
 
 export type DevianceRunStatus = 'running' | 'pass' | 'warn' | 'fail' | 'error'
@@ -271,25 +196,21 @@ export interface DevianceRun {
   error: string | null
 }
 
-export interface DevianceSuggestion {
-  token: string
-  cssVar: string | null
-  ts: string | null
-  value: string
-  /** Colour: OKLab ΔE×100; spacing/radius: px difference. */
-  distance: number | null
-}
-
-export interface DevianceFinding {
-  id?: string
-  rule_id: DesignRuleId
-  severity: FindingSeverity
-  file_path: string | null
-  line: number | null
-  col: number | null
-  value: string
-  message: string
-  suggestion: DevianceSuggestion | null
+/**
+ * GET|PUT /v1/admin/projects/:id/design/settings — what the deviance score
+ * may do on its own (project_settings; both actions off by default).
+ */
+export interface DesignActionSettingsView {
+  /** 0–100; the actions fire when the score is above it. */
+  threshold: number
+  /** `mushi recipe check --push` exits non-zero above the threshold. */
+  failCi: boolean
+  /** New warn/error findings above the threshold dispatch a fix (automatic trigger, capped). */
+  autofix: boolean
+  /** The project's auto-fix switch; the design auto-fix does nothing while it is off. */
+  autofixEnabled: boolean
+  /** Owners and admins may change these. */
+  canEdit: boolean
 }
 
 export interface DesignEditability {

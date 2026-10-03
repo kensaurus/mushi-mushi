@@ -3,7 +3,8 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { apiCall, die, outputIsJson, requireConfig, requireUuid } from '../cli-shared.js'
-import { checkRecipe, MANIFEST, starterManifest } from '../recipe/local.js'
+import { checkRecipe, MANIFEST, pushPayload, starterManifest } from '../recipe/local.js'
+import { describeCheck, localLimitExceeded, pushVerdict, type RecipePushAnswer } from '../recipe/report.js'
 
 interface RecipeElement {
   label: string
@@ -55,27 +56,34 @@ export function registerRecipeCommands(program: Command): void {
 
   recipe
     .command('check')
-    .description(`Validate ${MANIFEST} and its token files, and find colours that match no token`)
+    .description(`Validate ${MANIFEST} and its token files, and score how far the code is from your design system (the same rules Mushi's scan uses)`)
     .option('--dir <path>', 'Repo root', '.')
-    .option('--push', 'Send the recipe and findings to Mushi (one extra step in your existing CI job)')
+    .option('--push', "Send the recipe and the scan to Mushi (one extra step in your existing CI job); fails when the score is above the project's limit")
+    .option('--max-score <n>', 'Also fail when the deviance score (0–100) is above n, without asking Mushi')
     .option('--json', 'Machine-readable JSON output')
-    .action(async (opts: { dir: string; push?: boolean; json?: boolean }) => {
+    .action(async (opts: { dir: string; push?: boolean; maxScore?: string; json?: boolean }) => {
       const root = resolve(opts.dir)
+      const maxScore = opts.maxScore === undefined ? null : Number(opts.maxScore)
+      if (maxScore !== null && (!Number.isInteger(maxScore) || maxScore < 0 || maxScore > 100)) {
+        process.stderr.write('error: --max-score must be a whole number from 0 to 100.\n')
+        process.exitCode = 1
+        return
+      }
       const result = checkRecipe(root)
       const json = outputIsJson(opts.json)
-      if (json && !opts.push) {
-        console.log(JSON.stringify({ ok: result.ok, issues: result.issues, tokenCount: result.tokenCount, scannedFiles: result.scannedFiles, findings: result.findings }, null, 2))
-      } else if (!json) {
-        console.log(`${result.ok ? 'OK' : 'FAIL'}  ${MANIFEST}: ${result.tokenCount} tokens, ${result.scannedFiles} files scanned.`)
-        for (const i of result.issues) console.log(`  ${i.severity.toUpperCase().padEnd(5)} ${i.message}`)
-        for (const f of result.findings.slice(0, 50)) console.log(`  WARN  ${f.filePath}:${f.line} ${f.value} matches no design token`)
-        if (result.findings.length > 50) console.log(`  … and ${result.findings.length - 50} more`)
-      }
+      const local = { ok: result.ok, issues: result.issues, tokenCount: result.tokenCount, design: result.design, findings: result.findings }
+      if (json && !opts.push) console.log(JSON.stringify(local, null, 2))
+      else if (!json) for (const line of describeCheck(result)) console.log(line)
       if (!result.ok) {
         process.exitCode = 1
         return
       }
-      if (!opts.push) return
+      const overLocal = localLimitExceeded(result.design?.score ?? null, maxScore)
+      if (overLocal) process.stderr.write(`Deviance score ${result.design?.score} is above --max-score ${maxScore}.\n`)
+      if (!opts.push) {
+        if (overLocal) process.exitCode = 1
+        return
+      }
       const sha = headSha(root)
       if (!sha || !/^[0-9a-f]{7,64}$/i.test(sha)) {
         process.stderr.write('error: could not read the commit SHA (set GITHUB_SHA or run inside a git checkout).\n')
@@ -83,13 +91,17 @@ export function registerRecipeCommands(program: Command): void {
         return
       }
       const config = requireConfig()
-      const res = await apiCall<{ state: string; reason: string; tokenCount: number; findingsStored: number }>('/v1/ingest/recipe', config, {
+      const deviance = pushPayload(result)
+      const res = await apiCall<RecipePushAnswer>('/v1/ingest/recipe', config, {
         method: 'POST',
-        body: JSON.stringify({ commitSha: sha, branch: headBranch(root), files: result.files, findings: result.findings, scannedFiles: result.scannedFiles }),
+        body: JSON.stringify({ commitSha: sha, branch: headBranch(root), files: result.files, ...(deviance ? { deviance } : {}) }),
       })
       if (!res.ok) die(res)
-      if (json) console.log(JSON.stringify(res.data, null, 2))
-      else console.log(`Sent to Mushi: ${res.data.reason} ${res.data.findingsStored} findings stored.`)
+      const verdict = pushVerdict(res.data, maxScore, result.design?.score ?? null)
+      if (json) console.log(JSON.stringify({ ...res.data, local, failed: verdict.failed }, null, 2))
+      else for (const line of verdict.lines) console.log(line)
+      for (const line of verdict.errors) process.stderr.write(`${line}\n`)
+      if (verdict.failed) process.exitCode = 1
     })
 
   recipe

@@ -291,6 +291,23 @@ export interface DevianceFinding {
   suggestion: DevianceSuggestion | null
 }
 
+/**
+ * GET|PUT /v1/admin/projects/:id/design/settings — what the deviance score
+ * may do on its own (project_settings; both actions off by default).
+ */
+export interface DesignActionSettingsView {
+  /** 0–100; the actions fire when the score is above it. */
+  threshold: number
+  /** `mushi recipe check --push` exits non-zero above the threshold. */
+  failCi: boolean
+  /** New warn/error findings above the threshold dispatch a fix (automatic trigger, capped). */
+  autofix: boolean
+  /** The project's auto-fix switch; the design auto-fix does nothing while it is off. */
+  autofixEnabled: boolean
+  /** Owners and admins may change these. */
+  canEdit: boolean
+}
+
 export interface DesignEditability {
   enabled: boolean
   /** Why editing is off: no manifest, export-only tokens, no GitHub token. */

@@ -351,9 +351,11 @@ describe('GET /v1/admin/orgs/:orgId/portfolio/findings', () => {
         run('new-2', 2, 'code_health', '2026-10-01T00:00:00Z'),
         run('run-3', 3, 'code_health', '2026-10-01T00:00:00Z', 'running'),
         // A design refresh run must not hide the latest design scan.
-        run('scan-1', 1, 'design_drift', '2026-09-30T00:00:00Z'),
+        run('scan-1', 1, 'design_drift', '2026-09-30T00:00:00Z', 'fail', { phase: 'scan' }),
         run('refresh-1', 1, 'design_drift', '2026-10-01T00:00:00Z', 'pass', { phase: 'refresh' }),
-        run('scan-2', 2, 'design_drift', '2026-09-30T00:00:00Z'),
+        run('scan-2', 2, 'design_drift', '2026-09-30T00:00:00Z', 'fail', { phase: 'scan' }),
+        // Nor may any number of PR pushes newer than it (more than the 3,000-row window).
+        ...Array.from({ length: 3001 }, (_, i) => run(`pr-${i}`, 2, 'design_drift', `2026-10-02T00:00:${String(i % 60).padStart(2, '0')}Z`, 'pass', { phase: 'ci_branch_scan' })),
       ],
       gate_findings: [
         finding('old-1', 1, 'stale_rule'),
