@@ -21,6 +21,8 @@ import {
   type RadarFinding,
 } from '../_shared/radar.ts'
 import { parseGithubRepoUrl } from '../_shared/github.ts'
+import { resolveCostUsd } from '../_shared/llm-budget.ts'
+import { readAllPages } from '../_shared/paged-read.ts'
 
 export interface RadarPassDeps {
   /** GitHub facts for a primary repo, or null when GitHub cannot be read. */
@@ -40,6 +42,7 @@ interface SettingsRow {
   autofix_enabled: boolean | null
   autofix_max_spend_usd: number | null
   autofix_max_dispatches_per_day: number | null
+  monthly_llm_budget_usd: number | null
   sentry_webhook_secret: string | null
   linear_webhook_secret_ref: string | null
   slack_team_id: string | null
@@ -79,6 +82,31 @@ async function firstHealthRow(db: SupabaseClient, projectId: string, kind: strin
   return (res.data as { checked_at?: string } | null)?.checked_at ?? null
 }
 
+const SPEND_WINDOW_MS = 30 * 24 * 60 * 60 * 1000
+const MAX_SPEND_ROWS = 50_000
+
+/**
+ * The project's AI spend over the last 30 days, priced like the Costs page
+ * (stored cost, else the model price table). Feeds the suggested monthly
+ * budget, so a failed read throws instead of suggesting from $0.
+ */
+async function recentLlmSpendUsd(db: SupabaseClient, projectId: string, nowMs: number): Promise<number> {
+  type Row = { used_model: string | null; input_tokens: number | null; output_tokens: number | null; cost_usd: number | null }
+  const read = await readAllPages<Row>(
+    (from, to) => db
+      .from('llm_invocations')
+      .select('id, used_model, input_tokens, output_tokens, cost_usd', { count: 'exact' })
+      .eq('project_id', projectId)
+      .gte('created_at', new Date(nowMs - SPEND_WINDOW_MS).toISOString())
+      .order('id', { ascending: true })
+      .range(from, to),
+    { what: 'llm_invocations', maxRows: MAX_SPEND_ROWS },
+  )
+  // A cut-short read only makes the sum a lower bound; the suggestion is then
+  // still at least twice that, so it never undercuts what was read.
+  return read.rows.reduce((n, r) => n + resolveCostUsd(r.used_model, r.input_tokens, r.output_tokens, r.cost_usd), 0)
+}
+
 async function collectFindings(
   db: SupabaseClient,
   s: SettingsRow,
@@ -87,7 +115,8 @@ async function collectFindings(
   const projectId = s.project_id
   const findings: RadarFinding[] = []
 
-  findings.push(...detectSpendCapUnset(s))
+  const llmSpend30d = s.monthly_llm_budget_usd == null ? await recentLlmSpendUsd(db, projectId, deps.nowMs) : null
+  findings.push(...detectSpendCapUnset({ ...s, llm_spend_30d_usd: llmSpend30d }))
 
   const keys = must(
     await db
@@ -161,7 +190,7 @@ export async function runRadarPass(db: SupabaseClient, deps: RadarPassDeps): Pro
     await db
       .from('project_settings')
       .select(
-        'project_id, autofix_enabled, autofix_max_spend_usd, autofix_max_dispatches_per_day, sentry_webhook_secret, linear_webhook_secret_ref, slack_team_id',
+        'project_id, autofix_enabled, autofix_max_spend_usd, autofix_max_dispatches_per_day, monthly_llm_budget_usd, sentry_webhook_secret, linear_webhook_secret_ref, slack_team_id',
       ),
     'project_settings',
   ) as SettingsRow[]

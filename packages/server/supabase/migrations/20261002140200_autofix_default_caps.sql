@@ -12,9 +12,11 @@
 -- a day. The project_settings row is created by trg_seed_project_settings with
 -- only project_id, so these defaults apply to every new project.
 --
--- Existing projects are NOT changed. Those with auto-fix on and no cap get a
--- `spend_cap_unset` radar finding, fixed with
--- PUT /v1/admin/projects/:id/autofix/caps.
+-- Existing projects are NOT changed. Those with no cap (auto-fix on or off)
+-- or no monthly_llm_budget_usd get a `spend_cap_unset` radar finding, fixed
+-- from Settings → General → Spend limits or the finding's "Apply suggested
+-- caps" button, both of which send PATCH /v1/admin/settings (comment-only
+-- correction 2026-10-03: no PUT /autofix/caps route exists).
 --
 -- Verification (run after applying):
 --   select column_name, column_default from information_schema.columns

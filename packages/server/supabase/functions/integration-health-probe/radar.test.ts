@@ -52,6 +52,7 @@ function fakeDb(answer: (op: Op) => Answer): { db: any; ops: Op[] } {
       },
       order: () => b,
       limit: () => b,
+      range: () => b,
       single: () => b,
       maybeSingle: () => b,
       then(resolve: (v: unknown) => void, reject: (e: unknown) => void) {
@@ -81,13 +82,26 @@ Deno.test('byok_key_invalid: only keys the provider rejected', () => {
   assertEquals(f[0].severity, 'error')
 })
 
-Deno.test('spend_cap_unset: auto-fix on with a missing cap; silent when off or capped', () => {
-  assertEquals(detectSpendCapUnset({ autofix_enabled: false, autofix_max_spend_usd: null, autofix_max_dispatches_per_day: null }), [])
-  assertEquals(detectSpendCapUnset({ autofix_enabled: true, autofix_max_spend_usd: 2, autofix_max_dispatches_per_day: 3 }), [])
-  const [f] = detectSpendCapUnset({ autofix_enabled: true, autofix_max_spend_usd: null, autofix_max_dispatches_per_day: 3 })
+Deno.test('spend_cap_unset: a missing auto-fix cap or monthly AI budget; silent when everything is capped', () => {
+  assertEquals(detectSpendCapUnset({ autofix_enabled: true, autofix_max_spend_usd: 2, autofix_max_dispatches_per_day: 3, monthly_llm_budget_usd: 20 }), [])
+  const [f] = detectSpendCapUnset({ autofix_enabled: true, autofix_max_spend_usd: null, autofix_max_dispatches_per_day: 3, monthly_llm_budget_usd: 20 })
   assertEquals(f.rule_id, 'spend_cap_unset')
+  assertEquals(f.severity, 'warn')
   assertEquals(f.suggested_fix?.path, '/settings?tab=general#spend-limits')
-  assertEquals((f.suggested_fix?.values as Record<string, unknown>).autofix_max_spend_usd, 2)
+  assertEquals(f.suggested_fix?.endpoint, '/v1/admin/settings')
+  // Only the missing field is suggested, so applying it never overwrites a set cap.
+  assertEquals(f.suggested_fix?.values, { autofix_max_spend_usd: 2 })
+})
+
+Deno.test('spend_cap_unset: auto-fix off is not skipped; a missing budget is flagged on its own', () => {
+  const [off] = detectSpendCapUnset({ autofix_enabled: false, autofix_max_spend_usd: null, autofix_max_dispatches_per_day: null, monthly_llm_budget_usd: 20 })
+  assertEquals(off.severity, 'info')
+  assert(off.message.includes('Auto-fix is off'))
+  const [budget] = detectSpendCapUnset({ autofix_enabled: false, autofix_max_spend_usd: 2, autofix_max_dispatches_per_day: 3, monthly_llm_budget_usd: null, llm_spend_30d_usd: 12.4 })
+  assertEquals(budget.severity, 'warn')
+  // About twice the last 30 days, rounded up to $5: 12.40 * 2 = 24.80 -> 25.
+  assertEquals(budget.suggested_fix?.values, { monthly_llm_budget_usd: 25 })
+  assert(budget.message.includes('$12.40'))
 })
 
 Deno.test('webhook_never_delivered: configured 7+ days, nothing accepted', () => {
@@ -149,7 +163,7 @@ Deno.test('recordRadarRun writes a radar gate run plus findings', async () => {
   const res = await recordRadarRun(
     db,
     'p1',
-    detectSpendCapUnset({ autofix_enabled: true, autofix_max_spend_usd: null, autofix_max_dispatches_per_day: null }),
+    detectSpendCapUnset({ autofix_enabled: true, autofix_max_spend_usd: null, autofix_max_dispatches_per_day: null, monthly_llm_budget_usd: 20 }),
     { triggeredBy: 'test' },
   )
   assertEquals(res, { runId: 'run-1', findings: 1 })
@@ -174,7 +188,7 @@ Deno.test('recordRadarRun throws when findings fail to insert', async () => {
   const { db } = fakeDb((op) =>
     op.table === 'gate_runs' ? { data: { id: 'run-1' } } : op.table === 'gate_findings' ? { error: { message: 'boom' } } : {},
   )
-  const findings = detectSpendCapUnset({ autofix_enabled: true, autofix_max_spend_usd: null, autofix_max_dispatches_per_day: null })
+  const findings = detectSpendCapUnset({ autofix_enabled: true, autofix_max_spend_usd: null, autofix_max_dispatches_per_day: null, monthly_llm_budget_usd: 20 })
   await assertRejects(() => recordRadarRun(db, 'p1', findings, { triggeredBy: 'test' }), RadarWriteError, 'gate_findings')
 })
 
@@ -201,6 +215,11 @@ Deno.test('runRadarPass: a failed read is reported per project, never as "no fin
     }
     if (op.table === 'integration_health_history') return { data: { checked_at: daysAgo(30) } }
     if (op.table === 'webhook_audit_log') return { count: 0 }
+    if (op.table === 'llm_invocations') {
+      return op.filters.project_id === 'ok'
+        ? { data: [{ used_model: null, input_tokens: 0, output_tokens: 0, cost_usd: 3 }], count: 1 }
+        : { data: [], count: 0 }
+    }
     return {}
   })
   const res = await runRadarPass(db, {
@@ -221,4 +240,7 @@ Deno.test('runRadarPass: a failed read is reported per project, never as "no fin
   assertEquals(res.findings, 2)
   const written = ops.filter((o) => o.table === 'gate_findings').flatMap((o) => o.payload as Array<{ rule_id: string }>)
   assertEquals(written.map((r) => r.rule_id).sort(), ['spend_cap_unset', 'webhook_never_delivered'])
+  // No budget on 'ok': the suggestion is read from its last 30 days ($3 -> floor $10).
+  const spendRow = ops.filter((o) => o.table === 'gate_findings').flatMap((o) => o.payload as Array<{ rule_id: string; suggested_fix: { values: Record<string, number> } }>).find((r) => r.rule_id === 'spend_cap_unset')!
+  assertEquals(spendRow.suggested_fix.values.monthly_llm_budget_usd, 10)
 })
