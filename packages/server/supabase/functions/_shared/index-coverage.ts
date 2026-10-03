@@ -164,6 +164,26 @@ export function indexPathFilter(input: {
 }
 
 /**
+ * Indexed files the current scope or path filter now excludes: present in the
+ * repo's tree, indexable, but outside the filter. A sweep tombstones them, so
+ * narrowing a filter shrinks the index (and what diagnoses see) instead of
+ * leaving the old files stored past the plan cap. Files missing from the tree
+ * are left alone (a truncated tree does not list every file).
+ */
+export function pathsOutsideFilter(input: {
+  indexedPaths: ReadonlySet<string>
+  /** Indexable blob paths in the tree, before the scope and path filter. */
+  indexableTreePaths: readonly string[]
+  eligible: (path: string) => boolean
+}): string[] {
+  const out: string[] = []
+  for (const p of input.indexableTreePaths) {
+    if (input.indexedPaths.has(p) && !input.eligible(p)) out.push(p)
+  }
+  return out
+}
+
+/**
  *   complete: every storable eligible file is indexed and the tree was whole.
  *   filling:  short of both the repo and the plan ceiling; the hourly sweep
  *             adds files.
@@ -288,6 +308,73 @@ export function sweepBookkeeping(input: {
   }
 }
 
+/** The project_repos columns handleSweep writes after a non-targeted sweep. */
+export interface SweepRepoUpdate {
+  last_index_attempt_at: string
+  last_index_error: string | null
+  index_swept_at?: string
+  last_indexed_at?: string
+  index_files_indexed: number
+  index_files_eligible: number
+  index_file_cap: number
+  index_tree_truncated: boolean
+  index_coverage_state: IndexCoverageState
+}
+
+/**
+ * What handleSweep records for one non-targeted sweep, success or not.
+ *
+ * A sweep that embedded nothing and lost chunks (`inserted === 0 &&
+ * failed > 0`) is a failed run, but how it is recorded depends on coverage:
+ *   - filling or stalled: the full sweep bookkeeping, so a repo whose only
+ *     unindexed files always fail embedding reads as stalled and drops to the
+ *     daily cadence. Recording only the error left it `filling`, and the
+ *     hourly batch picked it up again forever (gap 16b).
+ *   - complete or capped: the coverage numbers and the error, but not
+ *     `index_swept_at`. The console and doctor read it as a failed sweep
+ *     (attempt later than the last sweep), and the next sweep retries it once
+ *     the staleness cutoff passes, as before.
+ */
+export function sweepOutcome(input: {
+  inserted: number
+  failed: number
+  lastError?: string
+  fetchErrors: number
+  lastFetchError?: string
+  coverage: IndexCoverage
+  nowIso: string
+}): { ok: boolean; error: string | null; update: SweepRepoUpdate } {
+  const bookkeeping = sweepBookkeeping({
+    coverage: input.coverage,
+    nowIso: input.nowIso,
+    failedChunks: input.failed,
+    lastError: input.lastError,
+    fetchErrors: input.fetchErrors,
+    lastFetchError: input.lastFetchError,
+  })
+  if (!(input.inserted === 0 && input.failed > 0)) {
+    return { ok: true, error: null, update: bookkeeping }
+  }
+  const state = input.coverage.state
+  if (state === 'filling' || state === 'stalled') {
+    return { ok: false, error: bookkeeping.last_index_error, update: bookkeeping }
+  }
+  const error = (input.lastError ?? 'all chunk embeddings failed').slice(0, 500)
+  return {
+    ok: false,
+    error,
+    update: {
+      last_index_attempt_at: input.nowIso,
+      last_index_error: error,
+      index_files_indexed: bookkeeping.index_files_indexed,
+      index_files_eligible: bookkeeping.index_files_eligible,
+      index_file_cap: bookkeeping.index_file_cap,
+      index_tree_truncated: bookkeeping.index_tree_truncated,
+      index_coverage_state: bookkeeping.index_coverage_state,
+    },
+  }
+}
+
 function sweepErrorText(input: {
   coverage: IndexCoverage
   failedChunks: number
@@ -402,5 +489,86 @@ export function pushCoverageUpdate(input: {
     index_files_eligible: eligible,
     index_file_cap: input.cap,
     index_coverage_state: state,
+  }
+}
+
+/** The project_repos columns the doctor's codebase-index check reads. */
+export interface IndexDoctorRepo {
+  last_indexed_at: string | null
+  last_index_error: string | null
+  index_swept_at?: string | null
+  index_files_indexed?: number | null
+  index_files_eligible?: number | null
+  index_file_cap?: number | null
+  index_tree_truncated?: boolean | null
+  index_coverage_state?: string | null
+}
+
+export interface IndexDoctorCheck {
+  name: string
+  status: 'pass' | 'warn' | 'fail'
+  summary: string
+  hint?: string
+}
+
+/**
+ * The doctor's per-project codebase-index check. A stalled repo always has a
+ * `stalled:` last_index_error (sweepErrorText), so it is classified before
+ * the generic error branch: it gets its coverage numbers and the reason, not
+ * only "Index issue".
+ */
+export function codebaseIndexDoctorCheck(projectId: string, repo: IndexDoctorRepo | null | undefined): IndexDoctorCheck {
+  const name = `codebase_index:${projectId}`
+  // A partial sweep (plan cap, or still filling) sets index_swept_at only.
+  const sweptAt = repo ? latestIso(repo.last_indexed_at, repo.index_swept_at) : null
+  if (!repo || !sweptAt) {
+    return {
+      name,
+      status: 'fail',
+      summary: 'Codebase indexing is enabled but no sweep has completed — diagnoses run without code context.',
+      hint: 'Re-run the sweep from the console Integrations card, and verify the GitHub App installation.',
+    }
+  }
+  const coverage = describeIndexCoverage({
+    indexed: repo.index_files_indexed ?? null,
+    eligible: repo.index_files_eligible ?? null,
+    cap: repo.index_file_cap ?? null,
+    truncated: repo.index_tree_truncated === true,
+    state: repo.index_coverage_state ?? null,
+  })
+  const state = repo.index_coverage_state ?? null
+  if (state === 'stalled') {
+    const reason = repo.last_index_error ? repo.last_index_error.replace(/^stalled:\s*/, '').slice(0, 200) : null
+    return {
+      name,
+      status: 'warn',
+      summary: `Index stalled: ${coverage ?? 'coverage unknown'} (last sweep ${sweptAt}).${reason ? ` Reason: ${reason}` : ''}`,
+      hint: 'The last sweep added no file. Fix the reason, then re-run the sweep from the Integrations card; until then it is retried daily.',
+    }
+  }
+  if (repo.last_index_error) {
+    return {
+      name,
+      status: 'warn',
+      summary: `Index issue: ${repo.last_index_error.slice(0, 200)}${coverage ? ` (coverage: ${coverage})` : ''}`,
+      hint: repo.last_index_error.startsWith('partial:')
+        ? 'Some chunks failed to embed; the next sweep retries them.'
+        : 'Fix the recorded error, then re-run the sweep from the Integrations card.',
+    }
+  }
+  if (state === 'filling' || state === 'capped') {
+    return {
+      name,
+      status: 'warn',
+      summary: `Partly indexed: ${coverage ?? 'coverage unknown'} (last sweep ${sweptAt}).`,
+      hint: state === 'capped'
+        ? 'Diagnoses only see the indexed files. A higher plan indexes more files; a path filter on the Integrations card narrows the sweep to the files that matter.'
+        : 'The hourly sweep keeps adding files until the repo or the plan limit is covered.',
+    }
+  }
+  return {
+    name,
+    status: 'pass',
+    summary: coverage ? `Indexed: ${coverage} (last sweep ${sweptAt}).` : `Indexed (last sweep ${sweptAt}).`,
   }
 }

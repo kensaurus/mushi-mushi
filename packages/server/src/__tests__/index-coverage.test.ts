@@ -28,6 +28,10 @@ import {
   pushCoverageUpdate,
   selectSweepFiles,
   sweepBookkeeping,
+  sweepOutcome,
+  codebaseIndexDoctorCheck,
+  pathsOutsideFilter,
+  type IndexCoverage,
 } from '../../supabase/functions/_shared/index-coverage.ts'
 import { pathMatchesAnyGlob } from '../../supabase/functions/_shared/codebase-scope.ts'
 import { isCodebaseIndexFailing } from '../../supabase/functions/_shared/sweep-error-classifier.ts'
@@ -230,10 +234,30 @@ describe('wiring', () => {
   const indexer = readFileSync(resolve(FN, 'webhooks-github-indexer/index.ts'), 'utf8')
   const doctor = readFileSync(resolve(FN, 'api/routes/doctor.ts'), 'utf8')
 
-  it('the sweep writes bookkeeping through sweepBookkeeping, not a bare last_indexed_at', () => {
+  it('the sweep writes bookkeeping through sweepOutcome, not a bare last_indexed_at', () => {
     const sweep = indexer.slice(indexer.indexOf('async function handleSweep('), indexer.indexOf('async function sweepIndexRepo('))
-    expect(sweep).toContain('...sweepBookkeeping({')
+    expect(sweep).toContain('const outcome = sweepOutcome({')
+    expect(sweep).toContain('...outcome.update,')
     expect(sweep).not.toMatch(/last_indexed_at:\s*new Date/)
+  })
+
+  it('a sweep that embedded nothing still records its coverage (no error-only branch)', () => {
+    const sweep = indexer.slice(indexer.indexOf('async function handleSweep('), indexer.indexOf('async function sweepIndexRepo('))
+    // The old branch wrote only the error, so a filling repo stayed filling.
+    expect(sweep).not.toContain('if (stats.inserted === 0 && stats.failed > 0)')
+    // One project_repos write serves success and failure alike.
+    const from = sweep.indexOf('const outcome = sweepOutcome({')
+    const tryBlock = sweep.slice(from, sweep.indexOf('} catch (err) {', from))
+    expect(tryBlock.match(/\.from\('project_repos'\)/g)).toHaveLength(1)
+  })
+
+  it('the sweep tombstones indexed files the filter now excludes, before fetching', () => {
+    const repoSweep = indexer.slice(indexer.indexOf('async function sweepIndexRepo('), indexer.indexOf('interface PushPayload'))
+    expect(repoSweep).toContain('tombstonedOutOfFilter = await tombstonePaths(')
+    expect(repoSweep).toContain('pathsOutsideFilter({')
+    expect(repoSweep.indexOf('tombstonePaths(')).toBeLessThan(repoSweep.indexOf('fetchFileForIndex('))
+    expect(repoSweep.indexOf('if (filteredAway')).toBeLessThan(repoSweep.indexOf('tombstonePaths('))
+    expect(indexer).toContain('if (error) throw new Error(`tombstoning files outside the path filter failed: ${error.message}`);')
   })
 
   it('the sweep counts only storable blobs and reports unstorable fetches to the coverage measure', () => {
@@ -289,9 +313,9 @@ describe('wiring', () => {
     expect(list).toContain('last_indexed_at, index_swept_at, index_coverage_state, index_files_indexed, index_files_eligible')
   })
 
-  it('doctor treats a partial sweep as indexed (warn), not as never indexed (fail)', () => {
-    expect(doctor).toContain('latestIso(repo.last_indexed_at, repo.index_swept_at)')
-    expect(doctor).toContain('Partly indexed:')
+  it('doctor builds its codebase-index check with the shared helper', () => {
+    expect(doctor).toContain('checks.push(codebaseIndexDoctorCheck(pid, repoByProject.get(pid)));')
+    expect(doctor).not.toContain('Index issue:')
   })
 })
 
@@ -429,5 +453,140 @@ describe('push indexing and the plan ceiling', () => {
       newlyIndexed: 1,
       unindexed: 0,
     })).toBeNull()
+  })
+})
+
+describe('sweepOutcome (a sweep that embedded nothing)', () => {
+  const filling: IndexCoverage = { indexed: 10, eligible: 20, cap: 300, truncated: false, state: 'filling' }
+
+  it('a filling repo whose new files all fail embedding is recorded as stalled, out of the hourly batch', () => {
+    // measureIndexCoverage turns "filling, nothing added" into stalled.
+    const coverage = measureIndexCoverage({
+      eligiblePaths: Array.from({ length: 20 }, (_, i) => `src/f${i}.ts`),
+      indexedPaths: new Set(Array.from({ length: 10 }, (_, i) => `src/f${i}.ts`)),
+      cap: 300,
+      truncated: false,
+      indexedBefore: 10,
+    })
+    expect(coverage.state).toBe('stalled')
+    const out = sweepOutcome({ inserted: 0, failed: 4, lastError: 'maximum context length exceeded', fetchErrors: 0, coverage, nowIso: NOW })
+    expect(out.ok).toBe(false)
+    expect(out.update.index_coverage_state).toBe('stalled')
+    expect(out.update.index_swept_at).toBe(NOW)
+    expect(out.update.last_index_attempt_at).toBe(NOW)
+    expect(out.update).not.toHaveProperty('last_indexed_at')
+    expect(out.update.last_index_error).toMatch(/^stalled: /)
+    expect(out.update.last_index_error).toContain('4 chunk embedding(s) failed (maximum context length exceeded)')
+    expect(out.error).toBe(out.update.last_index_error)
+    expect(out.update).toMatchObject({ index_files_indexed: 10, index_files_eligible: 20, index_file_cap: 300 })
+  })
+
+  it('a failed run that still made progress records filling coverage too', () => {
+    const out = sweepOutcome({ inserted: 0, failed: 2, lastError: 'rate limited', fetchErrors: 0, coverage: filling, nowIso: NOW })
+    expect(out.ok).toBe(false)
+    expect(out.update).toMatchObject({ index_coverage_state: 'filling', index_swept_at: NOW, last_index_error: 'rate limited' })
+  })
+
+  it('a complete or capped repo whose embeddings all failed stays a failed run (no index_swept_at)', () => {
+    for (const state of ['complete', 'capped'] as const) {
+      const out = sweepOutcome({
+        inserted: 0,
+        failed: 3,
+        lastError: 'OpenAI 401',
+        fetchErrors: 0,
+        coverage: { indexed: 20, eligible: 20, cap: 300, truncated: false, state },
+        nowIso: NOW,
+      })
+      expect(out.ok).toBe(false)
+      expect(out.error).toBe('OpenAI 401')
+      expect(out.update).not.toHaveProperty('index_swept_at')
+      expect(out.update).not.toHaveProperty('last_indexed_at')
+      expect(out.update).toMatchObject({ last_index_attempt_at: NOW, last_index_error: 'OpenAI 401', index_coverage_state: state })
+    }
+  })
+
+  it('a run that embedded something, or lost nothing, is the plain sweep bookkeeping', () => {
+    const complete: IndexCoverage = { indexed: 20, eligible: 20, cap: 300, truncated: false, state: 'complete' }
+    const ok = sweepOutcome({ inserted: 5, failed: 1, lastError: 'one batch failed', fetchErrors: 0, coverage: complete, nowIso: NOW })
+    expect(ok.ok).toBe(true)
+    expect(ok.update).toEqual(sweepBookkeeping({ coverage: complete, nowIso: NOW, failedChunks: 1, lastError: 'one batch failed', fetchErrors: 0 }))
+    expect(sweepOutcome({ inserted: 0, failed: 0, fetchErrors: 0, coverage: complete, nowIso: NOW }).ok).toBe(true)
+  })
+})
+
+describe('codebaseIndexDoctorCheck', () => {
+  const base = {
+    last_indexed_at: null,
+    last_index_error: null,
+    index_swept_at: NOW,
+    index_files_indexed: 10,
+    index_files_eligible: 20,
+    index_file_cap: 300,
+    index_tree_truncated: false,
+    index_coverage_state: 'filling',
+  }
+
+  it('a stalled repo gets its coverage and the reason, not only the generic index issue', () => {
+    const check = codebaseIndexDoctorCheck('p1', {
+      ...base,
+      index_coverage_state: 'stalled',
+      last_index_error: 'stalled: the last sweep indexed no new file; 4 chunk embedding(s) failed (too many tokens). Retried on the daily sweep.',
+    })
+    expect(check.name).toBe('codebase_index:p1')
+    expect(check.status).toBe('warn')
+    expect(check.summary).toContain('Index stalled: 10 of 20 files indexed')
+    expect(check.summary).toContain(`last sweep ${NOW}`)
+    expect(check.summary).toContain('Reason: the last sweep indexed no new file; 4 chunk embedding(s) failed')
+    expect(check.summary).not.toContain('Index issue')
+    expect(check.summary).not.toContain('stalled: the last')
+    expect(check.hint).toContain('retried daily')
+  })
+
+  it('never swept fails; a recorded error warns with the coverage; partial warns; complete passes', () => {
+    expect(codebaseIndexDoctorCheck('p1', undefined).status).toBe('fail')
+    expect(codebaseIndexDoctorCheck('p1', { ...base, index_swept_at: null }).status).toBe('fail')
+    const err = codebaseIndexDoctorCheck('p1', { ...base, last_index_error: 'push indexing failed: HTTP 500' })
+    expect(err.status).toBe('warn')
+    expect(err.summary).toContain('Index issue: push indexing failed: HTTP 500')
+    expect(err.summary).toContain('coverage: 10 of 20 files indexed')
+    expect(codebaseIndexDoctorCheck('p1', base).summary).toContain('Partly indexed:')
+    expect(codebaseIndexDoctorCheck('p1', { ...base, index_coverage_state: 'capped' }).hint).toContain('higher plan')
+    const done = codebaseIndexDoctorCheck('p1', { ...base, index_files_indexed: 20, index_coverage_state: 'complete', last_indexed_at: NOW })
+    expect(done.status).toBe('pass')
+    expect(done.summary).toBe(`Indexed: 20 of 20 files indexed (last sweep ${NOW}).`)
+  })
+})
+
+describe('path filter: globstar and narrowing', () => {
+  it('a ** followed by a slash also matches zero directories', () => {
+    expect(pathMatchesAnyGlob('a.ts', ['**/*.ts'])).toBe(true)
+    expect(pathMatchesAnyGlob('src/x/a.ts', ['**/*.ts'])).toBe(true)
+    expect(pathMatchesAnyGlob('a.tsx', ['**/*.ts'])).toBe(false)
+    expect(pathMatchesAnyGlob('src/a.ts', ['src/**/*.ts'])).toBe(true)
+    expect(pathMatchesAnyGlob('src/x/y/a.ts', ['src/**/*.ts'])).toBe(true)
+    expect(pathMatchesAnyGlob('lib/a.ts', ['src/**/*.ts'])).toBe(false)
+    expect(pathMatchesAnyGlob('apps/web/lib/a.ts', ['apps/*/src/**'])).toBe(false)
+    expect(pathMatchesAnyGlob('apps/web/src/a.ts', ['apps/*/src/**'])).toBe(true)
+    // `*` still stays inside one segment.
+    expect(pathMatchesAnyGlob('src/x/a.ts', ['src/*.ts'])).toBe(false)
+  })
+
+  it('the scope exclude globs keep their meaning', () => {
+    // exclude_globs use the older matcher on purpose: `**/x` there needs a directory.
+    const f = indexPathFilter({ scope: { scope_paths: [], exclude_globs: ['**/generated.ts'] }, pathGlobs: null })
+    expect(f('generated.ts')).toBe(true)
+    expect(f('src/generated.ts')).toBe(false)
+  })
+
+  it('pathsOutsideFilter: indexed tree files the filter now excludes, nothing else', () => {
+    const eligible = indexPathFilter({ scope: null, pathGlobs: ['src/**'] })
+    const out = pathsOutsideFilter({
+      indexedPaths: new Set(['src/a.ts', 'scripts/b.ts', 'gone/c.ts']),
+      indexableTreePaths: ['src/a.ts', 'scripts/b.ts', 'scripts/new.ts'],
+      eligible,
+    })
+    // gone/c.ts is not in the tree (a truncated listing could omit it): left alone.
+    expect(out).toEqual(['scripts/b.ts'])
+    expect(pathsOutsideFilter({ indexedPaths: new Set(['a.ts']), indexableTreePaths: ['a.ts'], eligible: () => true })).toEqual([])
   })
 })

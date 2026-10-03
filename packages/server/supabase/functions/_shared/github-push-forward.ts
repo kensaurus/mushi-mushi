@@ -86,7 +86,11 @@ const UNVERIFIED: Omit<PatPushResult, 'auditNote'> = {
  */
 export async function routePatPushWebhook(
   input: { body: string; signature: string; deliveryId: string | null },
-  deps: { db: SupabaseClient; forward: (req: PushForwardRequest) => Promise<void> },
+  deps: {
+    db: SupabaseClient
+    forward: (req: PushForwardRequest) => Promise<void>
+    log: { error(msg: string, ctx?: Record<string, unknown>): void }
+  },
 ): Promise<PatPushResult> {
   let payload: { repository?: { full_name?: unknown } } & Record<string, unknown>
   try {
@@ -119,24 +123,39 @@ export async function routePatPushWebhook(
 
   const verified: typeof candidates = []
   const secretByProject = new Map<string, boolean>()
+  /** Projects whose webhook secret could not be read (settings row or Vault). */
+  const unreadable: string[] = []
   for (const cand of candidates) {
     let ok = secretByProject.get(cand.project_id)
     if (ok === undefined) {
-      const { data: settings } = await deps.db
+      ok = false
+      const { data: settings, error: settingsErr } = await deps.db
         .from('project_settings')
         .select('github_webhook_secret')
         .eq('project_id', cand.project_id)
         .maybeSingle()
-      const secret = await dereferenceMaybeVault(
-        deps.db,
-        ((settings as { github_webhook_secret?: string | null } | null)?.github_webhook_secret) ?? null,
-      )
-      ok = !!secret && (await githubSignatureMatches(input.signature, input.body, secret))
+      if (settingsErr) {
+        unreadable.push(cand.project_id)
+        deps.log.error('PAT push: webhook secret read failed', { projectId: cand.project_id, error: settingsErr.message })
+      } else {
+        const ref = ((settings as { github_webhook_secret?: string | null } | null)?.github_webhook_secret) ?? null
+        const secret = await dereferenceMaybeVault(deps.db, ref)
+        if (ref && !secret) {
+          // A stored secret that resolves to nothing is a Vault read failure,
+          // not a signature mismatch.
+          unreadable.push(cand.project_id)
+          deps.log.error('PAT push: webhook secret could not be resolved from Vault', { projectId: cand.project_id })
+        } else {
+          ok = !!secret && (await githubSignatureMatches(input.signature, input.body, secret))
+        }
+      }
       secretByProject.set(cand.project_id, ok)
     }
     if (ok) verified.push(cand)
   }
-  if (verified.length === 0) return { ...UNVERIFIED, auditNote: 'INVALID_SIGNATURE' }
+  // The caller gets the uniform 401 either way (no oracle); only the audit
+  // note says a database or Vault failure kept the push from verifying.
+  if (verified.length === 0) return { ...UNVERIFIED, auditNote: unreadable.length > 0 ? 'SECRET_READ_FAILED' : 'INVALID_SIGNATURE' }
 
   // Only a signed caller learns what happened to its push.
   const projectIds = [...new Set(verified.map((r) => r.project_id))]
@@ -168,6 +187,34 @@ export async function routePatPushWebhook(
     outcome: 'accepted',
     projectIds,
   }
+}
+
+/**
+ * Every failure the forwarder records starts with this, so a later clean push
+ * can clear exactly those errors and leave a sweep's error alone.
+ */
+export const PUSH_INDEX_ERROR_PREFIX = 'push indexing'
+
+/**
+ * After a push indexed cleanly (no failed upsert, tombstone or embedding
+ * batch), clear a `last_index_error` an earlier failed forward left behind.
+ * Otherwise the console and doctor keep showing a resolved push failure until
+ * the next sweep, up to a day later for a complete or capped repo. Only
+ * errors with PUSH_INDEX_ERROR_PREFIX are cleared; a sweep's error stays.
+ */
+export async function clearResolvedPushIndexError(
+  db: SupabaseClient,
+  repoId: string,
+  outcome: { upsertFailures: number; tombstoneFailures: number; embedFailures: number },
+): Promise<{ cleared: boolean; error?: string }> {
+  if (outcome.upsertFailures > 0 || outcome.tombstoneFailures > 0 || outcome.embedFailures > 0) return { cleared: false }
+  const { error } = await db
+    .from('project_repos')
+    .update({ last_index_error: null })
+    .eq('id', repoId)
+    .like('last_index_error', `${PUSH_INDEX_ERROR_PREFIX}%`)
+  if (error) return { cleared: false, error: error.message }
+  return { cleared: true }
 }
 
 /** Wall-clock budget for one forwarded push (the edge function limit). */
@@ -205,7 +252,7 @@ export function createIndexerPushForwarder(deps: {
 
   return async (req) => {
     if (!deps.supabaseUrl || !deps.internalSecret) {
-      await recordFailure(req, 'push indexing is not configured on this server (SUPABASE_URL / internal caller secret missing)')
+      await recordFailure(req, `${PUSH_INDEX_ERROR_PREFIX} is not configured on this server (SUPABASE_URL / internal caller secret missing)`)
       throw new Error('indexer forward not configured (SUPABASE_URL / internal secret)')
     }
     const task = (async () => {
@@ -226,14 +273,14 @@ export function createIndexerPushForwarder(deps: {
       } catch (err) {
         const name = err instanceof Error ? err.name : ''
         const message = name === 'TimeoutError' || name === 'AbortError'
-          ? `push indexing did not answer within ${Math.round(timeoutMs / 1000)} s (it may have hit the edge function time limit); the daily sweep catches the files up`
-          : `push indexing request failed: ${err instanceof Error ? err.message : String(err)}`
+          ? `${PUSH_INDEX_ERROR_PREFIX} did not answer within ${Math.round(timeoutMs / 1000)} s (it may have hit the edge function time limit); the daily sweep catches the files up`
+          : `${PUSH_INDEX_ERROR_PREFIX} request failed: ${err instanceof Error ? err.message : String(err)}`
         await recordFailure(req, message)
         return
       }
       if (!res.ok) {
         const detail = await res.text().then((t) => t.slice(0, 300)).catch(() => '')
-        await recordFailure(req, `push indexing failed: HTTP ${res.status}${detail ? `: ${detail}` : ''}`)
+        await recordFailure(req, `${PUSH_INDEX_ERROR_PREFIX} failed: HTTP ${res.status}${detail ? `: ${detail}` : ''}`)
       }
     })()
     deps.background(task, 'pat-push-index')

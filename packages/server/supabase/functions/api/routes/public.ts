@@ -942,7 +942,7 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
           background: runInBackground,
           log,
         });
-        pushed = await routePatPushWebhook({ body, signature: sig, deliveryId }, { db, forward });
+        pushed = await routePatPushWebhook({ body, signature: sig, deliveryId }, { db, forward, log });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         log.error('PAT push routing failed', { error: message });

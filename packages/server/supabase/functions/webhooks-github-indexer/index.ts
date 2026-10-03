@@ -53,10 +53,12 @@ import {
   measureIndexCoverage,
   pushCoverageUpdate,
   selectSweepFiles,
-  sweepBookkeeping,
+  pathsOutsideFilter,
+  sweepOutcome,
   type IndexCoverage,
   type IndexFileCap,
 } from '../_shared/index-coverage.ts';
+import { clearResolvedPushIndexError } from '../_shared/github-push-forward.ts';
 import { resolveProjectPlan } from '../_shared/quota.ts';
 import {
   framePathsFromStackText,
@@ -982,73 +984,56 @@ async function handleSweep(
           summary.push({ repo: repo.repo_url, ok: stats.inserted > 0 || stats.failed === 0, ...stats });
           continue;
         }
-        if (stats.inserted === 0 && stats.failed > 0) {
-          const msg = stats.lastError ?? 'all chunk embeddings failed';
-          const kind = classifyIndexerError(msg);
+        // Coverage (gap 16a/16b): last_indexed_at moves only when every
+        // eligible file is indexed; a partial sweep records its coverage and
+        // index_swept_at. A run that embedded nothing and lost chunks is a
+        // failed run, but a filling repo still records its coverage, so one
+        // whose only unindexed files always fail embedding reads as stalled
+        // and leaves the hourly batch (see sweepOutcome).
+        if (!stats.coverage) throw new Error('sweep finished without a coverage measurement');
+        const outcome = sweepOutcome({
+          inserted: stats.inserted,
+          failed: stats.failed,
+          lastError: stats.lastError,
+          fetchErrors: stats.fetchErrors,
+          lastFetchError: stats.lastFetchError,
+          coverage: stats.coverage,
+          nowIso: new Date().toISOString(),
+        });
+        if (!outcome.ok) {
+          const msg = outcome.error ?? stats.lastError ?? 'all chunk embeddings failed';
+          const kind = classifyIndexerError(stats.lastError ?? msg);
           // Auth / permission / transient errors are operator-config or
           // upstream issues — surface via `last_index_error` (admin UI
           // shows it) and a structured `log.warn` so we don't generate a
           // recurring Sentry Issue (regression history: MUSHI-MUSHI-SERVER-B).
-          if (kind === 'unknown') {
-            log.error('sweep: repo index failed', {
-              repo: repo.repo_url,
-              error: msg,
-              failed: stats.failed,
-              skipped: stats.skipped,
-              kind,
-            });
-          } else {
-            log.warn('sweep: repo index skipped', {
-              repo: repo.repo_url,
-              error: msg,
-              failed: stats.failed,
-              skipped: stats.skipped,
-              kind,
-            });
-          }
-          await db
-            .from('project_repos')
-            .update({
-              last_index_attempt_at: new Date().toISOString(),
-              last_index_error: msg.slice(0, 500),
-              // The tree fetch on GitHub's default branch did succeed, so the
-              // branch truth is known even though embeddings failed.
-              ...(stats.correctedBranch ? { default_branch: stats.correctedBranch } : {}),
-            })
-            .eq('id', repo.id);
-          summary.push({ repo: repo.repo_url, ok: false, error: msg });
-        } else {
-          // project_repos.commit_sha / indexed_branch feed impact-resolve and
-          // the radar's index checks. A failed write is reported, not hidden.
-          // Coverage (gap #16a): last_indexed_at moves only when every
-          // eligible file is indexed; a partial sweep records its coverage
-          // and index_swept_at, and stays in the hourly batch while filling.
-          if (!stats.coverage) throw new Error('sweep finished without a coverage measurement');
-          const { error: bookkeepingErr } = await db
-            .from('project_repos')
-            .update({
-              indexed_branch: stats.branch,
-              ...(stats.headSha ? { commit_sha: stats.headSha } : {}),
-              ...sweepBookkeeping({
-                coverage: stats.coverage,
-                nowIso: new Date().toISOString(),
-                failedChunks: stats.failed,
-                lastError: stats.lastError,
-                fetchErrors: stats.fetchErrors,
-                lastFetchError: stats.lastFetchError,
-              }),
-              // Persist the branch GitHub actually serves so the next sweep,
-              // the fix-worker base and the console all agree.
-              ...(stats.correctedBranch ? { default_branch: stats.correctedBranch } : {}),
-            })
-            .eq('id', repo.id);
-          if (bookkeepingErr) {
-            log.error('sweep: project_repos update failed', { repo: repo.repo_url, error: bookkeepingErr.message });
-            summary.push({ repo: repo.repo_url, ok: false, error: `project_repos update failed: ${bookkeepingErr.message}` });
-            continue;
-          }
-          summary.push({ repo: repo.repo_url, ok: true, ...stats });
+          const ctx = { repo: repo.repo_url, error: msg, failed: stats.failed, skipped: stats.skipped, kind, coverage: stats.coverage.state };
+          if (kind === 'unknown') log.error('sweep: repo index failed', ctx);
+          else log.warn('sweep: repo index skipped', ctx);
         }
+        // project_repos.commit_sha / indexed_branch feed impact-resolve and
+        // the radar's index checks, so only a run that indexed moves them.
+        // A failed write is reported, not hidden.
+        const { error: bookkeepingErr } = await db
+          .from('project_repos')
+          .update({
+            ...(outcome.ok
+              ? { indexed_branch: stats.branch, ...(stats.headSha ? { commit_sha: stats.headSha } : {}) }
+              : {}),
+            ...outcome.update,
+            // Persist the branch GitHub actually serves so the next sweep,
+            // the fix-worker base and the console all agree. The tree fetch
+            // on that branch succeeded even when embeddings failed.
+            ...(stats.correctedBranch ? { default_branch: stats.correctedBranch } : {}),
+          })
+          .eq('id', repo.id);
+        if (bookkeepingErr) {
+          log.error('sweep: project_repos update failed', { repo: repo.repo_url, error: bookkeepingErr.message });
+          summary.push({ repo: repo.repo_url, ok: false, error: `project_repos update failed: ${bookkeepingErr.message}` });
+          continue;
+        }
+        if (outcome.ok) summary.push({ repo: repo.repo_url, ok: true, ...stats });
+        else summary.push({ repo: repo.repo_url, ok: false, error: outcome.error ?? 'sweep failed' });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         const kind = classifyIndexerError(err);
@@ -1200,6 +1185,28 @@ async function refreshChunks(
   return { refreshed, failed, lastError, paths };
 }
 
+/**
+ * Tombstone every live chunk of `paths`. Throws on a write error: the sweep
+ * records it in last_index_error rather than measuring coverage over files
+ * it meant to drop.
+ */
+async function tombstonePaths(
+  db: ReturnType<typeof getDb>,
+  projectId: string,
+  paths: string[],
+): Promise<number> {
+  for (let i = 0; i < paths.length; i += 100) {
+    const { error } = await db
+      .from('project_codebase_files')
+      .update({ tombstoned_at: new Date().toISOString() })
+      .eq('project_id', projectId)
+      .in('file_path', paths.slice(i, i + 100))
+      .is('tombstoned_at', null);
+    if (error) throw new Error(`tombstoning files outside the path filter failed: ${error.message}`);
+  }
+  return paths.length;
+}
+
 /** Ceiling for a targeted (frame-path) run: an import names ≤10 issues. */
 const TARGETED_FILE_CAP = 25;
 /** Statuses whose fix site no longer needs to be in the index first. */
@@ -1328,6 +1335,8 @@ async function sweepIndexRepo(
   branch: string;
   /** Head commit of that branch, when GitHub returned it. */
   headSha: string | null;
+  /** Indexed files tombstoned because the scope or path filter now excludes them. */
+  tombstonedOutOfFilter: number;
   /** Coverage after this sweep (null for a targeted frame-path run, which measures nothing). */
   coverage: IndexCoverage | null;
   /** Set when the configured branch 404'd and GitHub's default branch was used instead. */
@@ -1407,6 +1416,7 @@ async function sweepIndexRepo(
   const targeted = (opts.targetFramePaths?.length ?? 0) > 0;
   let selected: string[];
   let indexedBefore = new Set<string>();
+  let tombstonedOutOfFilter = 0;
   if (targeted) {
     selected = matchFramePathsToTree(opts.targetFramePaths ?? [], treePaths).slice(0, TARGETED_FILE_CAP);
   } else {
@@ -1419,6 +1429,19 @@ async function sweepIndexRepo(
     // of reporting a made-up number.
     if (!indexedPaths) throw new Error('indexed-path lookup failed; coverage unknown, sweep skipped');
     indexedBefore = indexedPaths;
+    // A narrowed scope or path filter shrinks the index too: indexed files it
+    // now excludes are tombstoned before any GitHub fetch, so a failed write
+    // stops the run without spending the rate limit. (Re-admitting a file
+    // later refreshes its stored chunks; nothing is embedded again.)
+    tombstonedOutOfFilter = await tombstonePaths(
+      db,
+      projectId,
+      pathsOutsideFilter({
+        indexedPaths,
+        indexableTreePaths: (tree.tree ?? []).filter((t) => t.type === 'blob' && indexable(t.path)).map((t) => t.path),
+        eligible,
+      }),
+    );
     selected = selectSweepFiles({
       treePaths,
       framePaths: matchFramePathsToTree(framePaths, treePaths),
@@ -1529,6 +1552,7 @@ async function sweepIndexRepo(
     lastError,
     fetchErrors,
     lastFetchError,
+    tombstonedOutOfFilter,
     coverage,
     branch,
     headSha,
@@ -1642,6 +1666,8 @@ async function indexPushForProject(
   let tombstoned = 0;
   let upsertFailures = 0;
   let tombstoneFailures = 0;
+  /** Chunks in embedding batches that failed (the next push or sweep retries them). */
+  let embedFailures = 0;
   let unindexed = 0;
   const languageCounts: Record<string, number> = {};
 
@@ -1693,6 +1719,7 @@ async function indexPushForProject(
     } catch (err) {
       // Push embeddings are best-effort — log and move on. The next push
       // event for the same path will re-attempt indexing.
+      embedFailures += batch.length;
       log.warn('push: batch embed failed (non-fatal)', {
         projectId,
         repoFullName,
@@ -1740,6 +1767,7 @@ async function indexPushForProject(
     tombstoned,
     upsertFailures,
     tombstoneFailures,
+    embedFailures,
   });
 
   // Keep this repo's indexed HEAD in sync for last-push diff impact, analyze
@@ -1773,6 +1801,10 @@ async function indexPushForProject(
     })
     .eq('id', row.id);
   if (headErr) log.error('push: project_repos head update failed', { projectId, error: headErr.message });
+  // A clean push clears an earlier failed forward's error ("push indexing …"),
+  // so the console and doctor stop showing a push failure this one resolved.
+  const cleared = await clearResolvedPushIndexError(db, row.id, { upsertFailures, tombstoneFailures, embedFailures });
+  if (cleared.error) log.error('push: clearing the resolved push error failed', { projectId, error: cleared.error });
 
   try {
     const { invalidateCodebaseUnderstandCaches } = await import('../_shared/codebase-impact-resolve.ts')
@@ -1828,6 +1860,7 @@ async function indexPushForProject(
       tombstoned,
       upsertFailures,
       tombstoneFailures,
+      embedFailures,
       overCap: admission.overCap.length,
       languages: languageCounts,
     },

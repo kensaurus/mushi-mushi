@@ -22,19 +22,11 @@ import type { Variables } from '../types.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { adminOrApiKey } from '../../_shared/auth.ts';
 import { ownedProjectIds } from '../shared.ts';
-import { describeIndexCoverage, latestIso } from '../../_shared/index-coverage.ts';
+import { codebaseIndexDoctorCheck, type IndexDoctorRepo } from '../../_shared/index-coverage.ts';
 
 /** The project_repos columns the codebase-index check reads. */
-interface DoctorRepoRow {
+interface DoctorRepoRow extends IndexDoctorRepo {
   project_id: string;
-  last_indexed_at: string | null;
-  last_index_error: string | null;
-  index_swept_at?: string | null;
-  index_files_indexed?: number | null;
-  index_files_eligible?: number | null;
-  index_file_cap?: number | null;
-  index_tree_truncated?: boolean | null;
-  index_coverage_state?: string | null;
 }
 
 export interface DoctorCheck {
@@ -183,56 +175,7 @@ export function registerDoctorRoutes(app: Hono<{ Variables: Variables }>): void 
       ((reposRes.data ?? []) as DoctorRepoRow[]).map((r) => [r.project_id, r]),
     );
     for (const pid of enabledProjects) {
-      const repo = repoByProject.get(pid);
-      // A partial sweep (plan cap, or still filling) sets index_swept_at only.
-      const sweptAt = repo ? latestIso(repo.last_indexed_at, repo.index_swept_at) : null;
-      const coverage = repo
-        ? describeIndexCoverage({
-          indexed: repo.index_files_indexed ?? null,
-          eligible: repo.index_files_eligible ?? null,
-          cap: repo.index_file_cap ?? null,
-          truncated: repo.index_tree_truncated === true,
-          state: repo.index_coverage_state ?? null,
-        })
-        : null;
-      if (!repo || !sweptAt) {
-        checks.push({
-          name: `codebase_index:${pid}`,
-          status: 'fail',
-          summary: 'Codebase indexing is enabled but no sweep has completed — diagnoses run without code context.',
-          hint: 'Re-run the sweep from the console Integrations card, and verify the GitHub App installation.',
-        });
-      } else if (repo.last_index_error) {
-        checks.push({
-          name: `codebase_index:${pid}`,
-          status: 'warn',
-          summary: `Index issue: ${repo.last_index_error.slice(0, 200)}`,
-          hint: repo.last_index_error.startsWith('partial:')
-            ? 'Some chunks failed to embed; the next sweep retries them.'
-            : 'Fix the recorded error, then re-run the sweep from the Integrations card.',
-        });
-      } else if (
-        repo.index_coverage_state === 'filling' ||
-        repo.index_coverage_state === 'capped' ||
-        repo.index_coverage_state === 'stalled'
-      ) {
-        checks.push({
-          name: `codebase_index:${pid}`,
-          status: 'warn',
-          summary: `Partly indexed: ${coverage ?? 'coverage unknown'} (last sweep ${sweptAt}).`,
-          hint: repo.index_coverage_state === 'capped'
-            ? 'Diagnoses only see the indexed files. A higher plan indexes more files; a path filter on the Integrations card narrows the sweep to the files that matter.'
-            : repo.index_coverage_state === 'stalled'
-            ? 'The last sweep added no file. Re-run the sweep from the Integrations card; it is retried daily.'
-            : 'The hourly sweep keeps adding files until the repo or the plan limit is covered.',
-        });
-      } else {
-        checks.push({
-          name: `codebase_index:${pid}`,
-          status: 'pass',
-          summary: coverage ? `Indexed: ${coverage} (last sweep ${sweptAt}).` : `Indexed (last sweep ${sweptAt}).`,
-        });
-      }
+      checks.push(codebaseIndexDoctorCheck(pid, repoByProject.get(pid)));
     }
 
     // ── Observability transports ───────────────────────────────────────

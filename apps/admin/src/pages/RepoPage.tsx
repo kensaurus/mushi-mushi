@@ -584,7 +584,7 @@ export function RepoPage() {
         ]}
         helpHowToUse={copy?.help?.howToUse ?? [
           'Connect your primary repo: go to Integrations → GitHub, paste the repo URL, then install the Mushi GitHub App (the "Install Mushi on GitHub" button appears here once the URL is set).',
-          'Add a second repo: click Manage → add the backend/frontend repo, set role=backend, and set path_globs (e.g. src/**) so the fix worker knows which files to target.',
+          'Add a second repo: click Manage → add the backend/frontend repo, set role=backend, and set path_globs (e.g. src/**) so the fix worker knows which files to target (the same globs limit which files are indexed).',
           'Enable Autofix: Settings → Autofix must be ON and Sandbox must be set to e2b/modal (not local-noop) for PRs to open in production.',
           'Review: Branches tab lists every fix PR with CI status. Activity tab shows a chronological log of dispatches, commits, and CI conclusions.',
         ].join('\n')}
