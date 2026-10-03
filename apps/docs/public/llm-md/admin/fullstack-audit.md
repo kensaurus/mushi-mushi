@@ -74,8 +74,10 @@ check.
 
 ## Prerequisites
 
-Add your Supabase PAT under **Settings → API Keys** and set
-`supabase_project_ref` on the project. CLI equivalent: `mushi audit`.
+Set the Supabase project ref under **Settings → General → Supabase project**,
+then add a scoped Supabase access token under **Settings → AI keys → Supabase**:
+this one project only, with Database, Edge Functions, Advisors and Logs set to
+Read, and an expiry. CLI equivalent: `mushi audit`.
 
 ---
 
