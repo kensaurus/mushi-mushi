@@ -15,7 +15,14 @@ import { ErrorAlert, Loading } from '../ui'
 import { GateFindingCard } from '../inventory/GateFindingCard'
 import { ApplySuggestedCapsButton } from './ApplySuggestedCapsButton'
 import { usePageData } from '../../lib/usePageData'
-import { latestOpenFindings, spendCapSuggestion, type GateFindingsPayload } from '../../lib/gateFindings'
+import {
+  FINDINGS_ROUTE_MAX_RUNS,
+  findingsReadTruncated,
+  latestOpenFindings,
+  latestRunPerGate,
+  spendCapSuggestion,
+  type GateFindingsPayload,
+} from '../../lib/gateFindings'
 import { gateLabel, type GateId } from '../../lib/gateLabels'
 
 interface Props {
@@ -36,25 +43,32 @@ export function GateFindingsSection({ projectId, gate, neverRunText, limit = 50 
   if (loading && !data) return <Loading text="Reading the findings…" />
   if (!data) return null
 
-  const finished = data.runs.filter((r) => r.status !== 'running' && r.status !== 'queued')
-  if (finished.length === 0) {
-    return <p className="text-xs text-fg-muted">{neverRunText} This is not a pass.</p>
+  // The route returns the newest 50 runs and 500 findings: past that, a check
+  // that last ran earlier is missing, so an all-clear cannot be claimed.
+  const truncated = findingsReadTruncated(data)
+  const latestByGate = latestRunPerGate(data.runs)
+  const truncatedNote = truncated ? (
+    <p className="text-xs text-warn" role="status">
+      Only the newest {FINDINGS_ROUTE_MAX_RUNS} runs were read; a check that last ran before them is not shown here.
+    </p>
+  ) : null
+  if (latestByGate.size === 0) {
+    return truncatedNote ?? <p className="text-xs text-fg-muted">{neverRunText} This is not a pass.</p>
   }
 
   const findings = latestOpenFindings(data)
-  const latestByGate = new Map<string, (typeof finished)[number]>()
-  for (const r of finished) if (!latestByGate.has(r.gate)) latestByGate.set(r.gate, r)
   const errored = [...latestByGate.values()].filter((r) => r.status === 'error')
   const shown = findings.slice(0, limit)
 
   return (
     <div className="flex flex-col gap-2">
+      {truncatedNote}
       {errored.map((r) => (
         <p key={r.id} className="text-xs text-danger" role="status">
           The last {gateLabel(r.gate)} run could not finish, so its result is unknown.
         </p>
       ))}
-      {findings.length === 0 && errored.length === 0 && (
+      {findings.length === 0 && errored.length === 0 && !truncated && (
         <p className="text-xs text-fg-muted">The newest run of each check found nothing open.</p>
       )}
       {shown.map((f) => {

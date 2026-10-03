@@ -8,16 +8,46 @@
 
 import type { GateFinding } from '../components/inventory/GateFindingCard'
 
-export interface GateRunRow {
+interface GateRunRow {
   id: string
   gate: string
   status: string
   findings_count?: number | null
   started_at?: string | null
   completed_at?: string | null
+  summary?: unknown
 }
 
-export interface GateFindingRow extends GateFinding {
+/** The findings route returns at most this many runs and findings (api/routes/inventory.ts). */
+export const FINDINGS_ROUTE_MAX_RUNS = 50
+const FINDINGS_ROUTE_MAX_FINDINGS = 500
+
+/**
+ * True when the route's caps were reached: a check that last ran before the
+ * newest 50 runs is then missing, so "nothing open" cannot be claimed.
+ */
+export function findingsReadTruncated(payload: GateFindingsPayload): boolean {
+  return payload.runs.length >= FINDINGS_ROUTE_MAX_RUNS || payload.findings.length >= FINDINGS_ROUTE_MAX_FINDINGS
+}
+
+/** A design-token refresh is not a scan; it never hides the latest scan (server: isScanRun). */
+function isScanRun(run: GateRunRow): boolean {
+  if (run.gate !== 'design_drift') return true
+  const phase = run.summary && typeof run.summary === 'object' ? (run.summary as { phase?: unknown }).phase : undefined
+  return phase !== 'refresh'
+}
+
+/** The newest finished run per gate, skipping design refresh runs. */
+export function latestRunPerGate(runs: readonly GateRunRow[]): Map<string, GateRunRow> {
+  const latest = new Map<string, GateRunRow>()
+  for (const run of runs) {
+    if (run.status === 'running' || run.status === 'queued' || !isScanRun(run)) continue
+    if (!latest.has(run.gate)) latest.set(run.gate, run)
+  }
+  return latest
+}
+
+interface GateFindingRow extends GateFinding {
   gate_run_id: string
   allowlisted?: boolean | null
   suggested_fix?: unknown
@@ -29,7 +59,7 @@ export interface GateFindingsPayload {
 }
 
 /** A finding with the gate of its run attached. */
-export type LatestGateFinding = GateFindingRow & { gate: string }
+type LatestGateFinding = GateFindingRow & { gate: string }
 
 const SEVERITY_RANK: Record<string, number> = { error: 0, warn: 1, info: 2 }
 
@@ -39,11 +69,7 @@ const SEVERITY_RANK: Record<string, number> = { error: 0, warn: 1, info: 2 }
  * the latest; a `running` / `queued` run is skipped like the server does.
  */
 export function latestOpenFindings(payload: GateFindingsPayload): LatestGateFinding[] {
-  const latestRun = new Map<string, GateRunRow>()
-  for (const run of payload.runs) {
-    if (run.status === 'running' || run.status === 'queued') continue
-    if (!latestRun.has(run.gate)) latestRun.set(run.gate, run)
-  }
+  const latestRun = latestRunPerGate(payload.runs)
   const gateOfRun = new Map([...latestRun.values()].map((r) => [r.id, r.gate]))
   return payload.findings
     .filter((f) => !f.allowlisted && gateOfRun.has(f.gate_run_id))
@@ -51,7 +77,7 @@ export function latestOpenFindings(payload: GateFindingsPayload): LatestGateFind
     .sort((a, b) => (SEVERITY_RANK[a.severity ?? 'info'] ?? 3) - (SEVERITY_RANK[b.severity ?? 'info'] ?? 3))
 }
 
-export type SpendCapField = 'monthly_llm_budget_usd' | 'autofix_max_spend_usd' | 'autofix_max_dispatches_per_day'
+type SpendCapField = 'monthly_llm_budget_usd' | 'autofix_max_spend_usd' | 'autofix_max_dispatches_per_day'
 
 export type SpendCapValues = Partial<Record<SpendCapField, number>>
 

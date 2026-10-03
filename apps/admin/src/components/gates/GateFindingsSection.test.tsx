@@ -97,6 +97,15 @@ describe('GateFindingsSection', () => {
     expect(container.textContent).toContain('Never ran. This is not a pass.')
   })
 
+  it('never says nothing is open when the route returned its 50-run cap', async () => {
+    const runs = Array.from({ length: 50 }, (_, i) => ({ id: `c${i}`, gate: 'code_health', status: 'pass' }))
+    apiFetch.mockResolvedValue({ ok: true, data: { runs, findings: [] } })
+    render()
+    await flush()
+    expect(container.textContent).toContain('Only the newest 50 runs were read')
+    expect(container.textContent).not.toContain('found nothing open')
+  })
+
   it('applies the suggested caps only after confirming, to the finding’s project', async () => {
     apiFetch.mockResolvedValue({ ok: true, data: payload })
     apiFetchMutate.mockResolvedValue({ ok: true, data: {} })
