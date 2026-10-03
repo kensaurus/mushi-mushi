@@ -318,6 +318,31 @@ const MUSHI_DOC_MAX_CHARS = 8000
 const REPORT_STATUSES = CANONICAL_REPORT_STATUSES
 const REPORT_CATEGORIES = ['bug', 'slow', 'visual', 'confusing', 'other'] as const
 const REPORT_SEVERITIES = ['critical', 'high', 'medium', 'low'] as const
+/**
+ * Every gate_runs.gate the live CHECK constraint allows — the same list as the
+ * stdio `GATE_IDS` (packages/mcp/src/server.ts). `radar` is Mushi's own setup
+ * checks; portfolio_radar* / store_review are the app hole checks.
+ */
+const LIST_GATE_FINDINGS_GATES = [
+  'dead_handler',
+  'mock_leak',
+  'api_contract',
+  'crawl',
+  'status_claim',
+  'spec_drift',
+  'orphan_endpoint',
+  'unknown_call',
+  'schema_drift',
+  'code_health',
+  'design_drift',
+  'ci_drift',
+  'deploy_drift',
+  'env_drift',
+  'radar',
+  'portfolio_radar',
+  'portfolio_radar_ci',
+  'store_review',
+] as const
 
 /** Build a query string, skipping undefined/empty values (events/* tools). */
 function eventsQuery(params: Record<string, string | number | undefined>): string {
@@ -495,6 +520,14 @@ const BASE_TOOLS: Record<string, HostedTool> = {
     handler: async (args, ctx) => {
       const pid = (args.projectId as string | undefined) ?? ctx.projectIdHint
       if (!pid) throw new McpError(ERR_INVALID_PARAMS, 'projectId is required for list_gate_findings')
+      // Same enums as the stdio zod schema (packages/mcp/src/server.ts GATE_IDS):
+      // an unknown gate is an invalid param on both transports, never "no findings".
+      if (args.gate !== undefined && !(typeof args.gate === 'string' && (LIST_GATE_FINDINGS_GATES as readonly string[]).includes(args.gate))) {
+        throw new McpError(ERR_INVALID_PARAMS, `gate must be one of ${LIST_GATE_FINDINGS_GATES.join(', ')}`)
+      }
+      if (args.severity !== undefined && !(typeof args.severity === 'string' && ['info', 'warn', 'error'].includes(args.severity))) {
+        throw new McpError(ERR_INVALID_PARAMS, 'severity must be one of info, warn, error')
+      }
       const q = new URLSearchParams()
       if (typeof args.gate === 'string') q.set('gate', args.gate)
       if (typeof args.severity === 'string') q.set('severity', args.severity)
