@@ -37,6 +37,39 @@ describe('starterManifest', () => {
     expect(m.ci.workflows).toEqual({ 'ci.yml': { role: 'ci' } })
     expect(m.change.allowPaths).toEqual(['mushi.recipe.json', 'packages/design-tokens/**'])
   })
+
+  it('reads a monorepo: skips fixture tokens, scans app and package sources, finds nested migrations, tags deploy workflows', () => {
+    const root = repo({
+      'package.json': JSON.stringify({ name: 'mono' }),
+      'packages/brand/tokens/brand.tokens.json': TOKENS,
+      'packages/server/src/__tests__/fixtures/other/dtcg/tokens.json': TOKENS,
+      'examples/demo/theme.tokens.json': TOKENS,
+      'apps/admin/src/App.tsx': 'export const A = 1',
+      'packages/ui/src/button.css': '.b{}',
+      'packages/server/supabase/migrations/20261001000000_a.sql': 'select 1;',
+      '.github/workflows/ci.yml': 'on: push',
+      '.github/workflows/deploy-admin.yml': 'on: push',
+      '.github/workflows/release.yml': 'on: push',
+    })
+    const m = starterManifest(root) as {
+      design: { tokens: Array<{ path: string }>; literalScan: { globs: string[] } }
+      data: { migrationsDir: string }
+      ci: { defaultBranch: string; workflows: Record<string, { role: string }> }
+    }
+    expect(m.design.tokens.map((t) => t.path)).toEqual(['packages/brand/tokens/brand.tokens.json'])
+    expect(m.design.literalScan.globs.sort()).toEqual(['apps/admin/src/**/*.{ts,tsx,css}', 'packages/ui/src/**/*.{ts,tsx,css}'])
+    expect(m.data.migrationsDir).toBe('packages/server/supabase/migrations')
+    expect(m.ci.workflows).toEqual({ 'ci.yml': { role: 'ci' }, 'deploy-admin.yml': { role: 'deploy' }, 'release.yml': { role: 'deploy' } })
+  })
+
+  it('takes the default branch from origin/HEAD when the clone records one', () => {
+    const root = repo({ 'package.json': '{}', '.github/workflows/ci.yml': 'on: push' })
+    const git = (...args: string[]) => execFileSync('git', args, { cwd: root, stdio: 'ignore' })
+    git('init', '-q')
+    git('update-ref', 'refs/remotes/origin/master', '4b825dc642cb6eb9a060e54bf8d69288fbee4904')
+    git('symbolic-ref', 'refs/remotes/origin/HEAD', 'refs/remotes/origin/master')
+    expect((starterManifest(root) as { ci: { defaultBranch: string } }).ci.defaultBranch).toBe('master')
+  })
 })
 
 describe('checkRecipe', () => {

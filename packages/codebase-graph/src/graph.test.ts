@@ -187,19 +187,32 @@ describe('import scanning', () => {
   })
 
   it('stays linear on input that made the old pattern backtrack', () => {
-    const hostile = [
-      `import\t${'\t'.repeat(50_000)}`,
-      `import\t!${'\t'.repeat(50_000)}`,
-      'import '.repeat(50_000),
-      `${'import x from '.repeat(20_000)}'${'a'.repeat(50_000)}`,
-      `${'require( '.repeat(20_000)}`,
-      `import ${' '.repeat(50_000)}from${' '.repeat(50_000)}`,
+    // Scaling, not a wall-clock ceiling: 4x the input must cost about 4x the
+    // time (the old pattern grew quadratically, ~16x). Best of 3 runs each, so
+    // a slow or busy CI runner does not decide the result.
+    const hostile: Array<(n: number) => string> = [
+      (n) => `import	${'	'.repeat(n)}`,
+      (n) => `import	!${'	'.repeat(n)}`,
+      (n) => 'import '.repeat(n),
+      (n) => `${'import x from '.repeat(n / 2)}'${'a'.repeat(n)}`,
+      (n) => 'require( '.repeat(n / 2),
+      (n) => `import ${' '.repeat(n)}from${' '.repeat(n)}`,
     ]
-    for (const src of hostile) {
-      const started = performance.now()
-      scanImportSpecifiers(src)
-      fingerprintFile({ id: 'h', file_path: 'h.ts', symbol_name: null, content_preview: src } as IndexedFileRow)
-      expect(performance.now() - started).toBeLessThan(500)
+    const cost = (src: string) => {
+      let best = Infinity
+      for (let i = 0; i < 3; i++) {
+        const started = performance.now()
+        scanImportSpecifiers(src)
+        fingerprintFile({ id: 'h', file_path: 'h.ts', symbol_name: null, content_preview: src } as IndexedFileRow)
+        best = Math.min(best, performance.now() - started)
+      }
+      return best
+    }
+    for (const make of hostile) {
+      const small = cost(make(12_500))
+      const large = cost(make(50_000))
+      expect(large).toBeLessThan(Math.max(small, 2) * 10)
+      expect(large).toBeLessThan(5_000)
     }
   })
 })

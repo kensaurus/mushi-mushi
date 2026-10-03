@@ -122,6 +122,11 @@ export function SentryImportPanel({ sentryProjects }: Props) {
         <div className="flex-1 min-w-48">
           <Input
             aria-label="Sentry issue ids"
+            // Not a login field: without these, Chrome autofills the saved
+            // email here, which hides the project and date pickers.
+            name="sentry-issue-ids"
+            autoComplete="off"
+            spellCheck={false}
             placeholder="WEB-12, WEB-13"
             value={ids}
             onChange={(e) => setIds(e.target.value)}
