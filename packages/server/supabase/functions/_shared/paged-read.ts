@@ -6,8 +6,10 @@
  *          as a real total while it is not.
  *
  * The caller builds the query and must order it by a unique column (`id`), so
- * pages never overlap or skip a row. Each page asks for `count: 'exact'`; the
- * reader stops once it has the counted rows, on an empty page, or at
+ * pages never overlap or skip a row. Only the first page asks for
+ * `count: 'exact'` (the fetcher gets `'exact'` there and `undefined` after):
+ * an exact count per page would re-count the whole filtered table each time.
+ * The reader stops once it has the counted rows, on an empty page, or at
  * `maxRows`. It advances by the rows actually returned, so a server cap lower
  * than `pageSize` only costs more requests, never rows.
  *
@@ -19,7 +21,7 @@
 export interface PageResult<T> {
   data: T[] | null
   error: { message: string } | null
-  /** Rows matching the query, when it was asked for with `count: 'exact'`. */
+  /** Rows matching the query, when it was asked for with `count: 'exact'` (first page only). */
   count?: number | null
 }
 
@@ -40,8 +42,11 @@ export class PagedReadError extends Error {
   }
 }
 
+/** What a page fetcher passes as `select(cols, { count })`: `'exact'` on the first page only. */
+export type PageCount = 'exact' | undefined
+
 export async function readAllPages<T>(
-  fetchPage: (from: number, to: number) => PromiseLike<PageResult<T>>,
+  fetchPage: (from: number, to: number, count: PageCount) => PromiseLike<PageResult<T>>,
   opts: { what: string; maxRows: number; pageSize?: number },
 ): Promise<PagedRead<T>> {
   const pageSize = Math.max(1, opts.pageSize ?? DEFAULT_PAGE_ROWS)
@@ -50,9 +55,9 @@ export async function readAllPages<T>(
   while (rows.length < opts.maxRows) {
     const want = Math.min(pageSize, opts.maxRows - rows.length)
     const from = rows.length
-    const { data, error, count } = await fetchPage(from, from + want - 1)
+    const { data, error, count } = await fetchPage(from, from + want - 1, from === 0 ? 'exact' : undefined)
     if (error) throw new PagedReadError(opts.what, error.message)
-    if (typeof count === 'number') total = count
+    if (from === 0 && typeof count === 'number') total = count
     const page = data ?? []
     rows.push(...page)
     if (page.length === 0) break
