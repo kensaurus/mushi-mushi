@@ -275,7 +275,7 @@ function harness(db: FakeDb) {
   // The clock moves a minute per call, so each import is strictly newer than the one before.
   let tick = 0
   const now = () => new Date(NOW.getTime() + (tick++) * 60_000)
-  routes.registerSpendLedgerRoutes(app as never, { getServiceClient: () => db as never, adminOrApiKeyRead: pass, jwtAuth: pass, now })
+  routes.registerSpendLedgerRoutes(app as never, { getServiceClient: () => db as never, adminOrApiKeyRead: pass, adminOrApiKeyWrite: pass, now })
   return app
 }
 
@@ -325,6 +325,23 @@ describe('spend routes', () => {
     expect((await app.call('POST', `/v1/admin/orgs/${ORG}/spend/imports`, { body: { vendor: 'vercel', projectId: '9000000a-0000-4000-8000-000000000000', csv: VERCEL_FOCUS } })).status).toBe(404)
     expect((await app.call('POST', `/v1/admin/orgs/${ORG}/spend/imports`, { body: { vendor: 'gcp', projectId: P1, csv: VERCEL_FOCUS } })).body.error?.code).toBe('VALIDATION_ERROR')
     expect((await app.call('POST', `/v1/admin/orgs/${ORG}/spend/imports`, { body: { vendor: 'vercel', projectId: P1, csv: 'foo,bar\n1,2' } })).body.error?.code).toBe('VALIDATION_ERROR')
+  })
+
+  it('an account-level key whose owner is a team owner or admin imports and removes bills; a member key or a project-bound key cannot', async () => {
+    const db = seedLedger({ spend_ledger_entries: [] })
+    const app = harness(db)
+    const ownerKey = { authMethod: 'apiKey', isOrgScopedKey: true, userId: 'owner' }
+    const imp = await app.call('POST', `/v1/admin/orgs/${ORG}/spend/imports`, { body: { vendor: 'vercel', projectId: P1, csv: VERCEL_FOCUS }, vars: ownerKey })
+    expect(imp.status).toBe(200)
+    const importId = (imp.body.data as { importId: string }).importId
+    const memberKey = { authMethod: 'apiKey', isOrgScopedKey: true, userId: 'member' }
+    expect((await app.call('POST', `/v1/admin/orgs/${ORG}/spend/imports`, { body: { vendor: 'vercel', projectId: P1, csv: VERCEL_FOCUS }, vars: memberKey })).status).toBe(403)
+    expect((await app.call('DELETE', `/v1/admin/orgs/${ORG}/spend/imports/${importId}`, { vars: memberKey })).status).toBe(403)
+    const bound = await app.call('POST', `/v1/admin/orgs/${ORG}/spend/imports`, { body: { vendor: 'vercel', projectId: P1, csv: VERCEL_FOCUS }, vars: { authMethod: 'apiKey', isOrgScopedKey: false, userId: 'owner' } })
+    expect(bound.status).toBe(403)
+    expect(bound.body.error?.code).toBe('PORTFOLIO_NEEDS_ACCOUNT_KEY')
+    expect((await app.call('DELETE', `/v1/admin/orgs/${ORG}/spend/imports/${importId}`, { vars: ownerKey })).status).toBe(200)
+    expect(db.table('spend_bill_imports')).toHaveLength(0)
   })
 
   it('removes an import and its rows', async () => {

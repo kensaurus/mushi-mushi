@@ -319,7 +319,7 @@ class FakeApp {
 function harness(db: FakeDb) {
   const app = new FakeApp()
   const pass = (async (_c: unknown, next: () => Promise<void>) => next()) as never
-  routes.registerStoreReviewIntakeRoutes(app as never, { getServiceClient: () => db as never, adminOrApiKeyRead: pass, adminOrApiKeyWrite: pass, jwtAuth: pass, intake: deps().deps })
+  routes.registerStoreReviewIntakeRoutes(app as never, { getServiceClient: () => db as never, adminOrApiKeyRead: pass, adminOrApiKeyWrite: pass, intake: deps().deps })
   return app
 }
 
@@ -369,6 +369,27 @@ describe('store review routes', () => {
     expect(db.table('reports')).toHaveLength(0)
     const memberPull = await app.call('POST', `/v1/admin/projects/${P1}/store/reviews/pull`, { vars: { userId: 'member' } })
     expect(memberPull.status).toBe(200)
+  })
+
+  it('an owner\'s API key turns intake off and changes the threshold, but only a signed-in owner or admin turns it on', async () => {
+    const db = seed({}, { store_review_intake_enabled: false, store_review_max_rating: 2 })
+    const app = harness(db)
+    const ownerKey = { authMethod: 'apiKey', userId: 'owner' }
+    const refused = await app.call('PUT', `/v1/admin/projects/${P1}/store/reviews/settings`, { body: { enabled: true, maxRating: 3 }, vars: ownerKey })
+    expect(refused.status).toBe(403)
+    expect(refused.body.error?.code).toBe('HUMAN_REQUIRED')
+    expect(db.table('project_settings')[0]).toMatchObject({ store_review_intake_enabled: false, store_review_max_rating: 2 })
+
+    expect((await app.call('PUT', `/v1/admin/projects/${P1}/store/reviews/settings`, { body: { enabled: true } })).status).toBe(200)
+    const threshold = await app.call('PUT', `/v1/admin/projects/${P1}/store/reviews/settings`, { body: { enabled: true, maxRating: 3 }, vars: ownerKey })
+    expect(threshold.status).toBe(200)
+    expect(threshold.body.data).toMatchObject({ enabled: true, maxRating: 3 })
+    const off = await app.call('PUT', `/v1/admin/projects/${P1}/store/reviews/settings`, { body: { enabled: false }, vars: ownerKey })
+    expect(off.body.data).toMatchObject({ enabled: false, maxRating: 3 })
+
+    const memberKey = await app.call('PUT', `/v1/admin/projects/${P1}/store/reviews/settings`, { body: { enabled: false }, vars: { authMethod: 'apiKey', userId: 'member' } })
+    expect(memberKey.status).toBe(403)
+    expect(memberKey.body.error?.code).toBe('FORBIDDEN')
   })
 
   it('validates the threshold and hides other teams\' projects', async () => {

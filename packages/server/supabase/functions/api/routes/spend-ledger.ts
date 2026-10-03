@@ -2,18 +2,20 @@
  * spend-ledger.ts — the per-app spend ledger (gap #22, Plan 020 §6).
  *
  *   GET    /v1/admin/orgs/:orgId/spend                     adminOrApiKey(mcp:read)  30-day ledger per app
- *   POST   /v1/admin/orgs/:orgId/spend/imports             jwtAuth, owner/admin     import a bill CSV
- *   DELETE /v1/admin/orgs/:orgId/spend/imports/:importId   jwtAuth, owner/admin     remove an import; its days go back
- *                                                                                    to the next newest import that has them
+ *   POST   /v1/admin/orgs/:orgId/spend/imports             adminOrApiKey(mcp:write), owner/admin  import a bill CSV
+ *   DELETE /v1/admin/orgs/:orgId/spend/imports/:importId   adminOrApiKey(mcp:write), owner/admin  remove an import; its days go
+ *                                                                                                  back to the next newest import
+ *                                                                                                  that has them
  *
- * Bill imports are console-only (JWT): they write money figures every member
- * of the team sees. The ledger read follows the portfolio access rule (an
- * account-level key or a member session; the caller's visible apps only).
+ * Every route follows the portfolio access rule: an account-level key (MCP,
+ * CLI) or a member session, and the caller's visible apps only. Bill imports
+ * write money figures every member of the team sees, so they also need the
+ * session user or the key owner to be a team owner or admin.
  */
 
 import type { Hono, MiddlewareHandler } from 'npm:hono@4'
 import { z } from 'npm:zod@3'
-import { adminOrApiKey, jwtAuth } from '../../_shared/auth.ts'
+import { adminOrApiKey } from '../../_shared/auth.ts'
 import { getServiceClient } from '../../_shared/db.ts'
 import { log } from '../../_shared/logger.ts'
 import { readBodyCapped } from '../../_shared/read-body-capped.ts'
@@ -41,14 +43,14 @@ type Db = ReturnType<typeof getServiceClient>
 export interface SpendRouteDeps {
   getServiceClient: () => Db
   adminOrApiKeyRead: MiddlewareHandler
-  jwtAuth: MiddlewareHandler
+  adminOrApiKeyWrite: MiddlewareHandler
   now: () => Date
 }
 
 export const defaultSpendDeps: SpendRouteDeps = {
   getServiceClient,
   adminOrApiKeyRead: adminOrApiKey({ scope: 'mcp:read' }) as MiddlewareHandler,
-  jwtAuth: jwtAuth as MiddlewareHandler,
+  adminOrApiKeyWrite: adminOrApiKey({ scope: 'mcp:write' }) as MiddlewareHandler,
   now: () => new Date(),
 }
 
@@ -93,7 +95,7 @@ export function registerSpendLedgerRoutes(app: Hono<{ Variables: Variables }>, d
     }
   })
 
-  app.post('/v1/admin/orgs/:orgId/spend/imports', deps.jwtAuth, async (c) => {
+  app.post('/v1/admin/orgs/:orgId/spend/imports', deps.adminOrApiKeyWrite, async (c) => {
     const db = deps.getServiceClient()
     const access = await portfolioAccess(c, db, c.req.param('orgId') ?? '')
     if (!access.ok) return access.response
@@ -180,7 +182,7 @@ export function registerSpendLedgerRoutes(app: Hono<{ Variables: Variables }>, d
     })
   })
 
-  app.delete('/v1/admin/orgs/:orgId/spend/imports/:importId', deps.jwtAuth, async (c) => {
+  app.delete('/v1/admin/orgs/:orgId/spend/imports/:importId', deps.adminOrApiKeyWrite, async (c) => {
     const db = deps.getServiceClient()
     const access = await portfolioAccess(c, db, c.req.param('orgId') ?? '')
     if (!access.ok) return access.response

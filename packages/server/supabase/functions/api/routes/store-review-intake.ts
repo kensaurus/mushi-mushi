@@ -2,19 +2,21 @@
  * store-review-intake.ts — store reviews as reports (gap #23, Plan 020 §5).
  *
  *   GET  /v1/admin/projects/:id/store/reviews            adminOrApiKey(mcp:read)   settings, bound stores, recent reviews seen
- *   PUT  /v1/admin/projects/:id/store/reviews/settings   jwtAuth, owner/admin      opt in or out, star threshold
+ *   PUT  /v1/admin/projects/:id/store/reviews/settings   adminOrApiKey(mcp:write), owner/admin  opt in or out, star threshold
  *   POST /v1/admin/projects/:id/store/reviews/pull       adminOrApiKey(mcp:write)  pull now (1 per 10 min), not viewers
  *
- * Off by default. Switching it on is console-only (JWT) and limited to owners
- * and admins: it decides that reviews from the public become reports in the
- * queue. A viewer cannot pull either, since a pull spends the stored store
- * keys and files reports. Reads go through the project's existing App Store
+ * Off by default, and limited to owners and admins (the session user or the
+ * key owner). Switching it on needs a signed-in person in the console: it
+ * decides that reviews from the public become reports in the queue. An API
+ * key (MCP, CLI) can turn it off or change the star threshold, never turn it
+ * on. A viewer cannot pull either, since a pull spends the stored store keys
+ * and files reports. Reads go through the project's existing App Store
  * Connect / Google Play connectors, read-only.
  */
 
 import type { Context, Hono, MiddlewareHandler } from 'npm:hono@4'
 import { z } from 'npm:zod@3'
-import { adminOrApiKey, jwtAuth } from '../../_shared/auth.ts'
+import { adminOrApiKey } from '../../_shared/auth.ts'
 import { getServiceClient } from '../../_shared/db.ts'
 import { log } from '../../_shared/logger.ts'
 import { queueReportClassification } from '../../_shared/report-classification.ts'
@@ -32,7 +34,6 @@ export interface StoreReviewRouteDeps {
   getServiceClient: () => Db
   adminOrApiKeyRead: MiddlewareHandler
   adminOrApiKeyWrite: MiddlewareHandler
-  jwtAuth: MiddlewareHandler
   intake: StoreIntakeDeps
 }
 
@@ -40,7 +41,6 @@ export const defaultStoreReviewDeps: StoreReviewRouteDeps = {
   getServiceClient,
   adminOrApiKeyRead: adminOrApiKey({ scope: 'mcp:read' }) as MiddlewareHandler,
   adminOrApiKeyWrite: adminOrApiKey({ scope: 'mcp:write' }) as MiddlewareHandler,
-  jwtAuth: jwtAuth as MiddlewareHandler,
   intake: {
     fetch: (url, init) => fetch(url, init),
     now: () => new Date(),
@@ -116,13 +116,21 @@ export function registerStoreReviewIntakeRoutes(app: Hono<{ Variables: Variables
     })
   })
 
-  app.put('/v1/admin/projects/:id/store/reviews/settings', deps.jwtAuth, async (c) => {
+  app.put('/v1/admin/projects/:id/store/reviews/settings', deps.adminOrApiKeyWrite, async (c) => {
     const db = deps.getServiceClient()
     const a = await access(c, db)
     if (!a.ok) return a.response
     if (!canManageStoreReviews(a.role)) return jsonError(c, 'FORBIDDEN', 'Only owners and admins can change store review intake.', 403)
     const parsed = settingsSchema.safeParse(await c.req.json().catch(() => null))
     if (!parsed.success) return jsonError(c, 'VALIDATION_ERROR', parsed.error.issues.map((i) => `${i.path.join('.') || 'body'}: ${i.message}`).join('; '), 400)
+    if (parsed.data.enabled && c.get('authMethod') === 'apiKey') {
+      // A key may keep intake on (to change the threshold) but never be the one that turns it on.
+      const { data: current, error: currentErr } = await db.from('project_settings').select('store_review_intake_enabled').eq('project_id', a.projectId).maybeSingle()
+      if (currentErr) return jsonError(c, 'DB_ERROR', 'The store review intake could not be read.', 500)
+      if (!(current as { store_review_intake_enabled?: boolean | null } | null)?.store_review_intake_enabled) {
+        return jsonError(c, 'HUMAN_REQUIRED', 'Turning on store reviews as reports needs a signed-in owner or admin (console: Recipe → Store reviews as reports). An API key can only turn it off or change the star threshold.', 403)
+      }
+    }
     const patch: Record<string, unknown> = { store_review_intake_enabled: parsed.data.enabled }
     if (parsed.data.maxRating !== undefined) patch.store_review_max_rating = parsed.data.maxRating
     const { data, error } = await db.from('project_settings').update(patch).eq('project_id', a.projectId).select(SETTINGS_COLUMNS)

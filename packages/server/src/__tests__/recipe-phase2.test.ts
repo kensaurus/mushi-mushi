@@ -466,8 +466,23 @@ describe('recipe ingest routes', () => {
     expect(res.body.data).toMatchObject({ imported: 1, errors: [], skippedOverLimit: 0 })
     expect((await app.call('GET', `/v1/admin/orgs/${ORG}/portfolio/resources`)).body.data.canImport).toBe(true)
     expect((await app.call('GET', `/v1/admin/orgs/${ORG}/portfolio/resources`, { vars: { userId: 'member' } })).body.data.canImport).toBe(false)
-    // An account-level API key reads the graph but cannot import (the import route is jwtAuth).
-    expect((await app.call('GET', `/v1/admin/orgs/${ORG}/portfolio/resources`, { vars: { authMethod: 'apiKey', isOrgScopedKey: true } })).body.data.canImport).toBe(false)
+    // An account-level key imports when its owner is a team owner or admin (MCP import_portfolio_resources, `mushi portfolio import`).
+    expect((await app.call('GET', `/v1/admin/orgs/${ORG}/portfolio/resources`, { vars: { authMethod: 'apiKey', isOrgScopedKey: true } })).body.data.canImport).toBe(true)
+    expect((await app.call('GET', `/v1/admin/orgs/${ORG}/portfolio/resources`, { vars: { authMethod: 'apiKey', isOrgScopedKey: true, userId: 'member' } })).body.data.canImport).toBe(false)
+  })
+
+  it('takes the CSV from an account-level key whose owner is a team owner or admin, never from a member key or a project-bound key', async () => {
+    const db = seed()
+    const app = ingestHarness(db)
+    const csv = 'kind,external_id,project\ndomain,glot.it,glot-it\n'
+    const owner = await app.call('POST', '/v1/ingest/recipe/csv', { body: { organizationId: ORG, csv }, vars: { authMethod: 'apiKey', isOrgScopedKey: true } })
+    expect(owner.status).toBe(200)
+    expect(owner.body.data).toMatchObject({ imported: 1 })
+    const member = await app.call('POST', '/v1/ingest/recipe/csv', { body: { organizationId: ORG, csv }, vars: { authMethod: 'apiKey', isOrgScopedKey: true, userId: 'member' } })
+    expect(member.status).toBe(403)
+    const bound = await app.call('POST', '/v1/ingest/recipe/csv', { body: { organizationId: ORG, csv }, vars: { authMethod: 'apiKey', isOrgScopedKey: false } })
+    expect(bound.status).toBe(403)
+    expect(bound.body.error.code).toBe('PORTFOLIO_NEEDS_ACCOUNT_KEY')
   })
 
   it('counts every refused row while listing only the first 50, and names the line the file really has', async () => {

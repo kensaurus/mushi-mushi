@@ -4,10 +4,14 @@
  *
  *   GET    /v1/admin/orgs/:orgId/accounts              adminOrApiKey(mcp:read)  accounts, domains, open rules
  *   GET    /v1/admin/orgs/:orgId/accounts/export       adminOrApiKey(mcp:read)  the register as Markdown
- *   POST   /v1/admin/orgs/:orgId/accounts              jwtAuth, owner/admin     record an account
- *   PATCH  /v1/admin/orgs/:orgId/accounts/:id          jwtAuth, owner/admin     change it
- *   DELETE /v1/admin/orgs/:orgId/accounts/:id          jwtAuth, owner/admin
- *   PATCH  /v1/admin/orgs/:orgId/domains/:id           jwtAuth, owner/admin     declare a domain's auto-renew
+ *   POST   /v1/admin/orgs/:orgId/accounts              adminOrApiKey(mcp:write), owner/admin  record an account
+ *   PATCH  /v1/admin/orgs/:orgId/accounts/:id          adminOrApiKey(mcp:write), owner/admin  change it
+ *   DELETE /v1/admin/orgs/:orgId/accounts/:id          adminOrApiKey(mcp:write), owner/admin
+ *   PATCH  /v1/admin/orgs/:orgId/domains/:id           adminOrApiKey(mcp:write), owner/admin  declare a domain's auto-renew
+ *
+ * Every route takes the console JWT or an account-level API key (MCP, CLI);
+ * a key bound to one project is refused by portfolioAccess, and a write also
+ * needs the session user or the key owner to be a team owner or admin.
  *
  * Names and metadata only: every text field is secret-scanned and a value
  * shaped like a key or token is refused. Domains are the organization's
@@ -19,7 +23,7 @@
 
 import type { Context, Hono, MiddlewareHandler } from 'npm:hono@4'
 import { z } from 'npm:zod@3'
-import { adminOrApiKey, jwtAuth } from '../../_shared/auth.ts'
+import { adminOrApiKey } from '../../_shared/auth.ts'
 import { getServiceClient } from '../../_shared/db.ts'
 import { log } from '../../_shared/logger.ts'
 import { scanForSecrets } from '../../_shared/secret-scan.ts'
@@ -45,14 +49,14 @@ type Db = ReturnType<typeof getServiceClient>
 export interface AccountsRegisterDeps {
   getServiceClient: () => Db
   adminOrApiKeyRead: MiddlewareHandler
-  jwtAuth: MiddlewareHandler
+  adminOrApiKeyWrite: MiddlewareHandler
   now: () => Date
 }
 
 export const defaultAccountsRegisterDeps: AccountsRegisterDeps = {
   getServiceClient,
   adminOrApiKeyRead: adminOrApiKey({ scope: 'mcp:read' }) as MiddlewareHandler,
-  jwtAuth: jwtAuth as MiddlewareHandler,
+  adminOrApiKeyWrite: adminOrApiKey({ scope: 'mcp:write' }) as MiddlewareHandler,
   now: () => new Date(),
 }
 
@@ -122,7 +126,7 @@ export function registerAccountsRegisterRoutes(app: Hono<{ Variables: Variables 
     if (!access.ok) return access.response
     try {
       const register = await loadRegister(db, access.orgId, access.projectIds)
-      const canEdit = c.get('authMethod') !== 'apiKey' && await isOrgAdmin(db, access.orgId, c.get('userId') as string)
+      const canEdit = await isOrgAdmin(db, access.orgId, c.get('userId') as string)
       return c.json({ ok: true, data: { organizationId: access.orgId, canEdit, ...register } })
     } catch (err) {
       alog.error('register read failed', { orgId: access.orgId, err: (err as Error)?.message })
@@ -151,7 +155,7 @@ export function registerAccountsRegisterRoutes(app: Hono<{ Variables: Variables 
     }
   })
 
-  /** Owner/admin of the organization, signed in (not an API key). */
+  /** Owner/admin of the organization: the signed-in user, or the owner of an account-level key. */
   const forWrite = async (c: Context): Promise<{ ok: true; db: Db; orgId: string; userId: string; projectIds: string[] } | { ok: false; response: Response }> => {
     const db = deps.getServiceClient()
     const access = await portfolioAccess(c, db, c.req.param('orgId') ?? '')
@@ -161,7 +165,7 @@ export function registerAccountsRegisterRoutes(app: Hono<{ Variables: Variables 
     return { ok: true, db, orgId: access.orgId, userId, projectIds: access.projectIds }
   }
 
-  app.post('/v1/admin/orgs/:orgId/accounts', deps.jwtAuth, async (c) => {
+  app.post('/v1/admin/orgs/:orgId/accounts', deps.adminOrApiKeyWrite, async (c) => {
     const w = await forWrite(c)
     if (!w.ok) return w.response
     const raw = await c.req.json().catch(() => null)
@@ -210,7 +214,7 @@ export function registerAccountsRegisterRoutes(app: Hono<{ Variables: Variables 
     return { ...w, row: row as unknown as RegisterRow }
   }
 
-  app.patch('/v1/admin/orgs/:orgId/accounts/:id', deps.jwtAuth, async (c) => {
+  app.patch('/v1/admin/orgs/:orgId/accounts/:id', deps.adminOrApiKeyWrite, async (c) => {
     const w = await withAccount(c, 'account')
     if (!w.ok) return w.response
     const parsed = accountPatchSchema.safeParse(await c.req.json().catch(() => null))
@@ -243,7 +247,7 @@ export function registerAccountsRegisterRoutes(app: Hono<{ Variables: Variables 
     return c.json({ ok: true, data: { id: w.row.id } })
   })
 
-  app.delete('/v1/admin/orgs/:orgId/accounts/:id', deps.jwtAuth, async (c) => {
+  app.delete('/v1/admin/orgs/:orgId/accounts/:id', deps.adminOrApiKeyWrite, async (c) => {
     const w = await withAccount(c, 'account')
     if (!w.ok) return w.response
     const { error } = await w.db.from('portfolio_resources').delete().eq('id', w.row.id)
@@ -252,7 +256,7 @@ export function registerAccountsRegisterRoutes(app: Hono<{ Variables: Variables 
     return c.json({ ok: true, data: { deleted: true } })
   })
 
-  app.patch('/v1/admin/orgs/:orgId/domains/:id', deps.jwtAuth, async (c) => {
+  app.patch('/v1/admin/orgs/:orgId/domains/:id', deps.adminOrApiKeyWrite, async (c) => {
     const w = await withAccount(c, 'domain')
     if (!w.ok) return w.response
     const parsed = domainPatchSchema.safeParse(await c.req.json().catch(() => null))
