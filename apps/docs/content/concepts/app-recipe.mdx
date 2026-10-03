@@ -174,13 +174,17 @@ when the score is above the project's threshold (40 unless you change it):
 
 - **Fail the CI check.** `mushi recipe check --push` exits non-zero when the
   score Mushi computes for the push is above the threshold. A push that could not
-  be scored never fails the check.
+  be scored never fails the check. A push Mushi scored but could not store fails
+  it while this action is on.
 - **Dispatch a fix for new drift.** When a scan finds warn or error findings
   that were not in the previous scan (same rule, file and value), Mushi opens one
   design-drift report, or reuses the open one, and dispatches a fix through the
   normal automatic path. Autofix must be on for the project, and its spend and
   per-day caps apply. The first scan only sets the baseline, and a CI push acts
-  only for your default branch, so pull-request runs never spend.
+  only for your default branch, so pull-request runs never spend. Only the
+  findings a scan stores (the first 500) are compared, so a large backlog does
+  not dispatch again after every scan. Only an owner or admin signed in to the
+  console can turn this on; an API key can turn it off.
 
 ## Hole checks
 
@@ -285,11 +289,16 @@ including Jenkins or a cron on a server.
 `mushi recipe check` runs the same deviance rules as Mushi's own scan, with the
 same rule ids, over your tracked files, so it reports the same findings and the
 same score. With `--push` it sends the scan along with the recipe. Mushi does
-not take the CLI's word for it: it applies your rules' severities, judges
-contrast from the tokens itself, computes the score, and records the
-`design.deviance_score` metric. Only a push of your default branch becomes the
-score shown in the console; a pull-request run keeps its findings and the CI
-gate but never replaces it. A push from a CLI older than this engine is kept
+not take the CLI's word for it: it judges every pushed value again with your
+rules and tokens and writes each finding's text and suggested token itself,
+applies your rules' severities, judges contrast from the tokens, computes the
+score, and records the `design.deviance_score` metric. Only a push of your
+default branch becomes the score shown in the console (the connected repo's
+default branch, else `ci.defaultBranch` in `mushi.recipe.json`, else `main`);
+a pull-request run keeps its findings and the CI gate but never replaces it.
+Use a key for CI that no web page sends: a push with a key that a browser has
+used keeps its findings and the CI gate, but never sets the shown score or
+dispatches a fix. A push from a CLI older than this engine is kept
 but never replaces the score shown in the console either. Update the server before the
 CLI if you self-host.
 

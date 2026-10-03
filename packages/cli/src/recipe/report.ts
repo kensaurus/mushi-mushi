@@ -6,8 +6,10 @@
  *            - `--max-score n` fails when the local score is above n;
  *            - with `--push`, Mushi's answer fails the step when the project's
  *              deviance gate is on and the score Mushi computed is above its
- *              limit. A null score (nothing judged) and an older server that
- *              sends no gate never fail.
+ *              limit, or when the gate is on and Mushi could not store the
+ *              scan (an error must not pass a check the project asked for).
+ *              A null score (nothing judged) and an older server that sends
+ *              no gate never fail.
  */
 
 import type { RecipeCheck } from './local.js'
@@ -26,7 +28,7 @@ export interface RecipePushAnswer {
     storedFindings: number
     droppedFindings: number
     gate: { enabled: boolean; failAbove: number | null; exceeded: boolean } | null
-    action: { action: string; reportId?: string; newFindings?: number; code?: string; message?: string; error?: string } | null
+    action: { action: string; reportId?: string; newFindings?: number; code?: string; message?: string; error?: string; reason?: string } | null
     reason: string | null
   } | null
 }
@@ -64,8 +66,13 @@ export function pushVerdict(answer: RecipePushAnswer, maxScore: number | null, l
     return { lines, errors, failed }
   }
   if (d.status === 'skipped') lines.push(`Not scored: ${d.reason ?? 'no design tokens to judge against.'}`)
-  else if (d.status === 'error') errors.push(`Mushi could not store the scan: ${d.reason ?? 'unknown error'}`)
-  else {
+  else if (d.status === 'error') {
+    errors.push(`Mushi could not store the scan: ${d.reason ?? 'unknown error'}`)
+    if (d.gate?.enabled) {
+      errors.push("Failing the step: this project's deviance gate is on, and an unstored scan cannot be checked against it.")
+      failed = true
+    }
+  } else {
     const refused = d.droppedFindings > 0 ? `, ${d.droppedFindings} refused` : ''
     lines.push(`Mushi scored ${d.score === null ? 'nothing (no rule had anything to judge)' : `${d.score}/100`}: ${d.storedFindings} findings stored${refused}.`)
   }
@@ -85,6 +92,7 @@ export function pushVerdict(answer: RecipePushAnswer, maxScore: number | null, l
   if (a?.action === 'dispatched') lines.push(`Mushi dispatched a fix for ${a.newFindings ?? 'the'} new finding${a.newFindings === 1 ? '' : 's'} (report ${a.reportId}).`)
   else if (a?.action === 'dispatch_refused') lines.push(`Design auto-fix did not dispatch: ${a.message ?? a.code ?? 'refused'}.`)
   else if (a?.action === 'autofix_disabled') lines.push('Design auto-fix is on, but Autofix is off for this project, so no fix was dispatched.')
+  else if (a?.action === 'key_not_trusted') lines.push('Design auto-fix skipped for this push: the key is treated as public (see above).')
   else if (a?.action === 'settings_unavailable' || a?.action === 'report_failed') errors.push(`Design auto-fix failed: ${a.error ?? a.action}.`)
   return { lines, errors, failed }
 }

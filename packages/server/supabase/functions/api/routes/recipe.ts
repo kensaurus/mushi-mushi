@@ -43,8 +43,7 @@ import {
   composeDesignPlane,
   composeDirections,
   composeRecipe,
-  isScanRun,
-  loadDesignRuns,
+  loadDesignScans,
   loadRunFindings,
   toDevianceRun,
   type ComposeDeps,
@@ -282,9 +281,9 @@ export function registerRecipeRoutes(app: Hono<{ Variables: Variables }>, deps: 
     const access = await projectAccess(c, db)
     if (!access.ok) return access.response
     const limit = Math.min(Math.max(Number(c.req.query('limit') ?? 25) || 25, 1), 200)
-    const [runs, snapshot] = await Promise.all([loadDesignRuns(db, access.projectId), deps.loadSnapshot(db, access.projectId)])
+    const [scanRows, snapshot] = await Promise.all([loadDesignScans(db, access.projectId), deps.loadSnapshot(db, access.projectId)])
     const now = deps.now()
-    const scans = runs.filter(isScanRun).map((r) => toDevianceRun(r, now))
+    const scans = scanRows.map((r) => toDevianceRun(r, now))
     const latest = scans.find((r) => r.status !== 'running') ?? null
     const findings = latest && latest.status !== 'error' ? await loadRunFindings(db, latest.runId, limit) : []
     return c.json({
@@ -306,8 +305,8 @@ export function registerRecipeRoutes(app: Hono<{ Variables: Variables }>, deps: 
     const access = await projectAccess(c, db)
     if (!access.ok) return access.response
     const now = deps.now()
-    const runs = await loadDesignRuns(db, access.projectId, 5)
-    const recent = runs.filter(isScanRun).map((r) => toDevianceRun(r, now)).find((r) => r.status !== 'error')
+    const scans = await loadDesignScans(db, access.projectId, 5)
+    const recent = scans.map((r) => toDevianceRun(r, now)).find((r) => r.status !== 'error')
     if (recent && now.getTime() - Date.parse(recent.startedAt) < REFRESH_COOLDOWN_MS) {
       return jsonError(c, 'RATE_LIMITED', recent.status === 'running' ? 'A deviance check is already running.' : 'A deviance check ran in the last 5 minutes. Try again shortly.', 429)
     }
@@ -349,6 +348,12 @@ export function registerRecipeRoutes(app: Hono<{ Variables: Variables }>, deps: 
     const parsed = designSettingsSchema.safeParse(await c.req.json().catch(() => null))
     if (!parsed.success) return jsonError(c, 'VALIDATION_ERROR', parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ').slice(0, 300), 400)
     const p = parsed.data
+    // Turning the design auto-fix on lets the project spend on its own. Like
+    // the project's own auto-fix switch (POST /autofix/toggle, jwtAuth), only a
+    // signed-in owner or admin may do it; an API key may still turn it off.
+    if (p.autofix === true && c.get('authMethod') === 'apiKey') {
+      return jsonError(c, 'FORBIDDEN', 'Turning on the design auto-fix needs a signed-in owner or admin (console: Design system → When the score is too high). An API key can only turn it off.', 403)
+    }
     const patch: Record<string, unknown> = {}
     if (p.threshold !== undefined) patch.design_deviance_threshold = p.threshold
     if (p.failCi !== undefined) patch.design_deviance_fail_ci = p.failCi

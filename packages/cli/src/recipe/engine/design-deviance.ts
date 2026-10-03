@@ -242,6 +242,89 @@ const ANCHOR_CONTEXT_RE = /(?:href|to|id|htmlFor|hash|anchor|target|selector|que
 const HEX_PREV_OK = /[\s(\[,:='"`{]/
 const SHORT_HEX_AFTER = /^(?:solid|dashed|dotted|double|groove|ridge|inset|outset|none|transparent|-?[\d.]+(?:px|rem|em|%)?)$/i
 
+// ── What a flagged literal says ──────────────────────────────────────────────
+
+/** A literal a rule flags: the value, the finding text and the token to use. Built here only, never taken from a caller. */
+export interface LiteralVerdict {
+  value: string
+  message: string
+  suggestion: DevianceSuggestion | null
+}
+
+function judgeColorLiteral(ctx: DevianceContext, rule: DesignRuleConfig, literal: string): LiteralVerdict | null {
+  if (allowedValue(rule, literal) || /var\(|\bfrom\b/i.test(literal)) return null
+  const c = parseCssColor(literal)
+  if (c && ctx.colors.some((t) => sameRgb(t.rgba, c))) return null
+  return {
+    value: literal,
+    message: c ? `Colour ${literal} is not in your tokens.` : `Colour ${literal} could not be read as sRGB, so it cannot match a token.`,
+    suggestion: c ? nearestColor(ctx, c) : null,
+  }
+}
+
+function judgeFontName(ctx: DevianceContext, rule: DesignRuleConfig, name: string): LiteralVerdict | null {
+  if (!name || /^\d+$/.test(name) || GENERIC_FAMILIES.has(name.toLowerCase())) return null
+  if (ctx.families.has(name.toLowerCase()) || allowedValue(rule, name)) return null
+  const body = [...ctx.families][0] ?? null
+  return { value: name, message: `Font family "${name}" is not in your tokens.`, suggestion: body ? { token: 'font.family', cssVar: null, ts: null, value: body, distance: null } : null }
+}
+
+function judgeScaleValue(rule: DesignRuleConfig, scale: Array<{ token: DesignToken; px: number }>, raw: string, what: 'Spacing' | 'Radius'): LiteralVerdict | null {
+  if (allowedValue(rule, raw)) return null
+  const px = toPx(raw)
+  if (px == null || px === 0) return null
+  if (scale.some((s) => Math.abs(s.px - px) < 0.01)) return null
+  if (allowedValue(rule, `${px}px`)) return null
+  return { value: raw.trim(), message: `${what} ${raw.trim()} is off your ${what.toLowerCase()} scale.`, suggestion: nearestScale(scale, px) }
+}
+
+function judgeRawElement(rule: DesignRuleConfig, tag: string): LiteralVerdict {
+  const prim = rule.primitives?.[tag] ?? null
+  return {
+    value: `<${tag}>`,
+    message: prim ? `Raw <${tag}> bypasses your ${prim} primitive.` : `Raw <${tag}> outside your component primitives.`,
+    suggestion: prim ? { token: prim, cssVar: null, ts: null, value: prim, distance: null } : null,
+  }
+}
+
+const HEX_ONLY_RE = /^#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3,4})$/
+const COLOR_FN_ONLY_RE = /^(?:rgba?|hsla?|hwb|oklab|oklch)\((?:[\d\s.,%/+-]|deg|turn|g?rad|none)*\)$/i
+const FONT_NAME_RE = /^[\p{L}\p{N}][\p{L}\p{N} .-]{0,63}$/u
+const SCALE_VALUE_RE = /^-?\d+(?:\.\d+)?(?:px|rem)$/
+const RAW_ELEMENT_RE = /^<(button|input|select|textarea)>$/
+
+/**
+ * Judge again one literal finding reported from elsewhere (the CI push of
+ * `mushi recipe check`). Null unless the rule is on and applies to `path`, the
+ * value has the exact shape this rule's scanner extracts (a hex or a numeric
+ * colour function that parses, a short font name, a px/rem length, a raw
+ * element tag), and it really is off the tokens. The value, message and
+ * suggestion all come from here, so no reporter text reaches a finding.
+ */
+export function rejudgeLiteral(path: string, ruleId: DesignRuleId, value: string, ctx: DevianceContext): LiteralVerdict | null {
+  const rule = ctx.rules.get(ruleId)
+  if (!rule || !rule.enabled || langOf(path) === 'other') return null
+  if (rule.allowFiles.length > 0 && matchAny(path, rule.allowFiles)) return null
+  switch (ruleId) {
+    case 'off_token_color': {
+      const shaped = HEX_ONLY_RE.test(value) || (COLOR_FN_ONLY_RE.test(value) && parseCssColor(value) !== null)
+      return ctx.colors.length > 0 && shaped ? judgeColorLiteral(ctx, rule, value) : null
+    }
+    case 'off_token_font':
+      return ctx.families.size > 0 && FONT_NAME_RE.test(value) && value.trim() === value ? judgeFontName(ctx, rule, value) : null
+    case 'off_scale_spacing':
+      return ctx.spacing.length > 0 && SCALE_VALUE_RE.test(value) ? judgeScaleValue(rule, ctx.spacing, value, 'Spacing') : null
+    case 'off_scale_radius':
+      return ctx.radius.length > 0 && SCALE_VALUE_RE.test(value) ? judgeScaleValue(rule, ctx.radius, value, 'Radius') : null
+    case 'raw_interactive_element': {
+      const tag = RAW_ELEMENT_RE.exec(value)?.[1]
+      return tag && /\.(tsx|jsx)$/i.test(path) && !matchAny(path, ctx.componentGlobs) ? judgeRawElement(rule, tag) : null
+    }
+    case 'contrast_below_aa':
+      return null
+  }
+}
+
 // ── The scanner ──────────────────────────────────────────────────────────────
 
 export interface ScanFileResult {
@@ -263,9 +346,10 @@ export function scanSourceFile(path: string, text: string, ctx: DevianceContext)
     if (r.allowFiles.length > 0 && matchAny(path, r.allowFiles)) return null
     return r
   }
-  const push = (rule: DesignRuleConfig, offset: number, value: string, message: string, suggestion: DevianceSuggestion | null) => {
+  const push = (rule: DesignRuleConfig, offset: number, verdict: LiteralVerdict | null) => {
+    if (!verdict) return
     const { line, col } = position(starts, offset)
-    findings.push({ rule_id: rule.id, severity: rule.severity, file_path: path, line, col, value, message, suggestion })
+    findings.push({ rule_id: rule.id, severity: rule.severity, file_path: path, line, col, value: verdict.value, message: verdict.message, suggestion: verdict.suggestion })
   }
 
   // Colours
@@ -273,19 +357,9 @@ export function scanSourceFile(path: string, text: string, ctx: DevianceContext)
   if (colorRule && ctx.colors.length > 0) {
     const seen = new Set<number>()
     const judge = (offset: number, literal: string) => {
-      if (seen.has(offset) || allowedValue(colorRule, literal)) return
+      if (seen.has(offset)) return
       seen.add(offset)
-      if (/var\(|\bfrom\b/i.test(literal)) return
-      const c = parseCssColor(literal)
-      if (c && ctx.colors.some((t) => sameRgb(t.rgba, c))) return
-      const sug = c ? nearestColor(ctx, c) : null
-      push(
-        colorRule,
-        offset,
-        literal,
-        c ? `Colour ${literal} is not in your tokens.` : `Colour ${literal} could not be read as sRGB, so it cannot match a token.`,
-        sug,
-      )
+      push(colorRule, offset, judgeColorLiteral(ctx, colorRule, literal))
     }
     // In JS/TS only literals inside a string count (`rgb(` in code is a call).
     // In CSS only literals in a value position count (`#add {` is a selector).
@@ -323,10 +397,7 @@ export function scanSourceFile(path: string, text: string, ctx: DevianceContext)
       if (/var\(|\$\{/.test(list)) return
       for (const fam of list.split(',')) {
         const name = fam.trim().replace(/^['"]|['"]$/g, '').replace(/_/g, ' ').trim()
-        if (!name || /^\d+$/.test(name) || GENERIC_FAMILIES.has(name.toLowerCase())) continue
-        if (ctx.families.has(name.toLowerCase()) || allowedValue(fontRule, name)) continue
-        const body = [...ctx.families][0] ?? null
-        push(fontRule, offset, name, `Font family "${name}" is not in your tokens.`, body ? { token: 'font.family', cssVar: null, ts: null, value: body, distance: null } : null)
+        push(fontRule, offset, judgeFontName(ctx, fontRule, name))
       }
     }
     const re = lang === 'css' ? /font-family\s*:\s*([^;{}]+)/gi : /fontFamily\s*:\s*(['"`])([^'"`]+)\1/g
@@ -343,18 +414,11 @@ export function scanSourceFile(path: string, text: string, ctx: DevianceContext)
     cssProp: RegExp,
     jsProp: RegExp,
     twClass: RegExp,
-    what: string,
+    what: 'Spacing' | 'Radius',
   ) => {
     const rule = active(id)
     if (!rule || scale.length === 0) return
-    const judge = (offset: number, raw: string) => {
-      if (allowedValue(rule, raw)) return
-      const px = toPx(raw)
-      if (px == null || px === 0) return
-      if (scale.some((s) => Math.abs(s.px - px) < 0.01)) return
-      if (allowedValue(rule, `${px}px`)) return
-      push(rule, offset, raw.trim(), `${what} ${raw.trim()} is off your ${what.toLowerCase()} scale.`, nearestScale(scale, px))
-    }
+    const judge = (offset: number, raw: string) => push(rule, offset, judgeScaleValue(rule, scale, raw, what))
     if (lang === 'css') {
       for (const m of masked.matchAll(cssProp)) {
         const valueStart = (m.index ?? 0) + m[0].length - m[m.length - 1].length
@@ -392,11 +456,7 @@ export function scanSourceFile(path: string, text: string, ctx: DevianceContext)
   // Raw interactive elements
   const rawRule = active('raw_interactive_element')
   if (rawRule && /\.(tsx|jsx)$/i.test(path) && !matchAny(path, ctx.componentGlobs)) {
-    for (const m of masked.matchAll(/<(button|input|select|textarea)\b/g)) {
-      const tag = m[1]
-      const prim = rawRule.primitives?.[tag] ?? null
-      push(rawRule, m.index ?? 0, `<${tag}>`, prim ? `Raw <${tag}> bypasses your ${prim} primitive.` : `Raw <${tag}> outside your component primitives.`, prim ? { token: prim, cssVar: null, ts: null, value: prim, distance: null } : null)
-    }
+    for (const m of masked.matchAll(/<(button|input|select|textarea)\b/g)) push(rawRule, m.index ?? 0, judgeRawElement(rawRule, m[1]))
   }
 
   return { findings, lines }
