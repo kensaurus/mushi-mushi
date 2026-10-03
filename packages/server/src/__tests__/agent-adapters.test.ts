@@ -36,6 +36,7 @@ vi.mock('../../supabase/functions/_shared/github.ts', () => ({
     return m ? { owner: m[1], repo: m[2] } : null
   },
   resolveProjectGithubToken: (...args: unknown[]) => mocks.resolveProjectGithubToken(...args),
+  prNumberFromUrl: (url: string) => Number(url.split('/pull/')[1]?.split('/')[0]) || null,
   fetchPullRequestFiles: (...args: unknown[]) => mocks.fetchPullRequestFiles(...args),
 }))
 vi.mock('../../supabase/functions/_shared/github-pr.ts', () => ({
@@ -467,7 +468,7 @@ describe('applyCloudAgentOutcome', () => {
     expect(res).toEqual({ applied: true, awaitingChanges: true })
     const attach = findQueries(queries, 'fix_attempts', 'update')
     expect(attach).toHaveLength(1)
-    expect(attach[0].payload).toEqual({ pr_url: 'https://github.com/o/r/pull/12', pr_state: 'open', branch: 'copilot/fix-1', branch_name: 'copilot/fix-1' })
+    expect(attach[0].payload).toEqual({ pr_url: 'https://github.com/o/r/pull/12', pr_number: 12, pr_state: 'open', branch: 'copilot/fix-1', branch_name: 'copilot/fix-1' })
     expect(attach[0].payload).not.toHaveProperty('status')
     expect(attach[0].filters).toContainEqual({ method: 'is', args: ['pr_url', null] })
     expect(hasFilter(attach[0], 'in', 'status')).toBe(true)

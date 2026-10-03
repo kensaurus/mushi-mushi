@@ -173,6 +173,8 @@ export interface PullRequestSnapshot {
   closedAt?: string | null
   /** ISO time GitHub merged the PR; null unless merged. */
   mergedAt?: string | null
+  /** Current head commit; CI runs against this, not the first fix commit. */
+  headSha?: string | null
 }
 
 export interface PullRequestDetails extends PullRequestSnapshot {
@@ -193,6 +195,12 @@ function githubAuthHeaders(token: string): Record<string, string> {
 }
 
 /** Fetch minimal PR metadata — used before merge to detect draft state. */
+/** Cloud agents hand back only a PR URL; the console merge needs the number. */
+export function prNumberFromUrl(url: string): number | null {
+  const n = Number(url.match(/\/pull\/(\d+)/)?.[1])
+  return Number.isFinite(n) && n > 0 ? n : null
+}
+
 export async function fetchPullRequest(
   token: string,
   ref: GithubRepoRef,
@@ -212,6 +220,7 @@ export async function fetchPullRequest(
     node_id?: string
     closed_at?: string | null
     merged_at?: string | null
+    head?: { sha?: string }
   }
   return {
     number: body.number ?? pullNumber,
@@ -221,6 +230,7 @@ export async function fetchPullRequest(
     nodeId: body.node_id ?? null,
     closedAt: body.closed_at ?? null,
     mergedAt: body.merged_at ?? null,
+    headSha: body.head?.sha ?? null,
   }
 }
 

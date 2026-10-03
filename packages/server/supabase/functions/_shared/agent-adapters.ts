@@ -27,7 +27,7 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { log } from './logger.ts'
 import { resolveLlmKey } from './byok.ts'
-import { fetchPullRequestFiles, parseGithubRepoUrl, resolveProjectGithubToken } from './github.ts'
+import { fetchPullRequestFiles, parseGithubRepoUrl, prNumberFromUrl, resolveProjectGithubToken } from './github.ts'
 import { classifyPrSubstance, parsePullRequestUrl, type PrChangedFile } from './pr-substance.ts'
 import { generateCursorCloudBranchName, validateFixBranchName } from './github-pr.ts'
 import { notifyTeamFixEvent } from './team-notify.ts'
@@ -698,6 +698,7 @@ export async function applyCloudAgentOutcome(
     const claim = await claimAttemptForPr(db, target.attemptId, outcome.prUrl, {
       status: 'completed',
       pr_url: outcome.prUrl,
+      pr_number: prNumberFromUrl(outcome.prUrl),
       pr_state: 'open',
       ...(outcome.branch ? { branch: outcome.branch, branch_name: outcome.branch } : {}),
       ...(outcome.summary ? { summary: outcome.summary.slice(0, 2000) } : {}),
@@ -854,6 +855,7 @@ async function applyNeedsInvestigationPr(
   const claim = await claimAttemptForPr(db, target.attemptId, outcome.prUrl, {
     status: 'failed',
     pr_url: outcome.prUrl,
+    pr_number: prNumberFromUrl(outcome.prUrl),
     pr_state: 'open',
     ...(outcome.branch ? { branch: outcome.branch, branch_name: outcome.branch } : {}),
     ...(outcome.summary ? { summary: outcome.summary.slice(0, 2000) } : {}),
@@ -965,6 +967,7 @@ async function attachPendingPr(
     .from('fix_attempts')
     .update({
       pr_url: outcome.prUrl,
+      pr_number: prNumberFromUrl(outcome.prUrl),
       pr_state: 'open',
       ...(outcome.branch ? { branch: outcome.branch, branch_name: outcome.branch } : {}),
     })
