@@ -497,3 +497,165 @@ describe('GET /v1/admin/findings/:findingId', () => {
     expect(res.body.error?.code).toBe('DB_ERROR')
   })
 })
+
+// ── gates with more than one writer, and runs that did not reach a source ────
+
+describe('run writers and sources', () => {
+  it('splits only code_health and schema_drift by writer', () => {
+    expect(helper.comparesByWriter('code_health')).toBe(true)
+    expect(helper.comparesByWriter('schema_drift')).toBe(true)
+    for (const gate of ['portfolio_radar', 'status_claim', 'design_drift', 'deploy_drift']) expect(helper.comparesByWriter(gate), gate).toBe(false)
+  })
+  it('knows the schema scanner reports changes, not standing state', () => {
+    expect(helper.reportsChangesOnly('schema_drift', 'backend-drift-scanner')).toBe(true)
+    expect(helper.reportsChangesOnly('schema_drift', 'recipe-collector')).toBe(false)
+    expect(helper.reportsChangesOnly('schema_drift', null)).toBe(false)
+    expect(helper.reportsChangesOnly('code_health', 'backend-drift-scanner')).toBe(false)
+  })
+  it('lists the sources the finding run read that the latest run did not reach', () => {
+    expect(helper.sourcesNotReached({ connectors: ['github', 'play_console'] }, { connectors: ['github'] })).toEqual(['play_console'])
+    expect(helper.sourcesNotReached({ connectors: ['github', 'play_console'] }, { connectors: ['play_console', 'github'] })).toEqual([])
+    // A latest run that records no sources reached none of them.
+    expect(helper.sourcesNotReached({ connectors: ['supabase'] }, { added: 1 })).toEqual(['supabase'])
+    expect(helper.sourcesNotReached(null, { connectors: [] })).toEqual([])
+    expect(helper.runSources({ connectors: ['github', 3] })).toEqual(['github'])
+    expect(helper.runSources({ source: 'recipe-budgets' })).toBeNull()
+  })
+  it('absenceUnproven refuses a change-only run and a run that missed a source', () => {
+    const base = { status: 'pass', findingsCount: 0, storedCount: null, summary: null, ruleId: 'migration_unapplied', matchedBy: 'file' as const }
+    expect(helper.absenceUnproven(base)).toBeNull()
+    expect(helper.absenceUnproven({ ...base, reportsChangesOnly: true })).toContain('what changed')
+    expect(helper.absenceUnproven({ ...base, sourcesNotReached: ['github'] })).toContain('could not reach github')
+    expect(helper.absenceUnproven({ ...base, sourcesNotReached: [] })).toBeNull()
+  })
+})
+
+describe('GET /v1/admin/findings/:findingId with several writers per gate', () => {
+  const RUN_THIRD = '2000000c-0000-4000-8000-000000000000'
+  const ciRun = (over: Record<string, unknown>) => ({
+    project_id: P1, gate: 'code_health', triggered_by: 'ci_push', summary: null, commit_sha: null, completed_at: '2026-10-01T00:01:00Z', ...over,
+  })
+  const budgetsRun = (over: Record<string, unknown>) => ({
+    project_id: P1, gate: 'code_health', triggered_by: 'recipe-collector', commit_sha: 'b', completed_at: '2026-10-02T00:01:00Z',
+    summary: { source: 'recipe-budgets', budgets: { 'bundle.web.kb': 900 } }, ...over,
+  })
+
+  it('never calls a CI god-file finding fixed because a newer recipe-budgets run did not report it', async () => {
+    const { app } = setup({
+      gate_runs: [
+        ciRun({ id: RUN_OLD, status: 'fail', started_at: '2026-10-01T00:00:00Z', findings_count: 1 }),
+        budgetsRun({ id: RUN_NEW, status: 'pass', started_at: '2026-10-02T00:00:00Z', findings_count: 0 }),
+      ],
+      gate_findings: [finding()],
+    })
+    const res = await app.call(`/v1/admin/findings/${F_OLD}`)
+    expect(res.body.data?.state).not.toBe('not_in_latest_run')
+    expect(res.body.data).toMatchObject({ state: 'open', latestRun: { id: RUN_OLD } })
+  })
+
+  it('compares a CI god-file finding with the next CI push, and a budget finding with the next budgets run', async () => {
+    const ci = setup({
+      gate_runs: [
+        ciRun({ id: RUN_OLD, status: 'fail', started_at: '2026-10-01T00:00:00Z', findings_count: 1 }),
+        ciRun({ id: RUN_NEW, status: 'warn', started_at: '2026-10-02T00:00:00Z', findings_count: 1 }),
+        budgetsRun({ id: RUN_THIRD, status: 'pass', started_at: '2026-10-03T00:00:00Z', findings_count: 0 }),
+      ],
+      gate_findings: [finding(), finding({ id: F_NEW, gate_run_id: RUN_NEW, file_path: 'src/other.tsx' })],
+    })
+    expect((await ci.app.call(`/v1/admin/findings/${F_OLD}`)).body.data).toMatchObject({ state: 'not_in_latest_run', latestRun: { id: RUN_NEW } })
+
+    const budget = setup({
+      gate_runs: [
+        budgetsRun({ id: RUN_OLD, status: 'warn', started_at: '2026-10-01T00:00:00Z', findings_count: 1 }),
+        // A newer CI push checks god files only; it is not the comparison.
+        ciRun({ id: RUN_NEW, status: 'fail', started_at: '2026-10-02T00:00:00Z', findings_count: 1 }),
+      ],
+      gate_findings: [
+        finding({ rule_id: 'budget_exceeded', severity: 'warn', file_path: null, line: null, message: 'bundle.web.kb is 950, over its budget of 900.', suggested_fix: { kind: 'prompt', text: 'Find what grew bundle.web.kb.' } }),
+        finding({ id: F_NEW, gate_run_id: RUN_NEW }),
+      ],
+    })
+    expect((await budget.app.call(`/v1/admin/findings/${F_OLD}`)).body.data).toMatchObject({ state: 'open', latestRun: { id: RUN_OLD } })
+  })
+
+  const recipeSchemaRun = (over: Record<string, unknown>) => ({
+    project_id: P1, gate: 'schema_drift', triggered_by: 'recipe-collector', commit_sha: 'a', completed_at: '2026-10-01T00:01:00Z',
+    summary: { source: 'connectors', connectors: ['supabase', 'github'] }, ...over,
+  })
+  const scannerRun = (over: Record<string, unknown>) => ({
+    project_id: P1, gate: 'schema_drift', triggered_by: 'backend-drift-scanner', commit_sha: null, completed_at: '2026-10-02T00:01:00Z',
+    summary: { added: 0, removed: 1, modified: 0, total_changes: 1 }, ...over,
+  })
+  const unapplied = (over: Record<string, unknown> = {}) => finding({
+    rule_id: 'migration_unapplied', file_path: 'supabase/migrations/20261001000000_add_orders.sql', line: null,
+    message: 'The migration 20261001000000_add_orders.sql is in the repo but was never applied to the database.',
+    suggested_fix: { kind: 'command', text: 'supabase db push' }, ...over,
+  })
+
+  it('never calls an unapplied migration fixed because the schema scanner ran after it', async () => {
+    const { app } = setup({
+      gate_runs: [
+        recipeSchemaRun({ id: RUN_OLD, status: 'fail', started_at: '2026-10-01T00:00:00Z', findings_count: 1 }),
+        scannerRun({ id: RUN_NEW, status: 'fail', started_at: '2026-10-02T00:00:00Z', findings_count: 1 }),
+      ],
+      gate_findings: [unapplied(), finding({ id: F_NEW, gate_run_id: RUN_NEW, rule_id: 'schema-drift-table-removed', file_path: null, line: null, message: 'Table "orders_old" was removed.', suggested_fix: null })],
+    })
+    const res = await app.call(`/v1/admin/findings/${F_OLD}`)
+    expect(res.body.data?.state).not.toBe('not_in_latest_run')
+    expect(res.body.data).toMatchObject({ state: 'open', latestRun: { id: RUN_OLD } })
+  })
+
+  it('never calls a schema-scanner finding fixed: the scanner reports changes, not what is still wrong', async () => {
+    const tableRemoved = finding({ rule_id: 'schema-drift-table-removed', file_path: null, line: null, message: 'Table "orders" was removed.', suggested_fix: { target: 'orders' } })
+    const { app } = setup({
+      gate_runs: [
+        scannerRun({ id: RUN_OLD, status: 'fail', started_at: '2026-10-01T00:00:00Z', completed_at: '2026-10-01T00:01:00Z', findings_count: 1 }),
+        scannerRun({ id: RUN_NEW, status: 'warn', started_at: '2026-10-02T00:00:00Z', findings_count: 1, summary: { added: 1, removed: 0, modified: 0, total_changes: 1 } }),
+      ],
+      gate_findings: [tableRemoved, finding({ id: F_NEW, gate_run_id: RUN_NEW, rule_id: 'schema-drift-table-added', file_path: null, line: null, message: 'New table "x" was added.', suggested_fix: { target: 'x' } })],
+    })
+    const res = await app.call(`/v1/admin/findings/${F_OLD}`)
+    expect(res.body.data).toMatchObject({ state: 'unknown', latestRun: { id: RUN_NEW } })
+    expect(String(res.body.data?.stateReason)).toContain('what changed')
+  })
+
+  it('never calls an unapplied migration fixed when the next run could not reach GitHub', async () => {
+    const { app } = setup({
+      gate_runs: [
+        recipeSchemaRun({ id: RUN_OLD, status: 'fail', started_at: '2026-10-01T00:00:00Z', findings_count: 1 }),
+        recipeSchemaRun({ id: RUN_NEW, status: 'pass', started_at: '2026-10-02T00:00:00Z', findings_count: 0, summary: { source: 'connectors', connectors: ['supabase'] } }),
+      ],
+      gate_findings: [unapplied()],
+    })
+    const res = await app.call(`/v1/admin/findings/${F_OLD}`)
+    expect(res.body.data).toMatchObject({ state: 'unknown', latestRun: { id: RUN_NEW } })
+    expect(String(res.body.data?.stateReason)).toContain('could not reach github')
+  })
+
+  it('calls an unapplied migration fixed when the next run read both sources and no longer has it', async () => {
+    const { app } = setup({
+      gate_runs: [
+        recipeSchemaRun({ id: RUN_OLD, status: 'fail', started_at: '2026-10-01T00:00:00Z', findings_count: 1 }),
+        recipeSchemaRun({ id: RUN_NEW, status: 'pass', started_at: '2026-10-02T00:00:00Z', findings_count: 0, summary: { source: 'connectors', connectors: ['github', 'supabase'] } }),
+      ],
+      gate_findings: [unapplied()],
+    })
+    expect((await app.call(`/v1/admin/findings/${F_OLD}`)).body.data).toMatchObject({ state: 'not_in_latest_run', latestRun: { id: RUN_NEW } })
+  })
+
+  it('says unknown, naming the source, when a deploy_drift run did not reach the store the finding came from', async () => {
+    const deployRun = (over: Record<string, unknown>) => ({
+      project_id: P1, gate: 'deploy_drift', triggered_by: 'recipe-collector', commit_sha: 'a', completed_at: '2026-10-01T00:01:00Z', ...over,
+    })
+    const { app } = setup({
+      gate_runs: [
+        deployRun({ id: RUN_OLD, status: 'warn', started_at: '2026-10-01T00:00:00Z', findings_count: 1, summary: { source: 'connectors', connectors: ['github', 'play_console'] } }),
+        deployRun({ id: RUN_NEW, status: 'pass', started_at: '2026-10-02T00:00:00Z', findings_count: 0, summary: { source: 'connectors', connectors: ['github'] } }),
+      ],
+      gate_findings: [finding({ rule_id: 'rollout_halted', severity: 'warn', file_path: null, line: null, message: 'The production release 42 of com.example.app is halted.', suggested_fix: { kind: 'prompt', text: 'Check why the rollout was halted.' } })],
+    })
+    const res = await app.call(`/v1/admin/findings/${F_OLD}`)
+    expect(res.body.data).toMatchObject({ state: 'unknown', latestRun: { id: RUN_NEW } })
+    expect(String(res.body.data?.stateReason)).toContain('could not reach play_console')
+  })
+})
