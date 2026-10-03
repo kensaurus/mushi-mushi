@@ -34,6 +34,7 @@ let dtcg: typeof import('../../supabase/functions/_shared/dtcg.ts')
 let sets: typeof import('../../supabase/functions/_shared/design-sets.ts')
 let schema: typeof import('../../supabase/functions/_shared/recipe-schema.ts')
 let cssScopes: typeof import('../../supabase/functions/_shared/css-scopes.ts')
+let compose: typeof import('../../supabase/functions/api/routes/recipe-compose.ts')
 
 beforeAll(async () => {
   ;(globalThis as { Deno?: unknown }).Deno = { env: { get: (k: string) => process.env[k] } }
@@ -42,6 +43,7 @@ beforeAll(async () => {
   sets = await import('../../supabase/functions/_shared/design-sets.ts')
   schema = await import('../../supabase/functions/_shared/recipe-schema.ts')
   cssScopes = await import('../../supabase/functions/_shared/css-scopes.ts')
+  compose = await import('../../supabase/functions/api/routes/recipe-compose.ts')
 })
 
 // ── fake Hono surface ────────────────────────────────────────────────────────
@@ -651,5 +653,58 @@ describe('GET /recipe/elements/:element views (gap #17)', () => {
     const broken = new Proxy(db, { get: (t, prop, r) => (prop === 'from' ? (name: string) => (name === 'ci_workflow_runs' ? chain : t.from(name)) : Reflect.get(t, prop, r)) })
     const { app: b } = harness(broken as FakeDb)
     expect((await b.call('GET', `/v1/admin/projects/${P_A}/recipe/elements/ci`)).status).toBe(500)
+  })
+})
+
+describe('deploy observations per target (a chatty target never hides another)', () => {
+  function deploySeed(extra: Record<string, unknown[]> = {}) {
+    const snap = glotSnapshot(P_A)
+    snap.manifest = {
+      ...snap.manifest,
+      deploy: { targets: [{ id: 'web', kind: 'vercel', probe: { type: 'sdk_heartbeat' } }, { id: 'api', kind: 'fly', probe: { type: 'version_json' } }] },
+    } as never
+    // 250 fresh heartbeats from `web`, newer than api's one daily probe.
+    const chatty = Array.from({ length: 250 }, (_, i) => ({
+      project_id: P_A, target_id: 'web', ok: true, error: null, observed_at: new Date(NOW.getTime() - i * 1000).toISOString(), observed_version: '1.0.0', observed_commit: 'head999', source: 'sdk_heartbeat',
+    }))
+    const api = { project_id: P_A, target_id: 'api', ok: true, error: null, observed_at: '2026-10-02T03:00:00Z', observed_version: '1.0.0', observed_commit: 'head999', source: 'version_json' }
+    const removed = { project_id: P_A, target_id: 'old-worker', ok: true, error: null, observed_at: '2026-10-01T03:00:00Z', observed_version: '0.9.0', observed_commit: 'abc', source: 'version_json' }
+    return seed({
+      app_recipe_snapshots: [snap],
+      deploy_observations: [...chatty, api, removed],
+      connector_snapshots: [{ project_id: P_A, kind: 'github', is_current: true, ok: true, snapshot: { facts: { headSha: 'head999' } } }],
+      ...extra,
+    })
+  }
+
+  it('the deploy view shows the observed target whose rows are older than 200 rows of another', async () => {
+    const { app } = harness(deploySeed())
+    const res = await app.call('GET', `/v1/admin/projects/${P_A}/recipe/elements/deploy`)
+    const view = (res.body.data as { detail: { deployView: { targets: Array<{ id: string; status: string; observed: { at: string } | null }>; undeclared: string[] } } }).detail.deployView
+    expect(view.targets.map((t) => [t.id, t.status])).toEqual([['web', 'live'], ['api', 'live']])
+    expect(view.targets[1].observed?.at).toBe('2026-10-02T03:00:00Z')
+    expect(view.undeclared).toEqual(['old-worker'])
+  })
+
+  it('the recipe card counts every declared target as observed', async () => {
+    const { app } = harness(deploySeed())
+    const res = await app.call('GET', `/v1/admin/projects/${P_A}/recipe`)
+    const deploy = (res.body.data as { elements: Record<string, { state: string; reason: string }> }).elements.deploy
+    expect(deploy.reason).not.toMatch(/of 2 targets observed/)
+    expect(deploy.state).toBe('ok')
+  })
+
+  it('postgrestInList quotes ids so a comma or quote stays inside one value', () => {
+    expect(compose.postgrestInList(['web', 'a,b', 'say "hi"', 'back\\slash'])).toBe('("web","a,b","say \\"hi\\"","back\\\\slash")')
+  })
+
+  it('a failed GitHub snapshot read is a 500 on the env and deploy views, not "not checked"', async () => {
+    const db = deploySeed()
+    const failed = { data: null, error: { message: 'statement timeout' } }
+    const chain: Record<string, unknown> = new Proxy({}, { get: (_t, prop) => (prop === 'then' ? (ok: (v: unknown) => unknown) => Promise.resolve(failed).then(ok) : () => chain) })
+    const broken = new Proxy(db, { get: (t, prop, r) => (prop === 'from' ? (name: string) => (name === 'connector_snapshots' ? chain : t.from(name)) : Reflect.get(t, prop, r)) })
+    const { app } = harness(broken as FakeDb)
+    expect((await app.call('GET', `/v1/admin/projects/${P_A}/recipe/elements/env`)).status).toBe(500)
+    expect((await app.call('GET', `/v1/admin/projects/${P_A}/recipe/elements/deploy`)).status).toBe(500)
   })
 })

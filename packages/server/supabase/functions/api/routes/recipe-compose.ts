@@ -18,7 +18,7 @@ import { DESIGN_GATE, STUCK_SCAN_MS, type SnapshotRow } from '../../_shared/desi
 import type { RecipeRepoResolution, RecipeRepo } from '../../_shared/recipe-github.ts'
 import type { WorkflowRunSnapshot } from '../../_shared/github.ts'
 import { assetMime } from '../../_shared/design-assets.ts'
-import { ciView, deployView, envView, MAX_CI_RUNS, presentEnvNames, schemaView } from '../../_shared/recipe-detail.ts'
+import { ciView, declaredTargets as declaredDeployTargets, deployView, envView, MAX_CI_RUNS, presentEnvNames, schemaView, type ObservationRow } from '../../_shared/recipe-detail.ts'
 import type {
   DesignDirection,
   DesignDirectionsResponse,
@@ -369,11 +369,11 @@ export async function composeRecipe(db: Db, deps: ComposeDeps, projectId: string
   const releaseRows = (releases ?? []) as Array<{ version: string; status: string; published_at: string | null }>
   const rawTargets = (manifest as { deploy?: { targets?: unknown } } | null)?.deploy?.targets
   const declaredTargets = Array.isArray(rawTargets) ? (rawTargets as Array<{ id?: unknown }>).filter((t) => typeof t?.id === 'string') : []
-  const { data: obsRows } = declaredTargets.length
-    ? await db.from('deploy_observations').select('target_id, ok, error, observed_at, observed_version, observed_commit').eq('project_id', projectId).order('observed_at', { ascending: false }).limit(100)
-    : { data: [] }
+  const obsRows = declaredTargets.length
+    ? await latestDeployObservations(db, projectId, declaredTargets.slice(0, MAX_DECLARED_READS).map((t) => t.id as string))
+    : []
   const latestObs = new Map<string, { targetId: string; ok: boolean; observedAt: string; error: string | null; version: string | null; commit: string | null }>()
-  for (const o of (obsRows ?? []) as Array<{ target_id: string; ok: boolean; error: string | null; observed_at: string; observed_version: string | null; observed_commit: string | null }>) {
+  for (const o of obsRows) {
     if (!latestObs.has(o.target_id)) latestObs.set(o.target_id, { targetId: o.target_id, ok: o.ok, observedAt: o.observed_at, error: o.error, version: o.observed_version, commit: o.observed_commit })
   }
   const deployState = deriveElementState({
@@ -494,8 +494,10 @@ interface ViewContext {
 
 type GithubFacts = { headSha?: string; actionsNames?: string[]; actionsNamesComplete?: boolean; environmentNames?: Record<string, string[]> }
 
+/** The current GitHub connector facts, or null when there is no snapshot. A failed read throws (a 500, not "not checked"). */
 async function githubFacts(db: Db, projectId: string): Promise<GithubFacts | null> {
-  const { data } = await db.from('connector_snapshots').select('snapshot').eq('project_id', projectId).eq('kind', 'github').eq('is_current', true).eq('ok', true).maybeSingle()
+  const { data, error } = await db.from('connector_snapshots').select('snapshot').eq('project_id', projectId).eq('kind', 'github').eq('is_current', true).eq('ok', true).maybeSingle()
+  if (error) throw new Error(`connector_snapshots read failed: ${error.message}`)
   const facts = (data as { snapshot?: { facts?: unknown } } | null)?.snapshot?.facts
   return facts && typeof facts === 'object' ? (facts as GithubFacts) : null
 }
@@ -504,6 +506,43 @@ async function githubFacts(db: Db, projectId: string): Promise<GithubFacts | nul
 function rows<T>(res: { data: unknown; error: { message: string } | null }, what: string): T[] {
   if (res.error) throw new Error(`${what} read failed: ${res.error.message}`)
   return (res.data ?? []) as T[]
+}
+
+const OBSERVATION_COLUMNS = 'target_id, ok, error, observed_at, observed_version, observed_commit, source'
+/** Declared targets read one by one (declaredTargets() caps the list at 20 too). */
+const MAX_DECLARED_READS = 20
+/** Rows scanned for targets the manifest does not declare (a hint list, so bounded). */
+const UNDECLARED_SCAN_ROWS = 200
+
+/** A PostgREST `in` list with every value double-quoted, so an id holding , ( ) or " stays one value. */
+export function postgrestInList(values: readonly string[]): string {
+  return `(${values.map((v) => `"${v.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`).join(',')})`
+}
+
+/**
+ * The latest observation of every target. One indexed read per declared
+ * target (deploy_observations_project covers project, target, observed_at
+ * desc), so a target that reports often can never push another target's rows
+ * out of a shared window and make it read "not observed yet". Undeclared ids
+ * come from one bounded read of everything else. A failed read throws.
+ */
+export async function latestDeployObservations(db: Db, projectId: string, declaredIds: readonly string[]): Promise<ObservationRow[]> {
+  const ids = [...new Set(declaredIds)]
+  const others = db.from('deploy_observations').select(OBSERVATION_COLUMNS).eq('project_id', projectId)
+  const reads = await Promise.all([
+    ...ids.map((id) => db.from('deploy_observations').select(OBSERVATION_COLUMNS).eq('project_id', projectId).eq('target_id', id).order('observed_at', { ascending: false }).limit(1)),
+    (ids.length ? others.not('target_id', 'in', postgrestInList(ids)) : others).order('observed_at', { ascending: false }).limit(UNDECLARED_SCAN_ROWS),
+  ])
+  const seen = new Set<string>()
+  const out: ObservationRow[] = []
+  for (const res of reads) {
+    for (const row of rows<ObservationRow>(res, 'deploy_observations')) {
+      if (seen.has(row.target_id)) continue
+      seen.add(row.target_id)
+      out.push(row)
+    }
+  }
+  return out
 }
 
 export async function loadElementViews(db: Db, element: RecipeElementKey, ctx: ViewContext): Promise<Record<string, unknown>> {
@@ -539,14 +578,14 @@ export async function loadElementViews(db: Db, element: RecipeElementKey, ctx: V
     return { ciView: ciView(runs) }
   }
   if (element === 'deploy') {
-    const [obs, facts] = await Promise.all([
-      db.from('deploy_observations').select('target_id, ok, error, observed_at, observed_version, observed_commit, source').eq('project_id', ctx.projectId).order('observed_at', { ascending: false }).limit(200),
+    const [observations, facts] = await Promise.all([
+      latestDeployObservations(db, ctx.projectId, declaredDeployTargets(ctx.manifest).map((t) => t.id)),
       githubFacts(db, ctx.projectId),
     ])
     return {
       deployView: deployView({
         manifest: ctx.manifest,
-        observations: rows(obs, 'deploy_observations'),
+        observations,
         expectedCommit: ctx.liveHeadSha ?? (typeof facts?.headSha === 'string' ? facts.headSha : null),
         expectedVersion: ctx.releaseVersion,
       }),
