@@ -6,7 +6,9 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
+  DEFAULT_INVENTORY_PATH,
   effectiveDesignRules,
+  inventoryPathOf,
   isWritablePath,
   parseRecipeManifest,
   RECIPE_MANIFEST_MAX_BYTES,
@@ -286,5 +288,19 @@ describe('design-change', () => {
 
   it('an unchanged file has an empty diff', () => {
     expect(unifiedDiff('a', 'x\ny\n', 'x\ny\n')).toEqual({ diff: '', additions: 0, deletions: 0 })
+  })
+})
+
+describe('routes.inventory (the inventory file the host CI ingests)', () => {
+  it('defaults to inventory.yaml, follows a declared safe path, and never falls back from an unsafe one', () => {
+    expect(inventoryPathOf(glot)).toBe(DEFAULT_INVENTORY_PATH)
+    const declared = parseRecipeManifest('{"version":1,"routes":{"inventory":"apps/web/inventory.yaml"}}')
+    expect(declared.ok && inventoryPathOf(declared.manifest)).toBe('apps/web/inventory.yaml')
+    const unsafe = parseRecipeManifest('{"version":1,"routes":{"inventory":"../x.yaml"}}')
+    expect(unsafe.ok).toBe(true)
+    if (!unsafe.ok) return
+    expect(unsafe.issues).toEqual([expect.objectContaining({ severity: 'error', code: 'UNSAFE_PATH', message: expect.stringMatching(/routes\.inventory/) })])
+    expect(inventoryPathOf(unsafe.manifest)).toBeNull()
+    expect(parseRecipeManifest('{"version":1,"routes":{"inventory":7}}').ok).toBe(false)
   })
 })

@@ -84,6 +84,7 @@ format. Mushi also reads the shorthand most repos already ship (`"#abc"`,
 - `design.contrast` declares the foreground/background pairs that must meet WCAG: 4.5:1 by default, 3:1 with `large: true`, or an explicit `min`.
 - `design.rules` turns rules on or off and sets severity, allowed values and ignored files.
 - `change.allowPaths` is the only set of paths a recipe pull request may write.
+- `routes.inventory` is the path of the inventory file your CI ingests, if it is not `inventory.yaml` at the repo root (the same path as the mcp-ci action's `inventory` input). The Routes form edits that file.
 - `design.directions[]` (`{name, status: "active" | "inactive", tokens[], note?}`) lists candidate directions for comparison.
   - `design.tokens[]` stays the only source the drift check reads.
   - At most one direction may be `active`, and its `tokens` must be exactly the `role: "source"` paths. Anything else is rejected with `directions_active_mismatch`.
@@ -271,12 +272,15 @@ Select the **Gates**, **Env** or **Routes** card on the Recipe page and open the
 |------|---------------------|
 | Gates | `gates.budgets` (a number per metric) and `gates.cadence` (how often a gate must run, such as `P1D`) in `mushi.recipe.json` |
 | Env | `env.required` in `mushi.recipe.json`: each variable **name** and where it must be set (GitHub Actions, a GitHub environment, or runtime). Optionally the same names in `.env.example`. There is no field for a value. |
-| Routes | `inventory.yaml` as text |
+| Routes | The inventory as text: the file `routes.inventory` names, else `inventory.yaml` |
 
 **Preview diff** shows exactly what would change and nothing is written.
 **Open draft PR** opens one draft pull request with that diff, and the tab
 follows it until the link appears. A file that is not in `change.allowPaths`
-stays read-only and the tab says why. If someone changed the file on the
+stays read-only and the tab says why. A new `mushi.recipe.json` must still
+parse as a recipe (64 KB cap, schema, no secrets), and a new inventory must
+still pass inventory ingest; otherwise the preview lists the file as refused
+with the first problems, and no PR can be opened. If someone changed the file on the
 default branch after your preview, the PR is refused, so it can never undo
 their change. Preview again to start from the new version.
 

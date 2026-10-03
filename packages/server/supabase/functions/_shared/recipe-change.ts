@@ -18,6 +18,11 @@
  *   readRecipeSources the fixed files an element's console form edits, read
  *                     at the head SHA (never a caller-chosen path).
  *
+ * The new content of a file Mushi itself parses is validated before it can
+ * reach a PR: mushi.recipe.json must still parse as a recipe (64 KB cap,
+ * schema, secrets) and an inventory file must still pass inventory ingest.
+ * Otherwise a merged edit would blank the recipe or break ingest.
+ *
  * An edit may carry `baseSha`, the blob SHA the caller previewed against
  * (null = "the file did not exist"). A file that moved since is refused, so a
  * whole-file edit can never silently revert someone else's change.
@@ -26,7 +31,8 @@
 import type { getServiceClient } from './db.ts'
 import type { createPrFromFiles, findOpenPrByHeadPrefix } from './github-pr.ts'
 import { unifiedDiff } from './design-change.ts'
-import { isWritablePath, RECIPE_MANIFEST_PATH, type RecipeManifest } from './recipe-schema.ts'
+import { parseInventoryYaml } from './inventory.ts'
+import { inventoryPathOf, isWritablePath, parseRecipeManifest, RECIPE_MANIFEST_PATH, type RecipeManifest } from './recipe-schema.ts'
 import { normalizeRepoPath } from './recipe-glob.ts'
 import type { readRepoFile, RecipeRepo, RecipeRepoResolution } from './recipe-github.ts'
 import { scanForSecrets } from './secret-scan.ts'
@@ -65,7 +71,8 @@ export interface ChangeDeps {
 export interface PlannedChange {
   ok: boolean
   reason: string | null
-  files: Array<{ path: string; diff: string; additions: number; deletions: number; reason: string; before: string; after: string }>
+  /** `baseSha`: the blob SHA the diff was taken against (null = new file); send it back to guard the confirm. */
+  files: Array<{ path: string; diff: string; additions: number; deletions: number; reason: string; before: string; after: string; baseSha: string | null }>
   denied: Array<{ path: string; reason: string }>
   repo: RecipeRepo | null
   head: { branch: string; sha: string } | null
@@ -81,6 +88,7 @@ export async function planRecipeChange(db: Db, projectId: string, element: Recip
   const head = await deps.getDefaultHead(repo.repo)
   const rawListingDir = (manifest as unknown as { store?: { listingDir?: unknown } }).store?.listingDir
   const listingDir = typeof rawListingDir === 'string' ? normalizeRepoPath(rawListingDir.replace(/\/+$/, '')) : null
+  const inventoryPath = inventoryPathOf(manifest)
 
   const files: PlannedChange['files'] = []
   const denied: PlannedChange['denied'] = []
@@ -101,9 +109,34 @@ export async function planRecipeChange(db: Db, projectId: string, element: Recip
     const before = current.kind === 'file' ? current.text : ''
     const d = unifiedDiff(check.path, before, e.content)
     if (d.additions + d.deletions === 0) continue
-    files.push({ path: check.path, diff: d.diff, additions: d.additions, deletions: d.deletions, reason: e.reason ?? `update ${check.path}`, before, after: e.content })
+    const broken = contentProblem(check.path, e.content, inventoryPath)
+    if (broken) { denied.push({ path: check.path, reason: broken }); continue }
+    files.push({ path: check.path, diff: d.diff, additions: d.additions, deletions: d.deletions, reason: e.reason ?? `update ${check.path}`, before, after: e.content, baseSha: current.kind === 'file' ? current.sha : null })
   }
   return { ok: true, reason: null, files, denied, repo: repo.repo, head }
+}
+
+function isInventoryFile(path: string, inventoryPath: string | null): boolean {
+  return path === inventoryPath || /(^|\/)inventory\.ya?ml$/.test(path)
+}
+
+/**
+ * Why the new content would break something Mushi parses once merged, or null.
+ * mushi.recipe.json goes through the same parse as a refresh; an inventory
+ * file through the same validation as inventory ingest.
+ */
+export function contentProblem(path: string, content: string, inventoryPath: string | null): string | null {
+  if (path === RECIPE_MANIFEST_PATH) {
+    const parsed = parseRecipeManifest(content)
+    if (parsed.ok) return null
+    return `the new mushi.recipe.json would not load, so nothing would be writable after the merge: ${parsed.issues.slice(0, 2).map((i) => i.message).join('; ')}`.slice(0, 400)
+  }
+  if (isInventoryFile(path, inventoryPath)) {
+    const parsed = parseInventoryYaml(content)
+    if (parsed.ok) return null
+    return `the new inventory would fail inventory ingest: ${parsed.issues.slice(0, 2).map((i) => `${i.path}: ${i.message}`).join('; ')}`.slice(0, 400)
+  }
+  return null
 }
 
 /** Why a file no longer matches the SHA the caller previewed against, or null when it still does (or was not checked). */
@@ -246,7 +279,7 @@ export function isTerminalJobStatus(status: string): boolean {
 }
 
 export interface RecipeJobStreamIo {
-  /** The job row, or null when it is gone. */
+  /** The job row, or null when it is gone. Throws when the read itself failed. */
   load: () => Promise<RecipeJobRow | null>
   /** Write one SSE event (already formatted by the caller's encoder). */
   emit: (event: 'status' | 'done' | 'error' | 'heartbeat', payload: Record<string, unknown>) => Promise<void>
@@ -260,7 +293,9 @@ export interface RecipeJobStreamIo {
  * The SSE loop behind GET /recipe/changes/:jobId/stream (mirrors the
  * sdk-upgrade stream): a `status` event on every status change, `done` once
  * the job is terminal, a heartbeat every `heartbeatMs`, and an `error`
- * (STREAM_TIMEOUT) after `maxMs` so the client reconnects or polls.
+ * (STREAM_TIMEOUT) after `maxMs` so the client reconnects or polls. A
+ * failed read ends the stream with an `error` (DB_ERROR), never a silent
+ * "still running".
  */
 export async function streamRecipeChangeJob(io: RecipeJobStreamIo, opts: { pollMs?: number; heartbeatMs?: number; maxMs?: number } = {}): Promise<void> {
   const pollMs = opts.pollMs ?? 1_500
@@ -269,7 +304,13 @@ export async function streamRecipeChangeJob(io: RecipeJobStreamIo, opts: { pollM
   let elapsed = 0
   let last = ''
   while (elapsed < maxMs && !io.aborted()) {
-    const raw = await io.load()
+    let raw: RecipeJobRow | null
+    try {
+      raw = await io.load()
+    } catch {
+      await io.emit('error', { code: 'DB_ERROR', message: 'The job could not be read. Try again in a minute.' })
+      return
+    }
     if (!raw) {
       await io.emit('error', { code: 'NOT_FOUND' })
       return
@@ -300,14 +341,21 @@ export async function streamRecipeChangeJob(io: RecipeJobStreamIo, opts: { pollM
 
 // ── What the console's forms edit ────────────────────────────────────────────
 
-/** The only files a console form reads per element. Never a caller-chosen path. */
-export const RECIPE_SOURCE_FILES: Readonly<Record<'gates' | 'env' | 'routes', readonly string[]>> = {
-  gates: [RECIPE_MANIFEST_PATH],
-  env: [RECIPE_MANIFEST_PATH, '.env.example'],
-  routes: ['inventory.yaml'],
+export const RECIPE_SOURCE_ELEMENTS = ['gates', 'env', 'routes'] as const
+export type RecipeSourceElement = (typeof RECIPE_SOURCE_ELEMENTS)[number]
+
+/**
+ * The only files a console form reads per element. Never a caller-chosen path:
+ * the inventory is the one mushi.recipe.json names in `routes.inventory`
+ * (the file the host's CI ingests), else inventory.yaml. null when that
+ * declared path is unsafe.
+ */
+export function recipeSourceFiles(element: RecipeSourceElement, manifest: RecipeManifest): string[] | null {
+  if (element === 'gates') return [RECIPE_MANIFEST_PATH]
+  if (element === 'env') return [RECIPE_MANIFEST_PATH, '.env.example']
+  const inventory = inventoryPathOf(manifest)
+  return inventory ? [inventory] : null
 }
-export type RecipeSourceElement = keyof typeof RECIPE_SOURCE_FILES
-export const RECIPE_SOURCE_ELEMENTS = Object.keys(RECIPE_SOURCE_FILES) as RecipeSourceElement[]
 
 export interface RecipeSourceFile {
   path: string
@@ -328,11 +376,13 @@ export async function readRecipeSources(db: Db, projectId: string, element: Reci
   const { data: snap } = await db.from('app_recipe_snapshots').select('manifest').eq('project_id', projectId).eq('is_current', true).maybeSingle()
   const manifest = ((snap as { manifest?: RecipeManifest | null } | null)?.manifest) ?? null
   if (!manifest) return { ok: false, element, reason: 'This repo has no valid mushi.recipe.json, so nothing is writable. Add one and refresh the recipe.', files: [] }
+  const paths = recipeSourceFiles(element, manifest)
+  if (!paths) return { ok: false, element, reason: 'routes.inventory in mushi.recipe.json is not a safe repo path, so the inventory cannot be edited here. Fix it and refresh the recipe.', files: [] }
   const repo = await deps.resolveRepo(db, projectId)
   if (!repo.ok) return { ok: false, element, reason: repo.reason, files: [] }
   const head = await deps.getDefaultHead(repo.repo)
   const files: RecipeSourceFile[] = []
-  for (const path of RECIPE_SOURCE_FILES[element]) {
+  for (const path of paths) {
     const check = isWritablePath(path, manifest)
     const current = await deps.readRepoFile(repo.repo, head.sha, path, MAX_FILE_BYTES)
     if (current.kind === 'too_large') {
