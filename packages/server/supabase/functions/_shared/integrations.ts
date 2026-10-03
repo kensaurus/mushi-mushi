@@ -98,9 +98,13 @@ export async function resolveExternalIssue(
     intLog.error('resolveExternalIssue: query failed', { reportId, err: String(error) })
     return
   }
-  if (!openIssues || openIssues.length === 0) return
+  // Sentry links by numeric issue id came from Sentry itself and are resolved
+  // by sentry-resolve-back.ts with the project's Sentry token; only the legacy
+  // outbound-plugin links are this function's job.
+  const legacy = (openIssues ?? []).filter((r: { system: string; external_id: string }) => !(r.system === 'sentry' && /^\d+$/.test(r.external_id)))
+  if (legacy.length === 0) return
 
-  const systems = [...new Set(openIssues.map((r: { system: string }) => r.system))]
+  const systems = [...new Set(legacy.map((r: { system: string }) => r.system))]
 
   const { data: integrations } = await db
     .from('project_integrations')
@@ -117,7 +121,7 @@ export async function resolveExternalIssue(
     )
   }
 
-  for (const issue of openIssues) {
+  for (const issue of legacy) {
     const config = configBySystem.get(issue.system as string)
     if (!config) {
       intLog.warn('resolveExternalIssue: no active integration config', {

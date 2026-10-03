@@ -138,6 +138,21 @@ describe('resolveLinkedSentryIssues', () => {
     expect(state.fixEvents[0]).toMatchObject({ kind: 'pr_state_changed', status: 'ok', dedupe_key: 'sentry_resolve:4501' })
   })
 
+  it('resolves a report marked fixed by hand: no fix attempt, the note becomes the Sentry comment', async () => {
+    const calls: Array<{ url: string; body: string }> = []
+    const fetchImpl = async (url: string, init?: RequestInit) => {
+      calls.push({ url: url.replace(api.SENTRY_API_BASE, ''), body: String(init?.body ?? '') })
+      return json({})
+    }
+    const manual = { projectId: input.projectId, reportId: input.reportId, fixAttemptId: null, prUrl: null, note: 'marked fixed in Mushi by a console user.' }
+    const result = await rb.resolveLinkedSentryIssues(makeDb(state), manual, { credentials: creds, fetchImpl })
+    expect(result.resolved).toEqual(['4501'])
+    expect(state.stamped).toEqual(['l1'])
+    expect(calls[1].url).toBe('/organizations/sakuramoto/issues/4501/comments/')
+    expect(calls[1].body).toContain('marked fixed in Mushi by a console user.')
+    expect(state.fixEvents).toEqual([])
+  })
+
   it('falls back to plain resolved when the project has no releases', async () => {
     const bodies: string[] = []
     const fetchImpl = async (_url: string, init?: RequestInit) => {
