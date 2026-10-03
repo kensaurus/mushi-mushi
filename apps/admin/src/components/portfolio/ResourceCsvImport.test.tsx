@@ -20,7 +20,7 @@ const pageData = vi.hoisted(() => ({ usePageData: vi.fn() }))
 vi.mock('../../lib/supabase', () => api)
 vi.mock('../../lib/usePageData', () => pageData)
 
-import { describeCsvImport, ResourceCsvImport } from './ResourceCsvImport'
+import { ResourceCsvImport } from './ResourceCsvImport'
 import { SharedResourcesCard } from './SharedResourcesCard'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -30,14 +30,6 @@ const ORG = '0000000a-0000-4000-8000-000000000000'
 async function flush(): Promise<void> {
   for (let i = 0; i < 8; i += 1) await Promise.resolve()
 }
-
-describe('describeCsvImport', () => {
-  it('is ok only when every row was saved', () => {
-    expect(describeCsvImport({ imported: 2, errors: [], skippedOverLimit: 0 })).toEqual({ tone: 'ok', text: 'Imported 2 rows.' })
-    expect(describeCsvImport({ imported: 1, errors: ['line 3: unknown kind "x"'], skippedOverLimit: 0 })).toEqual({ tone: 'warn', text: 'Imported 1 row. 1 row was not saved.' })
-    expect(describeCsvImport({ imported: 500, errors: [], skippedOverLimit: 4 }).text).toMatch(/4 rows past the 500-row limit were skipped/)
-  })
-})
 
 describe('ResourceCsvImport', () => {
   let container: HTMLDivElement
@@ -88,6 +80,26 @@ describe('ResourceCsvImport', () => {
     expect(container.textContent).toContain('Imported 1 row. 1 row was not saved.')
     expect(container.querySelector('ul[aria-label="Rows that were not saved"]')?.textContent).toContain('line 3: project not found in this team')
     expect(onImported).toHaveBeenCalledTimes(1)
+  })
+
+  it('says how many rows were saved, and which were skipped past the 500-row limit', async () => {
+    api.apiFetchMutate.mockResolvedValueOnce({ ok: true, data: { imported: 2, errors: [], skippedOverLimit: 0 } })
+    act(() => root.render(createElement(ResourceCsvImport, { orgId: ORG, onImported: vi.fn() })))
+    await pickFile('kind,external_id,project\n')
+    await act(async () => {
+      importButton().click()
+      await flush()
+    })
+    expect(container.textContent).toContain('Imported 2 rows.')
+    expect(container.querySelector('ul[aria-label="Rows that were not saved"]')).toBeNull()
+
+    api.apiFetchMutate.mockResolvedValueOnce({ ok: true, data: { imported: 500, errors: [], skippedOverLimit: 4 } })
+    await pickFile('kind,external_id,project\n')
+    await act(async () => {
+      importButton().click()
+      await flush()
+    })
+    expect(container.textContent).toContain('4 rows past the 500-row limit were skipped')
   })
 
   it('shows the server error and does not refresh when nothing was saved', async () => {

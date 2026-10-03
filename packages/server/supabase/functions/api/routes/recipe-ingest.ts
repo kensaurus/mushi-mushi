@@ -3,7 +3,10 @@
  * and the portfolio's shared-resource graph (Phase P2).
  *
  *   POST /v1/ingest/recipe          apiKeyAuth  the host CI pushes mushi.recipe.json + token/CSS files
- *                                               (+ off-token findings) for repos Mushi has no token for
+ *                                               for repos Mushi has no token for, plus the deviance
+ *                                               scan `mushi recipe check` ran with the shared engine
+ *                                               (`deviance`, scored here: _shared/design-ci-push.ts);
+ *                                               the answer carries the score and the project's CI gate
  *   POST /v1/ingest/recipe/events   apiKeyAuth  build.completed / deploy.completed / release.published
  *   POST /v1/ingest/recipe/csv      jwtAuth     one-off import of shared resources (domains, bundle ids…)
  *   GET  /v1/admin/orgs/:orgId/portfolio/resources  adminOrApiKey(mcp:read)  resources, uses, cross-project findings
@@ -20,6 +23,7 @@ import { adminOrApiKey, apiKeyAuth, jwtAuth } from '../../_shared/auth.ts'
 import { getServiceClient } from '../../_shared/db.ts'
 import { log } from '../../_shared/logger.ts'
 import { snapshotFromSource, DESIGN_GATE } from '../../_shared/design-plane.ts'
+import { recordCiDeviance, type CiDeviancePush, type CiDevianceResult } from '../../_shared/design-ci-push.ts'
 import { normalizeRepoPath } from '../../_shared/recipe-glob.ts'
 import { PORTFOLIO_RESOURCE_KINDS } from '../../_shared/portfolio-rules.ts'
 import { upsertResource } from '../../_shared/recipe-phase2.ts'
@@ -43,6 +47,7 @@ export interface RecipeIngestDeps {
   jwtAuth: MiddlewareHandler
   adminOrApiKeyRead: MiddlewareHandler
   now: () => Date
+  recordCiDeviance: (db: Db, projectId: string, input: { commitSha: string; branch: string; push: CiDeviancePush }) => Promise<CiDevianceResult>
 }
 
 export const defaultRecipeIngestDeps: RecipeIngestDeps = {
@@ -51,12 +56,44 @@ export const defaultRecipeIngestDeps: RecipeIngestDeps = {
   jwtAuth: jwtAuth as MiddlewareHandler,
   adminOrApiKeyRead: adminOrApiKey({ scope: 'mcp:read' }) as MiddlewareHandler,
   now: () => new Date(),
+  recordCiDeviance: (db, projectId, input) => recordCiDeviance(db, projectId, input),
 }
+
+const suggestionSchema = z.object({
+  token: z.string().max(300),
+  cssVar: z.string().max(200).nullable(),
+  ts: z.string().max(200).nullable(),
+  value: z.string().max(200),
+  distance: z.number().nullable(),
+}).strict()
+
+/** A scan from `mushi recipe check` ≥ the shared engine: literal findings with the server's rule ids, and true counts. */
+const devianceSchema = z.object({
+  engine: z.literal(1),
+  scannedFiles: z.number().int().min(0).max(1_000_000),
+  scannedLines: z.number().int().min(0).max(1_000_000_000),
+  matchedFiles: z.number().int().min(0).max(1_000_000),
+  truncated: z.boolean(),
+  counts: z.record(z.string().max(60), z.number().int().min(0).max(10_000_000)),
+  score: z.number().min(0).max(100).nullable().optional(),
+  findings: z.array(z.object({
+    ruleId: z.string().max(60),
+    filePath: z.string().min(1).max(400),
+    line: z.number().int().min(1).max(10_000_000),
+    col: z.number().int().min(1).max(1_000_000).nullable(),
+    value: z.string().max(200),
+    message: z.string().max(500),
+    suggestion: suggestionSchema.nullable(),
+  }).strict()).max(500),
+}).strict()
 
 const pushSchema = z.object({
   commitSha: z.string().regex(/^[0-9a-f]{7,64}$/i),
   branch: z.string().min(1).max(200).default('main'),
   files: z.record(z.string().max(400), z.string()),
+  deviance: devianceSchema.optional(),
+  // A CLI older than the shared engine: hex literals only, rule `off_token_literal`, no score.
+  // Stored as a `ci_scan` run, which never becomes the shown score (isScanRun).
   findings: z.array(z.object({
     ruleId: z.literal('off_token_literal'),
     filePath: z.string().min(1).max(400),
@@ -154,7 +191,16 @@ export function registerRecipeIngestRoutes(app: Hono<{ Variables: Variables }>, 
     }, 'ci')
 
     let findingsStored = 0
-    if (result.ok && body.findings) {
+    let deviance: CiDevianceResult | null = null
+    if (result.ok && body.deviance) {
+      try {
+        deviance = await deps.recordCiDeviance(db, projectId, { commitSha: body.commitSha, branch: body.branch, push: body.deviance })
+        findingsStored = deviance.storedFindings
+      } catch (err) {
+        ilog.error('ci deviance scan failed', { projectId, err: (err as Error)?.message })
+        return jsonError(c, 'DEVIANCE_FAILED', `The recipe was stored, but the deviance scan could not be: ${String((err as Error)?.message ?? err).slice(0, 200)}`, 500)
+      }
+    } else if (result.ok && body.findings) {
       const now = deps.now().toISOString()
       const status = body.findings.length ? 'warn' : 'pass'
       const { data: run, error } = await db.from('gate_runs').insert({
@@ -176,7 +222,7 @@ export function registerRecipeIngestRoutes(app: Hono<{ Variables: Variables }>, 
     }
     // A rejected push must fail the CI step, not pass it with a 200.
     if (!result.ok) return jsonError(c, 'RECIPE_REJECTED', result.reason, 422, { state: result.state, issues: result.issues })
-    return c.json({ ok: true, data: { ...result, findingsStored } })
+    return c.json({ ok: true, data: { ...result, findingsStored, deviance } })
   })
 
   app.post('/v1/ingest/recipe/events', deps.apiKeyAuth, async (c) => {

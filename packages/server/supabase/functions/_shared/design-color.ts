@@ -4,6 +4,9 @@
  *          parse CSS colour literals (hex, rgb, hsl, hwb, oklab, oklch),
  *          WCAG 2.x contrast ratios, and OKLab distance for "nearest token"
  *          suggestions. No dependencies.
+ *
+ * Engine file: kept byte-identical in packages/cli/src/recipe/engine/
+ * (see design-engine-types.ts).
  */
 
 export interface Rgba {

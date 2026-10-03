@@ -29,12 +29,17 @@
  *   score           round(100 × Σ weight·penalty / Σ weight) over enabled,
  *                   applicable rules. 0 = fully on-system; null when no rule
  *                   could judge anything (nothing scanned, no tokens).
+ *
+ * Engine file: kept byte-identical in packages/cli/src/recipe/engine/
+ * (see design-engine-types.ts), so `mushi recipe check` finds exactly what
+ * the server scan finds.
  */
 
 import { colorDistance, contrastRatio, parseCssColor, sameRgb, type Rgba } from './design-color.ts'
 import { declaredFontFamilies } from './dtcg.ts'
 import { matchAny } from './recipe-glob.ts'
 import type {
+  ContrastPairDecl,
   ContrastPairResult,
   DesignRuleConfig,
   DesignRuleId,
@@ -43,8 +48,7 @@ import type {
   DevianceFinding,
   DevianceSuggestion,
   FindingSeverity,
-} from './recipe-types.ts'
-import type { ContrastPairDecl } from './recipe-schema.ts'
+} from './design-engine-types.ts'
 
 export const DEVIANCE_K = 3
 export const SEVERITY_WEIGHT: Readonly<Record<FindingSeverity, number>> = { error: 3, warn: 2, info: 1 }

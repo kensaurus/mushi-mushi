@@ -15,10 +15,13 @@
  *
  * All files of one set are merged BEFORE aliases resolve, because component,
  * semantic and primitive files alias across each other.
+ *
+ * Engine file: kept byte-identical in packages/cli/src/recipe/engine/
+ * (see design-engine-types.ts).
  */
 
 import { parseCssColor, toHex } from './design-color.ts'
-import type { DesignToken, RecipeIssue } from './recipe-types.ts'
+import type { DesignToken, RecipeIssue } from './design-engine-types.ts'
 
 export const MUSHI_EXTENSION_KEY = 'us.kensaur.mushi'
 

@@ -10,6 +10,7 @@
  *       POST /v1/admin/projects/:id/design/changes       → DesignChangeResult
  *       POST /v1/admin/projects/:id/design/deviance/run  → DesignDevianceRunResult (202, scan runs in the background)
  *       GET  /v1/admin/projects/:id/design/deviance      → polled every 5 s while a scan is running
+ *       GET|PUT /v1/admin/projects/:id/design/settings   → DesignActionsCard (CI gate + design auto-fix, off by default)
  *
  * The edit queue and both preview states live at the top of the page: a set
  * switch re-fetches (and briefly clears) the data, and must not drop edits.
@@ -39,6 +40,7 @@ import { DesignTokenSections } from '../components/design/DesignTokenSections'
 import { ContrastTiles } from '../components/design/ContrastTiles'
 import { DeviancePanel, type DevianceRunNotice } from '../components/design/DeviancePanel'
 import { DesignRulesConfig } from '../components/design/DesignRulesConfig'
+import { DesignActionsCard } from '../components/design/DesignActionsCard'
 import { TokenEditQueue } from '../components/design/TokenEditQueue'
 import { changeLocksInputs, useDesignChange } from '../components/design/useDesignChange'
 import { editKey, type RuleChange } from '../components/design/designTokens'
@@ -311,6 +313,8 @@ function ProjectDesign({ projectId }: { projectId: string }) {
               notice={runNotice}
               onRun={() => void runDeviance()}
             />
+
+            <DesignActionsCard projectId={projectId} score={data.deviance.latest?.score ?? null} />
 
             <DesignRulesConfig
               rules={data.rules}
