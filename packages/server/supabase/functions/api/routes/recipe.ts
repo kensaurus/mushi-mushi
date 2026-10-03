@@ -34,7 +34,7 @@ import { applyActivateDirection, applyDeclareDirection, applyRulesEdit, applyTok
 import { effectiveDesignRules, isWritablePath, RECIPE_MANIFEST_MAX_BYTES, RECIPE_MANIFEST_PATH } from '../../_shared/recipe-schema.ts'
 import { directionOf, MAX_ASSET_BYTES, MAX_TOKEN_FILE_BYTES } from '../../_shared/design-sets.ts'
 import { DESIGN_RULE_IDS, RECIPE_ELEMENT_KEYS, type DesignChangeResult, type DesignDevianceRunResult, type DesignTokensResponse, type DevianceRun, type RecipeElementKey, type RecipeHistoryResponse } from '../../_shared/recipe-types.ts'
-import { inferStack, requiredCiVarNames } from './project-ci-secrets.ts'
+import { inferStack, requiredCiVarNames } from '../../_shared/sdk-diagnostics.ts'
 import { callerCanAccessProject, dbError, jsonError } from '../shared.ts'
 import type { Variables } from '../types.ts'
 import {
