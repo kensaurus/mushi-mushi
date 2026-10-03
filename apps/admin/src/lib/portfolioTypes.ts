@@ -155,3 +155,79 @@ interface CrossProjectFinding {
   message: string
   suggestedFix: string | null
 }
+
+// ── Spend ledger (gap #22): mirror of _shared/spend-ledger.ts ───────────────
+
+export type BillVendor = 'vercel' | 'aws' | 'supabase' | 'other'
+export type LedgerSourceState = 'ok' | 'not_connected' | 'error'
+
+export interface LedgerSource {
+  state: LedgerSourceState
+  /** Null unless state is ok. */
+  usd: number | null
+  detail: string | null
+}
+
+export interface LedgerApp {
+  projectId: string
+  name: string
+  mushiLlm: LedgerSource & { calls: number }
+  providerLlm: LedgerSource
+  ci: LedgerSource & { minutes: number | null; runs: number }
+  supabase: LedgerSource & { usage: Array<{ service: string; unit: string; quantity: number }> }
+  bills: LedgerSource & { byVendor: Array<{ vendor: BillVendor; usd: number }> }
+  totalUsd: number
+  complete: boolean
+}
+
+export interface LedgerImport {
+  id: string
+  vendor: BillVendor
+  projectId: string | null
+  filename: string | null
+  format: string
+  rowsRead: number
+  rowsImported: number
+  rowsSkipped: number
+  totalUsd: number
+  periodStart: string | null
+  periodEnd: string | null
+  createdAt: string
+}
+
+export interface SpendLedgerResponse {
+  organizationId: string
+  from: string
+  to: string
+  days: number
+  ciUsdPerLinuxMinute: number
+  apps: LedgerApp[]
+  totals: { mushiLlmUsd: number; providerLlmUsd: number; ciUsd: number; supabaseUsd: number; billsUsd: number; totalUsd: number }
+  unattributedProviderUsd: number | null
+  complete: boolean
+  imports: LedgerImport[]
+}
+
+/** DELETE /v1/admin/orgs/:orgId/spend/imports/:importId */
+export interface BillRemovalResult {
+  importId: string
+  /** Rows that left the ledger: no other import had those days. */
+  rowsRemoved: number
+  /** Rows handed back to the next newest import that had them. */
+  rowsRestored: number
+  /** How many earlier imports got rows back. */
+  restoredFrom: number
+}
+
+export interface BillImportResult {
+  importId: string
+  format: string
+  rowsRead: number
+  rowsImported: number
+  rowsSkipped: number
+  skipReasons: string[]
+  unmatchedApps: string[]
+  totalUsd: number
+  periodStart: string | null
+  periodEnd: string | null
+}

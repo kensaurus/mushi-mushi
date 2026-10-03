@@ -30,6 +30,7 @@ import { RecipeHeaderSummary } from '../components/recipe/RecipeHeaderSummary'
 import { usePrefersRecipeList } from '../components/recipe/useMediaQuery'
 import { RadarPanel } from '../components/portfolio/RadarPanel'
 import { StorePanel } from '../components/portfolio/StorePanel'
+import { StoreReviewsPanel } from '../components/portfolio/StoreReviewsPanel'
 
 const RecipeFlow = lazy(() =>
   import('../components/recipe/RecipeFlow').then((m) => ({ default: m.RecipeFlow })),
@@ -183,6 +184,7 @@ function ProjectRecipe({ projectId }: { projectId: string }) {
         )}
         <RadarPanel projectId={projectId} />
         <StorePanel projectId={projectId} />
+        <StoreReviewsPanel projectId={projectId} />
       </div>
     </div>
   )

@@ -5,6 +5,11 @@
  *   PUT  /v1/admin/orgs/:orgId/digest/settings   jwtAuth, owner/admin     switch channels on or off
  *   POST /v1/admin/orgs/:orgId/digest/send       jwtAuth, owner/admin     send now (1 per 5 min)
  *
+ * Channels: a project's Slack channel, Discord webhook, Teams webhook or
+ * Telegram chats (each reuses that project's existing connection), email and
+ * push to owners and admins. gtmWeekday adds each app's weekly signups and
+ * activations from the team funnel on that UTC weekday (null = never).
+ *
  * Delivery is off until an owner or admin turns a channel on. The settings
  * writes are console-only (JWT), never an API key: they decide where an
  * organization's summary gets posted.
@@ -15,7 +20,7 @@ import { z } from 'npm:zod@3'
 import { adminOrApiKey, jwtAuth } from '../../_shared/auth.ts'
 import { getServiceClient } from '../../_shared/db.ts'
 import { log } from '../../_shared/logger.ts'
-import { collectDigest, composeDigest, deliverDigest, type DeliveryDeps } from '../../_shared/operator-digest.ts'
+import { collectDigest, composeDigest, deliverDigest, isGtmDay, type DeliveryDeps } from '../../_shared/operator-digest.ts'
 import { digestConsoleUrl, liveDeliveryDeps } from '../../_shared/operator-digest-delivery.ts'
 import { jsonError } from '../shared.ts'
 import type { Variables } from '../types.ts'
@@ -45,6 +50,10 @@ export const defaultDigestDeps: DigestRouteDeps = {
 const settingsSchema = z.object({
   enabled: z.boolean(),
   slackProjectId: z.string().uuid().nullable().optional(),
+  discordProjectId: z.string().uuid().nullable().optional(),
+  teamsProjectId: z.string().uuid().nullable().optional(),
+  telegramProjectId: z.string().uuid().nullable().optional(),
+  gtmWeekday: z.number().int().min(0).max(6).nullable().optional(),
   email: z.boolean().optional(),
   webPush: z.boolean().optional(),
   sendHourUtc: z.number().int().min(0).max(23).optional(),
@@ -54,9 +63,13 @@ interface SettingsRow {
   organization_id: string
   enabled: boolean
   slack_project_id: string | null
+  discord_project_id: string | null
+  teams_project_id: string | null
+  telegram_project_id: string | null
   email: boolean
   web_push: boolean
   send_hour_utc: number
+  gtm_weekday: number | null
   last_sent_at: string | null
   last_status: string | null
   last_error: string | null
@@ -67,9 +80,14 @@ function toWire(orgId: string, row: SettingsRow | null) {
     organizationId: orgId,
     enabled: row?.enabled ?? false,
     slackProjectId: row?.slack_project_id ?? null,
+    discordProjectId: row?.discord_project_id ?? null,
+    teamsProjectId: row?.teams_project_id ?? null,
+    telegramProjectId: row?.telegram_project_id ?? null,
     email: row?.email ?? false,
     webPush: row?.web_push ?? false,
     sendHourUtc: row?.send_hour_utc ?? 0,
+    // A team with no settings row gets the column default (Monday).
+    gtmWeekday: row ? row.gtm_weekday ?? null : 1,
     lastSentAt: row?.last_sent_at ?? null,
     lastStatus: row?.last_status ?? null,
     lastError: row?.last_error ?? null,
@@ -93,7 +111,10 @@ export function registerDigestRoutes(app: Hono<{ Variables: Variables }>, deps: 
     const access = await portfolioAccess(c, db, c.req.param('orgId') ?? '')
     if (!access.ok) return access.response
     try {
-      const [row, data] = await Promise.all([loadSettings(db, access.orgId), collectDigest(db, access.orgId, deps.now())])
+      const row = await loadSettings(db, access.orgId)
+      const weekday = row ? row.gtm_weekday : 1
+      // The preview shows the weekly lines whenever they are switched on, so the team can see them before that day.
+      const data = await collectDigest(db, access.orgId, deps.now(), { gtm: weekday !== null })
       // The preview only lists apps the caller can reach.
       const visible = { ...data, projects: data.projects.filter((p) => access.projectIds.includes(p.projectId)) }
       return c.json({ ok: true, data: { settings: toWire(access.orgId, row), preview: composeDigest(visible, digestConsoleUrl()) } })
@@ -112,22 +133,28 @@ export function registerDigestRoutes(app: Hono<{ Variables: Variables }>, deps: 
     const parsed = settingsSchema.safeParse(await c.req.json().catch(() => null))
     if (!parsed.success) return jsonError(c, 'VALIDATION_ERROR', parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; '), 400)
     const body = parsed.data
-    if (body.slackProjectId && !access.projectIds.includes(body.slackProjectId)) {
-      return jsonError(c, 'NOT_FOUND', 'That project is not in this team.', 404)
+    for (const id of [body.slackProjectId, body.discordProjectId, body.teamsProjectId, body.telegramProjectId]) {
+      if (id && !access.projectIds.includes(id)) return jsonError(c, 'NOT_FOUND', 'That project is not in this team.', 404)
     }
     const current = await loadSettings(db, access.orgId)
+    const keep = <T>(value: T | undefined, stored: T): T => (value === undefined ? stored : value)
     const next = {
       organization_id: access.orgId,
       enabled: body.enabled,
-      slack_project_id: body.slackProjectId === undefined ? current?.slack_project_id ?? null : body.slackProjectId,
+      slack_project_id: keep(body.slackProjectId, current?.slack_project_id ?? null),
+      discord_project_id: keep(body.discordProjectId, current?.discord_project_id ?? null),
+      teams_project_id: keep(body.teamsProjectId, current?.teams_project_id ?? null),
+      telegram_project_id: keep(body.telegramProjectId, current?.telegram_project_id ?? null),
       email: body.email ?? current?.email ?? false,
       web_push: body.webPush ?? current?.web_push ?? false,
       send_hour_utc: body.sendHourUtc ?? current?.send_hour_utc ?? 0,
+      gtm_weekday: keep(body.gtmWeekday, current ? current.gtm_weekday : 1),
       updated_by: userId,
       updated_at: deps.now().toISOString(),
     }
-    if (next.enabled && !next.slack_project_id && !next.email && !next.web_push) {
-      return jsonError(c, 'NO_CHANNEL', 'Turn on at least one place to send the digest: Slack, email or push.', 400)
+    const anyChannel = next.slack_project_id || next.discord_project_id || next.teams_project_id || next.telegram_project_id || next.email || next.web_push
+    if (next.enabled && !anyChannel) {
+      return jsonError(c, 'NO_CHANNEL', 'Turn on at least one place to send the digest: Slack, Discord, Teams, Telegram, email or push.', 400)
     }
     const { error } = await db.from('operator_digest_settings').upsert(next, { onConflict: 'organization_id' })
     if (error) return jsonError(c, 'DB_ERROR', 'The digest settings could not be saved.', 500)
@@ -146,7 +173,7 @@ export function registerDigestRoutes(app: Hono<{ Variables: Variables }>, deps: 
       return jsonError(c, 'RATE_LIMITED', 'The digest went out a few minutes ago. Try again shortly.', 429)
     }
     try {
-      const digest = composeDigest(await collectDigest(db, access.orgId, now), digestConsoleUrl())
+      const digest = composeDigest(await collectDigest(db, access.orgId, now, { gtm: isGtmDay(row.gtm_weekday, now) }), digestConsoleUrl())
       const delivery = await deliverDigest(db, row, digest, deps.delivery)
       const failed = delivery.channels.filter((ch) => !ch.ok).map((ch) => `${ch.channel}: ${ch.detail}`).join('; ')
       await db.from('operator_digest_settings').update({ last_sent_at: now.toISOString(), last_status: delivery.status, last_error: failed || null }).eq('organization_id', access.orgId)

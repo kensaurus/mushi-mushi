@@ -279,6 +279,33 @@ It ends with a short pre-submission checklist, each item marked high, medium
 or low risk. Reading the claims uses your own AI key; without one, that check
 says **Not checked**. This is a check against your code, not legal advice.
 
+### Store reviews as reports
+
+A one-star review is a bug report from someone who never opened your widget.
+Switch on **Store reviews as reports** on the Recipe page and Mushi reads the
+app's App Store and Google Play reviews every 6 hours, through the App Store
+Connect and Google Play sources bound to that app (see below). Each new review
+at or under your star threshold becomes a report in the queue, with
+`source: store_review`, and is diagnosed like any other report.
+
+| Setting | Default |
+|---------|---------|
+| On or off | Off. Each app opts in. Owners and admins switch it. |
+| Star threshold | 1 and 2 stars. Pick 1 star only, up to any rating. |
+
+- Each review becomes a report **once**. Mushi remembers every review it has
+  read, including the ones above the threshold, so an edit or a re-read never
+  files it again.
+- Reviews older than 30 days are recorded but not filed, so switching it on
+  does not flood the queue with old reviews. At most 25 reports per store per
+  run; the rest follow on the next run.
+- The reviewer's name is never stored. Review text is treated like widget
+  text: data for the diagnosis, never instructions.
+- Google Play only returns reviews added or edited in the last week, so a Play
+  app is covered from the day you switch it on.
+- **Pull now** reads right away (once per 10 minutes). Viewers cannot pull. A store that refuses the
+  key shows its own error; it never reads as "no reviews".
+
 ## Connected sources
 
 Each part of the recipe can read from a source. GitHub, Supabase and Sentry use

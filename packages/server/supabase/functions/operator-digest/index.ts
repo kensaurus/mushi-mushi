@@ -8,15 +8,17 @@
 // Auth:    requireServiceRoleAuth (internal only).
 //
 // Each organization with operator_digest_settings.enabled is sent once per
-// UTC day, in its send_hour_utc hour. Delivery is off by default; a digest
-// with nothing new is recorded as nothing_to_send and not posted.
+// UTC day, in its send_hour_utc hour, to Slack, Discord, Teams, Telegram,
+// email or push. On its gtm_weekday the digest adds each app's weekly
+// signups and activations. Delivery is off by default; a digest with
+// nothing new is recorded as nothing_to_send and not posted.
 // ============================================================
 
 import { getServiceClient } from '../_shared/db.ts'
 import { log } from '../_shared/logger.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
-import { collectDigest, composeDigest, deliverDigest, isDigestDue, type DigestSettings } from '../_shared/operator-digest.ts'
+import { collectDigest, composeDigest, deliverDigest, isDigestDue, isGtmDay, type DigestSettings } from '../_shared/operator-digest.ts'
 import { digestConsoleUrl, liveDeliveryDeps } from '../_shared/operator-digest-delivery.ts'
 
 declare const Deno: {
@@ -48,19 +50,19 @@ async function handler(req: Request): Promise<Response> {
     }
   }
 
-  let q = db.from('operator_digest_settings').select('organization_id, enabled, slack_project_id, email, web_push, send_hour_utc, last_sent_at').eq('enabled', true).limit(MAX_ORGS)
+  let q = db.from('operator_digest_settings').select('organization_id, enabled, slack_project_id, discord_project_id, teams_project_id, telegram_project_id, email, web_push, send_hour_utc, gtm_weekday, last_sent_at').eq('enabled', true).limit(MAX_ORGS)
   if (only) q = q.eq('organization_id', only)
   const { data, error } = await q
   if (error) {
     dlog.error('failed to read digest settings', { err: error.message })
     return json({ ok: false, error: error.message }, 500)
   }
-  const due = ((data ?? []) as Array<DigestSettings & { send_hour_utc: number; last_sent_at: string | null }>).filter((r) => isDigestDue(r, now, force))
+  const due = ((data ?? []) as Array<DigestSettings & { send_hour_utc: number; gtm_weekday: number | null; last_sent_at: string | null }>).filter((r) => isDigestDue(r, now, force))
 
   const results: Array<{ organizationId: string; status: string }> = []
   for (const row of due) {
     try {
-      const digest = composeDigest(await collectDigest(db, row.organization_id, now), digestConsoleUrl())
+      const digest = composeDigest(await collectDigest(db, row.organization_id, now, { gtm: isGtmDay(row.gtm_weekday, now) }), digestConsoleUrl())
       const delivery = await deliverDigest(db, row, digest, liveDeliveryDeps)
       const failed = delivery.channels.filter((ch) => !ch.ok).map((ch) => `${ch.channel}: ${ch.detail}`).join('; ')
       await db.from('operator_digest_settings').update({
