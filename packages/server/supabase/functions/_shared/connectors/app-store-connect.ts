@@ -18,7 +18,7 @@
  */
 
 import { signJwt } from './jwt.ts'
-import { fetchJson, statusReason } from './http-util.ts'
+import { fetchJson, statusReason, type JsonResponse } from './http-util.ts'
 import { ConnectorError, notConnected, type ConnectorContext, type ProbeResult, type RecipeConnector } from './types.ts'
 
 const API = 'https://api.appstoreconnect.apple.com'
@@ -53,6 +53,17 @@ async function token(ctx: ConnectorContext, key: AscKey): Promise<string> {
 
 async function asc(ctx: ConnectorContext, key: AscKey, path: string) {
   return fetchJson<any>(ctx, `${API}${path}`, { headers: { Authorization: `Bearer ${await token(ctx, key)}` } })
+}
+
+/**
+ * One read-only GET with the connector's key (the store review intake reads
+ * customer reviews with it). Throws ConnectorError `not_connected` when there
+ * is no readable key.
+ */
+export async function appStoreConnectGet(ctx: ConnectorContext, path: string): Promise<JsonResponse<unknown>> {
+  const key = parseKey(ctx.readCredential)
+  if (!key) throw new ConnectorError('App Store Connect is not connected.', 'not_connected')
+  return fetchJson<unknown>(ctx, `${API}${path}`, { headers: { Authorization: `Bearer ${await token(ctx, key)}` } })
 }
 
 export const appStoreConnectConnector: RecipeConnector = {

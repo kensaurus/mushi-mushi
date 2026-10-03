@@ -40,9 +40,15 @@ export interface DigestSettingsView {
   organizationId: string
   enabled: boolean
   slackProjectId: string | null
+  /** A project whose Discord / Teams webhook or bound Telegram chats get the digest. */
+  discordProjectId: string | null
+  teamsProjectId: string | null
+  telegramProjectId: string | null
   email: boolean
   webPush: boolean
   sendHourUtc: number
+  /** UTC weekday (0 = Sunday) of the weekly signups and activations line; null = never. */
+  gtmWeekday: number | null
   lastSentAt: string | null
   lastStatus: 'sent' | 'partial' | 'failed' | 'nothing_to_send' | null
   lastError: string | null

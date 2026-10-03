@@ -1,7 +1,9 @@
 /**
  * DigestCard — the daily digest across a team's apps (Plan 020 §9). Off by
  * default. Shows today's preview; owners and admins pick where it goes
- * (a project's Slack channel, email, push) and the hour it is sent.
+ * (a project's Slack channel, Discord or Teams webhook, or Telegram chats;
+ * email; push), the hour it is sent, and the weekday of the weekly
+ * signups and activations line.
  *
  * Data: GET /v1/admin/orgs/:orgId/digest → DigestPreviewResponse
  *       PUT /v1/admin/orgs/:orgId/digest/settings
@@ -19,6 +21,22 @@ interface ProjectOption {
   name: string
 }
 
+const SELECT = 'rounded-sm border border-edge bg-surface-root px-2 py-1 text-xs'
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+
+/** One "send through this project's <channel>" picker; the project's existing connection is reused. */
+function ProjectChannel({ label, none, value, projects, onChange }: { label: string; none: string; value: string | null; projects: ProjectOption[]; onChange: (projectId: string | null) => void }) {
+  return (
+    <label className="flex flex-wrap items-center gap-2">
+      <span className="text-fg-muted">{label}</span>
+      <select className={SELECT} value={value ?? ''} onChange={(e) => onChange(e.target.value || null)}>
+        <option value="">{none}</option>
+        {projects.map((p) => <option key={p.projectId} value={p.projectId}>{p.name}</option>)}
+      </select>
+    </label>
+  )
+}
+
 export function DigestCard({ orgId, projects }: { orgId: string; projects: ProjectOption[] }) {
   const path = `/v1/admin/orgs/${orgId}/digest`
   const { data, loading, error, reload } = usePageData<DigestPreviewResponse>(path)
@@ -33,7 +51,17 @@ export function DigestCard({ orgId, projects }: { orgId: string; projects: Proje
     try {
       const res = await apiFetchMutate<DigestSettingsView>(`${path}/settings`, {
         method: 'PUT',
-        body: JSON.stringify({ enabled: next.enabled, slackProjectId: next.slackProjectId, email: next.email, webPush: next.webPush, sendHourUtc: next.sendHourUtc }),
+        body: JSON.stringify({
+          enabled: next.enabled,
+          slackProjectId: next.slackProjectId,
+          discordProjectId: next.discordProjectId,
+          teamsProjectId: next.teamsProjectId,
+          telegramProjectId: next.telegramProjectId,
+          email: next.email,
+          webPush: next.webPush,
+          sendHourUtc: next.sendHourUtc,
+          gtmWeekday: next.gtmWeekday,
+        }),
       })
       if (!res.ok) setNotice({ tone: 'danger', text: res.error?.message ?? 'The digest settings could not be saved.' })
     } finally {
@@ -59,7 +87,7 @@ export function DigestCard({ orgId, projects }: { orgId: string; projects: Proje
   const s = data?.settings
   return (
     <Section title="Daily digest">
-      <p className="mb-3 text-xs text-fg-muted">One message a day across all your apps: new reports, holes found, releases and a jump in AI spend. Off until you pick where it goes.</p>
+      <p className="mb-3 text-xs text-fg-muted">One message a day across all your apps: new reports, holes found, releases and a jump in AI spend, plus once a week each app's signups and activations from the team funnel. Off until you pick where it goes.</p>
       {error && <ErrorAlert message={error} endpoint={path} onRetry={reload} />}
       {loading && !data && <Loading text="Building today's digest…" />}
       {notice && (
@@ -85,17 +113,11 @@ export function DigestCard({ orgId, projects }: { orgId: string; projects: Proje
               <input type="checkbox" checked={s.enabled} onChange={(e) => save({ enabled: e.target.checked })} />
               <span>Send the digest every day</span>
             </label>
-            <label className="flex flex-wrap items-center gap-2">
-              <span className="text-fg-muted">Slack channel of</span>
-              <select
-                className="rounded-sm border border-edge bg-surface-root px-2 py-1 text-xs"
-                value={s.slackProjectId ?? ''}
-                onChange={(e) => save({ slackProjectId: e.target.value || null })}
-              >
-                <option value="">No Slack</option>
-                {projects.map((p) => <option key={p.projectId} value={p.projectId}>{p.name}</option>)}
-              </select>
-            </label>
+            <ProjectChannel label="Slack channel of" none="No Slack" value={s.slackProjectId} projects={projects} onChange={(id) => save({ slackProjectId: id })} />
+            <ProjectChannel label="Discord webhook of" none="No Discord" value={s.discordProjectId} projects={projects} onChange={(id) => save({ discordProjectId: id })} />
+            <ProjectChannel label="Teams webhook of" none="No Teams" value={s.teamsProjectId} projects={projects} onChange={(id) => save({ teamsProjectId: id })} />
+            <ProjectChannel label="Telegram chats of" none="No Telegram" value={s.telegramProjectId} projects={projects} onChange={(id) => save({ telegramProjectId: id })} />
+            <p className="text-2xs text-fg-faint">Each uses that app's own connection from Integrations; nothing new to set up.</p>
             <label className="flex items-center gap-2">
               <input type="checkbox" checked={s.email} onChange={(e) => save({ email: e.target.checked })} />
               <span>Email the team's owners and admins</span>
@@ -112,6 +134,17 @@ export function DigestCard({ orgId, projects }: { orgId: string; projects: Proje
                 onChange={(e) => save({ sendHourUtc: Number(e.target.value) })}
               >
                 {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{`${String(h).padStart(2, '0')}:00 UTC`}</option>)}
+              </select>
+            </label>
+            <label className="flex flex-wrap items-center gap-2">
+              <span className="text-fg-muted">Weekly signups and activations on</span>
+              <select
+                className={SELECT}
+                value={s.gtmWeekday === null ? '' : String(s.gtmWeekday)}
+                onChange={(e) => save({ gtmWeekday: e.target.value === '' ? null : Number(e.target.value) })}
+              >
+                <option value="">Never</option>
+                {WEEKDAYS.map((d, i) => <option key={d} value={i}>{`${d} (UTC)`}</option>)}
               </select>
             </label>
           </fieldset>
