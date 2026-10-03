@@ -86,6 +86,7 @@ npm org: https://www.npmjs.com/org/mushi-mushi
 - [Research](https://kensaur.us/mushi-mushi/docs/admin/research): The Research page runs a Firecrawl web search scoped to your tech stack and returns summarised answers with links to their sources.
 - [Rewards program](https://kensaur.us/mushi-mushi/docs/admin/rewards): Set up the Mushi rewards program from the console — points for reporter activity, the tier ladder, and the perks your app grants at each tier.
 - [SDK health](https://kensaur.us/mushi-mushi/docs/admin/sdk-health): The SDK health card shows the live heartbeat of every Mushi SDK that reported in the last 24 hours, so an SDK that never shipped is obvious.
+- [SDK upgrade lockfile helper](https://kensaur.us/mushi-mushi/docs/admin/sdk-upgrade-lockfile): Add one workflow to your repo so Mushi's SDK upgrade PRs arrive with a refreshed lockfile and pass npm ci or pnpm install --frozen-lockfile.
 - [Settings](https://kensaur.us/mushi-mushi/docs/admin/settings): The Settings page holds every project option — notifications, your own LLM keys, widget copy, Slack alerts and developer settings.
 - [Setup Copilot](https://kensaur.us/mushi-mushi/docs/admin/setup-copilot): Setup Copilot is a guided checklist that verifies SDK ingest and fix dispatch for a project, with copy-paste CLI commands for each step.
 - [Skill Pipelines](https://kensaur.us/mushi-mushi/docs/admin/skill-pipelines): Skill Pipelines recommend agent skills from the kenji skills and skills.sh ecosystem for each classified bug and run them during review in Mushi.
