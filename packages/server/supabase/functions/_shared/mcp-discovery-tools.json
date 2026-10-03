@@ -778,6 +778,28 @@
         "additionalProperties": false
       }
     },
+    "get_accounts_register": {
+      "title": "Accounts register",
+      "description": "Return the accounts and resilience register of one organization: the accounts recorded (provider, name, owner email, two-factor declared, recovery contact, admin count, auto-renew), the domains the caller's apps use with their declared auto-renew, and the open rules (account_single_owner: one person and no recovery contact; registrar_autorenew_off). Names and contacts only, never secrets. canEdit says whether the caller (or the key owner) may change it. Optional organizationId; needs an account-level key. Returns { organizationId, canEdit, accounts, domains, findings }. Read-only.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Accounts register",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "organizationId": {
+            "description": "Organization UUID — defaults to the key owner's only organization when omitted",
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          }
+        }
+      }
+    },
     "get_app_recipe": {
       "title": "App recipe",
       "description": "Return the App Recipe for a project: one card per element (schema, design, routes, gates, ci, deploy, env, integrations), each with a state, a plain-English reason, key facts, a findings count and console links, plus the worst state overall and the mushi.recipe.json manifest status. Every element is exactly one of ok | drift | unknown | not_connected | error. unknown means configured but not observed recently and never means healthy; not_connected means nothing is configured. Returns { projectId, worst, elements: { <element>: { state, reason, facts, findingsCount, lastCheckedAt, links } }, manifest, snapshotHash }. Read-only. Use to see how the app is put together and which part is drifting; use get_design_tokens for the token values, get_design_deviance for code that drifts off them, or list_gate_findings for gate detail.",
@@ -798,6 +820,26 @@
         }
       },
       "returnsUntrusted": true
+    },
+    "get_auto_release_status": {
+      "title": "Auto-release blocker",
+      "description": "Return the automatic release draft that is blocking auto-release for one project, if any. Only one automatic draft can exist at a time, so a draft whose publish failed stops every later automatic release until a person publishes or deletes it (mushi releases publish / delete, or the console Releases page). Optional projectId (defaults to the configured project). Returns { blockingDraft: { id, version, createdAt, autoSource, stale } | null }. Read-only.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Auto-release blocker",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "description": "Project UUID — defaults to the server-configured project when omitted (`project_id` is accepted too.)",
+            "type": "string"
+          }
+        }
+      }
     },
     "get_backend_health": {
       "title": "Get backend health for a project",
@@ -952,6 +994,26 @@
         }
       },
       "returnsUntrusted": true
+    },
+    "get_design_settings": {
+      "title": "Design score actions",
+      "description": "Return what the design deviance score may do on its own for one project: threshold (0–100; the actions fire above it), failCi (mushi recipe check --push fails CI above it), autofix (new warn/error findings above it dispatch a fix) and autofixEnabled (the project auto-fix switch, without which the design auto-fix does nothing), plus canEdit. Optional projectId. Read-only.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Design score actions",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "description": "Project UUID — defaults to the server-configured project when omitted (`project_id` is accepted too.)",
+            "type": "string"
+          }
+        }
+      }
     },
     "get_design_tokens": {
       "title": "Design tokens",
@@ -1968,6 +2030,36 @@
       },
       "returnsUntrusted": true
     },
+    "get_recipe_change": {
+      "title": "Recipe change status",
+      "description": "Return one recipe change job by jobId (the jobId propose_recipe_change returned): { id, element, status, pr_url, pr_number, branch, error, batch_id, created_at, started_at, finished_at }. status moves queued → running → pr_opened, or ends rejected or failed with the reason in error; a job stuck past its deadline reads as failed. Optional projectId. Read-only.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Recipe change status",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "description": "Project UUID — defaults to the server-configured project when omitted (`project_id` is accepted too.)",
+            "type": "string"
+          },
+          "jobId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "description": "The jobId propose_recipe_change returned"
+          }
+        },
+        "required": [
+          "jobId"
+        ]
+      },
+      "returnsUntrusted": true
+    },
     "get_recipe_drift": {
       "title": "Recipe drift",
       "description": "Return what drifted from the app recipe, with a fix for each: CI workflows (no concurrency or timeout, macOS on every run, long artifact retention, crons more than daily, the default branch red), deploys (a merged fix not live yet, a failed version probe, web and mobile on different versions), env names declared but missing in CI, migrations in the repo but not applied, and off-token design values. For each gate it says when it last ran (never_run means not checked, never healthy). Returns { projectId, gates: { <gate>: { status, checkedAt, commitSha } }, findings: [{ gate, ruleId, severity, message, filePath, line, suggestedFix }] }. Read-only. Mushi never runs DDL or edits workflows: apply schema and CI fixes from your editor.",
@@ -1986,6 +2078,39 @@
             "type": "string"
           }
         }
+      },
+      "returnsUntrusted": true
+    },
+    "get_recipe_sources": {
+      "title": "Recipe source files",
+      "description": "Return the repo files a recipe change may edit for one part of the recipe: element gates (mushi.recipe.json budgets and cadence), env (.env.example declarations) or routes (the inventory file). Each file has { path, exists, content, sha, writable, reason }, read from the default branch head; a file over 512 KB or one containing something shaped like a secret has content null. Pass each sha as baseSha to propose_recipe_change so a file that changed since is refused. Optional projectId. Returns { ok, element, branch, headSha, files } or { ok: false, reason }. Read-only.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Recipe source files",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "description": "Project UUID — defaults to the server-configured project when omitted (`project_id` is accepted too.)",
+            "type": "string"
+          },
+          "element": {
+            "type": "string",
+            "enum": [
+              "gates",
+              "env",
+              "routes"
+            ],
+            "description": "gates (mushi.recipe.json budgets), env (.env.example) or routes (the inventory file)"
+          }
+        },
+        "required": [
+          "element"
+        ]
       },
       "returnsUntrusted": true
     },
@@ -2420,6 +2545,49 @@
         ]
       }
     },
+    "get_spend_ledger": {
+      "title": "Spend ledger",
+      "description": "Return the 30-day spend ledger of one organization, per app: Mushi LLM spend, provider AI spend from llm_usage connectors, estimated CI cost, Supabase, and imported bills, with totals, the AI spend not bound to an app, whether every source was read (complete), and the 10 latest bill imports. Optional organizationId; needs an account-level key. Returns { organizationId, from, to, days, apps, totals, unattributedProviderUsd, complete, imports }. Read-only.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Spend ledger",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "organizationId": {
+            "description": "Organization UUID — defaults to the key owner's only organization when omitted",
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          }
+        }
+      }
+    },
+    "get_store_reviews": {
+      "title": "Store reviews as reports",
+      "description": "Return the store review intake of one project: settings { enabled, maxRating, lastPulledAt, lastStatus, lastError }, the App Store and Google Play sources bound through connectors (connected false when the stored key cannot be read), the 20 reviews seen most recently { store, reviewId, rating, reportId, reviewCreatedAt, seenAt } (reportId set when the review was filed as a report), and canManage / canPull for the caller. Off by default. Optional projectId. Read-only.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Store reviews as reports",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "description": "Project UUID — defaults to the server-configured project when omitted (`project_id` is accepted too.)",
+            "type": "string"
+          }
+        }
+      },
+      "returnsUntrusted": true
+    },
     "get_store_status": {
       "title": "Store review status",
       "description": "Return the latest store review of an app: listing text in the repo vs what is live on the App Store and Google Play (listing_drift, a language out of sync, store length limits), listing claims checked against the code (listing_claim_contradicts_code: for example \"never leaves your phone\" while the code uploads, or \"open source\" for a private repo), privacy labels vs data-collecting SDKs, iOS screenshots that look Android-shaped or older than recent releases, and a pre-submission checklist with a risk per item. Each result is ok | finding | unknown (not checked, never healthy). This is a check against the code, not legal advice. status never_run means it has not run yet; it runs from the console. Returns { projectId, checkedAt, status, results, checklist, findings }. Read-only.",
@@ -2594,6 +2762,38 @@
         ]
       },
       "returnsUntrusted": true
+    },
+    "import_portfolio_resources": {
+      "title": "Import shared resources (CSV)",
+      "description": "Record which accounts, domains, buckets or bundle ids your apps share, from a CSV with the columns kind, external_id, project (an app id, slug or name) and optionally role. At most 500 rows and 256 KB; each row is saved on its own, and refused rows are listed with their line number. Read the result with mushi portfolio resources or the console. Optional organizationId; team owners and admins only; needs an account-level key. Returns { imported, errorCount, errors, skippedOverLimit }. Write.",
+      "scope": "mcp:write",
+      "annotations": {
+        "title": "Import shared resources (CSV)",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "organizationId": {
+            "description": "Organization UUID — defaults to the key owner's only organization",
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "csv": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 262144,
+            "description": "CSV with the columns kind, external_id, project and optionally role"
+          }
+        },
+        "required": [
+          "csv"
+        ]
+      }
     },
     "import_sentry_issues": {
       "title": "Import Sentry issues",
@@ -2798,6 +2998,57 @@
           "indexing"
         ],
         "additionalProperties": false
+      }
+    },
+    "import_spend_bill": {
+      "title": "Import a bill CSV",
+      "description": "Import a vendor bill CSV into the spend ledger. vendor is vercel, aws, supabase or other; csv is the file content (FOCUS, AWS CUR or a plain date,service,cost CSV; at most 5 MB). projectId puts every row on one app; omit it to match each row's app column to an app name or slug. A second import of the same days for the same vendor replaces them instead of adding. Optional filename and organizationId. Team owners and admins only; needs an account-level key. Returns { importId, format, rowsRead, rowsImported, rowsSkipped, skipReasons, unmatchedApps, totalUsd, periodStart, periodEnd }. Write.",
+      "scope": "mcp:write",
+      "annotations": {
+        "title": "Import a bill CSV",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "organizationId": {
+            "description": "Organization UUID — defaults to the key owner's only organization",
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "vendor": {
+            "type": "string",
+            "enum": [
+              "vercel",
+              "aws",
+              "supabase",
+              "other"
+            ]
+          },
+          "csv": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The bill CSV content (at most 5 MB)"
+          },
+          "projectId": {
+            "description": "Put every row on this app; omit to match an app column by name or slug (`project_id` is accepted too.)",
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "filename": {
+            "type": "string",
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "vendor",
+          "csv"
+        ]
       }
     },
     "improve_qa_story": {
@@ -3523,6 +3774,28 @@
       },
       "returnsUntrusted": true
     },
+    "pull_store_reviews": {
+      "title": "Pull store reviews now",
+      "description": "Pull the latest App Store and Google Play reviews of one project now and file those at or under the star threshold as reports (source store_review), deduplicated against earlier pulls. Intake must be on (400 INTAKE_OFF otherwise), at most one pull every 10 minutes (429 RATE_LIMITED), and not for viewers. It spends the stored store keys read-only and files reports that are then classified. Optional projectId. Returns { status, filed, stores }. Write.",
+      "scope": "mcp:write",
+      "annotations": {
+        "title": "Pull store reviews now",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "description": "Project UUID — defaults to the server-configured project when omitted (`project_id` is accepted too.)",
+            "type": "string"
+          }
+        }
+      },
+      "returnsUntrusted": true
+    },
     "query_funnel": {
       "title": "Ordered funnel over product events",
       "description": "Where do users drop off? Ordered funnel over Mushi.track() events for this project. Pass 2–8 step event names in order (e.g. [\"landing_view\", \"signup_completed\", \"first_report_received\"]); each step counts distinct users who did the previous step then this one within stepWindow (default 7d), over the trailing windowDays (default 30). Optional breakdown property (e.g. \"utm_source\", \"$surface\") splits every step. Returns { steps: [{ name, entered, converted, pct, median_secs }], breakdown: [{ value, entered, steps }] } (pct is conversion from step 1; breakdown is empty unless requested). Read-only. Use to find the biggest drop-off before changing onboarding; use get_product_events_summary to discover event names, or get_user_paths to see what users did after a step.",
@@ -3768,6 +4041,70 @@
         "required": [
           "projectId",
           "keyId"
+        ]
+      }
+    },
+    "remove_register_account": {
+      "title": "Remove a register account",
+      "description": "Remove one account from the accounts register by id (from get_accounts_register). It only deletes the register entry; nothing changes at the provider. Team owners and admins only; needs an account-level key. Confirm with the user first. Returns { deleted: true }. Write.",
+      "scope": "mcp:write",
+      "annotations": {
+        "title": "Remove a register account",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "organizationId": {
+            "description": "Organization UUID — defaults to the key owner's only organization",
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "description": "Account id (get_accounts_register)"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    "remove_spend_import": {
+      "title": "Remove a bill import",
+      "description": "Remove one bill import from the spend ledger by importId (from get_spend_ledger imports). Its days go back to the next newest import of the same vendor that has them; a retry finishes a removal that failed half-way. Team owners and admins only; needs an account-level key. Confirm with the user first. Returns { importId, rowsRemoved, rowsRestored, restoredFrom }. Write.",
+      "scope": "mcp:write",
+      "annotations": {
+        "title": "Remove a bill import",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "organizationId": {
+            "description": "Organization UUID — defaults to the key owner's only organization",
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "importId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "description": "Import id (get_spend_ledger imports)"
+          }
+        },
+        "required": [
+          "importId"
         ]
       }
     },
@@ -4079,6 +4416,107 @@
       },
       "returnsUntrusted": true
     },
+    "save_register_account": {
+      "title": "Save a register account",
+      "description": "Record an account in the accounts register, or change one when id is given. provider is one of apple, google_play, aws, supabase, vercel, registrar, stripe, github, cloudflare, other; displayName is required on create. Optional ownerEmail, twoFactorDeclared, recoveryContact (a person, not a code), adminCount (1–100) and autoRenew; null clears a field. A value shaped like a key or token is refused (400 SECRET_DETECTED); the register keeps names and contacts only. A second account with the same provider and name is 409 ACCOUNT_EXISTS. Team owners and admins only; needs an account-level key. Returns { id }. Write.",
+      "scope": "mcp:write",
+      "annotations": {
+        "title": "Save a register account",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "organizationId": {
+            "description": "Organization UUID — defaults to the key owner's only organization",
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "id": {
+            "description": "Account id to change (get_accounts_register); omit to record a new account",
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "provider": {
+            "description": "Required when recording a new account",
+            "type": "string",
+            "enum": [
+              "apple",
+              "google_play",
+              "aws",
+              "supabase",
+              "vercel",
+              "registrar",
+              "stripe",
+              "github",
+              "cloudflare",
+              "other"
+            ]
+          },
+          "displayName": {
+            "description": "Required when recording a new account",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "ownerEmail": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 254,
+                "format": "email",
+                "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "twoFactorDeclared": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recoveryContact": {
+            "description": "A person who can recover the account (never a recovery code)",
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "adminCount": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "autoRenew": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      }
+    },
     "search_codebase": {
       "title": "Semantic codebase search",
       "description": "Search the indexed repo by plain-English meaning via embeddings. Returns { results: [{ file_path, line_start, line_end, content_preview, similarity, … }], query, mode } ordered by similarity. Requires codebase indexing enabled. Read-only. Use to locate where something lives (\"where do we verify webhooks?\"); use ask_codebase for a synthesized answer with citations, or analyze_codebase_impact to find dependents of a file.",
@@ -4264,6 +4702,119 @@
         "additionalProperties": false
       },
       "returnsUntrusted": true
+    },
+    "set_design_settings": {
+      "title": "Set design score actions",
+      "description": "Change what the design deviance score may do for one project: threshold (0–100), failCi (true fails `mushi recipe check --push` above the threshold) and autofix. Send at least one. An API key can turn autofix off but never on: turning it on lets the project spend on fixes by itself, so it needs a signed-in owner or admin in the console (403 otherwise). Project owners and admins only. Optional projectId. Returns the saved settings. Write.",
+      "scope": "mcp:write",
+      "annotations": {
+        "title": "Set design score actions",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "description": "Project UUID — defaults to the server-configured project when omitted (`project_id` is accepted too.)",
+            "type": "string"
+          },
+          "threshold": {
+            "description": "0–100; the actions fire when the score is above it",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "failCi": {
+            "description": "true: `mushi recipe check --push` fails CI above the threshold",
+            "type": "boolean"
+          },
+          "autofix": {
+            "description": "false turns the design auto-fix off; an API key cannot turn it on",
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "set_domain_auto_renew": {
+      "title": "Declare domain auto-renew",
+      "description": "Declare whether one domain renews automatically at its registrar: autoRenew true, false, or null for not known. The domain id comes from get_accounts_register; only a domain one of the caller's apps uses can be changed (404 otherwise). It records what you declare and checks nothing at the registrar; false opens the registrar_autorenew_off rule. Team owners and admins only; needs an account-level key. Returns { id }. Write.",
+      "scope": "mcp:write",
+      "annotations": {
+        "title": "Declare domain auto-renew",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "organizationId": {
+            "description": "Organization UUID — defaults to the key owner's only organization",
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "domainId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "description": "Domain id (the id of a domain in get_accounts_register)"
+          },
+          "autoRenew": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "true, false, or null for not known"
+          }
+        },
+        "required": [
+          "domainId",
+          "autoRenew"
+        ]
+      }
+    },
+    "set_store_review_intake": {
+      "title": "Set store review intake",
+      "description": "Turn store reviews as reports on or off for one project and set the star threshold (maxRating 1–5: reviews at or under it are filed). enabled is required. An API key can turn intake off or change the threshold while it is on, but only a signed-in owner or admin can turn it on in the console (403 HUMAN_REQUIRED), because it decides that public reviews become reports. Project owners and admins only. Optional projectId. Returns the saved settings. Write.",
+      "scope": "mcp:write",
+      "annotations": {
+        "title": "Set store review intake",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "description": "Project UUID — defaults to the server-configured project when omitted (`project_id` is accepted too.)",
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "false turns intake off; true keeps it on (only the console can turn it on)"
+          },
+          "maxRating": {
+            "description": "Reviews at or under this many stars are filed (1–5)",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5
+          }
+        },
+        "required": [
+          "enabled"
+        ]
+      }
     },
     "set_tier": {
       "title": "Override contributor tier",

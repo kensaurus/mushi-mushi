@@ -1696,6 +1696,297 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     },
   );
 
+  // --- Console parity: release, design, recipe and store panels -------------
+
+  server.registerTool(
+    'get_auto_release_status',
+    {
+      title: titleOf('get_auto_release_status'),
+      description: descOf('get_auto_release_status'),
+      annotations: annotationsFor('get_auto_release_status'),
+      inputSchema: PROJECT_ID_INPUT,
+    },
+    async (args) => {
+      // The route reads the project from ?project_id= (an account-level key has no project of its own).
+      const pid = await resolveProjectId(args.projectId);
+      return jsonText(await apiCall(`/v1/admin/releases/auto-release?${new URLSearchParams({ project_id: pid })}`));
+    },
+  );
+
+  server.registerTool(
+    'get_design_settings',
+    {
+      title: titleOf('get_design_settings'),
+      description: descOf('get_design_settings'),
+      annotations: annotationsFor('get_design_settings'),
+      inputSchema: PROJECT_ID_INPUT,
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      return jsonText(await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/design/settings`));
+    },
+  );
+
+  server.registerTool(
+    'set_design_settings',
+    {
+      title: titleOf('set_design_settings'),
+      description: descOf('set_design_settings'),
+      annotations: annotationsFor('set_design_settings'),
+      inputSchema: z.object({
+        projectId: z.string().optional().describe('Project UUID — defaults to the server-configured project when omitted'),
+        threshold: z.number().int().min(0).max(100).optional().describe('0–100; the actions fire when the score is above it'),
+        failCi: z.boolean().optional().describe('true: `mushi recipe check --push` fails CI above the threshold'),
+        autofix: z.boolean().optional().describe('false turns the design auto-fix off; an API key cannot turn it on'),
+      }),
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      const body = { threshold: args.threshold, failCi: args.failCi, autofix: args.autofix };
+      return jsonText(await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/design/settings`, { method: 'PUT', body: JSON.stringify(body) }));
+    },
+  );
+
+  server.registerTool(
+    'get_recipe_sources',
+    {
+      title: titleOf('get_recipe_sources'),
+      description: descOf('get_recipe_sources'),
+      annotations: annotationsFor('get_recipe_sources'),
+      inputSchema: z.object({
+        projectId: z.string().optional().describe('Project UUID — defaults to the server-configured project when omitted'),
+        element: z.enum(['gates', 'env', 'routes']).describe('gates (mushi.recipe.json budgets), env (.env.example) or routes (the inventory file)'),
+      }),
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      const qs = new URLSearchParams({ element: args.element });
+      return jsonText(await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/recipe/sources?${qs}`));
+    },
+  );
+
+  server.registerTool(
+    'get_recipe_change',
+    {
+      title: titleOf('get_recipe_change'),
+      description: descOf('get_recipe_change'),
+      annotations: annotationsFor('get_recipe_change'),
+      inputSchema: z.object({
+        projectId: z.string().optional().describe('Project UUID — defaults to the server-configured project when omitted'),
+        jobId: z.string().uuid().describe('The jobId propose_recipe_change returned'),
+      }),
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      return jsonText(await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/recipe/changes/${encodeURIComponent(args.jobId)}`));
+    },
+  );
+
+  server.registerTool(
+    'get_store_reviews',
+    {
+      title: titleOf('get_store_reviews'),
+      description: descOf('get_store_reviews'),
+      annotations: annotationsFor('get_store_reviews'),
+      inputSchema: PROJECT_ID_INPUT,
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      return jsonText(await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/store/reviews`));
+    },
+  );
+
+  server.registerTool(
+    'pull_store_reviews',
+    {
+      title: titleOf('pull_store_reviews'),
+      description: descOf('pull_store_reviews'),
+      annotations: annotationsFor('pull_store_reviews'),
+      inputSchema: PROJECT_ID_INPUT,
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      return jsonText(
+        await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/store/reviews/pull`, { method: 'POST' }, { minTimeoutMs: 90_000 }),
+      );
+    },
+  );
+
+  server.registerTool(
+    'set_store_review_intake',
+    {
+      title: titleOf('set_store_review_intake'),
+      description: descOf('set_store_review_intake'),
+      annotations: annotationsFor('set_store_review_intake'),
+      inputSchema: z.object({
+        projectId: z.string().optional().describe('Project UUID — defaults to the server-configured project when omitted'),
+        enabled: z.boolean().describe('false turns intake off; true keeps it on (only the console can turn it on)'),
+        maxRating: z.number().int().min(1).max(5).optional().describe('Reviews at or under this many stars are filed (1–5)'),
+      }),
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      const body = { enabled: args.enabled, maxRating: args.maxRating };
+      return jsonText(await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/store/reviews/settings`, { method: 'PUT', body: JSON.stringify(body) }));
+    },
+  );
+
+  // --- Portfolio operator records (accounts register, spend ledger, shared
+  // resources). Account-level key; the api refuses a project-bound key.
+
+  const ACCOUNT_PROVIDER = z.enum(['apple', 'google_play', 'aws', 'supabase', 'vercel', 'registrar', 'stripe', 'github', 'cloudflare', 'other']);
+
+  server.registerTool(
+    'get_accounts_register',
+    {
+      title: titleOf('get_accounts_register'),
+      description: descOf('get_accounts_register'),
+      annotations: annotationsFor('get_accounts_register'),
+      inputSchema: ORG_ID_INPUT,
+    },
+    async (args) => {
+      const org = encodeURIComponent(args.organizationId ?? 'current');
+      return jsonText(await apiCall(`/v1/admin/orgs/${org}/accounts`));
+    },
+  );
+
+  server.registerTool(
+    'save_register_account',
+    {
+      title: titleOf('save_register_account'),
+      description: descOf('save_register_account'),
+      annotations: annotationsFor('save_register_account'),
+      inputSchema: z.object({
+        organizationId: z.string().uuid().optional().describe("Organization UUID — defaults to the key owner's only organization"),
+        id: z.string().uuid().optional().describe('Account id to change (get_accounts_register); omit to record a new account'),
+        provider: ACCOUNT_PROVIDER.optional().describe('Required when recording a new account'),
+        displayName: z.string().min(1).max(120).optional().describe('Required when recording a new account'),
+        ownerEmail: z.string().email().max(254).nullable().optional(),
+        twoFactorDeclared: z.boolean().nullable().optional(),
+        recoveryContact: z.string().max(200).nullable().optional().describe('A person who can recover the account (never a recovery code)'),
+        adminCount: z.number().int().min(1).max(100).optional(),
+        autoRenew: z.boolean().nullable().optional(),
+      }),
+    },
+    async (args) => {
+      const org = encodeURIComponent(args.organizationId ?? 'current');
+      const { organizationId: _org, id, ...fields } = args;
+      if (!id && (!fields.provider || !fields.displayName)) {
+        throw new MushiApiError(400, 'VALIDATION_ERROR', 'provider and displayName are required to record a new account (pass id to change one).');
+      }
+      const path = id ? `/v1/admin/orgs/${org}/accounts/${encodeURIComponent(id)}` : `/v1/admin/orgs/${org}/accounts`;
+      return jsonText(await apiCall(path, { method: id ? 'PATCH' : 'POST', body: JSON.stringify(fields) }));
+    },
+  );
+
+  server.registerTool(
+    'remove_register_account',
+    {
+      title: titleOf('remove_register_account'),
+      description: descOf('remove_register_account'),
+      annotations: annotationsFor('remove_register_account'),
+      inputSchema: z.object({
+        organizationId: z.string().uuid().optional().describe("Organization UUID — defaults to the key owner's only organization"),
+        id: z.string().uuid().describe('Account id (get_accounts_register)'),
+      }),
+    },
+    async (args) => {
+      const org = encodeURIComponent(args.organizationId ?? 'current');
+      return jsonText(await apiCall(`/v1/admin/orgs/${org}/accounts/${encodeURIComponent(args.id)}`, { method: 'DELETE' }));
+    },
+  );
+
+  server.registerTool(
+    'set_domain_auto_renew',
+    {
+      title: titleOf('set_domain_auto_renew'),
+      description: descOf('set_domain_auto_renew'),
+      annotations: annotationsFor('set_domain_auto_renew'),
+      inputSchema: z.object({
+        organizationId: z.string().uuid().optional().describe("Organization UUID — defaults to the key owner's only organization"),
+        domainId: z.string().uuid().describe('Domain id (the id of a domain in get_accounts_register)'),
+        autoRenew: z.boolean().nullable().describe('true, false, or null for not known'),
+      }),
+    },
+    async (args) => {
+      const org = encodeURIComponent(args.organizationId ?? 'current');
+      return jsonText(await apiCall(`/v1/admin/orgs/${org}/domains/${encodeURIComponent(args.domainId)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ autoRenew: args.autoRenew }),
+      }));
+    },
+  );
+
+  server.registerTool(
+    'get_spend_ledger',
+    {
+      title: titleOf('get_spend_ledger'),
+      description: descOf('get_spend_ledger'),
+      annotations: annotationsFor('get_spend_ledger'),
+      inputSchema: ORG_ID_INPUT,
+    },
+    async (args) => {
+      const org = encodeURIComponent(args.organizationId ?? 'current');
+      return jsonText(await apiCall(`/v1/admin/orgs/${org}/spend`));
+    },
+  );
+
+  server.registerTool(
+    'import_spend_bill',
+    {
+      title: titleOf('import_spend_bill'),
+      description: descOf('import_spend_bill'),
+      annotations: annotationsFor('import_spend_bill'),
+      inputSchema: z.object({
+        organizationId: z.string().uuid().optional().describe("Organization UUID — defaults to the key owner's only organization"),
+        vendor: z.enum(['vercel', 'aws', 'supabase', 'other']),
+        csv: z.string().min(1).describe('The bill CSV content (at most 5 MB)'),
+        projectId: z.string().uuid().optional().describe('Put every row on this app; omit to match an app column by name or slug'),
+        filename: z.string().max(200).optional(),
+      }),
+    },
+    async (args) => {
+      const org = encodeURIComponent(args.organizationId ?? 'current');
+      const body = { vendor: args.vendor, csv: args.csv, projectId: args.projectId, filename: args.filename };
+      return jsonText(await apiCall(`/v1/admin/orgs/${org}/spend/imports`, { method: 'POST', body: JSON.stringify(body) }, { minTimeoutMs: 60_000 }));
+    },
+  );
+
+  server.registerTool(
+    'remove_spend_import',
+    {
+      title: titleOf('remove_spend_import'),
+      description: descOf('remove_spend_import'),
+      annotations: annotationsFor('remove_spend_import'),
+      inputSchema: z.object({
+        organizationId: z.string().uuid().optional().describe("Organization UUID — defaults to the key owner's only organization"),
+        importId: z.string().uuid().describe('Import id (get_spend_ledger imports)'),
+      }),
+    },
+    async (args) => {
+      const org = encodeURIComponent(args.organizationId ?? 'current');
+      return jsonText(await apiCall(`/v1/admin/orgs/${org}/spend/imports/${encodeURIComponent(args.importId)}`, { method: 'DELETE' }));
+    },
+  );
+
+  server.registerTool(
+    'import_portfolio_resources',
+    {
+      title: titleOf('import_portfolio_resources'),
+      description: descOf('import_portfolio_resources'),
+      annotations: annotationsFor('import_portfolio_resources'),
+      inputSchema: z.object({
+        organizationId: z.string().uuid().optional().describe("Organization UUID — defaults to the key owner's only organization"),
+        csv: z.string().min(1).max(256 * 1024).describe('CSV with the columns kind, external_id, project and optionally role'),
+      }),
+    },
+    async (args) => {
+      // The route takes the organization in the body; `current` resolves the key owner's only one.
+      const body = { organizationId: args.organizationId ?? 'current', csv: args.csv };
+      return jsonText(await apiCall('/v1/ingest/recipe/csv', { method: 'POST', body: JSON.stringify(body) }));
+    },
+  );
+
   server.registerTool(
     'suggest_fix',
     {

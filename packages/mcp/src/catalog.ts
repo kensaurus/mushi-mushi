@@ -384,6 +384,154 @@ export const TOOL_CATALOG: ToolSpec[] = [
     useCase: 'What does this finding mean, and how do I fix it?',
   },
   {
+    name: 'get_auto_release_status',
+    title: 'Auto-release blocker',
+    description:
+      'Return the automatic release draft that is blocking auto-release for one project, if any. Only one automatic draft can exist at a time, so a draft whose publish failed stops every later automatic release until a person publishes or deletes it (mushi releases publish / delete, or the console Releases page). Optional projectId (defaults to the configured project). Returns { blockingDraft: { id, version, createdAt, autoSource, stale } | null }. Read-only.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase: 'Why did my last build not release automatically?',
+  },
+  {
+    name: 'get_design_settings',
+    title: 'Design score actions',
+    description:
+      'Return what the design deviance score may do on its own for one project: threshold (0–100; the actions fire above it), failCi (mushi recipe check --push fails CI above it), autofix (new warn/error findings above it dispatch a fix) and autofixEnabled (the project auto-fix switch, without which the design auto-fix does nothing), plus canEdit. Optional projectId. Read-only.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase: 'Does a bad design score fail CI or dispatch a fix for this app?',
+  },
+  {
+    name: 'set_design_settings',
+    title: 'Set design score actions',
+    description:
+      'Change what the design deviance score may do for one project: threshold (0–100), failCi (true fails `mushi recipe check --push` above the threshold) and autofix. Send at least one. An API key can turn autofix off but never on: turning it on lets the project spend on fixes by itself, so it needs a signed-in owner or admin in the console (403 otherwise). Project owners and admins only. Optional projectId. Returns the saved settings. Write.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: true, openWorld: true },
+    useCase: 'Fail CI when the design score goes above 40.',
+  },
+  {
+    name: 'get_recipe_sources',
+    title: 'Recipe source files',
+    description:
+      'Return the repo files a recipe change may edit for one part of the recipe: element gates (mushi.recipe.json budgets and cadence), env (.env.example declarations) or routes (the inventory file). Each file has { path, exists, content, sha, writable, reason }, read from the default branch head; a file over 512 KB or one containing something shaped like a secret has content null. Pass each sha as baseSha to propose_recipe_change so a file that changed since is refused. Optional projectId. Returns { ok, element, branch, headSha, files } or { ok: false, reason }. Read-only.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    returnsUntrusted: true,
+    useCase: 'Show me the files I would edit to change this budget.',
+  },
+  {
+    name: 'get_recipe_change',
+    title: 'Recipe change status',
+    description:
+      'Return one recipe change job by jobId (the jobId propose_recipe_change returned): { id, element, status, pr_url, pr_number, branch, error, batch_id, created_at, started_at, finished_at }. status moves queued → running → pr_opened, or ends rejected or failed with the reason in error; a job stuck past its deadline reads as failed. Optional projectId. Read-only.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    returnsUntrusted: true,
+    useCase: 'Did my recipe change open its draft PR yet?',
+  },
+  {
+    name: 'get_store_reviews',
+    title: 'Store reviews as reports',
+    description:
+      'Return the store review intake of one project: settings { enabled, maxRating, lastPulledAt, lastStatus, lastError }, the App Store and Google Play sources bound through connectors (connected false when the stored key cannot be read), the 20 reviews seen most recently { store, reviewId, rating, reportId, reviewCreatedAt, seenAt } (reportId set when the review was filed as a report), and canManage / canPull for the caller. Off by default. Optional projectId. Read-only.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    returnsUntrusted: true,
+    useCase: 'Are low-star store reviews turning into bug reports for this app?',
+  },
+  {
+    name: 'pull_store_reviews',
+    title: 'Pull store reviews now',
+    description:
+      'Pull the latest App Store and Google Play reviews of one project now and file those at or under the star threshold as reports (source store_review), deduplicated against earlier pulls. Intake must be on (400 INTAKE_OFF otherwise), at most one pull every 10 minutes (429 RATE_LIMITED), and not for viewers. It spends the stored store keys read-only and files reports that are then classified. Optional projectId. Returns { status, filed, stores }. Write.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
+    returnsUntrusted: true,
+    useCase: 'File this week\'s 1-star reviews as reports now.',
+  },
+  {
+    name: 'set_store_review_intake',
+    title: 'Set store review intake',
+    description:
+      'Turn store reviews as reports on or off for one project and set the star threshold (maxRating 1–5: reviews at or under it are filed). enabled is required. An API key can turn intake off or change the threshold while it is on, but only a signed-in owner or admin can turn it on in the console (403 HUMAN_REQUIRED), because it decides that public reviews become reports. Project owners and admins only. Optional projectId. Returns the saved settings. Write.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: true, openWorld: true },
+    useCase: 'Stop filing store reviews as reports for this app.',
+  },
+  {
+    name: 'get_accounts_register',
+    title: 'Accounts register',
+    description:
+      'Return the accounts and resilience register of one organization: the accounts recorded (provider, name, owner email, two-factor declared, recovery contact, admin count, auto-renew), the domains the caller\'s apps use with their declared auto-renew, and the open rules (account_single_owner: one person and no recovery contact; registrar_autorenew_off). Names and contacts only, never secrets. canEdit says whether the caller (or the key owner) may change it. Optional organizationId; needs an account-level key. Returns { organizationId, canEdit, accounts, domains, findings }. Read-only.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase: 'Which of my store and cloud accounts have only one person who can get in?',
+  },
+  {
+    name: 'save_register_account',
+    title: 'Save a register account',
+    description:
+      'Record an account in the accounts register, or change one when id is given. provider is one of apple, google_play, aws, supabase, vercel, registrar, stripe, github, cloudflare, other; displayName is required on create. Optional ownerEmail, twoFactorDeclared, recoveryContact (a person, not a code), adminCount (1–100) and autoRenew; null clears a field. A value shaped like a key or token is refused (400 SECRET_DETECTED); the register keeps names and contacts only. A second account with the same provider and name is 409 ACCOUNT_EXISTS. Team owners and admins only; needs an account-level key. Returns { id }. Write.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
+    useCase: 'Record that our Apple Developer account now has a recovery contact.',
+  },
+  {
+    name: 'remove_register_account',
+    title: 'Remove a register account',
+    description:
+      'Remove one account from the accounts register by id (from get_accounts_register). It only deletes the register entry; nothing changes at the provider. Team owners and admins only; needs an account-level key. Confirm with the user first. Returns { deleted: true }. Write.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: true, idempotent: true, openWorld: true },
+    useCase: 'Take the old Heroku account off the register.',
+  },
+  {
+    name: 'set_domain_auto_renew',
+    title: 'Declare domain auto-renew',
+    description:
+      'Declare whether one domain renews automatically at its registrar: autoRenew true, false, or null for not known. The domain id comes from get_accounts_register; only a domain one of the caller\'s apps uses can be changed (404 otherwise). It records what you declare and checks nothing at the registrar; false opens the registrar_autorenew_off rule. Team owners and admins only; needs an account-level key. Returns { id }. Write.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: true, openWorld: true },
+    useCase: 'Mark glot.it as renewing automatically.',
+  },
+  {
+    name: 'get_spend_ledger',
+    title: 'Spend ledger',
+    description:
+      'Return the 30-day spend ledger of one organization, per app: Mushi LLM spend, provider AI spend from llm_usage connectors, estimated CI cost, Supabase, and imported bills, with totals, the AI spend not bound to an app, whether every source was read (complete), and the 10 latest bill imports. Optional organizationId; needs an account-level key. Returns { organizationId, from, to, days, apps, totals, unattributedProviderUsd, complete, imports }. Read-only.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase: 'What did each of my apps cost me this month?',
+  },
+  {
+    name: 'import_spend_bill',
+    title: 'Import a bill CSV',
+    description:
+      'Import a vendor bill CSV into the spend ledger. vendor is vercel, aws, supabase or other; csv is the file content (FOCUS, AWS CUR or a plain date,service,cost CSV; at most 5 MB). projectId puts every row on one app; omit it to match each row\'s app column to an app name or slug. A second import of the same days for the same vendor replaces them instead of adding. Optional filename and organizationId. Team owners and admins only; needs an account-level key. Returns { importId, format, rowsRead, rowsImported, rowsSkipped, skipReasons, unmatchedApps, totalUsd, periodStart, periodEnd }. Write.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
+    useCase: 'Add last month\'s Vercel bill to the spend ledger.',
+  },
+  {
+    name: 'remove_spend_import',
+    title: 'Remove a bill import',
+    description:
+      'Remove one bill import from the spend ledger by importId (from get_spend_ledger imports). Its days go back to the next newest import of the same vendor that has them; a retry finishes a removal that failed half-way. Team owners and admins only; needs an account-level key. Confirm with the user first. Returns { importId, rowsRemoved, rowsRestored, restoredFrom }. Write.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: true, idempotent: true, openWorld: true },
+    useCase: 'Undo the bill I imported into the wrong app.',
+  },
+  {
+    name: 'import_portfolio_resources',
+    title: 'Import shared resources (CSV)',
+    description:
+      'Record which accounts, domains, buckets or bundle ids your apps share, from a CSV with the columns kind, external_id, project (an app id, slug or name) and optionally role. At most 500 rows and 256 KB; each row is saved on its own, and refused rows are listed with their line number. Read the result with mushi portfolio resources or the console. Optional organizationId; team owners and admins only; needs an account-level key. Returns { imported, errorCount, errors, skippedOverLimit }. Write.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: true, openWorld: true },
+    useCase: 'Tell Mushi that these three apps share one Stripe account.',
+  },
+  {
     name: 'get_graph_neighborhood',
     title: 'Graph neighborhood',
     description:
