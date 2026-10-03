@@ -90,3 +90,27 @@ Deno.test('keys are probed at most once a day, and disabled keys never', () => {
   )
   assertEquals(due.map((k) => k.id), ['never', 'old'])
 })
+
+Deno.test('a Supabase token is probed only once its project has a linked ref, and against that ref', async () => {
+  const now = new Date(NOW).getTime()
+  const REF = 'abcdefghijklmnopqrst'
+  const due = selectDueByokKeys(
+    [
+      key({ id: 'linked', provider_slug: 'supabase', supabase_project_ref: REF }),
+      key({ id: 'unlinked', provider_slug: 'supabase', supabase_project_ref: null }),
+      key({ id: 'bad-ref', provider_slug: 'supabase', supabase_project_ref: 'NOT-A-REF' }),
+    ],
+    now,
+  )
+  assertEquals(due.map((k) => k.id), ['linked'])
+
+  let calledUrl = ''
+  const recorder = ((input: string | URL | Request) => {
+    calledUrl = String(input)
+    return Promise.resolve(new Response('[]', { status: 201 }))
+  }) as typeof fetch
+  const outcome = await probeByokRow(due[0], 'sbp_fixture', NOW, recorder)
+  assertEquals(calledUrl, `https://api.supabase.com/v1/projects/${REF}/database/query/read-only`)
+  assertEquals(outcome.health, 'ok')
+  assertEquals(outcome.patch?.status, 'active')
+})

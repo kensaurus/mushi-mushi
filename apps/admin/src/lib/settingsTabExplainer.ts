@@ -18,6 +18,7 @@ export const SETTINGS_TAB_EXPLAINERS: Record<SettingsTabId, SettingsTabExplainer
     affects: [
       'Slack — where triage alerts and fix updates are posted',
       'Sentry — whether production errors and user feedback become Mushi reports',
+      'Supabase — which project diagnoses may read, read-only',
       'Triage AI — which model scores severity and when auto-fix is allowed to run',
       'Daily limits — caps on web crawls and test generation to control spend',
     ],
@@ -29,6 +30,7 @@ export const SETTINGS_TAB_EXPLAINERS: Record<SettingsTabId, SettingsTabExplainer
     affects: [
       'Bug classification and fix-agent runs use your key when configured',
       'Test each key after saving — untested keys may fail silently in production',
+      'A scoped Supabase token (with the project ref under General) lets diagnoses read your app database, read-only',
     ],
   },
   firecrawl: {

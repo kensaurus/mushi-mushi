@@ -365,7 +365,7 @@ export function registerFullstackAuditRoutes(parent: Hono<{ Variables: Variables
         category: 'advisor',
         title: 'Backend not linked',
         detail:
-          'Set supabase_project_ref in project settings and add a Supabase PAT in API Keys (slug: supabase) to enable backend analysis.',
+          'Set the Supabase project ref in Settings → General, then add a scoped, read-only Supabase access token in Settings → AI keys → Supabase to enable backend analysis.',
       })
     }
 

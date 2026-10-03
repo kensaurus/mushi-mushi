@@ -7,7 +7,7 @@ export type PoolKeyStatus =
 
 export type PoolTestStatus = 'ok' | 'error_auth' | 'error_network' | 'error_quota' | null;
 
-export type PoolProvider = 'anthropic' | 'openai' | 'cursor' | 'firecrawl' | 'browserbase';
+export type PoolProvider = 'anthropic' | 'openai' | 'cursor' | 'firecrawl' | 'browserbase' | 'supabase';
 
 export interface PoolKey {
   id: string;
