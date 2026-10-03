@@ -183,7 +183,7 @@ export function useRecipeChange(projectId: string, element: RecipeChangeElement,
       const ctrl = new AbortController()
       abortRef.current = ctrl
       await openSseStream({
-        url: `${RESOLVED_API_URL}${base}/${jobId}/stream`,
+        url: `${RESOLVED_API_URL}/v1/admin/projects/${projectId}/recipe/changes/${jobId}/stream`,
         bearer,
         signal: ctrl.signal,
         onEvent: (e: SseEvent) => {
@@ -201,7 +201,7 @@ export function useRecipeChange(projectId: string, element: RecipeChangeElement,
         },
       })
     },
-    [applyJob, base, poll],
+    [applyJob, projectId, poll],
   )
 
   const preview = useCallback(

@@ -103,6 +103,12 @@ function normalizeApiError(error: unknown, httpStatus?: number): ApiError['error
 export interface ApiCallOptions {
   /** Per-call timeout. Slow routes (an LLM diagram, a release draft, a Sentry import) pass more than the 15 s default. */
   timeoutMs?: number
+  /**
+   * The route answers a download (Markdown, CSV) rather than a JSON envelope:
+   * a successful non-JSON body comes back as `{ ok: true, data: text }`.
+   * Errors still arrive as JSON envelopes and are handled as usual.
+   */
+  text?: boolean
 }
 
 /**
@@ -171,6 +177,7 @@ export async function apiCall<T = unknown>(
       try { body = await res.json() } catch { body = null }
     } else {
       const text = await res.text()
+      if (callOptions.text && res.ok) return { ok: true, data: text as T }
       try { body = JSON.parse(text) } catch {
         // Non-JSON body — surface as a structured error.
         body = {

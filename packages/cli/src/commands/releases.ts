@@ -3,6 +3,7 @@
  * PURPOSE: `mushi releases …` — console parity for the Releases page and the
  *          team release calendar:
  *            list | stats | show | draft | edit | delete | publish  → /v1/admin/releases*
+ *            auto-release                                          → /v1/admin/releases/auto-release
  *            calendar                                              → /v1/admin/orgs/:orgId/releases
  *          `publish` messages every credited reporter, and `delete` removes a
  *          draft, so both need --yes.
@@ -50,6 +51,15 @@ interface ReleaseDelivery {
   reporters_failed: number
   credits_stamped?: number
   credits_pending?: number
+}
+
+/** GET /v1/admin/releases/auto-release: one automatic draft at a time blocks every later one. */
+interface AutoReleaseDraft {
+  id: string
+  version: string
+  createdAt: string
+  autoSource: string
+  stale: boolean
 }
 
 interface ReleaseCalendarData {
@@ -260,6 +270,30 @@ export function registerReleasesCommands(program: Command): void {
         return
       }
       for (const line of renderPublish(extra.data, extra.delivery, extra.tickets_fulfilled)) console.log(line)
+    })
+
+  releases
+    .command('auto-release')
+    .description('The automatic draft that blocks auto-release for a project, if any')
+    .option('--project-id <id>', 'Project ID (defaults to the configured project)')
+    .option('--json', 'Machine-readable JSON output')
+    .action(async (opts: { projectId?: string; json?: boolean }) => {
+      const config = requireConfig()
+      const pid = resolveProjectId(opts.projectId, config.projectId)
+      // The route reads the project from ?project_id= (an account-level key has no project of its own).
+      const result = await apiCall<{ blockingDraft: AutoReleaseDraft | null }>(`/v1/admin/releases/auto-release?project_id=${pid}`, config)
+      if (!result.ok) die(result)
+      if (outputIsJson(opts.json)) {
+        console.log(JSON.stringify(result.data, null, 2))
+        return
+      }
+      const d = result.data.blockingDraft
+      if (!d) {
+        console.log('Nothing blocks auto-release: no automatic draft is waiting.')
+        return
+      }
+      console.log(`Auto-release is blocked by draft ${d.version} (${d.id}), created ${fmtDate(d.createdAt)}${d.stale ? ', stale' : ''}.`)
+      console.log(`Publish it (mushi releases publish ${d.id} --yes) or delete it (mushi releases delete ${d.id} --yes) to let the next build release.`)
     })
 
   releases
