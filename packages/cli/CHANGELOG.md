@@ -1,5 +1,36 @@
 # @mushi-mushi/cli
 
+## 0.29.0
+
+### Minor Changes
+
+- 5ad0800: Bring the console's newer pages to the terminal.
+
+  - `mushi portfolio show|findings|resources`: every app in your team on one screen, the problems repeated across them, and the domains, accounts and buckets they share.
+  - `mushi audit findings` and `mushi audit explain <id>`: each gate finding with file and line, and why one fired and how to fix it. `--gate` passes any gate name to the server, so a new server-side gate works before a CLI release. Plain `mushi audit` still runs the summary audit, now prints the server's error message whatever its shape, and ends by pointing at `mushi audit findings`.
+  - `mushi repo digest`: one token-budgeted text of the connected repo for an LLM, optionally starting from a report's files. `mushi repo diagram show|generate|publish|unpublish` manages the architecture diagram; publishing shows the preview first and needs `--yes`.
+  - `mushi connectors list|status|actions`: the team's connectors with their status and last error, and the actions requested on them. This is read-only; connectors are still added in the console.
+  - `mushi funnel show|set|growth`: one funnel across every app, and the operator growth funnel.
+  - `mushi code-health show|stats`: oversized files and bundle size from your CI.
+  - `mushi releases list|stats|show|draft|edit|delete|publish|calendar`: release notes that credit reporters. `publish` messages them, so it needs `--yes`.
+  - `mushi sentry import`: pull Sentry issues that are already open into the queue, by id or by search, with paging.
+  - `mushi outbox list|edit|release|discard`: reporter updates held for review. Release and discard need `--yes`.
+  - `mushi budgets show|autofix`: the monthly AI budget, the auto-fix caps, the plan spend cap and the auto-fix switch in one view.
+
+  Team-wide commands need an account-level key. When you belong to several organizations, the error lists them with the `--org` value to pass. Slow routes (diagram, release draft, Sentry import, digest) now get a longer timeout. Older routes that answered a bare error string now print that message instead of `undefined`.
+
+- 5ad0800: Add `mushi radar scan` and `mushi radar show`. `scan` finds storage rows deleted with SQL (the files stay in the bucket and keep billing) and, with `--push`, sends Mushi the build settings it checks against the current Google Play and App Store rules. Run it as one extra step in your existing CI job; Mushi never clones your repo. `show` lists every hole check for the project and what it found; a check that never ran says so and is never shown as passing.
+
+  Add `mushi recipe init`, `mushi recipe check [--push]` and `mushi recipe show`. `init` writes a starter `mushi.recipe.json` from what the repo shows. `check` validates it and its token files and lists colours that match no design token; `--push` sends the recipe to Mushi from your existing CI job, for repos Mushi has no token for. A rejected push fails the step.
+
+  Add `mushi store pull`. It copies the live App Store and Google Play listings into the repo in fastlane's metadata layout, once, using your own store keys on your machine. Nothing is sent to Mushi, and Mushi never holds a key that can publish. After that the listing is changed in a pull request and your own CI publishes it.
+
+- 5ad0800: `mushi recipe check` now runs Mushi's own design deviance rules (`off_token_color`, `off_token_font`, `off_scale_spacing`, `off_scale_radius`, `contrast_below_aa`, `raw_interactive_element`) over your tracked files and prints the same findings and 0–100 score the console shows. Add `--max-score <n>` to fail the step above a fixed score. With `--push`, Mushi scores the scan itself and the step fails when the project has turned on "fail the CI check" and the score is above its threshold, or when that check is on and Mushi could not store the scan.
+
+### Patch Changes
+
+- 5ad0800: `mushi recipe init` reads monorepos properly: it ignores token files in tests, fixtures and examples, scans `apps/*/src` and `packages/*/src`, finds a nested `supabase/migrations`, takes the default branch from `origin/HEAD` instead of assuming `main`, and tags deploy, publish and release workflows as `deploy`.
+
 ## 0.28.0
 
 ### Minor Changes
