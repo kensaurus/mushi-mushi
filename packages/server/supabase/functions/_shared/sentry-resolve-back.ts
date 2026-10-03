@@ -153,7 +153,7 @@ export interface SentryResolveBackResult {
 async function recordFixEvent(
   db: SupabaseClient,
   row: {
-    fixAttemptId: string;
+    fixAttemptId: string | null;
     projectId: string;
     status: 'ok' | 'fail';
     label: string;
@@ -161,6 +161,8 @@ async function recordFixEvent(
     dedupeKey: string;
   },
 ): Promise<void> {
+  // A hand-marked fix has no attempt to hang the event on; the log line stands.
+  if (!row.fixAttemptId) return;
   const { error } = await db.from('fix_events').insert({
     fix_attempt_id: row.fixAttemptId,
     project_id: row.projectId,
@@ -191,8 +193,12 @@ export async function resolveLinkedSentryIssues(
   input: {
     projectId: string;
     reportId: string;
-    fixAttemptId: string;
-    prUrl: string;
+    /** The merged fix attempt; null when a person marked the report fixed by hand. */
+    fixAttemptId: string | null;
+    /** The merged PR; null for a hand-marked fix. */
+    prUrl: string | null;
+    /** Sentry comment for a hand-marked fix (who marked it and why). */
+    note?: string;
   },
   deps: {
     credentials?: (db: SupabaseClient, projectId: string) => Promise<SentryCredentials | null>;
@@ -200,6 +206,7 @@ export async function resolveLinkedSentryIssues(
   } = {},
 ): Promise<SentryResolveBackResult> {
   const { projectId, reportId, fixAttemptId, prUrl } = input;
+  const how = prUrl ? `after ${prUrl} merged` : 'after the report was marked fixed in Mushi';
   // Only numeric Sentry issue ids (what ingest links). Any other `sentry`
   // link shape is left to resolveExternalIssue.
   const links = (await loadSentryLinks(db, projectId, reportId, true)).filter((l) =>
@@ -244,7 +251,7 @@ export async function resolveLinkedSentryIssues(
           creds.token,
           creds.orgSlug,
           link.external_id,
-          `Resolved by Mushi: the fix PR was merged — ${prUrl}`,
+          prUrl ? `Resolved by Mushi: the fix PR was merged — ${prUrl}` : `Resolved by Mushi: ${input.note ?? 'the report was marked fixed.'}`,
           deps.fetchImpl,
         );
       } catch (err) {
@@ -255,7 +262,7 @@ export async function resolveLinkedSentryIssues(
         projectId,
         status: 'ok',
         label: `Sentry issue ${link.external_id} ${status === 'resolved' ? 'resolved' : 'resolved in next release'}`,
-        detail: `Resolved through the Sentry API after ${prUrl} merged.`,
+        detail: `Resolved through the Sentry API ${how}.`,
         dedupeKey: `sentry_resolve:${link.external_id}`,
       });
       result.resolved.push(link.external_id);
