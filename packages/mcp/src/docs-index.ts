@@ -31,7 +31,7 @@ function docUrl(route: string): string {
   return route === '/' ? MUSHI_DOCS_BASE : MUSHI_DOCS_BASE + route
 }
 
-/** 206 pages, generated from llms.txt. */
+/** 207 pages, generated from llms.txt. */
 export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
   {
     title: "Mushi Mushi — know why your AI-built app broke, with the fix ready",
@@ -491,6 +491,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     keywords: ["admin", "sdk-health", "sdk", "health"],
     headings: ["What it shows", "Out-of-date detection", "Setup checklist integration", "Where it lives", "Related"],
     excerpt: "The SDK health card shows the live heartbeat of every Mushi SDK that reported in the last 24 hours, so an SDK that never shipped is obvious.",
+  },
+  {
+    title: "SDK upgrade lockfile helper",
+    url: docUrl("/admin/sdk-upgrade-lockfile"),
+    route: "/admin/sdk-upgrade-lockfile",
+    markdown: "admin/sdk-upgrade-lockfile.md",
+    keywords: ["admin", "sdk-upgrade-lockfile", "sdk", "upgrade", "lockfile", "helper"],
+    headings: ["How it works", "Add the workflow", "What the action does", "Private registries", "Pinning", "Why Mushi does not write the lockfile or the workflow", "Limits"],
+    excerpt: "Add one workflow to your repo so Mushi's SDK upgrade PRs arrive with a refreshed lockfile and pass npm ci or pnpm install --frozen-lockfile.",
   },
   {
     title: "Settings",
