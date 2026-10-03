@@ -54,7 +54,16 @@ function isLegacyKey(key: ManagedKey): key is LegacyKey {
 
 const PROVIDER_META: Record<
   string,
-  { name: string; placeholder: string; consoleUrl: string; help: string }
+  {
+    name: string;
+    placeholder: string;
+    consoleUrl: string;
+    help: string;
+    /** Shown when the provider has no key. Defaults to the platform-key note. */
+    emptyNote?: string;
+    /** Extra setup guidance under the help line. */
+    guidance?: string;
+  }
 > = {
   anthropic: {
     name: 'Anthropic (Claude)',
@@ -86,6 +95,15 @@ const PROVIDER_META: Record<
     consoleUrl: 'https://www.browserbase.com/settings',
     help: 'Runs cloud-browser QA stories using your own Browserbase account.',
   },
+  supabase: {
+    name: 'Supabase (read-only)',
+    placeholder: 'sbp_…',
+    consoleUrl: 'https://supabase.com/dashboard/account/tokens',
+    help: "Reads your linked Supabase project's schema, advisors, edge functions and logs for diagnoses. Read-only: Mushi never writes to it.",
+    emptyNote: 'no token — Supabase not linked',
+    guidance:
+      'Use a scoped token: this one project only; Database, Edge Functions, Advisors and Logs set to Read and nothing else; with an expiry. Set the project ref in Settings → General first, because the token is checked against it.',
+  },
 };
 
 const STATUS_CHIP: Record<PoolKeyStatus, { label: string; className: string }> = {
@@ -96,7 +114,17 @@ const STATUS_CHIP: Record<PoolKeyStatus, { label: string; className: string }> =
   auth_failed: { label: 'auth failed', className: CHIP_TONE.dangerSubtle },
 };
 
-const DISPLAY_PROVIDERS = ['anthropic', 'openai', 'cursor', 'firecrawl', 'browserbase'] as const;
+// Kept on one line: byok-lifecycle-contract.test.ts asserts the provider order.
+// prettier-ignore
+const DISPLAY_PROVIDERS = ['anthropic', 'openai', 'cursor', 'firecrawl', 'browserbase', 'supabase'] as const;
+
+type ValidationReply = { validation?: { status?: PoolTestStatus; detail?: string } } | undefined;
+
+/** The probe's own reason, so "set the project ref first" reaches the owner. */
+function quarantinedMessage(data: ValidationReply, fallback: string): string {
+  const detail = data?.validation?.detail?.trim();
+  return detail ? `${fallback} ${detail}` : fallback;
+}
 
 export function ByokPanel() {
   const entitlements = useEntitlements();
@@ -153,13 +181,13 @@ export function ByokPanel() {
     });
     setAdding(false);
     if (res.ok) {
-      const data = res.data as { validation?: { status?: PoolTestStatus } } | undefined;
+      const data = res.data as ValidationReply;
       const validated = data?.validation?.status === 'ok';
       setActionFeedback({
         ok: validated,
         message: validated
           ? 'Credential validated and activated.'
-          : 'Credential saved but quarantined. Fix the provider response, then test it again.',
+          : quarantinedMessage(data, 'Credential saved but quarantined.'),
       });
       setNewKeyVal('');
       setNewKeyLabel('');
@@ -245,13 +273,13 @@ export function ByokPanel() {
     const res = await apiFetch(`/v1/admin/byok/keys/${key.id}/test`, { method: 'POST' });
     setTestPending(null);
     if (res.ok) {
-      const data = res.data as { validation?: { status?: PoolTestStatus } } | undefined;
+      const data = res.data as ValidationReply;
       const validated = data?.validation?.status === 'ok';
       setActionFeedback({
         ok: validated,
         message: validated
           ? `${PROVIDER_META[key.provider_slug]?.name ?? key.provider_slug} credential validated and activated.`
-          : 'The provider did not validate this credential. It remains quarantined.',
+          : quarantinedMessage(data, 'The credential remains quarantined.'),
       });
     } else {
       setActionFeedback({ ok: false, message: res.error?.message ?? 'Credential test failed.' });
@@ -362,11 +390,14 @@ export function ByokPanel() {
                     )}
                     {providerKeys.length === 0 && providerLegacyKeys.length === 0 && (
                       <span className="text-2xs text-fg-faint italic">
-                        no keys — using platform default
+                        {meta.emptyNote ?? 'no keys — using platform default'}
                       </span>
                     )}
                   </div>
                   <p className="text-xs text-fg-muted mt-0.5">{meta.help}</p>
+                  {meta.guidance && (
+                    <p className="text-2xs text-fg-faint mt-0.5">{meta.guidance}</p>
+                  )}
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <a

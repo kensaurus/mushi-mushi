@@ -123,6 +123,15 @@ async function probeInstance(db: Db, deps: ConnectorRouteDeps, row: { id: string
   return result
 }
 
+/**
+ * Where a legacy-backed kind is connected instead. Only kinds with a
+ * concrete console path are listed; the rest keep the generic message.
+ */
+const LEGACY_CONNECT_HINT: Partial<Record<string, string>> = {
+  supabase:
+    "Supabase links per project, not here. Set the project's Supabase project ref in Settings → General → Supabase project, then add a read-only Supabase access token in Settings → AI keys → Supabase.",
+}
+
 const PROBE_NOT_SAVED = 'The check ran, but its result could not be saved, so the connector still shows its previous status. Press Check again in a minute.'
 
 async function replaceBindings(db: Db, instanceId: string, bindings: Array<{ projectId: string; externalId: string; role: string }>, allowed: string[]): Promise<string | null> {
@@ -184,7 +193,7 @@ export function registerConnectorRoutes(app: Hono<{ Variables: Variables }>, dep
       throw err
     }
     if ((LEGACY_BACKED as readonly string[]).includes(body.kind)) {
-      return jsonError(c, 'USE_EXISTING_SETTINGS', `${body.kind} uses the project's existing connection. Connect it from the project's settings instead.`, 400)
+      return jsonError(c, 'USE_EXISTING_SETTINGS', LEGACY_CONNECT_HINT[body.kind] ?? `${body.kind} uses the project's existing connection. Connect it from the project's settings instead.`, 400)
     }
     if (scanForSecrets(JSON.stringify(body.config))) return jsonError(c, 'SECRET_IN_CONFIG', 'The config looks like it holds a secret. Put credentials in the credential field; they go to Vault.', 400)
     if (body.projectId && !access.projectIds.includes(body.projectId)) return jsonError(c, 'NOT_FOUND', 'That project is not in this team.', 404)

@@ -58,6 +58,24 @@ export function JobStatusPill({
     )
   }
 
+  if (status === 'awaiting_lockfile') {
+    return (
+      <Tooltip
+        content="The bump is pushed. Your Mushi lockfile workflow is refreshing the lockfile; the PR opens on its own within about 30 minutes."
+        side="top"
+      >
+        <span
+          role="status"
+          aria-live="polite"
+          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${CHIP_TONE.infoSubtle}`}
+        >
+          {SPINNER}
+          Refreshing lockfile…
+        </span>
+      </Tooltip>
+    )
+  }
+
   if (status === 'completed' && prUrl) {
     return (
       <a

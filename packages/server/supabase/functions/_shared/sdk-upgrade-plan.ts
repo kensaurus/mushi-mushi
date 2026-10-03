@@ -45,6 +45,8 @@ export interface BumpEntry {
   to: string
   /** Legacy @mushi-mushi/react package — include migration note in PR body. */
   migrateToWeb?: boolean
+  /** package.json the bump was made in. Set by the runner, not computeBumpPlan. */
+  path?: string
 }
 
 export interface BumpPlan {

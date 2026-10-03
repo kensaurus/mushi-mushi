@@ -18,6 +18,8 @@ export type SdkUpgradeStatus =
   | 'queueing'
   | 'queued'
   | 'running'
+  /** Bump pushed; the host lockfile workflow runs, then the PR opens (ADR 0019). */
+  | 'awaiting_lockfile'
   | 'completed'
   | 'completed_no_pr'
   | 'failed'
@@ -72,6 +74,8 @@ interface SsePayload {
 
 const POLL_INTERVAL_MS = 2_500
 const POLL_MAX_MS = 10 * 60_000
+/** awaiting_lockfile resolves on the 5-minute sdk-release-sync tick (30 min at most). */
+const AWAITING_POLL_INTERVAL_MS = 30_000
 const TERMINAL_TTL_MS = 2 * 60 * 60_000
 
 function terminalStorageKey(projectId: string) {
@@ -169,6 +173,11 @@ export function useSdkUpgrade(projectId: string) {
         return
       }
       setState((s) => ({ ...s, status: d.status as SdkUpgradeStatus, jobId }))
+      if (d.status === 'awaiting_lockfile') {
+        // Not stuck: the PR opens server-side. Poll slowly, without the 10-minute cap.
+        setTimeout(() => poll(jobId, Date.now()), AWAITING_POLL_INTERVAL_MS)
+        return
+      }
       setTimeout(() => poll(jobId, startedAt), POLL_INTERVAL_MS)
     },
     [projectId],

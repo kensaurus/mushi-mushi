@@ -6,6 +6,9 @@
  * blocked | merged | deploying` states, polls GitHub for current check-run +
  * deployment status, and upserts results into sdk_upgrade_jobs.
  *
+ * Before that, jobs in status `awaiting_lockfile` (ADR 0019) get their PR
+ * opened once the host's lockfile workflow pushed, or after 30 minutes.
+ *
  * Auth: service-role only (requireServiceRoleAuth). Never callable by end users.
  */
 
@@ -22,6 +25,7 @@ import {
   fetchLatestDeploymentStatusForSha,
   normalizeDeployStatus,
 } from '../_shared/github.ts'
+import { syncAwaitingLockfileJobs } from '../_shared/sdk-upgrade-lockfile.ts'
 
 const log = rootLog.child('sdk-release-sync')
 
@@ -36,6 +40,8 @@ app.post('/sdk-release-sync', async (c) => {
   if (unauthorized) return unauthorized
 
   const db = getServiceClient()
+
+  const awaiting = await syncAwaitingLockfileJobs(db)
 
   const { data: jobs, error } = await db
     .from('sdk_upgrade_jobs')
@@ -151,8 +157,8 @@ app.post('/sdk-release-sync', async (c) => {
     }
   }
 
-  log.info('sync complete', { synced: results.length })
-  return c.json({ ok: true, data: { synced: results.length, results } })
+  log.info('sync complete', { synced: results.length, awaiting: awaiting.length })
+  return c.json({ ok: true, data: { synced: results.length, results, awaiting } })
 })
 
 Deno.serve(withSentry('sdk-release-sync', app.fetch))

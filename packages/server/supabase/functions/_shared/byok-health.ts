@@ -21,6 +21,7 @@
  */
 
 import { BYOK_PROVIDERS, probeByokKey, type ByokProbeResult, type ByokProvider } from './byok-validation.ts'
+import { isSupabaseProjectRef } from './supabase-project-ref.ts'
 
 export const BYOK_PROBE_INTERVAL_MS = 24 * 60 * 60 * 1000
 
@@ -36,6 +37,11 @@ export interface ByokKeyRow {
   test_status: string | null
   last_tested_at: string | null
   last_error: string | null
+  /**
+   * Supabase tokens only: the owning project's `supabase_project_ref`, joined
+   * in by the cron. The token is checked against that one project.
+   */
+  supabase_project_ref?: string | null
 }
 
 /** `integration_health_history.status` values (see its CHECK constraint). */
@@ -46,6 +52,9 @@ export function selectDueByokKeys(rows: ByokKeyRow[], nowMs: number): ByokKeyRow
   return rows.filter((r) => {
     if (r.status === 'disabled') return false
     if (!(BYOK_PROVIDERS as readonly string[]).includes(r.provider_slug)) return false
+    // A Supabase token without a linked project has nothing to be checked
+    // against; probing it daily would only log "unreachable" noise.
+    if (r.provider_slug === 'supabase' && !isSupabaseProjectRef(r.supabase_project_ref)) return false
     if (!r.last_tested_at) return true
     return nowMs - new Date(r.last_tested_at).getTime() >= BYOK_PROBE_INTERVAL_MS
   })
@@ -140,6 +149,7 @@ export async function probeByokRow(
     secret,
     key.provider_slug === 'openai' ? (key.base_url ?? undefined) : undefined,
     fetcher,
+    { supabaseProjectRef: key.supabase_project_ref ?? null },
   )
   return outcomeFromProbe(key, probe, nowIso)
 }
