@@ -19,7 +19,7 @@
 
 import type { Context, Hono, MiddlewareHandler } from 'npm:hono@4'
 import { z } from 'npm:zod@3'
-import { adminOrApiKey, apiKeyAuth, jwtAuth, mcpKeyBrowserExposure } from '../../_shared/auth.ts'
+import { adminOrApiKey, apiKeyAuth, jwtAuth, keyHasAgentScope, mcpKeyBrowserExposure } from '../../_shared/auth.ts'
 import { getServiceClient } from '../../_shared/db.ts'
 import { log } from '../../_shared/logger.ts'
 import { snapshotFromSource, DESIGN_GATE } from '../../_shared/design-plane.ts'
@@ -49,14 +49,23 @@ export interface RecipeIngestDeps {
   adminOrApiKeyRead: MiddlewareHandler
   now: () => Date
   recordCiDeviance: (db: Db, projectId: string, input: CiDevianceInput) => Promise<CiDevianceResult>
-  /** Whether the pushing key is public (a web page sent it); a public key's push never sets the design state or dispatches. */
+  /** Why the pushing key is public (a web page sent it, or an SDK key), or null; a public key's push never sets the design state or dispatches. */
   keyExposure: (c: Context) => CiKeyExposure
 }
 
-/** mcpKeyBrowserExposure for the key apiKeyAuth resolved: this request's browser headers, or the key's sticky browser signals. */
+/**
+ * Why the key apiKeyAuth resolved is public, or null for a private agent key:
+ * this request's browser headers or the key's sticky browser signals
+ * (mcpKeyBrowserExposure), else a key with no agent scope. That is the SDK
+ * key (report:write only), which ships inside the app: a native app sends no
+ * browser header, and a web key no browser has used yet has no signal.
+ */
 export function ingestKeyExposure(c: Context): CiKeyExposure {
   const signals = (c.get('apiKeyBrowserSignals') as { last_seen_origin: string | null; browser_seen_at: string | null } | undefined) ?? { last_seen_origin: null, browser_seen_at: null }
-  return mcpKeyBrowserExposure({ origin: c.req.header('Origin'), referer: c.req.header('Referer'), secFetchSite: c.req.header('Sec-Fetch-Site') }, signals)
+  const browser = mcpKeyBrowserExposure({ origin: c.req.header('Origin'), referer: c.req.header('Referer'), secFetchSite: c.req.header('Sec-Fetch-Site') }, signals)
+  if (browser) return browser
+  const scopes = (c.get('apiKeyScopes') as string[] | undefined) ?? []
+  return keyHasAgentScope(scopes) ? null : 'sdk_key'
 }
 
 export const defaultRecipeIngestDeps: RecipeIngestDeps = {

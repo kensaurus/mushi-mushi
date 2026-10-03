@@ -17,21 +17,29 @@
  *              gate, never the shown score, metric or auto-fix baseline);
  *            - the default branch is the primary repo's, else the manifest's
  *              `ci.defaultBranch` (what `mushi recipe init` writes), else main;
- *            - a key a web page has sent is public (anyone may hold it): its
- *              default-branch push is `phase: 'ci_untrusted_scan'`, keeps the
- *              CI gate, and never sets the score, the baseline or dispatches;
+ *            - a public key's default-branch push is `phase:
+ *              'ci_untrusted_scan'`: it keeps the CI gate, and never sets the
+ *              score, the baseline or dispatches. A key is public when a web
+ *              page sent it, or when it is an SDK key (report:write only, no
+ *              agent scope): that key ships inside the app, web or native,
+ *              and a native app sends no browser header;
+ *            - a pushed file path must be a plain code path (CI_FILE_PATH_RE),
+ *              since it is written into the report a fixing agent reads;
+ *            - the client's per-rule counts count above the findings it
+ *              listed only when its listing was full (the CLI lists 500), so
+ *              a push cannot lift its score with numbers alone;
  *            - the project's opt-in actions run (design-actions.ts): the CI
  *              gate always, even when storing the findings failed; the
  *              auto-fix only for a trusted push of the default branch.
  */
 
 import type { getServiceClient } from './db.ts'
-import { actOnDesignDeviance, DESIGN_SCAN_PHASE, devianceGate, loadDesignActionSettings, type ActOutcome, type DevianceGate } from './design-actions.ts'
+import { actOnDesignDeviance, DESIGN_SCAN_PHASE, devianceGate, loadDesignActionSettings, type ActOutcome, type DevianceGate, type UntrustedKeyReason } from './design-actions.ts'
 import { buildDevianceContext, devianceStatus, LITERAL_RULES, rejudgeLiteral, sortFindings } from './design-deviance.ts'
 import type { DesignRuleId, DevianceFinding, DevianceSuggestion } from './design-engine-types.ts'
 import { CI_BRANCH_SCAN_PHASE, CI_UNTRUSTED_SCAN_PHASE, DESIGN_GATE, loadCurrentSnapshot, recordDevianceMetric, storeScanFindings, type SnapshotRow } from './design-plane.ts'
 import { effectiveDesignRules } from './design-rules.ts'
-import { scoreDeviance } from './design-scan.ts'
+import { SCAN_LIMITS, scoreDeviance } from './design-scan.ts'
 import { judgingSet } from './design-set-plan.ts'
 import { normalizeRepoPath } from './recipe-glob.ts'
 
@@ -49,8 +57,8 @@ export interface CiDeviancePush {
   findings: Array<{ ruleId: string; filePath: string; line: number; col: number | null; value: string; message: string; suggestion: DevianceSuggestion | null }>
 }
 
-/** Why the pushing key is public (mcpKeyBrowserExposure), or null for a key only servers have sent. */
-export type CiKeyExposure = 'browser_request' | 'key_seen_in_browser' | null
+/** Why the pushing key is public (a web page sent it, or it is an SDK key), or null for a private agent key. */
+export type CiKeyExposure = UntrustedKeyReason | null
 
 export interface CiDevianceInput {
   commitSha: string
@@ -81,6 +89,22 @@ export interface CiPushDeps {
 export const defaultCiPushDeps: CiPushDeps = { now: () => new Date(), act: actOnDesignDeviance }
 
 const BRANCH_RE = /^[\w./-]{1,200}$/
+/**
+ * A pushed file path: segments of word characters and `@ . + $ ( ) [ ] -`
+ * (route folders like `(auth)`, `[id]` and `@modal` included), at most
+ * CI_FILE_PATH_MAX characters. No spaces, so no prose can ride along into the
+ * report text a fixing agent reads; a path outside it is refused.
+ */
+export const CI_FILE_PATH_RE = /^[\w@.+$()[\]-]+(?:\/[\w@.+$()[\]-]+)*$/
+export const CI_FILE_PATH_MAX = 300
+/** The most findings the CLI lists in one push (pushPayload's default). */
+const CLI_LISTED_MAX = SCAN_LIMITS.maxStoredFindings
+
+/** normalizeRepoPath, then the plain-code-path shape; null when refused. */
+export function ciFilePath(raw: string): string | null {
+  const path = normalizeRepoPath(raw)
+  return path && path.length <= CI_FILE_PATH_MAX && CI_FILE_PATH_RE.test(path) ? path : null
+}
 
 /**
  * The project's default branch: the primary repo's, else the manifest's
@@ -97,9 +121,10 @@ export async function defaultBranchOf(db: Db, projectId: string, manifest: Snaps
   return 'main'
 }
 
-const UNTRUSTED_REASON: Record<Exclude<CiKeyExposure, null>, string> = {
+const UNTRUSTED_REASON: Record<UntrustedKeyReason, string> = {
   browser_request: 'This push came from a web page, so it was not taken as the app\'s design state and cannot dispatch a fix. Push from CI with a key kept out of browser bundles.',
   key_seen_in_browser: 'This key has been sent by a web page, so anyone may hold it: the push keeps its findings and the CI gate, but does not set the shown score or dispatch a fix. Mint a separate key for CI and keep it out of browser bundles.',
+  sdk_key: 'This is an SDK key (report:write only). It ships inside your app, so anyone may hold it: the push keeps its findings and the CI gate, but does not set the shown score or dispatch a fix. Push from CI with a CLI key (from `mushi login`, which adds mcp:read) kept in your CI secrets.',
 }
 
 export async function recordCiDeviance(db: Db, projectId: string, input: CiDevianceInput, deps: CiPushDeps = defaultCiPushDeps): Promise<CiDevianceResult> {
@@ -114,7 +139,7 @@ export async function recordCiDeviance(db: Db, projectId: string, input: CiDevia
   let dropped = 0
   for (const f of input.push.findings) {
     const rule = ctx.rules.get(f.ruleId as DesignRuleId)
-    const path = normalizeRepoPath(f.filePath)
+    const path = ciFilePath(f.filePath)
     const verdict = rule && path && LITERAL_RULES.includes(rule.id) ? rejudgeLiteral(path, rule.id, f.value, ctx) : null
     if (!rule || !path || !verdict) {
       dropped++
@@ -122,11 +147,15 @@ export async function recordCiDeviance(db: Db, projectId: string, input: CiDevia
     }
     literal.push({ rule_id: rule.id, severity: rule.severity, file_path: path, line: f.line, col: f.col, value: verdict.value, message: verdict.message, suggestion: verdict.suggestion })
   }
+  // The CLI lists every finding up to CLI_LISTED_MAX, so only past that may
+  // its counts exceed what it listed. The test is on the findings accepted
+  // here, so a listing padded with refused junk unlocks nothing.
+  const listingFull = literal.length >= CLI_LISTED_MAX
   const counts: Partial<Record<DesignRuleId, number>> = {}
   for (const id of LITERAL_RULES) {
     if (!ctx.rules.get(id)?.enabled) continue
     const listed = literal.filter((f) => f.rule_id === id).length
-    const n = Math.max(listed, Math.floor(input.push.counts[id] ?? 0))
+    const n = listingFull ? Math.max(listed, Math.floor(input.push.counts[id] ?? 0)) : listed
     if (n > 0) counts[id] = n
   }
   const scored = scoreDeviance(snapshot, { counts, scannedLines: input.push.scannedLines, scannedFiles: input.push.scannedFiles })
