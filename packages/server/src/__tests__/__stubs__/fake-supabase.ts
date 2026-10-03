@@ -1,7 +1,8 @@
 /**
  * Minimal in-memory stand-in for the supabase-js query builder, covering the
  * subset the voice-inbox modules use: from().select/insert/update/upsert/delete
- * with eq / not-in / order / limit / maybeSingle / single, plus rpc().
+ * with eq / not-in / order / limit / range / maybeSingle / single, `count`
+ * (with or without `head`), plus rpc(). `failRead` makes a table's reads fail.
  *
  * Filters on JSON paths use the PostgREST `col->>key` spelling. Unique keys
  * per table can be declared so inserts return a `23505` error like Postgres.
@@ -23,6 +24,17 @@ interface FakeDbOptions {
    * as PostgREST does (PGRST116). Off by default for the older suites.
    */
   strictSingle?: boolean
+  /**
+   * Make a read fail the way PostgREST reports an error: return a message to
+   * fail `from(table).select(...)`, or null to let it run. Used by the
+   * fail-open suites to prove a failed read never renders as "nothing found".
+   */
+  failRead?: (table: string) => string | null
+  /**
+   * PostgREST `max_rows`: no select returns more rows than this, whatever
+   * `limit` / `range` ask for (1,000 on Supabase). Unset = no cap.
+   */
+  maxRows?: number
 }
 
 type Op = 'select' | 'insert' | 'update' | 'upsert' | 'delete'
@@ -39,8 +51,12 @@ function readPath(row: Row, key: string): unknown {
 class FakeQuery implements PromiseLike<{ data: unknown; error: { code?: string; message: string } | null; count?: number | null }> {
   private filters: Array<(r: Row) => boolean> = []
   private _limit: number | null = null
+  private _range: { from: number; to: number } | null = null
+  private _count = false
+  private _head = false
   private _single: 'maybe' | 'strict' | null = null
-  private _order: { key: string; ascending: boolean } | null = null
+  /** Sort keys in call order, as PostgREST applies `order=a.desc,b.asc`. */
+  private _order: Array<{ key: string; ascending: boolean }> = []
   private returning = false
   private onConflict: string[] | null = null
 
@@ -51,8 +67,10 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: { code?: string; 
     private payload: Row | Row[] | null = null,
   ) {}
 
-  select(_cols?: string, _opts?: unknown): this {
+  select(_cols?: string, opts?: { count?: string; head?: boolean }): this {
     if (this.op !== 'select') this.returning = true
+    if (opts?.count) this._count = true
+    if (opts?.head) this._head = true
     return this
   }
   insert(payload: Row | Row[]): this {
@@ -101,6 +119,29 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: { code?: string; 
     })
     return this
   }
+  /**
+   * `or('a.is.null,b.neq.x')`: flat PostgREST alternatives of `is.null`,
+   * `eq` and `neq`. `neq` never matches a NULL / absent column, as in Postgres
+   * (`NULL <> 'x'` is NULL), so a filter that forgets `is.null` fails here too.
+   */
+  or(filters: string): this {
+    const alternatives = filters.split(',').map((part) => {
+      const m = /^([\w>-]+)\.(is|eq|neq)\.(.*)$/.exec(part.trim())
+      if (!m) throw new Error(`fake-supabase: or(${part}) unsupported`)
+      const [, key, op, raw] = m
+      return (r: Row): boolean => {
+        const v = readPath(r, key)
+        if (op === 'is') {
+          if (raw !== 'null') throw new Error(`fake-supabase: or(${part}) unsupported`)
+          return v === null || v === undefined
+        }
+        if (v === null || v === undefined) return false
+        return op === 'eq' ? String(v) === raw : String(v) !== raw
+      }
+    })
+    this.filters.push((r) => alternatives.some((f) => f(r)))
+    return this
+  }
   gt(key: string, value: unknown): this {
     this.filters.push((r) => String(readPath(r, key)) > String(value))
     return this
@@ -118,11 +159,16 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: { code?: string; 
     return this
   }
   order(key: string, opts?: { ascending?: boolean }): this {
-    this._order = { key, ascending: opts?.ascending !== false }
+    this._order.push({ key, ascending: opts?.ascending !== false })
     return this
   }
   limit(n: number): this {
     this._limit = n
+    return this
+  }
+  /** Inclusive row window, as PostgREST's Range header. */
+  range(from: number, to: number): this {
+    this._range = { from, to }
     return this
   }
   maybeSingle(): this {
@@ -139,29 +185,40 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: { code?: string; 
     return rows.filter((r) => this.filters.every((f) => f(r)))
   }
 
-  private finish(rows: Row[]): { data: unknown; error: { code?: string; message: string } | null } {
+  private finish(rows: Row[]): { data: unknown; error: { code?: string; message: string } | null; count?: number | null } {
     let out = rows
-    if (this._order) {
-      const { key, ascending } = this._order
+    if (this._order.length > 0) {
       out = [...out].sort((a, b) => {
-        const av = String(readPath(a, key) ?? '')
-        const bv = String(readPath(b, key) ?? '')
-        return ascending ? av.localeCompare(bv) : bv.localeCompare(av)
+        for (const { key, ascending } of this._order) {
+          const av = String(readPath(a, key) ?? '')
+          const bv = String(readPath(b, key) ?? '')
+          const cmp = ascending ? av.localeCompare(bv) : bv.localeCompare(av)
+          if (cmp !== 0) return cmp
+        }
+        return 0
       })
     }
+    const total = out.length
+    if (this._range) out = out.slice(this._range.from, this._range.to + 1)
     if (this._limit != null) out = out.slice(0, this._limit)
+    if (this.db.options.maxRows != null) out = out.slice(0, this.db.options.maxRows)
+    const count = this._count ? { count: total } : {}
+    if (this._head) return { data: null, error: null, ...count }
     if (this._single && this.db.options.strictSingle && out.length > 1) {
       return { data: null, error: { code: 'PGRST116', message: 'JSON object requested, multiple (or no) rows returned' } }
     }
-    if (this._single) return { data: out[0] ?? null, error: null }
-    return { data: out, error: null }
+    if (this._single) return { data: out[0] ?? null, error: null, ...count }
+    return { data: out, error: null, ...count }
   }
 
-  private exec(): { data: unknown; error: { code?: string; message: string } | null } {
+  private exec(): { data: unknown; error: { code?: string; message: string } | null; count?: number | null } {
     const rows = this.db.table(this.table)
     switch (this.op) {
-      case 'select':
+      case 'select': {
+        const failure = this.db.options.failRead?.(this.table) ?? null
+        if (failure) return { data: null, error: { code: 'XX000', message: failure }, count: null }
         return this.finish(this.matches())
+      }
       case 'insert': {
         const items = Array.isArray(this.payload) ? this.payload : [this.payload as Row]
         const uniques = this.db.options.uniques?.[this.table]
@@ -201,7 +258,7 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: { code?: string; 
   }
 
   then<R1 = unknown, R2 = never>(
-    onfulfilled?: ((value: { data: unknown; error: { code?: string; message: string } | null }) => R1 | PromiseLike<R1>) | null,
+    onfulfilled?: ((value: { data: unknown; error: { code?: string; message: string } | null; count?: number | null }) => R1 | PromiseLike<R1>) | null,
     onrejected?: ((reason: unknown) => R2 | PromiseLike<R2>) | null,
   ): PromiseLike<R1 | R2> {
     return Promise.resolve()

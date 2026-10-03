@@ -248,7 +248,13 @@ const REPORT_STATUSES = [
 const REPORT_CATEGORIES = ['bug', 'slow', 'visual', 'confusing', 'other'] as const;
 const REPORT_SEVERITIES = ['critical', 'high', 'medium', 'low'] as const;
 
-/** gate_runs.gate CHECK constraint (migrations 20260612061520, 20261002130100_recipe_gate_types, 20261002180000_radar_gates_and_digest). */
+/**
+ * gate_runs.gate CHECK constraint (migrations 20260612061520,
+ * 20261002130100_recipe_gate_types, 20261002140100_failopen_radar_and_index_schema,
+ * 20261002180000_radar_gates_and_digest). The hosted server keeps the same list
+ * (functions/mcp/index.ts LIST_GATE_FINDINGS_GATES); the console labels every
+ * one (apps/admin/src/lib/gateLabels.ts).
+ */
 const GATE_IDS = [
   'dead_handler',
   'mock_leak',
@@ -264,6 +270,7 @@ const GATE_IDS = [
   'ci_drift',
   'deploy_drift',
   'env_drift',
+  'radar',
   'portfolio_radar',
   'portfolio_radar_ci',
   'store_review',

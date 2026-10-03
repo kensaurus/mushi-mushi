@@ -107,7 +107,11 @@ export function supabaseRadarResults(f: Record<string, any>) {
     evaluateSecretRpcs(f.secretRpcs ?? null),
     evaluateOrphanedStorage({ billedBytes: f.billedStorageBytes ?? null, buckets: f.buckets ?? null }),
     evaluateUnauthenticatedPaidFunctions(f.functions ?? null),
-    ...evaluateBackups({ pitrEnabled: f.pitrEnabled ?? null, storageBytes: Array.isArray(f.buckets) ? f.buckets.reduce((n: number, b: BucketSizeRow) => n + Number(b.bytes || 0), 0) : null }),
+    ...evaluateBackups({
+      pitrEnabled: f.pitrEnabled ?? null,
+      storageBytes: Array.isArray(f.buckets) ? f.buckets.reduce((n: number, b: BucketSizeRow) => n + Number(b.bytes || 0), 0) : null,
+      storageObjects: Array.isArray(f.buckets) ? f.buckets.reduce((n: number, b: BucketSizeRow) => n + Number(b.objects || 0), 0) : null,
+    }),
   ]
 }
 

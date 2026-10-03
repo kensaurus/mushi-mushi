@@ -27,7 +27,7 @@ import { callerCanAccessProject, jsonError } from '../shared.ts'
 import type { Variables } from '../types.ts'
 import { classifyIngestRateLimitError } from './ingest-rate-limit.ts'
 import { portfolioAccess } from './portfolio.ts'
-import { isScanRun, latestPerGate } from './recipe-compose.ts'
+import { loadLatestGateRuns } from './recipe-compose.ts'
 
 const ilog = log.child('recipe-ingest')
 const RECIPE_DRIFT_GATES = ['ci_drift', 'deploy_drift', 'env_drift', 'schema_drift', 'design_drift'] as const
@@ -265,17 +265,22 @@ export function registerRecipeIngestRoutes(app: Hono<{ Variables: Variables }>, 
     if (!/^[0-9a-f-]{36}$/i.test(projectId)) return jsonError(c, 'NOT_FOUND', 'Project not found', 404)
     const access = await callerCanAccessProject(c, db, c.get('userId') as string, projectId)
     if (!access.allowed) return jsonError(c, 'NOT_FOUND', 'Project not found', 404)
-    const { data: runs } = await db
-      .from('gate_runs')
-      .select('id, gate, status, summary, started_at, completed_at, commit_sha')
-      .eq('project_id', projectId)
-      .in('gate', [...RECIPE_DRIFT_GATES])
-      .order('started_at', { ascending: false })
-      .limit(100)
-    const latest = latestPerGate(((runs ?? []) as Array<{ id: string; gate: string; status: string; summary: Record<string, unknown> | null; completed_at: string | null; commit_sha: string | null }>).filter((r) => r.gate !== DESIGN_GATE || isScanRun(r)))
-    const { data: findings } = latest.length
+    // Newest run per drift gate, read per gate: a shared "newest N" page let busy
+    // gates push one out, and a failed read showed every gate as never run (P-1).
+    let latest: Awaited<ReturnType<typeof loadLatestGateRuns>>
+    try {
+      latest = await loadLatestGateRuns(db, projectId, RECIPE_DRIFT_GATES)
+    } catch (err) {
+      ilog.warn('recipe drift: gate_runs read failed', { projectId, err: err instanceof Error ? err.message : String(err) })
+      return jsonError(c, 'DB_ERROR', 'The drift checks of this project could not be read.', 500)
+    }
+    const { data: findings, error: findingsErr } = latest.length
       ? await db.from('gate_findings').select('gate_run_id, rule_id, severity, message, file_path, line, suggested_fix').in('gate_run_id', latest.map((r) => r.id)).eq('allowlisted', false).limit(500)
-      : { data: [] }
+      : { data: [], error: null }
+    if (findingsErr) {
+      ilog.warn('recipe drift: gate_findings read failed', { projectId, err: findingsErr.message })
+      return jsonError(c, 'DB_ERROR', 'The drift findings of this project could not be read.', 500)
+    }
     const gateOf = new Map(latest.map((r) => [r.id, r.gate]))
     return c.json({
       ok: true,

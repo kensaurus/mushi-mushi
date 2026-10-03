@@ -31,26 +31,19 @@ export function FullStackAuditReadout({ stats, fetchedAt, isValidating }: Props)
 
   const statsApi = `${RESOLVED_EXTERNAL_API_URL}/v1/admin/fullstack-audit/stats`
 
+  // A failed read leaves the counts unknown: never show them as a green 0.
+  const unknown = stats.topPriority === 'unknown'
+  const count = (n: number, bad: 'danger' | 'warn'): Pick<DetailRowItem, 'value' | 'tone'> =>
+    unknown ? { value: '—', tone: 'warn' } : { value: String(n), tone: n > 0 ? bad : 'ok' }
   const rows: DetailRowItem[] = [
-    {
-      label: 'Errors',
-      value: String(stats.errorCount),
-      tone: stats.errorCount > 0 ? 'danger' : 'ok',
-    },
-    {
-      label: 'Warnings',
-      value: String(stats.warnCount),
-      tone: stats.warnCount > 0 ? 'warn' : 'ok',
-    },
-    {
-      label: 'Failed gates',
-      value: String(stats.failedGateCount),
-      tone: stats.failedGateCount > 0 ? 'danger' : 'ok',
-    },
+    { label: 'Errors', ...count(stats.errorCount, 'danger') },
+    { label: 'Warnings', ...count(stats.warnCount, 'warn') },
+    { label: 'Failed gates', ...count(stats.failedGateCount, 'danger') },
     {
       label: 'Priority',
-      value: stats.topPriority,
+      value: unknown ? `unknown: ${stats.readError ?? 'a read failed'}` : stats.topPriority,
       tone: stats.topPriority === 'healthy' ? 'ok' : stats.topPriority === 'failures' ? 'danger' : 'warn',
+      wrap: unknown,
     },
     {
       label: 'Project ref',

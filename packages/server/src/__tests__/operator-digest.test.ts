@@ -44,7 +44,7 @@ const line = (over: Partial<import('../../supabase/functions/_shared/operator-di
 describe('composeDigest', () => {
   it('puts the worst app first, names every app, and says nothing new when nothing happened', () => {
     const d = digest.composeDigest({
-      organizationId: ORG, organizationName: 'Kenji apps', generatedAt: NOW.toISOString(),
+      organizationId: ORG, organizationName: 'Kenji apps', generatedAt: NOW.toISOString(), truncated: [],
       projects: [
         line({ name: 'yen-yen', newReports24h: 2, openReports: 5 }),
         line({ projectId: P2, name: 'glot.it', radar: { error: 1, warn: 2, checked: true, failed: false } }),
@@ -56,16 +56,16 @@ describe('composeDigest', () => {
     expect(d.lines[1]).toBe('yen-yen: 2 new reports (5 open)')
     expect(d.lines[2]).toBe('1 app has not had hole checks yet.')
     expect(d.text).toContain('https://example.test/portfolio')
-    const empty = digest.composeDigest({ organizationId: ORG, organizationName: null, generatedAt: '', projects: [line({})] }, 'u')
+    const empty = digest.composeDigest({ organizationId: ORG, organizationName: null, generatedAt: '', truncated: [], projects: [line({})] }, 'u')
     expect(empty.hasContent).toBe(false)
     expect(empty.text).toContain('Nothing new across your apps today.')
   })
 
   it('says when hole checks failed, and an org whose checks never ran still gets a digest saying so', () => {
-    const failed = digest.composeDigest({ organizationId: ORG, organizationName: null, generatedAt: '', projects: [line({ radar: { error: 0, warn: 0, checked: false, failed: true } })] }, 'u')
+    const failed = digest.composeDigest({ organizationId: ORG, organizationName: null, generatedAt: '', truncated: [], projects: [line({ radar: { error: 0, warn: 0, checked: false, failed: true } })] }, 'u')
     expect(failed.hasContent).toBe(true)
     expect(failed.lines).toEqual(['glot.it: hole checks failed to run'])
-    const never = digest.composeDigest({ organizationId: ORG, organizationName: null, generatedAt: '', projects: [line({ radar: { error: 0, warn: 0, checked: false, failed: false } }), line({ projectId: P2, name: 'yen', radar: { error: 0, warn: 0, checked: false, failed: false } })] }, 'u')
+    const never = digest.composeDigest({ organizationId: ORG, organizationName: null, generatedAt: '', truncated: [], projects: [line({ radar: { error: 0, warn: 0, checked: false, failed: false } }), line({ projectId: P2, name: 'yen', radar: { error: 0, warn: 0, checked: false, failed: false } })] }, 'u')
     expect(never.hasContent).toBe(true)
     expect(never.lines).toEqual(['2 apps have not had hole checks yet.'])
     expect(never.text).not.toContain('Nothing new')
@@ -235,6 +235,115 @@ describe('collectDigest hole-check state', () => {
     const by = Object.fromEntries(data.projects.map((p) => [p.projectId, p.radar]))
     expect(by[P1]).toMatchObject({ checked: false, failed: true })
     expect(by[P2]).toMatchObject({ checked: false, failed: false })
+  })
+})
+
+describe('collectDigest past the server row cap', () => {
+  const OLD = '2026-08-01T04:05:00Z'
+
+  it('counts every report, call and release, not the first 1,000 rows of each', async () => {
+    const db = makeFakeDb({
+      organizations: [{ id: ORG, name: 'A' }],
+      projects: [{ id: P1, name: 'glot.it', organization_id: ORG }],
+      reports: Array.from({ length: 2_500 }, (_, i) => ({ id: `r${String(i).padStart(5, '0')}`, project_id: P1, status: 'new', created_at: '2026-10-02T08:00:00Z' })),
+      llm_invocations: Array.from({ length: 1_500 }, (_, i) => ({ id: `c${String(i).padStart(5, '0')}`, project_id: P1, cost_usd: 0.01, created_at: '2026-10-02T08:00:00Z' })),
+      releases: [
+        ...Array.from({ length: 1_100 }, (_, i) => ({ id: `old${String(i).padStart(5, '0')}`, project_id: P1, status: 'published', published_at: OLD, created_at: OLD })),
+        { id: 'zz-draft', project_id: P1, status: 'draft', published_at: null, created_at: OLD },
+      ],
+      gate_runs: [], gate_findings: [],
+    } as never, { maxRows: 1_000 })
+    const data = await digest.collectDigest(db as never, ORG, NOW)
+    expect(data.truncated).toEqual([])
+    expect(data.projects[0]).toMatchObject({ newReports24h: 2_500, openReports: 2_500, draftReleases: 1, publishedReleases24h: 0, spend: { last24hUsd: 15 } })
+  })
+
+  it('an app whose latest hole check is older than 30 days is still checked, not "not checked yet"', async () => {
+    const db = makeFakeDb({
+      organizations: [{ id: ORG, name: 'A' }],
+      projects: [{ id: P1, name: 'glot.it', organization_id: ORG }],
+      reports: [], releases: [], llm_invocations: [],
+      gate_runs: [{ id: 'r-old', project_id: P1, gate: 'portfolio_radar', status: 'warn', summary: {}, started_at: OLD }],
+      gate_findings: [{ id: 'f1', gate_run_id: 'r-old', project_id: P1, severity: 'warn', allowlisted: false }],
+    } as never)
+    const data = await digest.collectDigest(db as never, ORG, NOW)
+    expect(data.projects[0].radar).toEqual({ error: 0, warn: 1, checked: true, failed: false })
+  })
+
+  it('never re-reads the history of a gate that ran in the last 30 days', async () => {
+    const db = makeFakeDb({
+      organizations: [{ id: ORG, name: 'A' }],
+      projects: [{ id: P1, name: 'glot.it', organization_id: ORG }],
+      reports: [], releases: [], llm_invocations: [], gate_findings: [],
+      // A recent scheduled run, 1,100 older ones, and no host-CI run at all.
+      gate_runs: [
+        { id: 'r-new', project_id: P1, gate: 'portfolio_radar', status: 'pass', summary: {}, started_at: '2026-10-02T04:05:00Z' },
+        ...Array.from({ length: 1_100 }, (_, i) => ({ id: `r-old-${String(i).padStart(5, '0')}`, project_id: P1, gate: 'portfolio_radar', status: 'pass', summary: {}, started_at: OLD })),
+      ],
+    } as never, { maxRows: 1_000 })
+    let gateRunReads = 0
+    const counted = new Proxy(db, {
+      get: (t, prop, r) => (prop === 'from' ? (name: string) => {
+        if (name === 'gate_runs') gateRunReads++
+        return t.from(name)
+      } : Reflect.get(t, prop, r)),
+    })
+    const data = await digest.collectDigest(counted as never, ORG, NOW)
+    // One newest-run read per hole-check gate (the host-CI one finds nothing); none of the 1,100 old rows.
+    expect(gateRunReads).toBe(2)
+    expect(data.truncated).toEqual([])
+    expect(data.projects[0].radar).toMatchObject({ checked: true, failed: false })
+  })
+
+  it('reads one newest run per app and gate, never one window over all apps', async () => {
+    // A window read over every app's runs could stop at its row ceiling and drop one
+    // app's newest run; a fallback over older runs then read a stale one as the latest.
+    const db = makeFakeDb({
+      organizations: [{ id: ORG, name: 'A' }],
+      projects: [{ id: P1, name: 'glot.it', organization_id: ORG }, { id: P2, name: 'yen', organization_id: ORG }],
+      reports: [], releases: [], llm_invocations: [], gate_findings: [],
+      gate_runs: [
+        ...Array.from({ length: 1_200 }, (_, i) => ({ id: `p1-${String(i).padStart(5, '0')}`, project_id: P1, gate: 'portfolio_radar', status: 'pass', summary: {}, started_at: '2026-10-02T04:05:00Z' })),
+        { id: 'p2-new', project_id: P2, gate: 'portfolio_radar', status: 'pass', summary: {}, started_at: '2026-09-20T04:05:00Z' },
+        { id: 'p2-old', project_id: P2, gate: 'portfolio_radar', status: 'error', summary: {}, started_at: OLD },
+      ],
+    } as never, { maxRows: 1_000 })
+    const calls: string[][] = []
+    const spied = new Proxy(db, {
+      get: (t, prop, r) => (prop === 'from' ? (name: string) => {
+        const query = t.from(name)
+        if (name !== 'gate_runs') return query
+        const used: string[] = []
+        calls.push(used)
+        const wrapped: object = new Proxy(query, {
+          get: (q, method, qr) => {
+            const value = Reflect.get(q, method, qr)
+            if (typeof value !== 'function' || method === 'then') return typeof value === 'function' ? value.bind(q) : value
+            return (...args: unknown[]) => {
+              used.push(method === 'limit' ? `limit(${String(args[0])})` : String(method))
+              value.apply(q, args)
+              return wrapped
+            }
+          },
+        })
+        return wrapped
+      } : Reflect.get(t, prop, r)),
+    })
+    const data = await digest.collectDigest(spied as never, ORG, NOW)
+    expect(calls).toHaveLength(4)
+    for (const used of calls) {
+      expect(used).toContain('limit(1)')
+      expect(used).not.toContain('range')
+    }
+    const by = Object.fromEntries(data.projects.map((p) => [p.projectId, p.radar]))
+    expect(by[P2]).toMatchObject({ checked: true, failed: false })
+    expect(data.truncated).toEqual([])
+  })
+
+  it('says a cut-short read out loud as a lower bound', () => {
+    const d = digest.composeDigest({ organizationId: ORG, organizationName: 'A', generatedAt: '', truncated: ['open reports'], projects: [line({})] }, 'u')
+    expect(d.hasContent).toBe(true)
+    expect(d.lines).toContain('Some numbers are lower bounds: there were more open reports than the digest reads.')
   })
 })
 

@@ -29,6 +29,15 @@ This page **reads only**. It builds on each app's [Recipe](/concepts/app-recipe)
 
 In **Advanced** mode each card also shows Mushi's own AI spend for that app over 30 days and its monthly budget.
 
+### When something could not be read
+
+If Mushi cannot read part of the page (the AI spend, the caps, the releases,
+the SDK versions, which integrations each app has), a callout at the top names
+it and the affected cells read **Could not read**. They never fall back to
+`$0`, "Not set", "None yet" or "no missing setups". When there are more rows
+than Mushi reads in one go, the total is marked as a lower bound ("at least
+$12.40", "40+").
+
 Below the cards:
 
 | Section | What it means |
@@ -36,7 +45,7 @@ Below the cards:
 | **Across your apps** | Problems only visible across apps: a deep link or "more apps" link that no longer opens, a shared login that does not allow one app's domain, apps sharing purchases on different Stripe accounts, many apps posting to one channel, CI cost in two repos. See [One login across your apps](../concepts/shared-login). |
 | **Funnel across apps** | One funnel run on every app: the same event names, in the same order, within the same window. Owners and admins pick the steps. An app with product events off, or with no events yet, says so instead of 0%. |
 | **Releases** | For each app: what is live and at what rollout, native changes waiting for a store build, and JS-only changes that can ship as an over-the-air update. It suggests one store release per app to save CI minutes. Your own CI builds and submits. |
-| **Daily digest** | One message a day across all apps. Off until an owner picks Slack, email or push. |
+| **Daily digest** | One message a day across all apps. Off until an owner picks Slack, email or push. When there were more reports, AI calls or findings than it reads, it says which numbers are lower bounds. |
 | **Shared between apps** | Domains, store apps, Supabase projects and channels two or more apps use. |
 | **Connected sources** | App Store Connect, Google Play, AI spend, RevenueCat or your own endpoint. Read-only by default. |
 
@@ -46,7 +55,8 @@ Below the cards:
 
 The MCP tools `get_portfolio` and `list_portfolio_findings` return the same
 data. They need an **account-level** key (Connect → MCP); a key bound to one
-project cannot read its sibling apps.
+project cannot read its sibling apps. Both return `readErrors`, and each card
+an `unreadable` list: a part named there is unknown, not empty.
 
 ## Who can see it
 

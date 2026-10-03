@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import type { PortfolioCard } from '../../lib/portfolioTypes'
-import { kindLabel, radarLabel, radarStateMeta, sdkLabel, sortPortfolioCards } from './portfolioView'
+import {
+  budgetText,
+  kindLabel,
+  openReportsText,
+  radarLabel,
+  radarStateMeta,
+  releaseText,
+  sdkLabel,
+  sortPortfolioCards,
+  spendText,
+} from './portfolioView'
 
 const card = (over: Partial<PortfolioCard>): PortfolioCard => ({
   projectId: 'p',
@@ -15,7 +25,8 @@ const card = (over: Partial<PortfolioCard>): PortfolioCard => ({
   sdk: [],
   latestRelease: null,
   radar: { checkedAt: null, status: 'never_run', open: { error: 0, warn: 0, info: 0 }, unchecked: 0, errored: 0 },
-  spend: { llmUsd30d: 0, llmCalls30d: 0, autofixCapUsd: null, monthlyLlmBudgetUsd: null },
+  spend: { llmUsd30d: 0, llmCalls30d: 0, partial: false, autofixCapUsd: null, monthlyLlmBudgetUsd: null, capsKnown: true },
+  unreadable: [],
   ...over,
 })
 
@@ -62,5 +73,27 @@ describe('radarStateMeta', () => {
 
   it('labels a radar run with nothing declared as nothing to check', () => {
     expect(radarLabel({ checkedAt: '2026-10-02T00:00:00Z', status: 'nothing_to_check', open: { error: 0, warn: 0, info: 0 }, unchecked: 6, errored: 0 }).text).toBe('Nothing to check yet')
+  })
+
+  it('a column the server could not read never reads as $0, "Not set", "None yet" or a pass', () => {
+    const unread = card({
+      spend: { llmUsd30d: null, llmCalls30d: null, partial: false, autofixCapUsd: null, monthlyLlmBudgetUsd: null, capsKnown: false },
+      unreadable: ['gate_runs', 'reports', 'sdk', 'spend', 'caps', 'releases', 'kind'],
+      openReports: 3,
+      radar: { checkedAt: '2026-10-02T00:00:00Z', status: 'pass', open: { error: 0, warn: 0, info: 0 }, unchecked: 0, errored: 0 },
+    })
+    expect(spendText(unread)).toBe('Could not read')
+    expect(budgetText(unread)).toBe('Could not read')
+    expect(releaseText(unread)).toBe('Could not read')
+    expect(openReportsText(unread)).toBe('3+')
+    expect(kindLabel(unread)).toBe('Kind: could not read')
+    expect(sdkLabel(unread.sdk, unread.unreadable).text).toBe('SDK: could not read')
+    expect(radarLabel(unread.radar, unread.unreadable).tone).not.toBe('okSubtle')
+
+    const read = card({ spend: { llmUsd30d: 1.5, llmCalls30d: 3, partial: true, autofixCapUsd: 2, monthlyLlmBudgetUsd: null, capsKnown: true } })
+    expect(spendText(read)).toBe('at least $1.50')
+    expect(budgetText(read)).toBe('Not set')
+    expect(releaseText(read)).toBe('None yet')
+    expect(openReportsText(read)).toBe('0')
   })
 })

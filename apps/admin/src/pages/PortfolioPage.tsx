@@ -12,7 +12,9 @@
  *       GET /v1/admin/orgs/:orgId/releases (ReleasesCard)
  *       GET|PUT /v1/admin/orgs/:orgId/funnel (FunnelCard)
  * Empty, loading, error and "not checked yet" states are explicit; nothing
- * that was never checked renders as healthy.
+ * that was never checked renders as healthy. A read the server could not
+ * finish is listed in a callout (`readErrors`) and its cells read "Could not
+ * read" (`card.unreadable`), never $0, "Not set" or "None yet".
  */
 
 import { Link } from 'react-router-dom'
@@ -21,15 +23,24 @@ import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { PageLoadError } from '../components/PageLoadError'
 import { PanelErrorBoundary } from '../components/PanelErrorBoundary'
-import { Badge, Btn, Card, CopyButton, EmptyState, FreshnessPill, Loading, Section, StatCard, StatGrid } from '../components/ui'
+import { Badge, Btn, Callout, Card, CopyButton, EmptyState, FreshnessPill, Loading, Section, StatCard, StatGrid } from '../components/ui'
 import { RecipeStateChip } from '../components/recipe/RecipeStateChip'
 import { useActiveOrgId } from '../components/OrgSwitcher'
 import { usePageData, type PageDataState } from '../lib/usePageData'
 import { useAdminMode } from '../lib/mode'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { setActiveProjectIdSnapshot } from '../lib/activeProject'
-import type { PortfolioCard, PortfolioFindingsResponse, PortfolioResponse } from '../lib/portfolioTypes'
-import { formatUsd, kindLabel, radarLabel, sdkLabel, sortPortfolioCards } from '../components/portfolio/portfolioView'
+import type { PortfolioCard, PortfolioFindingsResponse, PortfolioReadError, PortfolioResponse } from '../lib/portfolioTypes'
+import {
+  budgetText,
+  kindLabel,
+  openReportsText,
+  radarLabel,
+  releaseText,
+  sdkLabel,
+  sortPortfolioCards,
+  spendText,
+} from '../components/portfolio/portfolioView'
 import { DigestCard } from '../components/portfolio/DigestCard'
 import { ConnectorsCard } from '../components/portfolio/ConnectorsCard'
 import { SharedResourcesCard } from '../components/portfolio/SharedResourcesCard'
@@ -86,7 +97,11 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
                 <StatCard label="Apps" value={String(page.data.totalProjects)} />
                 <StatCard label="Need a look" value={String(needsLook)} accent={needsLook > 0 ? 'text-warn' : undefined} />
                 <StatCard label="Fix once" value={String(page.data.repeatedGroups)} hint="Problems open in two or more apps" />
-                <StatCard label="Missing setups" value={String(page.data.holes)} hint="Integrations most of your other apps have" />
+                <StatCard
+                  label="Missing setups"
+                  value={page.data.holes === null ? '—' : String(page.data.holes)}
+                  hint={page.data.holes === null ? 'Could not read which integrations each app has' : 'Integrations most of your other apps have'}
+                />
               </StatGrid>
             ) : null,
           },
@@ -97,6 +112,7 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
       {page.error && (
         <PageLoadError error={page.error} code={page.errorCode} resource="portfolio" endpoint={page.errorEndpoint} requestId={page.requestId} onRetry={page.reload} />
       )}
+      {page.data && page.data.readErrors.length > 0 && <ReadErrorsCallout errors={page.data.readErrors} />}
       {page.data && page.data.cards.length === 0 && (
         <Card className="px-4 py-8 text-center text-sm text-fg-faint">
           <p className="font-medium text-fg-muted">No apps in this team yet</p>
@@ -150,8 +166,8 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
 }
 
 function PortfolioCardTile({ card, showSpend }: { card: PortfolioCard; showSpend: boolean }) {
-  const radar = radarLabel(card.radar)
-  const sdk = sdkLabel(card.sdk)
+  const radar = radarLabel(card.radar, card.unreadable)
+  const sdk = sdkLabel(card.sdk, card.unreadable)
   const open = () => setActiveProjectIdSnapshot(card.projectId)
   return (
     <Card className="relative flex flex-col gap-3 p-4">
@@ -173,15 +189,15 @@ function PortfolioCardTile({ card, showSpend }: { card: PortfolioCard; showSpend
       </div>
       <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-fg-muted">
         <dt>Open reports</dt>
-        <dd className="text-right font-medium text-fg">{card.openReports}</dd>
+        <dd className="text-right font-medium text-fg">{openReportsText(card)}</dd>
         <dt>Latest release</dt>
-        <dd className="truncate text-right text-fg">{card.latestRelease?.version ?? 'None yet'}</dd>
+        <dd className="truncate text-right text-fg">{releaseText(card)}</dd>
         {showSpend && (
           <>
             <dt>Mushi AI spend (30 days)</dt>
-            <dd className="text-right text-fg">{formatUsd(card.spend.llmUsd30d)}</dd>
+            <dd className="text-right text-fg">{spendText(card)}</dd>
             <dt>Monthly AI budget</dt>
-            <dd className="text-right text-fg">{card.spend.monthlyLlmBudgetUsd == null ? 'Not set' : formatUsd(card.spend.monthlyLlmBudgetUsd)}</dd>
+            <dd className="text-right text-fg">{budgetText(card)}</dd>
           </>
         )}
       </dl>
@@ -202,8 +218,12 @@ function FindingsSections({ findings, names }: { findings: PageDataState<Portfol
   if (!data) return null
   const name = (id: string) => names.get(id) ?? id.slice(0, 8)
   const behind = data.sdkSkew.filter((e) => e.status !== 'current')
+  const failed = (part: PortfolioReadError['part']) => data.readErrors.find((e) => e.part === part && e.kind === 'failed')
+  const sdkFailed = failed('sdk')
+  const holesFailed = failed('integrations')
   return (
     <div className="flex flex-col gap-4">
+      {data.readErrors.length > 0 && <ReadErrorsCallout errors={data.readErrors} />}
       <Section title="Fix once">
         {data.groups.length === 0 ? (
           <p className="text-sm text-fg-muted">No problem is open in two or more apps right now.</p>
@@ -240,7 +260,9 @@ function FindingsSections({ findings, names }: { findings: PageDataState<Portfol
         </Section>
       )}
       <Section title="Mushi SDK versions">
-        {behind.length === 0 ? (
+        {sdkFailed ? (
+          <p className="text-sm text-danger" role="status">{sdkFailed.message}</p>
+        ) : behind.length === 0 ? (
           <p className="text-sm text-fg-muted">Every app that reported is on the latest Mushi SDK.</p>
         ) : (
           <ul className="flex flex-col gap-1 text-sm">
@@ -255,7 +277,9 @@ function FindingsSections({ findings, names }: { findings: PageDataState<Portfol
         )}
       </Section>
       <Section title="Missing setups">
-        {data.holes.length === 0 ? (
+        {holesFailed ? (
+          <p className="text-sm text-danger" role="status">{holesFailed.message}</p>
+        ) : data.holes.length === 0 ? (
           <p className="text-sm text-fg-muted">No app is missing something most of your other apps have.</p>
         ) : (
           <ul className="flex flex-col gap-1 text-sm">
@@ -269,5 +293,19 @@ function FindingsSections({ findings, names }: { findings: PageDataState<Portfol
         )}
       </Section>
     </div>
+  )
+}
+
+/** Reads the server could not finish: their columns are unknown, not empty or zero. */
+function ReadErrorsCallout({ errors }: { errors: PortfolioReadError[] }) {
+  return (
+    <Callout tone="warn" label="Some of this could not be read">
+      <ul className="flex list-disc flex-col gap-0.5 pl-4 text-xs text-fg-secondary" role="status">
+        {errors.map((e) => (
+          <li key={`${e.part}:${e.kind}`}>{e.message}</li>
+        ))}
+      </ul>
+      <p className="mt-1 text-2xs text-fg-muted">Cells that depend on these read "Could not read". Refresh in a minute.</p>
+    </Callout>
   )
 }

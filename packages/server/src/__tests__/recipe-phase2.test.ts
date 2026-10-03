@@ -338,6 +338,31 @@ describe('recipe ingest routes', () => {
     expect(graph.body.data.resources).toEqual([expect.objectContaining({ kind: 'domain', externalId: 'glot.it', uses: [{ projectId: P1, role: 'site', source: 'csv' }] })])
   })
 
+  it('drift shows an older drift run that 100+ newer runs of another drift gate followed, and a failed read is an error', async () => {
+    const ci = Array.from({ length: 150 }, (_, i) => {
+      const at = new Date(Date.parse('2026-10-01T00:00:00Z') + i * 60_000).toISOString()
+      return { id: `ci-${String(i).padStart(4, '0')}`, project_id: P1, gate: 'ci_drift', status: 'pass', summary: {}, started_at: at, completed_at: at, commit_sha: null }
+    })
+    const db = seed({
+      gate_runs: [
+        { id: 'env-old', project_id: P1, gate: 'env_drift', status: 'fail', summary: {}, started_at: '2026-09-20T00:00:00Z', completed_at: '2026-09-20T00:01:00Z', commit_sha: 'abc1234' },
+        ...ci,
+      ],
+      gate_findings: [{ id: 'f1', gate_run_id: 'env-old', rule_id: 'env_missing', severity: 'error', message: 'SENTRY_DSN missing in CI', file_path: null, line: null, suggested_fix: null, allowlisted: false }],
+    })
+    const res = await ingestHarness(db).call('GET', `/v1/admin/projects/${P1}/recipe/drift`)
+    expect(res.status).toBe(200)
+    expect(res.body.data.gates.env_drift).toEqual({ status: 'fail', checkedAt: '2026-09-20T00:01:00Z', commitSha: 'abc1234' })
+    expect(res.body.data.gates.ci_drift.status).toBe('pass')
+    expect(res.body.data.gates.deploy_drift.status).toBe('never_run')
+    expect(res.body.data.findings).toEqual([expect.objectContaining({ gate: 'env_drift', ruleId: 'env_missing' })])
+
+    const broken = makeFakeDb({ ...db.tables } as never, { failRead: (t) => (t === 'gate_runs' ? 'statement timeout' : null) })
+    const failed = await ingestHarness(broken).call('GET', `/v1/admin/projects/${P1}/recipe/drift`)
+    expect(failed.status).toBe(500)
+    expect(failed.body.error.code).toBe('DB_ERROR')
+  })
+
   it('parses quoted CSV cells', () => {
     expect(ingest.parseCsvLine('domain,"a,b.example","say ""hi"""')).toEqual(['domain', 'a,b.example', 'say "hi"'])
   })

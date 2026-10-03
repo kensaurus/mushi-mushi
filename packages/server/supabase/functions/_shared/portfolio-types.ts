@@ -13,6 +13,10 @@
  * organization (the MCP default).
  *
  * Every route answers `{ ok: true, data: <type> }`.
+ *
+ * Fail-open rule: a read that fails or is cut short is never shown as zero,
+ * "no cap", "no release" or "healthy". The page names it in `readErrors`, and
+ * each card lists the columns it could not read in `unreadable`.
  */
 
 import type { ElementState, RecipeElementKey } from './recipe-types.ts'
@@ -51,6 +55,33 @@ export interface PortfolioCard {
   latestRelease: { version: string; publishedAt: string | null } | null
   radar: PortfolioRadarColumn
   spend: PortfolioSpendColumn
+  /**
+   * Columns of this card whose read failed or was cut short. Their values are
+   * unknown: `openReports` 0, `latestRelease` null or an empty `sdk` list do
+   * not mean "none" when the column is listed here.
+   */
+  unreadable: PortfolioReadPart[]
+}
+
+/** A part of the portfolio that is read with its own query. */
+export type PortfolioReadPart =
+  | 'gate_runs'
+  | 'findings'
+  | 'reports'
+  | 'sdk'
+  | 'spend'
+  | 'caps'
+  | 'releases'
+  | 'kind'
+  | 'integrations'
+  | 'cross_project'
+
+export interface PortfolioReadError {
+  part: PortfolioReadPart
+  /** `failed`: the read errored. `truncated`: more rows matched than were read. */
+  kind: 'failed' | 'truncated'
+  /** Plain-English, safe to show (no SQL or row data). */
+  message: string
 }
 
 /**
@@ -75,10 +106,15 @@ export interface PortfolioRadarColumn {
  * findings: missing caps are reported by the Phase 0 detector, not here.
  */
 export interface PortfolioSpendColumn {
-  llmUsd30d: number
-  llmCalls30d: number
+  /** null when the spend could not be read. */
+  llmUsd30d: number | null
+  llmCalls30d: number | null
+  /** True when more calls matched than were summed: the totals are a lower bound. */
+  partial: boolean
   autofixCapUsd: number | null
   monthlyLlmBudgetUsd: number | null
+  /** False when the caps could not be read: null caps then mean "unknown", not "no cap". */
+  capsKnown: boolean
 }
 
 export interface FindingGroup {
@@ -112,7 +148,10 @@ export interface PortfolioResponse {
   cards: PortfolioCard[]
   /** Counts only; the list is on /portfolio/findings. */
   repeatedGroups: number
-  holes: number
+  /** null when the integrations could not be read. */
+  holes: number | null
+  /** Every read that failed or was cut short; empty when the page is complete. */
+  readErrors: PortfolioReadError[]
 }
 
 export interface PortfolioFindingsResponse {
@@ -123,6 +162,11 @@ export interface PortfolioFindingsResponse {
   holes: IntegrationHole[]
   /** Rules that are genuinely cross-project (shared auth, deep links, shared channels…), Phase P2. */
   crossProject: CrossProjectFinding[]
+  /**
+   * Every read that failed or was cut short. A part listed here means its list
+   * above is unknown, not empty (e.g. `integrations` failed → `holes` is []).
+   */
+  readErrors: PortfolioReadError[]
 }
 
 export interface CrossProjectFinding {
