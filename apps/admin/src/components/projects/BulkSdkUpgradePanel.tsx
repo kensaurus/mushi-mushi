@@ -59,7 +59,7 @@ export interface BulkUpgradeProject {
   hasRepo: boolean
 }
 
-const IN_FLIGHT: SdkUpgradeStatus[] = ['queueing', 'queued', 'running']
+const IN_FLIGHT: SdkUpgradeStatus[] = ['queueing', 'queued', 'running', 'awaiting_lockfile']
 
 // ---------------------------------------------------------------------------
 // Per-row live status pill (mirrors ConnectPage UpgradeStatusIndicator).
@@ -103,7 +103,7 @@ function RowStatus({
       </span>,
     )
   }
-  if (status === 'running') {
+  if (status === 'running' || status === 'awaiting_lockfile') {
     return wrap(
       <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-2xs font-medium ${CHIP_TONE.accentSubtle}`}>
         {spinner} {label}

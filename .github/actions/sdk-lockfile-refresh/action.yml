@@ -1,0 +1,178 @@
+# Mushi SDK lockfile refresh (ADR 0019)
+#
+# Runs in a HOST repo, on the `mushi/sdk-upgrade-*` branch Mushi pushed a
+# @mushi-mushi/* bump to. Regenerates every lockfile that governs a
+# package.json changed in the tip commit, with the package manager's own CLI
+# (lockfile only, --ignore-scripts), then commits and pushes it with the
+# workflow's GITHUB_TOKEN. Mushi opens the upgrade PR after it sees that
+# commit. Shell only, no dependencies.
+#
+# Use from the host workflow template: docs/templates/mushi-sdk-lockfile.yml
+#   - uses: kensaurus/mushi-mushi/.github/actions/sdk-lockfile-refresh@master
+#
+# Requirements: actions/checkout with fetch-depth: 2 (default credentials
+# kept), actions/setup-node, and `permissions: contents: write`.
+name: Mushi SDK lockfile refresh
+description: Refresh the lockfile on a Mushi SDK upgrade branch with the package manager CLI and push it.
+author: kensaurus
+branding:
+  icon: package
+  color: green
+
+inputs:
+  commit-message:
+    description: Commit message for the lockfile commit.
+    required: false
+    default: 'chore(deps): refresh lockfile for @mushi-mushi/* bump'
+
+outputs:
+  changed:
+    description: "'true' when a lockfile commit was pushed."
+    value: ${{ steps.refresh.outputs.changed }}
+
+runs:
+  using: composite
+  steps:
+    - id: refresh
+      shell: bash
+      env:
+        COMMIT_MESSAGE: ${{ inputs.commit-message }}
+        COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
+        COREPACK_ENABLE_STRICT: '0'
+      run: |
+        set -euo pipefail
+        echo "changed=false" >> "$GITHUB_OUTPUT"
+
+        if ! git rev-parse --verify -q HEAD~1 >/dev/null; then
+          echo "::error::No parent commit. Check out with fetch-depth: 2."
+          exit 1
+        fi
+
+        # package.json files changed by the tip commit (Mushi pushes the bump as one commit).
+        manifests=$(git diff --name-only HEAD~1 HEAD | grep -E '(^|/)package\.json$' || true)
+        if [ -z "$manifests" ]; then
+          echo "No package.json changed in the tip commit; nothing to refresh."
+          exit 0
+        fi
+
+        # Nearest directory at or above a path that holds a lockfile.
+        lock_dir_for() {
+          local d
+          d=$(dirname "$1")
+          while :; do
+            for f in pnpm-lock.yaml package-lock.json npm-shrinkwrap.json yarn.lock; do
+              if [ -f "$d/$f" ]; then echo "$d"; return 0; fi
+            done
+            [ "$d" = "." ] && return 0
+            d=$(dirname "$d")
+          done
+        }
+
+        # "packageManager" from <dir>/package.json, else the repo root's.
+        package_manager_field() {
+          local v=""
+          for pkg in "$1/package.json" "package.json"; do
+            [ -f "$pkg" ] || continue
+            v=$(node -e 'const p=require(require("path").resolve(process.argv[1]));process.stdout.write(p.packageManager||"")' "$pkg")
+            [ -n "$v" ] && break
+          done
+          echo "$v"
+        }
+
+        lockfile_of() {
+          case "$1" in
+            pnpm) echo pnpm-lock.yaml ;;
+            yarn) echo yarn.lock ;;
+            npm) if [ -f "$2/npm-shrinkwrap.json" ]; then echo npm-shrinkwrap.json; else echo package-lock.json; fi ;;
+          esac
+        }
+
+        legacy_peer_deps() {
+          for rc in "$1/.npmrc" ".npmrc"; do
+            if [ -f "$rc" ] && grep -Eq '^[[:space:]]*legacy-peer-deps[[:space:]]*=[[:space:]]*true' "$rc"; then
+              return 0
+            fi
+          done
+          return 1
+        }
+
+        corepack_on() {
+          if ! command -v corepack >/dev/null 2>&1; then npm install -g corepack >/dev/null; fi
+          corepack enable
+        }
+
+        lock_dirs=$(for m in $manifests; do lock_dir_for "$m"; done | sort -u)
+        if [ -z "$lock_dirs" ]; then
+          echo "No lockfile governs the changed package.json files; nothing to refresh."
+          exit 0
+        fi
+
+        touched=()
+        for dir in $lock_dirs; do
+          field=$(package_manager_field "$dir")
+          pm="${field%%@*}"
+          version="${field#*@}"; version="${version%%+*}"
+          [ "$version" = "$field" ] && version=""
+
+          # The packageManager field wins when its lockfile is here; otherwise the lockfile decides.
+          if [ -z "$pm" ] || [ ! -f "$dir/$(lockfile_of "$pm" "$dir")" ]; then
+            version=""
+            if [ -f "$dir/pnpm-lock.yaml" ]; then pm=pnpm
+            elif [ -f "$dir/package-lock.json" ] || [ -f "$dir/npm-shrinkwrap.json" ]; then pm=npm
+            else pm=yarn
+            fi
+          fi
+          lock=$(lockfile_of "$pm" "$dir")
+          echo "::group::$pm lockfile refresh in $dir ($lock)"
+
+          case "$pm" in
+            npm)
+              npm_cmd=(npm)
+              if [ -n "$version" ]; then
+                # A pinned npm major keeps lockfileVersion 3 fields (e.g. libc) stable.
+                npm_cmd=(npx --yes "npm@${version%%.*}")
+              elif grep -q '"lockfileVersion": 3' "$dir/$lock" && grep -q '"libc"' "$dir/$lock"; then
+                echo "::warning::$dir/$lock has libc fields but no packageManager pin; using the runner's npm $(npm --version). Pin npm in packageManager to avoid lockfile churn."
+              fi
+              args=(install --package-lock-only --ignore-scripts --no-audit --no-fund)
+              if legacy_peer_deps "$dir"; then args+=(--legacy-peer-deps); fi
+              (cd "$dir" && "${npm_cmd[@]}" "${args[@]}")
+              ;;
+            pnpm)
+              if [ -n "$version" ]; then
+                corepack_on
+                pnpm_cmd=(pnpm)
+              else
+                # No pin: match the lockfile's major (9.0 → 9, 6.x → 8, 5.x → 7).
+                lv=$(sed -n "s/^lockfileVersion: *'\{0,1\}\([0-9]*\).*/\1/p" "$dir/$lock" | head -1)
+                case "$lv" in 6) major=8 ;; 5) major=7 ;; *) major=9 ;; esac
+                pnpm_cmd=(npx --yes "pnpm@$major")
+              fi
+              # CI turns frozen-lockfile on by default; this run exists to update it.
+              (cd "$dir" && "${pnpm_cmd[@]}" install --lockfile-only --ignore-scripts --no-frozen-lockfile)
+              ;;
+            yarn)
+              # Untested: no dogfood host uses yarn yet.
+              corepack_on
+              if yarn --version | grep -q '^1\.'; then
+                (cd "$dir" && yarn install --ignore-scripts --non-interactive)
+              else
+                (cd "$dir" && YARN_ENABLE_IMMUTABLE_INSTALLS=false yarn install --mode update-lockfile)
+              fi
+              ;;
+          esac
+          echo "::endgroup::"
+          touched+=("$dir/$lock")
+        done
+
+        if [ -z "$(git status --porcelain -- "${touched[@]}")" ]; then
+          echo "Lockfiles already match the bump; nothing to commit."
+          exit 0
+        fi
+
+        git config user.name 'github-actions[bot]'
+        git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+        git add -- "${touched[@]}"
+        git commit -m "$COMMIT_MESSAGE"
+        git push origin "HEAD:refs/heads/${GITHUB_REF_NAME}"
+        echo "changed=true" >> "$GITHUB_OUTPUT"

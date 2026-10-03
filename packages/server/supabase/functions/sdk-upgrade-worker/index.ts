@@ -32,7 +32,10 @@ app.post('/sdk-upgrade-worker', async (c) => {
     return c.json({ ok: false, error: result.error }, status)
   }
 
-  return c.json({ ok: true, data: { status: result.status, prUrl: result.prUrl } })
+  return c.json({
+    ok: true,
+    data: { status: result.status, prUrl: 'prUrl' in result ? result.prUrl : undefined },
+  })
 })
 
 Deno.serve(withSentry('sdk-upgrade-worker', app.fetch))

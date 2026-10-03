@@ -87,6 +87,11 @@ When a package is outdated or deprecated:
    `@mushi-mushi/*` in `package.json` files only (never `workspace:` / `file:`).
 3. Draft PR opens on GitHub, auto-readied, status streams via SSE.
 
+The bump edits `package.json` only. Add the
+[lockfile helper workflow](/admin/sdk-upgrade-lockfile) to your repo and the PR
+opens after your own package manager has refreshed the lockfile, so
+`npm ci` / `pnpm install --frozen-lockfile` pass.
+
 CLI equivalent: see [SDK reference → CLI](/sdks/cli) (`mushi upgrade` for local bumps).
 
 ---
