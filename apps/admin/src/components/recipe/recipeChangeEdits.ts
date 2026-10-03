@@ -7,7 +7,9 @@
  *            • gates  → mushi.recipe.json `gates.budgets` and `gates.cadence`
  *            • env    → mushi.recipe.json `env.required` (NAMES only, never a
  *                       value) and, optionally, the keys of `.env.example`
- *            • routes → inventory.yaml as text
+ *            • routes → the inventory file as text: the one mushi.recipe.json
+ *                       names in `routes.inventory` (the file CI ingests),
+ *                       else inventory.yaml. The server reads exactly one.
  *          The manifest is re-serialized with its own indentation and final
  *          newline (the same rule the server uses for design-rule edits), so
  *          an untouched standard-format file produces no diff.
@@ -17,7 +19,8 @@ import type { RecipeChangeEdit, RecipeSourceFile } from '../../lib/recipeTypes'
 
 export const MANIFEST_PATH = 'mushi.recipe.json'
 export const ENV_EXAMPLE_PATH = '.env.example'
-export const INVENTORY_PATH = 'inventory.yaml'
+/** Where the inventory lives when mushi.recipe.json does not set `routes.inventory`. */
+export const DEFAULT_INVENTORY_PATH = 'inventory.yaml'
 const MAX_FILE_CHARS = 512 * 1024
 
 export const ENV_NAME_RE = /^[A-Z][A-Z0-9_]*$/
@@ -279,11 +282,16 @@ export function buildEnvEdits(files: readonly RecipeSourceFile[], rows: readonly
   return { ok: true, edits }
 }
 
+/** The inventory file the routes form edits: GET /recipe/sources?element=routes returns exactly that one. */
+export function inventoryFileOf(files: readonly RecipeSourceFile[]): RecipeSourceFile | null {
+  return files.length === 1 ? files[0] : null
+}
+
 export function buildRoutesEdits(files: readonly RecipeSourceFile[], text: string): BuiltEdits {
-  const inv = fileOf(files, INVENTORY_PATH)
-  if (!inv) return { ok: false, errors: ['inventory.yaml is not available.'] }
-  if (!text.trim()) return { ok: false, errors: ['inventory.yaml cannot be empty.'] }
-  if (text.length > MAX_FILE_CHARS) return { ok: false, errors: ['inventory.yaml is over 512 KB.'] }
-  const edit = editFor(inv, text, 'update inventory.yaml (pages, stories, actions)')
+  const inv = inventoryFileOf(files)
+  if (!inv) return { ok: false, errors: ['The inventory file is not available.'] }
+  if (!text.trim()) return { ok: false, errors: [`${inv.path} cannot be empty.`] }
+  if (text.length > MAX_FILE_CHARS) return { ok: false, errors: [`${inv.path} is over 512 KB.`] }
+  const edit = editFor(inv, text, `update ${inv.path} (pages, stories, actions)`)
   return { ok: true, edits: edit ? [edit] : [] }
 }

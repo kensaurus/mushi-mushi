@@ -4,7 +4,7 @@
  *            • GatesForm  — budgets (metric → number) and cadence (gate → P1D)
  *            • EnvForm    — declared env NAMES and where each must be set;
  *                           there is no value input anywhere
- *            • RoutesForm — inventory.yaml as text
+ *            • RoutesForm — the inventory file CI ingests, as text
  *          Each builds whole-file edits (recipeChangeEdits.ts) and hands them
  *          to `onPreview`. Every edit after a preview throws the preview away,
  *          so a confirm can only send what the diff showed.
@@ -20,7 +20,8 @@ import {
   ENV_EXAMPLE_PATH,
   envRowsFrom,
   gatesDraftFrom,
-  INVENTORY_PATH,
+  DEFAULT_INVENTORY_PATH,
+  inventoryFileOf,
   MANIFEST_PATH,
   newEnvRow,
   parseManifest,
@@ -253,23 +254,27 @@ export function EnvForm({ files, locked, previewing, onPreview, onEdit }: Change
 // ── routes ───────────────────────────────────────────────────────────────────
 
 export function RoutesForm({ files, locked, previewing, onPreview, onEdit }: ChangeFormProps) {
-  const inv = fileOf(files, INVENTORY_PATH)
+  const inv = inventoryFileOf(files)
+  const path = inv?.path ?? DEFAULT_INVENTORY_PATH
   const [text, setText] = useState(inv?.content ?? '')
-  const blocked = blockedReason(inv, INVENTORY_PATH)
+  const blocked = blockedReason(inv, path)
   const off = blocked !== null || locked
   const built = useMemo(() => buildRoutesEdits(files, text), [files, text])
   return (
     <div className="flex flex-col gap-3">
       <p className="text-xs text-fg-secondary">
-        <span className="font-mono">inventory.yaml</span> lists your pages, user stories and actions; the inventory gates check the app
-        against it. {inv && !inv.exists ? 'The repo has none yet: this creates it.' : ''}
+        This edits <span className="font-mono">{path}</span>, which lists your pages, user stories and actions; the inventory gates
+        check the app against it. It must be the file your CI ingests: if that is not{' '}
+        <span className="font-mono">{path}</span>, set <span className="font-mono">routes.inventory</span> in{' '}
+        <span className="font-mono">{MANIFEST_PATH}</span> to its path and refresh the recipe.{' '}
+        {inv && !inv.exists ? 'The repo has no such file yet: this creates it.' : ''}
       </p>
       <textarea
         className={`${FIELD_CLS} min-h-64 font-mono leading-relaxed`}
         value={text}
         disabled={off}
         spellCheck={false}
-        aria-label="inventory.yaml"
+        aria-label={path}
         placeholder={'schema_version: 2\npages:\n  - id: home\n    path: /'}
         onChange={(e) => {
           setText(e.target.value)

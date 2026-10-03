@@ -534,7 +534,8 @@ export interface RecipeChangeDryRun {
   dryRun: true
   ok: boolean
   reason: string | null
-  files: DesignFileChange[]
+  /** `baseSha`: the blob SHA each diff was taken against (null = a new file). */
+  files: Array<DesignFileChange & { reason: string; baseSha: string | null }>
   denied: Array<{ path: string; reason: string }>
 }
 

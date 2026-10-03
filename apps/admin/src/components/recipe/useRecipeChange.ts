@@ -11,7 +11,11 @@
  *             click cannot open two draft PRs. The server answers 202 + jobId.
  *          3. The job is followed on GET …/changes/:jobId/stream (SSE). If the
  *             stream closes before a terminal status, it falls back to polling
- *             GET …/changes/:jobId (useSdkUpgrade's pattern).
+ *             GET …/changes/:jobId (useSdkUpgrade's pattern). A poll answered
+ *             with an error that will not change on retry (404, 403, 401, a
+ *             bad request) ends in the error state at once with the server's
+ *             message; a network or 5xx error is retried, at most
+ *             POLL_MAX_ERRORS times in a row.
  *          4. reset() bumps a generation counter and stops following: a reply
  *             still in flight for older inputs is dropped on arrival.
  *
@@ -57,6 +61,18 @@ const IDLE: RecipeChangeState = { phase: 'idle', preview: null, job: null, error
 const TERMINAL: readonly RecipeChangeJobStatus[] = ['pr_opened', 'failed', 'rejected']
 const POLL_MS = 2_000
 const POLL_MAX_MS = 10 * 60_000
+/** Consecutive transient poll failures (network, 5xx) tolerated before the error is shown. */
+export const POLL_MAX_ERRORS = 3
+
+/** Error codes worth another poll: the request may succeed next time. Anything else is final. */
+const TRANSIENT_CODES: readonly string[] = ['NETWORK_ERROR', 'DB_ERROR', 'INTERNAL_ERROR', 'SERVICE_UNAVAILABLE', 'TIMEOUT', 'RATE_LIMITED']
+
+export function isTransientPollError(error: { code: string; message: string } | undefined): boolean {
+  if (!error) return true
+  if (TRANSIENT_CODES.includes(error.code)) return true
+  // apiFetch reports a body without an error envelope as HTTP_ERROR "<status>: …".
+  return error.code === 'HTTP_ERROR' && /^5\d\d:/.test(error.message)
+}
 
 export function isTerminalJob(status: RecipeChangeJobStatus): boolean {
   return TERMINAL.includes(status)
@@ -116,16 +132,30 @@ export function useRecipeChange(projectId: string, element: RecipeChangeElement,
 
   const poll = useCallback(
     (gen: number, jobId: string, startedAt: number) => {
+      let failures = 0
+      const fail = (message: string) => setState((s) => ({ ...s, phase: 'error', error: message }))
       const tick = async () => {
         if (gen !== generation.current) return
         if (Date.now() - startedAt > POLL_MAX_MS) {
-          setState((s) => ({ ...s, phase: 'error', error: 'The draft PR did not finish within 10 minutes. Check the repo before trying again.' }))
+          fail('The draft PR did not finish within 10 minutes. Check the repo before trying again.')
           return
         }
         const res = await apiFetch<RecipeChangeJobRow>(`${base}/${jobId}`, { cache: 'no-store' })
         if (gen !== generation.current) return
         if (res.ok && res.data) {
+          failures = 0
           if (applyJob(gen, fromRow(res.data))) return
+        } else {
+          const message = res.ok ? 'The job status came back empty.' : res.error?.message ?? 'The job status could not be read.'
+          failures += 1
+          if (!res.ok && !isTransientPollError(res.error)) {
+            fail(`Could not follow the change: ${message}`)
+            return
+          }
+          if (failures >= POLL_MAX_ERRORS) {
+            fail(`Could not follow the change after ${failures} tries: ${message}`)
+            return
+          }
         }
         pollTimer.current = setTimeout(() => void tick(), pollMs)
       }

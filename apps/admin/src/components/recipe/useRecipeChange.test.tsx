@@ -10,7 +10,9 @@
  *       follows the job on the SSE stream to the PR;
  *   (b) a stream that closes before the end falls back to polling the job;
  *   (c) a 409 ALREADY_RUNNING follows the running job instead of failing;
- *   (d) a preview answered after reset() is dropped.
+ *   (d) a preview answered after reset() is dropped;
+ *   (e) a poll answered with a final error (404, 403) stops at once with the
+ *       server's message; network and 5xx errors retry a few times first.
  */
 
 import { act, createElement } from 'react'
@@ -28,7 +30,7 @@ vi.mock('../../lib/env', () => ({ RESOLVED_API_URL: 'https://api.test' }))
 const sse = vi.hoisted(() => ({ openSseStream: vi.fn() }))
 vi.mock('../../lib/sseClient', () => sse)
 
-import { useRecipeChange } from './useRecipeChange'
+import { isTransientPollError, POLL_MAX_ERRORS, useRecipeChange } from './useRecipeChange'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -142,5 +144,46 @@ describe('useRecipeChange', () => {
     api.apiFetchMutate.mockResolvedValueOnce({ ok: true, data: { dryRun: true, ok: false, reason: 'This repo has no valid mushi.recipe.json', files: [], denied: [] } })
     await act(async () => { await hook!.preview(EDITS) })
     expect(hook!.state).toMatchObject({ phase: 'error', error: 'This repo has no valid mushi.recipe.json' })
+  })
+
+  it('a poll answered with 404 (or 403) ends in the error state at once, with the server message', async () => {
+    api.apiFetchMutate.mockResolvedValueOnce(DRY).mockResolvedValueOnce({ ok: true, data: { jobId: JOB, projectId: P, status: 'queued', prUrl: null, error: null } })
+    sse.openSseStream.mockImplementation(async (o: SseClientOptions) => {
+      o.onClose?.('error', new Error('SSE HTTP 404'))
+    })
+    api.apiFetch.mockResolvedValue({ ok: false, error: { code: 'NOT_FOUND', message: 'Not found' } })
+
+    await act(async () => { await hook!.preview(EDITS) })
+    await act(async () => { await hook!.confirm(); await flush() })
+    await act(async () => { await new Promise((r) => setTimeout(r, 30)); await flush() })
+    expect(api.apiFetch).toHaveBeenCalledTimes(1)
+    expect(hook!.state).toMatchObject({ phase: 'error', error: 'Could not follow the change: Not found' })
+  })
+
+  it('a network or 5xx poll error is retried, then shown after a few in a row', async () => {
+    api.apiFetchMutate.mockResolvedValueOnce(DRY).mockResolvedValueOnce({ ok: true, data: { jobId: JOB, projectId: P, status: 'queued', prUrl: null, error: null } })
+    sse.openSseStream.mockImplementation(async (o: SseClientOptions) => {
+      o.onClose?.('error', new Error('SSE HTTP 503'))
+    })
+    api.apiFetch
+      .mockResolvedValueOnce({ ok: false, error: { code: 'NETWORK_ERROR', message: 'Failed to fetch' } })
+      .mockResolvedValueOnce({ ok: false, error: { code: 'HTTP_ERROR', message: '503: upstream' } })
+      .mockResolvedValue({ ok: false, error: { code: 'DB_ERROR', message: 'A database error occurred' } })
+
+    await act(async () => { await hook!.preview(EDITS) })
+    await act(async () => { await hook!.confirm(); await flush() })
+    for (let i = 0; i < 6 && hook!.state.phase !== 'error'; i += 1) {
+      await act(async () => { await new Promise((r) => setTimeout(r, 20)); await flush() })
+    }
+    expect(api.apiFetch).toHaveBeenCalledTimes(POLL_MAX_ERRORS)
+    expect(hook!.state).toMatchObject({ phase: 'error', error: `Could not follow the change after ${POLL_MAX_ERRORS} tries: A database error occurred` })
+  })
+
+  it('isTransientPollError: only network and server-side failures are retried', () => {
+    expect(isTransientPollError({ code: 'NETWORK_ERROR', message: 'x' })).toBe(true)
+    expect(isTransientPollError({ code: 'HTTP_ERROR', message: '502: bad gateway' })).toBe(true)
+    expect(isTransientPollError({ code: 'HTTP_ERROR', message: '404: missing' })).toBe(false)
+    expect(isTransientPollError({ code: 'FORBIDDEN', message: 'no' })).toBe(false)
+    expect(isTransientPollError({ code: 'UNAUTHORIZED', message: 'no' })).toBe(false)
   })
 })
