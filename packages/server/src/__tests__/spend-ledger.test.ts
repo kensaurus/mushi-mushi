@@ -206,6 +206,14 @@ describe('buildSpendLedger', () => {
     expect(r.apps[0].totalUsd).toBe(43.85)
   })
 
+  it('reads past the server\'s 1,000-row cap instead of summing the first page as the whole month', async () => {
+    const calls = Array.from({ length: 1_500 }, (_, i) => ({ project_id: P1, cost_usd: 0.01, created_at: `2026-10-0${1 + (i % 2)}T00:00:00Z` }))
+    const base = seedLedger({ llm_invocations: calls })
+    const db = makeFakeDb(base.tables as never, { autoId: true, maxRows: 1_000 })
+    const r = await ledger.buildSpendLedger(db as never, { organizationId: ORG, projects: [{ id: P1, name: 'glot.it' }], now: NOW })
+    expect(r.apps[0].mushiLlm).toMatchObject({ state: 'ok', usd: 15, calls: 1_500 })
+  })
+
   it('treats a provider source whose last read failed as unknown, not $0', async () => {
     const db = seedLedger({ connector_snapshots: [{ connector_instance_id: 'llm1', project_id: P1, ok: false, error: '401', is_current: true, observed_at: '2026-10-03T03:35:00Z', snapshot: null }] })
     const r = await ledger.buildSpendLedger(db as never, { organizationId: ORG, projects: [{ id: P1, name: 'glot.it' }], now: NOW })

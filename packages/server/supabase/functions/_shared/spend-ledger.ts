@@ -22,6 +22,7 @@
  */
 
 import type { getServiceClient } from './db.ts'
+import { readAllPages, type PageCount, type PageResult } from './paged-read.ts'
 import { BILL_VENDORS, type BillVendor } from './spend-bill-csv.ts'
 
 type Db = ReturnType<typeof getServiceClient>
@@ -115,6 +116,21 @@ async function read<T>(q: PromiseLike<{ data: unknown; error: { message?: string
 const empty = <T>(): Read<T> => ({ rows: [], error: null, truncated: false })
 
 /**
+ * Every row up to READ_LIMIT, paged: a bare `.limit()` is silently capped at
+ * the server's max_rows (1,000 on Supabase), so its sum would read as exact
+ * while it is not (Plan 020 P-1). A failed read is the source's error state;
+ * a read cut short at READ_LIMIT is `truncated`, shown as a floor.
+ */
+async function readPaged<T>(what: string, fetchPage: (from: number, to: number, count: PageCount) => PromiseLike<PageResult<T>>): Promise<Read<T>> {
+  try {
+    const r = await readAllPages<T>(fetchPage, { what, maxRows: READ_LIMIT })
+    return { rows: r.rows, error: null, truncated: r.truncated }
+  } catch (err) {
+    return { rows: [], error: err instanceof Error ? err.message : String(err), truncated: false }
+  }
+}
+
+/**
  * One current llm_usage snapshot. The recipe refresh runs each connector per
  * project, so there is one row per (instance, project): perProject holds that
  * project's own spend, totalUsd the whole provider organization's.
@@ -145,14 +161,15 @@ export async function buildSpendLedger(
 
   // With no apps there is nothing to read; each read then resolves to an empty, successful result.
   const when = <T>(q: PromiseLike<{ data: unknown; error: { message?: string } | null }>, limit = READ_LIMIT): Promise<Read<T>> => (ids.length ? read<T>(q, limit) : Promise.resolve(empty<T>()))
+  const whenPaged = <T>(what: string, fetchPage: (from: number, to: number, count: PageCount) => PromiseLike<PageResult<T>>): Promise<Read<T>> => (ids.length ? readPaged<T>(what, fetchPage) : Promise.resolve(empty<T>()))
   // Imports the caller may see: those for one of their apps, and those matched by an
   // app column (no single app). An import for an app outside the caller's view is never listed.
   const importCols = 'id, vendor, project_id, filename, format, rows_read, rows_imported, rows_skipped, total_usd, period_start, period_end, created_at'
   const [llm, instances, ci, entries, appImports, teamImports] = await Promise.all([
-    when<{ project_id: string; cost_usd: number | string | null }>(db.from('llm_invocations').select('project_id, cost_usd').in('project_id', ids).gte('created_at', sinceIso).limit(READ_LIMIT)),
+    whenPaged<{ project_id: string; cost_usd: number | string | null }>('llm_invocations', (from, to, count) => db.from('llm_invocations').select('project_id, cost_usd', { count }).in('project_id', ids).gte('created_at', sinceIso).order('id', { ascending: true }).range(from, to)),
     when<{ id: string }>(db.from('connector_instances').select('id').eq('organization_id', organizationId).eq('kind', 'llm_usage').limit(20), 20),
-    when<{ project_id: string; est_billable_minutes: number | string | null }>(db.from('ci_workflow_runs').select('project_id, est_billable_minutes').in('project_id', ids).gte('started_at', sinceIso).limit(READ_LIMIT)),
-    when<{ project_id: string; vendor: BillVendor; service: string; unit: string; amount_usd: number | string; quantity: number | string | null }>(db.from('spend_ledger_entries').select('project_id, vendor, service, unit, amount_usd, quantity').eq('organization_id', organizationId).in('project_id', ids).gte('day', sinceDay).limit(READ_LIMIT)),
+    whenPaged<{ project_id: string; est_billable_minutes: number | string | null }>('ci_workflow_runs', (from, to, count) => db.from('ci_workflow_runs').select('project_id, est_billable_minutes', { count }).in('project_id', ids).gte('started_at', sinceIso).order('id', { ascending: true }).range(from, to)),
+    whenPaged<{ project_id: string; vendor: BillVendor; service: string; unit: string; amount_usd: number | string; quantity: number | string | null }>('spend_ledger_entries', (from, to, count) => db.from('spend_ledger_entries').select('project_id, vendor, service, unit, amount_usd, quantity', { count }).eq('organization_id', organizationId).in('project_id', ids).gte('day', sinceDay).order('id', { ascending: true }).range(from, to)),
     when<ImportRow>(db.from('spend_bill_imports').select(importCols).eq('organization_id', organizationId).in('project_id', ids).order('created_at', { ascending: false }).limit(IMPORTS_LISTED), IMPORTS_LISTED),
     when<ImportRow>(db.from('spend_bill_imports').select(importCols).eq('organization_id', organizationId).is('project_id', null).order('created_at', { ascending: false }).limit(IMPORTS_LISTED), IMPORTS_LISTED),
   ])
