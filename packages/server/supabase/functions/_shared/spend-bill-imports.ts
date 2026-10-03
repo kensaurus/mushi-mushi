@@ -22,13 +22,13 @@ import type { BillVendor } from './spend-bill-csv.ts'
 type Db = ReturnType<typeof getServiceClient>
 
 /** The ledger's natural key. */
-export const LEDGER_KEY = 'project_id,vendor,day,service,unit'
+const LEDGER_KEY = 'project_id,vendor,day,service,unit'
 /** Aggregated (app, day, service, unit) rows; one statement each, so an import is all or nothing. */
 export const MAX_LEDGER_ROWS_PER_IMPORT = 20_000
 /** Earlier imports' rows read when an import is removed. Past this the removal refuses instead of guessing. */
-export const MAX_FALLBACK_ROWS = 100_000
+const MAX_FALLBACK_ROWS = 100_000
 
-export interface ImportEntry {
+interface ImportEntry {
   projectId: string
   day: string
   service: string
@@ -37,7 +37,7 @@ export interface ImportEntry {
   quantity: number | null
 }
 
-export interface RecordImportInput {
+interface RecordImportInput {
   organizationId: string
   projectId: string | null
   vendor: BillVendor
@@ -55,7 +55,7 @@ export interface RecordImportInput {
   entries: ImportEntry[]
 }
 
-export type RecordImportResult = { ok: true; importId: string } | { ok: false; error: string }
+type RecordImportResult = { ok: true; importId: string } | { ok: false; error: string }
 
 /** Record an import, keep its rows, and make it the owner of every key it has. All or nothing. */
 export async function recordBillImport(db: Db, input: RecordImportInput): Promise<RecordImportResult> {
@@ -113,7 +113,7 @@ interface KeptRow extends OwnedRow { import_id: string; amount_usd: number | str
 
 const keyOf = (r: OwnedRow) => [r.project_id, r.vendor, r.day, r.service, r.unit].join('|')
 
-export type RemoveImportResult =
+type RemoveImportResult =
   | {
       ok: true
       /** Days that left the ledger: no other import had them. */

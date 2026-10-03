@@ -83,7 +83,7 @@ async function access(c: Context, db: Db): Promise<{ ok: true; projectId: string
 }
 
 /** Owners and admins decide whether public reviews become reports. */
-export const canManageStoreReviews = (role: ProjectRole): boolean => role === 'owner' || role === 'admin'
+const canManageStoreReviews = (role: ProjectRole): boolean => role === 'owner' || role === 'admin'
 
 export function registerStoreReviewIntakeRoutes(app: Hono<{ Variables: Variables }>, deps: StoreReviewRouteDeps = defaultStoreReviewDeps): void {
   app.get('/v1/admin/projects/:id/store/reviews', deps.adminOrApiKeyRead, async (c) => {
