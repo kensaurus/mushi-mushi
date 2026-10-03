@@ -16,7 +16,12 @@
 
 import { describe, it, expect } from 'vitest'
 
-import { isPlaceholderContents, fixSchema } from '../../supabase/functions/_shared/fix-schema.ts'
+import {
+  FIX_OUTPUT_CONTRACT,
+  fixSchema,
+  isEditEntry,
+  isPlaceholderContents,
+} from '../../supabase/functions/_shared/fix-schema.ts'
 
 describe('isPlaceholderContents', () => {
   it.each([
@@ -105,6 +110,60 @@ describe('fixSchema', () => {
       files: [{ ...validFix.files[0], reason: 'placeholder' }],
     }
     expect(fixSchema.safeParse(broken).success).toBe(false)
+  })
+
+  // 2026-10-03: an existing file is changed with find/replace edits; only a
+  // new file carries full contents.
+  const editFix = {
+    ...validFix,
+    files: [
+      {
+        path: 'src/lib/patterns.ts',
+        edits: [
+          { find: "log.error('fetch_patterns_failed')", replace: "log.error('fetch_patterns_failed', { status })" },
+          { find: 'return res.json()', replace: '' },
+        ],
+        reason: 'log the status that failed',
+      },
+      { path: 'src/lib/patterns.test.ts', contents: "it('logs the status', () => {})\n", reason: 'add a test' },
+    ],
+  }
+
+  it('accepts edits for an existing file alongside contents for a new file', () => {
+    const r = fixSchema.safeParse(editFix)
+    expect(r.success).toBe(true)
+    if (r.success) {
+      expect(isEditEntry(r.data.files[0])).toBe(true)
+      expect(isEditEntry(r.data.files[1])).toBe(false)
+    }
+  })
+
+  it.each([
+    ['find', 'placeholder'],
+    ['find', '   '],
+    ['replace', 'TODO'],
+    ['replace', '...'],
+  ])('rejects a placeholder edit %s (%j)', (field, bad) => {
+    const edit = { find: 'return res.json()', replace: 'return null', [field]: bad }
+    const broken = { ...editFix, files: [{ ...editFix.files[0], edits: [edit] }] }
+    expect(fixSchema.safeParse(broken).success).toBe(false)
+  })
+
+  it('rejects an entry that carries both edits and contents, or neither', () => {
+    const both = { ...editFix, files: [{ ...editFix.files[0], contents: 'export {}' }] }
+    const neither = { ...editFix, files: [{ path: 'src/a.ts', reason: 'nothing to apply' }] }
+    expect(fixSchema.safeParse(both).success).toBe(false)
+    expect(fixSchema.safeParse(neither).success).toBe(false)
+  })
+
+  it('rejects an empty edit list', () => {
+    const broken = { ...editFix, files: [{ ...editFix.files[0], edits: [] }] }
+    expect(fixSchema.safeParse(broken).success).toBe(false)
+  })
+
+  it('keeps the output contract the worker appends to every fix prompt', () => {
+    expect(FIX_OUTPUT_CONTRACT).toMatch(/You have the full file: change only what is needed, via find\/replace/)
+    expect(FIX_OUTPUT_CONTRACT).toMatch(/Never rewrite a file you were not shown in full/)
   })
 
   it('still allows file contents that contain the word "placeholder" in code', () => {

@@ -167,20 +167,28 @@ describe('fix-worker wiring', () => {
     resolve(__dirname, '../../supabase/functions/fix-worker/index.ts'),
     'utf8',
   )
-  const reviewGate = src.indexOf('if (!fixReviewPassed(fix))')
+  // Since 2026-10-03 the token is resolved BEFORE the model runs, to read
+  // whole files at the base commit (read-only). The invariant that matters is
+  // that the review gate runs before anything is applied or written.
   const tokenResolve = src.indexOf('const ghToken = await resolveGithubToken(')
-  const fileGuard = src.indexOf('assessFixFiles(fix.files, baseStates')
+  const firstModelCall = src.indexOf('await generateFix(null)')
+  const reviewGate = src.indexOf('if (!fixReviewPassed(fix))')
+  const materialize = src.indexOf('materializeFixFiles(fix.files, baseStates)')
+  const fileGuard = src.indexOf('assessFixFiles(materialized, baseStates')
   const prCreate = src.indexOf('await createPrFromFiles(')
 
-  it('runs the review gate before any GitHub call, so no review_passed=false fix opens a PR', () => {
-    expect(reviewGate).toBeGreaterThan(0)
-    expect(reviewGate).toBeLessThan(tokenResolve)
+  it('runs the review gate before any edit is applied or GitHub write, so no review_passed=false fix opens a PR', () => {
+    expect(tokenResolve).toBeGreaterThan(0)
+    expect(tokenResolve).toBeLessThan(firstModelCall)
+    expect(reviewGate).toBeGreaterThan(firstModelCall)
+    expect(reviewGate).toBeLessThan(materialize)
     expect(reviewGate).toBeLessThan(prCreate)
   })
 
-  it('runs the blind-write guard before the PR and commits only the files it kept', () => {
-    expect(fileGuard).toBeGreaterThan(tokenResolve)
+  it('runs the blind-write guard on the patched files before the PR and commits only the files it kept', () => {
+    expect(fileGuard).toBeGreaterThan(materialize)
     expect(fileGuard).toBeLessThan(prCreate)
+    expect(src).toMatch(/baseSha: base\.sha,/)
     expect(src).toMatch(/files: prFiles,/)
     expect(src).toMatch(/files_changed: prFiles\.map/)
   })
