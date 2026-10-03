@@ -37,6 +37,7 @@ import { log as rootLog } from '../_shared/logger.ts'
 import {
   fetchLatestCheckRun,
   fetchPullRequest,
+  installationIdForAttempt,
   parseGithubRepoUrl,
   resolveProjectGithubToken,
   type CheckRunSnapshot,
@@ -124,16 +125,7 @@ async function syncOne(
   const ref = parseGithubRepoUrl(attempt.pr_url.split('/pull/')[0])
   if (!ref) return { ok: false, reason: 'unparseable_pr_url' }
 
-  let installationId: number | null = null
-  if (attempt.repo_id) {
-    const { data: repo } = await db
-      .from('project_repos')
-      .select('github_app_installation_id')
-      .eq('id', attempt.repo_id)
-      .maybeSingle()
-    if (repo?.github_app_installation_id) installationId = Number(repo.github_app_installation_id)
-  }
-
+  const installationId = await installationIdForAttempt(db, attempt)
   const token = await resolveProjectGithubToken(db, attempt.project_id, installationId)
   if (!token) return { ok: false, reason: 'no_github_token' }
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { collapseCheckRuns, isAdvisoryCheckRun, prNumberFromUrl } from '../../supabase/functions/_shared/github.ts'
+import { collapseCheckRuns, installationIdForAttempt, isAdvisoryCheckRun, prNumberFromUrl } from '../../supabase/functions/_shared/github.ts'
 
 describe('collapseCheckRuns', () => {
   it('ignores the Copilot review run when the CI jobs passed', () => {
@@ -65,5 +65,39 @@ describe('cloud-agent PRs reach the merge and CI paths', () => {
   it('ci-sync reads CI on the PR head, falling back to the stored commit', () => {
     expect(ciSync).toContain('const sha = headSha ?? attempt.commit_sha')
     expect(ciSync).toContain('fetchLatestCheckRun(token, ref, sha)')
+  })
+})
+
+describe('installationIdForAttempt', () => {
+  const repos = [
+    { id: 'r-docs', repo_url: 'https://github.com/kensaurus/sbc-docs', is_primary: true, github_app_installation_id: 111 },
+    { id: 'r-be', repo_url: 'https://github.com/kensaurus/sbc_backend', is_primary: false, github_app_installation_id: 222 },
+  ]
+  const fakeDb = {
+    from: () => ({
+      select: () => {
+        const filters: Record<string, unknown> = {}
+        const q = {
+          eq: (col: string, val: unknown) => { filters[col] = val; return q },
+          maybeSingle: async () => ({ data: repos.find((r) => r.id === filters.id) ?? null }),
+          then: (resolve: (v: { data: typeof repos }) => unknown) => resolve({ data: repos }),
+        }
+        return q
+      },
+    }),
+  } as unknown as Parameters<typeof installationIdForAttempt>[0]
+
+  it('matches the PR repository when the attempt has no repo_id', async () => {
+    expect(await installationIdForAttempt(fakeDb, {
+      project_id: 'p', repo_id: null, pr_url: 'https://github.com/kensaurus/sbc_backend/pull/9',
+    })).toBe(222)
+  })
+
+  it('uses repo_id when the attempt has one', async () => {
+    expect(await installationIdForAttempt(fakeDb, { project_id: 'p', repo_id: 'r-docs', pr_url: null })).toBe(111)
+  })
+
+  it('falls back to the primary repo without a PR URL', async () => {
+    expect(await installationIdForAttempt(fakeDb, { project_id: 'p', repo_id: null, pr_url: null })).toBe(111)
   })
 })
