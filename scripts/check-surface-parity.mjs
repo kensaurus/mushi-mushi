@@ -10,11 +10,19 @@
  *   "GET /v1/admin/orgs/:orgId/portfolio": { "mcp": ["get_portfolio"], "cli": ["portfolio show"] }
  *   "POST /v1/admin/orgs/:orgId/connectors": { "allow": "jwt-only" }
  *
- * How a route counts as "used by the console": every '/v1/…' string literal
- * under apps/admin/src (tests excluded) is matched against the Hono route
- * registrations under packages/server/supabase/functions/api. Every method
- * the server registers on a matched path is in scope. HTTP methods are never
- * guessed from admin source text, so the result is deterministic.
+ * How a route counts as "used by the console": every '/v1/…' path under
+ * apps/admin/src (tests excluded) is matched against the Hono route
+ * registrations under packages/server/supabase/functions/api. A path is a
+ * '/v1/…' literal, or a template that starts with a path binding
+ * (`${path}/findings` after `const path = `/v1/…``, same file or a relative
+ * import). Every method the server registers on a matched path is in scope.
+ * HTTP methods are never guessed from admin source text.
+ *
+ * Fail closed: every call to apiFetch, apiFetchMutate, apiFetchRaw or
+ * usePageData (and to any function that forwards its first parameter to
+ * one) must have a first argument the check can resolve this way. One it
+ * cannot follow (a prop, a computed string) fails unless "dynamicCalls" in
+ * the mapping gives a reason for that file and argument text.
  *
  * Fails when:
  *   - a console route has no entry (add an MCP tool, a CLI command, or a reason);
@@ -22,7 +30,9 @@
  *   - an entry names a CLI command missing from packages/cli/src/commands;
  *   - an entry uses an unknown reason code, or mixes a reason with a surface;
  *   - `jwt-only` is used on a route that also accepts an API key;
- *   - an entry is stale (the console no longer calls that route).
+ *   - an entry is stale (the console no longer calls that route);
+ *   - a console call's path cannot be resolved and has no "dynamicCalls"
+ *     reason, or a "dynamicCalls" reason names a call that no longer exists.
  * Admin literals that match no server route (dynamic prefixes, external
  * paths) are counted and listed with --verbose; they never fail the check.
  *
@@ -215,36 +225,360 @@ export function extractServerRoutes(files) {
 
 // ── Admin literals ───────────────────────────────────────────────────────────
 
-/** Every '/v1/…' literal in the admin sources, with `${…}` kept as markers. */
-export function extractAdminLiterals(files) {
-  const out = []
-  for (const { file, source } of files) {
-    const re = /(['"`])\/v1\//g
-    let m
-    while ((m = re.exec(source)) !== null) {
-      const quote = m[1]
-      let i = m.index + 1
-      let text = ''
-      while (i < source.length && source[i] !== quote && source[i] !== '\n') {
-        if (quote === '`' && source[i] === '$' && source[i + 1] === '{') {
-          let depth = 1
-          i += 2
-          while (i < source.length && depth > 0) {
-            if (source[i] === '{') depth++
-            else if (source[i] === '}') depth--
-            i++
-          }
-          text += '\u0000'
-          continue
-        }
-        text += source[i]
+/** The console's request helpers. Their first argument is the API path. */
+export const ADMIN_CALLS = ['apiFetch', 'apiFetchMutate', 'apiFetchRaw', 'usePageData']
+
+/** Index just past the string or template literal that opens at `start`. */
+function skipString(source, start) {
+  const quote = source[start]
+  let i = start + 1
+  while (i < source.length && source[i] !== quote) {
+    if (source[i] === '\\') { i += 2; continue }
+    if (quote !== '`' && source[i] === '\n') return i
+    if (quote === '`' && source[i] === '$' && source[i + 1] === '{') {
+      let depth = 1
+      i += 2
+      while (i < source.length && depth > 0) {
+        if (source[i] === '`') { i = skipString(source, i); continue }
+        if (source[i] === '{') depth++
+        else if (source[i] === '}') depth--
         i++
       }
-      re.lastIndex = i + 1
-      out.push({ file, literal: text.replace(/\u0000/g, '${}') })
+      continue
+    }
+    i++
+  }
+  return i + 1
+}
+
+/**
+ * Blank out `//` and block comments, keeping every offset and newline, so a
+ * path or a call mentioned in a comment is neither resolved nor checked.
+ * String and template contents are left alone.
+ */
+export function blankComments(source) {
+  const out = source.split('')
+  const blank = (from, to) => {
+    for (let k = from; k < to; k++) if (out[k] !== '\n') out[k] = ' '
+  }
+  let i = 0
+  while (i < source.length) {
+    const ch = source[i]
+    if (ch === '/' && source[i + 1] === '*') {
+      const end = source.indexOf('*/', i + 2)
+      const stop = end === -1 ? source.length : end + 2
+      blank(i, stop)
+      i = stop
+      continue
+    }
+    // A line comment follows whitespace or punctuation, never a ':' as in 'https://'.
+    if (ch === '/' && source[i + 1] === '/' && (i === 0 || /[\s;,(){}[\]]/.test(source[i - 1]))) {
+      const end = source.indexOf('\n', i)
+      const stop = end === -1 ? source.length : end
+      blank(i, stop)
+      i = stop
+      continue
+    }
+    if (ch === "'" || ch === '"' || ch === '`') {
+      i = skipString(source, i)
+      continue
+    }
+    i++
+  }
+  return out.join('')
+}
+
+/**
+ * Read the literal opening at `start` with each `${…}` turned into the
+ * marker `${}`. Stops at the closing quote or at a newline.
+ */
+function readAdminLiteral(source, start) {
+  const quote = source[start]
+  let i = start + 1
+  let text = ''
+  while (i < source.length && source[i] !== quote && source[i] !== '\n') {
+    if (quote === '`' && source[i] === '$' && source[i + 1] === '{') {
+      let depth = 1
+      i += 2
+      while (i < source.length && depth > 0) {
+        if (source[i] === '{') depth++
+        else if (source[i] === '}') depth--
+        i++
+      }
+      text += '${}'
+      continue
+    }
+    text += source[i]
+    i++
+  }
+  return { text, end: i + 1 }
+}
+
+/** '/v1/…' literals written out in `text` (a quote, then '/v1/'). */
+function directV1Literals(text) {
+  const out = []
+  const re = /(['"`])\/v1\//g
+  let m
+  while ((m = re.exec(text)) !== null) {
+    const lit = readAdminLiteral(text, m.index)
+    re.lastIndex = Math.max(re.lastIndex, lit.end)
+    out.push(lit.text)
+  }
+  return out
+}
+
+/** Templates that open with `${NAME}`: `{ name, rest, index }`, rest with markers. */
+function composedTemplates(text) {
+  const out = []
+  for (const m of text.matchAll(/`\$\{\s*([A-Za-z_$][\w$]*)\s*\}/g)) {
+    const lit = readAdminLiteral(text, m.index)
+    out.push({ name: m[1], rest: lit.text.slice(3), index: m.index })
+  }
+  return out
+}
+
+/**
+ * The expression that starts at `start`: up to `;` or `,` at depth 0, a
+ * closing bracket it did not open, or a newline unless the statement plainly
+ * continues (the line ends in an operator, or the next starts with
+ * `? : . && || +`).
+ */
+function readExpression(source, from, limit = 4000) {
+  let start = from
+  while (start < source.length && /\s/.test(source[start])) start++
+  let depth = 0
+  let i = start
+  const stop = Math.min(source.length, start + limit)
+  while (i < stop) {
+    const ch = source[i]
+    if (ch === "'" || ch === '"' || ch === '`') { i = skipString(source, i); continue }
+    if (ch === '(' || ch === '[' || ch === '{') depth++
+    else if (ch === ')' || ch === ']' || ch === '}') {
+      if (depth === 0) break
+      depth--
+    } else if (depth === 0 && (ch === ';' || ch === ',')) break
+    else if (depth === 0 && ch === '\n') {
+      const before = source.slice(start, i).trimEnd()
+      const after = source.slice(i + 1).trimStart()
+      if (!/[=?:(,&|+>]$/.test(before) && !/^(\?|:|\.|&&|\|\||\+)/.test(after)) break
+    }
+    i++
+  }
+  return source.slice(start, i)
+}
+
+/** A top-level `function NAME(` up to the next top-level declaration. */
+function readTopLevelFunction(source, start) {
+  const next = /\n(?:export\s|function\s|const\s|let\s|async\s|interface\s|type\s|class\s)/.exec(source.slice(start + 1))
+  return source.slice(start, next ? start + 1 + next.index : source.length)
+}
+
+/** Per-file context: comment-free code and resolved relative named imports. */
+function fileContexts(files) {
+  const byFile = new Map()
+  for (const { file, source } of files) byFile.set(file, { file, source, code: blankComments(source), imports: new Map() })
+  const resolveImport = (from, spec) => {
+    const base = path.posix.normalize(path.posix.join(path.posix.dirname(from), spec))
+    for (const candidate of [base, `${base}.ts`, `${base}.tsx`, `${base}/index.ts`, `${base}/index.tsx`]) {
+      if (byFile.has(candidate)) return candidate
+    }
+    return null
+  }
+  for (const ctx of byFile.values()) {
+    for (const m of ctx.code.matchAll(/import\s+(?:type\s+)?\{([^}]*)\}\s*from\s*['"](\.[^'"]+)['"]/g)) {
+      const target = resolveImport(ctx.file, m[2])
+      if (!target) continue
+      for (const part of m[1].split(',')) {
+        const [name, alias] = part.replace(/^\s*type\s+/, '').trim().split(/\s+as\s+/)
+        if (name) ctx.imports.set((alias ?? name).trim(), { file: target, name: name.trim() })
+      }
+    }
+  }
+  return byFile
+}
+
+/**
+ * True when a function signature between `from` and `to` declares a
+ * parameter `name`: a use at `to` then means the parameter, not the
+ * `const` declared before `from`.
+ */
+function shadowedByParameter(code, name, from, to) {
+  const sig = new RegExp(`(?:function\\s*\\w*\\s*(?:<[^>]*>)?\\s*\\(|=\\s*(?:async\\s*)?\\()[^)]*\\b${name}\\s*\\??\\s*[:,)=]`)
+  return sig.test(code.slice(from, to))
+}
+
+/**
+ * Where `name` is bound for a use at `pos`: the nearest earlier `const`/`let`
+ * initializer, a top-level `function`, or a relative named import.
+ */
+function findBinding(byFile, ctx, name, pos) {
+  const declRe = new RegExp(`\\b(?:const|let|var)\\s+${name}\\s*(?::[^=;\\n]+)?=(?![=>])`, 'g')
+  let best = null
+  for (const m of ctx.code.matchAll(declRe)) if (m.index < pos) best = m
+  if (best && !shadowedByParameter(ctx.code, name, best.index + best[0].length, pos)) {
+    return { ctx, pos: best.index, text: readExpression(ctx.code, best.index + best[0].length) }
+  }
+  const fn = new RegExp(`(?:^|\\n)(?:export\\s+)?(?:async\\s+)?function\\s+${name}\\b`).exec(ctx.code)
+  if (fn) return { ctx, pos: fn.index, text: readTopLevelFunction(ctx.code, fn.index) }
+  const imported = ctx.imports.get(name)
+  const target = imported && byFile.get(imported.file)
+  return target ? findBinding(byFile, target, imported.name, target.code.length) : null
+}
+
+/**
+ * The '/v1/…' path(s) a binding stands for, with `${}` markers. A ternary
+ * with two paths yields both; `${base}/x` in the initializer expands `base`.
+ */
+function bindingBases(byFile, ctx, name, pos, seen = new Set()) {
+  const key = `${ctx.file}#${name}@${pos}`
+  if (seen.has(key)) return []
+  seen.add(key)
+  const binding = findBinding(byFile, ctx, name, pos)
+  if (!binding) return []
+  const bases = directV1Literals(binding.text)
+  for (const t of composedTemplates(binding.text)) {
+    for (const base of bindingBases(byFile, binding.ctx, t.name, binding.pos + t.index, seen)) bases.push(base + t.rest)
+  }
+  return bases
+}
+
+/**
+ * Every '/v1/…' path in the admin sources, with `${…}` kept as markers.
+ * Besides literals written out in full, a template that starts with a path
+ * binding (same file or a relative import) is expanded: `${path}/findings`
+ * after `const path = `/v1/admin/x/${id}`` yields '/v1/admin/x/${}/findings'.
+ * `${API_URL}/v1/…` yields its '/v1/…' tail.
+ */
+export function extractAdminLiterals(files) {
+  const byFile = fileContexts(files)
+  const out = []
+  for (const ctx of byFile.values()) {
+    for (const literal of directV1Literals(ctx.source)) out.push({ file: ctx.file, literal })
+    for (const t of composedTemplates(ctx.code)) {
+      const bases = bindingBases(byFile, ctx, t.name, t.index)
+      if (bases.length) {
+        for (const base of bases) out.push({ file: ctx.file, literal: base + t.rest })
+      } else if (t.rest.startsWith('/v1/')) {
+        out.push({ file: ctx.file, literal: t.rest })
+      }
     }
   }
   return out
+}
+
+/** Index after a generic type argument list at `i` (`<{ a: () => void }>`). */
+function skipTypeArgs(code, i) {
+  if (code[i] !== '<') return i
+  let depth = 0
+  for (let k = i; k < code.length; k++) {
+    if (code[k] === '<') depth++
+    else if (code[k] === '>' && code[k - 1] !== '=') {
+      depth--
+      if (depth === 0) return k + 1
+    }
+  }
+  return i
+}
+
+/** Split `a ? b : c` at depth 0 into its two branches, or null. */
+function ternaryBranches(expr) {
+  let depth = 0
+  let q = -1
+  for (let i = 0; i < expr.length; i++) {
+    const ch = expr[i]
+    if (ch === "'" || ch === '"' || ch === '`') { i = skipString(expr, i) - 1; continue }
+    if ('([{'.includes(ch)) depth++
+    else if (')]}'.includes(ch)) depth--
+    else if (depth === 0 && ch === '?' && expr[i + 1] !== '.' && expr[i + 1] !== '?' && expr[i - 1] !== '?') {
+      if (q === -1) q = i
+    } else if (depth === 0 && ch === ':' && q !== -1) {
+      return [expr.slice(q + 1, i), expr.slice(i + 1)]
+    }
+  }
+  return null
+}
+
+/**
+ * Can the gate tell which route this call argument reaches? Yes when it is
+ * (or each ternary branch is) `null`, a '/v1/…' literal, a template opening
+ * with a resolvable path binding, or a name or call whose binding holds one.
+ */
+function argResolves(byFile, ctx, expr, pos, seen = new Set()) {
+  const e = expr.trim()
+  if (e === '') return false
+  if (e === 'null' || e === 'undefined') return true
+  const branches = ternaryBranches(e)
+  if (branches) return branches.every((b) => argResolves(byFile, ctx, b, pos, seen))
+  const and = /^[^'"`]+?&&([\s\S]+)$/.exec(e)
+  if (and) return argResolves(byFile, ctx, and[1], pos, seen)
+  if (/^(['"`])\/v1\//.test(e)) return true
+  const composed = /^`\$\{\s*([A-Za-z_$][\w$]*)\s*\}/.exec(e)
+  if (composed) return bindingBases(byFile, ctx, composed[1], pos).length > 0
+  if (/^['"`]/.test(e)) return false
+  const head = /^([A-Za-z_$][\w$]*)/.exec(e)
+  if (!head) return false
+  const key = `${ctx.file}#${head[1]}@${pos}`
+  if (seen.has(key)) return false
+  seen.add(key)
+  const binding = findBinding(byFile, ctx, head[1], pos)
+  if (!binding) return false
+  if (directV1Literals(binding.text).length > 0) return true
+  if (composedTemplates(binding.text).some((t) => bindingBases(byFile, binding.ctx, t.name, binding.pos + t.index).length > 0)) return true
+  // `const url = buildUrl(tab)` or `const p = id ? PATH : null`: follow the initializer.
+  return /^(?:const|let|var)\b/.test(binding.ctx.code.slice(binding.pos))
+    && argResolves(byFile, binding.ctx, binding.text, binding.pos, seen)
+}
+
+/** The function enclosing `pos` whose FIRST parameter is `param`, or null. */
+function forwardingFunction(code, param, pos) {
+  const re = new RegExp(
+    `(?:function\\s+(\\w+)\\s*(?:<[^>]*>)?\\s*\\(|(?:const|let)\\s+(\\w+)\\s*=\\s*(?:async\\s*)?(?:function\\s*)?\\()\\s*${param}\\b`,
+    'g',
+  )
+  let found = null
+  for (const m of code.slice(0, pos).matchAll(re)) found = m[1] ?? m[2]
+  if (!found) return null
+  const exported = new RegExp(`export\\s+(?:async\\s+)?(?:function|const|let)\\s+${found}\\b`).test(code)
+  return { name: found, exported }
+}
+
+/**
+ * Console calls whose path the gate cannot resolve, as `{ file, call, arg }`.
+ * Every call to a request helper is checked. A function that hands its own
+ * first parameter to a helper (`const run = async (url) => apiFetchMutate(url)`)
+ * becomes a checked helper itself: file-local, or everywhere when exported.
+ * Whatever is left needs a reason under "dynamicCalls" in the mapping.
+ */
+export function extractDynamicCalls(files) {
+  const byFile = fileContexts(files)
+  const shared = new Set(ADMIN_CALLS)
+  const local = new Map([...byFile.keys()].map((f) => [f, new Set()]))
+  let unresolved = []
+  for (let pass = 0; pass < 6; pass++) {
+    let grew = false
+    unresolved = []
+    for (const ctx of byFile.values()) {
+      const re = new RegExp(`\\b(${[...shared, ...local.get(ctx.file)].join('|')})\\b\\s*`, 'g')
+      let m
+      while ((m = re.exec(ctx.code)) !== null) {
+        if (/(?:function|\.)\s*$/.test(ctx.code.slice(Math.max(0, m.index - 40), m.index))) continue
+        let i = skipTypeArgs(ctx.code, re.lastIndex)
+        while (/\s/.test(ctx.code[i] ?? '')) i++
+        if (ctx.code[i] !== '(') continue
+        const arg = readExpression(ctx.code, i + 1).trim()
+        if (argResolves(byFile, ctx, arg, m.index)) continue
+        const forwarder = /^[A-Za-z_$][\w$]*$/.test(arg) ? forwardingFunction(ctx.code, arg, m.index) : null
+        if (forwarder) {
+          const set = forwarder.exported ? shared : local.get(ctx.file)
+          if (!set.has(forwarder.name)) { set.add(forwarder.name); grew = true }
+          continue
+        }
+        unresolved.push({ file: ctx.file, call: m[1], arg })
+      }
+    }
+    if (!grew) break
+  }
+  return unresolved
 }
 
 /**
@@ -381,8 +715,26 @@ export function extractCliCommands(files) {
 
 // ── The check ────────────────────────────────────────────────────────────────
 
-export function checkParity({ used, mapping, mcpTools, cliCommands }) {
+export function checkParity({ used, mapping, mcpTools, cliCommands, dynamicCalls = [] }) {
   const errors = []
+  // A console call whose path the gate cannot resolve is a route it cannot
+  // see. It fails unless "dynamicCalls" names it, and a named call that no
+  // longer exists fails as stale, so the allowlist cannot grow silently.
+  const allowedDynamic = mapping.dynamicCalls ?? {}
+  const seenDynamic = new Set()
+  for (const call of dynamicCalls) {
+    const reason = allowedDynamic[call.file]?.[call.arg]
+    if (typeof reason === 'string' && reason.trim()) {
+      seenDynamic.add(`${call.file}\u0000${call.arg}`)
+      continue
+    }
+    errors.push(`${call.file}: ${call.call}(${call.arg}, …) builds its path in a way this check cannot follow, so the route it calls is unchecked. Use a '/v1/…' literal or a same-file path constant, or add a reason under "dynamicCalls" in ${PATHS.mapping}.`)
+  }
+  for (const [file, args] of Object.entries(allowedDynamic)) {
+    for (const arg of Object.keys(args)) {
+      if (!seenDynamic.has(`${file}\u0000${arg}`)) errors.push(`dynamicCalls ${file} "${arg}": stale entry; no console call passes that argument any more. Remove it from ${PATHS.mapping}.`)
+    }
+  }
   const reasons = mapping.reasons ?? {}
   const entries = mapping.routes ?? {}
   const stats = { routes: used.size, mcp: 0, cli: 0, allowed: 0, byReason: {} }
@@ -422,12 +774,14 @@ export function checkParity({ used, mapping, mcpTools, cliCommands }) {
 
 export function loadInputs(root = ROOT) {
   const routes = extractServerRoutes(readSources(root, PATHS.api))
-  const adminLiterals = extractAdminLiterals(readSources(root, PATHS.admin))
+  const adminFiles = readSources(root, PATHS.admin)
+  const adminLiterals = extractAdminLiterals(adminFiles)
+  const dynamicCalls = extractDynamicCalls(adminFiles)
   const { used, unresolved } = consoleRoutes(adminLiterals, routes)
   const mcpTools = extractMcpTools(readFileSync(path.join(root, PATHS.mcpCatalog), 'utf8'))
   const cliCommands = extractCliCommands(readSources(root, PATHS.cliCommands))
   const mapping = JSON.parse(readFileSync(path.join(root, PATHS.mapping), 'utf8'))
-  return { routes, used, unresolved, mcpTools, cliCommands, mapping }
+  return { routes, used, unresolved, dynamicCalls, mcpTools, cliCommands, mapping }
 }
 
 function main() {
@@ -458,7 +812,7 @@ function main() {
   }
   const reasons = Object.entries(stats.byReason).map(([k, n]) => `${k} ${n}`).join(', ')
   console.log(
-    `Surface parity OK: ${stats.routes} console routes; ${stats.mcp} with an MCP tool, ${stats.cli} with a CLI command, ${stats.allowed} allowlisted (${reasons || 'none'}); ${inputs.unresolved.length} admin literals matched no route.`,
+    `Surface parity OK: ${stats.routes} console routes; ${stats.mcp} with an MCP tool, ${stats.cli} with a CLI command, ${stats.allowed} allowlisted (${reasons || 'none'}); ${inputs.dynamicCalls.length} dynamic call(s) with a stated reason; ${inputs.unresolved.length} admin literals matched no route.`,
   )
 }
 
