@@ -1,5 +1,33 @@
 # @mushi-mushi/react-native
 
+## 0.24.0
+
+### Minor Changes
+
+- 5ad0800: `useMushi()` gains `getReporterUpdates()`, `onReporterUpdate(cb)` (refreshed when the app returns to the foreground, so a host feedback band or tab dot can show unread updates) and `getNotificationPrefs()` / `setNotificationPrefs({ email })` for email updates with double opt-in. `markReportRead(id)` is now one request to the v2 mark-read route, falling back to the per-notification routes on an older server.
+
+  The report sheet reaches web parity:
+  - **Free text first.** Type chips are optional. "Idea" files a feature request.
+  - **Easier to send.** Send enables after a few words (`widget.minDescriptionLength`, default 8), or right away when a screenshot is attached.
+  - **Timeline thread.** The thread shows the report's timeline: what happened and when, in the reporter's language, with the developer's replies.
+  - **Reduce Motion.** The sheet opens and closes instantly when Reduce Motion is on.
+  - **Receipt.** After sending, the form becomes a receipt with "Track it" and "Done".
+  - **Email opt-in.** When the app offers email updates, the receipt asks for an address. It is never pre-ticked, and a confirmation email goes out first.
+  - **Return toast.** A short "The developer replied" / "Your bug is fixed" toast appears when the app returns to the foreground: once per session, once a day, and only on devices that sent a report. Turn it off with `notifications: { toast: false }`.
+
+  Bundle budget: the RN size limit moves from 22 kB to 23.5 kB brotli (measured 22.95 kB) for this parity work. It is one-time weight inside a Metro app bundle; the shared rules live in `@mushi-mushi/core/reporter-ui`.
+
+### Patch Changes
+
+- 5ad0800: Fix: optional native modules no longer crash Metro apps. Versions 0.21–0.23 loaded `@react-native-community/netinfo`, `react-native-view-shot` and `expo-sensors` through an esbuild `__require()` shim that Metro can not resolve. The app crashed even though the SDK caught errors, so dogfood apps needed a postinstall patch. The built files now hold literal `require("<module>")` calls inside `try/catch`, and the build fails if any shim call is left. You can also pass the modules in: `<MushiProvider netInfo={NetInfo} viewShot={ViewShot} expoSensors={ExpoSensors}>`, which skips loading entirely. Drop any `__require` → `require` patch when you upgrade.
+- Updated dependencies [5ad0800]
+- Updated dependencies [5ad0800]
+- Updated dependencies [5ad0800]
+- Updated dependencies [5ad0800]
+- Updated dependencies [5ad0800]
+  - @mushi-mushi/core@1.31.0
+  - @mushi-mushi/web@1.31.0
+
 ## 0.23.0
 
 ### Minor Changes

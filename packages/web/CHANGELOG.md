@@ -1,5 +1,30 @@
 # @mushi-mushi/web
 
+## 1.31.0
+
+### Minor Changes
+
+- 5ad0800: New reporter-loop methods on the Mushi instance: `getReporterUpdates()`, `markReportRead(id)`, `onReporterUpdate(cb)` (draw your own unread badge; it refreshes with the inbox), `getNotificationPrefs()` / `setNotificationPrefs({ email })` (email updates with double opt-in — a confirmation email goes out first, every email has one-click unsubscribe) and `subscribeReporterPush()` (call it from a "Notify me" click; needs `notifications: { webPush: { serviceWorkerPath } }` and push turned on for the project). Nothing is opted in by default; offer email or push only when `/v1/sdk/config` says the project has them.
+- 5ad0800: The widget is now one screen, looks like part of your app, and keeps reporters in the loop (Plan 018, Phase 1).
+
+  - **One-screen report.** The 3-step category → intent → details flow is gone. Reporters type first, optionally pick a type chip (Bug, Slow, Looks wrong, Confusing, Idea, plus your own categories under "More…"), optionally narrow it with a sub-chip, attach a screenshot or point at an element, and press Send. `minDescriptionLength` now defaults to 8 (halved for Japanese, Chinese and Korean); an element the reporter picked, or a screenshot they asked for, also enables Send. With no chip picked the report is sent as `category: 'other'` and the classifier assigns the type.
+  - **Looks like your app.** The panel uses your page's font and system light/dark colours. The accent comes from `widget.accent`, then your `--mushi-accent`, `accent-color` or `<meta name="theme-color">` (a page colour that would vanish against the panel is ignored). Every colour is a `--mushi-*` CSS token you can set on `:root` or `#mushi-mushi-widget`, and CSS wins over JS config. The banner now defaults to the `subtle` variant; `brand` and `neon` are opt-in.
+  - **Your reports.** A header pill opens the list with an unread badge. Rows show a plain-English status ("Looking into it", "Waiting on you", "Fixed in v1.4"), the reporter's own type and page, and the news: the developer's words or "Update to v1.4. Does it work for you now?". Internal statuses, categories and severities are never shown. The detail view shows the report, a timeline, developer replies, "Yes / Not yet" on fixes, and a composer whose replies appear at once ("Sending…", then sent, or "Failed · Retry"). Opening a report marks its updates read.
+  - **Toast on the next visit.** When a device's reports have unread updates, one toast appears near the launcher ("The developer replied to your report"), at most once per session and per 24 hours, wherever the launcher is allowed. Turn it off with `notifications: { toast: false }`.
+  - **Email and push, opt-in only.** The receipt and the report view offer "Get updates by email" (never pre-ticked; the address is prefilled from `identify()` only with `notifications.emailFromIdentity`) and, when you pass `notifications.webPush: { serviceWorkerPath }`, a "Notify me" button that asks for browser permission from the click. Each appears only when your project offers that channel (`/v1/sdk/config` → `reporter`); `notifications.email: false` hides the email box.
+  - **Uses the new reporter routes, works with old servers.** Report detail, mark-read and the toast feed use `GET /v1/reporter/reports/:id`, `POST …/:id/read` and `GET /v1/reporter/updates`; against a server without them the widget falls back to the comments call and the in-app notification routes.
+  - **Less polling.** The reporter list is checked every 5 minutes while the page is visible (was 60 s), plus when the tab becomes visible, and never from a device that has not filed a report.
+  - **Smoother and more accessible.** The panel is built once and patched region by region, so a poll or a config update no longer rebuilds what the reporter is typing. Focus moves into the dialog, Tab stays inside, Escape closes (or goes back from a report), focus returns to the launcher, chips are a roving radio group, and "Sent" / reply status / errors are announced. All motion respects `prefers-reduced-motion`.
+  - New on the `Mushi` instance, for hosts that draw their own badge or controls: `getReporterUpdates()`, `markReportRead(id)`, `onReporterUpdate(cb)` (returns an unsubscribe), `getNotificationPrefs()`, `setNotificationPrefs({ email, channels })` and `subscribeReporterPush()` (call it from a click). Config gains `notifications: { toast, email, emailFromIdentity, webPush }`.
+  - `MushiLocale` gains a `panel` section; keys used only by the retired steps are now optional and deprecated.
+
+### Patch Changes
+
+- 5ad0800: Screenshots no longer come out blank on pages with entrance animations. CSS animations never run inside the SVG image the capture draws, so elements with fade-in keyframes stayed at opacity 0 and the whole capture was transparent ("This browser can't capture the page"). The capture now freezes animations and transitions after every page style, so it shows the settled page the reporter sees. The capture canvas also asks for `willReadFrequently`, which silences Chrome's Canvas2D readback warning. Short pages no longer come out half black: the page background now fills the whole capture, as it does on screen.
+- Updated dependencies [5ad0800]
+- Updated dependencies [5ad0800]
+  - @mushi-mushi/core@1.31.0
+
 ## 1.30.0
 
 ### Patch Changes
