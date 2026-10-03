@@ -290,7 +290,8 @@ function judgeRawElement(rule: DesignRuleConfig, tag: string): LiteralVerdict {
 const HEX_ONLY_RE = /^#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3,4})$/
 const COLOR_FN_ONLY_RE = /^(?:rgba?|hsla?|hwb|oklab|oklch)\((?:[\d\s.,%/+-]|deg|turn|g?rad|none)*\)$/i
 const FONT_NAME_RE = /^[\p{L}\p{N}][\p{L}\p{N} .-]{0,63}$/u
-const SCALE_VALUE_RE = /^-?\d+(?:\.\d+)?(?:px|rem)$/
+/** A px/rem length in every shape the scanner extracts (`[\d.]+`), so `.5rem` and `5.px` too. */
+const SCALE_VALUE_RE = /^-?(?:\d+\.?\d*|\.\d+)(?:px|rem)$/
 const RAW_ELEMENT_RE = /^<(button|input|select|textarea)>$/
 
 /**

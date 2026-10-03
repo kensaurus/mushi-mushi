@@ -10,7 +10,8 @@
 // least-recently refreshed first, and no new project after START_BUDGET_MS):
 //   1. refreshRecipeSnapshot: read mushi.recipe.json + DTCG token files at the
 //      default-branch head into app_recipe_snapshots.
-//   2. When the snapshot has tokens and the last design_drift scan is older
+//   2. When the snapshot has tokens and the last design_drift scan (phase
+//      `scan` only: CI pushes never count, see designScanDue) is older
 //      than SCAN_EVERY_HOURS, runDesignDeviance writes a gate run, findings
 //      and the design.deviance_score metric.
 // A project whose step fails gets an errored design_drift run (never skipped
@@ -21,7 +22,7 @@ import { getServiceClient } from '../_shared/db.ts'
 import { log } from '../_shared/logger.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
-import { DESIGN_GATE, refreshRecipeSnapshot, runDesignDeviance } from '../_shared/design-plane.ts'
+import { designScanDue, refreshRecipeSnapshot, runDesignDeviance } from '../_shared/design-plane.ts'
 import { collectOrgPortfolio, collectProjectPhase2 } from '../_shared/recipe-phase2.ts'
 
 declare const Deno: {
@@ -95,17 +96,12 @@ async function handler(req: Request): Promise<Response> {
       const refresh = await refreshRecipeSnapshot(db, projectId, 'cron')
       row.refresh = refresh.ok ? `ok:${refresh.tokenCount}` : `${refresh.state}:${refresh.reason.slice(0, 80)}`
       if (refresh.ok && refresh.tokenCount > 0) {
-        const { data: lastRun } = await db
-          .from('gate_runs')
-          .select('started_at, status')
-          .eq('project_id', projectId)
-          .eq('gate', DESIGN_GATE)
-          .neq('status', 'error')
-          .order('started_at', { ascending: false })
-          .limit(1)
-          .maybeSingle()
-        const age = lastRun ? Date.now() - Date.parse((lastRun as { started_at: string }).started_at) : Infinity
-        if (age > SCAN_EVERY_HOURS * 3600_000) {
+        // Only a phase `scan` run counts, so PR and other CI pushes never hold the daily scan back.
+        const due = await designScanDue(db, projectId, new Date(), SCAN_EVERY_HOURS * 3600_000)
+        if (!due.ok) {
+          clog.error('design scan cadence read failed', { projectId, err: due.error })
+          row.scan = `error:${due.error.slice(0, 80)}`
+        } else if (due.due) {
           const run = await runDesignDeviance(db, projectId, 'cron')
           row.scan = run.ok ? `${run.run.status}:${run.run.score ?? 'n/a'}` : `error:${run.error.slice(0, 80)}`
         }
