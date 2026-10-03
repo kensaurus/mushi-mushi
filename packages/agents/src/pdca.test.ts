@@ -76,7 +76,8 @@ function stubFetch() {
         : anthropicMessage('<h1>Checkout</h1><p>Clearer</p>', { input_tokens: 1_000, output_tokens: 300 })
     }
     otherHosts.push(url)
-    return new Response(JSON.stringify({ error: { message: 'unexpected host in test' } }), { status: 500 })
+    // 400, not 5xx: non-retryable, so a stray OpenAI call fails the test at once.
+    return new Response(JSON.stringify({ error: { message: 'unexpected host in test' } }), { status: 400 })
   })
   return { fetchImpl: fetchImpl as unknown as typeof globalThis.fetch, anthropicBodies, otherHosts }
 }
