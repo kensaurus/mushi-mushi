@@ -128,10 +128,27 @@ export interface IndexCoverage {
   state: IndexCoverageState
 }
 
+/** The sweep fetches at most this many characters of one file (fetchFileContents). */
+export const MAX_INDEXED_FILE_BYTES = 500_000
+
+/**
+ * Whether a tree blob can ever be stored: an empty file has nothing to embed
+ * and one over the fetch limit is never read, so counting either as
+ * "eligible" would keep coverage short of complete forever. A blob without a
+ * size (older listings) is assumed storable.
+ */
+export function isStorableBlob(entry: { size?: number }): boolean {
+  return entry.size == null || (entry.size > 0 && entry.size <= MAX_INDEXED_FILE_BYTES)
+}
+
 /**
  * Coverage after a sweep: `indexedPaths` is what the index holds now (read
  * back after the writes), intersected with the repo's eligible files.
- *   complete: every eligible file is indexed and the tree listing was whole.
+ * `unstorablePaths` are eligible files this run fetched and found missing,
+ * empty or over the limit: they can never be indexed, so they leave the
+ * eligible count instead of keeping the repo "filling" forever. (A transient
+ * fetch or embedding failure is not unstorable; the next sweep retries it.)
+ *   complete: every storable eligible file is indexed and the tree was whole.
  *   capped:   the plan ceiling is reached (or GitHub truncated the tree),
  *             so more sweeps will not add files.
  *   filling:  below both; the next sweeps add files.
@@ -139,12 +156,21 @@ export interface IndexCoverage {
 export function measureIndexCoverage(input: {
   eligiblePaths: readonly string[]
   indexedPaths: ReadonlySet<string>
+  unstorablePaths?: ReadonlySet<string>
   cap: number
   truncated: boolean
 }): IndexCoverage {
-  const eligible = input.eligiblePaths.length
+  const unstorable = input.unstorablePaths ?? new Set<string>()
+  let eligible = 0
   let indexed = 0
-  for (const p of input.eligiblePaths) if (input.indexedPaths.has(p)) indexed++
+  for (const p of input.eligiblePaths) {
+    if (input.indexedPaths.has(p)) {
+      eligible++
+      indexed++
+    } else if (!unstorable.has(p)) {
+      eligible++
+    }
+  }
   let state: IndexCoverageState
   if (indexed >= eligible && !input.truncated) state = 'complete'
   else if (indexed >= input.cap || (input.truncated && indexed >= eligible)) state = 'capped'

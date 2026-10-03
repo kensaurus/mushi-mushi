@@ -121,7 +121,8 @@ export async function resolveBranchForConnect(opts: {
 const TREE_TIMEOUT_MS = 30_000
 
 export interface RepoTree {
-  tree?: Array<{ path: string; type: string }>
+  /** `size` (bytes) is set by GitHub for blobs. */
+  tree?: Array<{ path: string; type: string; size?: number }>
   truncated?: boolean
 }
 

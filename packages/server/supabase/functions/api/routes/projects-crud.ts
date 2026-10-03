@@ -172,7 +172,7 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
         db
           .from('project_repos')
           .select(
-            'id, project_id, repo_url, role, default_branch, is_primary, indexing_enabled, last_indexed_at, last_index_attempt_at, last_index_error, github_app_installation_id, created_at',
+            'id, project_id, repo_url, role, default_branch, is_primary, indexing_enabled, last_indexed_at, last_index_attempt_at, last_index_error, github_app_installation_id, created_at, index_swept_at, index_coverage_state, index_files_indexed, index_files_eligible',
           )
           .in('project_id', projectIds)
           .order('is_primary', { ascending: false })
@@ -388,6 +388,11 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
       last_index_error: string | null;
       github_app_installation_id: number | null;
       created_at: string;
+      /** Since 20261003160000: last sweep (complete or partial) and its coverage. */
+      index_swept_at?: string | null;
+      index_coverage_state?: string | null;
+      index_files_indexed?: number | null;
+      index_files_eligible?: number | null;
     }
     const reposByProject: Record<string, RepoRow[]> = {};
     for (const r of (repos.data ?? []) as RepoRow[]) {
@@ -544,6 +549,10 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
         last_index_attempt_at: r.last_index_attempt_at,
         last_index_error: r.last_index_error,
         github_app_connected: r.github_app_installation_id != null,
+        index_swept_at: r.index_swept_at ?? null,
+        index_coverage_state: r.index_coverage_state ?? null,
+        index_files_indexed: r.index_files_indexed ?? null,
+        index_files_eligible: r.index_files_eligible ?? null,
       }));
       const settingsGithubUrl = settingsGithubByProject[p.id] ?? null;
       const primaryRepo =
@@ -560,6 +569,10 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
               last_index_attempt_at: null,
               last_index_error: null,
               github_app_connected: true,
+              index_swept_at: null,
+              index_coverage_state: null,
+              index_files_indexed: null,
+              index_files_eligible: null,
             }
           : null);
 
