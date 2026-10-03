@@ -155,6 +155,21 @@ export interface ReportJudgeEval {
   created_at: string
 }
 
+/**
+ * A merged fix joined to the project's deploy truth (deploy_drift run, its
+ * open `not_deployed` findings, the newest deploy_observations commit).
+ * `unknown` covers no checks, none since the merge, and a failed read.
+ */
+export interface ReportDeployLive {
+  state: 'live' | 'not_live' | 'unknown'
+  merged_at: string
+  /** The commit production runs, when an observation names one. */
+  prod_commit: string | null
+  target_id: string | null
+  checked_at: string | null
+  reason: string
+}
+
 export interface ReportDetail {
   id: string
   project_id: string
@@ -227,6 +242,9 @@ export interface ReportDetail {
   } | null
   /** Linked agentic fix attempts for this report. Most recent first. */
   fix_attempts?: ReportFixAttempt[]
+  /** Whether the merged fix runs in production; null when no fix merged.
+   *  Server: `_shared/report-deploy-live.ts`. */
+  deploy_live?: ReportDeployLive | null
   /** Latest classification judge evaluation, if the judge has run. */
   judge_eval?: ReportJudgeEval | null
   // 2026-05-07 SDK observability boost — these populate from the

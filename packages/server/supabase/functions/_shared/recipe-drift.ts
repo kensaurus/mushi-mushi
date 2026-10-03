@@ -231,7 +231,8 @@ export interface DeployObservation {
 
 const MOBILE_KIND = /android|ios|capacitor|expo|mobile|play|app-store|appstore|react-native/i
 
-function sameCommit(a: string, b: string): boolean {
+/** Full or abbreviated (≥ 7 chars) SHAs naming the same commit. */
+export function sameCommit(a: string, b: string): boolean {
   const x = a.trim().toLowerCase()
   const y = b.trim().toLowerCase()
   if (x.length < 7 || y.length < 7) return x === y
