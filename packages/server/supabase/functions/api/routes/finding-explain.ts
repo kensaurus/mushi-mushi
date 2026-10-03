@@ -17,11 +17,14 @@ import { getServiceClient } from '../../_shared/db.ts'
 import { DESIGN_GATE } from '../../_shared/design-plane.ts'
 import {
   absenceUnproven,
+  comparesByWriter,
   designRunPhase,
   explainFinding,
   findingTargetKey,
+  reportsChangesOnly,
   runCoversScope,
   runStoryScope,
+  sourcesNotReached,
   type ExplainFindingRow,
   type FindingMatchKey,
   type ExplainLatestRun,
@@ -52,6 +55,7 @@ interface LatestRunRow {
   completed_at: string | null
   summary: Record<string, unknown> | null
   findings_count: number | null
+  triggered_by: string | null
 }
 
 /**
@@ -66,18 +70,25 @@ interface LatestRunRow {
  * newest is taken whatever its status (a radar run with one errored connector
  * is `error` yet holds real findings; absenceUnproven reads its per-rule
  * record). design_drift compares a server scan only with server scans and a
- * CI push only with CI pushes, and an inventory-gates run scoped to another
- * story subtree is skipped, because neither examined this finding's place.
+ * CI push only with CI pushes; code_health and schema_drift compare a run only
+ * with runs of the same writer (comparesByWriter); an inventory-gates run
+ * scoped to another story subtree is skipped. None of those examined this
+ * finding's place.
  */
 async function latestRunFor(db: Db, finding: ExplainFindingRow, run: ExplainRunRow): Promise<ExplainLatestRun | null | 'error'> {
   let query = db
     .from('gate_runs')
-    .select('id, status, completed_at, summary, findings_count')
+    .select('id, status, completed_at, summary, findings_count, triggered_by')
     .eq('project_id', finding.project_id)
     .eq('gate', run.gate)
     .gte('started_at', run.started_at)
   // design_drift also writes token-refresh rows (phase refresh); they never match.
   if (run.gate === DESIGN_GATE) query = query.eq('summary->>phase', designRunPhase(run.summary))
+  // CI ingest vs recipe budgets, recipe connectors vs the schema scanner.
+  else if (comparesByWriter(run.gate)) {
+    const writer = run.triggered_by ?? null
+    query = writer === null ? query.is('triggered_by', null) : query.eq('triggered_by', writer)
+  }
   const { data: runs, error } = await query
     .not('status', 'in', '(running,queued)')
     .order('started_at', { ascending: false })
@@ -135,6 +146,8 @@ async function latestRunFor(db: Db, finding: ExplainFindingRow, run: ExplainRunR
     summary: latest.summary,
     ruleId: finding.rule_id,
     matchedBy,
+    sourcesNotReached: sourcesNotReached(run.summary, latest.summary),
+    reportsChangesOnly: reportsChangesOnly(run.gate, latest.triggered_by),
   })
   return { id: latest.id, completed_at: latest.completed_at, matchingFindingId: null, uncheckedReason }
 }
@@ -158,7 +171,7 @@ export function registerFindingExplainRoutes(
 
     const { data: runRow, error: runErr } = await db
       .from('gate_runs')
-      .select('id, gate, status, started_at, completed_at, commit_sha, summary')
+      .select('id, gate, status, started_at, completed_at, commit_sha, summary, triggered_by')
       .eq('id', finding.gate_run_id)
       .maybeSingle()
     if (runErr) return jsonError(c, 'DB_ERROR', 'The finding could not be read. Try again in a minute.', 500)

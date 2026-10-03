@@ -44,6 +44,8 @@ export interface ExplainRunRow {
   commit_sha: string | null
   /** The run's own summary: its phase (design_drift) and story scope (inventory gates) pick what it is compared with. */
   summary?: unknown
+  /** gate_runs.triggered_by: which writer recorded the run (see comparesByWriter). */
+  triggered_by?: string | null
 }
 
 /** The newest finished run of the same gate, and the matching finding in it, if any. */
@@ -77,6 +79,10 @@ export interface LatestRunEvidence {
   summary: unknown
   ruleId: string | null
   matchedBy: FindingMatchKey
+  /** Sources the finding's own run read that the latest run did not reach (see sourcesNotReached). */
+  sourcesNotReached?: readonly string[]
+  /** The run's writer reports changes since its previous run, not standing state (see reportsChangesOnly). */
+  reportsChangesOnly?: boolean
 }
 
 /** Statuses of a run that finished and checked what it was asked to (error and skipped did not). */
@@ -101,9 +107,17 @@ export const CI_SCAN_FINDINGS_CAP = 500
  *  - the run read only part of the project: it stopped at its file limit
  *    (summary.truncated), read no files at all (summary.scannedFiles 0), or is
  *    a CI scan that hit the CLI's 500-finding cap;
- *  - the run could only be searched by a message that embeds counts or dates.
+ *  - the run could only be searched by a message that embeds counts or dates;
+ *  - the run's writer reports only what changed since its previous run;
+ *  - the run did not reach a source (connector) the finding's own run read.
  */
 export function absenceUnproven(e: LatestRunEvidence): string | null {
+  if (e.reportsChangesOnly) {
+    return 'this check reports what changed since its previous run, not what is still wrong, so a newer run without it proves nothing.'
+  }
+  if (e.sourcesNotReached && e.sourcesNotReached.length > 0) {
+    return `the latest run could not reach ${e.sourcesNotReached.join(', ')}, which the run that found this read.`
+  }
   const summary = asRecord(e.summary)
   const results = summary && Array.isArray(summary.results) ? summary.results.map(asRecord) : null
   const entry = results && e.ruleId !== null ? results.find((r) => r !== null && r.ruleId === e.ruleId) ?? null : null
@@ -160,6 +174,56 @@ export function withFindingsNotStored(summary: Record<string, unknown>, stored: 
  */
 export function designRunPhase(summary: unknown): 'scan' | 'ci_scan' {
   return asRecord(summary)?.phase === 'ci_scan' ? 'ci_scan' : 'scan'
+}
+
+/**
+ * Gates that more than one writer records runs for, each checking different
+ * things, so a finding is compared only with later runs of its own writer
+ * (gate_runs.triggered_by):
+ *  - code_health: CI ingest (`ci_push`, god files per file) and recipe budgets
+ *    (`recipe-collector`, budget_exceeded only, no file);
+ *  - schema_drift: recipe connectors (`recipe-collector`, migration_unapplied)
+ *    and the schema snapshot diff (`backend-drift-scanner`).
+ * design_drift is split by summary.phase instead (designRunPhase). Other gates
+ * mix cron and manual triggers of the same check, so they are not split.
+ */
+const MULTI_WRITER_GATES: ReadonlySet<string> = new Set(['code_health', 'schema_drift'])
+
+export function comparesByWriter(gate: string): boolean {
+  return MULTI_WRITER_GATES.has(gate)
+}
+
+/**
+ * Writers whose runs record what changed since their previous run, not what is
+ * still wrong: backend-drift-scanner writes a schema_drift run only when the
+ * schema hash moved, with the tables added, removed or modified since the last
+ * snapshot. A later run without "table X removed" says nothing about table X.
+ */
+const CHANGE_ONLY_WRITERS: Readonly<Record<string, string>> = {
+  schema_drift: 'backend-drift-scanner',
+}
+
+export function reportsChangesOnly(gate: string, triggeredBy: string | null | undefined): boolean {
+  return triggeredBy != null && CHANGE_ONLY_WRITERS[gate] === triggeredBy
+}
+
+/** The sources (connectors) a run recorded in summary.connectors, or null when it recorded none. */
+export function runSources(summary: unknown): string[] | null {
+  const connectors = asRecord(summary)?.connectors
+  return Array.isArray(connectors) ? connectors.filter((k): k is string => typeof k === 'string') : null
+}
+
+/**
+ * Sources the finding's own run read that a later run did not reach. Connector
+ * gates (deploy_drift, env_drift, schema_drift, ci_drift) write a run when any
+ * one source connected, so a finding from a source that failed next time is
+ * simply absent. A later run that records no sources at all reached none.
+ */
+export function sourcesNotReached(ownSummary: unknown, latestSummary: unknown): string[] {
+  const own = runSources(ownSummary)
+  if (!own) return []
+  const reached = new Set(runSources(latestSummary) ?? [])
+  return own.filter((k) => !reached.has(k))
 }
 
 /** The story subtree an inventory-gates run was scoped to, or null for a whole-project run. */
