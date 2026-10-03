@@ -797,9 +797,15 @@ function ProjectContextRail({ project }: { project: Project }) {
     if (health === 'stale') return `Last successful index ${relativeTime(lastIso)}. Codebase-aware features may be using stale context.`
     if (health === 'partial') {
       const of = indexCoverageText(repo)
-      return repo.index_coverage_state === 'capped'
-        ? `Indexed ${of ?? 'part of the repo'}: the plan's file limit is reached. Diagnoses only see indexed files.`
-        : `Indexed ${of ?? 'part of the repo'} so far (${relativeTime(lastIso)}); the hourly sweep adds more.`
+      if (repo.index_coverage_state === 'capped') {
+        return `Indexed ${of ?? 'part of the repo'}: the plan's file limit is reached. Diagnoses only see indexed files.`
+      }
+      if (repo.index_coverage_state === 'stalled') {
+        return `Indexed ${of ?? 'part of the repo'}; the last sweep (${relativeTime(lastIso)}) added no file.${
+          repo.last_index_error ? `\n\n${repo.last_index_error.slice(0, 220)}` : ''
+        }`
+      }
+      return `Indexed ${of ?? 'part of the repo'} so far (${relativeTime(lastIso)}); the hourly sweep adds more.`
     }
     return `Indexed ${relativeTime(lastIso)}.`
   })()

@@ -110,6 +110,19 @@ describe('CodebaseIndexCard', () => {
     expect(container.textContent).not.toContain('Limit reached')
   })
 
+  it('shows a stalled index with the reason, not as filling', async () => {
+    await render({
+      ...STATS,
+      file_cap: 1500,
+      at_file_cap: false,
+      last_index_error: 'stalled: the last sweep indexed no new file; 3 file fetch(es) failed',
+      coverage: { ...STATS.coverage, indexed_files: 40, file_cap: 1500, state: 'stalled' },
+    })
+    const callout = container.querySelector('[data-testid="codebase-coverage-callout"]')
+    expect(callout?.textContent).toContain('the last sweep added no file')
+    expect(container.textContent).not.toContain('Still filling')
+  })
+
   it('tells a PAT-connected repo where to point the push webhook', async () => {
     await render(STATS)
     const hint = container.querySelector('[data-testid="codebase-push-webhook"]')

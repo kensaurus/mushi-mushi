@@ -25,6 +25,8 @@ describe('indexHealth with coverage', () => {
   it('a partial-only repo is Partial, not never-indexed', () => {
     expect(indexHealth({ ...base, index_swept_at: now, index_coverage_state: 'capped' })).toBe('partial')
     expect(indexHealth({ ...base, index_swept_at: now, index_coverage_state: 'filling' })).toBe('partial')
+    // A stalled repo (last sweep added nothing) is partial too, not ok.
+    expect(indexHealth({ ...base, index_swept_at: now, index_coverage_state: 'stalled' })).toBe('partial')
   })
   it('a complete repo is ok, and an older server payload behaves as before', () => {
     expect(indexHealth({ ...base, last_indexed_at: now, index_swept_at: now, index_coverage_state: 'complete' })).toBe('ok')

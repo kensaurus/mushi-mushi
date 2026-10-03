@@ -192,13 +192,14 @@ Connected with a Personal Access Token instead of the App? Add a repo webhook in
 
 Your plan sets how many files the index may hold: 300 on the free plan, and more on paid plans. The hourly sweep fetches files in batches, starting with the files named in open error stack traces and your application source. It keeps going until the whole repo or the plan limit is covered.
 
-The Codebase indexing card shows coverage in files, for example `1,500 of 4,700 files`, in one of three states:
+The Codebase indexing card shows coverage in files, for example `1,500 of 4,700 files`, in one of four states:
 
 - **all**: every indexable file is in the index.
 - **still filling**: later sweeps will add more files.
-- **plan limit**: the limit is reached. Diagnoses and fixes only see the indexed files, so use a path filter to choose which ones.
+- **plan limit**: the limit is reached. Diagnoses and fixes only see the indexed files. A path filter limits the sweep, and the count, to the directories that matter.
+- **stuck**: the last sweep could not add a file, for example because GitHub kept refusing a file. The card shows the error. The sweep retries daily instead of hourly.
 
-"Last sweep" counts partial sweeps too. A partial sweep is never shown as a complete index.
+"Last sweep" counts partial sweeps too. A partial sweep is never shown as a complete index. Pushes count against the plan limit as well: a push re-indexes files already in the index, and adds new files only while the index is under the limit.
 
 <Callout type="tip">
   Only files tracked by git are indexed. Add large generated directories (`dist/`, `.next/`, `node_modules/`) to `.mushiignore` to skip them.
