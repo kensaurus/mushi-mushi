@@ -83,6 +83,23 @@ const PUBLIC_BY_DESIGN: Record<string, string> = {
   mcp: 'Per-tool JWT / X-Mushi-Api-Key auth — see MCP transport docstring',
 }
 
+/**
+ * Internal functions that accept exactly one more credential besides the
+ * service-role bearer: a cryptographically verified token, never a header
+ * flag. They still import requireServiceRoleAuth and hand it to a combined
+ * gate whose 401 is returned unconditionally. Each entry is the exact gate
+ * the source must contain.
+ */
+const SECOND_CREDENTIAL_BY_DESIGN: Record<string, { why: string; gate: RegExp }> = {
+  // release.yml's catalog-sync job holds no Supabase key; it sends a GitHub
+  // Actions OIDC token pinned to release.yml on master in this repo by
+  // numeric repository/owner id, audience and event (_shared/github-oidc.ts).
+  'sdk-versions-cron': {
+    why: 'GitHub Actions OIDC token verified (RS256 + pinned claims) in _shared/github-oidc.ts',
+    gate: /authorizeServiceRoleOrGithubOidc\(\s*c\.req\.raw,\s*\{\s*serviceRoleCheck:\s*requireServiceRoleAuth,?\s*\}\s*\)\s*\n\s*if \(!auth\.ok\) \{[\s\S]{0,200}?return auth\.response\s*\}/,
+  },
+}
+
 function listFunctionDirs(): string[] {
   return readdirSync(functionsRoot)
     .filter((name) => {
@@ -146,11 +163,15 @@ describe('internal-auth contract', () => {
       ).toMatch(/requireServiceRoleAuth[^\n]*from\s+['"]\.\.\/\_shared\/auth\.ts['"]/)
 
       // Helper must be *called* before doing work. We look for the usage
-      // pattern `requireServiceRoleAuth(` anywhere after the import.
+      // pattern `requireServiceRoleAuth(` anywhere after the import or, for a
+      // documented second-credential function, its exact combined gate.
+      const secondCredential = SECOND_CREDENTIAL_BY_DESIGN[fn]
       expect(
         source,
-        `expected ${fn}/index.ts to call requireServiceRoleAuth(req) before handler work`,
-      ).toMatch(/requireServiceRoleAuth\s*\(/)
+        secondCredential
+          ? `expected ${fn}/index.ts to gate with the combined call (${secondCredential.why}) and return its 401`
+          : `expected ${fn}/index.ts to call requireServiceRoleAuth(req) before handler work`,
+      ).toMatch(secondCredential ? secondCredential.gate : /requireServiceRoleAuth\s*\(/)
 
       // Hand-rolled `authorized()` that only accepts SUPABASE_SERVICE_ROLE_KEY
       // is banned — it rejects pg_cron callers that must use
