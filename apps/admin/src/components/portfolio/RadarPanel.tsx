@@ -3,8 +3,13 @@
  * the Recipe page. Every check is listed; one that never ran says "Not
  * checked yet" and is never shown as passing.
  *
+ * Below them, Mushi's own setup checks for the app (gate `radar`: a rejected
+ * key, no spend cap or AI budget, a webhook that never delivered, a stale
+ * index), with a one-click "Apply suggested caps" on `spend_cap_unset`.
+ *
  * Data: GET /v1/admin/projects/:id/radar → RadarView
  *       POST /v1/admin/projects/:id/radar/run (202; 1 per 10 min)
+ *       GET /v1/admin/inventory/:id/findings?gate=radar (every plan, ADR 0018)
  */
 
 import { useState } from 'react'
@@ -13,6 +18,7 @@ import { usePageData } from '../../lib/usePageData'
 import { apiFetchMutate } from '../../lib/supabase'
 import type { RadarView } from '../../lib/radarTypes'
 import { radarStateMeta } from './portfolioView'
+import { GateFindingsSection } from '../gates/GateFindingsSection'
 
 export function RadarPanel({ projectId }: { projectId: string }) {
   const path = `/v1/admin/projects/${projectId}/radar`
@@ -74,6 +80,17 @@ export function RadarPanel({ projectId }: { projectId: string }) {
           })}
         </ul>
       )}
+      <div className="mt-4 border-t border-edge-subtle pt-3">
+        <h3 className="text-sm font-medium text-fg">Mushi setup checks</h3>
+        <p className="mb-2 text-xs text-fg-muted">
+          Checked once a day: provider keys Mushi uses, spend caps and the monthly AI budget, webhooks, and how fresh the code index is.
+        </p>
+        <GateFindingsSection
+          projectId={projectId}
+          gate="radar"
+          neverRunText="Mushi's setup checks have not run for this app yet; they run once a day."
+        />
+      </div>
     </Section>
   )
 }

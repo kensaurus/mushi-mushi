@@ -61,6 +61,8 @@ export interface AuditResult {
     findings_count: number
     run_id: string
   }>
+  /** False when the gate runs could not be read: an empty gate_runs is then unknown, not "none". */
+  gate_runs_read: boolean
   schema_snapshot_taken: boolean
   recent_backend_errors: number
   /** Plain-English list of the reads that failed; empty when the audit is complete. */
@@ -421,6 +423,7 @@ export function registerFullstackAuditRoutes(parent: Hono<{ Variables: Variables
       summary: { error_count: errorCount, warn_count: warnCount, info_count: infoCount, overall },
       findings,
       gate_runs: gateRunSummaries,
+      gate_runs_read: gateRead.ok,
       schema_snapshot_taken: schemaSnapshotTaken,
       recent_backend_errors: recentBackendErrors,
       read_errors: readErrors,
