@@ -60,9 +60,26 @@ describe('pushVerdict', () => {
     expect(pushVerdict(answer({ ...scored, action: { action: 'autofix_disabled' } }), null, 37).lines.join('\n')).toMatch(/Autofix is off for this project/)
   })
 
-  it('a scan Mushi could not store is reported but does not fail the host CI', () => {
+  it('a scan Mushi could not store is reported but does not fail the host CI while the gate is off', () => {
     const v = pushVerdict(answer({ ...scored, status: 'error', score: null, reason: 'gate_findings insert failed: boom' }), null, 37)
     expect(v.failed).toBe(false)
     expect(v.errors).toContain('Mushi could not store the scan: gate_findings insert failed: boom')
+  })
+
+  it('fails the step when the gate is on and the scan could not be stored, even within the limit', () => {
+    const within = { enabled: true, failAbove: 40, exceeded: false }
+    const v = pushVerdict(answer({ ...scored, status: 'error', gate: within, reason: 'gate_findings insert failed: boom' }), null, 37)
+    expect(v.failed).toBe(true)
+    expect(v.errors.join('\n')).toMatch(/deviance gate is on, and an unstored scan cannot be checked/)
+    // Above the limit it fails once, for both reasons.
+    const over = pushVerdict(answer({ ...scored, status: 'error', gate: { enabled: true, failAbove: 30, exceeded: true }, reason: 'boom' }), null, 37)
+    expect(over.failed).toBe(true)
+  })
+
+  it('says when a public key kept the auto-fix from running', () => {
+    const v = pushVerdict(answer({ ...scored, action: { action: 'key_not_trusted', reason: 'key_seen_in_browser' }, reason: 'This key has been sent by a web page.' }), null, 37)
+    expect(v.failed).toBe(false)
+    expect(v.errors).toContain('This key has been sent by a web page.')
+    expect(v.lines.join('\n')).toMatch(/auto-fix skipped for this push: the key is treated as public/)
   })
 })

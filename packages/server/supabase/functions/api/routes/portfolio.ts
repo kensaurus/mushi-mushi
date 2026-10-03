@@ -44,7 +44,7 @@ import { DESIGN_GATE } from '../../_shared/design-plane.ts'
 import { RADAR_CI_GATE, RADAR_GATE } from '../../_shared/radar/run.ts'
 import { jsonError, OPEN_REPORT_STATUSES } from '../shared.ts'
 import type { Variables } from '../types.ts'
-import { composeRecipe, isScanRun, latestPerGate, type ComposeDeps } from './recipe-compose.ts'
+import { composeRecipe, latestPerGate, loadLatestDesignScans, type ComposeDeps } from './recipe-compose.ts'
 import { defaultRecipeDeps } from './recipe.ts'
 
 const plog = log.child('portfolio')
@@ -135,11 +135,10 @@ interface RunRow {
   completed_at: string | null
 }
 
-/** Latest completed run per (project, gate). Design refresh runs never count as the latest scan. */
+/** Latest completed run per (project, gate), for every gate but design_drift (read separately, scans only). */
 function latestRunsByProject(runs: readonly RunRow[]): RunRow[] {
   const byProject = new Map<string, RunRow[]>()
   for (const r of runs) {
-    if (r.gate === DESIGN_GATE && !isScanRun(r)) continue
     const list = byProject.get(r.project_id) ?? []
     list.push(r)
     byProject.set(r.project_id, list)
@@ -149,14 +148,20 @@ function latestRunsByProject(runs: readonly RunRow[]): RunRow[] {
 
 async function loadLatestRuns(db: Db, projectIds: string[]): Promise<RunRow[]> {
   if (projectIds.length === 0) return []
-  const { data, error } = await db
-    .from('gate_runs')
-    .select('id, project_id, gate, status, summary, started_at, completed_at')
-    .in('project_id', projectIds)
-    .order('started_at', { ascending: false })
-    .limit(3000)
+  // design_drift is read per project, scans only: refresh errors and PR pushes
+  // (many per day) would otherwise push a project's latest scan out of this window.
+  const [{ data, error }, designScans] = await Promise.all([
+    db
+      .from('gate_runs')
+      .select('id, project_id, gate, status, summary, started_at, completed_at')
+      .in('project_id', projectIds)
+      .neq('gate', DESIGN_GATE)
+      .order('started_at', { ascending: false })
+      .limit(3000),
+    loadLatestDesignScans(db, projectIds),
+  ])
   if (error) throw new Error(`gate_runs: ${error.message}`)
-  return latestRunsByProject((data ?? []) as RunRow[])
+  return [...latestRunsByProject((data ?? []) as RunRow[]), ...designScans]
 }
 
 async function loadOpenFindings(db: Db, runs: readonly RunRow[]): Promise<OpenFindingRow[]> {

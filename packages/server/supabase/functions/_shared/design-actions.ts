@@ -20,9 +20,21 @@ import type { getServiceClient } from './db.ts'
 import { dispatchFixForReport, type DispatchResult } from './dispatch.ts'
 import { log } from './logger.ts'
 import type { DevianceFinding, FindingSeverity } from './design-engine-types.ts'
+import { SCAN_LIMITS } from './design-scan.ts'
 
 type Db = ReturnType<typeof getServiceClient>
 const alog = log.child('design-actions')
+
+/**
+ * The phase of a design_drift run that is the app's design state (a server
+ * scan or a default-branch CI push from a trusted key): the shown score, the
+ * metric and the auto-fix baseline come only from these. Every reader filters
+ * on it in SQL (DESIGN_PHASE_PATH), so refresh errors and PR pushes can never
+ * push the latest scan out of a fixed read window.
+ */
+export const DESIGN_SCAN_PHASE = 'scan'
+/** PostgREST path of a design_drift run's phase, for `.eq(DESIGN_PHASE_PATH, DESIGN_SCAN_PHASE)`. */
+export const DESIGN_PHASE_PATH = 'summary->>phase'
 
 export const DEFAULT_DEVIANCE_THRESHOLD = 40
 /** Marks the one open report the design-drift auto-fix keeps reusing. */
@@ -80,12 +92,45 @@ export function findingKey(f: KeyedFinding): string {
   return `${f.rule_id}|${f.file_path ?? ''}|${f.value}`
 }
 
-/** warn/error findings of this scan whose key the previous scan did not have. */
-export function newFindings<T extends KeyedFinding & { severity: FindingSeverity }>(current: readonly T[], previous: readonly KeyedFinding[]): T[] {
+/**
+ * Where an incomplete previous scan stops being complete. Findings are stored
+ * in sortFindings order (severity, file, line) and capped, so every finding
+ * whose (severity, file) sorts before the last stored one's was stored; the
+ * last stored bucket and everything after it may have been cut off.
+ */
+export interface StoredBoundary {
+  severity: FindingSeverity
+  file: string
+}
+
+const SEVERITY_RANK: Record<FindingSeverity, number> = { error: 0, warn: 1, info: 2 }
+
+function bucketCompare(a: { severity: FindingSeverity; file: string }, b: StoredBoundary): number {
+  return SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity] || a.file.localeCompare(b.file)
+}
+
+/** The last stored (severity, file) bucket of a capped scan's stored rows; null when nothing was stored. */
+export function storedBoundary(rows: readonly { severity: FindingSeverity; file_path: string | null }[]): StoredBoundary | null {
+  let last: StoredBoundary | null = null
+  for (const r of rows) {
+    const b = { severity: r.severity, file: r.file_path ?? '' }
+    if (!last || bucketCompare(b, last) > 0) last = b
+  }
+  return last
+}
+
+/**
+ * warn/error findings of this scan whose key the previous scan did not have.
+ * With a boundary (the previous scan stored only part of its findings), only
+ * findings in buckets the previous scan stored completely can be judged new:
+ * one past its cap may simply not have been stored.
+ */
+export function newFindings<T extends KeyedFinding & { severity: FindingSeverity }>(current: readonly T[], previous: readonly KeyedFinding[], boundary: StoredBoundary | null = null): T[] {
   const before = new Set(previous.map(findingKey))
   const seen = new Set<string>()
   return current.filter((f) => {
     if (f.severity === 'info') return false
+    if (boundary && bucketCompare({ severity: f.severity, file: f.file_path ?? '' }, boundary) >= 0) return false
     const k = findingKey(f)
     if (before.has(k) || seen.has(k)) return false
     seen.add(k)
@@ -119,7 +164,11 @@ export interface ActInput {
   projectId: string
   runId: string
   score: number | null
-  /** This scan's findings (stored rows or the run's list). */
+  /**
+   * This scan's STORED findings (storedFindingsOf), never the uncapped list:
+   * the previous scan is read back from its stored rows, so a finding past the
+   * cap would otherwise look new on every scan.
+   */
   findings: readonly DevianceFinding[]
   branch: string | null
 }
@@ -127,6 +176,8 @@ export interface ActInput {
 export type ActOutcome =
   | { action: 'off' | 'below_threshold' | 'baseline' | 'no_new_findings' | 'not_default_branch' }
   | { action: 'autofix_disabled' }
+  /** The CI push came with a key a web page has sent (public): it may not dispatch or set the baseline. */
+  | { action: 'key_not_trusted'; reason: 'browser_request' | 'key_seen_in_browser' }
   | { action: 'settings_unavailable' | 'report_failed'; error: string }
   | { action: 'dispatched'; reportId: string; dispatchId: string | null; newFindings: number }
   | { action: 'dispatch_refused'; reportId: string; code: DispatchResult['code']; message: string | undefined }
@@ -138,31 +189,50 @@ export interface ActDeps {
 
 const defaultActDeps: ActDeps = { dispatch: dispatchFixForReport, now: () => new Date() }
 
-/** Findings of the scan run before `runId` (the newest completed scan that is not this one), or null when there is none. */
-async function previousScanFindings(db: Db, projectId: string, runId: string): Promise<KeyedFinding[] | null> {
+/** The findings a scan keeps (and acts on): the first SCAN_LIMITS.maxStoredFindings in sortFindings order. */
+export function storedFindingsOf<T>(findings: readonly T[]): T[] {
+  return findings.slice(0, SCAN_LIMITS.maxStoredFindings)
+}
+
+interface PreviousScan {
+  findings: KeyedFinding[]
+  /** Set when the previous scan stored fewer findings than it found. */
+  boundary: StoredBoundary | null
+}
+
+/**
+ * The newest completed scan other than `runId`, filtered in SQL (phase and
+ * status), so any number of refresh errors or PR pushes in between can never
+ * hide it. Null when there is none (this scan is the baseline).
+ */
+async function previousScan(db: Db, projectId: string, runId: string): Promise<PreviousScan | null> {
   const { data: runs, error } = await db
     .from('gate_runs')
-    .select('id, status, summary')
+    .select('id, findings_count, summary')
     .eq('project_id', projectId)
     .eq('gate', 'design_drift')
+    .eq(DESIGN_PHASE_PATH, DESIGN_SCAN_PHASE)
+    .in('status', ['pass', 'warn', 'fail'])
+    .neq('id', runId)
     .order('started_at', { ascending: false })
-    .limit(20)
+    .limit(1)
   if (error) throw new Error(`gate_runs read failed: ${error.message}`)
-  const prev = ((runs ?? []) as Array<{ id: string; status: string; summary: { phase?: string } | null }>).find(
-    (r) => r.id !== runId && r.summary?.phase === 'scan' && ['pass', 'warn', 'fail'].includes(r.status),
-  )
+  const prev = ((runs ?? []) as Array<{ id: string; findings_count: number | null; summary: { storedFindings?: unknown } | null }>)[0]
   if (!prev) return null
   const { data: rows, error: fErr } = await db
     .from('gate_findings')
-    .select('rule_id, file_path, suggested_fix')
+    .select('rule_id, severity, file_path, suggested_fix')
     .eq('gate_run_id', prev.id)
-    .limit(1000)
+    .limit(SCAN_LIMITS.maxStoredFindings * 2)
   if (fErr) throw new Error(`gate_findings read failed: ${fErr.message}`)
-  return ((rows ?? []) as Array<{ rule_id: string; file_path: string | null; suggested_fix: { value?: string } | null }>).map((r) => ({
-    rule_id: r.rule_id as DevianceFinding['rule_id'],
-    file_path: r.file_path,
-    value: r.suggested_fix?.value ?? '',
-  }))
+  const stored = (rows ?? []) as Array<{ rule_id: string; severity: FindingSeverity; file_path: string | null; suggested_fix: { value?: string } | null }>
+  const storedCount = typeof prev.summary?.storedFindings === 'number' ? prev.summary.storedFindings : stored.length
+  const found = typeof prev.findings_count === 'number' ? prev.findings_count : storedCount
+  return {
+    findings: stored.map((r) => ({ rule_id: r.rule_id as DevianceFinding['rule_id'], file_path: r.file_path, value: r.suggested_fix?.value ?? '' })),
+    // Nothing stored of a capped scan: no bucket is known complete, so nothing can be new.
+    boundary: found > storedCount ? storedBoundary(stored) ?? { severity: 'error', file: '' } : null,
+  }
 }
 
 /** One open design-drift report per project: reuse it (with fresh text) or open it. */
@@ -221,9 +291,9 @@ export async function actOnDesignDeviance(db: Db, input: ActInput, settings: Set
   if (input.score === null || input.score <= s.threshold) return { action: 'below_threshold' }
   if (!s.autofixEnabled) return { action: 'autofix_disabled' }
   try {
-    const previous = await previousScanFindings(db, input.projectId, input.runId)
+    const previous = await previousScan(db, input.projectId, input.runId)
     if (previous === null) return { action: 'baseline' }
-    const fresh = newFindings(input.findings, previous)
+    const fresh = newFindings(storedFindingsOf(input.findings), previous.findings, previous.boundary)
     if (fresh.length === 0) return { action: 'no_new_findings' }
     const text = driftReportText(fresh, input.score, input.branch)
     const severity = fresh.some((f) => f.severity === 'error') ? 'medium' : 'low'

@@ -4,8 +4,10 @@
  *          scored `design_drift` gate run, exactly like a server scan:
  *            - the CLI ran the shared engine (design-scan.ts) over the repo,
  *              so its literal findings use the server's rule ids;
- *            - nothing it sends is a verdict: severity comes from the
- *              snapshot's rules, a disabled rule or skipped file is dropped,
+ *            - nothing it sends is a verdict or a text: each finding is
+ *              judged again here (rejudgeLiteral) from its rule, file and
+ *              value, so severity, message and suggestion are the server's,
+ *              and a value that is not a literal of that rule is refused;
  *              contrast is judged here from the tokens, and the score is
  *              computed here with scoreDeviance;
  *            - a default-branch push is written as `phase: 'scan',
@@ -13,19 +15,25 @@
  *              reads, and the `design.deviance_score` metric; a push of any
  *              other branch is `phase: 'ci_branch_scan'` (findings and the CI
  *              gate, never the shown score, metric or auto-fix baseline);
+ *            - the default branch is the primary repo's, else the manifest's
+ *              `ci.defaultBranch` (what `mushi recipe init` writes), else main;
+ *            - a key a web page has sent is public (anyone may hold it): its
+ *              default-branch push is `phase: 'ci_untrusted_scan'`, keeps the
+ *              CI gate, and never sets the score, the baseline or dispatches;
  *            - the project's opt-in actions run (design-actions.ts): the CI
- *              gate always, the auto-fix only for a push of the default branch.
+ *              gate always, even when storing the findings failed; the
+ *              auto-fix only for a trusted push of the default branch.
  */
 
 import type { getServiceClient } from './db.ts'
-import { actOnDesignDeviance, devianceGate, loadDesignActionSettings, type ActOutcome, type DevianceGate } from './design-actions.ts'
-import { devianceStatus, LITERAL_RULES, sortFindings } from './design-deviance.ts'
+import { actOnDesignDeviance, DESIGN_SCAN_PHASE, devianceGate, loadDesignActionSettings, type ActOutcome, type DevianceGate } from './design-actions.ts'
+import { buildDevianceContext, devianceStatus, LITERAL_RULES, rejudgeLiteral, sortFindings } from './design-deviance.ts'
 import type { DesignRuleId, DevianceFinding, DevianceSuggestion } from './design-engine-types.ts'
-import { CI_BRANCH_SCAN_PHASE, DESIGN_GATE, loadCurrentSnapshot, recordDevianceMetric, storeScanFindings } from './design-plane.ts'
+import { CI_BRANCH_SCAN_PHASE, CI_UNTRUSTED_SCAN_PHASE, DESIGN_GATE, loadCurrentSnapshot, recordDevianceMetric, storeScanFindings, type SnapshotRow } from './design-plane.ts'
 import { effectiveDesignRules } from './design-rules.ts'
 import { scoreDeviance } from './design-scan.ts'
 import { judgingSet } from './design-set-plan.ts'
-import { matchAny, normalizeRepoPath } from './recipe-glob.ts'
+import { normalizeRepoPath } from './recipe-glob.ts'
 
 type Db = ReturnType<typeof getServiceClient>
 
@@ -37,7 +45,18 @@ export interface CiDeviancePush {
   counts: Record<string, number>
   /** The CLI's own score; the server's is the one stored. */
   score?: number | null
+  /** `message` and `suggestion` are accepted for older CLIs and never stored: the server rebuilds both. */
   findings: Array<{ ruleId: string; filePath: string; line: number; col: number | null; value: string; message: string; suggestion: DevianceSuggestion | null }>
+}
+
+/** Why the pushing key is public (mcpKeyBrowserExposure), or null for a key only servers have sent. */
+export type CiKeyExposure = 'browser_request' | 'key_seen_in_browser' | null
+
+export interface CiDevianceInput {
+  commitSha: string
+  branch: string
+  push: CiDeviancePush
+  keyExposure: CiKeyExposure
 }
 
 export interface CiDevianceResult {
@@ -47,7 +66,7 @@ export interface CiDevianceResult {
   /** The CLI's score when it differs from the server's (an engine version mismatch). */
   clientScore: number | null
   storedFindings: number
-  /** Findings refused: unknown or disabled rule, unsafe path, or a file the rule skips. */
+  /** Findings refused: unknown or disabled rule, unsafe path, a file the rule skips, or a value that is not a finding. */
   droppedFindings: number
   gate: DevianceGate | null
   action: ActOutcome | null
@@ -61,40 +80,51 @@ export interface CiPushDeps {
 
 export const defaultCiPushDeps: CiPushDeps = { now: () => new Date(), act: actOnDesignDeviance }
 
-/** The primary repo's default branch ('main' when none is recorded); null when the read failed, so nothing auto-dispatches. */
-async function defaultBranchOf(db: Db, projectId: string): Promise<string | null> {
+const BRANCH_RE = /^[\w./-]{1,200}$/
+
+/**
+ * The project's default branch: the primary repo's, else the manifest's
+ * `ci.defaultBranch`, else 'main'. Null when the repo read failed, so the push
+ * is never taken for the app's state on a guess.
+ */
+export async function defaultBranchOf(db: Db, projectId: string, manifest: SnapshotRow['manifest']): Promise<string | null> {
   const { data, error } = await db.from('project_repos').select('default_branch').eq('project_id', projectId).eq('is_primary', true).maybeSingle()
   if (error) return null
-  return ((data as { default_branch?: string | null } | null)?.default_branch ?? null) || 'main'
+  const fromRepo = (data as { default_branch?: string | null } | null)?.default_branch
+  if (fromRepo) return fromRepo
+  const fromManifest = (manifest as { ci?: { defaultBranch?: unknown } } | null)?.ci?.defaultBranch
+  if (typeof fromManifest === 'string' && BRANCH_RE.test(fromManifest)) return fromManifest
+  return 'main'
 }
 
-export async function recordCiDeviance(
-  db: Db,
-  projectId: string,
-  input: { commitSha: string; branch: string; push: CiDeviancePush },
-  deps: CiPushDeps = defaultCiPushDeps,
-): Promise<CiDevianceResult> {
+const UNTRUSTED_REASON: Record<Exclude<CiKeyExposure, null>, string> = {
+  browser_request: 'This push came from a web page, so it was not taken as the app\'s design state and cannot dispatch a fix. Push from CI with a key kept out of browser bundles.',
+  key_seen_in_browser: 'This key has been sent by a web page, so anyone may hold it: the push keeps its findings and the CI gate, but does not set the shown score or dispatch a fix. Mint a separate key for CI and keep it out of browser bundles.',
+}
+
+export async function recordCiDeviance(db: Db, projectId: string, input: CiDevianceInput, deps: CiPushDeps = defaultCiPushDeps): Promise<CiDevianceResult> {
   const skipped = (reason: string): CiDevianceResult => ({ status: 'skipped', runId: null, score: null, clientScore: input.push.score ?? null, storedFindings: 0, droppedFindings: 0, gate: null, action: null, reason })
   const snapshot = await loadCurrentSnapshot(db, projectId)
   const set = judgingSet(snapshot?.tokens ?? null)
   if (!snapshot?.manifest || !set) return skipped('No design tokens to judge against, so the scan was not scored.')
 
   const rules = effectiveDesignRules(snapshot.manifest)
-  const byId = new Map(rules.map((r) => [r.id as string, r]))
+  const ctx = buildDevianceContext(set.tokens, rules, snapshot.manifest.design?.components?.globs ?? [])
   const literal: DevianceFinding[] = []
   let dropped = 0
   for (const f of input.push.findings) {
-    const rule = byId.get(f.ruleId)
+    const rule = ctx.rules.get(f.ruleId as DesignRuleId)
     const path = normalizeRepoPath(f.filePath)
-    if (!rule || !rule.enabled || !LITERAL_RULES.includes(rule.id) || !path || (rule.allowFiles.length > 0 && matchAny(path, rule.allowFiles))) {
+    const verdict = rule && path && LITERAL_RULES.includes(rule.id) ? rejudgeLiteral(path, rule.id, f.value, ctx) : null
+    if (!rule || !path || !verdict) {
       dropped++
       continue
     }
-    literal.push({ rule_id: rule.id, severity: rule.severity, file_path: path, line: f.line, col: f.col, value: f.value, message: f.message, suggestion: f.suggestion })
+    literal.push({ rule_id: rule.id, severity: rule.severity, file_path: path, line: f.line, col: f.col, value: verdict.value, message: verdict.message, suggestion: verdict.suggestion })
   }
   const counts: Partial<Record<DesignRuleId, number>> = {}
   for (const id of LITERAL_RULES) {
-    if (!byId.get(id)?.enabled) continue
+    if (!ctx.rules.get(id)?.enabled) continue
     const listed = literal.filter((f) => f.rule_id === id).length
     const n = Math.max(listed, Math.floor(input.push.counts[id] ?? 0))
     if (n > 0) counts[id] = n
@@ -104,11 +134,14 @@ export async function recordCiDeviance(
   const status = devianceStatus(findings)
   const total = Object.values(scored.counts).reduce((a, b) => a + (b ?? 0), 0)
   const startedAt = deps.now().toISOString()
-  // Only a push of the default branch is the app's design state. Any other
-  // branch (every PR run) is stored as its own phase, which never becomes the
-  // shown score, the metric or the auto-fix baseline, and may never spend.
-  const onDefault = input.branch === (await defaultBranchOf(db, projectId))
-  const phase = onDefault ? 'scan' : CI_BRANCH_SCAN_PHASE
+  // Only a trusted push of the default branch is the app's design state. Any
+  // other branch (every PR run) and any push with a public key is stored as
+  // its own phase, which never becomes the shown score, the metric or the
+  // auto-fix baseline, and may never spend.
+  const onDefault = input.branch === (await defaultBranchOf(db, projectId, snapshot.manifest))
+  const exposure = input.keyExposure
+  const trusted = exposure === null
+  const phase = !onDefault ? CI_BRANCH_SCAN_PHASE : trusted ? DESIGN_SCAN_PHASE : CI_UNTRUSTED_SCAN_PHASE
   const base = {
     phase,
     source: 'ci',
@@ -124,6 +157,12 @@ export async function recordCiDeviance(
     tokensHash: snapshot.tokens_hash,
     set: set.name,
   }
+  // The settings and the CI gate come first, so a failed findings insert still
+  // fails a CI step the project asked to fail.
+  const settings = await loadDesignActionSettings(db, projectId)
+  const gate = settings.ok ? devianceGate(settings.settings, scored.score) : null
+  const settingsReason = settings.ok ? null : `Design settings could not be read (${settings.error}); the CI gate was not applied.`
+
   const { data: run, error: runErr } = await db
     .from('gate_runs')
     .insert({ project_id: projectId, gate: DESIGN_GATE, status: 'running', commit_sha: input.commitSha, triggered_by: 'ci', summary: { phase, source: 'ci' }, started_at: startedAt })
@@ -139,20 +178,19 @@ export async function recordCiDeviance(
   } catch (err) {
     const message = (err as Error)?.message ?? String(err)
     await db.from('gate_runs').update({ status: 'error', summary: { phase, source: 'ci', error: message.slice(0, 500) }, completed_at: deps.now().toISOString() }).eq('id', runId)
-    return { status: 'error', runId, score: null, clientScore, storedFindings: 0, droppedFindings: dropped, gate: null, action: null, reason: message }
+    return { status: 'error', runId, score: scored.score, clientScore, storedFindings: 0, droppedFindings: dropped, gate, action: null, reason: settingsReason ?? message }
   }
 
-  const settings = await loadDesignActionSettings(db, projectId)
-  const gate = settings.ok ? devianceGate(settings.settings, scored.score) : null
-  const action: ActOutcome = onDefault
-    ? await deps.act(db, { projectId, runId, score: scored.score, findings, branch: input.branch }, settings)
-    : { action: 'not_default_branch' }
+  let action: ActOutcome
+  if (!onDefault) action = { action: 'not_default_branch' }
+  else if (exposure) action = settings.ok && !settings.settings.autofix ? { action: 'off' } : { action: 'key_not_trusted', reason: exposure }
+  else action = await deps.act(db, { projectId, runId, score: scored.score, findings, branch: input.branch }, settings)
 
   const completedAt = deps.now().toISOString()
   const summary = { ...base, storedFindings: stored, droppedFindings: dropped, ...(action.action === 'off' ? {} : { action }) }
   const { error: upErr } = await db.from('gate_runs').update({ status, summary, findings_count: total, completed_at: completedAt }).eq('id', runId)
   if (upErr) throw new Error(`gate_runs update failed: ${upErr.message}`)
-  if (onDefault) await recordDevianceMetric(db, projectId, set.name, completedAt, scored.score)
+  if (phase === DESIGN_SCAN_PHASE) await recordDevianceMetric(db, projectId, set.name, completedAt, scored.score)
   return {
     status,
     runId,
@@ -162,6 +200,6 @@ export async function recordCiDeviance(
     droppedFindings: dropped,
     gate,
     action,
-    reason: settings.ok ? null : `Design settings could not be read (${settings.error}); the CI gate was not applied.`,
+    reason: settingsReason ?? (onDefault && exposure ? UNTRUSTED_REASON[exposure] : null),
   }
 }

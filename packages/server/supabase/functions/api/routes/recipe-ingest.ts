@@ -19,11 +19,11 @@
 
 import type { Context, Hono, MiddlewareHandler } from 'npm:hono@4'
 import { z } from 'npm:zod@3'
-import { adminOrApiKey, apiKeyAuth, jwtAuth } from '../../_shared/auth.ts'
+import { adminOrApiKey, apiKeyAuth, jwtAuth, mcpKeyBrowserExposure } from '../../_shared/auth.ts'
 import { getServiceClient } from '../../_shared/db.ts'
 import { log } from '../../_shared/logger.ts'
 import { snapshotFromSource, DESIGN_GATE } from '../../_shared/design-plane.ts'
-import { recordCiDeviance, type CiDeviancePush, type CiDevianceResult } from '../../_shared/design-ci-push.ts'
+import { recordCiDeviance, type CiDevianceInput, type CiDevianceResult, type CiKeyExposure } from '../../_shared/design-ci-push.ts'
 import { normalizeRepoPath } from '../../_shared/recipe-glob.ts'
 import { PORTFOLIO_RESOURCE_KINDS } from '../../_shared/portfolio-rules.ts'
 import { upsertResource } from '../../_shared/recipe-phase2.ts'
@@ -31,13 +31,14 @@ import { callerCanAccessProject, jsonError } from '../shared.ts'
 import type { Variables } from '../types.ts'
 import { classifyIngestRateLimitError } from './ingest-rate-limit.ts'
 import { portfolioAccess } from './portfolio.ts'
-import { isScanRun, latestPerGate } from './recipe-compose.ts'
+import { latestPerGate, loadLatestDesignScans } from './recipe-compose.ts'
 
 const ilog = log.child('recipe-ingest')
 const RECIPE_DRIFT_GATES = ['ci_drift', 'deploy_drift', 'env_drift', 'schema_drift', 'design_drift'] as const
 const MAX_FILES = 60
 const MAX_FILE_BYTES = 512 * 1024
 const MAX_TOTAL_BYTES = 4 * 1024 * 1024
+const CSV_LISTED_ERRORS = 50
 
 type Db = ReturnType<typeof getServiceClient>
 
@@ -47,7 +48,15 @@ export interface RecipeIngestDeps {
   jwtAuth: MiddlewareHandler
   adminOrApiKeyRead: MiddlewareHandler
   now: () => Date
-  recordCiDeviance: (db: Db, projectId: string, input: { commitSha: string; branch: string; push: CiDeviancePush }) => Promise<CiDevianceResult>
+  recordCiDeviance: (db: Db, projectId: string, input: CiDevianceInput) => Promise<CiDevianceResult>
+  /** Whether the pushing key is public (a web page sent it); a public key's push never sets the design state or dispatches. */
+  keyExposure: (c: Context) => CiKeyExposure
+}
+
+/** mcpKeyBrowserExposure for the key apiKeyAuth resolved: this request's browser headers, or the key's sticky browser signals. */
+export function ingestKeyExposure(c: Context): CiKeyExposure {
+  const signals = (c.get('apiKeyBrowserSignals') as { last_seen_origin: string | null; browser_seen_at: string | null } | undefined) ?? { last_seen_origin: null, browser_seen_at: null }
+  return mcpKeyBrowserExposure({ origin: c.req.header('Origin'), referer: c.req.header('Referer'), secFetchSite: c.req.header('Sec-Fetch-Site') }, signals)
 }
 
 export const defaultRecipeIngestDeps: RecipeIngestDeps = {
@@ -57,6 +66,7 @@ export const defaultRecipeIngestDeps: RecipeIngestDeps = {
   adminOrApiKeyRead: adminOrApiKey({ scope: 'mcp:read' }) as MiddlewareHandler,
   now: () => new Date(),
   recordCiDeviance: (db, projectId, input) => recordCiDeviance(db, projectId, input),
+  keyExposure: ingestKeyExposure,
 }
 
 const suggestionSchema = z.object({
@@ -194,7 +204,7 @@ export function registerRecipeIngestRoutes(app: Hono<{ Variables: Variables }>, 
     let deviance: CiDevianceResult | null = null
     if (result.ok && body.deviance) {
       try {
-        deviance = await deps.recordCiDeviance(db, projectId, { commitSha: body.commitSha, branch: body.branch, push: body.deviance })
+        deviance = await deps.recordCiDeviance(db, projectId, { commitSha: body.commitSha, branch: body.branch, push: body.deviance, keyExposure: deps.keyExposure(c) })
         findingsStored = deviance.storedFindings
       } catch (err) {
         ilog.error('ci deviance scan failed', { projectId, err: (err as Error)?.message })
@@ -266,29 +276,31 @@ export function registerRecipeIngestRoutes(app: Hono<{ Variables: Variables }>, 
     const { data: projects } = await db.from('projects').select('id, slug, name').in('id', access.projectIds.length ? access.projectIds : ['00000000-0000-0000-0000-000000000000'])
     const resolveProject = (ref: string) => ((projects ?? []) as Array<{ id: string; slug: string | null; name: string | null }>).find((p) => p.id === ref || p.slug === ref || p.name === ref)?.id ?? null
     // Excel's "CSV UTF-8" starts the file with a byte-order mark, which would hide the `kind` header.
-    const lines = body.csv.replace(/^﻿/, '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
-    const header = parseCsvLine(lines.shift() ?? '').map((h) => h.toLowerCase())
+    // Blank lines are skipped but keep their place, so an error names the line the file really has.
+    const lines = body.csv.replace(/^﻿/, '').split(/\r?\n/).map((text, i) => ({ n: i + 1, text: text.trim() })).filter((l) => l.text)
+    const header = parseCsvLine(lines.shift()?.text ?? '').map((h) => h.toLowerCase())
     const col = (name: string) => header.indexOf(name)
     if (col('kind') < 0 || col('external_id') < 0 || col('project') < 0) return jsonError(c, 'VALIDATION_ERROR', 'The CSV needs the columns kind, external_id, project (and optionally role).', 400)
     const now = deps.now().toISOString()
     const errors: string[] = []
     let imported = 0
-    for (const [i, line] of lines.slice(0, 500).entries()) {
-      const cells = parseCsvLine(line)
+    for (const { n, text } of lines.slice(0, 500)) {
+      const cells = parseCsvLine(text)
       const kind = cells[col('kind')]
       const externalId = cells[col('external_id')]
       const projectId = resolveProject(cells[col('project')] ?? '')
       const roleName = (col('role') >= 0 ? cells[col('role')] : '') || 'uses'
-      if (!(PORTFOLIO_RESOURCE_KINDS as readonly string[]).includes(kind)) { errors.push(`line ${i + 2}: unknown kind "${(kind ?? '').slice(0, 40)}"`); continue }
-      if (!externalId || externalId.length > 300) { errors.push(`line ${i + 2}: missing external_id`); continue }
-      if (!projectId) { errors.push(`line ${i + 2}: project not found in this team`); continue }
+      if (!(PORTFOLIO_RESOURCE_KINDS as readonly string[]).includes(kind)) { errors.push(`line ${n}: unknown kind "${(kind ?? '').slice(0, 40)}"`); continue }
+      if (!externalId || externalId.length > 300) { errors.push(`line ${n}: missing external_id`); continue }
+      if (!projectId) { errors.push(`line ${n}: project not found in this team`); continue }
       const res = await upsertResource(db, access.orgId, kind, externalId, deps.now())
-      if (!res) { errors.push(`line ${i + 2}: could not save`); continue }
+      if (!res) { errors.push(`line ${n}: could not save`); continue }
       const { error } = await db.from('portfolio_resource_uses').upsert({ resource_id: (res as { id: string }).id, project_id: projectId, role: roleName.slice(0, 60), source: 'csv', observed_at: now }, { onConflict: 'resource_id,project_id,role' })
-      if (error) errors.push(`line ${i + 2}: could not save the use`)
+      if (error) errors.push(`line ${n}: could not save the use`)
       else imported++
     }
-    return c.json({ ok: true, data: { imported, errors: errors.slice(0, 50), skippedOverLimit: Math.max(0, lines.length - 500) } })
+    // `errors` is capped; `errorCount` counts every row that was not saved.
+    return c.json({ ok: true, data: { imported, errorCount: errors.length, errors: errors.slice(0, CSV_LISTED_ERRORS), skippedOverLimit: Math.max(0, lines.length - 500) } })
   })
 
   app.get('/v1/admin/orgs/:orgId/portfolio/resources', deps.adminOrApiKeyRead, async (c) => {
@@ -330,14 +342,26 @@ export function registerRecipeIngestRoutes(app: Hono<{ Variables: Variables }>, 
     if (!/^[0-9a-f-]{36}$/i.test(projectId)) return jsonError(c, 'NOT_FOUND', 'Project not found', 404)
     const access = await callerCanAccessProject(c, db, c.get('userId') as string, projectId)
     if (!access.allowed) return jsonError(c, 'NOT_FOUND', 'Project not found', 404)
-    const { data: runs } = await db
-      .from('gate_runs')
-      .select('id, gate, status, summary, started_at, completed_at, commit_sha')
-      .eq('project_id', projectId)
-      .in('gate', [...RECIPE_DRIFT_GATES])
-      .order('started_at', { ascending: false })
-      .limit(100)
-    const latest = latestPerGate(((runs ?? []) as Array<{ id: string; gate: string; status: string; summary: Record<string, unknown> | null; completed_at: string | null; commit_sha: string | null }>).filter((r) => r.gate !== DESIGN_GATE || isScanRun(r)))
+    // design_drift is read on its own, scans only: refresh errors and PR pushes are not drift and must never bury the latest scan.
+    type DriftRun = { id: string; gate: string; status: string; summary: Record<string, unknown> | null; completed_at: string | null; commit_sha: string | null }
+    let latest: DriftRun[]
+    try {
+      const [{ data: runs, error: runsErr }, designScans] = await Promise.all([
+        db
+          .from('gate_runs')
+          .select('id, gate, status, summary, started_at, completed_at, commit_sha')
+          .eq('project_id', projectId)
+          .in('gate', RECIPE_DRIFT_GATES.filter((g) => g !== DESIGN_GATE))
+          .order('started_at', { ascending: false })
+          .limit(100),
+        loadLatestDesignScans(db, [projectId]),
+      ])
+      if (runsErr) throw new Error(`gate_runs read failed: ${runsErr.message}`)
+      latest = [...latestPerGate((runs ?? []) as DriftRun[]), ...designScans]
+    } catch (err) {
+      ilog.error('recipe drift read failed', { projectId, err: (err as Error)?.message })
+      return jsonError(c, 'DRIFT_FAILED', 'The recipe drift could not be read.', 500)
+    }
     const { data: findings } = latest.length
       ? await db.from('gate_findings').select('gate_run_id, rule_id, severity, message, file_path, line, suggested_fix').in('gate_run_id', latest.map((r) => r.id)).eq('allowlisted', false).limit(500)
       : { data: [] }

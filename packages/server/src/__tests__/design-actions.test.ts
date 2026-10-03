@@ -109,6 +109,42 @@ describe('actOnDesignDeviance', () => {
     expect(d.table('reports')[0]).toMatchObject({ severity: 'medium' })
   })
 
+  it('finds the previous scan however many PR pushes and refresh errors came after it', async () => {
+    const noise = Array.from({ length: 40 }, (_, i) => ({
+      id: `noise-${i}`, project_id: P, gate: 'design_drift', status: i % 2 ? 'pass' : 'error',
+      summary: { phase: i % 2 ? 'ci_branch_scan' : 'refresh' }, started_at: `2026-10-03T0${Math.floor(i / 10)}:${String(i % 60).padStart(2, '0')}:00Z`,
+    }))
+    const d = db({ gate_runs: [prevRun, ...noise] })
+    const out = await actions.actOnDesignDeviance(d, input(), null, deps())
+    expect(out).toMatchObject({ action: 'dispatched', newFindings: 1 })
+  })
+
+  it('acts only on the findings a scan stores, so a finding past the cap is never new on every scan', async () => {
+    const stored = Array.from({ length: 500 }, (_, i) => finding({ severity: 'error', value: `#0000${String(i).padStart(2, '0').slice(-2)}`, file_path: `src/e${String(i).padStart(3, '0')}.tsx` }))
+    const prevRows = stored.map((f) => ({ gate_run_id: 'run-prev', rule_id: f.rule_id, severity: f.severity, file_path: f.file_path, suggested_fix: { value: f.value } }))
+    const d = db({ gate_runs: [{ ...prevRun, findings_count: 500, summary: { phase: 'scan', storedFindings: 500 } }], gate_findings: prevRows })
+    // The 501st (a warn, sorted after every error) is past the cap: not stored, so not acted on.
+    const past = finding({ value: '#abcdef', file_path: 'src/z.tsx' })
+    expect(await actions.actOnDesignDeviance(d, input({ findings: [...stored, past] }), null, deps())).toEqual({ action: 'no_new_findings' })
+  })
+
+  it('a previous scan that stored only part of its findings judges new only in the buckets it stored completely', async () => {
+    const prev = { ...prevRun, findings_count: 900, summary: { phase: 'scan', storedFindings: 1 } }
+    const prevRow = { gate_run_id: 'run-prev', rule_id: 'off_token_color', severity: 'warn', file_path: 'src/a.tsx', suggested_fix: { value: '#ff0000' } }
+    const d = db({ gate_runs: [prev], gate_findings: [prevRow] })
+    const out = await actions.actOnDesignDeviance(d, input({
+      findings: [
+        finding({ severity: 'error', value: '#111111', file_path: 'src/z.tsx' }), // error sorts before the last stored (warn) bucket: complete, so new
+        finding({ value: '#222222', file_path: 'src/a.tsx' }), // the last stored bucket may have been cut: not new
+        finding({ value: '#333333', file_path: 'src/b.tsx' }), // past the cut: not new
+      ],
+    }), null, deps())
+    expect(out).toMatchObject({ action: 'dispatched', newFindings: 1 })
+    expect(String(d.table('reports')[0].description)).toContain('src/z.tsx')
+    expect(String(d.table('reports')[0].description)).not.toContain('src/b.tsx')
+    expect(actions.storedBoundary([{ severity: 'warn', file_path: 'src/a.tsx' }, { severity: 'error', file_path: 'src/z.tsx' }])).toEqual({ severity: 'warn', file: 'src/a.tsx' })
+  })
+
   it('opens a new report once the old one is fixed', async () => {
     const d = db({ reports: [{ id: 'r-old', project_id: P, reporter_token_hash: 'cron:design-drift', status: 'fixed', created_at: '2026-10-01T00:00:00Z' }] })
     const out = await actions.actOnDesignDeviance(d, input(), null, deps())

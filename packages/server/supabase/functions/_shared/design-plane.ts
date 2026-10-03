@@ -18,10 +18,10 @@
 import type { getServiceClient } from './db.ts'
 import { log } from './logger.ts'
 import { normalizeTokenSet, stableStringify } from './dtcg.ts'
-import { actOnDesignDeviance } from './design-actions.ts'
+import { actOnDesignDeviance, storedFindingsOf } from './design-actions.ts'
 import { devianceStatus } from './design-deviance.ts'
 import type { DevianceFinding } from './design-engine-types.ts'
-import { computeDeviance, SCAN_LIMITS, selectScanFiles, tokenFilePaths } from './design-scan.ts'
+import { computeDeviance, selectScanFiles, tokenFilePaths } from './design-scan.ts'
 import { collectSetAssets, judgingSet, MAX_TOKEN_FILE_BYTES, planTokenSets, readDirectionMeta, type StoredTokens, type StoredTokenSet } from './design-sets.ts'
 import { matchAny } from './recipe-glob.ts'
 import {
@@ -57,6 +57,12 @@ export const DEVIANCE_METRIC = 'design.deviance_score'
  * auto-fix baseline (isScanRun and previousScanFindings skip it).
  */
 export const CI_BRANCH_SCAN_PHASE = 'ci_branch_scan'
+/**
+ * A default-branch CI push made with a key a web page has sent (public, so
+ * anyone could have made it): kept for its findings and the CI gate, never
+ * the shown score, the metric, the auto-fix baseline or a dispatch.
+ */
+export const CI_UNTRUSTED_SCAN_PHASE = 'ci_untrusted_scan'
 
 export async function sha256Hex(text: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))
@@ -329,7 +335,7 @@ export async function startDesignDeviance(db: Db, projectId: string, triggeredBy
 
 /** Store a scan's findings (capped) in the shape loadRunFindings reads; returns the stored count. Throws on a failed insert. */
 export async function storeScanFindings(db: Db, projectId: string, runId: string, findings: readonly DevianceFinding[]): Promise<number> {
-  const stored = findings.slice(0, SCAN_LIMITS.maxStoredFindings)
+  const stored = storedFindingsOf(findings)
   const rows = stored.map((f) => ({
     gate_run_id: runId,
     project_id: projectId,
@@ -366,7 +372,8 @@ async function executeScan(db: Db, projectId: string, snapshot: SnapshotRow, rep
     const status = devianceStatus(result.findings)
     const stored = await storeScanFindings(db, projectId, runId, result.findings)
     // Opt-in actions (off by default): may dispatch a fix for new findings. Never throws.
-    const acted = await actOnDesignDeviance(db, { projectId, runId, score: result.score, findings: result.findings, branch: null })
+    // Only the stored slice: the next scan compares against these stored rows.
+    const acted = await actOnDesignDeviance(db, { projectId, runId, score: result.score, findings: storedFindingsOf(result.findings), branch: null })
     if (acted.action !== 'off') dlog.info('design deviance action', { projectId, runId, ...acted })
     const completedAt = new Date().toISOString()
     const summary = {
