@@ -16,6 +16,7 @@ import {
   buildResponseHeadersPolicyConfig,
   desiredWebsiteConfig,
   loadDocsSecurityHeaders,
+  policyConfigMatches,
 } from './aws-configure-docs-errors.mjs'
 
 describe('response headers policy from the docs response function', () => {
@@ -61,6 +62,23 @@ describe('response headers policy from the docs response function', () => {
     assert.throws(() => buildResponseHeadersPolicyConfig({ 'x-frame-options': 'ALLOW-FROM x' }))
     assert.throws(() => buildResponseHeadersPolicyConfig({ 'content-security-policy': 'a'.repeat(CSP_MAX_CHARS + 1) }))
     assert.throws(() => buildResponseHeadersPolicyConfig({ 'strict-transport-security': 'preload' }))
+  })
+})
+
+describe('comparing the live policy with the desired one', () => {
+  const desired = buildResponseHeadersPolicyConfig(loadDocsSecurityHeaders())
+
+  it('treats the config CloudFront returns (reordered keys, empty XSSProtection) as current', () => {
+    const { Name, Comment, ...rest } = desired
+    const live = { Comment, Name, ...rest, SecurityHeadersConfig: { XSSProtection: {}, ...desired.SecurityHeadersConfig } }
+    assert.equal(policyConfigMatches(live, desired), true)
+  })
+
+  it('still reports a real change', () => {
+    const live = { ...desired, Comment: 'edited by hand' }
+    assert.equal(policyConfigMatches(live, desired), false)
+    const noFrame = { ...desired, SecurityHeadersConfig: { ...desired.SecurityHeadersConfig, FrameOptions: undefined } }
+    assert.equal(policyConfigMatches(noFrame, desired), false)
   })
 })
 
