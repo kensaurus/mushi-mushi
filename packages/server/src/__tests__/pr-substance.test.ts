@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest'
 import {
   classifyPrSubstance,
   isDocFile,
+  isNoteFile,
   isTodoOnlyChange,
   parsePullRequestUrl,
   type PrChangedFile,
@@ -29,11 +30,24 @@ describe('isDocFile', () => {
     expect(isDocFile('NEEDS_INVESTIGATION.md')).toBe(true)
     expect(isDocFile('docs/needs-investigation')).toBe(true)
     expect(isDocFile('apps/docs/content/guide.mdx')).toBe(true)
-    expect(isDocFile('notes.TXT')).toBe(true)
+    // .txt is not prose: requirements.txt, CMakeLists.txt and robots.txt are code.
+    expect(isDocFile('notes.TXT')).toBe(false)
+    expect(isDocFile('requirements.txt')).toBe(false)
     expect(isDocFile('src/login.ts')).toBe(false)
     expect(isDocFile('apps/docs/app/layout.tsx')).toBe(false)
     expect(isDocFile('Dockerfile')).toBe(false)
     expect(isDocFile('.md')).toBe(false)
+  })
+})
+
+describe('isNoteFile', () => {
+  it('counts an ADDED prose file or a NEEDS_INVESTIGATION file as a note, never an edit to an existing doc', () => {
+    expect(isNoteFile(file('docs/why-it-crashes.md', '+# notes', { status: 'added' }))).toBe(true)
+    expect(isNoteFile(file('NEEDS_INVESTIGATION.md', '+x', { status: 'modified' }))).toBe(true)
+    expect(isNoteFile(file('apps/docs/content/guide.mdx', '+the right flag is --yes', { status: 'modified' }))).toBe(false)
+    expect(isNoteFile(file('apps/docs/content/guide.mdx', '-old\n+new', { status: 'added', deletions: 1 }))).toBe(false)
+    expect(isNoteFile(file('README.md', '+x', { status: 'renamed' }))).toBe(false)
+    expect(isNoteFile(file('requirements.txt', '+requests==2.32.3', { status: 'added' }))).toBe(false)
   })
 })
 
@@ -72,6 +86,23 @@ describe('classifyPrSubstance', () => {
     )
     expect(v).toMatchObject({ speculative: true, files: ['NEEDS_INVESTIGATION.md', 'src/a.ts'] })
     if (v.speculative) expect(v.reason).toContain('NEEDS_INVESTIGATION.md')
+  })
+
+  it('a docs fix in an existing page, or a dependency pin in a .txt file, is a real change', () => {
+    expect(classifyPrSubstance([file('apps/docs/content/sdks/cli.mdx', '-mushi login --key\n+mushi login', { deletions: 1 })], { complete: true }))
+      .toEqual({ speculative: false })
+    expect(classifyPrSubstance([file('apps/docs/content/guide.mdx', '+Run `mushi doctor` first.')], { complete: true }))
+      .toEqual({ speculative: false })
+    expect(classifyPrSubstance([file('requirements.txt', '+urllib3==2.2.3', { status: 'added' })], { complete: true }))
+      .toEqual({ speculative: false })
+    expect(classifyPrSubstance([file('requirements.txt', '-urllib3==2.2.2\n+urllib3==2.2.3', { deletions: 1 })], { complete: true }))
+      .toEqual({ speculative: false })
+    expect(classifyPrSubstance([file('CMakeLists.txt', '+add_definitions(-DFIX)')], { complete: true })).toEqual({ speculative: false })
+  })
+
+  it('a new write-up next to a TODO comment is still notes only', () => {
+    expect(classifyPrSubstance([file('docs/investigation.md', '+# what I found', { status: 'added' }), file('src/a.ts', '+// TODO: look here')], { complete: true }))
+      .toMatchObject({ speculative: true })
   })
 
   it('a single code change, a removal or a truncated listing is never speculative', () => {
