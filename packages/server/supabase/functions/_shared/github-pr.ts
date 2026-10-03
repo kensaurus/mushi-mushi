@@ -594,11 +594,28 @@ export function formatFixCommitMessage(
   category?: string | null,
   trailers: readonly string[] = [],
 ): string {
-  const scope = reportId ? `MUSHI-${reportId}` : 'mushi'
-  const prefix = categoryToBranchPrefix(category)
-  const trimmed = reason.trim().slice(0, 200)
-  const subject = `${prefix}(${scope}): ${trimmed}`
-  return trailers.length > 0 ? `${subject}\n\n${trailers.join('\n')}` : subject
+  // Host repos run commitlint (config-conventional): a standard type, a
+  // lower-case scope and subject, a header within 100 characters. The branch
+  // prefix (`bugfix/`) is not a commit type, so the type is mapped here, and
+  // the report id moves to a trailer where its length and case are free.
+  const type = conventionalCommitType(category)
+  const head = `${type}(mushi): `
+  let subject = reason.trim().replace(/\s+/g, ' ').replace(/[.。]+$/, '')
+  subject = subject.charAt(0).toLowerCase() + subject.slice(1)
+  const room = 72 - head.length
+  if (subject.length > room) subject = subject.slice(0, room).replace(/\s+\S*$/, '') || subject.slice(0, room)
+  const footer = [...trailers, ...(reportId ? [`Mushi-Report: ${reportId}`] : [])]
+  return footer.length > 0 ? `${head}${subject}\n\n${footer.join('\n')}` : `${head}${subject}`
+}
+
+/** The conventional-commit type for a report category (what commitlint accepts). */
+export function conventionalCommitType(category?: string | null): string {
+  const c = (category ?? 'bug').toLowerCase()
+  if (c === 'slow') return 'perf'
+  if (c === 'feature') return 'feat'
+  if (c === 'docs' || c === 'test' || c === 'ci' || c === 'refactor' || c === 'chore') return c
+  if (c === 'other') return 'chore'
+  return 'fix'
 }
 
 export function formatFixPrTitle(summary: string, reportId: string): string {
