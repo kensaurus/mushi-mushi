@@ -75,6 +75,11 @@ Two facts shape the fix:
 - Migration `20261003193000_sdk_upgrade_awaiting_lockfile.sql` widens the
   `sdk_upgrade_jobs` status CHECK. It must be applied before the `api`,
   `sdk-upgrade-worker` and `sdk-release-sync` functions that write the value.
+- `sdk-release-sync` was documented as a 5-minute cron but was never
+  scheduled (no migration, no `cron.job` row on production on 2026-10-03).
+  Migration `20261003193100_sdk_release_sync_cron.sql` schedules it; this
+  decision depends on it. It also starts the CI/deploy chip sync for open
+  upgrade PRs that the cron was always meant to run.
 - The console shows **Refreshing lockfile…** for the parked job and offers the
   workflow as a copy block; the copy, the template and the docs page are kept
   identical by `apps/admin/src/lib/sdkLockfileHelper.test.ts`.

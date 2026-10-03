@@ -116,8 +116,11 @@ npx pod-install    # React Native iOS
 \`\`\`
 
 ---
-*Review every change before merging. Mushi only modifies \`@mushi-mushi/*\`
-dependency version strings; a lockfile commit, if any, comes from your own workflow.*`
+${lockfile === 'helper_missing'
+    ? `*Review every change before merging. This PR only modifies \`@mushi-mushi/*\`
+dependency version strings — no other files are touched.*`
+    : `*Review every change before merging. Mushi only modifies \`@mushi-mushi/*\`
+dependency version strings; the lockfile commit comes from your own workflow.*`}`
 }
 
 type SimpleLogger = {

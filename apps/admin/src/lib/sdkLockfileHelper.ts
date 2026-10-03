@@ -43,6 +43,8 @@ export const SDK_LOCKFILE_WORKFLOW_YAML = [
   "        with:",
   "          # No version file? Replace with  node-version: 22",
   "          node-version-file: .nvmrc  # or .node-version / package.json",
+  "          # Nothing is installed here; auto-caching also fails without a root lockfile.",
+  "          package-manager-cache: false",
   "      # Private registry? Write ~/.npmrc auth from a secret before this step, e.g.",
   "      #   - run: echo \"//npm.pkg.github.com/:_authToken=${NPM_TOKEN}\" >> ~/.npmrc",
   "      #     env:",
