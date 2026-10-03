@@ -11,6 +11,7 @@ import {
   consoleRoutes,
   extractAdminLiterals,
   extractCliCommands,
+  extractDynamicCalls,
   extractServerRoutes,
   loadInputs,
   matchAdminLiteral,
@@ -101,6 +102,114 @@ test('consoleRoutes takes every server method on a matched path and counts unmat
   const { used, unresolved } = consoleRoutes(literals, routes)
   assert.deepEqual([...used.keys()].sort(), ['GET /v1/admin/board', 'GET /v1/admin/orgs/:orgId/portfolio'])
   assert.equal(unresolved.length, 1)
+})
+
+// Routes for the composed-path cases below.
+const composedServer = extractServerRoutes([{
+  file: 'routes/composed.ts',
+  source: `
+    app.get('/v1/admin/orgs/:orgId/portfolio/findings', adminOrApiKey(), async (c) => {})
+    app.get('/v1/admin/inventory/:projectId/findings', adminOrApiKey(), async (c) => {})
+    app.get('/v1/admin/inventory/:projectId/user-stories', adminOrApiKey(), async (c) => {})
+    app.post('/v1/admin/orgs/:orgId/connector-actions/:actionId/:verb', jwtAuth, async (c) => {})
+    app.get('/v1/admin/projects/:id/codebase/digest', adminOrApiKey(), async (c) => {})
+    app.get('/v1/admin/fixes/dispatch/:id/stream', adminOrApiKey(), async (c) => {})
+  `,
+}])
+
+function usedKeys(files) {
+  return [...consoleRoutes(extractAdminLiterals(files), composedServer).used.keys()].sort()
+}
+
+test('a call built from a same-file path constant (`${path}/x`) is a console route', () => {
+  const files = [{
+    file: 'apps/admin/src/pages/PortfolioPage.tsx',
+    source: `
+      function OrgPortfolio({ orgId }) {
+        const path = \`/v1/admin/orgs/\${orgId}/portfolio\`
+        const findings = usePageData(\`\${path}/findings\`)
+      }
+    `,
+  }]
+  assert.deepEqual(usedKeys(files), ['GET /v1/admin/orgs/:orgId/portfolio/findings'])
+  assert.deepEqual(extractDynamicCalls(files), [])
+})
+
+test('a ternary base (`id ? `/v1/…` : null`) expands inside a later condition', () => {
+  const files = [{
+    file: 'apps/admin/src/pages/InventoryPage.tsx',
+    source: `
+      const basePath = projectId ? \`/v1/admin/inventory/\${projectId}\` : null
+      const stories = usePageData(
+        basePath ? \`\${basePath}/user-stories\` : null,
+        { deps: [projectId] },
+      )
+      const findings = usePageData(
+        basePath && (tab === 'gates' || tab === 'stories') ? \`\${basePath}/findings\` : null,
+      )
+    `,
+  }]
+  assert.deepEqual(usedKeys(files), ['GET /v1/admin/inventory/:projectId/findings', 'GET /v1/admin/inventory/:projectId/user-stories'])
+  assert.deepEqual(extractDynamicCalls(files), [])
+})
+
+test('a local helper that forwards its first parameter is checked at its own call sites', () => {
+  const files = [{
+    file: 'apps/admin/src/components/portfolio/ActionsCard.tsx',
+    source: `
+      export function ActionsCard({ orgId, a }) {
+        const path = \`/v1/admin/orgs/\${orgId}/connector-actions\`
+        const run = async (url: string, body: unknown) => {
+          const res = await apiFetchMutate(url, { method: 'POST', body: JSON.stringify(body) })
+        }
+        return <Btn onClick={() => run(\`\${path}/\${a.id}/approve\`, {})}>Approve</Btn>
+      }
+    `,
+  }]
+  assert.deepEqual(usedKeys(files), ['POST /v1/admin/orgs/:orgId/connector-actions/:actionId/:verb'])
+  assert.deepEqual(extractDynamicCalls(files), [])
+  // The same helper fed a prop is a route the check cannot see.
+  const fed = [{ ...files[0], source: files[0].source.replace('run(`${path}/${a.id}/approve`, {})', 'run(a.url, {})') }]
+  assert.deepEqual(extractDynamicCalls(fed), [{ file: files[0].file, call: 'run', arg: 'a.url' }])
+})
+
+test('a path builder imported from a sibling module resolves', () => {
+  const files = [
+    { file: 'apps/admin/src/lib/repo.ts', source: 'export function digestPath(id: string): string {\n  return `/v1/admin/projects/${id}/codebase/digest`\n}\n' },
+    { file: 'apps/admin/src/components/Copy.tsx', source: "import { digestPath } from '../lib/repo'\nconst res = await apiFetch<X>(digestPath(projectId), { cache: 'no-store' })\n" },
+  ]
+  assert.deepEqual(extractDynamicCalls(files), [])
+})
+
+test('a path built from a prop fails the check unless dynamicCalls gives a reason', () => {
+  const files = [{
+    file: 'apps/admin/src/components/Card.tsx',
+    source: `
+      // apiFetch(base) in a comment is not a call
+      export function Card({ base }: { base: string }) {
+        const run = () => apiFetchMutate(\`\${base}/run\`, { method: 'POST' })
+      }
+    `,
+  }]
+  const dynamicCalls = extractDynamicCalls(files)
+  assert.deepEqual(dynamicCalls, [{ file: 'apps/admin/src/components/Card.tsx', call: 'apiFetchMutate', arg: '`${base}/run`' }])
+  const failing = checkParity({ used: used([]), mapping: mapping({}), mcpTools, cliCommands, dynamicCalls })
+  assert.equal(failing.errors.length, 1)
+  assert.match(failing.errors[0], /cannot follow/)
+  const allowed = { ...mapping({}), dynamicCalls: { 'apps/admin/src/components/Card.tsx': { '`${base}/run`': 'base is always the radar path' } } }
+  assert.deepEqual(checkParity({ used: used([]), mapping: allowed, mcpTools, cliCommands, dynamicCalls }).errors, [])
+})
+
+test('a dynamicCalls entry for a call that no longer exists is stale', () => {
+  const stale = { ...mapping({}), dynamicCalls: { 'apps/admin/src/components/Gone.tsx': { path: 'was a prop' } } }
+  const { errors } = checkParity({ used: used([]), mapping: stale, mcpTools, cliCommands, dynamicCalls: [] })
+  assert.equal(errors.length, 1)
+  assert.match(errors[0], /dynamicCalls .*Gone\.tsx "path": stale entry/)
+})
+
+test('`${API_URL}/v1/…` counts its /v1 tail as a console route', () => {
+  const files = [{ file: 'apps/admin/src/lib/dispatchFix.ts', source: 'const url = `${RESOLVED_API_URL}/v1/admin/fixes/dispatch/${dispatchId}/stream`\n' }]
+  assert.deepEqual(usedKeys(files), ['GET /v1/admin/fixes/dispatch/:id/stream'])
 })
 
 test('extractCliCommands follows variables, nesting and comment lines', () => {
