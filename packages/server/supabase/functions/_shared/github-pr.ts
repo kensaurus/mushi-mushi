@@ -389,11 +389,51 @@ export async function createPrFromFiles(
     lastCommitSha = putRes.commit.sha
   }
 
+  const pr = await openPullRequestForBranch(
+    { token, owner, repo, base: resolvedBase, branch, title, body, labels, markReady },
+    log,
+  )
+
+  return {
+    url: pr.url,
+    number: pr.number,
+    branch,
+    commitSha: lastCommitSha,
+  }
+}
+
+export interface OpenPullRequestOptions {
+  token: string
+  owner: string
+  repo: string
+  /** Branch the PR merges into. */
+  base: string
+  /** Branch that already holds the commits. */
+  branch: string
+  title: string
+  body: string
+  labels?: string[]
+  markReady?: boolean
+}
+
+/**
+ * Open a draft PR for a branch that already exists, mark it ready (unless
+ * `markReady: false`) and add labels. {@link createPrFromFiles} ends with this;
+ * the SDK upgrade flow also calls it on its own once the host's lockfile
+ * workflow has pushed to the branch.
+ */
+export async function openPullRequestForBranch(
+  opts: OpenPullRequestOptions,
+  log: SimpleLogger = noopLog,
+): Promise<{ url: string; number: number }> {
+  const { token, owner, repo, base, branch, title, body, labels = [], markReady = true } = opts
+  const baseHeaders = ghHeaders(token)
+
   // Open the draft PR targeting the resolved base (may differ from stored defaultBranch).
   const prRes = (await ghFetch(`https://api.github.com/repos/${owner}/${repo}/pulls`, {
     method: 'POST',
     headers: baseHeaders,
-    body: JSON.stringify({ title, head: branch, base: resolvedBase, draft: true, body }),
+    body: JSON.stringify({ title, head: branch, base, draft: true, body }),
   })) as { number: number; html_url: string }
 
   // Lift draft gate so CI runs and the console merge API works.
@@ -421,12 +461,69 @@ export async function createPrFromFiles(
     )
   }
 
-  return {
-    url: prRes.html_url,
-    number: prRes.number,
-    branch,
-    commitSha: lastCommitSha,
+  return { url: prRes.html_url, number: prRes.number }
+}
+
+/**
+ * Create `branch` from `baseSha` holding ONE commit that writes every file,
+ * via the Git Data API (tree → commit → ref). Needs only `Contents: write`.
+ *
+ * One commit means one push, so a host workflow triggered by the push sees
+ * every changed file in `HEAD~1..HEAD` (the per-file Contents API loop in
+ * {@link commitFilesToBranch} makes one push per file, and a workflow that
+ * cancels in-progress runs would only see the last file).
+ *
+ * Returns the new commit SHA.
+ */
+export async function createBranchWithSingleCommit(
+  opts: {
+    token: string
+    owner: string
+    repo: string
+    branch: string
+    baseSha: string
+    message: string
+    files: FileChange[]
+  },
+): Promise<string> {
+  const { token, owner, repo, branch, baseSha, message, files } = opts
+  const headers = ghHeaders(token)
+  const api = `https://api.github.com/repos/${owner}/${repo}`
+
+  const baseCommit = (await ghFetch(`${api}/git/commits/${baseSha}`, { headers })) as {
+    tree: { sha: string }
   }
+  const tree = (await ghFetch(`${api}/git/trees`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      base_tree: baseCommit.tree.sha,
+      tree: files.map((f) => ({ path: f.path, mode: '100644', type: 'blob', content: f.contents })),
+    }),
+  })) as { sha: string }
+  const commit = (await ghFetch(`${api}/git/commits`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ message, tree: tree.sha, parents: [baseSha] }),
+  })) as { sha: string }
+
+  try {
+    await ghFetch(`${api}/git/refs`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ ref: `refs/heads/${branch}`, sha: commit.sha }),
+    })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    if (!msg.includes('Reference already exists')) throw err
+    // A retried run reuses its branch name: move it to the new commit.
+    await ghFetch(`${api}/git/refs/heads/${branch}`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ sha: commit.sha, force: true }),
+    })
+  }
+  return commit.sha
 }
 
 export interface OpenPrRef {
