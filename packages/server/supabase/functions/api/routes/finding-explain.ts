@@ -17,8 +17,11 @@ import { getServiceClient } from '../../_shared/db.ts'
 import { DESIGN_GATE } from '../../_shared/design-plane.ts'
 import {
   absenceUnproven,
+  designRunPhase,
   explainFinding,
   findingTargetKey,
+  runCoversScope,
+  runStoryScope,
   type ExplainFindingRow,
   type FindingMatchKey,
   type ExplainLatestRun,
@@ -26,7 +29,6 @@ import {
 } from '../../_shared/finding-explain.ts'
 import { callerCanAccessProject, jsonError } from '../shared.ts'
 import type { Variables } from '../types.ts'
-import { isScanRun } from './recipe-compose.ts'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const FINDING_COLUMNS =
@@ -53,25 +55,36 @@ interface LatestRunRow {
 }
 
 /**
- * The newest finished run of the finding's gate, the same rule at the same
- * place in it, and — when it is not there — whether that absence proves
- * anything (absenceUnproven). The newest run is taken whatever its status: a
- * radar run with one errored connector is `error` yet holds real findings, so
- * skipping it would compare against an older run and call a live finding fixed.
+ * The newest finished run of the finding's gate that looked at the same thing
+ * the finding's own run did, the same rule at the same place in it, and —
+ * when it is not there — whether that absence proves anything
+ * (absenceUnproven).
+ *
+ * Only runs started at or after the finding's own run count: a finding's rows
+ * are written while its run is still `running`, so an older finished run
+ * cannot have it and must never stand in as "the latest". Among those, the
+ * newest is taken whatever its status (a radar run with one errored connector
+ * is `error` yet holds real findings; absenceUnproven reads its per-rule
+ * record). design_drift compares a server scan only with server scans and a
+ * CI push only with CI pushes, and an inventory-gates run scoped to another
+ * story subtree is skipped, because neither examined this finding's place.
  */
-async function latestRunFor(db: Db, finding: ExplainFindingRow, gate: string): Promise<ExplainLatestRun | null | 'error'> {
-  const { data: runs, error } = await db
+async function latestRunFor(db: Db, finding: ExplainFindingRow, run: ExplainRunRow): Promise<ExplainLatestRun | null | 'error'> {
+  let query = db
     .from('gate_runs')
     .select('id, status, completed_at, summary, findings_count')
     .eq('project_id', finding.project_id)
-    .eq('gate', gate)
+    .eq('gate', run.gate)
+    .gte('started_at', run.started_at)
+  // design_drift also writes token-refresh rows (phase refresh); they never match.
+  if (run.gate === DESIGN_GATE) query = query.eq('summary->>phase', designRunPhase(run.summary))
+  const { data: runs, error } = await query
     .not('status', 'in', '(running,queued)')
     .order('started_at', { ascending: false })
     .limit(10)
   if (error) return 'error'
-  const rows = (runs ?? []) as LatestRunRow[]
-  // design_drift also writes token-refresh rows; only scans carry findings.
-  const latest = (gate === DESIGN_GATE ? rows.filter(isScanRun) : rows)[0]
+  const ownStory = runStoryScope(run.summary)
+  const latest = ((runs ?? []) as LatestRunRow[]).find((r) => runCoversScope(ownStory, runStoryScope(r.summary)))
   if (!latest) return null
   if (latest.id === finding.gate_run_id) {
     return { id: latest.id, completed_at: latest.completed_at, matchingFindingId: finding.id, uncheckedReason: null }
@@ -145,7 +158,7 @@ export function registerFindingExplainRoutes(
 
     const { data: runRow, error: runErr } = await db
       .from('gate_runs')
-      .select('id, gate, status, started_at, completed_at, commit_sha')
+      .select('id, gate, status, started_at, completed_at, commit_sha, summary')
       .eq('id', finding.gate_run_id)
       .maybeSingle()
     if (runErr) return jsonError(c, 'DB_ERROR', 'The finding could not be read. Try again in a minute.', 500)
@@ -153,7 +166,7 @@ export function registerFindingExplainRoutes(
     if (!run) return jsonError(c, 'NOT_FOUND', 'Finding not found', 404)
 
     // A failed read must not turn into "fixed in the latest run".
-    const latest = await latestRunFor(db, finding, run.gate)
+    const latest = await latestRunFor(db, finding, run)
     if (latest === 'error') return jsonError(c, 'DB_ERROR', 'Could not check the latest run of this check. Try again in a minute.', 500)
 
     return c.json({ ok: true, data: explainFinding(finding, run, latest) })

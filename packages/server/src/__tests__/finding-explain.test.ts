@@ -81,14 +81,44 @@ describe('absenceUnproven: a missing finding is evidence only from a clean, comp
     expect(helper.absenceUnproven({ ...base, status: 'warn', findingsCount: 250, storedCount: 200 })).toContain('stored only 200')
     expect(helper.absenceUnproven({ ...base, status: 'warn', findingsCount: 3, storedCount: null })).not.toBeNull()
   })
-  it('accepts a per-rule summary only when the rule was checked clean', () => {
+  it('accepts a per-rule summary only when the rule ran to the end (ok, or finding with others)', () => {
     const summary = (state: string) => ({ results: [{ ruleId: 'domain_expiring', state, reason: 'registry did not answer', findings: 0 }] })
     const radar = { ...base, ruleId: 'domain_expiring', matchedBy: 'target' as const }
     expect(helper.absenceUnproven({ ...radar, summary: summary('ok') })).toBeNull()
-    for (const state of ['unknown', 'error', 'finding']) {
+    // The rule ran and found other targets; this one is not among them.
+    expect(helper.absenceUnproven({ ...radar, status: 'warn', findingsCount: 1, storedCount: 1, summary: summary('finding') })).toBeNull()
+    for (const state of ['unknown', 'error']) {
       expect(helper.absenceUnproven({ ...radar, summary: summary(state) }), state).toContain(`"${state}"`)
     }
     expect(helper.absenceUnproven({ ...radar, summary: { results: [{ ruleId: 'cert_expiring', state: 'ok' }] } })).toContain('did not run the domain_expiring rule')
+  })
+  it('lets a rule checked clean outweigh a run that errored on another connector', () => {
+    const radar = { ...base, ruleId: 'domain_expiring', matchedBy: 'target' as const }
+    const summary = { results: [{ ruleId: 'domain_expiring', state: 'ok' }, { ruleId: 'store_listing', state: 'error' }] }
+    expect(helper.absenceUnproven({ ...radar, status: 'error', summary })).toBeNull()
+    // ...but never a run whose findings did not land (radar marks that run error too).
+    expect(helper.absenceUnproven({ ...radar, status: 'error', findingsCount: 2, storedCount: 0, summary })).toContain('stored only 0')
+  })
+  it('refuses a run that read only part of the project', () => {
+    expect(helper.absenceUnproven({ ...base, summary: { phase: 'scan', truncated: true } })).toContain('file limit')
+    expect(helper.absenceUnproven({ ...base, summary: { phase: 'ci_scan', scannedFiles: 0 } })).toContain('read no files')
+    expect(helper.absenceUnproven({ ...base, status: 'warn', findingsCount: 500, storedCount: 500, summary: { phase: 'ci_scan', scannedFiles: 90 } })).toContain('500')
+    expect(helper.absenceUnproven({ ...base, summary: { phase: 'scan', truncated: false, scannedFiles: 40 } })).toBeNull()
+  })
+  it('refuses a run that recorded findings it could not store', () => {
+    expect(helper.absenceUnproven({ ...base, status: 'fail', findingsCount: 2, storedCount: 2, summary: { violations: 3, findings_not_stored: 1 } })).toContain('could not store 1')
+  })
+  it('scopes runs: design phases, and inventory story subtrees', () => {
+    expect(helper.designRunPhase({ phase: 'ci_scan' })).toBe('ci_scan')
+    expect(helper.designRunPhase({ phase: 'scan' })).toBe('scan')
+    expect(helper.designRunPhase(null)).toBe('scan')
+    expect(helper.runStoryScope({ story_node_id: 'story-a' })).toBe('story-a')
+    expect(helper.runStoryScope({ actions_examined: 3 })).toBeNull()
+    expect(helper.runCoversScope(null, null)).toBe(true)
+    expect(helper.runCoversScope('story-a', null)).toBe(true)
+    expect(helper.runCoversScope('story-a', 'story-a')).toBe(true)
+    expect(helper.runCoversScope(null, 'story-a')).toBe(false)
+    expect(helper.runCoversScope('story-a', 'story-b')).toBe(false)
   })
   it('refuses a message-only search', () => {
     expect(helper.absenceUnproven({ ...base, matchedBy: 'message' })).toContain('message')
@@ -331,6 +361,110 @@ describe('GET /v1/admin/findings/:findingId', () => {
     ;(db as FakeDb).table('gate_findings').push(finding({ id: F_NEW, gate_run_id: RUN_NEW, allowlisted: true, allowlist_reason: 'generated file' }))
     const res = await app.call(`/v1/admin/findings/${F_OLD}`)
     expect(res.body.data).toMatchObject({ state: 'allowlisted', latestRun: { findingId: F_NEW } })
+  })
+
+  // ── compare only with a run that looked at the same thing ───────────────────
+
+  const RUN_THIRD = '2000000c-0000-4000-8000-000000000000'
+  const designRun = (over: Record<string, unknown>) => ({
+    project_id: P1, gate: 'design_drift', commit_sha: 'a', findings_count: 0, completed_at: '2026-10-01T00:01:00Z', ...over,
+  })
+  const designFinding = (over: Record<string, unknown> = {}) => finding({
+    rule_id: 'spacing_literal', severity: 'warn', file_path: 'src/Button.tsx', line: 12, message: 'src/Button.tsx:12 uses 13px, which matches no spacing token.',
+    suggested_fix: { value: '13px', suggestion: { token: 'space.3', cssVar: '--space-3', value: '12px', distance: 1 } }, ...over,
+  })
+
+  it('never calls a server-scan design finding fixed because a newer CI push did not report it', async () => {
+    const { app } = setup({
+      gate_runs: [
+        designRun({ id: RUN_OLD, status: 'warn', started_at: '2026-10-01T00:00:00Z', findings_count: 1, summary: { phase: 'scan', truncated: false, scannedFiles: 400 } }),
+        // `mushi recipe check --push`: only off_token_literal, only the files CI matched.
+        designRun({ id: RUN_NEW, status: 'pass', started_at: '2026-10-02T00:00:00Z', triggered_by: 'ci', summary: { phase: 'ci_scan', source: 'ci', scannedFiles: 30, storedFindings: 0 } }),
+      ],
+      gate_findings: [designFinding()],
+    })
+    const res = await app.call(`/v1/admin/findings/${F_OLD}`)
+    expect(res.body.data?.state).not.toBe('not_in_latest_run')
+    expect(res.body.data).toMatchObject({ state: 'open', latestRun: { id: RUN_OLD } })
+  })
+
+  it('compares a CI-push design finding with the next CI push', async () => {
+    const { app } = setup({
+      gate_runs: [
+        designRun({ id: RUN_OLD, status: 'warn', started_at: '2026-10-01T00:00:00Z', findings_count: 1, summary: { phase: 'ci_scan', scannedFiles: 30, storedFindings: 1 } }),
+        designRun({ id: RUN_NEW, status: 'pass', started_at: '2026-10-02T00:00:00Z', summary: { phase: 'ci_scan', scannedFiles: 30, storedFindings: 0 } }),
+        // A newer server scan is a different kind of run and is not the comparison.
+        designRun({ id: RUN_THIRD, status: 'pass', started_at: '2026-10-03T00:00:00Z', summary: { phase: 'scan', truncated: false, scannedFiles: 400 } }),
+      ],
+      gate_findings: [designFinding({ rule_id: 'off_token_literal', message: 'src/Button.tsx:12 uses #123456, which matches no design token.', suggested_fix: null })],
+    })
+    expect((await app.call(`/v1/admin/findings/${F_OLD}`)).body.data).toMatchObject({ state: 'not_in_latest_run', latestRun: { id: RUN_NEW } })
+  })
+
+  it('never says fixed after a server scan that stopped at its file limit', async () => {
+    const { app } = setup({
+      gate_runs: [
+        designRun({ id: RUN_OLD, status: 'warn', started_at: '2026-10-01T00:00:00Z', findings_count: 1, summary: { phase: 'scan', truncated: false, scannedFiles: 400 } }),
+        designRun({ id: RUN_NEW, status: 'pass', started_at: '2026-10-02T00:00:00Z', summary: { phase: 'scan', truncated: true, scannedFiles: 1500 } }),
+      ],
+      gate_findings: [designFinding()],
+    })
+    const res = await app.call(`/v1/admin/findings/${F_OLD}`)
+    expect(res.body.data).toMatchObject({ state: 'unknown', latestRun: { id: RUN_NEW } })
+    expect(String(res.body.data?.stateReason)).toContain('file limit')
+  })
+
+  const claimRun = (over: Record<string, unknown>) => ({
+    project_id: P1, gate: 'status_claim', commit_sha: null, completed_at: '2026-10-01T00:01:00Z', findings_count: 0, ...over,
+  })
+  const claimFinding = (over: Record<string, unknown> = {}) => finding({
+    rule_id: 'status-claim-violation', file_path: null, line: null, node_id: 'node-checkout', message: 'Action "Checkout" claims verified but the reconciler derives wired.',
+    suggested_fix: { explanation: 'Downgrade the claim.' }, ...over,
+  })
+
+  it('skips an inventory-gates run scoped to another story subtree', async () => {
+    const { app } = setup({
+      gate_runs: [
+        claimRun({ id: RUN_OLD, status: 'fail', started_at: '2026-10-01T00:00:00Z', findings_count: 1, summary: { actions_examined: 40, violations: 1 } }),
+        claimRun({ id: RUN_NEW, status: 'pass', started_at: '2026-10-02T00:00:00Z', summary: { actions_examined: 3, violations: 0, story_node_id: 'story-signup' } }),
+      ],
+      gate_findings: [claimFinding()],
+    })
+    const res = await app.call(`/v1/admin/findings/${F_OLD}`)
+    expect(res.body.data?.state).not.toBe('not_in_latest_run')
+    expect(res.body.data).toMatchObject({ state: 'open', latestRun: { id: RUN_OLD } })
+  })
+
+  it('never says fixed when the inventory-gates run could not store some findings', async () => {
+    const { app } = setup({
+      gate_runs: [
+        claimRun({ id: RUN_OLD, status: 'fail', started_at: '2026-10-01T00:00:00Z', findings_count: 1, summary: { actions_examined: 40, violations: 1 } }),
+        claimRun({ id: RUN_NEW, status: 'fail', started_at: '2026-10-02T00:00:00Z', findings_count: 0, summary: { actions_examined: 40, violations: 1, findings_not_stored: 1 } }),
+      ],
+      gate_findings: [claimFinding()],
+    })
+    expect((await app.call(`/v1/admin/findings/${F_OLD}`)).body.data).toMatchObject({ state: 'unknown' })
+  })
+
+  it('never compares a finding whose run is still going with an older finished run', async () => {
+    const { app } = setup({
+      gate_runs: [
+        { id: RUN_OLD, project_id: P1, gate: 'code_health', status: 'pass', started_at: '2026-09-30T00:00:00Z', completed_at: '2026-09-30T00:01:00Z', commit_sha: 'a', summary: null, findings_count: 0 },
+        { id: RUN_NEW, project_id: P1, gate: 'code_health', status: 'running', started_at: '2026-10-01T00:00:00Z', completed_at: null, commit_sha: 'b', summary: null, findings_count: null },
+      ],
+      gate_findings: [finding({ gate_run_id: RUN_NEW })],
+    })
+    const res = await app.call(`/v1/admin/findings/${F_OLD}`)
+    expect(res.body.data?.state).not.toBe('not_in_latest_run')
+    expect(res.body.data).toMatchObject({ state: 'open', latestRun: null })
+  })
+
+  it('says fixed when an errored radar run still checked this rule clean', async () => {
+    const { app } = setup({
+      gate_runs: [RADAR_OLD_RUN, radarNew({ status: 'error', summary: { results: [{ ruleId: 'domain_expiring', state: 'ok', reason: 'ok', findings: 0 }, { ruleId: 'store_listing', state: 'error', reason: 'connector down', findings: 0 }] } })],
+      gate_findings: [domainFinding()],
+    })
+    expect((await app.call(`/v1/admin/findings/${F_OLD}`)).body.data).toMatchObject({ state: 'not_in_latest_run', latestRun: { id: RUN_NEW } })
   })
 
   it('answers 500, never "fixed", when the latest-run read fails', async () => {
