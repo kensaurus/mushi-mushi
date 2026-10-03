@@ -206,6 +206,23 @@ describe('connector specifics', () => {
     expect(db.table('connector_snapshots')[0]).toMatchObject({ ok: false, error_kind: 'credential_rejected' })
   })
 
+  it('a snapshot that could not be stored is an error with the reason, never connected or a silent drop', async () => {
+    const base = makeFakeDb({})
+    const failed = { data: null, error: { message: 'column "error_kind" does not exist' } }
+    const chain: unknown = new Proxy({}, { get: (_t, prop) => (prop === 'then' ? (ok: (v: unknown) => unknown) => Promise.resolve(failed).then(ok) : () => chain) })
+    const db = new Proxy(base, { get: (t, prop, r) => (prop === 'from' ? (name: string) => (name === 'connector_snapshots' ? chain : t.from(name)) : Reflect.get(t, prop, r)) })
+    // The vendor answers fine; only the write fails.
+    const okEntry = { connector: registry.getConnector('revenuecat'), instanceId: 'i1', bindings: SETUP.revenuecat.bindings, ctx: { ...ctx('revenuecat', vi.fn(async (u: string, i?: RequestInit) => recorded(u, i))), db } }
+    const stored = await runtime.runConnector(db as never, okEntry as never, null)
+    expect(stored.status).toBe('error')
+    expect(stored.reason).toMatch(/Could not store the .* snapshot: column "error_kind" does not exist/)
+    // The vendor said no and that failure could not be written either: the result still says both.
+    const badEntry = { ...okEntry, ctx: { ...okEntry.ctx, fetch: always(401) } }
+    const denied = await runtime.runConnector(db as never, badEntry as never, null)
+    expect(denied.status).toBe('error')
+    expect(denied.reason).toMatch(/error_kind/)
+  })
+
   it('GitHub proposeChange drops workflow, env and out-of-allowlist paths', async () => {
     const c = registry.getConnector('github')
     const manifest = { version: 1, change: { allowPaths: ['mushi.recipe.json', 'tokens/**'] } }
