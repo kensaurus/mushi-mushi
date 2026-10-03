@@ -5,7 +5,8 @@
  *   POST /v1/ingest/recipe          apiKeyAuth  the host CI pushes mushi.recipe.json + token/CSS files
  *                                               (+ off-token findings) for repos Mushi has no token for
  *   POST /v1/ingest/recipe/events   apiKeyAuth  build.completed / deploy.completed / release.published
- *   POST /v1/ingest/recipe/csv      jwtAuth     one-off import of shared resources (domains, bundle ids…)
+ *   POST /v1/ingest/recipe/csv      adminOrApiKey(mcp:write)  one-off import of shared resources (domains, bundle ids…);
+ *                                               console JWT or an account-level key, team owner/admin only
  *   GET  /v1/admin/orgs/:orgId/portfolio/resources  adminOrApiKey(mcp:read)  resources, uses, cross-project findings
  *   GET  /v1/admin/projects/:id/recipe/drift          adminOrApiKey(mcp:read)  open recipe drift with fixes (MCP get_recipe_drift)
  *
@@ -16,7 +17,7 @@
 
 import type { Context, Hono, MiddlewareHandler } from 'npm:hono@4'
 import { z } from 'npm:zod@3'
-import { adminOrApiKey, apiKeyAuth, jwtAuth } from '../../_shared/auth.ts'
+import { adminOrApiKey, apiKeyAuth } from '../../_shared/auth.ts'
 import { getServiceClient } from '../../_shared/db.ts'
 import { log } from '../../_shared/logger.ts'
 import { snapshotFromSource, DESIGN_GATE } from '../../_shared/design-plane.ts'
@@ -40,16 +41,16 @@ type Db = ReturnType<typeof getServiceClient>
 export interface RecipeIngestDeps {
   getServiceClient: () => Db
   apiKeyAuth: MiddlewareHandler
-  jwtAuth: MiddlewareHandler
   adminOrApiKeyRead: MiddlewareHandler
+  adminOrApiKeyWrite: MiddlewareHandler
   now: () => Date
 }
 
 export const defaultRecipeIngestDeps: RecipeIngestDeps = {
   getServiceClient,
   apiKeyAuth: apiKeyAuth as MiddlewareHandler,
-  jwtAuth: jwtAuth as MiddlewareHandler,
   adminOrApiKeyRead: adminOrApiKey({ scope: 'mcp:read' }) as MiddlewareHandler,
+  adminOrApiKeyWrite: adminOrApiKey({ scope: 'mcp:write' }) as MiddlewareHandler,
   now: () => new Date(),
 }
 
@@ -193,7 +194,7 @@ export function registerRecipeIngestRoutes(app: Hono<{ Variables: Variables }>, 
     return c.json({ ok: true, data: { received: parsed.data.events.length, stored } })
   })
 
-  app.post('/v1/ingest/recipe/csv', deps.jwtAuth, async (c) => {
+  app.post('/v1/ingest/recipe/csv', deps.adminOrApiKeyWrite, async (c) => {
     const db = deps.getServiceClient()
     const body = await c.req.json().catch(() => null) as { organizationId?: unknown; csv?: unknown } | null
     if (typeof body?.organizationId !== 'string' || typeof body.csv !== 'string') return jsonError(c, 'VALIDATION_ERROR', 'Send { organizationId, csv }.', 400)

@@ -10,6 +10,8 @@ import { emitProductEvent } from '../../_shared/product-events.ts';
 import { getDemoReportFixture, materializeDemoReport, precomputedClassification } from '../../_shared/demo-report-fixtures.ts';
 import { checkIngestQuota } from '../../_shared/quota.ts';
 import { log } from '../../_shared/logger.ts';
+import { logAudit } from '../../_shared/audit.ts';
+import { decideAutofixToggle } from '../../_shared/autofix-toggle.ts';
 import { classifyIngestRateLimitError } from './ingest-rate-limit.ts';
 // Pure readiness → dry-run shaping lives in its own import-free module so it
 // can be unit-tested under CI's permission-less `deno test`.
@@ -227,9 +229,10 @@ export function registerProjectIntegrationsRoutes(app: Hono<{ Variables: Variabl
   //
   // Returns the current autofix_enabled flag for the project. Consumed by
   // CodebaseIndexCard (IntegrationsPage) so the autofix toggle can reflect
-  // the live state without requiring a full settings reload.
+  // the live state without requiring a full settings reload. Console JWT or
+  // an API key with mcp:read (a project-bound key reads only its project).
   // ---------------------------------------------------------------------------
-  app.get('/v1/admin/projects/:id/autofix', jwtAuth, async (c) => {
+  app.get('/v1/admin/projects/:id/autofix', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
     const projectId = c.req.param('id')!;
     const userId = c.get('userId') as string;
     const db = getServiceClient();
@@ -260,10 +263,12 @@ export function registerProjectIntegrationsRoutes(app: Hono<{ Variables: Variabl
   // ---------------------------------------------------------------------------
   // Autofix toggle — POST /v1/admin/projects/:id/autofix/toggle
   //
-  // Flips the autofix_enabled flag on project_settings. Accepts { enabled: boolean }.
-  // Returns the updated flag so the caller can sync its local state.
+  // Sets the autofix_enabled flag on project_settings. Requires { enabled: boolean }
+  // and a project owner or admin (decideAutofixToggle); console JWT or an API
+  // key with mcp:write. Audited. Returns the updated flag so the caller can
+  // sync its local state.
   // ---------------------------------------------------------------------------
-  app.post('/v1/admin/projects/:id/autofix/toggle', jwtAuth, async (c) => {
+  app.post('/v1/admin/projects/:id/autofix/toggle', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {
     const projectId = c.req.param('id')!;
     const userId = c.get('userId') as string;
     const db = getServiceClient();
@@ -280,8 +285,12 @@ export function registerProjectIntegrationsRoutes(app: Hono<{ Variables: Variabl
       return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404);
     }
 
-    const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
-    const enabled = Boolean(body.enabled);
+    const body: unknown = await c.req.json().catch(() => null);
+    const decision = decideAutofixToggle(access.role, body);
+    if (!decision.ok) {
+      return c.json({ ok: false, error: { code: decision.code, message: decision.message } }, decision.status);
+    }
+    const enabled = decision.enabled;
 
     const { error } = await db
       .from('project_settings')
@@ -291,6 +300,12 @@ export function registerProjectIntegrationsRoutes(app: Hono<{ Variables: Variabl
       );
 
     if (error) return dbError(c, error);
+
+    await logAudit(db, projectId, userId, 'settings.updated', 'autofix', projectId, {
+      action: 'autofix.toggle',
+      enabled,
+      via: c.get('authMethod') === 'apiKey' ? 'api_key' : 'console',
+    }).catch(() => {});
 
     return c.json({ ok: true, data: { autofix_enabled: enabled } });
   });

@@ -327,7 +327,7 @@ export async function publicationOutdated(
 
 export type PublishDecision =
   | { ok: true }
-  | { ok: false; status: 403; code: 'REPO_WRITE_REQUIRED'; message: string }
+  | { ok: false; status: 403; code: 'REPO_WRITE_REQUIRED' | 'PRIVATE_REPO_NEEDS_CONSOLE'; message: string }
   | { ok: false; status: 409; code: 'STALE_PREVIEW' | 'CONSENT_REQUIRED' | 'ALREADY_PUBLISHED'; message: string }
 
 /**
@@ -337,6 +337,11 @@ export type PublishDecision =
  * public repo and lock its real owner out). Consent is bound to the exact
  * payload the owner previewed (its hash), a private repo needs an explicit
  * confirmation, and one repo has at most one public page.
+ *
+ * The confirmation for a private repo is a person reading the preview in the
+ * console: an API key (an agent, a script) can publish a public repo's
+ * diagram, but `confirm_private` from a key is not that review, so a private
+ * repo published by key is refused outright.
  */
 export function decidePublish(input: {
   /** GitHub says the project's token can push to (or administer) the repo. Unknown counts as no. */
@@ -346,12 +351,17 @@ export function decidePublish(input: {
   repoPrivate: boolean
   confirmPrivate: boolean
   publishedByOtherProject: boolean
+  /** The request was authenticated with an API key rather than a console session. */
+  viaApiKey?: boolean
 }): PublishDecision {
   if (!input.repoWriteAccess) {
     return { ok: false, status: 403, code: 'REPO_WRITE_REQUIRED', message: 'Only someone with write access to this repo on GitHub can publish its diagram.' }
   }
   if (input.previewedHash !== input.currentHash) {
     return { ok: false, status: 409, code: 'STALE_PREVIEW', message: 'The diagram changed since you previewed it. Review it again before publishing.' }
+  }
+  if (input.repoPrivate && input.viaApiKey) {
+    return { ok: false, status: 403, code: 'PRIVATE_REPO_NEEDS_CONSOLE', message: privateRepoNeedsConsoleMessage() }
   }
   if (input.repoPrivate && !input.confirmPrivate) {
     return { ok: false, status: 409, code: 'CONSENT_REQUIRED', message: 'This repo is private. Confirm the preview to publish its diagram.' }
@@ -360,6 +370,11 @@ export function decidePublish(input: {
     return { ok: false, status: 409, code: 'ALREADY_PUBLISHED', message: 'Another project already publishes a diagram for this repo.' }
   }
   return { ok: true }
+}
+
+/** Shared by decidePublish and the publish preview, so both say the same thing. */
+export function privateRepoNeedsConsoleMessage(): string {
+  return 'This repo is private. A person has to review the preview and publish it from the console (Repo → Diagram → Publish); an API key cannot confirm it.'
 }
 
 const OWNER_RE = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/

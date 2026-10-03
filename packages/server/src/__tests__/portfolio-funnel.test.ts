@@ -73,7 +73,7 @@ function setup(extra: Record<string, unknown[]> = {}, rpc?: (fn: string, args: R
     ...extra,
   } as never, { autoId: true, rpc })
   const app = new FakeApp()
-  funnel.registerPortfolioFunnelRoutes(app as never, { getServiceClient: () => db as never, adminOrApiKeyRead: (async (_c: unknown, next: () => Promise<void>) => next()) as never, jwtAuth: (async (_c: unknown, next: () => Promise<void>) => next()) as never, now: () => NOW })
+  funnel.registerPortfolioFunnelRoutes(app as never, { getServiceClient: () => db as never, adminOrApiKeyRead: (async (_c: unknown, next: () => Promise<void>) => next()) as never, adminOrApiKeyWrite: (async (_c: unknown, next: () => Promise<void>) => next()) as never, now: () => NOW })
   return { db, app }
 }
 
@@ -124,7 +124,7 @@ describe('cross-app funnel read failures', () => {
     const broken = new Proxy(db, { get: (t, prop, r) => (prop === 'from' ? (name: string) => (name === 'project_settings' ? chain : t.from(name)) : Reflect.get(t, prop, r)) })
     const app = new FakeApp()
     const pass = (async (_c: unknown, next: () => Promise<void>) => next()) as never
-    funnel.registerPortfolioFunnelRoutes(app as never, { getServiceClient: () => broken as never, adminOrApiKeyRead: pass, jwtAuth: pass, now: () => NOW })
+    funnel.registerPortfolioFunnelRoutes(app as never, { getServiceClient: () => broken as never, adminOrApiKeyRead: pass, adminOrApiKeyWrite: pass, now: () => NOW })
     const r = await app.call('GET', `/v1/admin/orgs/${ORG}/funnel`)
     expect(r.status).toBe(500)
   })

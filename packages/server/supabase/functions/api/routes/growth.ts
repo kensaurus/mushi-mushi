@@ -10,11 +10,16 @@
  * mushi_runtime_config.self_project_id. The RPC is service_role-only; this
  * route is its only caller and gates on requireOperator
  * (secret MUSHI_OPERATOR_USER_IDS) before touching the DB.
+ *
+ * Auth: the console JWT, or an account-level API key with mcp:read whose
+ * owner is an operator (the gtm-weekly loop reads it from the CLI / MCP).
+ * A project-bound key is refused: the company funnel counts every tenant,
+ * so it is never a single project's data.
  */
 
 import type { Hono } from 'npm:hono@4';
 import type { Variables } from '../types.ts';
-import { jwtAuth } from '../../_shared/auth.ts';
+import { adminOrApiKey } from '../../_shared/auth.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { log } from '../../_shared/logger.ts';
 import { requireOperator } from '../../_shared/operator-gate.ts';
@@ -35,7 +40,20 @@ interface FunnelPayload {
 
 export function registerGrowthRoutes(app: Hono<{ Variables: Variables }>): void {
   // GET /v1/admin/growth/funnel?weeks=8&source=<signup_source|all>
-  app.get('/v1/admin/growth/funnel', jwtAuth, async (c) => {
+  app.get('/v1/admin/growth/funnel', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
+    if (c.get('authMethod') === 'apiKey' && !c.get('isOrgScopedKey')) {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'GROWTH_NEEDS_ACCOUNT_KEY',
+            message:
+              'This key is bound to one project. The company funnel needs an account-level key (Connect → MCP → account key) or a signed-in session.',
+          },
+        },
+        403,
+      );
+    }
     const denied = requireOperator(c);
     if (denied) return denied;
 
