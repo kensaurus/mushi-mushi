@@ -4,15 +4,23 @@
  * When `projectId` is supplied (GitHub connected), the primary action is
  * "Create Upgrade PR" (server opens a draft PR in the connected repo).
  * The copy-command fallback is always present as a secondary option.
+ *
+ * The "lockfile helper" disclosure hands out the host workflow from ADR 0019:
+ * with it in the repo, the upgrade PR arrives with a refreshed lockfile.
  */
 
 import { useState } from 'react'
 import { Btn, Tooltip } from './ui'
 import { JobStatusPill } from './ui/job-status-pill'
-import { CodeInline } from './CodePanel'
+import { CodeInline, CodePanel } from './CodePanel'
 import { IconCopy, IconTerminal, IconBolt, IconExternalLink } from './icons'
 import { resolveSdkDisplay } from '../lib/sdkVersionCompare'
 import { useSdkUpgrade } from '../lib/useSdkUpgrade'
+import {
+  SDK_LOCKFILE_DOCS_URL,
+  SDK_LOCKFILE_WORKFLOW_PATH,
+  SDK_LOCKFILE_WORKFLOW_YAML,
+} from '../lib/sdkLockfileHelper'
 import type { SdkStatus } from './SdkVersionBadge'
 
 interface SdkUpgradeCTAProps {
@@ -73,6 +81,10 @@ function UpgradePrButton({
     )
   }
 
+  if (state.status === 'awaiting_lockfile') {
+    return <JobStatusPill status="awaiting_lockfile" />
+  }
+
   const busy =
     state.status === 'queueing' ||
     state.status === 'queued' ||
@@ -92,6 +104,44 @@ function UpgradePrButton({
         {busy ? 'Creating PR…' : 'Create Upgrade PR'}
       </span>
     </Btn>
+  )
+}
+
+/** Copy block for the host workflow that refreshes the lockfile on upgrade branches. */
+export function LockfileHelperDisclosure() {
+  const [copied, setCopied] = useState(false)
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(SDK_LOCKFILE_WORKFLOW_YAML)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch { /* ignore */ }
+  }
+  return (
+    <details className="w-full text-2xs text-fg-muted">
+      <summary className="cursor-pointer select-none hover:text-fg">
+        Upgrade PRs fail <CodeInline>npm ci</CodeInline>? Add the lockfile helper
+      </summary>
+      <div className="mt-2 space-y-2">
+        <p>
+          Mushi edits only <CodeInline>package.json</CodeInline>. Save this workflow as{' '}
+          <CodeInline>{SDK_LOCKFILE_WORKFLOW_PATH}</CodeInline> on your default branch: Mushi then pushes the
+          bump first, your workflow regenerates the lockfile with your package manager, and the PR opens after
+          that, so a frozen install passes.{' '}
+          <a href={SDK_LOCKFILE_DOCS_URL} target="_blank" rel="noopener noreferrer" className="underline hover:text-fg">
+            Docs
+          </a>
+        </p>
+        <CodePanel
+          label="Lockfile helper"
+          language="yaml"
+          code={SDK_LOCKFILE_WORKFLOW_YAML}
+          onCopy={() => void copy()}
+          copied={copied}
+          maxHeight="max-h-64"
+        />
+      </div>
+    </details>
   )
 }
 
@@ -166,6 +216,7 @@ export function SdkUpgradeCTA({
             </Btn>
         )}
       </div>
+      {projectId && <LockfileHelperDisclosure />}
     </div>
   )
 }
