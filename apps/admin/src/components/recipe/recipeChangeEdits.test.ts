@@ -164,4 +164,11 @@ describe('routes', () => {
     expect(buildRoutesEdits([file('inventory.yaml', null)], 'pages: []\n')).toMatchObject({ ok: true, edits: [{ baseSha: null }] })
     expect(buildRoutesEdits([inv], '   ')).toEqual({ ok: false, errors: ['inventory.yaml cannot be empty.'] })
   })
+
+  it('edits the inventory path the server returned (routes.inventory), never a hardcoded one', () => {
+    const declared = file('apps/web/inventory.yaml', 'schema_version: 2\n')
+    expect(buildRoutesEdits([declared], 'schema_version: 2\npages: []\n')).toMatchObject({ ok: true, edits: [{ path: 'apps/web/inventory.yaml', baseSha: 'sha-apps/web/inventory.yaml', reason: 'update apps/web/inventory.yaml (pages, stories, actions)' }] })
+    expect(buildRoutesEdits([declared], '')).toEqual({ ok: false, errors: ['apps/web/inventory.yaml cannot be empty.'] })
+    expect(buildRoutesEdits([], 'pages: []\n')).toEqual({ ok: false, errors: ['The inventory file is not available.'] })
+  })
 })

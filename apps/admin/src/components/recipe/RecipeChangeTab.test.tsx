@@ -10,7 +10,9 @@
  *       reason, and Preview stays disabled (no dead button);
  *   (c) editing a budget and pressing Preview sends a dry run with the base
  *       SHA, and the diff and "Open draft PR" appear;
- *   (d) the env form has no value input.
+ *   (d) the env form has no value input;
+ *   (e) the routes form edits the inventory path the server returned
+ *       (routes.inventory), and an inventory the server refuses blocks the PR.
  */
 
 import { act, createElement } from 'react'
@@ -134,5 +136,35 @@ describe('RecipeSidePanel Change tab', () => {
     const labels = [...container.querySelectorAll('input')].map((i) => `${i.getAttribute('aria-label') ?? ''} ${i.getAttribute('placeholder') ?? ''}`)
     expect(labels.some((l) => /value|secret/i.test(l))).toBe(false)
     expect((container.querySelector('input[aria-label="Env name 1"]') as HTMLInputElement).value).toBe('API_URL')
+  })
+
+  it('the routes form edits the inventory path the server named, and a refused inventory blocks the draft PR', async () => {
+    const INV = 'schema_version: "2.0"\n'
+    page.byPath.set('element=routes', {
+      ok: true,
+      element: 'routes',
+      branch: 'main',
+      headSha: 'abcdef1234',
+      files: [{ path: 'apps/web/inventory.yaml', exists: true, content: INV, sha: 'sha-inv', writable: true, reason: null }],
+    } satisfies RecipeSources)
+    api.apiFetchMutate.mockResolvedValueOnce({
+      ok: true,
+      data: { dryRun: true, ok: true, reason: null, files: [], denied: [{ path: 'apps/web/inventory.yaml', reason: 'the new inventory would fail inventory ingest: app: Required' }] },
+    })
+    render('routes')
+    openChange()
+    const area = container.querySelector('textarea') as HTMLTextAreaElement
+    expect(area.getAttribute('aria-label')).toBe('apps/web/inventory.yaml')
+    expect(container.textContent).toContain('routes.inventory')
+    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!
+    act(() => {
+      setter.call(area, `${INV}pages: []\n`)
+      area.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await act(async () => { byText('Preview diff')!.click() })
+    const body = JSON.parse(api.apiFetchMutate.mock.calls[0][1].body)
+    expect(body).toMatchObject({ element: 'routes', dryRun: true, edits: [{ path: 'apps/web/inventory.yaml', baseSha: 'sha-inv' }] })
+    expect(container.textContent).toContain('would fail inventory ingest')
+    expect(byText('Open draft PR')?.disabled ?? true).toBe(true)
   })
 })
