@@ -351,6 +351,62 @@ function requestedOrganizationId(c: Context): string | null {
 }
 
 /**
+ * An account-level (org-scoped) API key: no bound project, reaches every
+ * project its owner can reach (callerProjectIds lists them all).
+ */
+function isAccountKey(c: Context): boolean {
+  return c.get('authMethod') === 'apiKey' && Boolean(c.get('isOrgScopedKey')) && !c.get('projectId');
+}
+
+/**
+ * {@link resolveOwnedProject} for an account-level key. The project must be
+ * named (project_id / X-Mushi-Project-Id, or the route's URL id): there is no
+ * "first project" fallback for a key. The key acts with its owner's real role
+ * on that project (never a blanket 'owner', so requireProjectAdmin still
+ * refuses a member's key), and a project the owner cannot reach is a 404.
+ */
+async function resolveAccountKeyProject(
+  c: Context,
+  db: ReturnType<typeof getServiceClient>,
+  userId: string,
+  options: ResolveOwnedProjectOptions,
+): Promise<OwnedProjectResolution> {
+  const requested = (options.overrideProjectId ?? requestedProjectId(c)) || null;
+  if (!requested) {
+    if (options.noProjectResponse) return { response: options.noProjectResponse() };
+    return {
+      response: jsonError(
+        c,
+        'PROJECT_REQUIRED',
+        'This account-level API key reaches several projects: name one with project_id (or the X-Mushi-Project-Id header).',
+        400,
+      ),
+    };
+  }
+  if (!UUID_RE.test(requested)) {
+    return { response: jsonError(c, 'INVALID_PROJECT_ID', 'project_id must be a UUID', 400) };
+  }
+  const notFound = (): OwnedProjectResolution => ({
+    response: jsonError(c, 'PROJECT_NOT_FOUND', 'Project not found', 404),
+  });
+  const access = await userCanAccessProject(db, userId, requested);
+  if (!access.allowed || !access.role) return notFound();
+  const { data: row } = await db
+    .from('projects')
+    .select('id, name, organization_id')
+    .eq('id', requested)
+    .maybeSingle();
+  if (!row) return notFound();
+  const requestedOrg = requestedOrganizationId(c);
+  if (requestedOrg && requestedOrg !== row.organization_id) {
+    return { response: jsonForbidden(c, 'Project is not in the active organization') };
+  }
+  if (row.organization_id) c.set('organizationId', row.organization_id);
+  c.set('projectId', row.id);
+  return { project: { ...row, organization_role: access.role }, explicit: true };
+}
+
+/**
  * Resolve the admin's active project consistently across route modules.
  *
  * New admin builds send `X-Mushi-Project-Id` based on ProjectSwitcher. Older
@@ -367,6 +423,7 @@ export async function resolveOwnedProject(
   if (c.get('authMethod') === 'apiKey') {
     const bound = c.get('projectId') as string | undefined;
     if (!bound) {
+      if (isAccountKey(c)) return resolveAccountKeyProject(c, db, userId, options);
       return { response: jsonForbidden(c, 'API key missing project binding') };
     }
     const requested = options.overrideProjectId ?? requestedProjectId(c);
@@ -654,7 +711,9 @@ export type TargetProjectAccessResult =
 
 /**
  * Fail-closed access check for a specific project id (body, query, header, or URL).
- * API-key callers stay bound to the key project; JWT callers use org/project membership.
+ * Project-bound API keys stay bound to the key project; JWT callers and
+ * account-level (org-scoped) keys use the caller's org/project membership,
+ * so an account key acts with its owner's real role.
  */
 export async function assertTargetProjectAccess(
   c: Context,
@@ -669,10 +728,11 @@ export async function assertTargetProjectAccess(
     };
   }
 
-  const scopeErr = assertCallerProjectScope(c, projectId);
+  const accountKey = isAccountKey(c);
+  const scopeErr = accountKey ? null : assertCallerProjectScope(c, projectId);
   if (scopeErr) return { ok: false, response: scopeErr };
 
-  if (c.get('authMethod') === 'apiKey') {
+  if (c.get('authMethod') === 'apiKey' && !accountKey) {
     const { data: row } = await db
       .from('projects')
       .select('id, organization_id')
