@@ -569,7 +569,7 @@ async function emitCommitEventsForPush(
  * write so GitHub doesn't retry the webhook for non-billing reasons.
  */
 async function handleFixPrMerged(payload: {
-  pull_request?: { html_url?: string; number?: number };
+  pull_request?: { html_url?: string; number?: number; merged_at?: string | null };
   repository?: { full_name?: string };
 }): Promise<Response> {
   const prUrl = payload.pull_request?.html_url;
@@ -596,6 +596,7 @@ async function handleFixPrMerged(payload: {
     prUrl,
     prNumber: payload.pull_request?.number,
     repository: payload.repository?.full_name,
+    mergedAt: payload.pull_request?.merged_at ?? null,
   });
 
   if (justMerged) {
