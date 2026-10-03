@@ -33,7 +33,7 @@ function UnifiedDiff({ diff }: { diff: string }) {
   )
 }
 
-function DeniedList({ denied }: { denied: DesignChangeResult['denied'] }) {
+export function DeniedList({ denied }: { denied: DesignChangeResult['denied'] }) {
   if (denied.length === 0) return null
   return (
     <Callout tone="warn" label="Not allowed — left out of the change">
@@ -49,7 +49,7 @@ function DeniedList({ denied }: { denied: DesignChangeResult['denied'] }) {
   )
 }
 
-function FileDiffs({ files }: { files: DesignFileChange[] }) {
+export function FileDiffs({ files }: { files: DesignFileChange[] }) {
   if (files.length === 0) {
     return <p className="text-xs text-fg-muted">No file would change.</p>
   }

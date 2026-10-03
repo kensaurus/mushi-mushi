@@ -397,6 +397,91 @@ export interface DesignChangeResult {
   pr: { url: string; number: number; branch: string; draft: true } | null
 }
 
+// ── Recipe changes from the console (gates, env, routes) ────────────────────
+// Mirror of packages/server/supabase/functions/_shared/recipe-change.ts.
+//   GET  /v1/admin/projects/:id/recipe/sources?element=   → RecipeSources
+//   POST /v1/admin/projects/:id/recipe/changes            → RecipeChangeDryRun (dryRun) | RecipeChangeAccepted (202, wait:false)
+//   GET  /v1/admin/projects/:id/recipe/changes/:jobId     → RecipeChangeJobRow
+//   GET  /v1/admin/projects/:id/recipe/changes/:jobId/stream  → SSE `status` (RecipeChangeStreamStatus), `done`, `error`
+
+export type RecipeChangeElement = 'design' | 'gates' | 'env' | 'routes' | 'store' | 'release'
+/** The elements the side panel's Change tab edits. */
+export type RecipeSourceElement = 'gates' | 'env' | 'routes'
+
+export interface RecipeSourceFile {
+  path: string
+  exists: boolean
+  /** null when absent, too large, or holding something shaped like a secret. */
+  content: string | null
+  /** Blob SHA to send back as `baseSha`; null when the file does not exist. */
+  sha: string | null
+  writable: boolean
+  reason: string | null
+}
+
+export type RecipeSources =
+  | { ok: true; element: RecipeSourceElement; branch: string; headSha: string; files: RecipeSourceFile[] }
+  | { ok: false; element: RecipeSourceElement; reason: string; files: [] }
+
+export interface RecipeChangeEdit {
+  path: string
+  content: string
+  reason?: string
+  /** The SHA the preview was read at; null = the file did not exist. The server refuses a file that moved since. */
+  baseSha?: string | null
+}
+
+export interface RecipeChangeRequest {
+  element: RecipeChangeElement
+  edits: RecipeChangeEdit[]
+  dryRun?: boolean
+  /** false: answer 202 with a job id and open the PR in the background. */
+  wait?: boolean
+  title?: string
+}
+
+export interface RecipeChangeDryRun {
+  dryRun: true
+  ok: boolean
+  reason: string | null
+  files: DesignFileChange[]
+  denied: Array<{ path: string; reason: string }>
+}
+
+export type RecipeChangeJobStatus = 'queued' | 'running' | 'pr_opened' | 'failed' | 'rejected'
+
+export interface RecipeChangeAccepted {
+  jobId: string
+  projectId: string
+  status: 'queued'
+  prUrl: null
+  error: null
+}
+
+export interface RecipeChangeJobRow {
+  id: string
+  element: RecipeChangeElement
+  status: RecipeChangeJobStatus
+  pr_url: string | null
+  pr_number: number | null
+  branch: string | null
+  error: string | null
+  batch_id: string | null
+  created_at: string
+  started_at: string | null
+  finished_at: string | null
+}
+
+export interface RecipeChangeStreamStatus {
+  status: RecipeChangeJobStatus
+  prUrl: string | null
+  prNumber: number | null
+  branch: string | null
+  startedAt: string | null
+  finishedAt: string | null
+  error: string | null
+}
+
 // ── Excerpt for get_fix_context ──────────────────────────────────────────────
 
 export interface DesignExcerpt {

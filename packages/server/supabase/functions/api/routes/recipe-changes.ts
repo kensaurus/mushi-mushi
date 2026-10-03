@@ -3,7 +3,10 @@
  * (Plan 020 Phase 4), all behind a human.
  *
  *   POST /v1/admin/projects/:id/recipe/changes            adminOrApiKey(mcp:write)  dry run by default; dryRun:false opens ONE draft PR
+ *                                                         (wait:false → 202 + jobId; the PR opens in the background)
  *   GET  /v1/admin/projects/:id/recipe/changes/:jobId     adminOrApiKey(mcp:read)
+ *   GET  /v1/admin/projects/:id/recipe/changes/:jobId/stream  adminOrApiKey(mcp:read)  SSE: status → done
+ *   GET  /v1/admin/projects/:id/recipe/sources?element=   adminOrApiKey(mcp:read)   the fixed files a console form edits
  *   POST /v1/admin/orgs/:orgId/portfolio/changes          adminOrApiKey(mcp:write)  "fix once": one draft PR per repo (≤ 10), shared batch_id
  *   GET  /v1/admin/orgs/:orgId/releases                   adminOrApiKey(mcp:read)   release calendar + the batch to release now vs next (read-only)
  *   GET  /v1/admin/orgs/:orgId/connector-actions          adminOrApiKey(mcp:read)
@@ -18,12 +21,29 @@
  */
 
 import type { Context, Hono, MiddlewareHandler } from 'npm:hono@4'
+import { streamSSE } from 'npm:hono@4/streaming'
 import { z } from 'npm:zod@3'
 import { adminOrApiKey, jwtAuth } from '../../_shared/auth.ts'
 import { getServiceClient } from '../../_shared/db.ts'
 import { createPrFromFiles, findOpenPrByHeadPrefix } from '../../_shared/github-pr.ts'
 import { getDefaultHead, readRepoFile, resolveRecipeRepo } from '../../_shared/recipe-github.ts'
-import { MAX_BATCH_REPOS, planRecipeChange, RECIPE_CHANGE_ELEMENTS, runRecipeChange, type ChangeDeps } from '../../_shared/recipe-change.ts'
+import {
+  createRecipeChangeJob,
+  effectiveJobRow,
+  executeRecipeChangeJob,
+  MAX_BATCH_REPOS,
+  planRecipeChange,
+  readRecipeSources,
+  RECIPE_CHANGE_ELEMENTS,
+  RECIPE_SOURCE_ELEMENTS,
+  runRecipeChange,
+  streamRecipeChangeJob,
+  type ChangeDeps,
+  type RecipeJobRow,
+  type RecipeSourceElement,
+} from '../../_shared/recipe-change.ts'
+import { runInBackground } from '../../_shared/background.ts'
+import { sanitizeSseString, sseHeartbeat, toSseEvent } from '../../_shared/sse.ts'
 import { approveConnectorAction, executeConnectorAction, rejectConnectorAction, requestConnectorAction, type ExecuteDeps } from '../../_shared/connector-actions.ts'
 import { calendarAppsFrom, releaseCalendar } from '../../_shared/store-review.ts'
 import { callerCanAccessProject, jsonError } from '../shared.ts'
@@ -40,6 +60,8 @@ export interface RecipeChangeRouteDeps {
   jwtAuth: MiddlewareHandler
   change: ChangeDeps
   execute: ExecuteDeps
+  /** Keeps a console-started job running past the 202 (wait:false). */
+  runInBackground: (task: Promise<unknown>, label: string) => void
 }
 
 export const defaultRecipeChangeDeps: RecipeChangeRouteDeps = {
@@ -49,15 +71,25 @@ export const defaultRecipeChangeDeps: RecipeChangeRouteDeps = {
   jwtAuth: jwtAuth as MiddlewareHandler,
   change: { resolveRepo: resolveRecipeRepo, getDefaultHead, readRepoFile, createPr: createPrFromFiles, findOpenPr: findOpenPrByHeadPrefix, now: () => new Date() },
   execute: { fetch: (url, init) => fetch(url, init), now: () => new Date() },
+  runInBackground,
 }
 
-const editSchema = z.object({ path: z.string().min(1).max(400), content: z.string().max(512 * 1024), reason: z.string().max(200).optional() })
+const editSchema = z.object({
+  path: z.string().min(1).max(400),
+  content: z.string().max(512 * 1024),
+  reason: z.string().max(200).optional(),
+  /** Blob SHA the caller previewed against (null = the file did not exist); a file that moved since is refused. */
+  baseSha: z.string().min(1).max(80).nullable().optional(),
+})
 const changeSchema = z.object({
   element: z.enum(RECIPE_CHANGE_ELEMENTS),
   edits: z.array(editSchema).min(1).max(30),
   dryRun: z.boolean().default(true),
+  /** false: create the job, answer 202 with its id, and open the PR in the background (the console follows the stream). */
+  wait: z.boolean().default(true),
   title: z.string().min(1).max(120).optional(),
 }).strict()
+const JOB_COLUMNS = 'id, element, status, pr_url, pr_number, branch, error, batch_id, created_at, started_at, finished_at'
 const batchSchema = z.object({
   element: z.enum(RECIPE_CHANGE_ELEMENTS),
   changes: z.array(z.object({ projectId: z.string().uuid(), edits: z.array(editSchema).min(1).max(30) })).min(1).max(MAX_BATCH_REPOS),
@@ -113,9 +145,42 @@ export function registerRecipeChangeRoutes(app: Hono<{ Variables: Variables }>, 
       const plan = await planRecipeChange(db, projectId, body.element, body.edits, deps.change).catch((err) => ({ ok: false, reason: (err as Error).message, files: [], denied: [] }))
       return c.json({ ok: true, data: { dryRun: true, ok: plan.ok, reason: plan.reason, files: plan.files.map(({ before: _b, after: _a, ...f }) => f), denied: plan.denied } })
     }
-    const job = await runRecipeChange(db, { projectId, element: body.element, edits: body.edits, title: body.title ?? `chore(recipe): update ${body.element}`, requestedBy: requester(c) }, deps.change)
+    const input = { projectId, element: body.element, edits: body.edits, title: body.title ?? `chore(recipe): update ${body.element}`, requestedBy: requester(c) }
+    if (!body.wait) {
+      const created = await createRecipeChangeJob(db, input, deps.change.now())
+      if (!created.ok) {
+        if (created.activeJobId) {
+          // `data.jobId` too: the console's envelope keeps `data` on an error, not extra error fields.
+          const message = created.result.error ?? 'A change for this part of the recipe is already running.'
+          const requestId = c.get('requestId') as string | undefined
+          return c.json({ ok: false, error: { code: 'ALREADY_RUNNING', message, jobId: created.activeJobId, ...(requestId ? { requestId } : {}) }, data: { jobId: created.activeJobId } }, 409)
+        }
+        return jsonError(c, 'JOB_FAILED', created.result.error ?? 'The job could not be created.', 500)
+      }
+      deps.runInBackground(executeRecipeChangeJob(db, created.jobId, input, deps.change), 'recipe-change')
+      return c.json({ ok: true, data: { jobId: created.jobId, projectId, status: 'queued', prUrl: null, error: null } }, 202)
+    }
+    const job = await runRecipeChange(db, input, deps.change)
     if (job.status === 'rejected' && /not writable/i.test(job.error ?? '')) return jsonError(c, 'PATH_NOT_WRITABLE', job.error!, 400, { jobId: job.jobId })
     return c.json({ ok: true, data: job }, job.status === 'pr_opened' ? 201 : 200)
+  })
+
+  app.get('/v1/admin/projects/:id/recipe/sources', deps.adminOrApiKeyRead, async (c) => {
+    const db = deps.getServiceClient()
+    const projectId = c.req.param('id') ?? ''
+    if (!UUID_RE.test(projectId)) return jsonError(c, 'NOT_FOUND', 'Project not found', 404)
+    const access = await callerCanAccessProject(c, db, c.get('userId') as string, projectId)
+    if (!access.allowed) return jsonError(c, 'NOT_FOUND', 'Project not found', 404)
+    const element = c.req.query('element') ?? ''
+    if (!(RECIPE_SOURCE_ELEMENTS as readonly string[]).includes(element)) {
+      return jsonError(c, 'VALIDATION_ERROR', `element must be one of ${RECIPE_SOURCE_ELEMENTS.join(', ')}`, 400)
+    }
+    try {
+      const sources = await readRecipeSources(db, projectId, element as RecipeSourceElement, deps.change)
+      return c.json({ ok: true, data: sources })
+    } catch (err) {
+      return jsonError(c, 'GITHUB_FAILED', `Could not read the repo: ${(err as Error)?.message ?? String(err)}`.slice(0, 300), 502)
+    }
   })
 
   app.get('/v1/admin/projects/:id/recipe/changes/:jobId', deps.adminOrApiKeyRead, async (c) => {
@@ -125,9 +190,38 @@ export function registerRecipeChangeRoutes(app: Hono<{ Variables: Variables }>, 
     if (!UUID_RE.test(projectId) || !UUID_RE.test(jobId)) return jsonError(c, 'NOT_FOUND', 'Not found', 404)
     const access = await callerCanAccessProject(c, db, c.get('userId') as string, projectId)
     if (!access.allowed) return jsonError(c, 'NOT_FOUND', 'Not found', 404)
-    const { data } = await db.from('recipe_change_jobs').select('id, element, status, pr_url, pr_number, branch, error, batch_id, created_at, finished_at').eq('id', jobId).eq('project_id', projectId).maybeSingle()
+    const { data } = await db.from('recipe_change_jobs').select(JOB_COLUMNS).eq('id', jobId).eq('project_id', projectId).maybeSingle()
     if (!data) return jsonError(c, 'NOT_FOUND', 'Not found', 404)
-    return c.json({ ok: true, data })
+    return c.json({ ok: true, data: effectiveJobRow(data as unknown as RecipeJobRow, deps.change.now()) })
+  })
+
+  // SSE status stream for one job (mirrors the sdk-upgrade stream); the console falls back to polling the GET above.
+  app.get('/v1/admin/projects/:id/recipe/changes/:jobId/stream', deps.adminOrApiKeyRead, async (c) => {
+    const db = deps.getServiceClient()
+    const projectId = c.req.param('id') ?? ''
+    const jobId = c.req.param('jobId') ?? ''
+    if (!UUID_RE.test(projectId) || !UUID_RE.test(jobId)) return jsonError(c, 'NOT_FOUND', 'Not found', 404)
+    const access = await callerCanAccessProject(c, db, c.get('userId') as string, projectId)
+    if (!access.allowed) return jsonError(c, 'NOT_FOUND', 'Not found', 404)
+    const load = async (): Promise<RecipeJobRow | null> => {
+      const { data } = await db.from('recipe_change_jobs').select(JOB_COLUMNS).eq('id', jobId).eq('project_id', projectId).maybeSingle()
+      return (data as unknown as RecipeJobRow | null) ?? null
+    }
+    if (!(await load())) return jsonError(c, 'NOT_FOUND', 'Not found', 404)
+    return streamSSE(c, async (stream) => {
+      await streamRecipeChangeJob({
+        load,
+        emit: async (event, payload) => {
+          await stream.write(event === 'heartbeat' ? sseHeartbeat() : toSseEvent(payload, { event, id: event === 'status' ? `${jobId}:${Date.now()}` : undefined }))
+        },
+        sleep: async (ms) => {
+          await stream.sleep(ms)
+        },
+        aborted: () => stream.aborted,
+        now: () => deps.change.now(),
+        sanitize: sanitizeSseString,
+      })
+    })
   })
 
   app.post('/v1/admin/orgs/:orgId/portfolio/changes', deps.adminOrApiKeyWrite, async (c) => {
