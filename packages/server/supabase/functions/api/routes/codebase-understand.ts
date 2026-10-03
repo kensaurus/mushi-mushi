@@ -7,7 +7,6 @@
 import type { Context, Hono } from 'npm:hono@4'
 import type { Variables } from '../types.ts'
 import { streamSSE } from 'npm:hono@4/streaming'
-import { createAnthropic } from 'npm:@ai-sdk/anthropic@1'
 import { createOpenAI } from 'npm:@ai-sdk/openai@1'
 import { generateText, streamText } from 'npm:ai@4'
 import { z } from 'npm:zod@3'
@@ -17,7 +16,13 @@ import { log } from '../../_shared/logger.ts'
 import { adminOrApiKey } from '../../_shared/auth.ts'
 import { toSseEvent } from '../../_shared/sse.ts'
 import { createTrace } from '../../_shared/observability.ts'
-import { CODEBASE_ASSIST_MODEL, ASSIST_FALLBACK } from '../../_shared/models.ts'
+import {
+  CODEBASE_ASSIST_EFFORT,
+  CODEBASE_ASSIST_MODEL,
+  ASSIST_FALLBACK,
+  THINKING_HEADROOM_TOKENS,
+} from '../../_shared/models.ts'
+import { claudeGenerateText, claudeStreamText } from '../../_shared/claude-messages.ts'
 import { estimateCallCostUsd } from '../../_shared/pricing.ts'
 import { logLlmInvocation, extractAnthropicCacheUsage } from '../../_shared/telemetry.ts'
 import { withAnthropicOrOpenAi, LlmFailoverError } from '../../_shared/llm-failover.ts'
@@ -42,6 +47,27 @@ import { enqueueCodebaseAnalyzeJob, runCodebaseAnalyzeJob } from '../../_shared/
 import { dbError, callerCanAccessProject } from '../shared.ts'
 
 const routeLog = log.child('codebase-understand')
+
+/** What every Atlas text call reads back, whichever provider served it. */
+interface AssistTextResult {
+  text: string
+  usage: { promptTokens: number; completionTokens: number }
+  experimental_providerMetadata: unknown
+}
+
+function assistText(r: {
+  text: string
+  usage: { promptTokens: number; completionTokens: number }
+  experimental_providerMetadata?: unknown
+}): AssistTextResult {
+  return { text: r.text, usage: r.usage, experimental_providerMetadata: r.experimental_providerMetadata ?? null }
+}
+
+/** The streamed Atlas chat, whichever provider served it. */
+interface AssistStream {
+  textStream: AsyncIterable<string>
+  usage: Promise<{ promptTokens: number; completionTokens: number }>
+}
 
 function deriveThreadTitle(firstUserMessage: string): string {
   const t = firstUserMessage.replace(/\s+/g, ' ').trim()
@@ -242,21 +268,24 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
         projectId,
         async (key) => {
           keySource = key.source
-          const anthropic = createAnthropic({ apiKey: key.key })
-          return generateText({
-            model: anthropic(CODEBASE_ASSIST_MODEL),
-            messages: [
-              {
-                role: 'system',
-                content: systemPrompt,
-                experimental_providerMetadata: {
-                  anthropic: { cacheControl: { type: 'ephemeral' } },
+          return assistText(
+            await claudeGenerateText({
+              apiKey: key.key,
+              model: CODEBASE_ASSIST_MODEL,
+              effort: CODEBASE_ASSIST_EFFORT,
+              messages: [
+                {
+                  role: 'system',
+                  content: systemPrompt,
+                  experimental_providerMetadata: {
+                    anthropic: { cacheControl: { type: 'ephemeral' } },
+                  },
                 },
-              },
-              ...body.messages!.slice(-10).map((m) => ({ role: m.role, content: m.content })),
-            ],
-            maxTokens: 900,
-          })
+                ...body.messages!.slice(-10).map((m) => ({ role: m.role, content: m.content })),
+              ],
+              maxTokens: 900 + THINKING_HEADROOM_TOKENS,
+            }),
+          )
         },
         async (key) => {
           keySource = key.source
@@ -265,12 +294,14 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
             ...(key.baseUrl ? { baseURL: key.baseUrl } : {}),
           })
           usedModel = ASSIST_FALLBACK
-          return generateText({
-            model: openai(ASSIST_FALLBACK),
-            system: systemPrompt,
-            messages: body.messages!.slice(-10).map((m) => ({ role: m.role, content: m.content })),
-            maxTokens: 900,
-          })
+          return assistText(
+            await generateText({
+              model: openai(ASSIST_FALLBACK),
+              system: systemPrompt,
+              messages: body.messages!.slice(-10).map((m) => ({ role: m.role, content: m.content })),
+              maxTokens: 900,
+            }),
+          )
         },
       )
       usedModel = usedProvider === 'openai' ? ASSIST_FALLBACK : CODEBASE_ASSIST_MODEL
@@ -422,11 +453,12 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
         const { result, usedProvider } = await withAnthropicOrOpenAi(
           db,
           projectId,
-          async (key) => {
+          async (key): Promise<AssistStream> => {
             keySource = key.source
-            const anthropic = createAnthropic({ apiKey: key.key })
-            return streamText({
-              model: anthropic(CODEBASE_ASSIST_MODEL),
+            const streamed = claudeStreamText({
+              apiKey: key.key,
+              model: CODEBASE_ASSIST_MODEL,
+              effort: CODEBASE_ASSIST_EFFORT,
               messages: [
                 {
                   role: 'system',
@@ -437,22 +469,24 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
                 },
                 ...body.messages!.slice(-10).map((m) => ({ role: m.role, content: m.content })),
               ],
-              maxTokens: 900,
+              maxTokens: 900 + THINKING_HEADROOM_TOKENS,
             })
+            return { textStream: streamed.textStream, usage: streamed.usage }
           },
-          async (key) => {
+          async (key): Promise<AssistStream> => {
             keySource = key.source
             usedModel = ASSIST_FALLBACK
             const openai = createOpenAI({
               apiKey: key.key,
               ...(key.baseUrl ? { baseURL: key.baseUrl } : {}),
             })
-            return streamText({
+            const streamed = streamText({
               model: openai(ASSIST_FALLBACK),
               system: systemPrompt,
               messages: body.messages!.slice(-10).map((m) => ({ role: m.role, content: m.content })),
               maxTokens: 900,
             })
+            return { textStream: streamed.textStream, usage: streamed.usage }
           },
         )
         usedModel = usedProvider === 'openai' ? ASSIST_FALLBACK : CODEBASE_ASSIST_MODEL
@@ -610,12 +644,15 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
         projectId,
         async (key) => {
           keySource = key.source
-          const anthropic = createAnthropic({ apiKey: key.key })
-          return generateText({
-            model: anthropic(CODEBASE_ASSIST_MODEL),
-            prompt,
-            maxTokens: 400,
-          })
+          return assistText(
+            await claudeGenerateText({
+              apiKey: key.key,
+              model: CODEBASE_ASSIST_MODEL,
+              effort: CODEBASE_ASSIST_EFFORT,
+              prompt,
+              maxTokens: 400 + THINKING_HEADROOM_TOKENS,
+            }),
+          )
         },
         async (key) => {
           keySource = key.source
@@ -624,11 +661,13 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
             apiKey: key.key,
             ...(key.baseUrl ? { baseURL: key.baseUrl } : {}),
           })
-          return generateText({
-            model: openai(ASSIST_FALLBACK),
-            prompt,
-            maxTokens: 400,
-          })
+          return assistText(
+            await generateText({
+              model: openai(ASSIST_FALLBACK),
+              prompt,
+              maxTokens: 400,
+            }),
+          )
         },
       )
       usedModel = usedProvider === 'openai' ? ASSIST_FALLBACK : CODEBASE_ASSIST_MODEL
@@ -740,22 +779,27 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
           projectId,
           async (key) => {
             keySource = key.source
-            const anthropic = createAnthropic({ apiKey: key.key })
-            return generateText({
-              model: anthropic(CODEBASE_ASSIST_MODEL),
-              prompt: `Improve these guided-tour stop rationales for onboarding a new developer. Keep the same order. Return JSON array of {order, rationale} only.\n\n${tourContext}`,
-              maxTokens: 800,
-            })
+            return assistText(
+              await claudeGenerateText({
+                apiKey: key.key,
+                model: CODEBASE_ASSIST_MODEL,
+                effort: CODEBASE_ASSIST_EFFORT,
+                prompt: `Improve these guided-tour stop rationales for onboarding a new developer. Keep the same order. Return JSON array of {order, rationale} only.\n\n${tourContext}`,
+                maxTokens: 800 + THINKING_HEADROOM_TOKENS,
+              }),
+            )
           },
           async (key) => {
             keySource = key.source
             usedModel = ASSIST_FALLBACK
             const openai = createOpenAI({ apiKey: key.key, ...(key.baseUrl ? { baseURL: key.baseUrl } : {}) })
-            return generateText({
-              model: openai(ASSIST_FALLBACK),
-              prompt: `Improve these guided-tour stop rationales for onboarding a new developer. Keep the same order. Return JSON array of {order, rationale} only.\n\n${tourContext}`,
-              maxTokens: 800,
-            })
+            return assistText(
+              await generateText({
+                model: openai(ASSIST_FALLBACK),
+                prompt: `Improve these guided-tour stop rationales for onboarding a new developer. Keep the same order. Return JSON array of {order, rationale} only.\n\n${tourContext}`,
+                maxTokens: 800,
+              }),
+            )
           },
         )
         usedModel = usedProvider === 'openai' ? ASSIST_FALLBACK : CODEBASE_ASSIST_MODEL
@@ -860,22 +904,27 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
         projectId,
         async (key) => {
           keySource = key.source
-          const anthropic = createAnthropic({ apiKey: key.key })
-          return generateText({
-            model: anthropic(CODEBASE_ASSIST_MODEL),
-            prompt: `From this indexed file list, extract business domains, user flows, and steps. Return JSON matching {domains:[{id,name,description,flows:[{id,name,description,steps:[{id,name,description,file_paths[]}]}]}]}.\n\nFiles:\n${fileList}`,
-            maxTokens: 1200,
-          })
+          return assistText(
+            await claudeGenerateText({
+              apiKey: key.key,
+              model: CODEBASE_ASSIST_MODEL,
+              effort: CODEBASE_ASSIST_EFFORT,
+              prompt: `From this indexed file list, extract business domains, user flows, and steps. Return JSON matching {domains:[{id,name,description,flows:[{id,name,description,steps:[{id,name,description,file_paths[]}]}]}]}.\n\nFiles:\n${fileList}`,
+              maxTokens: 1200 + THINKING_HEADROOM_TOKENS,
+            }),
+          )
         },
         async (key) => {
           keySource = key.source
           usedModel = ASSIST_FALLBACK
           const openai = createOpenAI({ apiKey: key.key, ...(key.baseUrl ? { baseURL: key.baseUrl } : {}) })
-          return generateText({
-            model: openai(ASSIST_FALLBACK),
-            prompt: `From this indexed file list, extract business domains, user flows, and steps. Return JSON matching {domains:[{id,name,description,flows:[{id,name,description,steps:[{id,name,description,file_paths[]}]}]}]}.\n\nFiles:\n${fileList}`,
-            maxTokens: 1200,
-          })
+          return assistText(
+            await generateText({
+              model: openai(ASSIST_FALLBACK),
+              prompt: `From this indexed file list, extract business domains, user flows, and steps. Return JSON matching {domains:[{id,name,description,flows:[{id,name,description,steps:[{id,name,description,file_paths[]}]}]}]}.\n\nFiles:\n${fileList}`,
+              maxTokens: 1200,
+            }),
+          )
         },
       )
       usedModel = usedProvider === 'openai' ? ASSIST_FALLBACK : CODEBASE_ASSIST_MODEL

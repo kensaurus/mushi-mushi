@@ -12,9 +12,11 @@
 // TWO CLAUDE CALL PATHS (2026-10-02). Sonnet 5.5 rejects non-default
 // `temperature` and forced `tool_choice`; AI SDK v4 sends both on every call.
 // So a route may use `ANTHROPIC_SONNET_LATEST` only when ALL its Claude calls
-// go through `claude-messages.ts`. Routes still on `createAnthropic` +
-// `generateObject` / `generateText` stay on `ANTHROPIC_SONNET` (4.6) until
-// they are moved over.
+// go through `claude-messages.ts`. Since 2026-10-03 every Sonnet caller does;
+// only Haiku calls (fast-filter, voice intent, the nl-query summariser, the
+// synthetic and mistake-summarizer fast paths) stay on `createAnthropic`,
+// because Haiku 4.5 still accepts the v4 call shape. The regression test
+// `claude-call-paths.test.ts` keeps it that way.
 //
 // Keep pricing rows in `pricing.ts` (and the SQL backfill in the matching
 // migration) in sync when adding a new model here.
@@ -22,11 +24,12 @@
 
 // --- Anthropic ---------------------------------------------------------------
 
-/** Current Sonnet ($2/$10 per MTok). Stage 2, fix-worker, judge, assistants
- *  and the intelligence digest — every caller goes through `claude-messages.ts`. */
+/** Current Sonnet ($2/$10 per MTok). Every Sonnet caller goes through
+ *  `claude-messages.ts`. */
 export const ANTHROPIC_SONNET_LATEST = 'claude-sonnet-5-5'
 
-/** Sonnet for routes still on the AI SDK v4 Claude path (see the header). */
+/** Previous Sonnet. No pipeline route calls it any more; it stays as the
+ *  fine-tuning base model and so per-project overrides onto it keep pricing. */
 export const ANTHROPIC_SONNET = 'claude-sonnet-4-6'
 
 /** Opus 4.8 (released 2026-05-28). Not a stage default; listed so pricing
@@ -92,18 +95,29 @@ export const INTELLIGENCE_MODEL = ANTHROPIC_SONNET_LATEST
 export const INTELLIGENCE_FALLBACK = OPENAI_PRIMARY
 
 /** generate-synthetic report generator. */
-export const SYNTHETIC_MODEL = ANTHROPIC_SONNET
+export const SYNTHETIC_MODEL = ANTHROPIC_SONNET_LATEST
 export const SYNTHETIC_FALLBACK = OPENAI_PRIMARY
 
 /** library-modernizer weekly dep audit. */
-export const MODERNIZER_MODEL = ANTHROPIC_SONNET
+export const MODERNIZER_MODEL = ANTHROPIC_SONNET_LATEST
 export const MODERNIZER_FALLBACK = OPENAI_PRIMARY
 
-/** prompt-auto-tune. Still on the AI SDK v4 path (`generateObject` +
- *  `temperature: 0`), so it stays on Sonnet 4.6 until it is moved to
- *  `claude-messages.ts`; the judge no longer shares its ceiling. */
-export const PROMPT_TUNE_MODEL = ANTHROPIC_SONNET
+/** prompt-auto-tune: rewrites a stage prompt from judge feedback. */
+export const PROMPT_TUNE_MODEL = ANTHROPIC_SONNET_LATEST
 export const PROMPT_TUNE_FALLBACK = OPENAI_PRIMARY
+
+/** release-builder: the user-facing changelog draft. */
+export const RELEASE_NOTES_MODEL = ANTHROPIC_SONNET_LATEST
+export const RELEASE_NOTES_FALLBACK = OPENAI_PRIMARY
+
+/** story-mapper: crawled pages → a draft inventory.yaml. */
+export const STORY_MAP_MODEL = ANTHROPIC_SONNET_LATEST
+
+/** inventory-propose: SDK observations → a draft inventory.yaml. */
+export const INVENTORY_PROPOSE_MODEL = ANTHROPIC_SONNET_LATEST
+
+/** mistake-clusterer coherence check and mistake-summarizer lessons. */
+export const MISTAKE_MODEL = ANTHROPIC_SONNET_LATEST
 
 /** Ask Mushi / `/v1/admin/ask-mushi/messages` and the in-SDK assistant —
  *  scoped chat that answers questions about the current page. Sonnet balances
@@ -116,11 +130,11 @@ export const ASSIST_FALLBACK = OPENAI_PRIMARY
 export const STORE_REVIEW_MODEL = ANTHROPIC_SONNET_LATEST
 export const STORE_REVIEW_FALLBACK = OPENAI_PRIMARY
 
-/** Codebase Atlas Q&A (`codebase-understand`), still on the AI SDK v4 path. */
-export const CODEBASE_ASSIST_MODEL = ANTHROPIC_SONNET
+/** Codebase Atlas Q&A (`codebase-understand`). */
+export const CODEBASE_ASSIST_MODEL = ANTHROPIC_SONNET_LATEST
 
-/** test-gen-from-story default, still on the AI SDK v4 path. */
-export const TEST_GEN_MODEL = ANTHROPIC_SONNET
+/** test-gen-from-story default. */
+export const TEST_GEN_MODEL = ANTHROPIC_SONNET_LATEST
 
 // --- Effort per route (`output_config.effort`) ------------------------------
 //
@@ -136,14 +150,23 @@ export const ASSIST_EFFORT = 'low' as const
 export const STORE_REVIEW_EFFORT = 'low' as const
 export const INTELLIGENCE_EFFORT = 'low' as const
 export const TEST_GEN_EFFORT = 'medium' as const
+export const SYNTHETIC_EFFORT = 'low' as const
+export const MODERNIZER_EFFORT = 'medium' as const
+export const PROMPT_TUNE_EFFORT = 'medium' as const
+export const RELEASE_NOTES_EFFORT = 'low' as const
+export const STORY_MAP_EFFORT = 'medium' as const
+export const INVENTORY_PROPOSE_EFFORT = 'medium' as const
+export const MISTAKE_EFFORT = 'low' as const
+export const CODEBASE_ASSIST_EFFORT = 'low' as const
+export const NL_QUERY_PLANNER_EFFORT = 'medium' as const
 
 /** Extra `max_tokens` on top of a reply cap so adaptive thinking (which counts
  *  toward `max_tokens`) cannot truncate a short assistant answer. */
 export const THINKING_HEADROOM_TOKENS = 4_000
 
-/** nl-query: SQL planner uses Sonnet (reasoning-heavy), summariser uses Haiku
- *  (fast, cheap). */
-export const NL_QUERY_PLANNER_MODEL = ANTHROPIC_SONNET
+/** nl-query: SQL planner uses Sonnet (reasoning-heavy, through
+ *  `claude-messages.ts`), summariser uses Haiku (fast, cheap, AI SDK v4). */
+export const NL_QUERY_PLANNER_MODEL = ANTHROPIC_SONNET_LATEST
 export const NL_QUERY_PLANNER_FALLBACK = OPENAI_PRIMARY
 export const NL_QUERY_SUMMARY_MODEL = ANTHROPIC_HAIKU
 export const NL_QUERY_SUMMARY_FALLBACK = OPENAI_MINI

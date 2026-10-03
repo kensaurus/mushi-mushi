@@ -14,14 +14,15 @@
  * Publishing triggers the widget notification channel.
  */
 
-import { createAnthropic } from 'npm:@ai-sdk/anthropic@1'
 import { createOpenAI } from 'npm:@ai-sdk/openai@1'
 import { generateText } from 'npm:ai@4'
 import { z } from 'npm:zod@3'
 import { getServiceClient } from '../_shared/db.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
-import { ANTHROPIC_SONNET, OPENAI_PRIMARY } from '../_shared/models.ts'
+import { RELEASE_NOTES_EFFORT, RELEASE_NOTES_FALLBACK, RELEASE_NOTES_MODEL, THINKING_HEADROOM_TOKENS } from '../_shared/models.ts'
+import { claudeGenerateText } from '../_shared/claude-messages.ts'
+import { estimateCallCostUsd } from '../_shared/pricing.ts'
 
 const bodySchema = z.object({
   project_id: z.string().uuid(),
@@ -92,9 +93,12 @@ Deno.serve(
     // Generate changelog body with LLM
     let bodyMd = ''
     try {
-      const anthropic = createAnthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY') })
-      const { text } = await generateText({
-        model: anthropic(ANTHROPIC_SONNET),
+      const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY')
+      if (!anthropicKey) throw new Error('ANTHROPIC_API_KEY is not set')
+      const { text, usage } = await claudeGenerateText({
+        apiKey: anthropicKey,
+        model: RELEASE_NOTES_MODEL,
+        effort: RELEASE_NOTES_EFFORT,
         prompt: `You are writing a user-facing changelog for software version ${version}.
 
 Fixed reports in this version:
@@ -107,24 +111,24 @@ Write a markdown changelog body that:
 3. If there are no reports, write a brief "No changes tracked for this release." note
 
 Keep it warm, human, and specific. Avoid developer jargon. Max 400 words.`,
-        maxTokens: 600,
+        // Adaptive thinking counts toward max_tokens; the reply itself stays ~600.
+        maxTokens: 600 + THINKING_HEADROOM_TOKENS,
       })
       bodyMd = text.trim()
 
-      // Log cost
       await db.from('llm_cost_usd').insert({
         project_id,
         operation: 'release-builder',
-        model: ANTHROPIC_SONNET,
-        input_tokens: 0,
-        output_tokens: 0,
-        cost_usd: 0.005, // approximate
+        model: RELEASE_NOTES_MODEL,
+        input_tokens: usage.promptTokens,
+        output_tokens: usage.completionTokens,
+        cost_usd: estimateCallCostUsd(RELEASE_NOTES_MODEL, usage.promptTokens, usage.completionTokens),
       })
     } catch {
       try {
         const openai = createOpenAI({ apiKey: Deno.env.get('OPENAI_API_KEY') })
         const { text } = await generateText({
-          model: openai(OPENAI_PRIMARY),
+          model: openai(RELEASE_NOTES_FALLBACK),
           prompt: `Write a markdown changelog for version ${version} with these fixed reports:\n${reportSummaries || '(none)'}`,
           maxTokens: 600,
         })

@@ -15,8 +15,6 @@
  * Triggered via POST /v1/admin/inventory/:pid/map-from-live
  */
 
-import { generateText } from 'npm:ai@4'
-import { createAnthropic } from 'npm:@ai-sdk/anthropic@1'
 import { getServiceClient } from '../_shared/db.ts'
 import { log as rootLog } from '../_shared/logger.ts'
 import { withSentry } from '../_shared/sentry.ts'
@@ -24,7 +22,8 @@ import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { withLlmFailover, WalletDeniedError } from '../_shared/llm-failover.ts'
 import { validateInventoryObject } from '../_shared/inventory.ts'
 import { assertSafeOutboundUrl } from '../_shared/inventory-guards.ts'
-import { ANTHROPIC_SONNET } from '../_shared/models.ts'
+import { STORY_MAP_EFFORT, STORY_MAP_MODEL, THINKING_HEADROOM_TOKENS } from '../_shared/models.ts'
+import { claudeGenerateText } from '../_shared/claude-messages.ts'
 import { createTrace } from '../_shared/observability.ts'
 import { tagLangfuseTrace } from '../_shared/sentry.ts'
 
@@ -269,12 +268,14 @@ Deno.serve(
             project_id,
             'anthropic',
             async (k) => {
-              const anthropic = createAnthropic({ apiKey: k.key })
-              const { text, usage } = await generateText({
-                model: anthropic(ANTHROPIC_SONNET),
+              const { text, usage } = await claudeGenerateText({
+                apiKey: k.key,
+                model: STORY_MAP_MODEL,
+                effort: STORY_MAP_EFFORT,
                 system: STORY_MAPPER_SYSTEM,
                 prompt: promptWithRetry,
-                maxTokens: 8000,
+                // 8k of inventory JSON plus room for adaptive thinking.
+                maxTokens: 8000 + THINKING_HEADROOM_TOKENS,
               })
               return { text, usage }
             },
@@ -282,7 +283,7 @@ Deno.serve(
             // is taken here rather than in logLlmInvocation.
             {
               feature: 'story-mapper',
-              model: ANTHROPIC_SONNET,
+              model: STORY_MAP_MODEL,
               traceId: trace.id,
               extractUsage: (r) => ({
                 inputTokens: r.usage?.promptTokens ?? 0,
@@ -316,12 +317,12 @@ Deno.serve(
       }
 
       if (!proposerOutput) {
-        llmSpan.end({ model: ANTHROPIC_SONNET, error: lastIssues.slice(0, 500) })
+        llmSpan.end({ model: STORY_MAP_MODEL, error: lastIssues.slice(0, 500) })
         await trace.end()
         throw new Error(`Claude could not produce a valid inventory.yaml after ${attempt} attempts. Last issues: ${lastIssues}`)
       }
 
-      llmSpan.end({ model: ANTHROPIC_SONNET })
+      llmSpan.end({ model: STORY_MAP_MODEL })
       await trace.end()
 
       // === Persist as inventory_proposals (source='live_crawl') ===
@@ -340,7 +341,7 @@ Deno.serve(
           proposed_parsed: proposerOutput.inventory,
           rationale_by_story: proposerOutput.rationale_by_story,
           observation_count: pages.length,
-          llm_model: ANTHROPIC_SONNET,
+          llm_model: STORY_MAP_MODEL,
         })
         .select('id')
         .single()
