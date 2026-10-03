@@ -169,13 +169,21 @@ export function indexPathFilter(input: {
  * narrowing a filter shrinks the index (and what diagnoses see) instead of
  * leaving the old files stored past the plan cap. Files missing from the tree
  * are left alone (a truncated tree does not list every file).
+ *
+ * The index is per project, not per repo. When a project indexes more than
+ * one repo (a frontend with `src/**` and a backend with `api/**`), a path one
+ * repo's filter excludes can be the other repo's indexed file, so nothing is
+ * tombstoned: the two sweeps would otherwise undo each other on every run.
  */
 export function pathsOutsideFilter(input: {
   indexedPaths: ReadonlySet<string>
   /** Indexable blob paths in the tree, before the scope and path filter. */
   indexableTreePaths: readonly string[]
   eligible: (path: string) => boolean
+  /** project_repos rows of this project with indexing on (this repo included). */
+  indexingRepos: number
 }): string[] {
+  if (input.indexingRepos > 1) return []
   const out: string[] = []
   for (const p of input.indexableTreePaths) {
     if (input.indexedPaths.has(p) && !input.eligible(p)) out.push(p)

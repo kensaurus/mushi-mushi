@@ -1207,6 +1207,21 @@ async function tombstonePaths(
   return paths.length;
 }
 
+/**
+ * project_repos rows of the project with indexing on. Throws on a read error:
+ * guessing one repo could tombstone another repo's files.
+ */
+async function countIndexingRepos(db: ReturnType<typeof getDb>, projectId: string): Promise<number> {
+  const { count, error } = await db
+    .from('project_repos')
+    .select('id', { count: 'exact', head: true })
+    .eq('project_id', projectId)
+    .eq('indexing_enabled', true);
+  if (error) throw new Error(`indexing repo count failed: ${error.message}`);
+  if (count == null) throw new Error('indexing repo count failed: no count returned');
+  return count;
+}
+
 /** Ceiling for a targeted (frame-path) run: an import names ≤10 issues. */
 const TARGETED_FILE_CAP = 25;
 /** Statuses whose fix site no longer needs to be in the index first. */
@@ -1432,7 +1447,9 @@ async function sweepIndexRepo(
     // A narrowed scope or path filter shrinks the index too: indexed files it
     // now excludes are tombstoned before any GitHub fetch, so a failed write
     // stops the run without spending the rate limit. (Re-admitting a file
-    // later refreshes its stored chunks; nothing is embedded again.)
+    // later refreshes its stored chunks; nothing is embedded again.) The
+    // index is per project, so a project indexing several repos is left
+    // alone; the repo count is read strictly for that reason.
     tombstonedOutOfFilter = await tombstonePaths(
       db,
       projectId,
@@ -1440,6 +1457,7 @@ async function sweepIndexRepo(
         indexedPaths,
         indexableTreePaths: (tree.tree ?? []).filter((t) => t.type === 'blob' && indexable(t.path)).map((t) => t.path),
         eligible,
+        indexingRepos: await countIndexingRepos(db, projectId),
       }),
     );
     selected = selectSweepFiles({
