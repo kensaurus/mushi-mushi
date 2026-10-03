@@ -22,7 +22,7 @@ This page **reads only**. It builds on each app's [Recipe](/concepts/app-recipe)
 | Section | What it means |
 |---------|---------------|
 | **Cards** | One per app: the worst recipe state, open reports, the latest release, the Mushi SDK against the latest version, and the hole checks. |
-| **Hole checks** | "Not checked yet" means Mushi has not looked. It is never a pass. |
+| **Hole checks** | "Not checked yet" means Mushi has not looked. It is never a pass. The checks that read your repo come from one step in your existing CI job: see [One CI step for both checks](/sdks/cli#one-ci-step-for-both-checks). |
 | **Fix once** | A problem open in two or more apps. Copy the prompt into your editor to fix it in every repo. |
 | **Mushi SDK versions** | Apps behind the latest release of the same package, and apps that never reported. |
 | **Missing setups** | An integration most of your other apps have and this one does not. |
