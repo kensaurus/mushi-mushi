@@ -119,6 +119,29 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: { code?: string; 
     })
     return this
   }
+  /**
+   * `or('a.is.null,b.neq.x')`: flat PostgREST alternatives of `is.null`,
+   * `eq` and `neq`. `neq` never matches a NULL / absent column, as in Postgres
+   * (`NULL <> 'x'` is NULL), so a filter that forgets `is.null` fails here too.
+   */
+  or(filters: string): this {
+    const alternatives = filters.split(',').map((part) => {
+      const m = /^([\w>-]+)\.(is|eq|neq)\.(.*)$/.exec(part.trim())
+      if (!m) throw new Error(`fake-supabase: or(${part}) unsupported`)
+      const [, key, op, raw] = m
+      return (r: Row): boolean => {
+        const v = readPath(r, key)
+        if (op === 'is') {
+          if (raw !== 'null') throw new Error(`fake-supabase: or(${part}) unsupported`)
+          return v === null || v === undefined
+        }
+        if (v === null || v === undefined) return false
+        return op === 'eq' ? String(v) === raw : String(v) !== raw
+      }
+    })
+    this.filters.push((r) => alternatives.some((f) => f(r)))
+    return this
+  }
   gt(key: string, value: unknown): this {
     this.filters.push((r) => String(readPath(r, key)) > String(value))
     return this

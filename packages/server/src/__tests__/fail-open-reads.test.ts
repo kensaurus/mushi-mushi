@@ -198,6 +198,50 @@ describe('composeRecipe never composes from a failed read', () => {
     await expect(compose.composeRecipe(seed() as never, deps as never, P)).resolves.toHaveProperty('response.worst')
   })
 
+  it('an older failing gate still counts when busier gates ran 300+ times since', async () => {
+    // 350 daily hole-check runs after one failing api_contract run: a shared
+    // "newest 300 runs" page held only radar runs, and the gates card read
+    // "no gate has run" while api_contract had an open error.
+    const radar = Array.from({ length: 350 }, (_, i) => {
+      const at = new Date(Date.parse('2026-10-02T00:00:00Z') + i * 60_000).toISOString()
+      return { id: `radar-${String(i).padStart(4, '0')}`, project_id: P, gate: 'portfolio_radar', status: 'warn', started_at: at, completed_at: at }
+    })
+    const db = makeFakeDb({
+      projects: [{ id: P, slug: 'p', organization_id: null }],
+      gate_runs: [
+        { id: 'old-fail', project_id: P, gate: 'api_contract', status: 'fail', started_at: '2026-10-01T00:00:00Z', completed_at: '2026-10-01T00:05:00Z' },
+        // A newer run still in flight is not the latest finished run.
+        { id: 'in-flight', project_id: P, gate: 'api_contract', status: 'running', started_at: '2026-10-03T11:00:00Z', completed_at: null },
+        ...radar,
+      ],
+      gate_findings: [{ id: 'f1', gate_run_id: 'old-fail', severity: 'error', allowlisted: false }],
+    }, { maxRows: 1_000 })
+    const { response } = await compose.composeRecipe(db as never, deps as never, P)
+    expect(response.elements.gates).toMatchObject({ state: 'drift', reason: '1 open finding across the latest gate runs.' })
+  })
+
+  it('reads the newest finished run per gate; a design refresh is not a scan, a run with no phase is', async () => {
+    const db = makeFakeDb({
+      gate_runs: [
+        { id: 'scan-old', project_id: P, gate: 'design_drift', status: 'fail', summary: { phase: 'scan' }, started_at: '2026-09-01T00:00:00Z' },
+        { id: 'no-phase', project_id: P, gate: 'design_drift', status: 'warn', summary: null, started_at: '2026-09-02T00:00:00Z' },
+        { id: 'refresh-new', project_id: P, gate: 'design_drift', status: 'pass', summary: { phase: 'refresh' }, started_at: '2026-10-02T00:00:00Z' },
+        { id: 'queued', project_id: P, gate: 'ci_drift', status: 'queued', started_at: '2026-10-02T00:00:00Z' },
+        { id: 'ci-done', project_id: P, gate: 'ci_drift', status: 'skipped', started_at: '2026-09-30T00:00:00Z' },
+        { id: 'other-project', project_id: 'someone-else', gate: 'env_drift', status: 'fail', started_at: '2026-10-02T00:00:00Z' },
+      ],
+    })
+    const runs = await compose.loadLatestGateRuns(db as never, P, ['design_drift', 'ci_drift', 'env_drift'])
+    expect(runs.map((r) => r.id).sort()).toEqual(['ci-done', 'no-phase'])
+    await expect(compose.loadLatestGateRuns(makeFakeDb({}, failing('gate_runs')) as never, P, ['ci_drift'])).rejects.toThrow(/gate_runs \(ci_drift\)/)
+  })
+
+  it('the recipe reads every live gate except the radar hole checks', () => {
+    expect([...compose.RECIPE_GATES].sort()).toEqual(
+      ['api_contract', 'ci_drift', 'code_health', 'crawl', 'dead_handler', 'deploy_drift', 'design_drift', 'env_drift', 'mock_leak', 'orphan_endpoint', 'radar', 'schema_drift', 'spec_drift', 'status_claim', 'unknown_call'],
+    )
+  })
+
   it.each(['gate_runs', 'project_settings', 'gate_findings', 'app_recipe_snapshots'])('throws when %s cannot be read', async (table) => {
     const db = makeFakeDb({
       projects: [{ id: P, slug: 'p', organization_id: null }],
