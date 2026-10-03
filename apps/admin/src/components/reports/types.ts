@@ -175,18 +175,18 @@ function parseTime(iso: string | null | undefined): number | null {
 
 /**
  * The reporter wrote after anyone on the team last looked (Plan 018
- * decision 10: `last_reporter_reply_at > admin_seen_at`, or never seen).
- * Opening the report in the console stamps `admin_seen_at`, so the dot clears
- * without a reply. An admin reply also counts as seen: rows replied to before
- * `admin_seen_at` existed carry only `last_admin_reply_at`.
+ * decision 10: `last_reporter_reply_at > admin_seen_at`, or never seen) —
+ * the same rule as MCP `triage_next_steps` and the reporter view API.
+ * Opening the report in the console stamps `admin_seen_at`, and so does an
+ * admin reply (the report_comments trigger), so the dot clears either way.
  */
 export function hasUnseenReporterReply(
-  row: Pick<ReportRow, 'last_reporter_reply_at' | 'last_admin_reply_at' | 'admin_seen_at'>,
+  row: Pick<ReportRow, 'last_reporter_reply_at' | 'admin_seen_at'>,
 ): boolean {
   const replied = parseTime(row.last_reporter_reply_at)
   if (replied === null) return false
-  const seen = Math.max(parseTime(row.admin_seen_at) ?? -Infinity, parseTime(row.last_admin_reply_at) ?? -Infinity)
-  return replied > seen
+  const seen = parseTime(row.admin_seen_at)
+  return seen === null || replied > seen
 }
 
 export function formatRelative(iso: string): string {
