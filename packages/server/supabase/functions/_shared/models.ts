@@ -111,6 +111,11 @@ export const PROMPT_TUNE_FALLBACK = OPENAI_PRIMARY
 export const ASSIST_MODEL = ANTHROPIC_SONNET_LATEST
 export const ASSIST_FALLBACK = OPENAI_PRIMARY
 
+/** Store review (Plan 020 §5.3): pull the claims out of a store listing. On
+ *  demand, per release, never per push. */
+export const STORE_REVIEW_MODEL = ANTHROPIC_SONNET_LATEST
+export const STORE_REVIEW_FALLBACK = OPENAI_PRIMARY
+
 /** Codebase Atlas Q&A (`codebase-understand`), still on the AI SDK v4 path. */
 export const CODEBASE_ASSIST_MODEL = ANTHROPIC_SONNET
 
@@ -128,6 +133,7 @@ export const VISION_EFFORT = 'low' as const
 export const FIX_EFFORT = 'medium' as const
 export const JUDGE_EFFORT = 'low' as const
 export const ASSIST_EFFORT = 'low' as const
+export const STORE_REVIEW_EFFORT = 'low' as const
 export const INTELLIGENCE_EFFORT = 'low' as const
 export const TEST_GEN_EFFORT = 'medium' as const
 

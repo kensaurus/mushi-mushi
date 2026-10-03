@@ -31,7 +31,7 @@ function docUrl(route: string): string {
   return route === '/' ? MUSHI_DOCS_BASE : MUSHI_DOCS_BASE + route
 }
 
-/** 204 pages, generated from llms.txt. */
+/** 206 pages, generated from llms.txt. */
 export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
   {
     title: "Mushi Mushi — know why your AI-built app broke, with the fix ready",
@@ -376,6 +376,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     excerpt: "The Overview page is the organization-wide portfolio view — seven-day activity and open tickets for every connected project at a glance.",
   },
   {
+    title: "Portfolio",
+    url: docUrl("/admin/portfolio"),
+    route: "/admin/portfolio",
+    markdown: "admin/portfolio.md",
+    keywords: ["admin", "portfolio"],
+    headings: ["What you see", "From your editor", "Who can see it"],
+    excerpt: "The Portfolio page shows every app in a team at once, with each app's worst recipe state, hole checks and SDK version, plus problems you can fix once across apps.",
+  },
+  {
     title: "Projects",
     url: docUrl("/admin/projects"),
     route: "/admin/projects",
@@ -696,7 +705,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/concepts/app-recipe",
     markdown: "concepts/app-recipe.md",
     keywords: ["concepts", "app-recipe", "app", "recipe", "design", "system"],
-    headings: ["The five states", "mushi.recipe.json", "The design system page", "Directions", "The deviance check", "The deviance score", "In your editor"],
+    headings: ["The five states", "mushi.recipe.json", "The design system page", "Directions", "The deviance check", "The deviance score", "Hole checks", "Store review"],
     excerpt: "The App Recipe records what your app is made of, so a diagnosis can say what changed and a fix can respect your design system.",
   },
   {
@@ -842,6 +851,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     keywords: ["concepts", "runtime-config", "runtime", "config"],
     headings: ["Setup default", "When host init wins", "Console tuning without rebuild", "Widget draft persistence", "Troubleshooting", "Related"],
     excerpt: "How the Mushi SDK fetches widget and capture settings from the console at startup, how they merge with your init options, and when to turn it off.",
+  },
+  {
+    title: "One login and one purchase across your apps",
+    url: docUrl("/concepts/shared-login"),
+    route: "/concepts/shared-login",
+    markdown: "concepts/shared-login.md",
+    keywords: ["concepts", "shared-login", "shared", "login", "one", "purchase", "across", "apps"],
+    headings: ["Signing in once", "What Mushi checks", "Keeping a purchase in every app", "Sending users between your apps", "Comparing apps"],
+    excerpt: "How to let people sign in once and keep what they bought across several of your apps, and what Mushi checks so it keeps working.",
   },
   {
     title: "Where the report button lives",

@@ -57,7 +57,7 @@
     },
     {
       "name": "list_gate_findings",
-      "description": "List recent inventory gate runs and their findings for a project, newest first. Returns { runs: [{ id, gate, status, findings_count, … }], findings: [{ severity, rule_id, message, file_path, node_id, … }] }. Filter by gate (dead_handler | mock_leak | api_contract | crawl | status_claim | spec_drift | orphan_endpoint | unknown_call | schema_drift | code_health | design_drift | ci_drift | deploy_drift | env_drift) or finding severity (info | warn | error). The *_drift gates are the App Recipe checks: design_drift is code that drifts off the design tokens, ci_drift / deploy_drift / env_drift are CI, deploy and env vars that drift from the recipe. Read-only. Use to see which CI gates failed on the last crawl; use diff_inventory to compare two commits, or get_inventory for the full snapshot."
+      "description": "List recent inventory gate runs and their findings for a project, newest first. Returns { runs: [{ id, gate, status, findings_count, … }], findings: [{ severity, rule_id, message, file_path, node_id, … }] }. Filter by gate (dead_handler | mock_leak | api_contract | crawl | status_claim | spec_drift | orphan_endpoint | unknown_call | schema_drift | code_health | design_drift | ci_drift | deploy_drift | env_drift | radar | radar_ci | store_review) or finding severity (info | warn | error). The *_drift gates are the App Recipe checks: design_drift is code that drifts off the design tokens, ci_drift / deploy_drift / env_drift are CI, deploy and env vars that drift from the recipe; radar / radar_ci / store_review are the hole checks (prefer get_radar). Read-only. Use to see which CI gates failed on the last crawl; use diff_inventory to compare two commits, or get_inventory for the full snapshot."
     },
     {
       "name": "get_app_recipe",
@@ -70,6 +70,38 @@
     {
       "name": "get_design_deviance",
       "description": "Return how far the code drifts off the design system: the latest 0–100 deviance score (lower is better; null means not scored yet), its per-rule breakdown, the score trend, a scan still running if any, the top findings (file, line, literal value, rule, and the nearest token to use instead), and the active rules (off_token_color, off_token_font, off_scale_spacing, off_scale_radius, contrast_below_aa, raw_interactive_element). Optional limit: findings to return (1–200, default 25). Returns { projectId, latest, running, trend, findings, rules }. Read-only. Use to find and fix off-token code; use get_design_tokens for the full token list."
+    },
+    {
+      "name": "get_portfolio",
+      "description": "Return every project in one organization as a card: the worst App Recipe state (ok | drift | unknown | not_connected | error; unknown and not_connected never mean healthy), open reports, the latest release, the Mushi SDK version against the latest release of the same package, the hole-check (radar) status with open findings by severity (never_run means not checked yet), and the 30-day LLM spend Mushi itself used. Optional organizationId (UUID); omitted, the only organization of the key owner is used, and a 400 ORG_REQUIRED lists the choices when there are several. Needs an account-level key; a project-bound key gets 403. Returns { organizationId, organizationName, cards, totalProjects, repeatedGroups, holes }. Read-only. Use list_portfolio_findings for the problems open in two or more apps."
+    },
+    {
+      "name": "list_portfolio_findings",
+      "description": "Return what to fix across the apps of one organization: groups of the same finding rule open in two or more projects (rule, gate, highest severity, affected projectIds, a sample message and one paste-ready fix prompt), the Mushi SDK version per project and package (current | behind | unknown), and integrations most sibling projects have but one lacks. Open means the latest completed gate run per project and gate, not allowlisted; info findings are left out. Optional organizationId as for get_portfolio. Needs an account-level key. Returns { organizationId, groups, sdkSkew, holes }. Read-only. Fix a group repo by repo with list_gate_findings in each project."
+    },
+    {
+      "name": "get_recipe_drift",
+      "description": "Return what drifted from the app recipe, with a fix for each: CI workflows (no concurrency or timeout, macOS on every run, long artifact retention, crons more than daily, the default branch red), deploys (a merged fix not live yet, a failed version probe, web and mobile on different versions), env names declared but missing in CI, migrations in the repo but not applied, and off-token design values. For each gate it says when it last ran (never_run means not checked, never healthy). Returns { projectId, gates: { <gate>: { status, checkedAt, commitSha } }, findings: [{ gate, ruleId, severity, message, filePath, line, suggestedFix }] }. Read-only. Mushi never runs DDL or edits workflows: apply schema and CI fixes from your editor."
+    },
+    {
+      "name": "list_connectors",
+      "description": "List the sources connected to an organization: each connector instance with its kind, status (connected | not_connected | blocked | error; blocked means an outside party refuses, for example an App Store agreement not accepted), the scopes it was granted, enabled capabilities and the projects it is bound to, plus the kinds that can be added and those still planned. Never returns credentials. Optional organizationId; account-level key needed. Returns { organizationId, available, planned, instances, legacy }. Read-only."
+    },
+    {
+      "name": "propose_recipe_change",
+      "description": "Propose edits to files the app recipe allows (design tokens, budgets in mushi.recipe.json, .env.example declarations, store listing text under store.listingDir) as ONE draft pull request. Dry run by default: returns the diff of each file and any path that is not writable (workflows, env files, lockfiles, generated exports and migrations never are). confirm: true opens the draft PR; it stays a draft so the repo CI does not run until the owner marks it ready, and nothing is merged or published. Confirm with the user before confirm: true. Returns { dryRun, files, denied } or { jobId, status, prUrl }. Write."
+    },
+    {
+      "name": "propose_portfolio_change",
+      "description": "Propose the same kind of recipe edit in up to 10 repos of one organization, one draft PR per repo with a shared batch id. Dry run by default (the diff and denied paths of each repo); confirm: true opens the drafts. One repo failing never rolls back the others; each result says what happened. Needs an account-level key. Confirm with the user before confirm: true. Returns { dryRun, plans } or { batchId, opened, results }. Write."
+    },
+    {
+      "name": "request_connector_action",
+      "description": "Ask for one connector action, for example set_rollout or promote_track on a Google Play connector. This only creates a request: nothing runs until a team owner or admin approves it in the console and then runs it there. An API key or this tool can never approve or run it. The approval binds the exact payload and expires after an hour. Confirm with the user first. Returns { id, status: \"pending_approval\", payloadSha256 }. Write."
+    },
+    {
+      "name": "get_radar",
+      "description": "Return the hole checks that catch a problem before a user hits it: store names that differ between the App Store and Google Play, a store listing missing a language, a domain or HTTPS certificate about to expire, missing security headers, a broken privacy link, storage rows deleted with SQL (files left behind and billed), and an Android target SDK or iOS build that the stores will refuse. scope \"project\" (default; projectId optional) returns every check with state ok | finding | unknown | error, a plain-English reason, and each finding with its fix; unknown means not checked and never means healthy. scope \"organization\" (organizationId optional, account-level key) returns the open findings of every app. Read-only. To run the checks again, use the console Recipe page."
     },
     {
       "name": "get_graph_neighborhood",

@@ -180,7 +180,10 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: { code?: string; 
         for (const item of items) {
           const existing = keys ? rows.find((r) => keys.every((k) => r[k] === item[k])) : undefined
           if (existing) Object.assign(existing, item)
-          else rows.push({ ...item })
+          else {
+            if (this.db.options.autoId && item.id === undefined) item.id = crypto.randomUUID()
+            rows.push({ ...item })
+          }
         }
         return this.returning ? this.finish(items) : { data: null, error: null }
       }

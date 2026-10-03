@@ -26,6 +26,10 @@ ship only as reviewed draft PRs. It never leads a public surface.
 
 **Primary buyer.** The solo / indie **vibe coder** who builds fast with AI (Cursor, Claude Code, Lovable, Bolt), ships to real users, then loses afternoons when something breaks because they don't fully grasp the generated code. Small teams and agencies are secondary; the enterprise SRE running Sentry + Datadog + Firebase is explicitly *not* who we lead with.
 
+**Portfolio operator** (ADR 0017) is the same vibe coder with several apps.
+Portfolio and radar features never lead a public surface; the claim is
+"nobody bundles this for a solo operator", never "nobody does this".
+
 **The three things we will not do** (drift tripwires):
 
 1. **We will not require a monitoring stack to get value.** Standalone-first, always — every inbound integration is an optional on-ramp, never a prerequisite.
@@ -100,6 +104,8 @@ Cron, billing, retention, and platform hygiene workers live alongside the 19 pip
 | `recompute-tester-reputation` | Tester marketplace reputation recompute |
 | `reward-payout-aggregator` | Aggregates reward payout batches |
 | `recipe-collector` | Daily (03:35 UTC) refresh of each project's `mushi.recipe.json` + DTCG tokens into `app_recipe_snapshots`, then the `design_drift` deviance scan (Plan 019 Phase 1b) |
+| `radar-scan` | Daily (04:05 UTC) hole checks per project (Plan 020): public probes (store names, listing locales, domain and certificate expiry, security headers, privacy link) and store-policy rules read from the repo → `gate_runs` gate `portfolio_radar`. Host CI pushes `portfolio_radar_ci` via `POST /v1/ingest/radar` (`mushi radar scan --push`) |
+| `operator-digest` | Hourly at :20; sends each organization's opt-in daily digest (new reports, holes, releases, AI spend jump) once a day at its `send_hour_utc` (Plan 020 §9; `operator_digest_settings`, off by default) |
 | `healthz` | Unauthenticated liveness + cheap DB probe (`{status, db, version}`); `verify_jwt = false` |
 | `linear-oauth-callback` | Completes Linear OAuth; vaults tokens; registers inbound webhook |
 | `webhooks-linear` | Linear issue push webhooks (HMAC); resolves linked reports on completed/cancelled |
@@ -252,7 +258,7 @@ Live App URL
 | Group | Commands |
 | --- | --- |
 | **Setup & account** | `mushi init`, `mushi setup`, `mushi connect`, `mushi login`, `mushi upgrade`, `mushi reset`, `mushi whoami`, `mushi doctor`, `mushi ping`, `mushi completion`, `mushi nudge` |
-| **Project & deploy** | `mushi project`, `mushi config`, `mushi deploy check`, `mushi selfhost up/doctor`, `mushi index`, `mushi sourcemaps upload`, `mushi audit` |
+| **Project & deploy** | `mushi project`, `mushi config`, `mushi deploy check`, `mushi selfhost up/doctor`, `mushi index`, `mushi sourcemaps upload`, `mushi audit`, `mushi radar scan/show`, `mushi recipe init/check/show`, `mushi store pull` |
 | **Reports & lessons** | `mushi reports list/show/search/triage/…`, `mushi lessons list/show`, `mushi sync-lessons`, `mushi feedback board` |
 | **Fixes** | `mushi fix`, `mushi fixes tail/refresh-ci/merge`, `mushi console watch <reportId>` |
 | **QA / TDD** | `mushi qa stories/runs/run`, `mushi tdd gen/pending/approve/improve/run`, `mushi stories map` |

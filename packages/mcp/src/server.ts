@@ -248,7 +248,7 @@ const REPORT_STATUSES = [
 const REPORT_CATEGORIES = ['bug', 'slow', 'visual', 'confusing', 'other'] as const;
 const REPORT_SEVERITIES = ['critical', 'high', 'medium', 'low'] as const;
 
-/** gate_runs.gate CHECK constraint (migrations 20260612061520 and 20261002130100_recipe_gate_types). */
+/** gate_runs.gate CHECK constraint (migrations 20260612061520, 20261002130100_recipe_gate_types, 20261002180000_radar_gates_and_digest). */
 const GATE_IDS = [
   'dead_handler',
   'mock_leak',
@@ -264,6 +264,9 @@ const GATE_IDS = [
   'ci_drift',
   'deploy_drift',
   'env_drift',
+  'portfolio_radar',
+  'portfolio_radar_ci',
+  'store_review',
 ] as const;
 /** gate_findings.severity CHECK constraint (migration 20260504000000). */
 const GATE_FINDING_SEVERITIES = ['info', 'warn', 'error'] as const;
@@ -1364,6 +1367,193 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       return jsonText(
         await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/design/deviance${suffix}`),
       );
+    },
+  );
+
+  // --- Portfolio (Plan 019 P1) ----------------------------------------------
+  // Organization-wide reads. The api refuses project-bound keys (403) and any
+  // organization the key owner is not a member of, so these never widen access.
+
+  const ORG_ID_INPUT = z.object({
+    organizationId: z
+      .string()
+      .uuid()
+      .optional()
+      .describe("Organization UUID — defaults to the key owner's only organization when omitted"),
+  });
+
+  server.registerTool(
+    'get_portfolio',
+    {
+      title: titleOf('get_portfolio'),
+      description: descOf('get_portfolio'),
+      annotations: annotationsFor('get_portfolio'),
+      inputSchema: ORG_ID_INPUT,
+    },
+    async (args) => {
+      const org = encodeURIComponent(args.organizationId ?? 'current');
+      return jsonText(await apiCall(`/v1/admin/orgs/${org}/portfolio`));
+    },
+  );
+
+  server.registerTool(
+    'list_portfolio_findings',
+    {
+      title: titleOf('list_portfolio_findings'),
+      description: descOf('list_portfolio_findings'),
+      annotations: annotationsFor('list_portfolio_findings'),
+      inputSchema: ORG_ID_INPUT,
+    },
+    async (args) => {
+      const org = encodeURIComponent(args.organizationId ?? 'current');
+      return jsonText(await apiCall(`/v1/admin/orgs/${org}/portfolio/findings`));
+    },
+  );
+
+  server.registerTool(
+    'get_recipe_drift',
+    {
+      title: titleOf('get_recipe_drift'),
+      description: descOf('get_recipe_drift'),
+      annotations: annotationsFor('get_recipe_drift'),
+      inputSchema: z.object({
+        projectId: z.string().optional().describe('Project UUID — defaults to the server-configured project when omitted'),
+      }),
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      return jsonText(await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/recipe/drift`));
+    },
+  );
+
+  server.registerTool(
+    'list_connectors',
+    {
+      title: titleOf('list_connectors'),
+      description: descOf('list_connectors'),
+      annotations: annotationsFor('list_connectors'),
+      inputSchema: ORG_ID_INPUT,
+    },
+    async (args) => {
+      const org = encodeURIComponent(args.organizationId ?? 'current');
+      return jsonText(await apiCall(`/v1/admin/orgs/${org}/connectors`));
+    },
+  );
+
+  const EDIT_INPUT = z.object({
+    path: z.string().min(1).max(400).describe('Repo-relative path the recipe allows'),
+    content: z.string().max(512 * 1024).describe('The full new file content'),
+    reason: z.string().max(200).optional(),
+  });
+  const ELEMENT_INPUT = z.enum(['design', 'gates', 'env', 'routes', 'store', 'release']).describe('Which part of the recipe the edit belongs to');
+
+  server.registerTool(
+    'propose_recipe_change',
+    {
+      title: titleOf('propose_recipe_change'),
+      description: descOf('propose_recipe_change'),
+      annotations: annotationsFor('propose_recipe_change'),
+      inputSchema: z.object({
+        projectId: z.string().optional().describe('Project UUID — defaults to the server-configured project when omitted'),
+        element: ELEMENT_INPUT,
+        edits: z.array(EDIT_INPUT).min(1).max(30),
+        title: z.string().min(1).max(120).optional(),
+        confirm: z.boolean().optional().describe('true opens the draft PR; omitted or false is a dry run'),
+      }),
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      return jsonText(await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/recipe/changes`, {
+        method: 'POST',
+        body: JSON.stringify({ element: args.element, edits: args.edits, title: args.title, dryRun: args.confirm !== true }),
+      }));
+    },
+  );
+
+  server.registerTool(
+    'propose_portfolio_change',
+    {
+      title: titleOf('propose_portfolio_change'),
+      description: descOf('propose_portfolio_change'),
+      annotations: annotationsFor('propose_portfolio_change'),
+      inputSchema: z.object({
+        organizationId: z.string().uuid().optional().describe("Organization UUID — defaults to the key owner's only organization"),
+        element: ELEMENT_INPUT,
+        changes: z.array(z.object({ projectId: z.string().uuid(), edits: z.array(EDIT_INPUT).min(1).max(30) })).min(1).max(10),
+        title: z.string().min(1).max(120).optional(),
+        confirm: z.boolean().optional().describe('true opens one draft PR per repo; omitted or false is a dry run'),
+      }),
+    },
+    async (args) => {
+      const org = encodeURIComponent(args.organizationId ?? 'current');
+      return jsonText(await apiCall(`/v1/admin/orgs/${org}/portfolio/changes`, {
+        method: 'POST',
+        body: JSON.stringify({ element: args.element, changes: args.changes, title: args.title, dryRun: args.confirm !== true }),
+      }));
+    },
+  );
+
+  server.registerTool(
+    'request_connector_action',
+    {
+      title: titleOf('request_connector_action'),
+      description: descOf('request_connector_action'),
+      annotations: annotationsFor('request_connector_action'),
+      inputSchema: z.object({
+        organizationId: z.string().uuid().optional().describe("Organization UUID — defaults to the key owner's only organization"),
+        connectorId: z.string().uuid().describe('Connector instance id (list_connectors)'),
+        action: z.string().min(1).max(60).describe('For example set_rollout or promote_track'),
+        payload: z.record(z.string(), z.unknown()).describe('The exact action input; the approval binds its hash'),
+        projectId: z.string().uuid().optional(),
+        reason: z.string().max(500).optional().describe('Why, shown to the approver'),
+      }),
+    },
+    async (args) => {
+      const org = encodeURIComponent(args.organizationId ?? 'current');
+      const body = { connectorId: args.connectorId, action: args.action, payload: args.payload, projectId: args.projectId, reason: args.reason };
+      return jsonText(await apiCall(`/v1/admin/orgs/${org}/connector-actions`, { method: 'POST', body: JSON.stringify(body) }));
+    },
+  );
+
+  server.registerTool(
+    'get_store_status',
+    {
+      title: titleOf('get_store_status'),
+      description: descOf('get_store_status'),
+      annotations: annotationsFor('get_store_status'),
+      inputSchema: z.object({
+        projectId: z.string().optional().describe('Project UUID — defaults to the server-configured project when omitted'),
+      }),
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      return jsonText(await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/store`));
+    },
+  );
+
+  server.registerTool(
+    'get_radar',
+    {
+      title: titleOf('get_radar'),
+      description: descOf('get_radar'),
+      annotations: annotationsFor('get_radar'),
+      inputSchema: z.object({
+        scope: z.enum(['project', 'organization']).optional().describe('project (default) or organization'),
+        projectId: z.string().optional().describe('Project UUID — defaults to the server-configured project (scope project)'),
+        organizationId: z
+          .string()
+          .uuid()
+          .optional()
+          .describe("Organization UUID — defaults to the key owner's only organization (scope organization)"),
+      }),
+    },
+    async (args) => {
+      if (args.scope === 'organization') {
+        const org = encodeURIComponent(args.organizationId ?? 'current');
+        return jsonText(await apiCall(`/v1/admin/orgs/${org}/radar`));
+      }
+      const pid = await resolveProjectId(args.projectId);
+      return jsonText(await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/radar`));
     },
   );
 
