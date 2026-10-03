@@ -89,8 +89,18 @@ The artifact gallery is visible in the expanded fix detail when artifacts are pr
 
 A cloud agent (Cursor or the GitHub Copilot agent) that cannot find the cause
 is told to finish without a pull request. If it opens one anyway, Mushi reads
-the PR's changed files before trusting it. A PR that only adds notes (a
-`NEEDS_INVESTIGATION.md`, other markdown, or TODO comments) is not a fix:
+the PR's changed files before trusting it. A PR whose changes are only notes
+is not a fix. Notes are a `NEEDS_INVESTIGATION` file, a new markdown file, or
+TODO comments. Editing an existing doc page counts as a real change, and so
+does any `.txt` file such as `requirements.txt`.
+
+The GitHub Copilot agent opens its draft PR before it pushes anything. So
+while an agent is still working, a PR with no files or only notes is attached
+to the fix but not judged yet. The report does not move and nobody is
+notified. The PR is judged on the files the agent left once the agent
+finishes. An empty PR from a finished agent also needs investigation.
+
+When the PR is not a fix:
 
 - the fix row is marked **needs investigation** (`failure_category:
   validation_rejected`) and keeps the PR link so you can read the notes and
