@@ -222,6 +222,18 @@ export function buildPrJobTooltip(input: {
     }
   }
 
+  if (status === 'awaiting_lockfile') {
+    return {
+      sections: [
+        {
+          kind: 'shows',
+          label: 'Refreshing lockfile',
+          body: 'The bump is pushed to a mushi/sdk-upgrade-* branch. The Mushi lockfile workflow in your repo regenerates the lockfile; the PR opens after it pushes, or after 30 minutes with a note.',
+        },
+      ],
+    }
+  }
+
   if (status === 'failed') {
     return {
       sections: [
@@ -344,6 +356,7 @@ export function prJobChipLabel(status: SdkUpgradeStatus): string {
   if (status === 'completed') return 'PR ready'
   if (status === 'completed_no_pr') return 'No PR needed'
   if (status === 'running') return 'Opening PR…'
+  if (status === 'awaiting_lockfile') return 'Refreshing lockfile…'
   if (status === 'queueing' || status === 'queued') return 'Queuing…'
   if (status === 'failed') return 'PR failed'
   return status
