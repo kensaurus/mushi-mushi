@@ -339,6 +339,33 @@ describe('tool → REST contract', () => {
     expect(JSON.parse(content[0].text)).toEqual({ fixId: 'fix_123', status: 'queued' })
   })
 
+  it('dispatch_fix sends the chosen repo as targetRepoId (camelCase or the target_repo_id alias)', async () => {
+    const repoId = '33333333-3333-4333-8333-333333333333'
+    for (const repoArg of [{ targetRepoId: repoId }, { target_repo_id: repoId }]) {
+      fetchStub.calls.length = 0
+      fetchStub.enqueue({ ok: true, data: { dispatchId: 'fix_124', status: 'queued' } })
+      const res = await client.callTool({
+        name: 'dispatch_fix',
+        arguments: { reportId: '11111111-1111-4111-8111-111111111111', ...repoArg },
+      })
+      expect(res.isError).toBeFalsy()
+      expect(fetchStub.calls[0].body).toEqual({
+        reportId: '11111111-1111-4111-8111-111111111111',
+        targetRepoId: repoId,
+        projectId: PROJECT_ID,
+      })
+    }
+  })
+
+  it('dispatch_fix rejects a targetRepoId that is not a UUID before calling the API', async () => {
+    const res = await client.callTool({
+      name: 'dispatch_fix',
+      arguments: { reportId: '11111111-1111-4111-8111-111111111111', targetRepoId: 'acme/backend' },
+    })
+    expect(res.isError).toBe(true)
+    expect(fetchStub.calls).toHaveLength(0)
+  })
+
   it('submit_fix_result chains POST /fixes + PATCH /fixes/:id', async () => {
     fetchStub.enqueue({ ok: true, data: { fixId: 'fix_99' } })
     fetchStub.enqueue({ ok: true, data: { updated: true } })

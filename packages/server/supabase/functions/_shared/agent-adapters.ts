@@ -27,7 +27,7 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { log } from './logger.ts'
 import { resolveLlmKey } from './byok.ts'
-import { fetchPullRequestFiles, parseGithubRepoUrl, resolveProjectGithubToken } from './github.ts'
+import { fetchPullRequestFiles, parseGithubRepoUrl, prNumberFromUrl, resolveProjectGithubToken } from './github.ts'
 import { classifyPrSubstance, parsePullRequestUrl, type PrChangedFile } from './pr-substance.ts'
 import { generateCursorCloudBranchName, validateFixBranchName } from './github-pr.ts'
 import { notifyTeamFixEvent } from './team-notify.ts'
@@ -358,8 +358,14 @@ const cursorAdapter: CloudAgentAdapter = {
 
     const agentId = await deterministicCursorAgentId(input.dispatchId)
     try {
+      // Cursor v1 refuses envVars together with a client-chosen agentId
+      // (400 validation_error, 2026-10-03). The deterministic agentId is what
+      // keeps a retried dispatch from starting a second agent, so the ids the
+      // agent needs travel in the prompt instead; none of them is a secret.
       const created = await createCursorAgentV1(client, {
-        prompt: input.prompt,
+        prompt: `${input.prompt}
+
+Mushi ids for this fix: project ${input.projectId}, report ${input.reportId}, fix attempt ${input.attemptId}.`,
         repoUrl: input.repoUrl,
         startingRef: input.baseRef,
         agentId,
@@ -367,11 +373,6 @@ const cursorAdapter: CloudAgentAdapter = {
         model: input.model,
         autoCreatePR: true,
         skipReviewerRequest: true,
-        envVars: {
-          MUSHI_PROJECT_ID: input.projectId,
-          MUSHI_REPORT_ID: input.reportId,
-          MUSHI_FIX_ATTEMPT_ID: input.attemptId,
-        },
       })
       return {
         externalAgentId: created.agent.id,
@@ -697,6 +698,7 @@ export async function applyCloudAgentOutcome(
     const claim = await claimAttemptForPr(db, target.attemptId, outcome.prUrl, {
       status: 'completed',
       pr_url: outcome.prUrl,
+      pr_number: prNumberFromUrl(outcome.prUrl),
       pr_state: 'open',
       ...(outcome.branch ? { branch: outcome.branch, branch_name: outcome.branch } : {}),
       ...(outcome.summary ? { summary: outcome.summary.slice(0, 2000) } : {}),
@@ -853,6 +855,7 @@ async function applyNeedsInvestigationPr(
   const claim = await claimAttemptForPr(db, target.attemptId, outcome.prUrl, {
     status: 'failed',
     pr_url: outcome.prUrl,
+    pr_number: prNumberFromUrl(outcome.prUrl),
     pr_state: 'open',
     ...(outcome.branch ? { branch: outcome.branch, branch_name: outcome.branch } : {}),
     ...(outcome.summary ? { summary: outcome.summary.slice(0, 2000) } : {}),
@@ -964,6 +967,7 @@ async function attachPendingPr(
     .from('fix_attempts')
     .update({
       pr_url: outcome.prUrl,
+      pr_number: prNumberFromUrl(outcome.prUrl),
       pr_state: 'open',
       ...(outcome.branch ? { branch: outcome.branch, branch_name: outcome.branch } : {}),
     })

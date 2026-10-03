@@ -37,6 +37,7 @@ import { log as rootLog } from '../_shared/logger.ts'
 import {
   fetchLatestCheckRun,
   fetchPullRequest,
+  installationIdForAttempt,
   parseGithubRepoUrl,
   resolveProjectGithubToken,
   type CheckRunSnapshot,
@@ -84,12 +85,20 @@ async function syncPrLifecycle(
   token: string,
   ref: GithubRepoRef,
   attempt: FixAttemptRow,
-): Promise<PrLifecycle | null> {
+): Promise<{ state: PrLifecycle; headSha: string | null } | null> {
   const prNumber = attempt.pr_number ?? Number(attempt.pr_url?.match(/\/pull\/(\d+)/)?.[1] ?? NaN)
   if (!Number.isFinite(prNumber)) return null
   const pr = await fetchPullRequest(token, ref, prNumber)
   if (!pr) return null
   const state = prLifecycleFrom(pr)
+  // Cloud agents (Cursor, GitHub) report only a PR URL. Without pr_number the
+  // console cannot merge, and without a commit the CI read never ran.
+  if (attempt.pr_number == null || (!attempt.commit_sha && pr.headSha)) {
+    await db.from('fix_attempts').update({
+      pr_number: attempt.pr_number ?? prNumber,
+      ...(!attempt.commit_sha && pr.headSha ? { commit_sha: pr.headSha } : {}),
+    }).eq('id', attempt.id)
+  }
   if (state === 'merged') {
     if (!attempt.merged_at) {
       await finalizeFixMerge(db, attempt, {
@@ -104,7 +113,7 @@ async function syncPrLifecycle(
   } else if (attempt.pr_state !== state) {
     await db.from('fix_attempts').update({ pr_state: state }).eq('id', attempt.id)
   }
-  return state
+  return { state, headSha: pr.headSha ?? null }
 }
 
 async function syncOne(
@@ -116,24 +125,18 @@ async function syncOne(
   const ref = parseGithubRepoUrl(attempt.pr_url.split('/pull/')[0])
   if (!ref) return { ok: false, reason: 'unparseable_pr_url' }
 
-  let installationId: number | null = null
-  if (attempt.repo_id) {
-    const { data: repo } = await db
-      .from('project_repos')
-      .select('github_app_installation_id')
-      .eq('id', attempt.repo_id)
-      .maybeSingle()
-    if (repo?.github_app_installation_id) installationId = Number(repo.github_app_installation_id)
-  }
-
+  const installationId = await installationIdForAttempt(db, attempt)
   const token = await resolveProjectGithubToken(db, attempt.project_id, installationId)
   if (!token) return { ok: false, reason: 'no_github_token' }
 
   // Separate try: a failed PR read (403 / 5xx) must not also skip the
   // check-run backfill below, which predates the lifecycle sync.
   let prState: PrLifecycle | null = null
+  let headSha: string | null = null
   try {
-    prState = await syncPrLifecycle(db, token, ref, attempt)
+    const pr = await syncPrLifecycle(db, token, ref, attempt)
+    prState = pr?.state ?? null
+    headSha = pr?.headSha ?? null
   } catch (err) {
     log.warn('pull request fetch failed', {
       attemptId: attempt.id,
@@ -142,8 +145,11 @@ async function syncOne(
   }
 
   try {
-    if (!attempt.commit_sha) return { ok: prState != null, reason: 'no_commit_sha', prState }
-    const snapshot = await fetchLatestCheckRun(token, ref, attempt.commit_sha)
+    // The PR head, not the first fix commit: a branch update or a pushed
+    // follow-up (lockfile refresh) reruns CI on a new head.
+    const sha = headSha ?? attempt.commit_sha
+    if (!sha) return { ok: prState != null, reason: 'no_commit_sha', prState }
+    const snapshot = await fetchLatestCheckRun(token, ref, sha)
     if (!snapshot) return { ok: prState != null, reason: 'check_runs_404', prState }
     await db.from('fix_attempts').update({
       check_run_status: snapshot.status,

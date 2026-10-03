@@ -82,6 +82,41 @@ export async function mintInstallationToken(installationId: number): Promise<str
  * Returns null when nothing resolves — callers should surface a "connect
  * GitHub" error rather than proceed with an unauthenticated request.
  */
+/**
+ * The GitHub App installation that owns a fix attempt's repository. Attempts
+ * rarely carry repo_id, so without the PR-URL match every console merge fell
+ * back to the project's stored token, which cannot run the GraphQL
+ * markPullRequestAsReady mutation: a draft PR (glot.it #141) answered 409.
+ */
+export async function installationIdForAttempt(
+  db: ReturnType<typeof getServiceClient>,
+  attempt: { project_id: string; repo_id?: string | null; pr_url?: string | null },
+): Promise<number | null> {
+  const toId = (v: unknown) => (Number(v) > 0 ? Number(v) : null)
+  if (attempt.repo_id) {
+    const { data } = await db
+      .from('project_repos')
+      .select('github_app_installation_id')
+      .eq('id', attempt.repo_id)
+      .maybeSingle()
+    return toId(data?.github_app_installation_id)
+  }
+  const prRepo = attempt.pr_url ? parseGithubRepoUrl(attempt.pr_url.split('/pull/')[0]) : null
+  const { data: repos } = await db
+    .from('project_repos')
+    .select('repo_url, is_primary, github_app_installation_id')
+    .eq('project_id', attempt.project_id)
+  const rows = (repos ?? []) as Array<{ repo_url: string | null; is_primary: boolean | null; github_app_installation_id: unknown }>
+  const match = prRepo
+    ? rows.find((r) => {
+        const ref = parseGithubRepoUrl(r.repo_url ?? '')
+        return ref != null && ref.owner.toLowerCase() === prRepo.owner.toLowerCase() &&
+          ref.repo.toLowerCase() === prRepo.repo.toLowerCase()
+      })
+    : rows.find((r) => r.is_primary)
+  return toId(match?.github_app_installation_id)
+}
+
 export async function resolveProjectGithubToken(
   db: ReturnType<typeof getServiceClient>,
   projectId: string,
@@ -173,6 +208,8 @@ export interface PullRequestSnapshot {
   closedAt?: string | null
   /** ISO time GitHub merged the PR; null unless merged. */
   mergedAt?: string | null
+  /** Current head commit; CI runs against this, not the first fix commit. */
+  headSha?: string | null
 }
 
 export interface PullRequestDetails extends PullRequestSnapshot {
@@ -193,6 +230,12 @@ function githubAuthHeaders(token: string): Record<string, string> {
 }
 
 /** Fetch minimal PR metadata — used before merge to detect draft state. */
+/** Cloud agents hand back only a PR URL; the console merge needs the number. */
+export function prNumberFromUrl(url: string): number | null {
+  const n = Number(url.match(/\/pull\/(\d+)/)?.[1])
+  return Number.isFinite(n) && n > 0 ? n : null
+}
+
 export async function fetchPullRequest(
   token: string,
   ref: GithubRepoRef,
@@ -212,6 +255,7 @@ export async function fetchPullRequest(
     node_id?: string
     closed_at?: string | null
     merged_at?: string | null
+    head?: { sha?: string }
   }
   return {
     number: body.number ?? pullNumber,
@@ -221,6 +265,7 @@ export async function fetchPullRequest(
     nodeId: body.node_id ?? null,
     closedAt: body.closed_at ?? null,
     mergedAt: body.merged_at ?? null,
+    headSha: body.head?.sha ?? null,
   }
 }
 
@@ -403,10 +448,31 @@ export async function fetchLatestCheckRun(
   )
   if (res.status === 404) return null
   if (!res.ok) throw new Error(`check-runs fetch ${res.status}`)
-  const body = await res.json() as {
-    check_runs?: Array<{ status: string | null; conclusion: string | null }>
-  }
-  const runs = body.check_runs ?? []
+  const body = await res.json() as { check_runs?: CheckRunLike[] }
+  return collapseCheckRuns(body.check_runs ?? [])
+}
+
+export interface CheckRunLike {
+  name?: string | null
+  status: string | null
+  conclusion: string | null
+}
+
+/**
+ * Check runs that review a PR instead of testing it. Copilot code review
+ * posts a `copilot-pull-request-reviewer` run that concludes `failure`
+ * whenever it leaves comments or runs out of quota; counting it made
+ * help-her-take-photo#65 read "CI failed" with its only CI job green, and
+ * the console hid the merge button.
+ */
+const ADVISORY_CHECK_RUN_NAMES = new Set(['copilot-pull-request-reviewer'])
+
+export function isAdvisoryCheckRun(run: { name?: string | null }): boolean {
+  return ADVISORY_CHECK_RUN_NAMES.has((run.name ?? '').toLowerCase())
+}
+
+export function collapseCheckRuns(all: CheckRunLike[]): CheckRunSnapshot {
+  const runs = all.filter((r) => !isAdvisoryCheckRun(r))
   if (runs.length === 0) return { status: null, conclusion: null }
 
   const pending = runs.some((r) => r.status === 'queued' || r.status === 'in_progress')

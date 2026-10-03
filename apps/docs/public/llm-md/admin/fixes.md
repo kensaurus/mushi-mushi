@@ -124,6 +124,13 @@ You can dispatch a fix from four places:
 All three paths produce the same `fix_dispatch_jobs` row and emit the same
 `fix.dispatched` webhook to subscribed plugins.
 
+When a project has more than one linked repo, pick the repo the PR opens
+against: the **Repo** select beside "Dispatch fix" (it starts on the primary
+repo), `targetRepoId` on `dispatch_fix` and `POST /v1/admin/fixes/dispatch`, or
+`mushi fix  --repo <repoId|owner/name>`. Without it, the fix goes to
+the primary repo; another project's repo id is refused with
+`400 TARGET_REPO_NOT_IN_PROJECT`.
+
 ---
 
 ## Webhooks

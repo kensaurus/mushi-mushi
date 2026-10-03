@@ -139,4 +139,18 @@ describe('mcp http edge function — dispatch_fix agent input', () => {
     expect([...(discovery.tools.dispatch_fix?.inputSchema.properties.agent?.enum ?? [])].sort()).toEqual(allowed)
     expect(SOURCE).toMatch(/\.\.\.\(typeof args\.agent === 'string' && args\.agent \? \{ agent: args\.agent \} : \{\}\)/)
   })
+
+  it('advertises an optional UUID targetRepoId and forwards it as the REST body key targetRepoId', () => {
+    const discovery = JSON.parse(
+      readFileSync(resolve(__dirname, '../../supabase/functions/_shared/mcp-discovery-tools.json'), 'utf8'),
+    ) as {
+      tools: Record<string, { inputSchema: { properties: Record<string, { type?: string; format?: string }>; required?: string[] } }>
+    }
+    const schema = discovery.tools.dispatch_fix?.inputSchema
+    expect(schema?.properties.targetRepoId).toMatchObject({ type: 'string', format: 'uuid' })
+    expect(schema?.required ?? []).not.toContain('targetRepoId')
+    // Not `target_repo_id`: the route reads body.targetRepoId, and a
+    // misspelt key is dropped silently (the agent/agentOverride bug).
+    expect(SOURCE).toMatch(/\{ targetRepoId: args\.targetRepoId \}/)
+  })
 })

@@ -23,6 +23,7 @@ import { DetailSkeleton } from '../components/skeletons/DetailSkeleton'
 import { EditorialErrorState } from '../components/EditorialErrorState'
 import { statusLabel, severityLabel, categoryLabel, categoryBadge } from '../lib/tokens'
 import { useDispatchFix } from '../lib/dispatchFix'
+import { useDispatchTargetRepo } from '../lib/useDispatchTargetRepo'
 import { usePublishPageContext } from '../lib/pageContext'
 import { FixProgressStream } from '../components/FixProgressStream'
 import { useReportComments } from '../lib/reportComments'
@@ -402,7 +403,15 @@ function RecommendedSkillsSection({ report }: { report: ReportDetail }) {
 function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: ReportDetailViewProps) {
   const toast = useToast()
   const { isAdvanced } = useAdminMode()
-  const { state: dispatchState, dispatch } = useDispatchFix(report.id, report.project_id)
+  const { state: dispatchState, dispatch: dispatchFix } = useDispatchFix(report.id, report.project_id)
+  // Every dispatch from this page (the triage bar and the recommendation's
+  // retry) goes to the repo chosen in the triage bar's Repo select.
+  const repoChoice = useDispatchTargetRepo(report.project_id)
+  const { dispatchTargetRepoId } = repoChoice
+  const dispatch = useCallback(
+    () => dispatchFix(dispatchTargetRepoId ? { targetRepoId: dispatchTargetRepoId } : undefined),
+    [dispatchFix, dispatchTargetRepoId],
+  )
   const { comments } = useReportComments({ reportId: report.id, projectId: report.project_id })
   const commentCount = comments.length
   const platform = usePlatformIntegrations()
@@ -573,6 +582,7 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
         onDispatch={dispatch}
         isDispatchBusy={isDispatchBusy}
         preflight={preflight}
+        repoChoice={repoChoice}
       />
 
       {report.tester_submission && (

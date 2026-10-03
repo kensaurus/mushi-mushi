@@ -182,6 +182,21 @@ Deno.test('a sibling job never fans out again', () => {
   assertEquals(isSiblingDispatch({ coordination_id: null, dispatch_metadata: { trigger: 'manual' } }), false)
 })
 
+Deno.test('a repo a person chose means that repo only: the job never fans out', () => {
+  assertEquals(
+    isSiblingDispatch({ coordination_id: null, dispatch_metadata: { trigger: 'manual', target_repo_id: 'r2' } }),
+    true,
+  )
+  assertEquals(
+    isSiblingDispatch({ coordination_id: null, dispatch_metadata: { trigger: 'automatic', target_repo_id: 'r2' } }),
+    true,
+  )
+  assertEquals(
+    isSiblingDispatch({ coordination_id: 'c1', dispatch_metadata: { trigger: 'manual', target_repo_id: 'r2' } }),
+    true,
+  )
+})
+
 Deno.test('spend limits: positive numbers (whole for the daily cap) or null', () => {
   assertEquals(validateSpendLimit('autofix_max_spend_usd', 2), { ok: true, value: 2 })
   assertEquals(validateSpendLimit('autofix_max_spend_usd', 2.345), { ok: true, value: 2.35 })

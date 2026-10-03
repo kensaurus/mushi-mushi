@@ -213,7 +213,7 @@ export function useDispatchFix(reportId: string, projectId: string) {
     }
   }, [poll])
 
-  const dispatch = useCallback(async (options?: { agentOverride?: string }) => {
+  const dispatch = useCallback(async (options?: { agentOverride?: string; targetRepoId?: string }) => {
     cancelled.current = false
     reachedTerminal.current = false
     setState({ status: 'queueing' })
@@ -225,6 +225,9 @@ export function useDispatchFix(reportId: string, projectId: string) {
           reportId,
           projectId,
           ...(options?.agentOverride ? { agentOverride: options.agentOverride } : {}),
+          // project_repos.id of the repo the PR opens against; omitted, the
+          // server uses the project's primary repo.
+          ...(options?.targetRepoId ? { targetRepoId: options.targetRepoId } : {}),
         }),
       },
     )

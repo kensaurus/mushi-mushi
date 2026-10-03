@@ -125,6 +125,8 @@ function createLiteReplay(maxMs: number): ReplayCapture {
 
 const DEFAULT_REDACT_SELECTORS = ['input[type="password"]', '[data-mushi-redact]']
 
+const RRWEB_SPECIFIER = 'rrweb'
+
 let rrwebModule: RrwebModule | null = null
 let warnedMissingRrweb = false
 
@@ -155,7 +157,12 @@ async function loadRrweb(loader?: () => Promise<unknown>): Promise<RrwebModule |
   // 3. A bare runtime import. It resolves only under an import map or in
   //    Node; in a bundled browser app it throws, which is caught.
   try {
-    const specifier = 'rrweb'
+    // Must not be a constant: Vite's dependency pre-bundle folded
+    // `const specifier = 'rrweb'` into a literal `import("rrweb")`, which Vite
+    // then failed to resolve in every host without rrweb (the-wanting-mind
+    // e2e, SDK 1.31.0). A global read cannot be folded.
+    const specifier =
+      (globalThis as { __MUSHI_RRWEB_SPECIFIER__?: string }).__MUSHI_RRWEB_SPECIFIER__ || RRWEB_SPECIFIER
     rrwebModule = asRrweb(await import(/* @vite-ignore */ specifier))
     return rrwebModule
   } catch {

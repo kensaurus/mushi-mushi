@@ -209,7 +209,7 @@ export async function buildUnifiedReportTimeline(
     data?: Record<string, unknown>
   }> | null
   for (const b of breadcrumbs ?? []) {
-    const isoAt = new Date(b.timestamp).toISOString()
+    const isoAt = timelineIso(b.timestamp, report.created_at)
     // Sentry-forwarded crumbs (category starts with 'sentry') get sentry provenance.
     const isSentry = b.category?.startsWith('sentry')
     entries.push({
@@ -239,7 +239,7 @@ export async function buildUnifiedReportTimeline(
     entries.push({
       id: `console-${log.timestamp}-${log.level}`,
       lane: 'console',
-      at: new Date(log.timestamp).toISOString(),
+      at: timelineIso(log.timestamp, report.created_at),
       title: `console.${log.level}: ${String(log.message).slice(0, 120)}`,
       body: log.stack ?? null,
       status: log.level,
@@ -294,4 +294,16 @@ export async function buildUnifiedReportTimeline(
 
   entries.sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())
   return entries
+}
+
+/**
+ * An entry's time as ISO. Evidence from other sources (Sentry imports, older
+ * SDKs) can lack a timestamp or carry a bad one; that entry then sits at the
+ * report's own time instead of failing the whole timeline (`new Date(undefined)
+ * .toISOString()` throws RangeError).
+ * @internal Exported for unit tests only.
+ */
+export function timelineIso(ts: unknown, fallbackIso: string): string {
+  const d = typeof ts === 'number' || typeof ts === 'string' ? new Date(ts) : null
+  return d && Number.isFinite(d.getTime()) ? d.toISOString() : fallbackIso
 }

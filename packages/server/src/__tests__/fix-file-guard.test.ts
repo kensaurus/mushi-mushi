@@ -167,22 +167,50 @@ describe('fix-worker wiring', () => {
     resolve(__dirname, '../../supabase/functions/fix-worker/index.ts'),
     'utf8',
   )
-  const reviewGate = src.indexOf('if (!fixReviewPassed(fix))')
+  // Since 2026-10-03 the token is resolved BEFORE the model runs, to read
+  // whole files at the base commit (read-only). The invariant that matters is
+  // that the review gate runs before anything is applied or written.
   const tokenResolve = src.indexOf('const ghToken = await resolveGithubToken(')
-  const fileGuard = src.indexOf('assessFixFiles(fix.files, baseStates')
+  const firstModelCall = src.indexOf('await generateFix(null)')
+  const reviewGate = src.indexOf('if (!fixReviewPassed(fix) && !(ghToken && base))')
+  const materialize = src.indexOf('materializeFixFiles(fix.files, baseStates)')
+  const fileGuard = src.indexOf('assessFixFiles(materialized, baseStates')
   const prCreate = src.indexOf('await createPrFromFiles(')
 
-  it('runs the review gate before any GitHub call, so no review_passed=false fix opens a PR', () => {
-    expect(reviewGate).toBeGreaterThan(0)
-    expect(reviewGate).toBeLessThan(tokenResolve)
+  it('runs the review gate before any edit is applied or GitHub write', () => {
+    expect(tokenResolve).toBeGreaterThan(0)
+    expect(tokenResolve).toBeLessThan(firstModelCall)
+    expect(reviewGate).toBeGreaterThan(firstModelCall)
+    expect(reviewGate).toBeLessThan(materialize)
     expect(reviewGate).toBeLessThan(prCreate)
   })
 
-  it('runs the blind-write guard before the PR and commits only the files it kept', () => {
-    expect(fileGuard).toBeGreaterThan(tokenResolve)
+  it('a fix the model flagged reaches GitHub only as a draft PR labelled needs-review', () => {
+    // Flagged + no way to apply edits to real files: stopped (the PR #424 case).
+    expect(reviewGate).toBeGreaterThan(0)
+    // Flagged + edits applied cleanly: a draft that is never marked ready.
+    expect(src).toContain('markReady: fixReviewPassed(fix),')
+    expect(src).toContain("labels: fixReviewPassed(fix) ? ['mushi-autofix'] : ['mushi-autofix', 'needs-review'],")
+    // A second failure to apply the edits still ends the attempt without a PR.
+    expect(src).toMatch(/the fix's edits could not be applied/)
+  })
+
+  it('runs the blind-write guard on the patched files before the PR and commits only the files it kept', () => {
+    expect(fileGuard).toBeGreaterThan(materialize)
     expect(fileGuard).toBeLessThan(prCreate)
+    expect(src).toMatch(/baseSha: base\.sha,/)
     expect(src).toMatch(/files: prFiles,/)
     expect(src).toMatch(/files_changed: prFiles\.map/)
+  })
+
+  it('keeps every candidate and every edit inside the target repo', () => {
+    // Index paths are attributed against the resolved repo's globs; the scope
+    // check honours every glob of that repo, not only the first.
+    expect(src).toMatch(/const scope = await loadLinkedRepoScope\(db, projectId, repo\)/)
+    expect(src).toMatch(/attribute,\n/)
+    expect(src).toMatch(/searchRepoCode\(ghToken, repo\.owner, repo\.repo, term\)/)
+    expect(src).toMatch(/fetchBaseFileState\(ghToken, repo\.owner, repo\.repo, baseSha, path\)/)
+    expect(src.match(/validateFixProposal\(fix, repo\.pathGlobs\)/g)).toHaveLength(2)
   })
 
   it('stores review_passed from the same helper the gate uses', () => {

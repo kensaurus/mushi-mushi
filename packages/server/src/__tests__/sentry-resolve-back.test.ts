@@ -75,10 +75,29 @@ describe('sentryFixesTrailers', () => {
 })
 
 describe('formatFixCommitMessage trailers', () => {
-  it('appends trailers as a message body', () => {
+  it('appends trailers, then the report id, as the message footer', () => {
     const msg = gh.formatFixCommitMessage('serialize non-Error objects', 'abc', 'bug', ['Fixes WEB-12'])
-    expect(msg.split('\n')).toEqual([expect.stringMatching(/^\w+\(MUSHI-abc\): serialize non-Error objects$/), '', 'Fixes WEB-12'])
-    expect(gh.formatFixCommitMessage('x', 'abc', 'bug')).not.toContain('\n')
+    expect(msg.split('\n')).toEqual(['fix(mushi): serialize non-Error objects', '', 'Fixes WEB-12', 'Mushi-Report: abc'])
+    expect(gh.formatFixCommitMessage('x', undefined, 'bug')).not.toContain('\n')
+  })
+})
+
+describe('formatFixCommitMessage passes config-conventional commitlint', () => {
+  // glot.it rejected `bugfix(mushi): Serialize …` (2026-10-03): wrong type,
+  // sentence-case subject, header over the limit.
+  it('uses a standard type per category', () => {
+    expect(gh.formatFixCommitMessage('a', undefined, 'bug')).toMatch(/^fix\(mushi\): /)
+    expect(gh.formatFixCommitMessage('a', undefined, 'visual')).toMatch(/^fix\(mushi\): /)
+    expect(gh.formatFixCommitMessage('a', undefined, 'slow')).toMatch(/^perf\(mushi\): /)
+    expect(gh.formatFixCommitMessage('a', undefined, 'feature')).toMatch(/^feat\(mushi\): /)
+    expect(gh.formatFixCommitMessage('a', undefined, 'other')).toMatch(/^chore\(mushi\): /)
+  })
+  it('lower-cases the subject, drops a trailing period and keeps the header within 72 characters', () => {
+    const header = gh.formatFixCommitMessage('Serialize non-Error values so fetch_patterns_failed logs a readable message instead of an object.', 'r1', 'bug').split('\n')[0]
+    expect(header.startsWith('fix(mushi): serialize')).toBe(true)
+    expect(header.length).toBeLessThanOrEqual(72)
+    expect(header.endsWith('.')).toBe(false)
+    expect(header.endsWith(' ')).toBe(false)
   })
 })
 
@@ -136,6 +155,21 @@ describe('resolveLinkedSentryIssues', () => {
     expect(calls[1].body).toContain(input.prUrl)
     expect(state.stamped).toEqual(['l1'])
     expect(state.fixEvents[0]).toMatchObject({ kind: 'pr_state_changed', status: 'ok', dedupe_key: 'sentry_resolve:4501' })
+  })
+
+  it('resolves a report marked fixed by hand: no fix attempt, the note becomes the Sentry comment', async () => {
+    const calls: Array<{ url: string; body: string }> = []
+    const fetchImpl = async (url: string, init?: RequestInit) => {
+      calls.push({ url: url.replace(api.SENTRY_API_BASE, ''), body: String(init?.body ?? '') })
+      return json({})
+    }
+    const manual = { projectId: input.projectId, reportId: input.reportId, fixAttemptId: null, prUrl: null, note: 'marked fixed in Mushi by a console user.' }
+    const result = await rb.resolveLinkedSentryIssues(makeDb(state), manual, { credentials: creds, fetchImpl })
+    expect(result.resolved).toEqual(['4501'])
+    expect(state.stamped).toEqual(['l1'])
+    expect(calls[1].url).toBe('/organizations/sakuramoto/issues/4501/comments/')
+    expect(calls[1].body).toContain('marked fixed in Mushi by a console user.')
+    expect(state.fixEvents).toEqual([])
   })
 
   it('falls back to plain resolved when the project has no releases', async () => {

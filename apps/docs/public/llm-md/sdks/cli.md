@@ -168,6 +168,9 @@ mushi fix 00000000-0000-0000-0000-000000000123
 # Cursor Cloud Agent — wait for PR
 mushi fix <reportId> --agent cursor_cloud --wait
 
+# A project with a frontend and a backend repo: send the fix to the backend
+mushi fix <reportId> --repo acme/app-backend
+
 # CI: fail the pipeline if the fix errors
 mushi fix $REPORT_ID --agent cursor_cloud --wait && echo "Fix PR opened"
 ```
@@ -178,6 +181,7 @@ mushi fix $REPORT_ID --agent cursor_cloud --wait && echo "Fix PR opened"
 | `--model ` | Model override for `cursor_cloud` (e.g. `composer-latest`) |
 | `--no-auto-pr` | Skip automatic PR creation for `cursor_cloud` |
 | `--wait` | Poll until terminal state; exits non-zero on failure |
+| `--repo <repoId\|owner/name>` | Linked repo to open the fix PR against, for a project with several repos. Defaults to the primary repo. A name is looked up among the project's linked repos |
 
 ### `mushi fixes`
 
