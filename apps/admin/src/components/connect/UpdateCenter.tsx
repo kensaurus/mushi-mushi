@@ -10,6 +10,7 @@ import { BumpPlanTable } from './BumpPlanTable'
 import { useSdkUpgrade } from '../../lib/useSdkUpgrade'
 import type { PreflightState } from '../../lib/useDispatchPreflight'
 import { CodeInline } from '../CodePanel'
+import { LockfileHelperDisclosure } from '../SdkUpgradeCTA'
 import {
   IconGit,
   IconExternalLink,
@@ -37,7 +38,7 @@ interface UpdateCenterProps {
 export function UpdateCenter({ project, preflight, hideVersionBadge = false }: UpdateCenterProps) {
   const { state, createUpgradePr, refreshUpgradePr, syncStatus } = useSdkUpgrade(project.id)
 
-  const isInFlight = ['queueing', 'queued', 'running'].includes(state.status)
+  const isInFlight = ['queueing', 'queued', 'running', 'awaiting_lockfile'].includes(state.status)
   const hasOpenPr = state.status === 'completed' && Boolean(state.prUrl)
   const isUpToDate = state.status === 'completed_no_pr'
   const isFailed = state.status === 'failed'
@@ -204,6 +205,8 @@ export function UpdateCenter({ project, preflight, hideVersionBadge = false }: U
           Capacitor/RN projects also need <CodeInline>npx cap sync</CodeInline>.
         </p>
       )}
+
+      {hasGithubReady && <LockfileHelperDisclosure />}
     </div>
   )
 }
