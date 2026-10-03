@@ -11,6 +11,7 @@
  */
 
 import type { getServiceClient } from './db.ts'
+import { mapWithConcurrency } from './concurrency.ts'
 import { PagedReadError, readAllPages, type PageCount, type PageResult } from './paged-read.ts'
 
 /**
@@ -118,8 +119,8 @@ function failOnReadError(what: string, res: { error?: { message?: string } | nul
 
 /** Row ceiling per digest read; past it the read is named in `DigestData.truncated`. */
 const MAX_DIGEST_ROWS = 50_000
-/** Hole-check runs are read for this window first; apps with no run in it get one older read. */
-const RUN_WINDOW_MS = 30 * 86400_000
+/** Newest-run reads in flight at once: one per app and hole-check gate. */
+const RUN_READ_CONCURRENCY = 10
 
 /**
  * Every row of one digest read, paged past the server's row cap. A failed
@@ -154,19 +155,26 @@ export async function collectDigest(db: Db, organizationId: string, now: Date): 
   const ids = rows.map((p) => p.id)
   const day = new Date(now.getTime() - 86400_000).toISOString()
   const week = new Date(now.getTime() - 8 * 86400_000).toISOString()
-  const month = new Date(now.getTime() - RUN_WINDOW_MS).toISOString()
 
   type ProjectRef = { project_id: string }
   type SpendRow = { project_id: string; cost_usd: number | string | null; created_at: string }
-  const [reports, openReports, recentRuns, drafts, published, spend] = ids.length
+  // The newest run of each hole-check gate, one row per app and gate. A window
+  // read over every app's runs could be cut short at its row ceiling and drop
+  // an app's newest run; a fallback over older runs then read a stale one.
+  const runKeys = ids.flatMap((projectId) => DIGEST_RADAR_GATES.map((gate) => ({ projectId, gate })))
+  const newestRuns = (): Promise<RunRow[]> => mapWithConcurrency(runKeys, RUN_READ_CONCURRENCY, async ({ projectId, gate }) => {
+    const res = await db.from('gate_runs').select('id, project_id, gate, status, summary, started_at').eq('project_id', projectId).eq('gate', gate)
+      .order('started_at', { ascending: false }).order('id', { ascending: true }).limit(1).maybeSingle()
+    failOnReadError('hole-check runs', res)
+    return (res.data as RunRow | null) ?? null
+  }).then((rows) => rows.filter((r): r is RunRow => r !== null))
+  const [reports, openReports, latestRuns, drafts, published, spend] = ids.length
     ? await Promise.all([
       readAllOrThrow<ProjectRef>('reports', truncated, (from, to, count) =>
         db.from('reports').select('id, project_id', { count }).in('project_id', ids).gte('created_at', day).order('id', { ascending: true }).range(from, to)),
       readAllOrThrow<ProjectRef>('open reports', truncated, (from, to, count) =>
         db.from('reports').select('id, project_id', { count }).in('project_id', ids).in('status', [...DIGEST_OPEN_STATUSES]).order('id', { ascending: true }).range(from, to)),
-      readAllOrThrow<RunRow>('hole-check runs', truncated, (from, to, count) =>
-        db.from('gate_runs').select('id, project_id, gate, status, summary, started_at', { count }).in('project_id', ids).in('gate', DIGEST_RADAR_GATES)
-          .gte('started_at', month).order('started_at', { ascending: false }).order('id', { ascending: true }).range(from, to)),
+      newestRuns(),
       readAllOrThrow<ProjectRef>('draft releases', truncated, (from, to, count) =>
         db.from('releases').select('id, project_id', { count }).in('project_id', ids).eq('status', 'draft').order('id', { ascending: true }).range(from, to)),
       readAllOrThrow<ProjectRef>('releases', truncated, (from, to, count) =>
@@ -176,22 +184,10 @@ export async function collectDigest(db: Db, organizationId: string, now: Date): 
     ])
     : [[], [], [], [], [], []] as [ProjectRef[], ProjectRef[], RunRow[], ProjectRef[], ProjectRef[], SpendRow[]]
 
+  // However old, an app's newest run counts: never "not checked yet" while it has one.
   const latestRun = new Map<string, { id: string; project_id: string; failed: boolean; skipped: boolean }>()
-  const keep = (list: readonly RunRow[]) => {
-    for (const r of list) {
-      const key = `${r.project_id}:${r.gate}`
-      if (!latestRun.has(key)) latestRun.set(key, { id: r.id, project_id: r.project_id, failed: r.status === 'error' || Number(r.summary?.errored ?? 0) > 0, skipped: r.status === 'skipped' })
-    }
-  }
-  keep(recentRuns)
-  // An app whose latest check is older than the window still has one: read it, never "not checked yet".
-  // Per gate, and only for the apps missing that gate, so a recent run is never re-read with its history.
-  for (const gate of DIGEST_RADAR_GATES) {
-    const stale = ids.filter((id) => !latestRun.has(`${id}:${gate}`))
-    if (stale.length === 0) continue
-    keep(await readAllOrThrow<RunRow>('older hole-check runs', truncated, (from, to, count) =>
-      db.from('gate_runs').select('id, project_id, gate, status, summary, started_at', { count }).in('project_id', stale).eq('gate', gate)
-        .lt('started_at', month).order('started_at', { ascending: false }).order('id', { ascending: true }).range(from, to)))
+  for (const r of latestRuns) {
+    latestRun.set(`${r.project_id}:${r.gate}`, { id: r.id, project_id: r.project_id, failed: r.status === 'error' || Number(r.summary?.errored ?? 0) > 0, skipped: r.status === 'skipped' })
   }
   const runIds = [...latestRun.values()].map((r) => r.id)
   const findings = runIds.length
