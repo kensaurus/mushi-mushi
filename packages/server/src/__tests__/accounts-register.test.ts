@@ -198,7 +198,7 @@ function racingDb(db: FakeDb): FakeDb {
 function harness(db: FakeDb) {
   const app = new FakeApp()
   const pass = (async (_c: unknown, next: () => Promise<void>) => next()) as never
-  routes.registerAccountsRegisterRoutes(app as never, { getServiceClient: () => db as never, adminOrApiKeyRead: pass, jwtAuth: pass, now: () => NOW } as never)
+  routes.registerAccountsRegisterRoutes(app as never, { getServiceClient: () => db as never, adminOrApiKeyRead: pass, adminOrApiKeyWrite: pass, now: () => NOW } as never)
   return app
 }
 
@@ -281,6 +281,36 @@ describe('accounts register routes', () => {
     expect((await app.call('PATCH', `/v1/admin/orgs/${ORG}/domains/${D1}`, { body: { autoRenew: false } })).status).toBe(200)
     expect((await app.call('GET', `/v1/admin/orgs/${ORG}/accounts`)).body.data.findings.map((f: { ruleId: string }) => f.ruleId)).toEqual(['registrar_autorenew_off'])
     expect((await app.call('PATCH', `/v1/admin/orgs/${ORG}/domains/${D_HIDDEN}`, { body: { autoRenew: true } })).status).toBe(404)
+  })
+
+  it('an account-level key whose owner is a team owner or admin edits the register (MCP, CLI); a member key or a project-bound key cannot', async () => {
+    const db = seed()
+    const app = harness(db)
+    const ownerKey = { authMethod: 'apiKey', isOrgScopedKey: true, userId: 'owner' }
+    const created = await app.call('POST', `/v1/admin/orgs/${ORG}/accounts`, { body: { provider: 'vercel', displayName: 'Team' }, vars: ownerKey })
+    expect(created.status).toBe(201)
+    const id = created.body.data.id
+    expect((await app.call('GET', `/v1/admin/orgs/${ORG}/accounts`, { vars: ownerKey })).body.data.canEdit).toBe(true)
+    expect((await app.call('PATCH', `/v1/admin/orgs/${ORG}/accounts/${id}`, { body: { adminCount: 2 }, vars: ownerKey })).status).toBe(200)
+    expect((await app.call('PATCH', `/v1/admin/orgs/${ORG}/domains/${D1}`, { body: { autoRenew: true }, vars: ownerKey })).status).toBe(200)
+
+    const memberKey = { authMethod: 'apiKey', isOrgScopedKey: true, userId: 'member' }
+    expect((await app.call('GET', `/v1/admin/orgs/${ORG}/accounts`, { vars: memberKey })).body.data.canEdit).toBe(false)
+    expect((await app.call('POST', `/v1/admin/orgs/${ORG}/accounts`, { body: { provider: 'stripe', displayName: 'Pay' }, vars: memberKey })).status).toBe(403)
+    expect((await app.call('DELETE', `/v1/admin/orgs/${ORG}/accounts/${id}`, { vars: memberKey })).status).toBe(403)
+    expect((await app.call('PATCH', `/v1/admin/orgs/${ORG}/domains/${D1}`, { body: { autoRenew: false }, vars: memberKey })).status).toBe(403)
+
+    const boundKey = { authMethod: 'apiKey', isOrgScopedKey: false, userId: 'owner' }
+    const bound = await app.call('POST', `/v1/admin/orgs/${ORG}/accounts`, { body: { provider: 'stripe', displayName: 'Pay' }, vars: boundKey })
+    expect(bound.status).toBe(403)
+    expect(bound.body.error.code).toBe('PORTFOLIO_NEEDS_ACCOUNT_KEY')
+
+    const secret = await app.call('POST', `/v1/admin/orgs/${ORG}/accounts`, { body: { provider: 'aws', displayName: 'Root', recoveryContact: 'AKIA' + 'ABCDEFGHIJKLMNOP' }, vars: ownerKey })
+    expect(secret.body.error.code).toBe('SECRET_DETECTED')
+    expect((await app.call('DELETE', `/v1/admin/orgs/${ORG}/accounts/${id}`, { vars: ownerKey })).status).toBe(200)
+    expect(db.table('org_audit_events').map((e) => [e.action, e.actor_id])).toEqual([
+      ['portfolio_account.created', 'owner'], ['portfolio_account.updated', 'owner'], ['portfolio_domain.updated', 'owner'], ['portfolio_account.deleted', 'owner'],
+    ])
   })
 
   it('exports Markdown as a download', async () => {

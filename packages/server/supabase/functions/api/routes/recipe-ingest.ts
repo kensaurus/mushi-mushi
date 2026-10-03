@@ -204,11 +204,12 @@ export function parseCsvLine(line: string): string[] {
 }
 
 /**
- * The CSV import is a signed-in owner's or admin's action (the route is
- * jwtAuth). A failed role read answers false, so the import fails closed.
+ * The CSV import is a team owner's or admin's action: the signed-in user, or
+ * the owner of an account-level key (portfolioAccess refuses a key bound to
+ * one project before this runs). A failed role read answers false, so the
+ * import fails closed.
  */
 async function canImportResources(c: Context, db: Db, orgId: string): Promise<boolean> {
-  if (c.get('authMethod') === 'apiKey') return false
   const userId = c.get('userId') as string | undefined
   if (!userId) return false
   const { data, error } = await db.from('organization_members').select('role').eq('organization_id', orgId).eq('user_id', userId).maybeSingle()
@@ -398,7 +399,7 @@ export function registerRecipeIngestRoutes(app: Hono<{ Variables: Variables }>, 
         ok: true,
         data: {
           organizationId: access.orgId,
-          // Whether this caller may POST /v1/ingest/recipe/csv (a signed-in owner or admin).
+          // Whether this caller may POST /v1/ingest/recipe/csv (a team owner or admin, signed in or by key).
           canImport,
           // Only resources a visible project uses, so a member never learns another team's ids.
           resources: ((resources ?? []) as Array<{ id: string; kind: string; external_id: string }>).filter((r) => used.has(r.id)).map((r) => ({
