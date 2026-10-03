@@ -212,6 +212,43 @@ export function extractReportLiterals(report: ReportForLiterals): ReportLiterals
   return { literals, framePaths: [...new Set(framePaths)].slice(0, 10) }
 }
 
+/**
+ * What to search for, in order, for one literal: the literal itself, then
+ * stems for strings the app builds at runtime. glot.it reports
+ * `ota:manifest-504`, but its source holds `` `ota:${reason}` `` and
+ * `` `manifest-${res.status}` ``, so only the stem `manifest-` is in the code.
+ *   - a trailing number is cut, keeping the separator (`ota:manifest-`);
+ *   - a namespace prefix before `:` or `.` is cut (`manifest-504`,
+ *     `get_partner_failed`), then its trailing number too (`manifest-`).
+ * Every term keeps at least 6 characters and a letter run of 3+, and the
+ * caller verifies whichever term matched against the full file text.
+ */
+export function literalSearchTerms(literal: string): string[] {
+  const out: string[] = [literal]
+  const stripNumber = (s: string): string | null => {
+    const m = /^(.*?[A-Za-z][^\d]*?[-_:./]?)\d{2,}$/.exec(s)
+    return m && m[1] !== s ? m[1] : null
+  }
+  const tails = (s: string): string[] => {
+    const t: string[] = []
+    const colon = s.lastIndexOf(':')
+    if (colon > 0 && colon < s.length - 1) t.push(s.slice(colon + 1))
+    const dot = s.indexOf('.')
+    if (dot > 0 && dot < s.length - 1 && !/\s/.test(s)) t.push(s.slice(dot + 1))
+    return t
+  }
+  const add = (s: string | null) => {
+    if (!s || s.length < 6 || !/[A-Za-z]{3,}/.test(s) || out.includes(s)) return
+    out.push(s)
+  }
+  add(stripNumber(literal))
+  for (const t of tails(literal)) {
+    add(t)
+    add(stripNumber(t))
+  }
+  return out.slice(0, 4)
+}
+
 // ---------------------------------------------------------------------------
 // Candidate ranking
 // ---------------------------------------------------------------------------
@@ -234,12 +271,61 @@ export interface ContextCandidate {
   previews: PreviewChunk[]
 }
 
+// ---------------------------------------------------------------------------
+// Repo attribution
+// ---------------------------------------------------------------------------
+
+/**
+ * Which linked repo an index path belongs to. The codebase index
+ * (`project_codebase_files`, `match_codebase_files`) is keyed by project, not
+ * repo, so in a multi-repo project a RAG hit may be another repo's file:
+ * solo-boss-cloud's frontend and backend both own `src/**`.
+ *   - target:  only the target repo's path globs cover it;
+ *   - other:   the target's globs do not cover it (it cannot be the target's);
+ *   - unknown: another linked repo claims it too. Usable only after a read
+ *              from the target repo succeeds, and its index preview (which
+ *              may be the other repo's text) is never shown.
+ */
+export type RepoAttribution = 'target' | 'other' | 'unknown'
+
+export interface LinkedRepoScope {
+  /** The target repo's `path_globs`; null or empty = the whole repo. */
+  targetGlobs: readonly string[] | null
+  /** `path_globs` of every OTHER repo linked to the project. */
+  otherRepoGlobs: ReadonlyArray<readonly string[] | null>
+}
+
+/** `src/**` → `src`, `./apps/web/*` → `apps/web`; '' covers everything. */
+export function globRoot(glob: string): string {
+  return glob.trim().replace(/\\/g, '/').replace(/\/\*\*?$/, '').replace(/^\.?\//, '').replace(/\/+$/, '')
+}
+
+/** True when `path` is under one of `globs` (null or empty = everything). */
+export function underRepoGlobs(path: string, globs: readonly string[] | null): boolean {
+  if (!globs || globs.length === 0) return true
+  const p = path.replace(/\\/g, '/').replace(/^\.?\/+/, '')
+  return globs.some((g) => {
+    const root = globRoot(g)
+    return root === '' || p === root || p.startsWith(`${root}/`)
+  })
+}
+
+export function attributeIndexPath(path: string, scope: LinkedRepoScope): RepoAttribution {
+  if (!underRepoGlobs(path, scope.targetGlobs)) return 'other'
+  if (scope.otherRepoGlobs.length === 0) return 'target'
+  return scope.otherRepoGlobs.some((g) => underRepoGlobs(path, g)) ? 'unknown' : 'target'
+}
+
 export interface CandidateSources {
-  /** path → literals found in it (code search, else index content). */
+  /** path → literals found in it by code search on the TARGET repo. */
   literalHits: ReadonlyMap<string, readonly string[]>
-  /** Repo paths matched from stack frames. */
+  /** path → literals found in it by the project-wide index (attributed). */
+  indexLiteralHits?: ReadonlyMap<string, readonly string[]>
+  /** Stack-frame paths taken as-is (only ever read from the target repo). */
   framePaths: readonly string[]
-  /** RAG rows (one per chunk; several per file is normal). */
+  /** Stack-frame paths matched in the project-wide index (attributed). */
+  indexFramePaths?: readonly string[]
+  /** RAG rows from the project-wide index (one per chunk; attributed). */
   rag: ReadonlyArray<{
     filePath: string
     preview: string
@@ -247,14 +333,24 @@ export interface CandidateSources {
     lineStart?: number | null
     lineEnd?: number | null
   }>
+  /**
+   * Attribution for index-derived paths. Omitted = single-repo project:
+   * every index path is the target's.
+   */
+  attribute?: (path: string) => RepoAttribution
 }
 
 /**
  * Merge every source into one list per path, strongest first: each literal
  * the file contains (up to 3) outweighs a stack frame, which outweighs any
  * RAG similarity. Ties keep the order the sources arrived in.
+ *
+ * Index-derived paths another linked repo owns are dropped; paths of
+ * unknown ownership are kept without their index previews, so they appear
+ * only if the read from the target repo finds them.
  */
 export function rankContextCandidates(sources: CandidateSources): ContextCandidate[] {
+  const attribute = sources.attribute ?? (() => 'target' as const)
   const byPath = new Map<string, ContextCandidate>()
   const get = (raw: string): ContextCandidate => {
     const path = raw.replace(/\\/g, '/').replace(/^\.?\/+/, '')
@@ -265,15 +361,27 @@ export function rankContextCandidates(sources: CandidateSources): ContextCandida
     }
     return c
   }
-  for (const [path, lits] of sources.literalHits) {
+  const addLiterals = (path: string, lits: readonly string[]) => {
     const c = get(path)
     for (const l of lits) if (!c.literals.includes(l)) c.literals.push(l)
   }
+  for (const [path, lits] of sources.literalHits) addLiterals(path, lits)
+  for (const [path, lits] of sources.indexLiteralHits ?? []) {
+    if (attribute(path) !== 'other') addLiterals(path, lits)
+  }
   for (const p of sources.framePaths) get(p).inStack = true
+  for (const p of sources.indexFramePaths ?? []) {
+    if (attribute(p) !== 'other') get(p).inStack = true
+  }
   for (const r of sources.rag) {
+    const owner = attribute(r.filePath)
+    if (owner === 'other') continue
     const c = get(r.filePath)
     c.ragSimilarity = Math.max(c.ragSimilarity ?? 0, r.similarity)
-    if (r.preview) c.previews.push({ text: r.preview, lineStart: r.lineStart ?? null, lineEnd: r.lineEnd ?? null })
+    // An unknown-owner preview may be another repo's text: never show it.
+    if (r.preview && owner === 'target') {
+      c.previews.push({ text: r.preview, lineStart: r.lineStart ?? null, lineEnd: r.lineEnd ?? null })
+    }
   }
   const score = (c: ContextCandidate) =>
     3 * Math.min(c.literals.length, 3) + (c.inStack ? 2 : 0) + (c.ragSimilarity ?? 0)

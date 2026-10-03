@@ -8,10 +8,14 @@
  */
 import { describe, expect, it, vi } from 'vitest'
 import {
+  attributeIndexPath,
   buildFullFileContext,
   extractReportLiterals,
+  globRoot,
   isBundledPath,
+  literalSearchTerms,
   rankContextCandidates,
+  underRepoGlobs,
   type ContextCandidate,
 } from '../../supabase/functions/_shared/fix-context.ts'
 import type { BaseFileState } from '../../supabase/functions/_shared/fix-file-guard.ts'
@@ -72,6 +76,26 @@ describe('extractReportLiterals', () => {
   })
 })
 
+describe('literalSearchTerms (runtime-built strings)', () => {
+  it('reaches the stem glot.it actually has in source for ota:manifest-504', () => {
+    // glot.it lib/native-bridge/live-update.ts: `ota:${reason}` + `manifest-${res.status}`
+    const terms = literalSearchTerms('ota:manifest-504')
+    expect(terms).toEqual(['ota:manifest-504', 'ota:manifest-', 'manifest-504', 'manifest-'])
+    const source = 'const reason = `manifest-${res.status}`;\ncaptureSentryException(new Error(`ota:${reason}`))'
+    expect(terms.find((t) => source.includes(t))).toBe('manifest-')
+  })
+
+  it('tries the bare name when the namespace is added at runtime, and keeps verbatim literals first', () => {
+    expect(literalSearchTerms('supabase.get_partner_failed')).toEqual(['supabase.get_partner_failed', 'get_partner_failed'])
+    expect(literalSearchTerms('fetch_patterns_failed')).toEqual(['fetch_patterns_failed'])
+  })
+
+  it('never produces a stem too short or without letters', () => {
+    expect(literalSearchTerms('ab:12345')).toEqual(['ab:12345'])
+    expect(literalSearchTerms('/checkout/confirm')).toEqual(['/checkout/confirm'])
+  })
+})
+
 describe('isBundledPath', () => {
   it.each(['dist-bundle/index.mjs', 'dist/server.js', 'build/app.js', '.vercel/output/fn.js', 'static/main.bundle.js', 'assets/index-a1b2c3d4e5.js'])(
     'treats %s as bundle output',
@@ -99,6 +123,69 @@ describe('rankContextCandidates', () => {
     expect(check.inStack).toBe(true)
     expect(check.ragSimilarity).toBe(0.7)
     expect(check.previews.map((p) => p.text)).toEqual(['early', 'late'])
+  })
+})
+
+describe('repo attribution (multi-repo projects)', () => {
+  // solo-boss-cloud: frontend and backend repos both own src/**; the index
+  // (match_codebase_files) is keyed by project, not repo.
+  const backend = { targetGlobs: ['src/**', 'supabase/**'], otherRepoGlobs: [['src/**', 'public/**']] }
+
+  it('attributes paths by every glob of the target and of the sibling repos', () => {
+    expect(attributeIndexPath('supabase/functions/api.ts', backend)).toBe('target')
+    expect(attributeIndexPath('public/logo.svg', backend)).toBe('other')
+    expect(attributeIndexPath('src/App.tsx', backend)).toBe('unknown')
+    expect(attributeIndexPath('srcfoo/x.ts', backend)).toBe('other') // whole segments only
+    expect(attributeIndexPath('anything.ts', { targetGlobs: null, otherRepoGlobs: [] })).toBe('target')
+    expect(attributeIndexPath('apps/web/x.ts', { targetGlobs: null, otherRepoGlobs: [null] })).toBe('unknown')
+    expect(globRoot('./apps/web/**')).toBe('apps/web')
+    expect(underRepoGlobs('apps/web/x.ts', ['apps/web/*'])).toBe(true)
+  })
+
+  it('drops another repo\'s index hits and never carries an unattributable preview', () => {
+    const ranked = rankContextCandidates({
+      literalHits: new Map([['src/server.ts', ['get_partner_failed']]]), // code search on the target repo
+      indexLiteralHits: new Map([['public/sw.js', ['get_partner_failed']], ['src/App.tsx', ['get_partner_failed']]]),
+      framePaths: [],
+      indexFramePaths: ['public/app.js'],
+      rag: [
+        { filePath: 'src/App.tsx', preview: 'frontend preview text', similarity: 0.9, lineStart: 1, lineEnd: 1 },
+        { filePath: 'supabase/functions/api.ts', preview: 'backend preview', similarity: 0.6, lineStart: 1, lineEnd: 1 },
+        { filePath: 'public/index.html', preview: 'frontend only', similarity: 0.99, lineStart: 1, lineEnd: 1 },
+      ],
+      attribute: (p) => attributeIndexPath(p, backend),
+    })
+    expect(ranked.map((c) => c.path)).toEqual(['src/App.tsx', 'src/server.ts', 'supabase/functions/api.ts'])
+    expect(ranked.find((c) => c.path === 'src/App.tsx')?.previews).toEqual([])
+    expect(ranked.find((c) => c.path === 'supabase/functions/api.ts')?.previews.map((p) => p.text)).toEqual(['backend preview'])
+  })
+
+  it('uses an unattributable path only if the target repo has it, and shows the target\'s bytes', async () => {
+    const ranked = rankContextCandidates({
+      literalHits: new Map(),
+      framePaths: [],
+      rag: [
+        { filePath: 'src/App.tsx', preview: 'frontend preview text', similarity: 0.9, lineStart: 1, lineEnd: 1 },
+        { filePath: 'src/index.ts', preview: 'frontend index preview', similarity: 0.8, lineStart: 1, lineEnd: 1 },
+      ],
+      attribute: (p) => attributeIndexPath(p, backend),
+    })
+    const readFile = vi.fn(async (path: string): Promise<BaseFileState> =>
+      path === 'src/index.ts' ? { kind: 'exists', contents: 'export const backend = true\n' } : { kind: 'absent' },
+    )
+    const ctx = await buildFullFileContext(ranked, readFile)
+    expect(readFile.mock.calls.map((c) => c[0])).toEqual(['src/App.tsx', 'src/index.ts'])
+    expect(ctx.outcomes).toEqual([
+      { path: 'src/App.tsx', shown: 'omitted', reason: 'not found on the base branch' },
+      { path: 'src/index.ts', shown: 'full' },
+    ])
+    expect(ctx.text).toContain('export const backend = true')
+    expect(ctx.text).not.toContain('frontend')
+
+    // Unreadable (or no GitHub access): no preview fallback for an unknown owner.
+    const blind = await buildFullFileContext(ranked, async () => ({ kind: 'unreadable', detail: '403' }))
+    expect(blind.shownCount).toBe(0)
+    expect(blind.text).not.toContain('frontend')
   })
 })
 

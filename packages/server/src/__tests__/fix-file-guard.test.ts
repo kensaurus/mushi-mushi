@@ -193,6 +193,16 @@ describe('fix-worker wiring', () => {
     expect(src).toMatch(/files_changed: prFiles\.map/)
   })
 
+  it('keeps every candidate and every edit inside the target repo', () => {
+    // Index paths are attributed against the resolved repo's globs; the scope
+    // check honours every glob of that repo, not only the first.
+    expect(src).toMatch(/const scope = await loadLinkedRepoScope\(db, projectId, repo\)/)
+    expect(src).toMatch(/attribute,\n/)
+    expect(src).toMatch(/searchRepoCode\(ghToken, repo\.owner, repo\.repo, term\)/)
+    expect(src).toMatch(/fetchBaseFileState\(ghToken, repo\.owner, repo\.repo, baseSha, path\)/)
+    expect(src.match(/validateFixProposal\(fix, repo\.pathGlobs\)/g)).toHaveLength(2)
+  })
+
   it('stores review_passed from the same helper the gate uses', () => {
     expect(src).not.toMatch(/review_passed: !fix\.needsHumanReview/)
     expect(src).toMatch(/review_passed: fixReviewPassed\(fix\)/)

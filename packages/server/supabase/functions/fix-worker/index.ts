@@ -37,15 +37,21 @@
  *     project owner's vault-stored installation token (or env GITHUB_TOKEN
  *     for self-hosted/dev).
  *   - The LLM is sandboxed by structured output: it can only emit file
- *     paths + content + rationale, never tool calls or shell commands.
+ *     paths + find/replace edits (or a new file's contents) + rationale,
+ *     never tool calls or shell commands.
+ *
+ * Context (2026-10-03): the model sees whole files read from the target
+ * repo at the commit the PR branches from (_shared/fix-context.ts), found
+ * via report literals, stack frames and RAG; its edits are applied to those
+ * same bytes (_shared/fix-edits.ts).
  *
  * Cost guard:
- *   - circuit_breaker: aborts if any single file would exceed
- *     project_settings.autofix_max_lines (default 200).
+ *   - circuit_breaker: aborts if any single file's diff (changed lines)
+ *     would exceed project_settings.autofix_max_lines (default 200).
  *   - token cap: passes maxTokens to limit blast radius even if the model
  *     misbehaves.
- *   - One LLM call per dispatch — no agentic loop in M5; SEP-1686 Tasks +
- * multi-turn lands in a release.
+ *   - At most two fix generations per dispatch: one, plus one retry with
+ *     the exact error when its edits do not apply. No agentic loop.
  */
 
 import { generateObject, NoObjectGeneratedError } from 'npm:ai@4';
@@ -79,11 +85,15 @@ import {
   type ProposedFile,
 } from '../_shared/fix-file-guard.ts';
 import {
+  attributeIndexPath,
   buildFullFileContext,
   extractReportLiterals,
+  literalSearchTerms,
   rankContextCandidates,
+  underRepoGlobs,
   FULL_CONTEXT_LIMITS,
   type FullFileContext,
+  type LinkedRepoScope,
 } from '../_shared/fix-context.ts';
 import {
   editRetryPrompt,
@@ -173,6 +183,8 @@ interface ResolvedRepo {
   repo: string;
   defaultBranch: string;
   scopeDirectory?: string;
+  /** All of the repo's project_repos.path_globs; null = the whole repo. */
+  pathGlobs: string[] | null;
 }
 
 /**
@@ -1051,7 +1063,7 @@ ${
       // Scope and the token scan read what the model proposed; the secret scan
       // covers only text the model wrote (replace strings, new files), so a
       // token-shaped string already in a file never blocks an unrelated fix.
-      validateFixProposal(fix, repo.scopeDirectory);
+      validateFixProposal(fix, repo.pathGlobs);
 
       // The model flags its own low-confidence output with needsHumanReview.
       // That used to be stored as review_passed=false and the PR opened anyway
@@ -1100,7 +1112,7 @@ ${
           const retried = await generateFix({ previous: fix, feedback: editRetryPrompt(applied.errors) });
           if (retried instanceof Response) return retried;
           fix = retried;
-          validateFixProposal(fix, repo.scopeDirectory);
+          validateFixProposal(fix, repo.pathGlobs);
           if (!fixReviewPassed(fix)) {
             llmSpan.end({ model: usedModel, inputTokens, outputTokens, latencyMs: Date.now() - llmStart });
             return await reviewBlock(fix, reviewFailedReason(fix));
@@ -1906,8 +1918,12 @@ async function dispatchToCloudAgent(
       action: (report.user_intent as string | undefined) ?? '',
       component: (report.component as string | undefined) ?? '',
     });
-    codeContext = formatCodeContext(ragResult.files);
-    ragSpan.end({ fileCount: ragResult.files.length, reason: ragResult.reason });
+    // The index is project-wide: hint only files attributable to the
+    // target repo (a sibling repo's preview would point the agent astray).
+    const scope = await loadLinkedRepoScope(db, dispatch.project_id, repo);
+    const ownFiles = ragResult.files.filter((f) => attributeIndexPath(f.filePath, scope) === 'target');
+    codeContext = formatCodeContext(ownFiles);
+    ragSpan.end({ fileCount: ownFiles.length, droppedOtherRepo: ragResult.files.length - ownFiles.length, reason: ragResult.reason });
   } catch (err) {
     log.warn('RAG context unavailable for cloud agent (non-fatal)', {
       reportId: dispatch.report_id,
@@ -2228,6 +2244,7 @@ async function resolveRepo(
     repo: parsed.repo,
     defaultBranch: primaryRepo?.default_branch ?? 'main',
     scopeDirectory,
+    pathGlobs: globs && globs.length > 0 ? globs.filter((g) => typeof g === 'string') : null,
   };
 }
 
@@ -2238,10 +2255,14 @@ function parseGithubUrl(url: string): { owner: string; repo: string } | null {
   return { owner: match[1], repo: match[2] };
 }
 
-function isFileInScope(filePath: string, scopeDir: string): boolean {
+/**
+ * Every path glob of the target repo counts (it used to be only the first),
+ * matched on whole path segments. Test files stay allowed anywhere.
+ */
+function isFileInScope(filePath: string, pathGlobs: readonly string[]): boolean {
   const normalized = filePath.replace(/\\/g, '/');
   if (TEST_PATTERNS.some((p) => p.test(normalized))) return true;
-  return normalized.startsWith(scopeDir.replace(/\\/g, '/'));
+  return underRepoGlobs(normalized, pathGlobs);
 }
 
 const TEST_PATTERNS = [/__tests__\//, /\.test\./, /\.spec\./, /^test\//, /^tests\//];
@@ -2265,11 +2286,11 @@ function containsObviousSecret(content: string): boolean {
  * files. Scanning whole patched files would block a fix for a token-shaped
  * string (e.g. a long kebab-case class name) that was already in the file.
  */
-function validateFixProposal(fix: FixOutput, scopeDirectory: string | undefined): void {
+function validateFixProposal(fix: FixOutput, pathGlobs: readonly string[] | null): void {
   const errors: string[] = [];
   for (const f of fix.files) {
-    if (scopeDirectory && !isFileInScope(f.path, scopeDirectory)) {
-      errors.push(`${f.path}: outside scope ${scopeDirectory}.`);
+    if (pathGlobs && pathGlobs.length > 0 && !isFileInScope(f.path, pathGlobs)) {
+      errors.push(`${f.path}: outside scope ${pathGlobs.join(', ')}.`);
     }
     if (containsObviousSecret(introducedText(f))) {
       errors.push(`${f.path}: contains a token-shaped string. Refusing to commit.`);
@@ -2292,7 +2313,7 @@ function proposalLineCount(fix: FixOutput): number {
 }
 
 /** GitHub code-search calls per dispatch (the endpoint allows ~10 a minute). */
-const MAX_CODE_SEARCH_CALLS = 4;
+const MAX_CODE_SEARCH_CALLS = 6;
 /** A literal found in more files than this is not distinctive; its hits are ignored. */
 const MAX_LITERAL_FILES = 15;
 /** Files kept per literal. */
@@ -2348,6 +2369,37 @@ async function indexPathsForFrames(
 }
 
 /**
+ * The target repo's path globs and every other linked repo's, for
+ * attributing project-wide index paths (see attributeIndexPath). The target
+ * is the repo resolveRepo picked (target_repo_id hint, else the primary).
+ * If project_repos cannot be read, every index path is treated as possibly
+ * another repo's: it is used only after a read from the target repo finds
+ * it, and its index preview is never shown.
+ */
+async function loadLinkedRepoScope(
+  db: ReturnType<typeof getServiceClient>,
+  projectId: string,
+  repo: ResolvedRepo,
+): Promise<LinkedRepoScope> {
+  const { data, error } = await db
+    .from('project_repos')
+    .select('repo_url, path_globs')
+    .eq('project_id', projectId);
+  if (error || !data) return { targetGlobs: repo.pathGlobs, otherRepoGlobs: [null] };
+  const isTarget = (url: string) => {
+    const parsed = parseGithubUrl(url);
+    return (
+      parsed?.owner.toLowerCase() === repo.owner.toLowerCase() &&
+      parsed?.repo.toLowerCase() === repo.repo.toLowerCase()
+    );
+  };
+  const others = (data as Array<{ repo_url: string; path_globs: string[] | null }>)
+    .filter((r) => !isTarget(r.repo_url))
+    .map((r) => (r.path_globs && r.path_globs.length > 0 ? r.path_globs : null));
+  return { targetGlobs: repo.pathGlobs, otherRepoGlobs: others };
+}
+
+/**
  * Step 3a: pick the files the model sees and read them whole at the base
  * commit. Candidates, strongest first: files containing a distinctive literal
  * from the report (GitHub code search, else the index), stack-frame files,
@@ -2368,28 +2420,47 @@ async function assembleFullFileContext(
   const { projectId, report, repo, ghToken, baseSha, ragFiles } = args;
   const { literals, framePaths } = extractReportLiterals(report);
 
-  const literalHits = new Map<string, string[]>();
+  // The index is project-wide; in a multi-repo project its paths may belong
+  // to a sibling repo (frontend and backend both owning `src/**`). Only the
+  // target repo's files may be read or edited.
+  const scope = await loadLinkedRepoScope(db, projectId, repo);
+  const attribute = (path: string) => attributeIndexPath(path, scope);
+
+  const literalHits = new Map<string, string[]>(); // code search on the target repo
+  const indexLiteralHits = new Map<string, string[]>(); // project-wide index
+  const addHit = (into: Map<string, string[]>, path: string, literal: string) => {
+    const hits = into.get(path) ?? [];
+    if (!hits.includes(literal)) hits.push(literal);
+    into.set(path, hits);
+  };
   let searchCalls = 0;
   let codeSearchUsable = Boolean(ghToken);
+  // Each literal is tried as-is, then as stems for runtime-built strings
+  // (`ota:manifest-504` → `manifest-`); the first term that finds files wins
+  // and is the one verified against the full text.
   for (const literal of literals) {
-    let paths: string[] | null = null;
-    if (ghToken && codeSearchUsable && searchCalls < MAX_CODE_SEARCH_CALLS) {
-      searchCalls++;
-      const found = await searchRepoCode(ghToken, repo.owner, repo.repo, literal);
-      if (found === null) codeSearchUsable = false; // rate limited / no access: stop asking
-      else paths = found.totalCount > MAX_LITERAL_FILES ? [] : found.paths;
-    }
-    if (!paths || paths.length === 0) {
-      try {
-        paths = await indexFilesContaining(db, projectId, literal);
-      } catch {
-        paths = [];
+    for (const term of literalSearchTerms(literal)) {
+      let searched: string[] | null = null;
+      if (ghToken && codeSearchUsable && searchCalls < MAX_CODE_SEARCH_CALLS) {
+        searchCalls++;
+        const found = await searchRepoCode(ghToken, repo.owner, repo.repo, term);
+        if (found === null) codeSearchUsable = false; // rate limited / no access: stop asking
+        else searched = found.totalCount > MAX_LITERAL_FILES ? [] : found.paths;
       }
-    }
-    for (const p of paths.slice(0, FILES_PER_LITERAL)) {
-      const hits = literalHits.get(p) ?? [];
-      if (!hits.includes(literal)) hits.push(literal);
-      literalHits.set(p, hits);
+      if (searched && searched.length > 0) {
+        for (const p of searched.slice(0, FILES_PER_LITERAL)) addHit(literalHits, p, term);
+        break;
+      }
+      let indexed: string[] = [];
+      try {
+        indexed = await indexFilesContaining(db, projectId, term);
+      } catch {
+        indexed = [];
+      }
+      if (indexed.length > 0) {
+        for (const p of indexed.slice(0, FILES_PER_LITERAL)) addHit(indexLiteralHits, p, term);
+        break;
+      }
     }
   }
 
@@ -2408,9 +2479,15 @@ async function assembleFullFileContext(
 
   const candidates = rankContextCandidates({
     literalHits,
-    framePaths: [...frameRepoPaths, ...unmatchedFrames],
+    indexLiteralHits,
+    framePaths: unmatchedFrames.filter((p) => underRepoGlobs(p, scope.targetGlobs)),
+    indexFramePaths: frameRepoPaths,
     rag: ragFiles,
+    attribute,
   });
+  const otherRepoPaths = [
+    ...new Set([...ragFiles.map((f) => f.filePath), ...indexLiteralHits.keys(), ...frameRepoPaths]),
+  ].filter((p) => attribute(p) === 'other');
   const readFile =
     ghToken && baseSha
       ? (path: string) => fetchBaseFileState(ghToken, repo.owner, repo.repo, baseSha, path)
@@ -2423,6 +2500,8 @@ async function assembleFullFileContext(
     codeSearchCalls: searchCalls,
     codeSearchUsable,
     candidates: candidates.length,
+    linkedRepos: scope.otherRepoGlobs.length + 1,
+    otherRepoPathsDropped: otherRepoPaths.slice(0, 10),
     shown: built.outcomes.filter((o) => o.shown === 'full').length,
     partial: built.outcomes.filter((o) => o.shown === 'preview' || o.shown === 'excerpt').length,
     omitted: built.outcomes.filter((o) => o.shown === 'omitted').map((o) => `${o.path}: ${o.reason}`).slice(0, 10),
