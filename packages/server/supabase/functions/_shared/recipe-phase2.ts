@@ -186,7 +186,7 @@ export async function collectProjectPhase2(db: Db, projectId: string, deps: Phas
   // Deploy truth: probes, then drift.
   const observations = await observeDeploys(db, projectId, manifest, deps, now)
   if (observations.length) connected.add('__deploy_probe')
-  const targets = Array.isArray(manifest?.deploy?.targets) ? manifest!.deploy.targets.filter((t: any) => typeof t?.id === 'string').map((t: any) => ({ id: t.id, kind: String(t.kind ?? ''), maxLagHours: typeof t.maxLagHours === 'number' ? t.maxLagHours : undefined })) : []
+  const targets = Array.isArray(manifest?.deploy?.targets) ? manifest!.deploy.targets.filter((t: { id?: unknown } | null) => typeof t?.id === 'string').map((t: { id: string; kind?: unknown; maxLagHours?: unknown }) => ({ id: t.id, kind: String(t.kind ?? ''), maxLagHours: typeof t.maxLagHours === 'number' ? t.maxLagHours : undefined })) : []
   if (targets.length && (observations.length || github)) {
     const d = deployDrift({ targets, observations, headSha: github?.headSha ?? null, headCommittedAt: github?.headCommittedAt ?? null, now })
     findings.push(...d.findings.map(toConnectorFinding))
@@ -400,7 +400,7 @@ export async function collectOrgPortfolio(db: Db, organizationId: string, deps: 
         kind: (p.kind ?? m?.app?.kind ?? null) as ProjectKindValue | null,
         signals: {
           hasCrashReporting: s ? Boolean(s.sentry_dsn || s.sentry_org_slug) : undefined,
-          hasVersionProbe: m ? Array.isArray(m.deploy?.targets) && m.deploy.targets.some((t: any) => t?.probe?.type === 'version_json') : undefined,
+          hasVersionProbe: m ? Array.isArray(m.deploy?.targets) && m.deploy.targets.some((t: { probe?: { type?: unknown } } | null) => t?.probe?.type === 'version_json') : undefined,
         },
       }
     })

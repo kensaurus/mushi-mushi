@@ -18,7 +18,7 @@ import { buildClaimExtractionPrompt, claimExtractionSchema, type ExtractedClaim 
 import { logLlmInvocation } from './telemetry.ts'
 import type { StoreOpsDeps } from './store-ops.ts'
 
-async function gh(repo: RecipeRepo, path: string): Promise<{ status: number; body: any }> {
+async function gh(repo: RecipeRepo, path: string): Promise<{ status: number; body: unknown }> {
   const res = await fetch(`https://api.github.com/repos/${repo.ref.owner}/${repo.ref.repo}${path}`, {
     headers: { Authorization: `Bearer ${repo.token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' },
     signal: AbortSignal.timeout(15_000),
@@ -34,12 +34,14 @@ export const liveStoreOpsDeps: StoreOpsDeps = {
   readBytes: readRepoBytes,
   async lastChanged(repo, path) {
     const r = await gh(repo, `/commits?path=${encodeURIComponent(path)}&per_page=1`)
-    return r.status === 200 && Array.isArray(r.body) ? (r.body[0]?.commit?.committer?.date ?? null) : null
+    return r.status === 200 && Array.isArray(r.body) ? ((r.body[0] as { commit?: { committer?: { date?: string } } } | undefined)?.commit?.committer?.date ?? null) : null
   },
   async repoInfo(repo) {
     const r = await gh(repo, '')
     if (r.status !== 200) return { public: null, license: null }
-    return { public: r.body?.private === false, license: r.body?.license?.spdx_id && r.body.license.spdx_id !== 'NOASSERTION' ? r.body.license.spdx_id : null }
+    const b = r.body as { private?: boolean; license?: { spdx_id?: string } | null } | null
+    const spdx = b?.license?.spdx_id
+    return { public: b?.private === false, license: spdx && spdx !== 'NOASSERTION' ? spdx : null }
   },
   fetcher: (url) => publicFetch(url),
   async extractClaims(db, projectId, listingText) {

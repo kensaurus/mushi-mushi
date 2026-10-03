@@ -73,7 +73,7 @@ npm org: https://www.npmjs.com/org/mushi-mushi
 - [Notifications](https://kensaur.us/mushi-mushi/docs/admin/notifications): The Notifications page lists every alert Mushi sent to reporters and team members for a project, so you can debug delivery or audit messages.
 - [Onboarding](https://kensaur.us/mushi-mushi/docs/admin/onboarding): Get your first real bug report into Mushi in about 10 minutes with the console onboarding checklist, from new project to classified report.
 - [Overview (portfolio)](https://kensaur.us/mushi-mushi/docs/admin/overview): The Overview page is the organization-wide portfolio view — seven-day activity and open tickets for every connected project at a glance.
-- [Portfolio](https://kensaur.us/mushi-mushi/docs/admin/portfolio): The Portfolio page shows every app in a team at once, with each app's worst recipe state, hole checks and SDK version, plus problems you can fix once across apps.
+- [Portfolio](https://kensaur.us/mushi-mushi/docs/admin/portfolio): The Portfolio page shows every app in a team at once, with each app's worst recipe state, hole checks and SDK version, plus fixes that apply across apps.
 - [Projects](https://kensaur.us/mushi-mushi/docs/admin/projects): Create a Mushi project, mint an API key, copy the install snippet for your framework and send a test report, all from the Projects page.
 - [Prompt lab](https://kensaur.us/mushi-mushi/docs/admin/prompt-lab): The Prompt lab lets you edit, test and A/B compare the classification prompts behind Mushi's diagnoses before you promote a new version.
 - [QA Coverage](https://kensaur.us/mushi-mushi/docs/admin/qa-coverage): QA Coverage turns user flows written in plain English into scheduled browser tests, so you find out when login or checkout breaks.
