@@ -37,7 +37,7 @@ export function registerRadarCommands(program: Command): void {
 What it checks here:
   storage_sql_delete     deleting storage.objects rows with SQL leaves the files in
                          the bucket, still billed. Delete through the Storage API.
-  key_in_client_bundle   a secret key (OpenAI, Stripe live, service-role JWT, …) in
+  key_in_client_bundle   a secret key (OpenAI, Stripe live, Supabase secret, …) in
                          the built app (dist, build, out, .next/static, native JS
                          bundles). Anyone who opens the app can read it. Public keys
                          by design (Supabase anon key, Mushi SDK key) are not flagged.
