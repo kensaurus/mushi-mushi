@@ -24,8 +24,6 @@ import { jsonError } from '../shared.ts'
 import type { Variables } from '../types.ts'
 import { portfolioAccess } from './portfolio.ts'
 
-export { MAX_LEDGER_ROWS_PER_IMPORT }
-
 const slog = log.child('spend-ledger')
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 /** A month of daily FOCUS or CUR rows for a few apps fits well under this. Counted in UTF-8 bytes. */
