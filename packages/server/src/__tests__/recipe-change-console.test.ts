@@ -15,7 +15,11 @@ vi.mock('../../supabase/functions/_shared/auth.ts', () => ({
   jwtAuth: async (_c: unknown, next: () => Promise<void>) => next(),
 }))
 vi.mock('../../supabase/functions/_shared/sentry.ts', () => ({ reportError: vi.fn(), reportMessage: vi.fn() }))
-vi.mock('../../supabase/functions/api/routes/project-ci-secrets.ts', () => ({ inferStack: () => 'nextjs', requiredCiVarNames: () => [] }))
+vi.mock('../../supabase/functions/_shared/sdk-diagnostics.ts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../supabase/functions/_shared/sdk-diagnostics.ts')>()),
+  inferStack: () => 'nextjs',
+  requiredCiVarNames: () => [],
+}))
 // Every `npm:` specifier resolves to one stub module in vitest; the stream
 // route needs a streamSSE that runs the callback and keeps what it wrote.
 vi.mock('npm:hono@4/streaming', async (importOriginal) => ({

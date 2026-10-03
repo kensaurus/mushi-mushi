@@ -30,7 +30,8 @@ vi.mock('../../supabase/functions/_shared/supabase-mcp-client.ts', () => ({
   getLogs: vi.fn(),
   listTables: vi.fn(),
 }))
-vi.mock('../../supabase/functions/api/routes/project-ci-secrets.ts', () => ({
+vi.mock('../../supabase/functions/_shared/sdk-diagnostics.ts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../supabase/functions/_shared/sdk-diagnostics.ts')>()),
   inferStack: () => 'nextjs',
   requiredCiVarNames: () => [],
 }))

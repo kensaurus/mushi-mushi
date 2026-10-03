@@ -64,7 +64,9 @@ Traces are visible in [Integration health](/admin/health) with a direct link.
 
 The **Codebase index** card shows the indexing status for the active project's repo —
 `ok`, `stale`, `failed`, `off`, or `never`. The index powers the [Repo page](/admin/repo)
-branch graph and the fix-worker's code context.
+branch graph and the fix-worker's code context. It also shows coverage in files
+against your plan's file limit (see [how much of a large repo is indexed](/admin/explore#how-much-of-a-large-repo-is-indexed)).
+For a repo connected with a Personal Access Token, it shows the webhook URL that turns on push indexing.
 
 ### Cursor Cloud
 

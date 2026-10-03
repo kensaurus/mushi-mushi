@@ -286,6 +286,10 @@ describe('cloudfront-mushi-spa-router', () => {
     assert.equal(spa(req('/mushi-mushi/r/vercel/next.js.md')).uri, '/mushi-mushi/r/vercel/next.js.md');
   });
 
+  it('serves the /r/ sitemap file as-is (not as a diagram page)', () => {
+    assert.equal(spa(req('/mushi-mushi/r/sitemap.xml')).uri, '/mushi-mushi/r/sitemap.xml');
+  });
+
   it('does not treat deeper /r/ paths as a diagram', () => {
     const out = spa(req('/mushi-mushi/r/acme/shop/extra'));
     assert.ok(!/^\/mushi-mushi\/r\/acme\/shop/.test(out.uri ?? ''), out.uri);

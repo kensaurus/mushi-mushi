@@ -21,7 +21,9 @@
  * and the per-repo `last_index_error` for the admin UI to surface.
  */
 
-export type SweepErrorKind = 'auth' | 'permission' | 'transient' | 'unknown';
+import { latestIso } from './index-coverage.ts';
+
+export type SweepErrorKind = 'auth' | 'permission' | 'config' | 'transient' | 'unknown';
 
 /**
  * Classify an error thrown anywhere in the sweep pipeline.
@@ -32,6 +34,8 @@ export type SweepErrorKind = 'auth' | 'permission' | 'transient' | 'unknown';
  *   2. Bare 401 / 403 status → auth.
  *   3. "Resource not accessible" / 404 → permission (token is valid but
  *      the project lost access to the specific repo; same operator action).
+ *   3b. A project scope or path filter that matches no file in the repo →
+ *      config (the operator fixes the filter; retries do not help).
  *   4. 5xx, network failures, OpenAI TPM hits → transient (the hourly cron
  *      will retry; warn so a sustained spike is still detectable in
  *      Supabase Logs by counting `kind=transient` rows).
@@ -46,6 +50,7 @@ export function classifyIndexerError(err: unknown): SweepErrorKind {
   // check the unambiguous auth phrases before the bare 4xx/5xx digit rules.
   if (/no[_\s]?token|bad credentials|requires authentication/i.test(msg)) return 'auth';
   if (/resource not accessible|not\s+accessible/i.test(msg)) return 'permission';
+  if (/^filter_matches_nothing:/.test(msg)) return 'config';
   if (/\b(401)\b/.test(msg)) return 'auth';
   if (/\b(403)\b/.test(msg)) return 'auth';
   if (/\b(404)\b/.test(msg)) return 'permission';
@@ -77,9 +82,11 @@ export function classifyIndexerError(err: unknown): SweepErrorKind {
  * True when a repo's most recent index attempt failed outright.
  *
  * `last_index_error` alone is not the signal: successful sweeps also write
- * benign notes there ("partial: indexed 300 of 1844 eligible files"). A failed
- * sweep never advances `last_indexed_at`, while a successful one writes both
- * timestamps from separate `Date()` calls a few ms apart, hence the allowance.
+ * benign notes there ("partial: some chunks failed"). A failed sweep never
+ * advances the sweep timestamps, while a successful one writes the attempt
+ * and sweep timestamps together, hence the allowance. Since 20261003160000 a
+ * partial sweep (plan cap, still filling) advances `index_swept_at` and not
+ * `last_indexed_at`, so the later of the two is the last success.
  *
  * Used by the GitHub integration probe so a dead index shows as a degraded
  * GitHub card instead of hiding behind a healthy repo-access check (the
@@ -91,13 +98,15 @@ export function isCodebaseIndexFailing(
     last_index_error: string | null
     last_indexed_at: string | null
     last_index_attempt_at: string | null
+    index_swept_at?: string | null
   },
   allowanceMs = 60_000,
 ): boolean {
   if (!row.last_index_error || !row.last_index_attempt_at) return false
-  if (!row.last_indexed_at) return true
+  const lastSuccess = latestIso(row.last_indexed_at, row.index_swept_at)
+  if (!lastSuccess) return true
   const attempted = Date.parse(row.last_index_attempt_at)
-  const indexed = Date.parse(row.last_indexed_at)
+  const indexed = Date.parse(lastSuccess)
   if (!Number.isFinite(attempted) || !Number.isFinite(indexed)) return false
   return attempted - indexed > allowanceMs
 }

@@ -228,6 +228,52 @@ mushi radar scan --push              # send results to Mushi (one extra step in 
 mushi radar show                     # every hole check for this project and what it found
 ```
 
+### One CI step for both checks
+
+`radar scan --push` and `recipe check --push` belong in a job you already
+run, so they cost no extra job. Both need `@mushi-mushi/cli` 0.29.0 or later;
+an older CLI answers "unknown command", and the packaged action stops with
+that version in its error instead. Store a project key as a repo secret first.
+The SDK ingest key works; an account-level (org) key does not. Both commands
+read the checked-out repo, so the job needs `actions/checkout` before them.
+
+**Copy-paste `run:` step**, for any CI system:
+
+```yaml
+- name: Mushi checks
+  run: |
+    npx --yes @mushi-mushi/cli@latest radar scan --push
+    npx --yes @mushi-mushi/cli@latest recipe check --push
+  env:
+    MUSHI_API_KEY: ${{ secrets.MUSHI_INGEST_KEY }}
+```
+
+**Packaged GitHub Action**, the same CLI with the inputs spelled out:
+
+```yaml
+- uses: actions/checkout@v4
+- uses: kensaurus/mushi-mushi/packages/cli@master
+  with:
+    api-key: ${{ secrets.MUSHI_INGEST_KEY }}
+    upload-sourcemaps: 'false'   # set 'true' (the default) to also upload source maps
+    radar-scan: 'true'
+    recipe-check: 'true'
+    # working-directory: apps/web   # if the app is not at the repo root
+    # fail-on-error: 'false'        # warn instead of failing the job
+```
+
+| Input | Default | What it does |
+|---|---|---|
+| `radar-scan` | `false` | Runs `mushi radar scan --push`. Findings do not fail the job; they show on the hole checks. |
+| `recipe-check` | `false` | Runs `mushi recipe check --push`. An invalid `mushi.recipe.json` (or none) fails the step. |
+| `fail-on-error` | `true` | `false` turns a failed check or an unreachable Mushi into a warning. |
+| `working-directory` | `.` | The repo root both checks read. |
+| `upload-sourcemaps` | `true` | The action's original source-map upload. Uses `release`, `sourcemaps-dir`, `dry-run`. |
+
+Run it on pushes to your default branch. `recipe check --push` records the
+commit SHA and branch from `GITHUB_SHA` and `GITHUB_REF_NAME`, and on a pull
+request the branch is the merge ref.
+
 ---
 
 ## Store listings

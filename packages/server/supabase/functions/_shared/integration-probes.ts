@@ -274,7 +274,7 @@ export async function probeIntegration(
         if (res.ok && projectId) {
           const { data: repos } = await db
             .from('project_repos')
-            .select('repo_url, default_branch, last_index_error, last_indexed_at, last_index_attempt_at')
+            .select('repo_url, default_branch, last_index_error, last_indexed_at, last_index_attempt_at, index_swept_at')
             .eq('project_id', projectId)
             .eq('indexing_enabled', true)
           const failing = ((repos ?? []) as Array<{
@@ -283,6 +283,7 @@ export async function probeIntegration(
             last_index_error: string | null
             last_indexed_at: string | null
             last_index_attempt_at: string | null
+            index_swept_at: string | null
           }>).filter((r) => isCodebaseIndexFailing(r))
           if (failing.length > 0) {
             status = 'degraded'
