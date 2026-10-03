@@ -11,6 +11,7 @@ import {
   editRetryPrompt,
   introducedText,
   materializeFixFiles,
+  isCommentOnlyFix,
 } from '../../supabase/functions/_shared/fix-edits.ts'
 import type { BaseFileState } from '../../supabase/functions/_shared/fix-file-guard.ts'
 
@@ -173,5 +174,18 @@ describe('introducedText / editRetryPrompt', () => {
     expect(p).toContain('- src/a.ts: edit 1: find matches 0 times')
     expect(p).toMatch(/without the line-number gutter/)
     expect(p).toMatch(/needsHumanReview=true/)
+  })
+})
+
+describe('isCommentOnlyFix', () => {
+  it('flags the placeholder notes seen on 2026-10-03 (comment-only edits)', () => {
+    expect(isCommentOnlyFix([{ path: 'a.ts', reason: 'r', edits: [{ find: 'const FN = "x";', replace: 'const FN = "x"; // NOTE: flagged for human review' }] }])).toBe(true)
+    expect(isCommentOnlyFix([{ path: 'a.ts', reason: 'r', edits: [{ find: 'export const a = 1', replace: '// NOTE: placeholder touch only\nexport const a = 1' }] }])).toBe(true)
+    expect(isCommentOnlyFix([{ path: 'a.tsx', reason: 'r', edits: [{ find: 'export function Hero() {', replace: '/* NOTE: the real LCP element is unconfirmed.\n * Capture a trace first. */\nexport function Hero() {' }] }])).toBe(true)
+  })
+  it('passes a real code change, and treats an empty proposal as comment-only', () => {
+    expect(isCommentOnlyFix([{ path: 'a.ts', reason: 'r', edits: [{ find: 'if (error) throw new Error(error);', replace: 'if (error) throw new Error(describeError(error));' }] }])).toBe(false)
+    expect(isCommentOnlyFix([{ path: 'n.ts', reason: 'r', contents: '// only a comment\n' }])).toBe(true)
+    expect(isCommentOnlyFix([])).toBe(true)
   })
 })

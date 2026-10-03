@@ -98,6 +98,7 @@ import {
 import {
   editRetryPrompt,
   introducedText,
+  isCommentOnlyFix,
   materializeFixFiles,
 } from '../_shared/fix-edits.ts';
 import { matchFramePathsToTree } from '../_shared/sentry-frames.ts';
@@ -1128,6 +1129,15 @@ ${
         materialized = applied.files;
       }
       llmSpan.end({ model: usedModel, inputTokens, outputTokens, latencyMs: Date.now() - llmStart });
+
+      // A comment is not a fix: stop any proposal whose every changed line is
+      // a comment or blank, flagged or not, before anything reaches GitHub.
+      if (isCommentOnlyFix(fix.files)) {
+        return await reviewBlock(
+          fix,
+          `review_failed: the proposed change only adds or removes comments, which is not a fix. ${fix.rationale}`,
+        );
+      }
 
       // ---- 6b. Circuit breaker on changed lines ----------------------------
       // Counted on the diff, not the file length: a two-line fix in a

@@ -190,3 +190,45 @@ export function editRetryPrompt(errors: readonly string[]): string {
     'Return the complete fix again (every file, not only the failed ones). For each existing file, copy each `find` verbatim from the full file shown in "Relevant code", without the line-number gutter, with enough surrounding lines that it occurs exactly once. Use `contents` only for files that do not exist yet. If you cannot make the edits match, set needsHumanReview=true and explain why.',
   ].join('\n')
 }
+
+const COMMENT_OR_BLANK = /^\s*(?:$|\/\/|\/\*|\*\/?(?:\s|$)|#(?!!)|<!--|-->|--\s)/
+
+/** A line with trailing and inline comments removed, so "code // note" equals "code". */
+function codeOf(line: string): string {
+  return line
+    .replace(/\/\*.*?\*\//g, '')
+    .replace(/\s+\/\/[^"'`]*$/, '')
+    .trimEnd()
+}
+
+/** Lines in `next` that `prev` does not have, compared by code (order-free). */
+function linesAdded(prev: string, next: string): string[] {
+  const pool = new Map<string, number>()
+  for (const l of prev.split(/\r?\n/)) pool.set(codeOf(l), (pool.get(codeOf(l)) ?? 0) + 1)
+  const added: string[] = []
+  for (const l of next.split(/\r?\n/)) {
+    const key = codeOf(l)
+    const n = pool.get(key) ?? 0
+    if (n > 0) pool.set(key, n - 1)
+    else added.push(key)
+  }
+  return added
+}
+
+/**
+ * True when every line the fix adds or removes is a comment or blank once
+ * comments are stripped: a note is not a fix, whatever the model flagged.
+ * Catches the "// NOTE: placeholder touch only" PRs of 2026-10-03
+ * (glot.it#137, the-wanting-mind#154, solo-boss-cloud_backend#499/#500)
+ * before they reach GitHub.
+ */
+export function isCommentOnlyFix(entries: readonly FixFileInput[]): boolean {
+  if (entries.length === 0) return true
+  for (const entry of entries) {
+    const changed = 'edits' in entry
+      ? entry.edits.flatMap((e) => [...linesAdded(e.find, e.replace), ...linesAdded(e.replace, e.find)])
+      : entry.contents.split(/\r?\n/).map(codeOf)
+    if (changed.some((l) => !COMMENT_OR_BLANK.test(l))) return false
+  }
+  return true
+}
