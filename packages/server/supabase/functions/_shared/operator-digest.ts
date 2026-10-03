@@ -291,8 +291,11 @@ export interface DeliveryDeps {
   sendTelegram: (db: Db, projectId: string, text: string) => Promise<{ sent: number; error?: string }>
   sendEmail: (to: string, subject: string, text: string) => Promise<{ ok: boolean; error?: string }>
   sendPush: (db: Db, userId: string, title: string, body: string) => Promise<{ sent: number; error?: string }>
-  /** Owner and admin emails of the organization (never logged). */
-  adminRecipients: (db: Db, organizationId: string) => Promise<Array<{ userId: string; email: string | null }>>
+  /**
+   * Owner and admin emails of the organization (never logged). Throws when the
+   * members cannot be read; a person whose email lookup failed has `emailError`.
+   */
+  adminRecipients: (db: Db, organizationId: string) => Promise<Array<{ userId: string; email: string | null; emailError?: string }>>
 }
 
 export interface DeliveryResult {
@@ -323,9 +326,20 @@ export async function deliverDigest(db: Db, settings: DigestSettings, digest: Co
     channels.push({ channel: 'telegram', ok: r.sent > 0, detail: r.sent > 0 ? `${r.sent} chat${r.sent === 1 ? '' : 's'}` : (r.error ?? 'no chat is bound to that project').slice(0, 200) })
   }
   if (settings.email || settings.web_push) {
-    const people = await deps.adminRecipients(db, settings.organization_id).catch(() => [])
-    if (settings.email) {
+    let people: Awaited<ReturnType<DeliveryDeps['adminRecipients']>> = []
+    let peopleError: string | null = null
+    try {
+      people = await deps.adminRecipients(db, settings.organization_id)
+    } catch (e) {
+      peopleError = `the owners and admins could not be read: ${String((e as Error)?.message ?? e).slice(0, 120)}`
+    }
+    if (peopleError) {
+      if (settings.email) channels.push({ channel: 'email', ok: false, detail: peopleError })
+      if (settings.web_push) channels.push({ channel: 'web_push', ok: false, detail: peopleError })
+    }
+    if (settings.email && !peopleError) {
       const withEmail = people.filter((p) => p.email)
+      const lookupFailed = people.filter((p) => !p.email && p.emailError).length
       let ok = 0
       let lastErr = ''
       for (const p of withEmail) {
@@ -333,9 +347,15 @@ export async function deliverDigest(db: Db, settings: DigestSettings, digest: Co
         if (r.ok) ok++
         else lastErr = r.error ?? 'failed'
       }
-      channels.push({ channel: 'email', ok: withEmail.length > 0 && ok === withEmail.length, detail: withEmail.length === 0 ? 'no owner or admin email' : `${ok}/${withEmail.length} sent${lastErr ? `; ${lastErr.slice(0, 120)}` : ''}` })
+      const wanted = withEmail.length + lookupFailed
+      const lookupNote = lookupFailed > 0 ? `; ${lookupFailed} email${lookupFailed === 1 ? '' : 's'} could not be read` : ''
+      channels.push({
+        channel: 'email',
+        ok: wanted > 0 && ok === wanted,
+        detail: wanted === 0 ? 'no owner or admin email' : `${ok}/${wanted} sent${lookupNote}${lastErr ? `; ${lastErr.slice(0, 120)}` : ''}`,
+      })
     }
-    if (settings.web_push) {
+    if (settings.web_push && !peopleError) {
       let sent = 0
       let lastErr = ''
       for (const p of people) {

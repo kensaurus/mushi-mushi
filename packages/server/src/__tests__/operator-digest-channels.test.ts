@@ -109,6 +109,76 @@ describe('live delivery through existing project connections', () => {
       globalThis.fetch = realFetch
     }
   })
+
+  /** project_settings reads fail; every other table reads from the fake. */
+  function settingsReadFails(db: FakeDb) {
+    const failed = { data: null, error: { message: 'statement timeout' } }
+    const chain: Record<string, unknown> = new Proxy({}, { get: (_t, prop) => (prop === 'then' ? (ok: (v: unknown) => unknown) => Promise.resolve(failed).then(ok) : () => chain) })
+    return new Proxy(db, { get: (t, prop, r) => (prop === 'from' ? (name: string) => (name === 'project_settings' ? chain : t.from(name)) : Reflect.get(t, prop, r)) })
+  }
+
+  it('a settings read failure is named as such, never as a missing webhook or channel', async () => {
+    const { liveDeliveryDeps } = await import('../../supabase/functions/_shared/operator-digest-delivery.ts')
+    const db = settingsReadFails(makeFakeDb({ project_settings: [] }))
+    expect(await liveDeliveryDeps.sendDiscord(db as never, P1, 't', 'b')).toEqual({ ok: false, error: "that project's Discord webhook could not be read" })
+    expect(await liveDeliveryDeps.sendTeams(db as never, P1, 't', 'b')).toEqual({ ok: false, error: "that project's Teams webhook could not be read" })
+    expect(await liveDeliveryDeps.sendSlack(db as never, P1, 'x')).toEqual({ ok: false, error: "that project's Slack channel could not be read" })
+  })
+
+  it('a webhook kept in the vault that cannot be read back is a vault failure', async () => {
+    const { liveDeliveryDeps } = await import('../../supabase/functions/_shared/operator-digest-delivery.ts')
+    const db = makeFakeDb({
+      project_settings: [{ project_id: P1, discord_webhook_url: 'vault://mushi/integration/p1/discord/discord_webhook_url' }],
+    } as never, { rpc: () => null })
+    expect(await liveDeliveryDeps.sendDiscord(db as never, P1, 't', 'b')).toEqual({ ok: false, error: "that project's Discord webhook could not be read from the vault" })
+  })
+
+  it('one failed email lookup marks that person only; a failed member read throws', async () => {
+    const { liveDeliveryDeps } = await import('../../supabase/functions/_shared/operator-digest-delivery.ts')
+    const db = makeFakeDb({
+      organization_members: [
+        { organization_id: ORG, user_id: 'u1', role: 'owner' },
+        { organization_id: ORG, user_id: 'u2', role: 'admin' },
+        { organization_id: ORG, user_id: 'u3', role: 'member' },
+      ],
+    })
+    ;(db as unknown as { auth: unknown }).auth = {
+      admin: {
+        getUserById: async (id: string) => {
+          if (id === 'u2') throw new Error('auth unavailable')
+          return { data: { user: { email: `${id}@example.test` } }, error: null }
+        },
+      },
+    }
+    expect(await liveDeliveryDeps.adminRecipients(db as never, ORG)).toEqual([
+      { userId: 'u1', email: 'u1@example.test' },
+      { userId: 'u2', email: null, emailError: 'auth unavailable' },
+    ])
+    const failed = { data: null, error: { message: 'permission denied' } }
+    const chain: Record<string, unknown> = new Proxy({}, { get: (_t, prop) => (prop === 'then' ? (ok: (v: unknown) => unknown) => Promise.resolve(failed).then(ok) : () => chain) })
+    await expect(liveDeliveryDeps.adminRecipients({ from: () => chain } as never, ORG)).rejects.toThrow(/permission denied/)
+  })
+})
+
+describe('deliverDigest when the owners and admins cannot be read', () => {
+  it('fails email and push with the reason instead of "no owner or admin email"', async () => {
+    const d = deps({ adminRecipients: vi.fn(async () => { throw new Error('permission denied') }) })
+    const r = await digest.deliverDigest({} as never, {
+      organization_id: ORG, enabled: true, slack_project_id: P1, email: true, web_push: true,
+    }, content, d)
+    expect(r.channels.map((c) => [c.channel, c.ok, c.detail])).toEqual([
+      ['slack', true, 'posted'],
+      ['email', false, 'the owners and admins could not be read: permission denied'],
+      ['web_push', false, 'the owners and admins could not be read: permission denied'],
+    ])
+    expect(r.status).toBe('partial')
+  })
+
+  it('counts a person whose email could not be read as not sent', async () => {
+    const d = deps({ adminRecipients: vi.fn(async () => [{ userId: 'u1', email: 'a@example.test' }, { userId: 'u2', email: null, emailError: 'auth unavailable' }]) })
+    const r = await digest.deliverDigest({} as never, { organization_id: ORG, enabled: true, email: true, web_push: false }, content, d)
+    expect(r.channels).toEqual([{ channel: 'email', ok: false, detail: '1/2 sent; 1 email could not be read' }])
+  })
 })
 
 describe('weekly funnel line', () => {
