@@ -50,9 +50,67 @@ export interface ExplainLatestRun {
   completed_at: string | null
   /** The same rule at the same place in that run; null when the run no longer has it. */
   matchingFindingId: string | null
+  /** The matching finding in that run is allowlisted there (with this reason, when one was given). */
+  matchingAllowlisted?: boolean
+  matchingAllowlistReason?: string | null
+  /**
+   * Set when the run does not have the finding but that is no evidence it was
+   * fixed (see absenceUnproven); the finding is then `unknown`, never fixed.
+   */
+  uncheckedReason: string | null
 }
 
-export type FindingOpenState = 'open' | 'not_in_latest_run' | 'allowlisted'
+export type FindingOpenState = 'open' | 'not_in_latest_run' | 'unknown' | 'allowlisted'
+
+/** How the newer run was searched for the same finding: by file, by stored target, or (weakest) by message. */
+export type FindingMatchKey = 'file' | 'target' | 'message'
+
+/** What a finished gate run says about the rules it ran, read back to judge a missing finding. */
+export interface LatestRunEvidence {
+  status: string
+  /** gate_runs.findings_count: what the run found, before any storage cap. */
+  findingsCount: number | null
+  /** gate_findings rows actually stored for the run; null when not counted. */
+  storedCount: number | null
+  summary: unknown
+  ruleId: string | null
+  matchedBy: FindingMatchKey
+}
+
+/** Statuses of a run that finished and checked what it was asked to (error and skipped did not). */
+const COMPLETE_RUN_STATUSES: ReadonlySet<string> = new Set(['pass', 'warn', 'fail'])
+
+/**
+ * Why a finding missing from the latest run is NOT evidence it was fixed, or
+ * null when it is. A run that errored or skipped, stored fewer findings than
+ * it found (a storage cap, or a findings insert that failed), did not run the
+ * finding's rule or could not decide it (radar and store runs record a state
+ * per rule in summary.results; only `ok` means checked and clean), or could
+ * only be searched by a message that embeds counts or dates, proves nothing.
+ */
+export function absenceUnproven(e: LatestRunEvidence): string | null {
+  if (!COMPLETE_RUN_STATUSES.has(e.status)) {
+    return `the latest run ended with status "${e.status}", so it did not check everything.`
+  }
+  if (e.findingsCount !== null && e.findingsCount > 0 && (e.storedCount === null || e.storedCount < e.findingsCount)) {
+    return `the latest run found ${e.findingsCount} problem${e.findingsCount === 1 ? '' : 's'} but stored only ${e.storedCount ?? 'an unknown number of them'}, so this one may be among those not stored.`
+  }
+  const summary = asRecord(e.summary)
+  if (summary && Array.isArray(summary.results) && e.ruleId !== null) {
+    const entry = summary.results
+      .map(asRecord)
+      .find((r) => r !== null && r.ruleId === e.ruleId)
+    if (!entry) return `the latest run did not run the ${e.ruleId} rule.`
+    if (entry.state !== 'ok') {
+      const why = str(entry.reason)
+      return `the ${e.ruleId} rule was "${String(entry.state)}" in the latest run, not checked clean${why ? ` (${why})` : ''}.`
+    }
+  }
+  if (e.matchedBy === 'message') {
+    return 'this finding has no file or target to look for, and its message (which can carry counts or dates) is not in the latest run.'
+  }
+  return null
+}
 
 export interface FindingFix {
   /** One sentence or a snippet to apply; null when the gate stored no fix it could be read from. */
@@ -167,12 +225,27 @@ export function fixOf(suggested: unknown): FindingFix {
   return base
 }
 
-function targetOf(suggested: unknown): string | null {
+/**
+ * The stable thing a file-less finding is about (a domain, host, URL, route or
+ * API path) and the suggested_fix key it is stored under, so a newer run can
+ * be searched for the same target instead of a message that embeds counts or
+ * dates ("expires in 12 days (2026-10-15)").
+ */
+export function findingTargetKey(suggested: unknown): { key: 'target' | 'route' | 'path'; value: string } | null {
   const o = asRecord(suggested)
   if (!o) return null
+  const target = str(o.target)
+  if (target) return { key: 'target', value: target }
+  const route = str(o.route)
+  if (route) return { key: 'route', value: route }
   // `path` is a console path when the fix has a kind (console step), and the
   // API path the finding is about otherwise (unknown_call, spec_drift).
-  return str(o.target) ?? str(o.route) ?? (str(o.kind) ? null : str(o.path))
+  const path = str(o.kind) ? null : str(o.path)
+  return path ? { key: 'path', value: path } : null
+}
+
+function targetOf(suggested: unknown): string | null {
+  return findingTargetKey(suggested)?.value ?? null
 }
 
 function stateOf(
@@ -191,7 +264,21 @@ function stateOf(
     return { state: 'open', reason: 'It is in the latest run of this check.' }
   }
   if (latest.matchingFindingId) {
+    if (latest.matchingAllowlisted) {
+      return {
+        state: 'allowlisted',
+        reason: latest.matchingAllowlistReason
+          ? `A newer run still finds it, and it is allowlisted there: ${latest.matchingAllowlistReason}`
+          : 'A newer run still finds it, and someone marked it there as accepted.',
+      }
+    }
     return { state: 'open', reason: 'A newer run of this check found the same problem in the same place.' }
+  }
+  if (latest.uncheckedReason) {
+    return {
+      state: 'unknown',
+      reason: `The latest run of this check could not confirm it is fixed: ${latest.uncheckedReason}`,
+    }
   }
   return {
     state: 'not_in_latest_run',

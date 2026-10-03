@@ -2,6 +2,7 @@
  * Minimal in-memory stand-in for the supabase-js query builder, covering the
  * subset the voice-inbox modules use: from().select/insert/update/upsert/delete
  * with eq / not-in / order / limit / maybeSingle / single, plus rpc().
+ * select(cols, { count: 'exact', head: true }) returns the match count.
  *
  * Filters on JSON paths use the PostgREST `col->>key` spelling. Unique keys
  * per table can be declared so inserts return a `23505` error like Postgres.
@@ -43,6 +44,8 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: { code?: string; 
   private _order: { key: string; ascending: boolean } | null = null
   private returning = false
   private onConflict: string[] | null = null
+  /** select(cols, { count: 'exact', head }) — return the match count, and no rows when head. */
+  private counting: { head: boolean } | null = null
 
   constructor(
     private readonly db: FakeDb,
@@ -51,8 +54,9 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: { code?: string; 
     private payload: Row | Row[] | null = null,
   ) {}
 
-  select(_cols?: string, _opts?: unknown): this {
+  select(_cols?: string, opts?: { count?: string; head?: boolean }): this {
     if (this.op !== 'select') this.returning = true
+    if (opts?.count) this.counting = { head: opts.head === true }
     return this
   }
   insert(payload: Row | Row[]): this {
@@ -139,7 +143,10 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: { code?: string; 
     return rows.filter((r) => this.filters.every((f) => f(r)))
   }
 
-  private finish(rows: Row[]): { data: unknown; error: { code?: string; message: string } | null } {
+  private finish(rows: Row[]): { data: unknown; error: { code?: string; message: string } | null; count?: number | null } {
+    if (this.counting) {
+      return { data: this.counting.head ? null : rows, error: null, count: rows.length }
+    }
     let out = rows
     if (this._order) {
       const { key, ascending } = this._order
@@ -157,7 +164,7 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: { code?: string; 
     return { data: out, error: null }
   }
 
-  private exec(): { data: unknown; error: { code?: string; message: string } | null } {
+  private exec(): { data: unknown; error: { code?: string; message: string } | null; count?: number | null } {
     const rows = this.db.table(this.table)
     switch (this.op) {
       case 'select':
@@ -201,7 +208,7 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: { code?: string; 
   }
 
   then<R1 = unknown, R2 = never>(
-    onfulfilled?: ((value: { data: unknown; error: { code?: string; message: string } | null }) => R1 | PromiseLike<R1>) | null,
+    onfulfilled?: ((value: { data: unknown; error: { code?: string; message: string } | null; count?: number | null }) => R1 | PromiseLike<R1>) | null,
     onrejected?: ((reason: unknown) => R2 | PromiseLike<R2>) | null,
   ): PromiseLike<R1 | R2> {
     return Promise.resolve()

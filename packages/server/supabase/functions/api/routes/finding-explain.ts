@@ -16,8 +16,11 @@ import { adminOrApiKey } from '../../_shared/auth.ts'
 import { getServiceClient } from '../../_shared/db.ts'
 import { DESIGN_GATE } from '../../_shared/design-plane.ts'
 import {
+  absenceUnproven,
   explainFinding,
+  findingTargetKey,
   type ExplainFindingRow,
+  type FindingMatchKey,
   type ExplainLatestRun,
   type ExplainRunRow,
 } from '../../_shared/finding-explain.ts'
@@ -41,35 +44,86 @@ export const defaultFindingExplainDeps: FindingExplainDeps = {
   adminOrApiKeyRead: adminOrApiKey({ scope: 'mcp:read' }) as MiddlewareHandler,
 }
 
-/** The newest finished run of the finding's gate, and the same rule at the same place in it. */
+interface LatestRunRow {
+  id: string
+  status: string
+  completed_at: string | null
+  summary: Record<string, unknown> | null
+  findings_count: number | null
+}
+
+/**
+ * The newest finished run of the finding's gate, the same rule at the same
+ * place in it, and — when it is not there — whether that absence proves
+ * anything (absenceUnproven). The newest run is taken whatever its status: a
+ * radar run with one errored connector is `error` yet holds real findings, so
+ * skipping it would compare against an older run and call a live finding fixed.
+ */
 async function latestRunFor(db: Db, finding: ExplainFindingRow, gate: string): Promise<ExplainLatestRun | null | 'error'> {
   const { data: runs, error } = await db
     .from('gate_runs')
-    .select('id, status, completed_at, summary')
+    .select('id, status, completed_at, summary, findings_count')
     .eq('project_id', finding.project_id)
     .eq('gate', gate)
     .not('status', 'in', '(running,queued)')
     .order('started_at', { ascending: false })
     .limit(10)
   if (error) return 'error'
-  const rows = (runs ?? []) as Array<{ id: string; status: string; completed_at: string | null; summary: Record<string, unknown> | null }>
+  const rows = (runs ?? []) as LatestRunRow[]
   // design_drift also writes token-refresh rows; only scans carry findings.
   const latest = (gate === DESIGN_GATE ? rows.filter(isScanRun) : rows)[0]
   if (!latest) return null
-  if (latest.id === finding.gate_run_id) return { id: latest.id, completed_at: latest.completed_at, matchingFindingId: finding.id }
+  if (latest.id === finding.gate_run_id) {
+    return { id: latest.id, completed_at: latest.completed_at, matchingFindingId: finding.id, uncheckedReason: null }
+  }
 
+  // Same file when there is one; otherwise the stored target (a domain, host,
+  // URL or route), whose message changes run to run ("expires in 12 days");
+  // the message only as a last resort.
+  const target = findingTargetKey(finding.suggested_fix)
+  const matchedBy: FindingMatchKey = finding.file_path !== null ? 'file' : target ? 'target' : 'message'
   let match = db
     .from('gate_findings')
-    .select('id')
+    .select('id, allowlisted, allowlist_reason')
     .eq('gate_run_id', latest.id)
-    .eq('allowlisted', false)
   match = finding.rule_id === null ? match.is('rule_id', null) : match.eq('rule_id', finding.rule_id)
-  // Same file when there is one; otherwise the same message (radar and store
-  // findings are about a domain or a listing, not a file).
-  match = finding.file_path === null ? match.eq('message', finding.message) : match.eq('file_path', finding.file_path)
-  const { data: same, error: sameErr } = await match.limit(1).maybeSingle()
+  if (matchedBy === 'file') match = match.eq('file_path', finding.file_path)
+  else if (target) match = match.eq(`suggested_fix->>${target.key}`, target.value)
+  else match = match.eq('message', finding.message)
+  // A non-allowlisted copy wins over an allowlisted one.
+  const { data: sameRows, error: sameErr } = await match.order('allowlisted', { ascending: true }).limit(1)
   if (sameErr) return 'error'
-  return { id: latest.id, completed_at: latest.completed_at, matchingFindingId: (same as { id: string } | null)?.id ?? null }
+  const same = ((sameRows ?? []) as Array<{ id: string; allowlisted: boolean; allowlist_reason: string | null }>)[0]
+  if (same) {
+    return {
+      id: latest.id,
+      completed_at: latest.completed_at,
+      matchingFindingId: same.id,
+      matchingAllowlisted: same.allowlisted,
+      matchingAllowlistReason: same.allowlist_reason,
+      uncheckedReason: null,
+    }
+  }
+
+  // Not there. Count what the run stored, to tell "fixed" from "not stored".
+  let storedCount: number | null = null
+  if ((latest.findings_count ?? 0) > 0) {
+    const { count, error: countErr } = await db
+      .from('gate_findings')
+      .select('id', { count: 'exact', head: true })
+      .eq('gate_run_id', latest.id)
+    if (countErr) return 'error'
+    storedCount = count ?? null
+  }
+  const uncheckedReason = absenceUnproven({
+    status: latest.status,
+    findingsCount: latest.findings_count,
+    storedCount,
+    summary: latest.summary,
+    ruleId: finding.rule_id,
+    matchedBy,
+  })
+  return { id: latest.id, completed_at: latest.completed_at, matchingFindingId: null, uncheckedReason }
 }
 
 export function registerFindingExplainRoutes(
