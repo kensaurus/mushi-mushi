@@ -31,6 +31,7 @@ import { log } from '../_shared/logger.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { collectDescendantActionIds } from '../_shared/inventory-story-scope.ts'
+import { withFindingsNotStored } from '../_shared/finding-explain.ts'
 
 declare const Deno: {
   serve(handler: (req: Request) => Response | Promise<Response>): void
@@ -136,12 +137,11 @@ async function finishGateRun(
   findingsCount: number,
   found = findingsCount,
 ): Promise<void> {
-  const notStored = Math.max(0, found - findingsCount)
   await db
     .from('gate_runs')
     .update({
       status,
-      summary: notStored > 0 ? { ...summary, findings_not_stored: notStored } : summary,
+      summary: withFindingsNotStored(summary, findingsCount, found),
       findings_count: findingsCount,
       completed_at: new Date().toISOString(),
     })

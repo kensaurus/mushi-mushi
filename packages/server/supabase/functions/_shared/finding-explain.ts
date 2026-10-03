@@ -119,7 +119,7 @@ export function absenceUnproven(e: LatestRunEvidence): string | null {
   if (e.findingsCount !== null && e.findingsCount > 0 && (e.storedCount === null || e.storedCount < e.findingsCount)) {
     return `the latest run found ${e.findingsCount} problem${e.findingsCount === 1 ? '' : 's'} but stored only ${e.storedCount ?? 'an unknown number of them'}, so this one may be among those not stored.`
   }
-  const notStored = summary && typeof summary.findings_not_stored === 'number' ? summary.findings_not_stored : 0
+  const notStored = summary && typeof summary[FINDINGS_NOT_STORED_KEY] === 'number' ? summary[FINDINGS_NOT_STORED_KEY] : 0
   if (notStored > 0) {
     return `the latest run could not store ${notStored} of the problems it found, so this one may be among them.`
   }
@@ -136,6 +136,20 @@ export function absenceUnproven(e: LatestRunEvidence): string | null {
     return 'this finding has no file or target to look for, and its message (which can carry counts or dates) is not in the latest run.'
   }
   return null
+}
+
+/** gate_runs.summary key for findings a gate found but could not insert (read back by absenceUnproven). */
+export const FINDINGS_NOT_STORED_KEY = 'findings_not_stored'
+
+/**
+ * The summary a gate run is closed with: unchanged when every finding it found
+ * was stored, else with {@link FINDINGS_NOT_STORED_KEY} set to how many were
+ * not, so a reader never takes a finding that failed to insert for one the
+ * gate no longer sees.
+ */
+export function withFindingsNotStored(summary: Record<string, unknown>, stored: number, found: number): Record<string, unknown> {
+  const notStored = Math.max(0, found - stored)
+  return notStored > 0 ? { ...summary, [FINDINGS_NOT_STORED_KEY]: notStored } : summary
 }
 
 /**
