@@ -11,7 +11,7 @@ import { getDemoReportFixture, materializeDemoReport, precomputedClassification 
 import { checkIngestQuota } from '../../_shared/quota.ts';
 import { log } from '../../_shared/logger.ts';
 import { logAudit } from '../../_shared/audit.ts';
-import { decideAutofixToggle } from '../../_shared/autofix-toggle.ts';
+import { parseAutofixToggleBody } from '../../_shared/autofix-toggle.ts';
 import { classifyIngestRateLimitError } from './ingest-rate-limit.ts';
 // Pure readiness → dry-run shaping lives in its own import-free module so it
 // can be unit-tested under CI's permission-less `deno test`.
@@ -264,8 +264,8 @@ export function registerProjectIntegrationsRoutes(app: Hono<{ Variables: Variabl
   // Autofix toggle — POST /v1/admin/projects/:id/autofix/toggle
   //
   // Sets the autofix_enabled flag on project_settings. Requires { enabled: boolean }
-  // and a project owner or admin (decideAutofixToggle); console JWT or an API
-  // key with mcp:write. Audited. Returns the updated flag so the caller can
+  // (parseAutofixToggleBody); console JWT or an API key with mcp:write.
+  // Audited. Returns the updated flag so the caller can
   // sync its local state.
   // ---------------------------------------------------------------------------
   app.post('/v1/admin/projects/:id/autofix/toggle', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {
@@ -286,7 +286,7 @@ export function registerProjectIntegrationsRoutes(app: Hono<{ Variables: Variabl
     }
 
     const body: unknown = await c.req.json().catch(() => null);
-    const decision = decideAutofixToggle(access.role, body);
+    const decision = parseAutofixToggleBody(body);
     if (!decision.ok) {
       return c.json({ ok: false, error: { code: decision.code, message: decision.message } }, decision.status);
     }
