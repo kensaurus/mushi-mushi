@@ -214,7 +214,10 @@ export function parseMushiCommand(rawText: string | null | undefined): MushiComm
       // Keep the message's own line breaks: only the command word and the id
       // are split off.
       const m = /^(\S+)\s+([\s\S]+)$/.exec(text.slice(first.length).trim())
-      return m && m[2].trim() ? { sub: 'reply', id: m[1], text: m[2].trim() } : { sub: 'usage', text: REPLY_USAGE }
+      // Slack HTML-encodes & < > in slash-command text; the reporter reads
+      // the reply as plain text, so decode them back to what was typed.
+      const body = m ? decodeSlackEntities(m[2].trim()) : ''
+      return m && body.trim() ? { sub: 'reply', id: m[1], text: body.trim() } : { sub: 'usage', text: REPLY_USAGE }
     }
     case 'help':
     default:
@@ -231,6 +234,14 @@ export const MUSHI_HELP_TEXT = [
   '• `/mushi reply <id> <message>` — answer the person who reported it; they see it word for word in your app',
   '• Or drop an *audio clip* in a connected channel and Mushi will transcribe it.',
 ].join('\n')
+
+/**
+ * Undo Slack's escaping of `&`, `<` and `>` in inbound text (`&amp;` last, so
+ * a typed `&lt;` that Slack sent as `&amp;lt;` stays `&lt;`).
+ */
+export function decodeSlackEntities(s: string): string {
+  return s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')
+}
 
 /** Escape Slack mrkdwn control characters in untrusted text. */
 export function escapeSlackText(s: string): string {
@@ -726,7 +737,7 @@ export async function runMushiCommand(
   db: SupabaseClient,
   projectId: string,
   cmd: MushiCommand,
-  form: Pick<SlashCommandForm, 'user_id'>,
+  form: Pick<SlashCommandForm, 'user_id'> & Partial<Pick<SlashCommandForm, 'channel_id'>>,
 ): Promise<SlashReply> {
   switch (cmd.sub) {
     case 'help':
@@ -772,7 +783,11 @@ export async function runMushiCommand(
       // row and enqueues email / push under the reporter's own opt-ins.
       const found = await findProjectReport(db, projectId, cmd.id)
       if (!found.ok) return eph(`:mag: ${found.message}`)
-      const sent = await sendSlackReporterReply(db, { reportId: found.report.id, message: cmd.text })
+      const sent = await sendSlackReporterReply(db, {
+        reportId: found.report.id,
+        message: cmd.text,
+        actor: { slackUserId: form.user_id || null, slackChannelId: form.channel_id ?? null, via: 'slash_command' },
+      })
       if (!sent.ok) return eph(`:x: Reply not sent — ${escapeSlackText(sent.message)}`)
       return eph(
         `:speech_balloon: Replied on \`${found.report.id.slice(0, 8)}\` — ${reportLabel(found.report)}\n${quoteBlock(truncate(cmd.text, 600))}`,

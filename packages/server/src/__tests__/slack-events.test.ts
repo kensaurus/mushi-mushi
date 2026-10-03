@@ -250,6 +250,12 @@ describe('parseMushiCommand', () => {
     })
     expect(core.parseMushiCommand('answer abc12345 ok')).toMatchObject({ sub: 'reply', id: 'abc12345', text: 'ok' })
   })
+  it('reply: decodes the &amp; &lt; &gt; Slack puts in slash-command text, &amp; last', () => {
+    expect(core.parseMushiCommand('reply abc12345 a &lt; b &amp;&amp; c &gt; d')).toEqual({ sub: 'reply', id: 'abc12345', text: 'a < b && c > d' })
+    // A typed "&lt;" arrives as "&amp;lt;" and must stay "&lt;", not become "<".
+    expect(core.parseMushiCommand('reply abc12345 write &amp;lt; for <')).toMatchObject({ text: 'write &lt; for <' })
+    expect(core.decodeSlackEntities('&amp;amp;')).toBe('&amp;')
+  })
   it('lists reply in the help text', () => {
     expect(core.MUSHI_HELP_TEXT).toContain('/mushi reply <id> <message>')
   })
@@ -577,6 +583,27 @@ describe('runMushiCommand', () => {
     })
   })
 
+  it('reply: records which Slack user sent it, and from which channel, in the audit log', async () => {
+    const db = seededDb({ reports: [WIDGET_REPORT], projects: [{ id: PROJECT, owner_id: 'owner-1' }], report_comments: [], audit_logs: [] })
+    await core.runMushiCommand(db as never, PROJECT, { sub: 'reply', id: 'aaaa1111', text: 'On it' }, { user_id: 'U0SENDER', channel_id: 'C0ANY' })
+    expect(db.tables.audit_logs).toHaveLength(1)
+    expect(db.tables.audit_logs[0]).toMatchObject({
+      project_id: PROJECT,
+      actor_id: 'owner-1',
+      actor_type: 'slack',
+      action: 'report.reporter_replied',
+      resource_type: 'report',
+      resource_id: WIDGET_REPORT.id,
+      metadata: { via: 'slash_command', slack_user_id: 'U0SENDER', slack_channel_id: 'C0ANY', comment_id: db.tables.report_comments[0].id ?? null },
+    })
+  })
+
+  it('reply: writes no audit row when the reply was refused', async () => {
+    const db = seededDb({ reports: [WIDGET_REPORT], projects: [{ id: PROJECT, owner_id: 'owner-1' }], report_comments: [], audit_logs: [] })
+    await core.runMushiCommand(db as never, PROJECT, { sub: 'reply', id: WIDGET_REPORT.id, text: 'x'.repeat(2001) }, { user_id: 'U' })
+    expect(db.tables.audit_logs).toHaveLength(0)
+  })
+
   it('reply: refuses a report nobody can read a reply on, and another project’s report', async () => {
     const db = seededDb({
       reports: [{ ...REPORT_A, reporter_token_hash: 'legacy-hash', closed_reason: null }, REPORT_C],
@@ -663,6 +690,21 @@ describe('POST /v1/webhooks/slack/commands', () => {
     expect(reply.text).toContain('Replied on')
     expect(db.tables.report_comments).toHaveLength(1)
     expect(db.tables.report_comments[0].body).toBe('Fixed — update the app to see it.')
+  })
+
+  it('sends the reporter the text as typed when Slack entity-encodes it, and escapes the echo once', async () => {
+    const db = seededDb({ reports: [WIDGET_REPORT], projects: [{ id: PROJECT, owner_id: 'owner-1' }], report_comments: [], audit_logs: [] })
+    const { app, routes } = fakeApp()
+    core.registerSlackEventsRoutesWith(app, makeDeps().deps)
+    stubSlackFetch()
+
+    const { ctx } = await signedCtx(commandForm('reply aaaa1111 a &lt; b &amp;&amp; c'), { path: '/v1/webhooks/slack/commands' })
+    const res = await routes['POST /v1/webhooks/slack/commands'](ctx)
+    const reply = (await res.json()) as { text: string }
+    expect(db.tables.report_comments[0].body).toBe('a < b && c')
+    expect(reply.text).toContain('a &lt; b &amp;&amp; c')
+    expect(reply.text).not.toContain('&amp;lt;')
+    expect(db.tables.audit_logs[0]).toMatchObject({ actor_type: 'slack', metadata: { slack_user_id: 'U0USER', via: 'slash_command' } })
   })
 
   it('rejects an unsigned slash command', async () => {

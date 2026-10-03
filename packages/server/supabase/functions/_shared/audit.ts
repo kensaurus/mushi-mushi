@@ -30,6 +30,7 @@ export type AuditAction = 'report.created' | 'report.classified' | 'report.triag
   | 'org.invite_revoked'
   | 'project.created'
   | 'project.deleted'
+  | 'report.reporter_replied'
 
 export async function logAudit(
   db: SupabaseClient,
