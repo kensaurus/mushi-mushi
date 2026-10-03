@@ -296,16 +296,19 @@ score, and records the `design.deviance_score` metric. Only a push of your
 default branch becomes the score shown in the console (the connected repo's
 default branch, else `ci.defaultBranch` in `mushi.recipe.json`, else `main`);
 a pull-request run keeps its findings and the CI gate but never replaces it.
-Use a key for CI that no web page sends: a push with a key that a browser has
-used keeps its findings and the CI gate, but never sets the shown score or
-dispatches a fix. A push from a CLI older than this engine is kept
+Push with a CLI key kept in your CI secrets (`mushi login` mints one with
+`mcp:read`). The SDK key (`report:write` only) ships inside your app, web or
+native, so anyone may hold it. A push made with the SDK key, or with any key a
+browser has used, keeps its findings and the CI gate, but never sets the shown
+score or dispatches a fix. A finding whose file path is not a plain code path
+(spaces, for example) is refused. A push from a CLI older than this engine is kept
 but never replaces the score shown in the console either. Update the server before the
 CLI if you self-host.
 
 ```yaml
 - run: npx @mushi-mushi/cli recipe check --push
   env:
-    MUSHI_API_KEY: ${{ secrets.MUSHI_INGEST_KEY }}
+    MUSHI_API_KEY: ${{ secrets.MUSHI_CLI_KEY }} # a `mushi login` key, not the SDK key
 ```
 
 Add `--max-score 30` to fail the step above a fixed score without asking Mushi.

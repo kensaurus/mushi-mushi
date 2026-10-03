@@ -173,11 +173,18 @@ export interface ActInput {
   branch: string | null
 }
 
+/**
+ * Why a CI push's key is public, so the push may not set the design state or
+ * dispatch: a web page sent this request, a web page has sent this key, or the
+ * key is an SDK key (report:write only, shipped inside the app).
+ */
+export type UntrustedKeyReason = 'browser_request' | 'key_seen_in_browser' | 'sdk_key'
+
 export type ActOutcome =
   | { action: 'off' | 'below_threshold' | 'baseline' | 'no_new_findings' | 'not_default_branch' }
   | { action: 'autofix_disabled' }
-  /** The CI push came with a key a web page has sent (public): it may not dispatch or set the baseline. */
-  | { action: 'key_not_trusted'; reason: 'browser_request' | 'key_seen_in_browser' }
+  /** The CI push came with a public key: it may not dispatch or set the baseline. */
+  | { action: 'key_not_trusted'; reason: UntrustedKeyReason }
   | { action: 'settings_unavailable' | 'report_failed'; error: string }
   | { action: 'dispatched'; reportId: string; dispatchId: string | null; newFindings: number }
   | { action: 'dispatch_refused'; reportId: string; code: DispatchResult['code']; message: string | undefined }

@@ -112,6 +112,11 @@ export function DesignActionsCard({ projectId, score }: { projectId: string; sco
                 disabled={off}
                 onChange={(v) => void save({ autofix: v })}
               />
+              <p className="text-2xs text-fg-muted">
+                A CI push sets the shown score and may dispatch only with a CLI key from{' '}
+                <code className="font-mono">mushi login</code>. A push with the SDK key keeps its findings and
+                the CI check, because that key ships inside your app.
+              </p>
             </div>
             {data.autofix && !data.autofixEnabled && (
               <Callout tone="warn" label="Autofix is off for this project">

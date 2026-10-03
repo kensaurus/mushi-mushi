@@ -210,6 +210,11 @@ mushi recipe check --push            # send the recipe and the scan from your ex
 mushi recipe show                    # each part of the recipe and its state
 ```
 
+For `--push`, give CI a `mushi login` key (it carries `mcp:read`). A push with
+the SDK key (`report:write` only) keeps its findings and the CI gate, but never
+sets the score the console shows or dispatches a design fix, because that key
+ships inside your app.
+
 ---
 
 ## Hole checks (radar)
