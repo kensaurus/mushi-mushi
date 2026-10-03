@@ -156,14 +156,15 @@ export interface ReportJudgeEval {
 }
 
 /**
- * A merged fix joined to the project's deploy truth (deploy_drift run, its
- * open `not_deployed` findings, the newest deploy_observations commit).
- * `unknown` covers no checks, none since the merge, and a failed read.
+ * A merged fix joined to the project's deploy truth: each deploy target's
+ * newest commit placed before or after the merge (deploy_drift run heads and
+ * earlier deploy_observations). `unknown` covers no check since the merge, a
+ * commit that cannot be placed, and a failed read.
  */
 export interface ReportDeployLive {
   state: 'live' | 'not_live' | 'unknown'
   merged_at: string
-  /** The commit production runs, when an observation names one. */
+  /** The commit the deciding deploy target runs, when it reported one. */
   prod_commit: string | null
   target_id: string | null
   checked_at: string | null
