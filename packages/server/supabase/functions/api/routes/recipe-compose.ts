@@ -18,6 +18,7 @@ import { DESIGN_GATE, STUCK_SCAN_MS, type SnapshotRow } from '../../_shared/desi
 import type { RecipeRepoResolution, RecipeRepo } from '../../_shared/recipe-github.ts'
 import type { WorkflowRunSnapshot } from '../../_shared/github.ts'
 import { assetMime } from '../../_shared/design-assets.ts'
+import { capFixRecipeContext, CONTEXT_BUDGET_BYTES } from '../../_shared/fix-recipe-context.ts'
 import type {
   DesignDirection,
   DesignDirectionsResponse,
@@ -29,6 +30,7 @@ import type {
   DevianceRun,
   DevianceRunStatus,
   ElementState,
+  FixRecipeContext,
   RecipeElementKey,
   RecipeElementSummary,
   RecipeIssue,
@@ -522,8 +524,18 @@ export async function composeDesignPlane(db: Db, projectId: string, snapshot: Sn
   }
 }
 
-/** The capped recipe block for get_fix_context (≤ 4 KB of JSON). */
-export function buildDesignExcerpt(plane: Pick<DesignPlaneResponse, 'state' | 'tokens' | 'shownSet' | 'deviance'>, files: string[], fileFindings: DevianceFinding[], maxBytes = 4096): DesignExcerpt {
+/**
+ * The capped recipe block for get_fix_context (≤ 4 KB of JSON). With a fixer
+ * `context` (schema, last fix's deploy state, radar), that context is kept
+ * whole within its own ≤ 2 KB share and the tokens fill what is left.
+ */
+export function buildDesignExcerpt(
+  plane: Pick<DesignPlaneResponse, 'state' | 'tokens' | 'shownSet' | 'deviance'>,
+  files: string[],
+  fileFindings: DevianceFinding[],
+  maxBytes = 4096,
+  context: FixRecipeContext | null = null,
+): DesignExcerpt {
   const rank = (path: string, cssVar: string | null, ts: string | null) => {
     const g = path.split('.')[0]
     const mapped = cssVar || ts ? 0 : 10
@@ -547,6 +559,7 @@ export function buildDesignExcerpt(plane: Pick<DesignPlaneResponse, 'state' | 't
     note: 'Use these design tokens (CSS var or TS name) instead of literal colours, fonts, spacing or radii.',
     truncated: false,
   }
+  if (context) out.context = capFixRecipeContext(context, Math.min(CONTEXT_BUDGET_BYTES, Math.floor(maxBytes / 2)))
   const size = () => new TextEncoder().encode(JSON.stringify(out)).length
   while (out.findings.length > 0 && size() > maxBytes) out.findings.pop()
   for (const t of candidates) {
