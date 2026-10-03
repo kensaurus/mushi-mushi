@@ -17,6 +17,7 @@ import {
   formatFixRecipeContextBlock,
   loadFixRecipeContext,
   RADAR_GATES,
+  RECENT_OBSERVATIONS,
   tablesNamedIn,
 } from '../../supabase/functions/_shared/fix-recipe-context.ts'
 import { RADAR_CI_GATE, RADAR_GATE } from '../../supabase/functions/_shared/radar/run.ts'
@@ -329,7 +330,7 @@ function seeded(): FakeDb {
 function failingOn(db: FakeDb, table: string) {
   const failed = { data: null, error: { message: `permission denied for table ${table}` } }
   const chain: Record<string, unknown> = {}
-  for (const m of ['select', 'eq', 'not', 'in', 'order', 'limit', 'maybeSingle']) chain[m] = () => chain
+  for (const m of ['select', 'eq', 'not', 'in', 'lt', 'order', 'limit', 'maybeSingle']) chain[m] = () => chain
   chain.then = (res: (v: unknown) => unknown) => Promise.resolve(failed).then(res)
   return { from: (name: string) => (name === table ? chain : db.from(name)) }
 }
@@ -378,6 +379,67 @@ describe('loadFixRecipeContext', () => {
     expect(ctx.schema.state).toBe('not_connected')
     expect(ctx.deploy.state).toBe('no_merged_fix')
     expect(ctx.radar.state).toBe('unknown')
+  })
+
+  describe('a merge older than the recent observation window', () => {
+    const MERGED = '2026-09-01T10:00:00Z'
+    /** A fix merged a month ago, then RECENT_OBSERVATIONS + 20 newer checks of `web`, and one pre-merge check. */
+    function oldMerge(preMergeCommit: string, newCommit: string): FakeDb {
+      const recent = Array.from({ length: RECENT_OBSERVATIONS + 20 }, (_, i) => ({
+        project_id: P,
+        target_id: 'web',
+        ok: true,
+        observed_commit: newCommit,
+        observed_at: new Date(Date.parse('2026-09-05T00:00:00Z') + i * 3_600_000).toISOString(),
+      }))
+      return makeFakeDb({
+        fix_attempts: [{ project_id: P, report_id: R, pr_url: null, merged_at: MERGED, commit_sha: 'dddddddd' }],
+        deploy_observations: [
+          ...recent,
+          { project_id: P, target_id: 'web', ok: false, observed_commit: null, observed_at: '2026-08-31T12:00:00Z' },
+          { project_id: P, target_id: 'web', ok: true, observed_commit: preMergeCommit, observed_at: '2026-08-31T00:00:00Z' },
+          { project_id: OTHER, target_id: 'web', ok: true, observed_commit: newCommit, observed_at: '2026-08-31T06:00:00Z' },
+        ],
+      } as never)
+    }
+
+    it('reads the pre-merge side on its own, so a moved target is deployed_since_merge, not unknown', async () => {
+      const ctx = await loadFixRecipeContext(oldMerge('cccccccc', 'bbbbbbbb') as never, P, null)
+      expect(ctx.deploy.state).toBe('deployed_since_merge')
+      expect(ctx.deploy.targets).toEqual([expect.objectContaining({ id: 'web', commit: 'bbbbbbbb' })])
+    })
+
+    it('says not_live when the target still serves its pre-merge commit', async () => {
+      const ctx = await loadFixRecipeContext(oldMerge('bbbbbbbb', 'bbbbbbbb') as never, P, null)
+      expect(ctx.deploy.state).toBe('not_live')
+    })
+
+    it('never takes another project\'s pre-merge row', async () => {
+      const db = oldMerge('cccccccc', 'bbbbbbbb')
+      db.table('deploy_observations').splice(-2, 1) // drop this project's only ok pre-merge row
+      const ctx = await loadFixRecipeContext(db as never, P, null)
+      expect(ctx.deploy.state).toBe('unknown')
+    })
+
+    it('says error, not unknown, when the pre-merge read fails', async () => {
+      const db = oldMerge('cccccccc', 'bbbbbbbb')
+      const failingLt = {
+        from: (name: string) => {
+          const q = db.from(name) as unknown as Record<string, unknown>
+          if (name !== 'deploy_observations') return q
+          return new Proxy(q, {
+            get(target, prop, receiver) {
+              if (prop === 'lt') return () => failingOn(db, name).from(name)
+              const v = Reflect.get(target, prop, receiver)
+              return typeof v === 'function' ? (...args: unknown[]) => { const r = v.apply(target, args); return r === target ? receiver : r } : v
+            },
+          })
+        },
+      }
+      const ctx = await loadFixRecipeContext(failingLt as never, P, null)
+      expect(ctx.deploy.state).toBe('error')
+      expect(ctx.deploy.note).toContain('before the merge')
+    })
   })
 
   it('never throws, even when the database client itself throws', async () => {

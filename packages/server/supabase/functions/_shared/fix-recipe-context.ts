@@ -43,6 +43,8 @@ const MAX_COLUMNS = 40
 const MAX_MISSING = 5
 const MAX_TARGETS = 6
 const MAX_RADAR = 8
+/** Newest deploy observations read for the "after the merge" side and the shown targets. */
+export const RECENT_OBSERVATIONS = 100
 /** The radar's scheduled run and the host CI's run (radar/run.ts RADAR_GATE, RADAR_CI_GATE). */
 export const RADAR_GATES = ['portfolio_radar', 'portfolio_radar_ci'] as const
 
@@ -472,7 +474,7 @@ async function loadDeploy(db: Db, projectId: string): Promise<FixDeployContext> 
       .select('target_id, ok, observed_commit, observed_at')
       .eq('project_id', projectId)
       .order('observed_at', { ascending: false })
-      .limit(100),
+      .limit(RECENT_OBSERVATIONS),
     db
       .from('gate_runs')
       .select('id, started_at, completed_at')
@@ -497,11 +499,57 @@ async function loadDeploy(db: Db, projectId: string): Promise<FixDeployContext> 
     if (error) return { state: 'error', note: `Could not read the deploy findings: ${cleanText(error.message, 160)}`, lastFix: null, targets: [] }
     notDeployed = { count: (data ?? []).length, ranAt: run.completed_at ?? run.started_at }
   }
-  return deriveFixDeployState({
-    lastFix: fixRes.data as MergedFixRow | null,
-    observations: (obsRes.data ?? []) as DeployObservationRow[],
-    notDeployed,
-  })
+  const lastFix = fixRes.data as MergedFixRow | null
+  const recent = (obsRes.data ?? []) as DeployObservationRow[]
+  let observations = recent
+  if (lastFix) {
+    const before = await loadPreMergeObservations(db, projectId, lastFix.merged_at, recent)
+    if (!before.ok) return { state: 'error', note: `Could not read the deploy state before the merge: ${cleanText(before.error, 160)}`, lastFix: null, targets: [] }
+    observations = [...recent, ...before.value]
+  }
+  return deriveFixDeployState({ lastFix, observations, notDeployed })
+}
+
+/**
+ * The "before the merge" side of each target, read on its own. The recent
+ * window holds only the newest RECENT_OBSERVATIONS rows; with a daily collector,
+ * several targets and webhook deploys it reaches back about two weeks, so for
+ * an older merge no pre-merge row is in it and the state could never be more
+ * than "unknown". For each target in the window (at most MAX_TARGETS) that has
+ * no ok pre-merge row there, read its newest ok row before the merge.
+ */
+async function loadPreMergeObservations(
+  db: Db,
+  projectId: string,
+  mergedAt: string,
+  recent: readonly DeployObservationRow[],
+): Promise<Section<DeployObservationRow[]>> {
+  const merged = at(mergedAt)
+  const targets: string[] = []
+  for (const o of [...recent].sort((a, b) => at(b.observed_at) - at(a.observed_at))) {
+    if (!targets.includes(o.target_id)) targets.push(o.target_id)
+  }
+  const lacking = targets
+    .slice(0, MAX_TARGETS)
+    .filter((id) => !recent.some((o) => o.target_id === id && o.ok && at(o.observed_at) < merged))
+  const reads = await Promise.all(lacking.map((id) =>
+    db
+      .from('deploy_observations')
+      .select('target_id, ok, observed_commit, observed_at')
+      .eq('project_id', projectId)
+      .eq('target_id', id)
+      .eq('ok', true)
+      .lt('observed_at', mergedAt)
+      .order('observed_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+  ))
+  const out: DeployObservationRow[] = []
+  for (const { data, error } of reads) {
+    if (error) return { ok: false, error: error.message }
+    if (data) out.push(data as DeployObservationRow)
+  }
+  return { ok: true, value: out }
 }
 
 async function loadRadar(db: Db, projectId: string): Promise<FixRadarContext> {
