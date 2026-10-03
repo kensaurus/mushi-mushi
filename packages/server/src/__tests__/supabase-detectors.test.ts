@@ -16,6 +16,7 @@ import {
   type FunctionGrantRow,
   type SecretRpcRow,
 } from '../../supabase/functions/_shared/radar/supabase-detectors.ts'
+import { supabaseRadarResults } from '../../supabase/functions/_shared/connectors/supabase.ts'
 
 const GB = 1024 ** 3
 
@@ -91,6 +92,41 @@ describe('backups', () => {
     expect([p2.state, s2.state]).toEqual(['unknown', 'unknown'])
     const [p3, s3] = evaluateBackups({ pitrEnabled: true, storageBytes: 0 })
     expect([p3.state, s3.state]).toEqual(['ok', 'ok'])
+  })
+})
+
+describe('storage_not_backed_up', () => {
+  it('any stored bytes are an info finding with a plain-English message and a fix', () => {
+    const [, store] = evaluateBackups({ pitrEnabled: true, storageBytes: 3 * GB })
+    expect(store.ruleId).toBe('storage_not_backed_up')
+    expect(store.state).toBe('finding')
+    expect(store.findings).toEqual([
+      expect.objectContaining({
+        ruleId: 'storage_not_backed_up',
+        severity: 'info',
+        message: expect.stringMatching(/not part of Supabase database backups/),
+        fix: expect.stringMatching(/Copy important buckets/),
+      }),
+    ])
+  })
+
+  it('an unread size is unknown, never "nothing stored"', () => {
+    const [, store] = evaluateBackups({ pitrEnabled: true, storageBytes: null })
+    expect(store).toMatchObject({ state: 'unknown', findings: [] })
+  })
+
+  it('objects with no byte size still count as stored files', () => {
+    expect(evaluateBackups({ pitrEnabled: true, storageBytes: 0, storageObjects: 4 })[1].state).toBe('finding')
+    expect(evaluateBackups({ pitrEnabled: true, storageBytes: 0, storageObjects: 0 })[1].state).toBe('ok')
+  })
+
+  it('is wired to the Supabase connector snapshot: bucket bytes and objects, unknown without a bucket list', () => {
+    const rule = (facts: Record<string, unknown>) => supabaseRadarResults(facts).find((r) => r.ruleId === 'storage_not_backed_up')
+    expect(rule({ buckets: [{ bucket_id: 'avatars', objects: 10, bytes: 2_048 }] })?.state).toBe('finding')
+    expect(rule({ buckets: [{ bucket_id: 'legacy', objects: 3, bytes: 0 }] })?.state).toBe('finding')
+    expect(rule({ buckets: [] })?.state).toBe('ok')
+    expect(rule({ buckets: null })?.state).toBe('unknown')
+    expect(rule({})?.state).toBe('unknown')
   })
 })
 
