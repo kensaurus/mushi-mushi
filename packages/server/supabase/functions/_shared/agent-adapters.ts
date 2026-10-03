@@ -27,7 +27,8 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { log } from './logger.ts'
 import { resolveLlmKey } from './byok.ts'
-import { parseGithubRepoUrl } from './github.ts'
+import { fetchPullRequestFiles, parseGithubRepoUrl, resolveProjectGithubToken } from './github.ts'
+import { classifyPrSubstance, parsePullRequestUrl, type PrChangedFile } from './pr-substance.ts'
 import { generateCursorCloudBranchName, validateFixBranchName } from './github-pr.ts'
 import { notifyTeamFixEvent } from './team-notify.ts'
 import { dispatchPluginEventDetached } from './plugins.ts'
@@ -291,7 +292,7 @@ You have the full repository \`${ctx.repoOwner}/${ctx.repoName}\` checked out. T
 2. Make the smallest change that fixes the bug. Add or update a test when you change behaviour. Do not refactor unrelated code.
 3. Open the pull request as a DRAFT against \`${ctx.baseRef}\`. Title it \`fix: <short summary> (MUSHI-${ctx.reportId})\` and include the line \`Mushi report: ${ctx.reportId}\` in the description, followed by what you changed and why.
 4. Never merge, never force-push, never touch secrets or CI credentials. A human reviews every line before merge.
-5. If you cannot find the cause, still open the draft PR with a \`NEEDS_INVESTIGATION.md\` describing what you checked and what to look at next.`
+5. If you cannot find the cause, do NOT open a pull request. Finish the run without one and explain in your final message what you checked and what to look at next. A pull request that only adds notes, markdown or TODO comments is not a fix: Mushi flags it as needs-investigation and leaves the report open.`
 }
 
 /** Branch the agent is asked to use; the Cursor helper owns the prefix/validation rules. */
@@ -531,6 +532,52 @@ export interface CloudAgentOutcomeTarget {
 export interface CloudAgentOutcomeResult {
   applied: boolean
   reason?: 'already_has_pr' | 'pr_url_conflict' | 'not_open' | 'update_failed'
+  /** The PR only adds notes (markdown / TODO comments): the attempt is
+   *  flagged needs-investigation and the report is NOT moved to fixing. */
+  needsInvestigation?: true
+}
+
+/** What Mushi could read of a cloud agent's PR before trusting it. */
+export type CloudPrInspection =
+  | { kind: 'read'; files: PrChangedFile[]; complete: boolean }
+  | { kind: 'unread'; reason: string }
+
+export interface CloudAgentOutcomeDeps {
+  /** Reads the PR's changed files; injectable for tests. */
+  inspectPr?: (db: SupabaseClient, projectId: string, prUrl: string) => Promise<CloudPrInspection>
+}
+
+/**
+ * Read a cloud agent PR's changed files with the project's own GitHub token:
+ * the App installation bound to that repo when there is one, else the
+ * project / org PAT, else the platform token (resolveProjectGithubToken's
+ * order). Never throws; an unreadable PR is reported, not guessed.
+ */
+export async function inspectCloudAgentPr(
+  db: SupabaseClient,
+  projectId: string,
+  prUrl: string,
+): Promise<CloudPrInspection> {
+  const pr = parsePullRequestUrl(prUrl)
+  if (!pr) return { kind: 'unread', reason: 'not a GitHub pull request URL' }
+  try {
+    const { data: repoRow } = await db
+      .from('project_repos')
+      .select('github_app_installation_id')
+      .eq('project_id', projectId)
+      .eq('repo_url', `https://github.com/${pr.owner}/${pr.repo}`)
+      .limit(1)
+      .maybeSingle()
+    const installationId =
+      (repoRow as { github_app_installation_id?: number | null } | null)?.github_app_installation_id ?? null
+    const token = await resolveProjectGithubToken(db, projectId, installationId)
+    if (!token) return { kind: 'unread', reason: 'no GitHub token is stored for this project' }
+    const listed = await fetchPullRequestFiles(token, { owner: pr.owner, repo: pr.repo }, pr.number)
+    if (!listed) return { kind: 'unread', reason: 'GitHub did not find the pull request' }
+    return { kind: 'read', files: listed.files, complete: listed.complete }
+  } catch (err) {
+    return { kind: 'unread', reason: String(err instanceof Error ? err.message : err).slice(0, 200) }
+  }
 }
 
 const OPEN_ATTEMPT_STATUSES = ['running', 'queued', 'dispatched', 'pending']
@@ -546,15 +593,38 @@ function failureCategoryFor(agent: string, explicit?: string | null): string {
  * the same attempt produce exactly one transition and one notification. A
  * unique-index hit on `uq_fix_attempts_pr_url` (another attempt already owns
  * that PR) is logged and skipped, as is an attempt that is no longer open.
+ *
+ * Before a PR moves the report to `fixing`, its changed files are read. A PR
+ * that only adds notes (markdown, a NEEDS_INVESTIGATION file, TODO comments)
+ * closes the attempt as needs-investigation instead. When the files cannot be
+ * read, the PR is trusted as before and the timeline says it went unchecked.
  */
 export async function applyCloudAgentOutcome(
   db: SupabaseClient,
   target: CloudAgentOutcomeTarget,
   outcome: CloudAgentOutcome,
+  deps: CloudAgentOutcomeDeps = {},
 ): Promise<CloudAgentOutcomeResult> {
   const now = new Date().toISOString()
 
   if (outcome.kind === 'pr_opened') {
+    const inspection = await (deps.inspectPr ?? inspectCloudAgentPr)(db, target.projectId, outcome.prUrl).catch(
+      (err): CloudPrInspection => ({ kind: 'unread', reason: String(err).slice(0, 200) }),
+    )
+    if (inspection.kind === 'read') {
+      const verdict = classifyPrSubstance(inspection.files, { complete: inspection.complete })
+      if (verdict.speculative) {
+        return await applyNeedsInvestigationPr(db, target, outcome, verdict, now)
+      }
+    } else {
+      alog.warn('Cloud agent PR contents not checked', {
+        attemptId: target.attemptId,
+        prUrl: outcome.prUrl,
+        reason: inspection.reason,
+      })
+    }
+    const contentCheck = inspection.kind === 'read' ? 'code_change' : `not_checked: ${inspection.reason}`
+
     const { data: updated, error } = await db
       .from('fix_attempts')
       .update({
@@ -609,7 +679,7 @@ export async function applyCloudAgentOutcome(
       label: 'Draft PR opened by cloud agent',
       detail: outcome.prUrl,
       dedupe_key: `cloud-pr:${target.attemptId}`,
-      payload: { agent: target.agent, prUrl: outcome.prUrl, branch: outcome.branch ?? null },
+      payload: { agent: target.agent, prUrl: outcome.prUrl, branch: outcome.branch ?? null, contentCheck },
     })
 
     dispatchPluginEventDetached(db, target.projectId, 'fix.proposed', {
@@ -692,6 +762,87 @@ export async function applyCloudAgentOutcome(
   }).catch((e) => alog.warn('Team fix notification failed', { event: 'fix_failed', err: String(e) }))
 
   return { applied: true }
+}
+
+/**
+ * A cloud agent opened a PR that only adds notes. Record the PR on the attempt
+ * (so the race guard and the unique index still hold, and a human can find
+ * and close it), close the attempt as needs-investigation, and leave the
+ * report's status alone: nothing was fixed.
+ */
+async function applyNeedsInvestigationPr(
+  db: SupabaseClient,
+  target: CloudAgentOutcomeTarget,
+  outcome: Extract<CloudAgentOutcome, { kind: 'pr_opened' }>,
+  verdict: { reason: string; files: string[] },
+  now: string,
+): Promise<CloudAgentOutcomeResult> {
+  const errorText =
+    `needs_investigation: ${verdict.reason}. The agent did not find a fix; read its notes, then close the PR: ${outcome.prUrl}`
+      .slice(0, 1000)
+  const { data: updated, error } = await db
+    .from('fix_attempts')
+    .update({
+      status: 'failed',
+      pr_url: outcome.prUrl,
+      pr_state: 'open',
+      ...(outcome.branch ? { branch: outcome.branch, branch_name: outcome.branch } : {}),
+      ...(outcome.summary ? { summary: outcome.summary.slice(0, 2000) } : {}),
+      files_changed: verdict.files.slice(0, 50),
+      review_passed: false,
+      review_reasoning: verdict.reason.slice(0, 1000),
+      error: errorText,
+      failure_category: 'validation_rejected',
+      completed_at: now,
+    })
+    .eq('id', target.attemptId)
+    .is('pr_url', null)
+    .select('id')
+  if (error) {
+    if (error.code === '23505') {
+      alog.warn('PR already attached to another fix attempt — skipping', { attemptId: target.attemptId, prUrl: outcome.prUrl })
+      return { applied: false, reason: 'pr_url_conflict' }
+    }
+    alog.error('fix_attempts needs-investigation update failed', { attemptId: target.attemptId, error: error.message })
+    return { applied: false, reason: 'update_failed' }
+  }
+  if (!updated || updated.length === 0) return { applied: false, reason: 'already_has_pr' }
+
+  await db
+    .from('fix_dispatch_jobs')
+    .update({ status: 'completed_no_pr', pr_url: outcome.prUrl, error: errorText.slice(0, 500), finished_at: now })
+    .eq('fix_attempt_id', target.attemptId)
+    .in('status', ['queued', 'running'])
+
+  // processing_error only: the report keeps its status (not `fixing`).
+  await db
+    .from('reports')
+    .update({ processing_error: `autofix_blocked: ${errorText}`.slice(0, 500) })
+    .eq('id', target.reportId)
+    .eq('project_id', target.projectId)
+
+  await insertFixEvent(db, {
+    fix_attempt_id: target.attemptId,
+    project_id: target.projectId,
+    kind: 'failed',
+    status: 'fail',
+    label: 'Cloud agent PR needs investigation (notes only, no fix)',
+    detail: `${verdict.reason} — ${outcome.prUrl}`.slice(0, 500),
+    dedupe_key: `cloud-final:${target.attemptId}`,
+    payload: { agent: target.agent, prUrl: outcome.prUrl, files: verdict.files.slice(0, 20), needsInvestigation: true },
+  })
+
+  dispatchPluginEventDetached(db, target.projectId, 'fix.failed', {
+    report: { id: target.reportId },
+    fix: { id: target.attemptId, agent: target.agent, error: errorText.slice(0, 500), prUrl: outcome.prUrl },
+  }).catch((e) => alog.warn('Plugin dispatch failed', { event: 'fix.failed', err: String(e) }))
+
+  void notifyTeamFixEvent(db, target.projectId, target.reportId, 'fix_failed', {
+    error: errorText.slice(0, 500),
+    failureCategory: 'validation_rejected',
+  }).catch((e) => alog.warn('Team fix notification failed', { event: 'fix_failed', err: String(e) }))
+
+  return { applied: true, needsInvestigation: true }
 }
 
 async function insertFixEvent(

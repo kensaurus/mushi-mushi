@@ -23,7 +23,12 @@ vi.mock('../../supabase/functions/_shared/db.ts', () => ({ getServiceClient: () 
 vi.mock('../../supabase/functions/_shared/sentry.ts', () => ({ withSentry: (_n: string, h: unknown) => h }))
 vi.mock('../../supabase/functions/_shared/auth.ts', () => ({ requireServiceRoleAuth: () => null }))
 vi.mock('../../supabase/functions/_shared/byok.ts', () => ({ resolveLlmKey: async () => null }))
-vi.mock('../../supabase/functions/_shared/github.ts', () => ({ parseGithubRepoUrl: () => null }))
+vi.mock('../../supabase/functions/_shared/github.ts', () => ({
+  parseGithubRepoUrl: () => null,
+  // No token: the PR content check reports "not checked" and the PR is trusted.
+  resolveProjectGithubToken: async () => null,
+  fetchPullRequestFiles: async () => null,
+}))
 vi.mock('../../supabase/functions/_shared/github-pr.ts', () => ({
   generateCursorCloudBranchName: (id: string) => `bugfix/MUSHI-${id}-cursor-cloud`,
   validateFixBranchName: () => undefined,
