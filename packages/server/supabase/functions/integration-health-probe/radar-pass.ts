@@ -93,9 +93,9 @@ const MAX_SPEND_ROWS = 50_000
 async function recentLlmSpendUsd(db: SupabaseClient, projectId: string, nowMs: number): Promise<number> {
   type Row = { used_model: string | null; input_tokens: number | null; output_tokens: number | null; cost_usd: number | null }
   const read = await readAllPages<Row>(
-    (from, to) => db
+    (from, to, count) => db
       .from('llm_invocations')
-      .select('id, used_model, input_tokens, output_tokens, cost_usd', { count: 'exact' })
+      .select('id, used_model, input_tokens, output_tokens, cost_usd', { count })
       .eq('project_id', projectId)
       .gte('created_at', new Date(nowMs - SPEND_WINDOW_MS).toISOString())
       .order('id', { ascending: true })
