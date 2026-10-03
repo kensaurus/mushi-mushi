@@ -34,6 +34,15 @@ For each release tag, Mushi:
 5. Review and edit the draft.
 6. Click **Publish**.
 
+The same steps work from a script or an agent with an API key: reads
+(`GET /v1/admin/releases`, `/stats`, `/:id`) take `mcp:read`; drafting,
+editing, deleting a draft and publishing take `mcp:write`. Publishing messages
+every credited reporter, so give a key `mcp:write` only where you would let it
+do that. A key bound to one project only sees that project's releases. An
+account-level key reaches every project you can reach, with your role in each:
+it opens any release in those projects, and `/stats` needs the project named
+with `project_id` (or the `X-Mushi-Project-Id` header).
+
 ---
 
 ## Release automatically when you ship

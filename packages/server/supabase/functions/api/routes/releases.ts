@@ -1,15 +1,17 @@
 // ============================================================
 // releases.ts — Release drafting, publishing, and attribution
 //
-// Admin (JWT, org-scoped):
-//   GET  /v1/admin/releases             — list releases for a project
-//   POST /v1/admin/releases/draft       — trigger release-builder edge function
-//   GET  /v1/admin/releases/auto-release — automatic draft blocking auto-release
-//   GET  /v1/admin/releases/:id         — release detail with credits
-//   PATCH /v1/admin/releases/:id        — edit body, title, status
-//   DELETE /v1/admin/releases/:id       — delete draft (not published)
+// Admin (console JWT, or an API key — adminOrApiKey; a project-bound key
+// only reaches its own project's releases):
+//   GET  /v1/admin/releases/stats       — posture banner (mcp:read)
+//   GET  /v1/admin/releases             — list releases for a project (mcp:read)
+//   POST /v1/admin/releases/draft       — trigger release-builder edge function (mcp:write)
+//   GET  /v1/admin/releases/auto-release — automatic draft blocking auto-release (mcp:read)
+//   GET  /v1/admin/releases/:id         — release detail with credits (mcp:read)
+//   PATCH /v1/admin/releases/:id        — edit body, title, status (mcp:write)
+//   DELETE /v1/admin/releases/:id       — delete draft (not published) (mcp:write)
 //   POST /v1/admin/releases/:id/publish — publish; resolve fixed_report_ids,
-//                                          message each reporter, credit after delivery
+//                                          message each reporter, credit after delivery (mcp:write)
 //
 // SDK (apiKeyAuth):
 //   GET /v1/sdk/me/credits              — releases where the user is credited
@@ -19,7 +21,7 @@ import type { Hono } from 'npm:hono@4'
 import type { Variables } from '../types.ts'
 import { z } from 'npm:zod@3'
 import { getServiceClient } from '../../_shared/db.ts'
-import { jwtAuth, apiKeyAuth } from '../../_shared/auth.ts'
+import { adminOrApiKey, apiKeyAuth } from '../../_shared/auth.ts'
 import { resolveEndUser } from '../../_shared/end-user-resolver.ts'
 import {
   assertTargetProjectAccess,
@@ -58,8 +60,11 @@ async function assertReleaseRowAccess(
 }
 
 export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
+  const readAuth = adminOrApiKey({ scope: 'mcp:read' })
+  const writeAuth = adminOrApiKey({ scope: 'mcp:write' })
+
   // GET /v1/admin/releases/stats — posture banner + RELEASES SNAPSHOT.
-  app.get('/v1/admin/releases/stats', jwtAuth, async (c) => {
+  app.get('/v1/admin/releases/stats', readAuth, async (c) => {
     const db = getServiceClient()
     const userId = c.get('userId') as string
 
@@ -215,7 +220,7 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
   })
 
   // ─── List releases ────────────────────────────────────────────────────────
-  app.get('/v1/admin/releases', jwtAuth, async (c) => {
+  app.get('/v1/admin/releases', readAuth, async (c) => {
     const db = getServiceClient()
     const userId = c.get('userId') as string
     const projectIds = await intersectOrgAndProjectScope(c, db, userId)
@@ -267,7 +272,7 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
     window_end: z.string().optional(),
   })
 
-  app.post('/v1/admin/releases/draft', jwtAuth, async (c) => {
+  app.post('/v1/admin/releases/draft', writeAuth, async (c) => {
     const body = draftSchema.safeParse(await c.req.json())
     if (!body.success) return c.json({ ok: false, error: body.error.flatten() }, 400)
 
@@ -313,7 +318,7 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
   })
 
   // ─── Release detail ────────────────────────────────────────────────────────
-  app.get('/v1/admin/releases/:id', jwtAuth, async (c) => {
+  app.get('/v1/admin/releases/:id', readAuth, async (c) => {
     const db = getServiceClient()
     const userId = c.get('userId') as string
     const idParsed = parseUuidParam(c, 'id')
@@ -340,7 +345,7 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
     fulfilled_ticket_ids: z.array(z.string().uuid()).optional(),
   })
 
-  app.patch('/v1/admin/releases/:id', jwtAuth, async (c) => {
+  app.patch('/v1/admin/releases/:id', writeAuth, async (c) => {
     const db = getServiceClient()
     const userId = c.get('userId') as string
     const idParsed = parseUuidParam(c, 'id')
@@ -364,7 +369,7 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
   })
 
   // ─── Delete draft release ─────────────────────────────────────────────────
-  app.delete('/v1/admin/releases/:id', jwtAuth, async (c) => {
+  app.delete('/v1/admin/releases/:id', writeAuth, async (c) => {
     const db = getServiceClient()
     const userId = c.get('userId') as string
     const idParsed = parseUuidParam(c, 'id')
@@ -383,7 +388,7 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
   })
 
   // ─── Publish release + notify credited users ──────────────────────────────
-  app.post('/v1/admin/releases/:id/publish', jwtAuth, async (c) => {
+  app.post('/v1/admin/releases/:id/publish', writeAuth, async (c) => {
     const db = getServiceClient()
     const userId = c.get('userId') as string
     const idParsed = parseUuidParam(c, 'id')

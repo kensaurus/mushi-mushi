@@ -41,7 +41,7 @@ import { accountRegisterRules, REGISTER_COLUMNS, registerFromRows, type Register
 type Db = ReturnType<typeof getServiceClient>
 
 const RECIPE_GATES = ['ci_drift', 'deploy_drift', 'env_drift', 'schema_drift'] as const
-type RecipeGate = (typeof RECIPE_GATES)[number]
+export type RecipeGate = (typeof RECIPE_GATES)[number]
 
 /** Which connector answers for which recipe gate (a gate with no connected source gets no run). */
 const GATE_SOURCE: Record<RecipeGate, string[]> = {
@@ -49,6 +49,22 @@ const GATE_SOURCE: Record<RecipeGate, string[]> = {
   env_drift: ['github', 'sentry'],
   schema_drift: ['supabase'],
   deploy_drift: ['github', 'app_store_connect', 'play_console', '__deploy_probe'],
+}
+
+/**
+ * Every source whose data can produce a gate's findings. schema_drift runs on
+ * Supabase alone, but its migration_unapplied finding also reads the GitHub
+ * migration files (migrationDrift).
+ */
+const GATE_INPUTS: Record<RecipeGate, string[]> = { ...GATE_SOURCE, schema_drift: ['supabase', 'github'] }
+
+/**
+ * The sources a gate run records as summary.connectors: each connected source
+ * that fed it. explain_finding reads this back, so a finding from a source the
+ * next run could not reach reads "unknown", never "fixed".
+ */
+export function gateRunConnectors(gate: RecipeGate, connected: ReadonlySet<string>): string[] {
+  return GATE_INPUTS[gate].filter((k) => connected.has(k))
 }
 
 export interface Phase2Deps extends RuntimeDeps {
@@ -238,7 +254,7 @@ export async function collectProjectPhase2(db: Db, projectId: string, deps: Phas
   for (const gate of RECIPE_GATES) {
     if (!GATE_SOURCE[gate].some((k) => connected.has(k))) continue
     const own = findings.filter((f) => f.gate === gate)
-    gates.push(await writeGateRun(db, projectId, gate, own, { source: 'connectors', connectors: GATE_SOURCE[gate].filter((k) => connected.has(k)) }, head, runWindow))
+    gates.push(await writeGateRun(db, projectId, gate, own, { source: 'connectors', connectors: gateRunConnectors(gate, connected) }, head, runWindow))
   }
 
   // Shared resources this project uses.

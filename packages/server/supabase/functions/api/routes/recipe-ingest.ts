@@ -9,7 +9,8 @@
  *                                               the answer carries the score and the project's CI gate
  *   POST /v1/ingest/recipe/events   apiKeyAuth  build.completed / deploy.completed / release.published
  *                                               (auto-release needs an mcp:write key never seen in a browser)
- *   POST /v1/ingest/recipe/csv      jwtAuth     one-off import of shared resources (domains, bundle ids…)
+ *   POST /v1/ingest/recipe/csv      adminOrApiKey(mcp:write)  one-off import of shared resources (domains, bundle ids…);
+ *                                               console JWT or an account-level key, team owner/admin only
  *   GET  /v1/admin/orgs/:orgId/portfolio/resources  adminOrApiKey(mcp:read)  resources, uses, cross-project findings
  *   GET  /v1/admin/projects/:id/recipe/drift          adminOrApiKey(mcp:read)  open recipe drift with fixes (MCP get_recipe_drift)
  *
@@ -20,7 +21,7 @@
 
 import type { Context, Hono, MiddlewareHandler } from 'npm:hono@4'
 import { z } from 'npm:zod@3'
-import { adminOrApiKey, apiKeyAuth, jwtAuth, keyGrantsAnyScope, keyHasAgentScope, mcpKeyBrowserExposure } from '../../_shared/auth.ts'
+import { adminOrApiKey, apiKeyAuth, keyGrantsAnyScope, keyHasAgentScope, mcpKeyBrowserExposure } from '../../_shared/auth.ts'
 import { getServiceClient } from '../../_shared/db.ts'
 import { log } from '../../_shared/logger.ts'
 import { snapshotFromSource, DESIGN_GATE } from '../../_shared/design-plane.ts'
@@ -47,8 +48,8 @@ type Db = ReturnType<typeof getServiceClient>
 export interface RecipeIngestDeps {
   getServiceClient: () => Db
   apiKeyAuth: MiddlewareHandler
-  jwtAuth: MiddlewareHandler
   adminOrApiKeyRead: MiddlewareHandler
+  adminOrApiKeyWrite: MiddlewareHandler
   now: () => Date
   recordCiDeviance: (db: Db, projectId: string, input: CiDevianceInput) => Promise<CiDevianceResult>
   /** Why the pushing key is public (a web page sent it, or an SDK key), or null; a public key's push never sets the design state or dispatches. */
@@ -75,8 +76,8 @@ export function ingestKeyExposure(c: Context): CiKeyExposure {
 export const defaultRecipeIngestDeps: RecipeIngestDeps = {
   getServiceClient,
   apiKeyAuth: apiKeyAuth as MiddlewareHandler,
-  jwtAuth: jwtAuth as MiddlewareHandler,
   adminOrApiKeyRead: adminOrApiKey({ scope: 'mcp:read' }) as MiddlewareHandler,
+  adminOrApiKeyWrite: adminOrApiKey({ scope: 'mcp:write' }) as MiddlewareHandler,
   now: () => new Date(),
   recordCiDeviance: (db, projectId, input) => recordCiDeviance(db, projectId, input),
   keyExposure: ingestKeyExposure,
@@ -342,7 +343,7 @@ export function registerRecipeIngestRoutes(app: Hono<{ Variables: Variables }>, 
     })
   })
 
-  app.post('/v1/ingest/recipe/csv', deps.jwtAuth, async (c) => {
+  app.post('/v1/ingest/recipe/csv', deps.adminOrApiKeyWrite, async (c) => {
     const db = deps.getServiceClient()
     const body = await c.req.json().catch(() => null) as { organizationId?: unknown; csv?: unknown } | null
     if (typeof body?.organizationId !== 'string' || typeof body.csv !== 'string') return jsonError(c, 'VALIDATION_ERROR', 'Send { organizationId, csv }.', 400)

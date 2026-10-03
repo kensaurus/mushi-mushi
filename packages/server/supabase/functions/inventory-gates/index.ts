@@ -31,6 +31,7 @@ import { log } from '../_shared/logger.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { collectDescendantActionIds } from '../_shared/inventory-story-scope.ts'
+import { withFindingsNotStored } from '../_shared/finding-explain.ts'
 
 declare const Deno: {
   serve(handler: (req: Request) => Response | Promise<Response>): void
@@ -122,18 +123,25 @@ async function startGateRun(
   return data.id as string
 }
 
+/**
+ * Close a gate run. `findingsCount` is what landed in gate_findings; `found`
+ * (when larger) is how many the gate tried to store, and the difference is
+ * written down as summary.findings_not_stored so a reader never takes a
+ * finding that failed to insert for one the gate no longer sees.
+ */
 async function finishGateRun(
   db: SupabaseClient,
   runId: string,
   status: GateStatus,
   summary: Record<string, unknown>,
   findingsCount: number,
+  found = findingsCount,
 ): Promise<void> {
   await db
     .from('gate_runs')
     .update({
       status,
-      summary,
+      summary: withFindingsNotStored(summary, findingsCount, found),
       findings_count: findingsCount,
       completed_at: new Date().toISOString(),
     })
@@ -204,7 +212,7 @@ async function runStatusClaimGate(
     sample: violations.slice(0, 5),
     ...(body.story_node_id ? { story_node_id: body.story_node_id } : {}),
   }
-  await finishGateRun(db, runId, status, summary, inserted)
+  await finishGateRun(db, runId, status, summary, inserted, violations.length)
   return { gate: 'status_claim', status, summary, findings_count: inserted, run_id: runId }
 }
 
@@ -285,7 +293,7 @@ async function runApiContractGate(
   }
 
   const status: GateStatus = missing.length === 0 ? 'pass' : 'fail'
-  await finishGateRun(db, runId, status, { missing_count: missing.length, sample: missing.slice(0, 5) }, inserted)
+  await finishGateRun(db, runId, status, { missing_count: missing.length, sample: missing.slice(0, 5) }, inserted, missing.length)
   return {
     gate: 'api_contract',
     status,
@@ -395,7 +403,7 @@ async function runOrphanEndpointGate(
     observed_routes: discovered.size - orphans.length,
     orphan_count: orphans.length,
     sample: orphans.slice(0, 5),
-  }, inserted)
+  }, inserted, orphans.length)
 
   return {
     gate: 'orphan_endpoint',
@@ -507,7 +515,7 @@ async function runUnknownCallGate(
     known_paths: known.size,
     unknown_count: unknowns.length,
     sample: unknowns.slice(0, 5),
-  }, inserted)
+  }, inserted, unknowns.length)
 
   return {
     gate: 'unknown_call',
@@ -550,7 +558,7 @@ async function recordSpecDriftGate(
     findings.length === 0 ? 'pass'
     : findings.some((f) => f.severity === 'error') ? 'fail'
     : 'warn'
-  await finishGateRun(db, runId, status, { provided_findings: findings.length }, inserted)
+  await finishGateRun(db, runId, status, { provided_findings: findings.length }, inserted, findings.length)
   return { gate: 'spec_drift', status, summary: { provided_findings: findings.length }, findings_count: inserted, run_id: runId }
 }
 
@@ -584,7 +592,7 @@ async function recordLintGate(
   }
   const status: GateStatus =
     findings.length === 0 ? 'pass' : findings.some((f) => f.severity === 'error') ? 'fail' : 'warn'
-  await finishGateRun(db, runId, status, { provided_findings: findings.length }, inserted)
+  await finishGateRun(db, runId, status, { provided_findings: findings.length }, inserted, findings.length)
   return {
     gate,
     status,

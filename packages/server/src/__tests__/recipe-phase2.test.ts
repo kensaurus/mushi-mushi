@@ -330,7 +330,7 @@ describe('connector routes', () => {
 describe('recipe ingest routes', () => {
   function ingestHarness(db: FakeDb) {
     const app = new FakeApp()
-    ingest.registerRecipeIngestRoutes(app as never, { getServiceClient: () => db as never, apiKeyAuth: pass, jwtAuth: pass, adminOrApiKeyRead: pass, now: () => NOW } as never)
+    ingest.registerRecipeIngestRoutes(app as never, { getServiceClient: () => db as never, apiKeyAuth: pass, adminOrApiKeyRead: pass, adminOrApiKeyWrite: pass, now: () => NOW } as never)
     return app
   }
 
@@ -525,7 +525,7 @@ describe('a rejected CI push fails the CI step', () => {
       app_recipe_snapshots: [{ id: 'cur', project_id: P1, is_current: true, tokens_hash: 'x', manifest: null }],
     } as never, { autoId: true, uniques: { app_recipe_snapshots: ['project_id'] } })
     const app = new FakeApp()
-    ingest.registerRecipeIngestRoutes(app as never, { getServiceClient: () => db as never, apiKeyAuth: pass, jwtAuth: pass, adminOrApiKeyRead: pass, now: () => NOW } as never)
+    ingest.registerRecipeIngestRoutes(app as never, { getServiceClient: () => db as never, apiKeyAuth: pass, adminOrApiKeyRead: pass, adminOrApiKeyWrite: pass, now: () => NOW } as never)
     const res = await app.call('POST', '/v1/ingest/recipe', { body: { commitSha: 'abcdef1', files: { 'mushi.recipe.json': '{"version":1}' } }, vars: { projectId: P1 } })
     expect(res.status).toBe(422)
     expect(res.body.error.code).toBe('RECIPE_REJECTED')
@@ -545,3 +545,14 @@ function failUpdates(db: FakeDb, table: string): FakeDb {
       : Reflect.get(t, prop, r),
   })
 }
+
+describe('gateRunConnectors', () => {
+  it('records every connected source that fed the gate, so a later run that missed one is not read as a fix', () => {
+    const all = new Set(['github', 'supabase', 'sentry', 'play_console'])
+    // schema_drift runs on Supabase alone, but migration_unapplied also reads GitHub.
+    expect(phase2.gateRunConnectors('schema_drift', all)).toEqual(['supabase', 'github'])
+    expect(phase2.gateRunConnectors('schema_drift', new Set(['supabase']))).toEqual(['supabase'])
+    expect(phase2.gateRunConnectors('deploy_drift', all)).toEqual(['github', 'play_console'])
+    expect(phase2.gateRunConnectors('env_drift', new Set(['sentry']))).toEqual(['sentry'])
+  })
+})

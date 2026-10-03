@@ -59,6 +59,8 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: { code?: string; 
   private _order: Array<{ key: string; ascending: boolean }> = []
   private returning = false
   private onConflict: string[] | null = null
+  /** select(cols, { count: 'exact', head }) — return the match count, and no rows when head. */
+  private counting: { head: boolean } | null = null
 
   constructor(
     private readonly db: FakeDb,
