@@ -175,8 +175,9 @@ export function detectSpendCapUnset(settings: SpendCapSettings): RadarFinding[] 
       suggested_fix: {
         kind: 'console',
         path: '/settings?tab=general#spend-limits',
-        // One-click apply: the console (and an agent) sends exactly these
-        // fields to PATCH /v1/admin/settings for this project.
+        // One-click apply from the console only: a signed-in project admin
+        // sends the fields still unset to PATCH /v1/admin/settings (jwtAuth).
+        // An API key or MCP client cannot apply it; it links to `path`.
         method: 'PATCH',
         endpoint: '/v1/admin/settings',
         values,
