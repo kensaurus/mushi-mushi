@@ -397,19 +397,8 @@ jobs:
 
       # The MCP registry publish runs in its own job (`mcp-registry` below) so
       # the third-party mcp-publisher binary never executes while this job's
-      # npm publish identity is live.
-
-      - name: Sync published versions to sdk_versions catalog
-        # Keep the console freshness chips accurate without hand-written
-        # migrations. On any failure we warn but do not fail the release —
-        # the daily sdk-versions-cron reconcile is the backstop.
-        if: ${{ !cancelled() && steps.changesets.outcome == 'success' && steps.changesets.outputs.published == 'true' }}
-        continue-on-error: true
-        env:
-          PUBLISHED: ${{ steps.changesets.outputs.publishedPackages }}
-          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: node scripts/sync-sdk-versions.mjs
+      # npm publish identity is live. The sdk_versions catalogue refresh runs
+      # in `catalog-sync` below, over GitHub OIDC, with no Supabase key.
 
       - name: Published packages summary
         if: ${{ !cancelled() && steps.changesets.outcome == 'success' && steps.changesets.outputs.published == 'true' }}
@@ -501,6 +490,83 @@ jobs:
             | grep -q "io.github.kensaurus/mushi-mushi" \
             && echo "✓ Mushi MCP server is live in the official registry" \
             || echo "::warning::MCP registry record not visible yet — re-check in a few minutes."
+
+  catalog-sync:
+    name: Refresh the SDK version catalog
+    # Keeps the console's SDK freshness chips current right after a publish.
+    # Asks the sdk-versions-cron edge function to re-read npm, authenticated
+    # by a GitHub OIDC token (audience mushi-sdk-catalog) that the function
+    # pins to this file on master in this repository
+    # (packages/server/supabase/functions/_shared/github-oidc.ts). No Supabase
+    # credential is in scope anywhere in this workflow.
+    #
+    # The PUBLISHED list goes along as a compare-only hint: the function never
+    # writes it, it reads npm itself and applies its quarantine guard. It
+    # answers 202 while npm `latest` still lags a published version, so this
+    # job retries. Failure only warns: the daily pg_cron run is the backstop.
+    #
+    # Minimal on purpose: no checkout, no install, only an OIDC token. An npm
+    # Trusted Publisher rule without an `environment` accepts an OIDC token
+    # from any job in this file (see `mcp-registry`), so nothing third-party
+    # runs here beyond the pinned harden-runner every job uses.
+    needs: release
+    if: ${{ !cancelled() && needs.release.outputs.published == 'true' }}
+    runs-on: ubuntu-latest
+    # Worst case below: 5 x (10 s token + 15 s call) + 4 x 30 s sleep = 245 s.
+    timeout-minutes: 5
+    permissions:
+      id-token: write
+    steps:
+      - uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40  # v2.19.0
+        with:
+          egress-policy: audit
+
+      - name: Ask sdk-versions-cron to re-read npm
+        continue-on-error: true
+        env:
+          PUBLISHED: ${{ needs.release.outputs.publishedPackages }}
+          CATALOG_URL: https://${{ secrets.SUPABASE_PROJECT_REF }}.supabase.co/functions/v1/sdk-versions-cron
+          OIDC_AUDIENCE: mushi-sdk-catalog
+        run: |
+          set -uo pipefail
+          if ! body=$(jq -cn --argjson p "${PUBLISHED:-[]}" '{expected: [$p[] | {name, version}]}'); then
+            echo "::warning::Could not read the published package list; the daily sdk-versions-cron run will refresh the catalog."
+            exit 0
+          fi
+          max_attempts=5
+          for attempt in $(seq 1 "$max_attempts"); do
+            # A fresh token per attempt: retries can outlive a token's lifetime.
+            token=$(curl -fsS --max-time 10 \
+              -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+              "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${OIDC_AUDIENCE}" | jq -r '.value // empty') || token=""
+            if [ -z "$token" ]; then
+              status=000
+            else
+              echo "::add-mask::${token}"
+              status=$(curl -sS -o "$RUNNER_TEMP/catalog-sync.json" -w '%{http_code}' --max-time 15 \
+                -X POST -H "Authorization: Bearer ${token}" -H 'Content-Type: application/json' \
+                --data "$body" "$CATALOG_URL") || status=000
+            fi
+            case "$status" in
+              200)
+                echo "sdk_versions catalog refreshed:"
+                jq -c '.data' "$RUNNER_TEMP/catalog-sync.json" || true
+                exit 0
+                ;;
+              202 | 5?? | 000)
+                echo "Attempt ${attempt}/${max_attempts}: HTTP ${status}, npm has not caught up or the call failed."
+                [ -f "$RUNNER_TEMP/catalog-sync.json" ] && { jq -c '.data.stale // .error // empty' "$RUNNER_TEMP/catalog-sync.json" || true; }
+                ;;
+              *)
+                # 401/403/4xx: auth or request shape will not heal on retry.
+                echo "::warning::sdk-versions-cron answered HTTP ${status}; not retrying. The daily cron run will refresh the catalog."
+                exit 0
+                ;;
+            esac
+            [ "$attempt" -lt "$max_attempts" ] && sleep 30
+          done
+          echo "::warning::sdk_versions catalog not confirmed fresh after ${max_attempts} attempts; the daily sdk-versions-cron run is the backstop."
+          exit 0
 
   sbom:
     name: SBOMs for published packages
