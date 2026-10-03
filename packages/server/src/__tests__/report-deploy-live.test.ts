@@ -226,10 +226,13 @@ describe('deriveDeployLive — the fix merged into another repo (review regressi
     expect(out.state).toBe('unknown')
   })
 
-  it('is unknown when a merged attempt has no readable PR URL, or no primary repo is connected', () => {
+  it('is unknown when a merged attempt has no readable PR URL', () => {
     expect(mustDerive({ ...live, fixRepos: [FRONT, null] }).reason).toMatch(/cannot tell which repo/)
     expect(mustDerive({ ...live, fixRepos: [] }).state).toBe('unknown')
-    expect(mustDerive({ ...live, watchedRepo: null }).reason).toMatch(/No primary GitHub repo/)
+  })
+
+  it('is null (no chip, never live) when the project has no primary GitHub repo', () => {
+    expect(derive({ ...live, watchedRepo: null })).toBeNull()
   })
 
   it('compares repos case-insensitively', () => {
@@ -327,10 +330,10 @@ function seed() {
       { id: 'repo-back', project_id: PROJECT, is_primary: false, repo_url: 'https://github.com/acme/sbc-be' },
     ],
     gate_runs: [
-      { id: 'r0', project_id: PROJECT, gate: 'deploy_drift', status: 'pass', started_at: '2026-10-02T03:35:00Z', completed_at: '2026-10-02T03:35:05Z', commit_sha: PRE, summary: { head_repo: FRONT } },
-      { id: 'r1', project_id: PROJECT, gate: 'deploy_drift', status: 'warn', started_at: '2026-10-03T03:35:00Z', completed_at: '2026-10-03T03:35:05Z', commit_sha: H1, summary: { head_repo: 'Acme/SBC-Front' } },
+      { id: 'r0', project_id: PROJECT, gate: 'deploy_drift', triggered_by: 'recipe-collector', status: 'pass', started_at: '2026-10-02T03:35:00Z', completed_at: '2026-10-02T03:35:05Z', commit_sha: PRE, summary: { head_repo: FRONT } },
+      { id: 'r1', project_id: PROJECT, gate: 'deploy_drift', triggered_by: 'recipe-collector', status: 'warn', started_at: '2026-10-03T03:35:00Z', completed_at: '2026-10-03T03:35:05Z', commit_sha: H1, summary: { head_repo: 'Acme/SBC-Front' } },
       { id: 'r-other-gate', project_id: PROJECT, gate: 'ci_drift', status: 'warn', started_at: '2026-10-03T08:00:00Z', completed_at: null, commit_sha: STRAY, summary: null },
-      { id: 'r-other-project', project_id: 'another-project', gate: 'deploy_drift', status: 'pass', started_at: '2026-10-03T08:00:00Z', completed_at: '2026-10-03T08:00:05Z', commit_sha: STRAY, summary: null },
+      { id: 'r-other-project', project_id: 'another-project', gate: 'deploy_drift', triggered_by: 'recipe-collector', status: 'pass', started_at: '2026-10-03T08:00:00Z', completed_at: '2026-10-03T08:00:05Z', commit_sha: STRAY, summary: null },
     ],
     deploy_observations: [
       { target_id: 'web', project_id: PROJECT, ok: true, observed_commit: PRE, observed_at: '2026-10-03T03:34:00Z' },
@@ -395,6 +398,22 @@ describe('loadReportDeployLive', () => {
     ])
     expect(out).toMatchObject({ state: 'unknown', merged_at: MERGED_AT })
     expect(out?.reason).toContain(BACK)
+  })
+
+  it('returns null when the project has no primary GitHub repo', async () => {
+    const db = seed()
+    db.tables.project_repos = db.tables.project_repos.filter((r) => r.is_primary !== true)
+    db.tables.deploy_observations.push({ target_id: 'web', project_id: PROJECT, ok: true, observed_commit: H1, observed_at: '2026-10-03T04:00:00Z' })
+    expect(await loadReportDeployLive(db as unknown as SupabaseClient, FIXED, FRONT_MERGE)).toBeNull()
+  })
+
+  it('reads heads only from recipe-collector runs, not a deploy_drift row another writer made', async () => {
+    const db = seed()
+    db.tables.gate_runs = db.tables.gate_runs.filter((r) => r.id !== 'r1')
+    db.tables.gate_runs.push({ id: 'r-ci', project_id: PROJECT, gate: 'deploy_drift', triggered_by: 'ci', status: 'pass', started_at: '2026-10-03T03:35:00Z', completed_at: '2026-10-03T03:35:05Z', commit_sha: H1, summary: null })
+    db.tables.deploy_observations.push({ target_id: 'web', project_id: PROJECT, ok: true, observed_commit: H1, observed_at: '2026-10-03T04:00:00Z' })
+    const out = await loadReportDeployLive(db as unknown as SupabaseClient, FIXED, FRONT_MERGE)
+    expect(out?.state).toBe('unknown')
   })
 
   it('does not count a run whose recorded head repo is not the primary repo', async () => {
@@ -485,8 +504,8 @@ describe('loadReportDeployLive — prod lagging a newer head (review regression)
       app_recipe_snapshots: [{ id: 's1', project_id: PROJECT, is_current: true, manifest: MANIFEST }],
       project_repos: [{ id: 'repo-front', project_id: PROJECT, is_primary: true, repo_url: 'https://github.com/acme/sbc-front.git' }],
       gate_runs: [
-        { id: 'r1', project_id: PROJECT, gate: 'deploy_drift', status: 'pass', started_at: '2026-10-03T03:35:00Z', completed_at: '2026-10-03T03:35:05Z', commit_sha: H1, summary: null },
-        { id: 'r2', project_id: PROJECT, gate: 'deploy_drift', status: 'warn', started_at: '2026-10-05T03:35:00Z', completed_at: '2026-10-05T03:35:05Z', commit_sha: H2, summary: null },
+        { id: 'r1', project_id: PROJECT, gate: 'deploy_drift', triggered_by: 'recipe-collector', status: 'pass', started_at: '2026-10-03T03:35:00Z', completed_at: '2026-10-03T03:35:05Z', commit_sha: H1, summary: null },
+        { id: 'r2', project_id: PROJECT, gate: 'deploy_drift', triggered_by: 'recipe-collector', status: 'warn', started_at: '2026-10-05T03:35:00Z', completed_at: '2026-10-05T03:35:05Z', commit_sha: H2, summary: null },
       ],
       gate_findings: [{ id: 'f1', gate_run_id: 'r2', project_id: PROJECT, rule_id: 'not_deployed', allowlisted: false }],
       deploy_observations: [

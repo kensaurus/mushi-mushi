@@ -41,9 +41,9 @@
  * The report: `not_live` when any target is not live (its own commit is
  * `prod_commit`), `live` when every counted target is live, else `unknown`.
  * Only declared targets that ever reported a commit count; a project whose
- * targets only report versions (`sdk_heartbeat` store apps) gets no chip
- * (`null`) rather than a permanent "unknown" (deploy targets are optional
- * recipe context, ADR 0016).
+ * targets only report versions (`sdk_heartbeat` store apps), or that has no
+ * primary GitHub repo, gets no chip (`null`) rather than a permanent
+ * "unknown" (deploy targets are optional recipe context, ADR 0016).
  *
  * Never fails open: a failed read is `unknown`, never `live`.
  */
@@ -186,8 +186,7 @@ function unknownChip(mergedAt: string, reason: string): ReportDeployLive {
  * Why the deploy heads cannot speak for this fix, or null when every merged
  * attempt merged into the repo the heads come from.
  */
-function repoMismatch(watchedRepo: string | null, fixRepos: ReadonlyArray<string | null>): string | null {
-  if (!watchedRepo) return 'No primary GitHub repo is connected, so Mushi cannot tie the deploys to this fix.'
+function repoMismatch(watchedRepo: string, fixRepos: ReadonlyArray<string | null>): string | null {
   if (fixRepos.length === 0 || fixRepos.some((r) => r === null)) {
     return 'Mushi cannot tell which repo this fix merged into.'
   }
@@ -199,7 +198,8 @@ function repoMismatch(watchedRepo: string | null, fixRepos: ReadonlyArray<string
 /**
  * Pure: the deploy state of a merged fix from the project's deploy_drift runs
  * and deploy observations (any order, any time). `null` when no declared
- * production deploy target ever reported a commit.
+ * production deploy target ever reported a commit, or the project has no
+ * primary GitHub repo.
  */
 export function deriveDeployLive(input: {
   mergedAt: string
@@ -220,8 +220,12 @@ export function deriveDeployLive(input: {
   const committed = new Set(observations.filter(hasCommit).map((o) => o.target_id))
   if (committed.size === 0) return null
 
-  // The heads speak only for the repo they were read from.
+  // No primary repo means no heads to place any fix against, for every report
+  // of the project: no chip rather than a permanent "unknown".
   const watchedRepo = input.watchedRepo?.toLowerCase() ?? null
+  if (!watchedRepo) return null
+
+  // The heads speak only for the repo they were read from.
   const mismatch = repoMismatch(watchedRepo, input.fixRepos.map((r) => r?.toLowerCase() ?? null))
   if (mismatch) return unknownChip(mergedAt, mismatch)
 
@@ -316,7 +320,8 @@ function headRepoOf(summary: unknown): string | null {
 /**
  * Deploy state for a fixed report's merged fix, or `null` (not fixed, no
  * merged attempt, no production deploy target declared in the current
- * recipe manifest, or none of them ever reported a commit). A handful of
+ * recipe manifest, none of them ever reported a commit, or no primary
+ * GitHub repo). A handful of
  * small project-scoped reads; never throws.
  */
 export async function loadReportDeployLive(
@@ -347,6 +352,8 @@ export async function loadReportDeployLive(
         .select('id, status, started_at, completed_at, commit_sha, summary')
         .eq('project_id', projectId)
         .eq('gate', 'deploy_drift')
+        // The collector's runs are the ones whose commit_sha is the primary repo's default-branch head.
+        .eq('triggered_by', 'recipe-collector')
         .order('started_at', { ascending: false })
         .limit(RUN_WINDOW),
       db
