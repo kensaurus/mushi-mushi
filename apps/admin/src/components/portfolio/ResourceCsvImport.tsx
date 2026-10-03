@@ -2,7 +2,8 @@
  * ResourceCsvImport — the one-off CSV import of shared resources (Plan 019
  * Phase P2) for what no recipe or connector declares yet: domains, bundle
  * ids, a Supabase project two apps share. Owners and admins only (the route
- * checks the role too). Row-level errors are listed, never swallowed.
+ * checks the role too). Every refused row is counted; the first 50 are listed
+ * with their line in the file, never swallowed.
  *
  * Data: POST /v1/ingest/recipe/csv  { organizationId, csv } → CsvImportResult
  */
@@ -13,6 +14,8 @@ import { apiFetchMutate } from '../../lib/supabase'
 
 interface CsvImportResult {
   imported: number
+  /** Every row that was not saved; `errors` lists only the first of them. */
+  errorCount: number
   errors: string[]
   skippedOverLimit: number
 }
@@ -26,9 +29,9 @@ const CSV_EXAMPLE = 'kind,external_id,project,role\ndomain,glot.it,glot-it,site\
 function describeCsvImport(r: CsvImportResult): { tone: 'ok' | 'warn'; text: string } {
   const saved = `Imported ${r.imported} row${r.imported === 1 ? '' : 's'}.`
   const parts = [saved]
-  if (r.errors.length > 0) parts.push(`${r.errors.length} row${r.errors.length === 1 ? ' was' : 's were'} not saved.`)
+  if (r.errorCount > 0) parts.push(`${r.errorCount} row${r.errorCount === 1 ? ' was' : 's were'} not saved.`)
   if (r.skippedOverLimit > 0) parts.push(`${r.skippedOverLimit} row${r.skippedOverLimit === 1 ? '' : 's'} past the 500-row limit ${r.skippedOverLimit === 1 ? 'was' : 'were'} skipped; import them in a second file.`)
-  return { tone: r.errors.length > 0 || r.skippedOverLimit > 0 ? 'warn' : 'ok', text: parts.join(' ') }
+  return { tone: r.errorCount > 0 || r.skippedOverLimit > 0 ? 'warn' : 'ok', text: parts.join(' ') }
 }
 
 interface Props {
@@ -128,6 +131,7 @@ export function ResourceCsvImport({ orgId, onImported }: Props) {
               {result.errors.map((e) => (
                 <li key={e}>{e}</li>
               ))}
+              {result.errorCount > result.errors.length && <li>… and {result.errorCount - result.errors.length} more</li>}
             </ul>
           )}
         </Callout>
