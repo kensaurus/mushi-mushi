@@ -26,6 +26,11 @@ export function dispatchTrigger(meta: unknown): DispatchTrigger {
  * True for a child job queued by fix-worker's cross-repo fan-out. Such a job
  * never fans out again: it would queue a job for the original repo, which
  * would fan out again, forever.
+ *
+ * A person who picks a repo (POST /v1/admin/fixes/dispatch `targetRepoId`)
+ * means that repo only, so a targeted job never fans out either. The console
+ * sends `targetRepoId` only for a non-primary choice; picking the primary
+ * keeps the normal fan-out.
  */
 export function isSiblingDispatch(dispatch: {
   coordination_id?: string | null

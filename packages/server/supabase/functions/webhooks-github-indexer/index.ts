@@ -32,6 +32,7 @@ import { unverifiedGithubInstallsAllowed } from '../_shared/github-install-trust
 import { finalizeFixClosedUnmerged, finalizeFixMerge } from '../_shared/fix-merge.ts';
 import { classifyIndexerError } from '../_shared/sweep-error-classifier.ts';
 import { fetchRepoTreeWithBranchFallback, lookupBranchHeadSha } from '../_shared/github-branch.ts';
+import { isAdvisoryCheckRun } from '../_shared/github.ts';
 import { extractRelativeImports } from '../_shared/codebase-graph-build.ts';
 import {
   chunkKey,
@@ -485,6 +486,9 @@ async function handleCheckRun(
   const run = payload.check_run;
   if (!run)
     return new Response(JSON.stringify({ ok: true, ignored: 'no_check_run' }), { status: 202 });
+
+  if (isAdvisoryCheckRun(run))
+    return new Response(JSON.stringify({ ok: true, ignored: 'advisory_check_run' }), { status: 202 });
 
   const headRef = run.pull_requests?.[0]?.head?.ref;
   const headSha = run.head_sha;

@@ -17,6 +17,7 @@ import { log } from './logger.ts';
 import { normalizeAdminStatus, toStoredStatus } from './report-status.ts';
 import { notifyReportStatusTransition } from './report-status-notify.ts';
 import { resolveExternalIssue } from './integrations.ts';
+import { resolveLinkedSentryIssues } from './sentry-resolve-back.ts';
 import { dispatchPluginEventDetached } from './plugins.ts';
 
 const transitionLog = log.child('report-transition');
@@ -75,6 +76,20 @@ export function runStatusTransitionSideEffects(
         err: String(e),
       }),
     );
+    // Reports imported from Sentry are linked by issue id and resolved with the
+    // project's own Sentry token (the merge path does the same). Without this,
+    // marking such a report fixed by hand never reached Sentry.
+    resolveLinkedSentryIssues(db, {
+      projectId: input.projectId,
+      reportId: input.reportId,
+      fixAttemptId: null,
+      prUrl: null,
+      note: `marked fixed in Mushi by ${input.actor.kind === 'admin' ? 'a console user' : input.actor.kind}.`,
+    })
+      .then((r) => {
+        if (r.failed.length) transitionLog.error('Sentry resolve on fixed failed', { reportId: input.reportId, failed: r.failed })
+      })
+      .catch((e: unknown) => transitionLog.error('Sentry resolve on fixed threw', { reportId: input.reportId, err: String(e) }));
   }
   if (input.reporterTokenHash && input.notifyReporter !== false) {
     notifyReportStatusTransition(db, {

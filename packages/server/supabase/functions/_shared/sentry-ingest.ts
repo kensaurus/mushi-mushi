@@ -59,6 +59,9 @@ interface SentryExceptionValue {
 
 export interface SentryEventPayload {
   event_id?: string;
+  /** When the event happened: ISO (`datetime`) or epoch seconds (`timestamp`). */
+  datetime?: string;
+  timestamp?: number;
   title?: string;
   culprit?: string;
   level?: string;
@@ -85,6 +88,13 @@ export interface SentryIssuePayload {
   permalink?: string;
   firstSeen?: string;
   platform?: string;
+}
+
+/** The event's wall-clock time in ms (event datetime → event timestamp → issue firstSeen → now). */
+export function sentryEventTimeMs(event: SentryEventPayload | null | undefined, issue: SentryIssuePayload | null | undefined): number {
+  const fromIso = (v: unknown) => (typeof v === 'string' ? Date.parse(v) : NaN)
+  const candidates = [fromIso(event?.datetime), typeof event?.timestamp === 'number' ? event.timestamp * 1000 : NaN, fromIso(issue?.firstSeen)]
+  return candidates.find((n) => Number.isFinite(n)) ?? Date.now()
 }
 
 function tagValue(tags: Array<[string, string]> | undefined, key: string): string | null {
@@ -251,7 +261,7 @@ export async function ingestSentryError(
     sentry_release: release,
     sentry_environment: environment,
     console_logs: stackText
-      ? [{ level: 'error', message: title, stack: stackText }]
+      ? [{ level: 'error', message: title, stack: stackText, timestamp: sentryEventTimeMs(event, issue) }]
       : null,
     custom_metadata: {
       source: 'sentry_webhook',

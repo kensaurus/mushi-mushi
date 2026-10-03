@@ -11,7 +11,8 @@ import type { PreflightState } from '../../lib/useDispatchPreflight'
 import type { ReportDetail } from './types'
 import { CHIP_TONE } from '../../lib/chipTone'
 import { ConfirmDialog } from '../ConfirmDialog'
-import { dispatchConfirmBody, featureRequestDispatchBlock } from '../../lib/dispatchConfirm'
+import { dispatchConfirmBody, featureRequestDispatchBlock, shortRepoName } from '../../lib/dispatchConfirm'
+import type { DispatchTargetRepo } from '../../lib/useDispatchTargetRepo'
 
 // One option per label: 'resolved' is the legacy spelling of 'fixed' (both
 // read "Fixed"), so listing both showed "Fixed" twice. A legacy row selects
@@ -54,6 +55,9 @@ interface ReportTriageBarProps {
   onDispatch: () => void | Promise<void>
   isDispatchBusy: boolean
   preflight?: PreflightState
+  /** The project's linked repos and the one the fix goes to. The Repo
+   *  select shows only when there is more than one. */
+  repoChoice?: DispatchTargetRepo
 }
 
 const PROVIDER_LABEL: Record<string, string> = {
@@ -72,6 +76,7 @@ export function ReportTriageBar({
   onDispatch,
   isDispatchBusy,
   preflight,
+  repoChoice,
 }: ReportTriageBarProps) {
   const [showSaved, setShowSaved] = useState(false)
   const [syncing, setSyncing] = useState(false)
@@ -231,6 +236,24 @@ export function ReportTriageBar({
         >
           {syncing ? 'Syncing\u2026' : `Sync to ${activeRoutes.length || 0} ${activeRoutes.length === 1 ? 'destination' : 'destinations'}`}
         </Btn>
+        {repoChoice && repoChoice.repos.length > 1 && (
+          <SelectField
+            label="Repo"
+            value={repoChoice.targetRepoId}
+            onChange={(e) => repoChoice.setTargetRepoId(e.currentTarget.value)}
+            disabled={isDispatchBusy}
+            className="!w-auto"
+            title="The linked repo the fix PR opens against"
+          >
+            {!repoChoice.repos.some((r) => r.is_primary) && <option value="">Project default</option>}
+            {repoChoice.repos.map((r) => (
+              <option key={r.id} value={r.id}>
+                {shortRepoName(r.repo_url)}
+                {r.is_primary ? ' (primary)' : ''}
+              </option>
+            ))}
+          </SelectField>
+        )}
         <div className="flex flex-col items-end gap-1">
           <Btn
             variant="primary"
@@ -268,7 +291,11 @@ export function ReportTriageBar({
       {confirmDispatch && (
         <ConfirmDialog
           title="Dispatch a fix for this report?"
-          body={dispatchConfirmBody({ repoUrl: preflight?.repoUrl, baseBranch: preflight?.baseBranch })}
+          body={dispatchConfirmBody(
+            repoChoice?.target
+              ? { repoUrl: repoChoice.target.repo_url, baseBranch: repoChoice.target.default_branch }
+              : { repoUrl: preflight?.repoUrl, baseBranch: preflight?.baseBranch },
+          )}
           confirmLabel="Dispatch fix"
           onCancel={() => setConfirmDispatch(false)}
           onConfirm={() => {

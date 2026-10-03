@@ -31,6 +31,7 @@ vi.mock('../../supabase/functions/_shared/github.ts', () => ({
   // Default no token: the PR content check reports "not checked" and the PR
   // is trusted. Tests that judge a PR give it a token and files.
   resolveProjectGithubToken: (...args: unknown[]) => mocks.resolveProjectGithubToken(...(args as [])),
+  prNumberFromUrl: (url: string) => Number(url.split('/pull/')[1]?.split('/')[0]) || null,
   fetchPullRequestFiles: (...args: unknown[]) => mocks.fetchPullRequestFiles(...(args as [])),
 }))
 vi.mock('../../supabase/functions/_shared/github-pr.ts', () => ({

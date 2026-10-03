@@ -162,6 +162,10 @@ describe('isWritablePath — the recipe PR allowlist', () => {
       ['apps/web/package-lock.json', /lockfile/],
       ['.env', /env files/],
       ['apps/web/.env.production', /env files/],
+      ['.env.local', /env files/],
+      ['.env.example.bak', /env files/],
+      // A template holds names only, so it is governed by allowPaths, not the env rule.
+      ['.env.local.example', /outside what this change may touch/],
       ['packages/design-tokens/dtcg/tokens.json', /generated export/],
       ['supabase/migrations/20261002_x.sql', /migration/],
       ['../../etc/passwd', /safe repo-relative/],

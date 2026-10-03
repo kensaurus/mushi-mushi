@@ -10,6 +10,7 @@ import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { apiFetch } from '../lib/supabase'
 import { useRealtime } from '../lib/realtime'
 import { usePageData } from '../lib/usePageData'
+import { useEntitlements } from '../lib/useEntitlements'
 import { useToast } from '../lib/toast'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { PageHeaderBar } from '../components/PageHeaderBar'
@@ -207,6 +208,9 @@ export function AntiGamingPage() {
   }, [devicesQuery, eventsQuery, reloadShellStats])
 
   // Mushi Bounties: fetch withheld tester redemptions for the 3rd KPI tile.
+  // The route is platform-wide and super-admin only (404 for everyone else),
+  // so project owners skip the call and the tile instead of logging a 404.
+  const { isSuperAdmin } = useEntitlements()
   const withheldRedemptionsQuery = usePageData<{ count: number; items: Array<{
     id: string
     tester_id: string
@@ -215,7 +219,7 @@ export function AntiGamingPage() {
     face_value_usd: number | null
     requested_at: string
     mushi_testers?: { public_handle: string | null } | null
-  }> }>('/v1/admin/tester-redemptions/withheld')
+  }> }>(isSuperAdmin ? '/v1/admin/tester-redemptions/withheld' : null)
   const withheldRedemptions = withheldRedemptionsQuery.data?.items ?? []
   const withheldCount = withheldRedemptionsQuery.data?.count ?? 0
 
@@ -474,12 +478,12 @@ export function AntiGamingPage() {
           meaning="Cumulative reports ingested from any tracked device. Compare against the dashboard's 14d intake to see if abuse is inflating volume."
         />
         {/* Mushi Bounties: 3rd KPI — tester redemptions awaiting manual review */}
-        <KpiTile
+        {isSuperAdmin && <KpiTile
           label="Tester redemptions withheld"
           value={withheldCount}
           accent={withheldCount > 0 ? 'warn' : undefined}
           meaning="Mushi Bounties gift-card redemptions paused for manual review (velocity cap exceeded or anti-fraud flag). Approve or deny below."
-        />
+        />}
       </div>
 
       {/* Mushi Bounties: withheld tester redemptions review section */}

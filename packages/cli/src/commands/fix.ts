@@ -1,6 +1,56 @@
 import type { Command } from 'commander';
-import { loadConfig } from '../config.js';
+import { loadConfig, type CliConfig } from '../config.js';
 import { apiCall, requireUuid } from '../cli-shared.js';
+import { MushiCliError } from '../errors.js';
+
+/** `owner/name` of a GitHub repo URL, lower-cased; null when it is not one. */
+function githubOwnerName(url: string): string | null {
+  const cleaned = url
+    .trim()
+    .replace(/^git@github\.com:/i, 'https://github.com/')
+    .replace(/\/+$/, '')
+    .replace(/\.git$/i, '');
+  const match = cleaned.match(/github\.com\/([^/]+)\/([^/]+)/i);
+  return match ? `${match[1]}/${match[2]}`.toLowerCase() : null;
+}
+
+/**
+ * `--repo` takes a linked repo's id or its GitHub `owner/name`. A name is
+ * looked up among the project's linked repos (GET /v1/admin/repo/repos), so
+ * it needs a project id; the server still checks the id belongs to it.
+ */
+async function resolveTargetRepoId(repo: string, cfg: CliConfig): Promise<string> {
+  if (!repo.includes('/')) return requireUuid(repo, '--repo');
+  if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) {
+    throw new MushiCliError('E_INVALID_INPUT', '--repo must be a repo id or owner/name', 'e.g. --repo acme/app-backend');
+  }
+  if (!cfg.projectId) {
+    throw new MushiCliError(
+      'E_INVALID_INPUT',
+      '--repo owner/name needs a project to look the repo up in',
+      'pass --project-id or set MUSHI_PROJECT_ID, or pass the repo id instead',
+    );
+  }
+  const res = await apiCall<Array<{ id: string; repo_url: string }>>(
+    `/v1/admin/repo/repos?project_id=${encodeURIComponent(cfg.projectId)}`,
+    cfg,
+  );
+  if (!res.ok) {
+    console.error('Error listing linked repos:', res.error.message);
+    process.exit(1);
+  }
+  const linked = res.data ?? [];
+  const matches = linked.filter((r) => githubOwnerName(r.repo_url) === repo.toLowerCase());
+  if (matches.length === 1) return matches[0]!.id;
+  const names = linked.map((r) => githubOwnerName(r.repo_url) ?? r.repo_url).join(', ') || 'none';
+  throw new MushiCliError(
+    'E_INVALID_INPUT',
+    matches.length === 0
+      ? `${repo} is not linked to this project`
+      : `${repo} matches ${matches.length} linked repos; pass the repo id`,
+    `linked repos: ${names}`,
+  );
+}
 
 export function registerFixCommands(program: Command): void {
 // ─── mushi fix ───────────────────────────────────────────────────────────────
@@ -26,6 +76,10 @@ fixCmd
     '--wait',
     'Poll until terminal state and exit non-zero on error/cancelled (CI-friendly)',
   )
+  .option(
+    '--repo <repoId|owner/name>',
+    "Linked repo to open the fix PR against (a project with several repos). Default: the project's primary repo",
+  )
   .option('-e, --endpoint <url>', 'API endpoint (overrides MUSHI_API_ENDPOINT)')
   .option('--api-key <key>', 'API key (overrides MUSHI_API_KEY)')
   .option('--project-id <id>', 'Project ID (overrides MUSHI_PROJECT_ID)')
@@ -35,6 +89,9 @@ Examples:
   mushi fix abc123 --agent cursor_cloud --model composer-latest --no-auto-pr
   mushi fix abc123 --agent claude_code
 
+  # A project with a frontend and a backend repo: send the fix to the backend
+  mushi fix abc123 --repo acme/app-backend
+
   # CI: fail the pipeline if the fix errors
   mushi fix $REPORT_ID --agent cursor_cloud --wait && echo "Fix PR opened"`)
   .action(async (reportId: string, opts: {
@@ -42,6 +99,7 @@ Examples:
     model?: string
     autoPr: boolean
     wait?: boolean
+    repo?: string
     endpoint?: string
     apiKey?: string
     projectId?: string
@@ -51,6 +109,7 @@ Examples:
     if (opts.endpoint) cfg.endpoint = opts.endpoint
     if (opts.apiKey) cfg.apiKey = opts.apiKey
     if (opts.projectId) cfg.projectId = opts.projectId
+    const targetRepoId = opts.repo ? await resolveTargetRepoId(opts.repo, cfg) : undefined
 
     const isTTY = process.stdout.isTTY
 
@@ -63,12 +122,18 @@ Examples:
       }
     }
 
-    emitEvent('dispatch.start', { reportId, agent: opts.agent, model: opts.model ?? null })
+    emitEvent('dispatch.start', {
+      reportId,
+      agent: opts.agent,
+      model: opts.model ?? null,
+      targetRepoId: targetRepoId ?? null,
+    })
 
     const body: Record<string, unknown> = {
       reportId,
       projectId: cfg.projectId,
       agent: opts.agent,
+      ...(targetRepoId ? { targetRepoId } : {}),
     }
     if (opts.agent === 'cursor_cloud') {
       if (opts.model) body.cursorModel = opts.model
@@ -76,7 +141,7 @@ Examples:
     }
 
     const result = await apiCall<{
-      fixId?: string; status?: string; agentId?: string; runId?: string; prUrl?: string
+      dispatchId?: string; fixId?: string; status?: string; agentId?: string; runId?: string; prUrl?: string
     }>('/v1/admin/fixes/dispatch', cfg, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -88,15 +153,16 @@ Examples:
       process.exit(1)
     }
 
-    const { fixId, status, agentId, runId, prUrl } = result.data
-    emitEvent('dispatch.ok', { fixId, status, agentId, runId, prUrl })
+    const { dispatchId, fixId, status, agentId, runId, prUrl } = result.data
+    emitEvent('dispatch.ok', { dispatchId, fixId, status, agentId, runId, prUrl })
 
     if (!opts.wait) {
       process.exit(0)
     }
 
-    if (!fixId) {
-      console.error('No fixId returned — cannot poll.')
+    // The route answers with the dispatch job id; poll that job.
+    if (!dispatchId) {
+      console.error('No dispatchId returned — cannot poll.')
       process.exit(1)
     }
 
@@ -108,7 +174,7 @@ Examples:
     for (let i = 0; i < MAX_POLLS; i++) {
       await new Promise(r => setTimeout(r, POLL_MS))
       const pollResult = await apiCall<{ status?: string; pr_url?: string; error?: string; cursor_agent_id?: string }>(
-        `/v1/admin/fixes/${fixId}`,
+        `/v1/admin/fixes/dispatch/${dispatchId}`,
         cfg,
       )
       if (!pollResult.ok) {

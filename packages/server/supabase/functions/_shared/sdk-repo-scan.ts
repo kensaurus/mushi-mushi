@@ -67,7 +67,8 @@ async function fetchPackageJson(
   const encoded = (fileRes as Record<string, unknown>).content as string | undefined
   if (!encoded) return null
   try {
-    const pkgText = atob(encoded.replace(/\s/g, ''))
+    const bin = atob(encoded.replace(/\s/g, ''))
+    const pkgText = new TextDecoder().decode(Uint8Array.from(bin, (ch) => ch.charCodeAt(0)))
     return JSON.parse(pkgText) as Record<string, unknown>
   } catch {
     return null
