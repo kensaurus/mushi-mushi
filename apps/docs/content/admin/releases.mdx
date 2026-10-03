@@ -36,6 +36,65 @@ For each release tag, Mushi:
 
 ---
 
+## Release automatically when you ship
+
+Off by default. Turn on **Release automatically when you ship** on the
+Releases overview (project admins only, or
+`PATCH /v1/admin/settings { "auto_release_enabled": true }`). From then on,
+any of these ships a release on its own:
+
+| Trigger | Where it comes from | Version reporters see |
+|---------|---------------------|-----------------------|
+| A GitHub release is **published** (not a draft or pre-release) | The Mushi GitHub App on the repo, subscribed to **Releases** | The tag, e.g. `v2.4.1` |
+| A **production** deployment succeeds (`deployment_status` = success) | The Mushi GitHub App, subscribed to **Deployment statuses** | The deployed tag, or the short commit sha |
+| Your CI posts `release.published` | `POST /v1/ingest/recipe/events` with an agent key (`mcp:write`) kept in CI secrets | The `version` you send |
+
+```bash
+curl -X POST "$MUSHI_API_URL/v1/ingest/recipe/events" \
+  -H "X-Mushi-Api-Key: $MUSHI_CI_KEY" -H "Content-Type: application/json" \
+  -d '{ "events": [ { "type": "release.published", "targetId": "web", "version": "2.4.1" } ] }'
+```
+
+For each trigger, Mushi:
+
+1. skips it if a release with that version already exists;
+2. skips it if no report was marked fixed since the last published release
+   (a deploy with nothing fixed makes no release);
+3. skips it while another automatic draft is open (see below);
+4. drafts the release from those reports and publishes it, so each reporter
+   gets one "your fix is live" message and credits are stamped once
+   delivered.
+
+An automatic release is published without anyone reading it first, and report
+summaries come from your users. So its notes are not written by AI. Each fixed
+report becomes one line, with markdown escaped and links removed.
+
+Only one automatic draft can be open per project, so a GitHub release and the
+deploy it triggers cannot both announce the same fixes. If publishing fails
+before the release goes live, the draft stays under **Drafts**, and
+auto-release pauses until you publish or delete that draft. The
+auto-release card on the Releases overview says so and links to it. If the
+release went live but messaging reporters failed part-way, the log says the
+release is published and some reporters were not told.
+
+The version must be a plain tag, semver or sha (letters, digits, `.`, `_`,
+`+`, `-`, at most 64 characters), because reporters see it.
+
+Send `release.published` with an agent key that has `mcp:write`, minted with
+`mushi login` or in the console and kept in CI secrets. A key that cannot
+release still has its event recorded, and the answer gives the reason:
+
+| Key | `autoReleaseSkipped` |
+|-----|----------------------|
+| The public SDK key (`report:write`), even one used only from a native app | `key_lacks_mcp_write` |
+| An `mcp:write` key that a web page has ever sent | `browser_exposed_key` |
+
+One request releases at most once, for its last `release.published` event. The
+answer gives that version in `autoReleaseVersion` and lists any others in
+`autoReleaseIgnoredVersions`.
+
+---
+
 ## Release entry fields
 
 | Field | Description |

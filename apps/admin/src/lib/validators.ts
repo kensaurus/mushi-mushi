@@ -349,6 +349,27 @@ export function slug(opts?: ValidatorOptions): Validator {
   })
 }
 
+/** Sentry project slug rule — mirrors SENTRY_PROJECT_SLUG_RE on the server
+ *  (_shared/integration-validation.ts). */
+const SENTRY_PROJECT_SLUG_RE = /^[a-z0-9][a-z0-9_-]{0,49}$/
+const MAX_SENTRY_EXTRA_PROJECTS = 10
+
+/**
+ * Comma- or space-separated Sentry project slugs (the extra projects one
+ * Mushi project imports from). Lowercase, at most 10.
+ */
+export function sentrySlugList(opts?: ValidatorOptions): Validator {
+  return withOptional(opts, (value) => {
+    const slugs = [...new Set(value.split(/[\s,]+/).filter(Boolean))]
+    const bad = slugs.find((s) => !SENTRY_PROJECT_SLUG_RE.test(s))
+    if (bad) return { message: `"${bad}" is not a Sentry project slug (lowercase letters, digits, - or _)` }
+    if (slugs.length > MAX_SENTRY_EXTRA_PROJECTS) {
+      return { message: `At most ${MAX_SENTRY_EXTRA_PROJECTS} extra Sentry projects` }
+    }
+    return null
+  })
+}
+
 /* ── Platform-specific composites ─────────────────────────────────────── */
 
 /**
@@ -441,6 +462,7 @@ const NAMED_VALIDATORS: Record<string, Validator> = {
   email: email(),
   sentryDsn: sentryDsn(),
   slug: slug(),
+  sentrySlugList: sentrySlugList(),
   token: token({ minLength: 16 }),
   tokenLong: token({ minLength: 24 }),
   jiraProjectKey: jiraProjectKey(),

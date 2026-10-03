@@ -39,6 +39,49 @@ export function validatePlatformBody(body: Record<string, unknown>): BodyError |
   return null
 }
 
+/** A Sentry project slug, as the import route accepts it (sentry-import.ts). */
+export const SENTRY_PROJECT_SLUG_RE = /^[a-z0-9][a-z0-9_-]{0,49}$/
+/** Mirrors CHECK (cardinality(sentry_extra_project_slugs) <= 10). */
+export const MAX_SENTRY_EXTRA_PROJECT_SLUGS = 10
+
+/**
+ * `sentry_extra_project_slugs` on PUT /v1/admin/integrations/platform/sentry:
+ * a string array of Sentry project slugs, trimmed and deduped, at most 10.
+ * `null`, `''` and `[]` clear it to `{}` (the column is NOT NULL).
+ */
+export function parseSentryExtraProjectSlugs(
+  raw: unknown,
+): { ok: true; slugs: string[] } | { ok: false; error: BodyError } {
+  if (raw === null || raw === '') return { ok: true, slugs: [] }
+  if (!Array.isArray(raw) || raw.some((v) => typeof v !== 'string')) {
+    return {
+      ok: false,
+      error: { code: 'VALIDATION_ERROR', message: 'sentry_extra_project_slugs must be an array of Sentry project slugs.' },
+    }
+  }
+  const slugs = [...new Set((raw as string[]).map((s) => s.trim()).filter((s) => s.length > 0))]
+  const bad = slugs.find((s) => !SENTRY_PROJECT_SLUG_RE.test(s))
+  if (bad !== undefined) {
+    return {
+      ok: false,
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: `"${bad.slice(0, 60)}" is not a Sentry project slug (lowercase letters, digits, "-" or "_").`,
+      },
+    }
+  }
+  if (slugs.length > MAX_SENTRY_EXTRA_PROJECT_SLUGS) {
+    return {
+      ok: false,
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: `At most ${MAX_SENTRY_EXTRA_PROJECT_SLUGS} extra Sentry projects per Mushi project.`,
+      },
+    }
+  }
+  return { ok: true, slugs }
+}
+
 /** Same rules for a routing provider's config, plus plain GitHub names. */
 export function validateRoutingConfig(type: string, config: Record<string, unknown>): BodyError | null {
   for (const [k, v] of Object.entries(config)) {

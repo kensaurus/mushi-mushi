@@ -136,6 +136,25 @@ export async function finalizeFixMerge(
     await db.from('fix_attempts').update({ pr_state: 'merged' }).eq('id', attempt.id);
   }
 
+  // A cloud agent's PR attached while the agent was still working leaves its
+  // attempt open (agent-adapters attachPendingPr) until the agent finishes.
+  // Merged first, the attempt is done: close it, or agent-status-poll keeps
+  // polling it and its 24 h expiry reports a merged fix as failed.
+  const { error: openCloseErr } = await db
+    .from('fix_attempts')
+    .update({ status: 'completed', completed_at: now })
+    .eq('id', attempt.id)
+    .in('status', ['running', 'queued', 'dispatched', 'pending']);
+  if (openCloseErr) {
+    log.error('closing the still-open attempt of a merged PR failed', { fixAttemptId: attempt.id, err: openCloseErr.message });
+  } else {
+    await db
+      .from('fix_dispatch_jobs')
+      .update({ status: 'completed', pr_url: meta.prUrl, finished_at: now })
+      .eq('fix_attempt_id', attempt.id)
+      .in('status', ['queued', 'running']);
+  }
+
   const { data: report } = await db
     .from('reports')
     .select('id, status, reporter_token_hash')

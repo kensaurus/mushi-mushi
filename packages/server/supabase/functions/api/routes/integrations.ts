@@ -7,7 +7,12 @@ import { jwtAuth, adminOrApiKey } from '../../_shared/auth.ts';
 import { logAudit } from '../../_shared/audit.ts';
 import { createExternalIssue } from '../../_shared/integrations.ts';
 import { callerProjectIds, requireProjectAdmin, resolveOwnedProject, resolveAccessibleOrg } from '../shared.ts';
-import { validatePlatformBody, validateRoutingConfig } from '../../_shared/integration-validation.ts';
+import {
+  parseSentryExtraProjectSlugs,
+  validatePlatformBody,
+  validateRoutingConfig,
+} from '../../_shared/integration-validation.ts';
+import { platformCardValues } from '../../_shared/platform-config.ts';
 import { extractInboundTraceparent } from '../../_shared/trace.ts';
 import { log } from '../../_shared/logger.ts';
 import { resolveEffectivePlatformSettings } from '../../_shared/integration-settings.ts';
@@ -371,8 +376,24 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
 
     // Use the effective resolver so org-inherited and env-backed fields are
     // reflected in the card's "configured" state and inheritance badges.
-    const { settings: effectiveSettings, sourceByField, organizationId } =
-      await resolveEffectivePlatformSettings(db, project.id as string);
+    // Fields the resolver does not track come from the project row; select(*)
+    // so a column a pending migration adds is simply absent, not an error.
+    const [{ settings: effectiveSettings, sourceByField, organizationId }, rawRowRes] = await Promise.all([
+      resolveEffectivePlatformSettings(db, project.id as string),
+      db.from('project_settings').select('*').eq('project_id', project.id).maybeSingle(),
+    ]);
+    // Without the row every untracked card field (Sentry slug, DSN, toggles,
+    // extra slugs) would come back null and the card would show it unset.
+    // select('*') does not fail on a column a pending migration adds, so an
+    // error here is a real read failure: say so instead of serving nulls.
+    if (rawRowRes.error) {
+      log.error('platform GET: project_settings row unreadable', { projectId: project.id, err: rawRowRes.error.message });
+      return c.json(
+        { ok: false, error: { code: 'SETTINGS_UNREADABLE', message: "Could not read this project's integration settings. Try again." } },
+        500,
+      );
+    }
+    const projectRow = (rawRowRes.data ?? null) as Record<string, unknown> | null;
 
     // Mask secret-shaped values; we only return whether a credential is set,
     // never the value itself. The UI shows "configured" badges, not secrets.
@@ -398,10 +419,15 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
       keyof typeof PLATFORM_KIND_FIELDS
     >;
     for (const kind of platformKinds) {
+      const values = platformCardValues(
+        kind,
+        PLATFORM_KIND_FIELDS[kind],
+        effectiveSettings as unknown as Record<string, unknown>,
+        sourceByField,
+        projectRow,
+      );
       platform[kind] = {};
-      for (const f of PLATFORM_KIND_FIELDS[kind]) {
-        platform[kind][f] = maskField(f, (effectiveSettings as Record<string, unknown>)[f]);
-      }
+      for (const [f, v] of Object.entries(values)) platform[kind][f] = maskField(f, v);
     }
 
     return c.json({ ok: true, data: { platform, sourceByField, organizationId } });
@@ -451,6 +477,13 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
     // Masked values from GET ("…abcd") are silently ignored so a partial form
     // submit doesn't replace a real key with a masked one.
     const updates: Record<string, unknown> = { project_id: project.id };
+    // Project-only list field (PROJECT_LIST_FIELDS_BY_KIND): a validated
+    // array, never vaulted, never copied to other projects.
+    if (kind === 'sentry' && 'sentry_extra_project_slugs' in body) {
+      const parsed = parseSentryExtraProjectSlugs(body.sentry_extra_project_slugs);
+      if (!parsed.ok) return c.json({ ok: false, error: parsed.error }, 400);
+      updates.sentry_extra_project_slugs = parsed.slugs;
+    }
     for (const k of allowed) {
       if (!(k in body)) continue;
       const v = body[k];

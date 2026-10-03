@@ -45,6 +45,7 @@ import {
   applyCloudAgentOutcome,
   parseCloudAgentBranchRef,
 } from '../_shared/agent-adapters.ts';
+import { routeGithubShipEvent, type GithubShipPayload } from '../_shared/auto-release.ts';
 
 ensureSentry('webhooks-github-indexer');
 
@@ -1472,6 +1473,16 @@ app.post('/webhooks-github-indexer', async (c) => {
       repository?: { full_name?: string };
     };
     return await handleCheckRun(crPayload, deliveryId);
+  }
+
+  // release.published / deployment_status success (production): the host
+  // shipped. Projects that opted in to auto-release get a release drafted
+  // and published, which tells reporters their fix is live. The work runs
+  // after the 202 (waitUntil); runAutoRelease re-checks the opt-in.
+  if (event === 'release' || event === 'deployment_status') {
+    const routed = await routeGithubShipEvent(getDb(), event, JSON.parse(raw) as GithubShipPayload);
+    if (routed.projectIds[0]) await auditRow.setProject(routed.projectIds[0]);
+    return c.json(routed.body, routed.status);
   }
 
   if (event !== 'push' && event !== 'installation_repositories') {

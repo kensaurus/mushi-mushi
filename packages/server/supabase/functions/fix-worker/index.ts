@@ -143,7 +143,7 @@ Rules:
 NEVER emit placeholder output. The strings "placeholder", "TODO", "lorem ipsum", "FIXME", "...", or any stub stand-in for real content are FORBIDDEN as the value of \`summary\`, \`rationale\`, \`files[].contents\`, or \`files[].reason\`. The schema will reject them and you will be retried. If you do not have enough context to write a real fix:
   - set \`needsHumanReview: true\`
   - in \`rationale\`, explain exactly which file or snippet you would need to see
-  - in \`files\`, you MUST include at least one file — emit the SMALLEST plausible defensive change you can justify (e.g. an explicit error message at the crash site, a null-guard, or a TODO comment that references the specific line that needs investigation). A \`NEEDS_INVESTIGATION.md\` with a concrete analysis of what you found and what needs to change is acceptable.
+  - in \`files\`, you MUST include at least one file — emit the SMALLEST plausible defensive code change you can justify (e.g. an explicit error message at the crash site or a null-guard). A file that only adds notes, markdown or TODO comments is not a fix; with needsHumanReview set, the review gate stops this attempt before any PR is opened.
   - \`files\` can NEVER be an empty array — the schema requires at least one entry
   - never emit a draft PR full of stub files just to satisfy the schema`;
 
