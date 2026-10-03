@@ -1,5 +1,41 @@
 # @mushi-mushi/mcp
 
+## 0.24.0
+
+### Minor Changes
+
+- 5ad0800: Add three App Recipe and design-plane tools, on by default in the `inventory` group:
+
+  - `get_app_recipe` returns one card per part of the app (schema, design, routes, gates, CI, deploy, env, integrations). Each card is `ok`, `drift`, `unknown`, `not_connected` or `error`, and `unknown` never means healthy.
+  - `get_design_tokens` returns the app's design tokens plus a `nameMap` from each CSS variable or TS name to its token. A fix can then use the app's tokens instead of hard-coded colours, spacing and fonts.
+  - `get_design_deviance` returns the 0–100 design deviance score (lower is better), the score for each rule, the trend, and the top off-token findings with the nearest token to use instead.
+
+  `get_fix_context` now also returns `recipe`. This is a design excerpt of at most 4 KB with the tokens, the deviance score and the findings in the files the fix touches. When the excerpt can't be read, `recipe` is `{ state, note }` and the rest of the fix context still comes back. `use_mushi` gains a `design` intent, and `list_gate_findings` accepts the `design_drift`, `ci_drift`, `deploy_drift` and `env_drift` gates.
+
+- 5ad0800: Add `get_repo_digest`: the connected GitHub repo as one paste-ready text digest at a pinned commit (tree plus ranked files, cut to a token budget), scoped to a folder or to the files one bug touches. It needs no codebase index, ships on the default feature set, and wraps its output as untrusted data. `.env` files and keys are never included, and a file that looks like it holds a secret is replaced with a notice.
+- 5ad0800: Add three tools, on by default in the `inventory` group. The two portfolio tools need an account-level key; a key bound to one project gets a 403.
+
+  - `get_portfolio` returns one card per app in an organization: the worst recipe state, open reports, the latest release, the Mushi SDK against the latest release of the same package, and the hole checks. A check that never ran reads `never_run`, never as healthy.
+  - `list_portfolio_findings` returns the problems open in two or more apps (one paste-ready fix prompt each), the SDK version of every app, and integrations most of your other apps have but one lacks.
+  - `get_radar` returns the hole checks: store names that differ between stores, a missing listing language, an expiring domain or certificate, missing security headers, a broken privacy link, storage rows deleted with SQL, and store build rules your app no longer meets. A check that never ran reads `unknown`, never healthy. `scope: "organization"` lists the open findings of every app.
+
+  The portfolio tools take an optional `organizationId`; without it, your only organization is used.
+
+  Also adds `get_recipe_drift` (what drifted from the recipe — CI workflows, deploys not live, env names, unapplied migrations, off-token values — each with a fix) and `list_connectors` (the sources an organization connected, their status and scopes; never credentials). `list_gate_findings` accepts the `portfolio_radar`, `portfolio_radar_ci` and `store_review` gates.
+
+  Three write tools, dry run by default: `propose_recipe_change` (one draft PR to paths the recipe allows; it stays a draft), `propose_portfolio_change` (the same fix in up to 10 repos, one draft PR each) and `request_connector_action` (asks for a store action such as a Play rollout change; nothing runs until a person approves and runs it in the console — a key can never approve). The server instructions now list them with the other confirm-first tools.
+
+  Also adds `get_store_status`: the latest store review of an app. It compares the listing in the repo with what is live, checks listing claims against the code, checks privacy labels against data-collecting SDKs and iOS screenshots, and ends with a pre-submission checklist. A check that did not run reads `unknown`, never healthy. It is a check against the code, not legal advice.
+
+### Patch Changes
+
+- 5ad0800: A configured `MUSHI_API_ENDPOINT` that is not an http(s) URL now starts the server in setup mode with a clear error, instead of failing on every tool call. Your key is never sent to that endpoint or to the default one.
+- 5ad0800: `import_sentry_issues` can now pull a whole Sentry backlog: `sinceDays` (1-90) limits the search to recently seen issues, and `cursor` takes the returned `nextCursor` to fetch the next 10 until it comes back null. `sentryProject` picks another of the project's Sentry projects when one app reports to two (for example a frontend and a backend).
+- 5ad0800: `triage_next_steps` now lists reporters waiting for an answer — people who replied in your app's "Your reports" thread since you last looked — right after blocked auto-fixes, pointing at the report timeline so you can answer with `reply_to_reporter`.
+- Updated dependencies [5ad0800]
+- Updated dependencies [5ad0800]
+  - @mushi-mushi/core@1.31.0
+
 ## 0.23.0
 
 ### Minor Changes
