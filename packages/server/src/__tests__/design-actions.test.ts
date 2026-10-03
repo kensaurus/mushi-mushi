@@ -6,6 +6,8 @@
  * trigger 'automatic' so the auto-fix caps apply, one reused report per
  * project, and every failure reported instead of swallowed).
  */
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { makeFakeDb, type FakeDb } from './__stubs__/fake-supabase.ts'
 import type { DevianceFinding } from '../../supabase/functions/_shared/design-engine-types.ts'
@@ -160,5 +162,47 @@ describe('actOnDesignDeviance', () => {
     const from = broken.from.bind(broken)
     broken.from = ((t: string) => (t === 'gate_findings' ? { select: () => ({ eq: () => ({ limit: async () => ({ data: null, error: { message: 'boom' } }) }) }) } : from(t))) as never
     expect(await actions.actOnDesignDeviance(broken, input(), null, deps())).toEqual({ action: 'report_failed', error: 'gate_findings read failed: boom' })
+  })
+})
+
+describe('designScanDue (the recipe-collector cadence)', () => {
+  let plane: typeof import('../../supabase/functions/_shared/design-plane.ts')
+  beforeAll(async () => {
+    plane = await import('../../supabase/functions/_shared/design-plane.ts')
+  })
+  const EVERY = 20 * 3600_000
+  const run = (id: string, phase: string, status: string, hoursAgo: number) => ({
+    id, project_id: P, gate: 'design_drift', status, summary: { phase }, started_at: new Date(NOW.getTime() - hoursAgo * 3600_000).toISOString(),
+  })
+
+  it('a 2-day-old scan is due however many PR, untrusted or legacy CI pushes and refresh errors came after it', async () => {
+    const d = makeFakeDb({ gate_runs: [
+      run('scan', 'scan', 'pass', 48),
+      run('pr', 'ci_branch_scan', 'fail', 1),
+      run('public', 'ci_untrusted_scan', 'warn', 1),
+      run('legacy', 'ci_scan', 'pass', 1),
+      run('refresh', 'refresh', 'error', 1),
+      run('broken', 'scan', 'error', 1),
+    ] } as never)
+    expect(await plane.designScanDue(d, P, NOW, EVERY)).toEqual({ ok: true, due: true })
+  })
+
+  it('a recent scan, or one still running, is not due; a project never scanned is', async () => {
+    expect(await plane.designScanDue(makeFakeDb({ gate_runs: [run('s', 'scan', 'warn', 2)] } as never), P, NOW, EVERY)).toEqual({ ok: true, due: false })
+    expect(await plane.designScanDue(makeFakeDb({ gate_runs: [run('s', 'scan', 'running', 1)] } as never), P, NOW, EVERY)).toEqual({ ok: true, due: false })
+    expect(await plane.designScanDue(makeFakeDb({ gate_runs: [run('pr', 'ci_branch_scan', 'pass', 1)] } as never), P, NOW, EVERY)).toEqual({ ok: true, due: true })
+  })
+
+  it('a failed read is an explicit error, never a guessed scan or skip', async () => {
+    interface Q { eq(): Q; neq(): Q; order(): Q; limit(): Q; maybeSingle(): Promise<{ data: null; error: { message: string } }> }
+    const q: Q = { eq: () => q, neq: () => q, order: () => q, limit: () => q, maybeSingle: async () => ({ data: null, error: { message: 'boom' } }) }
+    const d = { from: () => ({ select: () => q }) }
+    expect(await plane.designScanDue(d as never, P, NOW, EVERY)).toEqual({ ok: false, error: 'gate_runs read failed: boom' })
+  })
+
+  it('recipe-collector decides its cadence with designScanDue, not its own gate_runs read', () => {
+    const src = readFileSync(resolve(__dirname, '../../supabase/functions/recipe-collector/index.ts'), 'utf8')
+    expect(src).toContain('designScanDue(db, projectId,')
+    expect(src).not.toMatch(/from\('gate_runs'\)/)
   })
 })

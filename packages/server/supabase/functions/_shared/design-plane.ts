@@ -18,7 +18,7 @@
 import type { getServiceClient } from './db.ts'
 import { log } from './logger.ts'
 import { normalizeTokenSet, stableStringify } from './dtcg.ts'
-import { actOnDesignDeviance, storedFindingsOf } from './design-actions.ts'
+import { actOnDesignDeviance, DESIGN_PHASE_PATH, DESIGN_SCAN_PHASE, storedFindingsOf } from './design-actions.ts'
 import { devianceStatus } from './design-deviance.ts'
 import type { DevianceFinding } from './design-engine-types.ts'
 import { computeDeviance, selectScanFiles, tokenFilePaths } from './design-scan.ts'
@@ -303,6 +303,30 @@ export const STUCK_SCAN_MS = 15 * 60 * 1000
 export type DevianceStart =
   | { ok: true; runId: string; startedAt: string; commitSha: string | null; execute: () => Promise<{ ok: true; run: DevianceRun } | { ok: false; error: string }> }
   | { ok: false; error: string }
+
+/**
+ * Whether the collector's scan is due: the newest design_drift run of phase
+ * `scan` that did not error (running, pass, warn or fail) started more than
+ * `everyMs` ago, or there is none. Filtered on the phase in SQL, so PR pushes
+ * (`ci_branch_scan`), public-key pushes (`ci_untrusted_scan`), legacy CLI
+ * pushes (`ci_scan`) and refresh errors never stand in for a scan and hold
+ * the shown score, the metric and the auto-fix baseline back.
+ */
+export async function designScanDue(db: Db, projectId: string, now: Date, everyMs: number): Promise<{ ok: true; due: boolean } | { ok: false; error: string }> {
+  const { data, error } = await db
+    .from('gate_runs')
+    .select('started_at')
+    .eq('project_id', projectId)
+    .eq('gate', DESIGN_GATE)
+    .eq(DESIGN_PHASE_PATH, DESIGN_SCAN_PHASE)
+    .neq('status', 'error')
+    .order('started_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (error) return { ok: false, error: `gate_runs read failed: ${error.message}` }
+  const at = data ? Date.parse((data as { started_at: string }).started_at) : Number.NaN
+  return { ok: true, due: !Number.isFinite(at) || now.getTime() - at > everyMs }
+}
 
 /** Scan synchronously (the collector). The api route uses startDesignDeviance. */
 export async function runDesignDeviance(db: Db, projectId: string, triggeredBy = 'manual'): Promise<{ ok: true; run: DevianceRun } | { ok: false; error: string }> {
