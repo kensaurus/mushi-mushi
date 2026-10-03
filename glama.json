@@ -253,11 +253,11 @@
     },
     {
       "name": "list_byok_keys",
-      "description": "List the project's BYOK API keys grouped by provider (anthropic | openai | firecrawl | browserbase | cursor). Returns pooled { keys: [{ id, provider_slug, label, priority, status, cooldown_until, test_status, key_hint, base_url, last_tested_at, last_used_at }] } plus read-only { legacyKeys } metadata for credentials saved before the pooled lifecycle — never the raw secret. Read-only. Use to see which keys are validated, active, pending, legacy, or rate-limited; use add_byok_key to add one."
+      "description": "List the project's BYOK API keys grouped by provider (anthropic | openai | firecrawl | browserbase | cursor | supabase). Returns pooled { keys: [{ id, provider_slug, label, priority, status, cooldown_until, test_status, key_hint, base_url, last_tested_at, last_used_at }] } plus read-only { legacyKeys } metadata for credentials saved before the pooled lifecycle — never the raw secret. Read-only. Use to see which keys are validated, active, pending, legacy, or rate-limited; use add_byok_key to add one."
     },
     {
       "name": "add_byok_key",
-      "description": "Add and immediately validate a BYOK API key for anthropic | openai | firecrawl | browserbase | cursor. The raw key is stored encrypted in Supabase Vault and never returned; failed probes remain quarantined. Optional baseUrl is accepted only for allow-listed OpenAI-compatible HTTPS providers. Write; NOT idempotent."
+      "description": "Add and immediately validate a BYOK API key for anthropic | openai | firecrawl | browserbase | cursor | supabase (a scoped, read-only Supabase access token, checked against the linked supabase_project_ref). The raw key is stored encrypted in Supabase Vault and never returned; failed probes remain quarantined. Optional baseUrl is accepted only for allow-listed OpenAI-compatible HTTPS providers. Write; NOT idempotent."
     },
     {
       "name": "test_byok_key",
@@ -333,7 +333,7 @@
     },
     {
       "name": "run_fullstack_audit",
-      "description": "Fan out a full-stack health audit for the current project: DB schema + advisors, API contract gate results (Gates 3–8), recent backend error logs, and RLS gap detection. Returns a PM-readable scorecard with severity-ranked findings and fix hints. Requires the project to have a Supabase PAT configured (Settings → API Keys, slug: supabase) and supabase_project_ref set in project settings for backend analysis. The audit completes synchronously in ~10 s. Triggers a background gate run for orphan_endpoint and unknown_call gates if they have not run today."
+      "description": "Fan out a full-stack health audit for the current project: DB schema + advisors, API contract gate results (Gates 3–8), recent backend error logs, and RLS gap detection. Returns a PM-readable scorecard with severity-ranked findings and fix hints. Backend analysis needs supabase_project_ref set (Settings → General) and a scoped, read-only Supabase access token added (Settings → AI keys, slug: supabase). The audit completes synchronously in ~10 s. Triggers a background gate run for orphan_endpoint and unknown_call gates if they have not run today."
     },
     {
       "name": "get_backend_health",

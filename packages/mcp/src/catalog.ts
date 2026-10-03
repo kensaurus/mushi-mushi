@@ -1072,7 +1072,7 @@ export const TDD_TOOL_CATALOG: ToolSpec[] = [
     name: 'list_byok_keys',
     title: 'List your API key pool',
     description:
-      "List the project's BYOK API keys grouped by provider (anthropic | openai | firecrawl | browserbase | cursor). Returns pooled { keys: [{ id, provider_slug, label, priority, status, cooldown_until, test_status, key_hint, base_url, last_tested_at, last_used_at }] } plus read-only { legacyKeys } metadata for credentials saved before the pooled lifecycle — never the raw secret. Read-only. Use to see which keys are validated, active, pending, legacy, or rate-limited; use add_byok_key to add one.",
+      "List the project's BYOK API keys grouped by provider (anthropic | openai | firecrawl | browserbase | cursor | supabase). Returns pooled { keys: [{ id, provider_slug, label, priority, status, cooldown_until, test_status, key_hint, base_url, last_tested_at, last_used_at }] } plus read-only { legacyKeys } metadata for credentials saved before the pooled lifecycle — never the raw secret. Read-only. Use to see which keys are validated, active, pending, legacy, or rate-limited; use add_byok_key to add one.",
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'Which API keys are active and which are rate-limited?',
@@ -1081,7 +1081,7 @@ export const TDD_TOOL_CATALOG: ToolSpec[] = [
     name: 'add_byok_key',
     title: 'Add an API key',
     description:
-      'Add and immediately validate a BYOK API key for anthropic | openai | firecrawl | browserbase | cursor. The raw key is stored encrypted in Supabase Vault and never returned; failed probes remain quarantined. Optional baseUrl is accepted only for allow-listed OpenAI-compatible HTTPS providers. Write; NOT idempotent.',
+      'Add and immediately validate a BYOK API key for anthropic | openai | firecrawl | browserbase | cursor | supabase (a scoped, read-only Supabase access token, checked against the linked supabase_project_ref). The raw key is stored encrypted in Supabase Vault and never returned; failed probes remain quarantined. Optional baseUrl is accepted only for allow-listed OpenAI-compatible HTTPS providers. Write; NOT idempotent.',
     scope: 'mcp:write',
     hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
     useCase: 'Add a backup Anthropic key to the pool.',
@@ -1281,8 +1281,8 @@ export const TDD_TOOL_CATALOG: ToolSpec[] = [
       'Fan out a full-stack health audit for the current project: DB schema + advisors, ' +
       'API contract gate results (Gates 3–8), recent backend error logs, and RLS gap detection. ' +
       'Returns a PM-readable scorecard with severity-ranked findings and fix hints. ' +
-      'Requires the project to have a Supabase PAT configured (Settings → API Keys, slug: supabase) ' +
-      'and supabase_project_ref set in project settings for backend analysis. ' +
+      'Backend analysis needs supabase_project_ref set (Settings → General) and a scoped, read-only ' +
+      'Supabase access token added (Settings → AI keys, slug: supabase). ' +
       'The audit completes synchronously in ~10 s. Triggers a background gate run for orphan_endpoint ' +
       'and unknown_call gates if they have not run today.',
     scope: 'mcp:write',

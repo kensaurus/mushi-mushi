@@ -30,6 +30,7 @@ import {
   type SdkConfigRow,
 } from '../helpers.ts';
 import { validateFixBranchTemplate } from '../../_shared/github-pr.ts';
+import { parseSupabaseProjectRefSetting } from '../../_shared/supabase-project-ref.ts';
 import { isOperatorProject } from '../../_shared/operator-gate.ts';
 import {
   byokKeyIdSchema,
@@ -40,6 +41,28 @@ import {
   probeByokKey,
   validateOpenAiBaseUrl,
 } from '../../_shared/byok-validation.ts';
+
+/**
+ * The ref a Supabase BYOK token is probed against. Only loaded for the
+ * supabase provider; a read failure probes with no ref, which keeps the token
+ * quarantined with a "link the project first" detail instead of guessing.
+ */
+async function supabaseProbeOptions(
+  db: ReturnType<typeof getServiceClient>,
+  projectId: string,
+  provider: string,
+): Promise<{ supabaseProjectRef?: string | null }> {
+  if (provider !== 'supabase') return {};
+  const { data } = await db
+    .from('project_settings')
+    .select('supabase_project_ref')
+    .eq('project_id', projectId)
+    .maybeSingle();
+  return {
+    supabaseProjectRef:
+      ((data as { supabase_project_ref?: string | null } | null)?.supabase_project_ref ?? null),
+  };
+}
 
 // ── Slack bot token per project ──────────────────────────────────────────────
 // A project's own vaulted install (the "Add to Slack" OAuth flow) always wins.
@@ -436,6 +459,10 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       // Opt-in auto-release (migration 20261003130000): publishing messages
       // reporters, so project admins only. Validated below.
       'auto_release_enabled',
+      // Supabase link (ADR 0016): the project ref the read-only Supabase
+      // features read. The token itself is a BYOK key (slug `supabase`),
+      // never a settings column. Validated below.
+      'supabase_project_ref',
     ];
     // Secrets submitted raw are written to Supabase Vault and persisted as
     // `vault://<name>` — same auto-vault contract (and the same Vault names)
@@ -509,6 +536,17 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
           );
         }
         updates[key] = value;
+        continue;
+      }
+      if (key === 'supabase_project_ref') {
+        // It decides which database the stored token reads: admins only.
+        const forbidden = requireProjectAdmin(c, project);
+        if (forbidden) return forbidden;
+        const verdict = parseSupabaseProjectRefSetting(value);
+        if (!verdict.ok) {
+          return c.json({ error: { code: 'VALIDATION_ERROR', message: verdict.message } }, 400);
+        }
+        updates[key] = verdict.value;
         continue;
       }
       if (key === 'voice_intake_enabled') {
@@ -2859,7 +2897,13 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         return dbError(c, insertErr);
       }
 
-      const probe = await probeByokKey(provider, keyVal, baseUrl);
+      const probe = await probeByokKey(
+        provider,
+        keyVal,
+        baseUrl,
+        fetch,
+        await supabaseProbeOptions(db, project.id, provider),
+      );
       const now = new Date().toISOString();
       const cooldownUntil =
         probe.keyStatus === 'quota_exhausted'
@@ -3092,6 +3136,8 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         keyRow.provider_slug as PooledByokProvider,
         secret,
         validatedBaseUrl,
+        fetch,
+        await supabaseProbeOptions(db, project.id, keyRow.provider_slug as string),
       );
       const now = new Date().toISOString();
       const cooldownUntil =

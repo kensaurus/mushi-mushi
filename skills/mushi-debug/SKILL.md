@@ -143,7 +143,7 @@ mushi billing status   # plan, diagnoses used against the limit, spend cap
 | `No Firecrawl API key configured` | Missing Firecrawl key | Add one in Settings → Web crawl, or `mushi keys add --provider firecrawl` |
 | `All LLM keys exhausted` | Every Anthropic/OpenAI key hit quota | Add a backup key with `mushi keys add` |
 | `Story not found` in test generation | Story id not in an accepted inventory | Accept the inventory proposal first |
-| `byok_keys_provider_slug_check` | Invalid provider slug | Use one of: anthropic, openai, firecrawl, browserbase, cursor |
+| `byok_keys_provider_slug_check` | Invalid provider slug | Use one of: anthropic, openai, firecrawl, browserbase, cursor, supabase |
 | `relation … does not exist` | A self-hosted database is missing migrations | Apply them as described in [`SELF_HOSTED.md`](https://github.com/kensaurus/mushi-mushi/blob/master/SELF_HOSTED.md) |
 
 ## Self-hosting
