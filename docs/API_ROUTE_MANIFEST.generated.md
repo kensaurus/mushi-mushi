@@ -8,11 +8,11 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 
 | Auth | Count |
 | --- | ---: |
-| `adminOrApiKey` | 153 |
+| `adminOrApiKey` | 160 |
 | `apiKeyAuth` | 58 |
-| `jwtAuth` | 347 |
+| `jwtAuth` | 339 |
 | `jwtOrApiKey` | 3 |
-| `unknown` | 90 |
+| `unknown` | 91 |
 
 ## Routes by path
 
@@ -231,9 +231,9 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/org/integrations/platform/:kind` | `jwtAuth` | `packages/server/supabase/functions/api/routes/integrations.ts` |
 | PUT | `/v1/admin/org/integrations/platform/:kind` | `jwtAuth` | `packages/server/supabase/functions/api/routes/integrations.ts` |
 | GET | `/v1/admin/orgs/:orgId/accounts` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/accounts-register.ts` |
-| POST | `/v1/admin/orgs/:orgId/accounts` | `jwtAuth` | `packages/server/supabase/functions/api/routes/accounts-register.ts` |
-| DELETE | `/v1/admin/orgs/:orgId/accounts/:id` | `jwtAuth` | `packages/server/supabase/functions/api/routes/accounts-register.ts` |
-| PATCH | `/v1/admin/orgs/:orgId/accounts/:id` | `jwtAuth` | `packages/server/supabase/functions/api/routes/accounts-register.ts` |
+| POST | `/v1/admin/orgs/:orgId/accounts` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/accounts-register.ts` |
+| DELETE | `/v1/admin/orgs/:orgId/accounts/:id` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/accounts-register.ts` |
+| PATCH | `/v1/admin/orgs/:orgId/accounts/:id` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/accounts-register.ts` |
 | GET | `/v1/admin/orgs/:orgId/accounts/export` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/accounts-register.ts` |
 | GET | `/v1/admin/orgs/:orgId/connector-actions` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/recipe-changes.ts` |
 | POST | `/v1/admin/orgs/:orgId/connector-actions` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/recipe-changes.ts` |
@@ -245,7 +245,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/orgs/:orgId/digest` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/digest.ts` |
 | POST | `/v1/admin/orgs/:orgId/digest/send` | `jwtAuth` | `packages/server/supabase/functions/api/routes/digest.ts` |
 | PUT | `/v1/admin/orgs/:orgId/digest/settings` | `jwtAuth` | `packages/server/supabase/functions/api/routes/digest.ts` |
-| PATCH | `/v1/admin/orgs/:orgId/domains/:id` | `jwtAuth` | `packages/server/supabase/functions/api/routes/accounts-register.ts` |
+| PATCH | `/v1/admin/orgs/:orgId/domains/:id` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/accounts-register.ts` |
 | GET | `/v1/admin/orgs/:orgId/funnel` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/portfolio-funnel.ts` |
 | PUT | `/v1/admin/orgs/:orgId/funnel` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/portfolio-funnel.ts` |
 | GET | `/v1/admin/orgs/:orgId/portfolio` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/portfolio.ts` |
@@ -255,8 +255,8 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/orgs/:orgId/radar` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/radar.ts` |
 | GET | `/v1/admin/orgs/:orgId/releases` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/recipe-changes.ts` |
 | GET | `/v1/admin/orgs/:orgId/spend` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/spend-ledger.ts` |
-| POST | `/v1/admin/orgs/:orgId/spend/imports` | `jwtAuth` | `packages/server/supabase/functions/api/routes/spend-ledger.ts` |
-| DELETE | `/v1/admin/orgs/:orgId/spend/imports/:importId` | `jwtAuth` | `packages/server/supabase/functions/api/routes/spend-ledger.ts` |
+| POST | `/v1/admin/orgs/:orgId/spend/imports` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/spend-ledger.ts` |
+| DELETE | `/v1/admin/orgs/:orgId/spend/imports/:importId` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/spend-ledger.ts` |
 | GET | `/v1/admin/plugins` | `jwtAuth` | `packages/server/supabase/functions/api/routes/plugins-marketplace.ts` |
 | POST | `/v1/admin/plugins` | `jwtAuth` | `packages/server/supabase/functions/api/routes/plugins-marketplace.ts` |
 | DELETE | `/v1/admin/plugins/:slug` | `jwtAuth` | `packages/server/supabase/functions/api/routes/plugins-marketplace.ts` |
@@ -347,7 +347,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | POST | `/v1/admin/projects/:id/store/review` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/store-ops.ts` |
 | GET | `/v1/admin/projects/:id/store/reviews` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/store-review-intake.ts` |
 | POST | `/v1/admin/projects/:id/store/reviews/pull` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/store-review-intake.ts` |
-| PUT | `/v1/admin/projects/:id/store/reviews/settings` | `jwtAuth` | `packages/server/supabase/functions/api/routes/store-review-intake.ts` |
+| PUT | `/v1/admin/projects/:id/store/reviews/settings` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/store-review-intake.ts` |
 | POST | `/v1/admin/projects/:id/sync-ci-secrets` | `jwtAuth` | `packages/server/supabase/functions/api/routes/project-ci-secrets.ts` |
 | POST | `/v1/admin/projects/:id/test-report` | `jwtAuth` | `packages/server/supabase/functions/api/routes/project-integrations.ts` |
 | GET | `/v1/admin/projects/:pid/integrations` | `unknown` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
@@ -410,7 +410,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/releases/:id` | `unknown` | `packages/server/supabase/functions/api/routes/releases.ts` |
 | PATCH | `/v1/admin/releases/:id` | `unknown` | `packages/server/supabase/functions/api/routes/releases.ts` |
 | POST | `/v1/admin/releases/:id/publish` | `unknown` | `packages/server/supabase/functions/api/routes/releases.ts` |
-| GET | `/v1/admin/releases/auto-release` | `jwtAuth` | `packages/server/supabase/functions/api/routes/releases.ts` |
+| GET | `/v1/admin/releases/auto-release` | `unknown` | `packages/server/supabase/functions/api/routes/releases.ts` |
 | POST | `/v1/admin/releases/draft` | `unknown` | `packages/server/supabase/functions/api/routes/releases.ts` |
 | GET | `/v1/admin/releases/stats` | `unknown` | `packages/server/supabase/functions/api/routes/releases.ts` |
 | GET | `/v1/admin/repo/activity` | `jwtAuth` | `packages/server/supabase/functions/api/routes/query-fixes-repo.ts` |
