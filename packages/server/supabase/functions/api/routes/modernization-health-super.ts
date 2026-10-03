@@ -30,6 +30,7 @@ import { logAudit } from '../../_shared/audit.ts';
 import { createExternalIssue } from '../../_shared/integrations.ts';
 import { getActivePlugins, dispatchPluginEvent } from '../../_shared/plugins.ts';
 import {
+  historyHttpStatus,
   probeIntegration,
   ALL_INTEGRATION_KINDS,
   type IntegrationKind,
@@ -276,14 +277,17 @@ export function registerModernizationHealthSuperRoutes(app: Hono<{ Variables: Va
 
     const probe = await probeIntegration(kind, db, settings ?? {}, routingConfig, projectId);
 
-    await db.from('integration_health_history').insert({
+    const { error: historyErr } = await db.from('integration_health_history').insert({
       project_id: projectId,
       kind,
       status: probe.status,
       latency_ms: probe.latencyMs,
       message: probe.detail || (probe.httpStatus ? `HTTP ${probe.httpStatus}` : null),
       source: 'manual',
+      http_status: historyHttpStatus(probe),
     });
+    // The probe result is still returned, but a check that was not stored must be visible.
+    if (historyErr) log.error('integration_health_history insert failed', { projectId, kind, err: historyErr.message });
 
     return c.json({
       ok: true,
