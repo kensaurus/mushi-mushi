@@ -1320,8 +1320,10 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     const [{ data: primaryRepo }, { data: settings }, { data: fixes }] = await Promise.all([
       db
         .from('project_repos')
+        // Coverage (gap 16a): a capped repo never sets last_indexed_at, so the
+        // Repo page reads the last sweep of either kind.
         .select(
-          'repo_url, default_branch, github_app_installation_id, last_indexed_at, indexing_enabled',
+          'repo_url, default_branch, github_app_installation_id, last_indexed_at, indexing_enabled, index_swept_at, index_coverage_state, index_files_indexed, index_files_eligible',
         )
         .eq('project_id', projectId)
         .eq('is_primary', true)
@@ -1412,6 +1414,10 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
           github_app_installation_id: primaryRepo?.github_app_installation_id ?? null,
           last_indexed_at: primaryRepo?.last_indexed_at ?? null,
           indexing_enabled: primaryRepo?.indexing_enabled ?? null,
+          index_swept_at: primaryRepo?.index_swept_at ?? null,
+          index_coverage_state: primaryRepo?.index_coverage_state ?? null,
+          index_files_indexed: primaryRepo?.index_files_indexed ?? null,
+          index_files_eligible: primaryRepo?.index_files_eligible ?? null,
         },
         counts: { open, ci_passing, ci_failed, merged, failed_to_open, total: branches.length },
         branches,
@@ -1686,7 +1692,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     }
     const { data, error } = await db
       .from('project_repos')
-      .select('id, repo_url, default_branch, github_app_installation_id, indexing_enabled, last_indexed_at, role, path_globs, is_primary, created_at, updated_at')
+      .select('id, repo_url, default_branch, github_app_installation_id, indexing_enabled, last_indexed_at, index_swept_at, index_coverage_state, index_files_indexed, index_files_eligible, role, path_globs, is_primary, created_at, updated_at')
       .eq('project_id', projectId)
       .order('is_primary', { ascending: false })
       .order('created_at', { ascending: true });

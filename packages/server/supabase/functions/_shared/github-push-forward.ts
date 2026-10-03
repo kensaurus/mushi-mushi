@@ -9,12 +9,16 @@
  * project's `github_webhook_secret` (the one Codebase indexing reveals). This
  * module routes such a `push` delivery:
  *
- *   1. find the indexing-enabled, App-less project_repos rows for the
- *      repository (case-insensitive URL match);
- *   2. verify X-Hub-Signature-256 against each candidate project's own
+ *   1. find every project_repos row for the repository (case-insensitive
+ *      URL match), whatever its indexing or App state;
+ *   2. verify X-Hub-Signature-256 against each of those projects' own
  *      secret (fail closed: no verified project, no indexing);
- *   3. hand each verified project's push to the indexer's internal
- *      `mode: 'push'` (the same path an App delivery takes).
+ *   3. hand each verified, indexing-enabled, App-less row's push to the
+ *      indexer's internal `mode: 'push'` (the path an App delivery takes).
+ *
+ * An unverified delivery gets the same 401 whether or not any project has
+ * the repo, so the public endpoint cannot be used to learn which repos Mushi
+ * customers index. The difference is kept in the audit note only.
  *
  * Rows with an App installation are skipped: the App already delivers that
  * push to the indexer, and indexing it twice would double the embedding cost.
@@ -55,8 +59,24 @@ export interface PatPushResult {
   body: Record<string, unknown>
   /** Audit-log outcome for the delivery. */
   outcome: 'accepted' | 'rejected_signature' | 'error'
-  /** Projects the push was forwarded for (first one tags the audit row). */
+  /** Projects whose secret verified the push (first one tags the audit row). */
   projectIds: string[]
+  /** Audit-log note: why a delivery was rejected or not forwarded. */
+  auditNote?: string
+}
+
+const UNVERIFIED: Omit<PatPushResult, 'auditNote'> = {
+  status: 401,
+  body: {
+    ok: false,
+    error: {
+      code: 'INVALID_SIGNATURE',
+      message:
+        "Push signature did not match the webhook secret of a project indexing this repo. Use the secret Codebase indexing revealed (or rotate it).",
+    },
+  },
+  outcome: 'rejected_signature',
+  projectIds: [],
 }
 
 /**
@@ -82,19 +102,20 @@ export async function routePatPushWebhook(
 
   const { data: rows, error } = await deps.db
     .from('project_repos')
-    .select('id, project_id, repo_url, github_app_installation_id')
+    .select('id, project_id, repo_url, github_app_installation_id, indexing_enabled')
     .ilike('repo_url', likeLiteral(repoUrl))
-    .eq('indexing_enabled', true)
-    .is('github_app_installation_id', null)
-    .limit(20)
+    .limit(50)
   if (error) {
     return { status: 500, body: { ok: false, error: { code: 'DB_ERROR', message: 'Could not look up the repository' } }, outcome: 'error', projectIds: [] }
   }
-  const candidates = ((rows ?? []) as Array<{ id: string; project_id: string; repo_url: string; github_app_installation_id: number | null }>)
-    .filter((r) => r.github_app_installation_id == null && String(r.repo_url).toLowerCase() === repoUrl.toLowerCase())
-  if (candidates.length === 0) {
-    return { status: 200, body: { ok: true, data: { reason: 'no PAT-connected repo with indexing on' } }, outcome: 'accepted', projectIds: [] }
-  }
+  const candidates = ((rows ?? []) as Array<{
+    id: string
+    project_id: string
+    repo_url: string
+    github_app_installation_id: number | null
+    indexing_enabled: boolean | null
+  }>).filter((r) => String(r.repo_url).toLowerCase() === repoUrl.toLowerCase())
+  if (candidates.length === 0) return { ...UNVERIFIED, auditNote: 'NO_PROJECT_FOR_REPO' }
 
   const verified: typeof candidates = []
   const secretByProject = new Map<string, boolean>()
@@ -115,25 +136,106 @@ export async function routePatPushWebhook(
     }
     if (ok) verified.push(cand)
   }
-  if (verified.length === 0) {
+  if (verified.length === 0) return { ...UNVERIFIED, auditNote: 'INVALID_SIGNATURE' }
+
+  // Only a signed caller learns what happened to its push.
+  const projectIds = [...new Set(verified.map((r) => r.project_id))]
+  const toIndex = verified.filter((r) => r.indexing_enabled === true && r.github_app_installation_id == null)
+  if (toIndex.length === 0) {
+    const appCovered = verified.some((r) => r.github_app_installation_id != null)
     return {
-      status: 401,
+      status: 202,
       body: {
-        ok: false,
-        error: {
-          code: 'INVALID_SIGNATURE',
-          message: "Push signature did not match the webhook secret of any project indexing this repo. Use the secret Codebase indexing revealed (or rotate it).",
+        ok: true,
+        data: {
+          forwarded: 0,
+          reason: appCovered ? 'the GitHub App indexes this repo' : 'codebase indexing is off for this repo',
         },
       },
-      outcome: 'rejected_signature',
-      projectIds: [],
+      outcome: 'accepted',
+      projectIds,
+      auditNote: appCovered ? 'APP_DELIVERS_PUSH' : 'INDEXING_OFF',
     }
   }
 
   const deliveryId = input.deliveryId ?? crypto.randomUUID()
-  for (const row of verified) {
+  for (const row of toIndex) {
     await deps.forward({ projectId: row.project_id, repoId: row.id, deliveryId, payload })
   }
-  const projectIds = [...new Set(verified.map((r) => r.project_id))]
-  return { status: 202, body: { ok: true, data: { forwarded: verified.length, projectIds } }, outcome: 'accepted', projectIds }
+  return {
+    status: 202,
+    body: { ok: true, data: { forwarded: toIndex.length, projectIds: [...new Set(toIndex.map((r) => r.project_id))] } },
+    outcome: 'accepted',
+    projectIds,
+  }
+}
+
+/** Wall-clock budget for one forwarded push (the edge function limit). */
+export const PUSH_FORWARD_TIMEOUT_MS = 150_000
+
+/**
+ * The production `forward` for routePatPushWebhook: POST the push to the
+ * indexer's internal `mode: 'push'` in the background (GitHub wants an answer
+ * within 10 s). The outcome is not only logged: a non-2xx answer, a failed
+ * request or a timeout is written to the repo's `last_index_error` and
+ * `last_index_attempt_at`, so the console and doctor show it.
+ */
+export function createIndexerPushForwarder(deps: {
+  db: SupabaseClient
+  supabaseUrl: string | undefined
+  internalSecret: string | undefined
+  background: (task: Promise<unknown>, label: string) => void
+  log: { warn(msg: string, ctx?: Record<string, unknown>): void; error(msg: string, ctx?: Record<string, unknown>): void }
+  fetchImpl?: typeof fetch
+  timeoutMs?: number
+  nowIso?: () => string
+}): (req: PushForwardRequest) => Promise<void> {
+  const doFetch = deps.fetchImpl ?? fetch
+  const now = deps.nowIso ?? (() => new Date().toISOString())
+  const timeoutMs = deps.timeoutMs ?? PUSH_FORWARD_TIMEOUT_MS
+
+  const recordFailure = async (req: PushForwardRequest, message: string): Promise<void> => {
+    deps.log.warn('PAT push index failed', { projectId: req.projectId, repoId: req.repoId, error: message })
+    const { error } = await deps.db
+      .from('project_repos')
+      .update({ last_index_attempt_at: now(), last_index_error: message.slice(0, 500) })
+      .eq('id', req.repoId)
+    if (error) deps.log.error('PAT push index failure could not be recorded', { repoId: req.repoId, error: error.message })
+  }
+
+  return async (req) => {
+    if (!deps.supabaseUrl || !deps.internalSecret) {
+      await recordFailure(req, 'push indexing is not configured on this server (SUPABASE_URL / internal caller secret missing)')
+      throw new Error('indexer forward not configured (SUPABASE_URL / internal secret)')
+    }
+    const task = (async () => {
+      let res: Response
+      try {
+        res = await doFetch(`${deps.supabaseUrl}/functions/v1/webhooks-github-indexer`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${deps.internalSecret}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            mode: 'push',
+            project_id: req.projectId,
+            repo_id: req.repoId,
+            delivery_id: req.deliveryId,
+            payload: req.payload,
+          }),
+          signal: AbortSignal.timeout(timeoutMs),
+        })
+      } catch (err) {
+        const name = err instanceof Error ? err.name : ''
+        const message = name === 'TimeoutError' || name === 'AbortError'
+          ? `push indexing did not answer within ${Math.round(timeoutMs / 1000)} s (it may have hit the edge function time limit); the daily sweep catches the files up`
+          : `push indexing request failed: ${err instanceof Error ? err.message : String(err)}`
+        await recordFailure(req, message)
+        return
+      }
+      if (!res.ok) {
+        const detail = await res.text().then((t) => t.slice(0, 300)).catch(() => '')
+        await recordFailure(req, `push indexing failed: HTTP ${res.status}${detail ? `: ${detail}` : ''}`)
+      }
+    })()
+    deps.background(task, 'pat-push-index')
+  }
 }

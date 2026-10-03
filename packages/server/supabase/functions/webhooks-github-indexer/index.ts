@@ -15,7 +15,15 @@
 
 import { Hono } from 'npm:hono@4';
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import { chunk, shouldIndex, sha256Hex } from '../_shared/code-indexer.ts';
+import { chunk, sha256Hex } from '../_shared/code-indexer.ts';
+import type { CodebaseScopeSettings } from '../_shared/codebase-scope.ts';
+import {
+  dispatchInternalIndexerRequest,
+  handleInternalPushRequest,
+  INTERNAL_PUSH_REPO_COLUMNS,
+  type InternalIndexerBody,
+  type InternalPushRepoRow,
+} from '../_shared/indexer-internal.ts';
 import { createEmbedding, createEmbeddingBatch } from '../_shared/embeddings.ts';
 import { log as rootLog } from '../_shared/logger.ts';
 import { ensureSentry, sentryHonoErrorHandler } from '../_shared/sentry.ts';
@@ -37,9 +45,12 @@ import {
   DEFAULT_SWEEP_RUN_FILES,
   INDEX_FILE_CAP_ENV,
   MAX_INDEXED_FILE_BYTES,
+  admitPushPaths,
   isStorableBlob,
   indexFileCapForPlan,
+  indexPathFilter,
   measureIndexCoverage,
+  pushCoverageUpdate,
   selectSweepFiles,
   sweepBookkeeping,
   type IndexCoverage,
@@ -186,7 +197,7 @@ async function fetchFileForIndex(
   repo: string,
   path: string,
   ref: string,
-): Promise<{ text: string } | { skip: 'unstorable' | 'error' }> {
+): Promise<{ text: string } | { skip: 'unstorable' } | { skip: 'error'; detail: string }> {
   const res = await fetch(
     `https://api.github.com/repos/${owner}/${repo}/contents/${encodeRepoPath(path)}?ref=${encodeURIComponent(ref)}`,
     {
@@ -200,7 +211,7 @@ async function fetchFileForIndex(
   if (res.status === 404) return { skip: 'unstorable' };
   if (!res.ok) {
     log.warn('contents fetch failed', { path, status: res.status });
-    return { skip: 'error' };
+    return { skip: 'error', detail: `contents fetch ${res.status} for ${path}` };
   }
   const text = await res.text();
   if (text.length === 0 || text.length > MAX_INDEXED_FILE_BYTES) return { skip: 'unstorable' };
@@ -803,12 +814,34 @@ async function resolveProjectGithubToken(
 }
 
 /**
+ * The project's codebase scope (Settings: scope paths, excludes). Unlike
+ * getProjectCodebaseScope this throws on a read error: a sweep or push that
+ * silently lost its scope would index (and count as eligible) the whole repo.
+ */
+async function loadIndexScopeStrict(
+  db: ReturnType<typeof getDb>,
+  projectId: string,
+): Promise<CodebaseScopeSettings> {
+  const { data, error } = await db
+    .from('project_settings')
+    .select('codebase_index_scope_paths, codebase_index_exclude_globs')
+    .eq('project_id', projectId)
+    .maybeSingle();
+  if (error) throw new Error(`codebase scope read failed: ${error.message}`);
+  return {
+    scope_paths: (data?.codebase_index_scope_paths as string[] | null) ?? null,
+    exclude_globs: (data?.codebase_index_exclude_globs as string[] | null) ?? null,
+  };
+}
+
+/**
  * Sweep mode: invoked hourly by pg_cron (see migration
  * 20260418003200_repo_indexer_cron.sql). Re-indexes every project_repos row
  * whose last sweep (`index_swept_at`) is older than `staleAfterHours`
  * (default 24h), never swept, or whose coverage is still `filling` (a
  * capped run that later runs will extend). Oldest attempt first, so a big
- * repo that is filling cannot hold a batch slot every hour.
+ * repo that is filling cannot hold a batch slot every hour. A `stalled` repo
+ * (its last sweep added no file) waits for the normal staleness cutoff.
  *
  * Authenticated via Authorization: Bearer <service_role_key>; we never accept
  * external sweep requests.
@@ -844,7 +877,7 @@ async function handleSweep(
 
   let query = db
     .from('project_repos')
-    .select('id, project_id, repo_url, default_branch, github_app_installation_id, last_indexed_at, index_file_cap')
+    .select('id, project_id, repo_url, default_branch, github_app_installation_id, last_indexed_at, index_file_cap, path_globs')
     .eq('indexing_enabled', true);
 
   // `{ mode:'sweep', project_id, frame_paths }` (from the Sentry import
@@ -928,6 +961,12 @@ async function handleSweep(
         const fileCap = targetFramePaths.length > 0
           ? null
           : await projectIndexFileCap(db, repo.project_id, (repo as { index_file_cap?: number | null }).index_file_cap ?? null);
+        // The project scope and the repo's path filter decide which files are
+        // fetched and which count as eligible (coverage reads the same set).
+        const pathFilter = indexPathFilter({
+          scope: await loadIndexScopeStrict(db, repo.project_id),
+          pathGlobs: (repo as { path_globs?: string[] | null }).path_globs ?? null,
+        });
         const stats = await sweepIndexRepo(
           db,
           repo.project_id,
@@ -935,7 +974,7 @@ async function handleSweep(
           owner,
           name,
           repo.default_branch ?? 'main',
-          { targetFramePaths, fileCap },
+          { targetFramePaths, fileCap, pathFilter },
         );
         if (targetFramePaths.length > 0) {
           log.info('sweep: frame-path index', { repo: repo.repo_url, ...stats });
@@ -994,6 +1033,8 @@ async function handleSweep(
                 nowIso: new Date().toISOString(),
                 failedChunks: stats.failed,
                 lastError: stats.lastError,
+                fetchErrors: stats.fetchErrors,
+                lastFetchError: stats.lastFetchError,
               }),
               // Persist the branch GitHub actually serves so the next sweep,
               // the fix-worker base and the console all agree.
@@ -1263,7 +1304,7 @@ async function sweepIndexRepo(
   owner: string,
   repo: string,
   branch: string,
-  opts: { targetFramePaths?: string[]; fileCap?: IndexFileCap | null } = {},
+  opts: { targetFramePaths?: string[]; fileCap?: IndexFileCap | null; pathFilter?: (path: string) => boolean } = {},
 ): Promise<{
   /** Chunks embedded (new or changed text). */
   inserted: number;
@@ -1274,6 +1315,9 @@ async function sweepIndexRepo(
   skipped: number;
   failed: number;
   lastError?: string;
+  /** Selected files whose contents fetch failed (transient; retried). */
+  fetchErrors: number;
+  lastFetchError?: string;
   /** Branch the sweep actually read. */
   branch: string;
   /** Head commit of that branch, when GitHub returned it. */
@@ -1298,7 +1342,8 @@ async function sweepIndexRepo(
   const tree = resolved.tree;
   // Empty blobs and blobs over the fetch limit can never be stored; leaving
   // them out of the eligible set keeps coverage able to reach complete.
-  const files = (tree.tree ?? []).filter((t) => t.type === 'blob' && shouldIndex(t.path) && isStorableBlob(t));
+  const eligible = opts.pathFilter ?? indexPathFilter({ scope: null, pathGlobs: null });
+  const files = (tree.tree ?? []).filter((t) => t.type === 'blob' && eligible(t.path) && isStorableBlob(t));
   let inserted = 0;
   let skipped = 0;
   let failed = 0;
@@ -1372,11 +1417,18 @@ async function sweepIndexRepo(
   const pending: IndexChunk[] = [];
   /** Selected files that turned out gone, empty or too large: never indexable. */
   const unstorablePaths = new Set<string>();
+  let fetchErrors = 0;
+  let lastFetchError: string | undefined;
   for (const path of selected) {
     const got = await fetchFileForIndex(token, owner, repo, path, branch);
     if (!('text' in got)) {
       skipped++;
-      if (got.skip === 'unstorable') unstorablePaths.add(path);
+      if (got.skip === 'unstorable') {
+        unstorablePaths.add(path);
+      } else {
+        fetchErrors++;
+        lastFetchError = got.detail;
+      }
       continue;
     }
     pending.push(...(await chunksForFile(path, got.text)));
@@ -1437,6 +1489,10 @@ async function sweepIndexRepo(
   // report clean success, leaving big monorepos silently half-indexed. The
   // index after this run is what it held before plus what this run wrote
   // (a sweep never tombstones); only eligible tree files count.
+  // A sweep that adds no file to a filling repo reads as stalled, so a
+  // permanently failing file cannot keep the repo in the hourly batch.
+  let indexedEligibleBefore = 0;
+  for (const p of treePaths) if (indexedBefore.has(p)) indexedEligibleBefore++;
   const coverage = targeted
     ? null
     : measureIndexCoverage({
@@ -1445,6 +1501,7 @@ async function sweepIndexRepo(
       unstorablePaths,
       cap,
       truncated: tree.truncated === true,
+      indexedBefore: indexedEligibleBefore,
     });
   const headSha = targeted ? null : await lookupBranchHeadSha(token, owner, repo, branch).catch(() => null);
   return {
@@ -1454,6 +1511,8 @@ async function sweepIndexRepo(
     skipped,
     failed,
     lastError,
+    fetchErrors,
+    lastFetchError,
     coverage,
     branch,
     headSha,
@@ -1478,13 +1537,15 @@ interface PushPayload {
  * repo's indexed HEAD and enqueue an analyze job. Shared by the GitHub App
  * delivery (installation token) and the internal `mode: 'push'` call the
  * api forwards for PAT-connected repos (project token).
+ *
+ * The plan ceiling binds here too (gap 16b): files already in the index are
+ * refreshed, a file new to the index is embedded only while the index holds
+ * fewer than the plan's files, and the coverage columns follow the push.
  */
 async function indexPushForProject(
   db: ReturnType<typeof getDb>,
   args: {
-    projectId: string;
-    repoRowId: string;
-    configuredDefaultBranch: string | null;
+    row: InternalPushRepoRow;
     token: string;
     owner: string;
     repo: string;
@@ -1492,11 +1553,14 @@ async function indexPushForProject(
     deliveryId: string;
   },
 ): Promise<{ status: 200 | 202 | 500; body: Record<string, unknown> }> {
-  const { projectId, token, owner, repo, payload, deliveryId } = args;
+  const { row, token, owner, repo, payload, deliveryId } = args;
+  const projectId = row.project_id;
   const repoFullName = `${owner}/${repo}`;
   const ref = payload.after ?? '';
-  const { getProjectCodebaseScope } = await import('../_shared/codebase-understand.ts')
-  const indexScope = await getProjectCodebaseScope(db, projectId)
+  const isEligible = indexPathFilter({
+    scope: await loadIndexScopeStrict(db, projectId),
+    pathGlobs: row.path_globs,
+  });
 
   // Emit `commit` fix_events if this push is on a branch we're tracking
   // (i.e. fix_attempts.branch == ref). Runs before the embedding pipeline so
@@ -1515,27 +1579,57 @@ async function indexPushForProject(
 
   // One index per project, built from the default branch. A push to any
   // other branch used to overwrite default-branch code in the index.
-  const branchDecision = pushBranchDecision(payload, args.configuredDefaultBranch);
+  const branchDecision = pushBranchDecision(payload, row.default_branch);
   if (!branchDecision.index) {
     log.info('push not indexed', { projectId, repoFullName, branch: branchDecision.branch, reason: branchDecision.reason });
     return { status: 202, body: { ok: true, ignored: branchDecision.reason, branch: branchDecision.branch } };
   }
 
+  // Final state per path across the push's commits: GitHub lists a file as
+  // `added` when it is new to the repo and `modified` when it existed.
   const added = new Set<string>();
+  const newToRepo = new Set<string>();
   const removed = new Set<string>();
   for (const commit of payload.commits ?? []) {
-    for (const p of [...(commit.added ?? []), ...(commit.modified ?? [])]) added.add(p);
-    for (const p of commit.removed ?? []) removed.add(p);
+    for (const p of commit.added ?? []) {
+      added.add(p);
+      if (removed.delete(p)) continue; // removed then re-added: it existed before
+      newToRepo.add(p);
+    }
+    for (const p of commit.modified ?? []) added.add(p);
+    for (const p of commit.removed ?? []) {
+      added.delete(p);
+      if (newToRepo.delete(p)) continue; // added then removed in one push: never counted
+      removed.add(p);
+    }
+  }
+  const eligibleChanged = [...added].filter(isEligible);
+  const eligibleRemoved = [...removed].filter(isEligible);
+
+  // Which of these paths the index holds, and how many files it holds: the
+  // ceiling check and the coverage update both need them. A read error fails
+  // the push (500, recorded by the caller) instead of indexing past the cap.
+  const indexedAmong = await loadIndexedAmong(db, projectId, [...eligibleChanged, ...eligibleRemoved]);
+  const cap = (await projectIndexFileCap(db, projectId, row.index_file_cap)).cap;
+  let indexedCount = row.index_files_indexed;
+  if (indexedCount == null) {
+    const all = await loadIndexedPaths(db, projectId);
+    if (!all) throw new Error('indexed-path lookup failed; the plan ceiling cannot be checked');
+    indexedCount = [...all].filter(isEligible).length;
+  }
+  const admission = admitPushPaths({ candidates: eligibleChanged, indexed: indexedAmong, indexedCount, cap });
+  if (admission.overCap.length > 0) {
+    log.info('push: files over the plan index ceiling not indexed', { projectId, repoFullName, cap, overCap: admission.overCap.length });
   }
 
   let inserted = 0;
   let tombstoned = 0;
   let upsertFailures = 0;
   let tombstoneFailures = 0;
+  let unindexed = 0;
   const languageCounts: Record<string, number> = {};
 
-  for (const path of removed) {
-    if (!shouldIndex(path, indexScope)) continue;
+  for (const path of eligibleRemoved) {
     const { error } = await db
       .from('project_codebase_files')
       .update({ tombstoned_at: new Date().toISOString() })
@@ -1547,6 +1641,7 @@ async function indexPushForProject(
       continue;
     }
     tombstoned++;
+    if (indexedAmong.has(path)) unindexed++;
   }
 
   // Same batching strategy as the sweep path (MUSHI-MUSHI-INDEXER-429): a
@@ -1555,8 +1650,9 @@ async function indexPushForProject(
   // budget. Chunks are hashed first; only new or changed text is embedded,
   // in batches of 96.
   const pendingChunks: IndexChunk[] = [];
-  for (const path of added) {
-    if (!shouldIndex(path, indexScope)) continue;
+  /** Paths with at least one chunk written by this push. */
+  const writtenPaths = new Set<string>();
+  for (const path of admission.admit) {
     const source = await fetchFileContents(token, owner, repo, path, ref);
     if (!source) continue;
     pendingChunks.push(...(await chunksForFile(path, source)));
@@ -1567,6 +1663,7 @@ async function indexPushForProject(
   const pushRefresh = await refreshChunks(db, projectId, pushPlan.refresh);
   upsertFailures += pushRefresh.failed;
   inserted += pushRefresh.refreshed;
+  for (const p of pushRefresh.paths) writtenPaths.add(p);
 
   const pushBatchSize = envInt('MUSHI_REPO_INDEX_BATCH_SIZE', 96, { min: 1, max: 2048 });
   for (let i = 0; i < pushPlan.embed.length; i += pushBatchSize) {
@@ -1612,6 +1709,7 @@ async function indexPushForProject(
         continue;
       }
       inserted++;
+      writtenPaths.add(c.path);
       languageCounts[c.chunk.language] = (languageCounts[c.chunk.language] ?? 0) + 1;
     }
   }
@@ -1631,16 +1729,39 @@ async function indexPushForProject(
   // Keep this repo's indexed HEAD in sync for last-push diff impact, analyze
   // jobs and the radar. The column did not exist until 20261002140100 and the
   // write was never checked; a failure is now logged as an error.
+  // Coverage follows the push (the console and doctor would otherwise show
+  // the last sweep's numbers until the next one). It does not move
+  // index_swept_at; see pushCoverageUpdate.
+  let newlyIndexed = 0;
+  for (const p of writtenPaths) if (!indexedAmong.has(p)) newlyIndexed++;
+  const coverageUpdate = pushCoverageUpdate({
+    prev: {
+      indexed: row.index_files_indexed,
+      eligible: row.index_files_eligible,
+      truncated: row.index_tree_truncated,
+      state: row.index_coverage_state,
+    },
+    cap,
+    addedToRepo: eligibleChanged.filter((p) => newToRepo.has(p) && !indexedAmong.has(p)).length,
+    removedFromRepo: eligibleRemoved.length,
+    newlyIndexed,
+    unindexed,
+  });
   const { error: headErr } = await db
     .from('project_repos')
-    .update({ commit_sha: ref, indexed_branch: branchDecision.branch, updated_at: new Date().toISOString() })
-    .eq('id', args.repoRowId);
+    .update({
+      commit_sha: ref,
+      indexed_branch: branchDecision.branch,
+      updated_at: new Date().toISOString(),
+      ...(coverageUpdate ?? {}),
+    })
+    .eq('id', row.id);
   if (headErr) log.error('push: project_repos head update failed', { projectId, error: headErr.message });
 
   try {
     const { invalidateCodebaseUnderstandCaches } = await import('../_shared/codebase-impact-resolve.ts')
     await invalidateCodebaseUnderstandCaches(db, projectId)
-    const changedPaths = [...added]
+    const changedPaths = admission.admit
     if (changedPaths.length > 0) {
       const { enqueueCodebaseAnalyzeJob } = await import('../_shared/codebase-analyze-runner.ts')
       const { jobId } = await enqueueCodebaseAnalyzeJob(db, {
@@ -1691,101 +1812,72 @@ async function indexPushForProject(
       tombstoned,
       upsertFailures,
       tombstoneFailures,
+      overCap: admission.overCap.length,
       languages: languageCounts,
     },
-  };}
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function jsonResponse(body: Record<string, unknown>, status: number): Response {
-  return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+  };
 }
 
 /**
- * Internal `mode: 'push'` (gap #16b): the api's `/v1/webhooks/github` route
- * has verified a push delivery against a PAT-connected project's own webhook
- * secret and forwards it here, because a repo without the GitHub App never
- * delivers to this function. Service-role auth only; the GitHub signature
- * was checked by the caller. Indexes with the project's token, through the
- * same indexPushForProject path as an App delivery.
+ * Which of `paths` the index holds (live rows). Throws on a read error: the
+ * push's ceiling check and coverage update cannot run on a guess.
  */
-async function handleInternalPush(
-  req: Request,
-  body: { project_id?: unknown; repo_id?: unknown; delivery_id?: unknown; payload?: unknown },
-): Promise<Response> {
-  const unauthorized = requireServiceRoleAuth(req);
-  if (unauthorized) return unauthorized;
-
-  const projectId = typeof body.project_id === 'string' && UUID_RE.test(body.project_id) ? body.project_id : null;
-  const repoId = typeof body.repo_id === 'string' && UUID_RE.test(body.repo_id) ? body.repo_id : null;
-  const payload = body.payload && typeof body.payload === 'object' ? (body.payload as PushPayload) : null;
-  const owner = payload?.repository?.owner?.login;
-  const repo = payload?.repository?.name;
-  if (!projectId || !repoId || !payload || !owner || !repo || !payload.after) {
-    return jsonResponse({ ok: false, error: { code: 'BAD_REQUEST', message: 'project_id, repo_id and a push payload are required' } }, 400);
+async function loadIndexedAmong(
+  db: ReturnType<typeof getDb>,
+  projectId: string,
+  paths: string[],
+): Promise<Set<string>> {
+  const out = new Set<string>();
+  const unique = [...new Set(paths)];
+  for (let i = 0; i < unique.length; i += 100) {
+    const { data, error } = await db
+      .from('project_codebase_files')
+      .select('file_path')
+      .eq('project_id', projectId)
+      .is('tombstoned_at', null)
+      .in('file_path', unique.slice(i, i + 100));
+    if (error) throw new Error(`indexed-path lookup failed: ${error.message}`);
+    for (const r of data ?? []) out.add(r.file_path as string);
   }
-  const deliveryId = typeof body.delivery_id === 'string' && body.delivery_id ? body.delivery_id : crypto.randomUUID();
+  return out;
+}
 
+/**
+ * Internal `mode: 'push'` (gap 16b): the api's `/v1/webhooks/github` route
+ * verified a push against a PAT-connected project's own webhook secret and
+ * forwards it here. See _shared/indexer-internal.ts.
+ */
+function handleInternalPush(req: Request, body: InternalIndexerBody): Promise<Response> {
   const db = getDb();
-  const { data: row, error } = await db
-    .from('project_repos')
-    .select('id, project_id, repo_url, default_branch, github_app_installation_id, indexing_enabled')
-    .eq('id', repoId)
-    .eq('project_id', projectId)
-    .maybeSingle();
-  if (error) {
-    log.error('internal push: project_repos read failed', { projectId, error: error.message });
-    return jsonResponse({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500);
-  }
-  if (!row || !row.indexing_enabled) return jsonResponse({ ok: true, ignored: 'indexing_not_enabled' }, 202);
-  // An App install already delivers this push here directly; indexing it twice
-  // would double the embedding spend.
-  if (row.github_app_installation_id) return jsonResponse({ ok: true, ignored: 'app_installation_delivers_directly' }, 202);
-  if (String(row.repo_url).toLowerCase() !== `https://github.com/${owner}/${repo}`.toLowerCase()) {
-    return jsonResponse({ ok: true, ignored: 'repo_mismatch' }, 202);
-  }
-
-  const token = await resolveProjectGithubToken(db, projectId);
-  if (!token) {
-    await db
-      .from('project_repos')
-      .update({ last_index_attempt_at: new Date().toISOString(), last_index_error: 'no_token: push received but no GitHub token resolved for this project' })
-      .eq('id', repoId);
-    return jsonResponse({ ok: true, ignored: 'no_token' }, 202);
-  }
-
-  const pushed = await indexPushForProject(db, {
-    projectId,
-    repoRowId: repoId,
-    configuredDefaultBranch: (row.default_branch as string | null) ?? null,
-    token,
-    owner,
-    repo,
-    payload,
-    deliveryId,
+  return handleInternalPushRequest<PushPayload>(req, body, {
+    db,
+    requireAuth: requireServiceRoleAuth,
+    resolveToken: (projectId) => resolveProjectGithubToken(db, projectId),
+    indexPush: ({ row, token, owner, repo, payload, deliveryId }) =>
+      indexPushForProject(db, { row, token, owner, repo, payload, deliveryId }),
   });
-  return jsonResponse({ ...pushed.body, via: 'pat_webhook' }, pushed.status);
 }
 
 app.post('/webhooks-github-indexer', async (c) => {
   const raw = await c.req.text();
 
-  // Sweep mode: cron-invoked, no GitHub signature; auth via service-role bearer.
-  // Internal caller (not inbound webhook traffic), so it deliberately bypasses
-  // the audit/rate-limit/replay middleware below.
-  if (raw.length > 0) {
-    try {
-      const peek = JSON.parse(raw) as { mode?: string; project_id?: string; repo_id?: unknown; delivery_id?: unknown; payload?: unknown };
-      if (peek?.mode === 'sweep') {
-        return await handleSweep(c.req.raw, peek);
-      }
-      if (peek?.mode === 'push') {
-        return await handleInternalPush(c.req.raw, peek);
-      }
-    } catch {
-      /* fall through to webhook handling */
-    }
-  }
+  // Internal modes (sweep from cron / "Index now", push from the api):
+  // service-role bearer, no GitHub signature, so they bypass the
+  // audit/rate-limit/replay middleware below. Only a body that is not an
+  // internal request falls through; a handler error comes back as a 500.
+  const internal = await dispatchInternalIndexerRequest(
+    raw,
+    {
+      sweep: (body) =>
+        handleSweep(c.req.raw, {
+          project_id: typeof body.project_id === 'string' ? body.project_id : undefined,
+          frame_paths: body.frame_paths,
+        }),
+      push: (body) => handleInternalPush(c.req.raw, body),
+    },
+    log,
+  );
+  if (internal) return internal;
 
   // Genuine inbound GitHub webhook delivery from here on — apply the same
   // audit-log + per-IP rate-limit + 24h replay-cache posture as the other
@@ -1898,27 +1990,30 @@ app.post('/webhooks-github-indexer', async (c) => {
   // Route to the project that bound this repository to this installation.
   // The old lookup matched project_integrations.config.repo, which any tenant
   // could set to someone else's "owner/repo" and receive its indexed source.
-  const { data: project } = await db
+  const { data: projectRow, error: projectErr } = await db
     .from('project_repos')
-    .select('id, project_id, default_branch')
+    .select(INTERNAL_PUSH_REPO_COLUMNS)
     .eq('repo_url', `https://github.com/${repoFullName}`)
     .eq('github_app_installation_id', installationId)
     .eq('indexing_enabled', true)
     .limit(1)
     .maybeSingle();
+  if (projectErr) {
+    log.error('push: project_repos lookup failed', { repoFullName, error: projectErr.message });
+    return c.json({ ok: false, error: { code: 'DB_ERROR', message: projectErr.message } }, 500);
+  }
+  const project = projectRow as InternalPushRepoRow | null;
 
   if (!project?.project_id) {
     return c.json({ ok: true, ignored: 'no_project_for_repo', repoFullName }, 202);
   }
 
-  const projectId = project.project_id as string;
+  const projectId = project.project_id;
   // Lets the radar count accepted deliveries per project (webhook_never_delivered).
   await auditRow.setProject(projectId);
   const token = await mintInstallationToken(installationId);
   const pushed = await indexPushForProject(db, {
-    projectId,
-    repoRowId: project.id as string,
-    configuredDefaultBranch: (project.default_branch as string | null) ?? null,
+    row: project,
     token,
     owner,
     repo,

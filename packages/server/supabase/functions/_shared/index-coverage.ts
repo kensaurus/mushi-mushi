@@ -17,6 +17,8 @@
  * index covered every eligible file".
  */
 import { prioritizeSweepFiles } from './sweep-file-priority.ts'
+import { shouldIndex } from './code-indexer.ts'
+import { pathMatchesAnyGlob, type CodebaseScopeSettings } from './codebase-scope.ts'
 
 /** Files a plan's index may hold, by plan id. Unknown plans get DEFAULT_INDEX_FILE_CAP. */
 export const PLAN_INDEX_FILE_CAPS: Readonly<Record<string, number>> = {
@@ -118,7 +120,43 @@ export function selectSweepFiles(input: {
   return out
 }
 
-export type IndexCoverageState = 'complete' | 'filling' | 'capped'
+/**
+ * Which repo files the index may hold: a supported source file outside the
+ * skip list, inside the project's codebase scope (scope paths and excludes)
+ * and matching the repo's path filter (`project_repos.path_globs`, the
+ * console's "Path filter"). The sweep and the push path share it, so a path
+ * filter changes both what is fetched and what counts as eligible.
+ */
+export function indexPathFilter(input: {
+  scope: CodebaseScopeSettings | null
+  pathGlobs: readonly string[] | null
+}): (path: string) => boolean {
+  return (path) => shouldIndex(path, input.scope) && pathMatchesAnyGlob(path, input.pathGlobs)
+}
+
+/**
+ *   complete: every storable eligible file is indexed and the tree was whole.
+ *   filling:  short of both the repo and the plan ceiling; the hourly sweep
+ *             adds files.
+ *   capped:   the plan ceiling is reached (or GitHub truncated the tree).
+ *   stalled:  would be filling, but the last sweep added no file (fetches or
+ *             embeddings keep failing). Swept on the normal staleness
+ *             cadence instead of hourly, with the reason in last_index_error.
+ */
+export type IndexCoverageState = 'complete' | 'filling' | 'capped' | 'stalled'
+
+export const INDEX_COVERAGE_STATES: readonly IndexCoverageState[] = ['complete', 'filling', 'capped', 'stalled']
+
+export function isIndexCoverageState(v: unknown): v is IndexCoverageState {
+  return typeof v === 'string' && (INDEX_COVERAGE_STATES as readonly string[]).includes(v)
+}
+
+/** State from counts alone (no progress check). */
+function classifyCoverage(indexed: number, eligible: number, cap: number, truncated: boolean): 'complete' | 'filling' | 'capped' {
+  if (indexed >= eligible && !truncated) return 'complete'
+  if (indexed >= cap || (truncated && indexed >= eligible)) return 'capped'
+  return 'filling'
+}
 
 export interface IndexCoverage {
   indexed: number
@@ -159,6 +197,11 @@ export function measureIndexCoverage(input: {
   unstorablePaths?: ReadonlySet<string>
   cap: number
   truncated: boolean
+  /**
+   * Eligible files the index held before this sweep. When given, a sweep that
+   * would leave the repo filling without adding a file reads as stalled.
+   */
+  indexedBefore?: number
 }): IndexCoverage {
   const unstorable = input.unstorablePaths ?? new Set<string>()
   let eligible = 0
@@ -171,10 +214,8 @@ export function measureIndexCoverage(input: {
       eligible++
     }
   }
-  let state: IndexCoverageState
-  if (indexed >= eligible && !input.truncated) state = 'complete'
-  else if (indexed >= input.cap || (input.truncated && indexed >= eligible)) state = 'capped'
-  else state = 'filling'
+  let state: IndexCoverageState = classifyCoverage(indexed, eligible, input.cap, input.truncated)
+  if (state === 'filling' && input.indexedBefore !== undefined && indexed <= input.indexedBefore) state = 'stalled'
   return { indexed, eligible, cap: input.cap, truncated: input.truncated, state }
 }
 
@@ -189,6 +230,10 @@ export function sweepBookkeeping(input: {
   nowIso: string
   failedChunks: number
   lastError?: string
+  /** Last file-fetch failure of this sweep, for the stalled reason. */
+  lastFetchError?: string
+  /** Files this sweep could not fetch (transient errors). */
+  fetchErrors?: number
 }): {
   index_swept_at: string
   last_index_attempt_at: string
@@ -205,13 +250,31 @@ export function sweepBookkeeping(input: {
     index_swept_at: nowIso,
     last_index_attempt_at: nowIso,
     ...(coverage.state === 'complete' ? { last_indexed_at: nowIso } : {}),
-    last_index_error: input.failedChunks > 0 ? (input.lastError ?? 'partial: some chunks failed').slice(0, 500) : null,
+    last_index_error: sweepErrorText(input),
     index_files_indexed: coverage.indexed,
     index_files_eligible: coverage.eligible,
     index_file_cap: coverage.cap,
     index_tree_truncated: coverage.truncated,
     index_coverage_state: coverage.state,
   }
+}
+
+function sweepErrorText(input: {
+  coverage: IndexCoverage
+  failedChunks: number
+  lastError?: string
+  lastFetchError?: string
+  fetchErrors?: number
+}): string | null {
+  if (input.coverage.state === 'stalled') {
+    const why = input.failedChunks > 0
+      ? `${input.failedChunks} chunk embedding(s) failed${input.lastError ? ` (${input.lastError})` : ''}`
+      : (input.fetchErrors ?? 0) > 0
+      ? `${input.fetchErrors} file fetch(es) failed${input.lastFetchError ? ` (${input.lastFetchError})` : ''}`
+      : 'no unindexed file could be fetched'
+    return `stalled: the last sweep indexed no new file; ${why}. Retried on the daily sweep.`.slice(0, 500)
+  }
+  return input.failedChunks > 0 ? (input.lastError ?? 'partial: some chunks failed').slice(0, 500) : null
 }
 
 /** The later of two ISO timestamps (either may be missing). */
@@ -238,5 +301,77 @@ export function describeIndexCoverage(c: {
       ? `${of} indexed (GitHub truncated the file list for this repo)`
       : `${of} indexed (plan limit ${n(c.cap ?? c.indexed)})`
   }
+  if (c.state === 'stalled') return `${of} indexed; the last sweep added none (see the index error)`
   return `${of} indexed so far; the hourly sweep adds more`
+}
+
+/**
+ * Which changed files one push embeds (gap 16b: the plan ceiling binds pushes
+ * too). Files already in the index are always refreshed; a file new to the
+ * index is admitted only while the index holds fewer than `cap` files.
+ */
+export function admitPushPaths(input: {
+  /** Eligible added/modified paths, deduped. */
+  candidates: readonly string[]
+  /** Which of the candidates the index already holds. */
+  indexed: ReadonlySet<string>
+  /** Eligible files in the index before this push. */
+  indexedCount: number
+  cap: number
+}): { admit: string[]; overCap: string[] } {
+  let room = Math.max(0, input.cap - input.indexedCount)
+  const admit: string[] = []
+  const overCap: string[] = []
+  for (const p of input.candidates) {
+    if (input.indexed.has(p)) {
+      admit.push(p)
+    } else if (room > 0) {
+      admit.push(p)
+      room--
+    } else {
+      overCap.push(p)
+    }
+  }
+  return { admit, overCap }
+}
+
+/**
+ * The coverage columns after a push, from the last measurement plus what the
+ * push changed. Null when nothing was measured yet (the first sweep measures
+ * the tree). A push does not move `index_swept_at`: the daily sweep still runs
+ * and reconciles anything a push missed (a dropped delivery, a force push).
+ * A push that adds files to a stalled repo puts it back to filling, so the
+ * hourly sweep tries again.
+ */
+export function pushCoverageUpdate(input: {
+  prev: { indexed: number | null; eligible: number | null; truncated: boolean | null; state: string | null }
+  cap: number
+  /** Eligible files the push added to the repo (commit `added`, net of removals). */
+  addedToRepo: number
+  /** Eligible files the push removed from the repo (net of re-adds). */
+  removedFromRepo: number
+  /** Files new to the index that the push wrote. */
+  newlyIndexed: number
+  /** Indexed files the push tombstoned. */
+  unindexed: number
+}): {
+  index_files_indexed: number
+  index_files_eligible: number
+  index_file_cap: number
+  index_coverage_state: IndexCoverageState
+} | null {
+  const { prev } = input
+  if (prev.indexed == null || prev.eligible == null || !isIndexCoverageState(prev.state)) return null
+  const indexed = Math.max(0, prev.indexed + input.newlyIndexed - input.unindexed)
+  const eligible = Math.max(indexed, prev.eligible + input.addedToRepo - input.removedFromRepo)
+  let state: IndexCoverageState = classifyCoverage(indexed, eligible, input.cap, prev.truncated === true)
+  // Still filling with nothing new to try: keep the stall until a sweep or a
+  // push makes progress, so a stalled repo does not rejoin the hourly batch.
+  if (state === 'filling' && prev.state === 'stalled' && input.newlyIndexed === 0 && input.addedToRepo === 0) state = 'stalled'
+  return {
+    index_files_indexed: indexed,
+    index_files_eligible: eligible,
+    index_file_cap: input.cap,
+    index_coverage_state: state,
+  }
 }

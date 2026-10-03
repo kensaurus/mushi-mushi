@@ -52,3 +52,22 @@ export function filterPathsByScope(
 ): string[] {
   return paths.filter((p) => pathMatchesScope(p, scope))
 }
+
+/**
+ * A repo's `project_repos.path_globs` (the console's "Path filter"): the file
+ * must match at least one glob. Empty or missing = every file. `**` spans
+ * directories, `*` stays inside one segment (`apps/<star>/src/<star><star>`
+ * matches apps/web/src/a.ts, not apps/web/lib/a.ts); a glob with no star is a
+ * directory prefix.
+ */
+export function pathMatchesAnyGlob(filePath: string, globs: readonly string[] | null | undefined): boolean {
+  const pats = (globs ?? []).map((g) => normalizeRepoPath(g.trim())).filter(Boolean)
+  if (pats.length === 0) return true
+  const p = normalizeRepoPath(filePath)
+  return pats.some((g) => {
+    if (g.includes('*')) return globToRegExp(g).test(p)
+    // A bare directory or file ("src", "src/") is a prefix.
+    const prefix = g.replace(/\/+$/, '')
+    return p === prefix || p.startsWith(`${prefix}/`)
+  })
+}

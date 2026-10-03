@@ -211,13 +211,19 @@ export function registerDoctorRoutes(app: Hono<{ Variables: Variables }>): void 
             ? 'Some chunks failed to embed; the next sweep retries them.'
             : 'Fix the recorded error, then re-run the sweep from the Integrations card.',
         });
-      } else if (repo.index_coverage_state === 'filling' || repo.index_coverage_state === 'capped') {
+      } else if (
+        repo.index_coverage_state === 'filling' ||
+        repo.index_coverage_state === 'capped' ||
+        repo.index_coverage_state === 'stalled'
+      ) {
         checks.push({
           name: `codebase_index:${pid}`,
           status: 'warn',
           summary: `Partly indexed: ${coverage ?? 'coverage unknown'} (last sweep ${sweptAt}).`,
           hint: repo.index_coverage_state === 'capped'
-            ? 'Diagnoses only see the indexed files. A higher plan indexes more files; a path filter on the Integrations card picks which ones.'
+            ? 'Diagnoses only see the indexed files. A higher plan indexes more files; a path filter on the Integrations card narrows the sweep to the files that matter.'
+            : repo.index_coverage_state === 'stalled'
+            ? 'The last sweep added no file. Re-run the sweep from the Integrations card; it is retried daily.'
             : 'The hourly sweep keeps adding files until the repo or the plan limit is covered.',
         });
       } else {

@@ -21,11 +21,18 @@
 --   index_file_cap         the plan's coverage ceiling used by that sweep.
 --   index_tree_truncated   GitHub truncated the tree listing, so
 --                          index_files_eligible is a lower bound.
---   index_coverage_state   complete | filling | capped
+--   index_coverage_state   complete | filling | capped | stalled
 --                            filling: later sweeps will add files (picked
 --                                     up every hour until it is not);
 --                            capped:  the plan ceiling (or a truncated
---                                     tree) stops it short of the repo.
+--                                     tree) stops it short of the repo;
+--                            stalled: short of the repo, but the last
+--                                     sweep added no file (fetches or
+--                                     embeddings keep failing). Swept on
+--                                     the normal staleness cadence, with
+--                                     the reason in last_index_error.
+--   Pushes (App or PAT webhook) also update index_files_* and the state,
+--   but not index_swept_at, so the daily sweep still reconciles.
 --
 -- No CHECK constraint on index_coverage_state on purpose: the writer is the
 -- indexer alone, and a constraint mismatch would fail the bookkeeping update
@@ -54,7 +61,7 @@ COMMENT ON COLUMN public.project_repos.index_file_cap IS
 COMMENT ON COLUMN public.project_repos.index_tree_truncated IS
   'GitHub truncated the tree listing at the last sweep.';
 COMMENT ON COLUMN public.project_repos.index_coverage_state IS
-  'complete | filling (later sweeps add files) | capped (plan ceiling or truncated tree). NULL until the first sweep after 20261003160000.';
+  'complete | filling (later sweeps add files) | capped (plan ceiling or truncated tree) | stalled (last sweep added no file; see last_index_error). NULL until the first sweep after 20261003160000.';
 
 -- Existing partial rows: their last_indexed_at was set by a capped sweep.
 -- Copy it into index_swept_at so staleness keeps working; the next sweep
