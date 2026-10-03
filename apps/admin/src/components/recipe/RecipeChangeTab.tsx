@@ -16,7 +16,7 @@ import { EnvForm, GatesForm, RoutesForm, type ChangeFormProps } from './RecipeCh
 import { RecipeChangePreview } from './RecipeChangePreview'
 import { recipeChangeLocksInputs, useRecipeChange } from './useRecipeChange'
 
-export const CHANGE_TAB_ELEMENTS: readonly RecipeSourceElement[] = ['gates', 'env', 'routes']
+const CHANGE_TAB_ELEMENTS: readonly RecipeSourceElement[] = ['gates', 'env', 'routes']
 
 export function hasChangeTab(key: RecipeElementKey): key is RecipeSourceElement {
   return (CHANGE_TAB_ELEMENTS as readonly string[]).includes(key)

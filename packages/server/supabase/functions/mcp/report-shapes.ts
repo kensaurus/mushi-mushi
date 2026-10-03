@@ -207,6 +207,7 @@ const DESIGN_EXCERPT_MAX_FILES = 20
  * report's fix attempts changed (newest attempt first), then the files the fix
  * packet quotes under "Relevant code". Deduplicated and capped at the route's
  * 20. A path with a comma is skipped, because ?files= is comma-separated.
+ * @internal Exported for unit tests only.
  */
 export function designExcerptFilesOf(report: Row): string[] {
   const out: string[] = []

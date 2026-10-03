@@ -9,7 +9,7 @@
  */
 
 /** `stalled`: still short of the repo, but the last sweep added no file. */
-export type CoverageState = 'complete' | 'filling' | 'capped' | 'stalled'
+type CoverageState = 'complete' | 'filling' | 'capped' | 'stalled'
 export type FileCapSource = 'env' | 'plan_flag' | 'plan_tier' | 'default' | 'unavailable'
 
 export interface CodebaseCoverage {

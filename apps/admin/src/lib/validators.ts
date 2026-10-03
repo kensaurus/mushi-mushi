@@ -358,7 +358,7 @@ const MAX_SENTRY_EXTRA_PROJECTS = 10
  * Comma- or space-separated Sentry project slugs (the extra projects one
  * Mushi project imports from). Lowercase, at most 10.
  */
-export function sentrySlugList(opts?: ValidatorOptions): Validator {
+function sentrySlugList(opts?: ValidatorOptions): Validator {
   return withOptional(opts, (value) => {
     const slugs = [...new Set(value.split(/[\s,]+/).filter(Boolean))]
     const bad = slugs.find((s) => !SENTRY_PROJECT_SLUG_RE.test(s))

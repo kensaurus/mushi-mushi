@@ -9,7 +9,7 @@ import type { BadgeTone } from '../ui'
 import type { ReportDeployLive } from './types'
 
 /** Short SHA for display: 7 characters, the way git and GitHub print it. */
-export function shortSha(sha: string): string {
+function shortSha(sha: string): string {
   return sha.trim().slice(0, 7)
 }
 

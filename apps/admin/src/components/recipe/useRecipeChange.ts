@@ -61,12 +61,16 @@ const IDLE: RecipeChangeState = { phase: 'idle', preview: null, job: null, error
 const TERMINAL: readonly RecipeChangeJobStatus[] = ['pr_opened', 'failed', 'rejected']
 const POLL_MS = 2_000
 const POLL_MAX_MS = 10 * 60_000
-/** Consecutive transient poll failures (network, 5xx) tolerated before the error is shown. */
+/**
+ * Consecutive transient poll failures (network, 5xx) tolerated before the error is shown.
+ * @internal Exported for unit tests only.
+ */
 export const POLL_MAX_ERRORS = 3
 
 /** Error codes worth another poll: the request may succeed next time. Anything else is final. */
 const TRANSIENT_CODES: readonly string[] = ['NETWORK_ERROR', 'DB_ERROR', 'INTERNAL_ERROR', 'SERVICE_UNAVAILABLE', 'TIMEOUT', 'RATE_LIMITED']
 
+/** @internal Exported for unit tests only. */
 export function isTransientPollError(error: { code: string; message: string } | undefined): boolean {
   if (!error) return true
   if (TRANSIENT_CODES.includes(error.code)) return true
@@ -74,7 +78,7 @@ export function isTransientPollError(error: { code: string; message: string } | 
   return error.code === 'HTTP_ERROR' && /^5\d\d:/.test(error.message)
 }
 
-export function isTerminalJob(status: RecipeChangeJobStatus): boolean {
+function isTerminalJob(status: RecipeChangeJobStatus): boolean {
   return TERMINAL.includes(status)
 }
 

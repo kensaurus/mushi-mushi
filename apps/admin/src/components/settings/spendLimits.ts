@@ -62,7 +62,10 @@ export function formatLimit(value: number | null | undefined): string {
   return value == null ? '' : String(value)
 }
 
-/** Parse what the user typed. Empty means "no limit". */
+/**
+ * Parse what the user typed. Empty means "no limit".
+ * @internal Exported for unit tests only.
+ */
 export function parseLimit(
   meta: Pick<SpendLimitMeta, 'unit'>,
   raw: string,
