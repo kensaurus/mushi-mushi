@@ -279,28 +279,32 @@ export function deriveFixDeployState(input: {
     return { state: 'live', note: `The fix commit is live on ${safeTarget(liveTarget[0])}.`, lastFix: fix, targets }
   }
 
-  if (input.notDeployed.count > 0 && input.notDeployed.ranAt && at(input.notDeployed.ranAt) >= mergedAt) {
-    return {
-      state: 'not_live',
-      note: 'The deploy check after the merge found the default branch is not live yet, so the last fix is not live. Check the deploy workflow before changing the same code again.',
-      lastFix: fix,
-      targets,
-    }
-  }
-
   const movedOn: string[] = []
   const stuck: string[] = []
   for (const [id, list] of byTarget) {
     const after = list.find((o) => o.ok && at(o.observed_at) >= mergedAt)
     const before = list.find((o) => o.ok && at(o.observed_at) < mergedAt)
-    if (!after?.observed_commit) continue
-    if (!before?.observed_commit || !sameCommit(after.observed_commit, before.observed_commit)) movedOn.push(safeTarget(id))
+    // Moving needs a commit on both sides of the merge to compare.
+    if (!after?.observed_commit || !before?.observed_commit) continue
+    if (!sameCommit(after.observed_commit, before.observed_commit)) movedOn.push(safeTarget(id))
     else stuck.push(safeTarget(id))
   }
+  // A target that moved after the merge outranks `not_deployed`: that finding
+  // is about the branch head, which a later, stalled push can hold back while
+  // this fix is already live.
   if (movedOn.length > 0) {
     return {
       state: 'deployed_since_merge',
       note: `${movedOn.join(', ')} started serving a new commit after the fix merged. Matched by time, not by commit (a squash merge changes the sha).`,
+      lastFix: fix,
+      targets,
+    }
+  }
+
+  if (input.notDeployed.count > 0 && input.notDeployed.ranAt && at(input.notDeployed.ranAt) >= mergedAt) {
+    return {
+      state: 'not_live',
+      note: 'The deploy check after the merge found the default branch is not live yet, and no target has served a new commit since the fix merged. Check the deploy workflow before changing the same code again.',
       lastFix: fix,
       targets,
     }
@@ -311,7 +315,12 @@ export function deriveFixDeployState(input: {
   if (stuck.length > 0) {
     return { state: 'not_live', note: `${stuck.join(', ')} still serves the commit it served before the fix merged.`, lastFix: fix, targets }
   }
-  return { state: 'unknown', note: 'No deploy target has been checked since the fix merged.', lastFix: fix, targets }
+  return {
+    state: 'unknown',
+    note: 'No deploy target has a version from both before and after the fix merged, so Mushi cannot tell yet whether it is live.',
+    lastFix: fix,
+    targets,
+  }
 }
 
 // ── 3. radar findings ────────────────────────────────────────────────────────

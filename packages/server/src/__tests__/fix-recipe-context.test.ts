@@ -152,6 +152,17 @@ describe('deriveFixDeployState', () => {
     expect(d.state).toBe('not_live')
   })
 
+  it('a target that moved after the merge outranks a later not_deployed finding about a stalled head', () => {
+    // web moved an hour after the merge; a later push stalled, so the next
+    // drift run raised not_deployed for the head. The fix itself is live.
+    const d = deriveFixDeployState({
+      lastFix,
+      observations: [obs('web', 'ccccccc', '2026-10-02T11:00:00Z'), obs('web', 'bbbbbbb', '2026-10-02T09:00:00Z')],
+      notDeployed: { count: 1, ranAt: '2026-10-03T12:00:00Z' },
+    })
+    expect(d.state).toBe('deployed_since_merge')
+  })
+
   it('ignores a not_deployed finding from before the merge', () => {
     const d = deriveFixDeployState({
       lastFix,
@@ -171,6 +182,12 @@ describe('deriveFixDeployState', () => {
   it('probe_failed when every newest check failed', () => {
     const d = deriveFixDeployState({ lastFix, observations: [obs('web', null, '2026-10-02T12:00:00Z', false)], notDeployed: none })
     expect(d.state).toBe('probe_failed')
+  })
+
+  it('unknown, not "deployed", when a target has no version from before the merge to compare', () => {
+    const d = deriveFixDeployState({ lastFix, observations: [obs('web', 'ccccccc', '2026-10-02T12:00:00Z')], notDeployed: none })
+    expect(d.state).toBe('unknown')
+    expect(d.note).toContain('before and after')
   })
 
   it('unknown when no target was checked since the merge', () => {
