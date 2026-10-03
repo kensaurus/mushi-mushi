@@ -16,7 +16,7 @@ import type { ReportDetail } from './types'
 
 vi.mock('./CursorAgentLaunch', () => ({ CursorAgentLaunch: () => null }))
 
-import { DiagnosisFixHero } from './DiagnosisFixHero'
+import { DiagnosisFixHero, inlineMarkdown } from './DiagnosisFixHero'
 
 let container: HTMLDivElement
 let root: Root
@@ -85,5 +85,15 @@ describe('DiagnosisFixHero', () => {
     expect(text).toContain('Lesson card shows the wrong duration')
     expect(text).toContain('Full diagnosis not run (classifier confident)')
     expect(text).not.toContain('Why it broke')
+  })
+})
+
+describe('inlineMarkdown', () => {
+  it('renders **bold** and `code` as elements and leaves everything else as plain text', () => {
+    act(() => root.render(createElement('p', null, ...inlineMarkdown('1. **Duration mismatch**: read `lesson.estimatedMinutes` <b>not html</b>'))))
+    expect(container.querySelector('strong')?.textContent).toBe('Duration mismatch')
+    expect(container.querySelector('code')?.textContent).toBe('lesson.estimatedMinutes')
+    expect(container.querySelector('b')).toBeNull()
+    expect(container.textContent).toBe('1. Duration mismatch: read lesson.estimatedMinutes <b>not html</b>')
   })
 })
