@@ -2,14 +2,19 @@
  * SharedResourcesCard — what the team's apps share (Plan 019 Phase P2): an
  * auth project, a Supabase project, a domain, a Slack channel, a bundle id…
  * and which apps use each. Read from recipes, connectors and CSV imports.
+ * Owners and admins can import a CSV here (ResourceCsvImport).
  *
  * Data: GET /v1/admin/orgs/:orgId/portfolio/resources
+ *       POST /v1/ingest/recipe/csv (ResourceCsvImport)
  */
 
 import { ErrorAlert, Loading, Section } from '../ui'
 import { usePageData } from '../../lib/usePageData'
+import { ResourceCsvImport } from './ResourceCsvImport'
 
 interface ResourcesResponse {
+  /** Absent on an older api; then the import stays hidden. */
+  canImport?: boolean
   resources: Array<{ id: string; kind: string; externalId: string; uses: Array<{ projectId: string; role: string; source: string }> }>
 }
 
@@ -28,7 +33,7 @@ export function SharedResourcesCard({ orgId, names }: { orgId: string; names: Ma
       {error && <ErrorAlert message={error} endpoint={path} onRetry={reload} />}
       {loading && !data && <Loading text="Reading shared resources…" />}
       {data && (shared.length === 0 ? (
-        <p className="text-sm text-fg-muted">No resource is used by two or more apps yet. Declare links in mushi.recipe.json or connect a source to see them.</p>
+        <p className="text-sm text-fg-muted">No resource is used by two or more apps yet. {data.canImport ? 'Declare links in mushi.recipe.json, connect a source, or import a CSV below to see them.' : 'Declare links in mushi.recipe.json or connect a source to see them.'}</p>
       ) : (
         <ul className="flex flex-col gap-1 text-sm">
           {shared.map((r) => (
@@ -40,6 +45,11 @@ export function SharedResourcesCard({ orgId, names }: { orgId: string; names: Ma
           ))}
         </ul>
       ))}
+      {data?.canImport && (
+        <div className="mt-3">
+          <ResourceCsvImport orgId={orgId} onImported={reload} />
+        </div>
+      )}
     </Section>
   )
 }

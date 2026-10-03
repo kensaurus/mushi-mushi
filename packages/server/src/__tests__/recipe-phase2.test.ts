@@ -338,6 +338,18 @@ describe('recipe ingest routes', () => {
     expect(graph.body.data.resources).toEqual([expect.objectContaining({ kind: 'domain', externalId: 'glot.it', uses: [{ projectId: P1, role: 'site', source: 'csv' }] })])
   })
 
+  it('reads a CSV saved by Excel (byte-order mark, CRLF) and tells the console who may import', async () => {
+    const db = seed()
+    const app = ingestHarness(db)
+    const res = await app.call('POST', '/v1/ingest/recipe/csv', { body: { organizationId: ORG, csv: '﻿kind,external_id,project\r\ndomain,glot.it,glot-it\r\n' } })
+    expect(res.status).toBe(200)
+    expect(res.body.data).toMatchObject({ imported: 1, errors: [], skippedOverLimit: 0 })
+    expect((await app.call('GET', `/v1/admin/orgs/${ORG}/portfolio/resources`)).body.data.canImport).toBe(true)
+    expect((await app.call('GET', `/v1/admin/orgs/${ORG}/portfolio/resources`, { vars: { userId: 'member' } })).body.data.canImport).toBe(false)
+    // An account-level API key reads the graph but cannot import (the import route is jwtAuth).
+    expect((await app.call('GET', `/v1/admin/orgs/${ORG}/portfolio/resources`, { vars: { authMethod: 'apiKey', isOrgScopedKey: true } })).body.data.canImport).toBe(false)
+  })
+
   it('parses quoted CSV cells', () => {
     expect(ingest.parseCsvLine('domain,"a,b.example","say ""hi"""')).toEqual(['domain', 'a,b.example', 'say "hi"'])
   })
