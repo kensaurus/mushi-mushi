@@ -175,9 +175,9 @@ export function registerReleasesCommands(program: Command): void {
       if (r.body_md) console.log(`\n${r.body_md}`)
     })
 
+  // The version is positional: a `--version` flag would collide with the
+  // root program's `mushi --version`.
   releases
-    // The version is positional: a `--version` flag would collide with the
-    // root program's `mushi --version`.
     .command('draft <version>')
     .description('Draft notes from the fixes merged in a window (nothing is sent)')
     .option('--title <title>', 'Release title')

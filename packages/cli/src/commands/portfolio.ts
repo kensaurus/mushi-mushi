@@ -44,6 +44,28 @@ export interface PortfolioFindingsData {
   crossProject: Array<{ id: string; ruleId: string; severity?: string; message?: string; projectIds?: string[] }>
 }
 
+export interface PortfolioResourcesData {
+  organizationId: string
+  resources: Array<{ id: string; kind: string; externalId: string; uses: Array<{ projectId: string; role: string; source: string }> }>
+  findings: Array<{ id: string; rule_id: string; severity: string; project_ids: string[]; message: string }>
+}
+
+export function renderPortfolioResources(data: PortfolioResourcesData): string[] {
+  if (data.resources.length === 0) {
+    return ['No shared resources recorded yet. They come from each app\'s recipe, or a CSV upload in the console.']
+  }
+  const lines = ['Shared resources (one account, domain or bucket used by several apps):']
+  for (const r of data.resources) {
+    lines.push(`  ${r.kind.padEnd(14)} ${oneLine(r.externalId, 50)}  used by ${r.uses.length} app(s)`)
+    for (const u of r.uses) lines.push(`      ${u.projectId}  ${oneLine(u.role, 30)} (${u.source})`)
+  }
+  if (data.findings.length > 0) {
+    lines.push('Open findings on shared resources:')
+    for (const f of data.findings) lines.push(`  ${f.severity.toUpperCase().padEnd(5)} ${f.rule_id} — ${oneLine(f.message, 100)}`)
+  }
+  return lines
+}
+
 const ORG_HELP = '--org <id>'
 const ORG_DESC = "Organization UUID (default: your only organization)"
 
@@ -137,5 +159,21 @@ export function registerPortfolioCommands(program: Command): void {
         return
       }
       for (const line of renderPortfolioFindings(result.data)) console.log(line)
+    })
+
+  portfolio
+    .command('resources')
+    .description('Accounts, domains and buckets shared between your apps, and their open findings')
+    .option(ORG_HELP, ORG_DESC)
+    .option('--json', 'Machine-readable JSON output')
+    .action(async (opts: { org?: string; json?: boolean }) => {
+      const config = requireConfig()
+      const result = await apiCall<PortfolioResourcesData>(`/v1/admin/orgs/${orgSegment(opts.org)}/portfolio/resources`, config)
+      if (!result.ok) dieOrgError(result)
+      if (outputIsJson(opts.json)) {
+        console.log(JSON.stringify(result.data, null, 2))
+        return
+      }
+      for (const line of renderPortfolioResources(result.data)) console.log(line)
     })
 }

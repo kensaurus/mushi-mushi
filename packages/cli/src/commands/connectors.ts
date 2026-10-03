@@ -70,6 +70,32 @@ export function renderConnectorStatus(i: ConnectorInstance): string[] {
   ]
 }
 
+export interface ConnectorAction {
+  id: string
+  connector_instance_id: string
+  project_id: string | null
+  action: string
+  reason: string | null
+  status: string
+  requested_at: string
+  approved_at: string | null
+  expires_at: string | null
+  executed_at: string | null
+  error: string | null
+}
+
+export function renderConnectorActions(actions: ConnectorAction[]): string[] {
+  if (actions.length === 0) return ['No connector actions requested.']
+  const lines: string[] = []
+  for (const a of actions) {
+    lines.push(`  ${a.status.toUpperCase().padEnd(17)} ${a.action.padEnd(24)} requested ${fmtDate(a.requested_at)}  ${a.id}`)
+    if (a.reason) lines.push(`      why: ${oneLine(a.reason, 100)}`)
+    if (a.error) lines.push(`      error: ${oneLine(a.error, 100)}`)
+  }
+  if (actions.some((a) => a.status === 'pending_approval')) lines.push('A team owner or admin approves pending actions in the console.')
+  return lines
+}
+
 async function loadConnectors(org: string | undefined): Promise<ConnectorsData> {
   const config = requireConfig()
   const result = await apiCall<ConnectorsData>(`/v1/admin/orgs/${orgSegment(org)}/connectors`, config)
@@ -118,5 +144,21 @@ export function registerConnectorsCommands(program: Command): void {
         return
       }
       for (const line of renderConnectorStatus(instance)) console.log(line)
+    })
+
+  connectors
+    .command('actions')
+    .description('Actions requested on a connector and whether they were approved and run (latest 100)')
+    .option('--org <id>', 'Organization UUID (default: your only organization)')
+    .option('--json', 'Machine-readable JSON output')
+    .action(async (opts: { org?: string; json?: boolean }) => {
+      const config = requireConfig()
+      const result = await apiCall<{ actions: ConnectorAction[] }>(`/v1/admin/orgs/${orgSegment(opts.org)}/connector-actions`, config)
+      if (!result.ok) dieOrgError(result)
+      if (outputIsJson(opts.json)) {
+        console.log(JSON.stringify(result.data, null, 2))
+        return
+      }
+      for (const line of renderConnectorActions(result.data.actions)) console.log(line)
     })
 }
