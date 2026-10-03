@@ -7,7 +7,7 @@ vi.mock('../config.js', async (importOriginal) => {
   const actual = await importOriginal<typeof ConfigModule>()
   return {
     ...actual,
-    loadConfig: () => ({ apiKey: 'mushi_test_key_0123', endpoint: 'https://api.test/functions/v1/api', projectId: '11111111-2222-4333-8444-555555555555' }),
+    loadConfig: () => ({ apiKey: 'mushi_test_key_0123', endpoint: 'https://api.test/functions/v1/api', projectId: '11111111-2222-4333-8444-555555555555' }), // gitleaks:allow — fake key for the CLI test harness
   }
 })
 
@@ -22,7 +22,7 @@ describe('mushi audit (no subcommand)', () => {
   it('still POSTs the full-stack audit with the key and project headers', async () => {
     const run = await runCli(registerAuditCommands, ['audit', '--json'], () => okReply(healthy))
     expect(run.calls).toEqual([expect.objectContaining({ method: 'POST', path: `/v1/admin/projects/${PID}/audit` })])
-    expect(run.calls[0]!.headers).toMatchObject({ 'X-Mushi-Api-Key': 'mushi_test_key_0123', 'X-Mushi-Project-Id': PID })
+    expect(run.calls[0]!.headers).toMatchObject({ 'X-Mushi-Api-Key': 'mushi_test_key_0123', 'X-Mushi-Project-Id': PID }) // gitleaks:allow — fake key for the CLI test harness
     expect(JSON.parse(run.stdout)).toEqual(healthy)
   })
 

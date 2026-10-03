@@ -16,7 +16,7 @@ import { MushiCliError } from './errors.js'
 
 export const TEST_ENDPOINT = 'https://api.test/functions/v1/api'
 export const TEST_PROJECT_ID = '11111111-2222-4333-8444-555555555555'
-export const TEST_API_KEY = 'mushi_test_key_0123'
+export const TEST_API_KEY = 'mushi_test_key_0123' // gitleaks:allow — fake key for the CLI test harness
 export const TEST_CONFIG = { apiKey: TEST_API_KEY, endpoint: TEST_ENDPOINT, projectId: TEST_PROJECT_ID }
 
 export interface RecordedCall {
