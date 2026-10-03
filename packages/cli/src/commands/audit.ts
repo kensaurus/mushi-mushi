@@ -1,11 +1,86 @@
 import type { Command } from 'commander';
 import { sanitizeApiKey, sanitizeEndpoint, sanitizeProjectId } from '../sanitize-config.js';
-import { requireConfig } from '../cli-shared.js';
+import { apiCall, die, fmtDate, outputIsJson, requireConfig, requireUuid } from '../cli-shared.js';
+import { oneLine, resolveProjectId } from '../command-helpers.js';
+import { MushiCliError } from '../errors.js';
+
+/** gate_runs.gate values a finding can come from (mirrors the MCP GATE_IDS list). */
+export const GATE_IDS = [
+  'dead_handler', 'mock_leak', 'api_contract', 'crawl', 'status_claim', 'spec_drift',
+  'orphan_endpoint', 'unknown_call', 'schema_drift', 'code_health', 'design_drift',
+  'ci_drift', 'deploy_drift', 'env_drift', 'portfolio_radar', 'portfolio_radar_ci', 'store_review',
+] as const;
+const SEVERITIES = ['info', 'warn', 'error'] as const;
+
+export interface GateFindingRow {
+  id: string;
+  gate_run_id: string;
+  severity: string;
+  rule_id: string | null;
+  message: string;
+  file_path: string | null;
+  line: number | null;
+  allowlisted: boolean;
+  created_at: string;
+}
+
+export interface GateFindingsData {
+  runs: Array<{ id: string; gate: string; status: string; findings_count: number | null; started_at: string; commit_sha: string | null }>;
+  findings: GateFindingRow[];
+}
+
+export interface FindingExplanationData {
+  id: string;
+  gate: string;
+  gateLabel: string;
+  gateMeaning: string;
+  ruleId: string | null;
+  rule: { title: string; prevents: string } | null;
+  severity: string;
+  reason: string;
+  fix: { text: string | null; consolePath: string | null; command: string | null };
+  location: { filePath: string | null; line: number | null; target: string | null };
+  state: 'open' | 'not_in_latest_run' | 'allowlisted';
+  stateReason: string;
+  run: { status: string; completedAt: string | null; commitSha: string | null };
+}
+
+export function renderGateFindings(data: GateFindingsData, includeAllowlisted: boolean): string[] {
+  const gateOf = new Map(data.runs.map((r) => [r.id, r.gate]));
+  const shown = data.findings.filter((f) => includeAllowlisted || !f.allowlisted);
+  if (data.runs.length === 0) return ['No gate runs yet for this project.'];
+  if (shown.length === 0) return [`${data.runs.length} recent run(s), no open findings.`];
+  const lines: string[] = [];
+  for (const f of shown) {
+    const where = f.file_path ? `${f.file_path}${f.line ? `:${f.line}` : ''}` : '';
+    lines.push(`  ${f.severity.toUpperCase().padEnd(5)} ${(gateOf.get(f.gate_run_id) ?? '?').padEnd(18)} ${f.rule_id ?? ''}  ${where}`);
+    lines.push(`        ${oneLine(f.message, 110)}  [${f.id}]${f.allowlisted ? ' (allowlisted)' : ''}`);
+  }
+  lines.push(`${shown.length} finding(s). Why one fired and how to fix it: mushi audit explain <id>`);
+  return lines;
+}
+
+export function renderExplanation(e: FindingExplanationData): string[] {
+  const lines = [
+    `${e.severity.toUpperCase()} — ${e.gateLabel}${e.rule ? `: ${e.rule.title}` : e.ruleId ? ` (${e.ruleId})` : ''}`,
+    `  What this checks: ${e.gateMeaning}`,
+  ];
+  if (e.rule) lines.push(`  What it prevents: ${e.rule.prevents}`);
+  lines.push(`  Why it fired: ${oneLine(e.reason, 300)}`);
+  const where = e.location.filePath ? `${e.location.filePath}${e.location.line ? `:${e.location.line}` : ''}` : e.location.target;
+  if (where) lines.push(`  Where: ${where}`);
+  if (e.fix.text) lines.push(`  Fix: ${oneLine(e.fix.text, 300)}`);
+  if (e.fix.command) lines.push(`  Run: ${e.fix.command}`);
+  if (e.fix.consolePath) lines.push(`  In the console: ${e.fix.consolePath}`);
+  lines.push(`  State: ${e.state} — ${e.stateReason}`);
+  lines.push(`  From run: ${e.run.status} ${fmtDate(e.run.completedAt)}${e.run.commitSha ? ` @ ${e.run.commitSha.slice(0, 7)}` : ''}`);
+  return lines;
+}
 
 export function registerAuditCommands(program: Command): void {
 // ─── audit ────────────────────────────────────────────────────────────────────
 
-program
+const audit = program
   .command('audit')
   .description('Run a full-stack health audit for the current project')
   .option('--json', 'Machine-readable JSON output')
@@ -28,7 +103,9 @@ Description:
 Examples:
   mushi audit
   mushi audit --json
-  mushi audit --project-id abc123`)
+  mushi audit --project-id abc123
+  mushi audit findings --gate code_health --severity error
+  mushi audit explain <finding id>`)
   .action(async (opts: { json?: boolean; projectId?: string }) => {
     const config = requireConfig()
     const rawProjectId = opts.projectId ?? config.projectId
@@ -126,5 +203,68 @@ Examples:
       process.exit(1)
     }
   })
+
+// ─── audit findings / explain ─────────────────────────────────────────────────
+// The per-finding list behind every gate (GET /v1/admin/inventory/:id/findings)
+// and the plain-English explanation of one finding (GET /v1/admin/findings/:id).
+//
+// `audit` itself declares --json and --project-id, and Commander lets the
+// parent consume its own options wherever they appear, so
+// `mushi audit findings --json` sets audit's --json, not findings'. The
+// subcommands read optsWithGlobals() to see both.
+
+audit
+  .command('findings')
+  .description('Every finding from the recent gate runs, with file and line')
+  .option('--gate <gate>', `Only this gate: ${GATE_IDS.join(', ')}`)
+  .option('--severity <level>', 'Only this severity: info | warn | error')
+  .option('--all', 'Include allowlisted findings')
+  // Declared for --help; audit consumes these, optsWithGlobals() reads them.
+  .option('--project-id <id>', 'Project ID (defaults to the configured project)')
+  .option('--json', 'Machine-readable JSON output')
+  .action(async (_local: unknown, cmd: Command) => {
+    const opts = cmd.optsWithGlobals<{ gate?: string; severity?: string; all?: boolean; projectId?: string; json?: boolean }>();
+    if (opts.gate && !(GATE_IDS as readonly string[]).includes(opts.gate)) {
+      throw new MushiCliError('E_INVALID_INPUT', `Unknown gate ${opts.gate}.`, `one of: ${GATE_IDS.join(', ')}`);
+    }
+    if (opts.severity && !(SEVERITIES as readonly string[]).includes(opts.severity)) {
+      throw new MushiCliError('E_INVALID_INPUT', '--severity must be info, warn or error');
+    }
+    const config = requireConfig();
+    const projectId = resolveProjectId(opts.projectId, config.projectId);
+    const qs = new URLSearchParams();
+    if (opts.gate) qs.set('gate', opts.gate);
+    if (opts.severity) qs.set('severity', opts.severity);
+    const suffix = qs.toString() ? `?${qs}` : '';
+    const result = await apiCall<GateFindingsData>(`/v1/admin/inventory/${projectId}/findings${suffix}`, config);
+    if (!result.ok) {
+      if (result.error.code === 'feature_not_in_plan') {
+        process.stderr.write('The per-finding list is not on your plan. `mushi audit` (no subcommand) still runs the summary audit.\n');
+      }
+      die(result);
+    }
+    if (outputIsJson(opts.json)) {
+      console.log(JSON.stringify(result.data, null, 2));
+      return;
+    }
+    for (const line of renderGateFindings(result.data, opts.all === true)) console.log(line);
+  });
+
+audit
+  .command('explain <findingId>')
+  .description('Why one finding fired, what it prevents, and how to fix it')
+  .option('--json', 'Machine-readable JSON output')
+  .action(async (findingId: string, _local: unknown, cmd: Command) => {
+    const opts = cmd.optsWithGlobals<{ json?: boolean }>();
+    const id = requireUuid(findingId, 'finding id');
+    const config = requireConfig();
+    const result = await apiCall<FindingExplanationData>(`/v1/admin/findings/${id}`, config);
+    if (!result.ok) die(result);
+    if (outputIsJson(opts.json)) {
+      console.log(JSON.stringify(result.data, null, 2));
+      return;
+    }
+    for (const line of renderExplanation(result.data)) console.log(line);
+  });
 
 }

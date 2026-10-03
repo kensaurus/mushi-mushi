@@ -35,6 +35,15 @@ import { registerProfileCommands } from './commands/profile.js'
 import { registerRadarCommands } from './commands/radar.js'
 import { registerRecipeCommands } from './commands/recipe.js'
 import { registerStoreCommands } from './commands/store.js'
+import { registerPortfolioCommands } from './commands/portfolio.js'
+import { registerConnectorsCommands } from './commands/connectors.js'
+import { registerFunnelCommands } from './commands/funnel.js'
+import { registerCodeHealthCommands } from './commands/code-health.js'
+import { registerReleasesCommands } from './commands/releases.js'
+import { registerSentryCommands } from './commands/sentry.js'
+import { registerOutboxCommands } from './commands/outbox.js'
+import { registerBudgetsCommands } from './commands/budgets.js'
+import { registerRepoCommands } from './commands/repo.js'
 import { setGlobalOutputFormat } from './cli-shared.js'
 import { printAndExit } from './errors.js'
 
@@ -115,6 +124,15 @@ registerProfileCommands(program)
 registerRadarCommands(program)
 registerRecipeCommands(program)
 registerStoreCommands(program)
+registerPortfolioCommands(program)
+registerConnectorsCommands(program)
+registerFunnelCommands(program)
+registerCodeHealthCommands(program)
+registerReleasesCommands(program)
+registerSentryCommands(program)
+registerOutboxCommands(program)
+registerBudgetsCommands(program)
+registerRepoCommands(program)
 // Registered last so buildCommandTree() sees every command above when the
 // action runs (Commander builds the tree during these synchronous calls;
 // the action itself only executes later, at parseAsync() time).
