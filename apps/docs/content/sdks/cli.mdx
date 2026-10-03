@@ -232,7 +232,8 @@ mushi audit                        # full-stack project health audit
 
 `mushi audit findings` lists each finding from the recent gate runs with its
 file and line. `mushi audit explain` says why one fired, what it prevents and
-how to fix it.
+how to fix it. `--gate` takes any gate name: one this CLI version does not list
+is still sent to the server, with a warning.
 
 ```bash
 mushi audit findings

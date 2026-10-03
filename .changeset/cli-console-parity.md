@@ -5,7 +5,7 @@
 Bring the console's newer pages to the terminal.
 
 - `mushi portfolio show|findings|resources`: every app in your team on one screen, the problems repeated across them, and the domains, accounts and buckets they share.
-- `mushi audit findings` and `mushi audit explain <id>`: each gate finding with file and line, and why one fired and how to fix it. Plain `mushi audit` still runs the summary audit.
+- `mushi audit findings` and `mushi audit explain <id>`: each gate finding with file and line, and why one fired and how to fix it. `--gate` passes any gate name to the server, so a new server-side gate works before a CLI release. Plain `mushi audit` still runs the summary audit, now prints the server's error message whatever its shape, and ends by pointing at `mushi audit findings`.
 - `mushi repo digest`: one token-budgeted text of the connected repo for an LLM, optionally starting from a report's files. `mushi repo diagram show|generate|publish|unpublish` manages the architecture diagram; publishing shows the preview first and needs `--yes`.
 - `mushi connectors list|status|actions`: the team's connectors with their status and last error, and the actions requested on them. This is read-only; connectors are still added in the console.
 - `mushi funnel show|set|growth`: one funnel across every app, and the operator growth funnel.
