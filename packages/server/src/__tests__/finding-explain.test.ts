@@ -66,9 +66,48 @@ describe('fixOf reads every stored fix shape', () => {
   })
 })
 
+describe('absenceUnproven: a missing finding is evidence only from a clean, complete run', () => {
+  const base = { status: 'pass', findingsCount: 0, storedCount: null, summary: null, ruleId: 'god_file', matchedBy: 'file' as const }
+  it('accepts a complete run that was searched by file or target', () => {
+    expect(helper.absenceUnproven(base)).toBeNull()
+    expect(helper.absenceUnproven({ ...base, matchedBy: 'target' })).toBeNull()
+    expect(helper.absenceUnproven({ ...base, status: 'fail', findingsCount: 2, storedCount: 2 })).toBeNull()
+  })
+  it('refuses an errored or skipped run', () => {
+    expect(helper.absenceUnproven({ ...base, status: 'error' })).toContain('"error"')
+    expect(helper.absenceUnproven({ ...base, status: 'skipped' })).toContain('"skipped"')
+  })
+  it('refuses a run that stored fewer findings than it found', () => {
+    expect(helper.absenceUnproven({ ...base, status: 'warn', findingsCount: 250, storedCount: 200 })).toContain('stored only 200')
+    expect(helper.absenceUnproven({ ...base, status: 'warn', findingsCount: 3, storedCount: null })).not.toBeNull()
+  })
+  it('accepts a per-rule summary only when the rule was checked clean', () => {
+    const summary = (state: string) => ({ results: [{ ruleId: 'domain_expiring', state, reason: 'registry did not answer', findings: 0 }] })
+    const radar = { ...base, ruleId: 'domain_expiring', matchedBy: 'target' as const }
+    expect(helper.absenceUnproven({ ...radar, summary: summary('ok') })).toBeNull()
+    for (const state of ['unknown', 'error', 'finding']) {
+      expect(helper.absenceUnproven({ ...radar, summary: summary(state) }), state).toContain(`"${state}"`)
+    }
+    expect(helper.absenceUnproven({ ...radar, summary: { results: [{ ruleId: 'cert_expiring', state: 'ok' }] } })).toContain('did not run the domain_expiring rule')
+  })
+  it('refuses a message-only search', () => {
+    expect(helper.absenceUnproven({ ...base, matchedBy: 'message' })).toContain('message')
+  })
+})
+
+describe('findingTargetKey', () => {
+  it('reads target, then route, then a non-console path', () => {
+    expect(helper.findingTargetKey({ fix: 'Renew it.', target: 'example.com' })).toEqual({ key: 'target', value: 'example.com' })
+    expect(helper.findingTargetKey({ explanation: 'x', route: '/api/x' })).toEqual({ key: 'route', value: '/api/x' })
+    expect(helper.findingTargetKey({ method: 'GET', path: '/v1/x' })).toEqual({ key: 'path', value: '/v1/x' })
+    expect(helper.findingTargetKey({ kind: 'console', path: '/settings' })).toBeNull()
+    expect(helper.findingTargetKey({ fix: 'x', target: null })).toBeNull()
+  })
+})
+
 describe('explainFinding', () => {
   it('explains a finding in the latest run as open, with the gate meaning and location', () => {
-    const out = helper.explainFinding(finding(), run(), { id: RUN_OLD, completed_at: '2026-10-01T00:01:00Z', matchingFindingId: F_OLD })
+    const out = helper.explainFinding(finding(), run(), { id: RUN_OLD, completed_at: '2026-10-01T00:01:00Z', matchingFindingId: F_OLD, uncheckedReason: null })
     expect(out).toMatchObject({
       gate: 'code_health', gateLabel: 'Code health', ruleId: 'god_file', reason: 'src/app.tsx is 2,400 lines.',
       location: { filePath: 'src/app.tsx', line: 1, col: null, target: null }, state: 'open',
@@ -82,8 +121,18 @@ describe('explainFinding', () => {
     expect(out.rule?.prevents).toContain('domain')
   })
   it('says not_in_latest_run when a newer run no longer has it, and open when it does', () => {
-    expect(helper.explainFinding(finding(), run(), { id: RUN_NEW, completed_at: null, matchingFindingId: null }).state).toBe('not_in_latest_run')
-    expect(helper.explainFinding(finding(), run(), { id: RUN_NEW, completed_at: null, matchingFindingId: F_NEW })).toMatchObject({ state: 'open', latestRun: { findingId: F_NEW } })
+    expect(helper.explainFinding(finding(), run(), { id: RUN_NEW, completed_at: null, matchingFindingId: null, uncheckedReason: null }).state).toBe('not_in_latest_run')
+    expect(helper.explainFinding(finding(), run(), { id: RUN_NEW, completed_at: null, matchingFindingId: F_NEW, uncheckedReason: null })).toMatchObject({ state: 'open', latestRun: { findingId: F_NEW } })
+  })
+  it('says unknown, never fixed, when the newer run could not confirm it', () => {
+    const out = helper.explainFinding(finding(), run(), { id: RUN_NEW, completed_at: null, matchingFindingId: null, uncheckedReason: 'the latest run ended with status "error", so it did not check everything.' })
+    expect(out.state).toBe('unknown')
+    expect(out.stateReason).toContain('could not confirm it is fixed')
+  })
+  it('reports allowlisted when the newer run still has it, allowlisted there', () => {
+    const out = helper.explainFinding(finding(), run(), { id: RUN_NEW, completed_at: null, matchingFindingId: F_NEW, matchingAllowlisted: true, matchingAllowlistReason: 'vendored', uncheckedReason: null })
+    expect(out).toMatchObject({ state: 'allowlisted', latestRun: { findingId: F_NEW } })
+    expect(out.stateReason).toContain('vendored')
   })
   it('reports an allowlisted finding as allowlisted, with the reason', () => {
     const out = helper.explainFinding(finding({ allowlisted: true, allowlist_reason: 'generated file' }), run(), null)
@@ -186,6 +235,102 @@ describe('GET /v1/admin/findings/:findingId', () => {
     void db
     const res = await app.call(`/v1/admin/findings/${F_OLD}`)
     expect(res.body.data).toMatchObject({ gate: 'design_drift', state: 'open', latestRun: { id: RUN_OLD } })
+  })
+
+  // ── a missing finding is "fixed" only on evidence ──────────────────────────
+
+  const RADAR_OLD_RUN = { id: RUN_OLD, project_id: P1, gate: 'portfolio_radar', status: 'warn', started_at: '2026-10-01T00:00:00Z', completed_at: '2026-10-01T00:01:00Z', commit_sha: null, findings_count: 1, summary: { results: [{ ruleId: 'domain_expiring', state: 'finding', reason: '1 problem found.', findings: 1 }] } }
+  const domainFinding = (over: Record<string, unknown> = {}) => finding({
+    rule_id: 'domain_expiring', severity: 'warn', file_path: null, line: null,
+    message: 'example.com expires in 20 days (2026-10-21)', suggested_fix: { fix: 'Renew example.com or turn on auto-renew.', target: 'example.com', evidence: null }, ...over,
+  })
+  const radarNew = (over: Record<string, unknown> = {}) => ({
+    id: RUN_NEW, project_id: P1, gate: 'portfolio_radar', status: 'pass', started_at: '2026-10-02T00:00:00Z', completed_at: '2026-10-02T00:01:00Z', commit_sha: null, findings_count: 0,
+    summary: { results: [{ ruleId: 'domain_expiring', state: 'ok', reason: 'Every domain has more than 30 days left.', findings: 0 }] }, ...over,
+  })
+
+  it('never says fixed when the latest run errored and stored nothing', async () => {
+    const { app } = setup({
+      gate_runs: [RADAR_OLD_RUN, radarNew({ status: 'error', summary: { results: [], error: 'findings not stored: timeout' } })],
+      gate_findings: [domainFinding()],
+    })
+    const res = await app.call(`/v1/admin/findings/${F_OLD}`)
+    expect(res.status).toBe(200)
+    expect(res.body.data).toMatchObject({ state: 'unknown', latestRun: { id: RUN_NEW, findingId: null } })
+  })
+
+  it('never says fixed when the rule was unknown in the latest radar run', async () => {
+    const { app } = setup({
+      gate_runs: [RADAR_OLD_RUN, radarNew({ summary: { results: [{ ruleId: 'domain_expiring', state: 'unknown', reason: 'The registry did not answer.', findings: 0 }] } })],
+      gate_findings: [domainFinding()],
+    })
+    const res = await app.call(`/v1/admin/findings/${F_OLD}`)
+    expect(res.body.data).toMatchObject({ state: 'unknown' })
+    expect(String(res.body.data?.stateReason)).toContain('The registry did not answer.')
+  })
+
+  it('never says fixed when the latest run did not run the rule at all', async () => {
+    const { app } = setup({
+      gate_runs: [RADAR_OLD_RUN, radarNew({ summary: { results: [{ ruleId: 'cert_expiring', state: 'ok', reason: 'ok', findings: 0 }] } })],
+      gate_findings: [domainFinding()],
+    })
+    expect((await app.call(`/v1/admin/findings/${F_OLD}`)).body.data).toMatchObject({ state: 'unknown' })
+  })
+
+  it('says fixed when the rule was checked clean and the target is gone', async () => {
+    const { app } = setup({ gate_runs: [RADAR_OLD_RUN, radarNew()], gate_findings: [domainFinding()] })
+    expect((await app.call(`/v1/admin/findings/${F_OLD}`)).body.data).toMatchObject({ state: 'not_in_latest_run', latestRun: { id: RUN_NEW, findingId: null } })
+  })
+
+  it('matches a file-less finding on its target, not its message with the day count', async () => {
+    const { app } = setup({
+      gate_runs: [RADAR_OLD_RUN, radarNew({ status: 'warn', findings_count: 1, summary: { results: [{ ruleId: 'domain_expiring', state: 'finding', reason: '1 problem found.', findings: 1 }] } })],
+      gate_findings: [domainFinding(), domainFinding({ id: F_NEW, gate_run_id: RUN_NEW, message: 'example.com expires in 19 days (2026-10-21)' })],
+    })
+    expect((await app.call(`/v1/admin/findings/${F_OLD}`)).body.data).toMatchObject({ state: 'open', latestRun: { id: RUN_NEW, findingId: F_NEW } })
+  })
+
+  it('never says fixed when the latest run stored fewer findings than it found', async () => {
+    const { app } = setup({
+      gate_runs: [
+        { id: RUN_OLD, project_id: P1, gate: 'code_health', status: 'fail', started_at: '2026-10-01T00:00:00Z', completed_at: '2026-10-01T00:01:00Z', commit_sha: 'a', summary: null, findings_count: 1 },
+        { id: RUN_NEW, project_id: P1, gate: 'code_health', status: 'fail', started_at: '2026-10-02T00:00:00Z', completed_at: '2026-10-02T00:01:00Z', commit_sha: 'b', summary: null, findings_count: 3 },
+      ],
+      gate_findings: [finding(), finding({ id: F_NEW, gate_run_id: RUN_NEW, file_path: 'src/other.tsx' })],
+    })
+    const res = await app.call(`/v1/admin/findings/${F_OLD}`)
+    expect(res.body.data).toMatchObject({ state: 'unknown' })
+    expect(String(res.body.data?.stateReason)).toContain('stored only 1')
+  })
+
+  it('never says fixed for a finding with no file and no target whose message is gone', async () => {
+    const { app } = setup({
+      gate_runs: [
+        { id: RUN_OLD, project_id: P1, gate: 'store_review', status: 'warn', started_at: '2026-10-01T00:00:00Z', completed_at: '2026-10-01T00:01:00Z', commit_sha: null, summary: null, findings_count: 1 },
+        { id: RUN_NEW, project_id: P1, gate: 'store_review', status: 'pass', started_at: '2026-10-02T00:00:00Z', completed_at: '2026-10-02T00:01:00Z', commit_sha: null, summary: null, findings_count: 0 },
+      ],
+      gate_findings: [finding({ rule_id: 'listing_length', file_path: null, line: null, message: 'The description is 4,120 of 4,000 characters.', suggested_fix: { fix: 'Shorten it.', target: null } })],
+    })
+    expect((await app.call(`/v1/admin/findings/${F_OLD}`)).body.data).toMatchObject({ state: 'unknown' })
+  })
+
+  it('keeps a finding open when its own run is the newest, even with status error', async () => {
+    const { app } = setup({
+      gate_runs: [
+        { ...radarNew({ id: RUN_OLD, started_at: '2026-09-30T00:00:00Z' }) },
+        { ...RADAR_OLD_RUN, id: RUN_NEW, status: 'error', started_at: '2026-10-02T00:00:00Z' },
+      ],
+      gate_findings: [domainFinding({ gate_run_id: RUN_NEW })],
+    })
+    expect((await app.call(`/v1/admin/findings/${F_OLD}`)).body.data).toMatchObject({ state: 'open', latestRun: { id: RUN_NEW, findingId: F_OLD } })
+  })
+
+  it('reports allowlisted when the newer run has it but it is allowlisted there', async () => {
+    const { app, db } = setup()
+    ;(db as FakeDb).table('gate_runs').push({ id: RUN_NEW, project_id: P1, gate: 'code_health', status: 'fail', started_at: '2026-10-02T00:00:00Z', completed_at: '2026-10-02T00:01:00Z', commit_sha: 'b', summary: null, findings_count: 1 })
+    ;(db as FakeDb).table('gate_findings').push(finding({ id: F_NEW, gate_run_id: RUN_NEW, allowlisted: true, allowlist_reason: 'generated file' }))
+    const res = await app.call(`/v1/admin/findings/${F_OLD}`)
+    expect(res.body.data).toMatchObject({ state: 'allowlisted', latestRun: { findingId: F_NEW } })
   })
 
   it('answers 500, never "fixed", when the latest-run read fails', async () => {
