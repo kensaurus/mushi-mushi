@@ -29,6 +29,7 @@ import {
 import { assetMime, signAssetUrl, verifyAssetSignature } from '../../_shared/design-assets.ts'
 import { loadCurrentSnapshot, refreshRecipeSnapshot, startDesignDeviance, type SnapshotRow } from '../../_shared/design-plane.ts'
 import { runInBackground } from '../../_shared/background.ts'
+import { loadFixRecipeContext } from '../../_shared/fix-recipe-context.ts'
 import { judgingSet, type StoredTokens } from '../../_shared/design-sets.ts'
 import { applyActivateDirection, applyDeclareDirection, applyRulesEdit, applyTokenEdits, buildDuplicateDirection, DIRECTION_NAME_RE, unifiedDiff, type TokenFileEdit } from '../../_shared/design-change.ts'
 import { effectiveDesignRules, isWritablePath, RECIPE_MANIFEST_MAX_BYTES, RECIPE_MANIFEST_PATH } from '../../_shared/recipe-schema.ts'
@@ -69,6 +70,8 @@ export interface RecipeRouteDeps extends ComposeDeps {
   createPr: typeof createPrFromFiles
   /** Key material for signed asset URLs; null disables previews (never a default key). */
   assetSecret: () => string | null
+  /** The fixer context for GET /design/excerpt (never throws). */
+  loadFixContext: typeof loadFixRecipeContext
 }
 
 export const defaultRecipeDeps: RecipeRouteDeps = {
@@ -89,6 +92,7 @@ export const defaultRecipeDeps: RecipeRouteDeps = {
       return null
     }
   },
+  loadFixContext: loadFixRecipeContext,
   resolveRepo: resolveRecipeRepo,
   getDefaultHead,
   fetchWorkflowRun: (repo: RecipeRepo, branch: string, sha: string) => fetchLatestWorkflowRunForSha(repo.token, repo.ref, branch, sha),
@@ -368,17 +372,27 @@ export function registerRecipeRoutes(app: Hono<{ Variables: Variables }>, deps: 
     return c.json({ ok: true, data })
   })
 
-  // ── GET /v1/admin/projects/:id/design/excerpt ──────────────────────────────
+  // ── GET /v1/admin/projects/:id/design/excerpt[?files=&reportId=] ───────────
+  // get_fix_context's `recipe`: design tokens plus the fixer context (tables
+  // the report's stack trace names, the last fix's deploy state, open radar
+  // findings). The context loads beside the design plane and fails soft, so a
+  // slow or failed read never turns the whole excerpt into an error.
   app.get('/v1/admin/projects/:id/design/excerpt', deps.adminOrApiKeyRead, async (c) => {
     const db = deps.getServiceClient()
     const access = await projectAccess(c, db)
     if (!access.ok) return access.response
     const files = (c.req.query('files') ?? '').split(',').map((f) => f.trim()).filter(Boolean).slice(0, 20)
-    const [snapshot, repo] = await Promise.all([deps.loadSnapshot(db, access.projectId), deps.resolveRepo(db, access.projectId)])
+    const reportId = c.req.query('reportId') ?? null
+    if (reportId !== null && !UUID_RE.test(reportId)) return jsonError(c, 'VALIDATION_ERROR', 'reportId must be a report UUID.', 400)
+    const [snapshot, repo, context] = await Promise.all([
+      deps.loadSnapshot(db, access.projectId),
+      deps.resolveRepo(db, access.projectId),
+      deps.loadFixContext(db, access.projectId, reportId ? { reportId } : null),
+    ])
     const plane = await composeDesignPlane(db, access.projectId, snapshot, repo, null, deps.now())
     const runId = plane.deviance.latest?.runId
     const fileFindings = runId && files.length > 0 ? await loadRunFindings(db, runId, 200) : []
-    return c.json({ ok: true, data: buildDesignExcerpt(plane, files, fileFindings) })
+    return c.json({ ok: true, data: buildDesignExcerpt(plane, files, fileFindings, 4096, context) })
   })
 
   // ── GET /v1/admin/projects/:id/design/directions ───────────────────────────

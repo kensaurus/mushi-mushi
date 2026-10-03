@@ -602,6 +602,50 @@ export interface DesignExcerpt {
   score: number | null
   note: string
   truncated: boolean
+  /** Backend and release context for the fixer (gap #11); its own ≤ 2 KB share of the 4 KB. */
+  context?: FixRecipeContext
+}
+
+// ── Fixer context: schema, last fix's deploy state, radar ────────────────────
+
+/** Tables the report's stack trace and failed requests name, from the latest schema snapshot. */
+export interface FixSchemaContext {
+  /** ok: tables found · drift: a named table is missing from the snapshot · unknown: none named · not_connected: no snapshot · error: read failed. */
+  state: ElementState
+  note: string
+  snapshotAt: string | null
+  /** Columns as `name type`, most useful tables first. */
+  tables: Array<{ name: string; columns: string[] }>
+  /** Tables an error says do not exist and the snapshot does not have either. */
+  missing: string[]
+}
+
+export type FixDeployState = 'live' | 'deployed_since_merge' | 'not_live' | 'probe_failed' | 'unknown' | 'no_merged_fix' | 'error'
+
+/** Whether the project's last merged fix is live, from deploy observations and deploy_drift. */
+export interface FixDeployContext {
+  state: FixDeployState
+  note: string
+  lastFix: { reportId: string | null; prUrl: string | null; mergedAt: string } | null
+  /** Newest observation per deploy target. */
+  targets: Array<{ id: string; ok: boolean; commit: string | null; observedAt: string }>
+}
+
+/** The project's open hole-check (radar) findings. */
+export interface FixRadarContext {
+  /** drift: open findings · ok: checked, none open · unknown: never checked · error: read failed. */
+  state: ElementState
+  note: string
+  checkedAt: string | null
+  findings: Array<{ rule: string; severity: string; message: string; fix: string | null }>
+}
+
+export interface FixRecipeContext {
+  schema: FixSchemaContext
+  deploy: FixDeployContext
+  radar: FixRadarContext
+  /** Something was cut to stay inside the budget. */
+  truncated: boolean
 }
 
 // ── Directions board ─────────────────────────────────────────────────────────

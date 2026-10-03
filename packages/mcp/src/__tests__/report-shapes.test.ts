@@ -21,6 +21,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { createMushiServer } from '../server.js'
 import {
   designExcerptFilesOf,
+  designExcerptQueryOf,
   projectReportDetail,
   recipeFromExcerpt,
   reportEvidenceOf,
@@ -305,7 +306,37 @@ describe('design plane in get_fix_context (Plan 019)', () => {
     expect((res.structuredContent as { recipe: unknown }).recipe).toEqual(EXCERPT)
     const excerptUrl = fetchLog.urls.find((u) => u.includes('/design/excerpt'))!
     expect(new URL(excerptUrl).searchParams.get('files')).toBe('src/Pay.tsx,src/Cart.tsx,src/checkout/Button.tsx')
+    // The report id makes the excerpt carry the fixer context (schema, deploy, radar).
+    expect(new URL(excerptUrl).searchParams.get('reportId')).toBe(REPORT_ID)
     expect((res.content as Array<{ text: string }>)[0]!.text.startsWith('<mushi-data role="')).toBe(true)
+  })
+
+  it('designExcerptQueryOf sends the files and the report id, and skips an id that is not a UUID', () => {
+    const q = new URLSearchParams(designExcerptQueryOf(withFiles).slice(1))
+    expect(q.get('files')).toBe('src/Pay.tsx,src/Cart.tsx,src/checkout/Button.tsx')
+    expect(q.get('reportId')).toBe(REPORT_ID)
+    expect(designExcerptQueryOf({ id: REPORT_ID })).toBe(`?reportId=${REPORT_ID}`)
+    expect(designExcerptQueryOf({ id: '1 or 1=1', fix_attempts: null })).toBe('')
+  })
+
+  it('passes the fixer context through to recipe.context', async () => {
+    const withContext = {
+      ...EXCERPT,
+      context: {
+        schema: { state: 'ok', note: 'Tables the error names.', snapshotAt: '2026-10-01T00:00:00Z', tables: [{ name: 'orders', columns: ['id uuid'] }], missing: [] },
+        deploy: { state: 'not_live', note: 'web still serves the commit it served before the fix merged.', lastFix: null, targets: [] },
+        radar: { state: 'unknown', note: 'The hole checks have not run for this project yet.', checkedAt: null, findings: [] },
+        truncated: false,
+      },
+    }
+    const c = await connect(stubFetch({
+      [`/v1/admin/reports/${REPORT_ID}`]: DETAIL_ROW,
+      [`/v1/admin/projects/${PROJECT_ID}/design/excerpt`]: withContext,
+    }).stub)
+    const res = await c.callTool({ name: 'get_fix_context', arguments: { reportId: REPORT_ID } })
+    const recipe = (res.structuredContent as { recipe: typeof withContext }).recipe
+    expect(recipe.context.schema.tables[0].name).toBe('orders')
+    expect(recipe.context.deploy.state).toBe('not_live')
   })
 
   it('still succeeds with recipe { state: error, note } when the excerpt read fails', async () => {
