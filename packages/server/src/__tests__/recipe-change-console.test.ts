@@ -1,7 +1,9 @@
 /**
  * The console half of recipe changes (gap #8): the fixed source files a form
  * edits, the stale-base guard, the async confirm (202 + background job), the
- * stuck-job sweep, and the SSE loop behind /recipe/changes/:jobId/stream.
+ * stuck-job sweep, the SSE loop behind /recipe/changes/:jobId/stream and that
+ * route itself, the content checks on mushi.recipe.json and the inventory,
+ * the inventory path from `routes.inventory`, and job reads that fail.
  */
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { makeFakeDb, type FakeDb } from './__stubs__/fake-supabase.ts'
@@ -14,6 +16,16 @@ vi.mock('../../supabase/functions/_shared/auth.ts', () => ({
 }))
 vi.mock('../../supabase/functions/_shared/sentry.ts', () => ({ reportError: vi.fn(), reportMessage: vi.fn() }))
 vi.mock('../../supabase/functions/api/routes/project-ci-secrets.ts', () => ({ inferStack: () => 'nextjs', requiredCiVarNames: () => [] }))
+// Every `npm:` specifier resolves to one stub module in vitest; the stream
+// route needs a streamSSE that runs the callback and keeps what it wrote.
+vi.mock('npm:hono@4/streaming', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  streamSSE: async (_c: unknown, cb: (s: { aborted: boolean; write: (x: string) => Promise<void>; sleep: (ms: number) => Promise<void> }) => Promise<void>) => {
+    const chunks: string[] = []
+    await cb({ aborted: false, write: async (x) => { chunks.push(x) }, sleep: async () => {} })
+    return { status: 200, body: { ok: true }, sse: chunks.join('') }
+  },
+}))
 
 let routes: typeof import('../../supabase/functions/api/routes/recipe-changes.ts')
 let change: typeof import('../../supabase/functions/_shared/recipe-change.ts')
@@ -30,7 +42,7 @@ const OTHER = '1000000c-0000-4000-8000-000000000000'
 const clock = new Date('2026-10-03T12:00:00Z')
 
 type Handler = (c: Record<string, unknown>, next?: () => Promise<void>) => Promise<unknown> | unknown
-interface Result { status: number; body: { ok: boolean; data?: Record<string, unknown> & { files?: Array<Record<string, unknown>>; denied?: Array<{ path: string; reason: string }> }; error?: { code: string; jobId?: string } } }
+interface Result { status: number; sse?: string; body: { ok: boolean; data?: Record<string, unknown> & { files?: Array<Record<string, unknown>>; denied?: Array<{ path: string; reason: string }> }; error?: { code: string; jobId?: string; message?: string } } }
 
 class FakeApp {
   routes: Array<{ method: string; pattern: RegExp; keys: string[]; handlers: Handler[] }> = []
@@ -49,7 +61,7 @@ class FakeApp {
       const params = Object.fromEntries(r.keys.map((k, i) => [k, m[i + 1]]))
       const vars: Record<string, unknown> = { userId: 'owner', authMethod: 'jwt', ...opts.vars }
       const c = {
-        req: { json: async () => opts.body, param: (k: string) => params[k], query: (k: string) => query.get(k) ?? undefined, header: () => undefined },
+        req: { json: async () => opts.body, param: (k: string) => params[k], query: (k: string) => query.get(k) ?? undefined, header: () => undefined, path, method },
         get: (k: string) => vars[k], set: (k: string, v: unknown) => { vars[k] = v }, header: () => {},
         json: (body: unknown, status = 200) => ({ body, status }),
       }
@@ -275,5 +287,135 @@ describe('streamRecipeChangeJob (the SSE loop)', () => {
     const aborted = io([row({ status: 'running' })], { aborted: () => n++ > 1 })
     await change.streamRecipeChangeJob(aborted.io, { pollMs: 10, maxMs: 1000 })
     expect(aborted.events.some(([e]) => e === 'error')).toBe(false)
+  })
+})
+
+describe('content checks before a PR (a merged edit must not break the recipe or ingest)', () => {
+  const invManifestText = '{\n  "version": 1,\n  "change": { "allowPaths": ["mushi.recipe.json", "inventory.yaml", "apps/web/inventory.yaml"] }\n}\n'
+  const invManifest = JSON.parse(invManifestText)
+  const validInventory = 'schema_version: "2.0"\napp:\n  id: glot\n  name: glot\n  base_url: https://glot.example\npages:\n  - id: home\n    path: /\n'
+  const files = { ...FILES, 'mushi.recipe.json': { text: invManifestText, sha: 'sha-manifest' } }
+  const seedInv = (m: unknown = invManifest) => seed({ app_recipe_snapshots: [{ project_id: P1, is_current: true, manifest: m }] })
+
+  it('the dry run refuses invalid YAML and an inventory that fails the schema, and passes a valid one with its baseSha', async () => {
+    const { app } = harness(seedInv(), files)
+    const yaml = await app.call('POST', CHANGES, { body: { element: 'routes', edits: [{ path: 'inventory.yaml', content: 'pages: [\n  - id: home\n' }] } })
+    expect(yaml.body.data!.files).toEqual([])
+    expect(yaml.body.data!.denied).toEqual([{ path: 'inventory.yaml', reason: expect.stringMatching(/would fail inventory ingest: \$: /) }])
+
+    const schemaFail = await app.call('POST', CHANGES, { body: { element: 'routes', edits: [{ path: 'inventory.yaml', content: 'schema_version: "2.0"\npages: []\n' }] } })
+    expect(schemaFail.body.data!.denied![0].reason).toMatch(/would fail inventory ingest: app: Required/)
+
+    const ok = await app.call('POST', CHANGES, { body: { element: 'routes', edits: [{ path: 'inventory.yaml', content: validInventory, baseSha: 'sha-inv' }] } })
+    expect(ok.body.data!.denied).toEqual([])
+    expect(ok.body.data!.files).toEqual([expect.objectContaining({ path: 'inventory.yaml', baseSha: 'sha-inv' })])
+  })
+
+  it('the dry run refuses a mushi.recipe.json over 64 KB or failing the schema', async () => {
+    const { app } = harness(seedInv(), files)
+    const big = JSON.stringify({ version: 1, change: invManifest.change, app: { notes: 'x'.repeat(70 * 1024) } })
+    const tooBig = await app.call('POST', CHANGES, { body: { element: 'gates', edits: [{ path: 'mushi.recipe.json', content: big }] } })
+    expect(tooBig.body.data!.denied).toEqual([{ path: 'mushi.recipe.json', reason: expect.stringMatching(/would not load.*cap is 65536/) }])
+
+    const wrongVersion = await app.call('POST', CHANGES, { body: { element: 'gates', edits: [{ path: 'mushi.recipe.json', content: invManifestText.replace('"version": 1', '"version": 2') }] } })
+    expect(wrongVersion.body.data!.denied![0].reason).toMatch(/would not load.*version/)
+
+    const notJson = await app.call('POST', CHANGES, { body: { element: 'gates', edits: [{ path: 'mushi.recipe.json', content: '{ "version": 1,' }] } })
+    expect(notJson.body.data!.denied![0].reason).toMatch(/not valid JSON/)
+  })
+
+  it('the async confirm (wait:false) rejects the job instead of opening a PR', async () => {
+    const db = seedInv()
+    const { app, deps, background } = harness(db, files)
+    const inv = await app.call('POST', CHANGES, { body: { element: 'routes', dryRun: false, wait: false, edits: [{ path: 'inventory.yaml', content: 'pages: [' }] } })
+    expect(inv.status).toBe(202)
+    await Promise.all(background)
+    const invJob = await app.call('GET', `${CHANGES}/${String(inv.body.data!.jobId)}`)
+    expect(invJob.body.data).toMatchObject({ status: 'rejected', error: expect.stringMatching(/^Not writable: inventory\.yaml \(the new inventory would fail inventory ingest/) })
+
+    const man = await app.call('POST', CHANGES, { body: { element: 'gates', dryRun: false, wait: false, edits: [{ path: 'mushi.recipe.json', content: '{"version": 3}' }] } })
+    await Promise.all(background)
+    const manJob = await app.call('GET', `${CHANGES}/${String(man.body.data!.jobId)}`)
+    expect(manJob.body.data).toMatchObject({ status: 'rejected', error: expect.stringMatching(/mushi\.recipe\.json \(the new mushi\.recipe\.json would not load/) })
+    expect(deps.createPr).not.toHaveBeenCalled()
+  })
+
+  it('an inventory anywhere in the repo is checked, and other files are not parsed', () => {
+    expect(change.contentProblem('apps/web/inventory.yml', 'pages: [', 'inventory.yaml')).toMatch(/inventory ingest/)
+    expect(change.contentProblem('docs/inv.yaml', 'pages: [', 'docs/inv.yaml')).toMatch(/inventory ingest/)
+    expect(change.contentProblem('tokens/a.json', 'not json', 'inventory.yaml')).toBeNull()
+  })
+})
+
+describe('the inventory path the Routes form edits', () => {
+  it('follows routes.inventory in mushi.recipe.json, and refuses an unsafe one instead of falling back', async () => {
+    const declared = { ...manifest, routes: { inventory: 'apps/web/inventory.yaml' }, change: { allowPaths: ['apps/web/inventory.yaml'] } }
+    const files = { ...FILES, 'apps/web/inventory.yaml': { text: 'schema_version: "2.0"\n', sha: 'sha-web-inv' } }
+    const { app, deps } = harness(seed({ app_recipe_snapshots: [{ project_id: P1, is_current: true, manifest: declared }] }), files)
+    const r = await app.call('GET', `/v1/admin/projects/${P1}/recipe/sources?element=routes`)
+    expect(r.body.data!.files).toEqual([{ path: 'apps/web/inventory.yaml', exists: true, content: 'schema_version: "2.0"\n', sha: 'sha-web-inv', writable: true, reason: null }])
+    expect(deps.readRepoFile.mock.calls.map((c) => c[2])).toEqual(['apps/web/inventory.yaml'])
+
+    const unsafe = { ...manifest, routes: { inventory: '../outside.yaml' } }
+    const { app: b, deps: bd } = harness(seed({ app_recipe_snapshots: [{ project_id: P1, is_current: true, manifest: unsafe }] }))
+    const u = await b.call('GET', `/v1/admin/projects/${P1}/recipe/sources?element=routes`)
+    expect(u.body.data).toMatchObject({ ok: false, files: [], reason: expect.stringMatching(/routes\.inventory/) })
+    expect(bd.readRepoFile).not.toHaveBeenCalled()
+  })
+})
+
+describe('following a job over HTTP', () => {
+  const JOB = '5000000c-0000-4000-8000-000000000000'
+  const OTHER_JOB = '5000000d-0000-4000-8000-000000000000'
+  const jobs = [
+    { id: JOB, project_id: P1, element: 'gates', status: 'pr_opened', pr_url: 'https://github.com/k/glot/pull/9', pr_number: 9, branch: 'mushi/recipe-gates-x', error: null, created_at: '2026-10-03T11:59:00Z', started_at: '2026-10-03T11:59:01Z', finished_at: '2026-10-03T11:59:05Z' },
+    { id: OTHER_JOB, project_id: OTHER, element: 'gates', status: 'queued', created_at: '2026-10-03T11:59:00Z' },
+  ]
+
+  it('GET …/stream sends the status then done for a job of this project', async () => {
+    const { app } = harness(seed({ recipe_change_jobs: jobs }))
+    const r = await app.call('GET', `${CHANGES}/${JOB}/stream`)
+    expect(r.status).toBe(200)
+    const events = (r.sse ?? '').split('\n\n').filter(Boolean)
+    expect(events[0]).toMatch(new RegExp(`^event: status\\nid: ${JOB}:\\d+\\ndata: `))
+    expect(JSON.parse(events[0].split('data: ')[1])).toMatchObject({ status: 'pr_opened', prUrl: 'https://github.com/k/glot/pull/9', prNumber: 9, error: null })
+    expect(events[1]).toBe('event: done\ndata: {"done":true}')
+  })
+
+  it('GET …/stream is a 404 for another project’s job and for a project outside the caller’s access', async () => {
+    const { app } = harness(seed({ recipe_change_jobs: jobs }))
+    const crossJob = await app.call('GET', `${CHANGES}/${OTHER_JOB}/stream`)
+    expect(crossJob.status).toBe(404)
+    expect(crossJob.sse).toBeUndefined()
+    const crossProject = await app.call('GET', `/v1/admin/projects/${OTHER}/recipe/changes/${OTHER_JOB}/stream`)
+    expect(crossProject.status).toBe(404)
+    expect(crossProject.sse).toBeUndefined()
+  })
+
+  it('a failed job read is a 500 DB_ERROR on the GET and the stream, never a 404 or a silent spinner', async () => {
+    const db = seed({ recipe_change_jobs: jobs })
+    const failed = { data: null, error: { message: 'statement timeout', code: '57014' } }
+    const chain: Record<string, unknown> = new Proxy({}, { get: (_t, prop) => (prop === 'then' ? (ok: (v: unknown) => unknown) => Promise.resolve(failed).then(ok) : () => chain) })
+    const broken = new Proxy(db, { get: (t, prop, r) => (prop === 'from' ? (name: string) => (name === 'recipe_change_jobs' ? chain : t.from(name)) : Reflect.get(t, prop, r)) })
+    const { app } = harness(broken as FakeDb)
+    const get = await app.call('GET', `${CHANGES}/${JOB}`)
+    expect(get.status).toBe(500)
+    expect(get.body.error).toMatchObject({ code: 'DB_ERROR' })
+    const stream = await app.call('GET', `${CHANGES}/${JOB}/stream`)
+    expect(stream.status).toBe(500)
+    expect(stream.body.error).toMatchObject({ code: 'DB_ERROR' })
+  })
+
+  it('a read that fails mid-stream ends it with DB_ERROR', async () => {
+    const events: Array<[string, Record<string, unknown>]> = []
+    await change.streamRecipeChangeJob({
+      load: async () => { throw new Error('statement timeout') },
+      emit: async (event, payload) => { events.push([event, payload]) },
+      sleep: async () => {},
+      aborted: () => false,
+      now: () => clock,
+      sanitize: (s) => s,
+    })
+    expect(events).toEqual([['error', { code: 'DB_ERROR', message: 'The job could not be read. Try again in a minute.' }]])
   })
 })

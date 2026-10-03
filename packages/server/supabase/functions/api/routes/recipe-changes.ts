@@ -46,7 +46,7 @@ import { runInBackground } from '../../_shared/background.ts'
 import { sanitizeSseString, sseHeartbeat, toSseEvent } from '../../_shared/sse.ts'
 import { approveConnectorAction, executeConnectorAction, rejectConnectorAction, requestConnectorAction, type ExecuteDeps } from '../../_shared/connector-actions.ts'
 import { calendarAppsFrom, releaseCalendar } from '../../_shared/store-review.ts'
-import { callerCanAccessProject, jsonError } from '../shared.ts'
+import { callerCanAccessProject, dbError, jsonError } from '../shared.ts'
 import type { Variables } from '../types.ts'
 import { portfolioAccess } from './portfolio.ts'
 
@@ -90,6 +90,19 @@ const changeSchema = z.object({
   title: z.string().min(1).max(120).optional(),
 }).strict()
 const JOB_COLUMNS = 'id, element, status, pr_url, pr_number, branch, error, batch_id, created_at, started_at, finished_at'
+
+class JobReadError extends Error {
+  constructor(readonly dbError: { message: string; code?: string }) {
+    super(dbError.message)
+  }
+}
+
+/** One job of one project; null when there is none. A failed read throws (never reads as "not found"). */
+async function loadJob(db: Db, projectId: string, jobId: string): Promise<RecipeJobRow | null> {
+  const { data, error } = await db.from('recipe_change_jobs').select(JOB_COLUMNS).eq('id', jobId).eq('project_id', projectId).maybeSingle()
+  if (error) throw new JobReadError(error)
+  return (data as unknown as RecipeJobRow | null) ?? null
+}
 const batchSchema = z.object({
   element: z.enum(RECIPE_CHANGE_ELEMENTS),
   changes: z.array(z.object({ projectId: z.string().uuid(), edits: z.array(editSchema).min(1).max(30) })).min(1).max(MAX_BATCH_REPOS),
@@ -190,9 +203,14 @@ export function registerRecipeChangeRoutes(app: Hono<{ Variables: Variables }>, 
     if (!UUID_RE.test(projectId) || !UUID_RE.test(jobId)) return jsonError(c, 'NOT_FOUND', 'Not found', 404)
     const access = await callerCanAccessProject(c, db, c.get('userId') as string, projectId)
     if (!access.allowed) return jsonError(c, 'NOT_FOUND', 'Not found', 404)
-    const { data } = await db.from('recipe_change_jobs').select(JOB_COLUMNS).eq('id', jobId).eq('project_id', projectId).maybeSingle()
-    if (!data) return jsonError(c, 'NOT_FOUND', 'Not found', 404)
-    return c.json({ ok: true, data: effectiveJobRow(data as unknown as RecipeJobRow, deps.change.now()) })
+    let row: RecipeJobRow | null
+    try {
+      row = await loadJob(db, projectId, jobId)
+    } catch (err) {
+      return dbError(c, err instanceof JobReadError ? err.dbError : { message: String(err) })
+    }
+    if (!row) return jsonError(c, 'NOT_FOUND', 'Not found', 404)
+    return c.json({ ok: true, data: effectiveJobRow(row, deps.change.now()) })
   })
 
   // SSE status stream for one job (mirrors the sdk-upgrade stream); the console falls back to polling the GET above.
@@ -203,11 +221,14 @@ export function registerRecipeChangeRoutes(app: Hono<{ Variables: Variables }>, 
     if (!UUID_RE.test(projectId) || !UUID_RE.test(jobId)) return jsonError(c, 'NOT_FOUND', 'Not found', 404)
     const access = await callerCanAccessProject(c, db, c.get('userId') as string, projectId)
     if (!access.allowed) return jsonError(c, 'NOT_FOUND', 'Not found', 404)
-    const load = async (): Promise<RecipeJobRow | null> => {
-      const { data } = await db.from('recipe_change_jobs').select(JOB_COLUMNS).eq('id', jobId).eq('project_id', projectId).maybeSingle()
-      return (data as unknown as RecipeJobRow | null) ?? null
+    const load = () => loadJob(db, projectId, jobId)
+    let first: RecipeJobRow | null
+    try {
+      first = await load()
+    } catch (err) {
+      return dbError(c, err instanceof JobReadError ? err.dbError : { message: String(err) })
     }
-    if (!(await load())) return jsonError(c, 'NOT_FOUND', 'Not found', 404)
+    if (!first) return jsonError(c, 'NOT_FOUND', 'Not found', 404)
     return streamSSE(c, async (stream) => {
       await streamRecipeChangeJob({
         load,
