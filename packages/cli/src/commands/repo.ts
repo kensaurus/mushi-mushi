@@ -9,13 +9,15 @@
  */
 
 import type { Command } from 'commander'
-import { writeFileSync } from 'node:fs'
 import { apiCall, die, fmtDate, outputIsJson, requireConfig, requireUuid } from '../cli-shared.js'
 import { oneLine, requireYes, resolveProjectId } from '../command-helpers.js'
 import { MushiCliError } from '../errors.js'
+import { writeUserOutputFile } from '../file-io.js'
 
 /** A cache miss reads the GitHub tree and file contents. */
 const DIGEST_TIMEOUT_MS = 90_000
+/** A digest is at most 200k tokens (under 1 MB); anything far larger is not a digest. */
+const MAX_DIGEST_FILE_BYTES = 16 * 1024 * 1024
 /** Generating a diagram is one LLM call over the repo tree. */
 const DIAGRAM_TIMEOUT_MS = 120_000
 /** Publishing writes the static page and its Markdown twin. */
@@ -133,11 +135,9 @@ export function registerRepoCommands(program: Command): void {
         return
       }
       if (opts.out) {
-        try {
-          writeFileSync(opts.out, result.data.text, 'utf8')
-        } catch (err) {
-          throw new MushiCliError('E_FILE_PERMISSION', `Could not write ${opts.out}`, 'pick a path you can write to', err)
-        }
+        // Intended flow: the user asked for the digest in the file they named.
+        // Only that path is written, and only bounded text.
+        writeUserOutputFile(opts.out, result.data.text, { maxBytes: MAX_DIGEST_FILE_BYTES })
         for (const line of digestSummary(result.data)) console.log(line)
         console.log(`Wrote ${opts.out}.`)
         return

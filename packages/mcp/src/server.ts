@@ -492,6 +492,10 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     const toolCall = toolCallContext.getStore();
     let res: Response;
     try {
+      // Intended flow: the endpoint, key and project id may come from the
+      // CLI config file `mushi login` wrote (src/index.ts), and sending that
+      // key to that endpoint is the point of the file. The endpoint is checked
+      // to be an http(s) URL first (resolveStdioCredentials in stdio-config.ts).
       res = await doFetch(`${apiEndpoint}${path}`, {
         ...options,
         headers: {

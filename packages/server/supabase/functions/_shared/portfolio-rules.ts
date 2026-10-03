@@ -506,6 +506,12 @@ export function crossPromoLinksFrom(projects: readonly PortfolioProject[]): Cros
   return out
 }
 
+/** `apple.com` itself or one of its subdomains: an exact match or a dot-bounded suffix. */
+function isAppleHost(hostname: string): boolean {
+  const host = hostname.toLowerCase()
+  return host === 'apple.com' || host.endsWith('.apple.com')
+}
+
 /** Does this link carry a campaign tag the store or analytics can attribute? */
 export function hasCampaignTag(url: URL): boolean {
   const host = url.hostname.toLowerCase()
@@ -549,7 +555,7 @@ export function crossPromoChecks(
         resourceKey: rk,
         message: `${names(projects, [l.fromProjectId])}: ${label} has no campaign tag, so installs from it cannot be told apart from the rest.`,
         evidence: { url: l.url },
-        suggestedFix: parsed.hostname.endsWith('apple.com')
+        suggestedFix: isAppleHost(parsed.hostname)
           ? 'Add a campaign token, for example `?ct=from-glot` (App Store Connect → App Analytics → Campaigns).'
           : parsed.hostname === 'play.google.com'
             ? 'Add `&referrer=utm_source%3Dglot%26utm_campaign%3Dmore-apps` so Play Console attributes the install.'

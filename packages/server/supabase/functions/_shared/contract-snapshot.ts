@@ -98,3 +98,19 @@ export function isOpenApiDocument(body: unknown): boolean {
   const b = body as Record<string, unknown>
   return (typeof b.openapi === 'string' || typeof b.swagger === 'string') && typeof b.paths === 'object'
 }
+
+/**
+ * Why the OpenAPI URL could not be read, as a fixed sentence for the
+ * response. The thrown error itself is logged by the caller, never returned.
+ */
+export function describeOpenApiFetchError(err: unknown): string {
+  const name = typeof err === 'object' && err !== null ? String((err as { name?: unknown }).name ?? '') : ''
+  const message = err instanceof Error ? err.message : String(err)
+  if (message.startsWith('outbound-blocked:')) {
+    return message.includes('TOO_MANY_REDIRECTS')
+      ? 'The OpenAPI URL redirected too many times.'
+      : 'The OpenAPI URL is not a public https address.'
+  }
+  if (name === 'TimeoutError' || name === 'AbortError') return 'The OpenAPI URL did not answer in time.'
+  return 'The OpenAPI URL could not be fetched.'
+}

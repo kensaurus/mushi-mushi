@@ -120,6 +120,65 @@ describe('renderPublicDiagramMarkdown', () => {
     // Four cells: five pipes once the escaped one is removed.
     expect(row.replace(/\\\|/g, '').split('|')).toHaveLength(6)
   })
+
+  it('escapes a backslash before the pipe, so `\\|` in a path cannot end the cell', () => {
+    const md = renderPublicDiagramMarkdown({ ...PAYLOAD, nodes: [{ ...PAYLOAD.nodes[0], path: 'apps/a\\|b' }] })
+    const row = md.split('\n').find((l) => l.startsWith('| Checkout'))!
+    expect(row).toContain('apps/a\\\\\\|b')
+    // Every `|` left after removing escaped characters is a cell boundary: still four cells.
+    expect(row.replace(/\\[\\|]/g, '').split('|')).toHaveLength(6)
+  })
+
+  it('keeps a hostile sha and a parenthesis in a path out of the code span and link target', () => {
+    const md = renderPublicDiagramMarkdown({
+      ...PAYLOAD,
+      sha: 'abc` [x](javascript:alert(1)) `',
+      nodes: [{ ...PAYLOAD.nodes[0], path: 'app/(auth)/x)y' }],
+    })
+    expect(md).not.toContain('javascript:')
+    expect(md).toContain('commit ``.')
+    expect(md).toContain('app/%28auth%29/x%29y')
+  })
+})
+
+describe('public page with hostile payload strings', () => {
+  const evil = '"><script>alert(1)</script><img src=x onerror=alert(1)>'
+  const hostile = {
+    ...PAYLOAD,
+    sha: `${SHA}"><script>`,
+    groups: [{ ...PAYLOAD.groups[0], label: evil, x: '0" onload="alert(1)' as unknown as number }],
+    nodes: [{ ...PAYLOAD.nodes[0], label: evil, description: `</script>${evil}`, path: `a/${evil}`, y: Number.NaN }],
+    edges: [{ from: 'ui', to: 'ui', label: evil }],
+  } as PublicDiagramPayload
+  const html = renderPublicDiagramHtml(hostile)
+
+  it('never emits a raw tag, attribute break or event handler from a payload string', () => {
+    expect(html).not.toContain('<script>alert')
+    expect(html).not.toContain('<img src=x')
+    expect(html).not.toContain('"><script')
+    expect(html).not.toContain('"><img')
+    // Every `onerror=` is inert: escaped text after `&lt;img`, or JSON-LD data after `<img`.
+    const count = (needle: string) => html.split(needle).length - 1
+    expect(count('onerror=')).toBe(count('&lt;img src=x onerror=') + count('\\u003cimg src=x onerror='))
+    expect(html).not.toContain('onload=')
+    expect(html).not.toContain(`"${evil}`)
+    expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;')
+  })
+
+  it('writes coordinates as numbers and the commit link only from a hex sha', () => {
+    expect(html).toContain('<rect class="group" x="0" y="0"')
+    expect(html).not.toContain('NaN')
+    expect(html).toContain('href="https://github.com/Acme/Shop.js/tree/"')
+  })
+
+  it('keeps JSON-LD free of `<`, `>` and `&` while it still parses to the same strings', () => {
+    const m = /<script type="application\/ld\+json">(.*?)<\/script>/s.exec(html)
+    expect(m).not.toBeNull()
+    expect(m![1]).not.toMatch(/[<>&]/)
+    const ld = JSON.parse(m![1])
+    expect(ld.hasPart[0].name).toBe(evil)
+    expect(ld.hasPart[0].description).toBe(`</script>${evil}`)
+  })
 })
 
 describe('keys and badge', () => {

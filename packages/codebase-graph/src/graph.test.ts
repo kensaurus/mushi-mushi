@@ -22,7 +22,8 @@
  */
 import { describe, it, expect } from 'vitest'
 import { fingerprintFile, classifyFingerprintDelta, classifyBatchUpdate } from './fingerprint'
-import { buildGraphFromIndex, mergeGraphUpdate } from './build-from-index'
+import { buildGraphFromIndex, extractRelativeImports, mergeGraphUpdate } from './build-from-index'
+import { scanImportSpecifiers } from './imports'
 import type { IndexedFileRow } from './types'
 
 function fileRow(
@@ -158,5 +159,47 @@ describe('mergeGraphUpdate', () => {
     expect(paths).toContain('src/b.ts')
     // the unchanged b node is preserved from `existing`
     expect(merged.nodes.some((n) => n.id === 'fb')).toBe(true)
+  })
+})
+
+describe('import scanning', () => {
+  it('finds every import and require shape, in order', () => {
+    const src = [
+      "import x from './a'",
+      'import { y,',
+      '  z } from "./b"',
+      "import type T from './t'",
+      "import './side-effect'",
+      "const c = require('./c')",
+      'const d = require( "./d" )',
+      "import React from 'react'",
+      "const lazy = import('./dynamic')",
+      "const notAnImport = 'imported'",
+    ].join('\n')
+    expect(scanImportSpecifiers(src)).toEqual(['./a', './b', './t', './side-effect', './c', './d', 'react'])
+    expect(extractRelativeImports(`${src}\nimport again from './a'`)).toEqual(['./a', './b', './t', './side-effect', './c', './d'])
+  })
+
+  it('needs whitespace around `from` and a closing paren after require, like before', () => {
+    expect(scanImportSpecifiers("import x fromy './a'")).toEqual([])
+    expect(scanImportSpecifiers("require('./a'")).toEqual([])
+    expect(scanImportSpecifiers("import x from ''")).toEqual([])
+  })
+
+  it('stays linear on input that made the old pattern backtrack', () => {
+    const hostile = [
+      `import\t${'\t'.repeat(50_000)}`,
+      `import\t!${'\t'.repeat(50_000)}`,
+      'import '.repeat(50_000),
+      `${'import x from '.repeat(20_000)}'${'a'.repeat(50_000)}`,
+      `${'require( '.repeat(20_000)}`,
+      `import ${' '.repeat(50_000)}from${' '.repeat(50_000)}`,
+    ]
+    for (const src of hostile) {
+      const started = performance.now()
+      scanImportSpecifiers(src)
+      fingerprintFile({ id: 'h', file_path: 'h.ts', symbol_name: null, content_preview: src } as IndexedFileRow)
+      expect(performance.now() - started).toBeLessThan(500)
+    }
   })
 })

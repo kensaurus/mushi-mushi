@@ -1,4 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import type * as ConfigModule from '../config.js'
 import { okReply, runCli } from '../test-harness.js'
 import { registerRecipeCommands } from './recipe.js'
@@ -55,5 +58,38 @@ describe('mushi recipe change', () => {
     const run = await runCli(registerRecipeCommands, ['recipe', 'change', 'nope'])
     expect(run.calls).toHaveLength(0)
     expect(run.exitCode).not.toBe(0)
+  })
+})
+
+describe('mushi recipe init', () => {
+  const tempRepo = () => mkdtempSync(join(tmpdir(), 'mushi-recipe-init-'))
+
+  it('writes a starter manifest in a repo without one', async () => {
+    const dir = tempRepo()
+    try {
+      const run = await runCli(registerRecipeCommands, ['recipe', 'init', '--dir', dir])
+      expect(run.exitCode).toBe(0)
+      expect(JSON.parse(readFileSync(join(dir, 'mushi.recipe.json'), 'utf8')).version).toBe(1)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('leaves an existing manifest untouched without --force, and overwrites it with --force', async () => {
+    const dir = tempRepo()
+    try {
+      const target = join(dir, 'mushi.recipe.json')
+      writeFileSync(target, '{"version":1,"mine":true}\n')
+      const refused = await runCli(registerRecipeCommands, ['recipe', 'init', '--dir', dir])
+      expect(refused.exitCode).toBe(1)
+      expect(refused.stderr).toContain('already exists. Use --force to overwrite it.')
+      expect(readFileSync(target, 'utf8')).toBe('{"version":1,"mine":true}\n')
+
+      const forced = await runCli(registerRecipeCommands, ['recipe', 'init', '--dir', dir, '--force'])
+      expect(forced.exitCode).toBe(0)
+      expect(JSON.parse(readFileSync(target, 'utf8')).mine).toBeUndefined()
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })

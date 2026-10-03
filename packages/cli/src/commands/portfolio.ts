@@ -9,10 +9,10 @@
  */
 
 import type { Command } from 'commander'
-import { readFileSync, statSync } from 'node:fs'
 import { apiCall, outputIsJson, requireConfig, requireUuid } from '../cli-shared.js'
 import { dieOrgError, oneLine, orgSegment } from '../command-helpers.js'
 import { MushiCliError } from '../errors.js'
+import { readTextFileCapped } from '../file-io.js'
 
 /** The api's cap on a resource CSV. */
 const MAX_RESOURCE_CSV_BYTES = 256 * 1024
@@ -190,14 +190,10 @@ export function registerPortfolioCommands(program: Command): void {
     .option(ORG_HELP, ORG_DESC)
     .option('--json', 'Machine-readable JSON output')
     .action(async (file: string, opts: { org?: string; json?: boolean }) => {
-      let size: number
-      try {
-        size = statSync(file).size
-      } catch {
-        throw new MushiCliError('E_INVALID_INPUT', `Cannot read ${file}.`)
-      }
-      if (size > MAX_RESOURCE_CSV_BYTES) throw new MushiCliError('E_INVALID_INPUT', `${file} is over 256 KB.`, 'split it into several files')
-      const csv = readFileSync(file, 'utf8')
+      const read = readTextFileCapped(file, MAX_RESOURCE_CSV_BYTES)
+      if (read.kind === 'absent') throw new MushiCliError('E_INVALID_INPUT', `Cannot read ${file}.`)
+      if (read.kind === 'too_large') throw new MushiCliError('E_INVALID_INPUT', `${file} is over 256 KB.`, 'split it into several files')
+      const csv = read.text
       // The route takes the organization in the body; `current` resolves the key owner's only one.
       const organizationId = opts.org && opts.org !== 'current' ? requireUuid(opts.org, 'organization id') : 'current'
       const config = requireConfig()

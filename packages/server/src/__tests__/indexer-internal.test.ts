@@ -41,7 +41,7 @@ describe('dispatchInternalIndexerRequest', () => {
     expect(handlers.push).not.toHaveBeenCalled()
   })
 
-  it('a throwing push handler is a 500 with the error, not a fall-through', async () => {
+  it('a throwing push handler is a 500 with a code, not a fall-through; the cause is logged, not returned', async () => {
     const l = log()
     const res = await dispatchInternalIndexerRequest(
       '{"mode":"push"}',
@@ -50,21 +50,30 @@ describe('dispatchInternalIndexerRequest', () => {
     )
     expect(res).not.toBeNull()
     expect(res?.status).toBe(500)
-    expect(await res?.json()).toEqual({
+    const text = await res!.text()
+    expect(JSON.parse(text)).toEqual({
       ok: false,
-      error: { code: 'PUSH_INDEX_FAILED', message: 'codebase scope read failed: timeout' },
+      error: { code: 'PUSH_INDEX_FAILED', message: 'Indexing the push failed. The indexer logs have the cause.' },
     })
+    expect(text).not.toContain('timeout')
     expect(l.error).toHaveBeenCalledWith('internal push failed', { error: 'codebase scope read failed: timeout' })
   })
 
-  it('a throwing sweep handler is a 500 too', async () => {
+  it('a throwing sweep handler is a 500 too, and no stack or message reaches the body', async () => {
+    const l = log()
+    const err = new Error('boom at /srv/secret/path.ts')
     const res = await dispatchInternalIndexerRequest(
       '{"mode":"sweep"}',
-      { sweep: async () => { throw new Error('boom') }, push: vi.fn(ok()) },
-      log(),
+      { sweep: async () => { throw err }, push: vi.fn(ok()) },
+      l,
     )
     expect(res?.status).toBe(500)
-    expect(((await res?.json()) as { error: { code: string } }).error.code).toBe('SWEEP_FAILED')
+    const text = await res!.text()
+    expect((JSON.parse(text) as { error: { code: string } }).error.code).toBe('SWEEP_FAILED')
+    expect(text).not.toContain('boom')
+    expect(text).not.toContain('/srv/secret')
+    expect(text).not.toContain(String(err.stack).split('\n')[1]?.trim() ?? 'no-stack')
+    expect(l.error).toHaveBeenCalledWith('internal sweep failed', { error: 'boom at /srv/secret/path.ts' })
   })
 
   it('the indexer routes through it and no longer swallows handler errors', () => {

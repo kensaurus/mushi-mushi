@@ -86,6 +86,15 @@ describe('register rules', () => {
     expect(md).toContain('**account_single_owner**')
     expect(md).toMatch(/no passwords, keys or recovery codes/)
   })
+
+  it('escapes a backslash before a pipe, so `\\|` in a name cannot end the cell', () => {
+    const accounts = [account({ name: 'A \\| B', adminCount: 2 })]
+    const md = reg.renderRegisterMarkdown({ organizationName: 'Kenji', generatedAt: NOW.toISOString(), accounts, domains: [], findings: [] })
+    const row = md.split('\n').find((l) => l.startsWith('| A '))!
+    expect(row).toContain('| A \\\\\\| B |')
+    // Seven cells: eight boundaries once escaped characters are removed.
+    expect(row.replace(/\\[\\|]/g, '').split('|')).toHaveLength(9)
+  })
 })
 
 // ── routes ───────────────────────────────────────────────────────────────────

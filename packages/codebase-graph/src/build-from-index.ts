@@ -1,6 +1,5 @@
+import { scanImportSpecifiers } from './imports'
 import type { IndexedFileRow, KnowledgeGraph, KnowledgeGraphEdge, KnowledgeGraphNode } from './types'
-
-const IMPORT_RE = /(?:import\s+(?:[^'"]+\s+from\s+)?['"]([^'"]+)['"]|require\s*\(\s*['"]([^'"]+)['"]\s*\))/g
 
 function resolveRelative(fromPath: string, importPath: string): string {
   const dir = fromPath.split('/').slice(0, -1).join('/')
@@ -26,11 +25,8 @@ function detectLayer(filePath: string): string {
 /** Relative import specifiers in `content`, in order, without duplicates. */
 export function extractRelativeImports(content: string): string[] {
   const seen = new Set<string>()
-  let m: RegExpExecArray | null
-  IMPORT_RE.lastIndex = 0
-  while ((m = IMPORT_RE.exec(content)) !== null) {
-    const p = m[1] ?? m[2]
-    if (p && p.startsWith('.')) seen.add(p)
+  for (const p of scanImportSpecifiers(content)) {
+    if (p.startsWith('.')) seen.add(p)
   }
   return [...seen]
 }

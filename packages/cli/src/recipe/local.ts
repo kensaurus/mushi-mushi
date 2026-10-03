@@ -19,6 +19,7 @@ import type { DesignRuleId, DevianceBreakdownEntry, DevianceFinding } from './en
 import { computeDeviance, readScanTokens, selectScanFiles, tokenFilePaths, type LocalFile } from './engine/design-scan.ts'
 import { judgingSet } from './engine/design-set-plan.ts'
 import { normalizeRepoPath } from './engine/recipe-glob.ts'
+import { readTextFileCapped } from '../file-io.js'
 import { readScanManifest, type LocalIssue } from './manifest-shape.js'
 
 export const MANIFEST = 'mushi.recipe.json'
@@ -146,11 +147,8 @@ function isObject(v: unknown): v is Record<string, unknown> {
 function localReader(root: string): (path: string, maxBytes: number) => LocalFile {
   return (path, maxBytes) => {
     const safe = normalizeRepoPath(path)
-    const full = safe ? join(root, safe) : null
-    if (!full || !existsSync(full) || !statSync(full).isFile()) return { kind: 'absent' }
-    const size = statSync(full).size
-    if (size > maxBytes) return { kind: 'too_large', size }
-    return { kind: 'file', text: readFileSync(full, 'utf8') }
+    if (!safe) return { kind: 'absent' }
+    return readTextFileCapped(join(root, safe), maxBytes)
   }
 }
 
@@ -159,9 +157,10 @@ export function checkRecipe(root: string): RecipeCheck {
   const files: Record<string, string> = {}
   const path = join(root, MANIFEST)
   const fail = (message: string): RecipeCheck => ({ ok: false, manifest: null, issues: [...issues, { severity: 'error', message, path: MANIFEST }], tokenCount: 0, findings: [], design: null, files })
-  if (!existsSync(path)) return fail(`No ${MANIFEST} at the repo root. Run \`mushi recipe init\` to write one.`)
-  if (statSync(path).size > MAX_MANIFEST_BYTES) return fail(`${MANIFEST} is over 64 KB.`)
-  const text = readFileSync(path, 'utf8')
+  const manifestRead = readTextFileCapped(path, MAX_MANIFEST_BYTES)
+  if (manifestRead.kind === 'absent') return fail(`No ${MANIFEST} at the repo root. Run \`mushi recipe init\` to write one.`)
+  if (manifestRead.kind === 'too_large') return fail(`${MANIFEST} is over 64 KB.`)
+  const text = manifestRead.text
   let parsed: unknown
   try {
     parsed = JSON.parse(text)

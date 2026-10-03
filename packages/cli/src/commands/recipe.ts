@@ -1,6 +1,6 @@
 import type { Command } from 'commander'
 import { execFileSync } from 'node:child_process'
-import { existsSync, writeFileSync } from 'node:fs'
+import { writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { apiCall, die, fmtDate, outputIsJson, requireConfig, requireUuid } from '../cli-shared.js'
 import { MushiCliError } from '../errors.js'
@@ -68,12 +68,16 @@ export function registerRecipeCommands(program: Command): void {
     .action((opts: { dir: string; force?: boolean }) => {
       const root = resolve(opts.dir)
       const target = join(root, MANIFEST)
-      if (existsSync(target) && !opts.force) {
+      // 'wx' creates the file or fails if it exists, in one step: no window
+      // between an existence check and the write.
+      try {
+        writeFileSync(target, `${JSON.stringify(starterManifest(root), null, 2)}\n`, { flag: opts.force ? 'w' : 'wx' })
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err
         process.stderr.write(`${MANIFEST} already exists. Use --force to overwrite it.\n`)
         process.exitCode = 1
         return
       }
-      writeFileSync(target, `${JSON.stringify(starterManifest(root), null, 2)}\n`)
       console.log(`Wrote ${MANIFEST}. Check the guesses, then run \`mushi recipe check\`.`)
     })
 
