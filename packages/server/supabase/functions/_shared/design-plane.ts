@@ -51,6 +51,12 @@ const dlog = log.child('design-plane')
 
 export const DESIGN_GATE = 'design_drift'
 export const DEVIANCE_METRIC = 'design.deviance_score'
+/**
+ * A CI push of a branch other than the default (every PR run): kept for its
+ * findings and the CI gate, never the shown score, the metric or the
+ * auto-fix baseline (isScanRun and previousScanFindings skip it).
+ */
+export const CI_BRANCH_SCAN_PHASE = 'ci_branch_scan'
 
 export async function sha256Hex(text: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))
