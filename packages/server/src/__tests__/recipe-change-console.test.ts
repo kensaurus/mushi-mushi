@@ -165,6 +165,33 @@ describe('recipe sources for the console forms', () => {
     const r = await app.call('GET', `/v1/admin/projects/${P1}/recipe/sources?element=gates`)
     expect(r.body.data).toMatchObject({ ok: false, files: [], reason: expect.stringMatching(/mushi\.recipe\.json/) })
   })
+
+  it('reads the env template the manifest names in env.example, not a hard-coded .env.example', async () => {
+    const named = { ...manifest, env: { example: 'apps/web/.env.example' }, change: { allowPaths: ['mushi.recipe.json', 'apps/web/.env.example'] } }
+    const { app, deps } = harness(seed({ app_recipe_snapshots: [{ project_id: P1, is_current: true, manifest: named }] }), {
+      ...FILES,
+      'apps/web/.env.example': { text: 'API_URL=\n', sha: 'sha-env' },
+    })
+    const r = await app.call('GET', `/v1/admin/projects/${P1}/recipe/sources?element=env`)
+    expect(r.body.data!.files!.map((f) => [f.path, f.exists, f.content, f.writable])).toEqual([
+      ['mushi.recipe.json', true, manifestText, true],
+      ['apps/web/.env.example', true, 'API_URL=\n', true],
+    ])
+    expect(deps.readRepoFile.mock.calls.map((c) => c[2])).not.toContain('.env.example')
+  })
+
+  it('never reads a real env file or an unsafe path named as env.example', async () => {
+    for (const example of ['.env', '.env.local', 'apps/web/.env.production', '../.env.example', 42]) {
+      const bad = { ...manifest, env: { example } }
+      const { app, deps } = harness(seed({ app_recipe_snapshots: [{ project_id: P1, is_current: true, manifest: bad }] }))
+      const r = await app.call('GET', `/v1/admin/projects/${P1}/recipe/sources?element=env`)
+      expect(r.body.data).toMatchObject({ ok: false, files: [], reason: expect.stringMatching(/env\.example/) })
+      expect(deps.readRepoFile).not.toHaveBeenCalled()
+    }
+    expect(change.envExamplePathOf({ version: 1, env: { example: '.env.local.example' } } as never)).toBe('.env.local.example')
+    expect(change.envExamplePathOf({ version: 1, env: { example: 'config/.env.sample' } } as never)).toBe('config/.env.sample')
+    expect(change.envExamplePathOf({ version: 1 } as never)).toBe('.env.example')
+  })
 })
 
 describe('the stale-base guard', () => {

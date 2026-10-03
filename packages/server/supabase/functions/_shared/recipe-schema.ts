@@ -245,9 +245,13 @@ const ALWAYS_DENIED: ReadonlyArray<{ glob: string; reason: string }> = [
   { glob: '**/*.{png,jpg,jpeg,gif,webp,avif,ico,pdf,zip,gz,woff,woff2,ttf,otf,mp4,mov,mp3,wasm,jar,keystore,p8,p12,pem,key}', reason: 'binary or key material' },
 ]
 
+/** An env template's file name: `.env` plus optional segments, ending in .example, .sample or .template. */
+export const ENV_TEMPLATE_NAME = /^\.env(\.[A-Za-z0-9_-]+)*\.(example|sample|template)$/
+
+/** A real env file. Templates (names only, no values) such as .env.local.example are not. */
 function isEnvFile(path: string): boolean {
   const base = path.split('/').pop() ?? ''
-  return base.startsWith('.env') && base !== '.env.example'
+  return base.startsWith('.env') && !ENV_TEMPLATE_NAME.test(base)
 }
 
 export type WritableCheck = { ok: true; path: string } | { ok: false; path: string; reason: string }

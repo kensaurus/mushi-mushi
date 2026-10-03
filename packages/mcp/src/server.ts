@@ -3048,6 +3048,13 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           .describe(
             'Optional inventory Action node UUID for spec-traceability (§2.10). When provided, the fix-worker embeds the expected_outcome contract in the LLM prompt and runs validateAgainstSpec before opening the PR.',
           ),
+        targetRepoId: z
+          .string()
+          .uuid()
+          .optional()
+          .describe(
+            "Optional linked repo id (project_repos.id) to open the fix PR against, for a project with several repos. Omit for the project's primary repo. Another project's repo id is rejected with 400 TARGET_REPO_NOT_IN_PROJECT.",
+          ),
       }),
       outputSchema: z.object({
         fixId: z.string(),
@@ -3086,6 +3093,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           reportId: args.reportId,
           agent: args.agent,
           inventoryActionNodeId: args.inventoryActionNodeId,
+          ...(args.targetRepoId ? { targetRepoId: args.targetRepoId } : {}),
           ...(pid ? { projectId: pid } : {}),
         }),
       });

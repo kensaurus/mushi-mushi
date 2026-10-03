@@ -37,7 +37,72 @@ export const isPlaceholderContents = (s: string): boolean =>
 
 const PLACEHOLDER_REJECTION_MESSAGE =
   'must be the full real source — never the literal string "placeholder", "TODO", "lorem ipsum", "...", or similar. ' +
-  'If you do not have enough context to write the real file, set needsHumanReview=true and emit the "Relevant code" snippet you would change instead.'
+  'If you do not have enough context to write the real file, set needsHumanReview=true and explain in the rationale which file you would need to see.'
+
+const filePathSchema = z
+  .string()
+  .min(1)
+  .max(500)
+  .describe('Repo-relative file path (forward-slashed). Must be inside the scope directory or a test file.')
+
+const fileReasonSchema = z
+  .string()
+  .min(5)
+  .max(500)
+  .refine((s) => !isPlaceholderContents(s), {
+    message: 'files[].reason must be the real per-file reason, not a placeholder',
+  })
+  .describe('One-line per-file reason for the change.')
+
+const EDIT_PLACEHOLDER_MESSAGE =
+  'must be real source text copied from (find) or written for (replace) the file — never "placeholder", "TODO", "..." or similar.'
+
+export const fixEditSchema = z
+  .object({
+    find: z
+      .string()
+      .min(1)
+      .max(20_000)
+      .refine((s) => s.trim().length > 0 && !isPlaceholderContents(s), { message: EDIT_PLACEHOLDER_MESSAGE })
+      .describe(
+        'Exact text copied verbatim from the current file (no line-number gutter). It must occur exactly once in the file; include enough surrounding lines to make it unique.',
+      ),
+    replace: z
+      .string()
+      .max(20_000)
+      .refine((s) => !isPlaceholderContents(s), { message: EDIT_PLACEHOLDER_MESSAGE })
+      .describe('The text that replaces `find`. May be empty to delete it.'),
+  })
+  .strict()
+
+const editFileSchema = z
+  .object({
+    path: filePathSchema,
+    edits: z
+      .array(fixEditSchema)
+      .min(1)
+      .max(20)
+      .describe('Find/replace edits for an EXISTING file you were shown in full, applied in order.'),
+    reason: fileReasonSchema,
+  })
+  .strict()
+
+const newFileSchema = z
+  .object({
+    path: filePathSchema,
+    contents: z
+      .string()
+      .min(1)
+      .max(50_000)
+      .refine((s) => !isPlaceholderContents(s), {
+        message: PLACEHOLDER_REJECTION_MESSAGE,
+      })
+      .describe(
+        'Full contents of a NEW file that does not exist yet (typically a test). Never use this for an existing file. NEVER emit "placeholder" or stub text.',
+      ),
+    reason: fileReasonSchema,
+  })
+  .strict()
 
 export const fixSchema = z.object({
   // Single short-form summary that becomes the PR title.
@@ -64,43 +129,19 @@ export const fixSchema = z.object({
       'Explain *why* this fix resolves the report — root cause + how the change addresses it. Reviewer-facing, plain English. NEVER emit "placeholder" or stub text.',
     ),
 
-  // Each file is a full-content rewrite (path + new contents). The Edge
-  // Function diffs against the existing file to validate scope. We don't
-  // accept patch hunks — they're too brittle for an LLM to emit reliably.
+  // Each entry is EITHER find/replace edits against an existing file the
+  // model was shown in full, OR the full contents of a brand-new file. Full
+  // replacements of existing files were dropped (2026-10-03): with truncated
+  // context the model refused to "invent" the rest of the file, and every
+  // dispatch ended in review_failed. The worker applies the edits to the
+  // file it fetched from the base branch (_shared/fix-edits.ts); a `find`
+  // that does not match exactly once is fed back to the model, never guessed.
   files: z
-    .array(
-      z.object({
-        path: z
-          .string()
-          .min(1)
-          .max(500)
-          .describe(
-            'Repo-relative file path (forward-slashed). Must be inside the scope directory or a test file.',
-          ),
-        contents: z
-          .string()
-          .min(1)
-          .max(50_000)
-          .refine((s) => !isPlaceholderContents(s), {
-            message: PLACEHOLDER_REJECTION_MESSAGE,
-          })
-          .describe(
-            'Full new file contents. The Edge Function replaces the file atomically — never partial. NEVER emit "placeholder" or stub text — that just creates a broken PR a human has to clean up.',
-          ),
-        reason: z
-          .string()
-          .min(5)
-          .max(500)
-          .refine((s) => !isPlaceholderContents(s), {
-            message: 'files[].reason must be the real per-file reason, not a placeholder',
-          })
-          .describe('One-line per-file reason for the change.'),
-      }),
-    )
+    .array(z.union([editFileSchema, newFileSchema]))
     .min(1)
     .max(10)
     .describe(
-      'Files to change. Keep the set minimal — adding test files is encouraged.',
+      'Files to change. Keep the set minimal — adding test files is encouraged. An existing file takes `edits`; only a file that does not exist yet takes `contents`.',
     ),
 
   needsHumanReview: z
@@ -111,3 +152,21 @@ export const fixSchema = z.object({
 })
 
 export type FixOutput = z.infer<typeof fixSchema>
+export type FixFileEntry = FixOutput['files'][number]
+export type FixEditFileEntry = z.infer<typeof editFileSchema>
+
+export function isEditEntry(entry: FixFileEntry): entry is FixEditFileEntry {
+  return Array.isArray((entry as { edits?: unknown }).edits)
+}
+
+/**
+ * The output contract the worker owns. Appended to whichever fix system
+ * prompt is active: production reads the prompt from `prompt_versions`
+ * (stage 'fix', seeded in 20260422110000), which predates edit hunks, so a
+ * change to the hardcoded fallback prompt alone would never reach the model.
+ */
+export const FIX_OUTPUT_CONTRACT = `Output format (enforced by the worker, applies whatever else this prompt says):
+- "Relevant code" shows files marked "(full file …)": the complete current contents at the commit the PR branches from, with a line-number gutter ("  12 | ") that is NOT part of the file. Files marked "(preview only …)" or "(excerpt only …)" are partial.
+- You have the full file: change only what is needed, via find/replace. For an EXISTING file emit { path, edits: [{ find, replace }], reason }. Each \`find\` is copied verbatim from the file, without the gutter, and must occur exactly once in it; add surrounding lines until it is unique. Edits apply in order.
+- Emit { path, contents, reason } ONLY to create a NEW file that does not exist yet (for example a test). Never emit \`contents\` for an existing file.
+- Never rewrite a file you were not shown in full, and never write a \`find\` for text you have not seen. If the code you need is only in a preview, or not shown at all, set needsHumanReview=true and name the file and symbol you would need in the rationale.`

@@ -9,6 +9,7 @@
  */
 
 import { markPullRequestReady } from './github.ts'
+import { fetchWithTimeout } from './http.ts'
 import { log } from './logger.ts'
 import { parseContentsResponse, type BaseFileState } from './fix-file-guard.ts'
 
@@ -166,6 +167,12 @@ export interface CreatePrOptions {
    * PR stays a draft and the host's CI does not run until the owner chooses.
    */
   markReady?: boolean
+  /**
+   * Branch from exactly this commit of `defaultBranch` instead of its current
+   * tip. fix-worker patches files it read at this SHA; branching from a newer
+   * tip would silently overwrite whatever landed in between.
+   */
+  baseSha?: string
 }
 
 export interface PrResult {
@@ -256,6 +263,45 @@ export async function fetchBaseFileState(
 }
 
 /**
+ * Files in the repo whose text contains `literal`, from GitHub code search
+ * (`GET /search/code`, default branch only). One attempt with a timeout, no
+ * retry: the endpoint is rate limited (about 10 calls a minute) and the fix
+ * must not stall on it. Returns null when search is unavailable (no access,
+ * rate limited, timeout), so the caller can fall back to the index.
+ *
+ * Hits are approximate: the search tokenizes punctuation, so the caller
+ * checks the literal against the full file text before trusting a hit.
+ */
+export async function searchRepoCode(
+  token: string,
+  owner: string,
+  repo: string,
+  literal: string,
+  timeoutMs = 8_000,
+): Promise<{ paths: string[]; totalCount: number } | null> {
+  const phrase = literal.replace(/["\\]/g, ' ').trim()
+  if (!phrase) return { paths: [], totalCount: 0 }
+  const q = `"${phrase}" repo:${owner}/${repo}`
+  try {
+    const res = await fetchWithTimeout(
+      `https://api.github.com/search/code?per_page=10&q=${encodeURIComponent(q)}`,
+      { headers: ghHeaders(token) },
+      timeoutMs,
+    )
+    if (!res.ok) return null
+    const body = (await res.json().catch(() => null)) as {
+      total_count?: number
+      items?: Array<{ path?: string }>
+    } | null
+    if (!body) return null
+    const paths = (body.items ?? []).map((i) => i.path).filter((p): p is string => typeof p === 'string')
+    return { paths, totalCount: typeof body.total_count === 'number' ? body.total_count : paths.length }
+  } catch {
+    return null
+  }
+}
+
+/**
  * Create a GitHub branch, commit the given files, open a draft PR, and
  * (unless `markReady: false`) immediately mark it ready-for-review so CI can run.
  *
@@ -279,6 +325,7 @@ export async function createPrFromFiles(
     category,
     commitTrailers = [],
     markReady = true,
+    baseSha: pinnedBaseSha,
   } = opts
 
   const baseHeaders = {
@@ -289,14 +336,11 @@ export async function createPrFromFiles(
     'User-Agent': 'mushi-mushi/1.0',
   }
 
-  // Fetch the SHA of the default branch tip so we can branch from it.
-  const { branch: resolvedBase, sha: baseSha } = await resolveBaseBranch(
-    token,
-    owner,
-    repo,
-    defaultBranch,
-    log,
-  )
+  // Fetch the SHA of the default branch tip so we can branch from it,
+  // unless the caller pinned the commit its file contents were read at.
+  const { branch: resolvedBase, sha: baseSha } = pinnedBaseSha
+    ? { branch: defaultBranch, sha: pinnedBaseSha }
+    : await resolveBaseBranch(token, owner, repo, defaultBranch, log)
 
   // Create the new branch (idempotent — retry-safe).
   try {
@@ -550,11 +594,28 @@ export function formatFixCommitMessage(
   category?: string | null,
   trailers: readonly string[] = [],
 ): string {
-  const scope = reportId ? `MUSHI-${reportId}` : 'mushi'
-  const prefix = categoryToBranchPrefix(category)
-  const trimmed = reason.trim().slice(0, 200)
-  const subject = `${prefix}(${scope}): ${trimmed}`
-  return trailers.length > 0 ? `${subject}\n\n${trailers.join('\n')}` : subject
+  // Host repos run commitlint (config-conventional): a standard type, a
+  // lower-case scope and subject, a header within 100 characters. The branch
+  // prefix (`bugfix/`) is not a commit type, so the type is mapped here, and
+  // the report id moves to a trailer where its length and case are free.
+  const type = conventionalCommitType(category)
+  const head = `${type}(mushi): `
+  let subject = reason.trim().replace(/\s+/g, ' ').replace(/[.。]+$/, '')
+  subject = subject.charAt(0).toLowerCase() + subject.slice(1)
+  const room = 72 - head.length
+  if (subject.length > room) subject = subject.slice(0, room).replace(/\s+\S*$/, '') || subject.slice(0, room)
+  const footer = [...trailers, ...(reportId ? [`Mushi-Report: ${reportId}`] : [])]
+  return footer.length > 0 ? `${head}${subject}\n\n${footer.join('\n')}` : `${head}${subject}`
+}
+
+/** The conventional-commit type for a report category (what commitlint accepts). */
+export function conventionalCommitType(category?: string | null): string {
+  const c = (category ?? 'bug').toLowerCase()
+  if (c === 'slow') return 'perf'
+  if (c === 'feature') return 'feat'
+  if (c === 'docs' || c === 'test' || c === 'ci' || c === 'refactor' || c === 'chore') return c
+  if (c === 'other') return 'chore'
+  return 'fix'
 }
 
 export function formatFixPrTitle(summary: string, reportId: string): string {

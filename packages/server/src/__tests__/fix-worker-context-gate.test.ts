@@ -83,3 +83,18 @@ describe('fix-worker context-floor gate (V5.3 §2.10 Phase 2)', () => {
     expect(g.action).toBe('proceed')
   })
 })
+
+describe('fix-worker context-floor gate wiring', () => {
+  // The predicate above is a mirror; this pins what production counts.
+  // Since 2026-10-03 the gate counts files the model is actually shown
+  // (literal-search and stack-frame hits included), not raw RAG rows, so a
+  // Sentry report whose emitting file was found by literal search is
+  // grounded even when RAG returned nothing.
+  it('gates on the files shown in the full-file context', async () => {
+    const { readFileSync } = await import('node:fs')
+    const { resolve } = await import('node:path')
+    const src = readFileSync(resolve(__dirname, '../../supabase/functions/fix-worker/index.ts'), 'utf8')
+    expect(src).toMatch(/if \(fullContext\.shownCount < MIN_RAG_CHUNKS && webSnippets\.length === 0\)/)
+    expect(src).not.toMatch(/if \(codeFiles\.length < MIN_RAG_CHUNKS && webSnippets\.length === 0\)/)
+  })
+})

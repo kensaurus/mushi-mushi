@@ -54,6 +54,27 @@ export interface BumpPlan {
   updatedPkg: Record<string, unknown>
 }
 
+/** Directories a repo marks retired with an `ARCHIVED.md`. */
+export function archivedDirsFrom(paths: string[]): Set<string> {
+  const dirs = new Set<string>()
+  for (const p of paths) {
+    const m = /^(.*)\/ARCHIVED\.md$/i.exec(p)
+    if (m) dirs.add(m[1])
+  }
+  return dirs
+}
+
+/**
+ * True when a file sits in an archived directory. glot.it's retired
+ * apps/mobile (no lockfile, not a workspace) was getting bump commits.
+ */
+export function isUnderArchivedDir(path: string, archived: Set<string>): boolean {
+  for (const dir of archived) {
+    if (path.startsWith(`${dir}/`)) return true
+  }
+  return false
+}
+
 /** Return true when `version` is a plain semver specifier (not workspace:/file:/git). */
 function isRegistrySpecifier(version: string): boolean {
   const core = version.replace(/^[\^~>=<\s*]+/, '').trim()
@@ -113,10 +134,36 @@ export function computeBumpPlan(
   processSection(deps, newDeps)
   processSection(devDeps, newDevDeps)
 
+  // A root `overrides` / `resolutions` pin left behind makes `npm install`
+  // fail with EOVERRIDE (solo-boss-cloud-documentation#677). Move a pin only
+  // when this plan bumps the same package, so a deliberate pin on a package
+  // we are not touching stays put.
+  const bumped = new Map(bumps.map((b) => [b.package, b.to]))
+  const bumpPins = (section: unknown): Record<string, unknown> | null => {
+    if (!section || typeof section !== 'object' || Array.isArray(section)) return null
+    const next = { ...(section as Record<string, unknown>) }
+    let changed = false
+    for (const [name, to] of bumped) {
+      const current = next[name]
+      if (typeof current !== 'string' || !isRegistrySpecifier(current)) continue
+      const prefix = current.match(/^([\^~>=<]+)/)?.[1] ?? ''
+      next[name] = `${prefix}${to}`
+      changed = true
+    }
+    return changed ? next : null
+  }
+  const overrides = bumpPins(pkg.overrides)
+  const resolutions = bumpPins(pkg.resolutions)
+  const pnpmSection = pkg.pnpm as Record<string, unknown> | undefined
+  const pnpmOverrides = bumpPins(pnpmSection?.overrides)
+
   const updatedPkg = {
     ...pkg,
     ...(Object.keys(deps).length > 0 ? { dependencies: newDeps } : {}),
     ...(Object.keys(devDeps).length > 0 ? { devDependencies: newDevDeps } : {}),
+    ...(overrides ? { overrides } : {}),
+    ...(resolutions ? { resolutions } : {}),
+    ...(pnpmOverrides ? { pnpm: { ...pnpmSection, overrides: pnpmOverrides } } : {}),
   }
 
   return { bumps, updatedPkg }

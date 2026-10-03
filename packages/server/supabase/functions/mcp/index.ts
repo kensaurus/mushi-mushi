@@ -875,6 +875,11 @@ const BASE_TOOLS: Record<string, HostedTool> = {
             ? { inventoryActionNodeId: args.inventoryActionNodeId }
             : {}),
           ...(typeof args.agent === 'string' && args.agent ? { agent: args.agent } : {}),
+          // The REST body key is targetRepoId; the route validates it belongs
+          // to this project (400 TARGET_REPO_NOT_IN_PROJECT otherwise).
+          ...(typeof args.targetRepoId === 'string' && args.targetRepoId
+            ? { targetRepoId: args.targetRepoId }
+            : {}),
         }),
       })
       void emitProductEvent(getServiceClient(), {

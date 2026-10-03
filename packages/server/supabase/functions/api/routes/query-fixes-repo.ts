@@ -46,6 +46,7 @@ import {
 } from '../../_shared/fix-timeline.ts';
 import { fixFailureBucket, isFixCountedFailed } from '../../_shared/fix-loop-status.ts';
 import {
+  installationIdForAttempt,
   parseGithubRepoUrl,
   resolveProjectGithubToken,
 } from '../../_shared/github.ts';
@@ -938,18 +939,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       );
     }
 
-    let installationId: number | null = null;
-    if (attempt.repo_id) {
-      const { data: repo } = await db
-        .from('project_repos')
-        .select('github_app_installation_id')
-        .eq('id', attempt.repo_id)
-        .maybeSingle();
-      if (repo?.github_app_installation_id) {
-        installationId = Number(repo.github_app_installation_id);
-      }
-    }
-
+    const installationId = await installationIdForAttempt(db, attempt);
     const token = await resolveProjectGithubToken(db, attempt.project_id, installationId);
     if (!token) {
       return c.json(
@@ -1680,8 +1670,12 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
   // POST — add a new repo (role + path_globs + repo_url)
   // PUT  — update an existing repo by id
   // DELETE — remove a repo by id
+  //
+  // GET also takes an API key (mcp:read): `mushi fix --repo owner/name`
+  // resolves the name to a project_repos.id here. A project-bound key only
+  // reads its own project (callerCanAccessProject).
 
-  app.get('/v1/admin/repo/repos', jwtAuth, async (c) => {
+  app.get('/v1/admin/repo/repos', adminOrApiKey(), async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
     const projectId = c.req.query('project_id');

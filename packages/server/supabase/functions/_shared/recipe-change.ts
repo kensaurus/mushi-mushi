@@ -32,7 +32,7 @@ import type { getServiceClient } from './db.ts'
 import type { createPrFromFiles, findOpenPrByHeadPrefix } from './github-pr.ts'
 import { unifiedDiff } from './design-change.ts'
 import { parseInventoryYaml } from './inventory.ts'
-import { inventoryPathOf, isWritablePath, parseRecipeManifest, RECIPE_MANIFEST_PATH, type RecipeManifest } from './recipe-schema.ts'
+import { ENV_TEMPLATE_NAME, inventoryPathOf, isWritablePath, parseRecipeManifest, RECIPE_MANIFEST_PATH, type RecipeManifest } from './recipe-schema.ts'
 import { normalizeRepoPath } from './recipe-glob.ts'
 import type { readRepoFile, RecipeRepo, RecipeRepoResolution } from './recipe-github.ts'
 import { scanForSecrets } from './secret-scan.ts'
@@ -344,15 +344,36 @@ export async function streamRecipeChangeJob(io: RecipeJobStreamIo, opts: { pollM
 export const RECIPE_SOURCE_ELEMENTS = ['gates', 'env', 'routes'] as const
 export type RecipeSourceElement = (typeof RECIPE_SOURCE_ELEMENTS)[number]
 
+
+/**
+ * The env template mushi.recipe.json names in `env.example`, else
+ * .env.example. Only a template-shaped name counts: the console shows this
+ * file's text, so `"example": ".env"` must never read the real env file.
+ * null when the declared path is unsafe or not a template.
+ */
+export function envExamplePathOf(manifest: RecipeManifest): string | null {
+  const env = (manifest as Record<string, unknown>).env
+  const declared = typeof env === 'object' && env !== null && !Array.isArray(env) ? (env as Record<string, unknown>).example : undefined
+  if (declared === undefined || declared === null || declared === '') return '.env.example'
+  if (typeof declared !== 'string') return null
+  const path = normalizeRepoPath(declared)
+  if (!path || !ENV_TEMPLATE_NAME.test(path.split('/').pop() ?? '')) return null
+  return path
+}
+
 /**
  * The only files a console form reads per element. Never a caller-chosen path:
  * the inventory is the one mushi.recipe.json names in `routes.inventory`
- * (the file the host's CI ingests), else inventory.yaml. null when that
+ * (the file the host's CI ingests), else inventory.yaml; the env template is
+ * the one it names in `env.example`, else .env.example. null when that
  * declared path is unsafe.
  */
 export function recipeSourceFiles(element: RecipeSourceElement, manifest: RecipeManifest): string[] | null {
   if (element === 'gates') return [RECIPE_MANIFEST_PATH]
-  if (element === 'env') return [RECIPE_MANIFEST_PATH, '.env.example']
+  if (element === 'env') {
+    const example = envExamplePathOf(manifest)
+    return example ? [RECIPE_MANIFEST_PATH, example] : null
+  }
   const inventory = inventoryPathOf(manifest)
   return inventory ? [inventory] : null
 }
@@ -377,7 +398,12 @@ export async function readRecipeSources(db: Db, projectId: string, element: Reci
   const manifest = ((snap as { manifest?: RecipeManifest | null } | null)?.manifest) ?? null
   if (!manifest) return { ok: false, element, reason: 'This repo has no valid mushi.recipe.json, so nothing is writable. Add one and refresh the recipe.', files: [] }
   const paths = recipeSourceFiles(element, manifest)
-  if (!paths) return { ok: false, element, reason: 'routes.inventory in mushi.recipe.json is not a safe repo path, so the inventory cannot be edited here. Fix it and refresh the recipe.', files: [] }
+  if (!paths) {
+    const reason = element === 'env'
+      ? 'env.example in mushi.recipe.json is not a safe path to an env template (.env.example, .env.local.example, .env.sample, .env.template), so it cannot be edited here. Fix it and refresh the recipe.'
+      : 'routes.inventory in mushi.recipe.json is not a safe repo path, so the inventory cannot be edited here. Fix it and refresh the recipe.'
+    return { ok: false, element, reason, files: [] }
+  }
   const repo = await deps.resolveRepo(db, projectId)
   if (!repo.ok) return { ok: false, element, reason: repo.reason, files: [] }
   const head = await deps.getDefaultHead(repo.repo)
