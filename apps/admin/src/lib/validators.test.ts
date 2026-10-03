@@ -25,6 +25,7 @@ import {
   jiraProjectKey,
   pagerdutyRoutingKey,
   githubRepoUrl,
+  supabaseProjectRef,
   resolveValidator,
   compose,
 } from './validators'
@@ -217,6 +218,19 @@ describe('pagerdutyRoutingKey', () => {
   it('rejects short or non-alphanumeric keys', () => {
     expect(pagerdutyRoutingKey()('short')?.message).toBeDefined()
     expect(pagerdutyRoutingKey()('a'.repeat(20) + '!@#$')?.message).toBeDefined()
+  })
+})
+
+describe('supabaseProjectRef', () => {
+  it('accepts a 20-character lowercase ref and an empty field', () => {
+    expect(supabaseProjectRef()('abcdefghijklmnopqrst')).toBeNull()
+    expect(supabaseProjectRef()('')).toBeNull()
+  })
+
+  it('rejects wrong length, uppercase and pasted URLs', () => {
+    expect(supabaseProjectRef()('abcdefghijklmnopqrs')?.message).toBeDefined()
+    expect(supabaseProjectRef()('ABCDEFGHIJKLMNOPQRST')?.message).toBeDefined()
+    expect(supabaseProjectRef()('https://abcdefghijklmnopqrst.supabase.co')?.message).toBeDefined()
   })
 })
 

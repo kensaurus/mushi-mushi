@@ -261,6 +261,23 @@ const SETTINGS_GENERAL: ConfigDoc[] = [
     whenToChange:
       'Change it to match your team\u2019s branch convention (e.g. `fixes/{date}-{shortId}`) so Mushi PRs sort alongside your existing branches. Keep `{shortId}` in the template to guarantee uniqueness and avoid branch collisions across reports.',
   },
+  {
+    id: 'settings.general.supabase_project_ref',
+    label: 'Supabase project ref',
+    summary:
+      'Links this Mushi project to your app\u2019s Supabase project so diagnoses can read its schema, advisors, edge functions and logs.',
+    howItWorks:
+      'The ref is the 20-character id in `https://<ref>.supabase.co`. Mushi reads that one project with the Supabase access token you add under Settings \u2192 AI keys \u2192 Supabase, in read-only mode and with SELECT queries only. The token is checked against this ref, so save the ref first. Clearing the ref unlinks the project; the token stays in Vault until you remove it.',
+    default: { value: 'Not linked' },
+    backend: {
+      table: 'project_settings',
+      column: 'supabase_project_ref',
+      endpoint: 'PATCH /v1/admin/settings',
+      readBy: ['backend-drift-scanner', 'api (recipe, backend, db-advisors, fullstack-audit)', 'integration-health-probe'],
+    },
+    whenToChange:
+      'Set it once when your app runs on Supabase. Create a scoped access token for this one project only, with Database, Edge Functions, Advisors and Logs set to Read, and give it an expiry. Change the ref only if the app moves to another Supabase project.',
+  },
 ];
 
 const SETTINGS_BYOK: ConfigDoc[] = [

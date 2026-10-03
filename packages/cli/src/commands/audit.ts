@@ -103,7 +103,7 @@ const audit = program
   .addHelpText('after', `
 Description:
   Fans out to the Mushi backend to run a full-stack health audit:
-    • DB schema + Supabase advisors (requires Supabase PAT in API Keys)
+    • DB schema + Supabase advisors (requires a linked Supabase project)
     • Recent backend error logs
     • Tables without RLS enabled
     • Gate results: API contract (G3), spec drift (G6), orphan endpoints (G7),
@@ -112,8 +112,9 @@ Description:
   Returns a human-readable summary with severity-ranked findings.
 
   Prerequisites:
-    1. Add your Supabase PAT in Admin → Settings → API Keys
-    2. Set supabase_project_ref in Admin → Settings → Project.
+    1. Set the Supabase project ref in Admin → Settings → General → Supabase project.
+    2. Add a scoped, read-only Supabase access token (one project; Database,
+       Edge Functions, Advisors and Logs at Read) in Admin → Settings → AI keys → Supabase.
 
 Examples:
   mushi audit

@@ -407,6 +407,22 @@ export function pagerdutyRoutingKey(opts?: ValidatorOptions): Validator {
 }
 
 /**
+ * Supabase project ref: the 20 lowercase letters/digits in
+ * `https://<ref>.supabase.co`. Mirrors `parseSupabaseProjectRefSetting` in
+ * the server's `_shared/supabase-project-ref.ts`, which rejects anything else.
+ */
+export function supabaseProjectRef(opts?: ValidatorOptions): Validator {
+  return withOptional(opts, (value) => {
+    if (!/^[a-z0-9]{20}$/.test(value)) {
+      return {
+        message: 'Expected the 20-character project ref (lowercase letters and digits), as in https://<ref>.supabase.co',
+      }
+    }
+    return null
+  })
+}
+
+/**
  * GitHub HTTPS repo URL of the form `https://github.com/<owner>/<repo>`.
  * SSH URLs (`git@github.com:owner/repo.git`) are normalised server-side, so
  * the form layer here only validates the HTTPS shape — anything else will
