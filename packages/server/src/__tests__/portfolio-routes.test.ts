@@ -86,7 +86,7 @@ const pid = (n: number) => `1000000${n}-0000-4000-8000-000000000000`
 const NAMES = ['glot.it', 'solo-boss-cloud', 'yen-yen', 'the-wanting-mind', 'Help Her Take Photo', 'tsumagoi', 'mushi-demo']
 const P_OTHER = '2000000b-0000-4000-8000-000000000000'
 
-function seed(extra: Record<string, unknown[]> = {}): FakeDb {
+function seed(extra: Record<string, unknown[]> = {}, options: Parameters<typeof makeFakeDb>[1] = {}): FakeDb {
   return makeFakeDb({
     organizations: [{ id: ORG_A, name: 'Kenji apps' }, { id: ORG_B, name: 'Other' }],
     projects: [
@@ -109,7 +109,7 @@ function seed(extra: Record<string, unknown[]> = {}): FakeDb {
       { package: '@mushi-mushi/react-native', version: '0.21.0', deprecated: false },
     ],
     ...extra,
-  } as never)
+  } as never, options)
 }
 
 function harness(db: FakeDb, over: Partial<PortfolioModule['defaultPortfolioDeps']> = {}) {
@@ -184,7 +184,87 @@ describe('GET /v1/admin/orgs/:orgId/portfolio', () => {
     })
     const res = await harness(db).app.call(`/v1/admin/orgs/${ORG_A}/portfolio`)
     const glot = res.body.data.cards.find((c: { projectId: string }) => c.projectId === pid(1))
-    expect(glot.spend).toEqual({ llmUsd30d: 0.51, llmCalls30d: 2, autofixCapUsd: 5, monthlyLlmBudgetUsd: null })
+    expect(glot.spend).toEqual({ llmUsd30d: 0.51, llmCalls30d: 2, partial: false, autofixCapUsd: 5, monthlyLlmBudgetUsd: null, capsKnown: true })
+    expect(glot.unreadable).toEqual([])
+    expect(res.body.data.readErrors).toEqual([])
+  })
+
+  it('sums every AI call even when the server returns at most 1,000 rows per request', async () => {
+    const calls = Array.from({ length: 2_500 }, (_, i) => ({
+      id: `call-${String(i).padStart(5, '0')}`, project_id: pid(1), cost_usd: 0.01, created_at: '2026-09-30T00:00:00Z',
+    }))
+    const db = seed({ llm_invocations: calls }, { maxRows: 1_000 })
+    const res = await harness(db).app.call(`/v1/admin/orgs/${ORG_A}/portfolio`)
+    const glot = res.body.data.cards.find((c: { projectId: string }) => c.projectId === pid(1))
+    expect(glot.spend).toMatchObject({ llmCalls30d: 2_500, llmUsd30d: 25, partial: false })
+    expect(res.body.data.readErrors).toEqual([])
+  })
+})
+
+describe('portfolio fail-open: a failed read is never $0, "no cap", "none yet" or "no holes"', () => {
+  const failing = (...tables: string[]) => ({ failRead: (t: string) => (tables.includes(t) ? `relation "${t}" is unavailable` : null) })
+
+  it('a failed spend read leaves the spend unknown and names it, the page still answers', async () => {
+    const res = await harness(seed({}, failing('llm_invocations'))).app.call(`/v1/admin/orgs/${ORG_A}/portfolio`)
+    expect(res.status).toBe(200)
+    for (const card of res.body.data.cards) {
+      expect(card.spend.llmUsd30d).toBeNull()
+      expect(card.spend.llmCalls30d).toBeNull()
+      expect(card.unreadable).toContain('spend')
+    }
+    expect(res.body.data.readErrors).toEqual([expect.objectContaining({ part: 'spend', kind: 'failed' })])
+    // The raw database message never reaches the payload.
+    expect(JSON.stringify(res.body.data.readErrors)).not.toMatch(/relation/)
+  })
+
+  it('failed settings reads make caps and integration holes unknown, not "no cap" / "no holes"', async () => {
+    const page = await harness(seed({}, failing('project_settings'))).app.call(`/v1/admin/orgs/${ORG_A}/portfolio`)
+    expect(page.status).toBe(200)
+    expect(page.body.data.holes).toBeNull()
+    for (const card of page.body.data.cards) {
+      expect(card.spend.capsKnown).toBe(false)
+      expect(card.unreadable).toContain('caps')
+      // The recipe reads the same settings: its card reads error, never "not connected".
+      expect(card.worst).toBe('error')
+    }
+    const parts = page.body.data.readErrors.map((e: { part: string }) => e.part).sort()
+    expect(parts).toEqual(['caps', 'integrations'])
+
+    const findings = await harness(seed({}, failing('project_repos'))).app.call(`/v1/admin/orgs/${ORG_A}/portfolio/findings`)
+    expect(findings.status).toBe(200)
+    expect(findings.body.data.holes).toEqual([])
+    expect(findings.body.data.readErrors).toEqual([expect.objectContaining({ part: 'integrations', kind: 'failed' })])
+  })
+
+  it('failed SDK, kind and release reads are listed per card', async () => {
+    const res = await harness(seed({}, failing('project_sdk_observations', 'app_recipe_snapshots', 'releases'))).app.call(`/v1/admin/orgs/${ORG_A}/portfolio`)
+    expect(res.status).toBe(200)
+    const glot = res.body.data.cards.find((c: { projectId: string }) => c.projectId === pid(1))
+    expect(glot.sdk).toEqual([])
+    expect(glot.kind).toBeNull()
+    expect(glot.kindSource).toBe('unknown')
+    expect(glot.unreadable).toEqual(['sdk', 'releases', 'kind'])
+  })
+
+  it('a failed cross-project read is named on the findings page', async () => {
+    const res = await harness(seed({}, failing('portfolio_findings'))).app.call(`/v1/admin/orgs/${ORG_A}/portfolio/findings`)
+    expect(res.status).toBe(200)
+    expect(res.body.data.crossProject).toEqual([])
+    expect(res.body.data.readErrors).toEqual([expect.objectContaining({ part: 'cross_project', kind: 'failed' })])
+  })
+
+  it('without the project list or the gate runs the page fails loudly instead of showing "no apps"', async () => {
+    const codes: Record<string, string> = { projects: 'DB_ERROR', project_members: 'DB_ERROR', gate_runs: 'PORTFOLIO_FAILED', reports: 'PORTFOLIO_FAILED' }
+    for (const [table, code] of Object.entries(codes)) {
+      const res = await harness(seed({}, failing(table))).app.call(`/v1/admin/orgs/${ORG_A}/portfolio`)
+      expect(res.status, table).toBe(500)
+      expect(res.body.error.code, table).toBe(code)
+    }
+  })
+
+  it('a membership read that fails is a 500, not "you are not a member"', async () => {
+    const res = await harness(seed({}, failing('organization_members'))).app.call(`/v1/admin/orgs/${ORG_A}/portfolio`)
+    expect(res.status).toBe(500)
   })
 })
 
