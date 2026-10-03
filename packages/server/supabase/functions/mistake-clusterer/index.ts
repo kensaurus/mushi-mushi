@@ -18,7 +18,6 @@
  * Cost discipline: every LLM call logged to llm_cost_usd.
  */
 
-import { createAnthropic } from 'npm:@ai-sdk/anthropic@1'
 import { createOpenAI } from 'npm:@ai-sdk/openai@1'
 import { generateObject } from 'npm:ai@4'
 import { z } from 'npm:zod@3'
@@ -26,7 +25,9 @@ import { getServiceClient } from '../_shared/db.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { log } from '../_shared/logger.ts'
-import { ANTHROPIC_SONNET, OPENAI_PRIMARY } from '../_shared/models.ts'
+import { MISTAKE_EFFORT, MISTAKE_MODEL, OPENAI_PRIMARY } from '../_shared/models.ts'
+import { claudeGenerateObject } from '../_shared/claude-messages.ts'
+import { estimateCallCostUsd } from '../_shared/pricing.ts'
 
 // Cosine distance threshold for cluster assignment (≤ = assign, > = new cluster)
 const ASSIGN_DISTANCE = 0.18
@@ -253,17 +254,22 @@ Rate the semantic coherence of this cluster and suggest how to name and summaris
         try {
           let result: z.infer<typeof coherenceSchema>
           let usageTokens = { promptTokens: 0, completionTokens: 0 }
-          const anthropic = createAnthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY') })
+          let usedModel: string = MISTAKE_MODEL
 
           try {
-            const { object, usage } = await generateObject({
-              model: anthropic(ANTHROPIC_SONNET),
+            const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY')
+            if (!anthropicKey) throw new Error('ANTHROPIC_API_KEY is not set')
+            const { object, usage } = await claudeGenerateObject({
+              apiKey: anthropicKey,
+              model: MISTAKE_MODEL,
+              effort: MISTAKE_EFFORT,
               schema: coherenceSchema,
               prompt,
             })
             result = object
             usageTokens = { promptTokens: usage.promptTokens, completionTokens: usage.completionTokens }
           } catch {
+            usedModel = OPENAI_PRIMARY
             const openai = createOpenAI({ apiKey: Deno.env.get('OPENAI_API_KEY') })
             const { object, usage } = await generateObject({
               model: openai(OPENAI_PRIMARY),
@@ -275,8 +281,8 @@ Rate the semantic coherence of this cluster and suggest how to name and summaris
           }
 
           // Log cost
-          const costUsd = (usageTokens.promptTokens / 1_000_000) * 3 + (usageTokens.completionTokens / 1_000_000) * 15
-          await logLlmCost(db, projectId, 'cluster-coherence', ANTHROPIC_SONNET, usageTokens.promptTokens, usageTokens.completionTokens, costUsd)
+          const costUsd = estimateCallCostUsd(usedModel, usageTokens.promptTokens, usageTokens.completionTokens)
+          await logLlmCost(db, projectId, 'cluster-coherence', usedModel, usageTokens.promptTokens, usageTokens.completionTokens, costUsd)
 
           // Update cluster with judge result
           const updatePayload: Record<string, unknown> = {

@@ -352,4 +352,21 @@ Add `--max-score 30` to fail the step above a fixed score without asking Mushi.
 | `get_design_tokens` | The normalized tokens and a CSS-variable / TS-name map, so a fix uses tokens instead of literals |
 | `get_design_deviance` | The score, the per-rule breakdown, the trend and the top findings |
 | `get_store_status` | The latest store review: listing vs live, claims vs code, screenshots and the checklist |
-| `get_fix_context` | Now includes a `recipe` block (at most 4 KB) with the tokens to use |
+| `get_fix_context` | Now includes a `recipe` block (at most 4 KB) with the tokens to use, and `recipe.context` for the bug itself (below) |
+
+### What the fixer gets with each bug
+
+The `recipe` block in `get_fix_context`, and the same block in the prompt of a
+fix Mushi writes itself, also carries `context`: three things a fix gets wrong
+when nobody tells it.
+
+| Section | What it says | When it is empty |
+|---|---|---|
+| `schema` | The tables the error names (in its message, stack trace or a failed `/rest/v1/…` request), with their columns from the latest schema snapshot. If the error says a table does not exist and the snapshot has no such table either, it is listed under `missing`: a migration may not be applied. | `not_connected` until the daily drift scan has a snapshot of your Supabase schema; `unknown` when the error names no table. |
+| `deploy` | Whether your last merged fix is live: `live` (a deploy target serves the fix commit), `deployed_since_merge` (a target started serving a new commit after the merge, matched by time because a squash merge changes the sha), `not_live` or `probe_failed`. | `no_merged_fix`, or `unknown` until a deploy target in `mushi.recipe.json` reports its version. |
+| `radar` | The app's open hole-check findings, with their fixes. | `unknown` until the hole checks have run once. |
+
+Each section has its own `state` and a plain-English `note`, and a section that
+was never checked never reads as fine. The context takes at most half of the
+4 KB; when it would not fit, hole-check findings are cut first, then columns,
+then extra tables. The deploy state is always kept.

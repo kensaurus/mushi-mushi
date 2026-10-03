@@ -23,9 +23,9 @@
  * forced tool_choice), so JUDGE_MODEL may now be a no-sampling model such as
  * Sonnet 5.5. This regression test prevents either failure from coming back:
  *
- *   1. A no-sampling judge model is allowed ONLY while judge-batch reaches
- *      Claude exclusively through `claude-messages.ts`; PROMPT_TUNE_MODEL is
- *      still on the AI SDK v4 path and must still accept sampling knobs.
+ *   1. A no-sampling judge or prompt-tune model is allowed ONLY while that
+ *      function reaches Claude exclusively through `claude-messages.ts`
+ *      (prompt-auto-tune moved there on 2026-10-03).
  *   2. Neither Edge Function source may import `anthropicThinkingProviderOptions`
  *      or set `experimental_providerMetadata: { anthropic: { thinking ... } }`
  *      on a `generateObject` call — both are the exact pattern that re-fired
@@ -55,8 +55,12 @@ describe('MUSHI-MUSHI-SERVER-9 regression — Opus 4.7 + generateObject + thinki
     expect(JUDGE_MODEL).not.toBe(ANTHROPIC_OPUS)
   })
 
-  it('PROMPT_TUNE_MODEL is not a model that requires the broken thinking workaround', () => {
-    expect(acceptsSamplingKnobs(PROMPT_TUNE_MODEL)).toBe(true)
+  it('a no-sampling PROMPT_TUNE_MODEL is only used through claude-messages.ts', () => {
+    const src = readFileSync(resolve(FUNCTIONS_ROOT, 'prompt-auto-tune/index.ts'), 'utf8')
+    if (!acceptsSamplingKnobs(PROMPT_TUNE_MODEL)) {
+      expect(src).not.toMatch(/from 'npm:@ai-sdk\/anthropic|createAnthropic\(/)
+      expect(src).toMatch(/claudeGenerateObject\(/)
+    }
     expect(PROMPT_TUNE_MODEL).not.toBe(ANTHROPIC_OPUS)
   })
 

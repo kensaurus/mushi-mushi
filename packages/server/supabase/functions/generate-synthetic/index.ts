@@ -6,7 +6,8 @@ import { createTrace } from '../_shared/observability.ts';
 import { log } from '../_shared/logger.ts';
 import { withSentry } from '../_shared/sentry.ts';
 import { requireServiceRoleAuth } from '../_shared/auth.ts';
-import { SYNTHETIC_MODEL, ANTHROPIC_HAIKU } from '../_shared/models.ts';
+import { SYNTHETIC_EFFORT, SYNTHETIC_MODEL, ANTHROPIC_HAIKU } from '../_shared/models.ts';
+import { claudeGenerateObject } from '../_shared/claude-messages.ts';
 import { getPromptForStage } from '../_shared/prompt-ab.ts';
 
 // Wave T (2026-04-23): fallback template used when `prompt_versions` has no
@@ -88,7 +89,13 @@ Deno.serve(
       return new Response(JSON.stringify({ error: 'projectId required' }), { status: 400 });
     }
 
-    const anthropic = createAnthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY') });
+    const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY');
+    if (!anthropicKey) {
+      return new Response(JSON.stringify({ error: 'ANTHROPIC_API_KEY is not set' }), { status: 503 });
+    }
+    // The Sonnet generator goes through claude-messages.ts; the Haiku eval
+    // pass stays on the AI SDK (Haiku 4.5 still accepts its call shape).
+    const anthropic = createAnthropic({ apiKey: anthropicKey });
     const trace = createTrace('generate-synthetic', { projectId, count });
     const generated: unknown[] = [];
 
@@ -120,8 +127,10 @@ Deno.serve(
       const results = await Promise.allSettled(
         batchItems.map(async (i) => {
           const span = trace.span(`generate.${i}`);
-          const { object, usage } = await generateObject({
-            model: anthropic(SYNTHETIC_MODEL),
+          const { object, usage } = await claudeGenerateObject({
+            apiKey: anthropicKey,
+            model: SYNTHETIC_MODEL,
+            effort: SYNTHETIC_EFFORT,
             schema: syntheticSchema,
             system: syntheticSystemPrompt,
             prompt: `Generate bug report #${i + 1} of ${count}. Make each unique in category and complexity.`,

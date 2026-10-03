@@ -314,6 +314,62 @@ describe('GET /design (glot.it Pha Khram fixture)', () => {
     expect(d.tokens[0].cssVar ?? d.tokens[0].ts).toBeTruthy()
     expect(d.set).toBe('soi-signpaint')
   })
+
+  // Gap #11: the fixer context rides in the same 4 KB.
+  const R_A = '2000000a-0000-4000-8000-000000000000'
+  const R_B = '2000000b-0000-4000-8000-000000000000'
+  const bigSchema = Array.from({ length: 30 }, (_, t) => ({
+    name: t === 0 ? 'orders' : `table_${t}`, schema: 'public', rls_enabled: true,
+    columns: Array.from({ length: 60 }, (_, c) => ({ name: `column_${c}`, type: 'timestamp with time zone', nullable: true })),
+  }))
+  const contextSeed = () => seed({
+    app_recipe_snapshots: [glotSnapshot(P_A)],
+    reports: [
+      { id: R_A, project_id: P_A, console_logs: [{ level: 'error', message: 'relation "public.order_items" does not exist', stack: 'at checkout (/rest/v1/orders)' }], network_logs: [] },
+      { id: R_B, project_id: P_B, console_logs: [{ level: 'error', message: 'select from public.orders failed' }], network_logs: [] },
+    ],
+    backend_schema_snapshots: [{ project_id: P_A, captured_at: '2026-10-01T03:05:00Z', schema_json: bigSchema }],
+    fix_attempts: [{ project_id: P_A, report_id: R_A, pr_url: 'https://github.com/kensaurus/glot.it/pull/3', merged_at: '2026-10-02T09:00:00Z', commit_sha: 'abc1234' }],
+    deploy_observations: [{ project_id: P_A, target_id: 'web', ok: true, observed_commit: 'abc1234', observed_at: '2026-10-02T10:00:00Z' }],
+    gate_runs: [{ id: 'radar-1', project_id: P_A, gate: 'portfolio_radar', status: 'warn', started_at: '2026-10-02T00:00:00Z', completed_at: '2026-10-02T00:01:00Z', summary: { results: [{ ruleId: 'cert_expiry' }] } }],
+    gate_findings: Array.from({ length: 12 }, (_, i) => ({ id: `rf${i}`, gate_run_id: 'radar-1', project_id: P_A, severity: 'warn', rule_id: 'cert_expiry', message: `Certificate ${i} expires soon. ${'x'.repeat(150)}`, allowlisted: false, suggested_fix: { fix: 'Renew it.' } })),
+  })
+
+  it('GET /design/excerpt?reportId= adds the tables, the deploy state and the radar inside 4 KB', async () => {
+    const { app } = harness(contextSeed())
+    const res = await app.call('GET', `/v1/admin/projects/${P_A}/design/excerpt?reportId=${R_A}`)
+    expect(res.status).toBe(200)
+    const d = res.body.data as any
+    expect(new TextEncoder().encode(JSON.stringify(d)).length).toBeLessThanOrEqual(4096)
+    expect(d.tokens.length).toBeGreaterThan(0)
+    expect(d.context.schema.state).toBe('drift')
+    expect(d.context.schema.missing).toEqual(['order_items'])
+    expect(d.context.schema.tables[0].name).toBe('orders')
+    expect(d.context.schema.tables[0].columns.length).toBeGreaterThan(0)
+    expect(d.context.deploy).toMatchObject({ state: 'live', lastFix: { reportId: R_A } })
+    expect(d.context.truncated).toBe(true)
+  })
+
+  it('GET /design/excerpt never reads a report of another project', async () => {
+    const { app } = harness(contextSeed())
+    const d = (await app.call('GET', `/v1/admin/projects/${P_A}/design/excerpt?reportId=${R_B}`)).body.data as any
+    expect(d.context.schema.state).toBe('unknown')
+    expect(d.context.schema.tables).toEqual([])
+  })
+
+  it('GET /design/excerpt without a report still says whether the last fix is live', async () => {
+    const { app } = harness(contextSeed())
+    const d = (await app.call('GET', `/v1/admin/projects/${P_A}/design/excerpt`)).body.data as any
+    expect(d.context.schema.state).toBe('unknown')
+    expect(d.context.deploy.state).toBe('live')
+    expect(d.context.radar.state).toBe('drift')
+  })
+
+  it('GET /design/excerpt refuses a reportId that is not a UUID', async () => {
+    const { app } = harness(contextSeed())
+    const res = await app.call('GET', `/v1/admin/projects/${P_A}/design/excerpt?reportId=1%20or%201=1`)
+    expect(res.status).toBe(400)
+  })
 })
 
 // ── changes: always a draft PR, only to allowlisted token/recipe files ──────

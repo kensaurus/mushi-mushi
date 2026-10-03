@@ -28,15 +28,14 @@
  */
 
 import { Hono } from 'npm:hono@4'
-import { generateObject } from 'npm:ai@4'
-import { createAnthropic } from 'npm:@ai-sdk/anthropic@1'
 import { z } from 'npm:zod@3'
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { log as rootLog } from '../_shared/logger.ts'
 import { ensureSentry, sentryHonoErrorHandler } from '../_shared/sentry.ts'
 import { resolveLlmKey } from '../_shared/byok.ts'
 import { firecrawlScrape } from '../_shared/firecrawl.ts'
-import { MODERNIZER_MODEL } from '../_shared/models.ts'
+import { MODERNIZER_EFFORT, MODERNIZER_MODEL, THINKING_HEADROOM_TOKENS } from '../_shared/models.ts'
+import { claudeGenerateObject } from '../_shared/claude-messages.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import {
   bindFindingsToRegistry,
@@ -281,23 +280,18 @@ async function processRepo(
     }
   }
 
-  const client = createAnthropic({ apiKey: anthropic.key })
-  let model: ReturnType<typeof client>
-  try {
-    model = client(MODERNIZER_MODEL)
-  } catch (err) {
-    log.warn('anthropic client init failed', { error: String(err).slice(0, 200) })
-    return { scanned: deps.length, created: 0, skipped: 'llm_init_failed' }
-  }
-
   let plan: z.infer<typeof findingSchema>
   try {
-    const result = await generateObject({
-      model,
+    // claudeGenerateObject validates the reply against findingSchema.
+    const result = await claudeGenerateObject({
+      apiKey: anthropic.key,
+      model: MODERNIZER_MODEL,
+      effort: MODERNIZER_EFFORT,
       schema: findingSchema,
       system: `You are a senior dependency auditor. Each dependency below is behind npm's latest stable release; the installed range and the latest version are facts from the npm registry, do not change them. Use the optional release-notes excerpts to set severity. Mark security CVEs as 'security'; deprecated/yanked packages as 'deprecated'; otherwise 'major' (breaking) vs 'minor'. Return at most 8 findings — only flag genuinely actionable ones.`,
       prompt: `Manifest: ${manifestPath} (${manifestKind})\n\nDependencies (installed range → npm latest stable):\n${candidates.map((c) => `- ${c.name}: ${c.installed} → ${c.latest}`).join('\n')}\n\nRelease-notes excerpts (best-effort web scrape, may be empty):\n${releaseNotes.map((n) => `### ${n.name}\n${n.notes}`).join('\n\n') || '(no excerpts available — base your judgement on the version strings only)'}`,
-      maxTokens: 2_000,
+      // Up to 8 findings of ~400 chars, plus room for adaptive thinking.
+      maxTokens: 2_000 + THINKING_HEADROOM_TOKENS,
     })
     plan = result.object
   } catch (err) {
