@@ -30,14 +30,18 @@ export function findingsReadTruncated(payload: GateFindingsPayload): boolean {
   return payload.runs.length >= FINDINGS_ROUTE_MAX_RUNS || payload.findings.length >= FINDINGS_ROUTE_MAX_FINDINGS
 }
 
-/** A design-token refresh is not a scan; it never hides the latest scan (server: isScanRun). */
+/**
+ * Only a deviance scan (`phase: 'scan'`) is a design_drift result, as on the
+ * server (isScanRun): a token refresh, a CI push of another branch, a push
+ * with a public key or from an older CLI never hides the latest scan.
+ */
 function isScanRun(run: GateRunRow): boolean {
   if (run.gate !== 'design_drift') return true
   const phase = run.summary && typeof run.summary === 'object' ? (run.summary as { phase?: unknown }).phase : undefined
-  return phase !== 'refresh'
+  return phase === 'scan'
 }
 
-/** The newest finished run per gate, skipping design refresh runs. */
+/** The newest finished run per gate; for design_drift, the newest deviance scan. */
 export function latestRunPerGate(runs: readonly GateRunRow[]): Map<string, GateRunRow> {
   const latest = new Map<string, GateRunRow>()
   for (const run of runs) {

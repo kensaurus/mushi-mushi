@@ -62,7 +62,7 @@ const payload = {
   runs: [
     { id: 'radar-new', gate: 'radar', status: 'warn', started_at: '2026-10-02T00:00:00Z' },
     { id: 'radar-old', gate: 'radar', status: 'warn', started_at: '2026-10-01T00:00:00Z' },
-    { id: 'design-1', gate: 'design_drift', status: 'fail', started_at: '2026-10-02T00:00:00Z' },
+    { id: 'design-1', gate: 'design_drift', status: 'fail', summary: { phase: 'scan' }, started_at: '2026-10-02T00:00:00Z' },
   ],
   findings: [
     {
