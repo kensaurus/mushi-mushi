@@ -144,12 +144,14 @@ export const githubConnector: RecipeConnector = {
   },
   detectDrift(_prev, next, manifest) {
     const f = next.facts as { branch: string; workflowFiles: Record<string, string>; runs: Array<{ head_branch: string | null; conclusion: string | null; completed_at: string | null }>; actionsNames: string[] }
-    const m = (manifest && typeof manifest === 'object' ? manifest : {}) as Record<string, any>
-    const declared = Array.isArray(m.env?.required) ? m.env.required.filter((e: any) => e && typeof e.name === 'string') : []
+    type DeclaredEnv = { name: string; in?: unknown; environments?: unknown }
+    const m = (manifest && typeof manifest === 'object' ? manifest : {}) as { env?: { required?: unknown } }
+    const required = m.env?.required
+    const declared: DeclaredEnv[] = Array.isArray(required) ? required.filter((e): e is DeclaredEnv => !!e && typeof (e as DeclaredEnv).name === 'string') : []
     const out: DriftFinding[] = [
       ...ciWorkflowDrift(f.workflowFiles ?? {}),
       ...defaultBranchRed(f.runs ?? [], f.branch),
-      ...(declared.length ? envDrift({ declared: declared.map((e: any) => ({ name: e.name, in: Array.isArray(e.in) ? e.in : ['github-actions'], environments: Array.isArray(e.environments) ? e.environments : [] })), present: { 'github-actions': f.actionsNames ?? [] }, exampleNames: null }) : []),
+      ...(declared.length ? envDrift({ declared: declared.map((e) => ({ name: e.name, in: Array.isArray(e.in) ? e.in : ['github-actions'], environments: Array.isArray(e.environments) ? e.environments : [] })), present: { 'github-actions': f.actionsNames ?? [] }, exampleNames: null }) : []),
     ]
     return out.map((d) => ({ gate: d.gate, ruleId: d.ruleId, severity: d.severity, message: d.message, filePath: d.filePath ?? null, suggestedFix: d.suggestedFix }))
   },

@@ -11,7 +11,7 @@ description: Every tool, resource and prompt the Mushi MCP server exposes to Cur
 
   Auto-generated from `packages/mcp/src/catalog.ts`. Do not edit by hand — run `pnpm gen:mcp-tools-doc`.
 
-**84 tools** · **8 resources** · **4 prompts**
+**93 tools** · **8 resources** · **4 prompts**
 
 ## Read tools (`mcp:read`)
 

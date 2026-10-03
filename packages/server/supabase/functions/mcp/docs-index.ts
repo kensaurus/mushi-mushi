@@ -382,7 +382,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     markdown: "admin/portfolio.md",
     keywords: ["admin", "portfolio"],
     headings: ["What you see", "From your editor", "Who can see it"],
-    excerpt: "The Portfolio page shows every app in a team at once, with each app's worst recipe state, hole checks and SDK version, plus problems you can fix once across apps.",
+    excerpt: "The Portfolio page shows every app in a team at once, with each app's worst recipe state, hole checks and SDK version, plus fixes that apply across apps.",
   },
   {
     title: "Projects",

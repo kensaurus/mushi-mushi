@@ -56,8 +56,9 @@ export async function pullAppStore(fetchImpl: Fetch, appId: string, key: { keyId
   const out: Record<string, string> = {}
   const infos = await json(fetchImpl, `${base}/apps/${appId}/appInfos`, auth)
   // `state` / `appVersionState` replaced the deprecated `appStoreState`; accept either.
-  const isLive = (a: any) => a?.state === 'READY_FOR_DISTRIBUTION' || a?.appStoreState === 'READY_FOR_SALE'
-  const info = (infos.data ?? []).find((i: any) => isLive(i.attributes)) ?? infos.data?.[0]
+  type InfoAttrs = { state?: string; appStoreState?: string } | undefined
+  const isLive = (a: InfoAttrs) => a?.state === 'READY_FOR_DISTRIBUTION' || a?.appStoreState === 'READY_FOR_SALE'
+  const info = (infos.data ?? []).find((i: { attributes?: InfoAttrs }) => isLive(i.attributes)) ?? infos.data?.[0]
   if (info) {
     const locs = await json(fetchImpl, `${base}/appInfos/${info.id}/appInfoLocalizations`, auth)
     for (const l of locs.data ?? []) {
