@@ -7,7 +7,8 @@
  *   20261002140100_failopen_radar_and_index_schema  appends 'radar'
  *   20261002180000_radar_gates_and_digest  appends v_add (portfolio_radar …)
  * and compared with the stdio `GATE_IDS`, the hosted
- * `LIST_GATE_FINDINGS_GATES` and the console `GATE_IDS` / `GATE_LABELS`.
+ * `LIST_GATE_FINDINGS_GATES`, the hosted tools/list schema generated into
+ * `mcp-discovery-tools.json`, and the console `GATE_IDS` / `GATE_LABELS`.
  */
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -49,6 +50,20 @@ describe('gate ids', () => {
 
   it('hosted list_gate_findings accepts exactly the live gates', () => {
     expect(constList('packages/server/supabase/functions/mcp/index.ts', 'LIST_GATE_FINDINGS_GATES')).toEqual(live)
+  })
+
+  it('the hosted tools/list schema (generated mcp-discovery-tools.json) offers exactly the live gates', () => {
+    // The hosted server advertises this inputSchema (withCatalogMetadata); a client that
+    // validates against it cannot send a gate missing from this enum.
+    const manifest = JSON.parse(read('packages/server/supabase/functions/_shared/mcp-discovery-tools.json')) as {
+      tools: Record<string, { description: string; inputSchema: { properties: { gate: { enum: string[] } } } }>
+    }
+    const tool = manifest.tools.list_gate_findings
+    expect([...tool.inputSchema.properties.gate.enum].sort()).toEqual(live)
+    const catalog = read('packages/mcp/src/catalog.ts')
+    const filter = /name: 'list_gate_findings',[\s\S]*?Filter by gate \(([^)]*)\)/.exec(catalog)![1]
+    expect(tool.description).toContain(`Filter by gate (${filter})`)
+    expect(tool.description).toContain('Available on every plan.')
   })
 
   it('the console labels every live gate in plain English', () => {
