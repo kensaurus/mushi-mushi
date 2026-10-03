@@ -508,27 +508,24 @@ function rows<T>(res: { data: unknown; error: { message: string } | null }, what
 
 export async function loadElementViews(db: Db, element: RecipeElementKey, ctx: ViewContext): Promise<Record<string, unknown>> {
   if (element === 'schema') {
-    const scanned = rows<{ captured_at: string; schema_json: unknown }>(
-      await db.from('backend_schema_snapshots').select('captured_at, schema_json').eq('project_id', ctx.projectId).order('captured_at', { ascending: false }).limit(2),
-      'backend_schema_snapshots',
-    )
-    if (scanned.length) {
-      return {
-        schemaView: schemaView(
-          { capturedAt: scanned[0].captured_at, tables: scanned[0].schema_json, source: 'drift_scanner' },
-          scanned[1] ? { capturedAt: scanned[1].captured_at, tables: scanned[1].schema_json } : null,
-        ),
-      }
-    }
-    // No drift-scanner snapshot: the Supabase connector keeps each day's table list (older rows are kept, not current).
-    const snaps = rows<{ observed_at: string; snapshot: { facts?: { tables?: unknown } } | null }>(
-      await db.from('connector_snapshots').select('observed_at, snapshot').eq('project_id', ctx.projectId).eq('kind', 'supabase').eq('ok', true).order('observed_at', { ascending: false }).limit(2),
-      'connector_snapshots',
-    )
+    // Two sources keep a table list per snapshot: the drift scanner and the
+    // Supabase connector (older connector rows are kept, just not current).
+    // The newer one wins, and the diff compares within that same source, so
+    // the panel never shows an old list while a fresher read exists.
+    const [scanRes, connRes] = await Promise.all([
+      db.from('backend_schema_snapshots').select('captured_at, schema_json').eq('project_id', ctx.projectId).order('captured_at', { ascending: false }).limit(2),
+      db.from('connector_snapshots').select('observed_at, snapshot').eq('project_id', ctx.projectId).eq('kind', 'supabase').eq('ok', true).order('observed_at', { ascending: false }).limit(2),
+    ])
+    const scanned = rows<{ captured_at: string; schema_json: unknown }>(scanRes, 'backend_schema_snapshots')
+      .map((r) => ({ capturedAt: r.captured_at, tables: r.schema_json }))
+    const connector = rows<{ observed_at: string; snapshot: { facts?: { tables?: unknown } } | null }>(connRes, 'connector_snapshots')
+      .map((r) => ({ capturedAt: r.observed_at, tables: r.snapshot?.facts?.tables }))
+    const useConnector = connector.length > 0 && (scanned.length === 0 || Date.parse(connector[0].capturedAt) > Date.parse(scanned[0].capturedAt))
+    const [latest, previous] = useConnector ? connector : scanned
     return {
       schemaView: schemaView(
-        snaps[0] ? { capturedAt: snaps[0].observed_at, tables: snaps[0].snapshot?.facts?.tables, source: 'supabase_connector' } : null,
-        snaps[1] ? { capturedAt: snaps[1].observed_at, tables: snaps[1].snapshot?.facts?.tables } : null,
+        latest ? { ...latest, source: useConnector ? 'supabase_connector' : 'drift_scanner' } : null,
+        previous ?? null,
       ),
     }
   }
@@ -536,7 +533,7 @@ export async function loadElementViews(db: Db, element: RecipeElementKey, ctx: V
     const runs = rows<Record<string, unknown>>(
       await db.from('ci_workflow_runs')
         .select('run_id, name, event, head_branch, head_sha, status, conclusion, started_at, completed_at, est_billable_minutes, html_url')
-        .eq('project_id', ctx.projectId).order('started_at', { ascending: false }).limit(MAX_CI_RUNS),
+        .eq('project_id', ctx.projectId).order('started_at', { ascending: false, nullsFirst: false }).limit(MAX_CI_RUNS),
       'ci_workflow_runs',
     )
     return { ciView: ciView(runs) }
