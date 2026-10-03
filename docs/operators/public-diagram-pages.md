@@ -12,6 +12,7 @@ behind it.
 |---|---|---|
 | `/mushi-mushi/r/<owner>/<repo>` | `mushi-mushi/r/<owner>/<repo>.html` in the docs S3 bucket, written by the `api` function on publish | Yes (`robots: index`, canonical, `SoftwareSourceCode` JSON-LD) |
 | `/mushi-mushi/r/<owner>/<repo>.md` | `mushi-mushi/r/<owner>/<repo>.md`, written with it | Linked as `rel="alternate" type="text/markdown"` |
+| `/mushi-mushi/r/sitemap.xml` | `mushi-mushi/r/sitemap.xml`, rewritten by the `api` function on every publish, unpublish and project delete | It is the sitemap (see [Search engines](#search-engines-the-r-sitemap)) |
 | Same URL with no object (store not configured, write failed, never published) | The bucket's 404 document. Once `scripts/aws-configure-docs-errors.mjs` has pointed it at the docs `404.html`, the docs `not-found` page renders the diagram client-side (best-effort, status 404). **As of 2026-10-02 that is not set up on kensaur.us: a missing key returns the raw S3 `NoSuchKey` page.** | No |
 | `/mushi-mushi/docs/r?repo=<owner>/<repo>` | The docs static shell (interactive view) | No (`noindex`) |
 
@@ -112,6 +113,44 @@ curl -s  https://kensaur.us/mushi-mushi/r/<owner>/<repo>.md  # the Markdown twin
 
 Then unpublish. Once the edge cache expires (see above), the first URL
 returns 404.
+
+## Search engines: the `/r/` sitemap
+
+The docs sitemap is generated when the docs site is built, so it can't list
+pages published afterwards. The `api` function therefore keeps a separate
+sitemap at `https://kensaur.us/mushi-mushi/r/sitemap.xml`
+(`_shared/public-page-store.ts`, `regeneratePublicSitemap`).
+
+- **What it lists:** every row in `public_repo_diagrams` whose static file exists
+  (`static_page_at` set). Each `<loc>` is the page's canonical URL, and
+  `<lastmod>` is when its file was last written. Rows without a written file
+  point at the unindexed interactive view, so they are left out.
+- **When it changes:** it is rewritten in full from the table after every
+  publish (once `static_page_at` is set), every unpublish (once the row is
+  gone), and every project delete that removed a page. After the last
+  unpublish it is an empty `<urlset>`.
+- **If a rewrite fails:** the failure is logged and does not stop the
+  publish or unpublish, because a stale sitemap only delays indexing. The
+  next publish or unpublish rewrites the file from the table, so a missed
+  rewrite does not persist.
+- **Permissions:** the file sits under the IAM user's existing
+  `mushi-mushi/r/*` grant, so no new permission is needed. The CloudFront
+  router serves it as a plain `.xml` asset. Rule 0c needs both an owner and
+  a repo segment, so it never rewrites this file.
+- **Until the store is configured:** nothing is written, the same as for
+  the pages.
+
+**Owner action, once the store is configured and the first page is
+published:**
+
+1. In Google Search Console, open the `kensaur.us` property and choose
+   **Sitemaps**.
+2. Submit `https://kensaur.us/mushi-mushi/r/sitemap.xml`.
+3. Do the same in Bing Webmaster Tools if the site is registered there.
+
+You could instead add `Sitemap: https://kensaur.us/mushi-mushi/r/sitemap.xml`
+to the root `https://kensaur.us/robots.txt`. That file lives outside this
+repo. Mushi does not submit or ping the sitemap itself.
 
 ## Takedown runbook
 

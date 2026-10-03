@@ -74,6 +74,7 @@ import { reportFramePaths } from '../../_shared/report-seeds.ts'
 import {
   deletePublicPage,
   readPublicPageStoreConfig,
+  regeneratePublicSitemap,
   staleStaticPage,
   writePublicPage,
   type StaticPageStatus,
@@ -679,6 +680,11 @@ export function registerRepoDiagramRoutes(app: Hono<{ Variables: Variables }>): 
       if (markErr) routeLog.warn('static page mark failed', { projectId, error: markErr.message })
     }
     const written = staticPage === 'written'
+    // The /r/ sitemap lists pages whose file exists; this publish may have
+    // added one or (on a repo rename) replaced one. Best-effort.
+    await regeneratePublicSitemap(db, storeConfig(), (err) =>
+      routeLog.warn('/r/ sitemap regeneration failed', { projectId, error: String(err) }),
+    )
 
     await logAudit(db, projectId, userId, 'settings.updated', 'public_diagram', row.id, {
       action: 'publish',
@@ -726,6 +732,12 @@ export function registerRepoDiagramRoutes(app: Hono<{ Variables: Variables }>): 
     }
     const { error } = await db.from('public_repo_diagrams').delete().eq('project_id', projectId)
     if (error) return dbError(c, error)
+    // Drop the page's URL from the /r/ sitemap now that its row is gone.
+    if (pub) {
+      await regeneratePublicSitemap(db, storeConfig(), (err) =>
+        routeLog.warn('/r/ sitemap regeneration failed', { projectId, error: String(err) }),
+      )
+    }
     await logAudit(db, projectId, userId, 'settings.updated', 'public_diagram', undefined, { action: 'unpublish' }).catch(() => {})
     return c.json({ ok: true, data: { published: false, static_page: staticPage } })
   })
