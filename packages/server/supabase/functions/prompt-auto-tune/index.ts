@@ -26,15 +26,15 @@
  */
 
 import { Hono } from 'npm:hono@4'
-import { generateObject } from 'npm:ai@4'
-import { createAnthropic } from 'npm:@ai-sdk/anthropic@1'
 import { z } from 'npm:zod@3'
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { log as rootLog } from '../_shared/logger.ts'
 import { ensureSentry, sentryHonoErrorHandler } from '../_shared/sentry.ts'
 import { resolveLlmKey } from '../_shared/byok.ts'
+import { LlmBudgetExceededError } from '../_shared/llm-budget.ts'
 import { createTrace } from '../_shared/observability.ts'
-import { PROMPT_TUNE_MODEL } from '../_shared/models.ts'
+import { PROMPT_TUNE_EFFORT, PROMPT_TUNE_MODEL } from '../_shared/models.ts'
+import { claudeGenerateObject } from '../_shared/claude-messages.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 
 ensureSentry('prompt-auto-tune')
@@ -271,7 +271,11 @@ async function proposeCandidate(
   const buckets = bucketize(failures)
   const trace = createTrace('prompt-auto-tune', { projectId, stage, parentVersion: active.version })
 
-  const resolved = await resolveLlmKey(db, projectId, 'anthropic').catch(() => null)
+  // Over budget rethrows: falling back to the env key would bypass the budget.
+  const resolved = await resolveLlmKey(db, projectId, 'anthropic').catch((err) => {
+    if (err instanceof LlmBudgetExceededError) throw err
+    return null
+  })
   const apiKey = resolved?.key ?? Deno.env.get('ANTHROPIC_API_KEY')
   if (!apiKey) {
     log.info('skipping — no Anthropic key', { projectId, stage })
@@ -279,11 +283,6 @@ async function proposeCandidate(
     return null
   }
 
-  const anthropic = createAnthropic({ apiKey })
-  // Wave R (2026-04-22): Promoted from Sonnet 4-6 to Opus 4-7 — prompt rewrites
-  // benefit most from the frontier self-critique. Falls back silently when
-  // Opus isn't in the account; the judge-batch evaluator re-scores outputs
-  // regardless.
   const model = PROMPT_TUNE_MODEL
 
   const failuresPrompt = failures
@@ -295,18 +294,15 @@ Judge's correction: ${JSON.stringify(f.suggestedCorrection ?? {}).slice(0, 200)}
     .join('\n\n')
 
   const span = trace.span('generate-candidate')
-  // Sentry MUSHI-MUSHI-SERVER-9 (2026-04-23, then 2026-04-24 03:00 UTC):
-  // Opus 4.7 dropped sampling knobs. AI SDK v4 hardcodes `temperature ?? 0`
-  // — flipping Anthropic into thinking mode strips it BUT also trips
-  // Anthropic's "thinking + tool_choice forces tool use" 400, which
-  // `generateObject` always forces. Until vercel/ai ships native
-  // middleware (vercel/ai#7220 / #9351), PROMPT_TUNE_MODEL stays on
-  // Sonnet 4.6 — accepts `temperature: 0` and works with `generateObject`
-  // directly. See `_shared/models.ts` `acceptsSamplingKnobs` for the full
-  // migration note.
+  // Sentry MUSHI-MUSHI-SERVER-9: AI SDK v4 always sends `temperature: 0` and
+  // forces `tool_choice` for JSON, which Opus 4.7+ and Sonnet 5.5 reject.
+  // claude-messages.ts uses native structured outputs instead and sends
+  // `temperature` only to models that accept it, so no thinking workaround.
   try {
-    const { object, usage } = await generateObject({
-      model: anthropic(model),
+    const { object, usage } = await claudeGenerateObject({
+      apiKey,
+      model,
+      effort: PROMPT_TUNE_EFFORT,
       schema: candidateSchema,
       temperature: 0,
       system: `You are a senior prompt engineer for an automated bug-classification pipeline. You will be shown the current prompt for ${stage} and a sample of recent classifications the LLM judge disagreed with. Propose a revised prompt that addresses the dominant failure modes WITHOUT changing template variables (anything inside {{ ... }}) or breaking the existing output schema.

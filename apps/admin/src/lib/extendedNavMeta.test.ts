@@ -191,6 +191,11 @@ describe('fullstackAuditNavBadge', () => {
     expect(badge?.tone).toBe('danger')
     expect(badge?.count).toBe(2)
   })
+
+  it('flags a failed read instead of showing no badge', () => {
+    const badge = fullstackAuditNavBadge({ errorCount: 0, warnCount: 0, failedGateCount: 0, topPriority: 'unknown' })
+    expect(badge).toMatchObject({ tone: 'warn', label: expect.stringMatching(/could not read/) })
+  })
 })
 
 describe('dashboardNavBadge', () => {

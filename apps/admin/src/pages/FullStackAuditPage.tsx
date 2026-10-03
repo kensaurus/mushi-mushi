@@ -11,6 +11,11 @@
  *
  * One "Run audit" button fans out to POST /v1/admin/projects/:id/audit
  * which returns a pre-computed scorecard within ~10 s.
+ *
+ * A read the server could not finish is listed (`read_errors`) and the
+ * verdict reads "Incomplete", never "All clear". Below the scorecard, the open
+ * findings of every gate are listed with file, line and message on every plan
+ * (GET /v1/admin/inventory/:id/findings, ADR 0018).
  */
 
 import { useCallback, useState } from 'react'
@@ -23,6 +28,7 @@ import {
   Card,
   Badge,
   Btn,
+  Callout,
   Section,
   ErrorAlert,
 } from '../components/ui'
@@ -35,6 +41,8 @@ import {
   type FullstackAuditStats,
 } from '../components/fullstack-audit/FullstackAuditStatsTypes'
 import { CHIP_TONE } from '../lib/chipTone'
+import { gateLabel } from '../lib/gateLabels'
+import { GateFindingsSection } from '../components/gates/GateFindingsSection'
 
 // ─── Local type definitions (mirrors fullstack-audit.ts response shapes) ─────
 
@@ -55,11 +63,16 @@ interface AuditGateRun {
 
 interface AuditResult {
   audit_at: string
-  backend_linked: boolean
+  /** null when the project settings could not be read. */
+  backend_linked: boolean | null
   schema_snapshot_taken: boolean
   recent_backend_errors: number
+  /** False when the gate runs could not be read: an empty list is then unknown. */
+  gate_runs_read: boolean
+  /** Reads that failed; the verdict is then `unknown` unless an error was found. */
+  read_errors: string[]
   summary: {
-    overall: 'pass' | 'warn' | 'fail'
+    overall: 'pass' | 'warn' | 'fail' | 'unknown'
     error_count: number
     warn_count: number
     info_count: number
@@ -94,11 +107,17 @@ function OverallScorecard({ result }: { result: AuditResult }) {
   const overallCls =
     overall === 'fail'
       ? CHIP_TONE.dangerSubtle
-      : overall === 'warn'
+      : overall === 'warn' || overall === 'unknown'
         ? CHIP_TONE.warnSubtle
         : CHIP_TONE.okSubtle
   const overallLabel =
-    overall === 'fail' ? 'Issues found' : overall === 'warn' ? 'Warnings' : 'All clear'
+    overall === 'fail'
+      ? 'Issues found'
+      : overall === 'warn'
+        ? 'Warnings'
+        : overall === 'unknown'
+          ? 'Incomplete: some checks could not be read'
+          : 'All clear'
 
   return (
     <div className={`rounded-md border px-4 py-3 ${overallCls}`}>
@@ -116,7 +135,11 @@ function OverallScorecard({ result }: { result: AuditResult }) {
             Audited {new Date(result.audit_at).toLocaleString()}
           </p>
           <p className="text-xs text-fg-faint">
-            {result.backend_linked ? '✓ Backend linked' : '⚠ Backend not linked'}
+            {result.backend_linked === null
+              ? '? Backend link unknown'
+              : result.backend_linked
+                ? '✓ Backend linked'
+                : '⚠ Backend not linked'}
           </p>
         </div>
       </div>
@@ -135,13 +158,16 @@ const CATEGORY_LABELS: Record<string, string> = {
   backend_error: 'Backend Errors',
   spec_drift: 'Spec Drift',
   advisor: 'DB Advisor',
+  gate: 'Gate',
 }
 
-function FindingsList({ findings }: { findings: AuditFinding[] }) {
+function FindingsList({ findings, incomplete }: { findings: AuditFinding[]; incomplete: boolean }) {
   if (findings.length === 0) {
     return (
       <div className="rounded-md border border-edge-subtle px-4 py-3 text-sm text-fg-secondary">
-        No findings. Your project looks healthy.
+        {incomplete
+          ? 'No findings in what could be read. Some checks could not be read, so this is not a pass.'
+          : 'No findings. Your project looks healthy.'}
       </div>
     )
   }
@@ -174,18 +200,14 @@ function FindingsList({ findings }: { findings: AuditFinding[] }) {
 
 // ─── Gate run summary table ───────────────────────────────────────────────────
 
-const GATE_LABELS: Record<string, string> = {
-  api_contract: 'API Contract (G3)',
-  spec_drift: 'Spec Drift (G6)',
-  orphan_endpoint: 'Orphan Endpoints (G7)',
-  unknown_call: 'Unknown Calls (G8)',
-  schema_drift: 'Schema Drift',
-  dead_handler: 'Dead Handler (G1)',
-  mock_leak: 'Mock Leak (G2)',
-  status_claim: 'Status Claim (G5)',
-}
-
-function GateRunsTable({ runs }: { runs: AuditGateRun[] }) {
+function GateRunsTable({ runs, read }: { runs: AuditGateRun[]; read: boolean }) {
+  if (!read) {
+    return (
+      <p className="text-xs text-danger" role="status">
+        The gate runs of the last 7 days could not be read, so their results are unknown.
+      </p>
+    )
+  }
   if (runs.length === 0) {
     return (
       <p className="text-xs text-fg-faint">
@@ -207,7 +229,7 @@ function GateRunsTable({ runs }: { runs: AuditGateRun[] }) {
           {runs.map((run) => (
             <tr key={run.run_id ?? run.gate} className="border-b border-edge-subtle/30 last:border-0">
               <td className="px-3 py-2 font-medium text-fg">
-                {GATE_LABELS[run.gate] ?? run.gate}
+                {gateLabel(run.gate)}
               </td>
               <td className="px-3 py-2">
                 <GateStatusBadge status={run.status} />
@@ -314,6 +336,18 @@ export function FullStackAuditPage() {
 
       {error && <ErrorAlert message={error} />}
 
+      {projectId && (
+        <Section title="Open findings by check">
+          <p className="mb-2 text-xs text-fg-muted">
+            The newest run of every check, with the file, line and rule behind each count.
+          </p>
+          <GateFindingsSection
+            projectId={projectId}
+            neverRunText="No check has run for this project yet."
+          />
+        </Section>
+      )}
+
       {!result && !loading && !error && projectId && (
         <Card>
           <div className="flex flex-col items-center gap-3 py-8 text-center">
@@ -331,6 +365,16 @@ export function FullStackAuditPage() {
         <div className="space-y-4">
           <OverallScorecard result={result} />
 
+          {result.read_errors.length > 0 && (
+            <Callout tone="warn" label="Some checks could not be read">
+              <ul className="flex list-disc flex-col gap-0.5 pl-4 text-xs text-fg-secondary" role="status">
+                {result.read_errors.map((e) => (
+                  <li key={e}>{e}</li>
+                ))}
+              </ul>
+            </Callout>
+          )}
+
           <Card className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
             <p className="text-xs text-fg-secondary">
               Bundle sizes and god-file LOC budgets are tracked on{' '}
@@ -342,11 +386,11 @@ export function FullStackAuditPage() {
           </Card>
 
           <Section title="Findings">
-            <FindingsList findings={result.findings} />
+            <FindingsList findings={result.findings} incomplete={result.read_errors.length > 0} />
           </Section>
 
           <Section title="Gate Results (last 7 days)">
-            <GateRunsTable runs={result.gate_runs} />
+            <GateRunsTable runs={result.gate_runs} read={result.gate_runs_read} />
           </Section>
 
           {result.backend_linked && (

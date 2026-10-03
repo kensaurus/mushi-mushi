@@ -25,6 +25,27 @@
 import type { getServiceClient } from './db.ts'
 
 /**
+ * `strict`: a failed read throws `ProjectAccessReadError` instead of counting
+ * as "no access". The default stays fail-closed-and-quiet (an empty list) for
+ * the routes that already rely on it; a page that would render an empty list
+ * as a fact ("no apps yet") passes `strict: true` (Plan 020 P-1).
+ */
+export interface AccessReadOptions {
+  strict?: boolean
+}
+
+export class ProjectAccessReadError extends Error {
+  constructor(what: string, detail: string) {
+    super(`project access read failed (${what}): ${detail}`)
+    this.name = 'ProjectAccessReadError'
+  }
+}
+
+function failOnReadError(res: { error: { message: string } | null }, what: string): void {
+  if (res.error) throw new ProjectAccessReadError(what, res.error.message)
+}
+
+/**
  * Resolve the set of project ids visible to the authenticated user.
  *
  * Three concurrent sources of "I can see this project" the api has to
@@ -45,16 +66,21 @@ import type { getServiceClient } from './db.ts'
 export async function accessibleProjectIds(
   db: ReturnType<typeof getServiceClient>,
   userId: string,
+  opts: AccessReadOptions = {},
 ): Promise<string[]> {
-  const [
-    { data: orgMemberships },
-    { data: projectMemberships },
-    { data: owned },
-  ] = await Promise.all([
+  const [orgRes, memberRes, ownedRes] = await Promise.all([
     db.from('organization_members').select('organization_id').eq('user_id', userId),
     db.from('project_members').select('project_id').eq('user_id', userId),
     db.from('projects').select('id').eq('owner_id', userId),
   ])
+  if (opts.strict) {
+    failOnReadError(orgRes, 'organization_members')
+    failOnReadError(memberRes, 'project_members')
+    failOnReadError(ownedRes, 'projects')
+  }
+  const orgMemberships = orgRes.data
+  const projectMemberships = memberRes.data
+  const owned = ownedRes.data
 
   const ids = new Set<string>()
   for (const p of owned ?? []) ids.add(p.id)
@@ -62,8 +88,9 @@ export async function accessibleProjectIds(
 
   const orgIds = (orgMemberships ?? []).map((m) => m.organization_id).filter(Boolean)
   if (orgIds.length > 0) {
-    const { data: projects } = await db.from('projects').select('id').in('organization_id', orgIds)
-    for (const p of projects ?? []) ids.add(p.id)
+    const orgProjectsRes = await db.from('projects').select('id').in('organization_id', orgIds)
+    if (opts.strict) failOnReadError(orgProjectsRes, 'projects')
+    for (const p of orgProjectsRes.data ?? []) ids.add(p.id)
   }
 
   return Array.from(ids)
@@ -78,24 +105,28 @@ export async function accessibleProjectIdsInOrganization(
   db: ReturnType<typeof getServiceClient>,
   userId: string,
   organizationId: string,
+  opts: AccessReadOptions = {},
 ): Promise<string[]> {
-  const { data: membership } = await db
+  const membershipRes = await db
     .from('organization_members')
     .select('organization_id')
     .eq('organization_id', organizationId)
     .eq('user_id', userId)
     .maybeSingle()
+  if (opts.strict) failOnReadError(membershipRes, 'organization_members')
+  const membership = membershipRes.data
   if (!membership) return []
 
-  const all = await accessibleProjectIds(db, userId)
+  const all = await accessibleProjectIds(db, userId, opts)
   if (all.length === 0) return []
 
-  const { data: orgProjects } = await db
+  const orgProjectsRes = await db
     .from('projects')
     .select('id')
     .eq('organization_id', organizationId)
     .in('id', all)
-  return (orgProjects ?? []).map((p) => p.id)
+  if (opts.strict) failOnReadError(orgProjectsRes, 'projects')
+  return (orgProjectsRes.data ?? []).map((p) => p.id)
 }
 
 /**

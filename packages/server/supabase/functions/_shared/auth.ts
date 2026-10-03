@@ -422,8 +422,18 @@ async function lookupActiveApiKey(apiKey: string): Promise<ApiKeyRow | null> {
 const isAgentScope = (scope: McpScope): boolean => scope === 'mcp:read' || scope === 'mcp:write'
 
 /** True iff the key's scopes satisfy ANY of the accepted scopes (mcp:write implies mcp:read). */
-function keyGrantsAnyScope(scopes: string[], accepted: readonly McpScope[]): boolean {
+export function keyGrantsAnyScope(scopes: string[], accepted: readonly McpScope[]): boolean {
   return accepted.some((s) => scopes.includes(s) || (s === 'mcp:read' && scopes.includes('mcp:write')))
+}
+
+/**
+ * True iff the key was minted for an agent (the CLI or MCP: mcp:read or
+ * mcp:write). The SDK key carries report:write only because it ships inside
+ * the host app (web bundle, APK, IPA), so it is public even when no browser
+ * has ever sent it — a native app sends no Origin.
+ */
+export function keyHasAgentScope(scopes: readonly string[]): boolean {
+  return keyGrantsAnyScope([...scopes], ['mcp:read'])
 }
 
 async function authenticateApiKey(

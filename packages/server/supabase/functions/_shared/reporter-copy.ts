@@ -139,6 +139,10 @@ export function reporterSafePayload(row: ReporterNotificationRow): Record<string
   const kind = timelineKindForNotification(row.notification_type)
   let message: string
   if (row.body_override) message = row.body_override
+  // The project's own wording (reporter_templates), resolved when the row was
+  // written. Only rows the server flagged pass through; legacy payloads still
+  // re-render from the fixed template.
+  else if (p.templated === true && verbatim) message = verbatim
   else if (row.notification_type === 'comment_reply' || row.notification_type === 'info_requested') message = verbatim
   else if (row.notification_type === 'points_awarded') message = verbatim
   else if (kind) message = renderReporterEventText(kind, { version, closedReason })
@@ -149,6 +153,7 @@ export function reporterSafePayload(row: ReporterNotificationRow): Record<string
   if (typeof p.points === 'number') safe.points = p.points
   if (typeof p.commentId === 'number' || typeof p.commentId === 'string') safe.commentId = p.commentId
   if (typeof p.canonicalReportId === 'string') safe.canonicalReportId = p.canonicalReportId
+  if (row.body_override || (p.templated === true && verbatim)) safe.custom = true
   return safe
 }
 
@@ -205,6 +210,8 @@ export interface ReporterTimelineItem {
   version?: string
   closed_reason?: string
   comment_id?: number | string
+  /** `text` was written by the developer (Outbox edit) or the project (template): show it as is. */
+  custom?: boolean
 }
 
 /**
@@ -238,7 +245,10 @@ export function buildReporterTimeline(input: {
     items.push({
       kind,
       at: n.created_at,
-      text: n.body_override ?? renderReporterEventText(kind, { version, closedReason: closed }),
+      text: safe.custom ? (safe.message as string) : renderReporterEventText(kind, { version, closedReason: closed }),
+      // Developer- or project-written text: SDKs show `text` as is instead of
+      // re-rendering the kind in the reporter's locale.
+      ...(safe.custom ? { custom: true } : {}),
       ...(version ? { version } : {}),
       ...(closed ? { closed_reason: closed } : {}),
     })

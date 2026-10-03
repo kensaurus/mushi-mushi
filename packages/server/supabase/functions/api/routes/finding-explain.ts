@@ -1,0 +1,187 @@
+/**
+ * finding-explain.ts — one gate finding, explained (MCP explain_finding).
+ *
+ *   GET /v1/admin/findings/:findingId   adminOrApiKey(mcp:read)
+ *
+ * Looks a gate_findings row up by id (from list_gate_findings, get_radar,
+ * get_recipe_drift, get_code_health, get_store_status or the console) and
+ * returns what the check is, why it fired, the file and line, the fix in one
+ * sentence (plus the stored fix object), and whether the latest run of the
+ * same check still reports it. A finding in a project the caller cannot
+ * reach is a 404, the same as one that does not exist.
+ */
+
+import type { Hono, MiddlewareHandler } from 'npm:hono@4'
+import { adminOrApiKey } from '../../_shared/auth.ts'
+import { getServiceClient } from '../../_shared/db.ts'
+import { DESIGN_GATE } from '../../_shared/design-plane.ts'
+import {
+  absenceUnproven,
+  comparesByWriter,
+  designRunPhase,
+  explainFinding,
+  findingTargetKey,
+  reportsChangesOnly,
+  runCoversScope,
+  runStoryScope,
+  sourcesNotReached,
+  type ExplainFindingRow,
+  type FindingMatchKey,
+  type ExplainLatestRun,
+  type ExplainRunRow,
+} from '../../_shared/finding-explain.ts'
+import { callerCanAccessProject, jsonError } from '../shared.ts'
+import type { Variables } from '../types.ts'
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const FINDING_COLUMNS =
+  'id, gate_run_id, project_id, severity, rule_id, message, file_path, line, col, node_id, suggested_fix, allowlisted, allowlist_reason, created_at'
+
+type Db = ReturnType<typeof getServiceClient>
+
+export interface FindingExplainDeps {
+  getServiceClient: () => Db
+  adminOrApiKeyRead: MiddlewareHandler
+}
+
+export const defaultFindingExplainDeps: FindingExplainDeps = {
+  getServiceClient,
+  adminOrApiKeyRead: adminOrApiKey({ scope: 'mcp:read' }) as MiddlewareHandler,
+}
+
+interface LatestRunRow {
+  id: string
+  status: string
+  completed_at: string | null
+  summary: Record<string, unknown> | null
+  findings_count: number | null
+  triggered_by: string | null
+}
+
+/**
+ * The newest finished run of the finding's gate that looked at the same thing
+ * the finding's own run did, the same rule at the same place in it, and —
+ * when it is not there — whether that absence proves anything
+ * (absenceUnproven).
+ *
+ * Only runs started at or after the finding's own run count: a finding's rows
+ * are written while its run is still `running`, so an older finished run
+ * cannot have it and must never stand in as "the latest". Among those, the
+ * newest is taken whatever its status (a radar run with one errored connector
+ * is `error` yet holds real findings; absenceUnproven reads its per-rule
+ * record). design_drift compares a server scan only with server scans and a
+ * CI push only with CI pushes; code_health and schema_drift compare a run only
+ * with runs of the same writer (comparesByWriter); an inventory-gates run
+ * scoped to another story subtree is skipped. None of those examined this
+ * finding's place.
+ */
+async function latestRunFor(db: Db, finding: ExplainFindingRow, run: ExplainRunRow): Promise<ExplainLatestRun | null | 'error'> {
+  let query = db
+    .from('gate_runs')
+    .select('id, status, completed_at, summary, findings_count, triggered_by')
+    .eq('project_id', finding.project_id)
+    .eq('gate', run.gate)
+    .gte('started_at', run.started_at)
+  // design_drift also writes token-refresh rows (phase refresh); they never match.
+  if (run.gate === DESIGN_GATE) query = query.eq('summary->>phase', designRunPhase(run.summary))
+  // CI ingest vs recipe budgets, recipe connectors vs the schema scanner.
+  else if (comparesByWriter(run.gate)) {
+    const writer = run.triggered_by ?? null
+    query = writer === null ? query.is('triggered_by', null) : query.eq('triggered_by', writer)
+  }
+  const { data: runs, error } = await query
+    .not('status', 'in', '(running,queued)')
+    .order('started_at', { ascending: false })
+    .limit(10)
+  if (error) return 'error'
+  const ownStory = runStoryScope(run.summary)
+  const latest = ((runs ?? []) as LatestRunRow[]).find((r) => runCoversScope(ownStory, runStoryScope(r.summary)))
+  if (!latest) return null
+  if (latest.id === finding.gate_run_id) {
+    return { id: latest.id, completed_at: latest.completed_at, matchingFindingId: finding.id, uncheckedReason: null }
+  }
+
+  // Same file when there is one; otherwise the stored target (a domain, host,
+  // URL or route), whose message changes run to run ("expires in 12 days");
+  // the message only as a last resort.
+  const target = findingTargetKey(finding.suggested_fix)
+  const matchedBy: FindingMatchKey = finding.file_path !== null ? 'file' : target ? 'target' : 'message'
+  let match = db
+    .from('gate_findings')
+    .select('id, allowlisted, allowlist_reason')
+    .eq('gate_run_id', latest.id)
+  match = finding.rule_id === null ? match.is('rule_id', null) : match.eq('rule_id', finding.rule_id)
+  if (matchedBy === 'file') match = match.eq('file_path', finding.file_path)
+  else if (target) match = match.eq(`suggested_fix->>${target.key}`, target.value)
+  else match = match.eq('message', finding.message)
+  // A non-allowlisted copy wins over an allowlisted one.
+  const { data: sameRows, error: sameErr } = await match.order('allowlisted', { ascending: true }).limit(1)
+  if (sameErr) return 'error'
+  const same = ((sameRows ?? []) as Array<{ id: string; allowlisted: boolean; allowlist_reason: string | null }>)[0]
+  if (same) {
+    return {
+      id: latest.id,
+      completed_at: latest.completed_at,
+      matchingFindingId: same.id,
+      matchingAllowlisted: same.allowlisted,
+      matchingAllowlistReason: same.allowlist_reason,
+      uncheckedReason: null,
+    }
+  }
+
+  // Not there. Count what the run stored, to tell "fixed" from "not stored".
+  let storedCount: number | null = null
+  if ((latest.findings_count ?? 0) > 0) {
+    const { count, error: countErr } = await db
+      .from('gate_findings')
+      .select('id', { count: 'exact', head: true })
+      .eq('gate_run_id', latest.id)
+    if (countErr) return 'error'
+    storedCount = count ?? null
+  }
+  const uncheckedReason = absenceUnproven({
+    status: latest.status,
+    findingsCount: latest.findings_count,
+    storedCount,
+    summary: latest.summary,
+    ruleId: finding.rule_id,
+    matchedBy,
+    sourcesNotReached: sourcesNotReached(run.summary, latest.summary),
+    reportsChangesOnly: reportsChangesOnly(run.gate, latest.triggered_by),
+  })
+  return { id: latest.id, completed_at: latest.completed_at, matchingFindingId: null, uncheckedReason }
+}
+
+export function registerFindingExplainRoutes(
+  app: Hono<{ Variables: Variables }>,
+  deps: FindingExplainDeps = defaultFindingExplainDeps,
+): void {
+  app.get('/v1/admin/findings/:findingId', deps.adminOrApiKeyRead, async (c) => {
+    const findingId = c.req.param('findingId') ?? ''
+    if (!UUID_RE.test(findingId)) return jsonError(c, 'NOT_FOUND', 'Finding not found', 404)
+    const db = deps.getServiceClient()
+
+    const { data: row, error } = await db.from('gate_findings').select(FINDING_COLUMNS).eq('id', findingId).maybeSingle()
+    if (error) return jsonError(c, 'DB_ERROR', 'The finding could not be read. Try again in a minute.', 500)
+    const finding = row as ExplainFindingRow | null
+    if (!finding) return jsonError(c, 'NOT_FOUND', 'Finding not found', 404)
+
+    const access = await callerCanAccessProject(c, db, c.get('userId') as string, finding.project_id)
+    if (!access.allowed) return jsonError(c, 'NOT_FOUND', 'Finding not found', 404)
+
+    const { data: runRow, error: runErr } = await db
+      .from('gate_runs')
+      .select('id, gate, status, started_at, completed_at, commit_sha, summary, triggered_by')
+      .eq('id', finding.gate_run_id)
+      .maybeSingle()
+    if (runErr) return jsonError(c, 'DB_ERROR', 'The finding could not be read. Try again in a minute.', 500)
+    const run = runRow as ExplainRunRow | null
+    if (!run) return jsonError(c, 'NOT_FOUND', 'Finding not found', 404)
+
+    // A failed read must not turn into "fixed in the latest run".
+    const latest = await latestRunFor(db, finding, run)
+    if (latest === 'error') return jsonError(c, 'DB_ERROR', 'Could not check the latest run of this check. Try again in a minute.', 500)
+
+    return c.json({ ok: true, data: explainFinding(finding, run, latest) })
+  })
+}

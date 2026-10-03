@@ -23,6 +23,7 @@ import {
   resolveOwnedProject,
 } from '../shared.ts'
 import type { Variables } from '../types.ts'
+import { PDCA_DEFAULT_MODEL, pdcaModelError } from '../../_shared/pdca-models.ts'
 
 const app = new Hono<{ Variables: Variables }>()
 
@@ -284,6 +285,12 @@ function pdcaRoutes() {
       )
     }
 
+    const modelError =
+      pdcaModelError('primary_model', primary_model) ?? pdcaModelError('judge_model', judge_model)
+    if (modelError) {
+      return c.json({ ok: false, error: { code: 'BAD_REQUEST', message: modelError } }, 400)
+    }
+
     const access = await assertTargetProjectAccess(c, db(), userId, projectId)
     if (!access.ok) return access.response
 
@@ -294,8 +301,8 @@ function pdcaRoutes() {
         target_url,
         goal,
         iterations_target: iterations_target ?? 5,
-        primary_model: primary_model ?? 'claude-sonnet-4-6',
-        judge_model: judge_model ?? 'claude-sonnet-4-6',
+        primary_model: typeof primary_model === 'string' && primary_model.trim() ? primary_model.trim() : PDCA_DEFAULT_MODEL,
+        judge_model: typeof judge_model === 'string' && judge_model.trim() ? judge_model.trim() : PDCA_DEFAULT_MODEL,
         persona: persona ?? 'nng-heuristic',
         target_score: target_score ?? 0.7,
       })

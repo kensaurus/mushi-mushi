@@ -1,6 +1,6 @@
 /**
  * Grouped navigation for /explore — reduces 8 flat tabs to 5 primary groups
- * with optional secondary segments (Understand: Ask/Tour/Domains, Map: Graph/Layers).
+ * with optional secondary segments (Understand: Ask/Tour/Domains, Map: Graph/Layers/Diagram).
  * URL params stay backward-compatible (`?tab=ask` still works).
  */
 
@@ -9,15 +9,16 @@ import type { ExploreTabId } from '../components/explore/ExploreStatsTypes'
 export type ExplorePrimaryTabId = 'overview' | 'understand' | 'map' | 'search' | 'index'
 
 export type ExploreUnderstandView = 'ask' | 'tour' | 'domains' | 'knowledge'
-export type ExploreMapView = 'graph' | 'layers'
+export type ExploreMapView = 'graph' | 'layers' | 'diagram'
 
 const UNDERSTAND_VIEWS: ExploreUnderstandView[] = ['ask', 'tour', 'domains', 'knowledge']
-const MAP_VIEWS: ExploreMapView[] = ['graph', 'layers']
+const MAP_VIEWS: ExploreMapView[] = ['graph', 'layers', 'diagram']
 
 export function resolveExploreTab(value: string | null): ExploreTabId {
   if (
     value === 'overview' ||
     value === 'layers' ||
+    value === 'diagram' ||
     value === 'search' ||
     value === 'index' ||
     value === 'ask' ||
@@ -79,7 +80,7 @@ export const EXPLORE_PRIMARY_TABS: Array<{
   {
     id: 'map',
     label: 'Map',
-    description: 'Interactive graph or layer lane — click nodes for plain-English summaries.',
+    description: 'Interactive graph, layer lane, or an AI architecture diagram — click nodes for plain-English summaries.',
   },
   {
     id: 'search',
@@ -103,4 +104,5 @@ export const EXPLORE_UNDERSTAND_VIEWS: Array<{ id: ExploreUnderstandView; label:
 export const EXPLORE_MAP_VIEWS: Array<{ id: ExploreMapView; label: string }> = [
   { id: 'graph', label: 'Graph' },
   { id: 'layers', label: 'Layers' },
+  { id: 'diagram', label: 'Diagram' },
 ]

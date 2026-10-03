@@ -104,6 +104,20 @@ Deno.test('Sonnet 5.5 request: structured output, effort, fallback; no sampling,
   }
 })
 
+Deno.test('an aborted caller deadline stops the request before it is sent', async () => {
+  const stub = stubFetch(() => message({}))
+  try {
+    const controller = new AbortController()
+    controller.abort()
+    await assertRejects(() =>
+      claudeGenerateObject({ apiKey: 'test-key', model: 'claude-sonnet-5-5', schema, prompt: 'x', abortSignal: controller.signal }),
+    )
+    assertEquals(stub.calls.length, 0)
+  } finally {
+    stub.restore()
+  }
+})
+
 Deno.test('refusal surfaces as ClaudeRefusalError with its category', async () => {
   const stub = stubFetch(() => message({ content: [], stop_reason: 'refusal', stop_details: { type: 'refusal', category: 'cyber' } }))
   try {

@@ -1,0 +1,254 @@
+{
+  "version": 1,
+  "app": {
+    "name": "glot.it",
+    "kind": "app",
+    "platforms": [
+      "web",
+      "android",
+      "ios"
+    ],
+    "ids": {
+      "bundleId": "com.glotit.app",
+      "androidPackage": "com.glotit.app"
+    }
+  },
+  "links": {
+    "domains": [
+      "kensaur.us"
+    ],
+    "deepLinks": {
+      "schemes": [
+        "com.glotit.app"
+      ],
+      "universalLinkDomains": [
+        "kensaur.us"
+      ],
+      "appLinks": []
+    },
+    "auth": {
+      "provider": "supabase",
+      "ref": "ixrdttionueowivjdlyb"
+    }
+  },
+  "design": {
+    "tokens": [
+      {
+        "path": "packages/design-tokens/tokens/directions/soi-signpaint/primitive.tokens.json",
+        "role": "source",
+        "format": "dtcg-2025.10"
+      },
+      {
+        "path": "packages/design-tokens/tokens/directions/soi-signpaint/semantic.tokens.json",
+        "role": "source",
+        "format": "dtcg-2025.10"
+      },
+      {
+        "path": "packages/design-tokens/tokens/directions/soi-signpaint/component.tokens.json",
+        "role": "source",
+        "format": "dtcg-2025.10"
+      },
+      {
+        "path": "packages/design-tokens/dtcg/tokens.json",
+        "role": "export",
+        "format": "dtcg-2025.10",
+        "generator": "npm run tokens:dtcg"
+      }
+    ],
+    "css": [
+      {
+        "path": "app/styles/globals/theme-soi-signpaint.css",
+        "role": "export",
+        "scopes": [
+          "html:root[data-direction=\"soi-signpaint\"]",
+          "html.dark:root[data-direction=\"soi-signpaint\"]"
+        ]
+      },
+      {
+        "path": "packages/design-tokens/src/cross-platform-tokens.css",
+        "role": "export"
+      }
+    ],
+    "components": {
+      "globs": [
+        "design-system/primitives/**/*.tsx"
+      ]
+    },
+    "assets": [
+      {
+        "path": "assets/icon-only.png",
+        "kind": "icon"
+      },
+      {
+        "path": "assets/icon-foreground.png",
+        "kind": "icon"
+      },
+      {
+        "path": "assets/icon-background.png",
+        "kind": "icon"
+      },
+      {
+        "path": "app/icon.svg",
+        "kind": "icon"
+      },
+      {
+        "path": "public/images/soi/signs",
+        "kind": "illustration"
+      },
+      {
+        "path": "public/images/soi/mae-muang",
+        "kind": "illustration"
+      },
+      {
+        "path": "store-assets/soi-signpaint",
+        "kind": "image"
+      }
+    ],
+    "literalScan": {
+      "globs": [
+        "app/**/*.{ts,tsx,css}",
+        "components/**/*.tsx",
+        "features/**/*.tsx",
+        "design-system/primitives/street/**/*.tsx"
+      ],
+      "ignore": [
+        "**/*.test.*",
+        "app/styles/globals/theme-*.css",
+        "design-system/directions/**"
+      ]
+    },
+    "directions": [
+      {
+        "name": "soi-signpaint",
+        "status": "active",
+        "tokens": [
+          "packages/design-tokens/tokens/directions/soi-signpaint/primitive.tokens.json",
+          "packages/design-tokens/tokens/directions/soi-signpaint/semantic.tokens.json",
+          "packages/design-tokens/tokens/directions/soi-signpaint/component.tokens.json"
+        ],
+        "note": "Soi Signpaint look with the Pha Khram earned-progress mechanic (ADR 0010, owner 2026-10-02)"
+      },
+      {
+        "name": "pha-khram",
+        "status": "inactive",
+        "tokens": [
+          "packages/design-tokens/tokens/directions/pha-khram/primitive.tokens.json",
+          "packages/design-tokens/tokens/directions/pha-khram/semantic.tokens.json",
+          "packages/design-tokens/tokens/directions/pha-khram/component.tokens.json"
+        ]
+      },
+      {
+        "name": "nang-lamp",
+        "status": "inactive",
+        "tokens": [
+          "packages/design-tokens/tokens/directions/nang-lamp/primitive.tokens.json",
+          "packages/design-tokens/tokens/directions/nang-lamp/semantic.tokens.json",
+          "packages/design-tokens/tokens/directions/nang-lamp/component.tokens.json"
+        ]
+      }
+    ]
+  },
+  "data": {
+    "provider": "supabase",
+    "projectRef": "ixrdttionueowivjdlyb",
+    "migrationsDir": "supabase/migrations"
+  },
+  "routes": {
+    "inventory": "inventory.yaml"
+  },
+  "ci": {
+    "provider": "github-actions",
+    "defaultBranch": "main",
+    "workflows": {
+      "ci.yml": {
+        "role": "pr-gate"
+      },
+      "deploy.yml": {
+        "role": "deploy-web"
+      },
+      "build-mobile-capacitor.yml": {
+        "role": "build-mobile"
+      }
+    }
+  },
+  "deploy": {
+    "targets": [
+      {
+        "id": "web-prod",
+        "kind": "cloudfront-s3",
+        "environment": "production",
+        "url": "https://kensaur.us/glot-it",
+        "probe": {
+          "type": "version_json",
+          "url": "https://kensaur.us/glot-it/version.json"
+        },
+        "workflow": "deploy.yml",
+        "maxLagHours": 24
+      },
+      {
+        "id": "android-play",
+        "kind": "capacitor-android",
+        "environment": "production",
+        "probe": {
+          "type": "sdk_heartbeat"
+        },
+        "workflow": "build-mobile-capacitor.yml"
+      },
+      {
+        "id": "ios-app-store",
+        "kind": "capacitor-ios",
+        "environment": "production",
+        "probe": {
+          "type": "sdk_heartbeat"
+        },
+        "workflow": "build-mobile-capacitor.yml"
+      }
+    ]
+  },
+  "env": {
+    "environments": [
+      "production"
+    ],
+    "required": [
+      {
+        "name": "NEXT_PUBLIC_MUSHI_PROJECT_ID",
+        "in": [
+          "github-actions"
+        ],
+        "environments": [
+          "production"
+        ]
+      },
+      {
+        "name": "NEXT_PUBLIC_MUSHI_API_KEY",
+        "in": [
+          "github-actions"
+        ],
+        "environments": [
+          "production"
+        ]
+      },
+      {
+        "name": "NEXT_PUBLIC_SUPABASE_URL",
+        "in": [
+          "github-actions"
+        ],
+        "environments": [
+          "production"
+        ]
+      }
+    ]
+  },
+  "integrations": {
+    "sentry": {
+      "project": "glot-it"
+    }
+  },
+  "change": {
+    "allowPaths": [
+      "mushi.recipe.json",
+      "packages/design-tokens/tokens/**",
+      "inventory.yaml"
+    ]
+  }
+}

@@ -58,6 +58,9 @@ const SsoPage = lazy(() => import('./pages/SsoPage').then(m => ({ default: m.Sso
 const AuditPage = lazy(() => import('./pages/AuditPage').then(m => ({ default: m.AuditPage })))
 const FullStackAuditPage = lazy(() => import('./pages/FullStackAuditPage').then(m => ({ default: m.FullStackAuditPage })))
 const CodeHealthPage = lazy(() => import('./pages/CodeHealthPage').then(m => ({ default: m.CodeHealthPage })))
+const RecipePage = lazy(() => import('./pages/RecipePage').then(m => ({ default: m.RecipePage })))
+const DesignPage = lazy(() => import('./pages/DesignPage').then(m => ({ default: m.DesignPage })))
+const PortfolioPage = lazy(() => import('./pages/PortfolioPage').then(m => ({ default: m.PortfolioPage })))
 const PromptLabPage = lazy(() => import('./pages/PromptLabPage').then(m => ({ default: m.PromptLabPage })))
 const IntelligencePage = lazy(() => import('./pages/IntelligencePage').then(m => ({ default: m.IntelligencePage })))
 const CompliancePage = lazy(() => import('./pages/CompliancePage').then(m => ({ default: m.CompliancePage })))
@@ -90,6 +93,7 @@ const NotificationsPage = lazy(() => import('./pages/NotificationsPage').then(m 
 const BillingPage = lazy(() => import('./pages/BillingPage').then(m => ({ default: m.BillingPage })))
 const OrganizationSettingsPage = lazy(() => import('./pages/OrganizationSettingsPage').then(m => ({ default: m.OrganizationSettingsPage })))
 const AcceptInvitePage = lazy(() => import('./pages/AcceptInvitePage').then(m => ({ default: m.AcceptInvitePage })))
+const ReporterEmailLinkPage = lazy(() => import('./pages/ReporterEmailLinkPage').then(m => ({ default: m.ReporterEmailLinkPage })))
 const CliAuthPage = lazy(() => import('./pages/CliAuthPage').then(m => ({ default: m.CliAuthPage })))
 const McpAuthPage = lazy(() => import('./pages/McpAuthPage').then(m => ({ default: m.McpAuthPage })))
 // Wave T (2026-04-23) — new /inbox page, lazy-loaded like every other route so
@@ -313,6 +317,16 @@ export function App() {
             LoginPage's pathname-based initial mode). */}
         <Route path="/signup" element={<LoginPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
+        {/* Public: an app's end user confirms or stops report-update emails
+            (Plan 018). The token in the link is the credential. */}
+        <Route
+          path="/email/reporter"
+          element={
+            <Suspense fallback={<Loading text="Loading…" />}>
+              <ReporterEmailLinkPage />
+            </Suspense>
+          }
+        />
         <Route
           path="/invite/accept"
           element={
@@ -381,6 +395,9 @@ export function App() {
                   <Route path="/audit" element={<AuditPage />} />
                   <Route path="/fullstack-audit" element={<FullStackAuditPage />} />
                   <Route path="/code-health" element={<CodeHealthPage />} />
+                  <Route path="/recipe" element={<RecipePage />} />
+                  <Route path="/design" element={<DesignPage />} />
+                  <Route path="/portfolio" element={<PortfolioPage />} />
                   <Route path="/prompt-lab" element={<PromptLabPage />} />
                   <Route path="/fine-tuning" element={<Navigate to="/prompt-lab" replace />} />
                   <Route path="/intelligence" element={<IntelligencePage />} />

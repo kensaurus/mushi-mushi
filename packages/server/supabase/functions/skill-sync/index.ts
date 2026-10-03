@@ -29,6 +29,7 @@ import { log as rootLog } from '../_shared/logger.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { createEmbedding } from '../_shared/embeddings.ts'
+import { scanForSecrets } from '../_shared/secret-scan.ts'
 
 declare const Deno: {
   serve(handler: (req: Request) => Response | Promise<Response>): void
@@ -61,19 +62,6 @@ interface SkillSource {
   repo_slug: string
   ref: string
   enabled: boolean
-}
-
-// ── Secret-pattern guard (mirrors pdca-runner) ────────────────────────────────
-const SECRET_PATTERNS = [
-  /sk-[A-Za-z0-9]{20,}/,         // OpenAI / Anthropic keys
-  /(?:AKIA|ASIA)[A-Z0-9]{16}/,   // AWS access key IDs
-  /ghp_[A-Za-z0-9]{36}/,         // GitHub personal access tokens
-  /crsr_[A-Za-z0-9]{32,}/,       // Cursor API keys
-  /-----BEGIN (?:RSA |EC )?PRIVATE KEY-----/, // PEM private keys
-]
-
-function containsSecretPattern(text: string): boolean {
-  return SECRET_PATTERNS.some((re) => re.test(text))
 }
 
 // ── YAML frontmatter parser ───────────────────────────────────────────────────
@@ -242,9 +230,11 @@ async function parseSkillFile(
     return null
   }
 
-  // Security: skip files containing secret patterns
-  if (containsSecretPattern(rawContent)) {
-    log.warn('SKILL.md contains potential secret — skipping', { path })
+  // Security: skip files containing secret patterns. One shared scan
+  // (_shared/secret-scan.ts) for every text Mushi stores or feeds to an LLM.
+  const secretKind = scanForSecrets(rawContent)
+  if (secretKind) {
+    log.warn('SKILL.md contains potential secret — skipping', { path, kind: secretKind })
     return null
   }
 

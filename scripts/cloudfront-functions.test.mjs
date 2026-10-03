@@ -270,6 +270,31 @@ describe('cloudfront-mushi-spa-router', () => {
     assert.equal(out.uri, '/mushi-mushi/testers/apps/_shell/index.html');
   });
 
+  it('serves a public diagram page from its lowercase static file, dotted repo names included', () => {
+    const cases = {
+      '/mushi-mushi/r/kensaurus/mushi-mushi': '/mushi-mushi/r/kensaurus/mushi-mushi.html',
+      '/mushi-mushi/r/Vercel/Next.js': '/mushi-mushi/r/vercel/next.js.html',
+      '/mushi-mushi/r/acme/shop/': '/mushi-mushi/r/acme/shop.html',
+    };
+    for (const [uri, expected] of Object.entries(cases)) {
+      assert.equal(spa(req(uri)).uri, expected, uri);
+    }
+  });
+
+  it('serves the Markdown twin', () => {
+    assert.equal(spa(req('/mushi-mushi/r/Acme/Shop.md')).uri, '/mushi-mushi/r/acme/shop.md');
+    assert.equal(spa(req('/mushi-mushi/r/vercel/next.js.md')).uri, '/mushi-mushi/r/vercel/next.js.md');
+  });
+
+  it('serves the /r/ sitemap file as-is (not as a diagram page)', () => {
+    assert.equal(spa(req('/mushi-mushi/r/sitemap.xml')).uri, '/mushi-mushi/r/sitemap.xml');
+  });
+
+  it('does not treat deeper /r/ paths as a diagram', () => {
+    const out = spa(req('/mushi-mushi/r/acme/shop/extra'));
+    assert.ok(!/^\/mushi-mushi\/r\/acme\/shop/.test(out.uri ?? ''), out.uri);
+  });
+
   it('does not rewrite the /apps/ listing page itself to the shell', () => {
     const out = spa(req('/mushi-mushi/testers/apps/'));
     assert.equal(out.uri, '/mushi-mushi/testers/apps/index.html');

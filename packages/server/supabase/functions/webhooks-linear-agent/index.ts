@@ -262,6 +262,8 @@ export async function runLinearAgentDispatch(
     reportId,
     requestedBy: null,
     skipMembershipCheck: true,
+    // A person delegated the Linear issue to the Mushi agent.
+    trigger: 'manual',
     metadata: {
       source: 'linear',
       requestedBy: 'linear-agent',

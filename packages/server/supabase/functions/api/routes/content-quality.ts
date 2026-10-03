@@ -19,6 +19,7 @@ import { getServiceClient } from '../../_shared/db.ts';
 import { log } from '../../_shared/logger.ts';
 import { apiKeyAuth, jwtAuth, timingSafeEqual } from '../../_shared/auth.ts';
 import { checkIngestQuota } from '../../_shared/quota.ts';
+import { dereferenceMaybeVault } from '../../_shared/settings-secrets.ts';
 import { dbError, resolveOwnedProject, callerCanAccessProject } from '../shared.ts';
 
 const cqlog = log.child('content-quality');
@@ -125,8 +126,10 @@ async function dispatchRegenWebhook(
     .eq('project_id', projectId)
     .maybeSingle();
 
+  // regen_webhook_url is a plain endpoint URL (not a credential); the secret
+  // column holds a `vault://` ref.
   const webhookUrl = settings?.regen_webhook_url;
-  const webhookSecret = settings?.regen_webhook_secret;
+  const webhookSecret = await dereferenceMaybeVault(db, settings?.regen_webhook_secret ?? null);
 
   if (!webhookUrl || !webhookSecret) {
     return { ok: false, error: 'regen_webhook_url or regen_webhook_secret not configured for project' };
@@ -325,7 +328,7 @@ export function registerContentQualityRoutes(app: Hono<{ Variables: Variables }>
     // callback for it is necessarily forged. Reject rather than accepting an
     // unsigned status update that could mark issues resolved/failed and inject
     // arbitrary regen_result JSON.
-    const secret = settings?.regen_webhook_secret;
+    const secret = await dereferenceMaybeVault(db, settings?.regen_webhook_secret ?? null);
     if (!secret) {
       cqlog.warn('callback_no_secret', { issueId: issue_id });
       return c.json({ error: 'Webhook signing not configured for this project' }, 401);

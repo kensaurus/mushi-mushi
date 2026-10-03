@@ -126,6 +126,11 @@ auditConfig:
     # Remove when node-forge ships a fix, or when RN's optional expo peers
     # stop being auto-installed. Owner decision 2026-10-02.
     - 'GHSA-86w9-cpqp-85rv'
+    # braces <=3.0.3 (GHSA-vfj7-8cjw-p6xm, high): no fixed release exists.
+    # Reachability: only via @changesets/cli > @changesets/config > micromatch,
+    # a release-time dev tool that globs our own package names. Never in a
+    # published package or an edge function. Remove when braces ships a fix.
+    - 'GHSA-vfj7-8cjw-p6xm'
 
 # ---------------------------------------------------------------------------
 # Supply-chain hardening (pnpm)

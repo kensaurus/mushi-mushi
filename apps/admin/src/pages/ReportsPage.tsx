@@ -44,7 +44,7 @@ import {
 import { isReportsBannerVisible } from '../lib/reportsExplainer'
 import { shouldHideGuideWhenBannerActive, COMMON_HEALTHY_PRIORITIES } from '../lib/pagePostureHelpers'
 import { ReportsTable } from '../components/reports/ReportsTable'
-import { PAGE_SIZE, type ReportRow, type SortDir, type SortField } from '../components/reports/types'
+import { PAGE_SIZE, withLocallySeen, type ReportRow, type SortDir, type SortField } from '../components/reports/types'
 import { pluralize, pluralizeWithCount } from '../lib/format'
 import { DogfoodNarrativeBanner } from '../components/DogfoodNarrativeBanner'
 import { SdkConnectivityEmptyState } from '../components/SdkHealthSummary'
@@ -146,7 +146,13 @@ export function ReportsPage() {
     reloadReportsStats()
   }, [reload, reloadReportsStats])
 
-  const reports = data?.reports ?? []
+  // Reports opened in the preview drawer this session (the server stamped
+  // admin_seen_at on that read; the list was fetched before it).
+  const [seenLocally, setSeenLocally] = useState<ReadonlyMap<string, string>>(() => new Map())
+  const markSeenLocally = useCallback((reportId: string) => {
+    setSeenLocally((prev) => new Map(prev).set(reportId, new Date().toISOString()))
+  }, [])
+  const reports = useMemo(() => withLocallySeen(data?.reports ?? [], seenLocally), [data, seenLocally])
   const total = data?.total ?? 0
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
@@ -910,6 +916,7 @@ export function ReportsPage() {
 
       <ReportPreviewDrawer
         previewId={searchParams.get('preview')}
+        onSeen={markSeenLocally}
         onClose={() => {
           const next = new URLSearchParams(searchParams)
           next.delete('preview')

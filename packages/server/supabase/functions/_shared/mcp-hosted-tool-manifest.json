@@ -83,7 +83,14 @@
     "description": "Import existing Sentry issues into the report queue.",
     "method": "POST",
     "path": "/v1/admin/projects/{projectId}/sentry/import",
-    "body": { "issueIds": "{issueIds}", "query": "{query}", "limit": "{limit}" },
+    "body": {
+      "issueIds": "{issueIds}",
+      "query": "{query}",
+      "limit": "{limit}",
+      "sinceDays": "{sinceDays}",
+      "cursor": "{cursor}",
+      "sentryProject": "{sentryProject}"
+    },
     "hints": { "destructive": false, "idempotent": true }
   },
   "reopen_report": {
@@ -370,5 +377,65 @@
     "description": "Fetch wiki/knowledge graph for indexed docs sources.",
     "method": "GET",
     "path": "/v1/admin/projects/{projectId}/codebase/knowledge/graph"
+  },
+  "get_repo_digest": {
+    "scope": "mcp:read",
+    "description": "Paste-ready repo digest (tree + files) at a pinned commit, cut to a token budget.",
+    "method": "GET",
+    "path": "/v1/admin/projects/{projectId}/codebase/digest?budget={budgetTokens}&report_id={reportId}&path={path}&include={include}&exclude={exclude}&ref={ref}"
+  },
+  "get_repo_diagram": {
+    "scope": "mcp:read",
+    "description": "Latest architecture diagram of the connected repo and its public-page state; overlay=true adds open reports and findings per part.",
+    "method": "GET",
+    "path": "/v1/admin/projects/{projectId}/codebase/diagram",
+    "transform": "repo_diagram"
+  },
+  "run_radar": {
+    "scope": "mcp:write",
+    "description": "Start the hole checks for one project now (background; at most once per 10 minutes). Poll get_radar.",
+    "method": "POST",
+    "path": "/v1/admin/projects/{projectId}/radar/run",
+    "hints": { "destructive": false, "idempotent": false }
+  },
+  "refresh_recipe": {
+    "scope": "mcp:write",
+    "description": "Re-read mushi.recipe.json and the design tokens from the repo and store a new recipe snapshot (at most once per 5 minutes).",
+    "method": "POST",
+    "path": "/v1/admin/projects/{projectId}/recipe/refresh",
+    "hints": { "destructive": false, "idempotent": false }
+  },
+  "run_design_deviance": {
+    "scope": "mcp:write",
+    "description": "Refresh the tokens and start a design deviance scan (background; at most once per 5 minutes). Poll get_design_deviance.",
+    "method": "POST",
+    "path": "/v1/admin/projects/{projectId}/design/deviance/run",
+    "hints": { "destructive": false, "idempotent": false }
+  },
+  "run_store_review": {
+    "scope": "mcp:write",
+    "description": "Run the store review now: listing vs live stores, claims vs code, privacy labels, screenshots, checklist (at most once per 30 minutes).",
+    "method": "POST",
+    "path": "/v1/admin/projects/{projectId}/store/review",
+    "hints": { "destructive": false, "idempotent": false }
+  },
+  "get_release_calendar": {
+    "scope": "mcp:read",
+    "description": "Release calendar of one organization: what is live, merged fixes waiting to ship, and the batch to release now vs next. Account-level key.",
+    "method": "GET",
+    "path": "/v1/admin/orgs/{organizationId|current}/releases"
+  },
+  "get_code_health": {
+    "scope": "mcp:read",
+    "description": "Code health your CI pushed: god files with fixes, bundle and file-size trends, and a summary.",
+    "method": "GET",
+    "path": "/v1/admin/code-health?project_id={projectId}&days={days|30}"
+  },
+  "explain_finding": {
+    "scope": "mcp:read",
+    "description": "Explain one gate finding by id: the check, why it fired, file and line, the fix, and whether it is still open.",
+    "method": "GET",
+    "path": "/v1/admin/findings/{findingId}",
+    "required": ["findingId"]
   }
 }

@@ -11,7 +11,7 @@ description: Visual, searchable map of every indexed source file — explore arc
 
 The Explore page turns the raw indexed source files into a visual, navigable map of how your project is architecturally structured. It is the fastest way to answer "where does X live?", "what imports what?", and "which layer handles this concern?" — without opening your editor.
 
-  **Prerequisite:** The Explore page requires codebase indexing to be enabled. Run `mushi index` from your project directory, or enable **Settings → Codebase Indexing** in the admin console. Indexing typically completes in under a minute for codebases up to 10,000 files.
+  **Prerequisite:** Most of the Explore page requires codebase indexing to be enabled. **Copy digest** and **Map → Diagram** only need a connected GitHub repo. Run `mushi index` from your project directory, or enable **Settings → Codebase Indexing** in the admin console. Indexing typically completes in under a minute for codebases up to 10,000 files.
 
 ---
 
@@ -23,14 +23,37 @@ The page is organized into three rails (URL `?tab=`):
 |------|------|---------|
 | **Summary** | Summary | Index health, file counts, last index attempt / error |
 | **Understand** | Ask · Tour · Domains · Knowledge | Chat with citations, guided walkthrough, business domains, wiki/docs knowledge merged into Ask |
-| **Map** | Graph · Layers · Search | Visual architecture map and semantic search (detailed below) |
+| **Map** | Graph · Layers · Diagram · Search | Visual architecture map, an AI architecture diagram, and semantic search (detailed below) |
 | **Index** | Index | Indexer debug — repo, webhook, embedding coverage, last error |
 
-MCP equivalents: `ask_codebase`, `get_file_summary`, `get_codebase_tour`, `search_codebase`, `get_codebase_domains`, `analyze_codebase_impact`, `analyze_wiki_knowledge`.
+MCP equivalents: `ask_codebase`, `get_file_summary`, `get_codebase_tour`, `search_codebase`, `get_codebase_domains`, `analyze_codebase_impact`, `analyze_wiki_knowledge`, `get_repo_digest` (on the default feature set; needs no index).
+
+---
+
+## Copy digest
+
+**Copy digest** (top of the page) copies your repo as one paste for an AI chat or coding agent: the folder tree plus the most useful files, in this order — README, manifests (`package.json`, …), entry points, source, then tests. Pick a size first; the digest stops at that many tokens (an estimate: characters ÷ 4) and says what it left out.
+
+- It reads GitHub at one commit and names the commit, so the paste matches a real version of your code.
+- Real env files (`.env`, `.env.local`, `.env.production`), private keys and similar files are never included. Env templates such as `.env.example` are included, because they explain the setup. Any file that looks like it holds a secret, templates too, is replaced with a notice.
+- On a bug report, **Copy code for this bug** puts the bug's files first: files from its stack trace, files earlier fixes changed, related code from the index, then the files that import them.
+
+The same digest is the MCP tool `get_repo_digest`, on the default tool set.
 
 ---
 
 ## Map views
+
+### Diagram
+
+An AI drawing of the main parts of your app and how they connect. Mushi reads the repo on GitHub at the latest commit and asks the AI for the parts, their folders or files, and the links between them. Then Mushi checks every path against the real repo: a path that does not exist is removed and the part is marked, so a made-up file never becomes a link.
+
+- **Draw diagram** costs one AI call. Diagrams are stored per commit and never redrawn on their own, not even on a push: that would spend an AI call on commits that change nothing, and a public page must only show what you previewed. **Update to latest commit** draws only when there is a new commit; **Redraw** asks the AI again.
+- Click a part to read what it does and open its folder or file on GitHub at that commit.
+- Badges on each part count its open bug reports and its code findings from the last 30 days. Click the part to list them: reports open their detail page, findings open the file and line on GitHub. A report lands on a part through its stack trace or the files its fixes changed; reports and findings in files no part covers are counted under the diagram.
+- **Public page** (optional, owner or admin): share the diagram at `kensaur.us/mushi-mushi/r//`. The preview shows exactly what becomes public: part names, descriptions and paths, never file contents. A private repo needs you to tick a consent box first. The page shows the commit it was drawn from, keeps showing that drawing until you publish again, and **Unpublish** removes it. Visitors can report a wrong or unwanted diagram privately: the report goes to Mushi's own inbox, never to a public issue. Once live, the card gives you a README badge to copy and a Markdown copy of the page for AI agents. Search engines index the page.
+- **From your editor:** the MCP tool `get_repo_diagram` returns the latest diagram; pass `overlay: true` to also get the open reports and findings on each part. It reads the stored drawing and never draws a new one.
+- **With an API key:** the preview, publish and unpublish routes take a key with `mcp:read` (preview) or `mcp:write` (publish, unpublish) as well as the console session. A key can publish a public repo's diagram. A private repo's diagram can only be published from the console, because the consent box is a person reading the preview.
 
 ### Graph
 
@@ -158,6 +181,23 @@ The CLI reads your project's `MUSHI_PROJECT_ID` and `MUSHI_API_KEY` from environ
 ### Or enable auto-indexing
 
 In **Settings → Codebase Indexing**, toggle **Auto-index on push**. The Mushi GitHub App listens for `push` events and re-indexes changed files automatically.
+
+Connected with a Personal Access Token instead of the App? Add a repo webhook in GitHub (**Settings → Webhooks**). Point it at the URL the Codebase indexing card shows (your API endpoint plus `/v1/webhooks/github`). Use content type `application/json` and the webhook secret the card revealed, and tick **Pushes** and **Check runs**. Each push to the default branch then re-indexes the changed files.
+
+### How much of a large repo is indexed
+
+Your plan sets how many files the index may hold: 300 on the free plan, and more on paid plans. The hourly sweep fetches files in batches, starting with the files named in open error stack traces and your application source. It keeps going until the whole repo or the plan limit is covered.
+
+The Codebase indexing card shows coverage in files, for example `1,500 of 4,700 files`, in one of four states:
+
+- **all**: every indexable file is in the index.
+- **still filling**: later sweeps will add more files.
+- **plan limit**: the limit is reached. Diagnoses and fixes only see the indexed files. A path filter limits the sweep, and the count, to the directories that matter.
+- **stuck**: the last sweep could not add a file, for example because GitHub kept refusing a file or the embedding API kept rejecting it. The card shows the error. The sweep retries daily instead of hourly.
+
+The path filter is the repo's `path_globs`, the same globs the fix worker uses to pick its target files. They limit indexing too: a sweep indexes only matching files, and removes files a narrowed filter no longer matches from the index (unless the project indexes more than one repo, since they share one index). `**/` also matches the repo root, so `**/*.ts` includes `index.ts` and `src/**/*.ts` includes `src/a.ts`. If you set globs on a repo only to route fixes, check that they cover the code you want diagnoses to see.
+
+"Last sweep" counts partial sweeps too. A partial sweep is never shown as a complete index. Pushes count against the plan limit as well: a push re-indexes files already in the index, and adds new files only while the index is under the limit.
 
   Only files tracked by git are indexed. Add large generated directories (`dist/`, `.next/`, `node_modules/`) to `.mushiignore` to skip them.
 

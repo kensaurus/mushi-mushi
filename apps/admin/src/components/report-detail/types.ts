@@ -155,6 +155,22 @@ export interface ReportJudgeEval {
   created_at: string
 }
 
+/**
+ * A merged fix joined to the project's deploy truth: each deploy target's
+ * newest commit placed before or after the merge (deploy_drift run heads and
+ * earlier deploy_observations). `unknown` covers no check since the merge, a
+ * commit that cannot be placed, and a failed read.
+ */
+export interface ReportDeployLive {
+  state: 'live' | 'not_live' | 'unknown'
+  merged_at: string
+  /** The commit the deciding deploy target runs, when it reported one. */
+  prod_commit: string | null
+  target_id: string | null
+  checked_at: string | null
+  reason: string
+}
+
 export interface ReportDetail {
   id: string
   project_id: string
@@ -189,6 +205,10 @@ export interface ReportDetail {
   confidence: number | null
   status: string
   reporter_token_hash: string
+  /** Set when grouped under a canonical report; required to close as a duplicate. */
+  report_group_id?: string | null
+  /** Why a dismissed report was closed; the reporter sees matching copy (Plan 018 §2.1). */
+  closed_reason?: string | null
   /** Parent report when this row is a regression reopen. */
   parent_report_id?: string | null
   verified_at?: string | null
@@ -223,6 +243,9 @@ export interface ReportDetail {
   } | null
   /** Linked agentic fix attempts for this report. Most recent first. */
   fix_attempts?: ReportFixAttempt[]
+  /** Whether the merged fix runs in production; null when no fix merged.
+   *  Server: `_shared/report-deploy-live.ts`. */
+  deploy_live?: ReportDeployLive | null
   /** Latest classification judge evaluation, if the judge has run. */
   judge_eval?: ReportJudgeEval | null
   // 2026-05-07 SDK observability boost — these populate from the

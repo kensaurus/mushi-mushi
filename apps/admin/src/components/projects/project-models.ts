@@ -74,6 +74,12 @@ export interface ProjectRepoLite {
   last_index_attempt_at: string | null
   last_index_error: string | null
   github_app_connected: boolean
+  /** Last sweep, complete or partial (older servers omit it). */
+  index_swept_at?: string | null
+  /** complete | filling | capped | stalled */
+  index_coverage_state?: string | null
+  index_files_indexed?: number | null
+  index_files_eligible?: number | null
 }
 
 interface SeverityBreakdown {
@@ -160,22 +166,48 @@ export function shortRepoLabel(url: string | null | undefined): string | null {
   }
 }
 
-export type IndexHealth = 'ok' | 'stale' | 'failed' | 'off' | 'never'
+export type IndexHealth = 'ok' | 'partial' | 'stale' | 'failed' | 'off' | 'never'
+
+/**
+ * The last successful sweep: `last_indexed_at` moves only when the whole repo
+ * was covered, `index_swept_at` on every sweep, so take the later one.
+ */
+export function lastIndexSweepAt(repo: Pick<ProjectRepoLite, 'last_indexed_at' | 'index_swept_at'>): string | null {
+  const a = repo.last_indexed_at
+  const b = repo.index_swept_at ?? null
+  if (!a) return b
+  if (!b) return a
+  return new Date(b) > new Date(a) ? b : a
+}
 
 export function indexHealth(repo: ProjectRepoLite): IndexHealth {
   if (!repo.indexing_enabled) return 'off'
+  const swept = lastIndexSweepAt(repo)
   if (
     repo.last_index_error &&
-    (!repo.last_indexed_at ||
+    (!swept ||
       (repo.last_index_attempt_at &&
-        new Date(repo.last_index_attempt_at) > new Date(repo.last_indexed_at)))
+        new Date(repo.last_index_attempt_at) > new Date(swept)))
   ) {
     return 'failed'
   }
-  if (!repo.last_indexed_at) return 'never'
-  const ageMs = Date.now() - new Date(repo.last_indexed_at).getTime()
+  if (!swept) return 'never'
+  const ageMs = Date.now() - new Date(swept).getTime()
   if (ageMs > 7 * 86_400_000) return 'stale'
+  if (
+    repo.index_coverage_state === 'filling' ||
+    repo.index_coverage_state === 'capped' ||
+    repo.index_coverage_state === 'stalled'
+  ) {
+    return 'partial'
+  }
   return 'ok'
+}
+
+/** "1,500 of 4,700 files" when the last sweep measured coverage. */
+export function indexCoverageText(repo: Pick<ProjectRepoLite, 'index_files_indexed' | 'index_files_eligible'>): string | null {
+  if (repo.index_files_indexed == null || repo.index_files_eligible == null) return null
+  return `${repo.index_files_indexed.toLocaleString('en-US')} of ${repo.index_files_eligible.toLocaleString('en-US')} files`
 }
 
 export const INDEX_HEALTH_LABEL: Record<IndexHealth, string> = {
@@ -184,6 +216,7 @@ export const INDEX_HEALTH_LABEL: Record<IndexHealth, string> = {
   failed: 'Failed',
   off: 'Off',
   never: 'Pending',
+  partial: 'Partial',
 }
 
 export const INDEX_HEALTH_CHIP_TONE: Record<IndexHealth, 'ok' | 'warn' | 'danger' | 'neutral'> = {
@@ -192,4 +225,5 @@ export const INDEX_HEALTH_CHIP_TONE: Record<IndexHealth, 'ok' | 'warn' | 'danger
   failed: 'danger',
   off: 'neutral',
   never: 'neutral',
+  partial: 'warn',
 }

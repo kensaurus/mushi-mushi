@@ -61,6 +61,7 @@ export default [
             'PublicHomePage.tsx',
             'PublicIntegrationsPage.tsx',
             'ReportDetailPage.tsx',
+            'ReporterEmailLinkPage.tsx',
             'ResetPasswordPage.tsx',
             'SetupGatePage.tsx',
             'TesterSubmissionsReviewPage.tsx',

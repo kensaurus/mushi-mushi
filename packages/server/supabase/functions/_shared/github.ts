@@ -86,6 +86,14 @@ export async function resolveProjectGithubToken(
   db: ReturnType<typeof getServiceClient>,
   projectId: string,
   installationId: number | null = null,
+  opts: {
+    /**
+     * false = never fall back to the platform `GITHUB_TOKEN`. Routes that hand
+     * repo contents to the caller (digest, diagram) pass false: otherwise any
+     * project could point repo_url at a repo only the platform token can read.
+     */
+    allowEnvFallback?: boolean
+  } = {},
 ): Promise<string | null> {
   if (installationId && installationId > 0) {
     try {
@@ -137,6 +145,7 @@ export async function resolveProjectGithubToken(
   }
 
   // Step 3: env fallback.
+  if (opts.allowEnvFallback === false) return null
   return Deno.env.get('GITHUB_TOKEN') ?? null
 }
 
@@ -162,6 +171,8 @@ export interface PullRequestSnapshot {
   nodeId?: string | null
   /** ISO time GitHub closed (or merged) the PR; null while open. */
   closedAt?: string | null
+  /** ISO time GitHub merged the PR; null unless merged. */
+  mergedAt?: string | null
 }
 
 export interface PullRequestDetails extends PullRequestSnapshot {
@@ -200,6 +211,7 @@ export async function fetchPullRequest(
     merged?: boolean
     node_id?: string
     closed_at?: string | null
+    merged_at?: string | null
   }
   return {
     number: body.number ?? pullNumber,
@@ -208,6 +220,7 @@ export async function fetchPullRequest(
     merged: body.merged === true,
     nodeId: body.node_id ?? null,
     closedAt: body.closed_at ?? null,
+    mergedAt: body.merged_at ?? null,
   }
 }
 
@@ -247,6 +260,57 @@ export async function fetchPullRequestDetails(
     mergeable: body.mergeable ?? null,
     mergeableState: body.mergeable_state ?? null,
   }
+}
+
+export interface PullRequestFile {
+  filename: string
+  status: string
+  additions: number
+  deletions: number
+  patch: string | null
+}
+
+/**
+ * List a PR's changed files (`GET /pulls/:n/files`, 100 per page). Stops at
+ * `maxPages`; `complete` is false when GitHub had more, so a caller never
+ * mistakes a truncated list for the whole change. Null when the PR is gone.
+ */
+export async function fetchPullRequestFiles(
+  token: string,
+  ref: GithubRepoRef,
+  pullNumber: number,
+  opts: { maxPages?: number } = {},
+): Promise<{ files: PullRequestFile[]; complete: boolean } | null> {
+  const maxPages = opts.maxPages ?? 3
+  const files: PullRequestFile[] = []
+  for (let page = 1; page <= maxPages; page++) {
+    const res = await fetchWithTimeout(
+      `https://api.github.com/repos/${ref.owner}/${ref.repo}/pulls/${pullNumber}/files?per_page=100&page=${page}`,
+      { headers: githubAuthHeaders(token) },
+    )
+    if (res.status === 404) return null
+    if (!res.ok) throw new Error(`pull files fetch ${res.status}`)
+    const body = await res.json() as Array<{
+      filename?: string
+      status?: string
+      additions?: number
+      deletions?: number
+      patch?: string
+    }>
+    if (!Array.isArray(body)) throw new Error('pull files fetch returned a non-array body')
+    for (const f of body) {
+      if (typeof f.filename !== 'string') continue
+      files.push({
+        filename: f.filename,
+        status: f.status ?? 'modified',
+        additions: f.additions ?? 0,
+        deletions: f.deletions ?? 0,
+        patch: typeof f.patch === 'string' ? f.patch : null,
+      })
+    }
+    if (body.length < 100) return { files, complete: true }
+  }
+  return { files, complete: false }
 }
 
 /**

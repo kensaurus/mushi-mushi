@@ -15,10 +15,10 @@ const pkg = require('./package.json') as { version: string };
 export const stripShippedTemplateWhitespace: NonNullable<Options['esbuildPlugins']>[number] = {
   name: 'strip-shipped-template-whitespace',
   setup(build) {
-    // widget-render.ts: its HTML templates ship their indentation too. HTML
+    // widget-render.ts / widget-views.ts: their HTML templates ship their indentation too. HTML
     // collapses whitespace runs and none of these templates holds <pre> or
     // non-empty <textarea> text, so only the indentation is dropped there.
-    build.onLoad({ filter: /[\\/]src[\\/](styles|widget-render)\.ts$/ }, async (args) => {
+    build.onLoad({ filter: /[\\/]src[\\/](styles|widget-render|widget-views)\.ts$/ }, async (args) => {
       let src = await readFile(args.path, 'utf8');
       if (/styles\.ts$/.test(args.path)) {
         src = mapTemplateText(src.replace(/\/\*[\s\S]*?\*\//g, ''), minifyCssText);

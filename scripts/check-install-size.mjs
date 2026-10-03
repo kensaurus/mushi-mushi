@@ -30,9 +30,14 @@ import { packPackage, tarballFileSizes } from './lib/pack.mjs'
 
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..')
 
+// Raised 2026-10-03: the release added 24 MCP tools (117 in the catalog, which
+// ships its descriptions and schemas) and CLI commands for accounts, spend,
+// design, store reviews, recipe, radar, portfolio and releases, so every
+// console page has a terminal and editor path. Same file count; the growth is
+// that code, measured at mcp 223.3/877.7 kB and cli 176.5/680.4 kB packed/unpacked.
 export const BUDGETS = [
-  { name: '@mushi-mushi/mcp', dir: 'packages/mcp', packed: 220_000, unpacked: 825_000 },
-  { name: '@mushi-mushi/cli', dir: 'packages/cli', packed: 165_000, unpacked: 615_000 },
+  { name: '@mushi-mushi/mcp', dir: 'packages/mcp', packed: 235_000, unpacked: 920_000 },
+  { name: '@mushi-mushi/cli', dir: 'packages/cli', packed: 185_000, unpacked: 715_000 },
 ]
 
 const fmt = (n) => `${(n / 1000).toFixed(1)} kB`
