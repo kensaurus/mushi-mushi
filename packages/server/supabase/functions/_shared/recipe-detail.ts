@@ -130,7 +130,7 @@ export function ciView(rows: ReadonlyArray<Obj>): CiView {
 
 // ── deploy ───────────────────────────────────────────────────────────────────
 
-interface ObservationRow {
+export interface ObservationRow {
   target_id: string
   ok: boolean
   error: string | null
