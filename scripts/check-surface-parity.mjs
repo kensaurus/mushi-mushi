@@ -27,8 +27,13 @@
  * call to a function (or an IIFE) whose every return resolves, or a ternary
  * or `&&` whose branches do. A prop, a concatenation (`'/v1/x/' + id`) or a
  * `??`/`||` fallback fails unless "dynamicCalls" in the mapping gives a
- * reason for that file and argument text. An arrow or function parameter
- * shadows an outer path constant of the same name.
+ * reason for that file and argument text. A name resolves only when exactly
+ * one binding of it is in scope at the call: a `const` initializer, a
+ * `let`/`var` initializer the file never assigns to again, a `function`
+ * declaration or a relative import. A second binding in scope (an inner
+ * `const`, a parameter, a destructuring pattern, a `for … of` or `catch`
+ * binding) or any reassignment (`=`, `+=`, `??=`, `||=`, `++`) leaves it
+ * unresolved.
  *
  * A literal whose run-time `${…}` lands on a static server segment
  * (`/projects/${id}/${action}` against `/projects/:id/pause` and `/resume`)
@@ -447,50 +452,220 @@ function fileContexts(files) {
   return byFile
 }
 
+/** `name` as a RegExp source (`$` is legal in identifiers). */
+function reName(name) {
+  return name.replace(/\$/g, '\\$')
+}
+
+/** Words before `(` that open a condition or an operand, never a parameter list. */
+const NOT_PARAMETER_HEADS = new Set([
+  'if', 'for', 'while', 'switch', 'with', 'return', 'typeof', 'await', 'yield', 'new',
+  'in', 'of', 'void', 'delete', 'case', 'do', 'else', 'instanceof', 'throw', 'super', 'import',
+])
+
 /**
- * True when a parameter `name` declared between `from` and `to` is in scope
- * at `to`, so a use there means the parameter, not the `const` declared
- * before `from`. Covers function signatures and `= (…) =>` assignments
- * (typed or not, plain or destructured: `({ path })`), and arrow callbacks
- * passed as arguments (`.map((path) => …)`, `useCallback(async (path: string)
- * => …)`, `path => …`) whose body reaches `to`.
+ * The scope structure of a file, computed once: matching brackets (strings
+ * skipped), the parameter lists of every function form (with the range they
+ * are in scope for) and every `const`/`let`/`var` declarator. When the
+ * brackets do not pair up (a brace inside a regex literal or in JSX text
+ * after an apostrophe), every block is taken to be the whole file, so a
+ * name bound twice anywhere in it never resolves.
  */
-function shadowedByParameter(code, name, from, to) {
-  const slice = code.slice(from, to)
-  const sig = new RegExp(`(?:function\\s*\\w*\\s*(?:<[^>]*>)?\\s*\\(|=\\s*(?:async\\s*)?\\()[^)]*\\b${name}\\s*\\??\\s*[:,)=}]`)
-  if (sig.test(slice)) return true
-  const declares = new RegExp(`(?:^|[\\s,({])${name}\\s*\\??\\s*(?:[:,)=}]|$)`)
-  // `(params) =>` with one level of nested parens in the list, an optional
-  // return type, or a bare `name =>`.
-  const arrow = /\(((?:[^()]|\([^()]*\))*)\)\s*(?::[^=;{}]*?)?=>|(?<![\w$.])([A-Za-z_$][\w$]*)\s*=>/g
-  for (const m of slice.matchAll(arrow)) {
-    const params = m[1] !== undefined ? declares.test(m[1]) : m[2] === name
-    if (params && arrowBodyEnd(code, from + m.index + m[0].length) >= to) return true
+function fileScopes(ctx) {
+  if (ctx.scopes) return ctx.scopes
+  const code = ctx.code
+  const end = code.length + 1
+  const close = new Map()
+  const stack = []
+  let balanced = true
+  for (let i = 0; i < code.length; i++) {
+    const ch = code[i]
+    if (ch === "'" || ch === '"' || ch === '`') { i = skipString(code, i) - 1; continue }
+    if (ch === '(' || ch === '[' || ch === '{') stack.push(i)
+    else if (ch === ')' || ch === ']' || ch === '}') {
+      const open = stack.pop()
+      if (open === undefined || '([{'.indexOf(code[open]) !== ')]}'.indexOf(ch)) { balanced = false; break }
+      close.set(open, i + 1)
+    }
+  }
+  if (stack.length > 0) balanced = false
+  const blocks = balanced ? [...close].filter(([open]) => code[open] === '{') : []
+  /** The innermost block around `at`, or the whole file. */
+  const blockAt = (at) => {
+    let best = [0, end]
+    for (const [open, shut] of blocks) if (open < at && at < shut && open > best[0]) best = [open, shut]
+    return best
+  }
+  const bracketEnd = (open) => close.get(open) ?? closeBracket(code, open)
+
+  // Parameter lists: `(…) =>`, `function name(…) {`, a method `name(…) {`, `catch (…) {`.
+  const params = []
+  for (const [open, shut] of close) {
+    if (code[open] !== '(') continue
+    const after = code.slice(shut, shut + 300)
+    const arrow = /^\s*(?::[^;()?=]*?)?=>/.exec(after)
+    let scopeEnd = -1
+    if (arrow) {
+      scopeEnd = arrowBodyEnd(code, shut + arrow[0].length)
+    } else {
+      const head = /([A-Za-z_$][\w$]*)\s*(?:<[^<>()]*>)?\s*$/.exec(code.slice(Math.max(0, open - 120), open))
+      const body = /^\s*(?::[^;(){}=]*?)?\{/.exec(after)
+      if (head && body && !NOT_PARAMETER_HEADS.has(head[1])) scopeEnd = bracketEnd(shut + body[0].length - 1)
+    }
+    if (scopeEnd !== -1) params.push({ open, text: code.slice(open + 1, shut - 1), scope: balanced ? [open, scopeEnd] : [0, end] })
+  }
+
+  // Declarators: `const a = 1, b = 2`, `let { x: y } = o`, `for (const p of list)`.
+  const declarators = []
+  for (const m of code.matchAll(/(?<![\w$.])(const|let|var)\s+/g)) {
+    const keyword = m[1]
+    let scope
+    const forHead = /\bfor\s*(?:await\s*)?\(\s*$/.exec(code.slice(Math.max(0, m.index - 30), m.index))
+    if (!balanced || keyword === 'var') {
+      scope = [0, end]
+    } else if (forHead) {
+      const open = code.lastIndexOf('(', m.index)
+      const bodyAt = skipSpace(code, bracketEnd(open))
+      scope = [open, code[bodyAt] === '{' ? bracketEnd(bodyAt) : expressionEnd(code, bodyAt)]
+    } else {
+      scope = blockAt(m.index)
+    }
+    let i = m.index + m[0].length
+    for (let n = 0; n < 50; n++) {
+      i = skipSpace(code, i)
+      const at = i
+      let name = null
+      let pattern = null
+      if (code[i] === '{' || code[i] === '[') {
+        const shut = bracketEnd(i)
+        pattern = code.slice(i, shut)
+        i = shut
+      } else {
+        const id = /^[A-Za-z_$][\w$]*/.exec(code.slice(i, i + 100))
+        if (!id) break
+        name = id[0]
+        i += name.length
+      }
+      const init = /^\s*!?\s*(?::[^=;\n]+)?=(?![=>])/.exec(code.slice(i, i + 300))
+      if (init) {
+        const textPos = skipSpace(code, i + init[0].length)
+        i = expressionEnd(code, textPos)
+        declarators.push({ keyword, name, pattern, at, textPos, text: code.slice(textPos, i), scope })
+      } else {
+        declarators.push({ keyword, name, pattern, at, textPos: -1, text: null, scope })
+      }
+      i = skipSpace(code, i)
+      if (code[i] !== ',') break
+      i++
+    }
+  }
+
+  ctx.scopes = { balanced, end, blockAt, params, declarators, sites: new Map() }
+  return ctx.scopes
+}
+
+/**
+ * Does the binding pattern or parameter list `text` bind `name`? A member
+ * read (`a.name`) does not; in a declaration pattern a key (`{ name: x }`)
+ * does not either. In a parameter list every other mention counts (a type
+ * annotation, a key, a default value), so the check errs toward failing.
+ */
+function bindsName(text, name, keyBinds) {
+  for (const m of text.matchAll(new RegExp(`(?<![\\w$])${reName(name)}(?![\\w$])`, 'g'))) {
+    const before = text.slice(Math.max(0, m.index - 3), m.index)
+    if (before.endsWith('.') && !before.endsWith('...')) continue
+    if (!keyBinds && /^\s*:/.test(text.slice(m.index + name.length))) continue
+    return true
   }
   return false
 }
 
 /**
- * Where `name` is bound for a use at `pos`: the nearest earlier `const`/`let`
- * initializer, a top-level `function`, or a relative named import. `textPos`
- * is the absolute offset of `text` in the file.
+ * Every place `name` is bound in a file, each with the range it is in scope
+ * for: declarators (`init` with a usable initializer, `pattern` without),
+ * parameters, `function`/`class` declarations and relative named imports.
  */
-function findBinding(byFile, ctx, name, pos) {
-  const declRe = new RegExp(`\\b(?:const|let|var)\\s+${name}\\s*(?::[^=;\\n]+)?=(?![=>])`, 'g')
-  let best = null
-  for (const m of ctx.code.matchAll(declRe)) if (m.index < pos) best = m
-  if (best && !shadowedByParameter(ctx.code, name, best.index + best[0].length, pos)) {
-    const textPos = skipSpace(ctx.code, best.index + best[0].length)
-    return { ctx, pos: best.index, textPos, isVariable: true, text: readExpression(ctx.code, textPos) }
+function bindingSites(ctx, name) {
+  const scopes = fileScopes(ctx)
+  const cached = scopes.sites.get(name)
+  if (cached) return cached
+  const code = ctx.code
+  const sites = []
+  for (const d of scopes.declarators) {
+    if (d.pattern !== null) {
+      if (bindsName(d.pattern, name, false)) sites.push({ kind: 'pattern', at: d.at, scope: d.scope })
+    } else if (d.name === name) {
+      sites.push(d.text === null
+        ? { kind: 'pattern', at: d.at, scope: d.scope }
+        : { kind: 'init', keyword: d.keyword, at: d.at, textPos: d.textPos, text: d.text, scope: d.scope })
+    }
   }
-  const fn = new RegExp(`(?:^|\\n)(?:export\\s+)?(?:async\\s+)?function\\s+${name}\\b`).exec(ctx.code)
-  if (fn) {
-    const textPos = fn.index + fn[0].indexOf('function')
-    return { ctx, pos: fn.index, textPos, isVariable: false, text: readTopLevelFunction(ctx.code, textPos) }
+  for (const p of scopes.params) if (bindsName(p.text, name, true)) sites.push({ kind: 'param', at: p.open, scope: p.scope, list: p })
+  for (const m of code.matchAll(new RegExp(`(?<![\\w$.])${reName(name)}\\s*=>`, 'g'))) {
+    sites.push({ kind: 'pattern', at: m.index, scope: scopes.balanced ? [m.index, arrowBodyEnd(code, m.index + m[0].length)] : [0, scopes.end] })
+  }
+  for (const m of code.matchAll(new RegExp(`(?<![\\w$.])(function\\s*\\*?|class)\\s+${reName(name)}(?![\\w$])`, 'g'))) {
+    const kind = m[1].startsWith('function') ? 'function' : 'pattern'
+    sites.push({ kind, at: m.index, scope: scopes.blockAt(m.index) })
   }
   const imported = ctx.imports.get(name)
-  const target = imported && byFile.get(imported.file)
-  return target ? findBinding(byFile, target, imported.name, target.code.length) : null
+  if (imported) sites.push({ kind: 'import', at: 0, scope: [0, scopes.end], imported })
+  scopes.sites.set(name, sites)
+  return sites
+}
+
+/** Assignments to `name` anywhere in the file (`=`, `+=`, `??=`, `++`, …), as `{ at, rhsAt }`. */
+function writesOf(ctx, name) {
+  const code = ctx.code
+  const declared = new Set(bindingSites(ctx, name).map((s) => s.at))
+  const n = reName(name)
+  const out = []
+  const assign = new RegExp(`(?<![\\w$.])${n}\\s*(?:\\*\\*|<<|>>>|>>|\\?\\?|\\|\\||&&|[-+*/%&|^])?=(?![=>])`, 'g')
+  for (const m of code.matchAll(assign)) if (!declared.has(m.index)) out.push({ at: m.index, rhsAt: m.index + m[0].length })
+  const step = new RegExp(`(?:\\+\\+|--)\\s*${n}(?![\\w$])|(?<![\\w$.])${n}\\s*(?:\\+\\+|--)`, 'g')
+  for (const m of code.matchAll(step)) out.push({ at: m.index, rhsAt: -1 })
+  return out
+}
+
+/**
+ * Where `name` is bound for a use at `pos`. Scope-aware and fail-closed: it
+ * resolves only when exactly one binding of `name` is in scope at `pos`, and
+ * that binding is
+ *  - a `const` declarator with an initializer, written before `pos`;
+ *  - a `let`/`var` declarator with an initializer, before `pos`, when nothing
+ *    in the file assigns to `name` (`=`, `+=`, `??=`, `||=`, `++`, …);
+ *  - a `function` declaration; or
+ *  - a relative named import whose module binds it the same way.
+ * A second binding in scope (an inner `const`, a parameter, a destructuring
+ * pattern, a `for … of` or `catch` binding) shadows or doubles it, and a
+ * binding without a usable initializer (a pattern, a parameter, `let x;`)
+ * says nothing: the name is unresolved, and the call needs a "dynamicCalls"
+ * reason. `textPos` is the absolute offset of `text` in the file.
+ */
+function findBinding(byFile, ctx, name, pos) {
+  const live = bindingSites(ctx, name).filter((s) => s.scope[0] <= pos && pos < s.scope[1])
+  if (live.length !== 1) return null
+  const [site] = live
+  if (site.kind === 'init') {
+    if (site.at >= pos) return null
+    if (site.keyword !== 'const' && writesOf(ctx, name).length > 0) return null
+    return { ctx, pos: site.at, textPos: site.textPos, isVariable: true, text: site.text }
+  }
+  if (site.kind === 'function') {
+    const textPos = site.at
+    return { ctx, pos: site.at, textPos, isVariable: false, text: readTopLevelFunction(ctx.code, textPos) }
+  }
+  if (site.kind === 'import') {
+    const target = byFile.get(site.imported.file)
+    return target ? findBinding(byFile, target, site.imported.name, target.code.length) : null
+  }
+  return null
+}
+
+/** Does any declarator of, or assignment to, `name` in the file write an API path? */
+function nameWritesApiPath(ctx, name) {
+  if (bindingSites(ctx, name).some((s) => s.kind === 'init' && API_PATH.test(s.text))) return true
+  return writesOf(ctx, name).some((w) => w.rhsAt !== -1 && API_PATH.test(readExpression(ctx.code, w.rhsAt)))
 }
 
 /**
@@ -715,7 +890,10 @@ function writesApiPath(byFile, ctx, arg, pos) {
   const ref = wholeReference(arg)
   if (!ref || ref.call) return false
   const binding = findBinding(byFile, ctx, ref.name, pos)
-  return Boolean(binding?.isVariable && API_PATH.test(binding.text))
+  if (binding) return binding.isVariable && API_PATH.test(binding.text)
+  // A name that does not resolve (bound twice, reassigned) is checked when
+  // any of its declarators or assignments writes an API path.
+  return nameWritesApiPath(ctx, ref.name)
 }
 
 /**
@@ -740,16 +918,23 @@ function objectProperty(text, key) {
   return null
 }
 
-/** The function enclosing `pos` whose FIRST parameter is `param`, or null. */
-function forwardingFunction(code, param, pos) {
-  const re = new RegExp(
-    `(?:function\\s+(\\w+)\\s*(?:<[^>]*>)?\\s*\\(|(?:const|let)\\s+(\\w+)\\s*=\\s*(?:async\\s*)?(?:function\\s*)?\\()\\s*${param}\\b`,
-    'g',
-  )
-  let found = null
-  for (const m of code.slice(0, pos).matchAll(re)) found = m[1] ?? m[2]
-  if (!found) return null
-  const exported = new RegExp(`export\\s+(?:async\\s+)?(?:function|const|let)\\s+${found}\\b`).test(code)
+/**
+ * The named function whose FIRST parameter is the `param` in scope at `pos`,
+ * or null. The parameter must be the only binding of `param` there (see
+ * findBinding), and the function a `function NAME(` or a
+ * `const|let NAME = (async) (function) (` whose own parameter list it is.
+ */
+function forwardingFunction(ctx, param, pos) {
+  const live = bindingSites(ctx, param).filter((s) => s.scope[0] <= pos && pos < s.scope[1])
+  if (live.length !== 1 || live[0].kind !== 'param') return null
+  const { list } = live[0]
+  const first = /^\s*([A-Za-z_$][\w$]*)\s*(?:[:?,=]|$)/.exec(list.text)
+  if (!first || first[1] !== param) return null
+  const before = ctx.code.slice(Math.max(0, list.open - 200), list.open)
+  const named = /(?:function\s+([\w$]+)\s*(?:<[^>]*>)?|(?:const|let)\s+([\w$]+)\s*=\s*(?:async\s*)?(?:function\s*)?)\s*$/.exec(before)
+  if (!named) return null
+  const found = named[1] ?? named[2]
+  const exported = new RegExp(`export\\s+(?:async\\s+)?(?:function|const|let)\\s+${reName(found)}\\b`).test(ctx.code)
   return { name: found, exported }
 }
 
@@ -792,7 +977,7 @@ export function extractDynamicCalls(files) {
           continue
         }
         if (argResolves(byFile, ctx, arg, m.index)) continue
-        const forwarder = /^[A-Za-z_$][\w$]*$/.test(arg) ? forwardingFunction(ctx.code, arg, m.index) : null
+        const forwarder = /^[A-Za-z_$][\w$]*$/.test(arg) ? forwardingFunction(ctx, arg, m.index) : null
         if (forwarder) {
           const set = forwarder.exported ? shared : local.get(ctx.file)
           if (!set.has(forwarder.name)) { set.add(forwarder.name); grew = true }

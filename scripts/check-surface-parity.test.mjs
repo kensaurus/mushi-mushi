@@ -497,3 +497,140 @@ test('the checked-in mapping matches the repo', () => {
   const { errors } = checkParity(loadInputs())
   assert.deepEqual(errors, [])
 })
+
+// ── name binding is scope-aware and fails closed ──────────────────────────────
+
+test('a reassigned let does not resolve to its initializer', () => {
+  const file = 'apps/admin/src/components/Reassign.tsx'
+  const files = [{
+    file,
+    source: `
+      export function Reassign({ id, props, list }) {
+        let url = \`/v1/admin/projects/\${id}/radar\`
+        url = props.url
+        apiFetch(url, { method: 'POST' })
+        let next = \`/v1/admin/projects/\${id}\`
+        next += '/brand-new'
+        apiFetch(next, { method: 'POST' })
+        let maybe = '/v1/admin/projects/known/radar'
+        maybe ??= props.url
+        apiFetch(maybe)
+        let raw = '/v1/admin/projects/known/radar'
+        raw = props.url
+        fetch(raw)
+        let steady = '/v1/admin/projects/known/radar'
+        apiFetch(steady)
+      }
+    `,
+  }]
+  assert.deepEqual(extractDynamicCalls(files), [
+    { file, call: 'apiFetch', arg: 'url' },
+    { file, call: 'apiFetch', arg: 'next' },
+    { file, call: 'apiFetch', arg: 'maybe' },
+    { file, call: 'fetch', arg: 'raw' },
+  ])
+  const literals = extractAdminLiterals(files).map((l) => l.literal)
+  assert.ok(literals.includes('/v1/admin/projects/known/radar'), literals.join(', '))
+})
+
+test('a new route reached through `+=` fails the check end to end', () => {
+  const routes = extractServerRoutes([{
+    file: 'routes/radar.ts',
+    source: `
+      app.post('/v1/admin/projects/:id', adminOrApiKeyWrite, async (c) => {})
+      app.post('/v1/admin/projects/:id/brand-new', adminOrApiKeyWrite, async (c) => {})
+    `,
+  }])
+  const files = [{
+    file: 'apps/admin/src/components/Append.tsx',
+    source: "export function go(id) {\n  let url = `/v1/admin/projects/${id}`\n  url += '/brand-new'\n  return apiFetch(url, { method: 'POST' })\n}\n",
+  }]
+  const { used: seen } = consoleRoutes(extractAdminLiterals(files), routes)
+  const allMapped = mapping(Object.fromEntries([...seen.keys()].map((k) => [k, { allow: 'parity-debt' }])))
+  const { errors } = checkParity({ used: seen, mapping: allMapped, mcpTools, cliCommands, dynamicCalls: extractDynamicCalls(files) })
+  assert.equal(errors.length, 1, errors.join('\n'))
+  assert.match(errors[0], /Append\.tsx: apiFetch\(url, …\) builds its path/)
+})
+
+test('a name shadowed in a nested scope does not borrow the outer path constant', () => {
+  const file = 'apps/admin/src/components/Nested.tsx'
+  const files = [{
+    file,
+    source: `
+      const path = '/v1/admin/projects/known/radar'
+      export function Outer({ list, props }) {
+        function inner() {
+          const path = '/v1/admin/projects/other/radar'
+          return apiFetch(path)
+        }
+        const run = () => {
+          const { path } = props
+          return apiFetch(\`\${path}/run\`)
+        }
+        const all = async () => {
+          for (const path of list) await apiFetch(\`\${path}/run\`)
+        }
+        try { load() } catch (path) { apiFetch(path) }
+        return usePageData(\`\${path}/ok\`)
+      }
+    `,
+  }]
+  assert.deepEqual(extractDynamicCalls(files), [
+    { file, call: 'apiFetch', arg: 'path' },
+    { file, call: 'apiFetch', arg: '`${path}/run`' },
+    { file, call: 'apiFetch', arg: '`${path}/run`' },
+    { file, call: 'apiFetch', arg: 'path' },
+  ])
+  const literals = extractAdminLiterals(files).map((l) => l.literal)
+  assert.ok(!literals.includes('/v1/admin/projects/known/radar/run'), literals.join(', '))
+  assert.ok(literals.includes('/v1/admin/projects/known/radar/ok'), literals.join(', '))
+})
+
+test('a parameter of the same name shadows the outer path constant, in every function form', () => {
+  const file = 'apps/admin/src/lib/params.ts'
+  const files = [{
+    file,
+    source: `
+      const path = '/v1/admin/projects/known/radar'
+      export function run(path: string) {
+        return apiFetch(\`\${path}/run\`)
+      }
+      export const api = {
+        load(path) {
+          return apiFetch(path)
+        },
+      }
+      export const go = function (id, path = '') {
+        return apiFetch(path)
+      }
+      export const ok = () => apiFetch(path)
+    `,
+  }]
+  assert.deepEqual(extractDynamicCalls(files), [
+    { file, call: 'apiFetch', arg: '`${path}/run`' },
+    { file, call: 'apiFetch', arg: 'path' },
+    { file, call: 'apiFetch', arg: 'path' },
+  ])
+})
+
+test('a binding in a sibling scope, or a later declarator, does not unsettle a resolved name', () => {
+  const file = 'apps/admin/src/components/Siblings.tsx'
+  const files = [{
+    file,
+    source: `
+      export function A() {
+        const base = 'x', path = '/v1/admin/a'
+        return usePageData(path)
+      }
+      export function B({ path }) {
+        return null
+      }
+      export function C() {
+        for (const path of []) void path
+        const path = '/v1/admin/c'
+        return usePageData(path)
+      }
+    `,
+  }]
+  assert.deepEqual(extractDynamicCalls(files), [])
+})
