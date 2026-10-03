@@ -8,6 +8,8 @@
  *     the gate runs or the finding counts cannot be read.
  *   - `api/routes/recipe-compose.ts` throws when the gate runs or settings
  *     cannot be read, instead of composing "never checked / not connected".
+ *   - Reads past the server's 1,000-row cap count every row, or say they
+ *     could not (audit stats `unknown`), never a silently low number.
  */
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { makeFakeDb } from './__stubs__/fake-supabase.ts'
@@ -81,6 +83,62 @@ describe('readAllPages', () => {
         : { data: null, error: { message: 'timeout' }, count: null })
     }
     await expect(paged.readAllPages(flaky, { what: 'llm_invocations', maxRows: 10_000 })).rejects.toThrow(/llm_invocations: timeout/)
+  })
+
+  it('asks for an exact count on the first page only', async () => {
+    const asked: Array<[number, string | undefined]> = []
+    const counting = (from: number, to: number, count: 'exact' | undefined) => {
+      asked.push([from, count])
+      return Promise.resolve({ data: rows.slice(from, to + 1), error: null, count: count === 'exact' ? rows.length : null })
+    }
+    const res = await paged.readAllPages(counting, { what: 't', maxRows: 10_000 })
+    expect(res.rows).toHaveLength(2_350)
+    expect(res.truncated).toBe(false)
+    expect(res.total).toBe(2_350)
+    expect(asked).toEqual([[0, 'exact'], [1_000, undefined], [2_000, undefined]])
+  })
+})
+
+describe('reads past the server row cap (1,000 rows per response)', () => {
+  const capped = { maxRows: 1_000 }
+
+  it('audit stats count every failed run, not the first 1,000', async () => {
+    const runs = Array.from({ length: 1_500 }, (_, i) => ({
+      id: `run-${String(i).padStart(5, '0')}`, project_id: P, gate: 'api_contract', status: 'fail',
+      completed_at: '2026-10-02T00:00:00Z', started_at: '2026-10-02T00:00:00Z',
+    }))
+    const stats = await audit.readFullstackAuditStats(makeFakeDb({ gate_runs: runs, gate_findings: [] }, capped) as never, P, NOW)
+    expect(stats).toEqual({ errorCount: 0, warnCount: 0, failedGateCount: 1_500, topPriority: 'failures', readError: null })
+  })
+
+  it('audit stats past their run ceiling are unknown, never a partial count', async () => {
+    const runs = Array.from({ length: 10_001 }, (_, i) => ({
+      id: `run-${String(i).padStart(5, '0')}`, project_id: P, gate: 'api_contract', status: 'pass',
+      completed_at: '2026-10-02T00:00:00Z', started_at: '2026-10-02T00:00:00Z',
+    }))
+    const stats = await audit.readFullstackAuditStats(makeFakeDb({ gate_runs: runs, gate_findings: [] }, capped) as never, P, NOW)
+    expect(stats.topPriority).toBe('unknown')
+    expect(stats.readError).toMatch(/More than 10,000 check runs/)
+  })
+
+  it('recipe finding counts include every open error and warn, never info or allowlisted', async () => {
+    const findings = [
+      ...Array.from({ length: 1_400 }, (_, i) => ({ id: `a${String(i).padStart(5, '0')}`, gate_run_id: 'run-a', severity: i % 2 ? 'error' : 'warn', allowlisted: false })),
+      { id: 'b1', gate_run_id: 'run-b', severity: 'info', allowlisted: false },
+      { id: 'b2', gate_run_id: 'run-b', severity: 'error', allowlisted: true },
+    ]
+    const counts = await compose.openFindingCounts(makeFakeDb({ gate_findings: findings }, capped) as never, ['run-a', 'run-b'])
+    expect(counts.get('run-a')).toBe(1_400)
+    expect(counts.has('run-b')).toBe(false)
+  })
+
+  it('recipe finding counts past the row ceiling switch to exact counts per run', async () => {
+    const findings = Array.from({ length: 5_300 }, (_, i) => ({
+      id: `f${String(i).padStart(5, '0')}`, gate_run_id: i < 5_000 ? 'run-a' : 'run-b', severity: 'error', allowlisted: false,
+    }))
+    const counts = await compose.openFindingCounts(makeFakeDb({ gate_findings: findings }, capped) as never, ['run-a', 'run-b'])
+    expect(counts.get('run-a')).toBe(5_000)
+    expect(counts.get('run-b')).toBe(300)
   })
 })
 

@@ -175,7 +175,9 @@ const MAX_FINDING_ROWS = 20_000
 const MAX_REPORT_ROWS = 50_000
 const MAX_SPEND_ROWS = 50_000
 const MAX_RELEASE_ROWS = 5_000
-const MAX_SDK_VERSION_ROWS = 5_000
+const MAX_SDK_VERSION_ROWS = 20_000
+/** Reads with at most a few rows per project (settings, repos, SDK observations, the project list). */
+const MAX_PER_PROJECT_ROWS = 20_000
 
 /** Parts whose failure makes a card's own column unknown. */
 const CARD_PARTS: readonly PortfolioReadPart[] = ['gate_runs', 'findings', 'reports', 'sdk', 'spend', 'caps', 'releases', 'kind']
@@ -195,9 +197,9 @@ function noteTruncated(errs: ReadErrors, part: PortfolioReadPart, message: strin
 async function loadLatestRuns(db: Db, projectIds: string[], errs: ReadErrors): Promise<RunRow[]> {
   if (projectIds.length === 0) return []
   const read = await readAllPages<RunRow>(
-    (from, to) => db
+    (from, to, count) => db
       .from('gate_runs')
-      .select('id, project_id, gate, status, summary, started_at, completed_at', { count: 'exact' })
+      .select('id, project_id, gate, status, summary, started_at, completed_at', { count })
       .in('project_id', projectIds)
       .order('started_at', { ascending: false })
       .order('id', { ascending: true })
@@ -216,9 +218,9 @@ async function loadOpenFindings(db: Db, runs: readonly RunRow[], errs: ReadError
   const gateOf = new Map(runs.map((r) => [r.id, r.gate]))
   type Row = { gate_run_id: string; project_id: string; rule_id: string; severity: string; message: string | null }
   const read = await readAllPages<Row>(
-    (from, to) => db
+    (from, to, count) => db
       .from('gate_findings')
-      .select('id, gate_run_id, project_id, rule_id, severity, message', { count: 'exact' })
+      .select('id, gate_run_id, project_id, rule_id, severity, message', { count })
       .in('gate_run_id', runIds)
       .eq('allowlisted', false)
       .order('id', { ascending: true })
@@ -239,51 +241,92 @@ async function loadOpenFindings(db: Db, runs: readonly RunRow[], errs: ReadError
 
 /** null when the SDK observations or the version catalog could not be read. */
 async function loadSdk(db: Db, projectIds: string[], errs: ReadErrors): Promise<{ observations: SdkObservationRow[]; latest: Map<string, string> } | null> {
-  const [obs, versions] = await Promise.all([
-    projectIds.length
-      ? db.from('project_sdk_observations').select('project_id, sdk_package, sdk_version').in('project_id', projectIds)
-      : Promise.resolve({ data: [] as SdkObservationRow[], error: null }),
-    db.from('sdk_versions').select('package, version, deprecated').limit(MAX_SDK_VERSION_ROWS),
-  ])
-  if (obs.error || versions.error) {
-    noteFailed(errs, 'sdk', 'The Mushi SDK versions could not be read.', (obs.error ?? versions.error)?.message ?? '')
+  try {
+    const [obs, versions] = await Promise.all([
+      projectIds.length
+        ? readAllPages<SdkObservationRow>(
+          (from, to, count) => db
+            .from('project_sdk_observations')
+            .select('project_id, sdk_package, sdk_version', { count })
+            .in('project_id', projectIds)
+            .order('project_id', { ascending: true })
+            .range(from, to),
+          { what: 'project_sdk_observations', maxRows: MAX_PER_PROJECT_ROWS },
+        )
+        : Promise.resolve({ rows: [] as SdkObservationRow[], truncated: false, total: 0 }),
+      // Keyed (package, version): that order is unique, so pages never overlap.
+      readAllPages<SdkVersionRow>(
+        (from, to, count) => db
+          .from('sdk_versions')
+          .select('package, version, deprecated', { count })
+          .order('package', { ascending: true })
+          .order('version', { ascending: true })
+          .range(from, to),
+        { what: 'sdk_versions', maxRows: MAX_SDK_VERSION_ROWS },
+      ),
+    ])
+    if (versions.truncated) {
+      noteTruncated(errs, 'sdk', `The Mushi SDK release catalog has more than ${MAX_SDK_VERSION_ROWS.toLocaleString('en-US')} versions; "latest" may be out of date.`)
+    }
+    if (obs.truncated) {
+      noteTruncated(errs, 'sdk', "Not every app's Mushi SDK version was read; some apps show no SDK.")
+    }
+    return { observations: obs.rows, latest: latestSdkVersions(versions.rows) }
+  } catch (err) {
+    noteFailed(errs, 'sdk', 'The Mushi SDK versions could not be read.', err instanceof Error ? err.message : String(err))
     return null
   }
-  const versionRows = (versions.data ?? []) as SdkVersionRow[]
-  if (versionRows.length >= MAX_SDK_VERSION_ROWS) {
-    noteTruncated(errs, 'sdk', 'The Mushi SDK release catalog is larger than Mushi reads; "latest" may be out of date.')
-  }
-  return {
-    observations: (obs.data ?? []) as SdkObservationRow[],
-    latest: latestSdkVersions(versionRows),
-  }
 }
+
+type SettingsPresenceRow = Record<string, string | null> & { project_id: string }
 
 /** null when the integration settings could not be read: holes are then unknown, not "none". */
 async function loadPresence(db: Db, projectIds: string[], errs: ReadErrors): Promise<Map<string, Set<IntegrationKey>> | null> {
   const out = new Map<string, Set<IntegrationKey>>(projectIds.map((id) => [id, new Set<IntegrationKey>()]))
   if (projectIds.length === 0) return out
-  const [settingsRes, reposRes] = await Promise.all([
-    db.from('project_settings')
-      .select('project_id, sentry_dsn, sentry_org_slug, slack_channel_id, slack_bot_token_ref, linear_api_key_ref, linear_access_token_ref, supabase_project_ref')
-      .in('project_id', projectIds),
-    db.from('project_repos').select('project_id').in('project_id', projectIds),
-  ])
-  if (settingsRes.error || reposRes.error) {
-    noteFailed(errs, 'integrations', 'Which integrations each app has could not be read, so missing setups are unknown.', (settingsRes.error ?? reposRes.error)?.message ?? '')
+  let settings: SettingsPresenceRow[]
+  let repos: Array<{ project_id: string }>
+  try {
+    const [settingsRead, reposRead] = await Promise.all([
+      readAllPages<SettingsPresenceRow>(
+        (from, to, count) => db
+          .from('project_settings')
+          .select('project_id, sentry_dsn, sentry_org_slug, slack_channel_id, slack_bot_token_ref, linear_api_key_ref, linear_access_token_ref, supabase_project_ref', { count })
+          .in('project_id', projectIds)
+          .order('project_id', { ascending: true })
+          .range(from, to),
+        { what: 'project_settings', maxRows: MAX_PER_PROJECT_ROWS },
+      ),
+      readAllPages<{ id: string; project_id: string }>(
+        (from, to, count) => db
+          .from('project_repos')
+          .select('id, project_id', { count })
+          .in('project_id', projectIds)
+          .order('id', { ascending: true })
+          .range(from, to),
+        { what: 'project_repos', maxRows: MAX_PER_PROJECT_ROWS },
+      ),
+    ])
+    // A cut-short read would turn an unread app into "no integrations": unknown instead.
+    if (settingsRead.truncated || reposRead.truncated) {
+      noteTruncated(errs, 'integrations', 'Too many apps to read every integration setting, so missing setups are unknown.')
+      return null
+    }
+    settings = settingsRead.rows
+    repos = reposRead.rows
+  } catch (err) {
+    noteFailed(errs, 'integrations', 'Which integrations each app has could not be read, so missing setups are unknown.', err instanceof Error ? err.message : String(err))
     return null
   }
-  const settings = settingsRes.data
-  const repos = reposRes.data
-  for (const s of (settings ?? []) as Array<Record<string, string | null>>) {
-    const set = out.get(s.project_id as string)
+  for (const s of settings) {
+    const set = out.get(s.project_id)
     if (!set) continue
     if (s.sentry_dsn || s.sentry_org_slug) set.add('sentry')
     if (s.slack_channel_id || s.slack_bot_token_ref) set.add('slack')
     if (s.linear_api_key_ref || s.linear_access_token_ref) set.add('linear')
     if (s.supabase_project_ref) set.add('supabase')
   }
-  for (const r of (repos ?? []) as Array<{ project_id: string }>) out.get(r.project_id)?.add('github')
+  for (const r of repos) out.get(r.project_id)?.add('github')
   return out
 }
 
@@ -320,9 +363,9 @@ async function loadSpend(db: Db, projectIds: string[], since: string, errs: Read
   type CallRow = { project_id: string; cost_usd: number | string | null }
   const [callsRead, capsRes] = await Promise.all([
     readAllPages<CallRow>(
-      (from, to) => db
+      (from, to, count) => db
         .from('llm_invocations')
-        .select('id, project_id, cost_usd', { count: 'exact' })
+        .select('id, project_id, cost_usd', { count })
         .in('project_id', projectIds)
         .gte('created_at', since)
         .order('id', { ascending: true })
@@ -374,9 +417,9 @@ async function loadOpenReports(db: Db, projectIds: string[], errs: ReadErrors): 
   if (projectIds.length === 0) return out
   type ReportRow = { project_id: string }
   const read = await readAllPages<ReportRow>(
-    (from, to) => db
+    (from, to, count) => db
       .from('reports')
-      .select('id, project_id', { count: 'exact' })
+      .select('id, project_id', { count })
       .in('project_id', projectIds)
       .in('status', [...OPEN_REPORT_STATUSES])
       .order('id', { ascending: true })
@@ -413,9 +456,9 @@ async function loadLatestReleases(db: Db, projectIds: string[], errs: ReadErrors
   type ReleaseRow = { project_id: string; version: string; published_at: string | null }
   try {
     const read = await readAllPages<ReleaseRow>(
-      (from, to) => db
+      (from, to, count) => db
         .from('releases')
-        .select('id, project_id, version, published_at, created_at', { count: 'exact' })
+        .select('id, project_id, version, published_at, created_at', { count })
         .in('project_id', projectIds)
         .order('created_at', { ascending: false })
         .order('id', { ascending: true })
@@ -453,10 +496,19 @@ export async function buildPortfolio(db: Db, deps: PortfolioRouteDeps, orgId: st
   const sorted = [...projectIds].sort()
   let projectRows: ProjectRow[] = []
   if (sorted.length) {
-    const { data, error } = await db.from('projects').select('id, name, slug').in('id', sorted)
-    // Without the project list there is nothing true to show: never "no apps yet".
-    if (error) throw new Error(`projects: ${error.message}`)
-    projectRows = (data ?? []) as ProjectRow[]
+    // Without the whole project list there is nothing true to show: never "no apps yet",
+    // and never a total that silently stops at the server's row cap. readAllPages throws on error.
+    const read = await readAllPages<ProjectRow>(
+      (from, to, count) => db
+        .from('projects')
+        .select('id, name, slug', { count })
+        .in('id', sorted)
+        .order('id', { ascending: true })
+        .range(from, to),
+      { what: 'projects', maxRows: MAX_PER_PROJECT_ROWS },
+    )
+    if (read.truncated) throw new Error(`projects: more than ${MAX_PER_PROJECT_ROWS} projects in one organization`)
+    projectRows = read.rows
   }
   const projects = projectRows.sort((a, b) => (a.name ?? '').localeCompare(b.name ?? '') || a.id.localeCompare(b.id))
   const pageProjects = projects.slice((page - 1) * PORTFOLIO_PAGE_SIZE, page * PORTFOLIO_PAGE_SIZE)
