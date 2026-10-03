@@ -16,7 +16,7 @@ interface ResourcesResponse {
 const KIND_LABEL: Record<string, string> = {
   auth_provider: 'Sign-in', supabase_project: 'Supabase project', stripe_account: 'Stripe account', domain: 'Domain',
   deep_link_domain: 'Deep link', bundle_id: 'Store app', push_channel: 'Push', slack_channel: 'Slack channel',
-  posthog_project: 'PostHog', sentry_project: 'Sentry project', repo: 'Repo', legacy_system: 'Other system', revenuecat_project: 'RevenueCat',
+  posthog_project: 'PostHog', sentry_project: 'Sentry project', repo: 'Repo', legacy_system: 'Other system', revenuecat_project: 'RevenueCat', account: 'Account',
 }
 
 export function SharedResourcesCard({ orgId, names }: { orgId: string; names: Map<string, string> }) {

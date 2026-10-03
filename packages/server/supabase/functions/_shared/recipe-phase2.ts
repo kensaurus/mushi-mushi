@@ -36,6 +36,7 @@ import {
   type ProjectKindValue,
 } from './portfolio-rules.ts'
 import type { DeclaredAuthSettings } from './supabase-config-toml.ts'
+import { accountRegisterRules, REGISTER_COLUMNS, registerFromRows, type RegisterRow } from './accounts-register.ts'
 
 type Db = ReturnType<typeof getServiceClient>
 
@@ -410,6 +411,14 @@ export async function collectOrgPortfolio(db: Db, organizationId: string, deps: 
       if (c.kind && Object.values(c.signals).some((v) => v === undefined)) unknown.push({ ruleId: 'recipe_incomplete', projectIds: [c.id], resourceKey: null, reason: 'Not every completeness signal was read.' })
     }
   }
+
+  // Accounts and resilience register (Plan 020 §11): organization-level, so it
+  // runs with a single app too. Its findings are written here with the rest;
+  // otherwise the sweep below would resolve them every run.
+  const { data: registerRows, error: registerError } = await db.from('portfolio_resources').select(REGISTER_COLUMNS).eq('organization_id', organizationId).in('kind', ['account', 'domain']).limit(1000)
+  if (registerError) throw new Error(`collectOrgPortfolio: could not read the accounts register, findings left as they were: ${registerError.message}`)
+  const register = registerFromRows((registerRows ?? []) as unknown as RegisterRow[])
+  findings.push(...accountRegisterRules(register.accounts, register.domains))
 
   // Upsert open findings; resolve the open ones this run saw go away. A rule
   // that could not decide this run leaves its open findings as they were.
