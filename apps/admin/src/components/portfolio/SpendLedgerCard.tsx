@@ -6,16 +6,17 @@
  *
  * Data: GET    /v1/admin/orgs/:orgId/spend
  *       POST   /v1/admin/orgs/:orgId/spend/imports            (owners and admins)
- *       DELETE /v1/admin/orgs/:orgId/spend/imports/:importId  (owners and admins)
+ *       DELETE /v1/admin/orgs/:orgId/spend/imports/:importId  (owners and admins; the import's
+ *              days go back to the next newest import that has them)
  */
 
 import { useRef, useState } from 'react'
 import { Badge, Btn, Callout, ErrorAlert, Loading, Section } from '../ui'
 import { usePageData } from '../../lib/usePageData'
 import { apiFetchMutate } from '../../lib/supabase'
-import type { BillImportResult, BillVendor, LedgerSource, SpendLedgerResponse } from '../../lib/portfolioTypes'
+import type { BillImportResult, BillRemovalResult, BillVendor, LedgerSource, SpendLedgerResponse } from '../../lib/portfolioTypes'
 import { formatUsd } from './portfolioView'
-import { billsBreakdown, importSummary, ledgerCell, ledgerTotal, supabaseUsage, vendorLabel } from './spendView'
+import { billsBreakdown, importSummary, ledgerCell, ledgerTotal, removalSummary, supabaseUsage, vendorLabel } from './spendView'
 
 const VENDORS: BillVendor[] = ['vercel', 'aws', 'supabase', 'other']
 const SELECT = 'rounded-sm border border-edge bg-surface-root px-2 py-1 text-xs'
@@ -64,8 +65,10 @@ export function SpendLedgerCard({ orgId, projects }: { orgId: string; projects: 
     setBusy(true)
     setNotice(null)
     try {
-      const res = await apiFetchMutate<{ importId: string }>(`${path}/imports/${importId}`, { method: 'DELETE' })
-      setNotice(res.ok ? { tone: 'info', text: 'Import removed.' } : { tone: 'danger', text: res.error?.message ?? 'The import could not be removed.' })
+      const res = await apiFetchMutate<BillRemovalResult>(`${path}/imports/${importId}`, { method: 'DELETE' })
+      setNotice(res.ok && res.data
+        ? { tone: 'info', text: removalSummary(res.data) }
+        : { tone: 'danger', text: res.error?.message ?? 'The import could not be removed.' })
     } finally {
       setBusy(false)
       reload()
@@ -174,6 +177,9 @@ export function SpendLedgerCard({ orgId, projects }: { orgId: string; projects: 
           {data.imports.length > 0 && (
             <div className="flex flex-col gap-1">
               <p className="text-xs font-medium text-fg">Recent imports</p>
+              <p className="text-xs text-fg-muted">
+                A newer import of the same days replaces the older figures. Removing it puts the older import's figures back.
+              </p>
               <ul className="flex flex-col divide-y divide-edge-subtle text-xs">
                 {data.imports.map((i) => (
                   <li key={i.id} className="flex flex-wrap items-center justify-between gap-2 py-1.5">

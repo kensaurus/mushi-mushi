@@ -133,13 +133,25 @@ describe('SpendLedgerCard', () => {
     expect(container.textContent).toContain('Imported 1 row ($3.00) for 2026-10-01 to 2026-10-01.')
   })
 
-  it('removes an import', async () => {
+  it('removes an import and says which rows went back to an earlier import', async () => {
+    mocks.apiFetch.mockResolvedValue({ ok: true, data: { importId: 'imp1', rowsRemoved: 1, rowsRestored: 2, restoredFrom: 1 } })
     await render(createElement(SpendLedgerCard, { orgId: ORG, projects: [{ projectId: P1, name: 'glot.it' }] }))
     await act(async () => {
       Array.from(container.querySelectorAll('button')).find((b) => b.textContent?.trim() === 'Remove')!.click()
       await flush()
     })
     expect(calls('DELETE')).toEqual([{ path: `/v1/admin/orgs/${ORG}/spend/imports/imp1`, body: null }])
+    expect(container.textContent).toContain('Import removed. 1 row left the ledger. 2 rows went back to the earlier import that had them.')
+  })
+
+  it('says when removing an import changed nothing in the ledger', async () => {
+    mocks.apiFetch.mockResolvedValue({ ok: true, data: { importId: 'imp1', rowsRemoved: 0, rowsRestored: 0, restoredFrom: 0 } })
+    await render(createElement(SpendLedgerCard, { orgId: ORG, projects: [{ projectId: P1, name: 'glot.it' }] }))
+    await act(async () => {
+      Array.from(container.querySelectorAll('button')).find((b) => b.textContent?.trim() === 'Remove')!.click()
+      await flush()
+    })
+    expect(container.textContent).toContain('a later import had already replaced all of its rows')
   })
 
   it('the digest card saves a Teams channel and the weekly day with the rest of the settings', async () => {

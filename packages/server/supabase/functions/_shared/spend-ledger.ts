@@ -85,6 +85,23 @@ export interface SpendLedgerResponse {
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100
+/** Recent imports listed under the ledger. */
+const IMPORTS_LISTED = 10
+
+interface ImportRow {
+  id: string
+  vendor: BillVendor
+  project_id: string | null
+  filename: string | null
+  format: string
+  rows_read: number
+  rows_imported: number
+  rows_skipped: number
+  total_usd: number | string
+  period_start: string | null
+  period_end: string | null
+  created_at: string
+}
 
 interface Read<T> { rows: T[]; error: string | null; truncated: boolean }
 
@@ -128,13 +145,21 @@ export async function buildSpendLedger(
 
   // With no apps there is nothing to read; each read then resolves to an empty, successful result.
   const when = <T>(q: PromiseLike<{ data: unknown; error: { message?: string } | null }>, limit = READ_LIMIT): Promise<Read<T>> => (ids.length ? read<T>(q, limit) : Promise.resolve(empty<T>()))
-  const [llm, instances, ci, entries, imports] = await Promise.all([
+  // Imports the caller may see: those for one of their apps, and those matched by an
+  // app column (no single app). An import for an app outside the caller's view is never listed.
+  const importCols = 'id, vendor, project_id, filename, format, rows_read, rows_imported, rows_skipped, total_usd, period_start, period_end, created_at'
+  const [llm, instances, ci, entries, appImports, teamImports] = await Promise.all([
     when<{ project_id: string; cost_usd: number | string | null }>(db.from('llm_invocations').select('project_id, cost_usd').in('project_id', ids).gte('created_at', sinceIso).limit(READ_LIMIT)),
     when<{ id: string }>(db.from('connector_instances').select('id').eq('organization_id', organizationId).eq('kind', 'llm_usage').limit(20), 20),
     when<{ project_id: string; est_billable_minutes: number | string | null }>(db.from('ci_workflow_runs').select('project_id, est_billable_minutes').in('project_id', ids).gte('started_at', sinceIso).limit(READ_LIMIT)),
     when<{ project_id: string; vendor: BillVendor; service: string; unit: string; amount_usd: number | string; quantity: number | string | null }>(db.from('spend_ledger_entries').select('project_id, vendor, service, unit, amount_usd, quantity').eq('organization_id', organizationId).in('project_id', ids).gte('day', sinceDay).limit(READ_LIMIT)),
-    when<{ id: string; vendor: BillVendor; project_id: string | null; filename: string | null; format: string; rows_read: number; rows_imported: number; rows_skipped: number; total_usd: number | string; period_start: string | null; period_end: string | null; created_at: string }>(db.from('spend_bill_imports').select('id, vendor, project_id, filename, format, rows_read, rows_imported, rows_skipped, total_usd, period_start, period_end, created_at').eq('organization_id', organizationId).order('created_at', { ascending: false }).limit(10), 10),
+    when<ImportRow>(db.from('spend_bill_imports').select(importCols).eq('organization_id', organizationId).in('project_id', ids).order('created_at', { ascending: false }).limit(IMPORTS_LISTED), IMPORTS_LISTED),
+    when<ImportRow>(db.from('spend_bill_imports').select(importCols).eq('organization_id', organizationId).is('project_id', null).order('created_at', { ascending: false }).limit(IMPORTS_LISTED), IMPORTS_LISTED),
   ])
+  const importsError = appImports.error ?? teamImports.error
+  const imports = [...appImports.rows, ...teamImports.rows]
+    .sort((a, b) => (a.created_at === b.created_at ? (a.id < b.id ? 1 : -1) : a.created_at < b.created_at ? 1 : -1))
+    .slice(0, IMPORTS_LISTED)
 
   // Provider spend: the current snapshot of each llm_usage instance, and which apps are bound to it.
   const instanceIds = instances.rows.map((r) => r.id)
@@ -287,8 +312,8 @@ export async function buildSpendLedger(
     apps: apps.sort((a, b) => b.totalUsd - a.totalUsd || a.name.localeCompare(b.name)),
     totals,
     unattributedProviderUsd: unattributed,
-    complete: apps.every((a) => a.complete) && !imports.error,
-    imports: (imports.rows as Array<{ id: string; vendor: BillVendor; project_id: string | null; filename: string | null; format: string; rows_read: number; rows_imported: number; rows_skipped: number; total_usd: number | string; period_start: string | null; period_end: string | null; created_at: string }>).map((r) => ({
+    complete: apps.every((a) => a.complete) && !importsError,
+    imports: imports.map((r) => ({
       id: r.id,
       vendor: r.vendor,
       projectId: r.project_id,

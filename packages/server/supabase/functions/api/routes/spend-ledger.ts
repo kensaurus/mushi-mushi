@@ -3,7 +3,8 @@
  *
  *   GET    /v1/admin/orgs/:orgId/spend                     adminOrApiKey(mcp:read)  30-day ledger per app
  *   POST   /v1/admin/orgs/:orgId/spend/imports             jwtAuth, owner/admin     import a bill CSV
- *   DELETE /v1/admin/orgs/:orgId/spend/imports/:importId   jwtAuth, owner/admin     remove an import's rows
+ *   DELETE /v1/admin/orgs/:orgId/spend/imports/:importId   jwtAuth, owner/admin     remove an import; its days go back
+ *                                                                                    to the next newest import that has them
  *
  * Bill imports are console-only (JWT): they write money figures every member
  * of the team sees. The ledger read follows the portfolio access rule (an
@@ -15,18 +16,27 @@ import { z } from 'npm:zod@3'
 import { adminOrApiKey, jwtAuth } from '../../_shared/auth.ts'
 import { getServiceClient } from '../../_shared/db.ts'
 import { log } from '../../_shared/logger.ts'
-import { aggregateBill, BILL_VENDORS, parseBillCsv } from '../../_shared/spend-bill-csv.ts'
+import { readBodyCapped } from '../../_shared/read-body-capped.ts'
+import { aggregateBill, BILL_VENDORS, parseBillCsv, type BillVendor } from '../../_shared/spend-bill-csv.ts'
+import { MAX_LEDGER_ROWS_PER_IMPORT, recordBillImport, removeBillImport } from '../../_shared/spend-bill-imports.ts'
 import { buildSpendLedger } from '../../_shared/spend-ledger.ts'
 import { jsonError } from '../shared.ts'
 import type { Variables } from '../types.ts'
 import { portfolioAccess } from './portfolio.ts'
 
+export { MAX_LEDGER_ROWS_PER_IMPORT }
+
 const slog = log.child('spend-ledger')
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-/** A month of daily FOCUS or CUR rows for a few apps fits well under this. */
+/** A month of daily FOCUS or CUR rows for a few apps fits well under this. Counted in UTF-8 bytes. */
 export const MAX_BILL_CSV_BYTES = 5 * 1024 * 1024
-/** Aggregated (app, day, service, unit) rows; one upsert statement, so an import is all or nothing. */
-export const MAX_LEDGER_ROWS_PER_IMPORT = 20_000
+/**
+ * The request body cap, checked before anything is parsed. JSON escaping can
+ * double a CSV (every quote and newline becomes two bytes), so the body may be
+ * up to twice the CSV cap plus room for the other fields; the CSV itself is
+ * then held to MAX_BILL_CSV_BYTES exactly.
+ */
+export const MAX_IMPORT_BODY_BYTES = 2 * MAX_BILL_CSV_BYTES + 64 * 1024
 
 type Db = ReturnType<typeof getServiceClient>
 
@@ -91,10 +101,20 @@ export function registerSpendLedgerRoutes(app: Hono<{ Variables: Variables }>, d
     if (!access.ok) return access.response
     const userId = c.get('userId') as string
     if (!(await isOrgAdmin(db, access.orgId, userId))) return jsonError(c, 'FORBIDDEN', 'Only team owners and admins can import bills.', 403)
-    const raw = await c.req.json().catch(() => null) as { csv?: unknown } | null
-    if (typeof raw?.csv === 'string' && raw.csv.length > MAX_BILL_CSV_BYTES) {
-      return jsonError(c, 'PAYLOAD_TOO_LARGE', 'The CSV is over 5 MB. Export daily rather than hourly rows, or split it by month.', 413)
+    const tooLarge = () => jsonError(c, 'PAYLOAD_TOO_LARGE', 'The CSV is over 5 MB. Export daily rather than hourly rows, or split it by month.', 413)
+    // Refuse an oversized upload before it is buffered or parsed: by its declared
+    // length, then by the bytes that actually arrive (a chunked body has no length).
+    if (Number(c.req.header('content-length') ?? '0') > MAX_IMPORT_BODY_BYTES) return tooLarge()
+    const text = await readBodyCapped(c.req.raw, MAX_IMPORT_BODY_BYTES)
+    if (text === null) return tooLarge()
+    let raw: unknown = null
+    try {
+      raw = JSON.parse(text)
+    } catch {
+      return jsonError(c, 'VALIDATION_ERROR', 'body: the request is not valid JSON', 400)
     }
+    const rawCsv = (raw as { csv?: unknown } | null)?.csv
+    if (typeof rawCsv === 'string' && new TextEncoder().encode(rawCsv).byteLength > MAX_BILL_CSV_BYTES) return tooLarge()
     const parsed = importSchema.safeParse(raw)
     if (!parsed.success) return jsonError(c, 'VALIDATION_ERROR', parsed.error.issues.map((i) => `${i.path.join('.') || 'body'}: ${i.message}`).join('; '), 400)
     const body = parsed.data
@@ -124,44 +144,27 @@ export function registerSpendLedgerRoutes(app: Hono<{ Variables: Variables }>, d
       return jsonError(c, 'PAYLOAD_TOO_LARGE', `The bill has ${agg.entries.length} distinct app, day, service and unit combinations; the limit is ${MAX_LEDGER_ROWS_PER_IMPORT}. Split it by month.`, 413)
     }
 
-    const now = deps.now().toISOString()
-    const { data: imp, error: impError } = await db.from('spend_bill_imports').insert({
-      organization_id: access.orgId,
-      project_id: fixed,
+    const recorded = await recordBillImport(db, {
+      organizationId: access.orgId,
+      projectId: fixed,
       vendor: body.vendor,
       filename: body.filename ?? null,
       format: bill.bill.format,
-      rows_read: bill.bill.rowsRead,
-      rows_imported: bill.bill.rows.length - agg.unmatched,
-      rows_skipped: bill.bill.skipped + agg.unmatched,
-      total_usd: agg.totalUsd,
-      period_start: agg.periodStart,
-      period_end: agg.periodEnd,
-      imported_by: userId,
-      created_at: now,
-    }).select('id').single()
-    if (impError || !imp) return jsonError(c, 'DB_ERROR', 'The import could not be recorded.', 500)
-    const importId = (imp as { id: string }).id
-
-    const rows = agg.entries.map((e) => ({
-      organization_id: access.orgId,
-      project_id: e.projectId,
-      vendor: body.vendor,
-      service: e.service,
-      unit: e.unit,
-      day: e.day,
-      amount_usd: e.amountUsd,
-      quantity: e.quantity,
-      import_id: importId,
-      updated_at: now,
-    }))
-    // One statement: it lands whole or not at all.
-    const { error: writeError } = await db.from('spend_ledger_entries').upsert(rows, { onConflict: 'project_id,vendor,day,service,unit' })
-    if (writeError) {
-      await db.from('spend_bill_imports').delete().eq('id', importId)
-      slog.error('bill import write failed', { orgId: access.orgId, err: writeError.message })
+      rowsRead: bill.bill.rowsRead,
+      rowsImported: bill.bill.rows.length - agg.unmatched,
+      rowsSkipped: bill.bill.skipped + agg.unmatched,
+      totalUsd: agg.totalUsd,
+      periodStart: agg.periodStart,
+      periodEnd: agg.periodEnd,
+      importedBy: userId,
+      now: deps.now().toISOString(),
+      entries: agg.entries,
+    })
+    if (!recorded.ok) {
+      slog.error('bill import write failed', { orgId: access.orgId, err: recorded.error })
       return jsonError(c, 'DB_ERROR', 'The bill could not be saved. Nothing was imported.', 500)
     }
+    const importId = recorded.importId
     return c.json({
       ok: true,
       data: {
@@ -186,14 +189,19 @@ export function registerSpendLedgerRoutes(app: Hono<{ Variables: Variables }>, d
     if (!(await isOrgAdmin(db, access.orgId, c.get('userId') as string))) return jsonError(c, 'FORBIDDEN', 'Only team owners and admins can remove an import.', 403)
     const importId = c.req.param('importId') ?? ''
     if (!UUID_RE.test(importId)) return jsonError(c, 'NOT_FOUND', 'Import not found', 404)
-    const { data: row, error: readError } = await db.from('spend_bill_imports').select('id').eq('id', importId).eq('organization_id', access.orgId).maybeSingle()
+    const { data: row, error: readError } = await db.from('spend_bill_imports').select('id, vendor').eq('id', importId).eq('organization_id', access.orgId).maybeSingle()
     if (readError) return jsonError(c, 'DB_ERROR', 'The import could not be read.', 500)
     if (!row) return jsonError(c, 'NOT_FOUND', 'Import not found', 404)
-    // The entries cascade in Postgres; delete them explicitly too so the result does not depend on it.
-    const { error: entriesError } = await db.from('spend_ledger_entries').delete().eq('import_id', importId)
-    if (entriesError) return jsonError(c, 'DB_ERROR', 'The import could not be removed.', 500)
-    const { error } = await db.from('spend_bill_imports').delete().eq('id', importId)
-    if (error) return jsonError(c, 'DB_ERROR', 'The import could not be removed.', 500)
-    return c.json({ ok: true, data: { importId } })
+    const removed = await removeBillImport(db, {
+      organizationId: access.orgId,
+      importId,
+      vendor: (row as { vendor: BillVendor }).vendor,
+      now: deps.now().toISOString(),
+    })
+    if (!removed.ok) {
+      slog.error('bill import removal failed', { orgId: access.orgId, importId, err: removed.error })
+      return jsonError(c, 'DB_ERROR', 'The import could not be removed. Try again: a retry finishes what this one started.', 500)
+    }
+    return c.json({ ok: true, data: { importId, rowsRemoved: removed.rowsRemoved, rowsRestored: removed.rowsRestored, restoredFrom: removed.restoredFrom } })
   })
 }

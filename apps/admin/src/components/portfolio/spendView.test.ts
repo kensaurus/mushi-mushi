@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { billsBreakdown, importSummary, ledgerCell, ledgerTotal, supabaseUsage } from './spendView'
+import { billsBreakdown, importSummary, ledgerCell, ledgerTotal, removalSummary, supabaseUsage } from './spendView'
 import { ratingLabel, pullSummary } from './storeReviewsView'
 
 describe('ledgerCell', () => {
@@ -23,6 +23,14 @@ describe('ledgerCell', () => {
   it('summarises an import with what was skipped and why', () => {
     expect(importSummary({ rowsImported: 3, rowsSkipped: 1, totalUsd: 7.5, periodStart: '2026-10-01', periodEnd: '2026-10-02', unmatchedApps: ['other-app'], skipReasons: ['line 4: the date is not YYYY-MM-DD'] }))
       .toBe('Imported 3 rows ($7.50) for 2026-10-01 to 2026-10-02. Skipped 1. No app named: other-app. line 4: the date is not YYYY-MM-DD')
+  })
+
+  it('says what removing an import did, including when nothing changed', () => {
+    expect(removalSummary({ rowsRemoved: 0, rowsRestored: 0, restoredFrom: 0 }))
+      .toBe('Import removed. The ledger did not change: a later import had already replaced all of its rows.')
+    expect(removalSummary({ rowsRemoved: 3, rowsRestored: 0, restoredFrom: 0 })).toBe('Import removed. 3 rows left the ledger.')
+    expect(removalSummary({ rowsRemoved: 0, rowsRestored: 1, restoredFrom: 1 })).toBe('Import removed. 1 row went back to the earlier import that had them.')
+    expect(removalSummary({ rowsRemoved: 1, rowsRestored: 4, restoredFrom: 2 })).toBe('Import removed. 1 row left the ledger. 4 rows went back to 2 earlier imports that had them.')
   })
 })
 

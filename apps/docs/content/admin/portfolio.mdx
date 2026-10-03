@@ -70,8 +70,15 @@ Pick the app the bill belongs to, or let each row's `app` column (or an `app`
 or `project` tag) name the app by its name or slug. Rows in another currency
 than USD, with a date that is not YYYY-MM-DD, or naming no app of yours are
 skipped, and the first few are explained. Importing the same bill again
-replaces those days instead of adding to them. **Remove** takes an import's
-rows out again. The file limit is 5 MB: export daily rather than hourly rows.
+replaces those days instead of adding to them: each day belongs to the newest
+import that has it. **Remove** takes an import out and gives its days back to
+the next newest import that has them, so removing a corrected bill brings the
+earlier figures back. It says how many rows left the ledger and how many went
+back. The file limit is 5 MB: export daily rather than hourly rows.
+
+The ledger shows each member only the apps they can see. An import for one app
+is listed to that app's members; an import matched by an `app` column is
+listed to the team.
 
 ## Daily digest
 

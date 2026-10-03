@@ -48,6 +48,22 @@ export function supabaseUsage(app: Pick<LedgerApp, 'supabase'>): string | undefi
 }
 
 /** A summary of an import result a person can act on. */
+/**
+ * What removing an import did to the ledger. A day the import owned goes back
+ * to the next newest import that has it, or leaves the ledger; an import whose
+ * days a later import already replaced changes nothing, and says so.
+ */
+export function removalSummary(r: { rowsRemoved: number; rowsRestored: number; restoredFrom: number }): string {
+  const days = (n: number) => `${n} row${n === 1 ? '' : 's'}`
+  if (r.rowsRemoved === 0 && r.rowsRestored === 0) {
+    return 'Import removed. The ledger did not change: a later import had already replaced all of its rows.'
+  }
+  const parts = ['Import removed.']
+  if (r.rowsRemoved > 0) parts.push(`${days(r.rowsRemoved)} left the ledger.`)
+  if (r.rowsRestored > 0) parts.push(`${days(r.rowsRestored)} went back to ${r.restoredFrom === 1 ? 'the earlier import' : `${r.restoredFrom} earlier imports`} that had them.`)
+  return parts.join(' ')
+}
+
 export function importSummary(r: { rowsImported: number; rowsSkipped: number; totalUsd: number; periodStart: string | null; periodEnd: string | null; unmatchedApps: string[]; skipReasons: string[] }): string {
   const period = r.periodStart && r.periodEnd ? ` for ${r.periodStart} to ${r.periodEnd}` : ''
   const parts = [`Imported ${r.rowsImported} row${r.rowsImported === 1 ? '' : 's'} (${formatUsd(r.totalUsd)})${period}.`]
