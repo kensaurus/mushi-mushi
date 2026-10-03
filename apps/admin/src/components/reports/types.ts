@@ -189,6 +189,27 @@ export function hasUnseenReporterReply(
   return seen === null || replied > seen
 }
 
+/**
+ * Rows opened in the preview drawer this session. The server stamps
+ * `admin_seen_at` on that read (GET /v1/admin/reports/:id), but the list was
+ * fetched before it, so the row would keep its reply dot until the next
+ * refetch. The newer of the server value and the local open wins.
+ */
+export function withLocallySeen<T extends Pick<ReportRow, 'id' | 'admin_seen_at'>>(
+  rows: readonly T[],
+  seenAt: ReadonlyMap<string, string>,
+): T[] {
+  if (seenAt.size === 0) return rows as T[]
+  return rows.map((row) => {
+    const local = seenAt.get(row.id)
+    if (!local) return row
+    const server = parseTime(row.admin_seen_at)
+    const opened = parseTime(local)
+    if (opened === null || (server !== null && server >= opened)) return row
+    return { ...row, admin_seen_at: local }
+  })
+}
+
 export function formatRelative(iso: string): string {
   const t = new Date(iso).getTime()
   if (Number.isNaN(t)) return '—'
