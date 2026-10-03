@@ -1,0 +1,21 @@
+{
+  "objectClassName": "domain",
+  "ldhName": "glot.it",
+  "status": [
+    "active"
+  ],
+  "events": [
+    {
+      "eventAction": "registration",
+      "eventDate": "2024-03-01T10:00:00Z"
+    },
+    {
+      "eventAction": "expiration",
+      "eventDate": "2026-10-20T10:00:00Z"
+    },
+    {
+      "eventAction": "last changed",
+      "eventDate": "2025-03-01T10:00:00Z"
+    }
+  ]
+}

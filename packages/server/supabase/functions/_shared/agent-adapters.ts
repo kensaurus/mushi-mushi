@@ -27,7 +27,8 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { log } from './logger.ts'
 import { resolveLlmKey } from './byok.ts'
-import { parseGithubRepoUrl } from './github.ts'
+import { fetchPullRequestFiles, parseGithubRepoUrl, resolveProjectGithubToken } from './github.ts'
+import { classifyPrSubstance, parsePullRequestUrl, type PrChangedFile } from './pr-substance.ts'
 import { generateCursorCloudBranchName, validateFixBranchName } from './github-pr.ts'
 import { notifyTeamFixEvent } from './team-notify.ts'
 import { dispatchPluginEventDetached } from './plugins.ts'
@@ -291,7 +292,7 @@ You have the full repository \`${ctx.repoOwner}/${ctx.repoName}\` checked out. T
 2. Make the smallest change that fixes the bug. Add or update a test when you change behaviour. Do not refactor unrelated code.
 3. Open the pull request as a DRAFT against \`${ctx.baseRef}\`. Title it \`fix: <short summary> (MUSHI-${ctx.reportId})\` and include the line \`Mushi report: ${ctx.reportId}\` in the description, followed by what you changed and why.
 4. Never merge, never force-push, never touch secrets or CI credentials. A human reviews every line before merge.
-5. If you cannot find the cause, still open the draft PR with a \`NEEDS_INVESTIGATION.md\` describing what you checked and what to look at next.`
+5. If you cannot find the cause, do NOT open a pull request. Finish the run without one and explain in your final message what you checked and what to look at next. A pull request that only adds notes, markdown or TODO comments is not a fix: Mushi flags it as needs-investigation and leaves the report open.`
 }
 
 /** Branch the agent is asked to use; the Cursor helper owns the prefix/validation rules. */
@@ -517,7 +518,19 @@ export function getCloudAgentAdapter(kind: string): CloudAgentAdapter {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type CloudAgentOutcome =
-  | { kind: 'pr_opened'; prUrl: string; branch?: string | null; summary?: string | null }
+  | {
+      kind: 'pr_opened'
+      prUrl: string
+      branch?: string | null
+      summary?: string | null
+      /**
+       * True when the vendor says the agent run is over (poll `completed`,
+       * Cursor FINISHED), so the PR's files are final. A `pull_request.opened`
+       * delivery or a PR seen at dispatch time leaves it unset: the GitHub
+       * Copilot agent opens its draft PR before it pushes anything.
+       */
+      agentFinished?: boolean
+    }
   | { kind: 'completed_no_pr'; summary?: string | null }
   | { kind: 'failed'; error: string; failureCategory?: string | null }
 
@@ -526,11 +539,68 @@ export interface CloudAgentOutcomeTarget {
   projectId: string
   reportId: string
   agent: string
+  /**
+   * The PR already attached to this still-open attempt while the agent was
+   * working (fix_attempts.pr_url). A final "finished without a PR" then means
+   * "finished, and that PR is the result", so it is judged, not dropped.
+   */
+  pendingPrUrl?: string | null
 }
 
 export interface CloudAgentOutcomeResult {
   applied: boolean
   reason?: 'already_has_pr' | 'pr_url_conflict' | 'not_open' | 'update_failed'
+  /** The PR only adds notes (markdown / TODO comments), or the finished
+   *  agent's PR changes nothing: the attempt is flagged needs-investigation
+   *  and the report is NOT moved to fixing. */
+  needsInvestigation?: true
+  /** The agent is still working and its PR has no code change yet: the PR
+   *  is attached, the attempt stays open, and the verdict waits for the
+   *  agent to finish (agent-status-poll / cursor-webhook). */
+  awaitingChanges?: true
+}
+
+/** What Mushi could read of a cloud agent's PR before trusting it. */
+export type CloudPrInspection =
+  | { kind: 'read'; files: PrChangedFile[]; complete: boolean }
+  | { kind: 'unread'; reason: string }
+
+export interface CloudAgentOutcomeDeps {
+  /** Reads the PR's changed files; injectable for tests. */
+  inspectPr?: (db: SupabaseClient, projectId: string, prUrl: string) => Promise<CloudPrInspection>
+}
+
+/**
+ * Read a cloud agent PR's changed files with the project's own GitHub token:
+ * the App installation bound to that repo when there is one, else the
+ * project / org PAT, else the platform token (resolveProjectGithubToken's
+ * order). Never throws; an unreadable PR is reported, not guessed.
+ */
+export async function inspectCloudAgentPr(
+  db: SupabaseClient,
+  projectId: string,
+  prUrl: string,
+): Promise<CloudPrInspection> {
+  const pr = parsePullRequestUrl(prUrl)
+  if (!pr) return { kind: 'unread', reason: 'not a GitHub pull request URL' }
+  try {
+    const { data: repoRow } = await db
+      .from('project_repos')
+      .select('github_app_installation_id')
+      .eq('project_id', projectId)
+      .eq('repo_url', `https://github.com/${pr.owner}/${pr.repo}`)
+      .limit(1)
+      .maybeSingle()
+    const installationId =
+      (repoRow as { github_app_installation_id?: number | null } | null)?.github_app_installation_id ?? null
+    const token = await resolveProjectGithubToken(db, projectId, installationId)
+    if (!token) return { kind: 'unread', reason: 'no GitHub token is stored for this project' }
+    const listed = await fetchPullRequestFiles(token, { owner: pr.owner, repo: pr.repo }, pr.number)
+    if (!listed) return { kind: 'unread', reason: 'GitHub did not find the pull request' }
+    return { kind: 'read', files: listed.files, complete: listed.complete }
+  } catch (err) {
+    return { kind: 'unread', reason: String(err instanceof Error ? err.message : err).slice(0, 200) }
+  }
 }
 
 const OPEN_ATTEMPT_STATUSES = ['running', 'queued', 'dispatched', 'pending']
@@ -546,40 +616,110 @@ function failureCategoryFor(agent: string, explicit?: string | null): string {
  * the same attempt produce exactly one transition and one notification. A
  * unique-index hit on `uq_fix_attempts_pr_url` (another attempt already owns
  * that PR) is logged and skipped, as is an attempt that is no longer open.
+ *
+ * Before a PR moves the report to `fixing`, its changed files are read:
+ *   - a PR that only adds notes (markdown, a NEEDS_INVESTIGATION file, TODO
+ *     comments), or a finished agent's PR that changes no file, closes the
+ *     attempt as needs-investigation;
+ *   - while the agent is still working (`agentFinished` unset), a PR with no
+ *     files or only notes so far is attached but NOT judged: the attempt
+ *     stays open, agent-status-poll keeps polling it, and the verdict is made
+ *     on the files the finished agent left;
+ *   - when the files cannot be read while the agent is still working, the PR
+ *     is attached and the verdict waits the same way (a transient GitHub
+ *     error never passes a PR that nobody will re-read);
+ *   - when the files still cannot be read once the agent has finished (no
+ *     token, GitHub down), the PR is trusted and the timeline says it went
+ *     unchecked.
  */
 export async function applyCloudAgentOutcome(
   db: SupabaseClient,
   target: CloudAgentOutcomeTarget,
-  outcome: CloudAgentOutcome,
+  rawOutcome: CloudAgentOutcome,
+  deps: CloudAgentOutcomeDeps = {},
 ): Promise<CloudAgentOutcomeResult> {
   const now = new Date().toISOString()
+  // "Finished, no PR" on an attempt that already holds the PR the agent
+  // opened while working: that PR is the result, so it gets judged.
+  const outcome: CloudAgentOutcome =
+    rawOutcome.kind === 'completed_no_pr' && target.pendingPrUrl
+      ? { kind: 'pr_opened', prUrl: target.pendingPrUrl, summary: rawOutcome.summary ?? null, agentFinished: true }
+      : rawOutcome
 
   if (outcome.kind === 'pr_opened') {
-    const { data: updated, error } = await db
-      .from('fix_attempts')
-      .update({
-        status: 'completed',
-        pr_url: outcome.prUrl,
-        pr_state: 'open',
-        ...(outcome.branch ? { branch: outcome.branch, branch_name: outcome.branch } : {}),
-        ...(outcome.summary ? { summary: outcome.summary.slice(0, 2000) } : {}),
-        completed_at: now,
+    const finished = outcome.agentFinished === true
+    const inspection = await (deps.inspectPr ?? inspectCloudAgentPr)(db, target.projectId, outcome.prUrl).catch(
+      (err): CloudPrInspection => ({ kind: 'unread', reason: String(err).slice(0, 200) }),
+    )
+    if (inspection.kind === 'read') {
+      const verdict = classifyPrSubstance(inspection.files, { complete: inspection.complete })
+      const empty = inspection.files.length === 0
+      if (!finished && (empty || verdict.speculative)) {
+        return await attachPendingPr(
+          db,
+          target,
+          outcome,
+          empty ? 'the pull request has no files yet' : 'the pull request only has notes so far',
+        )
+      }
+      if (empty) {
+        return await applyNeedsInvestigationPr(
+          db,
+          target,
+          outcome,
+          { reason: 'the agent finished, but its pull request changes no files', files: [] },
+          now,
+        )
+      }
+      if (verdict.speculative) {
+        return await applyNeedsInvestigationPr(db, target, outcome, verdict, now)
+      }
+    } else if (!finished) {
+      // A transient read failure (GitHub 5xx / 403 / rate limit / timeout)
+      // while the agent still works must not pass the PR as a fix: once the
+      // attempt is claimed, nothing re-reads it. Attach it and let the
+      // finished agent's outcome (agent-status-poll / cursor-webhook) judge.
+      alog.warn('Cloud agent PR contents not readable yet — waiting for the agent to finish', {
+        attemptId: target.attemptId,
+        prUrl: outcome.prUrl,
+        reason: inspection.reason,
       })
-      .eq('id', target.attemptId)
-      .is('pr_url', null)
-      .select('id')
-    if (error) {
-      if (error.code === '23505') {
+      return await attachPendingPr(db, target, outcome, `the pull request's files could not be read yet (${inspection.reason})`)
+    } else {
+      alog.warn('Cloud agent PR contents not checked', {
+        attemptId: target.attemptId,
+        prUrl: outcome.prUrl,
+        reason: inspection.reason,
+      })
+    }
+    const contentCheck = inspection.kind === 'unread' ? `not_checked: ${inspection.reason}` : 'code_change'
+
+    const claim = await claimAttemptForPr(db, target.attemptId, outcome.prUrl, {
+      status: 'completed',
+      pr_url: outcome.prUrl,
+      pr_state: 'open',
+      ...(outcome.branch ? { branch: outcome.branch, branch_name: outcome.branch } : {}),
+      ...(outcome.summary ? { summary: outcome.summary.slice(0, 2000) } : {}),
+      completed_at: now,
+    })
+    if (claim.error) {
+      if (claim.error.code === '23505') {
         alog.warn('PR already attached to another fix attempt — skipping', {
           attemptId: target.attemptId,
           prUrl: outcome.prUrl,
         })
         return { applied: false, reason: 'pr_url_conflict' }
       }
-      alog.error('fix_attempts PR update failed', { attemptId: target.attemptId, error: error.message })
+      alog.error('fix_attempts PR update failed', { attemptId: target.attemptId, error: claim.error.message })
       return { applied: false, reason: 'update_failed' }
     }
-    if (!updated || updated.length === 0) return { applied: false, reason: 'already_has_pr' }
+    if (!claim.claimed) {
+      if (finished) {
+        const closed = await closeAttemptWhosePrClosed(db, target, outcome.prUrl, now)
+        if (closed) return closed
+      }
+      return { applied: false, reason: 'already_has_pr' }
+    }
 
     await db
       .from('fix_dispatch_jobs')
@@ -609,7 +749,7 @@ export async function applyCloudAgentOutcome(
       label: 'Draft PR opened by cloud agent',
       detail: outcome.prUrl,
       dedupe_key: `cloud-pr:${target.attemptId}`,
-      payload: { agent: target.agent, prUrl: outcome.prUrl, branch: outcome.branch ?? null },
+      payload: { agent: target.agent, prUrl: outcome.prUrl, branch: outcome.branch ?? null, contentCheck },
     })
 
     dispatchPluginEventDetached(db, target.projectId, 'fix.proposed', {
@@ -691,6 +831,221 @@ export async function applyCloudAgentOutcome(
     failureCategory: failureCategoryFor(target.agent, isFailure ? outcome.failureCategory : null),
   }).catch((e) => alog.warn('Team fix notification failed', { event: 'fix_failed', err: String(e) }))
 
+  return { applied: true }
+}
+
+/**
+ * A cloud agent opened a PR that only adds notes. Record the PR on the attempt
+ * (so the race guard and the unique index still hold, and a human can find
+ * and close it), close the attempt as needs-investigation, and leave the
+ * report's status alone: nothing was fixed.
+ */
+async function applyNeedsInvestigationPr(
+  db: SupabaseClient,
+  target: CloudAgentOutcomeTarget,
+  outcome: Extract<CloudAgentOutcome, { kind: 'pr_opened' }>,
+  verdict: { reason: string; files: string[] },
+  now: string,
+): Promise<CloudAgentOutcomeResult> {
+  const errorText =
+    `needs_investigation: ${verdict.reason}. The agent did not find a fix; read its notes, then close the PR: ${outcome.prUrl}`
+      .slice(0, 1000)
+  const claim = await claimAttemptForPr(db, target.attemptId, outcome.prUrl, {
+    status: 'failed',
+    pr_url: outcome.prUrl,
+    pr_state: 'open',
+    ...(outcome.branch ? { branch: outcome.branch, branch_name: outcome.branch } : {}),
+    ...(outcome.summary ? { summary: outcome.summary.slice(0, 2000) } : {}),
+    files_changed: verdict.files.slice(0, 50),
+    review_passed: false,
+    review_reasoning: verdict.reason.slice(0, 1000),
+    error: errorText,
+    failure_category: 'validation_rejected',
+    completed_at: now,
+  })
+  if (claim.error) {
+    if (claim.error.code === '23505') {
+      alog.warn('PR already attached to another fix attempt — skipping', { attemptId: target.attemptId, prUrl: outcome.prUrl })
+      return { applied: false, reason: 'pr_url_conflict' }
+    }
+    alog.error('fix_attempts needs-investigation update failed', { attemptId: target.attemptId, error: claim.error.message })
+    return { applied: false, reason: 'update_failed' }
+  }
+  if (!claim.claimed) {
+    if (outcome.agentFinished === true) {
+      const closed = await closeAttemptWhosePrClosed(db, target, outcome.prUrl, now)
+      if (closed) return closed
+    }
+    return { applied: false, reason: 'already_has_pr' }
+  }
+
+  await db
+    .from('fix_dispatch_jobs')
+    .update({ status: 'completed_no_pr', pr_url: outcome.prUrl, error: errorText.slice(0, 500), finished_at: now })
+    .eq('fix_attempt_id', target.attemptId)
+    .in('status', ['queued', 'running'])
+
+  // processing_error only: the report keeps its status (not `fixing`).
+  await db
+    .from('reports')
+    .update({ processing_error: `autofix_blocked: ${errorText}`.slice(0, 500) })
+    .eq('id', target.reportId)
+    .eq('project_id', target.projectId)
+
+  await insertFixEvent(db, {
+    fix_attempt_id: target.attemptId,
+    project_id: target.projectId,
+    kind: 'failed',
+    status: 'fail',
+    label: 'Cloud agent PR needs investigation (notes only, no fix)',
+    detail: `${verdict.reason} — ${outcome.prUrl}`.slice(0, 500),
+    dedupe_key: `cloud-final:${target.attemptId}`,
+    payload: { agent: target.agent, prUrl: outcome.prUrl, files: verdict.files.slice(0, 20), needsInvestigation: true },
+  })
+
+  dispatchPluginEventDetached(db, target.projectId, 'fix.failed', {
+    report: { id: target.reportId },
+    fix: { id: target.attemptId, agent: target.agent, error: errorText.slice(0, 500), prUrl: outcome.prUrl },
+  }).catch((e) => alog.warn('Plugin dispatch failed', { event: 'fix.failed', err: String(e) }))
+
+  void notifyTeamFixEvent(db, target.projectId, target.reportId, 'fix_failed', {
+    error: errorText.slice(0, 500),
+    failureCategory: 'validation_rejected',
+  }).catch((e) => alog.warn('Team fix notification failed', { event: 'fix_failed', err: String(e) }))
+
+  return { applied: true, needsInvestigation: true }
+}
+
+type DbError = { code?: string; message: string }
+
+/**
+ * Write a PR verdict onto the attempt exactly once. First writer wins on
+ * `pr_url IS NULL` (as always); an attempt whose PR was attached while the
+ * agent was still working is claimed instead on "same PR, still open, PR not
+ * closed". The second write leaves `pr_state` alone: the indexer keeps it
+ * current (a Copilot PR is a draft until someone readies it).
+ */
+async function claimAttemptForPr(
+  db: SupabaseClient,
+  attemptId: string,
+  prUrl: string,
+  patch: Record<string, unknown>,
+): Promise<{ claimed: boolean; error: DbError | null }> {
+  const first = await db.from('fix_attempts').update(patch).eq('id', attemptId).is('pr_url', null).select('id')
+  if (first.error) return { claimed: false, error: first.error }
+  if (first.data && first.data.length > 0) return { claimed: true, error: null }
+
+  const pendingPatch = Object.fromEntries(Object.entries(patch).filter(([key]) => key !== 'pr_state'))
+  const second = await db
+    .from('fix_attempts')
+    .update(pendingPatch)
+    .eq('id', attemptId)
+    .eq('pr_url', prUrl)
+    .in('status', OPEN_ATTEMPT_STATUSES)
+    .in('pr_state', ['open', 'draft'])
+    .select('id')
+  if (second.error) return { claimed: false, error: second.error }
+  return { claimed: !!second.data && second.data.length > 0, error: null }
+}
+
+/**
+ * The agent is still working and its PR has no code change yet. Attach the PR
+ * (so the unique index and the indexer's pr_url lookups hold) but keep the
+ * attempt open and the report where it is; the finished agent's files decide.
+ * No team notification and no `fix.proposed`: nothing is proposed yet.
+ */
+async function attachPendingPr(
+  db: SupabaseClient,
+  target: CloudAgentOutcomeTarget,
+  outcome: Extract<CloudAgentOutcome, { kind: 'pr_opened' }>,
+  waitingFor: string,
+): Promise<CloudAgentOutcomeResult> {
+  const { data: attached, error } = await db
+    .from('fix_attempts')
+    .update({
+      pr_url: outcome.prUrl,
+      pr_state: 'open',
+      ...(outcome.branch ? { branch: outcome.branch, branch_name: outcome.branch } : {}),
+    })
+    .eq('id', target.attemptId)
+    .is('pr_url', null)
+    .in('status', OPEN_ATTEMPT_STATUSES)
+    .select('id')
+  if (error) {
+    if (error.code === '23505') {
+      alog.warn('PR already attached to another fix attempt — skipping', { attemptId: target.attemptId, prUrl: outcome.prUrl })
+      return { applied: false, reason: 'pr_url_conflict' }
+    }
+    alog.error('fix_attempts pending PR attach failed', { attemptId: target.attemptId, error: error.message })
+    return { applied: false, reason: 'update_failed' }
+  }
+  if (!attached || attached.length === 0) return { applied: false, reason: 'already_has_pr' }
+
+  await insertFixEvent(db, {
+    fix_attempt_id: target.attemptId,
+    project_id: target.projectId,
+    kind: 'pr_opened',
+    status: 'pending',
+    label: 'Draft PR opened; waiting for the agent to finish',
+    detail: `${waitingFor} — ${outcome.prUrl}`.slice(0, 500),
+    dedupe_key: `cloud-pr-pending:${target.attemptId}`,
+    payload: {
+      agent: target.agent,
+      prUrl: outcome.prUrl,
+      branch: outcome.branch ?? null,
+      contentCheck: `pending: ${waitingFor}`,
+    },
+  })
+  return { applied: true, awaitingChanges: true }
+}
+
+/**
+ * The agent finished, but the PR it opened while working was closed before
+ * that: nothing to judge. Close the attempt so it stops blocking re-dispatch
+ * (the report never moved to fixing).
+ */
+async function closeAttemptWhosePrClosed(
+  db: SupabaseClient,
+  target: CloudAgentOutcomeTarget,
+  prUrl: string,
+  now: string,
+): Promise<CloudAgentOutcomeResult | null> {
+  const errorText = `The cloud agent's pull request was closed before the agent finished: ${prUrl}`.slice(0, 1000)
+  const { data: closed, error } = await db
+    .from('fix_attempts')
+    .update({
+      status: 'failed',
+      error: errorText,
+      failure_category: failureCategoryFor(target.agent, null),
+      completed_at: now,
+    })
+    .eq('id', target.attemptId)
+    .eq('pr_url', prUrl)
+    .eq('pr_state', 'closed')
+    .in('status', OPEN_ATTEMPT_STATUSES)
+    .select('id')
+  if (error) {
+    alog.error('fix_attempts close (PR closed) failed', { attemptId: target.attemptId, error: error.message })
+    return { applied: false, reason: 'update_failed' }
+  }
+  if (!closed || closed.length === 0) return null
+
+  await db
+    .from('fix_dispatch_jobs')
+    .update({ status: 'completed_no_pr', pr_url: prUrl, error: errorText.slice(0, 500), finished_at: now })
+    .eq('fix_attempt_id', target.attemptId)
+    .in('status', ['queued', 'running'])
+
+  await insertFixEvent(db, {
+    fix_attempt_id: target.attemptId,
+    project_id: target.projectId,
+    kind: 'failed',
+    status: 'fail',
+    label: 'Cloud agent finished after its PR was closed',
+    detail: errorText.slice(0, 500),
+    dedupe_key: `cloud-final:${target.attemptId}`,
+    payload: { agent: target.agent, prUrl },
+  })
   return { applied: true }
 }
 
@@ -784,7 +1139,7 @@ export function pollResultToOutcome(poll: CloudPollResult): CloudAgentOutcome | 
       return null
     case 'completed':
       return poll.prUrl
-        ? { kind: 'pr_opened', prUrl: poll.prUrl, branch: poll.branch ?? null, summary: poll.summary ?? null }
+        ? { kind: 'pr_opened', prUrl: poll.prUrl, branch: poll.branch ?? null, summary: poll.summary ?? null, agentFinished: true }
         : { kind: 'completed_no_pr', summary: poll.summary ?? null }
     case 'cancelled':
       return { kind: 'failed', error: poll.error ?? 'Cloud agent run was cancelled' }

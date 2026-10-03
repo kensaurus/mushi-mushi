@@ -23,6 +23,9 @@
  *     `/mushi list`         — last 10 open reports
  *     `/mushi open <id>`    — console deep link + summary
  *     `/mushi resolve <id>` — status → resolved via the shared transition
+ *     `/mushi reply <id> <text>` — answer the reporter through the same
+ *                           path as the card's "Reply to reporter" modal
+ *                           (`_shared/slack-reporter-reply.ts`)
  *     `/mushi help`
  *     Ports `packages/plugin-slack-app/src/commands.ts buildSlashRouter`
  *     (edge bundles cannot import workspace packages).
@@ -55,6 +58,7 @@ import { fetchWithTimeout } from '../../_shared/http.ts'
 import { sendBotMessage, buildReportDeepLink } from '../../_shared/slack.ts'
 import { verifySlackRequest } from '../../_shared/slack-verify.ts'
 import { applyReportStatusTransition } from '../../_shared/report-transition.ts'
+import { sendSlackReporterReply } from '../../_shared/slack-reporter-reply.ts'
 import type { VoiceIngestInput, VoiceIngestResult } from '../../_shared/voice-intake.ts'
 import {
   createWebhookMiddleware,
@@ -177,8 +181,11 @@ export type MushiCommand =
   | { sub: 'list' }
   | { sub: 'open'; id: string }
   | { sub: 'resolve'; id: string }
+  | { sub: 'reply'; id: string; text: string }
   | { sub: 'help' }
   | { sub: 'usage'; text: string }
+
+const REPLY_USAGE = 'Usage: `/mushi reply <report-id> <your message to the reporter>`'
 
 export function parseMushiCommand(rawText: string | null | undefined): MushiCommand {
   const text = (rawText ?? '').trim()
@@ -202,6 +209,16 @@ export function parseMushiCommand(rawText: string | null | undefined): MushiComm
     case 'fix':
     case 'done':
       return rest[0] ? { sub: 'resolve', id: rest[0] } : { sub: 'usage', text: 'Usage: `/mushi resolve <report-id>`' }
+    case 'reply':
+    case 'answer': {
+      // Keep the message's own line breaks: only the command word and the id
+      // are split off.
+      const m = /^(\S+)\s+([\s\S]+)$/.exec(text.slice(first.length).trim())
+      // Slack HTML-encodes & < > in slash-command text; the reporter reads
+      // the reply as plain text, so decode them back to what was typed.
+      const body = m ? decodeSlackEntities(m[2].trim()) : ''
+      return m && body.trim() ? { sub: 'reply', id: m[1], text: body.trim() } : { sub: 'usage', text: REPLY_USAGE }
+    }
     case 'help':
     default:
       return { sub: 'help' }
@@ -214,8 +231,17 @@ export const MUSHI_HELP_TEXT = [
   '• `/mushi list` — last 10 open reports',
   '• `/mushi open <id>` — open a report in the console',
   '• `/mushi resolve <id>` — mark a report resolved',
+  '• `/mushi reply <id> <message>` — answer the person who reported it; they see it word for word in your app',
   '• Or drop an *audio clip* in a connected channel and Mushi will transcribe it.',
 ].join('\n')
+
+/**
+ * Undo Slack's escaping of `&`, `<` and `>` in inbound text (`&amp;` last, so
+ * a typed `&lt;` that Slack sent as `&amp;lt;` stays `&lt;`).
+ */
+export function decodeSlackEntities(s: string): string {
+  return s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')
+}
 
 /** Escape Slack mrkdwn control characters in untrusted text. */
 export function escapeSlackText(s: string): string {
@@ -711,7 +737,7 @@ export async function runMushiCommand(
   db: SupabaseClient,
   projectId: string,
   cmd: MushiCommand,
-  form: Pick<SlashCommandForm, 'user_id'>,
+  form: Pick<SlashCommandForm, 'user_id'> & Partial<Pick<SlashCommandForm, 'channel_id'>>,
 ): Promise<SlashReply> {
   switch (cmd.sub) {
     case 'help':
@@ -750,6 +776,22 @@ export async function runMushiCommand(
       })
       if (!result.ok) return eph(`:x: Could not resolve — ${escapeSlackText(result.message)}`)
       return eph(`:white_check_mark: Resolved \`${found.report.id.slice(0, 8)}\` — ${reportLabel(found.report)}`)
+    }
+    case 'reply': {
+      // Same path as the card's "Reply to reporter" modal and the console:
+      // one visible comment; the report_comments trigger writes the in-app
+      // row and enqueues email / push under the reporter's own opt-ins.
+      const found = await findProjectReport(db, projectId, cmd.id)
+      if (!found.ok) return eph(`:mag: ${found.message}`)
+      const sent = await sendSlackReporterReply(db, {
+        reportId: found.report.id,
+        message: cmd.text,
+        actor: { slackUserId: form.user_id || null, slackChannelId: form.channel_id ?? null, via: 'slash_command' },
+      })
+      if (!sent.ok) return eph(`:x: Reply not sent — ${escapeSlackText(sent.message)}`)
+      return eph(
+        `:speech_balloon: Replied on \`${found.report.id.slice(0, 8)}\` — ${reportLabel(found.report)}\n${quoteBlock(truncate(cmd.text, 600))}`,
+      )
     }
     case 'voice':
       // Never reached: the route defers voice work behind an ack.

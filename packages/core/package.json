@@ -27,12 +27,25 @@
         "types": "./dist/reporter-ui.d.cts",
         "default": "./dist/reporter-ui.cjs"
       }
+    },
+    "./reporter-channels": {
+      "import": {
+        "types": "./dist/reporter-channels.d.ts",
+        "default": "./dist/reporter-channels.js"
+      },
+      "require": {
+        "types": "./dist/reporter-channels.d.cts",
+        "default": "./dist/reporter-channels.cjs"
+      }
     }
   },
   "typesVersions": {
     "*": {
       "reporter-ui": [
         "./dist/reporter-ui.d.ts"
+      ],
+      "reporter-channels": [
+        "./dist/reporter-channels.d.ts"
       ]
     }
   },

@@ -7,6 +7,7 @@ export type ExploreTabId =
   | 'overview'
   | 'graph'
   | 'layers'
+  | 'diagram'
   | 'search'
   | 'index'
   | 'ask'

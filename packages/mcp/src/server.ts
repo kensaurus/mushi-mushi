@@ -41,10 +41,14 @@ import { wrapUntrustedJson, type UntrustedContentRole } from './wrap-untrusted.j
 import { installStdoutGuard } from './stdout-guard.js';
 import { normalizeArgAliases, snakeAliasOf } from './arg-aliases.js';
 import {
+  RECIPE_STATES,
+  designExcerptQueryOf,
   fixContextOf,
   inventoryActionNodeIdOf,
   projectReportDetail,
   projectReportListRow,
+  recipeError,
+  recipeFromExcerpt,
   reportEvidenceOf,
   similarityQueryOf,
   triageRecommendedActions,
@@ -244,7 +248,13 @@ const REPORT_STATUSES = [
 const REPORT_CATEGORIES = ['bug', 'slow', 'visual', 'confusing', 'other'] as const;
 const REPORT_SEVERITIES = ['critical', 'high', 'medium', 'low'] as const;
 
-/** gate_runs.gate CHECK constraint (migration 20260612061520). */
+/**
+ * gate_runs.gate CHECK constraint (migrations 20260612061520,
+ * 20261002130100_recipe_gate_types, 20261002140100_failopen_radar_and_index_schema,
+ * 20261002180000_radar_gates_and_digest). The hosted server keeps the same list
+ * (functions/mcp/index.ts LIST_GATE_FINDINGS_GATES); the console labels every
+ * one (apps/admin/src/lib/gateLabels.ts).
+ */
 const GATE_IDS = [
   'dead_handler',
   'mock_leak',
@@ -256,6 +266,14 @@ const GATE_IDS = [
   'unknown_call',
   'schema_drift',
   'code_health',
+  'design_drift',
+  'ci_drift',
+  'deploy_drift',
+  'env_drift',
+  'radar',
+  'portfolio_radar',
+  'portfolio_radar_ci',
+  'store_review',
 ] as const;
 /** gate_findings.severity CHECK constraint (migration 20260504000000). */
 const GATE_FINDING_SEVERITIES = ['info', 'warn', 'error'] as const;
@@ -333,6 +351,45 @@ const FIX_CONTEXT_SHAPE = {
   rootCause: z.unknown().describe('Stage-2 root cause, or null before Stage 2 runs'),
   bugOntologyTags: z.unknown().describe('Bug ontology tags, or null'),
 };
+
+/** get_fix_context's `recipe` (recipeFromExcerpt / recipeError in report-shapes.ts). */
+const RECIPE_EXCERPT_OUTPUT = z
+  .looseObject({
+    state: z
+      .enum(RECIPE_STATES)
+      .describe('ok | drift | unknown | not_connected | error; unknown never means healthy'),
+    note: z.string().describe('Why this state, in plain English'),
+    set: z.string().nullable().optional().describe('The token set the excerpt was taken from'),
+    tokens: z
+      .array(z.unknown())
+      .optional()
+      .describe('Most useful tokens first: { path, value, cssVar, ts }. Use these names, not literals.'),
+    findings: z
+      .array(z.unknown())
+      .optional()
+      .describe('Open design deviance findings in the files this fix touches'),
+    score: z
+      .number()
+      .nullable()
+      .optional()
+      .describe('Design deviance score 0–100, lower is better; null = not scored'),
+    truncated: z.boolean().optional().describe('True when the excerpt was cut to stay under 4 KB'),
+    context: z
+      .looseObject({
+        schema: z
+          .unknown()
+          .describe('{ state, note, snapshotAt, tables: [{ name, columns }], missing }: tables the stack trace names, from the latest schema snapshot'),
+        deploy: z
+          .unknown()
+          .describe('{ state: live | deployed_since_merge | not_live | probe_failed | unknown | no_merged_fix | error, note, lastFix, targets }'),
+        radar: z.unknown().describe('{ state, note, checkedAt, findings: [{ rule, severity, message, fix }] }: open hole checks'),
+      })
+      .optional()
+      .describe('Backend and release context for this bug; each section has its own state, and unknown never means healthy'),
+  })
+  .describe(
+    "Design excerpt (≤ 4 KB) for the report's project: tokens with CSS var / TS names, the deviance score, findings in the files this fix touches, and context (tables the stack trace names, whether the last fix is live, open hole checks). Never null; when it could not be read, { state: 'error', note }.",
+  );
 
 /** True when a text block was already wrapped by a handler (wrappedJson*). */
 function isWrappedUntrusted(text: string): boolean {
@@ -418,16 +475,27 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     });
   }
 
-  async function apiCall<T = unknown>(path: string, options?: RequestInit): Promise<T> {
+  async function apiCall<T = unknown>(
+    path: string,
+    options?: RequestInit,
+    // A tool whose route legitimately runs long (get_repo_digest reads a repo
+    // from GitHub) may raise its own deadline; it can never lower the global one.
+    callOptions?: { minTimeoutMs?: number },
+  ): Promise<T> {
     const requestId = crypto.randomUUID().slice(0, 12);
     const started = Date.now();
+    const effectiveTimeoutMs = Math.max(timeoutMs, callOptions?.minTimeoutMs ?? 0);
     // Every tool body funnels through here, so this is the
     // only place a timeout has to exist. `AbortSignal.timeout` fires a
     // `TimeoutError` DOMException that fetch surfaces as the rejection reason.
-    const timeoutSignal = AbortSignal.timeout(timeoutMs);
+    const timeoutSignal = AbortSignal.timeout(effectiveTimeoutMs);
     const toolCall = toolCallContext.getStore();
     let res: Response;
     try {
+      // Intended flow: the endpoint, key and project id may come from the
+      // CLI config file `mushi login` wrote (src/index.ts), and sending that
+      // key to that endpoint is the point of the file. The endpoint is checked
+      // to be an http(s) URL first (resolveStdioCredentials in stdio-config.ts).
       res = await doFetch(`${apiEndpoint}${path}`, {
         ...options,
         headers: {
@@ -474,11 +542,11 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       // your endpoint, DNS, proxy or VPN". A single generic failure string
       // sent people down the wrong path.
       if (timeoutSignal.aborted) {
-        apiLog.warn('api.timeout', { path, requestId, durationMs, timeoutMs });
+        apiLog.warn('api.timeout', { path, requestId, durationMs, timeoutMs: effectiveTimeoutMs });
         return new MushiApiError(
           504,
           'MUSHI_TIMEOUT',
-          `Timed out after ${timeoutMs}ms waiting for ${path}. The Mushi API accepted ` +
+          `Timed out after ${effectiveTimeoutMs}ms waiting for ${path}. The Mushi API accepted ` +
             'the connection but did not answer in time — retry, or raise the budget ' +
             'with MUSHI_MCP_TIMEOUT_MS (ms) in your MCP env block if you self-host ' +
             `and cold starts are slow. Endpoint: ${apiEndpoint}`,
@@ -697,6 +765,35 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       content: [{ type: 'text' as const, text: wrapUntrustedJson(value, role) }],
       structuredContent: value as Record<string, unknown>,
     };
+  }
+
+  /**
+   * get_fix_context's `recipe`: the design excerpt for the report's project,
+   * scoped to the files its fix attempts and fix packet name, plus `context`
+   * (tables the stack trace names, the last fix's deploy state, open radar
+   * findings) for the report itself. Never throws and
+   * never returns null — a failed read is { state: 'error', note }, so the fix
+   * context itself still succeeds.
+   */
+  async function designRecipeFor(
+    report: Record<string, unknown>,
+    fallbackProjectId: string,
+    headers: Record<string, string>,
+  ): Promise<Record<string, unknown>> {
+    const pid =
+      typeof report.project_id === 'string' && report.project_id
+        ? report.project_id
+        : fallbackProjectId;
+    const query = designExcerptQueryOf(report);
+    try {
+      return recipeFromExcerpt(
+        await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/design/excerpt${query}`, {
+          headers,
+        }),
+      );
+    } catch (err) {
+      return recipeError(`Could not read the design excerpt: ${bareMessage(err)}`);
+    }
   }
 
   const server = new McpServer(
@@ -978,13 +1075,15 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         inventoryAction: z
           .unknown()
           .describe('The inventory action (with its expected_outcome contract) the report is filed against, or null'),
+        recipe: RECIPE_EXCERPT_OUTPUT,
       }),
     },
     async (args) => {
-      const { headers } = await projectScopeHeaders(args.projectId);
+      const { projectId: scopedProjectId, headers } = await projectScopeHeaders(args.projectId);
       const report = await apiCall<Record<string, unknown>>(`/v1/admin/reports/${args.reportId}`, {
         headers,
       });
+      const recipe = await designRecipeFor(report, scopedProjectId, headers);
       // fix_packet, report body, and rootCause are user-authored or LLM-generated
       // free text — wrap with anti-injection delimiters.
       return wrappedJsonResult(
@@ -992,6 +1091,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           report: projectReportDetail(report, false),
           ...fixContextOf(report),
           inventoryAction: report.inventory_action ?? null,
+          recipe,
         },
         'fix context',
       );
@@ -1196,6 +1296,698 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         `/v1/admin/inventory/${pid}/findings${suffix}`,
       );
       return jsonResult(data);
+    },
+  );
+
+  // --- App Recipe + design plane (Plan 019) --------------------------------
+  // Results carry repo content (manifest strings, token descriptions, file
+  // paths); the catalog flags them returnsUntrusted, so the central wrapper
+  // below puts them in data delimiters.
+
+  server.registerTool(
+    'get_app_recipe',
+    {
+      title: titleOf('get_app_recipe'),
+      description: descOf('get_app_recipe'),
+      annotations: annotationsFor('get_app_recipe'),
+      inputSchema: z.object({
+        projectId: z
+          .string()
+          .optional()
+          .describe('Project UUID — defaults to the server-configured project when omitted'),
+      }),
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      return jsonText(await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/recipe`));
+    },
+  );
+
+  server.registerTool(
+    'get_design_tokens',
+    {
+      title: titleOf('get_design_tokens'),
+      description: descOf('get_design_tokens'),
+      annotations: annotationsFor('get_design_tokens'),
+      inputSchema: z.object({
+        projectId: z
+          .string()
+          .optional()
+          .describe('Project UUID — defaults to the server-configured project when omitted'),
+        group: z
+          .string()
+          .max(80)
+          .optional()
+          .describe('Only tokens in this group (first path segment, e.g. color, space, radius).'),
+        type: z
+          .string()
+          .max(40)
+          .optional()
+          .describe('Only tokens of this DTCG $type (color, dimension, fontFamily, …).'),
+        direction: z
+          .string()
+          .max(80)
+          .optional()
+          .describe('A named token set (directions/<name>/) instead of the active one.'),
+      }),
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      const q = new URLSearchParams();
+      if (args.group) q.set('group', args.group);
+      if (args.type) q.set('type', args.type);
+      if (args.direction) q.set('direction', args.direction);
+      const suffix = q.toString() ? `?${q}` : '';
+      return jsonText(
+        await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/design/tokens${suffix}`),
+      );
+    },
+  );
+
+  server.registerTool(
+    'get_design_deviance',
+    {
+      title: titleOf('get_design_deviance'),
+      description: descOf('get_design_deviance'),
+      annotations: annotationsFor('get_design_deviance'),
+      inputSchema: z.object({
+        projectId: z
+          .string()
+          .optional()
+          .describe('Project UUID — defaults to the server-configured project when omitted'),
+        limit: z
+          .number()
+          .int()
+          .min(1)
+          .max(200)
+          .optional()
+          .describe('Findings to return, 1–200 (default 25).'),
+      }),
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      const suffix =
+        args.limit !== undefined ? `?${new URLSearchParams({ limit: String(args.limit) })}` : '';
+      return jsonText(
+        await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/design/deviance${suffix}`),
+      );
+    },
+  );
+
+  // --- Portfolio (Plan 019 P1) ----------------------------------------------
+  // Organization-wide reads. The api refuses project-bound keys (403) and any
+  // organization the key owner is not a member of, so these never widen access.
+
+  const ORG_ID_INPUT = z.object({
+    organizationId: z
+      .string()
+      .uuid()
+      .optional()
+      .describe("Organization UUID — defaults to the key owner's only organization when omitted"),
+  });
+
+  server.registerTool(
+    'get_portfolio',
+    {
+      title: titleOf('get_portfolio'),
+      description: descOf('get_portfolio'),
+      annotations: annotationsFor('get_portfolio'),
+      inputSchema: ORG_ID_INPUT,
+    },
+    async (args) => {
+      const org = encodeURIComponent(args.organizationId ?? 'current');
+      return jsonText(await apiCall(`/v1/admin/orgs/${org}/portfolio`));
+    },
+  );
+
+  server.registerTool(
+    'list_portfolio_findings',
+    {
+      title: titleOf('list_portfolio_findings'),
+      description: descOf('list_portfolio_findings'),
+      annotations: annotationsFor('list_portfolio_findings'),
+      inputSchema: ORG_ID_INPUT,
+    },
+    async (args) => {
+      const org = encodeURIComponent(args.organizationId ?? 'current');
+      return jsonText(await apiCall(`/v1/admin/orgs/${org}/portfolio/findings`));
+    },
+  );
+
+  server.registerTool(
+    'get_recipe_drift',
+    {
+      title: titleOf('get_recipe_drift'),
+      description: descOf('get_recipe_drift'),
+      annotations: annotationsFor('get_recipe_drift'),
+      inputSchema: z.object({
+        projectId: z.string().optional().describe('Project UUID — defaults to the server-configured project when omitted'),
+      }),
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      return jsonText(await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/recipe/drift`));
+    },
+  );
+
+  server.registerTool(
+    'list_connectors',
+    {
+      title: titleOf('list_connectors'),
+      description: descOf('list_connectors'),
+      annotations: annotationsFor('list_connectors'),
+      inputSchema: ORG_ID_INPUT,
+    },
+    async (args) => {
+      const org = encodeURIComponent(args.organizationId ?? 'current');
+      return jsonText(await apiCall(`/v1/admin/orgs/${org}/connectors`));
+    },
+  );
+
+  const EDIT_INPUT = z.object({
+    path: z.string().min(1).max(400).describe('Repo-relative path the recipe allows'),
+    content: z.string().max(512 * 1024).describe('The full new file content'),
+    reason: z.string().max(200).optional(),
+    baseSha: z
+      .string()
+      .min(1)
+      .max(80)
+      .nullable()
+      .optional()
+      .describe("The file's baseSha from the dry run (null = it did not exist). The confirm is refused if the file changed since, so it never reverts someone else's edit"),
+  });
+  const ELEMENT_INPUT = z.enum(['design', 'gates', 'env', 'routes', 'store', 'release']).describe('Which part of the recipe the edit belongs to');
+
+  server.registerTool(
+    'propose_recipe_change',
+    {
+      title: titleOf('propose_recipe_change'),
+      description: descOf('propose_recipe_change'),
+      annotations: annotationsFor('propose_recipe_change'),
+      inputSchema: z.object({
+        projectId: z.string().optional().describe('Project UUID — defaults to the server-configured project when omitted'),
+        element: ELEMENT_INPUT,
+        edits: z.array(EDIT_INPUT).min(1).max(30),
+        title: z.string().min(1).max(120).optional(),
+        confirm: z.boolean().optional().describe('true opens the draft PR; omitted or false is a dry run'),
+      }),
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      return jsonText(await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/recipe/changes`, {
+        method: 'POST',
+        body: JSON.stringify({ element: args.element, edits: args.edits, title: args.title, dryRun: args.confirm !== true }),
+      }));
+    },
+  );
+
+  server.registerTool(
+    'propose_portfolio_change',
+    {
+      title: titleOf('propose_portfolio_change'),
+      description: descOf('propose_portfolio_change'),
+      annotations: annotationsFor('propose_portfolio_change'),
+      inputSchema: z.object({
+        organizationId: z.string().uuid().optional().describe("Organization UUID — defaults to the key owner's only organization"),
+        element: ELEMENT_INPUT,
+        changes: z.array(z.object({ projectId: z.string().uuid(), edits: z.array(EDIT_INPUT).min(1).max(30) })).min(1).max(10),
+        title: z.string().min(1).max(120).optional(),
+        confirm: z.boolean().optional().describe('true opens one draft PR per repo; omitted or false is a dry run'),
+      }),
+    },
+    async (args) => {
+      const org = encodeURIComponent(args.organizationId ?? 'current');
+      return jsonText(await apiCall(`/v1/admin/orgs/${org}/portfolio/changes`, {
+        method: 'POST',
+        body: JSON.stringify({ element: args.element, changes: args.changes, title: args.title, dryRun: args.confirm !== true }),
+      }));
+    },
+  );
+
+  server.registerTool(
+    'request_connector_action',
+    {
+      title: titleOf('request_connector_action'),
+      description: descOf('request_connector_action'),
+      annotations: annotationsFor('request_connector_action'),
+      inputSchema: z.object({
+        organizationId: z.string().uuid().optional().describe("Organization UUID — defaults to the key owner's only organization"),
+        connectorId: z.string().uuid().describe('Connector instance id (list_connectors)'),
+        action: z.string().min(1).max(60).describe('For example set_rollout or promote_track'),
+        payload: z.record(z.string(), z.unknown()).describe('The exact action input; the approval binds its hash'),
+        projectId: z.string().uuid().optional(),
+        reason: z.string().max(500).optional().describe('Why, shown to the approver'),
+      }),
+    },
+    async (args) => {
+      const org = encodeURIComponent(args.organizationId ?? 'current');
+      const body = { connectorId: args.connectorId, action: args.action, payload: args.payload, projectId: args.projectId, reason: args.reason };
+      return jsonText(await apiCall(`/v1/admin/orgs/${org}/connector-actions`, { method: 'POST', body: JSON.stringify(body) }));
+    },
+  );
+
+  server.registerTool(
+    'get_store_status',
+    {
+      title: titleOf('get_store_status'),
+      description: descOf('get_store_status'),
+      annotations: annotationsFor('get_store_status'),
+      inputSchema: z.object({
+        projectId: z.string().optional().describe('Project UUID — defaults to the server-configured project when omitted'),
+      }),
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      return jsonText(await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/store`));
+    },
+  );
+
+  server.registerTool(
+    'get_radar',
+    {
+      title: titleOf('get_radar'),
+      description: descOf('get_radar'),
+      annotations: annotationsFor('get_radar'),
+      inputSchema: z.object({
+        scope: z.enum(['project', 'organization']).optional().describe('project (default) or organization'),
+        projectId: z.string().optional().describe('Project UUID — defaults to the server-configured project (scope project)'),
+        organizationId: z
+          .string()
+          .uuid()
+          .optional()
+          .describe("Organization UUID — defaults to the key owner's only organization (scope organization)"),
+      }),
+    },
+    async (args) => {
+      if (args.scope === 'organization') {
+        const org = encodeURIComponent(args.organizationId ?? 'current');
+        return jsonText(await apiCall(`/v1/admin/orgs/${org}/radar`));
+      }
+      const pid = await resolveProjectId(args.projectId);
+      return jsonText(await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/radar`));
+    },
+  );
+
+  const PROJECT_ID_INPUT = z.object({
+    projectId: z.string().optional().describe('Project UUID — defaults to the server-configured project when omitted'),
+  });
+
+  // Run-now triggers for the recipe, design, radar and store checks. Each one
+  // only records a new run (rate limited server-side); nothing in the repo or
+  // a store changes.
+  server.registerTool(
+    'run_radar',
+    {
+      title: titleOf('run_radar'),
+      description: descOf('run_radar'),
+      annotations: annotationsFor('run_radar'),
+      inputSchema: PROJECT_ID_INPUT,
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      return jsonText(await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/radar/run`, { method: 'POST' }));
+    },
+  );
+
+  server.registerTool(
+    'refresh_recipe',
+    {
+      title: titleOf('refresh_recipe'),
+      description: descOf('refresh_recipe'),
+      annotations: annotationsFor('refresh_recipe'),
+      inputSchema: PROJECT_ID_INPUT,
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      return jsonText(await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/recipe/refresh`, { method: 'POST' }));
+    },
+  );
+
+  server.registerTool(
+    'run_design_deviance',
+    {
+      title: titleOf('run_design_deviance'),
+      description: descOf('run_design_deviance'),
+      annotations: annotationsFor('run_design_deviance'),
+      inputSchema: PROJECT_ID_INPUT,
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      return jsonText(await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/design/deviance/run`, { method: 'POST' }));
+    },
+  );
+
+  server.registerTool(
+    'run_store_review',
+    {
+      title: titleOf('run_store_review'),
+      description: descOf('run_store_review'),
+      annotations: annotationsFor('run_store_review'),
+      inputSchema: PROJECT_ID_INPUT,
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      return jsonText(
+        await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/store/review`, { method: 'POST' }, { minTimeoutMs: 90_000 }),
+      );
+    },
+  );
+
+  server.registerTool(
+    'get_release_calendar',
+    {
+      title: titleOf('get_release_calendar'),
+      description: descOf('get_release_calendar'),
+      annotations: annotationsFor('get_release_calendar'),
+      inputSchema: ORG_ID_INPUT,
+    },
+    async (args) => {
+      const org = encodeURIComponent(args.organizationId ?? 'current');
+      return jsonText(await apiCall(`/v1/admin/orgs/${org}/releases`));
+    },
+  );
+
+  server.registerTool(
+    'get_code_health',
+    {
+      title: titleOf('get_code_health'),
+      description: descOf('get_code_health'),
+      annotations: annotationsFor('get_code_health'),
+      inputSchema: z.object({
+        projectId: z.string().optional().describe('Project UUID — defaults to the server-configured project when omitted'),
+        days: z.number().int().min(1).max(365).optional().describe('Trend window in days (default 30)'),
+      }),
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      const qs = new URLSearchParams({ project_id: pid, days: String(args.days ?? 30) });
+      return jsonText(await apiCall(`/v1/admin/code-health?${qs}`));
+    },
+  );
+
+  server.registerTool(
+    'explain_finding',
+    {
+      title: titleOf('explain_finding'),
+      description: descOf('explain_finding'),
+      annotations: annotationsFor('explain_finding'),
+      inputSchema: z.object({
+        findingId: z.string().uuid().describe('Gate finding id (the id field of a finding in list_gate_findings, get_radar, get_code_health…)'),
+      }),
+    },
+    async (args) => {
+      return jsonText(await apiCall(`/v1/admin/findings/${encodeURIComponent(args.findingId)}`));
+    },
+  );
+
+  // --- Console parity: release, design, recipe and store panels -------------
+
+  server.registerTool(
+    'get_auto_release_status',
+    {
+      title: titleOf('get_auto_release_status'),
+      description: descOf('get_auto_release_status'),
+      annotations: annotationsFor('get_auto_release_status'),
+      inputSchema: PROJECT_ID_INPUT,
+    },
+    async (args) => {
+      // The route reads the project from ?project_id= (an account-level key has no project of its own).
+      const pid = await resolveProjectId(args.projectId);
+      return jsonText(await apiCall(`/v1/admin/releases/auto-release?${new URLSearchParams({ project_id: pid })}`));
+    },
+  );
+
+  server.registerTool(
+    'get_design_settings',
+    {
+      title: titleOf('get_design_settings'),
+      description: descOf('get_design_settings'),
+      annotations: annotationsFor('get_design_settings'),
+      inputSchema: PROJECT_ID_INPUT,
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      return jsonText(await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/design/settings`));
+    },
+  );
+
+  server.registerTool(
+    'set_design_settings',
+    {
+      title: titleOf('set_design_settings'),
+      description: descOf('set_design_settings'),
+      annotations: annotationsFor('set_design_settings'),
+      inputSchema: z.object({
+        projectId: z.string().optional().describe('Project UUID — defaults to the server-configured project when omitted'),
+        threshold: z.number().int().min(0).max(100).optional().describe('0–100; the actions fire when the score is above it'),
+        failCi: z.boolean().optional().describe('true: `mushi recipe check --push` fails CI above the threshold'),
+        autofix: z.boolean().optional().describe('false turns the design auto-fix off; an API key cannot turn it on'),
+      }),
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      const body = { threshold: args.threshold, failCi: args.failCi, autofix: args.autofix };
+      return jsonText(await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/design/settings`, { method: 'PUT', body: JSON.stringify(body) }));
+    },
+  );
+
+  server.registerTool(
+    'get_recipe_sources',
+    {
+      title: titleOf('get_recipe_sources'),
+      description: descOf('get_recipe_sources'),
+      annotations: annotationsFor('get_recipe_sources'),
+      inputSchema: z.object({
+        projectId: z.string().optional().describe('Project UUID — defaults to the server-configured project when omitted'),
+        element: z.enum(['gates', 'env', 'routes']).describe('gates (mushi.recipe.json budgets), env (.env.example) or routes (the inventory file)'),
+      }),
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      const qs = new URLSearchParams({ element: args.element });
+      return jsonText(await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/recipe/sources?${qs}`));
+    },
+  );
+
+  server.registerTool(
+    'get_recipe_change',
+    {
+      title: titleOf('get_recipe_change'),
+      description: descOf('get_recipe_change'),
+      annotations: annotationsFor('get_recipe_change'),
+      inputSchema: z.object({
+        projectId: z.string().optional().describe('Project UUID — defaults to the server-configured project when omitted'),
+        jobId: z.string().uuid().describe('The jobId propose_recipe_change returned'),
+      }),
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      return jsonText(await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/recipe/changes/${encodeURIComponent(args.jobId)}`));
+    },
+  );
+
+  server.registerTool(
+    'get_store_reviews',
+    {
+      title: titleOf('get_store_reviews'),
+      description: descOf('get_store_reviews'),
+      annotations: annotationsFor('get_store_reviews'),
+      inputSchema: PROJECT_ID_INPUT,
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      return jsonText(await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/store/reviews`));
+    },
+  );
+
+  server.registerTool(
+    'pull_store_reviews',
+    {
+      title: titleOf('pull_store_reviews'),
+      description: descOf('pull_store_reviews'),
+      annotations: annotationsFor('pull_store_reviews'),
+      inputSchema: PROJECT_ID_INPUT,
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      return jsonText(
+        await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/store/reviews/pull`, { method: 'POST' }, { minTimeoutMs: 90_000 }),
+      );
+    },
+  );
+
+  server.registerTool(
+    'set_store_review_intake',
+    {
+      title: titleOf('set_store_review_intake'),
+      description: descOf('set_store_review_intake'),
+      annotations: annotationsFor('set_store_review_intake'),
+      inputSchema: z.object({
+        projectId: z.string().optional().describe('Project UUID — defaults to the server-configured project when omitted'),
+        enabled: z.boolean().describe('false turns intake off; true keeps it on (only the console can turn it on)'),
+        maxRating: z.number().int().min(1).max(5).optional().describe('Reviews at or under this many stars are filed (1–5)'),
+      }),
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      const body = { enabled: args.enabled, maxRating: args.maxRating };
+      return jsonText(await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/store/reviews/settings`, { method: 'PUT', body: JSON.stringify(body) }));
+    },
+  );
+
+  // --- Portfolio operator records (accounts register, spend ledger, shared
+  // resources). Account-level key; the api refuses a project-bound key.
+
+  const ACCOUNT_PROVIDER = z.enum(['apple', 'google_play', 'aws', 'supabase', 'vercel', 'registrar', 'stripe', 'github', 'cloudflare', 'other']);
+
+  server.registerTool(
+    'get_accounts_register',
+    {
+      title: titleOf('get_accounts_register'),
+      description: descOf('get_accounts_register'),
+      annotations: annotationsFor('get_accounts_register'),
+      inputSchema: ORG_ID_INPUT,
+    },
+    async (args) => {
+      const org = encodeURIComponent(args.organizationId ?? 'current');
+      return jsonText(await apiCall(`/v1/admin/orgs/${org}/accounts`));
+    },
+  );
+
+  server.registerTool(
+    'save_register_account',
+    {
+      title: titleOf('save_register_account'),
+      description: descOf('save_register_account'),
+      annotations: annotationsFor('save_register_account'),
+      inputSchema: z.object({
+        organizationId: z.string().uuid().optional().describe("Organization UUID — defaults to the key owner's only organization"),
+        id: z.string().uuid().optional().describe('Account id to change (get_accounts_register); omit to record a new account'),
+        provider: ACCOUNT_PROVIDER.optional().describe('Required when recording a new account'),
+        displayName: z.string().min(1).max(120).optional().describe('Required when recording a new account'),
+        ownerEmail: z.string().email().max(254).nullable().optional(),
+        twoFactorDeclared: z.boolean().nullable().optional(),
+        recoveryContact: z.string().max(200).nullable().optional().describe('A person who can recover the account (never a recovery code)'),
+        adminCount: z.number().int().min(1).max(100).optional(),
+        autoRenew: z.boolean().nullable().optional(),
+      }),
+    },
+    async (args) => {
+      const org = encodeURIComponent(args.organizationId ?? 'current');
+      const { organizationId: _org, id, ...fields } = args;
+      if (!id && (!fields.provider || !fields.displayName)) {
+        throw new MushiApiError(400, 'VALIDATION_ERROR', 'provider and displayName are required to record a new account (pass id to change one).');
+      }
+      const path = id ? `/v1/admin/orgs/${org}/accounts/${encodeURIComponent(id)}` : `/v1/admin/orgs/${org}/accounts`;
+      return jsonText(await apiCall(path, { method: id ? 'PATCH' : 'POST', body: JSON.stringify(fields) }));
+    },
+  );
+
+  server.registerTool(
+    'remove_register_account',
+    {
+      title: titleOf('remove_register_account'),
+      description: descOf('remove_register_account'),
+      annotations: annotationsFor('remove_register_account'),
+      inputSchema: z.object({
+        organizationId: z.string().uuid().optional().describe("Organization UUID — defaults to the key owner's only organization"),
+        id: z.string().uuid().describe('Account id (get_accounts_register)'),
+      }),
+    },
+    async (args) => {
+      const org = encodeURIComponent(args.organizationId ?? 'current');
+      return jsonText(await apiCall(`/v1/admin/orgs/${org}/accounts/${encodeURIComponent(args.id)}`, { method: 'DELETE' }));
+    },
+  );
+
+  server.registerTool(
+    'set_domain_auto_renew',
+    {
+      title: titleOf('set_domain_auto_renew'),
+      description: descOf('set_domain_auto_renew'),
+      annotations: annotationsFor('set_domain_auto_renew'),
+      inputSchema: z.object({
+        organizationId: z.string().uuid().optional().describe("Organization UUID — defaults to the key owner's only organization"),
+        domainId: z.string().uuid().describe('Domain id (the id of a domain in get_accounts_register)'),
+        autoRenew: z.boolean().nullable().describe('true, false, or null for not known'),
+      }),
+    },
+    async (args) => {
+      const org = encodeURIComponent(args.organizationId ?? 'current');
+      return jsonText(await apiCall(`/v1/admin/orgs/${org}/domains/${encodeURIComponent(args.domainId)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ autoRenew: args.autoRenew }),
+      }));
+    },
+  );
+
+  server.registerTool(
+    'get_spend_ledger',
+    {
+      title: titleOf('get_spend_ledger'),
+      description: descOf('get_spend_ledger'),
+      annotations: annotationsFor('get_spend_ledger'),
+      inputSchema: ORG_ID_INPUT,
+    },
+    async (args) => {
+      const org = encodeURIComponent(args.organizationId ?? 'current');
+      return jsonText(await apiCall(`/v1/admin/orgs/${org}/spend`));
+    },
+  );
+
+  server.registerTool(
+    'import_spend_bill',
+    {
+      title: titleOf('import_spend_bill'),
+      description: descOf('import_spend_bill'),
+      annotations: annotationsFor('import_spend_bill'),
+      inputSchema: z.object({
+        organizationId: z.string().uuid().optional().describe("Organization UUID — defaults to the key owner's only organization"),
+        vendor: z.enum(['vercel', 'aws', 'supabase', 'other']),
+        csv: z.string().min(1).describe('The bill CSV content (at most 5 MB)'),
+        projectId: z.string().uuid().optional().describe('Put every row on this app; omit to match an app column by name or slug'),
+        filename: z.string().max(200).optional(),
+      }),
+    },
+    async (args) => {
+      const org = encodeURIComponent(args.organizationId ?? 'current');
+      const body = { vendor: args.vendor, csv: args.csv, projectId: args.projectId, filename: args.filename };
+      return jsonText(await apiCall(`/v1/admin/orgs/${org}/spend/imports`, { method: 'POST', body: JSON.stringify(body) }, { minTimeoutMs: 60_000 }));
+    },
+  );
+
+  server.registerTool(
+    'remove_spend_import',
+    {
+      title: titleOf('remove_spend_import'),
+      description: descOf('remove_spend_import'),
+      annotations: annotationsFor('remove_spend_import'),
+      inputSchema: z.object({
+        organizationId: z.string().uuid().optional().describe("Organization UUID — defaults to the key owner's only organization"),
+        importId: z.string().uuid().describe('Import id (get_spend_ledger imports)'),
+      }),
+    },
+    async (args) => {
+      const org = encodeURIComponent(args.organizationId ?? 'current');
+      return jsonText(await apiCall(`/v1/admin/orgs/${org}/spend/imports/${encodeURIComponent(args.importId)}`, { method: 'DELETE' }));
+    },
+  );
+
+  server.registerTool(
+    'import_portfolio_resources',
+    {
+      title: titleOf('import_portfolio_resources'),
+      description: descOf('import_portfolio_resources'),
+      annotations: annotationsFor('import_portfolio_resources'),
+      inputSchema: z.object({
+        organizationId: z.string().uuid().optional().describe("Organization UUID — defaults to the key owner's only organization"),
+        csv: z.string().min(1).max(256 * 1024).describe('CSV with the columns kind, external_id, project and optionally role'),
+      }),
+    },
+    async (args) => {
+      // The route takes the organization in the body; `current` resolves the key owner's only one.
+      const body = { organizationId: args.organizationId ?? 'current', csv: args.csv };
+      return jsonText(await apiCall('/v1/ingest/recipe/csv', { method: 'POST', body: JSON.stringify(body) }));
     },
   );
 
@@ -2158,6 +2950,24 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         });
       }
 
+      // Reporters who answered in the widget and have not been read yet
+      // (last_reporter_reply_at > admin_seen_at) — Plan 018 decision 10.
+      const waiting = reports.filter(
+        (r) =>
+          typeof r.last_reporter_reply_at === 'string' &&
+          (typeof r.admin_seen_at !== 'string' ||
+            Date.parse(r.last_reporter_reply_at) > Date.parse(r.admin_seen_at)),
+      );
+      if (waiting.length > 0) {
+        steps.push({
+          priority: priority++,
+          action: `Answer ${waiting.length} reporter${waiting.length === 1 ? '' : 's'} waiting for a reply`,
+          reason: `They replied in your app's "Your reports" thread. Latest: ${label(waiting[0])}. Read it, then answer with reply_to_reporter.`,
+          tool: 'get_report_timeline',
+          args: { reportId: waiting[0].id },
+        });
+      }
+
       const fixing = reports.filter((r) => r.status === 'fixing');
       for (const r of fixing.slice(0, 2)) {
         steps.push({
@@ -2201,7 +3011,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
 
       const summary =
         steps.length === 0
-          ? 'Inbox is clear — no blocked fixes, no open user reports, no chores. Nothing needs your attention.'
+          ? 'Inbox is clear — no blocked fixes, no reporters waiting, no open user reports, no chores. Nothing needs your attention.'
           : `${steps.length} prioritised step${steps.length === 1 ? '' : 's'}: ` +
             steps.map((s) => s.action).join(' → ');
       return jsonResult({ steps, summary });
@@ -2471,6 +3281,23 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           .optional()
           .describe('Sentry search query within the configured Sentry project (default is:unresolved). Not with issueIds.'),
         limit: z.number().int().min(1).max(10).optional().describe('How many issues a query imports (1-10, default 5)'),
+        sinceDays: z
+          .number()
+          .int()
+          .min(1)
+          .max(90)
+          .optional()
+          .describe('Only issues seen in the last N days (1-90). Search mode only.'),
+        cursor: z
+          .string()
+          .regex(/^[0-9][0-9.:-]{0,63}$/)
+          .optional()
+          .describe('nextCursor from the previous import, to fetch the next page of a backlog. Search mode only.'),
+        sentryProject: z
+          .string()
+          .regex(/^[a-z0-9][a-z0-9_-]{0,49}$/)
+          .optional()
+          .describe("Which of the project's Sentry projects to search (default: the primary one). Search mode only."),
         projectId: z.string().optional().describe('Project UUID. Defaults to configured project.'),
       }),
       outputSchema: z.object({
@@ -2492,13 +3319,27 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         indexing: z
           .looseObject({ queued: z.boolean(), paths: z.number() })
           .describe('Whether stack-frame files were queued for codebase indexing'),
+        sentryProject: z.string().nullable().optional().describe('The Sentry project a search ran in (null for issueIds)'),
+        sentryProjects: z.array(z.string()).optional().describe("This project's Sentry projects, primary first"),
+        nextCursor: z
+          .string()
+          .nullable()
+          .optional()
+          .describe('Pass back as cursor to import the next page; null when the backlog is done'),
       }),
     },
     async (args) => {
       const pid = await resolveProjectId(args.projectId);
       const data = await apiCall<Record<string, unknown>>(`/v1/admin/projects/${pid}/sentry/import`, {
         method: 'POST',
-        body: JSON.stringify({ issueIds: args.issueIds, query: args.query, limit: args.limit }),
+        body: JSON.stringify({
+          issueIds: args.issueIds,
+          query: args.query,
+          limit: args.limit,
+          sinceDays: args.sinceDays,
+          cursor: args.cursor,
+          sentryProject: args.sentryProject,
+        }),
       });
       return jsonResult(data);
     },
@@ -4115,6 +4956,87 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       if (!pid) throw new MushiApiError(400, 'MISSING_PROJECT', 'projectId is required');
       const data = await apiCall<unknown>(`/v1/admin/projects/${pid}/codebase/knowledge/graph`);
       return jsonText(data);
+    },
+  );
+
+  server.registerTool(
+    'get_repo_digest',
+    {
+      title: titleOf('get_repo_digest', CODEBASE_TOOL_CATALOG),
+      description: descOf('get_repo_digest', CODEBASE_TOOL_CATALOG),
+      annotations: annotationsFor('get_repo_digest', CODEBASE_TOOL_CATALOG),
+      inputSchema: z.object({
+        projectId: z.string().optional().describe('Project UUID (defaults to configured project)'),
+        reportId: z
+          .string()
+          .optional()
+          .describe("Scope to one bug: the report's files come first, then the rest of the repo by priority"),
+        path: z.string().optional().describe('Scope to one folder, e.g. "apps/web/src"'),
+        budgetTokens: z
+          .number()
+          .int()
+          .min(2_000)
+          .max(200_000)
+          .optional()
+          .describe('Estimated token budget for the whole digest (default 50,000)'),
+        include: z
+          .array(z.string())
+          .max(50)
+          .optional()
+          .describe('Glob patterns a file must match, e.g. ["src/**/*.ts", "*.md"]'),
+        exclude: z.array(z.string()).max(50).optional().describe('Glob patterns to leave out, e.g. ["tests/"]'),
+        ref: z.string().optional().describe('Branch, tag or commit SHA (default: the repo default branch)'),
+      }),
+    },
+    async (args) => {
+      const pid = args.projectId ?? projectId;
+      if (!pid) throw new MushiApiError(400, 'MISSING_PROJECT', 'projectId is required');
+      const qs = new URLSearchParams();
+      if (args.budgetTokens) qs.set('budget', String(args.budgetTokens));
+      if (args.reportId) qs.set('report_id', args.reportId);
+      if (args.path) qs.set('path', args.path);
+      if (args.include?.length) qs.set('include', args.include.join(','));
+      if (args.exclude?.length) qs.set('exclude', args.exclude.join(','));
+      if (args.ref) qs.set('ref', args.ref);
+      const query = qs.toString();
+      const data = await apiCall<unknown>(
+        `/v1/admin/projects/${pid}/codebase/digest${query ? `?${query}` : ''}`,
+        undefined,
+        // The server reads up to a few hundred files from GitHub (60 s deadline).
+        { minTimeoutMs: 90_000 },
+      );
+      return jsonText(data);
+    },
+  );
+
+  server.registerTool(
+    'get_repo_diagram',
+    {
+      title: titleOf('get_repo_diagram', CODEBASE_TOOL_CATALOG),
+      description: descOf('get_repo_diagram', CODEBASE_TOOL_CATALOG),
+      annotations: annotationsFor('get_repo_diagram', CODEBASE_TOOL_CATALOG),
+      inputSchema: z.object({
+        projectId: z.string().optional().describe('Project UUID (defaults to configured project)'),
+        overlay: z
+          .boolean()
+          .optional()
+          .describe('Also place the open bug reports and code findings on each part of the diagram'),
+      }),
+    },
+    async (args) => {
+      const pid = encodeURIComponent(await resolveProjectId(args.projectId));
+      const data = await apiCall<{ diagram: unknown; publication: unknown }>(
+        `/v1/admin/projects/${pid}/codebase/diagram`,
+      );
+      if (args.overlay !== true) return jsonText(data);
+      // No diagram yet: the overlay route answers 404 NO_DIAGRAM, so skip it.
+      const overlay = data.diagram
+        ? await apiCall<unknown>(`/v1/admin/projects/${pid}/codebase/diagram/overlay`, undefined, {
+            // One GitHub tree read plus up to a few hundred reports.
+            minTimeoutMs: 60_000,
+          })
+        : null;
+      return jsonText({ ...data, overlay });
     },
   );
 

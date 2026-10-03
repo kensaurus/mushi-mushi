@@ -18,6 +18,8 @@ type ReplyStatus = 201 | 404 | 409 | 500
 export interface PostReplyResult {
   status: ReplyStatus
   body: Record<string, unknown>
+  /** On 201: the Mushi user the comment is attributed to (the project owner). Never in `body`. */
+  authorUserId?: string
 }
 
 /**
@@ -86,7 +88,7 @@ export async function postReporterReply(
   // id) and enqueues reporter-notify-fanout for email / push. Writing a
   // second comment_reply row here would double the reporter's badge.
 
-  return { status: 201, body: { ok: true, data: { comment } } }
+  return { status: 201, body: { ok: true, data: { comment } }, authorUserId: project.owner_id as string }
 }
 
 /**

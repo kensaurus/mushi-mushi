@@ -104,6 +104,40 @@ export async function sendTeamsNotification(
 }
 
 /**
+ * Sends a titled plain-text message (a digest, a summary) to a Teams webhook.
+ * Same MessageCard shape as the report card, without report facts. The
+ * remote body is never returned to the caller (status code only).
+ */
+export async function sendTeamsText(
+  webhookUrl: string,
+  title: string,
+  text: string,
+): Promise<{ ok: boolean; error?: string }> {
+  if (!webhookUrl) return { ok: false, error: 'no_webhook_url' }
+  const card = {
+    '@type': 'MessageCard',
+    '@context': 'https://schema.org/extensions',
+    themeColor: '7C3AED',
+    summary: title.slice(0, 200),
+    sections: [{ activityTitle: title.slice(0, 200), text: text.slice(0, 20_000).replace(/\n/g, '\n\n') }],
+  }
+  try {
+    const res = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(card),
+      signal: AbortSignal.timeout(15_000),
+    })
+    if (res.ok) return { ok: true }
+    await res.body?.cancel().catch(() => {})
+    teamsLog.warn('teams webhook error', { status: res.status })
+    return { ok: false, error: `HTTP ${res.status}` }
+  } catch (err) {
+    return { ok: false, error: String(err) }
+  }
+}
+
+/**
  * Sends a plain-text test message to a Teams webhook.
  * Used by the console "Send test" button.
  */

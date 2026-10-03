@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Badge, Breadcrumbs, Btn, RelativeTime } from '../ui'
+import { DEPLOY_LIVE_TONE, deployLiveLabel, deployLiveTitle } from './deployLive'
 import { ContainedBlock, MetaChip } from './ReportSurface'
 import {
   STATUS,
@@ -12,7 +13,7 @@ import {
 } from '../../lib/tokens'
 import { useReportPresence } from '../../lib/reportPresence'
 import { reportHeading } from '../../lib/clipText'
-import type { ReportDetail } from './types'
+import type { ReportDeployLive, ReportDetail } from './types'
 
 export function ReportDetailHeader({ report, reporterShort }: { report: ReportDetail; reporterShort: string }) {
   // Friendly display title: prefer the Stage-2 generated `title` (non-engineer
@@ -53,6 +54,7 @@ export function ReportDetailHeader({ report, reporterShort }: { report: ReportDe
               {CATEGORY_LABELS[report.category] ?? report.category}
             </Badge>
           )}
+          {report.deploy_live && <DeployLiveBadge deployLive={report.deploy_live} />}
           {(report.custom_metadata as { source?: string } | null)?.source === 'sentry_webhook' && (
             <Badge className="bg-surface-overlay text-fg-secondary border border-edge-subtle" title="Ingested from a Sentry webhook — errors and user feedback routed into Mushi">
               via Sentry
@@ -169,6 +171,15 @@ export function ReportDetailHeader({ report, reporterShort }: { report: ReportDe
       <PresenceBadges reportId={report.id} projectId={report.project_id} />
       </div>
     </div>
+  )
+}
+
+/** The merged fix vs what production runs; the reason is on hover. */
+function DeployLiveBadge({ deployLive }: { deployLive: ReportDeployLive }) {
+  return (
+    <Badge tone={DEPLOY_LIVE_TONE[deployLive.state]} title={deployLiveTitle(deployLive)}>
+      <span data-testid="deploy-live">{deployLiveLabel(deployLive)}</span>
+    </Badge>
   )
 }
 

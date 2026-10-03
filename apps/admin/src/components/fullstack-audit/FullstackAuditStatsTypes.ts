@@ -7,6 +7,8 @@ export type FullstackAuditTopPriority =
   | 'failures'
   | 'warnings'
   | 'healthy'
+  /** A read failed: the counts are not known (see readError). Never healthy. */
+  | 'unknown'
 
 export interface FullstackAuditStats {
   hasAnyProject: boolean
@@ -16,6 +18,8 @@ export interface FullstackAuditStats {
   warnCount: number
   failedGateCount: number
   topPriority: FullstackAuditTopPriority
+  /** Plain-English reason when topPriority is `unknown`. */
+  readError?: string | null
 }
 
 export const EMPTY_FULLSTACK_AUDIT_STATS: FullstackAuditStats = {

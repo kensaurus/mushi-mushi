@@ -1,0 +1,540 @@
+/**
+ * FILE: packages/server/supabase/functions/_shared/recipe-types.ts
+ * PURPOSE: Wire types for the App Recipe and design-plane routes (Plan 019,
+ *          Phase 1 + 1b). Types only, no runtime code, so the admin console
+ *          mirror (apps/admin/src/lib/recipeTypes.ts) and the MCP proxies can
+ *          copy them without pulling any Deno module.
+ *
+ * Routes (all under adminOrApiKey; writes need mcp:write or an owner/admin JWT):
+ *   GET  /v1/admin/projects/:id/recipe                    → RecipeResponse
+ *   GET  /v1/admin/projects/:id/recipe/elements/:element  → RecipeElementDetail
+ *   POST /v1/admin/projects/:id/recipe/refresh            → RecipeRefreshResult
+ *   GET  /v1/admin/projects/:id/recipe/history            → RecipeHistoryResponse
+ *   GET  /v1/admin/projects/:id/design[?direction=]       → DesignPlaneResponse
+ *   GET  /v1/admin/projects/:id/design/tokens[?group=&type=&direction=] → DesignTokensResponse
+ *   GET  /v1/admin/projects/:id/design/deviance[?limit=]  → DesignDevianceResponse
+ *   POST /v1/admin/projects/:id/design/deviance/run       → DesignDevianceRunResult (202; run.status 'running', poll GET …/deviance)
+ *   POST /v1/admin/projects/:id/design/changes            → DesignChangeResult
+ *   GET  /v1/admin/projects/:id/design/excerpt[?files=]   → DesignExcerpt
+ *   GET  /v1/admin/projects/:id/design/directions         → DesignDirectionsResponse
+ *   GET  /v1/design-assets/:projectId?path=&exp=&sig=      → the asset bytes (HMAC-signed URL, no auth header)
+ *
+ * Every route answers `{ ok: true, data: <type> }`.
+ *
+ * The token, rule and finding types live in design-engine-types.ts (the
+ * engine shared with `mushi recipe check`) and are re-exported here.
+ */
+
+import type {
+  ContrastPairResult,
+  DesignRuleConfig,
+  DesignRuleId,
+  DesignToken,
+  DevianceBreakdownEntry,
+  DevianceFinding,
+  FindingSeverity,
+  RecipeIssue,
+  TokenSetKind,
+} from './design-engine-types.ts'
+
+export { DESIGN_RULE_IDS } from './design-engine-types.ts'
+export type {
+  ContrastPairResult,
+  DesignRuleConfig,
+  DesignRuleId,
+  DesignToken,
+  DevianceBreakdownEntry,
+  DevianceFinding,
+  DevianceSuggestion,
+  FindingSeverity,
+  RecipeIssue,
+  TokenType,
+} from './design-engine-types.ts'
+
+// ── The five states ──────────────────────────────────────────────────────────
+
+export const RECIPE_ELEMENT_KEYS = [
+  'schema',
+  'design',
+  'routes',
+  'gates',
+  'ci',
+  'deploy',
+  'env',
+  'integrations',
+] as const
+export type RecipeElementKey = (typeof RECIPE_ELEMENT_KEYS)[number]
+
+/**
+ * `unknown` means "configured but never observed, or observed too long ago".
+ * It is never rendered as green. `not_connected` means nothing is configured.
+ */
+export type ElementState = 'ok' | 'drift' | 'unknown' | 'not_connected' | 'error'
+
+export type RecipeLane = 'sources' | 'build' | 'deploy' | 'runtime'
+
+export interface RecipeLink {
+  label: string
+  /** Console path (`/code-health`) or absolute https URL. */
+  to: string
+}
+
+export interface RecipeElementSummary {
+  key: RecipeElementKey
+  label: string
+  lane: RecipeLane
+  state: ElementState
+  /** One plain-English line: why this state. */
+  reason: string
+  lastCheckedAt: string | null
+  /** A few key facts for the card (counts, versions, names). */
+  facts: Record<string, string | number | boolean | null>
+  findingsCount: number
+  links: RecipeLink[]
+}
+
+export interface RecipeManifestStatus {
+  present: boolean
+  path: string | null
+  commitSha: string | null
+  capturedAt: string | null
+  validationErrors: RecipeIssue[]
+}
+
+export interface RecipeResponse {
+  projectId: string
+  organizationId: string | null
+  generatedAt: string
+  /** Worst state across elements: error > drift > unknown > not_connected > ok. */
+  worst: ElementState
+  elements: Record<RecipeElementKey, RecipeElementSummary>
+  manifest: RecipeManifestStatus
+  snapshotHash: string | null
+}
+
+export interface RecipeElementDetail {
+  element: RecipeElementSummary
+  /**
+   * Element-specific detail; shapes are documented per element in recipe.ts.
+   * GET /recipe/elements/:element (never GET /recipe) adds one typed view:
+   * `schemaView`, `ciView`, `deployView` or `envView` (below).
+   */
+  detail: Record<string, unknown>
+}
+
+// ── Per-element detail views (GET /recipe/elements/:element only) ───────────
+
+export interface SchemaTableRow {
+  name: string
+  schema: string | null
+  /** null when the source does not say (the connector's table list has no RLS for some rows). */
+  rls: boolean | null
+  /** null when the source lists tables without columns. */
+  columns: number | null
+}
+
+export interface SchemaTableChange {
+  name: string
+  addedColumns: string[]
+  removedColumns: string[]
+  /** Set when RLS was switched on or off between the two snapshots. */
+  rls: { from: boolean | null; to: boolean | null } | null
+}
+
+export interface SchemaView {
+  /** Where the table list came from; null when no snapshot exists yet. */
+  source: 'drift_scanner' | 'supabase_connector' | null
+  capturedAt: string | null
+  tables: SchemaTableRow[]
+  /** Tables beyond the cap are left out. */
+  totalTables: number
+  /** Diff against the snapshot before; null when there is only one. */
+  diff: { previousCapturedAt: string; added: string[]; removed: string[]; changed: SchemaTableChange[] } | null
+}
+
+export interface CiRunRow {
+  runId: number
+  name: string | null
+  event: string | null
+  branch: string | null
+  headSha: string | null
+  status: string | null
+  conclusion: string | null
+  startedAt: string | null
+  completedAt: string | null
+  /** Estimated billable minutes (GitHub closed the usage APIs); null when not estimated. */
+  estMinutes: number | null
+  /** https only. */
+  url: string | null
+}
+
+export interface CiView {
+  runs: CiRunRow[]
+  /** Sum over the listed runs that have an estimate. */
+  estMinutesTotal: number | null
+  estimatedRuns: number
+  note: string
+}
+
+export type DeployTargetStatus = 'live' | 'behind' | 'probe_failed' | 'unobserved' | 'not_comparable'
+
+export interface DeployTargetRow {
+  id: string
+  kind: string | null
+  environment: string | null
+  probe: string | null
+  expected: { commit: string | null; version: string | null }
+  observed: { commit: string | null; version: string | null; at: string; ok: boolean; error: string | null; source: string } | null
+  status: DeployTargetStatus
+  /** Plain-English reason for the status. */
+  reason: string
+}
+
+export interface DeployView {
+  /** The default-branch head every target should be running. */
+  expectedCommit: string | null
+  expectedVersion: string | null
+  targets: DeployTargetRow[]
+  /** Targets with observations that mushi.recipe.json no longer declares. */
+  undeclared: string[]
+}
+
+/** `not_checked`: the names there could not be listed, so nothing is claimed. */
+export type EnvCell = 'present' | 'missing' | 'extra' | 'not_required' | 'not_checked'
+
+export interface EnvMatrixColumn {
+  /** `github-actions`, `github-environment:<name>` or `runtime`. */
+  key: string
+  label: string
+  checked: boolean
+}
+
+export interface EnvMatrixRow {
+  name: string
+  /** Declared in env.required, or required by the Mushi SDK for this stack; false = only found in GitHub. */
+  declared: boolean
+  cells: Record<string, EnvCell>
+}
+
+export interface EnvView {
+  columns: EnvMatrixColumn[]
+  rows: EnvMatrixRow[]
+  /** Undeclared names beyond the cap are left out. */
+  truncated: boolean
+}
+
+export interface RecipeRefreshResult {
+  ok: boolean
+  state: ElementState
+  reason: string
+  snapshotId: string | null
+  tokensHash: string | null
+  manifestPresent: boolean
+  tokenCount: number
+  issues: RecipeIssue[]
+}
+
+export interface RecipeHistoryEntry {
+  id: string
+  capturedAt: string
+  commitSha: string | null
+  source: 'repo_file' | 'ci_ingest' | 'derived' | 'connector'
+  tokensHash: string
+  isCurrent: boolean
+  tokenCount: number
+  validationErrorCount: number
+}
+
+export interface RecipeHistoryResponse {
+  snapshots: RecipeHistoryEntry[]
+  /** Token-level diff between the two newest snapshots (null when < 2). */
+  latestDiff: TokenDiff | null
+}
+
+export interface TokenDiff {
+  fromSnapshotId: string
+  toSnapshotId: string
+  added: string[]
+  removed: string[]
+  changed: Array<{ path: string; from: string; to: string }>
+}
+
+// ── Design tokens ────────────────────────────────────────────────────────────
+
+export interface DesignTokenSet {
+  name: string
+  /** True for the set the manifest points at. */
+  active: boolean
+  /** `direction` for directions/<name>/, `export` for generated files, `default` otherwise. */
+  kind: TokenSetKind
+  files: Array<{ path: string; role: 'source' | 'export'; generator: string | null }>
+  tokenCount: number
+  /** design.directions[].note, when declared. */
+  note?: string | null
+}
+
+export interface DesignComponentEntry {
+  name: string
+  file: string
+}
+
+export type DevianceRunStatus = 'running' | 'pass' | 'warn' | 'fail' | 'error'
+
+export interface DevianceRun {
+  runId: string
+  status: DevianceRunStatus
+  /** 0 (on-system) … 100 (off-system). Null when the scan could not judge anything. */
+  score: number | null
+  scannedFiles: number
+  scannedLines: number
+  /** Files that matched the scan globs before the cap was applied. */
+  matchedFiles: number
+  /** True when the file or byte cap stopped the scan early. */
+  truncated: boolean
+  commitSha: string | null
+  startedAt: string
+  completedAt: string | null
+  breakdown: DevianceBreakdownEntry[]
+  /** True finding counts per rule (stored rows are capped). */
+  counts: Partial<Record<DesignRuleId, number>>
+  storedFindings: number
+  error: string | null
+}
+
+/**
+ * GET|PUT /v1/admin/projects/:id/design/settings — what the deviance score
+ * may do on its own (project_settings; both actions off by default).
+ */
+export interface DesignActionSettingsView {
+  /** 0–100; the actions fire when the score is above it. */
+  threshold: number
+  /** `mushi recipe check --push` exits non-zero above the threshold. */
+  failCi: boolean
+  /** New warn/error findings above the threshold dispatch a fix (automatic trigger, capped). */
+  autofix: boolean
+  /** The project's auto-fix switch; the design auto-fix does nothing while it is off. */
+  autofixEnabled: boolean
+  /** Owners and admins may change these. */
+  canEdit: boolean
+}
+
+export interface DesignEditability {
+  enabled: boolean
+  /** Why editing is off: no manifest, export-only tokens, no GitHub token. */
+  reason: string | null
+  /** Repo paths a token edit may write (role: source ∩ change.allowPaths). */
+  tokenFiles: string[]
+  /** Whether mushi.recipe.json itself is writable (needed for rules edits). */
+  manifestWritable: boolean
+}
+
+export interface DesignPlaneResponse {
+  projectId: string
+  state: ElementState
+  reason: string
+  snapshot: {
+    id: string
+    capturedAt: string
+    commitSha: string | null
+    source: RecipeHistoryEntry['source']
+    tokensHash: string
+  } | null
+  manifest: RecipeManifestStatus
+  sets: DesignTokenSet[]
+  /** The set whose tokens are in `tokens` (query `direction`, else the active one). */
+  shownSet: string | null
+  activeSet: string | null
+  tokens: DesignToken[]
+  issues: RecipeIssue[]
+  contrast: ContrastPairResult[]
+  components: DesignComponentEntry[]
+  /** design.css[] custom properties per scope: :root, @theme, and declared scopes (light/dark modes are scopes). */
+  cssScopes: Array<{ path: string; selector: string; kind: 'root' | 'theme' | 'declared'; vars: Array<{ name: string; value: string; hex: string | null }> }>
+  rules: DesignRuleConfig[]
+  editable: DesignEditability
+  deviance: {
+    latest: DevianceRun | null
+    trend: Array<{ at: string; score: number | null; status: DevianceRunStatus }>
+    topFindings: DevianceFinding[]
+  }
+  /** Newest failed refresh or scan that is newer than the snapshot. */
+  lastError: { at: string; message: string } | null
+}
+
+export interface DesignTokensResponse {
+  projectId: string
+  set: string | null
+  tokens: DesignToken[]
+  /** cssVar / ts name → token path, for agents writing code. */
+  nameMap: Record<string, string>
+  total: number
+}
+
+export interface DesignDevianceResponse {
+  projectId: string
+  latest: DevianceRun | null
+  /** A scan still in progress (POST /deviance/run answers 202 and finishes in the background). */
+  running: DevianceRun | null
+  trend: Array<{ at: string; score: number | null; status: DevianceRunStatus }>
+  findings: DevianceFinding[]
+  rules: DesignRuleConfig[]
+}
+
+export interface DesignDevianceRunResult {
+  refresh: RecipeRefreshResult
+  run: DevianceRun | null
+}
+
+// ── Changes (always a draft PR, never a direct write) ───────────────────────
+
+export interface TokenEdit {
+  /** Token path in the active (or named) set. */
+  path: string
+  /** New value: `#RRGGBB` for colors, `12px` / `220ms` for dimensions and durations, a number, or a family list. */
+  value: string | number | string[]
+  set?: string
+}
+
+export type DesignChangeRequest =
+  | { kind: 'tokens'; edits: TokenEdit[]; dryRun?: boolean; title?: string }
+  | {
+      kind: 'rules'
+      rules: Partial<Record<DesignRuleId, Partial<Pick<DesignRuleConfig, 'enabled' | 'severity' | 'allowValues' | 'allowFiles' | 'primitives'>>>>
+      dryRun?: boolean
+      title?: string
+    }
+  /** Point mushi.recipe.json's source token files at another directions/<name>/ folder. */
+  | { kind: 'activate'; direction: string; dryRun?: boolean; title?: string }
+  /** Copy a direction's token files into directions/<name>/, optionally with token edits applied to the copy. */
+  | { kind: 'duplicate'; from: string; name: string; displayName?: string; edits?: Array<Omit<TokenEdit, 'set'>>; dryRun?: boolean; title?: string }
+
+export interface DesignFileChange {
+  path: string
+  /** Unified diff of the change (single hunk per edit region). */
+  diff: string
+  additions: number
+  deletions: number
+}
+
+export interface DesignChangeResult {
+  dryRun: boolean
+  files: DesignFileChange[]
+  /** Paths the change wanted to write but the allowlist refused. */
+  denied: Array<{ path: string; reason: string }>
+  pr: { url: string; number: number; branch: string; draft: true } | null
+}
+
+// ── Excerpt for get_fix_context ──────────────────────────────────────────────
+
+export interface DesignExcerpt {
+  state: ElementState
+  set: string | null
+  /** Most useful tokens first (mapped semantic colours, type, spacing, radius). */
+  tokens: Array<{ path: string; value: string; cssVar: string | null; ts: string | null }>
+  /** Open deviance findings in the requested files. */
+  findings: Array<{ file: string; line: number | null; rule: DesignRuleId; value: string; use: string | null }>
+  score: number | null
+  note: string
+  truncated: boolean
+  /** Backend and release context for the fixer (gap #11); its own ≤ 2 KB share of the 4 KB. */
+  context?: FixRecipeContext
+}
+
+// ── Fixer context: schema, last fix's deploy state, radar ────────────────────
+
+/** Tables the report's stack trace and failed requests name, from the latest schema snapshot. */
+export interface FixSchemaContext {
+  /** ok: tables found · drift: a named table is missing from the snapshot · unknown: none named · not_connected: no snapshot · error: read failed. */
+  state: ElementState
+  note: string
+  snapshotAt: string | null
+  /** Columns as `name type`, most useful tables first. */
+  tables: Array<{ name: string; columns: string[] }>
+  /** Tables an error says do not exist and the snapshot does not have either. */
+  missing: string[]
+}
+
+export type FixDeployState = 'live' | 'deployed_since_merge' | 'not_live' | 'probe_failed' | 'unknown' | 'no_merged_fix' | 'error'
+
+/** Whether the project's last merged fix is live, from deploy observations and deploy_drift. */
+export interface FixDeployContext {
+  state: FixDeployState
+  note: string
+  lastFix: { reportId: string | null; prUrl: string | null; mergedAt: string } | null
+  /** Newest observation per deploy target. */
+  targets: Array<{ id: string; ok: boolean; commit: string | null; observedAt: string }>
+}
+
+/** The project's open hole-check (radar) findings. */
+export interface FixRadarContext {
+  /** drift: open findings · ok: checked, none open · unknown: never checked · error: read failed. */
+  state: ElementState
+  note: string
+  checkedAt: string | null
+  findings: Array<{ rule: string; severity: string; message: string; fix: string | null }>
+}
+
+export interface FixRecipeContext {
+  schema: FixSchemaContext
+  deploy: FixDeployContext
+  radar: FixRadarContext
+  /** Something was cut to stay inside the budget. */
+  truncated: boolean
+}
+
+// ── Directions board ─────────────────────────────────────────────────────────
+
+export interface DirectionAsset {
+  path: string
+  kind: 'icon' | 'illustration' | 'image' | 'font' | 'lottie' | string
+  /** Short-lived signed URL (relative to the api base, e.g. `/v1/design-assets/…`); null when it cannot be signed or is not an image. */
+  url: string | null
+  size: number | null
+}
+
+export interface DirectionFont {
+  /** Token path, e.g. `font.family.display`. */
+  path: string
+  role: string
+  families: string[]
+}
+
+export interface DesignDirection {
+  /** Folder name under directions/. */
+  name: string
+  displayName: string
+  /** Native-script name when the token file gives one, e.g. ผ้าคราม. */
+  nativeName: string | null
+  concept: string | null
+  active: boolean
+  /** design.directions[].note, when declared. */
+  note: string | null
+  /** Inactive directions are read-only comparison sets: never scanned, never edited by a recipe PR. */
+  readOnly: boolean
+  files: Array<{ path: string; role: 'source' | 'export'; generator: string | null }>
+  tokenCount: number
+  /** Every normalized token of the direction (the board picks roles from these). */
+  tokens: DesignToken[]
+  issues: RecipeIssue[]
+  /** Declared contrast pairs (mushi.recipe.json design.contrast) computed against this direction. */
+  contrast: ContrastPairResult[]
+  fonts: DirectionFont[]
+  /** motion.* tokens (durations, easings) as display strings. */
+  motion: Array<{ path: string; display: string }>
+  /** Line and shape tokens: border.*, radius.*, line colours. */
+  line: Array<{ path: string; display: string }>
+  assets: DirectionAsset[]
+  /** Latest deviance run; only the active direction is ever scanned. */
+  deviance: { score: number | null; status: DevianceRunStatus; at: string } | null
+}
+
+export interface DesignDirectionsResponse {
+  projectId: string
+  activeDirection: string | null
+  directions: DesignDirection[]
+  /** One Google Fonts css2 stylesheet URL per declared non-generic family; a family Google does not serve simply fails to load. */
+  fontStylesheets: string[]
+  /** Specimen text in the project's script, detected from the declared font families (Thai for glot). */
+  specimen: { script: 'thai' | 'japanese' | 'korean' | 'chinese' | 'arabic' | 'devanagari' | 'latin'; sample: string; word: string; latin: string }
+  editable: { enabled: boolean; reason: string | null }
+}

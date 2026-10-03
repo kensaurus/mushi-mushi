@@ -29,6 +29,7 @@ import { logAudit } from '../../_shared/audit.ts';
 import { createExternalIssue } from '../../_shared/integrations.ts';
 import { getActivePlugins, dispatchPluginEvent } from '../../_shared/plugins.ts';
 import { cancelCloudAgentAttempt, validateAgentOverride } from '../../_shared/agent-adapters.ts';
+import { checkAutofixBudget } from '../../_shared/autofix-budget.ts';
 import { getAvailableTags } from '../../_shared/ontology.ts';
 import { executeNaturalLanguageQuery } from '../../_shared/nl-query.ts';
 import { withIdempotency } from '../../_shared/idempotency.ts';
@@ -228,7 +229,12 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
           inventory_action_node_id: body.inventoryActionNodeId ?? null,
           // Agent override persisted into dispatch_metadata so the worker
           // can honour the caller's preference without a separate round-trip.
-          dispatch_metadata: agentOverride ? { agent_override: agentOverride } : undefined,
+          // A person asked for this fix (console, CLI, MCP), so the auto-fix
+          // caps do not block it — fix-worker reads `trigger`.
+          dispatch_metadata: {
+            trigger: 'manual',
+            ...(agentOverride ? { agent_override: agentOverride } : {}),
+          },
         })
         .select('id, status, created_at')
         .single();
@@ -256,9 +262,43 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
         });
       });
 
+      // Show the person what auto-fix has spent: a manual dispatch runs past
+      // the caps, so the caller should see the 30-day spend and whether a cap
+      // is already reached. A failed read is reported, not shown as $0.
+      let budget: Record<string, unknown>;
+      try {
+        const { data: capSettings, error: capErr } = await db
+          .from('project_settings')
+          .select('autofix_max_spend_usd, autofix_max_dispatches_per_day, autofix_approval_cost_threshold_usd')
+          .eq('project_id', body.projectId)
+          .maybeSingle();
+        if (capErr) throw new Error(capErr.message);
+        const check = await checkAutofixBudget(
+          db,
+          body.projectId,
+          {
+            autofix_max_spend_usd: (capSettings?.autofix_max_spend_usd as number | null) ?? null,
+            autofix_max_dispatches_per_day: (capSettings?.autofix_max_dispatches_per_day as number | null) ?? null,
+            autofix_approval_cost_threshold_usd:
+              (capSettings?.autofix_approval_cost_threshold_usd as number | null) ?? null,
+          },
+          { trigger: 'manual', excludeDispatchId: job.id },
+        );
+        budget = {
+          spendUsd30d: Math.round(check.spendUsd30d * 10_000) / 10_000,
+          maxSpendUsd: check.maxSpendUsd,
+          dispatchesToday: check.dispatchesToday,
+          maxDispatchesPerDay: check.maxDispatchesPerDay,
+          capExceeded: check.capExceeded,
+        };
+      } catch (err) {
+        log.warn('fix-dispatch budget summary unavailable', { err: String(err) });
+        budget = { error: 'Auto-fix spend could not be read' };
+      }
+
       return c.json({
         ok: true,
-        data: { dispatchId: job.id, status: job.status, createdAt: job.created_at },
+        data: { dispatchId: job.id, status: job.status, createdAt: job.created_at, budget },
       });
     } catch (err) {
       // Temporary: the dispatch endpoint was returning 500 via the Hono

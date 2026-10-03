@@ -62,6 +62,20 @@ if (sources.length === 0) {
 const drift = [];
 const updates = [];
 
+// The chart writes one ConfigMap per calendar month (YYYYMM prefix; see
+// deploy/helm/templates/_helpers.tpl) because the Kubernetes API caps a
+// single ConfigMap at 1 MiB. Fail before any one month gets close to it.
+const SHARD_LIMIT_KIB = 900;
+function shardSizesKiB() {
+  const sizes = new Map();
+  for (const name of sources) {
+    const shard = name.slice(0, 6);
+    sizes.set(shard, (sizes.get(shard) ?? 0) + readFileSync(join(SRC, name)).length);
+  }
+  return [...sizes].map(([shard, bytes]) => [shard, Math.round(bytes / 1024)]).sort();
+}
+const oversizedShards = shardSizesKiB().filter(([, kib]) => kib > SHARD_LIMIT_KIB);
+
 if (CHECK) {
   if (!existsSync(DEST)) {
     drift.push(`destination ${rel(DEST)} is missing`);
@@ -80,6 +94,9 @@ if (CHECK) {
     for (const name of actual) {
       if (!expected.has(name)) drift.push(`stale ${rel(join(DEST, name))}`);
     }
+  }
+  for (const [shard, kib] of oversizedShards) {
+    drift.push(`ConfigMap shard ${shard} is ${kib} KiB (limit ${SHARD_LIMIT_KIB} KiB of the 1 MiB API cap); shard it further in _helpers.tpl`);
   }
   if (drift.length) {
     console.error(
@@ -118,15 +135,18 @@ for (const name of stale) {
 
 const totalBytes = sources.reduce((sum, name) => sum + readFileSync(join(SRC, name)).length, 0);
 const kib = Math.round(totalBytes / 1024);
-const headroom = Math.max(0, 1024 - kib);
+const shards = shardSizesKiB();
+const largest = shards.reduce((max, s) => (s[1] > max[1] ? s : max), ['', 0]);
 
 console.log(`Synced ${sources.length} migration file(s) (${kib} KiB) → ${rel(DEST)}`);
 if (updates.length) console.log(`  + updated: ${updates.length}`);
 if (stale.length) console.log(`  - removed: ${stale.length}`);
-if (kib > 900) {
-  console.warn(
-    `⚠  ConfigMap budget warning: ${kib} KiB / 1024 KiB. Consider sharding by year prefix.`,
-  );
-} else {
-  console.log(`  Helm ConfigMap headroom: ${headroom} KiB (1 MiB cap)`);
+console.log(
+  `  Helm ConfigMaps: ${shards.length} monthly shard(s); largest ${largest[0]} at ${largest[1]} KiB (limit ${SHARD_LIMIT_KIB} KiB, 1 MiB cap)`,
+);
+if (oversizedShards.length) {
+  for (const [shard, size] of oversizedShards) {
+    console.error(`✗ ConfigMap shard ${shard} is ${size} KiB; shard it further in deploy/helm/templates/_helpers.tpl`);
+  }
+  process.exit(1);
 }

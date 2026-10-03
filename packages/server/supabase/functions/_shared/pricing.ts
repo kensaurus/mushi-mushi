@@ -64,3 +64,40 @@ export function estimateCallCostUsd(
   const price = LLM_PRICING_PER_M_TOKENS[stripped] ?? LLM_PRICING_FALLBACK
   return (inputTokens * price.in + outputTokens * price.out) / 1_000_000
 }
+
+/** Tokens and cost of one model's calls within one run. */
+export interface ModelUsageRow {
+  model: string
+  inputTokens: number
+  outputTokens: number
+  costUsd: number
+}
+
+/**
+ * Usage of a run that can call more than one model (a Claude call with an
+ * OpenAI fallback), kept per model. Write one `llm_cost_usd` row per model:
+ * a compound id such as `claude-sonnet-5-5+gpt-5.4-mini` would be a cost
+ * bucket of its own and would never match a model filter.
+ */
+export class UsageByModel {
+  private readonly totals = new Map<string, ModelUsageRow>()
+
+  record(model: string, inputTokens: number, outputTokens: number): void {
+    const row = this.totals.get(model) ?? { model, inputTokens: 0, outputTokens: 0, costUsd: 0 }
+    row.inputTokens += inputTokens
+    row.outputTokens += outputTokens
+    row.costUsd += estimateCallCostUsd(model, inputTokens, outputTokens)
+    this.totals.set(model, row)
+  }
+
+  /** One row per model used, in the order each was first used. */
+  rows(): ModelUsageRow[] {
+    return [...this.totals.values()].map((r) => ({ ...r }))
+  }
+
+  get totalCostUsd(): number {
+    let sum = 0
+    for (const r of this.totals.values()) sum += r.costUsd
+    return sum
+  }
+}

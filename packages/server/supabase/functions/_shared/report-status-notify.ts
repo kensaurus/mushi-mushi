@@ -75,6 +75,47 @@ async function notifyOwnerAndFollowers(
   );
 }
 
+/** The canonical report a duplicate was grouped under, or null. */
+async function canonicalReportFor(db: SupabaseClient, reportId: string): Promise<string | null> {
+  const { data: report, error } = await db
+    .from('reports')
+    .select('report_group_id')
+    .eq('id', reportId)
+    .maybeSingle();
+  const groupId = (report as { report_group_id?: string | null } | null)?.report_group_id;
+  if (error || !groupId) return null;
+  const { data: group } = await db
+    .from('report_groups')
+    .select('canonical_report_id')
+    .eq('id', groupId)
+    .maybeSingle();
+  const canonical = (group as { canonical_report_id?: string | null } | null)?.canonical_report_id ?? null;
+  return canonical && canonical !== reportId ? canonical : null;
+}
+
+async function notifyDuplicateClose(
+  db: SupabaseClient,
+  projectId: string,
+  reportId: string,
+  reporterTokenHash: string,
+): Promise<void> {
+  const canonical = await canonicalReportFor(db, reportId);
+  if (!canonical) {
+    // The close route requires a group; without one there is nothing to follow.
+    notifyLog.warn('duplicate_close_without_canonical', { reportId });
+    return;
+  }
+  await createNotification(
+    db,
+    projectId,
+    reportId,
+    reporterTokenHash,
+    'duplicate_linked',
+    { message: buildNotificationMessage('duplicate_linked', {}), reportId, canonicalReportId: canonical },
+    { dedupeKey: canonical },
+  );
+}
+
 /**
  * Notify the reporter (in-app / email per prefs) when a report's status changes.
  * No-op when notifications are disabled, token hash is missing, or status unchanged.
@@ -139,19 +180,21 @@ export async function notifyReportStatusTransition(
       await awardPoints(db, projectId, reporterTokenHash, { action: 'dismissed' }).catch((e) =>
         notifyLog.warn('Reputation award failed', { action: 'dismissed', err: String(e) }),
       );
-      const payload = {
+      // A duplicate close sends exactly ONE notice: `duplicate_linked`, keyed
+      // by the canonical report id — the same key the reports_follow_canonical
+      // trigger writes. When the trigger already wrote it (at grouping or at
+      // this close) the unique index makes this a no-op; when the trigger's
+      // insert failed (it swallows errors so grouping survives), this is the
+      // notice. A 'dismissed' message on top would be the second notice.
+      if (input.closedReason === 'duplicate') {
+        await notifyDuplicateClose(db, projectId, reportId, reporterTokenHash);
+        return;
+      }
+      await notifyOwnerAndFollowers(db, owner, 'dismissed', {
         message: buildNotificationMessage('dismissed', {}),
         reportId,
         closedReason: input.closedReason ?? null,
-      };
-      // A duplicate close tells only its own reporter (the trigger's
-      // duplicate_linked notice carries the follow); any other close of a
-      // canonical report reaches its followers too.
-      if (input.closedReason === 'duplicate') {
-        await createNotification(db, projectId, reportId, reporterTokenHash, 'dismissed', payload, { reviewable: true });
-      } else {
-        await notifyOwnerAndFollowers(db, owner, 'dismissed', payload, true);
-      }
+      }, true);
     }
   } catch (e) {
     notifyLog.warn('notifyReportStatusTransition failed', {

@@ -28,6 +28,7 @@ import { IconShare, IconExternalLink, IconClose } from '../icons'
 import {
   DISPATCH_ELIGIBLE_STATUSES,
   formatRelative,
+  hasUnseenReporterReply,
   severityStripeClass,
   type ReportRow,
 } from './types'
@@ -102,10 +103,7 @@ function ReportRowViewInner({
   const uniqueUsers = row.unique_users ?? 0
   const blastRadius = uniqueUsers > 0 ? uniqueUsers : dedupCount
   const canDispatch = DISPATCH_ELIGIBLE_STATUSES.has(row.status)
-  const reporterReplied = Boolean(
-    row.last_reporter_reply_at
-      && (!row.last_admin_reply_at || new Date(row.last_reporter_reply_at) > new Date(row.last_admin_reply_at)),
-  )
+  const reporterReplied = hasUnseenReporterReply(row)
 
   // "Loud" rows = critical OR significant blast (>=3 distinct users felt it).
   // These get a slightly tinted background so triagers can scan the page and

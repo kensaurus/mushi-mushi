@@ -191,6 +191,23 @@ async function main() {
     }))
     return
   }
+  if (CREDENTIALS.endpointError) {
+    // A configured endpoint that is not an http(s) URL: the key goes nowhere,
+    // and never to Mushi Cloud in its place. Setup mode says what to fix.
+    const report = [
+      '',
+      `[mushi-mcp] ${CREDENTIALS.endpointError}`,
+      '            Serving setup mode until it is an http(s) URL, for example',
+      '            https://xyz.supabase.co/functions/v1/api',
+      '',
+    ].join('\n')
+    process.stderr.write(report)
+    log.error('Configured API endpoint is not an http(s) URL — serving setup mode.')
+    serveUntilClosed(serveStdio(() => createSetupModeServer({ version: VERSION, missingKeyReport: report }), {
+      onerror: (err) => log.error('stdio transport error', { err: String(err) }),
+    }))
+    return
+  }
   if (CREDENTIALS.apiKeySource === 'cli-config') {
     log.info('[mushi-mcp] Using API key from the CLI config (~/.config/mushi/config.json)')
   }

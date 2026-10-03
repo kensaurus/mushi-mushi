@@ -25,6 +25,7 @@ import { IntegrationCredentialChips } from './IntegrationCredentialChips'
 import { PLATFORM_STATUS_MAP, type FieldSource, type HealthRow, type PlatformDef } from './types'
 import { CHIP_TONE } from '../../lib/chipTone'
 import { usePageData } from '../../lib/usePageData'
+import { sentryProjectsFromConfig } from '../../lib/platformIntegrationForm'
 
 /**
  * Triggers a one-shot success-pulse signal when the latest probe transitions
@@ -526,7 +527,9 @@ export function PlatformIntegrationCard({
         <ClaudeCodeSetupPanel configured={requiredOk} />
       )}
 
-      {def.kind === 'sentry' && !isEditing && requiredOk && <SentryImportPanel />}
+      {def.kind === 'sentry' && !isEditing && requiredOk && (
+        <SentryImportPanel sentryProjects={sentryProjectsFromConfig(config)} />
+      )}
     </Card>
   )
 }

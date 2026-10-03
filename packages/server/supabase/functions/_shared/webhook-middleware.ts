@@ -282,11 +282,14 @@ export function createWebhookMiddleware(source: WebhookSource) {
        * show per-project "last inbound delivery" receipts. Best-effort.
        */
       async setProject(projectId: string) {
-        await db
+        // The radar's webhook_never_delivered check counts deliveries by
+        // project_id, so an unstamped row reads as "never delivered". Never
+        // block the webhook on it, but say so when it fails.
+        const { error } = await db
           .from('webhook_audit_log')
           .update({ project_id: projectId })
           .eq('id', rowId)
-          .then(() => {}, () => {})
+        if (error) log.warn('audit setProject failed', { scope: 'webhook-middleware', rowId, err: error.message })
       },
     }
   }

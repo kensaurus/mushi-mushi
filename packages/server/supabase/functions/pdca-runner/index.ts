@@ -12,7 +12,6 @@
  * so external agents (Cursor Cloud, Devin) can subscribe to progress.
  */
 
-import { createAnthropic } from 'npm:@ai-sdk/anthropic@1'
 import { createOpenAI } from 'npm:@ai-sdk/openai@1'
 import { generateText, generateObject } from 'npm:ai@4'
 import { z } from 'npm:zod@3'
@@ -24,6 +23,10 @@ import { withAnthropicOrOpenAi } from '../_shared/llm-failover.ts'
 import { sendBotMessage, sendSlackText } from '../_shared/slack.ts'
 import { createTrace } from '../_shared/observability.ts'
 import { tagLangfuseTrace } from '../_shared/sentry.ts'
+import { claudeGenerateObject, claudeGenerateText } from '../_shared/claude-messages.ts'
+import { estimateCallCostUsd } from '../_shared/pricing.ts'
+import { OPENAI_PRIMARY } from '../_shared/models.ts'
+import { PDCA_DEFAULT_MODEL, resolvePdcaModel } from '../_shared/pdca-models.ts'
 
 declare const Deno: {
   serve(handler: (req: Request) => Response | Promise<Response>): void
@@ -70,6 +73,9 @@ const SECRET_PATTERNS = [
   /AKIA[A-Z0-9]{16}/,
 ]
 function hasSecret(s: string): boolean { return SECRET_PATTERNS.some((p) => p.test(s)) }
+
+/** The QA-story improver has no per-run model choice: the current Sonnet. */
+const IMPROVE_MODEL = PDCA_DEFAULT_MODEL
 
 async function runQaStoryImprover(
   db: ReturnType<typeof getServiceClient>,
@@ -149,18 +155,21 @@ async function runQaStoryImprover(
         db,
         story.project_id as string,
         async (anthropicKey) => {
-          const { object } = await generateObject({
-            model: createAnthropic({ apiKey: anthropicKey.key })('claude-sonnet-4-5'),
+          // claude-messages, not AI SDK v4: Sonnet 5.5 rejects the
+          // temperature + forced tool_choice that generateObject sends. The
+          // default max_tokens leaves room for adaptive thinking.
+          const { object } = await claudeGenerateObject({
+            apiKey: anthropicKey.key,
+            model: IMPROVE_MODEL,
             system: IMPROVE_SYSTEM,
             schema: improveSchema,
             prompt: `ORIGINAL TEST:\n\`\`\`typescript\n${(story.script as string).slice(0, 4000)}\n\`\`\`\n\nRECENT FAILURES:\n${failureSummary}`,
-            maxTokens: 6000,
           })
           return object
         },
         async (openaiKey) => {
           const { object } = await generateObject({
-            model: createOpenAI({ apiKey: openaiKey.key })('gpt-4.1', { structuredOutputs: false }),
+            model: createOpenAI({ apiKey: openaiKey.key })(OPENAI_PRIMARY, { structuredOutputs: false }),
             system: IMPROVE_SYSTEM,
             schema: improveSchema,
             prompt: `ORIGINAL TEST:\n\`\`\`typescript\n${(story.script as string).slice(0, 4000)}\n\`\`\`\n\nRECENT FAILURES:\n${failureSummary}`,
@@ -171,14 +180,14 @@ async function runQaStoryImprover(
       )
 
       if (result.confidence < 0.3) {
-        llmSpan.end({ model: 'claude-sonnet-4-5', error: 'low_confidence' })
+        llmSpan.end({ model: IMPROVE_MODEL, error: 'low_confidence' })
         await trace.end()
         continue
       }
 
       // Never persist/enable an improved script that contains a credential.
       if (hasSecret(result.improved_script)) {
-        llmSpan.end({ model: 'claude-sonnet-4-5', error: 'secret_detected' })
+        llmSpan.end({ model: IMPROVE_MODEL, error: 'secret_detected' })
         await trace.end()
         log.warn('improved script contained a secret — skipped', {
           scope: 'pdca-runner',
@@ -187,7 +196,7 @@ async function runQaStoryImprover(
         continue
       }
 
-      llmSpan.end({ model: 'claude-sonnet-4-5' })
+      llmSpan.end({ model: IMPROVE_MODEL })
       await trace.end()
 
       const automationMode = story.automation_mode as 'auto' | 'review' | 'approve'
@@ -208,7 +217,7 @@ async function runQaStoryImprover(
         origin_story_node_id: story.origin_story_node_id,
         parent_story_id: story.id,
         pdca_iteration: (story.pdca_iteration as number) + 1,
-        generation_model: 'claude-sonnet-4-5',
+        generation_model: IMPROVE_MODEL,
         enabled: approvalStatus === 'approved',
       })
 
@@ -293,8 +302,10 @@ Deno.serve(
       currentInput = `<!-- Could not fetch ${run.target_url} -->`
     }
 
-    const primaryModel = run.primary_model as string
-    const judgeModel = run.judge_model as string
+    // A stored run may name a retired or non-Claude model (older consoles
+    // offered gpt-5.4, which this runner then sent to Anthropic).
+    const primaryModel = resolvePdcaModel(run.primary_model as string | null)
+    const judgeModel = resolvePdcaModel(run.judge_model as string | null)
     const goal = run.goal as string
     const targetScore = run.target_score as number
     const iterationsTarget = run.iterations_target as number
@@ -317,18 +328,17 @@ Deno.serve(
           db,
           run.project_id as string,
           async (k) => {
-            const anthropic = createAnthropic({ apiKey: k.key })
-            const { text } = await generateText({
-              model: anthropic(primaryModel),
+            const { text } = await claudeGenerateText({
+              apiKey: k.key,
+              model: primaryModel,
               prompt: `You are a senior UI engineer.\nGoal: ${goal}${historyCtx}\n\nCurrent page:\n${currentInput.slice(0, 6000)}\n\nReturn only improved markup.`,
-              maxTokens: 3000,
             })
             return text.trim()
           },
           async (k) => {
             const openai = createOpenAI({ apiKey: k.key, ...(k.baseUrl ? { baseURL: k.baseUrl } : {}) })
             const { text } = await generateText({
-              model: openai('gpt-5.4'),
+              model: openai(OPENAI_PRIMARY),
               prompt: `You are a senior UI engineer.\nGoal: ${goal}${historyCtx}\n\nCurrent page:\n${currentInput.slice(0, 6000)}\n\nReturn only improved markup.`,
               maxTokens: 3000,
             })
@@ -340,27 +350,30 @@ Deno.serve(
         // Critic — use multi-key failover
         let critiqueResult: z.infer<typeof rubricSchema>
         let costUsd = 0
+        let costModel = judgeModel
         const { result: criticResult } = await withAnthropicOrOpenAi(
           db,
           run.project_id as string,
           async (k) => {
-            const anthropic = createAnthropic({ apiKey: k.key })
-            const { object, usage } = await generateObject({
-              model: anthropic(judgeModel),
+            const { object, usage } = await claudeGenerateObject({
+              apiKey: k.key,
+              model: judgeModel,
               schema: rubricSchema,
               prompt: `${personaPrompt}\n\nGoal: ${goal}\n\nPage:\n${draft.slice(0, 5000)}\n\nEvaluate critically.`,
             })
-            costUsd = (usage.promptTokens / 1_000_000) * 3 + (usage.completionTokens / 1_000_000) * 15
+            costModel = judgeModel
+            costUsd = estimateCallCostUsd(judgeModel, usage.promptTokens, usage.completionTokens)
             return object
           },
           async (k) => {
             const openai = createOpenAI({ apiKey: k.key, ...(k.baseUrl ? { baseURL: k.baseUrl } : {}) })
             const { object, usage } = await generateObject({
-              model: openai('gpt-5.4', { structuredOutputs: false }),
+              model: openai(OPENAI_PRIMARY, { structuredOutputs: false }),
               schema: rubricSchema,
               prompt: `${personaPrompt}\n\nGoal: ${goal}\n\nPage:\n${draft.slice(0, 5000)}\n\nEvaluate critically.`,
             })
-            costUsd = (usage.promptTokens / 1_000_000) * 2.5 + (usage.completionTokens / 1_000_000) * 10
+            costModel = OPENAI_PRIMARY
+            costUsd = estimateCallCostUsd(OPENAI_PRIMARY, usage.promptTokens, usage.completionTokens)
             return object
           },
         )
@@ -384,7 +397,7 @@ Deno.serve(
         await db.from('llm_cost_usd').insert({
           project_id: run.project_id,
           operation: 'pdca-iteration',
-          model: judgeModel,
+          model: costModel,
           input_tokens: 0,
           output_tokens: 0,
           cost_usd: costUsd,

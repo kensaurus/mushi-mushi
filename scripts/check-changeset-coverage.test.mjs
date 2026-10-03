@@ -8,7 +8,13 @@ import { mkdtempSync, rmSync, symlinkSync, unlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { findUncovered, isLicenseHeaderOnlyPatch, isShippedSource, parseChangesetTargets } from './check-changeset-coverage.mjs'
+import {
+  findUncovered,
+  isLicenseHeaderOnlyPatch,
+  isShippedSource,
+  isVersionPinOnlyPatch,
+  parseChangesetTargets,
+} from './check-changeset-coverage.mjs'
 
 const PACKAGES = [
   { dir: 'core', name: '@mushi-mushi/core' },
@@ -138,4 +144,55 @@ test('findUncovered drops files whose change is license headers only', () => {
     uncovered.map((u) => u.name),
     ['@mushi-mushi/mcp'],
   )
+})
+
+// The "chore: version packages" PR (#423) rewrites only the MCP pin in cli and
+// mcp source (scripts/sync-mcp-pin.mjs) and consumes the changesets. That is the
+// release itself; flagging it put a red X on every version PR.
+const VERSION_PR_CLI_PATCH = [
+  'diff --git a/packages/cli/src/version.ts b/packages/cli/src/version.ts',
+  '--- a/packages/cli/src/version.ts',
+  '+++ b/packages/cli/src/version.ts',
+  '@@ -24 +24 @@ export const MUSHI_CLI_VERSION: string =',
+  "-export const MUSHI_MCP_PIN_SPEC = '@mushi-mushi/mcp@0.22.0'",
+  "+export const MUSHI_MCP_PIN_SPEC = '@mushi-mushi/mcp@0.22.1'",
+].join('\n')
+
+test('isVersionPinOnlyPatch accepts the version PR pin bump', () => {
+  assert.equal(isVersionPinOnlyPatch(VERSION_PR_CLI_PATCH), true)
+  // Two pins on one line, CRLF patch, prerelease pin.
+  assert.equal(
+    isVersionPinOnlyPatch("-  a: '@mushi-mushi/mcp@0.21.9', b: '@mushi-mushi/mcp@0.21.9',\r\n+  a: '@mushi-mushi/mcp@0.22.0', b: '@mushi-mushi/mcp@0.22.0',\r\n"),
+    true,
+  )
+  assert.equal(isVersionPinOnlyPatch("-x('@mushi-mushi/mcp@1.0.0-rc.1')\n+x('@mushi-mushi/mcp@1.0.0')"), true)
+})
+
+test('isVersionPinOnlyPatch rejects any change beyond the pin', () => {
+  // The pin moved AND the line changed.
+  assert.equal(
+    isVersionPinOnlyPatch("-const PIN = '@mushi-mushi/mcp@0.22.0'\n+export const PIN = '@mushi-mushi/mcp@0.22.1'"),
+    false,
+  )
+  // A real code change next to the pin bump.
+  assert.equal(isVersionPinOnlyPatch(`${VERSION_PR_CLI_PATCH}\n+export const extra = 1`), false)
+  // No pin at all, only additions, only removals, empty.
+  assert.equal(isVersionPinOnlyPatch('-const a = 1\n+const a = 2'), false)
+  assert.equal(isVersionPinOnlyPatch("+'@mushi-mushi/mcp@0.22.1'"), false)
+  assert.equal(isVersionPinOnlyPatch("-'@mushi-mushi/mcp@0.22.0'"), false)
+  assert.equal(isVersionPinOnlyPatch(''), false)
+  // Another package's version is not the generated pin.
+  assert.equal(isVersionPinOnlyPatch("-'@mushi-mushi/core@1.0.0'\n+'@mushi-mushi/core@1.1.0'"), false)
+})
+
+test('findUncovered passes a version PR whose only source change is the pin', () => {
+  const pinOnly = new Set(['packages/cli/src/version.ts', 'packages/mcp/src/clients.ts'])
+  const uncovered = findUncovered({
+    changedFiles: ['packages/cli/src/version.ts', 'packages/mcp/src/clients.ts', 'packages/mcp/package.json', 'packages/mcp/CHANGELOG.md'],
+    packages: PACKAGES,
+    ignored: new Set(),
+    covered: new Set(), // the version PR consumed every changeset
+    isHeaderOnly: (f) => pinOnly.has(f),
+  })
+  assert.deepEqual(uncovered, [])
 })

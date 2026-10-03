@@ -49,12 +49,17 @@ const REVIEWED = new Map<string, 'keyed' | 'stored' | 'sentinel'>([
   ['api/routes/reporter-admin.ts reporter_token_hash', 'stored'], // reporter-view reads the reports row
   ['_shared/reporter-reply-signals.ts reporter_token_hash', 'stored'], // reopen reads the row back
   ['_shared/notifications.ts reporter_token_hash', 'stored'], // callers pass a row value
+  ['_shared/reporter-optin.ts reporter_token_hash', 'stored'], // auth.tokenHash from resolveReporterAuth
+  ['_shared/reporter-digest.ts reporter_token_hash', 'stored'], // deferred ledger row read back
+  ['_shared/slack-reporter-reply.ts reporter_token_hash', 'stored'], // reads the reports row; the reply comment carries no key
   ['_shared/reputation.ts reporter_token_hash', 'stored'], // caller passes the key
   ['_shared/telemetry.ts reporter_token_hash', 'stored'], // caller passes the key
   ['_shared/anti-gaming.ts reporter_tokens', 'stored'], // caller passes the key, or 'tester:<id>'
   ['_shared/product-events.ts anon_id', 'stored'], // payload.anonId; no caller passes a raw id
   ['_shared/sentry-ingest.ts reporter_token_hash', 'sentinel'], // 'sentry-webhook'
+  ['_shared/design-actions.ts reporter_token_hash', 'sentinel'], // 'cron:design-drift' (DESIGN_DRIFT_REPORTER)
   ['_shared/voice-intake.ts reporter_token_hash', 'sentinel'], // 'voice-intake'
+  ['_shared/store-review-intake.ts reporter_token_hash', 'sentinel'], // 'store-review'; the reviewer's identity is never stored
   ['library-modernizer/index.ts reporter_token_hash', 'sentinel'], // 'cron:library-modernizer'
   ['status-reconciler/index.ts reporter_token_hash', 'sentinel'], // 'cron:status-reconciler'
   ['webhooks-linear-agent/index.ts reporter_token_hash', 'sentinel'], // 'linear-agent'

@@ -362,6 +362,22 @@ verify_jwt = false
 [functions.backend-drift-scanner]
 verify_jwt = false
 
+# Cron-invoked daily (mushi-recipe-collector-daily, 03:35 UTC); Plan 019.
+[functions.recipe-collector]
+verify_jwt = false
+
+# Cron-invoked daily (mushi-radar-scan-daily, 04:05 UTC); Plan 020 hole checks.
+[functions.radar-scan]
+verify_jwt = false
+
+# Cron-invoked hourly (mushi-operator-digest-hourly, :20); Plan 020 operator digest.
+[functions.operator-digest]
+verify_jwt = false
+
+# Cron-invoked every 6 hours (mushi-store-review-intake, :45); opt-in store reviews → reports.
+[functions.store-review-intake]
+verify_jwt = false
+
 # Invoked by the api function or by another internal function.
 [functions.contract-graph-builder]
 verify_jwt = false

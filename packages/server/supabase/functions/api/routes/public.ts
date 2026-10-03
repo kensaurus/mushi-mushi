@@ -47,6 +47,9 @@ import {
 import { safeParse, ApiReportBodySchema } from '../../_shared/validate.ts';
 import { registerReporterFeatureBoardRoutes } from './reporter-feature-board.ts';
 import { registerReporterInboxRoutes } from './reporter-inbox.ts';
+import { registerReporterPrefsRoutes } from './reporter-prefs.ts';
+import { emailProviderConfigured } from '../../_shared/email.ts';
+import { getVapidConfig } from '../../_shared/web-push.ts';
 import { reporterSafePayload, type ReporterNotificationRow } from '../../_shared/reporter-copy.ts';
 import {
   announceReporterReply,
@@ -54,6 +57,11 @@ import {
   REPORTER_REPLY_MAX_CHARS,
 } from '../../_shared/reporter-reply-signals.ts';
 import { runInBackground } from '../../_shared/background.ts';
+import {
+  createIndexerPushForwarder,
+  githubSignatureMatches,
+  routePatPushWebhook,
+} from '../../_shared/github-push-forward.ts';
 import { resolveReporterAuth } from './reporter-auth.ts';
 import { reporterKey } from '../../_shared/reporter-token.ts';
 import { claimIpRateLimit, extractClientIp } from './cli-auth.ts';
@@ -285,7 +293,8 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
           'sdk_capture_console, sdk_capture_network, sdk_capture_performance, sdk_capture_screenshot, ' +
           'sdk_capture_element_selector, sdk_native_trigger_mode, sdk_min_description_length, sdk_config_updated_at, ' +
           'reporter_notifications_enabled, widget_brand_footer, ' +
-          'assistant_enabled, assistant_label, assistant_greeting, assistant_suggestions',
+          'assistant_enabled, assistant_label, assistant_greeting, assistant_suggestions, ' +
+          'reporter_email_enabled, reporter_push_enabled',
       )
       .eq('project_id', projectId)
       .maybeSingle();
@@ -300,7 +309,11 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
     c.header('Vary', 'Origin, X-Mushi-Project, X-Mushi-Api-Key');
     return c.json({
       ok: true,
-      data: normalizeSdkConfig(data as SdkConfigRow | null, { brandFooterDefault }),
+      data: normalizeSdkConfig(data as SdkConfigRow | null, {
+        brandFooterDefault,
+        emailProviderConfigured: emailProviderConfigured(),
+        vapidPublicKey: getVapidConfig()?.publicKey ?? null,
+      }),
     });
   });
 
@@ -879,13 +892,16 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
   });
 
   // ============================================================
-  // GITHUB CHECK-RUN WEBHOOK (V5.3 §2.10 — closes the PDCA loop)
+  // GITHUB REPO WEBHOOK: check runs (V5.3 §2.10, closes the PDCA loop)
+  // and pushes for PAT-connected repos (gap #16b, push indexing)
   // ============================================================
   // Configure in GitHub: Settings → Webhooks → Add webhook
   //   Payload URL: <api>/v1/webhooks/github
   //   Content type: application/json
-  //   Secret: same value as project_settings.github_webhook_secret
-  //   Events: "Check runs" + "Check suites"
+  //   Secret: the value project_settings.github_webhook_secret refers to in Vault
+  //   Events: "Check runs" + "Check suites" + "Pushes"
+  // A repo with the Mushi GitHub App installed gets pushes through the App
+  // instead; this route skips those repos so nothing is indexed twice.
 
   app.post('/v1/webhooks/github', async (c) => {
     const t0 = Date.now();
@@ -910,6 +926,38 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
         return c.json({ ok: false, error: { code: 'DUPLICATE', message: 'Duplicate delivery' } }, 409);
       }
       throw err;
+    }
+
+    if (event === 'push') {
+      let pushed;
+      try {
+        const db = getServiceClient();
+        // Hands a verified push to webhooks-github-indexer's internal
+        // `mode: 'push'` in the background (GitHub wants an answer in 10 s);
+        // a failed hand-off is written to the repo's last_index_error.
+        const forward = createIndexerPushForwarder({
+          db,
+          supabaseUrl: Deno.env.get('SUPABASE_URL'),
+          internalSecret: Deno.env.get('MUSHI_INTERNAL_CALLER_SECRET') ?? Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'),
+          background: runInBackground,
+          log,
+        });
+        pushed = await routePatPushWebhook({ body, signature: sig, deliveryId }, { db, forward, log });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        log.error('PAT push routing failed', { error: message });
+        await auditRow.resolve('error', 500, Date.now() - t0, message);
+        return c.json({ ok: false, error: { code: 'PUSH_FORWARD_FAILED', message: 'Could not hand the push to the indexer' } }, 500);
+      }
+      // Lets the radar count accepted deliveries per project (webhook_never_delivered).
+      if (pushed.projectIds[0]) await auditRow.setProject(pushed.projectIds[0]);
+      await auditRow.resolve(
+        pushed.outcome,
+        pushed.status,
+        Date.now() - t0,
+        pushed.auditNote,
+      );
+      return c.json(pushed.body, pushed.status);
     }
 
     if (event !== 'check_run' && event !== 'check_suite') {
@@ -961,6 +1009,9 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
     // posture is FAIL CLOSED: if we can't verify the signature, we refuse the
     // write entirely. Operators must either configure a github_webhook_secret
     // per project or stop sending the webhook.
+    // The column holds a `vault://` ref; an unreadable ref resolves to null
+    // and is skipped like a missing secret.
+    const { dereferenceMaybeVault } = await import('../../_shared/settings-secrets.ts');
     let verified = false;
     let verifiedProjectId: string | null = null;
     for (const cand of candidates) {
@@ -969,9 +1020,9 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
         .select('github_webhook_secret')
         .eq('project_id', cand.project_id)
         .single();
-      const secret = settings?.github_webhook_secret as string | undefined;
+      const secret = await dereferenceMaybeVault(db, (settings?.github_webhook_secret as string | null) ?? null);
       if (!secret) continue;
-      if (await verifyGithubSignature(sig, body, secret)) {
+      if (await githubSignatureMatches(sig, body, secret)) {
         verified = true;
         verifiedProjectId = cand.project_id;
         break;
@@ -1008,32 +1059,6 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
     await auditRow.resolve('accepted', 200, Date.now() - t0);
     return c.json({ ok: true, data: { updated: targetIds.length, verified } });
   });
-
-  async function verifyGithubSignature(
-    headerSig: string,
-    body: string,
-    secret: string,
-  ): Promise<boolean> {
-    const expected = headerSig.startsWith('sha256=') ? headerSig.slice('sha256='.length) : '';
-    if (!expected) return false;
-    const enc = new TextEncoder();
-    const key = await crypto.subtle.importKey(
-      'raw',
-      enc.encode(secret),
-      { name: 'HMAC', hash: 'SHA-256' },
-      false,
-      ['sign'],
-    );
-    const sig = await crypto.subtle.sign('HMAC', key, enc.encode(body));
-    const computed = Array.from(new Uint8Array(sig))
-      .map((b) => b.toString(16).padStart(2, '0'))
-      .join('');
-    if (computed.length !== expected.length) return false;
-    let diff = 0;
-    for (let i = 0; i < computed.length; i++)
-      diff |= computed.charCodeAt(i) ^ expected.charCodeAt(i);
-    return diff === 0;
-  }
 
   // ============================================================
   // SDK STATUS
@@ -1137,6 +1162,8 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
   // GET /v1/reporter/reports, GET /v1/reporter/reports/:id, mark-read and
   // /v1/reporter/updates live in reporter-inbox.ts (Plan 018 §2.2–2.3).
   registerReporterInboxRoutes(app, resolveReporterTokenHash);
+  // Email opt-in / unsubscribe and reporter Web Push (Plan 018 §4.1).
+  registerReporterPrefsRoutes(app, resolveReporterTokenHash);
 
   app.get('/v1/reporter/reports/:id/comments', apiKeyAuth, async (c) => {
     const projectId = c.get('projectId') as string;

@@ -14,6 +14,8 @@ import { registerDoctorRoutes } from './routes/doctor.ts';
 import { registerBillingProjectsQueueGraphRoutes } from './routes/billing-projects-queue-graph.ts';
 import { registerCodebaseRoutes } from './routes/codebase.ts';
 import { registerCodebaseUnderstandRoutes } from './routes/codebase-understand.ts';
+import { registerRepoDigestRoutes } from './routes/repo-digest.ts';
+import { registerRepoDiagramRoutes } from './routes/repo-diagram.ts';
 import {
   registerPreRegionDiscoveryRoutes,
   registerPostRegionDiscoveryRoutes,
@@ -59,6 +61,19 @@ import { registerBackendRoutes } from './routes/backend.ts';
 import { registerFullstackAuditRoutes } from './routes/fullstack-audit.ts';
 import { registerSkillsRoutes } from './routes/skills.ts';
 import { registerCodeHealthRoutes } from './routes/code-health.ts';
+import { registerRecipeRoutes } from './routes/recipe.ts';
+import { registerPortfolioRoutes } from './routes/portfolio.ts';
+import { registerRadarRoutes } from './routes/radar.ts';
+import { registerDigestRoutes } from './routes/digest.ts';
+import { registerConnectorRoutes } from './routes/connectors.ts';
+import { registerRecipeIngestRoutes } from './routes/recipe-ingest.ts';
+import { registerAccountsRegisterRoutes } from './routes/accounts-register.ts';
+import { registerRecipeChangeRoutes } from './routes/recipe-changes.ts';
+import { registerStoreOpsRoutes } from './routes/store-ops.ts';
+import { registerFindingExplainRoutes } from './routes/finding-explain.ts';
+import { registerPortfolioFunnelRoutes } from './routes/portfolio-funnel.ts';
+import { registerSpendLedgerRoutes } from './routes/spend-ledger.ts';
+import { registerStoreReviewIntakeRoutes } from './routes/store-review-intake.ts';
 import { registerWorkspaceNavMetaRoutes } from './routes/workspace-nav-meta.ts';
 import { registerActivationRoutes } from './routes/activation.ts';
 import { registerSdkUpgradeRoutes } from './routes/sdk-upgrade.ts';
@@ -252,7 +267,8 @@ app.use(
       'baggage',
       'sentry-trace',
     ],
-    allowMethods: ['GET', 'POST', 'OPTIONS'],
+    // PUT / DELETE: notification prefs and push subscriptions (Plan 018 §4.1).
+    allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     maxAge: PUBLIC_CORS_MAX_AGE_SECONDS,
   }),
 );
@@ -562,6 +578,10 @@ registerCodebaseRoutes(app);
 
 registerCodebaseUnderstandRoutes(app);
 
+registerRepoDigestRoutes(app);
+
+registerRepoDiagramRoutes(app);
+
 registerReportsDashboardRoutes(app);
 
 registerSettingsResearchRoutes(app);
@@ -623,6 +643,19 @@ registerFeatureBoardRoutes(app);
 registerBackendRoutes(app);
 registerFullstackAuditRoutes(app);
 registerCodeHealthRoutes(app);
+registerRecipeRoutes(app);
+registerPortfolioRoutes(app);
+registerRadarRoutes(app);
+registerDigestRoutes(app);
+registerConnectorRoutes(app);
+registerRecipeIngestRoutes(app);
+registerAccountsRegisterRoutes(app);
+registerRecipeChangeRoutes(app);
+registerStoreOpsRoutes(app);
+registerFindingExplainRoutes(app);
+registerPortfolioFunnelRoutes(app);
+registerSpendLedgerRoutes(app);
+registerStoreReviewIntakeRoutes(app);
 registerWorkspaceNavMetaRoutes(app);
 registerSkillsRoutes(app);
 registerSdkUpgradeRoutes(app);

@@ -126,20 +126,45 @@ export async function getLatestSentryEvent(
 }
 
 /** Issues in ONE Sentry project matching a Sentry search query. */
+export interface SentryIssuePage {
+  issues: SentryRestIssue[];
+  /** Pass back as `cursor` for the next page; null on the last page. */
+  nextCursor: string | null;
+}
+
+/**
+ * Sentry always sends a rel="next" link, even on the last page; its
+ * results="true|false" attribute says whether it leads anywhere.
+ */
+export function parseSentryNextCursor(link: string | null | undefined): string | null {
+  if (!link) return null;
+  for (const part of link.split(',')) {
+    if (!/rel="next"/.test(part)) continue;
+    if (!/results="true"/.test(part)) return null;
+    return part.match(/cursor="([^"]+)"/)?.[1] ?? null;
+  }
+  return null;
+}
+
 export async function searchSentryIssues(
   token: string,
   org: string,
   projectSlug: string,
-  query: string,
-  limit: number,
+  page: { query: string; limit: number; cursor?: string },
   fetchImpl: FetchLike = defaultFetch,
-): Promise<SentryRestIssue[]> {
-  const qs = new URLSearchParams({ query, limit: String(limit) });
-  return await sentryJson<SentryRestIssue[]>(
-    fetchImpl,
-    token,
-    `/projects/${seg(org)}/${seg(projectSlug)}/issues/?${qs.toString()}`,
-  );
+): Promise<SentryIssuePage> {
+  const qs = new URLSearchParams({ query: page.query, limit: String(page.limit) });
+  if (page.cursor) qs.set('cursor', page.cursor);
+  const path = `/projects/${seg(org)}/${seg(projectSlug)}/issues/?${qs.toString()}`;
+  const res = await sentryFetch(fetchImpl, token, path);
+  if (!res.ok) {
+    const detail = await res.text().then((t) => t.slice(0, 200)).catch(() => '');
+    throw new SentryApiError(res.status, `Sentry GET ${path.split('?')[0]} → ${res.status} ${detail}`.trim());
+  }
+  return {
+    issues: (await res.json()) as SentryRestIssue[],
+    nextCursor: parseSentryNextCursor(res.headers.get('link')),
+  };
 }
 
 /**

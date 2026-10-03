@@ -58,7 +58,7 @@ const LANGUAGES: Array<{ code: string; label: string }> = [
 const DEFAULT_LANGUAGES = ['en', 'ja']
 const DEFAULT_RETENTION_DAYS = 0
 
-/** GET returns either a masked hint or the vault ref; only hints are displayable. */
+/** GET returns a mask for a stored secret (older servers: the vault ref); only masks are displayable. */
 function secretHint(value: string | null | undefined): string | null {
   if (!value) return null
   return value.startsWith('vault://') ? null : value
