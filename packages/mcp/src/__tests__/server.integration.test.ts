@@ -166,6 +166,16 @@ describe('MCP protocol handshake', () => {
       'refresh_recipe',
       'run_design_deviance',
       'run_store_review',
+      // Console parity: settings, the store review pull, and the operator records.
+      'set_design_settings',
+      'pull_store_reviews',
+      'set_store_review_intake',
+      'save_register_account',
+      'remove_register_account',
+      'set_domain_auto_renew',
+      'import_spend_bill',
+      'remove_spend_import',
+      'import_portfolio_resources',
     ])
     for (const t of tools) {
       expect(t.annotations, `${t.name} annotations`).toBeTruthy()

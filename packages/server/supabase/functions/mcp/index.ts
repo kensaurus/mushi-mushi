@@ -649,6 +649,160 @@ const BASE_TOOLS: Record<string, HostedTool> = {
       return apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/store`, { headers: ctx.authHeaders })
     },
   },
+  // Console parity: the release, design, recipe and store panels.
+  get_auto_release_status: {
+    scope: 'mcp:read',
+    handler: async (args, ctx) => {
+      const pid = (args.projectId as string | undefined) ?? ctx.projectIdHint
+      if (!pid) throw new McpError(ERR_INVALID_PARAMS, 'projectId is required for get_auto_release_status')
+      // The route reads the project from ?project_id= (an account-level key has no project of its own).
+      return apiCall(`/v1/admin/releases/auto-release?${new URLSearchParams({ project_id: pid })}`, { headers: ctx.authHeaders })
+    },
+  },
+  get_design_settings: {
+    scope: 'mcp:read',
+    handler: async (args, ctx) => {
+      const pid = (args.projectId as string | undefined) ?? ctx.projectIdHint
+      if (!pid) throw new McpError(ERR_INVALID_PARAMS, 'projectId is required for get_design_settings')
+      return apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/design/settings`, { headers: ctx.authHeaders })
+    },
+  },
+  set_design_settings: {
+    scope: 'mcp:write',
+    handler: async (args, ctx) => {
+      const pid = (args.projectId as string | undefined) ?? ctx.projectIdHint
+      if (!pid) throw new McpError(ERR_INVALID_PARAMS, 'projectId is required for set_design_settings')
+      const body = { threshold: args.threshold, failCi: args.failCi, autofix: args.autofix }
+      return apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/design/settings`, { method: 'PUT', headers: ctx.authHeaders, body: JSON.stringify(body) })
+    },
+  },
+  get_recipe_sources: {
+    scope: 'mcp:read',
+    handler: async (args, ctx) => {
+      const pid = (args.projectId as string | undefined) ?? ctx.projectIdHint
+      if (!pid) throw new McpError(ERR_INVALID_PARAMS, 'projectId is required for get_recipe_sources')
+      requireString(args.element, 'element')
+      const qs = new URLSearchParams({ element: args.element as string })
+      return apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/recipe/sources?${qs}`, { headers: ctx.authHeaders })
+    },
+  },
+  get_recipe_change: {
+    scope: 'mcp:read',
+    handler: async (args, ctx) => {
+      const pid = (args.projectId as string | undefined) ?? ctx.projectIdHint
+      if (!pid) throw new McpError(ERR_INVALID_PARAMS, 'projectId is required for get_recipe_change')
+      requireString(args.jobId, 'jobId')
+      return apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/recipe/changes/${encodeURIComponent(args.jobId as string)}`, { headers: ctx.authHeaders })
+    },
+  },
+  get_store_reviews: {
+    scope: 'mcp:read',
+    handler: async (args, ctx) => {
+      const pid = (args.projectId as string | undefined) ?? ctx.projectIdHint
+      if (!pid) throw new McpError(ERR_INVALID_PARAMS, 'projectId is required for get_store_reviews')
+      return apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/store/reviews`, { headers: ctx.authHeaders })
+    },
+  },
+  pull_store_reviews: {
+    scope: 'mcp:write',
+    handler: async (args, ctx) => {
+      const pid = (args.projectId as string | undefined) ?? ctx.projectIdHint
+      if (!pid) throw new McpError(ERR_INVALID_PARAMS, 'projectId is required for pull_store_reviews')
+      return apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/store/reviews/pull`, { method: 'POST', headers: ctx.authHeaders })
+    },
+  },
+  set_store_review_intake: {
+    scope: 'mcp:write',
+    handler: async (args, ctx) => {
+      const pid = (args.projectId as string | undefined) ?? ctx.projectIdHint
+      if (!pid) throw new McpError(ERR_INVALID_PARAMS, 'projectId is required for set_store_review_intake')
+      if (typeof args.enabled !== 'boolean') throw new McpError(ERR_INVALID_PARAMS, 'enabled is required (true or false)')
+      const body = { enabled: args.enabled, maxRating: args.maxRating }
+      return apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/store/reviews/settings`, { method: 'PUT', headers: ctx.authHeaders, body: JSON.stringify(body) })
+    },
+  },
+  // Portfolio operator records (accounts register, spend ledger, shared
+  // resources). Account-level key; the api refuses a project-bound key.
+  get_accounts_register: {
+    scope: 'mcp:read',
+    handler: async (args, ctx) => {
+      const org = typeof args.organizationId === 'string' && args.organizationId ? args.organizationId : 'current'
+      return apiCall(`/v1/admin/orgs/${encodeURIComponent(org)}/accounts`, { headers: ctx.authHeaders })
+    },
+  },
+  save_register_account: {
+    scope: 'mcp:write',
+    handler: async (args, ctx) => {
+      const org = typeof args.organizationId === 'string' && args.organizationId ? args.organizationId : 'current'
+      const id = typeof args.id === 'string' && args.id ? args.id : null
+      const fields: Record<string, unknown> = {}
+      for (const k of ['provider', 'displayName', 'ownerEmail', 'twoFactorDeclared', 'recoveryContact', 'adminCount', 'autoRenew']) {
+        if (args[k] !== undefined) fields[k] = args[k]
+      }
+      if (!id && (!fields.provider || !fields.displayName)) {
+        throw new McpError(ERR_INVALID_PARAMS, 'provider and displayName are required to record a new account (pass id to change one)')
+      }
+      const path = id
+        ? `/v1/admin/orgs/${encodeURIComponent(org)}/accounts/${encodeURIComponent(id)}`
+        : `/v1/admin/orgs/${encodeURIComponent(org)}/accounts`
+      return apiCall(path, { method: id ? 'PATCH' : 'POST', headers: ctx.authHeaders, body: JSON.stringify(fields) })
+    },
+  },
+  remove_register_account: {
+    scope: 'mcp:write',
+    handler: async (args, ctx) => {
+      const org = typeof args.organizationId === 'string' && args.organizationId ? args.organizationId : 'current'
+      requireString(args.id, 'id')
+      return apiCall(`/v1/admin/orgs/${encodeURIComponent(org)}/accounts/${encodeURIComponent(args.id as string)}`, { method: 'DELETE', headers: ctx.authHeaders })
+    },
+  },
+  set_domain_auto_renew: {
+    scope: 'mcp:write',
+    handler: async (args, ctx) => {
+      const org = typeof args.organizationId === 'string' && args.organizationId ? args.organizationId : 'current'
+      requireString(args.domainId, 'domainId')
+      if (args.autoRenew !== null && typeof args.autoRenew !== 'boolean') throw new McpError(ERR_INVALID_PARAMS, 'autoRenew must be true, false or null')
+      return apiCall(`/v1/admin/orgs/${encodeURIComponent(org)}/domains/${encodeURIComponent(args.domainId as string)}`, {
+        method: 'PATCH',
+        headers: ctx.authHeaders,
+        body: JSON.stringify({ autoRenew: args.autoRenew }),
+      })
+    },
+  },
+  get_spend_ledger: {
+    scope: 'mcp:read',
+    handler: async (args, ctx) => {
+      const org = typeof args.organizationId === 'string' && args.organizationId ? args.organizationId : 'current'
+      return apiCall(`/v1/admin/orgs/${encodeURIComponent(org)}/spend`, { headers: ctx.authHeaders })
+    },
+  },
+  import_spend_bill: {
+    scope: 'mcp:write',
+    handler: async (args, ctx) => {
+      const org = typeof args.organizationId === 'string' && args.organizationId ? args.organizationId : 'current'
+      requireString(args.vendor, 'vendor')
+      requireString(args.csv, 'csv')
+      const body = { vendor: args.vendor, csv: args.csv, projectId: args.projectId, filename: args.filename }
+      return apiCall(`/v1/admin/orgs/${encodeURIComponent(org)}/spend/imports`, { method: 'POST', headers: ctx.authHeaders, body: JSON.stringify(body) })
+    },
+  },
+  remove_spend_import: {
+    scope: 'mcp:write',
+    handler: async (args, ctx) => {
+      const org = typeof args.organizationId === 'string' && args.organizationId ? args.organizationId : 'current'
+      requireString(args.importId, 'importId')
+      return apiCall(`/v1/admin/orgs/${encodeURIComponent(org)}/spend/imports/${encodeURIComponent(args.importId as string)}`, { method: 'DELETE', headers: ctx.authHeaders })
+    },
+  },
+  import_portfolio_resources: {
+    scope: 'mcp:write',
+    handler: async (args, ctx) => {
+      requireString(args.csv, 'csv')
+      // The route takes the organization in the body; `current` resolves the key owner's only one.
+      const organizationId = typeof args.organizationId === 'string' && args.organizationId ? args.organizationId : 'current'
+      return apiCall('/v1/ingest/recipe/csv', { method: 'POST', headers: ctx.authHeaders, body: JSON.stringify({ organizationId, csv: args.csv }) })
+    },
+  },
   get_radar: {
     scope: 'mcp:read',
     handler: async (args, ctx) => {
@@ -1954,6 +2108,10 @@ const UNTRUSTED_TOOLS: ReadonlySet<string> = new Set([
   'get_code_health',
   'explain_finding',
   'get_repo_diagram',
+  'get_recipe_sources',
+  'get_recipe_change',
+  'get_store_reviews',
+  'pull_store_reviews',
 ])
 
 /**

@@ -94,6 +94,15 @@ export const TOOL_FEATURE_MAP: Record<string, FeatureGroup> = {
   run_store_review: 'inventory',
   get_release_calendar: 'inventory',
   explain_finding: 'inventory',
+  // Console parity for the recipe, design and store panels (reads and settings)
+  get_auto_release_status: 'inventory',
+  get_design_settings: 'inventory',
+  set_design_settings: 'inventory',
+  get_recipe_sources: 'inventory',
+  get_recipe_change: 'inventory',
+  get_store_reviews: 'inventory',
+  pull_store_reviews: 'inventory',
+  set_store_review_intake: 'inventory',
 
   // setup
   diagnose_setup: 'setup',
@@ -125,6 +134,16 @@ export const TOOL_FEATURE_MAP: Record<string, FeatureGroup> = {
   get_account_overview: 'admin',
   get_project_context: 'admin',
   get_pipeline_logs: 'admin',
+  // Portfolio operator records (ADR 0017): the accounts register, the spend
+  // ledger and shared resources. Off the lean default; account-level key.
+  get_accounts_register: 'admin',
+  save_register_account: 'admin',
+  remove_register_account: 'admin',
+  set_domain_auto_renew: 'admin',
+  get_spend_ledger: 'admin',
+  import_spend_bill: 'admin',
+  remove_spend_import: 'admin',
+  import_portfolio_resources: 'admin',
 
   // usage / billing / product analytics (Mushi.track() funnels)
   get_usage: 'usage',
