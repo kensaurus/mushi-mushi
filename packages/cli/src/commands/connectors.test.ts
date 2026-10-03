@@ -54,6 +54,19 @@ describe('mushi connectors list', () => {
   })
 })
 
+describe('mushi connectors actions', () => {
+  it('lists requested actions and points pending ones at the console', async () => {
+    const run = await runCli(registerConnectorsCommands, ['connectors', 'actions'], () => okReply({ actions: [{
+      id: 'a1', connector_instance_id: 'c1', project_id: null, action: 'redeploy', reason: 'stale build', status: 'pending_approval',
+      requested_at: '2026-10-01T00:00:00Z', approved_at: null, expires_at: null, executed_at: null, error: null,
+    }] }))
+    expect(run.calls).toEqual([expect.objectContaining({ method: 'GET', path: '/v1/admin/orgs/current/connector-actions' })])
+    expect(run.stdout).toContain('PENDING_APPROVAL')
+    expect(run.stdout).toContain('why: stale build')
+    expect(run.stdout).toContain('approves pending actions in the console')
+  })
+})
+
 describe('mushi connectors status', () => {
   it('shows one connector by id prefix', async () => {
     const run = await runCli(registerConnectorsCommands, ['connectors', 'status', 'c0ffee00'], () => okReply(data))

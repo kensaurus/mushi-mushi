@@ -77,6 +77,24 @@ describe('mushi portfolio show', () => {
   })
 })
 
+describe('mushi portfolio resources', () => {
+  it('lists shared resources with the apps that use them', async () => {
+    const run = await runCli(registerPortfolioCommands, ['portfolio', 'resources'], () => okReply({
+      organizationId: ORG,
+      resources: [{ id: 'r1', kind: 'domain', externalId: 'example.com', uses: [{ projectId: 'p1', role: 'web', source: 'recipe' }, { projectId: 'p2', role: 'api', source: 'csv' }] }],
+      findings: [{ id: 'f1', rule_id: 'domain_expiry', severity: 'warn', project_ids: ['p1', 'p2'], message: 'example.com expires in 20 days' }],
+    }))
+    expect(run.calls[0]!.path).toBe('/v1/admin/orgs/current/portfolio/resources')
+    expect(run.stdout).toContain('example.com  used by 2 app(s)')
+    expect(run.stdout).toContain('domain_expiry — example.com expires in 20 days')
+  })
+
+  it('says where resources come from when there are none', async () => {
+    const run = await runCli(registerPortfolioCommands, ['portfolio', 'resources'], () => okReply({ organizationId: ORG, resources: [], findings: [] }))
+    expect(run.stdout).toContain('No shared resources recorded yet')
+  })
+})
+
 describe('mushi portfolio findings', () => {
   const findings: PortfolioFindingsData = {
     organizationId: ORG,
