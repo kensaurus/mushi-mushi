@@ -1,13 +1,17 @@
 /**
  * FILE: packages/server/supabase/functions/_shared/operator-digest-delivery.ts
- * PURPOSE: The live channels behind deliverDigest: Slack through a project's
- *          own Slack connection, email through Resend, and web push to the
- *          organization's owners' and admins' devices. Recipients are owners
+ * PURPOSE: The live channels behind deliverDigest: Slack, Discord, Teams and
+ *          Telegram through a project's own existing connection (its bot or
+ *          webhook, never a new credential), email through Resend, and web
+ *          push to the organization's owners' and admins' devices. Recipients are owners
  *          and admins only; emails are read from auth and never logged.
  */
 
 import type { getServiceClient } from './db.ts'
-import { sendBotMessage } from './slack.ts'
+import { sendBotMessage, sendDiscordNotification } from './slack.ts'
+import { sendTeamsText } from './teams.ts'
+import { sendTelegramMessage } from './telegram.ts'
+import { dereferenceMaybeVault } from './settings-secrets.ts'
 import { sendTransactionalEmail } from './email.ts'
 import { sendWebPushToUser } from './web-push.ts'
 import type { DeliveryDeps } from './operator-digest.ts'
@@ -26,6 +30,16 @@ export function digestConsoleUrl(): string {
   return `${base}/portfolio`
 }
 
+const MAX_TELEGRAM_CHATS = 5
+
+/** A project's Discord or Teams webhook URL, dereferenced when it is stored as a Vault ref. */
+async function projectWebhook(db: Db, projectId: string, column: 'discord_webhook_url' | 'teams_webhook_url'): Promise<string | null> {
+  const { data, error } = await db.from('project_settings').select(column).eq('project_id', projectId).maybeSingle()
+  if (error) return null
+  const stored = (data as Record<string, string | null> | null)?.[column] ?? null
+  return dereferenceMaybeVault(db as never, stored)
+}
+
 export const liveDeliveryDeps: DeliveryDeps = {
   async sendSlack(db: Db, projectId: string, text: string) {
     const { data } = await db.from('project_settings').select('slack_channel_id').eq('project_id', projectId).maybeSingle()
@@ -33,6 +47,31 @@ export const liveDeliveryDeps: DeliveryDeps = {
     if (!channel) return { ok: false, error: 'that project has no Slack channel connected' }
     const r = await sendBotMessage({ db, projectId, channel, text })
     return { ok: r.ok, error: r.ok ? undefined : r.error ?? 'Slack refused the message' }
+  },
+  async sendDiscord(db: Db, projectId: string, title: string, body: string) {
+    const url = await projectWebhook(db, projectId, 'discord_webhook_url')
+    if (!url) return { ok: false, error: 'that project has no Discord webhook' }
+    // Embed descriptions hold 4096 characters.
+    return sendDiscordNotification(url, body.slice(0, 4000), { title: title.slice(0, 250), color: 0x7c3aed })
+  },
+  async sendTeams(db: Db, projectId: string, title: string, body: string) {
+    const url = await projectWebhook(db, projectId, 'teams_webhook_url')
+    if (!url) return { ok: false, error: 'that project has no Teams webhook' }
+    return sendTeamsText(url, title, body)
+  },
+  async sendTelegram(db: Db, projectId: string, text: string) {
+    const { data, error } = await db.from('telegram_chat_bindings').select('chat_id').eq('project_id', projectId).limit(MAX_TELEGRAM_CHATS)
+    if (error) return { sent: 0, error: 'the Telegram chats could not be read' }
+    const chats = (data ?? []) as Array<{ chat_id: string }>
+    if (chats.length === 0) return { sent: 0, error: 'no Telegram chat is bound to that project' }
+    let sent = 0
+    let lastErr = ''
+    for (const c of chats) {
+      const r = await sendTelegramMessage(db as never, projectId, c.chat_id, text)
+      if (r.ok) sent++
+      else lastErr = r.description ?? 'Telegram refused the message'
+    }
+    return { sent, error: lastErr || undefined }
   },
   async sendEmail(to: string, subject: string, text: string) {
     const r = await sendTransactionalEmail({ to, subject, text, tags: { kind: 'operator_digest' } })

@@ -17,7 +17,7 @@
  */
 
 import { sha256Hex, signJwt } from './jwt.ts'
-import { fetchJson, statusReason } from './http-util.ts'
+import { fetchJson, statusReason, type JsonResponse } from './http-util.ts'
 import { canonicalJson } from './canonical.ts'
 import { ConnectorError, notConnected, type ApprovedConnectorAction, type ConnectorActionResult, type ConnectorContext, type RecipeConnector } from './types.ts'
 
@@ -82,6 +82,23 @@ async function readTracks(ctx: ConnectorContext, tokenValue: string, pkg: string
   } finally {
     await api(ctx, tokenValue, 'DELETE', `/${pkg}/edits/${edit.body.id}`).catch(() => {})
   }
+}
+
+/** True for an Android package name (com.example.app). */
+export function isPlayPackage(value: unknown): value is string {
+  return typeof value === 'string' && PKG.test(value)
+}
+
+/**
+ * One read-only GET under applications/ with the read service account (the
+ * store review intake lists reviews with it). Throws ConnectorError
+ * `not_connected` when there is no readable key.
+ */
+export async function playConsoleGet(ctx: ConnectorContext, path: string): Promise<JsonResponse<unknown>> {
+  const sa = parseSa(ctx.readCredential)
+  if (!sa) throw new ConnectorError('Google Play is not connected.', 'not_connected')
+  const t = await accessToken(ctx, sa)
+  return fetchJson<unknown>(ctx, `${API}${path}`, { headers: { Authorization: `Bearer ${t}` } })
 }
 
 export const playConsoleConnector: RecipeConnector = {
