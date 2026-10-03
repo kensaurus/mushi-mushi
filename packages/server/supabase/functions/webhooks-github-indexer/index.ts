@@ -45,11 +45,7 @@ import {
   applyCloudAgentOutcome,
   parseCloudAgentBranchRef,
 } from '../_shared/agent-adapters.ts';
-import {
-  scheduleAutoRelease,
-  triggerFromGithubDeploymentStatus,
-  triggerFromGithubRelease,
-} from '../_shared/auto-release.ts';
+import { routeGithubShipEvent, type GithubShipPayload } from '../_shared/auto-release.ts';
 
 ensureSentry('webhooks-github-indexer');
 
@@ -1484,38 +1480,9 @@ app.post('/webhooks-github-indexer', async (c) => {
   // and published, which tells reporters their fix is live. The work runs
   // after the 202 (waitUntil); runAutoRelease re-checks the opt-in.
   if (event === 'release' || event === 'deployment_status') {
-    const shipPayload = JSON.parse(raw) as Parameters<typeof triggerFromGithubRelease>[0] &
-      Parameters<typeof triggerFromGithubDeploymentStatus>[0] & {
-        repository?: { full_name?: string };
-        installation?: { id?: number };
-      };
-    const trigger = event === 'release'
-      ? triggerFromGithubRelease(shipPayload)
-      : triggerFromGithubDeploymentStatus(shipPayload);
-    if (!trigger) return c.json({ ok: true, ignored: `${event}_not_a_production_ship` }, 202);
-    const shipInstallationId = shipPayload.installation?.id;
-    const shipRepo = shipPayload.repository?.full_name;
-    if (!shipInstallationId || !shipRepo) {
-      return c.json({ ok: true, ignored: 'missing_repo_or_installation' }, 202);
-    }
-    const shipDb = getDb();
-    // Same routing as push (repo bound to THIS installation), without
-    // requiring indexing to be on: releases do not depend on the index.
-    const { data: shipRows } = await shipDb
-      .from('project_repos')
-      .select('project_id')
-      .eq('repo_url', `https://github.com/${shipRepo}`)
-      .eq('github_app_installation_id', shipInstallationId)
-      .limit(10);
-    const shipProjectIds = [
-      ...new Set(((shipRows ?? []) as Array<{ project_id: string }>).map((r) => r.project_id)),
-    ];
-    if (shipProjectIds.length === 0) {
-      return c.json({ ok: true, ignored: 'no_project_for_repo', repoFullName: shipRepo }, 202);
-    }
-    await auditRow.setProject(shipProjectIds[0]);
-    for (const pid of shipProjectIds) void scheduleAutoRelease(shipDb, pid, trigger);
-    return c.json({ ok: true, autoRelease: { queued: shipProjectIds.length, version: trigger.version } }, 202);
+    const routed = await routeGithubShipEvent(getDb(), event, JSON.parse(raw) as GithubShipPayload);
+    if (routed.projectIds[0]) await auditRow.setProject(routed.projectIds[0]);
+    return c.json(routed.body, routed.status);
   }
 
   if (event !== 'push' && event !== 'installation_repositories') {

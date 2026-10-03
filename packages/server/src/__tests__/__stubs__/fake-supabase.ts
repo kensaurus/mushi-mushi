@@ -87,8 +87,16 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: { code?: string; 
     this.filters.push((r) => values.includes(readPath(r, key)))
     return this
   }
-  not(key: string, op: string, value: string): this {
-    if (op !== 'in') throw new Error(`fake-supabase: not(${op}) unsupported`)
+  not(key: string, op: string, value: string | null): this {
+    if (op === 'is' && value === null) {
+      // `.not(col, 'is', null)`: the column is set.
+      this.filters.push((r) => {
+        const v = readPath(r, key)
+        return v !== null && v !== undefined
+      })
+      return this
+    }
+    if (op !== 'in' || value === null) throw new Error(`fake-supabase: not(${op}) unsupported`)
     const values = value.replace(/^\(|\)$/g, '').split(',').map((s) => s.trim().replace(/^"|"$/g, ''))
     this.filters.push((r) => !values.includes(String(readPath(r, key))))
     return this

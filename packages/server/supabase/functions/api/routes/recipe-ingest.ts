@@ -5,6 +5,7 @@
  *   POST /v1/ingest/recipe          apiKeyAuth  the host CI pushes mushi.recipe.json + token/CSS files
  *                                               (+ off-token findings) for repos Mushi has no token for
  *   POST /v1/ingest/recipe/events   apiKeyAuth  build.completed / deploy.completed / release.published
+ *                                               (auto-release needs an mcp:write key never seen in a browser)
  *   POST /v1/ingest/recipe/csv      jwtAuth     one-off import of shared resources (domains, bundle ids…)
  *   GET  /v1/admin/orgs/:orgId/portfolio/resources  adminOrApiKey(mcp:read)  resources, uses, cross-project findings
  *   GET  /v1/admin/projects/:id/recipe/drift          adminOrApiKey(mcp:read)  open recipe drift with fixes (MCP get_recipe_drift)
@@ -16,7 +17,7 @@
 
 import type { Context, Hono, MiddlewareHandler } from 'npm:hono@4'
 import { z } from 'npm:zod@3'
-import { adminOrApiKey, apiKeyAuth, jwtAuth, mcpKeyBrowserExposure } from '../../_shared/auth.ts'
+import { adminOrApiKey, apiKeyAuth, jwtAuth, keyGrantsAnyScope, mcpKeyBrowserExposure } from '../../_shared/auth.ts'
 import { getServiceClient } from '../../_shared/db.ts'
 import { log } from '../../_shared/logger.ts'
 import { snapshotFromSource, DESIGN_GATE } from '../../_shared/design-plane.ts'
@@ -87,6 +88,41 @@ async function rateLimited(c: Context, db: Db, projectId: string): Promise<Respo
 }
 
 /** Stable numeric run id for a host-supplied build id. */
+type RecipeEvent = z.infer<typeof eventSchema>
+
+/**
+ * The one `release.published` a request may auto-release: the LAST one in
+ * the batch (events are sent in order, so that is the newest ship). Every
+ * other distinct version is reported back as ignored, never dropped
+ * silently; one request never starts more than one release run.
+ */
+export function pickAutoRelease(
+  events: RecipeEvent[],
+): { version: string; commit: string | null; ignoredVersions: string[] } | null {
+  const releases = events.filter((e): e is Extract<RecipeEvent, { type: 'release.published' }> => e.type === 'release.published')
+  const chosen = releases[releases.length - 1]
+  if (!chosen) return null
+  const ignoredVersions = [...new Set(releases.map((e) => e.version))].filter((v) => v !== chosen.version)
+  return { version: chosen.version, commit: chosen.commit ?? null, ignoredVersions }
+}
+
+/**
+ * Auto-release publishes and messages every reporter, so the event must come
+ * from a credential the team keeps secret. apiKeyAuth accepts ANY project key,
+ * including the public SDK key (report:write), which also ships inside native
+ * apps that send no Origin header and so never look "seen in a browser".
+ * Require a positive grant (mcp:write, the agent/CI key scope) and keep the
+ * browser-exposure check as a second guard.
+ */
+export function autoReleaseRefusal(
+  scopes: string[],
+  browserExposure: ReturnType<typeof mcpKeyBrowserExposure>,
+): 'key_lacks_mcp_write' | 'browser_exposed_key' | null {
+  if (!keyGrantsAnyScope(scopes, ['mcp:write'])) return 'key_lacks_mcp_write'
+  if (browserExposure) return 'browser_exposed_key'
+  return null
+}
+
 function syntheticRunId(id: string): number {
   let h = 0
   for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) % 2_147_483_647
@@ -177,20 +213,7 @@ export function registerRecipeIngestRoutes(app: Hono<{ Variables: Variables }>, 
     if (!parsed.success) return jsonError(c, 'VALIDATION_ERROR', parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ').slice(0, 500), 400)
     const now = deps.now().toISOString()
     let stored = 0
-    // A shipped version may auto-release (opt-in, checked inside); once per
-    // version per request. Auto-release messages reporters, so a key that a
-    // web page has sent (the public SDK key) cannot trigger it.
-    const releasedVersions = new Set<string>()
-    const autoRelease = deps.scheduleAutoRelease ?? scheduleAutoRelease
-    const keyExposure = mcpKeyBrowserExposure(
-      { origin: c.req.header('Origin'), referer: c.req.header('Referer'), secFetchSite: c.req.header('Sec-Fetch-Site') },
-      (c.get('apiKeyBrowserSignals') as { last_seen_origin?: string | null; browser_seen_at?: string | null } | undefined) ?? {},
-    )
     for (const e of parsed.data.events) {
-      if (e.type === 'release.published' && !releasedVersions.has(e.version)) {
-        releasedVersions.add(e.version)
-        if (!keyExposure) void autoRelease(db, projectId, { source: 'recipe_event', version: e.version, commit: e.commit ?? null })
-      }
       if (e.type === 'build.completed') {
         const { error } = await db.from('ci_workflow_runs').upsert({
           project_id: projectId, repo: 'external', run_id: syntheticRunId(e.id), workflow_path: e.workflow ?? null, name: e.workflow ?? null,
@@ -207,13 +230,33 @@ export function registerRecipeIngestRoutes(app: Hono<{ Variables: Variables }>, 
         if (!error) stored++
       }
     }
+    const release = pickAutoRelease(parsed.data.events)
+    const skipped = release
+      ? autoReleaseRefusal(
+          (c.get('apiKeyScopes') as string[] | undefined) ?? [],
+          mcpKeyBrowserExposure(
+            { origin: c.req.header('Origin'), referer: c.req.header('Referer'), secFetchSite: c.req.header('Sec-Fetch-Site') },
+            (c.get('apiKeyBrowserSignals') as { last_seen_origin?: string | null; browser_seen_at?: string | null } | undefined) ?? {},
+          ),
+        )
+      : null
+    if (release && !skipped) {
+      // Opt-in is checked inside; at most one run per request.
+      void (deps.scheduleAutoRelease ?? scheduleAutoRelease)(db, projectId, {
+        source: 'recipe_event',
+        version: release.version,
+        commit: release.commit,
+      })
+    }
     return c.json({
       ok: true,
       data: {
         received: parsed.data.events.length,
         stored,
-        autoReleaseChecked: keyExposure ? 0 : releasedVersions.size,
-        ...(keyExposure && releasedVersions.size > 0 ? { autoReleaseSkipped: 'browser_exposed_key' } : {}),
+        autoReleaseChecked: release && !skipped ? 1 : 0,
+        ...(release ? { autoReleaseVersion: release.version } : {}),
+        ...(release && release.ignoredVersions.length > 0 ? { autoReleaseIgnoredVersions: release.ignoredVersions } : {}),
+        ...(skipped ? { autoReleaseSkipped: skipped } : {}),
       },
     })
   })

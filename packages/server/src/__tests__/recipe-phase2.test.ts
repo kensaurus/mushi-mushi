@@ -17,6 +17,9 @@ vi.mock('../../supabase/functions/_shared/auth.ts', () => ({
     h: { origin?: string | null; referer?: string | null; secFetchSite?: string | null },
     k: { last_seen_origin?: string | null; browser_seen_at?: string | null },
   ) => (h.origin || h.referer || h.secFetchSite ? 'browser_request' : k.browser_seen_at || k.last_seen_origin ? 'key_seen_in_browser' : null),
+  // Same rule as _shared/auth.ts: mcp:write implies mcp:read.
+  keyGrantsAnyScope: (scopes: string[], accepted: readonly string[]) =>
+    accepted.some((s) => scopes.includes(s) || (s === 'mcp:read' && scopes.includes('mcp:write'))),
 }))
 vi.mock('../../supabase/functions/_shared/sentry.ts', () => ({ reportError: vi.fn(), reportMessage: vi.fn() }))
 vi.mock('../../supabase/functions/api/routes/project-ci-secrets.ts', () => ({ inferStack: () => 'nextjs', requiredCiVarNames: () => [] }))
@@ -330,7 +333,7 @@ describe('recipe ingest routes', () => {
     expect(db.table('deploy_observations')[0]).toMatchObject({ source: 'webhook', target_id: 'vps' })
   })
 
-  it('hands each release.published version to auto-release once (the opt-in is checked there)', async () => {
+  it('starts at most one auto-release per request, for the last release.published, and lists the versions it ignored', async () => {
     const db = seed()
     const scheduleAutoRelease = vi.fn()
     const app = new FakeApp()
@@ -342,20 +345,50 @@ describe('recipe ingest routes', () => {
         { type: 'release.published', targetId: 'web', version: '2.0.0', commit: 'abc1234' },
         { type: 'release.published', targetId: 'api', version: '2.0.0' },
         { type: 'deploy.completed', targetId: 'web', version: '2.0.0', ok: true },
+        { type: 'release.published', targetId: 'web', version: '2.0.1', commit: 'def5678' },
       ] },
-      vars: { projectId: P1 },
+      vars: { projectId: P1, apiKeyScopes: ['mcp:read', 'mcp:write'] },
     })
-    expect(res.body.data).toEqual({ received: 3, stored: 3, autoReleaseChecked: 1 })
+    expect(res.body.data).toEqual({
+      received: 4, stored: 4, autoReleaseChecked: 1, autoReleaseVersion: '2.0.1', autoReleaseIgnoredVersions: ['2.0.0'],
+    })
     expect(scheduleAutoRelease).toHaveBeenCalledTimes(1)
-    expect(scheduleAutoRelease).toHaveBeenCalledWith(db, P1, { source: 'recipe_event', version: '2.0.0', commit: 'abc1234' })
+    expect(scheduleAutoRelease).toHaveBeenCalledWith(db, P1, { source: 'recipe_event', version: '2.0.1', commit: 'def5678' })
+  })
 
-    // A key a web page has sent (the public SDK key) records the event but never releases.
+  it('never auto-releases on the public SDK key (report:write), even one no browser ever sent (native apps, servers)', async () => {
+    const db = seed()
+    const scheduleAutoRelease = vi.fn()
+    const app = new FakeApp()
+    ingest.registerRecipeIngestRoutes(app as never, {
+      getServiceClient: () => db as never, apiKeyAuth: pass, jwtAuth: pass, adminOrApiKeyRead: pass, now: () => NOW, scheduleAutoRelease,
+    } as never)
+    const sdkKey = await app.call('POST', '/v1/ingest/recipe/events', {
+      body: { events: [{ type: 'release.published', targetId: 'web', version: '2.0.1' }] },
+      vars: { projectId: P1, apiKeyScopes: ['report:write'], apiKeyBrowserSignals: { last_seen_origin: null, browser_seen_at: null } },
+    })
+    expect(sdkKey.body.data).toEqual({ received: 1, stored: 1, autoReleaseChecked: 0, autoReleaseVersion: '2.0.1', autoReleaseSkipped: 'key_lacks_mcp_write' })
+    const readOnly = await app.call('POST', '/v1/ingest/recipe/events', {
+      body: { events: [{ type: 'release.published', targetId: 'web', version: '2.0.2' }] },
+      vars: { projectId: P1, apiKeyScopes: ['mcp:read'] },
+    })
+    expect(readOnly.body.data.autoReleaseSkipped).toBe('key_lacks_mcp_write')
+    expect(scheduleAutoRelease).not.toHaveBeenCalled()
+  })
+
+  it('an mcp:write key a web page has sent records the event but never releases', async () => {
+    const db = seed()
+    const scheduleAutoRelease = vi.fn()
+    const app = new FakeApp()
+    ingest.registerRecipeIngestRoutes(app as never, {
+      getServiceClient: () => db as never, apiKeyAuth: pass, jwtAuth: pass, adminOrApiKeyRead: pass, now: () => NOW, scheduleAutoRelease,
+    } as never)
     const exposed = await app.call('POST', '/v1/ingest/recipe/events', {
       body: { events: [{ type: 'release.published', targetId: 'web', version: '2.0.1' }] },
-      vars: { projectId: P1, apiKeyBrowserSignals: { last_seen_origin: null, browser_seen_at: '2026-10-01T00:00:00Z' } },
+      vars: { projectId: P1, apiKeyScopes: ['mcp:write'], apiKeyBrowserSignals: { last_seen_origin: null, browser_seen_at: '2026-10-01T00:00:00Z' } },
     })
-    expect(exposed.body.data).toEqual({ received: 1, stored: 1, autoReleaseChecked: 0, autoReleaseSkipped: 'browser_exposed_key' })
-    expect(scheduleAutoRelease).toHaveBeenCalledTimes(1)
+    expect(exposed.body.data).toEqual({ received: 1, stored: 1, autoReleaseChecked: 0, autoReleaseVersion: '2.0.1', autoReleaseSkipped: 'browser_exposed_key' })
+    expect(scheduleAutoRelease).not.toHaveBeenCalled()
   })
 
   it('imports shared resources from CSV for owners only, and reports bad lines', async () => {

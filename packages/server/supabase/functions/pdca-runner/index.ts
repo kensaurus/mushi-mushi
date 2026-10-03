@@ -169,7 +169,7 @@ async function runQaStoryImprover(
         },
         async (openaiKey) => {
           const { object } = await generateObject({
-            model: createOpenAI({ apiKey: openaiKey.key })('gpt-4.1', { structuredOutputs: false }),
+            model: createOpenAI({ apiKey: openaiKey.key })(OPENAI_PRIMARY, { structuredOutputs: false }),
             system: IMPROVE_SYSTEM,
             schema: improveSchema,
             prompt: `ORIGINAL TEST:\n\`\`\`typescript\n${(story.script as string).slice(0, 4000)}\n\`\`\`\n\nRECENT FAILURES:\n${failureSummary}`,

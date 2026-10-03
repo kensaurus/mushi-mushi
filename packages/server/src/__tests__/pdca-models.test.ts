@@ -32,6 +32,18 @@ describe('PDCA model rules', () => {
     expect(pdcaModelError('judge_model', 'claude-; drop table')).not.toBeNull()
   })
 
+  it('refuses a Claude-shaped id the runner cannot call or price, and accepts every console choice', () => {
+    expect(pdcaModelError('primary_model', 'claude-foo')).toContain('is not a Claude model Mushi knows')
+    expect(pdcaModelError('judge_model', 'claude-sonnet-9-9')).toContain('is not a Claude model Mushi knows')
+    // Retired or dated ids still resolve to a priced model, so they pass.
+    expect(pdcaModelError('primary_model', 'claude-sonnet-4-5')).toBeNull()
+    expect(pdcaModelError('primary_model', 'claude-haiku-4-5-20251001')).toBeNull()
+    const consoleTypes = readFileSync(resolve(__dirname, '../../../../apps/admin/src/components/iterate/types.ts'), 'utf-8')
+    const choices = [...consoleTypes.slice(consoleTypes.indexOf('export const MODEL_OPTIONS')).matchAll(/value: '([^']+)'/g)].map((m) => m[1])
+    expect(choices).toEqual(['claude-opus-5-5', 'claude-haiku-4-5'])
+    for (const id of [PDCA_DEFAULT_MODEL, ...choices]) expect(pdcaModelError('primary_model', id)).toBeNull()
+  })
+
   it('maps stored retired or non-Claude models to the default at run time', () => {
     expect(resolvePdcaModel(null)).toBe(PDCA_DEFAULT_MODEL)
     expect(resolvePdcaModel('gpt-5.4')).toBe(PDCA_DEFAULT_MODEL)
@@ -51,6 +63,9 @@ describe('pdca-runner source', () => {
     expect(src).not.toMatch(/['"]claude-[a-z0-9-]+['"]/)
     expect(src).not.toContain('createAnthropic')
     expect(src).not.toContain("'gpt-5.4'")
+    // Every OpenAI fallback (producer, critic and the QA-story improver) uses the shared id.
+    expect(src).not.toContain("'gpt-4.1'")
+    expect(src).not.toMatch(/createOpenAI\([^)]*\)\('gpt-/)
   })
 
   it('calls Claude through claude-messages and resolves stored models', () => {

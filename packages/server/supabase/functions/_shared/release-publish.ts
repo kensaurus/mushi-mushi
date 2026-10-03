@@ -32,7 +32,15 @@ export type PublishReleaseResult =
       ticketsFulfilled: number
       delivery: ReleaseDelivery & { credits_stamped: number; credits_pending: number }
     }
-  | { ok: false; status: 404 | 500; error: string }
+  | {
+      ok: false
+      status: 404 | 500
+      error: string
+      /** True when the release went live before the failure (support tickets,
+       *  reporter messages or credits failed part-way); false when it is
+       *  still a draft. */
+      published: boolean
+    }
 
 export async function publishRelease(
   db: SupabaseClient,
@@ -47,8 +55,8 @@ export async function publishRelease(
     .select()
     .maybeSingle()
 
-  if (error) return { ok: false, status: 500, error: error.message }
-  if (!release) return { ok: false, status: 404, error: 'Release not found or already published' }
+  if (error) return { ok: false, status: 500, error: error.message, published: false }
+  if (!release) return { ok: false, status: 404, error: 'Release not found or already published', published: false }
   const rel = release as PublishedRelease
 
   const publishedAt = rel.published_at ?? new Date().toISOString()
@@ -66,6 +74,7 @@ export async function publishRelease(
         ok: false,
         status: 500,
         error: `release published, but linking ${ticketIds.length} support ticket(s) failed: ${ticketsError.message}`,
+        published: true,
       }
     }
   }
@@ -74,9 +83,9 @@ export async function publishRelease(
   // reports keep their status, dismissed ones are skipped. Credits are
   // stamped only where a delivered ledger row exists.
   const linked = await notifyReleaseReporters(db, rel, actor)
-  if (!linked.ok) return { ok: false, status: 500, error: `release published, but ${linked.error}` }
+  if (!linked.ok) return { ok: false, status: 500, error: `release published, but ${linked.error}`, published: true }
   const credits = await stampDeliveredReleaseCredits(db, rel.id)
-  if (!credits.ok) return { ok: false, status: 500, error: `release published, but ${credits.error}` }
+  if (!credits.ok) return { ok: false, status: 500, error: `release published, but ${credits.error}`, published: true }
 
   return {
     ok: true,
