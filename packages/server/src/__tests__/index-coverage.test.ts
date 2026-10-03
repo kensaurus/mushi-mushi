@@ -5,22 +5,30 @@
  *   - one run fetches a bounded batch, admitting new files only under the
  *     ceiling, so a big cap fills over several runs;
  *   - the consumers (index-failing probe, doctor wording) read partial
- *     sweeps as successful.
+ *     sweeps as successful;
+ *   - the path filter and project scope decide eligibility for the sweep
+ *     and the push alike;
+ *   - a filling sweep that adds nothing is stalled (out of the hourly batch);
+ *   - pushes respect the plan ceiling and keep the coverage numbers current.
  */
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
+  admitPushPaths,
   DEFAULT_INDEX_FILE_CAP,
   describeIndexCoverage,
   indexFileCapForPlan,
+  indexPathFilter,
   isStorableBlob,
   latestIso,
   measureIndexCoverage,
   MAX_INDEX_FILE_CAP,
+  pushCoverageUpdate,
   selectSweepFiles,
   sweepBookkeeping,
 } from '../../supabase/functions/_shared/index-coverage.ts'
+import { pathMatchesAnyGlob } from '../../supabase/functions/_shared/codebase-scope.ts'
 import { isCodebaseIndexFailing } from '../../supabase/functions/_shared/sweep-error-classifier.ts'
 
 const NOW = '2026-10-03T12:00:00.000Z'
@@ -218,14 +226,36 @@ describe('wiring', () => {
   })
 
   it('the sweep counts only storable blobs and reports unstorable fetches to the coverage measure', () => {
-    expect(indexer).toContain("shouldIndex(t.path) && isStorableBlob(t)")
-    expect(indexer).toContain("if (got.skip === 'unstorable') unstorablePaths.add(path)")
+    expect(indexer).toContain("eligible(t.path) && isStorableBlob(t)")
+    expect(indexer).toContain("if (got.skip === 'unstorable') {")
     expect(indexer).toMatch(/indexedPaths: new Set\(\[\.\.\.indexedBefore, \.\.\.writtenPaths\]\),\s*unstorablePaths,/)
   })
 
-  it('the hourly batch re-picks filling repos, oldest attempt first', () => {
+  it('the hourly batch re-picks filling repos (not stalled ones), oldest attempt first', () => {
     expect(indexer).toContain('index_coverage_state.eq.filling')
+    expect(indexer).not.toContain('index_coverage_state.eq.stalled')
     expect(indexer).toContain(".order('last_index_attempt_at', { ascending: true, nullsFirst: true })")
+    // The progress check needs the pre-sweep count.
+    expect(indexer).toContain('indexedBefore: indexedEligibleBefore,')
+  })
+
+  it("the sweep applies the repo's path filter and the project scope, read strictly", () => {
+    const sweep = indexer.slice(indexer.indexOf('async function handleSweep('), indexer.indexOf('async function sweepIndexRepo('))
+    expect(sweep).toContain('path_globs')
+    expect(sweep).toContain('indexPathFilter({')
+    expect(sweep).toContain('scope: await loadIndexScopeStrict(db, repo.project_id)')
+    expect(indexer).toContain("if (error) throw new Error(`codebase scope read failed: ${error.message}`);")
+  })
+
+  it('the push path checks the plan ceiling and writes coverage', () => {
+    const push = indexer.slice(indexer.indexOf('async function indexPushForProject('), indexer.indexOf('async function loadIndexedAmong('))
+    expect(push).toContain('admitPushPaths({')
+    expect(push).toContain('for (const path of admission.admit)')
+    expect(push).toContain('pushCoverageUpdate({')
+    expect(push).toContain('...(coverageUpdate ?? {}),')
+    expect(push).toContain('indexPathFilter({')
+    // A failed membership read throws rather than indexing past the cap.
+    expect(indexer).toContain('if (error) throw new Error(`indexed-path lookup failed: ${error.message}`);')
   })
 
   it('the cap comes from the plan, and one run fetches a bounded batch', () => {
@@ -234,8 +264,146 @@ describe('wiring', () => {
     expect(indexer).not.toContain("envInt('MUSHI_REPO_INDEX_SWEEP_FILE_CAP'")
   })
 
+  it('the Repo page and repos-list routes send the sweep and coverage columns', () => {
+    const repoRoutes = readFileSync(resolve(FN, 'api/routes/query-fixes-repo.ts'), 'utf8')
+    const overview = repoRoutes.slice(repoRoutes.indexOf("app.get('/v1/admin/repo/overview'"), repoRoutes.indexOf("app.get('/v1/admin/repo/activity'"))
+    for (const col of ['index_swept_at', 'index_coverage_state', 'index_files_indexed', 'index_files_eligible']) {
+      expect(overview, `overview select ${col}`).toContain(`${col}`)
+      expect(overview, `overview response ${col}`).toContain(`${col}: primaryRepo?.${col} ?? null`)
+    }
+    const list = repoRoutes.slice(repoRoutes.indexOf("app.get('/v1/admin/repo/repos'"), repoRoutes.indexOf("app.post('/v1/admin/repo/repos'"))
+    expect(list).toContain('last_indexed_at, index_swept_at, index_coverage_state, index_files_indexed, index_files_eligible')
+  })
+
   it('doctor treats a partial sweep as indexed (warn), not as never indexed (fail)', () => {
     expect(doctor).toContain('latestIso(repo.last_indexed_at, repo.index_swept_at)')
     expect(doctor).toContain('Partly indexed:')
+  })
+})
+
+describe('path filter (gap 16b: the remediation the coverage callout gives)', () => {
+  it('pathMatchesAnyGlob: ** spans directories, * one segment, bare paths are prefixes', () => {
+    expect(pathMatchesAnyGlob('src/a/b.ts', ['src/**'])).toBe(true)
+    expect(pathMatchesAnyGlob('lib/a.ts', ['src/**'])).toBe(false)
+    expect(pathMatchesAnyGlob('apps/web/src/x.tsx', ['apps/*/src/**'])).toBe(true)
+    expect(pathMatchesAnyGlob('apps/web/lib/x.tsx', ['apps/*/src/**'])).toBe(false)
+    expect(pathMatchesAnyGlob('src/a.ts', ['src/'])).toBe(true)
+    expect(pathMatchesAnyGlob('srcx/a.ts', ['src'])).toBe(false)
+    expect(pathMatchesAnyGlob('anything.ts', [])).toBe(true)
+    expect(pathMatchesAnyGlob('anything.ts', null)).toBe(true)
+  })
+
+  it('indexPathFilter combines the indexable check, the project scope and the globs', () => {
+    const f = indexPathFilter({ scope: { scope_paths: ['apps'], exclude_globs: ['**/*.test.ts'] }, pathGlobs: ['apps/*/src/**'] })
+    expect(f('apps/web/src/a.ts')).toBe(true)
+    expect(f('apps/web/src/a.test.ts')).toBe(false)
+    expect(f('apps/web/lib/a.ts')).toBe(false)
+    expect(f('packages/x/src/a.ts')).toBe(false)
+    expect(f('apps/web/src/logo.png')).toBe(false)
+    expect(indexPathFilter({ scope: null, pathGlobs: null })('lib/a.ts')).toBe(true)
+  })
+
+  it('a filter shrinks the eligible set and can turn capped into complete', () => {
+    const tree = [
+      ...Array.from({ length: 300 }, (_, i) => `src/f${i}.ts`),
+      ...Array.from({ length: 900 }, (_, i) => `scripts/s${i}.ts`),
+    ]
+    const indexed = new Set(tree.slice(0, 300))
+    const unfiltered = measureIndexCoverage({ eligiblePaths: tree, indexedPaths: indexed, cap: 300, truncated: false })
+    expect(unfiltered).toMatchObject({ indexed: 300, eligible: 1200, state: 'capped' })
+
+    const onlySrc = tree.filter(indexPathFilter({ scope: null, pathGlobs: ['src/**'] }))
+    const filtered = measureIndexCoverage({ eligiblePaths: onlySrc, indexedPaths: indexed, cap: 300, truncated: false })
+    expect(filtered).toMatchObject({ indexed: 300, eligible: 300, state: 'complete' })
+    // And the sweep would fetch only filtered files.
+    expect(selectSweepFiles({ treePaths: onlySrc, framePaths: [], indexedPaths: new Set(), planCap: 300, runBudget: 50 })
+      .every((p) => p.startsWith('src/'))).toBe(true)
+  })
+})
+
+describe('stalled coverage (a filling sweep that adds nothing)', () => {
+  const eligible = ['a.ts', 'b.ts', 'c.ts', 'd.ts']
+
+  it('no new file indexed while filling reads as stalled', () => {
+    const cov = measureIndexCoverage({ eligiblePaths: eligible, indexedPaths: new Set(['a.ts']), cap: 300, truncated: false, indexedBefore: 1 })
+    expect(cov.state).toBe('stalled')
+  })
+
+  it('progress keeps it filling; complete and capped are unaffected', () => {
+    expect(measureIndexCoverage({ eligiblePaths: eligible, indexedPaths: new Set(['a.ts', 'b.ts']), cap: 300, truncated: false, indexedBefore: 1 }).state).toBe('filling')
+    expect(measureIndexCoverage({ eligiblePaths: eligible, indexedPaths: new Set(eligible), cap: 300, truncated: false, indexedBefore: 4 }).state).toBe('complete')
+    expect(measureIndexCoverage({ eligiblePaths: eligible, indexedPaths: new Set(['a.ts', 'b.ts']), cap: 2, truncated: false, indexedBefore: 2 }).state).toBe('capped')
+    // Without the pre-sweep count (older callers) it stays filling.
+    expect(measureIndexCoverage({ eligiblePaths: eligible, indexedPaths: new Set(['a.ts']), cap: 300, truncated: false }).state).toBe('filling')
+  })
+
+  it('a stalled sweep records why, so the console never shows a silent stall', () => {
+    const cov = { indexed: 10, eligible: 20, cap: 300, truncated: false, state: 'stalled' as const }
+    const fetches = sweepBookkeeping({ coverage: cov, nowIso: NOW, failedChunks: 0, fetchErrors: 3, lastFetchError: 'contents fetch 502 for src/x.ts' })
+    expect(fetches.last_index_error).toContain('stalled:')
+    expect(fetches.last_index_error).toContain('3 file fetch(es) failed (contents fetch 502 for src/x.ts)')
+    expect(fetches).not.toHaveProperty('last_indexed_at')
+    expect(fetches.index_coverage_state).toBe('stalled')
+    const embeds = sweepBookkeeping({ coverage: cov, nowIso: NOW, failedChunks: 4, lastError: 'too many tokens' })
+    expect(embeds.last_index_error).toContain('4 chunk embedding(s) failed (too many tokens)')
+    expect(sweepBookkeeping({ coverage: cov, nowIso: NOW, failedChunks: 0 }).last_index_error).toContain('no unindexed file could be fetched')
+  })
+
+  it('describeIndexCoverage words a stall', () => {
+    expect(describeIndexCoverage({ indexed: 10, eligible: 20, cap: 300, truncated: false, state: 'stalled' })).toContain('the last sweep added none')
+  })
+})
+
+describe('push indexing and the plan ceiling', () => {
+  it('refreshes indexed files always and admits new ones only under the cap', () => {
+    const out = admitPushPaths({
+      candidates: ['old1.ts', 'new1.ts', 'new2.ts', 'old2.ts', 'new3.ts'],
+      indexed: new Set(['old1.ts', 'old2.ts']),
+      indexedCount: 298,
+      cap: 300,
+    })
+    expect(out.admit).toEqual(['old1.ts', 'new1.ts', 'new2.ts', 'old2.ts'])
+    expect(out.overCap).toEqual(['new3.ts'])
+  })
+
+  it('at the cap a push only refreshes', () => {
+    const out = admitPushPaths({ candidates: ['n.ts', 'o.ts'], indexed: new Set(['o.ts']), indexedCount: 300, cap: 300 })
+    expect(out).toEqual({ admit: ['o.ts'], overCap: ['n.ts'] })
+  })
+
+  it('coverage follows the push', () => {
+    const prev = { indexed: 300, eligible: 300, truncated: false, state: 'complete' }
+    // Two new files, one admitted (cap 301): now capped at 301 of 302.
+    expect(pushCoverageUpdate({ prev, cap: 301, addedToRepo: 2, removedFromRepo: 0, newlyIndexed: 1, unindexed: 0 })).toEqual({
+      index_files_indexed: 301,
+      index_files_eligible: 302,
+      index_file_cap: 301,
+      index_coverage_state: 'capped',
+    })
+    // A removal shrinks both counts and keeps it complete.
+    expect(pushCoverageUpdate({ prev, cap: 1500, addedToRepo: 0, removedFromRepo: 1, newlyIndexed: 0, unindexed: 1 })).toMatchObject({
+      index_files_indexed: 299,
+      index_files_eligible: 299,
+      index_coverage_state: 'complete',
+    })
+    // A new file whose embedding failed leaves it filling for the hourly sweep.
+    expect(pushCoverageUpdate({ prev, cap: 1500, addedToRepo: 1, removedFromRepo: 0, newlyIndexed: 0, unindexed: 0 })?.index_coverage_state).toBe('filling')
+  })
+
+  it('a stalled repo stays stalled until something changes, and rejoins filling when it does', () => {
+    const prev = { indexed: 10, eligible: 20, truncated: false, state: 'stalled' }
+    expect(pushCoverageUpdate({ prev, cap: 300, addedToRepo: 0, removedFromRepo: 0, newlyIndexed: 0, unindexed: 0 })?.index_coverage_state).toBe('stalled')
+    expect(pushCoverageUpdate({ prev, cap: 300, addedToRepo: 1, removedFromRepo: 0, newlyIndexed: 1, unindexed: 0 })?.index_coverage_state).toBe('filling')
+  })
+
+  it('writes nothing before a sweep has measured the repo', () => {
+    expect(pushCoverageUpdate({
+      prev: { indexed: null, eligible: null, truncated: null, state: null },
+      cap: 300,
+      addedToRepo: 1,
+      removedFromRepo: 0,
+      newlyIndexed: 1,
+      unindexed: 0,
+    })).toBeNull()
   })
 })

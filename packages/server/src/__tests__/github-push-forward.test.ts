@@ -3,12 +3,16 @@
  * routes a `push` delivery to the indexer only for projects whose own
  * webhook secret verifies it, skips repos the GitHub App already covers,
  * and matches the repository case-insensitively without LIKE wildcards.
+ * An unverified delivery gets one uniform 401, so the endpoint does not
+ * reveal which repos are indexed. A failed hand-off to the indexer is
+ * written to the repo row, not only logged.
  */
 import { createHmac } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import {
+  createIndexerPushForwarder,
   githubSignatureMatches,
   routePatPushWebhook,
   type PushForwardRequest,
@@ -140,7 +144,40 @@ describe('routePatPushWebhook', () => {
     const forward = vi.fn(async () => {})
     const body = payload('acme/app-installed')
     const res = await routePatPushWebhook({ body, signature: sign(body, 'secret-two'), deliveryId: 'd-3' }, { db, forward })
-    expect(res.status).toBe(200)
+    expect(res.status).toBe(202)
+    expect(res.body).toMatchObject({ ok: true, data: { forwarded: 0, reason: 'the GitHub App indexes this repo' } })
+    expect(res.auditNote).toBe('APP_DELIVERS_PUSH')
+    expect(forward).not.toHaveBeenCalled()
+  })
+
+  it('tells a signed caller that indexing is off, and forwards nothing', async () => {
+    const { db } = fakeDb(
+      [{ id: R1, project_id: P1, repo_url: 'https://github.com/acme/quiet', indexing_enabled: false, github_app_installation_id: null }],
+      { [P1]: 'secret-one' },
+    )
+    const forward = vi.fn(async () => {})
+    const body = payload('acme/quiet')
+    const res = await routePatPushWebhook({ body, signature: sign(body, 'secret-one'), deliveryId: 'd-5' }, { db, forward })
+    expect(res.status).toBe(202)
+    expect(res.auditNote).toBe('INDEXING_OFF')
+    expect(res.projectIds).toEqual([P1])
+    expect(forward).not.toHaveBeenCalled()
+  })
+
+  it('answers an unknown repo exactly like a bad signature (no repo enumeration)', async () => {
+    const { db } = fakeDb(repos, { [P1]: 'secret-one', [P2]: 'secret-two' })
+    const forward = vi.fn(async () => {})
+    const unknownBody = payload('someone/not-a-customer')
+    const unknown = await routePatPushWebhook({ body: unknownBody, signature: '', deliveryId: 'd-6' }, { db, forward })
+    const knownBody = payload('acme/shop')
+    const forged = await routePatPushWebhook({ body: knownBody, signature: sign(knownBody, 'forged'), deliveryId: 'd-7' }, { db, forward })
+    expect(unknown.status).toBe(401)
+    expect(forged.status).toBe(401)
+    expect(unknown.body).toEqual(forged.body)
+    expect(unknown.outcome).toBe(forged.outcome)
+    // Only the audit log keeps the difference.
+    expect(unknown.auditNote).toBe('NO_PROJECT_FOR_REPO')
+    expect(forged.auditNote).toBe('INVALID_SIGNATURE')
     expect(forward).not.toHaveBeenCalled()
   })
 
@@ -153,7 +190,8 @@ describe('routePatPushWebhook', () => {
     const body = payload('acme/my_app')
     const res = await routePatPushWebhook({ body, signature: sign(body, 'secret-one'), deliveryId: 'd-4' }, { db, forward })
     expect(likePatterns[0]).toBe('https://github.com/acme/my\\_app')
-    expect(res.status).toBe(200)
+    expect(res.status).toBe(401)
+    expect(res.auditNote).toBe('NO_PROJECT_FOR_REPO')
     expect(forward).not.toHaveBeenCalled()
   })
 
@@ -173,6 +211,98 @@ describe('routePatPushWebhook', () => {
   })
 })
 
+/** Fake db for the forwarder: records project_repos updates. */
+function updatesDb(opts: { updateError?: boolean } = {}) {
+  const updates: Array<{ id: string; patch: Record<string, unknown> }> = []
+  const db = {
+    from(table: string) {
+      expect(table).toBe('project_repos')
+      return {
+        update: (patch: Record<string, unknown>) => ({
+          eq: async (_col: string, id: string) => {
+            updates.push({ id, patch })
+            return { error: opts.updateError ? { message: 'write failed' } : null }
+          },
+        }),
+      }
+    },
+  }
+  return { db: db as never, updates }
+}
+
+const NOW = '2026-10-03T12:00:00.000Z'
+const REQ: PushForwardRequest = { projectId: P1, repoId: R1, deliveryId: 'd-9', payload: { after: 'a'.repeat(40) } }
+
+function forwarderWith(fetchImpl: typeof fetch, extra: { supabaseUrl?: string; updateError?: boolean } = {}) {
+  const { db, updates } = updatesDb({ updateError: extra.updateError })
+  const tasks: Promise<unknown>[] = []
+  const log = { warn: vi.fn(), error: vi.fn() }
+  const forward = createIndexerPushForwarder({
+    db,
+    supabaseUrl: 'supabaseUrl' in extra ? extra.supabaseUrl : 'https://x.supabase.co',
+    internalSecret: 'internal',
+    background: (t) => { tasks.push(t) },
+    log,
+    fetchImpl,
+    nowIso: () => NOW,
+  })
+  return { forward, updates, log, settle: () => Promise.all(tasks) }
+}
+
+describe('createIndexerPushForwarder', () => {
+  it('posts mode push with internal auth and records nothing on success', async () => {
+    const fetchImpl = vi.fn(async () => new Response('{"ok":true}', { status: 200 }))
+    const f = forwarderWith(fetchImpl as unknown as typeof fetch)
+    await f.forward(REQ)
+    await f.settle()
+    const [url, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit]
+    expect(url).toBe('https://x.supabase.co/functions/v1/webhooks-github-indexer')
+    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer internal')
+    expect(JSON.parse(String(init.body))).toMatchObject({ mode: 'push', project_id: P1, repo_id: R1, delivery_id: 'd-9' })
+    expect(f.updates).toEqual([])
+  })
+
+  it('writes a non-2xx indexer answer to the repo row', async () => {
+    const f = forwarderWith((async () => new Response('{"error":{"code":"PUSH_INDEX_FAILED"}}', { status: 500 })) as unknown as typeof fetch)
+    await f.forward(REQ)
+    await f.settle()
+    expect(f.updates).toHaveLength(1)
+    expect(f.updates[0].id).toBe(R1)
+    expect(f.updates[0].patch.last_index_attempt_at).toBe(NOW)
+    expect(String(f.updates[0].patch.last_index_error)).toContain('HTTP 500')
+    expect(String(f.updates[0].patch.last_index_error)).toContain('PUSH_INDEX_FAILED')
+  })
+
+  it('writes a failed request and a timeout to the repo row, worded apart', async () => {
+    const boom = forwarderWith((async () => { throw new Error('connection reset') }) as unknown as typeof fetch)
+    await boom.forward(REQ)
+    await boom.settle()
+    expect(String(boom.updates[0].patch.last_index_error)).toContain('request failed: connection reset')
+
+    const slow = forwarderWith((async () => {
+      throw Object.assign(new Error('signal timed out'), { name: 'TimeoutError' })
+    }) as unknown as typeof fetch)
+    await slow.forward(REQ)
+    await slow.settle()
+    expect(String(slow.updates[0].patch.last_index_error)).toContain('did not answer within 150 s')
+  })
+
+  it('a failed bookkeeping write is logged as an error', async () => {
+    const f = forwarderWith((async () => new Response('', { status: 502 })) as unknown as typeof fetch, { updateError: true })
+    await f.forward(REQ)
+    await f.settle()
+    expect(f.log.error).toHaveBeenCalled()
+  })
+
+  it('missing configuration is recorded on the row and thrown (the route answers 500)', async () => {
+    const fetchImpl = vi.fn()
+    const f = forwarderWith(fetchImpl as unknown as typeof fetch, { supabaseUrl: undefined })
+    await expect(f.forward(REQ)).rejects.toThrow('not configured')
+    expect(fetchImpl).not.toHaveBeenCalled()
+    expect(String(f.updates[0].patch.last_index_error)).toContain('not configured')
+  })
+})
+
 describe('wiring', () => {
   const FN = resolve(__dirname, '../../supabase/functions')
   const publicRoutes = readFileSync(resolve(FN, 'api/routes/public.ts'), 'utf8')
@@ -182,18 +312,19 @@ describe('wiring', () => {
     const route = publicRoutes.slice(publicRoutes.indexOf("app.post('/v1/webhooks/github'"))
     expect(route.indexOf("if (event === 'push')")).toBeGreaterThan(-1)
     expect(route.indexOf("if (event === 'push')")).toBeLessThan(route.indexOf("if (event !== 'check_run' && event !== 'check_suite')"))
-    expect(publicRoutes).toContain("mode: 'push'")
-    expect(publicRoutes).toContain("Deno.env.get('MUSHI_INTERNAL_CALLER_SECRET')")
+    expect(route).toContain('createIndexerPushForwarder({')
+    expect(route).toContain("Deno.env.get('MUSHI_INTERNAL_CALLER_SECRET')")
+    // The audit row keeps why a delivery was rejected.
+    expect(route).toContain('pushed.auditNote')
   })
 
-  it("the indexer's internal push mode is service-role only and shares the App push path", () => {
-    const handler = indexer.slice(indexer.indexOf('async function handleInternalPush('), indexer.indexOf("app.post('/webhooks-github-indexer'"))
-    expect(handler.indexOf('requireServiceRoleAuth(req)')).toBeGreaterThan(-1)
-    expect(handler.indexOf('requireServiceRoleAuth(req)')).toBeLessThan(handler.indexOf('getDb()'))
-    expect(handler).toContain('github_app_installation_id')
+  it("the indexer's internal push mode goes through the shared handler and the App push path", () => {
+    const handler = indexer.slice(indexer.indexOf('function handleInternalPush('), indexer.indexOf("app.post('/webhooks-github-indexer'"))
+    expect(handler).toContain('handleInternalPushRequest<PushPayload>(req, body, {')
+    expect(handler).toContain('requireAuth: requireServiceRoleAuth')
     expect(handler).toContain('indexPushForProject(db, {')
     const appPath = indexer.slice(indexer.indexOf("app.post('/webhooks-github-indexer'"))
     expect(appPath).toContain('indexPushForProject(db, {')
-    expect(appPath).toContain("if (peek?.mode === 'push')")
+    expect(appPath).toContain('dispatchInternalIndexerRequest(')
   })
 })

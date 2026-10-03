@@ -18,6 +18,8 @@ import {
   describeIndexCoverage,
   indexFileCapForPlan,
   latestIso,
+  isIndexCoverageState,
+  type IndexCoverageState,
 } from '../../_shared/index-coverage.ts';
 import { resolveProjectPlan } from '../../_shared/quota.ts';
 
@@ -48,13 +50,13 @@ export function codebaseCoverageView(repo: Pick<
   eligible_files: number
   file_cap: number | null
   truncated: boolean
-  state: 'complete' | 'filling' | 'capped'
+  state: IndexCoverageState
   summary: string | null
   measured_at: string | null
 } | null {
   const state = repo?.index_coverage_state
   if (!repo || repo.index_files_indexed == null || repo.index_files_eligible == null) return null
-  if (state !== 'complete' && state !== 'filling' && state !== 'capped') return null
+  if (!isIndexCoverageState(state)) return null
   const truncated = repo.index_tree_truncated === true
   return {
     indexed_files: repo.index_files_indexed,

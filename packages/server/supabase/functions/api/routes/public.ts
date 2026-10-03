@@ -57,7 +57,11 @@ import {
   REPORTER_REPLY_MAX_CHARS,
 } from '../../_shared/reporter-reply-signals.ts';
 import { runInBackground } from '../../_shared/background.ts';
-import { githubSignatureMatches, routePatPushWebhook, type PushForwardRequest } from '../../_shared/github-push-forward.ts';
+import {
+  createIndexerPushForwarder,
+  githubSignatureMatches,
+  routePatPushWebhook,
+} from '../../_shared/github-push-forward.ts';
 import { resolveReporterAuth } from './reporter-auth.ts';
 import { reporterKey } from '../../_shared/reporter-token.ts';
 import { claimIpRateLimit, extractClientIp } from './cli-auth.ts';
@@ -899,38 +903,6 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
   // A repo with the Mushi GitHub App installed gets pushes through the App
   // instead; this route skips those repos so nothing is indexed twice.
 
-  /**
-   * Hand a verified push to webhooks-github-indexer's internal `mode: 'push'`
-   * (internal-caller auth, like the codebase "Index now" kick). Runs in the
-   * background so GitHub gets its answer inside its 10-second window.
-   */
-  async function forwardPushToIndexer(req: PushForwardRequest): Promise<void> {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL');
-    const internalSecret =
-      Deno.env.get('MUSHI_INTERNAL_CALLER_SECRET') ?? Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-    if (!supabaseUrl || !internalSecret) throw new Error('indexer forward not configured (SUPABASE_URL / internal secret)');
-    runInBackground(
-      fetch(`${supabaseUrl}/functions/v1/webhooks-github-indexer`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${internalSecret}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mode: 'push',
-          project_id: req.projectId,
-          repo_id: req.repoId,
-          delivery_id: req.deliveryId,
-          payload: req.payload,
-        }),
-        signal: AbortSignal.timeout(150_000),
-      }).then(async (res) => {
-        if (!res.ok) {
-          const detail = await res.text().then((t) => t.slice(0, 300)).catch(() => '');
-          log.warn('PAT push index failed', { projectId: req.projectId, status: res.status, detail });
-        }
-      }),
-      'pat-push-index',
-    );
-  }
-
   app.post('/v1/webhooks/github', async (c) => {
     const t0 = Date.now();
     const { audit, checkReplay, checkRateLimit } = createWebhookMiddleware('github');
@@ -959,10 +931,18 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
     if (event === 'push') {
       let pushed;
       try {
-        pushed = await routePatPushWebhook(
-          { body, signature: sig, deliveryId },
-          { db: getServiceClient(), forward: forwardPushToIndexer },
-        );
+        const db = getServiceClient();
+        // Hands a verified push to webhooks-github-indexer's internal
+        // `mode: 'push'` in the background (GitHub wants an answer in 10 s);
+        // a failed hand-off is written to the repo's last_index_error.
+        const forward = createIndexerPushForwarder({
+          db,
+          supabaseUrl: Deno.env.get('SUPABASE_URL'),
+          internalSecret: Deno.env.get('MUSHI_INTERNAL_CALLER_SECRET') ?? Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'),
+          background: runInBackground,
+          log,
+        });
+        pushed = await routePatPushWebhook({ body, signature: sig, deliveryId }, { db, forward });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         log.error('PAT push routing failed', { error: message });
@@ -975,7 +955,7 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
         pushed.outcome,
         pushed.status,
         Date.now() - t0,
-        pushed.outcome === 'accepted' ? undefined : String((pushed.body.error as { code?: string } | undefined)?.code ?? ''),
+        pushed.auditNote,
       );
       return c.json(pushed.body, pushed.status);
     }
