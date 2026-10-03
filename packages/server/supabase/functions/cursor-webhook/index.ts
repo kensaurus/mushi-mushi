@@ -180,6 +180,7 @@ export async function handleCursorWebhook(req: Request, deps: Partial<CursorWebh
     projectId: attempt.project_id,
     reportId: attempt.report_id,
     agent: attempt.agent,
+    pendingPrUrl: attempt.pr_url,
   }
   const status = payload.status.toUpperCase()
   const branch = payload.target?.branchName ?? attempt.branch_name ?? null
@@ -193,6 +194,7 @@ export async function handleCursorWebhook(req: Request, deps: Partial<CursorWebh
           prUrl,
           branch,
           summary: payload.summary ?? null,
+          agentFinished: true,
         })
       : await applyCloudAgentOutcome(db, target, { kind: 'completed_no_pr', summary: payload.summary ?? null })
   } else if (status === 'ERROR' || status === 'EXPIRED' || status === 'CANCELLED') {

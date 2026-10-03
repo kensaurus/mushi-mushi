@@ -258,6 +258,57 @@ export async function fetchPullRequestDetails(
   }
 }
 
+export interface PullRequestFile {
+  filename: string
+  status: string
+  additions: number
+  deletions: number
+  patch: string | null
+}
+
+/**
+ * List a PR's changed files (`GET /pulls/:n/files`, 100 per page). Stops at
+ * `maxPages`; `complete` is false when GitHub had more, so a caller never
+ * mistakes a truncated list for the whole change. Null when the PR is gone.
+ */
+export async function fetchPullRequestFiles(
+  token: string,
+  ref: GithubRepoRef,
+  pullNumber: number,
+  opts: { maxPages?: number } = {},
+): Promise<{ files: PullRequestFile[]; complete: boolean } | null> {
+  const maxPages = opts.maxPages ?? 3
+  const files: PullRequestFile[] = []
+  for (let page = 1; page <= maxPages; page++) {
+    const res = await fetchWithTimeout(
+      `https://api.github.com/repos/${ref.owner}/${ref.repo}/pulls/${pullNumber}/files?per_page=100&page=${page}`,
+      { headers: githubAuthHeaders(token) },
+    )
+    if (res.status === 404) return null
+    if (!res.ok) throw new Error(`pull files fetch ${res.status}`)
+    const body = await res.json() as Array<{
+      filename?: string
+      status?: string
+      additions?: number
+      deletions?: number
+      patch?: string
+    }>
+    if (!Array.isArray(body)) throw new Error('pull files fetch returned a non-array body')
+    for (const f of body) {
+      if (typeof f.filename !== 'string') continue
+      files.push({
+        filename: f.filename,
+        status: f.status ?? 'modified',
+        additions: f.additions ?? 0,
+        deletions: f.deletions ?? 0,
+        patch: typeof f.patch === 'string' ? f.patch : null,
+      })
+    }
+    if (body.length < 100) return { files, complete: true }
+  }
+  return { files, complete: false }
+}
+
 /**
  * Convert a draft PR to "ready for review" so CI can run and the merge API
  * accepts squash-merge. GitHub blocks merge on draft PRs even when checks pass.

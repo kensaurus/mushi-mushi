@@ -4,6 +4,7 @@
 // Admin (JWT, org-scoped):
 //   GET  /v1/admin/releases             — list releases for a project
 //   POST /v1/admin/releases/draft       — trigger release-builder edge function
+//   GET  /v1/admin/releases/auto-release — automatic draft blocking auto-release
 //   GET  /v1/admin/releases/:id         — release detail with credits
 //   PATCH /v1/admin/releases/:id        — edit body, title, status
 //   DELETE /v1/admin/releases/:id       — delete draft (not published)
@@ -31,7 +32,8 @@ import {
 } from '../shared.ts'
 import { log } from '../../_shared/logger.ts'
 import { reporterKey } from '../../_shared/reporter-token.ts'
-import { notifyReleaseReporters, stampDeliveredReleaseCredits } from '../../_shared/release-reporters.ts'
+import { publishRelease } from '../../_shared/release-publish.ts'
+import { findOpenAutoDraft } from '../../_shared/auto-release.ts'
 
 async function assertReleaseRowAccess(
   c: Parameters<typeof assertTargetProjectAccess>[0],
@@ -239,6 +241,23 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
     return c.json({ ok: true, data, meta: { total: count ?? 0, limit, offset } })
   })
 
+  // GET /v1/admin/releases/auto-release — the automatic draft that blocks
+  // auto-release for the active project, if any. One draft at a time is the
+  // rule (uq_releases_one_auto_draft), so a draft whose publish failed stops
+  // every later automatic release until a person publishes or deletes it.
+  // Registered before /:id so "auto-release" is never parsed as an id.
+  app.get('/v1/admin/releases/auto-release', jwtAuth, async (c) => {
+    const db = getServiceClient()
+    const userId = c.get('userId') as string
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () => c.json({ ok: true, data: { blockingDraft: null } }),
+    })
+    if ('response' in resolvedProject) return resolvedProject.response
+    const open = await findOpenAutoDraft(db, resolvedProject.project.id as string, new Date())
+    if (!open.ok) return c.json({ ok: false, error: { code: 'AUTO_DRAFT_UNREADABLE', message: open.error } }, 500)
+    return c.json({ ok: true, data: { blockingDraft: open.draft } })
+  })
+
   // ─── Draft a new release (via release-builder) ────────────────────────────
   const draftSchema = z.object({
     project_id: z.string().uuid(),
@@ -372,63 +391,19 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
     const rowAccess = await assertReleaseRowAccess(c, db, userId, idParsed.value)
     if (!rowAccess.ok) return rowAccess.response
 
-    // Mark as published
-    const { data: release, error } = await db
-      .from('releases')
-      .update({ status: 'published', published_at: new Date().toISOString() })
-      .eq('id', c.req.param('id')!)
-      .eq('status', 'draft')
-      .select()
-      .single()
-
-    if (error) return c.json({ ok: false, error: error.message }, 500)
-    if (!release) return c.json({ ok: false, error: 'Release not found or already published' }, 404)
-
-    const publishedAt = release.published_at ?? new Date().toISOString()
-    const ticketIds = (release.fulfilled_ticket_ids ?? []) as string[]
-    if (ticketIds.length > 0) {
-      const { error: ticketsError } = await db
-        .from('support_tickets')
-        .update({
-          shipped_in_release_id: release.id,
-          shipped_at: publishedAt,
-          status: 'resolved',
-        })
-        .in('id', ticketIds)
-        // fulfilled_ticket_ids is caller-supplied: only this project's tickets.
-        .eq('project_id', release.project_id)
-        .is('shipped_in_release_id', null)
-      if (ticketsError) {
-        return c.json(
-          {
-            ok: false,
-            error: `release published, but linking ${ticketIds.length} support ticket(s) failed: ${ticketsError.message}`,
-          },
-          500,
-        )
-      }
-    }
-
-    // ── Reports this release fixed (Plan 018 §5) ─────────────────────────────
-    // One `released` message per reporter (held in review mode); verified
-    // reports keep their status, dismissed ones are skipped. Credits are
-    // stamped only where a delivered ledger row exists.
-    const linked = await notifyReleaseReporters(db, release, userId)
-    if (!linked.ok) {
-      return c.json({ ok: false, error: `release published, but ${linked.error}` }, 500)
-    }
-    const credits = await stampDeliveredReleaseCredits(db, release.id)
-    if (!credits.ok) {
-      return c.json({ ok: false, error: `release published, but ${credits.error}` }, 500)
-    }
+    // Mark published, ship tickets, message each reporter (Plan 018 §5) and
+    // stamp delivered credits — the same path the opt-in auto-release takes.
+    const published = await publishRelease(db, idParsed.value, { kind: 'admin', id: userId })
+    // `published: true` = the release is live but some reporters were not told.
+    if (!published.ok) return c.json({ ok: false, error: published.error, published: published.published }, published.status)
 
     return c.json({
       ok: true,
-      data: release,
+      data: published.release,
       // Credits whose reporter actually received the release message.
-      notified: credits.stamped,
-      tickets_fulfilled: ticketIds.length,
-      delivery: { ...linked.delivery, credits_stamped: credits.stamped, credits_pending: credits.pending },
+      notified: published.notified,
+      tickets_fulfilled: published.ticketsFulfilled,
+      delivery: published.delivery,
     })
   })
 

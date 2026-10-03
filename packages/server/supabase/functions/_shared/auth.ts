@@ -422,7 +422,7 @@ async function lookupActiveApiKey(apiKey: string): Promise<ApiKeyRow | null> {
 const isAgentScope = (scope: McpScope): boolean => scope === 'mcp:read' || scope === 'mcp:write'
 
 /** True iff the key's scopes satisfy ANY of the accepted scopes (mcp:write implies mcp:read). */
-function keyGrantsAnyScope(scopes: string[], accepted: readonly McpScope[]): boolean {
+export function keyGrantsAnyScope(scopes: string[], accepted: readonly McpScope[]): boolean {
   return accepted.some((s) => scopes.includes(s) || (s === 'mcp:read' && scopes.includes('mcp:write')))
 }
 

@@ -82,6 +82,28 @@ describe('notifyReleaseReporters + stampDeliveredReleaseCredits', () => {
     expect(fake.table('reporter_notifications')).toHaveLength(0)
   })
 
+  it('a second release listing a report another release already shipped does not message, award or re-stamp it', async () => {
+    const { awardPoints } = await import('../../supabase/functions/_shared/reputation.ts')
+    const open = { id: 'r1', project_id: PROJECT, status: 'fixing', reporter_token_hash: 'rk1_a' }
+    const fake = db([open])
+    const first = await rel.notifyReleaseReporters(fake as never, { ...RELEASE, fixed_report_ids: ids(open) }, { kind: 'system', id: 'auto-release:github_release' })
+    expect(first).toMatchObject({ ok: true, delivery: { reports_resolved: 1, reporters_notified: 1, reports_already_released: 0 } })
+    vi.mocked(awardPoints).mockClear()
+
+    // Same fix shipped under a different version string ('v1.4.0' tag vs CI '1.4.0').
+    const second = { id: 'aaaaaaaa-0000-4000-8000-000000000002', project_id: PROJECT, version: 'v1.4.0' }
+    const res = await rel.notifyReleaseReporters(fake as never, { ...second, fixed_report_ids: ids(open) }, { kind: 'system', id: 'auto-release:ci' })
+    expect(res).toMatchObject({ ok: true, delivery: { reports_resolved: 0, reports_already_released: 1, reporters_notified: 0 } })
+    expect(fake.table('reports')[0]).toMatchObject({ fixed_release_id: RELEASE.id, fixed_in_version: '1.4.0' })
+    expect(fake.table('reporter_notifications')).toHaveLength(1)
+    expect(awardPoints).not.toHaveBeenCalled()
+
+    // Re-publishing the release that owns the report stays allowed and idempotent.
+    const again = await rel.notifyReleaseReporters(fake as never, { ...RELEASE, fixed_report_ids: ids(open) }, 'u1')
+    expect(again).toMatchObject({ ok: true, delivery: { reports_resolved: 1, reports_already_released: 0 } })
+    expect(fake.table('reporter_notifications')).toHaveLength(1)
+  })
+
   it('ignores report ids from another project', async () => {
     const foreign = { id: 'r9', project_id: 'other', status: 'fixing', reporter_token_hash: 'rk1_x' }
     const fake = db([foreign])
@@ -105,6 +127,61 @@ describe('notifyReleaseReporters + stampDeliveredReleaseCredits', () => {
     const res = await rel.stampDeliveredReleaseCredits(fake as never, RELEASE.id)
     expect(res).toMatchObject({ ok: false })
     expect(fake.table('release_credits')[0].notified_at).toBeNull()
+  })
+})
+
+describe('publishRelease (shared by manual publish and auto-release)', () => {
+  it('publishes a draft, messages its reporter, stamps the credit, and names the actor', async () => {
+    const { publishRelease } = await import('../../supabase/functions/_shared/release-publish.ts')
+    const { runStatusTransitionSideEffects } = await import('../../supabase/functions/_shared/report-transition.ts')
+    const open = { id: 'r1', project_id: PROJECT, status: 'fixing', reporter_token_hash: 'rk1_a' }
+    const fake = db([open], 'auto', {
+      releases: [{ ...RELEASE, status: 'draft', published_at: null, fixed_report_ids: ['r1'], fulfilled_ticket_ids: [] }],
+    })
+    const res = await publishRelease(fake as never, RELEASE.id, { kind: 'system', id: 'auto-release:github_release' })
+    expect(res).toMatchObject({ ok: true, notified: 1, ticketsFulfilled: 0, delivery: { reporters_notified: 1, credits_stamped: 1 } })
+    expect(fake.table('releases')[0]).toMatchObject({ status: 'published' })
+    expect(fake.table('reports')[0]).toMatchObject({ status: 'fixed', fixed_release_id: RELEASE.id })
+    expect(runStatusTransitionSideEffects).toHaveBeenCalledWith(
+      fake,
+      expect.objectContaining({ actor: { kind: 'system', id: 'auto-release:github_release' }, notifyReporter: false }),
+    )
+
+    // Publishing again is a 404, not a second round of messages.
+    const again = await publishRelease(fake as never, RELEASE.id, { kind: 'admin', id: 'u1' })
+    expect(again).toEqual({ ok: false, status: 404, error: 'Release not found or already published', published: false })
+    expect(fake.table('reporter_notifications')).toHaveLength(1)
+  })
+
+  it('a credit-stamping failure after the status flipped says the release is live (published: true)', async () => {
+    const { publishRelease } = await import('../../supabase/functions/_shared/release-publish.ts')
+    const open = { id: 'r9', project_id: PROJECT, status: 'fixing', reporter_token_hash: 'rk1_z' }
+    const fake = db([open], 'auto', {
+      releases: [{ ...RELEASE, status: 'draft', published_at: null, fixed_report_ids: ['r9'], fulfilled_ticket_ids: [] }],
+    })
+    const orig = fake.from.bind(fake)
+    // The reporter is messaged; reading the credits back afterwards fails.
+    const failing: Record<string, unknown> = {
+      select: () => failing,
+      eq: () => failing,
+      is: () => failing,
+      then: (ok: (v: unknown) => unknown) => Promise.resolve({ data: null, error: { message: 'credits down' } }).then(ok),
+    }
+    ;(fake as unknown as { from: (t: string) => unknown }).from = (t: string) => (t === 'release_credits' ? failing : orig(t))
+    const res = await publishRelease(fake as never, RELEASE.id, { kind: 'admin', id: 'u1' })
+    expect(res).toMatchObject({ ok: false, status: 500, published: true })
+    expect(fake.table('releases')[0]).toMatchObject({ status: 'published' })
+  })
+
+  it('a console user id still reaches the transition side effects as an admin actor', async () => {
+    const { runStatusTransitionSideEffects } = await import('../../supabase/functions/_shared/report-transition.ts')
+    const open = { id: 'r5', project_id: PROJECT, status: 'fixing', reporter_token_hash: null }
+    const fake = db([open])
+    await rel.notifyReleaseReporters(fake as never, { ...RELEASE, fixed_report_ids: ['r5'] }, 'u42')
+    expect(runStatusTransitionSideEffects).toHaveBeenCalledWith(
+      fake,
+      expect.objectContaining({ reportId: 'r5', actor: { kind: 'admin', id: 'u42' } }),
+    )
   })
 })
 

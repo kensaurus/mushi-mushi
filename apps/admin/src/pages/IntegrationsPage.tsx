@@ -50,6 +50,7 @@ import { IntegrationsProvenanceReadout } from '../components/integrations/Integr
 import { IntegrationsPageIntro } from '../components/integrations/IntegrationsPageIntro'
 import { isIntegrationsBannerVisible } from '../lib/integrationsExplainer'
 import { usePageCopy } from '../lib/copy'
+import { draftFromSaved, platformSaveBody } from '../lib/platformIntegrationForm'
 
 export function IntegrationsPage() {
   const toast = useToast()
@@ -270,12 +271,7 @@ export function IntegrationsPage() {
   const startEdit = (kind: Kind) => {
     setEditing(kind)
     const current = platform?.[kind] ?? {}
-    setDrafts((d) => ({
-      ...d,
-      [kind]: Object.fromEntries(
-        Object.entries(current).map(([k, v]) => [k, v == null ? '' : String(v)]),
-      ),
-    }))
+    setDrafts((d) => ({ ...d, [kind]: draftFromSaved(current) }))
   }
 
   const cancelEdit = () => setEditing(null)
@@ -300,10 +296,17 @@ export function IntegrationsPage() {
         return
       }
     }
+    const payload = def ? platformSaveBody(def, body, platform?.[kind] ?? {}) : body
+    if (Object.keys(payload).length === 0) {
+      clearInlineError(kind)
+      toast.success(`No changes to save for ${kind}`)
+      setEditing(null)
+      return
+    }
     setSaving(kind)
     const res = await apiFetch(`/v1/admin/integrations/platform/${kind}`, {
       method: 'PUT',
-      body: JSON.stringify(body),
+      body: JSON.stringify(payload),
     })
     setSaving(null)
     if (!res.ok) {
