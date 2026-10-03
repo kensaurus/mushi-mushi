@@ -1,5 +1,12 @@
 # @mushi-mushi/cli
 
+## 0.29.1
+
+### Patch Changes
+
+- 90d0603: `mushi fix <reportId> --repo <repoId|owner/name>` sends the fix to one of the project's linked repos instead of the primary one, for example the backend repo of a project whose frontend is primary. A GitHub `owner/name` is looked up among the project's linked repos (needs a project id); a name that is not linked is refused before anything is dispatched, with the linked repos listed.
+- 90d0603: `mushi recipe init` now reads the whole repo. It lists the files git tracks, as `mushi recipe check` does, instead of stopping after the first 5,000, so token files and Supabase migrations deep in a large repo are found. The design scan covers the workspaces in `package.json` or `pnpm-workspace.yaml` and, for an app at the repo root, folders such as `app/`, `components/` and `lib/`; any folder with an `ARCHIVED.md` is skipped. A token file that a script generates is marked `role: "export"`, with the script that writes it as its `generator`, and is left out of `change.allowPaths`. A workflow that uploads to a store, deploys a site or edge functions, ships an OTA bundle or publishes a package is tagged `deploy` whatever its name. `.env.local.example`, `.env.sample` and `.env.template` count as the env template, as well as `.env.example`.
+
 ## 0.29.0
 
 ### Minor Changes
