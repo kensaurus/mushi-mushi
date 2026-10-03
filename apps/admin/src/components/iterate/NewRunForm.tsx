@@ -8,7 +8,7 @@ import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
 import { Card, Btn, Input } from '../ui'
 import { IconIterate } from '../icons'
-import { MODEL_OPTIONS, PERSONA_OPTIONS } from './types'
+import { MODEL_OPTIONS, PDCA_DEFAULT_MODEL, PERSONA_OPTIONS } from './types'
 
 interface Props {
   projectId: string | null
@@ -23,8 +23,8 @@ export function NewRunForm({ projectId, projectName, onCreated }: Props) {
     target_url: '',
     goal: 'Improve UX: fix visual hierarchy, reduce cognitive load, improve scannability.',
     iterations_target: 5,
-    primary_model: 'claude-sonnet-4-6',
-    judge_model: 'claude-sonnet-4-6',
+    primary_model: PDCA_DEFAULT_MODEL,
+    judge_model: PDCA_DEFAULT_MODEL,
     persona: 'nng-heuristic',
     target_score: 0.75,
   })
