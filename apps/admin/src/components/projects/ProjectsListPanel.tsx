@@ -66,6 +66,8 @@ import {
   indexHealth,
   INDEX_HEALTH_LABEL,
   INDEX_HEALTH_CHIP_TONE,
+  indexCoverageText,
+  lastIndexSweepAt,
   type Project,
   type ScopePresetId,
 } from './project-models'
@@ -782,7 +784,7 @@ function ProjectContextRail({ project }: { project: Project }) {
   const health = repo ? indexHealth(repo) : null
   const indexHint = (() => {
     if (!repo) return undefined
-    const lastIso = repo.last_indexed_at
+    const lastIso = lastIndexSweepAt(repo)
     const attemptIso = repo.last_index_attempt_at
     if (health === 'failed') {
       const trimmed = (repo.last_index_error ?? '').slice(0, 220)
@@ -793,6 +795,12 @@ function ProjectContextRail({ project }: { project: Project }) {
     if (health === 'off') return 'Indexing is disabled for this repo. Enable it in Settings to power codebase-aware triage and fix suggestions.'
     if (health === 'never') return 'Repo connected but no successful index pass yet. The first index runs in the background.'
     if (health === 'stale') return `Last successful index ${relativeTime(lastIso)}. Codebase-aware features may be using stale context.`
+    if (health === 'partial') {
+      const of = indexCoverageText(repo)
+      return repo.index_coverage_state === 'capped'
+        ? `Indexed ${of ?? 'part of the repo'}: the plan's file limit is reached. Diagnoses only see indexed files.`
+        : `Indexed ${of ?? 'part of the repo'} so far (${relativeTime(lastIso)}); the hourly sweep adds more.`
+    }
     return `Indexed ${relativeTime(lastIso)}.`
   })()
 
@@ -830,8 +838,8 @@ function ProjectContextRail({ project }: { project: Project }) {
                 <ContextDivider />
                 <span
                   title={
-                    health === 'ok' && repo.last_indexed_at
-                      ? `${indexHint ?? ''} · ${relativeTime(repo.last_indexed_at)}`
+                    health === 'ok' && lastIndexSweepAt(repo)
+                      ? `${indexHint ?? ''} · ${relativeTime(lastIndexSweepAt(repo))}`
                       : indexHint
                   }
                 >

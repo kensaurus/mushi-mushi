@@ -36,6 +36,8 @@ import { envInt } from '../_shared/env-int.ts';
 import {
   DEFAULT_SWEEP_RUN_FILES,
   INDEX_FILE_CAP_ENV,
+  MAX_INDEXED_FILE_BYTES,
+  isStorableBlob,
   indexFileCapForPlan,
   measureIndexCoverage,
   selectSweepFiles,
@@ -174,13 +176,17 @@ function encodeRepoPath(path: string): string {
     .join('/');
 }
 
-async function fetchFileContents(
+/**
+ * One file's text at `ref`. `unstorable` (gone, empty, over the size limit)
+ * can never be indexed; `error` is transient and retried by the next sweep.
+ */
+async function fetchFileForIndex(
   token: string,
   owner: string,
   repo: string,
   path: string,
   ref: string,
-): Promise<string | null> {
+): Promise<{ text: string } | { skip: 'unstorable' | 'error' }> {
   const res = await fetch(
     `https://api.github.com/repos/${owner}/${repo}/contents/${encodeRepoPath(path)}?ref=${encodeURIComponent(ref)}`,
     {
@@ -191,14 +197,25 @@ async function fetchFileContents(
       },
     },
   );
-  if (res.status === 404) return null;
+  if (res.status === 404) return { skip: 'unstorable' };
   if (!res.ok) {
     log.warn('contents fetch failed', { path, status: res.status });
-    return null;
+    return { skip: 'error' };
   }
   const text = await res.text();
-  if (text.length > 500_000) return null;
-  return text;
+  if (text.length === 0 || text.length > MAX_INDEXED_FILE_BYTES) return { skip: 'unstorable' };
+  return { text };
+}
+
+async function fetchFileContents(
+  token: string,
+  owner: string,
+  repo: string,
+  path: string,
+  ref: string,
+): Promise<string | null> {
+  const got = await fetchFileForIndex(token, owner, repo, path, ref);
+  return 'text' in got ? got.text : null;
 }
 
 app.get('/webhooks-github-indexer/health', (c) => c.json({ ok: true }));
@@ -1279,7 +1296,9 @@ async function sweepIndexRepo(
   }
   branch = resolved.branch;
   const tree = resolved.tree;
-  const files = (tree.tree ?? []).filter((t) => t.type === 'blob' && shouldIndex(t.path));
+  // Empty blobs and blobs over the fetch limit can never be stored; leaving
+  // them out of the eligible set keeps coverage able to reach complete.
+  const files = (tree.tree ?? []).filter((t) => t.type === 'blob' && shouldIndex(t.path) && isStorableBlob(t));
   let inserted = 0;
   let skipped = 0;
   let failed = 0;
@@ -1351,13 +1370,16 @@ async function sweepIndexRepo(
   const writtenPaths = new Set<string>();
 
   const pending: IndexChunk[] = [];
+  /** Selected files that turned out gone, empty or too large: never indexable. */
+  const unstorablePaths = new Set<string>();
   for (const path of selected) {
-    const source = await fetchFileContents(token, owner, repo, path, branch);
-    if (!source) {
+    const got = await fetchFileForIndex(token, owner, repo, path, branch);
+    if (!('text' in got)) {
       skipped++;
+      if (got.skip === 'unstorable') unstorablePaths.add(path);
       continue;
     }
-    pending.push(...(await chunksForFile(path, source)));
+    pending.push(...(await chunksForFile(path, got.text)));
   }
 
   // Hash before embedding: only new or changed text is embedded (Plan 020
@@ -1420,6 +1442,7 @@ async function sweepIndexRepo(
     : measureIndexCoverage({
       eligiblePaths: treePaths,
       indexedPaths: new Set([...indexedBefore, ...writtenPaths]),
+      unstorablePaths,
       cap,
       truncated: tree.truncated === true,
     });

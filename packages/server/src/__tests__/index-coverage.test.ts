@@ -14,6 +14,7 @@ import {
   DEFAULT_INDEX_FILE_CAP,
   describeIndexCoverage,
   indexFileCapForPlan,
+  isStorableBlob,
   latestIso,
   measureIndexCoverage,
   MAX_INDEX_FILE_CAP,
@@ -106,6 +107,39 @@ describe('measureIndexCoverage', () => {
   it('an empty repo is complete', () => {
     expect(measureIndexCoverage({ eligiblePaths: [], indexedPaths: new Set(), cap: 300, truncated: false }).state).toBe('complete')
   })
+
+  it('a file this run found empty or gone never keeps the repo filling forever', () => {
+    // e.g. an empty __init__.py the sweep fetched: nothing to embed, never indexed.
+    const cov = measureIndexCoverage({
+      eligiblePaths: [...eligible, 'pkg/__init__.py'],
+      indexedPaths: new Set(eligible),
+      unstorablePaths: new Set(['pkg/__init__.py']),
+      cap: 300,
+      truncated: false,
+    })
+    expect(cov).toEqual({ indexed: 4, eligible: 4, cap: 300, truncated: false, state: 'complete' })
+    expect(sweepBookkeeping({ coverage: cov, nowIso: NOW, failedChunks: 0 }).last_indexed_at).toBe(NOW)
+  })
+
+  it('a file that failed transiently (not unstorable) still counts as missing', () => {
+    expect(measureIndexCoverage({
+      eligiblePaths: [...eligible, 'src/flaky.ts'],
+      indexedPaths: new Set(eligible),
+      cap: 300,
+      truncated: false,
+    }).state).toBe('filling')
+  })
+})
+
+describe('isStorableBlob', () => {
+  it('drops empty blobs and blobs over the fetch limit from the eligible set', () => {
+    expect(isStorableBlob({ size: 0 })).toBe(false)
+    expect(isStorableBlob({ size: 500_001 })).toBe(false)
+    expect(isStorableBlob({ size: 1 })).toBe(true)
+    expect(isStorableBlob({ size: 500_000 })).toBe(true)
+    // Listings without sizes are assumed storable.
+    expect(isStorableBlob({})).toBe(true)
+  })
 })
 
 describe('sweepBookkeeping (gap #16a)', () => {
@@ -181,6 +215,12 @@ describe('wiring', () => {
     const sweep = indexer.slice(indexer.indexOf('async function handleSweep('), indexer.indexOf('async function sweepIndexRepo('))
     expect(sweep).toContain('...sweepBookkeeping({')
     expect(sweep).not.toMatch(/last_indexed_at:\s*new Date/)
+  })
+
+  it('the sweep counts only storable blobs and reports unstorable fetches to the coverage measure', () => {
+    expect(indexer).toContain("shouldIndex(t.path) && isStorableBlob(t)")
+    expect(indexer).toContain("if (got.skip === 'unstorable') unstorablePaths.add(path)")
+    expect(indexer).toMatch(/indexedPaths: new Set\(\[\.\.\.indexedBefore, \.\.\.writtenPaths\]\),\s*unstorablePaths,/)
   })
 
   it('the hourly batch re-picks filling repos, oldest attempt first', () => {
