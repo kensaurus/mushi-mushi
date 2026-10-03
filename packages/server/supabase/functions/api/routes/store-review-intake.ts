@@ -2,12 +2,14 @@
  * store-review-intake.ts — store reviews as reports (gap #23, Plan 020 §5).
  *
  *   GET  /v1/admin/projects/:id/store/reviews            adminOrApiKey(mcp:read)   settings, bound stores, recent reviews seen
- *   PUT  /v1/admin/projects/:id/store/reviews/settings   jwtAuth                   opt in or out, star threshold
- *   POST /v1/admin/projects/:id/store/reviews/pull       adminOrApiKey(mcp:write)  pull now (1 per 10 min)
+ *   PUT  /v1/admin/projects/:id/store/reviews/settings   jwtAuth, owner/admin      opt in or out, star threshold
+ *   POST /v1/admin/projects/:id/store/reviews/pull       adminOrApiKey(mcp:write)  pull now (1 per 10 min), not viewers
  *
- * Off by default. Switching it on is console-only (JWT): it decides that
- * reviews from the public become reports in the queue. Reads go through the
- * project's existing App Store Connect / Google Play connectors, read-only.
+ * Off by default. Switching it on is console-only (JWT) and limited to owners
+ * and admins: it decides that reviews from the public become reports in the
+ * queue. A viewer cannot pull either, since a pull spends the stored store
+ * keys and files reports. Reads go through the project's existing App Store
+ * Connect / Google Play connectors, read-only.
  */
 
 import type { Context, Hono, MiddlewareHandler } from 'npm:hono@4'
@@ -71,12 +73,17 @@ function toWire(row: SettingsRow | null) {
   }
 }
 
-async function access(c: Context, db: Db): Promise<{ ok: true; projectId: string } | { ok: false; response: Response }> {
+type ProjectRole = 'owner' | 'admin' | 'member' | 'viewer'
+
+async function access(c: Context, db: Db): Promise<{ ok: true; projectId: string; role: ProjectRole } | { ok: false; response: Response }> {
   const projectId = c.req.param('id') ?? ''
   if (!UUID_RE.test(projectId)) return { ok: false, response: jsonError(c, 'NOT_FOUND', 'Project not found', 404) }
   const a = await callerCanAccessProject(c, db, c.get('userId') as string, projectId)
-  return a.allowed ? { ok: true, projectId } : { ok: false, response: jsonError(c, 'NOT_FOUND', 'Project not found', 404) }
+  return a.allowed && a.role ? { ok: true, projectId, role: a.role } : { ok: false, response: jsonError(c, 'NOT_FOUND', 'Project not found', 404) }
 }
+
+/** Owners and admins decide whether public reviews become reports. */
+export const canManageStoreReviews = (role: ProjectRole): boolean => role === 'owner' || role === 'admin'
 
 export function registerStoreReviewIntakeRoutes(app: Hono<{ Variables: Variables }>, deps: StoreReviewRouteDeps = defaultStoreReviewDeps): void {
   app.get('/v1/admin/projects/:id/store/reviews', deps.adminOrApiKeyRead, async (c) => {
@@ -103,13 +110,17 @@ export function registerStoreReviewIntakeRoutes(app: Hono<{ Variables: Variables
       reviewCreatedAt: r.review_created_at,
       seenAt: r.seen_at,
     }))
-    return c.json({ ok: true, data: { projectId: a.projectId, settings: toWire(settingsRes.data as SettingsRow | null), sources, recent } })
+    return c.json({
+      ok: true,
+      data: { projectId: a.projectId, settings: toWire(settingsRes.data as SettingsRow | null), sources, recent, canManage: canManageStoreReviews(a.role), canPull: a.role !== 'viewer' },
+    })
   })
 
   app.put('/v1/admin/projects/:id/store/reviews/settings', deps.jwtAuth, async (c) => {
     const db = deps.getServiceClient()
     const a = await access(c, db)
     if (!a.ok) return a.response
+    if (!canManageStoreReviews(a.role)) return jsonError(c, 'FORBIDDEN', 'Only owners and admins can change store review intake.', 403)
     const parsed = settingsSchema.safeParse(await c.req.json().catch(() => null))
     if (!parsed.success) return jsonError(c, 'VALIDATION_ERROR', parsed.error.issues.map((i) => `${i.path.join('.') || 'body'}: ${i.message}`).join('; '), 400)
     const patch: Record<string, unknown> = { store_review_intake_enabled: parsed.data.enabled }
@@ -125,6 +136,7 @@ export function registerStoreReviewIntakeRoutes(app: Hono<{ Variables: Variables
     const db = deps.getServiceClient()
     const a = await access(c, db)
     if (!a.ok) return a.response
+    if (a.role === 'viewer') return jsonError(c, 'FORBIDDEN', 'Viewers cannot pull store reviews.', 403)
     const { data, error } = await db.from('project_settings').select(SETTINGS_COLUMNS).eq('project_id', a.projectId).maybeSingle()
     if (error) return jsonError(c, 'DB_ERROR', 'The store review intake could not be read.', 500)
     const row = data as SettingsRow | null

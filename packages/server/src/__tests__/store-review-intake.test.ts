@@ -55,7 +55,11 @@ function seed(over: Record<string, unknown[]> = {}, settings: Record<string, unk
   return makeFakeDb({
     organizations: [{ id: ORG, name: 'A' }],
     projects: [{ id: P1, name: 'glot.it', owner_id: 'owner', organization_id: ORG }],
-    organization_members: [{ organization_id: ORG, user_id: 'owner', role: 'owner' }],
+    organization_members: [
+      { organization_id: ORG, user_id: 'owner', role: 'owner' },
+      { organization_id: ORG, user_id: 'member', role: 'member' },
+      { organization_id: ORG, user_id: 'viewer', role: 'viewer' },
+    ],
     project_members: [],
     project_settings: [{ project_id: P1, store_review_intake_enabled: true, store_review_max_rating: 2, ...settings }],
     connector_instances: [
@@ -217,6 +221,57 @@ describe('runStoreReviewIntake', () => {
   })
 })
 
+describe('projectsDueForStoreReviews', () => {
+  const P = (n: number) => `3000000${n}-0000-4000-8000-000000000000`
+
+  /** The fake ignores nullsFirst, so the order() arguments are recorded and asserted too. */
+  function recording(db: FakeDb) {
+    const orders: Array<{ key: string; opts: unknown }> = []
+    const proxied = {
+      from(name: string) {
+        const q = db.from(name)
+        const realOrder = q.order.bind(q)
+        q.order = ((key: string, opts?: { ascending?: boolean }) => {
+          orders.push({ key, opts })
+          return realOrder(key, opts)
+        }) as typeof q.order
+        return q
+      },
+    }
+    return { db: proxied, orders }
+  }
+
+  it('pulls the least recently pulled projects first, never-pulled ones before all others', async () => {
+    const db = makeFakeDb({
+      project_settings: [
+        { project_id: P(1), store_review_intake_enabled: true, store_review_last_pulled_at: '2026-10-03T06:45:00Z' },
+        { project_id: P(2), store_review_intake_enabled: true, store_review_last_pulled_at: '2026-10-01T06:45:00Z' },
+        { project_id: P(3), store_review_intake_enabled: true, store_review_last_pulled_at: null },
+        { project_id: P(4), store_review_intake_enabled: false, store_review_last_pulled_at: null },
+      ],
+    })
+    const r = recording(db)
+    expect(await intake.projectsDueForStoreReviews(r.db as never)).toEqual([P(3), P(2), P(1)])
+    expect(r.orders).toEqual([{ key: 'store_review_last_pulled_at', opts: { ascending: true, nullsFirst: true } }])
+  })
+
+  it('caps one run and narrows to one project on request', async () => {
+    const rows = Array.from({ length: intake.MAX_PROJECTS_PER_RUN + 5 }, (_, i) => ({
+      project_id: `4${String(i).padStart(7, '0')}-0000-4000-8000-000000000000`,
+      store_review_intake_enabled: true,
+      store_review_last_pulled_at: `2026-09-${String((i % 28) + 1).padStart(2, '0')}T00:00:00Z`,
+    }))
+    const db = makeFakeDb({ project_settings: rows })
+    expect(await intake.projectsDueForStoreReviews(db as never)).toHaveLength(intake.MAX_PROJECTS_PER_RUN)
+    expect(await intake.projectsDueForStoreReviews(db as never, rows[7].project_id)).toEqual([rows[7].project_id])
+  })
+
+  it('throws when the settings cannot be read, instead of pulling nothing', async () => {
+    const chain = { select: () => chain, eq: () => chain, order: () => chain, limit: () => chain, then: (ok: (v: unknown) => unknown) => Promise.resolve({ data: null, error: { message: 'permission denied' } }).then(ok) }
+    await expect(intake.projectsDueForStoreReviews({ from: () => chain } as never)).rejects.toThrow(/permission denied/)
+  })
+})
+
 // ── routes ───────────────────────────────────────────────────────────────────
 
 type Ctx = {
@@ -291,6 +346,29 @@ describe('store review routes', () => {
     // Threshold 1: only the 1-star App Store review and the 1-star Play review are filed.
     expect(pull.body.data).toMatchObject({ status: 'ok', filed: 2 })
     expect((await app.call('POST', `/v1/admin/projects/${P1}/store/reviews/pull`)).status).toBe(429)
+  })
+
+  it('only owners and admins change the settings; a viewer cannot pull; a member can', async () => {
+    const db = seed({}, { store_review_intake_enabled: false })
+    const app = harness(db)
+    for (const userId of ['member', 'viewer']) {
+      const put = await app.call('PUT', `/v1/admin/projects/${P1}/store/reviews/settings`, { body: { enabled: true, maxRating: 5 }, vars: { userId } })
+      expect(put.status).toBe(403)
+      expect(put.body.error?.code).toBe('FORBIDDEN')
+    }
+    expect(db.table('project_settings')[0]).toMatchObject({ store_review_intake_enabled: false, store_review_max_rating: 2 })
+    const asMember = await app.call('GET', `/v1/admin/projects/${P1}/store/reviews`, { vars: { userId: 'member' } })
+    expect(asMember.body.data).toMatchObject({ canManage: false, canPull: true })
+    const asViewer = await app.call('GET', `/v1/admin/projects/${P1}/store/reviews`, { vars: { userId: 'viewer' } })
+    expect(asViewer.body.data).toMatchObject({ canManage: false, canPull: false })
+    expect((await app.call('GET', `/v1/admin/projects/${P1}/store/reviews`)).body.data).toMatchObject({ canManage: true, canPull: true })
+
+    expect((await app.call('PUT', `/v1/admin/projects/${P1}/store/reviews/settings`, { body: { enabled: true } })).status).toBe(200)
+    const viewerPull = await app.call('POST', `/v1/admin/projects/${P1}/store/reviews/pull`, { vars: { userId: 'viewer' } })
+    expect(viewerPull.status).toBe(403)
+    expect(db.table('reports')).toHaveLength(0)
+    const memberPull = await app.call('POST', `/v1/admin/projects/${P1}/store/reviews/pull`, { vars: { userId: 'member' } })
+    expect(memberPull.status).toBe(200)
   })
 
   it('validates the threshold and hides other teams\' projects', async () => {
