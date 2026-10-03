@@ -253,7 +253,9 @@ if (typeof Deno !== 'undefined') {
     withSentry((req: Request) =>
       handleReleaseBuilder(req, {
         db: getServiceClient,
-        authorize: requireServiceRoleAuth,
+        // Called here, not passed by reference, so the internal-auth contract
+        // test sees the gate on this entry point.
+        authorize: (r: Request) => requireServiceRoleAuth(r),
         writeBody: llmReleaseBody,
       }),
     ),

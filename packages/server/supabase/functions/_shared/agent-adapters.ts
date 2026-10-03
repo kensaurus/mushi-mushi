@@ -625,8 +625,12 @@ function failureCategoryFor(agent: string, explicit?: string | null): string {
  *     files or only notes so far is attached but NOT judged: the attempt
  *     stays open, agent-status-poll keeps polling it, and the verdict is made
  *     on the files the finished agent left;
- *   - when the files cannot be read, the PR is trusted as before and the
- *     timeline says it went unchecked.
+ *   - when the files cannot be read while the agent is still working, the PR
+ *     is attached and the verdict waits the same way (a transient GitHub
+ *     error never passes a PR that nobody will re-read);
+ *   - when the files still cannot be read once the agent has finished (no
+ *     token, GitHub down), the PR is trusted and the timeline says it went
+ *     unchecked.
  */
 export async function applyCloudAgentOutcome(
   db: SupabaseClient,
@@ -670,6 +674,17 @@ export async function applyCloudAgentOutcome(
       if (verdict.speculative) {
         return await applyNeedsInvestigationPr(db, target, outcome, verdict, now)
       }
+    } else if (!finished) {
+      // A transient read failure (GitHub 5xx / 403 / rate limit / timeout)
+      // while the agent still works must not pass the PR as a fix: once the
+      // attempt is claimed, nothing re-reads it. Attach it and let the
+      // finished agent's outcome (agent-status-poll / cursor-webhook) judge.
+      alog.warn('Cloud agent PR contents not readable yet — waiting for the agent to finish', {
+        attemptId: target.attemptId,
+        prUrl: outcome.prUrl,
+        reason: inspection.reason,
+      })
+      return await attachPendingPr(db, target, outcome, `the pull request's files could not be read yet (${inspection.reason})`)
     } else {
       alog.warn('Cloud agent PR contents not checked', {
         attemptId: target.attemptId,

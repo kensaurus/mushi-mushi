@@ -108,9 +108,11 @@ When the PR is not a fix:
 - the report keeps its status instead of moving to **Fixing**;
 - your team gets the usual "fix failed" notification.
 
-Mushi reads the files with the project's GitHub token. When it has none, the
-PR is trusted as before and the fix timeline says the contents were not
-checked.
+Mushi reads the files with the project's GitHub token. If it cannot read them
+while the agent is still working (GitHub errors, rate limits, a missing
+token), the PR waits like an empty one and is read again when the agent
+finishes. If the files still cannot be read after the agent has finished, the
+PR is trusted and the fix timeline says the contents were not checked.
 
 ## Dispatching a fix
 
