@@ -32,6 +32,7 @@ import { runInBackground } from '../../_shared/background.ts'
 import { judgingSet, type StoredTokens } from '../../_shared/design-sets.ts'
 import { applyActivateDirection, applyDeclareDirection, applyRulesEdit, applyTokenEdits, buildDuplicateDirection, DIRECTION_NAME_RE, unifiedDiff, type TokenFileEdit } from '../../_shared/design-change.ts'
 import { effectiveDesignRules, isWritablePath, RECIPE_MANIFEST_MAX_BYTES, RECIPE_MANIFEST_PATH } from '../../_shared/recipe-schema.ts'
+import { contentProblem } from '../../_shared/recipe-change.ts'
 import { directionOf, MAX_ASSET_BYTES, MAX_TOKEN_FILE_BYTES } from '../../_shared/design-sets.ts'
 import { DESIGN_RULE_IDS, RECIPE_ELEMENT_KEYS, type DesignActionSettingsView, type DesignChangeResult, type DesignDevianceRunResult, type DesignTokensResponse, type DevianceRun, type RecipeElementKey, type RecipeHistoryResponse } from '../../_shared/recipe-types.ts'
 import { loadDesignActionSettings } from '../../_shared/design-actions.ts'
@@ -179,7 +180,7 @@ export function registerRecipeRoutes(app: Hono<{ Variables: Variables }>, deps: 
       return jsonError(c, 'VALIDATION_ERROR', `element must be one of ${RECIPE_ELEMENT_KEYS.join(', ')}`, 400)
     }
     try {
-      const { response, details } = await composeRecipe(db, deps, access.projectId)
+      const { response, details } = await composeRecipe(db, deps, access.projectId, { detailFor: element })
       return c.json({ ok: true, data: { element: response.elements[element], detail: details[element] } })
     } catch (err) {
       rlog.error('recipe element failed', { projectId: access.projectId, element, err: String(err) })
@@ -583,9 +584,16 @@ export function registerRecipeRoutes(app: Hono<{ Variables: Variables }>, deps: 
       }
     }
 
+    // A merged mushi.recipe.json that no longer parses (64 KB cap, schema)
+    // would blank the recipe: refuse it here, as recipe changes do.
     const files = changes
       .map((ch) => ({ ch, d: unifiedDiff(ch.path, ch.before, ch.after) }))
       .filter((x) => x.d.additions + x.d.deletions > 0)
+      .filter((x) => {
+        const broken = contentProblem(x.ch.path, x.ch.after, null)
+        if (broken) denied.push({ path: x.ch.path, reason: broken })
+        return !broken
+      })
     const result: DesignChangeResult = {
       dryRun,
       files: files.map((x) => ({ path: x.ch.path, diff: x.d.diff, additions: x.d.additions, deletions: x.d.deletions })),

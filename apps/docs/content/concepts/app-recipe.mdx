@@ -39,6 +39,15 @@ system, routes and stories, gates, CI/CD, deploy, env names, integrations) on on
 canvas, with a list view on narrow screens. MCP clients read the same data with
 `get_app_recipe`.
 
+Select a card to open its detail panel. Four cards have their own view:
+
+| Card | What the panel shows |
+|------|----------------------|
+| Schema | The tables in the newest schema snapshot (RLS on or off, column count) and what changed since the snapshot before: tables added or removed, columns added or removed, RLS switched |
+| CI/CD | The recent workflow runs with their result and **estimated** billable minutes. GitHub no longer reports billed minutes per run, so Mushi estimates them from job time and runner type. |
+| Deploy | For each target in `deploy.targets`, the commit it should run (the default-branch head) next to the commit and version it reported. A target with no observation says **Not observed**, never Live. |
+| Env names | A matrix of variable names by place: the repo's Actions secrets and variables, each GitHub environment, and runtime. Each cell says Set, Missing, Set but not declared, or **Not checked** when GitHub did not list that place (for example, a token without the secrets permission). Values are never read. |
+
 ## `mushi.recipe.json`
 
 A `mushi.recipe.json` file at your repo root points Mushi at your design tokens.
@@ -75,6 +84,7 @@ format. Mushi also reads the shorthand most repos already ship (`"#abc"`,
 - `design.contrast` declares the foreground/background pairs that must meet WCAG: 4.5:1 by default, 3:1 with `large: true`, or an explicit `min`.
 - `design.rules` turns rules on or off and sets severity, allowed values and ignored files.
 - `change.allowPaths` is the only set of paths a recipe pull request may write.
+- `routes.inventory` is the path of the inventory file your CI ingests, if it is not `inventory.yaml` at the repo root (the same path as the mcp-ci action's `inventory` input). The Routes form edits that file.
 - `design.directions[]` (`{name, status: "active" | "inactive", tokens[], note?}`) lists candidate directions for comparison.
   - `design.tokens[]` stays the only source the drift check reads.
   - At most one direction may be `active`, and its `tokens` must be exactly the `role: "source"` paths. Anything else is rejected with `directions_active_mismatch`.
@@ -272,6 +282,27 @@ in `change.allowPaths`: token files, budgets in `mushi.recipe.json`,
 env files, lockfiles, generated exports and migrations are never written. The
 draft stays a draft, so your CI does not run until you mark it ready. A
 listing change is published by your own CI after you merge.
+
+### From the console
+
+Select the **Gates**, **Env** or **Routes** card on the Recipe page and open the
+**Change** tab:
+
+| Card | What the form edits |
+|------|---------------------|
+| Gates | `gates.budgets` (a number per metric) and `gates.cadence` (how often a gate must run, such as `P1D`) in `mushi.recipe.json` |
+| Env | `env.required` in `mushi.recipe.json`: each variable **name** and where it must be set (GitHub Actions, a GitHub environment, or runtime). Optionally the same names in `.env.example`. There is no field for a value. |
+| Routes | The inventory as text: the file `routes.inventory` names, else `inventory.yaml` |
+
+**Preview diff** shows exactly what would change and nothing is written.
+**Open draft PR** opens one draft pull request with that diff, and the tab
+follows it until the link appears. A file that is not in `change.allowPaths`
+stays read-only and the tab says why. A new `mushi.recipe.json` must still
+parse as a recipe (64 KB cap, schema, no secrets), and a new inventory must
+still pass inventory ingest; otherwise the preview lists the file as refused
+with the first problems, and no PR can be opened. If someone changed the file on the
+default branch after your preview, the PR is refused, so it can never undo
+their change. Preview again to start from the new version.
 
 A store action, such as raising a Google Play rollout to 20%, is different: it
 calls the store directly. It needs a separate write key, and every single

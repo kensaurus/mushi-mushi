@@ -92,8 +92,98 @@ export interface RecipeResponse {
 
 export interface RecipeElementDetail {
   element: RecipeElementSummary
-  /** Element-specific detail; shapes are documented per element in recipe.ts. */
+  /**
+   * Element-specific detail; shapes are documented per element in recipe.ts.
+   * GET /recipe/elements/:element (never GET /recipe) adds one typed view:
+   * `schemaView`, `ciView`, `deployView` or `envView` (below).
+   */
   detail: Record<string, unknown>
+}
+
+// ── Per-element detail views (GET /recipe/elements/:element only) ───────────
+
+export interface SchemaTableRow {
+  name: string
+  schema: string | null
+  rls: boolean | null
+  columns: number | null
+}
+
+export interface SchemaTableChange {
+  name: string
+  addedColumns: string[]
+  removedColumns: string[]
+  rls: { from: boolean | null; to: boolean | null } | null
+}
+
+export interface SchemaView {
+  source: 'drift_scanner' | 'supabase_connector' | null
+  capturedAt: string | null
+  tables: SchemaTableRow[]
+  totalTables: number
+  diff: { previousCapturedAt: string; added: string[]; removed: string[]; changed: SchemaTableChange[] } | null
+}
+
+export interface CiRunRow {
+  runId: number
+  name: string | null
+  event: string | null
+  branch: string | null
+  headSha: string | null
+  status: string | null
+  conclusion: string | null
+  startedAt: string | null
+  completedAt: string | null
+  estMinutes: number | null
+  url: string | null
+}
+
+export interface CiView {
+  runs: CiRunRow[]
+  estMinutesTotal: number | null
+  estimatedRuns: number
+  note: string
+}
+
+export type DeployTargetStatus = 'live' | 'behind' | 'probe_failed' | 'unobserved' | 'not_comparable'
+
+export interface DeployTargetRow {
+  id: string
+  kind: string | null
+  environment: string | null
+  probe: string | null
+  expected: { commit: string | null; version: string | null }
+  observed: { commit: string | null; version: string | null; at: string; ok: boolean; error: string | null; source: string } | null
+  status: DeployTargetStatus
+  reason: string
+}
+
+export interface DeployView {
+  expectedCommit: string | null
+  expectedVersion: string | null
+  targets: DeployTargetRow[]
+  undeclared: string[]
+}
+
+/** `not_checked`: the names there could not be listed, so nothing is claimed. */
+export type EnvCell = 'present' | 'missing' | 'extra' | 'not_required' | 'not_checked'
+
+export interface EnvMatrixColumn {
+  key: string
+  label: string
+  checked: boolean
+}
+
+export interface EnvMatrixRow {
+  name: string
+  declared: boolean
+  cells: Record<string, EnvCell>
+}
+
+export interface EnvView {
+  columns: EnvMatrixColumn[]
+  rows: EnvMatrixRow[]
+  truncated: boolean
 }
 
 export interface RecipeRefreshResult {
@@ -412,6 +502,92 @@ export interface DesignChangeResult {
   /** Paths the change wanted to write but the allowlist refused. */
   denied: Array<{ path: string; reason: string }>
   pr: { url: string; number: number; branch: string; draft: true } | null
+}
+
+// ── Recipe changes from the console (gates, env, routes) ────────────────────
+// Mirror of packages/server/supabase/functions/_shared/recipe-change.ts.
+//   GET  /v1/admin/projects/:id/recipe/sources?element=   → RecipeSources
+//   POST /v1/admin/projects/:id/recipe/changes            → RecipeChangeDryRun (dryRun) | RecipeChangeAccepted (202, wait:false)
+//   GET  /v1/admin/projects/:id/recipe/changes/:jobId     → RecipeChangeJobRow
+//   GET  /v1/admin/projects/:id/recipe/changes/:jobId/stream  → SSE `status` (RecipeChangeStreamStatus), `done`, `error`
+
+export type RecipeChangeElement = 'design' | 'gates' | 'env' | 'routes' | 'store' | 'release'
+/** The elements the side panel's Change tab edits. */
+export type RecipeSourceElement = 'gates' | 'env' | 'routes'
+
+export interface RecipeSourceFile {
+  path: string
+  exists: boolean
+  /** null when absent, too large, or holding something shaped like a secret. */
+  content: string | null
+  /** Blob SHA to send back as `baseSha`; null when the file does not exist. */
+  sha: string | null
+  writable: boolean
+  reason: string | null
+}
+
+export type RecipeSources =
+  | { ok: true; element: RecipeSourceElement; branch: string; headSha: string; files: RecipeSourceFile[] }
+  | { ok: false; element: RecipeSourceElement; reason: string; files: [] }
+
+export interface RecipeChangeEdit {
+  path: string
+  content: string
+  reason?: string
+  /** The SHA the preview was read at; null = the file did not exist. The server refuses a file that moved since. */
+  baseSha?: string | null
+}
+
+export interface RecipeChangeRequest {
+  element: RecipeChangeElement
+  edits: RecipeChangeEdit[]
+  dryRun?: boolean
+  /** false: answer 202 with a job id and open the PR in the background. */
+  wait?: boolean
+  title?: string
+}
+
+export interface RecipeChangeDryRun {
+  dryRun: true
+  ok: boolean
+  reason: string | null
+  /** `baseSha`: the blob SHA each diff was taken against (null = a new file). */
+  files: Array<DesignFileChange & { reason: string; baseSha: string | null }>
+  denied: Array<{ path: string; reason: string }>
+}
+
+export type RecipeChangeJobStatus = 'queued' | 'running' | 'pr_opened' | 'failed' | 'rejected'
+
+export interface RecipeChangeAccepted {
+  jobId: string
+  projectId: string
+  status: 'queued'
+  prUrl: null
+  error: null
+}
+
+export interface RecipeChangeJobRow {
+  id: string
+  element: RecipeChangeElement
+  status: RecipeChangeJobStatus
+  pr_url: string | null
+  pr_number: number | null
+  branch: string | null
+  error: string | null
+  batch_id: string | null
+  created_at: string
+  started_at: string | null
+  finished_at: string | null
+}
+
+export interface RecipeChangeStreamStatus {
+  status: RecipeChangeJobStatus
+  prUrl: string | null
+  prNumber: number | null
+  branch: string | null
+  startedAt: string | null
+  finishedAt: string | null
+  error: string | null
 }
 
 // ── Excerpt for get_fix_context ──────────────────────────────────────────────
