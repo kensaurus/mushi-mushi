@@ -17,7 +17,7 @@
  */
 
 import { sha256Hex, signJwt } from './jwt.ts'
-import { fetchJson, statusReason } from './http-util.ts'
+import { failureOfStatus, fetchJson, statusReason, vendorError } from './http-util.ts'
 import { canonicalJson } from './canonical.ts'
 import { ConnectorError, notConnected, type ApprovedConnectorAction, type ConnectorActionResult, type ConnectorContext, type RecipeConnector } from './types.ts'
 
@@ -49,7 +49,8 @@ async function accessToken(ctx: ConnectorContext, sa: ServiceAccount): Promise<s
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: `grant_type=${encodeURIComponent('urn:ietf:params:oauth:grant-type:jwt-bearer')}&assertion=${encodeURIComponent(assertion)}`,
   })
-  if (res.status !== 200 || !res.body?.access_token) throw new ConnectorError(`Google refused the service account (${res.body?.error ?? res.status}).`)
+  // Google answers a revoked, deleted or mistyped service-account key with 400 invalid_grant (or 401).
+  if (res.status !== 200 || !res.body?.access_token) throw new ConnectorError(`Google refused the service account (${res.body?.error ?? res.status}).`, 'error', res.status === 400 || res.status === 401 ? 'credential_rejected' : failureOfStatus(res.status))
   return res.body.access_token
 }
 
@@ -69,10 +70,10 @@ export interface PlayTrack {
 /** Read every track through a temporary edit that is always deleted. */
 async function readTracks(ctx: ConnectorContext, tokenValue: string, pkg: string): Promise<PlayTrack[]> {
   const edit = await api(ctx, tokenValue, 'POST', `/${pkg}/edits`)
-  if (edit.status !== 200 || !edit.body?.id) throw new ConnectorError(statusReason('Google Play', edit.status))
+  if (edit.status !== 200 || !edit.body?.id) throw vendorError('Google Play', edit.status)
   try {
     const tracks = await api(ctx, tokenValue, 'GET', `/${pkg}/edits/${edit.body.id}/tracks`)
-    if (tracks.status !== 200) throw new ConnectorError(statusReason('Google Play', tracks.status))
+    if (tracks.status !== 200) throw vendorError('Google Play', tracks.status)
     return ((tracks.body?.tracks ?? []) as Array<Record<string, any>>).map((t) => ({
       track: String(t.track),
       releases: ((t.releases ?? []) as Array<Record<string, any>>).map((r) => ({
@@ -105,7 +106,14 @@ export const playConsoleConnector: RecipeConnector = {
       const granted = ['View app information (read-only)']
       return { ok: true, status: 'connected', granted, missing: ctx.writeCredential ? [] : ['Release apps to testing tracks'] }
     } catch (err) {
-      return { ok: false, status: 'error', granted: [], missing: ['View app information (read-only)'], reason: (err as Error).message.slice(0, 200) }
+      // Only a 403 means the read permission is missing; a rejected key, a 404 or a network error is not a scope problem.
+      const failure = err instanceof ConnectorError ? err.failure : undefined
+      return {
+        ok: false, status: 'error', granted: [],
+        missing: failure === 'permission_missing' ? ['View app information (read-only)'] : [],
+        reason: (err as Error).message.slice(0, 200),
+        ...(failure ? { failure } : {}),
+      }
     }
   },
   async snapshot(ctx, bindings) {

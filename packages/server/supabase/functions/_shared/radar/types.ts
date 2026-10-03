@@ -60,15 +60,30 @@ export const RADAR_RULE_IDS = [
   'revenuecat_project_split',
   'revenuecat_app_missing',
   'revenuecat_offering_missing',
+  // Plan 020 Phase 2 — operator detectors (Mushi's own tables, connector
+  // probes and snapshots, the recipe manifest, and the host CI's bundle scan).
+  'dead_app_live_spend',
+  'provider_key_invalid',
+  'store_credential_scope_missing',
+  'key_unused_90d',
+  'key_in_client_bundle',
+  'paid_feature_no_kill_switch',
+  'provider_limit_unset',
 ] as const
 export type RadarRuleId = (typeof RADAR_RULE_IDS)[number]
+
+export type RadarRuleSource = 'public_probe' | 'repo_scan' | 'host_ci' | 'connector' | 'mushi'
 
 export interface RadarRuleMeta {
   id: RadarRuleId
   title: string
-  /** Where the detector reads from. */
-  source: 'public_probe' | 'repo_scan' | 'host_ci' | 'connector'
-  /** For connector-backed rules: the connector kind that must be connected. */
+  /** Where the detector reads from. `mushi` = rows Mushi already keeps (heartbeats, keys). */
+  source: RadarRuleSource
+  /**
+   * For rules answered from ONE connector's current snapshot: that kind.
+   * connectorRadarResults treats every rule with this set as its own, so the
+   * operator detectors (which read several sources) leave it unset.
+   */
   connector?: 'supabase' | 'llm_usage' | 'revenuecat'
   /** The bug it prevents — the drift-test line (ADR 0017). */
   prevents: string
@@ -93,6 +108,13 @@ export const RADAR_RULES: Readonly<Record<RadarRuleId, RadarRuleMeta>> = {
   revenuecat_project_split: { id: 'revenuecat_project_split', title: 'Shared purchases in one RevenueCat project', source: 'connector', connector: 'revenuecat', prevents: 'A purchase in one app does not unlock the other app it was sold for.' },
   revenuecat_app_missing: { id: 'revenuecat_app_missing', title: 'Store app registered in RevenueCat', source: 'connector', connector: 'revenuecat', prevents: 'Purchases from an unregistered store app are never seen.' },
   revenuecat_offering_missing: { id: 'revenuecat_offering_missing', title: 'A current RevenueCat offering', source: 'connector', connector: 'revenuecat', prevents: 'The paywall has nothing to show.' },
+  dead_app_live_spend: { id: 'dead_app_live_spend', title: 'No spend on an app nobody uses', source: 'mushi', prevents: 'An app nobody opens keeps paying for functions, AI calls and keys.' },
+  provider_key_invalid: { id: 'provider_key_invalid', title: 'Every connected key still works', source: 'connector', prevents: 'A revoked or rotated key silently stops a feature until a user notices.' },
+  store_credential_scope_missing: { id: 'store_credential_scope_missing', title: 'Store keys have the permissions they need', source: 'connector', prevents: 'A store key without a needed permission fails the next read or release.' },
+  key_unused_90d: { id: 'key_unused_90d', title: 'No keys left unused for 90 days', source: 'mushi', prevents: 'A key nobody uses can still leak and be abused; it should be revoked.' },
+  key_in_client_bundle: { id: 'key_in_client_bundle', title: 'No secret keys in the built app', source: 'host_ci', prevents: 'Anyone who opens the app or site reads the key out of the bundle and spends on it.' },
+  paid_feature_no_kill_switch: { id: 'paid_feature_no_kill_switch', title: 'Paid features can be switched off', source: 'repo_scan', prevents: 'A runaway paid feature keeps spending until a new build ships.' },
+  provider_limit_unset: { id: 'provider_limit_unset', title: 'AI providers have a spending limit', source: 'connector', prevents: 'A leaked key or a loop spends without a ceiling; Mushi cannot cap your own provider keys.' },
 }
 
 /**

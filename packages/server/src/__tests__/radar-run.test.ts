@@ -376,3 +376,77 @@ describe('a repo read that threw is a failed check', () => {
     expect(none.errored).toBe(0)
   })
 })
+
+describe('operator detectors in the scheduled run (Plan 020 Phase 2)', () => {
+  const ago = (d: number) => new Date(NOW.getTime() - d * 86_400_000).toISOString()
+  const I_LLM = '2000000a-0000-4000-8000-000000000000'
+
+  it('reads heartbeats, keys and connector state, and turns them into findings with fixes', async () => {
+    const db = seed({
+      project_api_keys: [
+        { id: 'k1', project_id: P_A, label: 'web', scopes: ['report:write'], is_active: true, created_at: ago(400), last_seen_at: ago(120) },
+        { id: 'k2', project_id: P_A, label: 'cli', scopes: ['mcp:read'], is_active: true, created_at: ago(400), last_seen_at: null },
+      ],
+      byok_keys: [{ project_id: P_A, provider_slug: 'openai', label: 'main', key_hint: 'sk-…1', status: 'active', created_at: ago(200), last_used_at: ago(100) }],
+      connector_instances: [{ id: I_LLM, project_id: P_A, kind: 'llm_usage', display_name: 'OpenAI costs', config: { provider: 'openai' }, status: 'error', enabled_capabilities: ['snapshot', 'drift'], missing_scopes: [], last_probe_at: ago(2), last_probe_failure: 'credential_rejected' }],
+      connector_snapshots: [
+        { kind: 'llm_usage', connector_instance_id: I_LLM, project_id: P_A, is_current: true, ok: false, error: 'OpenAI rejected the credential.', error_kind: 'credential_rejected', observed_at: ago(1), snapshot: null },
+        { kind: 'supabase', connector_instance_id: null, project_id: P_A, is_current: true, ok: true, error: null, error_kind: null, observed_at: ago(1), snapshot: { observedAt: ago(1), elements: {}, resources: [], facts: { functions: [{ slug: 'tutor' }, { slug: 'tts' }], buckets: [], secretRpcs: [], billedStorageBytes: null, pitrEnabled: null } } },
+      ],
+      app_recipe_snapshots: [{ project_id: P_A, is_current: true, manifest: { spend: { paidFeatures: [{ name: 'AI tutor', provider: 'openai' }] } } }],
+    })
+    const summary = await run.runRadar(db as never, P_A, deps() as never)
+    const state = (id: string) => summary.results.find((r) => r.ruleId === id)?.state
+    expect(state('dead_app_live_spend')).toBe('finding')
+    expect(state('provider_key_invalid')).toBe('finding')
+    expect(state('key_unused_90d')).toBe('finding')
+    expect(state('paid_feature_no_kill_switch')).toBe('finding')
+    expect(state('provider_limit_unset')).toBe('finding')
+    expect(state('store_credential_scope_missing')).toBe('unknown')
+    const rules = db.table('gate_findings').map((f) => f.rule_id)
+    expect(rules).toEqual(expect.arrayContaining(['dead_app_live_spend', 'provider_key_invalid', 'key_unused_90d', 'paid_feature_no_kill_switch', 'provider_limit_unset']))
+    // The MCP key is not judged (its uses are not recorded); the SDK key and the BYOK key are.
+    expect(db.table('gate_findings').filter((f) => f.rule_id === 'key_unused_90d')).toHaveLength(2)
+    expect(summary.results.find((r) => r.ruleId === 'key_unused_90d')?.reason).toMatch(/1 console or MCP key was not judged/)
+    for (const f of db.table('gate_findings')) expect(String((f.suggested_fix as { fix: string }).fix).length).toBeGreaterThan(20)
+  })
+
+  it('a read that fails errors exactly the rules that need it, never a quiet ok', async () => {
+    const base = seed()
+    const broken: unknown = new Proxy({}, {
+      get: (_t, prop) => prop === 'then'
+        ? (ok: (v: unknown) => unknown) => Promise.resolve({ data: null, error: { message: 'permission denied for table byok_keys' } }).then(ok)
+        : () => broken,
+    })
+    const db = { from: (t: string) => (t === 'byok_keys' ? broken : base.from(t)), rpc: base.rpc.bind(base), table: base.table.bind(base) }
+    const summary = await run.runRadar(db as never, P_A, deps() as never)
+    const byId = new Map(summary.results.map((r) => [r.ruleId as string, r]))
+    for (const id of ['dead_app_live_spend', 'key_unused_90d', 'provider_limit_unset']) {
+      expect(byId.get(id)).toMatchObject({ state: 'error' })
+      expect(byId.get(id)!.reason).toMatch(/stored provider keys/)
+    }
+    expect(byId.get('provider_key_invalid')!.state).toBe('unknown')
+    expect(summary.status).toBe('error')
+  })
+
+  it('CI ingest: key_in_client_bundle stores the server-written message and the kind of key, never the key', async () => {
+    const db = seed()
+    const { app } = harness(db)
+    const r = await app.call('POST', '/v1/ingest/radar', {
+      body: { scanned: ['key_in_client_bundle'], findings: [{ ruleId: 'key_in_client_bundle', filePath: 'dist/assets/index.js', line: 1, kind: 'Stripe live key' }] },
+      vars: { projectId: P_A },
+    })
+    expect(r.status).toBe(200)
+    expect(r.body.data.status).toBe('fail')
+    const f = db.table('gate_findings')[0]
+    expect(f).toMatchObject({ rule_id: 'key_in_client_bundle', severity: 'error', file_path: 'dist/assets/index.js' })
+    expect(f.message).toContain('a Stripe live key')
+    const bad = await app.call('POST', '/v1/ingest/radar', { body: { scanned: ['key_in_client_bundle'], findings: [{ ruleId: 'key_in_client_bundle', filePath: 'dist/a.js', kind: 'sk_live_abc' }] }, vars: { projectId: P_A } })
+    expect(bad.status).toBe(400)
+  })
+
+  it('readRadar says how to turn on the bundle check: after the build step', async () => {
+    const view = await run.readRadar(seed() as never, P_A)
+    expect(view.detectors.find((d) => d.ruleId === 'key_in_client_bundle')!.reason).toMatch(/after the build step/)
+  })
+})

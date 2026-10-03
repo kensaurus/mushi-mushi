@@ -17,7 +17,7 @@ import { ciWorkflowDrift, defaultBranchRed, envDrift } from '../recipe-drift.ts'
 import { estimateRunMinutes } from '../ci-minutes.ts'
 import { isWritablePath, type RecipeManifest } from '../recipe-schema.ts'
 import { parseSupabaseAuthConfig, type DeclaredAuthSettings } from '../supabase-config-toml.ts'
-import { fetchJson, statusReason } from './http-util.ts'
+import { failureOfStatus, fetchJson, statusReason, vendorError } from './http-util.ts'
 import { ConnectorError, notConnected, type ConnectorContext, type DriftFinding, type FileEdit, type RecipeConnector } from './types.ts'
 
 const API = 'https://api.github.com'
@@ -56,7 +56,7 @@ export const githubConnector: RecipeConnector = {
     if (!r) return notConnected('No GitHub repo is connected to this project.')
     if (!ctx.readCredential) return notConnected('No GitHub token is stored for this project.')
     const res = await gh(ctx, `/repos/${r.owner}/${r.repo}`)
-    if (res.status !== 200) return { ok: false, status: 'error', granted: [], missing: [], reason: statusReason('GitHub', res.status) }
+    if (res.status !== 200) return { ok: false, status: 'error', granted: [], missing: [], reason: statusReason('GitHub', res.status), failure: failureOfStatus(res.status) }
     const granted = ['metadata:read', 'contents:read']
     const perms = (res.body?.permissions ?? {}) as Record<string, boolean>
     if (perms.push) granted.push('contents:write', 'pull_requests:write')
@@ -71,10 +71,10 @@ export const githubConnector: RecipeConnector = {
     const r = repoOf(ctx)
     if (!r || !ctx.readCredential) throw new ConnectorError('GitHub is not connected for this project.', 'not_connected')
     const info = await gh(ctx, `/repos/${r.owner}/${r.repo}`)
-    if (info.status !== 200) throw new ConnectorError(statusReason('GitHub', info.status))
+    if (info.status !== 200) throw vendorError('GitHub', info.status)
     const branch = String(info.body?.default_branch ?? ctx.config.defaultBranchHint ?? 'main')
     const head = await gh(ctx, `/repos/${r.owner}/${r.repo}/commits/${encodeURIComponent(branch)}`)
-    if (head.status !== 200) throw new ConnectorError(`Could not read the head of ${branch}: ${statusReason('GitHub', head.status)}`)
+    if (head.status !== 200) throw new ConnectorError(`Could not read the head of ${branch}: ${statusReason('GitHub', head.status)}`, 'error', failureOfStatus(head.status))
     const headSha = String(head.body?.sha ?? '')
     const headCommittedAt = (head.body?.commit?.committer?.date as string | undefined) ?? null
 
@@ -86,7 +86,7 @@ export const githubConnector: RecipeConnector = {
         if (file.status === 200 && typeof file.body?.content === 'string') workflowFiles[f.path] = decode(file.body.content)
       }
     } else if (dir.status !== 404) {
-      throw new ConnectorError(`Could not list the workflows: ${statusReason('GitHub', dir.status)}`)
+      throw new ConnectorError(`Could not list the workflows: ${statusReason('GitHub', dir.status)}`, 'error', failureOfStatus(dir.status))
     }
 
     const runsRes = await gh(ctx, `/repos/${r.owner}/${r.repo}/actions/runs?branch=${encodeURIComponent(branch)}&per_page=20`)
