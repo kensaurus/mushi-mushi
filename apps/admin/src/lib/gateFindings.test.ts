@@ -23,11 +23,13 @@ describe('latestOpenFindings', () => {
 })
 
 describe('design refresh runs and the route caps', () => {
-  it('a design refresh run never hides the latest design scan', () => {
+  it('a design refresh or a CI push that is not a scan never hides the latest design scan', () => {
     const out = latestOpenFindings({
       runs: [
         { id: 'refresh', gate: 'design_drift', status: 'pass', summary: { phase: 'refresh' } },
-        { id: 'scan', gate: 'design_drift', status: 'fail', summary: {} },
+        { id: 'pr-push', gate: 'design_drift', status: 'pass', summary: { phase: 'ci_branch_scan' } },
+        { id: 'public-key-push', gate: 'design_drift', status: 'pass', summary: { phase: 'ci_untrusted_scan' } },
+        { id: 'scan', gate: 'design_drift', status: 'fail', summary: { phase: 'scan' } },
       ],
       findings: [{ id: 'f', gate_run_id: 'scan', severity: 'warn', message: 'off-token colour' }],
     })
