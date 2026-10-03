@@ -14,6 +14,8 @@
  *          returns a freshly-generated webhook secret on first enable.
  *   - POST /v1/admin/projects/:id/codebase/rotate-secret → regenerates the
  *          webhook secret without re-enabling indexing.
+ *   - GET  /v1/admin/projects/:id/autofix → autofix_enabled + can_toggle
+ *          (owner or admin); POST .../autofix/toggle → { enabled }.
  */
 
 import { useCallback, useEffect, useState } from 'react'
@@ -67,6 +69,8 @@ interface CodebaseStats {
 
 interface AutofixState {
   autofix_enabled: boolean
+  /** Only a project owner or admin may flip autofix; members see it read-only. */
+  can_toggle: boolean
 }
 
 interface EnableResponse {
@@ -157,6 +161,7 @@ export function CodebaseIndexCard({ projectId }: Props) {
   // two flags that gate `/v1/admin/fixes/dispatch`. Splitting them across
   // pages was the exact pain point that forced the earlier SQL-flip workaround.
   const [autofixEnabled, setAutofixEnabled] = useState<boolean | null>(null)
+  const [autofixCanToggle, setAutofixCanToggle] = useState(false)
   const [autofixSaving, setAutofixSaving] = useState(false)
 
   const loadStats = useCallback(async () => {
@@ -174,6 +179,7 @@ export function CodebaseIndexCard({ projectId }: Props) {
     }
     if (autofixRes.ok && autofixRes.data) {
       setAutofixEnabled(autofixRes.data.autofix_enabled)
+      setAutofixCanToggle(autofixRes.data.can_toggle === true)
     }
     setLoading(false)
   }, [projectId])
@@ -187,7 +193,7 @@ export function CodebaseIndexCard({ projectId }: Props) {
     const previous = autofixEnabled
     setAutofixEnabled(next)
     setAutofixSaving(true)
-    const res = await apiFetch<AutofixState>(
+    const res = await apiFetch<Pick<AutofixState, 'autofix_enabled'>>(
       `/v1/admin/projects/${projectId}/autofix/toggle`,
       { method: 'POST', body: JSON.stringify({ enabled: next }) },
     )
@@ -364,6 +370,7 @@ export function CodebaseIndexCard({ projectId }: Props) {
       <AutofixToggleRow
         enabled={autofixEnabled}
         saving={autofixSaving}
+        canToggle={autofixCanToggle}
         onToggle={(next) => void toggleAutofix(next)}
         codebaseReady={enabled && hasFiles}
       />
@@ -479,14 +486,17 @@ function LanguageSparkline({ distribution }: { distribution: Record<string, numb
   )
 }
 
-function AutofixToggleRow({
+export function AutofixToggleRow({
   enabled,
   saving,
+  canToggle,
   onToggle,
   codebaseReady,
 }: {
   enabled: boolean | null
   saving: boolean
+  /** From GET /autofix `can_toggle`: the API refuses anyone but an owner or admin. */
+  canToggle: boolean
   onToggle: (next: boolean) => void
   codebaseReady: boolean
 }) {
@@ -505,6 +515,11 @@ function AutofixToggleRow({
           queue a fix-worker for triaged reports. Turn off to pause every dispatch button
           without removing your GitHub or BYOK credentials.
         </p>
+        {enabled != null && !canToggle && (
+          <p className="text-2xs text-fg-muted mt-0.5">
+            Only a project owner or admin can turn autofix on or off. Ask one of them to change it.
+          </p>
+        )}
         {!codebaseReady && isOn && (
           <p className="text-2xs text-warn mt-0.5">
             Heads up: codebase indexing isn&apos;t finished yet {EM_DASH} fixes will be skipped with
@@ -516,7 +531,7 @@ function AutofixToggleRow({
         ariaLabel="Toggle autofix dispatcher"
         checked={isOn}
         onChange={onToggle}
-        disabled={saving || enabled == null}
+        disabled={saving || enabled == null || !canToggle}
       />
     </div>
   )
