@@ -15,6 +15,7 @@ import {
   loadReportDeployLive,
   type DeployDriftRunRow,
   type DeployObservationRow,
+  type ReportDeployLive,
 } from '../../supabase/functions/_shared/report-deploy-live.ts'
 
 const PROJECT = '11111111-2222-4333-8444-555555555555'
@@ -37,9 +38,18 @@ function obs(target: string, commit: string | null, at: string, ok = true): Depl
   return { target_id: target, ok, observed_commit: commit, observed_at: at }
 }
 
+/** deriveDeployLive for inputs that have observations (so a state, never null). */
+function mustDerive(input: Parameters<typeof deriveDeployLive>[0]): ReportDeployLive {
+  const out = deriveDeployLive(input)
+  if (!out) throw new Error('expected a deploy state, got null')
+  return out
+}
+
+const FIXED = { project_id: PROJECT, status: 'fixed' }
+
 describe('deriveDeployLive', () => {
   it('is not_live with the stale prod commit when the run after the merge has an open not_deployed finding', () => {
-    const out = deriveDeployLive({
+    const out = mustDerive({
       mergedAt: MERGED_AT,
       run: run(),
       openNotDeployed: 1,
@@ -52,7 +62,7 @@ describe('deriveDeployLive', () => {
   })
 
   it('names the behind target, not one already on head', () => {
-    const out = deriveDeployLive({
+    const out = mustDerive({
       mergedAt: MERGED_AT,
       run: run(),
       openNotDeployed: 1,
@@ -62,7 +72,7 @@ describe('deriveDeployLive', () => {
   })
 
   it('is live when every observed target runs the head the post-merge run compared against', () => {
-    const out = deriveDeployLive({
+    const out = mustDerive({
       mergedAt: MERGED_AT,
       run: run({ status: 'pass' }),
       openNotDeployed: 0,
@@ -74,7 +84,7 @@ describe('deriveDeployLive', () => {
   })
 
   it('uses only the newest observation per target', () => {
-    const out = deriveDeployLive({
+    const out = mustDerive({
       mergedAt: MERGED_AT,
       run: run({ status: 'pass' }),
       openNotDeployed: 0,
@@ -84,7 +94,7 @@ describe('deriveDeployLive', () => {
   })
 
   it('is unknown when the latest drift run predates the merge', () => {
-    const out = deriveDeployLive({
+    const out = mustDerive({
       mergedAt: MERGED_AT,
       run: run({ started_at: '2026-10-02T03:35:00Z' }),
       openNotDeployed: 1,
@@ -95,14 +105,14 @@ describe('deriveDeployLive', () => {
     expect(out.prod_commit).toBe(OLD)
   })
 
-  it('is unknown when there are no deploy checks at all', () => {
-    const out = deriveDeployLive({ mergedAt: MERGED_AT, run: null, openNotDeployed: 0, observations: [] })
-    expect(out).toMatchObject({ state: 'unknown', prod_commit: null })
-    expect(out.reason).toMatch(/mushi\.recipe\.json/)
+  it('is null (no chip) when no deploy target was ever observed — deploy targets are optional', () => {
+    expect(deriveDeployLive({ mergedAt: MERGED_AT, run: null, openNotDeployed: 0, observations: [] })).toBeNull()
+    // A deploy_drift run fed only by the store connectors says nothing about the commit.
+    expect(deriveDeployLive({ mergedAt: MERGED_AT, run: run(), openNotDeployed: 0, observations: [] })).toBeNull()
   })
 
   it('is unknown, not live, while a target is behind but inside its allowed lag', () => {
-    const out = deriveDeployLive({
+    const out = mustDerive({
       mergedAt: MERGED_AT,
       run: run({ status: 'pass' }),
       openNotDeployed: 0,
@@ -114,15 +124,15 @@ describe('deriveDeployLive', () => {
 
   it('is unknown when the run errored or every probe failed', () => {
     expect(
-      deriveDeployLive({ mergedAt: MERGED_AT, run: run({ status: 'error' }), openNotDeployed: 0, observations: [obs('web', HEAD, '2026-10-03T03:34:00Z')] }).state,
+      mustDerive({ mergedAt: MERGED_AT, run: run({ status: 'error' }), openNotDeployed: 0, observations: [obs('web', HEAD, '2026-10-03T03:34:00Z')] }).state,
     ).toBe('unknown')
     expect(
-      deriveDeployLive({ mergedAt: MERGED_AT, run: run({ status: 'warn' }), openNotDeployed: 0, observations: [obs('web', null, '2026-10-03T03:34:00Z', false)] }).state,
+      mustDerive({ mergedAt: MERGED_AT, run: run({ status: 'warn' }), openNotDeployed: 0, observations: [obs('web', null, '2026-10-03T03:34:00Z', false)] }).state,
     ).toBe('unknown')
   })
 
   it('is unknown when the run has no head commit to compare with', () => {
-    const out = deriveDeployLive({
+    const out = mustDerive({
       mergedAt: MERGED_AT,
       run: run({ commit_sha: null, status: 'pass' }),
       openNotDeployed: 0,
@@ -152,15 +162,32 @@ describe('loadReportDeployLive', () => {
     })
   }
 
-  it('returns null when no fix merged, without reading anything', async () => {
+  it('returns null when no fix merged', async () => {
     const db = seed()
-    const out = await loadReportDeployLive(db as unknown as SupabaseClient, PROJECT, [{ merged_at: null }, {}])
+    const out = await loadReportDeployLive(db as unknown as SupabaseClient, FIXED, [{ merged_at: null }, {}])
     expect(out).toBeNull()
+  })
+
+  it('returns null unless the report reads as fixed (a reopened or re-dispatched report gets no chip)', async () => {
+    const db = seed()
+    const merged = [{ merged_at: MERGED_AT }]
+    for (const status of ['fixing', 'reopened', 'classified', 'new', 'dismissed']) {
+      expect(await loadReportDeployLive(db as unknown as SupabaseClient, { project_id: PROJECT, status }, merged)).toBeNull()
+    }
+    for (const status of ['fixed', 'resolved', 'verified', 'completed']) {
+      expect(await loadReportDeployLive(db as unknown as SupabaseClient, { project_id: PROJECT, status }, merged)).not.toBeNull()
+    }
+  })
+
+  it('returns null for a project that never had a deploy target observed', async () => {
+    const db = seed()
+    db.tables.deploy_observations = db.tables.deploy_observations.filter((o) => o.project_id !== PROJECT)
+    expect(await loadReportDeployLive(db as unknown as SupabaseClient, FIXED, [{ merged_at: MERGED_AT }])).toBeNull()
   })
 
   it('joins the newest merge to the newest finished deploy_drift run and its open not_deployed finding', async () => {
     const db = seed()
-    const out = await loadReportDeployLive(db as unknown as SupabaseClient, PROJECT, [
+    const out = await loadReportDeployLive(db as unknown as SupabaseClient, FIXED, [
       { merged_at: '2026-09-30T00:00:00Z' },
       { merged_at: MERGED_AT },
     ])
@@ -171,7 +198,7 @@ describe('loadReportDeployLive', () => {
     const db = seed()
     db.tables.gate_findings[0].allowlisted = true
     db.tables.deploy_observations.push({ target_id: 'web', project_id: PROJECT, ok: true, observed_commit: HEAD, observed_at: '2026-10-03T04:00:00Z' })
-    const out = await loadReportDeployLive(db as unknown as SupabaseClient, PROJECT, [{ merged_at: MERGED_AT }])
+    const out = await loadReportDeployLive(db as unknown as SupabaseClient, FIXED, [{ merged_at: MERGED_AT }])
     expect(out?.state).toBe('live')
   })
 
@@ -188,7 +215,7 @@ describe('loadReportDeployLive', () => {
     const broken = {
       from: (table: string) => (table === 'deploy_observations' ? failing : db.from(table)),
     }
-    const out = await loadReportDeployLive(broken as unknown as SupabaseClient, PROJECT, [{ merged_at: MERGED_AT }])
+    const out = await loadReportDeployLive(broken as unknown as SupabaseClient, FIXED, [{ merged_at: MERGED_AT }])
     expect(out).toMatchObject({ state: 'unknown', prod_commit: null })
     expect(out?.reason).toMatch(/Could not read/)
   })

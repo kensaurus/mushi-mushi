@@ -709,7 +709,8 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
     // the response.
     // Merged fix → is it live? Joins the merge to the project's deploy_drift
     // run, its open not_deployed findings and the latest deploy_observations
-    // commit. null when no fix merged; `unknown` (never `live`) on a failed read.
+    // commit. null unless the report reads as fixed, a fix merged and a
+    // deploy target was observed; `unknown` (never `live`) on a failed read.
     const [{ fixPacket: fix_packet }, deploy_live] = await Promise.all([
       buildReportFixPacket(
         db,
@@ -718,7 +719,7 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
       ),
       loadReportDeployLive(
         db,
-        data.project_id as string,
+        { project_id: data.project_id as string, status: (data.status as string | null) ?? null },
         (fixesRes.data ?? []) as Array<{ merged_at?: string | null }>,
       ),
     ]);

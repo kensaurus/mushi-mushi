@@ -18,8 +18,11 @@
  *             runs that head commit
  *   not_live  that run has an open `not_deployed` finding; `prod_commit` is
  *             the commit a behind target still runs
- *   unknown   no deploy checks, none since the merge, a target that is behind
- *             but still inside its allowed lag, or a read that failed
+ *   unknown   not checked since the merge, a target that is behind but still
+ *             inside its allowed lag, or a read that failed
+ *   null      the report does not read as fixed, no fix merged, or no deploy
+ *             target was ever observed (deploy targets are optional recipe
+ *             context, ADR 0016: no chip rather than a permanent "unknown")
  *
  * Never fails open: a failed read is `unknown`, never `live`.
  */
@@ -81,13 +84,26 @@ function latestPerTarget(observations: readonly DeployObservationRow[]): DeployO
   return [...byTarget.values()].sort((a, b) => Date.parse(b.observed_at) - Date.parse(a.observed_at))
 }
 
-/** Pure: the deploy state of a merged fix. */
+/**
+ * Statuses where the report reads as fixed (report-status.ts canonical
+ * `fixed` / `resolved` / `verified`, plus legacy `completed`, which the
+ * reports list still files under Fixed). A reopened or re-dispatched report
+ * gets no deploy chip, so the header never says "Fixed and live" beside
+ * "Fixing".
+ */
+const FIXED_STATUSES = new Set(['fixed', 'resolved', 'verified', 'completed'])
+
+export function reportReadsFixed(status: string | null | undefined): boolean {
+  return typeof status === 'string' && FIXED_STATUSES.has(status)
+}
+
+/** Pure: the deploy state of a merged fix; `null` when no deploy target was ever observed. */
 export function deriveDeployLive(input: {
   mergedAt: string
   run: DeployDriftRunRow | null
   openNotDeployed: number
   observations: readonly DeployObservationRow[]
-}): ReportDeployLive {
+}): ReportDeployLive | null {
   const { mergedAt, run, openNotDeployed } = input
   const latest = latestPerTarget(input.observations)
   const okWithCommit = latest.filter((o) => o.ok && typeof o.observed_commit === 'string' && o.observed_commit.length > 0)
@@ -99,9 +115,9 @@ export function deriveDeployLive(input: {
     checked_at: newest?.observed_at ?? null,
   }
 
-  if (!run && latest.length === 0) {
-    return { state: 'unknown', ...base, reason: 'No deploy checks yet. Declare deploy targets in mushi.recipe.json so Mushi can see what production runs.' }
-  }
+  // No deploy target has ever been observed (none declared, or only the store
+  // connectors feed deploy_drift): nothing to say about the commit.
+  if (latest.length === 0) return null
   const mergedT = Date.parse(mergedAt)
   if (!run || run.status === 'error' || Date.parse(run.started_at) < mergedT) {
     return { state: 'unknown', ...base, reason: 'Deploys have not been checked since this fix merged.' }
@@ -163,16 +179,19 @@ const READ_FAILED = (mergedAt: string): ReportDeployLive => ({
 })
 
 /**
- * Deploy state for a report's fix attempts, or `null` when none merged.
- * Three small reads, all project-scoped; never throws.
+ * Deploy state for a fixed report's merged fix, or `null` (not fixed, no
+ * merged attempt, or no deploy target ever observed). Up to three small
+ * project-scoped reads; never throws.
  */
 export async function loadReportDeployLive(
   db: SupabaseClient,
-  projectId: string,
+  report: { project_id: string; status: string | null },
   fixes: ReadonlyArray<{ merged_at?: string | null }>,
 ): Promise<ReportDeployLive | null> {
+  if (!reportReadsFixed(report.status)) return null
   const mergedAt = newestMerge(fixes)
   if (!mergedAt) return null
+  const projectId = report.project_id
   try {
     const [runsRes, obsRes] = await Promise.all([
       db
