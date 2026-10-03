@@ -225,7 +225,9 @@ mushi radar show                     # every hole check for this project and wha
 ### One CI step for both checks
 
 `radar scan --push` and `recipe check --push` belong in a job you already
-run, so they cost no extra job. Store a project key as a repo secret first.
+run, so they cost no extra job. Both need `@mushi-mushi/cli` 0.29.0 or later;
+an older CLI answers "unknown command", and the packaged action stops with
+that version in its error instead. Store a project key as a repo secret first.
 The SDK ingest key works; an account-level (org) key does not. Both commands
 read the checked-out repo, so the job needs `actions/checkout` before them.
 

@@ -4,7 +4,7 @@
  * no-`${{ inputs.* }}`-in-`run:` rule, and that every CLI command and flag
  * the action calls exists in this CLI.
  */
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { Command } from 'commander'
 import { describe, expect, it } from 'vitest'
@@ -92,5 +92,52 @@ describe('the CLI commands the action calls exist', () => {
   })
   it('recipe check takes --push and --dir', () => {
     expect(longFlags(program, ['recipe', 'check'])).toEqual(expect.arrayContaining(['--push', '--dir']))
+  })
+})
+
+/** Next minor of a 0.x/1.x semver (what a pending `minor` changeset releases). */
+function nextMinor(v: string): string {
+  const [maj, min] = v.split('.').map(Number)
+  return `${maj}.${min + 1}.0`
+}
+
+function cmpSemver(a: string, b: string): number {
+  const pa = a.split('.').map(Number)
+  const pb = b.split('.').map(Number)
+  for (let i = 0; i < 3; i++) if (pa[i] !== pb[i]) return pa[i] - pb[i]
+  return 0
+}
+
+describe('the minimum CLI version the portfolio checks need', () => {
+  const pkgVersion = (JSON.parse(readFileSync(resolve(__dirname, '../package.json'), 'utf8')) as { version: string }).version
+  const changeset = resolve(__dirname, '../../../.changeset/radar-cli.md')
+  const mins = [...yml.matchAll(/MUSHI_CLI_MIN_PORTFOLIO: '([0-9.]+)'/g)].map((m) => m[1])
+
+  it('both portfolio steps check it before calling the command', () => {
+    expect(mins).toHaveLength(2)
+    expect(new Set(mins).size).toBe(1)
+    for (const id of ['radar', 'recipe']) {
+      const step = stepBlock(id)
+      expect(step).toContain('--version')
+      expect(step).toContain('sort -V')
+      expect(step).toContain('::error title=')
+      expect(step).toContain('if [ "$cli_ok" = "true" ] && npx')
+    }
+  })
+
+  it('is the release that ships radar and recipe', () => {
+    // While the radar changeset is unreleased, the published CLI has no radar
+    // command: the minimum is the next minor. After release, the package
+    // version already includes it.
+    if (existsSync(changeset)) expect(mins[0]).toBe(nextMinor(pkgVersion))
+    else expect(cmpSemver(mins[0], pkgVersion)).toBeLessThanOrEqual(0)
+  })
+
+  it('the inputs and the docs say the same version', () => {
+    expect(inputBlock('radar-scan')).toContain(`@mushi-mushi/cli ${mins[0]} or later`)
+    expect(inputBlock('recipe-check')).toContain(`@mushi-mushi/cli ${mins[0]} or later`)
+    expect(inputBlock('cli-version')).toContain(`${mins[0]} or later`)
+    const docs = readFileSync(resolve(__dirname, '../../../apps/docs/content/sdks/cli.mdx'), 'utf8')
+    expect(docs).toContain(`\`@mushi-mushi/cli\` ${mins[0]} or later`)
   })
 })

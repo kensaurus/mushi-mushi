@@ -30,7 +30,7 @@ inputs:
     required: false
     default: 'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api'
   cli-version:
-    description: 'Version of @mushi-mushi/cli to run (default: latest).'
+    description: 'Version of @mushi-mushi/cli to run (default: latest). radar-scan and recipe-check need 0.29.0 or later; the step checks and fails with that message on an older CLI.'
     required: false
     default: 'latest'
   working-directory:
@@ -54,11 +54,11 @@ inputs:
     required: false
     default: 'false'
   radar-scan:
-    description: 'Run `mushi radar scan --push`: storage deletes done in SQL, plus the build files the store rules read, sent to Mushi (portfolio_radar_ci gate).'
+    description: 'Run `mushi radar scan --push` (needs @mushi-mushi/cli 0.29.0 or later): storage deletes done in SQL, plus the build files the store rules read, sent to Mushi (portfolio_radar_ci gate).'
     required: false
     default: 'false'
   recipe-check:
-    description: 'Run `mushi recipe check --push`: validate mushi.recipe.json and its token files and send the recipe and colour findings to Mushi. Fails the step when the manifest is invalid.'
+    description: 'Run `mushi recipe check --push` (needs @mushi-mushi/cli 0.29.0 or later): validate mushi.recipe.json and its token files and send the recipe and colour findings to Mushi. Fails the step when the manifest is invalid.'
     required: false
     default: 'false'
   fail-on-error:
@@ -113,9 +113,19 @@ runs:
         MUSHI_CLI_VERSION: ${{ inputs.cli-version }}
         MUSHI_WORKDIR: ${{ inputs.working-directory }}
         MUSHI_FAIL_ON_ERROR: ${{ inputs.fail-on-error }}
+        MUSHI_CLI_MIN_PORTFOLIO: '0.29.0'
       run: |
         set -uo pipefail
-        if npx --yes "@mushi-mushi/cli@${MUSHI_CLI_VERSION}" radar scan --push --dir "$MUSHI_WORKDIR"; then
+        # `radar scan` first shipped in @mushi-mushi/cli 0.29.0; an older CLI
+        # would fail with "unknown command", so say what to change instead.
+        cli_version="$(npx --yes "@mushi-mushi/cli@${MUSHI_CLI_VERSION}" --version 2>/dev/null | tail -n 1 | tr -d '[:space:]')"
+        if [ -n "$cli_version" ] && [ "$(printf '%s\n%s\n' "$MUSHI_CLI_MIN_PORTFOLIO" "$cli_version" | sort -V | head -n 1)" = "$MUSHI_CLI_MIN_PORTFOLIO" ]; then
+          cli_ok=true
+        else
+          cli_ok=false
+          echo "::error title=Mushi radar scan::radar scan needs @mushi-mushi/cli >= $MUSHI_CLI_MIN_PORTFOLIO, but cli-version '$MUSHI_CLI_VERSION' resolved to '${cli_version:-nothing}'. Set cli-version to $MUSHI_CLI_MIN_PORTFOLIO or later."
+        fi
+        if [ "$cli_ok" = "true" ] && npx --yes "@mushi-mushi/cli@${MUSHI_CLI_VERSION}" radar scan --push --dir "$MUSHI_WORKDIR"; then
           echo "pushed=true" >> "$GITHUB_OUTPUT"
         elif [ "$MUSHI_FAIL_ON_ERROR" = "true" ]; then
           exit 1
@@ -134,9 +144,19 @@ runs:
         MUSHI_CLI_VERSION: ${{ inputs.cli-version }}
         MUSHI_WORKDIR: ${{ inputs.working-directory }}
         MUSHI_FAIL_ON_ERROR: ${{ inputs.fail-on-error }}
+        MUSHI_CLI_MIN_PORTFOLIO: '0.29.0'
       run: |
         set -uo pipefail
-        if npx --yes "@mushi-mushi/cli@${MUSHI_CLI_VERSION}" recipe check --push --dir "$MUSHI_WORKDIR"; then
+        # `recipe check` first shipped in @mushi-mushi/cli 0.29.0; an older CLI
+        # would fail with "unknown command", so say what to change instead.
+        cli_version="$(npx --yes "@mushi-mushi/cli@${MUSHI_CLI_VERSION}" --version 2>/dev/null | tail -n 1 | tr -d '[:space:]')"
+        if [ -n "$cli_version" ] && [ "$(printf '%s\n%s\n' "$MUSHI_CLI_MIN_PORTFOLIO" "$cli_version" | sort -V | head -n 1)" = "$MUSHI_CLI_MIN_PORTFOLIO" ]; then
+          cli_ok=true
+        else
+          cli_ok=false
+          echo "::error title=Mushi recipe check::recipe check needs @mushi-mushi/cli >= $MUSHI_CLI_MIN_PORTFOLIO, but cli-version '$MUSHI_CLI_VERSION' resolved to '${cli_version:-nothing}'. Set cli-version to $MUSHI_CLI_MIN_PORTFOLIO or later."
+        fi
+        if [ "$cli_ok" = "true" ] && npx --yes "@mushi-mushi/cli@${MUSHI_CLI_VERSION}" recipe check --push --dir "$MUSHI_WORKDIR"; then
           echo "pushed=true" >> "$GITHUB_OUTPUT"
         elif [ "$MUSHI_FAIL_ON_ERROR" = "true" ]; then
           exit 1
