@@ -115,3 +115,11 @@ describe('Supabase as a BYOK provider', () => {
     expect(connectors).toContain('Settings → AI keys → Supabase')
   })
 })
+
+describe('Supabase MCP requests', () => {
+  it('every caller accepts JSON and SSE, as Streamable HTTP requires', () => {
+    for (const file of ['_shared/supabase-mcp-client.ts', '_shared/connectors/supabase.ts']) {
+      expect(read(file), file).toContain('application/json, text/event-stream')
+    }
+  })
+})
