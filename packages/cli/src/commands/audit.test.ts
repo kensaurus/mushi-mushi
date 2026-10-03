@@ -15,11 +15,36 @@ const PID = '11111111-2222-4333-8444-555555555555'
 const FID = '55555555-6666-4777-8888-999999999999'
 
 describe('mushi audit (no subcommand)', () => {
-  it('still POSTs the full-stack audit', async () => {
-    const run = await runCli(registerAuditCommands, ['audit', '--json'], () => okReply({
-      summary: { overall: 'ok', error_count: 0, warn_count: 0 }, findings: [], gate_runs: [], backend_linked: true, audit_at: '2026-10-01T00:00:00Z',
-    }))
+  const healthy = {
+    summary: { overall: 'ok', error_count: 0, warn_count: 0 }, findings: [], gate_runs: [{ gate: 'code_health', status: 'pass', findings_count: 0 }], backend_linked: true, audit_at: '2026-10-01T00:00:00Z',
+  }
+
+  it('still POSTs the full-stack audit with the key and project headers', async () => {
+    const run = await runCli(registerAuditCommands, ['audit', '--json'], () => okReply(healthy))
     expect(run.calls).toEqual([expect.objectContaining({ method: 'POST', path: `/v1/admin/projects/${PID}/audit` })])
+    expect(run.calls[0]!.headers).toMatchObject({ 'X-Mushi-Api-Key': 'mushi_test_key_0123', 'X-Mushi-Project-Id': PID })
+    expect(JSON.parse(run.stdout)).toEqual(healthy)
+  })
+
+  it('points at the per-finding list after the summary', async () => {
+    const run = await runCli(registerAuditCommands, ['audit'], () => okReply(healthy))
+    expect(run.exitCode).toBe(0)
+    expect(run.stdout).toContain('Gate Results:')
+    expect(run.stdout).toContain('Each gate finding with its file and line: mushi audit findings')
+  })
+
+  it('prints the server message when the error is a bare string', async () => {
+    const run = await runCli(registerAuditCommands, ['audit'], () => ({ status: 500, body: { ok: false, error: 'Supabase advisors unreachable' } }))
+    expect(run.exitCode).toBe(1)
+    expect(run.stdout).toContain('FAIL')
+    expect(run.stderr).toContain('Supabase advisors unreachable')
+    expect(run.stderr).not.toMatch(/undefined/)
+  })
+
+  it('prints a structured error as JSON on stdout with --json', async () => {
+    const run = await runCli(registerAuditCommands, ['audit', '--json'], () => ({ status: 403, body: { ok: false, error: 'not a member of this project' } }))
+    expect(run.exitCode).toBe(1)
+    expect(JSON.parse(run.stdout)).toEqual({ ok: false, error: { code: 'HTTP_403', message: 'not a member of this project' } })
   })
 })
 
@@ -52,10 +77,16 @@ describe('mushi audit findings', () => {
     expect(all.stdout).toContain('app/Big.tsx')
   })
 
-  it('rejects an unknown gate before calling the API', async () => {
-    const run = await runCli(registerAuditCommands, ['audit', 'findings', '--gate', 'nope'])
-    expect(run.calls).toHaveLength(0)
-    expect(run.error?.code).toBe('E_INVALID_INPUT')
+  it('passes a gate this CLI does not know to the server, with a warning', async () => {
+    const run = await runCli(registerAuditCommands, ['audit', 'findings', '--gate', 'license_drift'], () => okReply(data))
+    expect(run.error).toBeNull()
+    expect(run.calls).toEqual([expect.objectContaining({ method: 'GET', path: `/v1/admin/inventory/${PID}/findings?gate=license_drift` })])
+    expect(run.stderr).toContain('does not know the gate "license_drift"')
+  })
+
+  it('does not warn about a known gate', async () => {
+    const run = await runCli(registerAuditCommands, ['audit', 'findings', '--gate', 'store_review'], () => okReply(data))
+    expect(run.stderr).not.toContain('warning')
   })
 
   it('says plainly when the plan does not include the list', async () => {

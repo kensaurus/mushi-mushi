@@ -4,13 +4,28 @@ import { apiCall, die, fmtDate, outputIsJson, requireConfig, requireUuid } from 
 import { oneLine, resolveProjectId } from '../command-helpers.js';
 import { MushiCliError } from '../errors.js';
 
-/** gate_runs.gate values a finding can come from (mirrors the MCP GATE_IDS list). */
-const GATE_IDS = [
+/**
+ * gate_runs.gate values known when this CLI was built (the same list as the
+ * MCP server). Help text only: `--gate` passes any value to the server, which
+ * filters by it, so a gate added server-side works before a CLI release.
+ */
+const KNOWN_GATES = [
   'dead_handler', 'mock_leak', 'api_contract', 'crawl', 'status_claim', 'spec_drift',
   'orphan_endpoint', 'unknown_call', 'schema_drift', 'code_health', 'design_drift',
   'ci_drift', 'deploy_drift', 'env_drift', 'portfolio_radar', 'portfolio_radar_ci', 'store_review',
 ] as const;
 const SEVERITIES = ['info', 'warn', 'error'] as const;
+
+/** Bare `mushi audit` waits on Supabase advisors and log reads: 30 s, not apiCall's 15 s default. */
+const AUDIT_TIMEOUT_MS = 30_000;
+
+interface FullStackAuditData {
+  summary: { overall: string; error_count: number; warn_count: number };
+  findings: Array<{ severity: string; title: string; detail: string }>;
+  gate_runs: Array<{ gate: string; status: string; findings_count: number }>;
+  backend_linked: boolean;
+  audit_at: string;
+}
 
 interface GateFindingRow {
   id: string;
@@ -107,102 +122,72 @@ Examples:
   mushi audit findings --gate code_health --severity error
   mushi audit explain <finding id>`)
   .action(async (opts: { json?: boolean; projectId?: string }) => {
-    const config = requireConfig()
-    const rawProjectId = opts.projectId ?? config.projectId
+    const config = requireConfig();
+    const rawProjectId = opts.projectId ?? config.projectId;
     if (!rawProjectId) {
-      process.stderr.write('error: project ID required. Run `mushi login` or pass --project-id\n')
-      process.exit(1)
+      throw new MushiCliError('E_PROJECT_MISSING', 'Project ID not configured.', 'pass --project-id <id> or run `mushi login --project-id <id>`');
     }
-
-    let endpoint: string
-    let projectId: string
+    let endpoint: string;
+    let projectId: string;
+    let apiKey: string;
     try {
-      endpoint = sanitizeEndpoint(config.endpoint)
-      projectId = sanitizeProjectId(rawProjectId)
+      endpoint = sanitizeEndpoint(config.endpoint);
+      projectId = sanitizeProjectId(rawProjectId);
+      apiKey = sanitizeApiKey(config.apiKey);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      process.stderr.write(`error: ${msg}\n`)
-      process.exit(2)
+      throw new MushiCliError('E_INVALID_INPUT', err instanceof Error ? err.message : String(err));
+    }
+    const json = outputIsJson(opts.json);
+
+    if (!json) process.stdout.write('Running full-stack audit… ');
+    const result = await apiCall<FullStackAuditData>(
+      `/v1/admin/projects/${projectId}/audit`,
+      { ...config, endpoint, apiKey },
+      { method: 'POST', body: '{}', headers: { 'X-Mushi-Project-Id': projectId } },
+      { timeoutMs: AUDIT_TIMEOUT_MS },
+    );
+    if (!result.ok) {
+      if (json) {
+        console.log(JSON.stringify({ ok: false, error: result.error }));
+        process.exit(1);
+      }
+      process.stdout.write('FAIL\n');
+      die(result);
+    }
+    if (json) {
+      console.log(JSON.stringify(result.data, null, 2));
+      return;
     }
 
-    // Admin audit uses API key auth (same as other sync/admin MCP tools).
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      'X-Mushi-Project-Id': projectId,
-    }
-    const apiKey = config.apiKey ?? null
-    if (apiKey) {
-      headers['X-Mushi-Api-Key'] = sanitizeApiKey(apiKey)
+    const data = result.data;
+    const overallLabel = data.summary.overall === 'fail' ? 'FAIL' : data.summary.overall === 'warn' ? 'WARN' : 'OK';
+    process.stdout.write(`${overallLabel}\n\n`);
+
+    console.log(`Full-Stack Audit — ${new Date(data.audit_at).toLocaleString()}`);
+    console.log(`Backend linked: ${data.backend_linked ? 'yes' : 'no (configure Supabase PAT + project ref)'}`);
+    console.log(`Summary: ${data.summary.error_count} error(s) · ${data.summary.warn_count} warning(s)\n`);
+
+    if (data.findings.length === 0) {
+      console.log('  OK  No findings. Your project looks healthy.');
     } else {
-      process.stderr.write('error: no API key found. Run `mushi login` or set MUSHI_API_KEY.\n')
-      process.exit(1)
+      for (const f of data.findings) {
+        const icon = f.severity === 'error' ? 'FAIL' : f.severity === 'warn' ? 'WARN' : 'INFO';
+        console.log(`  ${icon}  ${f.title}`);
+        console.log(`     ${f.detail.slice(0, 120)}${f.detail.length > 120 ? '…' : ''}`);
+      }
     }
 
-    if (!opts.json) process.stdout.write('Running full-stack audit… ')
-
-    try {
-      const controller = new AbortController()
-      const timer = setTimeout(() => controller.abort(), 30_000)
-      const res = await fetch(
-        `${endpoint}/v1/admin/projects/${projectId}/audit`,
-        { method: 'POST', headers, body: '{}', signal: controller.signal },
-      )
-      clearTimeout(timer)
-      const body = await res.json() as { ok: boolean; data?: Record<string, unknown>; error?: { message: string } }
-      if (!res.ok || !body.ok) {
-        if (opts.json) { console.log(JSON.stringify(body)); process.exit(1) }
-        process.stdout.write('FAIL\n')
-        process.stderr.write(`error: ${body.error?.message ?? `HTTP ${res.status}`}\n`)
-        process.exit(1)
+    if (data.gate_runs.length > 0) {
+      console.log('\nGate Results:');
+      for (const run of data.gate_runs) {
+        const g = run.status === 'pass' ? 'OK' : run.status === 'fail' ? 'FAIL' : 'SKIP';
+        console.log(`  ${g} ${run.gate.padEnd(22)} ${run.status}  (${run.findings_count} finding${run.findings_count !== 1 ? 's' : ''})`);
       }
-
-      if (opts.json) { console.log(JSON.stringify(body.data, null, 2)); return }
-
-      const data = body.data as {
-        summary: { overall: string; error_count: number; warn_count: number }
-        findings: Array<{ severity: string; title: string; detail: string }>
-        gate_runs: Array<{ gate: string; status: string; findings_count: number }>
-        backend_linked: boolean
-        audit_at: string
-      }
-
-      const overallLabel = data.summary.overall === 'fail' ? 'FAIL' : data.summary.overall === 'warn' ? 'WARN' : 'OK'
-      process.stdout.write(`${overallLabel}\n\n`)
-
-      console.log(`Full-Stack Audit — ${new Date(data.audit_at).toLocaleString()}`)
-      console.log(`Backend linked: ${data.backend_linked ? 'yes' : 'no (configure Supabase PAT + project ref)'}`)
-      console.log(`Summary: ${data.summary.error_count} error(s) · ${data.summary.warn_count} warning(s)\n`)
-
-      if (data.findings.length === 0) {
-        console.log('  OK  No findings. Your project looks healthy.')
-      } else {
-        for (const f of data.findings) {
-          const icon = f.severity === 'error' ? 'FAIL' : f.severity === 'warn' ? 'WARN' : 'INFO'
-          console.log(`  ${icon}  ${f.title}`)
-          console.log(`     ${f.detail.slice(0, 120)}${f.detail.length > 120 ? '…' : ''}`)
-        }
-      }
-
-      if (data.gate_runs.length > 0) {
-        console.log('\nGate Results:')
-        for (const run of data.gate_runs) {
-          const g = run.status === 'pass' ? 'OK' : run.status === 'fail' ? 'FAIL' : 'SKIP'
-          console.log(`  ${g} ${run.gate.padEnd(22)} ${run.status}  (${run.findings_count} finding${run.findings_count !== 1 ? 's' : ''})`)
-        }
-      }
-
-      if (data.summary.overall === 'fail') process.exit(1)
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      if (opts.json) {
-        console.log(JSON.stringify({ ok: false, error: msg }))
-      } else {
-        process.stdout.write('ERROR\n')
-        process.stderr.write(`error: ${msg}\n`)
-      }
-      process.exit(1)
     }
-  })
+    console.log('\nEach gate finding with its file and line: mushi audit findings');
+
+    if (data.summary.overall === 'fail') process.exit(1);
+  });
 
 // ─── audit findings / explain ─────────────────────────────────────────────────
 // The per-finding list behind every gate (GET /v1/admin/inventory/:id/findings)
@@ -216,7 +201,7 @@ Examples:
 audit
   .command('findings')
   .description('Every finding from the recent gate runs, with file and line')
-  .option('--gate <gate>', `Only this gate: ${GATE_IDS.join(', ')}`)
+  .option('--gate <gate>', `Only this gate (known: ${KNOWN_GATES.join(', ')})`)
   .option('--severity <level>', 'Only this severity: info | warn | error')
   .option('--all', 'Include allowlisted findings')
   // Declared for --help; audit consumes these, optsWithGlobals() reads them.
@@ -224,8 +209,9 @@ audit
   .option('--json', 'Machine-readable JSON output')
   .action(async (_local: unknown, cmd: Command) => {
     const opts = cmd.optsWithGlobals<{ gate?: string; severity?: string; all?: boolean; projectId?: string; json?: boolean }>();
-    if (opts.gate && !(GATE_IDS as readonly string[]).includes(opts.gate)) {
-      throw new MushiCliError('E_INVALID_INPUT', `Unknown gate ${opts.gate}.`, `one of: ${GATE_IDS.join(', ')}`);
+    if (opts.gate && !(KNOWN_GATES as readonly string[]).includes(opts.gate)) {
+      // The server filters by any gate name; a newer server may have gates this CLI does not list.
+      process.stderr.write(`warning: this CLI does not know the gate "${opts.gate}" (known: ${KNOWN_GATES.join(', ')}). Asking the server anyway.\n`);
     }
     if (opts.severity && !(SEVERITIES as readonly string[]).includes(opts.severity)) {
       throw new MushiCliError('E_INVALID_INPUT', '--severity must be info, warn or error');
