@@ -9,6 +9,8 @@
  *   by the release id (held in review mode). A `verified` report keeps its
  *   status (the reporter already confirmed; asking again would be noise) and
  *   a `dismissed` one is left alone — a release can not resurrect a close.
+ *   A report another release already stamped (`fixed_release_id` set to a
+ *   different id) is skipped: its reporter heard about that release.
  * - `stampDeliveredReleaseCredits` — `release_credits.notified_at` is stamped
  *   only for credits whose report has a `sent` in-app ledger row for this
  *   release. Until 2026-10 every credit was stamped without anything being
@@ -29,6 +31,8 @@ export interface ReleaseDelivery {
   reports_resolved: number
   reports_not_found: number
   reports_skipped_dismissed: number
+  /** Already shipped by another release: not re-stamped, not messaged again. */
+  reports_already_released: number
   reporters_notified: number
   reporters_held: number
   reporters_failed: number
@@ -49,6 +53,7 @@ export async function notifyReleaseReporters(
     reports_resolved: 0,
     reports_not_found: 0,
     reports_skipped_dismissed: 0,
+    reports_already_released: 0,
     reporters_notified: 0,
     reporters_held: 0,
     reporters_failed: 0,
@@ -77,14 +82,26 @@ export async function notifyReleaseReporters(
     const verified = previousStatus === 'verified'
     const patch: Record<string, unknown> = { fixed_in_version: release.version, fixed_release_id: release.id }
     if (!verified) patch.status = 'fixed'
-    const { error: updErr } = await db
+    // Claim the report for THIS release at write time. Two automatic releases
+    // whose versions differ (tag 'v1.2.3' vs CI '1.2.3') can both list the
+    // same report before either publish finishes; only the first to stamp
+    // fixed_release_id messages its reporter. Re-publishing the same release
+    // still matches (its own id), and its message is deduped on release.id.
+    const { data: claimed, error: updErr } = await db
       .from('reports')
       .update(patch)
       .eq('id', report.id)
       .eq('project_id', release.project_id)
+      .or(`fixed_release_id.is.null,fixed_release_id.eq.${release.id}`)
+      .select('id')
     if (updErr) {
       relLog.error('release_report_resolve_failed', { releaseId: release.id, reportId: report.id, error: updErr.message })
       delivery.reporters_failed++
+      continue
+    }
+    if (!claimed || claimed.length === 0) {
+      relLog.info('release_report_already_released', { releaseId: release.id, reportId: report.id })
+      delivery.reports_already_released++
       continue
     }
     delivery.reports_resolved++

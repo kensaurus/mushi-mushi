@@ -109,6 +109,28 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: { code?: string; 
     })
     return this
   }
+  /**
+   * `or('a.is.null,a.eq.x')`: any clause matches. Only `col.is.null` and
+   * `col.eq.<value>` are understood; anything else throws so a test never
+   * silently passes on a filter the fake ignores.
+   */
+  or(expr: string): this {
+    const clauses = expr.split(',').map((raw) => {
+      const m = /^([\w>-]+)\.(is|eq)\.(.+)$/.exec(raw.trim())
+      if (!m) throw new Error(`fake-supabase: or(${expr}) unsupported`)
+      const [, key, op, value] = m
+      if (op === 'is') {
+        if (value !== 'null') throw new Error(`fake-supabase: or(${expr}) unsupported`)
+        return (r: Row) => {
+          const v = readPath(r, key)
+          return v === null || v === undefined
+        }
+      }
+      return (r: Row) => String(readPath(r, key)) === value
+    })
+    this.filters.push((r) => clauses.some((c) => c(r)))
+    return this
+  }
   gt(key: string, value: unknown): this {
     this.filters.push((r) => String(readPath(r, key)) > String(value))
     return this
