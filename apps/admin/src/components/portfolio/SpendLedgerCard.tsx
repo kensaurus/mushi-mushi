@@ -100,7 +100,7 @@ export function SpendLedgerCard({ orgId, projects }: { orgId: string; projects: 
             <p className="text-sm text-fg-muted">No apps to show.</p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[640px] text-xs" data-testid="spend-ledger-table">
+              <table className="w-full min-w-160 text-xs" data-testid="spend-ledger-table">
                 <thead>
                   <tr className="border-b border-edge text-fg-muted">
                     <th className="px-2 py-1.5 text-left font-medium">App</th>
@@ -117,7 +117,7 @@ export function SpendLedgerCard({ orgId, projects }: { orgId: string; projects: 
                     const total = ledgerTotal(a)
                     return (
                       <tr key={a.projectId} className="border-b border-edge-subtle">
-                        <td className="max-w-[12rem] truncate px-2 py-1.5 font-medium text-fg">{a.name}</td>
+                        <td className="max-w-48 truncate px-2 py-1.5 font-medium text-fg">{a.name}</td>
                         <Cell source={a.mushiLlm} title={`${a.mushiLlm.calls} AI call${a.mushiLlm.calls === 1 ? '' : 's'}${a.mushiLlm.detail ? `. ${a.mushiLlm.detail}` : ''}`} />
                         <Cell source={a.providerLlm} />
                         <Cell source={a.ci} title={a.ci.state === 'ok' ? `${a.ci.minutes ?? 0} billable minutes over ${a.ci.runs} runs. ${a.ci.detail ?? ''}` : undefined} />
