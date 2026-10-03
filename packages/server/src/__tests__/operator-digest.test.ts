@@ -289,10 +289,55 @@ describe('collectDigest past the server row cap', () => {
       } : Reflect.get(t, prop, r)),
     })
     const data = await digest.collectDigest(counted as never, ORG, NOW)
-    // One recent read and one (empty) older read for the host-CI gate; none of the 1,100 old rows.
+    // One newest-run read per hole-check gate (the host-CI one finds nothing); none of the 1,100 old rows.
     expect(gateRunReads).toBe(2)
     expect(data.truncated).toEqual([])
     expect(data.projects[0].radar).toMatchObject({ checked: true, failed: false })
+  })
+
+  it('reads one newest run per app and gate, never one window over all apps', async () => {
+    // A window read over every app's runs could stop at its row ceiling and drop one
+    // app's newest run; a fallback over older runs then read a stale one as the latest.
+    const db = makeFakeDb({
+      organizations: [{ id: ORG, name: 'A' }],
+      projects: [{ id: P1, name: 'glot.it', organization_id: ORG }, { id: P2, name: 'yen', organization_id: ORG }],
+      reports: [], releases: [], llm_invocations: [], gate_findings: [],
+      gate_runs: [
+        ...Array.from({ length: 1_200 }, (_, i) => ({ id: `p1-${String(i).padStart(5, '0')}`, project_id: P1, gate: 'portfolio_radar', status: 'pass', summary: {}, started_at: '2026-10-02T04:05:00Z' })),
+        { id: 'p2-new', project_id: P2, gate: 'portfolio_radar', status: 'pass', summary: {}, started_at: '2026-09-20T04:05:00Z' },
+        { id: 'p2-old', project_id: P2, gate: 'portfolio_radar', status: 'error', summary: {}, started_at: OLD },
+      ],
+    } as never, { maxRows: 1_000 })
+    const calls: string[][] = []
+    const spied = new Proxy(db, {
+      get: (t, prop, r) => (prop === 'from' ? (name: string) => {
+        const query = t.from(name)
+        if (name !== 'gate_runs') return query
+        const used: string[] = []
+        calls.push(used)
+        const wrapped: object = new Proxy(query, {
+          get: (q, method, qr) => {
+            const value = Reflect.get(q, method, qr)
+            if (typeof value !== 'function' || method === 'then') return typeof value === 'function' ? value.bind(q) : value
+            return (...args: unknown[]) => {
+              used.push(method === 'limit' ? `limit(${String(args[0])})` : String(method))
+              value.apply(q, args)
+              return wrapped
+            }
+          },
+        })
+        return wrapped
+      } : Reflect.get(t, prop, r)),
+    })
+    const data = await digest.collectDigest(spied as never, ORG, NOW)
+    expect(calls).toHaveLength(4)
+    for (const used of calls) {
+      expect(used).toContain('limit(1)')
+      expect(used).not.toContain('range')
+    }
+    const by = Object.fromEntries(data.projects.map((p) => [p.projectId, p.radar]))
+    expect(by[P2]).toMatchObject({ checked: true, failed: false })
+    expect(data.truncated).toEqual([])
   })
 
   it('says a cut-short read out loud as a lower bound', () => {
