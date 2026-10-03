@@ -8,6 +8,22 @@ import type { OpenPrRef } from './github-pr.ts'
 /** Branch family for machine-generated SDK upgrade PRs (must match sdk-upgrade-runner). */
 export const UPGRADE_BRANCH_PREFIX = 'mushi/sdk-upgrade'
 
+/**
+ * Statuses that hold the project's one upgrade slot. `awaiting_lockfile`
+ * (ADR 0019) has pushed its branch and waits for the host lockfile workflow;
+ * sdk-release-sync opens its PR, so a second run must not start meanwhile.
+ */
+export const SDK_UPGRADE_ACTIVE_STATUSES = ['queued', 'running', 'awaiting_lockfile'] as const
+
+/** Statuses after which the console stops streaming a job. */
+export const SDK_UPGRADE_SETTLED_STATUSES = [
+  'completed',
+  'completed_no_pr',
+  'failed',
+  'cancelled',
+  'awaiting_lockfile',
+] as const
+
 export interface SdkUpgradeProjectSettings {
   github_repo_url: string | null
   github_installation_token_ref: string | null
@@ -64,7 +80,9 @@ export function evaluateSdkUpgradePostGate(
       code: 'ALREADY_IN_PROGRESS',
       status: 409,
       jobId: inFlight[0].id,
-      message: 'An SDK upgrade is already in progress for this project.',
+      message: inFlight[0].status === 'awaiting_lockfile'
+        ? 'The upgrade branch is pushed and your lockfile workflow is refreshing it. The PR opens on its own within about 30 minutes.'
+        : 'An SDK upgrade is already in progress for this project.',
     }
   }
 

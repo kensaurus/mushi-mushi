@@ -84,6 +84,9 @@ async function callTool<T = unknown>(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      // Streamable HTTP requires both; a server may answer 406 without them
+      // (connectors/supabase.ts already sends this).
+      'Accept': 'application/json, text/event-stream',
       'Authorization': `Bearer ${opts.pat}`,
     },
     body: JSON.stringify(body),

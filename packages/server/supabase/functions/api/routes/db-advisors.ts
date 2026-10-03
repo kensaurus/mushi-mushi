@@ -42,8 +42,8 @@ export function registerDbAdvisorsRoutes(parent: Hono<{ Variables: Variables }>)
         data: null,
         reason: 'no_supabase_pat',
         hint:
-          'Add your Supabase Personal Access Token in Admin → Settings → API Keys ' +
-          '(slug: supabase) to enable live schema advisor data.',
+          'Add a scoped, read-only Supabase access token in Settings → AI keys → Supabase ' +
+          'to enable live schema advisor data.',
       })
     }
 
@@ -61,7 +61,7 @@ export function registerDbAdvisorsRoutes(parent: Hono<{ Variables: Variables }>)
         ok: true,
         data: null,
         reason: 'no_project_ref',
-        hint: 'Set `supabase_project_ref` in your project settings to enable advisor data.',
+        hint: 'Set the Supabase project ref in Settings → General → Supabase project to enable advisor data.',
       })
     }
 

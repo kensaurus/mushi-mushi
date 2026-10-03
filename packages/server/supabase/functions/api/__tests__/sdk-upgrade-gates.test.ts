@@ -6,6 +6,7 @@
 import { assertEquals } from 'https://deno.land/std@0.224.0/assert/mod.ts'
 import {
   evaluateSdkUpgradePostGate,
+  SDK_UPGRADE_ACTIVE_STATUSES,
   type SdkUpgradeProjectSettings,
   type SdkUpgradeInFlightJob,
 } from '../../_shared/sdk-upgrade-gates.ts'
@@ -50,6 +51,25 @@ Deno.test('sdk-upgrade gate — dedupes in-flight queued/running jobs', () => {
     assertEquals(result.code, 'ALREADY_IN_PROGRESS')
     assertEquals(result.status, 409)
     assertEquals(result.jobId, 'job-123')
+  }
+})
+
+Deno.test('sdk-upgrade gate — an awaiting_lockfile job holds the slot and says the PR opens on its own', () => {
+  assertEquals(SDK_UPGRADE_ACTIVE_STATUSES.includes('awaiting_lockfile'), true)
+  const result = evaluateSdkUpgradePostGate(
+    {
+      github_repo_url: 'https://github.com/acme/app',
+      github_installation_token_ref: 'vault:abc',
+    },
+    [{ id: 'job-456', status: 'awaiting_lockfile' }],
+    null,
+    { refresh: true },
+  )
+  assertEquals(result.action, 'reject')
+  if (result.action === 'reject') {
+    assertEquals(result.code, 'ALREADY_IN_PROGRESS')
+    assertEquals(result.jobId, 'job-456')
+    assertEquals(result.message.includes('lockfile workflow'), true)
   }
 })
 

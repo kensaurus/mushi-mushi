@@ -1,0 +1,133 @@
+# SDK upgrade lockfile helper
+
+Source: https://kensaur.us/mushi-mushi/docs/admin/sdk-upgrade-lockfile
+
+---
+title: SDK upgrade lockfile helper
+description: Add one workflow to your repo so Mushi's SDK upgrade PRs arrive with a refreshed lockfile and pass npm ci or pnpm install --frozen-lockfile.
+---
+
+# SDK upgrade lockfile helper
+
+**Create Upgrade PR** bumps `@mushi-mushi/*` in your `package.json` files. It
+does not touch your lockfile, so without help the PR fails a frozen install
+(`npm ci`, `pnpm install --frozen-lockfile`) until someone runs the package
+manager by hand.
+
+Add the workflow below once, and every upgrade PR arrives with the lockfile
+already refreshed by your own package manager.
+
+## How it works
+
+1. Mushi sees `.github/workflows/mushi-sdk-lockfile.yml` on your default branch.
+2. It pushes the bump as **one commit** to a `mushi/sdk-upgrade-*` branch and
+   holds the PR back. The console shows **Refreshing lockfile…**.
+3. The push starts your workflow. It runs `npm install --package-lock-only`,
+   `pnpm install --lockfile-only` or `yarn install --mode update-lockfile`, always
+   with `--ignore-scripts`, and commits the lockfile as `github-actions[bot]`.
+4. Mushi checks the branch every 5 minutes. When the lockfile commit is there,
+   it opens the PR, so your CI runs on the refreshed lockfile.
+5. If no lockfile commit arrives within 30 minutes, the PR opens anyway with a
+   **Lockfile not refreshed** note. Check the workflow run on that branch.
+
+Without the workflow, nothing changes: the PR opens at once and its body links
+here.
+
+## Add the workflow
+
+Save this as `.github/workflows/mushi-sdk-lockfile.yml` on your default branch.
+The console shows the same file under **Upgrade PRs fail `npm ci`? Add the
+lockfile helper**, with a copy button.
+
+```yaml
+# Mushi SDK lockfile helper. Save as .github/workflows/mushi-sdk-lockfile.yml
+# on your default branch. Mushi then pushes each @mushi-mushi/* bump first,
+# this workflow refreshes the lockfile, and the upgrade PR opens after it.
+# Docs: https://kensaur.us/mushi-mushi/docs/admin/sdk-upgrade-lockfile
+name: Mushi SDK lockfile
+
+on:
+  push:
+    branches: ['mushi/sdk-upgrade-**']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: mushi-lockfile-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lockfile:
+    # Never react to this workflow's own lockfile commit.
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0
+        with:
+          # No version file? Replace with  node-version: 22
+          node-version-file: .nvmrc  # or .node-version / package.json
+          # Nothing is installed here; auto-caching also fails without a root lockfile.
+          package-manager-cache: false
+      # Private registry? Write ~/.npmrc auth from a secret before this step, e.g.
+      #   - run: echo "//npm.pkg.github.com/:_authToken=${NPM_TOKEN}" >> ~/.npmrc
+      #     env:
+      #       NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - uses: kensaurus/mushi-mushi/.github/actions/sdk-lockfile-refresh@master
+```
+
+It runs only on `mushi/sdk-upgrade-*` branches, needs only `contents: write`,
+stops after 10 minutes, and cancels a superseded run on the same branch.
+
+## What the action does
+
+The action lives at
+[`.github/actions/sdk-lockfile-refresh`](https://github.com/kensaurus/mushi-mushi/tree/master/.github/actions/sdk-lockfile-refresh).
+It is a shell script with no dependencies.
+
+| Step | Detail |
+| --- | --- |
+| Find manifests | `package.json` files changed in the tip commit (`HEAD~1..HEAD`) |
+| Find lockfiles | For each one, the nearest lockfile at or above it: the workspace root, or each app's own lockfile in a repo without workspaces |
+| Pick the package manager | `packageManager` in `package.json` when its lockfile is there, else the lockfile present (`pnpm-lock.yaml`, `package-lock.json`, `yarn.lock`) |
+| Pin the version | `corepack enable` for pnpm and yarn. For npm, the major in `packageManager` (via `npx npm@`), which keeps lockfile v3 fields such as `libc` stable; otherwise the runner's npm, with a warning when the lockfile has `libc` fields |
+| Regenerate | npm: `install --package-lock-only --ignore-scripts`, plus `--legacy-peer-deps` when `.npmrc` sets `legacy-peer-deps=true`. pnpm: `install --lockfile-only --ignore-scripts --no-frozen-lockfile`. yarn: `install --mode update-lockfile` |
+| Commit | Only when a lockfile changed: `chore(deps): refresh lockfile for @mushi-mushi/* bump` as `github-actions[bot]`, pushed with the workflow's `GITHUB_TOKEN` |
+
+  Yarn support is untested; no host we run uses yarn yet. npm and pnpm are
+  covered.
+
+## Private registries
+
+The lockfile refresh resolves every dependency, so it needs the same registry
+auth your CI install uses. Either write `~/.npmrc` from a secret before the
+action (as in the commented step above), or use `actions/setup-node`'s
+`registry-url` input with `NODE_AUTH_TOKEN` set from a secret. Never commit a
+token to `.npmrc`.
+
+## Pinning
+
+`@master` follows the latest action. To pin, replace `master` with a commit
+SHA from this repository; the action has no release tags of its own.
+
+## Why Mushi does not write the lockfile or the workflow
+
+- **The lockfile:** only the package manager can write it correctly. A
+  hand-edited pnpm v9 lockfile breaks on peer-suffixed keys, and npm cannot run
+  inside Mushi's edge runtime.
+- **The workflow:** writing files under `.github/workflows` needs the GitHub
+  App's `workflows` permission, which Mushi does not request (least privilege,
+  ADR 0016). You add the file once; Mushi only reads it.
+
+## Limits
+
+- **Refreshing an open upgrade PR** (the **Refresh** button) pushes to that
+  PR's branch. The workflow refreshes the lockfile, but GitHub does not start
+  CI for a push made with `GITHUB_TOKEN`, so re-run the PR's checks once after
+  the lockfile commit lands.
+- The PR opens on the next 5-minute check after the lockfile commit, so expect
+  a short wait.

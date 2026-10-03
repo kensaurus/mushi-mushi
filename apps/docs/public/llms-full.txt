@@ -4,7 +4,7 @@
 
 Canonical docs: https://kensaur.us/mushi-mushi/docs
 Generated: 2026-10-03
-Pages: 206
+Pages: 207
 
 This file contains the full prose of every documentation page, stripped of
 JSX syntax, suitable for offline LLM ingestion. Getting-started pages come
@@ -216,7 +216,7 @@ Add to `.cursor/mcp.json` in your repo root:
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.24.0"],
+      "args": ["-y", "@mushi-mushi/mcp@0.24.1"],
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
@@ -242,7 +242,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.24.0"],
+      "args": ["-y", "@mushi-mushi/mcp@0.24.1"],
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
@@ -7694,7 +7694,7 @@ description: Every tool, resource and prompt the Mushi MCP server exposes to Cur
 | `get_product_events_summary` | Product events summary | Summarise the Mushi.track() product events this project received in the trailing windowDays (default 30): event names with counts and distinct users, daily volume, and top properties. Returns \{ window_days, events_total, persons, identified, anonymous, events_per_day: [\{ day, count }], top_events: [\{ name, count, persons }] }. Read-only. Use first to learn which event names exist before calling query_funnel or get_user_paths; use run_nl_query for ad-hoc SQL over the same rows. |
 | `get_user_paths` | Paths users take after an event | What did users do next? Rank the events users fired immediately after fromEvent within the trailing windowDays (default 30), most common first, up to limit rows (default 20, max 50). Returns \{ from_event, total, next: [\{ name, count, pct }] }. Read-only. Use to see where users go after a step instead of guessing the funnel order; use query_funnel once you know the ordered steps, or get_product_events_summary for event names. |
 | `get_map_run_status` | Story map run status | Poll the status and results of a story_map_run started by map_user_stories. Returns \{ status: pending\|running\|completed\|failed, pages_crawled, proposal_id (once done), cursor_pr_url (if Cursor Cloud refined the draft) }. Read-only. Use to know when a crawl has finished and which inventory_proposals row to review next. |
-| `list_byok_keys` | List your API key pool | List the project's BYOK API keys grouped by provider (anthropic \| openai \| firecrawl \| browserbase \| cursor). Returns pooled \{ keys: [\{ id, provider_slug, label, priority, status, cooldown_until, test_status, key_hint, base_url, last_tested_at, last_used_at }] } plus read-only \{ legacyKeys } metadata for credentials saved before the pooled lifecycle — never the raw secret. Read-only. Use to see which keys are validated, active, pending, legacy, or rate-limited; use add_byok_key to add one. |
+| `list_byok_keys` | List your API key pool | List the project's BYOK API keys grouped by provider (anthropic \| openai \| firecrawl \| browserbase \| cursor \| supabase). Returns pooled \{ keys: [\{ id, provider_slug, label, priority, status, cooldown_until, test_status, key_hint, base_url, last_tested_at, last_used_at }] } plus read-only \{ legacyKeys } metadata for credentials saved before the pooled lifecycle — never the raw secret. Read-only. Use to see which keys are validated, active, pending, legacy, or rate-limited; use add_byok_key to add one. |
 | `list_pending_review_stories` | List QA stories pending review | List auto-generated QA/TDD stories in approval_status=pending_review — the queue waiting for human sign-off before they run on schedule. Returns \{ stories: [\{ id, title, source, target_url, created_at }] }. Read-only. Use to find what needs review today; then approve_qa_story to approve or reject each. |
 | `list_reporter_outbox` | List held reporter updates | List pipeline messages waiting for review before they reach reporters (projects in review mode hold "fix in progress", "fixed", "shipped in vX" and "closed" messages). Each row has \{ id, report_id, report_title, notification_type, text, body_override, created_at }; text is exactly what the reporter will see. Read-only. Use before release_reporter_update; an empty list means nothing is waiting (or the project sends updates automatically). |
 | `get_two_way_comms_health` | Two-way communication health | Summarize SDK ↔ admin two-way reporter health for a host app: last SDK heartbeat, app version/platform last seen, unread reporter messages, recent reporter replies, and pending QA/TDD follow-ups. Use after wiring @mushi-mushi/web in a Vite/Capacitor app to confirm reports land in the console and admin/MCP replies reach the in-app widget. |
@@ -7750,7 +7750,7 @@ description: Every tool, resource and prompt the Mushi MCP server exposes to Cur
 | `generate_tdd_from_story` | Generate TDD test from user story | Generate a full Playwright TypeScript test from a mapped user story id (from accepted inventory) using Claude, and insert a qa_stories row (source=test_gen_from_story). approval_status follows the project automation_mode (auto = enabled immediately; review/approve = pending_review). Optionally opens a draft GitHub PR. Returns \{ qaStoryId, prUrl, approvalStatus, needsHumanReview }. Write; consumes LLM budget; NOT idempotent. Run map_user_stories first; use test_gen_from_report to build a test from a bug report instead. |
 | `improve_qa_story` | Auto-improve a failing QA story | Analyze recently failed qa_story_runs and use Claude to write improved test scripts that address the failures. New tests are created with source=pdca, parent_story_id chained to the original, and approval gated by the original story's automation_mode. Returns \{ improvedStoryIds }. Write; consumes LLM budget; NOT idempotent. Use to repair flaky/broken tests; use run_qa_story to re-run as-is, or list_qa_story_runs to inspect failures first. |
 | `run_qa_story` | Trigger a manual QA story run | Queue an immediate manual run for an enabled + approved qa_story (equivalent to "Run now" in the console). Returns \{ runId } right away; poll list_qa_story_runs or get_qa_story_run for progress and results. Write; NOT idempotent — each call creates a new run; returns 409 if the story is disabled or pending review. Use to verify a flow on demand; use improve_qa_story to repair a failing story. |
-| `add_byok_key` | Add an API key | Add and immediately validate a BYOK API key for anthropic \| openai \| firecrawl \| browserbase \| cursor. The raw key is stored encrypted in Supabase Vault and never returned; failed probes remain quarantined. Optional baseUrl is accepted only for allow-listed OpenAI-compatible HTTPS providers. Write; NOT idempotent. |
+| `add_byok_key` | Add an API key | Add and immediately validate a BYOK API key for anthropic \| openai \| firecrawl \| browserbase \| cursor \| supabase (a scoped, read-only Supabase access token, checked against the linked supabase_project_ref). The raw key is stored encrypted in Supabase Vault and never returned; failed probes remain quarantined. Optional baseUrl is accepted only for allow-listed OpenAI-compatible HTTPS providers. Write; NOT idempotent. |
 | `test_byok_key` | Test an API key | Re-test one pooled BYOK credential by key id. A successful provider probe activates the key; auth, quota, and network failures keep it out of the runtime pool. Returns the sanitized validation result and updated key metadata. Write; idempotent. |
 | `remove_byok_key` | Remove an API key | Permanently remove one pooled BYOK credential by key id from the authenticated project, including its Vault secret. Write; destructive; idempotent. |
 | `approve_qa_story` | Approve or reject a pending QA story | Approve or reject a qa_story currently in pending_review (pass approve=true\|false and an optional note). Approved stories are enabled in the QA schedule immediately; rejected ones are disabled. Returns \{ id, approval_status }. Write; idempotent — re-approving an approved story is a no-op. Use to clear the review queue from list_pending_review_stories. |
@@ -7760,7 +7760,7 @@ description: Every tool, resource and prompt the Mushi MCP server exposes to Cur
 | `test_notification_channel` | Send a test notification | Send a test notification to a configured notification channel for the project. Supported channel kinds: "slack" (posts a test Block Kit message to the configured channel), "discord" (posts to the project discord_webhook_url). Returns ok=true if the message was accepted. Use this to verify the integration is working after setup or after changing credentials. |
 | `start_skill_pipeline` | Start a skill pipeline | Start a new skill pipeline run for a report. Pass rootSkillSlug and optionally reportId. Returns run_id, context_packet (full instructions + report context), and step list. Read the context_packet — it contains skill instructions plus full report context (repro steps, root cause, RAG files). After executing each step, call checkin_pipeline_step. The PM watching the console sees progress live. |
 | `checkin_pipeline_step` | Check in a pipeline step | Report the completion status of a pipeline step (passed, failed, running, or skipped). Optionally include notes, a PR URL, or the Cursor agentId. Updates the live React Flow canvas in the Mushi console so PMs see real-time progress. |
-| `run_fullstack_audit` | Run a full-stack health audit | Fan out a full-stack health audit for the current project: DB schema + advisors, API contract gate results (Gates 3–8), recent backend error logs, and RLS gap detection. Returns a PM-readable scorecard with severity-ranked findings and fix hints. Requires the project to have a Supabase PAT configured (Settings → API Keys, slug: supabase) and supabase_project_ref set in project settings for backend analysis. The audit completes synchronously in ~10 s. Triggers a background gate run for orphan_endpoint and unknown_call gates if they have not run today. |
+| `run_fullstack_audit` | Run a full-stack health audit | Fan out a full-stack health audit for the current project: DB schema + advisors, API contract gate results (Gates 3–8), recent backend error logs, and RLS gap detection. Returns a PM-readable scorecard with severity-ranked findings and fix hints. Backend analysis needs supabase_project_ref set (Settings → General) and a scoped, read-only Supabase access token added (Settings → AI keys, slug: supabase). The audit completes synchronously in ~10 s. Triggers a background gate run for orphan_endpoint and unknown_call gates if they have not run today. |
 | `ask_codebase` | Ask about the indexed codebase | Answer a plain-English question about the connected repo, grounded on pgvector retrieval over project_codebase_files. Returns \{ answer, citations: [\{ path, line }] }. Set include_wiki=true to merge docs/wiki knowledge. Requires codebase indexing + your Anthropic or OpenAI key; consumes LLM budget (write scope). Use for "how does X work?"; use search_codebase for raw file matches without synthesis, or get_file_summary for one file. |
 
 ## Resources
@@ -15861,6 +15861,11 @@ When a package is outdated or deprecated:
    `@mushi-mushi/*` in `package.json` files only (never `workspace:` / `file:`).
 3. Draft PR opens on GitHub, auto-readied, status streams via SSE.
 
+The bump edits `package.json` only. Add the
+[lockfile helper workflow](/admin/sdk-upgrade-lockfile) to your repo and the PR
+opens after your own package manager has refreshed the lockfile, so
+`npm ci` / `pnpm install --frozen-lockfile` pass.
+
 CLI equivalent: see [SDK reference → CLI](/sdks/cli) (`mushi upgrade` for local bumps).
 
 ---
@@ -17290,8 +17295,10 @@ check.
 
 ## Prerequisites
 
-Add your Supabase PAT under **Settings → API Keys** and set
-`supabase_project_ref` on the project. CLI equivalent: `mushi audit`.
+Set the Supabase project ref under **Settings → General → Supabase project**,
+then add a scoped Supabase access token under **Settings → AI keys → Supabase**:
+this one project only, with Database, Edge Functions, Advisors and Logs set to
+Read, and an expiry. CLI equivalent: `mushi audit`.
 
 ---
 
@@ -20831,6 +20838,142 @@ diagnostics card directly so you can see which call is failing.
   current latest version.
 - [Concepts → Architecture](/concepts/architecture) — where the
   heartbeat data flows in the gateway.
+
+---
+
+## SDK upgrade lockfile helper
+
+Source: https://kensaur.us/mushi-mushi/docs/admin/sdk-upgrade-lockfile
+
+---
+title: SDK upgrade lockfile helper
+description: Add one workflow to your repo so Mushi's SDK upgrade PRs arrive with a refreshed lockfile and pass npm ci or pnpm install --frozen-lockfile.
+---
+
+# SDK upgrade lockfile helper
+
+**Create Upgrade PR** bumps `@mushi-mushi/*` in your `package.json` files. It
+does not touch your lockfile, so without help the PR fails a frozen install
+(`npm ci`, `pnpm install --frozen-lockfile`) until someone runs the package
+manager by hand.
+
+Add the workflow below once, and every upgrade PR arrives with the lockfile
+already refreshed by your own package manager.
+
+## How it works
+
+1. Mushi sees `.github/workflows/mushi-sdk-lockfile.yml` on your default branch.
+2. It pushes the bump as **one commit** to a `mushi/sdk-upgrade-*` branch and
+   holds the PR back. The console shows **Refreshing lockfile…**.
+3. The push starts your workflow. It runs `npm install --package-lock-only`,
+   `pnpm install --lockfile-only` or `yarn install --mode update-lockfile`, always
+   with `--ignore-scripts`, and commits the lockfile as `github-actions[bot]`.
+4. Mushi checks the branch every 5 minutes. When the lockfile commit is there,
+   it opens the PR, so your CI runs on the refreshed lockfile.
+5. If no lockfile commit arrives within 30 minutes, the PR opens anyway with a
+   **Lockfile not refreshed** note. Check the workflow run on that branch.
+
+Without the workflow, nothing changes: the PR opens at once and its body links
+here.
+
+## Add the workflow
+
+Save this as `.github/workflows/mushi-sdk-lockfile.yml` on your default branch.
+The console shows the same file under **Upgrade PRs fail `npm ci`? Add the
+lockfile helper**, with a copy button.
+
+```yaml
+# Mushi SDK lockfile helper. Save as .github/workflows/mushi-sdk-lockfile.yml
+# on your default branch. Mushi then pushes each @mushi-mushi/* bump first,
+# this workflow refreshes the lockfile, and the upgrade PR opens after it.
+# Docs: https://kensaur.us/mushi-mushi/docs/admin/sdk-upgrade-lockfile
+name: Mushi SDK lockfile
+
+on:
+  push:
+    branches: ['mushi/sdk-upgrade-**']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: mushi-lockfile-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lockfile:
+    # Never react to this workflow's own lockfile commit.
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0
+        with:
+          # No version file? Replace with  node-version: 22
+          node-version-file: .nvmrc  # or .node-version / package.json
+          # Nothing is installed here; auto-caching also fails without a root lockfile.
+          package-manager-cache: false
+      # Private registry? Write ~/.npmrc auth from a secret before this step, e.g.
+      #   - run: echo "//npm.pkg.github.com/:_authToken=${NPM_TOKEN}" >> ~/.npmrc
+      #     env:
+      #       NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - uses: kensaurus/mushi-mushi/.github/actions/sdk-lockfile-refresh@master
+```
+
+It runs only on `mushi/sdk-upgrade-*` branches, needs only `contents: write`,
+stops after 10 minutes, and cancels a superseded run on the same branch.
+
+## What the action does
+
+The action lives at
+[`.github/actions/sdk-lockfile-refresh`](https://github.com/kensaurus/mushi-mushi/tree/master/.github/actions/sdk-lockfile-refresh).
+It is a shell script with no dependencies.
+
+| Step | Detail |
+| --- | --- |
+| Find manifests | `package.json` files changed in the tip commit (`HEAD~1..HEAD`) |
+| Find lockfiles | For each one, the nearest lockfile at or above it: the workspace root, or each app's own lockfile in a repo without workspaces |
+| Pick the package manager | `packageManager` in `package.json` when its lockfile is there, else the lockfile present (`pnpm-lock.yaml`, `package-lock.json`, `yarn.lock`) |
+| Pin the version | `corepack enable` for pnpm and yarn. For npm, the major in `packageManager` (via `npx npm@`), which keeps lockfile v3 fields such as `libc` stable; otherwise the runner's npm, with a warning when the lockfile has `libc` fields |
+| Regenerate | npm: `install --package-lock-only --ignore-scripts`, plus `--legacy-peer-deps` when `.npmrc` sets `legacy-peer-deps=true`. pnpm: `install --lockfile-only --ignore-scripts --no-frozen-lockfile`. yarn: `install --mode update-lockfile` |
+| Commit | Only when a lockfile changed: `chore(deps): refresh lockfile for @mushi-mushi/* bump` as `github-actions[bot]`, pushed with the workflow's `GITHUB_TOKEN` |
+
+  Yarn support is untested; no host we run uses yarn yet. npm and pnpm are
+  covered.
+
+## Private registries
+
+The lockfile refresh resolves every dependency, so it needs the same registry
+auth your CI install uses. Either write `~/.npmrc` from a secret before the
+action (as in the commented step above), or use `actions/setup-node`'s
+`registry-url` input with `NODE_AUTH_TOKEN` set from a secret. Never commit a
+token to `.npmrc`.
+
+## Pinning
+
+`@master` follows the latest action. To pin, replace `master` with a commit
+SHA from this repository; the action has no release tags of its own.
+
+## Why Mushi does not write the lockfile or the workflow
+
+- **The lockfile:** only the package manager can write it correctly. A
+  hand-edited pnpm v9 lockfile breaks on peer-suffixed keys, and npm cannot run
+  inside Mushi's edge runtime.
+- **The workflow:** writing files under `.github/workflows` needs the GitHub
+  App's `workflows` permission, which Mushi does not request (least privilege,
+  ADR 0016). You add the file once; Mushi only reads it.
+
+## Limits
+
+- **Refreshing an open upgrade PR** (the **Refresh** button) pushes to that
+  PR's branch. The workflow refreshes the lockfile, but GitHub does not start
+  CI for a push made with `GITHUB_TOKEN`, so re-run the PR's checks once after
+  the lockfile commit lands.
+- The PR opens on the next 5-minute check after the lockfile commit, so expect
+  a short wait.
 
 ---
 

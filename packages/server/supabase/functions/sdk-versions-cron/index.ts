@@ -7,22 +7,36 @@
  *
  * Two invocation paths:
  *   1. pg_cron (daily at 02:30 UTC) with the service-role bearer.
- *   2. release.yml post-publish step via the sync-sdk-versions.mjs script
- *      (REST API upsert — this function is the fallback cron, not the primary
- *      publish-time path).
+ *   2. release.yml's `catalog-sync` job right after an npm publish, with a
+ *      GitHub Actions OIDC token (audience `mushi-sdk-catalog`). The
+ *      workflow holds no Supabase credential.
  *
- * Auth: requireServiceRoleAuth — only the pg_cron job and the release step
- * may invoke this function. Never callable by end users.
+ * Auth: the service-role bearer OR a GitHub OIDC token that _shared/github-oidc.ts
+ * pins to release.yml on master in kensaurus/mushi-mushi. Anything else is a
+ * 401. config.toml sets verify_jwt = false because the gateway would reject a
+ * GitHub-issued JWT before this code runs.
+ *
+ * Optional body `{ expected: [{ name, version }] }`: the versions the release
+ * just published. It is compare-only and never written; the function still
+ * reads npm itself and applies the major-jump quarantine. When npm `latest`
+ * has not caught up with an expected version yet, the response is 202 with
+ * `data.stale` so the workflow retries; otherwise 200.
  */
 
 import { Hono } from 'npm:hono@4'
 import { getServiceClient } from '../_shared/db.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
+import { authorizeServiceRoleOrGithubOidc } from '../_shared/github-oidc.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { log as rootLog } from '../_shared/logger.ts'
-import { fetchAllLatestVersions } from '../_shared/sdk-upgrade-plan.ts'
+import { fetchAllLatestVersions, UPGRADEABLE_PACKAGES } from '../_shared/sdk-upgrade-plan.ts'
 import { compareSemver } from '../_shared/sdk-version-compare.ts'
-import { shouldQuarantineCatalogVersion } from '../_shared/sdk-catalog-guard.ts'
+import {
+  findStaleExpected,
+  parseCatalogHint,
+  shouldQuarantineCatalogVersion,
+  type CatalogHint,
+} from '../_shared/sdk-catalog-guard.ts'
 
 const log = rootLog.child('sdk-versions-cron')
 
@@ -35,8 +49,32 @@ const app = new Hono()
 app.get('/sdk-versions-cron/health', (c) => c.json({ ok: true }))
 
 app.post('/sdk-versions-cron', async (c) => {
-  const unauthorized = requireServiceRoleAuth(c.req.raw)
-  if (unauthorized) return unauthorized
+  const auth = await authorizeServiceRoleOrGithubOidc(c.req.raw, {
+    serviceRoleCheck: requireServiceRoleAuth,
+  })
+  if (!auth.ok) {
+    log.warn('sdk-versions-cron: rejected caller', { reason: auth.reason })
+    return auth.response
+  }
+  if (auth.via === 'github_oidc') {
+    log.info('sdk-versions-cron: invoked by release workflow', {
+      run_id: auth.claims.run_id,
+      sha: auth.claims.sha,
+      actor: auth.claims.actor,
+    })
+  }
+
+  // The body is optional (pg_cron sends {}, the smoke script sends nothing).
+  // A malformed hint is logged and ignored, never a 400.
+  let hint: CatalogHint = { expected: [], ignored: [] }
+  const rawBody = await c.req.text().catch(() => '')
+  if (rawBody.trim()) {
+    try {
+      hint = parseCatalogHint(JSON.parse(rawBody), UPGRADEABLE_PACKAGES)
+    } catch {
+      log.warn('sdk-versions-cron: ignoring a body that is not JSON')
+    }
+  }
 
   const startedAt = Date.now()
   const db = getServiceClient()
@@ -98,19 +136,25 @@ app.post('/sdk-versions-cron', async (c) => {
   }
 
   const packagesUpserted = acceptedRows.map((r) => `${r.package}@${r.version}`)
+  const stale = findStaleExpected(hint.expected, latestVersions)
   const durationMs = Date.now() - startedAt
-  log.info('sdk-versions-cron: upserted', { packages: packagesUpserted, durationMs, rejected })
+  log.info('sdk-versions-cron: upserted', { packages: packagesUpserted, durationMs, rejected, stale })
 
-  return c.json({
-    ok: true,
-    data: {
-      upserted: packagesUpserted.length,
-      rejected: rejected.length,
-      duration_ms: durationMs,
-      packages: packagesUpserted,
-      quarantined: rejected,
+  return c.json(
+    {
+      ok: true,
+      data: {
+        upserted: packagesUpserted.length,
+        rejected: rejected.length,
+        duration_ms: durationMs,
+        packages: packagesUpserted,
+        quarantined: rejected,
+        stale,
+        ignored_expected: hint.ignored,
+      },
     },
-  })
+    stale.length > 0 ? 202 : 200,
+  )
 })
 
 Deno.serve(withSentry('sdk-versions-cron', app.fetch))

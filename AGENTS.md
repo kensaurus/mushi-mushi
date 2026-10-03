@@ -50,9 +50,9 @@ The "is this drift?" test for any feature you build or surface you write: *"Does
 |-------|----------|---------|-------------|
 | `classify-report` | `supabase/functions/classify-report/` | `reports` INSERT | LLM triage: severity, category, blast-radius |
 | `fix-worker` | `supabase/functions/fix-worker/` | manual / classify result | Opens a draft GitHub PR for a fix; auto-readies PR via GraphQL `markPullRequestAsReady`. Refactored to import branch/commit/PR helpers from `_shared/github-pr.ts`. |
-| `sdk-upgrade-worker` | `supabase/functions/sdk-upgrade-worker/` | POST from `sdk-upgrade` route | **NEW** Reads the connected repo's `package.json`(s), bumps `@mushi-mushi/*` to latest npm versions, opens a draft PR + marks ready. Writes result to `sdk_upgrade_jobs`. Guards: allow-listed paths, semver-only bumps, vault token resolution, `requireServiceRoleAuth`. |
-| `sdk-versions-cron` | `supabase/functions/sdk-versions-cron/` | pg_cron daily 02:30 UTC + release.yml | **NEW** Fetches latest stable version for every `@mushi-mushi/*` package from the npm registry and upserts into `sdk_versions` so freshness chips are accurate between hand-authored migrations. `requireServiceRoleAuth`. |
-| `sdk-release-sync` | `supabase/functions/sdk-release-sync/` | pg_cron every 5 min | **NEW** Polls GitHub for active SDK upgrade jobs (`pr_opened \| ready_to_merge \| blocked \| merged \| deploying`): fetches PR detail, latest check-run, and deployment status (normalized via `normalizeDeployStatus`), then upserts CI/deploy/release status into `sdk_upgrade_jobs` to drive the release-cockpit chips. `requireServiceRoleAuth`. |
+| `sdk-upgrade-worker` | `supabase/functions/sdk-upgrade-worker/` | POST from `sdk-upgrade` route | **NEW** Reads the connected repo's `package.json`(s), bumps `@mushi-mushi/*` to latest npm versions, opens a draft PR + marks ready. Writes result to `sdk_upgrade_jobs`. When the host has `.github/workflows/mushi-sdk-lockfile.yml` (ADR 0019) it pushes the bump as one commit and parks the job in `awaiting_lockfile` instead of opening the PR. Guards: allow-listed paths, semver-only bumps, vault token resolution, `requireServiceRoleAuth`. |
+| `sdk-versions-cron` | `supabase/functions/sdk-versions-cron/` | pg_cron daily 02:30 UTC + release.yml | **NEW** Fetches latest stable version for every `@mushi-mushi/*` package from the npm registry and upserts into `sdk_versions` so freshness chips are accurate between hand-authored migrations. Service-role bearer (pg_cron) or a GitHub OIDC token from `release.yml` (`_shared/github-oidc.ts`). |
+| `sdk-release-sync` | `supabase/functions/sdk-release-sync/` | pg_cron every 5 min | **NEW** Polls GitHub for active SDK upgrade jobs (`pr_opened \| ready_to_merge \| blocked \| merged \| deploying`): fetches PR detail, latest check-run, and deployment status (normalized via `normalizeDeployStatus`), then upserts CI/deploy/release status into `sdk_upgrade_jobs` to drive the release-cockpit chips. First opens the PR for `awaiting_lockfile` jobs once the host lockfile workflow pushed (or after 30 min, with a note). `requireServiceRoleAuth`. |
 | `inventory-propose` | `supabase/functions/inventory-propose/` | manual / cron | Proposes user-story inventory from SDK observation data |
 | `story-mapper` | `supabase/functions/story-mapper/` | POST /map-from-live | Crawls live app URL (Firecrawl/Browserbase) → Claude drafts `inventory.yaml` → `inventory_proposals` (source=live_crawl); opt-in Cursor Cloud PR |
 | `test-gen-from-story` | `supabase/functions/test-gen-from-story/` | POST /stories/:id/generate-test | User story → Playwright TypeScript test + Firecrawl YAML + draft GitHub PR + `qa_stories` row; gated by `automation_mode` |
@@ -512,11 +512,17 @@ Console "Create Upgrade PR" button
 ### sdk_versions catalog sync
 
 The `sdk_versions` catalog is kept fresh via two paths:
-1. **publish-time** — `release.yml` runs `scripts/sync-sdk-versions.mjs` after
-   Changesets publish, posting the exact published versions via Supabase REST.
-2. **daily cron** — `sdk-versions-cron` edge function (02:30 UTC) queries the
-   npm registry for every `@mushi-mushi/*` package and upserts the latest stable
-   version. Backstop for publish-time sync failures.
+1. **publish-time** — `release.yml`'s `catalog-sync` job calls
+   `sdk-versions-cron` after Changesets publishes, authenticated by a GitHub
+   Actions OIDC token (audience `mushi-sdk-catalog`) that
+   `_shared/github-oidc.ts` pins to `release.yml` on `master` in this repo by
+   numeric repository and owner id. No Supabase key is in the workflow. The
+   published list rides along as a compare-only `expected` hint: the function
+   still reads npm itself (with its major-jump quarantine) and answers 202
+   while npm `latest` lags, so the job retries, then only warns.
+2. **daily cron** — `sdk-versions-cron` edge function (02:30 UTC, service-role
+   bearer) queries the npm registry for every `@mushi-mushi/*` package and
+   upserts the latest stable version. Backstop for publish-time sync failures.
 
 ---
 

@@ -280,8 +280,10 @@ verify_jwt = false
 verify_jwt = false
 
 # sdk-versions-cron runs daily at 02:30 UTC (pg_cron) to reconcile the
-# sdk_versions catalogue against the npm registry. Auth inside via
-# requireServiceRoleAuth; the pg_cron job sends the service-role bearer.
+# sdk_versions catalogue against the npm registry, and release.yml's
+# catalog-sync job calls it after a publish. Auth inside: the service-role
+# bearer (pg_cron) or a GitHub Actions OIDC token (_shared/github-oidc.ts).
+# verify_jwt must stay false: the gateway would reject a GitHub-issued JWT.
 [functions.sdk-versions-cron]
 verify_jwt = false
 
