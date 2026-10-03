@@ -2,7 +2,9 @@
  * FILE: packages/server/supabase/functions/_shared/operator-digest.ts
  * PURPOSE: The daily operator digest (Plan 020 §9): one message across every
  *          app in an organization — new reports, open hole-check findings by
- *          severity, releases in flight, and a Mushi AI spend jump.
+ *          severity, releases in flight, and a Mushi AI spend jump. Once a
+ *          week (the organization's gtm_weekday) each app also gets a line
+ *          with its signups and activations over 7 days, from the team funnel.
  *
  * collectDigest reads; composeDigest is pure; deliverDigest posts to the
  * channels the organization switched on (all off by default). Every line
@@ -13,6 +15,7 @@
 import type { getServiceClient } from './db.ts'
 import { mapWithConcurrency } from './concurrency.ts'
 import { PagedReadError, readAllPages, type PageCount, type PageResult } from './paged-read.ts'
+import { mapBounded } from './portfolio.ts'
 
 /**
  * Report statuses that still wait on a decision. Same list as
@@ -37,7 +40,17 @@ export interface DigestProjectLine {
   publishedReleases24h: number
   /** Mushi's own LLM spend: the last 24 h and the daily average of the 7 days before. */
   spend: { last24hUsd: number; avgPrior7dUsd: number }
+  /** The weekly funnel line; null on other days, with no team funnel, or with product events off. */
+  gtm?: DigestGtmLine | null
 }
+
+/**
+ * Signups and activations over the last 7 days: the people who did the team
+ * funnel's first step and, of those, the people who reached its last step.
+ */
+export type DigestGtmLine =
+  | { state: 'ok'; firstStep: string; lastStep: string; signups: number; activated: number; pct: number | null }
+  | { state: 'error' }
 
 export interface DigestData {
   organizationId: string
@@ -91,6 +104,15 @@ function lineFor(p: DigestProjectLine): { text: string; weight: number } | null 
   return { text: `${p.name}: ${parts.join(' · ')}`, weight }
 }
 
+/** The weekly funnel line for one app, or null when it has none. */
+export function gtmLine(p: Pick<DigestProjectLine, 'name' | 'gtm'>): string | null {
+  const g = p.gtm
+  if (!g) return null
+  if (g.state === 'error') return `This week, ${p.name}: the funnel could not be read.`
+  if (g.signups === 0) return `This week, ${p.name}: nobody did ${g.firstStep}.`
+  return `This week, ${p.name}: ${g.signups} did ${g.firstStep}, ${g.activated} reached ${g.lastStep}${g.pct === null ? '' : ` (${g.pct}%)`}.`
+}
+
 export function composeDigest(data: DigestData, consoleUrl: string): ComposedDigest {
   const scored = data.projects
     .map((p) => ({ p, l: lineFor(p) }))
@@ -100,6 +122,10 @@ export function composeDigest(data: DigestData, consoleUrl: string): ComposedDig
   const unchecked = data.projects.filter((p) => !p.radar.checked && !p.radar.failed).length
   const lines = scored.map((x) => x.l.text)
   if (unchecked > 0) lines.push(`${unchecked} app${unchecked === 1 ? ' has' : 's have'} not had hole checks yet.`)
+  for (const p of [...data.projects].sort((a, b) => a.name.localeCompare(b.name))) {
+    const g = gtmLine(p)
+    if (g) lines.push(g)
+  }
   // A read cut short is said out loud: its counts are at least what is shown, never exact.
   if (data.truncated.length > 0) lines.push(`Some numbers are lower bounds: there were more ${data.truncated.join(', ')} than the digest reads.`)
   const org = data.organizationName ?? 'your apps'
@@ -145,8 +171,66 @@ async function readAllOrThrow<T>(
 type RunRow = { id: string; project_id: string; gate: string; status: string; summary: { errored?: number } | null }
 const DIGEST_RADAR_GATES = ['portfolio_radar', 'portfolio_radar_ci']
 
-/** Read what the digest needs for every project of the organization. Throws when a read fails. */
-export async function collectDigest(db: Db, organizationId: string, now: Date): Promise<DigestData> {
+/** product_funnel conversion windows for the team funnel definition (same values as api events-admin FUNNEL_WINDOWS). */
+const GTM_WINDOWS: Record<string, string> = { '1h': '1 hour', '1d': '1 day', '7d': '7 days', '30d': '30 days' }
+const GTM_CONCURRENCY = 4
+
+/** True on the organization's weekly-line weekday (UTC). Null means never. */
+export function isGtmDay(weekday: number | null | undefined, now: Date): boolean {
+  return typeof weekday === 'number' && weekday === now.getUTCDay()
+}
+
+/**
+ * Each app's signups and activations over the 7 days before `now`, run over
+ * the team funnel (org_funnel_definitions) with the product_funnel RPC.
+ * No funnel: an empty map (no weekly lines). An app with product events off
+ * gets no line. A failed RPC is an `error` line, never zeros.
+ */
+export async function collectGtmLines(db: Db, organizationId: string, projectIds: readonly string[], now: Date): Promise<Map<string, DigestGtmLine>> {
+  const out = new Map<string, DigestGtmLine>()
+  if (projectIds.length === 0) return out
+  const defRes = await db.from('org_funnel_definitions').select('steps, conversion_window').eq('organization_id', organizationId).maybeSingle()
+  failOnReadError('the team funnel', defRes)
+  const def = defRes.data as { steps?: string[]; conversion_window?: string } | null
+  const steps = def?.steps ?? []
+  if (steps.length < 2) return out
+  const settingsRes = await db.from('project_settings').select('project_id, product_events_enabled').in('project_id', [...projectIds])
+  failOnReadError('product event settings', settingsRes)
+  const off = new Set(((settingsRes.data ?? []) as Array<{ project_id: string; product_events_enabled: boolean | null }>).filter((r) => r.product_events_enabled === false).map((r) => r.project_id))
+  const from = new Date(now.getTime() - 7 * 86400_000).toISOString()
+  await mapBounded(projectIds.filter((id) => !off.has(id)), GTM_CONCURRENCY, async (projectId) => {
+    const { data, error } = await db.rpc('product_funnel', {
+      p_project_id: projectId,
+      p_steps: steps,
+      p_from: from,
+      p_to: now.toISOString(),
+      p_window: GTM_WINDOWS[def?.conversion_window ?? '7d'] ?? '7 days',
+      p_breakdown: null,
+    })
+    if (error) {
+      out.set(projectId, { state: 'error' })
+      return
+    }
+    const s = ((data as { steps?: Array<{ converted?: number | string }> } | null)?.steps) ?? []
+    const signups = Number(s[0]?.converted ?? 0) || 0
+    const activated = Number(s[s.length - 1]?.converted ?? 0) || 0
+    out.set(projectId, {
+      state: 'ok',
+      firstStep: steps[0],
+      lastStep: steps[steps.length - 1],
+      signups,
+      activated,
+      pct: signups > 0 ? Math.round((1000 * activated) / signups) / 10 : null,
+    })
+  })
+  return out
+}
+
+/**
+ * Read what the digest needs for every project of the organization. Throws when a read fails.
+ * `gtm` adds the weekly funnel line per app.
+ */
+export async function collectDigest(db: Db, organizationId: string, now: Date, opts: { gtm?: boolean } = {}): Promise<DigestData> {
   const truncated: string[] = []
   const orgRes = await db.from('organizations').select('name').eq('id', organizationId).maybeSingle()
   failOnReadError('organization', orgRes)
@@ -196,6 +280,7 @@ export async function collectDigest(db: Db, organizationId: string, now: Date): 
     : []
 
   const countFor = (list: readonly ProjectRef[], id: string) => list.filter((r) => r.project_id === id).length
+  const gtm = opts.gtm ? await collectGtmLines(db, organizationId, ids, now) : new Map<string, DigestGtmLine>()
   return {
     organizationId,
     organizationName: (orgRes.data as { name?: string | null } | null)?.name ?? null,
@@ -221,6 +306,7 @@ export async function collectDigest(db: Db, organizationId: string, now: Date): 
         draftReleases: countFor(drafts, p.id),
         publishedReleases24h: countFor(published, p.id),
         spend: { last24hUsd: Math.round(last24 * 100) / 100, avgPrior7dUsd: Math.round((prior / 7) * 100) / 100 },
+        gtm: gtm.get(p.id) ?? null,
       }
     }),
   }
@@ -230,21 +316,35 @@ export interface DigestSettings {
   organization_id: string
   enabled: boolean
   slack_project_id: string | null
+  /** Each names a project whose configured Discord / Teams webhook or bound Telegram chats get the digest. */
+  discord_project_id?: string | null
+  teams_project_id?: string | null
+  telegram_project_id?: string | null
   email: boolean
   web_push: boolean
 }
 
+export type DigestChannel = 'slack' | 'discord' | 'teams' | 'telegram' | 'email' | 'web_push'
+
 export interface DeliveryDeps {
   sendSlack: (db: Db, projectId: string, text: string) => Promise<{ ok: boolean; error?: string }>
+  /** Through the project's existing Discord / Teams webhook. */
+  sendDiscord: (db: Db, projectId: string, title: string, body: string) => Promise<{ ok: boolean; error?: string }>
+  sendTeams: (db: Db, projectId: string, title: string, body: string) => Promise<{ ok: boolean; error?: string }>
+  /** Through the project's Telegram bot, to every chat bound to the project. */
+  sendTelegram: (db: Db, projectId: string, text: string) => Promise<{ sent: number; error?: string }>
   sendEmail: (to: string, subject: string, text: string) => Promise<{ ok: boolean; error?: string }>
   sendPush: (db: Db, userId: string, title: string, body: string) => Promise<{ sent: number; error?: string }>
-  /** Owner and admin emails of the organization (never logged). */
-  adminRecipients: (db: Db, organizationId: string) => Promise<Array<{ userId: string; email: string | null }>>
+  /**
+   * Owner and admin emails of the organization (never logged). Throws when the
+   * members cannot be read; a person whose email lookup failed has `emailError`.
+   */
+  adminRecipients: (db: Db, organizationId: string) => Promise<Array<{ userId: string; email: string | null; emailError?: string }>>
 }
 
 export interface DeliveryResult {
   status: 'sent' | 'partial' | 'failed' | 'nothing_to_send'
-  channels: Array<{ channel: 'slack' | 'email' | 'web_push'; ok: boolean; detail: string }>
+  channels: Array<{ channel: DigestChannel; ok: boolean; detail: string }>
 }
 
 /** Post to every switched-on channel. One channel failing never stops the others. */
@@ -255,10 +355,35 @@ export async function deliverDigest(db: Db, settings: DigestSettings, digest: Co
     const r = await deps.sendSlack(db, settings.slack_project_id, digest.text).catch((e) => ({ ok: false, error: String(e) }))
     channels.push({ channel: 'slack', ok: r.ok, detail: r.ok ? 'posted' : (r.error ?? 'failed').slice(0, 200) })
   }
+  // Discord and Teams get the title separately; the body is the rest of the text.
+  const body = digest.text.split('\n').slice(1).join('\n')
+  if (settings.discord_project_id) {
+    const r = await deps.sendDiscord(db, settings.discord_project_id, digest.title, body).catch((e) => ({ ok: false, error: String(e) }))
+    channels.push({ channel: 'discord', ok: r.ok, detail: r.ok ? 'posted' : (r.error ?? 'failed').slice(0, 200) })
+  }
+  if (settings.teams_project_id) {
+    const r = await deps.sendTeams(db, settings.teams_project_id, digest.title, body).catch((e) => ({ ok: false, error: String(e) }))
+    channels.push({ channel: 'teams', ok: r.ok, detail: r.ok ? 'posted' : (r.error ?? 'failed').slice(0, 200) })
+  }
+  if (settings.telegram_project_id) {
+    const r = await deps.sendTelegram(db, settings.telegram_project_id, digest.text).catch((e) => ({ sent: 0, error: String(e) }))
+    channels.push({ channel: 'telegram', ok: r.sent > 0, detail: r.sent > 0 ? `${r.sent} chat${r.sent === 1 ? '' : 's'}` : (r.error ?? 'no chat is bound to that project').slice(0, 200) })
+  }
   if (settings.email || settings.web_push) {
-    const people = await deps.adminRecipients(db, settings.organization_id).catch(() => [])
-    if (settings.email) {
+    let people: Awaited<ReturnType<DeliveryDeps['adminRecipients']>> = []
+    let peopleError: string | null = null
+    try {
+      people = await deps.adminRecipients(db, settings.organization_id)
+    } catch (e) {
+      peopleError = `the owners and admins could not be read: ${String((e as Error)?.message ?? e).slice(0, 120)}`
+    }
+    if (peopleError) {
+      if (settings.email) channels.push({ channel: 'email', ok: false, detail: peopleError })
+      if (settings.web_push) channels.push({ channel: 'web_push', ok: false, detail: peopleError })
+    }
+    if (settings.email && !peopleError) {
       const withEmail = people.filter((p) => p.email)
+      const lookupFailed = people.filter((p) => !p.email && p.emailError).length
       let ok = 0
       let lastErr = ''
       for (const p of withEmail) {
@@ -266,9 +391,15 @@ export async function deliverDigest(db: Db, settings: DigestSettings, digest: Co
         if (r.ok) ok++
         else lastErr = r.error ?? 'failed'
       }
-      channels.push({ channel: 'email', ok: withEmail.length > 0 && ok === withEmail.length, detail: withEmail.length === 0 ? 'no owner or admin email' : `${ok}/${withEmail.length} sent${lastErr ? `; ${lastErr.slice(0, 120)}` : ''}` })
+      const wanted = withEmail.length + lookupFailed
+      const lookupNote = lookupFailed > 0 ? `; ${lookupFailed} email${lookupFailed === 1 ? '' : 's'} could not be read` : ''
+      channels.push({
+        channel: 'email',
+        ok: wanted > 0 && ok === wanted,
+        detail: wanted === 0 ? 'no owner or admin email' : `${ok}/${wanted} sent${lookupNote}${lastErr ? `; ${lastErr.slice(0, 120)}` : ''}`,
+      })
     }
-    if (settings.web_push) {
+    if (settings.web_push && !peopleError) {
       let sent = 0
       let lastErr = ''
       for (const p of people) {

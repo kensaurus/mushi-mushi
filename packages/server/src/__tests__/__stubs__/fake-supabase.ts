@@ -166,6 +166,10 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: { code?: string; 
     this.filters.push((r) => String(readPath(r, key)) >= String(value))
     return this
   }
+  lte(key: string, value: unknown): this {
+    this.filters.push((r) => String(readPath(r, key)) <= String(value))
+    return this
+  }
   order(key: string, opts?: { ascending?: boolean }): this {
     this._order.push({ key, ascending: opts?.ascending !== false })
     return this

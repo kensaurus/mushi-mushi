@@ -374,6 +374,10 @@ verify_jwt = false
 [functions.operator-digest]
 verify_jwt = false
 
+# Cron-invoked every 6 hours (mushi-store-review-intake, :45); opt-in store reviews → reports.
+[functions.store-review-intake]
+verify_jwt = false
+
 # Invoked by the api function or by another internal function.
 [functions.contract-graph-builder]
 verify_jwt = false

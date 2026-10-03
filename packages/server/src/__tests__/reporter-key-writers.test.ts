@@ -59,6 +59,7 @@ const REVIEWED = new Map<string, 'keyed' | 'stored' | 'sentinel'>([
   ['_shared/sentry-ingest.ts reporter_token_hash', 'sentinel'], // 'sentry-webhook'
   ['_shared/design-actions.ts reporter_token_hash', 'sentinel'], // 'cron:design-drift' (DESIGN_DRIFT_REPORTER)
   ['_shared/voice-intake.ts reporter_token_hash', 'sentinel'], // 'voice-intake'
+  ['_shared/store-review-intake.ts reporter_token_hash', 'sentinel'], // 'store-review'; the reviewer's identity is never stored
   ['library-modernizer/index.ts reporter_token_hash', 'sentinel'], // 'cron:library-modernizer'
   ['status-reconciler/index.ts reporter_token_hash', 'sentinel'], // 'cron:status-reconciler'
   ['webhooks-linear-agent/index.ts reporter_token_hash', 'sentinel'], // 'linear-agent'

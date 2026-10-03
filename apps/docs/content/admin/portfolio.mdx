@@ -45,12 +45,64 @@ Below the cards:
 | **Across your apps** | Problems only visible across apps: a deep link or "more apps" link that no longer opens, a shared login that does not allow one app's domain, apps sharing purchases on different Stripe accounts, many apps posting to one channel, CI cost in two repos. See [One login across your apps](../concepts/shared-login). |
 | **Funnel across apps** | One funnel run on every app: the same event names, in the same order, within the same window. Owners and admins pick the steps. An app with product events off, or with no events yet, says so instead of 0%. |
 | **Releases** | For each app: what is live and at what rollout, native changes waiting for a store build, and JS-only changes that can ship as an over-the-air update. It suggests one store release per app to save CI minutes. Your own CI builds and submits. |
-| **Daily digest** | One message a day across all apps. Off until an owner picks Slack, email or push. When there were more reports, AI calls or findings than it reads, it says which numbers are lower bounds. |
+| **Spend per app** | What each app cost over 30 days, from every source Mushi can read. See [Spend per app](#spend-per-app). |
+| **Daily digest** | One message a day across all apps. Off until an owner picks where it goes: an app's Slack channel, Discord or Teams webhook, or Telegram chats, email, or push. Once a week (Monday by default) it adds each app's signups and activations. When there were more reports, AI calls or findings than it reads, it says which numbers are lower bounds. See [Daily digest](#daily-digest). |
 | **Shared between apps** | Domains, store apps, Supabase projects and channels two or more apps use. Owners and admins can import what no recipe or source declares from a CSV with the columns `kind, external_id, project` and an optional `role`; each refused row is listed with its line number, and a file is capped at 500 rows and 256 KB. |
 | **Accounts and resilience** | Every account your apps depend on (Apple, Google Play, AWS, Supabase, Vercel, your registrar, Stripe…): the owner email, whether 2FA is on, how many people can get in, a recovery contact, and auto-renew for the registrar and each domain. See below. |
 | **Connected sources** | App Store Connect, Google Play, AI spend, RevenueCat or your own endpoint. Read-only by default. |
 
 ---
+
+## Spend per app
+
+One row per app, 30 days, one column per source:
+
+| Column | Where it comes from |
+|--------|---------------------|
+| **Mushi AI** | Mushi's own AI calls for that app (diagnoses, fixes, store review). |
+| **AI provider** | Your own OpenAI or Anthropic bill, from the **AI provider spend** source. An app counts only once it is bound to its OpenAI project or Anthropic workspace. |
+| **CI (est.)** | GitHub Actions minutes as money: estimated billable minutes × $0.006, GitHub's Linux price. macOS minutes count 10× and Windows 2×. Public repositories are free, so this is the list price, not your bill. |
+| **Supabase** | Supabase bills you import, with egress, invocations and other usage. Mushi reads Supabase read-only and cannot see billing. |
+| **Other bills** | Vercel, AWS and other bills you import. |
+
+A source that could not be read says **Couldn't read** and is left out of the
+total; the total then ends in `+` because it is a floor. **Not connected**
+means there is nothing to read yet. Neither one ever shows as $0.
+
+**Import a bill** (owners and admins) takes a CSV:
+
+- a **FOCUS** export, which both Vercel and AWS Data Exports offer;
+- an **AWS Cost and Usage Report** (legacy or 2.0 column names);
+- or any CSV with a `date` (YYYY-MM-DD), a `service` and a `cost` column, plus
+  optional `quantity`, `unit`, `currency` and `app` columns.
+
+Pick the app the bill belongs to, or let each row's `app` column (or an `app`
+or `project` tag) name the app by its name or slug. Rows in another currency
+than USD, with a date that is not YYYY-MM-DD, or naming no app of yours are
+skipped, and the first few are explained. Importing the same bill again
+replaces those days instead of adding to them: each day belongs to the newest
+import that has it. **Remove** takes an import out and gives its days back to
+the next newest import that has them, so removing a corrected bill brings the
+earlier figures back. It says how many rows left the ledger and how many went
+back. The file limit is 5 MB: export daily rather than hourly rows.
+
+The ledger shows each member only the apps they can see. An import for one app
+is listed to that app's members; an import matched by an `app` column is
+listed to the team.
+
+## Daily digest
+
+The digest goes to the places an owner or admin picks. Slack, Discord, Teams
+and Telegram each reuse one app's existing connection from
+[Integrations](./integrations): its Slack channel, its Discord or Teams
+webhook, or the Telegram chats bound to its bot. Nothing new to set up.
+
+On the weekday you pick (Monday by default, in UTC; or never), each app gets
+one more line: how many people did the first step of the
+[team funnel](#what-you-see) in the last 7 days, and how many of them reached
+its last step. An app with product events off gets no line; a funnel that
+could not be read says so instead of showing zero. Without a team funnel there
+are no weekly lines.
 
 ## Accounts and resilience
 

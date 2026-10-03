@@ -12,6 +12,7 @@
  *       GET /v1/admin/orgs/:orgId/releases (ReleasesCard)
  *       GET|PUT /v1/admin/orgs/:orgId/funnel (FunnelCard)
  *       GET|POST|PATCH|DELETE /v1/admin/orgs/:orgId/accounts (AccountsRegisterCard)
+ *       GET /v1/admin/orgs/:orgId/spend + bill imports (SpendLedgerCard)
  * Empty, loading, error and "not checked yet" states are explicit; nothing
  * that was never checked renders as healthy. A read the server could not
  * finish is listed in a callout (`readErrors`) and its cells read "Could not
@@ -48,6 +49,7 @@ import { SharedResourcesCard } from '../components/portfolio/SharedResourcesCard
 import { ReleasesCard } from '../components/portfolio/ReleasesCard'
 import { FunnelCard } from '../components/portfolio/FunnelCard'
 import { AccountsRegisterCard } from '../components/portfolio/AccountsRegisterCard'
+import { SpendLedgerCard } from '../components/portfolio/SpendLedgerCard'
 
 export function PortfolioPage() {
   const orgId = useActiveOrgId()
@@ -136,6 +138,11 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
       {page.data && page.data.cards.length > 0 && (
         <PanelErrorBoundary label="Fix once">
           <FindingsSections findings={findings} names={names} />
+        </PanelErrorBoundary>
+      )}
+      {page.data && page.data.cards.length > 0 && (
+        <PanelErrorBoundary label="Spend per app">
+          <SpendLedgerCard orgId={orgId} projects={page.data.cards.map((c) => ({ projectId: c.projectId, name: c.name }))} />
         </PanelErrorBoundary>
       )}
       {page.data && page.data.cards.length > 0 && (

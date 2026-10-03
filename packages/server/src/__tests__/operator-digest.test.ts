@@ -101,6 +101,9 @@ describe('deliverDigest', () => {
   const content = { title: 't', lines: ['a'], text: 't\na', hasContent: true }
   const fakeDeps = (over = {}) => ({
     sendSlack: vi.fn(async () => ({ ok: true })),
+    sendDiscord: vi.fn(async () => ({ ok: true })),
+    sendTeams: vi.fn(async () => ({ ok: false, error: 'HTTP 400' })),
+    sendTelegram: vi.fn(async () => ({ sent: 2 })),
     sendEmail: vi.fn(async () => ({ ok: false, error: 'no_api_key' })),
     sendPush: vi.fn(async () => ({ sent: 2 })),
     adminRecipients: vi.fn(async () => [{ userId: 'u1', email: 'owner@example.test' }]),
@@ -180,6 +183,9 @@ function harness(db: FakeDb) {
   const pass = (async (_c: unknown, next: () => Promise<void>) => next()) as never
   const delivery = {
     sendSlack: vi.fn(async () => ({ ok: true })),
+    sendDiscord: vi.fn(async () => ({ ok: true })),
+    sendTeams: vi.fn(async () => ({ ok: true })),
+    sendTelegram: vi.fn(async () => ({ sent: 1 })),
     sendEmail: vi.fn(async () => ({ ok: true })),
     sendPush: vi.fn(async () => ({ sent: 1 })),
     adminRecipients: vi.fn(async () => []),
