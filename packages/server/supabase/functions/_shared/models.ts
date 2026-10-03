@@ -12,11 +12,13 @@
 // TWO CLAUDE CALL PATHS (2026-10-02). Sonnet 5.5 rejects non-default
 // `temperature` and forced `tool_choice`; AI SDK v4 sends both on every call.
 // So a route may use `ANTHROPIC_SONNET_LATEST` only when ALL its Claude calls
-// go through `claude-messages.ts`. Since 2026-10-03 every Sonnet caller does;
-// only Haiku calls (fast-filter, voice intent, the nl-query summariser, the
-// synthetic and mistake-summarizer fast paths) stay on `createAnthropic`,
-// because Haiku 4.5 still accepts the v4 call shape. The regression test
-// `claude-call-paths.test.ts` keeps it that way.
+// go through `claude-messages.ts`. Since 2026-10-03 every route that uses a
+// constant from this file does. Haiku calls (fast-filter, voice intent,
+// sentinel-audit, the nl-query summariser, the synthetic and
+// mistake-summarizer fast paths) stay on `createAnthropic`, because Haiku 4.5
+// still accepts the v4 call shape. The one remaining Sonnet caller on the v4
+// path is `pdca-runner`, which hardcodes its own model ids (gap #14a).
+// `claude-call-paths.test.ts` guards the routes moved in gap #14b.
 //
 // Keep pricing rows in `pricing.ts` (and the SQL backfill in the matching
 // migration) in sync when adding a new model here.
@@ -24,12 +26,14 @@
 
 // --- Anthropic ---------------------------------------------------------------
 
-/** Current Sonnet ($2/$10 per MTok). Every Sonnet caller goes through
- *  `claude-messages.ts`. */
+/** Current Sonnet ($2/$10 per MTok). Every caller of this constant goes
+ *  through `claude-messages.ts`. */
 export const ANTHROPIC_SONNET_LATEST = 'claude-sonnet-5-5'
 
-/** Previous Sonnet. No pipeline route calls it any more; it stays as the
- *  fine-tuning base model and so per-project overrides onto it keep pricing. */
+/** Previous Sonnet. No route in this file's stage list defaults to it any
+ *  more; it stays as the fine-tuning base model and so per-project overrides
+ *  onto it keep a pricing row. (`pdca-runner` and `pdca.ts` still hardcode
+ *  Sonnet 4.x ids of their own; gap #14a.) */
 export const ANTHROPIC_SONNET = 'claude-sonnet-4-6'
 
 /** Opus 4.8 (released 2026-05-28). Not a stage default; listed so pricing
