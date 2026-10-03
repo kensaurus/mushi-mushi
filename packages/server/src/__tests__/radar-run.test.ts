@@ -384,7 +384,9 @@ describe('operator detectors in the scheduled run (Plan 020 Phase 2)', () => {
   it('reads heartbeats, keys and connector state, and turns them into findings with fixes', async () => {
     const db = seed({
       project_api_keys: [
-        { id: 'k1', project_id: P_A, label: 'web', scopes: ['report:write'], is_active: true, created_at: ago(400), last_seen_at: ago(120) },
+        { id: 'k1', project_id: P_A, label: 'web', scopes: ['report:write'], is_active: true, created_at: ago(400), last_seen_at: ago(120), last_seen_origin: 'https://glot.it', last_seen_user_agent: 'Mozilla/5.0' },
+        // The CI key pushed 2 days ago (no Origin, a Node client): CI is not use of the app.
+        { id: 'k3', project_id: P_A, label: 'ci', scopes: ['report:write'], is_active: true, created_at: ago(400), last_seen_at: ago(2), last_seen_origin: null, last_seen_user_agent: 'node' },
         { id: 'k2', project_id: P_A, label: 'cli', scopes: ['mcp:read'], is_active: true, created_at: ago(400), last_seen_at: null },
       ],
       byok_keys: [{ project_id: P_A, provider_slug: 'openai', label: 'main', key_hint: 'sk-…1', status: 'active', created_at: ago(200), last_used_at: ago(100) }],
@@ -398,6 +400,7 @@ describe('operator detectors in the scheduled run (Plan 020 Phase 2)', () => {
     const summary = await run.runRadar(db as never, P_A, deps() as never)
     const state = (id: string) => summary.results.find((r) => r.ruleId === id)?.state
     expect(state('dead_app_live_spend')).toBe('finding')
+    expect(db.table('gate_findings').find((f) => f.rule_id === 'dead_app_live_spend')!.message).toMatch(/Nobody has used this app for 120 days/)
     expect(state('provider_key_invalid')).toBe('finding')
     expect(state('key_unused_90d')).toBe('finding')
     expect(state('paid_feature_no_kill_switch')).toBe('finding')
@@ -405,7 +408,7 @@ describe('operator detectors in the scheduled run (Plan 020 Phase 2)', () => {
     expect(state('store_credential_scope_missing')).toBe('unknown')
     const rules = db.table('gate_findings').map((f) => f.rule_id)
     expect(rules).toEqual(expect.arrayContaining(['dead_app_live_spend', 'provider_key_invalid', 'key_unused_90d', 'paid_feature_no_kill_switch', 'provider_limit_unset']))
-    // The MCP key is not judged (its uses are not recorded); the SDK key and the BYOK key are.
+    // The MCP key is not judged (its uses are not recorded); the old SDK key and the BYOK key are; the CI key was used.
     expect(db.table('gate_findings').filter((f) => f.rule_id === 'key_unused_90d')).toHaveLength(2)
     expect(summary.results.find((r) => r.ruleId === 'key_unused_90d')?.reason).toMatch(/1 console or MCP key was not judged/)
     for (const f of db.table('gate_findings')) expect(String((f.suggested_fix as { fix: string }).fix).length).toBeGreaterThan(20)

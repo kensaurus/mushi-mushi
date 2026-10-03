@@ -78,13 +78,19 @@ export interface RegisterDomain {
   id: string
   domain: string
   autoRenew: boolean | null
+  /** Projects that use the domain; its finding names them so only members who see them all see it. */
+  projectIds: string[]
 }
 
 function isProvider(v: unknown): v is AccountProvider {
   return typeof v === 'string' && (ACCOUNT_PROVIDERS as readonly string[]).includes(v)
 }
 
-export function registerFromRows(rows: readonly RegisterRow[]): { accounts: RegisterAccount[]; domains: RegisterDomain[] } {
+/**
+ * Rows → register. `usesOf` maps a resource id to the projects that use it; a
+ * domain no project uses is left out, so it never surfaces to members.
+ */
+export function registerFromRows(rows: readonly RegisterRow[], usesOf: ReadonlyMap<string, readonly string[]>): { accounts: RegisterAccount[]; domains: RegisterDomain[] } {
   const accounts: RegisterAccount[] = []
   const domains: RegisterDomain[] = []
   for (const r of rows) {
@@ -102,7 +108,8 @@ export function registerFromRows(rows: readonly RegisterRow[]): { accounts: Regi
         updatedAt: r.updated_at,
       })
     } else if (r.kind === 'domain') {
-      domains.push({ id: r.id, domain: r.external_id, autoRenew: r.auto_renew })
+      const projectIds = [...new Set(usesOf.get(r.id) ?? [])].sort()
+      if (projectIds.length > 0) domains.push({ id: r.id, domain: r.external_id, autoRenew: r.auto_renew, projectIds })
     }
   }
   accounts.sort((a, b) => a.provider.localeCompare(b.provider) || a.name.localeCompare(b.name))
@@ -152,7 +159,7 @@ export function accountRegisterRules(accounts: readonly RegisterAccount[], domai
     out.push({
       ruleId: 'registrar_autorenew_off',
       severity: 'warn',
-      projectIds: [],
+      projectIds: [...d.projectIds],
       resourceKey: `domain:${d.domain}`,
       message: `Auto-renew is declared off for ${d.domain}. If the renewal is missed, the domain lapses and the apps and email on it go dark.`,
       evidence: { domain: d.domain },

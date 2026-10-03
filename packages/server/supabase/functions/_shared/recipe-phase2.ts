@@ -417,7 +417,17 @@ export async function collectOrgPortfolio(db: Db, organizationId: string, deps: 
   // otherwise the sweep below would resolve them every run.
   const { data: registerRows, error: registerError } = await db.from('portfolio_resources').select(REGISTER_COLUMNS).eq('organization_id', organizationId).in('kind', ['account', 'domain']).limit(1000)
   if (registerError) throw new Error(`collectOrgPortfolio: could not read the accounts register, findings left as they were: ${registerError.message}`)
-  const register = registerFromRows((registerRows ?? []) as unknown as RegisterRow[])
+  const rowsOfRegister = (registerRows ?? []) as unknown as RegisterRow[]
+  const domainIds = rowsOfRegister.filter((r) => r.kind === 'domain').map((r) => r.id)
+  const { data: domainUses, error: usesError } = domainIds.length
+    ? await db.from('portfolio_resource_uses').select('resource_id, project_id').in('resource_id', domainIds).limit(5000)
+    : { data: [], error: null }
+  if (usesError) throw new Error(`collectOrgPortfolio: could not read domain uses, findings left as they were: ${usesError.message}`)
+  // A domain finding names the projects that use the domain, so the read filters
+  // (every project visible to the caller) hide it from members who cannot see them.
+  const usesOf = new Map<string, string[]>()
+  for (const u of (domainUses ?? []) as Array<{ resource_id: string; project_id: string }>) usesOf.set(u.resource_id, [...(usesOf.get(u.resource_id) ?? []), u.project_id])
+  const register = registerFromRows(rowsOfRegister, usesOf)
   findings.push(...accountRegisterRules(register.accounts, register.domains))
 
   // Upsert open findings; resolve the open ones this run saw go away. A rule
