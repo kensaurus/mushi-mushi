@@ -8,7 +8,8 @@
  * into several), so the two are never compared.
  */
 
-export type CoverageState = 'complete' | 'filling' | 'capped'
+/** `stalled`: still short of the repo, but the last sweep added no file. */
+export type CoverageState = 'complete' | 'filling' | 'capped' | 'stalled'
 export type FileCapSource = 'env' | 'plan_flag' | 'plan_tier' | 'default' | 'unavailable'
 
 export interface CodebaseCoverage {
@@ -99,6 +100,17 @@ export function coverageView(c: CodebaseCoverage, fileCap: number): CoverageView
       },
     }
   }
+  if (c.state === 'stalled') {
+    return {
+      value: ofRepo,
+      tone: 'warn',
+      hint: 'The last sweep could not add a file (the index error says why). It is retried on the daily sweep.',
+      callout: {
+        tone: 'warn',
+        text: `Stuck at ${ofRepo}: the last sweep added no file. The index error on this card says why; the daily sweep retries, or re-index once it is fixed.`,
+      },
+    }
+  }
   const byTree = c.truncated && c.indexed_files < (c.file_cap ?? fileCap)
   return {
     value: ofRepo,
@@ -109,8 +121,8 @@ export function coverageView(c: CodebaseCoverage, fileCap: number): CoverageView
     callout: {
       tone: 'warn',
       text: byTree
-        ? `Indexed ${ofRepo}. GitHub returned only part of this repo's file list. Add a path filter below to index the directories that matter.`
-        : `Indexed ${ofRepo}, your plan's ${fmt(c.file_cap ?? fileCap)}-file limit. Diagnoses and fixes only see indexed files. Add a path filter below to choose which, or upgrade for a higher limit.`,
+        ? `Indexed ${ofRepo}. GitHub returned only part of this repo's file list, so the sweep cannot see the rest of the repo.`
+        : `Indexed ${ofRepo}, your plan's ${fmt(c.file_cap ?? fileCap)}-file limit. Diagnoses and fixes only see indexed files. A path filter below limits the sweep (and the count) to the directories that matter, or upgrade for a higher limit.`,
     },
   }
 }

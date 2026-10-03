@@ -76,7 +76,7 @@ export interface ProjectRepoLite {
   github_app_connected: boolean
   /** Last sweep, complete or partial (older servers omit it). */
   index_swept_at?: string | null
-  /** complete | filling | capped */
+  /** complete | filling | capped | stalled */
   index_coverage_state?: string | null
   index_files_indexed?: number | null
   index_files_eligible?: number | null
@@ -194,7 +194,13 @@ export function indexHealth(repo: ProjectRepoLite): IndexHealth {
   if (!swept) return 'never'
   const ageMs = Date.now() - new Date(swept).getTime()
   if (ageMs > 7 * 86_400_000) return 'stale'
-  if (repo.index_coverage_state === 'filling' || repo.index_coverage_state === 'capped') return 'partial'
+  if (
+    repo.index_coverage_state === 'filling' ||
+    repo.index_coverage_state === 'capped' ||
+    repo.index_coverage_state === 'stalled'
+  ) {
+    return 'partial'
+  }
   return 'ok'
 }
 

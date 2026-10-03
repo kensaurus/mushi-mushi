@@ -55,6 +55,7 @@ import { EMPTY_REPO_STATS, type RepoStats, type RepoTabId } from '../components/
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { ProjectReposCard } from '../components/repo/ProjectReposCard'
+import { RepoIndexStatus } from '../components/repo/RepoIndexStatus'
 
 interface RepoBranch {
   id: string
@@ -86,6 +87,11 @@ interface RepoOverview {
     github_app_installation_id: string | null
     last_indexed_at: string | null
     indexing_enabled: boolean | null
+    /** Last sweep, complete or partial (older servers omit it). */
+    index_swept_at?: string | null
+    index_coverage_state?: string | null
+    index_files_indexed?: number | null
+    index_files_eligible?: number | null
   }
   counts: {
     open: number
@@ -515,11 +521,7 @@ export function RepoPage() {
                 <SignalChip tone="warn">No GitHub App installation</SignalChip>
               </>
             ) : null}
-            {repo.last_indexed_at && (
-              <SignalChip tone="brand">
-                Indexed <RelativeTime value={repo.last_indexed_at} />
-              </SignalChip>
-            )}
+            <RepoIndexStatus repo={repo} variant="chip" />
           </div>
           <ActionPillRow className="shrink-0">
             {/* Only render when the App slug is configured. The slug used to

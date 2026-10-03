@@ -82,6 +82,15 @@ describe('coverageView', () => {
     const v = coverageView({ ...cov, indexed_files: 120, eligible_files: 120, truncated: true, file_cap: 1500, state: 'capped' }, 1500)
     expect(v.value).toBe('120 of 120+ files')
     expect(v.callout?.text).toContain('GitHub returned only part')
+    // A path filter cannot bring back files GitHub left out of the listing.
+    expect(v.callout?.text).not.toContain('path filter')
+  })
+  it('a stalled index warns and points at the error', () => {
+    const v = coverageView({ ...cov, indexed_files: 40, file_cap: 1500, state: 'stalled' }, 1500)
+    expect(v.tone).toBe('warn')
+    expect(v.value).toBe('40 of 4,700 files')
+    expect(v.callout?.text).toContain('the last sweep added no file')
+    expect(v.callout?.text).toContain('The index error on this card says why')
   })
 })
 
