@@ -79,15 +79,14 @@ function isNotesOnly(file: PrChangedFile): boolean {
 }
 
 /**
- * Speculative when the PR changes no files, or every changed file is notes.
- * `complete: false` (the listing hit its page cap) is always substantive:
- * an unseen file may be the real fix.
+ * Speculative when every changed file is notes. `complete: false` (the
+ * listing hit its page cap) is always substantive: an unseen file may be the
+ * real fix. So is an empty PR: the GitHub Copilot agent opens its draft PR
+ * before it pushes, so "no files yet" proves nothing (callers record the PR
+ * as unchecked instead).
  */
 export function classifyPrSubstance(files: PrChangedFile[], opts: { complete: boolean }): PrSubstanceVerdict {
-  if (!opts.complete) return { speculative: false }
-  if (files.length === 0) {
-    return { speculative: true, reason: 'the pull request changes no files', files: [] }
-  }
+  if (!opts.complete || files.length === 0) return { speculative: false }
   if (!files.every(isNotesOnly)) return { speculative: false }
   const names = files.map((f) => f.filename)
   const shown = names.slice(0, 5).join(', ') + (names.length > 5 ? ` and ${names.length - 5} more` : '')

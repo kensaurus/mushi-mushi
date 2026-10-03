@@ -13,6 +13,10 @@ vi.mock('../../supabase/functions/_shared/auth.ts', () => ({
   adminOrApiKey: () => async (_c: unknown, next: () => Promise<void>) => next(),
   apiKeyAuth: async (_c: unknown, next: () => Promise<void>) => next(),
   jwtAuth: async (_c: unknown, next: () => Promise<void>) => next(),
+  mcpKeyBrowserExposure: (
+    h: { origin?: string | null; referer?: string | null; secFetchSite?: string | null },
+    k: { last_seen_origin?: string | null; browser_seen_at?: string | null },
+  ) => (h.origin || h.referer || h.secFetchSite ? 'browser_request' : k.browser_seen_at || k.last_seen_origin ? 'key_seen_in_browser' : null),
 }))
 vi.mock('../../supabase/functions/_shared/sentry.ts', () => ({ reportError: vi.fn(), reportMessage: vi.fn() }))
 vi.mock('../../supabase/functions/api/routes/project-ci-secrets.ts', () => ({ inferStack: () => 'nextjs', requiredCiVarNames: () => [] }))
@@ -344,6 +348,14 @@ describe('recipe ingest routes', () => {
     expect(res.body.data).toEqual({ received: 3, stored: 3, autoReleaseChecked: 1 })
     expect(scheduleAutoRelease).toHaveBeenCalledTimes(1)
     expect(scheduleAutoRelease).toHaveBeenCalledWith(db, P1, { source: 'recipe_event', version: '2.0.0', commit: 'abc1234' })
+
+    // A key a web page has sent (the public SDK key) records the event but never releases.
+    const exposed = await app.call('POST', '/v1/ingest/recipe/events', {
+      body: { events: [{ type: 'release.published', targetId: 'web', version: '2.0.1' }] },
+      vars: { projectId: P1, apiKeyBrowserSignals: { last_seen_origin: null, browser_seen_at: '2026-10-01T00:00:00Z' } },
+    })
+    expect(exposed.body.data).toEqual({ received: 1, stored: 1, autoReleaseChecked: 0, autoReleaseSkipped: 'browser_exposed_key' })
+    expect(scheduleAutoRelease).toHaveBeenCalledTimes(1)
   })
 
   it('imports shared resources from CSV for owners only, and reports bad lines', async () => {

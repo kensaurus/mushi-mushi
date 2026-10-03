@@ -58,8 +58,11 @@ describe('isTodoOnlyChange', () => {
 })
 
 describe('classifyPrSubstance', () => {
-  it('flags an empty PR and a notes-only PR as speculative', () => {
-    expect(classifyPrSubstance([], { complete: true })).toMatchObject({ speculative: true })
+  it('does not judge an empty PR (the Copilot agent opens its PR before pushing)', () => {
+    expect(classifyPrSubstance([], { complete: true })).toEqual({ speculative: false })
+  })
+
+  it('flags a notes-only PR as speculative', () => {
     const v = classifyPrSubstance(
       [
         file('NEEDS_INVESTIGATION.md', '+# what I checked', { status: 'added' }),

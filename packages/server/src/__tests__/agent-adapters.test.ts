@@ -352,7 +352,13 @@ describe('applyCloudAgentOutcome', () => {
       db,
       TARGET,
       { kind: 'pr_opened', prUrl: 'https://github.com/o/r/pull/12' },
-      { inspectPr: async () => ({ kind: 'read', complete: true, files: [] }) },
+      {
+        inspectPr: async () => ({
+          kind: 'read',
+          complete: true,
+          files: [{ filename: 'NOTES.md', status: 'added', additions: 1, deletions: 0, patch: '+x' }],
+        }),
+      },
     )
     expect(res).toEqual({ applied: false, reason: 'already_has_pr' })
     expect(findQueries(queries, 'reports', 'update')).toHaveLength(0)
@@ -396,6 +402,21 @@ describe('applyCloudAgentOutcome', () => {
     expect(findQueries(queries, 'reports', 'update')[0].payload).toMatchObject({ status: 'fixing' })
     expect(findQueries(queries, 'fix_events', 'insert')[0].payload).toMatchObject({
       payload: expect.objectContaining({ contentCheck: 'not_checked: no GitHub token is stored for this project' }),
+    })
+  })
+
+  it('pr_opened on a PR with no files yet (Copilot opens before pushing) trusts it and records it unchecked', async () => {
+    const { db, queries } = createFakeDb((q) => (q.table === 'fix_attempts' && q.op === 'update' ? { data: [{ id: 'fa-1' }] } : { data: null }))
+    const res = await applyCloudAgentOutcome(
+      db,
+      { ...TARGET, agent: 'github_cloud_agent' },
+      { kind: 'pr_opened', prUrl: 'https://github.com/o/r/pull/12' },
+      { inspectPr: async () => ({ kind: 'read', complete: true, files: [] }) },
+    )
+    expect(res).toEqual({ applied: true })
+    expect(findQueries(queries, 'reports', 'update')[0].payload).toMatchObject({ status: 'fixing' })
+    expect(findQueries(queries, 'fix_events', 'insert')[0].payload).toMatchObject({
+      payload: expect.objectContaining({ contentCheck: 'not_checked: the pull request has no files yet' }),
     })
   })
 

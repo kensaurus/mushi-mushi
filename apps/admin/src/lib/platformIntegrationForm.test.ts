@@ -45,16 +45,29 @@ describe('platformSaveBody', () => {
 
   it('sends a changed list as an array', () => {
     const body = platformSaveBody(sentry, { sentry_project_slug: 'web', sentry_extra_project_slugs: 'api, worker' }, saved)
-    expect(body).toEqual({ sentry_project_slug: 'web', sentry_extra_project_slugs: ['api', 'worker'] })
+    expect(body).toEqual({ sentry_extra_project_slugs: ['api', 'worker'] })
   })
 
   it('sends an emptied list as [] and omits an unchanged one', () => {
     expect(platformSaveBody(sentry, { sentry_extra_project_slugs: '' }, saved)).toEqual({ sentry_extra_project_slugs: [] })
-    expect(platformSaveBody(sentry, { sentry_project_slug: 'web', sentry_extra_project_slugs: 'api' }, saved)).toEqual({
-      sentry_project_slug: 'web',
-    })
+    expect(platformSaveBody(sentry, { sentry_project_slug: 'web', sentry_extra_project_slugs: 'api' }, saved)).toEqual({})
     // Never saved (column missing before the migration): an empty draft is unchanged.
     expect(platformSaveBody(sentry, { sentry_extra_project_slugs: '' }, {})).toEqual({})
+  })
+
+  it('sends only edited scalars, never echoes booleans or masked secrets back as text', () => {
+    const current = {
+      sentry_project_slug: 'web',
+      sentry_seer_enabled: true,
+      sentry_auth_token_ref: '…ab12',
+      sentry_dsn: null,
+    }
+    const draft = { ...draftFromSaved(current), sentry_project_slug: 'web-app', sentry_dsn: '' }
+    expect(platformSaveBody(sentry, draft, current)).toEqual({ sentry_project_slug: 'web-app' })
+    // Clearing a saved value is a change and is sent as ''.
+    expect(platformSaveBody(sentry, { ...draftFromSaved(current), sentry_project_slug: '' }, current)).toEqual({
+      sentry_project_slug: '',
+    })
   })
 })
 

@@ -623,7 +623,12 @@ export async function applyCloudAgentOutcome(
         reason: inspection.reason,
       })
     }
-    const contentCheck = inspection.kind === 'read' ? 'code_change' : `not_checked: ${inspection.reason}`
+    const contentCheck =
+      inspection.kind === 'unread'
+        ? `not_checked: ${inspection.reason}`
+        : inspection.files.length === 0
+          ? 'not_checked: the pull request has no files yet'
+          : 'code_change'
 
     const { data: updated, error } = await db
       .from('fix_attempts')

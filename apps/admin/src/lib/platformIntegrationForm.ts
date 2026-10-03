@@ -29,9 +29,12 @@ function sameList(a: readonly string[], b: unknown): boolean {
 }
 
 /**
- * Request body for PUT /v1/admin/integrations/platform/:kind. A list field is
- * sent as an array, and only when it changed: a save that never touched it
- * then keeps working before the server migration that adds its column.
+ * Request body for PUT /v1/admin/integrations/platform/:kind: only the fields
+ * the user changed. Untouched values (booleans and numbers the form shows as
+ * text, masked secrets) are never echoed back as strings, and a save that
+ * never touched a list field keeps working before the server migration that
+ * adds its column. A list field is sent as an array; clearing a field sends
+ * `''` (or `[]`), which the server stores as cleared.
  */
 export function platformSaveBody(
   def: Pick<PlatformDef, 'fields'>,
@@ -39,10 +42,11 @@ export function platformSaveBody(
   saved: Record<string, unknown>,
 ): Record<string, unknown> {
   const listFields = new Set(def.fields.filter((f) => f.list).map((f) => f.name))
+  const savedDraft = draftFromSaved(saved)
   const body: Record<string, unknown> = {}
   for (const [k, v] of Object.entries(draft)) {
     if (!listFields.has(k)) {
-      body[k] = v
+      if (v !== savedDraft[k]) body[k] = v
       continue
     }
     const next = parseListInput(v)
