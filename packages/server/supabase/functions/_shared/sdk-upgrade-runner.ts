@@ -15,7 +15,9 @@ import {
   type FileChange,
 } from './github-pr.ts'
 import {
+  archivedDirsFrom,
   computeBumpPlan,
+  isUnderArchivedDir,
   fetchAllLatestVersions,
   type BumpEntry,
 } from './sdk-upgrade-plan.ts'
@@ -174,18 +176,25 @@ export async function runSdkUpgradeJob(jobId: string): Promise<SdkUpgradeRunResu
     // candidates if the tree can't be fetched (huge/truncated tree, 409 empty
     // repo, permission edge cases) so discovery can only ever add coverage,
     // never remove it.
-    const discoverPackageJsonPaths = async (ref: string): Promise<string[]> => {
+    const discoverPackageJsonPaths = async (
+      ref: string,
+    ): Promise<{ paths: string[]; archived: Set<string> }> => {
+      const none = { paths: [] as string[], archived: new Set<string>() }
       const treeRes = await ghFetchOptional(
         `https://api.github.com/repos/${owner}/${repo}/git/trees/${encodeURIComponent(ref)}?recursive=1`,
         { headers: baseHeaders },
       )
-      if (!treeRes || typeof treeRes !== 'object') return []
+      if (!treeRes || typeof treeRes !== 'object') return none
       const tree = (treeRes as { tree?: Array<{ path?: string; type?: string }> }).tree
-      if (!Array.isArray(tree)) return []
-      return tree
+      if (!Array.isArray(tree)) return none
+      const blobs = tree
         .filter((e) => e?.type === 'blob' && typeof e.path === 'string')
         .map((e) => e.path as string)
+      const archived = archivedDirsFrom(blobs)
+      const paths = blobs
         .filter((p) => /(^|\/)package\.json$/.test(p) && !PKG_PATH_IGNORE_RE.test(p))
+        .filter((p) => !isUnderArchivedDir(p, archived))
+      return { paths, archived }
     }
 
     // Scan every candidate package.json on a given ref and compute the bumps
@@ -198,8 +207,10 @@ export async function runSdkUpgradeJob(jobId: string): Promise<SdkUpgradeRunResu
       const filesToCommit: FileChange[] = []
       const discovered = await discoverPackageJsonPaths(ref)
       const pkgPaths = Array.from(
-        new Set([...FIXED_PKG_PATH_CANDIDATES, ...discovered]),
-      ).slice(0, MAX_PKG_FILES)
+        new Set([...FIXED_PKG_PATH_CANDIDATES, ...discovered.paths]),
+      )
+        .filter((p) => !isUnderArchivedDir(p, discovered.archived))
+        .slice(0, MAX_PKG_FILES)
       for (const pkgPath of pkgPaths) {
         const fileRes = await ghFetchOptional(
           `https://api.github.com/repos/${owner}/${repo}/contents/${pkgPath}?ref=${encodeURIComponent(ref)}`,
@@ -213,7 +224,10 @@ export async function runSdkUpgradeJob(jobId: string): Promise<SdkUpgradeRunResu
 
         let pkgText: string
         try {
-          pkgText = atob(encoded.replace(/\s/g, ''))
+          // atob() yields one char per byte; decode UTF-8 or an em dash in a
+          // description is written back as mojibake (glot.it, tsumagoi PRs).
+          const bin = atob(encoded.replace(/\s/g, ''))
+          pkgText = new TextDecoder().decode(Uint8Array.from(bin, (ch) => ch.charCodeAt(0)))
         } catch {
           continue
         }
