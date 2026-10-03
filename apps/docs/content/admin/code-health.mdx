@@ -56,7 +56,8 @@ POST /v1/ingest/metrics   # CI push — apiKeyAuth, prefix allow-list bundle.* /
 
 From your editor, the MCP tool `get_code_health` returns the same data
 (trends default to the last 30 days; pass `days` for more). Pass a god file's
-`id` to `explain_finding` for its fix in one sentence.
+`id` to `explain_finding` for its fix in one sentence. A project key reads its
+own project; an account-level key needs `projectId` (`project_id` on the API).
 
 ---
 
