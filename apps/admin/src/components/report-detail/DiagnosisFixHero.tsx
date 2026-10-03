@@ -163,10 +163,10 @@ function Stage2DiagnosisBody({
   return (
     <div className="space-y-2 text-sm leading-relaxed text-fg-secondary">
       {streaming && <p className="text-2xs text-fg-faint italic">Full diagnosis still running — fields fill in as they arrive.</p>}
-      <DiagnosisField label="Why it broke">{diagnosis.rootCause ?? summary ?? 'No root cause yet.'}</DiagnosisField>
+      <DiagnosisField label="Why it broke">{inlineMarkdown(diagnosis.rootCause ?? summary ?? 'No root cause yet.')}</DiagnosisField>
       {diagnosis.suggestedFix && (
         <DiagnosisField label="Suggested fix">
-          <span className="whitespace-pre-line">{diagnosis.suggestedFix}</span>
+          <span className="whitespace-pre-line">{inlineMarkdown(diagnosis.suggestedFix)}</span>
         </DiagnosisField>
       )}
       {diagnosis.reproductionSteps.length > 0 && (
@@ -181,6 +181,27 @@ function Stage2DiagnosisBody({
       {meta.length > 0 && <p className="text-2xs text-fg-faint">{meta.join(' · ')}</p>}
     </div>
   )
+}
+
+/**
+ * The model writes light Markdown (**bold**, `code`). Render just those two as
+ * elements. Everything stays React text, so model output can never become HTML.
+ * @internal Exported for unit tests only.
+ */
+export function inlineMarkdown(text: string): ReactNode[] {
+  const out: ReactNode[] = []
+  const re = /\*\*([^*\n]+)\*\*|`([^`\n]+)`/g
+  let last = 0
+  let i = 0
+  for (const m of text.matchAll(re)) {
+    const at = m.index ?? 0
+    if (at > last) out.push(text.slice(last, at))
+    if (m[1] !== undefined) out.push(<strong key={i++} className="font-semibold text-fg">{m[1]}</strong>)
+    else out.push(<code key={i++} className="rounded-sm bg-surface-raised px-1 font-mono">{m[2]}</code>)
+    last = at + m[0].length
+  }
+  if (last < text.length) out.push(text.slice(last))
+  return out
 }
 
 function DiagnosisField({ label, children }: { label: string; children: ReactNode }) {
