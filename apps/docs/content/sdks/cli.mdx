@@ -217,10 +217,17 @@ Checks that catch a problem before a user hits it. `scan` runs in your own CI
 job; Mushi never clones your repo.
 
 ```bash
-mushi radar scan                     # storage deletes done in SQL; lists the build files the store rules read
-mushi radar scan --push              # send results to Mushi (one extra step in your existing CI job)
+mushi radar scan                     # storage deletes done in SQL, secret keys in the built app; lists the build files the store rules read
+mushi radar scan --push              # send results to Mushi (one extra step in your existing CI job, after the build step)
 mushi radar show                     # every hole check for this project and what it found
 ```
+
+Run `scan` **after your build step**: it also reads the built app (`dist`,
+`build`, `out`, `.next/static`, native JS bundles) for secret keys. With no
+build output, that check is left out and reads "Not checked", never a pass.
+Only the file, the line and the kind of key are sent, never the key itself.
+The Supabase anon key and the Mushi SDK key are public by design and are not
+flagged.
 
 ---
 
