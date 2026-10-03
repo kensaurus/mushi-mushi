@@ -6,7 +6,9 @@
  *     store an `app_recipe_snapshots` row;
  *   - runDesignDeviance: scan the repo's source at the snapshot's commit
  *     (bounded) and write a `design_drift` gate run, its findings, and the
- *     `design.deviance_score` metric.
+ *     `design.deviance_score` metric, then run the project's opt-in deviance
+ *     actions (design-actions.ts). The scan itself is design-scan.ts, the
+ *     engine `mushi recipe check` runs too.
  *
  * Failures are written down, not swallowed: a failed refresh or scan leaves a
  * `design_drift` gate run with status `error`, so the console renders `error`
@@ -16,17 +18,10 @@
 import type { getServiceClient } from './db.ts'
 import { log } from './logger.ts'
 import { normalizeTokenSet, stableStringify } from './dtcg.ts'
-import {
-  buildDevianceContext,
-  computeDevianceScore,
-  contrastFindings,
-  devianceStatus,
-  evaluateContrast,
-  LITERAL_RULES,
-  ruleApplicable,
-  scanSourceFile,
-  sortFindings,
-} from './design-deviance.ts'
+import { actOnDesignDeviance, DESIGN_PHASE_PATH, DESIGN_SCAN_PHASE, storedFindingsOf } from './design-actions.ts'
+import { devianceStatus } from './design-deviance.ts'
+import type { DevianceFinding } from './design-engine-types.ts'
+import { computeDeviance, selectScanFiles, tokenFilePaths } from './design-scan.ts'
 import { collectSetAssets, judgingSet, MAX_TOKEN_FILE_BYTES, planTokenSets, readDirectionMeta, type StoredTokens, type StoredTokenSet } from './design-sets.ts'
 import { matchAny } from './recipe-glob.ts'
 import {
@@ -40,14 +35,12 @@ import {
   type RepoFile,
   type TreeEntry,
 } from './recipe-github.ts'
-import { effectiveDesignRules, parseRecipeManifest, RECIPE_MANIFEST_MAX_BYTES, RECIPE_MANIFEST_PATH, type RecipeManifest } from './recipe-schema.ts'
+import { parseRecipeManifest, RECIPE_MANIFEST_MAX_BYTES, RECIPE_MANIFEST_PATH, type RecipeManifest } from './recipe-schema.ts'
 import { scanForSecrets } from './secret-scan.ts'
 import { parseCssScopes } from './css-scopes.ts'
 import type { StoredCss } from './design-sets.ts'
 import type {
   DesignComponentEntry,
-  DesignRuleId,
-  DevianceFinding,
   DevianceRun,
   RecipeIssue,
   RecipeRefreshResult,
@@ -58,13 +51,18 @@ const dlog = log.child('design-plane')
 
 export const DESIGN_GATE = 'design_drift'
 export const DEVIANCE_METRIC = 'design.deviance_score'
-/** Scan bounds: files, total bytes, bytes per file, stored finding rows. */
-export const SCAN_LIMITS = { maxFiles: 1500, maxBytes: 12 * 1024 * 1024, maxFileBytes: 256 * 1024, maxStoredFindings: 500 }
-export const DEFAULT_SCAN_GLOBS = ['**/*.{css,scss,ts,tsx,js,jsx}']
-export const ALWAYS_IGNORE = [
-  '**/node_modules/**', '**/dist/**', '**/build/**', '**/.next/**', '**/out/**', '**/coverage/**', '**/vendor/**',
-  '**/*.d.ts', '**/*.min.*', '**/*.map', '**/*.generated.*', '**/android/**', '**/ios/**',
-]
+/**
+ * A CI push of a branch other than the default (every PR run): kept for its
+ * findings and the CI gate, never the shown score, the metric or the
+ * auto-fix baseline (isScanRun and previousScanFindings skip it).
+ */
+export const CI_BRANCH_SCAN_PHASE = 'ci_branch_scan'
+/**
+ * A default-branch CI push made with a key a web page has sent (public, so
+ * anyone could have made it): kept for its findings and the CI gate, never
+ * the shown score, the metric, the auto-fix baseline or a dispatch.
+ */
+export const CI_UNTRUSTED_SCAN_PHASE = 'ci_untrusted_scan'
 
 export async function sha256Hex(text: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))
@@ -299,76 +297,36 @@ export async function snapshotFromSource(db: Db, projectId: string, source: Reci
 
 // ── Deviance run ─────────────────────────────────────────────────────────────
 
-/** Files the scan reads, in a fixed order, plus whether a cap cut it short. */
-export function selectScanFiles(
-  entries: ReadonlyArray<{ path: string; size: number }>,
-  manifest: RecipeManifest | null,
-  excludePaths: readonly string[],
-  limits = SCAN_LIMITS,
-): { files: string[]; matched: number; truncated: boolean } {
-  const globs = manifest?.design?.literalScan?.globs?.length ? manifest.design.literalScan.globs : DEFAULT_SCAN_GLOBS
-  const ignore = [...ALWAYS_IGNORE, ...(manifest?.design?.literalScan?.ignore ?? [])]
-  const matched = entries
-    .filter((e) => matchAny(e.path, globs) && !matchAny(e.path, ignore) && !excludePaths.includes(e.path) && e.size <= limits.maxFileBytes)
-    .sort((a, b) => (a.path < b.path ? -1 : 1))
-  const files: string[] = []
-  let bytes = 0
-  for (const e of matched) {
-    if (files.length >= limits.maxFiles || bytes + e.size > limits.maxBytes) break
-    files.push(e.path)
-    bytes += e.size
-  }
-  return { files, matched: matched.length, truncated: files.length < matched.length }
-}
-
-export interface DevianceComputation {
-  findings: DevianceFinding[]
-  counts: Partial<Record<DesignRuleId, number>>
-  score: number | null
-  breakdown: ReturnType<typeof computeDevianceScore>['breakdown']
-  scannedLines: number
-}
-
-/** Pure: everything a deviance run computes from the snapshot plus file texts. */
-export function computeDeviance(snapshot: Pick<SnapshotRow, 'manifest' | 'tokens'>, texts: ReadonlyMap<string, string | null>): DevianceComputation {
-  const set = judgingSet(snapshot.tokens)
-  const tokens = set?.tokens ?? []
-  const rules = effectiveDesignRules(snapshot.manifest)
-  const ctx = buildDevianceContext(tokens, rules, snapshot.manifest?.design?.components?.globs ?? [])
-  const findings: DevianceFinding[] = []
-  let scannedLines = 0
-  let scannedFiles = 0
-  for (const [path, text] of texts) {
-    if (text == null) continue
-    const r = scanSourceFile(path, text, ctx)
-    scannedLines += r.lines
-    scannedFiles++
-    findings.push(...r.findings)
-  }
-  const contrast = evaluateContrast(tokens, snapshot.manifest?.design?.contrast ?? [])
-  findings.push(...contrastFindings(contrast, tokens, rules.find((r) => r.id === 'contrast_below_aa')))
-  const counts: Partial<Record<DesignRuleId, number>> = {}
-  for (const f of findings) counts[f.rule_id] = (counts[f.rule_id] ?? 0) + 1
-  const judged = contrast.filter((c) => c.pass !== null)
-  const applicable: Partial<Record<DesignRuleId, boolean>> = {}
-  for (const r of [...LITERAL_RULES, 'contrast_below_aa' as const]) applicable[r] = ruleApplicable(r, ctx, judged.length)
-  const { score, breakdown } = computeDevianceScore({
-    rules,
-    counts,
-    scannedLines,
-    scannedFiles,
-    applicable,
-    contrast: { declared: judged.length, failing: judged.filter((c) => c.pass === false).length },
-  })
-  return { findings: sortFindings(findings), counts, score, breakdown, scannedLines }
-}
-
 /** A `running` scan older than this never finished (the isolate died); it reads as `error`. */
 export const STUCK_SCAN_MS = 15 * 60 * 1000
 
 export type DevianceStart =
   | { ok: true; runId: string; startedAt: string; commitSha: string | null; execute: () => Promise<{ ok: true; run: DevianceRun } | { ok: false; error: string }> }
   | { ok: false; error: string }
+
+/**
+ * Whether the collector's scan is due: the newest design_drift run of phase
+ * `scan` that did not error (running, pass, warn or fail) started more than
+ * `everyMs` ago, or there is none. Filtered on the phase in SQL, so PR pushes
+ * (`ci_branch_scan`), public-key pushes (`ci_untrusted_scan`), legacy CLI
+ * pushes (`ci_scan`) and refresh errors never stand in for a scan and hold
+ * the shown score, the metric and the auto-fix baseline back.
+ */
+export async function designScanDue(db: Db, projectId: string, now: Date, everyMs: number): Promise<{ ok: true; due: boolean } | { ok: false; error: string }> {
+  const { data, error } = await db
+    .from('gate_runs')
+    .select('started_at')
+    .eq('project_id', projectId)
+    .eq('gate', DESIGN_GATE)
+    .eq(DESIGN_PHASE_PATH, DESIGN_SCAN_PHASE)
+    .neq('status', 'error')
+    .order('started_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (error) return { ok: false, error: `gate_runs read failed: ${error.message}` }
+  const at = data ? Date.parse((data as { started_at: string }).started_at) : Number.NaN
+  return { ok: true, due: !Number.isFinite(at) || now.getTime() - at > everyMs }
+}
 
 /** Scan synchronously (the collector). The api route uses startDesignDeviance. */
 export async function runDesignDeviance(db: Db, projectId: string, triggeredBy = 'manual'): Promise<{ ok: true; run: DevianceRun } | { ok: false; error: string }> {
@@ -399,34 +357,48 @@ export async function startDesignDeviance(db: Db, projectId: string, triggeredBy
   return { ok: true, runId, startedAt, commitSha: snapshot.commit_sha, execute: () => executeScan(db, projectId, snapshot, repo, runId, startedAt) }
 }
 
+/** Store a scan's findings (capped) in the shape loadRunFindings reads; returns the stored count. Throws on a failed insert. */
+export async function storeScanFindings(db: Db, projectId: string, runId: string, findings: readonly DevianceFinding[]): Promise<number> {
+  const stored = storedFindingsOf(findings)
+  const rows = stored.map((f) => ({
+    gate_run_id: runId,
+    project_id: projectId,
+    severity: f.severity,
+    rule_id: f.rule_id,
+    message: f.message.slice(0, 500),
+    file_path: f.file_path,
+    line: f.line,
+    col: f.col,
+    suggested_fix: { value: f.value, suggestion: f.suggestion },
+  }))
+  for (let i = 0; i < rows.length; i += 250) {
+    const { error } = await db.from('gate_findings').insert(rows.slice(i, i + 250))
+    if (error) throw new Error(`gate_findings insert failed: ${error.message}`)
+  }
+  return stored.length
+}
+
+/** The `design.deviance_score` metric point for a scored run (the set is the dimension). */
+export async function recordDevianceMetric(db: Db, projectId: string, set: string | null, ts: string, score: number | null): Promise<void> {
+  if (score == null) return
+  const { error } = await db.from('metric_series').insert({ project_id: projectId, metric_name: DEVIANCE_METRIC, dimension: set, ts, value: score })
+  if (error) dlog.error('deviance metric insert failed', { projectId, err: error.message })
+}
+
 async function executeScan(db: Db, projectId: string, snapshot: SnapshotRow, repo: RecipeRepo, runId: string, startedAt: string): Promise<{ ok: true; run: DevianceRun } | { ok: false; error: string }> {
   try {
     const sha = snapshot.commit_sha ?? (await getDefaultHead(repo)).sha
     const tree = await listTree(repo, sha)
-    const tokenFiles = (snapshot.tokens?.sets ?? []).flatMap((s) => s.files.map((f) => f.path))
-    const pick = selectScanFiles(tree.entries, snapshot.manifest, [...tokenFiles, RECIPE_MANIFEST_PATH])
+    const pick = selectScanFiles(tree.entries, snapshot.manifest, [...tokenFilePaths(snapshot.tokens), RECIPE_MANIFEST_PATH])
     const texts = await readBlobsGraphql(repo, sha, pick.files)
     const result = computeDeviance(snapshot, texts)
-    const scannedFiles = [...texts.values()].filter((t) => t != null).length
+    const scannedFiles = result.scannedFiles
     const status = devianceStatus(result.findings)
-    const stored = result.findings.slice(0, SCAN_LIMITS.maxStoredFindings)
-    if (stored.length > 0) {
-      const rows = stored.map((f) => ({
-        gate_run_id: runId,
-        project_id: projectId,
-        severity: f.severity,
-        rule_id: f.rule_id,
-        message: f.message.slice(0, 500),
-        file_path: f.file_path,
-        line: f.line,
-        col: f.col,
-        suggested_fix: { value: f.value, suggestion: f.suggestion },
-      }))
-      for (let i = 0; i < rows.length; i += 250) {
-        const { error } = await db.from('gate_findings').insert(rows.slice(i, i + 250))
-        if (error) throw new Error(`gate_findings insert failed: ${error.message}`)
-      }
-    }
+    const stored = await storeScanFindings(db, projectId, runId, result.findings)
+    // Opt-in actions (off by default): may dispatch a fix for new findings. Never throws.
+    // Only the stored slice: the next scan compares against these stored rows.
+    const acted = await actOnDesignDeviance(db, { projectId, runId, score: result.score, findings: storedFindingsOf(result.findings), branch: null })
+    if (acted.action !== 'off') dlog.info('design deviance action', { projectId, runId, ...acted })
     const completedAt = new Date().toISOString()
     const summary = {
       phase: 'scan',
@@ -437,20 +409,18 @@ async function executeScan(db: Db, projectId: string, snapshot: SnapshotRow, rep
       scannedLines: result.scannedLines,
       matchedFiles: pick.matched,
       truncated: pick.truncated || tree.truncated,
-      storedFindings: stored.length,
+      storedFindings: stored,
       snapshotId: snapshot.id,
       tokensHash: snapshot.tokens_hash,
       set: judgingSet(snapshot.tokens)?.name ?? null,
+      ...(acted.action === 'off' ? {} : { action: acted }),
     }
     const { error: upErr } = await db
       .from('gate_runs')
       .update({ status, summary, findings_count: result.findings.length, completed_at: completedAt })
       .eq('id', runId)
     if (upErr) throw new Error(`gate_runs update failed: ${upErr.message}`)
-    if (result.score != null) {
-      const { error: mErr } = await db.from('metric_series').insert({ project_id: projectId, metric_name: DEVIANCE_METRIC, dimension: summary.set, ts: completedAt, value: result.score })
-      if (mErr) dlog.error('deviance metric insert failed', { projectId, err: mErr.message })
-    }
+    await recordDevianceMetric(db, projectId, summary.set, completedAt, result.score)
     const run: DevianceRun = {
       runId,
       status,
@@ -464,7 +434,7 @@ async function executeScan(db: Db, projectId: string, snapshot: SnapshotRow, rep
       completedAt,
       breakdown: result.breakdown,
       counts: result.counts,
-      storedFindings: stored.length,
+      storedFindings: stored,
       error: null,
     }
     return { ok: true, run }

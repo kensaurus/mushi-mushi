@@ -363,6 +363,49 @@ describe('recipe ingest routes', () => {
     expect(failed.body.error.code).toBe('DB_ERROR')
   })
 
+  it('reads a CSV saved by Excel (byte-order mark, CRLF) and tells the console who may import', async () => {
+    const db = seed()
+    const app = ingestHarness(db)
+    const res = await app.call('POST', '/v1/ingest/recipe/csv', { body: { organizationId: ORG, csv: '﻿kind,external_id,project\r\ndomain,glot.it,glot-it\r\n' } })
+    expect(res.status).toBe(200)
+    expect(res.body.data).toMatchObject({ imported: 1, errors: [], skippedOverLimit: 0 })
+    expect((await app.call('GET', `/v1/admin/orgs/${ORG}/portfolio/resources`)).body.data.canImport).toBe(true)
+    expect((await app.call('GET', `/v1/admin/orgs/${ORG}/portfolio/resources`, { vars: { userId: 'member' } })).body.data.canImport).toBe(false)
+    // An account-level API key reads the graph but cannot import (the import route is jwtAuth).
+    expect((await app.call('GET', `/v1/admin/orgs/${ORG}/portfolio/resources`, { vars: { authMethod: 'apiKey', isOrgScopedKey: true } })).body.data.canImport).toBe(false)
+  })
+
+  it('counts every refused row while listing only the first 50, and names the line the file really has', async () => {
+    const db = seed()
+    const app = ingestHarness(db)
+    const bad = Array.from({ length: 70 }, (_, i) => `bogus,x${i},glot-it`)
+    // A blank line after the header and another before the last row must not shift the line numbers.
+    const csv = ['kind,external_id,project', '', 'domain,glot.it,glot-it', ...bad, '', 'bogus,last,glot-it'].join('\n')
+    const res = await app.call('POST', '/v1/ingest/recipe/csv', { body: { organizationId: ORG, csv } })
+    expect(res.status).toBe(200)
+    expect(res.body.data).toMatchObject({ imported: 1, errorCount: 71 })
+    expect(res.body.data.errors).toHaveLength(50)
+    expect(res.body.data.errors[0]).toBe('line 4: unknown kind "bogus"')
+    const last = await app.call('POST', '/v1/ingest/recipe/csv', { body: { organizationId: ORG, csv: 'kind,external_id,project\n\n\nbogus,x,glot-it' } })
+    expect(last.body.data.errors).toEqual(['line 4: unknown kind "bogus"'])
+  })
+
+  it('GET /recipe/drift shows the latest design scan however many PR pushes and refresh errors came after it', async () => {
+    const scan = { id: 'scan-1', project_id: P1, gate: 'design_drift', status: 'warn', summary: { phase: 'scan', score: 30 }, started_at: '2026-10-01T00:00:00Z', completed_at: '2026-10-01T00:01:00Z', commit_sha: 'abc' }
+    const noise = Array.from({ length: 150 }, (_, i) => ({
+      id: `pr-${i}`, project_id: P1, gate: 'design_drift', status: i % 3 ? 'pass' : 'error', summary: { phase: i % 3 ? 'ci_branch_scan' : 'refresh' },
+      started_at: `2026-10-02T00:${String(Math.floor(i / 60)).padStart(2, '0')}:${String(i % 60).padStart(2, '0')}Z`, completed_at: '2026-10-02T01:00:00Z', commit_sha: 'pr',
+    }))
+    const db = seed({
+      gate_runs: [...noise, scan],
+      gate_findings: [{ gate_run_id: 'scan-1', project_id: P1, rule_id: 'off_token_color', severity: 'warn', message: 'Colour #ff0000 is not in your tokens.', file_path: 'a.tsx', line: 1, allowlisted: false, suggested_fix: null }],
+    })
+    const res = await ingestHarness(db).call('GET', `/v1/admin/projects/${P1}/recipe/drift`)
+    expect(res.status).toBe(200)
+    expect(res.body.data.gates.design_drift).toMatchObject({ status: 'warn', commitSha: 'abc' })
+    expect(res.body.data.findings).toEqual([expect.objectContaining({ gate: 'design_drift', ruleId: 'off_token_color' })])
+  })
+
   it('parses quoted CSV cells', () => {
     expect(ingest.parseCsvLine('domain,"a,b.example","say ""hi"""')).toEqual(['domain', 'a,b.example', 'say "hi"'])
   })
