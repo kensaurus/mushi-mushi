@@ -108,6 +108,17 @@ describe('absenceUnproven: a missing finding is evidence only from a clean, comp
   it('refuses a run that recorded findings it could not store', () => {
     expect(helper.absenceUnproven({ ...base, status: 'fail', findingsCount: 2, storedCount: 2, summary: { violations: 3, findings_not_stored: 1 } })).toContain('could not store 1')
   })
+  it('withFindingsNotStored (what inventory gates close a run with) feeds that check', () => {
+    const summary = { actions_examined: 40, violations: 3 }
+    expect(helper.withFindingsNotStored(summary, 3, 3)).toBe(summary)
+    expect(helper.withFindingsNotStored(summary, 3, 2)).toBe(summary)
+    const written = helper.withFindingsNotStored(summary, 2, 3)
+    expect(written).toEqual({ actions_examined: 40, violations: 3, findings_not_stored: 1 })
+    expect(summary).not.toHaveProperty('findings_not_stored')
+    // Stored 2 of 3: findings_count is the stored 2, so only the summary key tells the reader.
+    expect(helper.absenceUnproven({ ...base, status: 'fail', findingsCount: 2, storedCount: 2, summary: written })).toContain('could not store 1')
+    expect(helper.absenceUnproven({ ...base, status: 'fail', findingsCount: 3, storedCount: 3, summary: helper.withFindingsNotStored(summary, 3, 3) })).toBeNull()
+  })
   it('scopes runs: design phases, and inventory story subtrees', () => {
     expect(helper.designRunPhase({ phase: 'ci_scan' })).toBe('ci_scan')
     expect(helper.designRunPhase({ phase: 'scan' })).toBe('scan')
