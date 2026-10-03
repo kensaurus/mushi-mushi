@@ -119,7 +119,7 @@ export interface SpendCapPlan {
 /**
  * Split a suggestion against the project's current settings (GET
  * /v1/admin/settings). The suggestion comes from the last daily check, so a
- * cap set since then is never overwritten: any non-null current value counts
+ * cap set since then is never overwritten. Every non-null current value counts
  * as set.
  */
 export function planSpendCaps(values: SpendCapValues, current: Readonly<Record<string, unknown>>): SpendCapPlan {
