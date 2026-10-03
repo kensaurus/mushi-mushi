@@ -403,10 +403,31 @@ export async function fetchLatestCheckRun(
   )
   if (res.status === 404) return null
   if (!res.ok) throw new Error(`check-runs fetch ${res.status}`)
-  const body = await res.json() as {
-    check_runs?: Array<{ status: string | null; conclusion: string | null }>
-  }
-  const runs = body.check_runs ?? []
+  const body = await res.json() as { check_runs?: CheckRunLike[] }
+  return collapseCheckRuns(body.check_runs ?? [])
+}
+
+export interface CheckRunLike {
+  name?: string | null
+  status: string | null
+  conclusion: string | null
+}
+
+/**
+ * Check runs that review a PR instead of testing it. Copilot code review
+ * posts a `copilot-pull-request-reviewer` run that concludes `failure`
+ * whenever it leaves comments or runs out of quota; counting it made
+ * help-her-take-photo#65 read "CI failed" with its only CI job green, and
+ * the console hid the merge button.
+ */
+const ADVISORY_CHECK_RUN_NAMES = new Set(['copilot-pull-request-reviewer'])
+
+export function isAdvisoryCheckRun(run: { name?: string | null }): boolean {
+  return ADVISORY_CHECK_RUN_NAMES.has((run.name ?? '').toLowerCase())
+}
+
+export function collapseCheckRuns(all: CheckRunLike[]): CheckRunSnapshot {
+  const runs = all.filter((r) => !isAdvisoryCheckRun(r))
   if (runs.length === 0) return { status: null, conclusion: null }
 
   const pending = runs.some((r) => r.status === 'queued' || r.status === 'in_progress')
