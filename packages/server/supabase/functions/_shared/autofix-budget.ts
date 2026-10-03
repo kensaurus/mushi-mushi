@@ -26,6 +26,10 @@ export function dispatchTrigger(meta: unknown): DispatchTrigger {
  * True for a child job queued by fix-worker's cross-repo fan-out. Such a job
  * never fans out again: it would queue a job for the original repo, which
  * would fan out again, forever.
+ *
+ * A person who picks the repo (POST /v1/admin/fixes/dispatch `targetRepoId`)
+ * also sets `target_repo_id`, but on a 'manual' job: that is a primary
+ * dispatch, and it fans out like one. Siblings are always 'automatic'.
  */
 export function isSiblingDispatch(dispatch: {
   coordination_id?: string | null
@@ -33,7 +37,7 @@ export function isSiblingDispatch(dispatch: {
 }): boolean {
   if (dispatch.coordination_id) return true
   const meta = (dispatch.dispatch_metadata as Record<string, unknown> | null) ?? {}
-  return typeof meta.target_repo_id === 'string'
+  return typeof meta.target_repo_id === 'string' && dispatchTrigger(meta) !== 'manual'
 }
 
 export interface AutofixBudgetCheck {

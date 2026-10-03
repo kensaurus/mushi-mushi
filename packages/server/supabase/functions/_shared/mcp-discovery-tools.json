@@ -528,7 +528,7 @@
     },
     "dispatch_fix": {
       "title": "Dispatch Mushi fix agent",
-      "description": "Start a Mushi fix agent for a classified report; it writes a branch and opens a signed draft PR. Set agent=\"cursor_cloud\" to dispatch a Cursor Cloud Agent (default uses the in-repo worker). Requires GitHub connected + an LLM key (run diagnose_setup mode=dispatch first). Returns { fixId, status } (fixId is the dispatch id; get_fix_timeline accepts it immediately); poll get_fix_timeline for progress and merge_fix when CI is green. Write; pass the same idempotencyKey to retry safely — without it each call starts a new attempt. Report must be classified — run triage_issue if not.",
+      "description": "Start a Mushi fix agent for a classified report; it writes a branch and opens a signed draft PR. Set agent=\"cursor_cloud\" to dispatch a Cursor Cloud Agent (default uses the in-repo worker). For a project with several linked repos, set targetRepoId (a project_repos.id) to choose the repo the PR opens against; omit it for the primary repo. Requires GitHub connected + an LLM key (run diagnose_setup mode=dispatch first). Returns { fixId, status } (fixId is the dispatch id; get_fix_timeline accepts it immediately); poll get_fix_timeline for progress and merge_fix when CI is green. Write; pass the same idempotencyKey to retry safely — without it each call starts a new attempt. Report must be classified — run triage_issue if not.",
       "scope": "mcp:write",
       "annotations": {
         "title": "Dispatch Mushi fix agent",
@@ -573,6 +573,12 @@
           },
           "inventoryActionNodeId": {
             "description": "Optional inventory Action node UUID for spec-traceability (§2.10). When provided, the fix-worker embeds the expected_outcome contract in the LLM prompt and runs validateAgainstSpec before opening the PR.",
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "targetRepoId": {
+            "description": "Optional linked repo id (project_repos.id) to open the fix PR against, for a project with several repos. Omit for the project's primary repo. Another project's repo id is rejected with 400 TARGET_REPO_NOT_IN_PROJECT.",
             "type": "string",
             "format": "uuid",
             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"

@@ -1680,8 +1680,12 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
   // POST — add a new repo (role + path_globs + repo_url)
   // PUT  — update an existing repo by id
   // DELETE — remove a repo by id
+  //
+  // GET also takes an API key (mcp:read): `mushi fix --repo owner/name`
+  // resolves the name to a project_repos.id here. A project-bound key only
+  // reads its own project (callerCanAccessProject).
 
-  app.get('/v1/admin/repo/repos', jwtAuth, async (c) => {
+  app.get('/v1/admin/repo/repos', adminOrApiKey(), async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
     const projectId = c.req.query('project_id');

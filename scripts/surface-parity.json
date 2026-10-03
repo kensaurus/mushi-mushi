@@ -255,7 +255,7 @@
     "GET /v1/admin/releases/stats": {"cli": ["releases stats"]},
     "GET /v1/admin/repo/activity": {"allow": "jwt-only"},
     "GET /v1/admin/repo/overview": {"allow": "jwt-only"},
-    "GET /v1/admin/repo/repos": {"allow": "jwt-only"},
+    "GET /v1/admin/repo/repos": {"cli": ["fix"]},
     "GET /v1/admin/repo/stats": {"allow": "jwt-only"},
     "GET /v1/admin/reporter-outbox": {"mcp": ["list_reporter_outbox"], "cli": ["outbox list"]},
     "GET /v1/admin/reporter-updates-mode": {"allow": "parity-debt"},

@@ -75,6 +75,11 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
         // Validated against ALLOWED_AGENT_OVERRIDES; unknown values are a
         // 400 UNSUPPORTED_AGENT, 'auto' means the project default.
         agentOverride?: string;
+        // Which linked repo (project_repos.id) the fix goes to. Omitted or
+        // null => fix-worker picks the project's primary repo, as before.
+        // Path-glob routing cannot tell two repos apart when both own
+        // `src/**`, or when a bundled backend's frames are `dist/*.mjs`.
+        targetRepoId?: string | null;
       };
       if (!body.reportId || !body.projectId) {
         return c.json(
@@ -102,6 +107,20 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
               code: 'INVALID_INVENTORY_ACTION_ID',
               message: 'inventoryActionNodeId must be a UUID',
             },
+          },
+          400,
+        );
+      }
+      const targetRepoId = body.targetRepoId ?? null;
+      if (
+        targetRepoId !== null &&
+        (typeof targetRepoId !== 'string' ||
+          !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetRepoId))
+      ) {
+        return c.json(
+          {
+            ok: false,
+            error: { code: 'INVALID_TARGET_REPO_ID', message: 'targetRepoId must be a UUID' },
           },
           400,
         );
@@ -216,6 +235,33 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
       }
       const agentOverride = agentValidation.agent;
 
+      // The chosen repo must be linked to this project. Checked after the
+      // membership gate so a non-member cannot probe other projects' repo
+      // ids. fix-worker re-checks project_id when it resolves the repo.
+      let targetRepo: { id: string; repo_url: string } | null = null;
+      if (targetRepoId) {
+        const { data: repoRow, error: repoErr } = await db
+          .from('project_repos')
+          .select('id, repo_url')
+          .eq('id', targetRepoId)
+          .eq('project_id', body.projectId)
+          .maybeSingle();
+        if (repoErr) return dbError(c, repoErr);
+        if (!repoRow) {
+          return c.json(
+            {
+              ok: false,
+              error: {
+                code: 'TARGET_REPO_NOT_IN_PROJECT',
+                message: 'targetRepoId is not a repo linked to this project',
+              },
+            },
+            400,
+          );
+        }
+        targetRepo = repoRow as { id: string; repo_url: string };
+      }
+
       const { data: job, error: insertErr } = await db
         .from('fix_dispatch_jobs')
         .insert({
@@ -231,9 +277,13 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
           // can honour the caller's preference without a separate round-trip.
           // A person asked for this fix (console, CLI, MCP), so the auto-fix
           // caps do not block it — fix-worker reads `trigger`.
+          // `target_repo_id` is the key fix-worker's resolveRepo() reads.
           dispatch_metadata: {
             trigger: 'manual',
             ...(agentOverride ? { agent_override: agentOverride } : {}),
+            ...(targetRepo
+              ? { target_repo_id: targetRepo.id, target_repo_url: targetRepo.repo_url }
+              : {}),
           },
         })
         .select('id, status, created_at')
@@ -298,7 +348,13 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
 
       return c.json({
         ok: true,
-        data: { dispatchId: job.id, status: job.status, createdAt: job.created_at, budget },
+        data: {
+          dispatchId: job.id,
+          status: job.status,
+          createdAt: job.created_at,
+          targetRepoId: targetRepo?.id ?? null,
+          budget,
+        },
       });
     } catch (err) {
       // Temporary: the dispatch endpoint was returning 500 via the Hono

@@ -216,7 +216,7 @@ Add to `.cursor/mcp.json` in your repo root:
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.23.0"],
+      "args": ["-y", "@mushi-mushi/mcp@0.24.0"],
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
@@ -242,7 +242,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.23.0"],
+      "args": ["-y", "@mushi-mushi/mcp@0.24.0"],
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
@@ -5360,11 +5360,11 @@ Published npm packages ship on independent semver tracks (see [npm](https://www.
 
 | Package | Version |
 | --- | --- |
-| @mushi-mushi/core, @mushi-mushi/web | 1.30.x |
+| @mushi-mushi/core, @mushi-mushi/web | 1.31.x |
 | @mushi-mushi/react | 1.29.x |
-| @mushi-mushi/react-native | 0.23.x |
-| @mushi-mushi/cli | 0.28.x |
-| @mushi-mushi/mcp | 0.23.x |
+| @mushi-mushi/react-native | 0.24.x |
+| @mushi-mushi/cli | 0.29.x |
+| @mushi-mushi/mcp | 0.24.x |
 | @mushi-mushi/capacitor | 1.1.x |
 | @mushi-mushi/node | 1.3.x |
 | @mushi-mushi/angular, @mushi-mushi/vue, @mushi-mushi/svelte | 1.0.x |
@@ -6378,6 +6378,9 @@ mushi fix 00000000-0000-0000-0000-000000000123
 # Cursor Cloud Agent — wait for PR
 mushi fix <reportId> --agent cursor_cloud --wait
 
+# A project with a frontend and a backend repo: send the fix to the backend
+mushi fix <reportId> --repo acme/app-backend
+
 # CI: fail the pipeline if the fix errors
 mushi fix $REPORT_ID --agent cursor_cloud --wait && echo "Fix PR opened"
 ```
@@ -6388,6 +6391,7 @@ mushi fix $REPORT_ID --agent cursor_cloud --wait && echo "Fix PR opened"
 | `--model ` | Model override for `cursor_cloud` (e.g. `composer-latest`) |
 | `--no-auto-pr` | Skip automatic PR creation for `cursor_cloud` |
 | `--wait` | Poll until terminal state; exits non-zero on failure |
+| `--repo <repoId\|owner/name>` | Linked repo to open the fix PR against, for a project with several repos. Defaults to the primary repo. A name is looked up among the project's linked repos |
 
 ### `mushi fixes`
 
@@ -7732,7 +7736,7 @@ description: Every tool, resource and prompt the Mushi MCP server exposes to Cur
 | `remove_spend_import` | Remove a bill import | Remove one bill import from the spend ledger by importId (from get_spend_ledger imports). Its days go back to the next newest import of the same vendor that has them; a retry finishes a removal that failed half-way. Team owners and admins only; needs an account-level key. Confirm with the user first. Returns \{ importId, rowsRemoved, rowsRestored, restoredFrom }. Write. |
 | `import_portfolio_resources` | Import shared resources (CSV) | Record which accounts, domains, buckets or bundle ids your apps share, from a CSV with the columns kind, external_id, project (an app id, slug or name) and optionally role. At most 500 rows and 256 KB; each row is saved on its own, and refused rows are listed with their line number. Read the result with mushi portfolio resources or the console. Optional organizationId; team owners and admins only; needs an account-level key. Returns \{ imported, errorCount, errors, skippedOverLimit }. Write. |
 | `submit_fix_result` | Record a fix outcome | Record a fix outcome from an external agent (e.g. your own Cursor/Claude run): branch, PR URL, files changed, lines added/removed. Creates a fix_attempt row then patches it to completed and links it to the report. Returns \{ fixAttemptId }. Write; NOT idempotent — each call creates a new fix_attempt, so call once per PR. Use after you opened a PR outside Mushi; use dispatch_fix to have Mushi open the PR instead, or merge_fix once CI is green. |
-| `dispatch_fix` | Dispatch Mushi fix agent | Start a Mushi fix agent for a classified report; it writes a branch and opens a signed draft PR. Set agent="cursor_cloud" to dispatch a Cursor Cloud Agent (default uses the in-repo worker). Requires GitHub connected + an LLM key (run diagnose_setup mode=dispatch first). Returns \{ fixId, status } (fixId is the dispatch id; get_fix_timeline accepts it immediately); poll get_fix_timeline for progress and merge_fix when CI is green. Write; pass the same idempotencyKey to retry safely — without it each call starts a new attempt. Report must be classified — run triage_issue if not. |
+| `dispatch_fix` | Dispatch Mushi fix agent | Start a Mushi fix agent for a classified report; it writes a branch and opens a signed draft PR. Set agent="cursor_cloud" to dispatch a Cursor Cloud Agent (default uses the in-repo worker). For a project with several linked repos, set targetRepoId (a project_repos.id) to choose the repo the PR opens against; omit it for the primary repo. Requires GitHub connected + an LLM key (run diagnose_setup mode=dispatch first). Returns \{ fixId, status } (fixId is the dispatch id; get_fix_timeline accepts it immediately); poll get_fix_timeline for progress and merge_fix when CI is green. Write; pass the same idempotencyKey to retry safely — without it each call starts a new attempt. Report must be classified — run triage_issue if not. |
 | `trigger_judge` | Run Sonnet-as-Judge | Queue the Sonnet-as-Judge to grade recent fix quality across accessible projects. Returns \{ dispatched: number } — one judge-batch job per project; scores land asynchronously in judge_results (read back with run_nl_query). Write; consumes LLM budget. Idempotent within a short window. Use before shipping to vet fix quality; use get_fix_timeline to inspect a single attempt instead. |
 | `test_gen_from_report` | Generate Playwright test from report | Generate a Playwright regression test from a classified report using your project LLM key, then open a draft GitHub PR with the spec. Requires the inventory_v2 plan plus GitHub and LLM keys configured. Returns \{ qaStoryId, prUrl }. Write; consumes LLM budget; NOT idempotent — each call opens a new PR. Use to lock in a regression as an E2E test; use generate_tdd_from_story to build a test from a mapped user story instead. |
 | `transition_status` | Move report between states | Move a report to a new workflow state, enforcing the same transition rules as the admin UI. Valid targets: classified, grouped, fixing, fixed, verified, reopened, dismissed. When dismissing, closedReason (duplicate, not_reproducible, wont_fix, working_as_intended, spam) sets what the reporter is told — spam closes silently, and duplicate needs the report grouped under another one first; reporterMessage posts your note to the reporter verbatim. Returns \{ ok }. Write; idempotent (setting the current status is a no-op); rejects illegal transitions. Use to dismiss a duplicate or mark fixed; use merge_fix to mark fixed via a merged PR, or reopen_report for the reopened path. |
@@ -17091,6 +17095,13 @@ You can dispatch a fix from four places:
 
 All three paths produce the same `fix_dispatch_jobs` row and emit the same
 `fix.dispatched` webhook to subscribed plugins.
+
+When a project has more than one linked repo, pick the repo the PR opens
+against: the **Repo** select beside "Dispatch fix" (it starts on the primary
+repo), `targetRepoId` on `dispatch_fix` and `POST /v1/admin/fixes/dispatch`, or
+`mushi fix  --repo <repoId|owner/name>`. Without it, the fix goes to
+the primary repo; another project's repo id is refused with
+`400 TARGET_REPO_NOT_IN_PROJECT`.
 
 ---
 

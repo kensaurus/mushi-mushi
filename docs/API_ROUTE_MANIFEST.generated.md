@@ -8,9 +8,9 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 
 | Auth | Count |
 | --- | ---: |
-| `adminOrApiKey` | 160 |
+| `adminOrApiKey` | 161 |
 | `apiKeyAuth` | 58 |
-| `jwtAuth` | 339 |
+| `jwtAuth` | 338 |
 | `jwtOrApiKey` | 3 |
 | `unknown` | 91 |
 
@@ -415,7 +415,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/releases/stats` | `unknown` | `packages/server/supabase/functions/api/routes/releases.ts` |
 | GET | `/v1/admin/repo/activity` | `jwtAuth` | `packages/server/supabase/functions/api/routes/query-fixes-repo.ts` |
 | GET | `/v1/admin/repo/overview` | `jwtAuth` | `packages/server/supabase/functions/api/routes/query-fixes-repo.ts` |
-| GET | `/v1/admin/repo/repos` | `jwtAuth` | `packages/server/supabase/functions/api/routes/query-fixes-repo.ts` |
+| GET | `/v1/admin/repo/repos` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/query-fixes-repo.ts` |
 | POST | `/v1/admin/repo/repos` | `jwtAuth` | `packages/server/supabase/functions/api/routes/query-fixes-repo.ts` |
 | DELETE | `/v1/admin/repo/repos/:repoId` | `jwtAuth` | `packages/server/supabase/functions/api/routes/query-fixes-repo.ts` |
 | PUT | `/v1/admin/repo/repos/:repoId` | `jwtAuth` | `packages/server/supabase/functions/api/routes/query-fixes-repo.ts` |
