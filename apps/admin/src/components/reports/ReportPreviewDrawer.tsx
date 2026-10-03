@@ -61,13 +61,24 @@ interface ReportPreview {
 interface Props {
   previewId: string | null
   onClose: () => void
+  /**
+   * The report loaded, which stamps `admin_seen_at` server-side. The list
+   * uses it to clear the row's reply dot without a refetch. Not called when
+   * the load failed (nothing was stamped then).
+   */
+  onSeen?: (reportId: string) => void
 }
 
-export function ReportPreviewDrawer({ previewId, onClose }: Props) {
+export function ReportPreviewDrawer({ previewId, onClose, onSeen }: Props) {
   const [report, setReport] = useState<ReportPreview | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const latestIdRef = useRef<string | null>(null)
+  // Read through a ref so a new callback identity never refetches the report.
+  const onSeenRef = useRef(onSeen)
+  useEffect(() => {
+    onSeenRef.current = onSeen
+  }, [onSeen])
 
   useEffect(() => {
     if (!previewId) {
@@ -92,8 +103,10 @@ export function ReportPreviewDrawer({ previewId, onClose }: Props) {
         { signal: controller.signal, cache: 'no-store' },
       )
       if (latestIdRef.current !== previewId || controller.signal.aborted) return
-      if (res.ok && res.data) setReport(res.data.report)
-      else setError(res.error?.message ?? 'Failed to load preview')
+      if (res.ok && res.data) {
+        setReport(res.data.report)
+        onSeenRef.current?.(previewId)
+      } else setError(res.error?.message ?? 'Failed to load preview')
       setLoading(false)
     })()
     return () => {
