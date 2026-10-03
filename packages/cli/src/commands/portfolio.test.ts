@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type * as ConfigModule from '../config.js'
 import { errorReply, okReply, runCli } from '../test-harness.js'
-import type { PortfolioData, PortfolioFindingsData } from './portfolio.js'
 import { registerPortfolioCommands } from './portfolio.js'
 
 vi.mock('../config.js', async (importOriginal) => {
@@ -14,7 +13,7 @@ vi.mock('../config.js', async (importOriginal) => {
 
 const ORG = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'
 
-const portfolio: PortfolioData = {
+const portfolio = {
   organizationId: ORG,
   organizationName: 'Indie Apps',
   page: 1,
@@ -96,7 +95,7 @@ describe('mushi portfolio resources', () => {
 })
 
 describe('mushi portfolio findings', () => {
-  const findings: PortfolioFindingsData = {
+  const findings = {
     organizationId: ORG,
     groups: [{ ruleId: 'missing_rls', gate: 'schema_drift', severity: 'error', projectIds: ['p1', 'p2'], findingCount: 4, sampleMessage: 'Table todos has no RLS', suggestedFix: 'Enable RLS' }],
     sdkSkew: [{ projectId: 'p2', package: '@mushi-mushi/web', version: '1.0.0', latest: '1.30.0', status: 'behind', reason: 'old' }],

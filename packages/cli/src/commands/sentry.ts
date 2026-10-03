@@ -14,7 +14,7 @@ import { MushiCliError } from '../errors.js'
 /** The import reads up to ten issues and their latest events from Sentry. */
 const IMPORT_TIMEOUT_MS = 90_000
 
-export interface SentryImportData {
+interface SentryImportData {
   items: Array<{ input: string; issueId: string | null; shortId: string | null; outcome: string; reportId: string | null; error?: string }>
   created: string[]
   linked: string[]
@@ -25,7 +25,7 @@ export interface SentryImportData {
   nextCursor: string | null
 }
 
-export interface SentryImportFlags {
+interface SentryImportFlags {
   query?: string
   limit?: string
   sinceDays?: string
@@ -34,7 +34,7 @@ export interface SentryImportFlags {
 }
 
 /** Build the request body, validating the same bounds the server enforces. */
-export function buildSentryImportBody(issueIds: string[], flags: SentryImportFlags): Record<string, unknown> {
+function buildSentryImportBody(issueIds: string[], flags: SentryImportFlags): Record<string, unknown> {
   const body: Record<string, unknown> = {}
   if (issueIds.length > 0) {
     if (issueIds.length > 10) throw new MushiCliError('E_INVALID_INPUT', 'Import at most 10 issue ids at a time.')
@@ -60,7 +60,7 @@ export function buildSentryImportBody(issueIds: string[], flags: SentryImportFla
 }
 
 /** The same search, one page on: a cursor only makes sense with the flags that produced it. */
-export function nextPageCommand(flags: SentryImportFlags, cursor: string): string {
+function nextPageCommand(flags: SentryImportFlags, cursor: string): string {
   const parts = ['mushi sentry import']
   if (flags.query) parts.push(`--query ${JSON.stringify(flags.query)}`)
   if (flags.sinceDays) parts.push(`--since-days ${flags.sinceDays}`)
@@ -70,7 +70,7 @@ export function nextPageCommand(flags: SentryImportFlags, cursor: string): strin
   return parts.join(' ')
 }
 
-export function renderSentryImport(data: SentryImportData, flags: SentryImportFlags = {}): string[] {
+function renderSentryImport(data: SentryImportData, flags: SentryImportFlags = {}): string[] {
   const lines = [`Sentry project: ${data.sentryProject ?? data.sentryProjects.join(', ')}`]
   if (data.items.length === 0) lines.push('  No matching issues.')
   for (const i of data.items) {

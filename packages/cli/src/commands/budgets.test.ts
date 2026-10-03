@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type * as ConfigModule from '../config.js'
 import { errorReply, okReply, runCli } from '../test-harness.js'
-import { pickLimits, registerBudgetsCommands } from './budgets.js'
+import { registerBudgetsCommands } from './budgets.js'
 
 vi.mock('../config.js', async (importOriginal) => {
   const actual = await importOriginal<typeof ConfigModule>()
@@ -13,9 +13,13 @@ vi.mock('../config.js', async (importOriginal) => {
 
 const PID = '11111111-2222-4333-8444-555555555555'
 
-describe('pickLimits', () => {
-  it('reads the four spend limits and treats missing as no limit', () => {
-    expect(pickLimits({ monthly_llm_budget_usd: '20', autofix_max_spend_usd: 2, slack_webhook_url: '…' })).toEqual({
+describe('mushi budgets show: reading the settings row', () => {
+  it('reads the four spend limits, coerces numeric strings and treats missing as no limit', async () => {
+    const run = await runCli(registerBudgetsCommands, ['budgets', 'show', '--json'], (c) =>
+      c.path.startsWith('/v1/admin/settings')
+        ? okReply({ monthly_llm_budget_usd: '20', autofix_max_spend_usd: 2, slack_webhook_url: '…' })
+        : c.path.startsWith('/v1/admin/billing/stats') ? okReply({ monthlySpendCapUsd: null }) : okReply({ autofix_enabled: false }))
+    expect(JSON.parse(run.stdout).limits).toEqual({
       monthly_llm_budget_usd: 20,
       autofix_max_spend_usd: 2,
       autofix_max_dispatches_per_day: null,

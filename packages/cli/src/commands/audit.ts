@@ -5,14 +5,14 @@ import { oneLine, resolveProjectId } from '../command-helpers.js';
 import { MushiCliError } from '../errors.js';
 
 /** gate_runs.gate values a finding can come from (mirrors the MCP GATE_IDS list). */
-export const GATE_IDS = [
+const GATE_IDS = [
   'dead_handler', 'mock_leak', 'api_contract', 'crawl', 'status_claim', 'spec_drift',
   'orphan_endpoint', 'unknown_call', 'schema_drift', 'code_health', 'design_drift',
   'ci_drift', 'deploy_drift', 'env_drift', 'portfolio_radar', 'portfolio_radar_ci', 'store_review',
 ] as const;
 const SEVERITIES = ['info', 'warn', 'error'] as const;
 
-export interface GateFindingRow {
+interface GateFindingRow {
   id: string;
   gate_run_id: string;
   severity: string;
@@ -24,12 +24,12 @@ export interface GateFindingRow {
   created_at: string;
 }
 
-export interface GateFindingsData {
+interface GateFindingsData {
   runs: Array<{ id: string; gate: string; status: string; findings_count: number | null; started_at: string; commit_sha: string | null }>;
   findings: GateFindingRow[];
 }
 
-export interface FindingExplanationData {
+interface FindingExplanationData {
   id: string;
   gate: string;
   gateLabel: string;
@@ -45,7 +45,7 @@ export interface FindingExplanationData {
   run: { status: string; completedAt: string | null; commitSha: string | null };
 }
 
-export function renderGateFindings(data: GateFindingsData, includeAllowlisted: boolean): string[] {
+function renderGateFindings(data: GateFindingsData, includeAllowlisted: boolean): string[] {
   const gateOf = new Map(data.runs.map((r) => [r.id, r.gate]));
   const shown = data.findings.filter((f) => includeAllowlisted || !f.allowlisted);
   if (data.runs.length === 0) return ['No gate runs yet for this project.'];
@@ -60,7 +60,7 @@ export function renderGateFindings(data: GateFindingsData, includeAllowlisted: b
   return lines;
 }
 
-export function renderExplanation(e: FindingExplanationData): string[] {
+function renderExplanation(e: FindingExplanationData): string[] {
   const lines = [
     `${e.severity.toUpperCase()} — ${e.gateLabel}${e.rule ? `: ${e.rule.title}` : e.ruleId ? ` (${e.ruleId})` : ''}`,
     `  What this checks: ${e.gateMeaning}`,

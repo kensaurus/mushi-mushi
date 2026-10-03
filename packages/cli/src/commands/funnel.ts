@@ -13,7 +13,7 @@ import { MushiCliError } from '../errors.js'
 
 interface FunnelStep { name: string; entered: number; converted: number; pct: number }
 
-export interface OrgFunnelData {
+interface OrgFunnelData {
   state: 'ok' | 'not_set_up'
   definition: { steps: string[]; window: string; lookbackDays: number; updatedAt: string } | null
   from?: string
@@ -21,7 +21,7 @@ export interface OrgFunnelData {
   rows: Array<{ projectId: string; name: string; state: 'ok' | 'off' | 'no_events' | 'error'; steps: FunnelStep[]; overallPct: number | null }>
 }
 
-export interface GrowthFunnelData {
+interface GrowthFunnelData {
   weeks: Array<Record<string, unknown>>
   by_source: Array<Record<string, unknown>>
   window_start: string | null
@@ -34,7 +34,7 @@ const EVENT_RE = /^[a-z][a-z0-9_]{1,63}$/
 const WINDOWS = ['1d', '7d', '30d'] as const
 
 /** Validate `--steps a,b,c` the same way the server does, so a typo fails before the request. */
-export function parseFunnelSteps(raw: string): string[] {
+function parseFunnelSteps(raw: string): string[] {
   const steps = raw.split(',').map((s) => s.trim()).filter(Boolean)
   if (steps.length < 2 || steps.length > 8) {
     throw new MushiCliError('E_INVALID_INPUT', 'A funnel needs 2 to 8 steps.', 'e.g. --steps signup,first_report,fix_merged')
@@ -49,7 +49,7 @@ export function parseFunnelSteps(raw: string): string[] {
   return steps
 }
 
-export function renderOrgFunnel(data: OrgFunnelData): string[] {
+function renderOrgFunnel(data: OrgFunnelData): string[] {
   if (data.state === 'not_set_up' || !data.definition) {
     return ['No team funnel yet. Set one with: mushi funnel set --steps signup,first_report,fix_merged']
   }
@@ -65,7 +65,7 @@ export function renderOrgFunnel(data: OrgFunnelData): string[] {
   return lines
 }
 
-export function renderGrowthFunnel(data: GrowthFunnelData): string[] {
+function renderGrowthFunnel(data: GrowthFunnelData): string[] {
   const lines = [`Growth funnel (${data.source}) ${data.window_start ?? '—'} → ${data.window_end ?? '—'}`]
   if (!data.self_project_configured) lines.push('  Note: the self-analytics project is not configured, so product steps may read zero.')
   if (data.weeks.length === 0) lines.push('  No weeks in this window.')

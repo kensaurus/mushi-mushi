@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type * as ConfigModule from '../config.js'
 import { okReply, runCli } from '../test-harness.js'
-import type { ConnectorsData } from './connectors.js'
 import { registerConnectorsCommands } from './connectors.js'
 
 vi.mock('../config.js', async (importOriginal) => {
@@ -12,7 +11,7 @@ vi.mock('../config.js', async (importOriginal) => {
   }
 })
 
-const data: ConnectorsData = {
+const data = {
   organizationId: 'org',
   available: [
     { kind: 'vercel', title: 'Vercel', capabilities: ['deploys'], legacyBacked: false },

@@ -11,14 +11,14 @@ import type { Command } from 'commander'
 import { apiCall, die, fmtDate, outputIsJson, requireConfig } from '../cli-shared.js'
 import { oneLine, resolveProjectId } from '../command-helpers.js'
 
-export interface CodeHealthData {
+interface CodeHealthData {
   godFiles: Array<{ id: string; rule_id: string; severity: 'error' | 'warn' | 'info'; file_path: string | null; line: number | null; message: string }>
   latestRunAt: string | null
   latestRunStatus: string | null
   summary: { error_count: number; warn_count: number; max_loc: number | null; latest_bundle_kb: number | null }
 }
 
-export interface CodeHealthStats {
+interface CodeHealthStats {
   hasAnyProject: boolean
   projectName: string | null
   errorCount: number
@@ -29,7 +29,7 @@ export interface CodeHealthStats {
   topPriorityLabel: string | null
 }
 
-export function renderCodeHealth(data: CodeHealthData): string[] {
+function renderCodeHealth(data: CodeHealthData): string[] {
   if (!data.latestRunAt) {
     return [
       'No code-health run yet. Post one from CI:',

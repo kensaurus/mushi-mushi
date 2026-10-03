@@ -12,9 +12,9 @@ import { oneLine, requireYes } from '../command-helpers.js'
 import { MushiCliError } from '../errors.js'
 
 /** Same cap as the server's BODY_OVERRIDE_MAX. */
-export const OUTBOX_TEXT_MAX = 1000
+const OUTBOX_TEXT_MAX = 1000
 
-export interface OutboxMessage {
+interface OutboxMessage {
   id: string
   project_id: string
   report_id: string | null
@@ -25,14 +25,14 @@ export interface OutboxMessage {
   created_at: string
 }
 
-export interface HeldActionData {
+interface HeldActionData {
   delivered: number
   skipped: number
   duplicate: number
   failed: number
 }
 
-export function validateOutboxText(text: string): string {
+function validateOutboxText(text: string): string {
   const trimmed = text.trim()
   if (!trimmed || trimmed.length > OUTBOX_TEXT_MAX) {
     throw new MushiCliError('E_INVALID_INPUT', `The message must be 1 to ${OUTBOX_TEXT_MAX} characters.`)
@@ -40,7 +40,7 @@ export function validateOutboxText(text: string): string {
   return trimmed
 }
 
-export function renderOutbox(messages: OutboxMessage[]): string[] {
+function renderOutbox(messages: OutboxMessage[]): string[] {
   if (messages.length === 0) return ['Nothing held. Every reporter update has gone out.']
   const lines = [`${messages.length} update(s) waiting for review:`]
   for (const m of messages) {

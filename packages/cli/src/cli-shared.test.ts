@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { apiCall, normalizeApiError } from './cli-shared.js'
+import { apiCall } from './cli-shared.js'
 
 const config = { apiKey: 'k', endpoint: 'https://api.test', projectId: 'p' }
 
@@ -12,25 +12,26 @@ function jsonResponse(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
 }
 
-describe('normalizeApiError', () => {
-  it('keeps a well-formed error and its details', () => {
-    const e = { code: 'ORG_REQUIRED', message: 'pick one', organizations: [{ id: 'o1' }] }
-    expect(normalizeApiError(e, 400)).toEqual(e)
+describe('apiCall error shapes', () => {
+  it('keeps a well-formed error and its details', async () => {
+    const error = { code: 'ORG_REQUIRED', message: 'pick one', organizations: [{ id: 'o1' }] }
+    vi.stubGlobal('fetch', async () => jsonResponse(400, { ok: false, error }))
+    expect(await apiCall('/x', config)).toEqual({ ok: false, httpStatus: 400, error })
   })
 
-  it('turns a bare string into a code and message', () => {
-    expect(normalizeApiError('release-builder failed', 500)).toEqual({ code: 'HTTP_500', message: 'release-builder failed' })
+  it('flattens a zod flatten() object', async () => {
+    vi.stubGlobal('fetch', async () => jsonResponse(400, { ok: false, error: { formErrors: [], fieldErrors: { version: ['Required'] } } }))
+    expect(await apiCall('/x', config)).toEqual({ ok: false, httpStatus: 400, error: { code: 'VALIDATION_ERROR', message: 'version: Required' } })
   })
 
-  it('flattens a zod flatten() object', () => {
-    expect(normalizeApiError({ formErrors: [], fieldErrors: { version: ['Required'] } }, 400))
-      .toEqual({ code: 'VALIDATION_ERROR', message: 'version: Required' })
-  })
-
-  it('never yields undefined fields', () => {
-    const e = normalizeApiError(undefined, 502)
-    expect(e.code).toBe('HTTP_502')
-    expect(e.message).toContain('502')
+  it('never yields undefined fields when the error is missing', async () => {
+    vi.stubGlobal('fetch', async () => jsonResponse(502, { ok: false }))
+    const r = await apiCall('/x', config)
+    expect(r.ok).toBe(false)
+    if (!r.ok) {
+      expect(r.error.code).toBe('HTTP_502')
+      expect(r.error.message).toContain('502')
+    }
   })
 })
 

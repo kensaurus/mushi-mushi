@@ -25,7 +25,7 @@ interface PortfolioCard {
   spend: { llmUsd30d: number; autofixCapUsd: number | null; monthlyLlmBudgetUsd: number | null }
 }
 
-export interface PortfolioData {
+interface PortfolioData {
   organizationId: string
   organizationName: string | null
   page: number
@@ -36,7 +36,7 @@ export interface PortfolioData {
   holes: number
 }
 
-export interface PortfolioFindingsData {
+interface PortfolioFindingsData {
   organizationId: string
   groups: Array<{ ruleId: string; gate: string; severity: Severity; projectIds: string[]; findingCount: number; sampleMessage: string; suggestedFix: string }>
   sdkSkew: Array<{ projectId: string; package: string | null; version: string | null; latest: string | null; status: string; reason: string }>
@@ -44,13 +44,13 @@ export interface PortfolioFindingsData {
   crossProject: Array<{ id: string; ruleId: string; severity?: string; message?: string; projectIds?: string[] }>
 }
 
-export interface PortfolioResourcesData {
+interface PortfolioResourcesData {
   organizationId: string
   resources: Array<{ id: string; kind: string; externalId: string; uses: Array<{ projectId: string; role: string; source: string }> }>
   findings: Array<{ id: string; rule_id: string; severity: string; project_ids: string[]; message: string }>
 }
 
-export function renderPortfolioResources(data: PortfolioResourcesData): string[] {
+function renderPortfolioResources(data: PortfolioResourcesData): string[] {
   if (data.resources.length === 0) {
     return ['No shared resources recorded yet. They come from each app\'s recipe, or a CSV upload in the console.']
   }
@@ -76,7 +76,7 @@ function sdkLabel(card: PortfolioCard): string {
   return 'SDK unknown'
 }
 
-export function renderPortfolio(data: PortfolioData): string[] {
+function renderPortfolio(data: PortfolioData): string[] {
   const lines: string[] = []
   const pages = Math.max(1, Math.ceil(data.totalProjects / Math.max(1, data.pageSize)))
   lines.push(`${data.organizationName ?? data.organizationId} — ${data.totalProjects} app(s), page ${data.page}/${pages}`)
@@ -94,7 +94,7 @@ export function renderPortfolio(data: PortfolioData): string[] {
   return lines
 }
 
-export function renderPortfolioFindings(data: PortfolioFindingsData): string[] {
+function renderPortfolioFindings(data: PortfolioFindingsData): string[] {
   const lines: string[] = []
   if (data.groups.length === 0 && data.sdkSkew.length === 0 && data.holes.length === 0 && data.crossProject.length === 0) {
     return ['No repeated problems across your apps.']

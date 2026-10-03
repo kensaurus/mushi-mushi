@@ -11,7 +11,7 @@ import { apiCall, fmtDate, outputIsJson, requireConfig } from '../cli-shared.js'
 import { dieOrgError, oneLine, orgSegment } from '../command-helpers.js'
 import { MushiCliError } from '../errors.js'
 
-export interface ConnectorInstance {
+interface ConnectorInstance {
   id: string
   project_id: string | null
   kind: string
@@ -26,7 +26,7 @@ export interface ConnectorInstance {
   bindings: Array<{ projectId: string; externalId: string; role: string }>
 }
 
-export interface ConnectorsData {
+interface ConnectorsData {
   organizationId: string
   available: Array<{ kind: string; title: string; capabilities: string[]; legacyBacked: boolean }>
   planned: unknown[]
@@ -34,7 +34,7 @@ export interface ConnectorsData {
   legacy: Array<{ kind: string; project_id: string; ok: boolean; error: string | null; observed_at: string }>
 }
 
-export function renderConnectorList(data: ConnectorsData): string[] {
+function renderConnectorList(data: ConnectorsData): string[] {
   const lines: string[] = []
   if (data.instances.length === 0 && data.legacy.length === 0) {
     lines.push('No connectors yet. Add one in the console: Portfolio → Connectors.')
@@ -56,7 +56,7 @@ export function renderConnectorList(data: ConnectorsData): string[] {
   return lines
 }
 
-export function renderConnectorStatus(i: ConnectorInstance): string[] {
+function renderConnectorStatus(i: ConnectorInstance): string[] {
   return [
     `${i.kind} — ${oneLine(i.display_name ?? '(no name)', 60)}`,
     `  id:            ${i.id}`,
@@ -70,7 +70,7 @@ export function renderConnectorStatus(i: ConnectorInstance): string[] {
   ]
 }
 
-export interface ConnectorAction {
+interface ConnectorAction {
   id: string
   connector_instance_id: string
   project_id: string | null
@@ -84,7 +84,7 @@ export interface ConnectorAction {
   error: string | null
 }
 
-export function renderConnectorActions(actions: ConnectorAction[]): string[] {
+function renderConnectorActions(actions: ConnectorAction[]): string[] {
   if (actions.length === 0) return ['No connector actions requested.']
   const lines: string[] = []
   for (const a of actions) {
