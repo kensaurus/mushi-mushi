@@ -2674,6 +2674,15 @@ system, routes and stories, gates, CI/CD, deploy, env names, integrations) on on
 canvas, with a list view on narrow screens. MCP clients read the same data with
 `get_app_recipe`.
 
+Select a card to open its detail panel. Four cards have their own view:
+
+| Card | What the panel shows |
+|------|----------------------|
+| Schema | The tables in the newest schema snapshot (RLS on or off, column count) and what changed since the snapshot before: tables added or removed, columns added or removed, RLS switched |
+| CI/CD | The recent workflow runs with their result and **estimated** billable minutes. GitHub no longer reports billed minutes per run, so Mushi estimates them from job time and runner type. |
+| Deploy | For each target in `deploy.targets`, the commit it should run (the default-branch head) next to the commit and version it reported. A target with no observation says **Not observed**, never Live. |
+| Env names | A matrix of variable names by place: the repo's Actions secrets and variables, each GitHub environment, and runtime. Each cell says Set, Missing, Set but not declared, or **Not checked** when GitHub did not list that place (for example, a token without the secrets permission). Values are never read. |
+
 ## `mushi.recipe.json`
 
 A `mushi.recipe.json` file at your repo root points Mushi at your design tokens.
@@ -2710,6 +2719,7 @@ format. Mushi also reads the shorthand most repos already ship (`"#abc"`,
 - `design.contrast` declares the foreground/background pairs that must meet WCAG: 4.5:1 by default, 3:1 with `large: true`, or an explicit `min`.
 - `design.rules` turns rules on or off and sets severity, allowed values and ignored files.
 - `change.allowPaths` is the only set of paths a recipe pull request may write.
+- `routes.inventory` is the path of the inventory file your CI ingests, if it is not `inventory.yaml` at the repo root (the same path as the mcp-ci action's `inventory` input). The Routes form edits that file.
 - `design.directions[]` (`{name, status: "active" | "inactive", tokens[], note?}`) lists candidate directions for comparison.
   - `design.tokens[]` stays the only source the drift check reads.
   - At most one direction may be `active`, and its `tokens` must be exactly the `role: "source"` paths. Anything else is rejected with `directions_active_mismatch`.
@@ -2801,6 +2811,26 @@ If nothing could be judged, the score is **not scored**, never 0. The
 severity, shrinking its allowlist) raises the score at first. Fixing the findings
 it reveals brings the score back down, against a stricter system each time.
 
+### When the score is too high
+
+Both actions are off until a project owner or admin turns them on, on the
+**Design system** page under **When the score is too high**. Each one fires only
+when the score is above the project's threshold (40 unless you change it):
+
+- **Fail the CI check.** `mushi recipe check --push` exits non-zero when the
+  score Mushi computes for the push is above the threshold. A push that could not
+  be scored never fails the check. A push Mushi scored but could not store fails
+  it while this action is on.
+- **Dispatch a fix for new drift.** When a scan finds warn or error findings
+  that were not in the previous scan (same rule, file and value), Mushi opens one
+  design-drift report, or reuses the open one, and dispatches a fix through the
+  normal automatic path. Autofix must be on for the project, and its spend and
+  per-day caps apply. The first scan only sets the baseline, and a CI push acts
+  only for your default branch, so pull-request runs never spend. Only the
+  findings a scan stores (the first 500) are compared, so a large backlog does
+  not dispatch again after every scan. Only an owner or admin signed in to the
+  console can turn this on; an API key can turn it off.
+
 ## Hole checks
 
 Some problems never throw an error, so no user report or crash log will show
@@ -2816,8 +2846,33 @@ checks** on the Recipe page:
 | Privacy link | The privacy URL you give the stores does not load a real policy page. |
 | Store build rules | Your Android target SDK or iOS build is older than Google Play or the App Store accepts. |
 | Storage deletes in SQL | Rows of `storage.objects` deleted with SQL. The files stay in the bucket and keep costing money. This one runs in your own CI: `mushi radar scan --push`. |
+| Secret keys in the built app | An OpenAI, Anthropic, Stripe live or AWS key, or a Supabase secret or service-role key, inside the built app (`dist`, `build`, `out`, `.next/static`, `.output/public`, `.svelte-kit/output/client`, `.vercel/output/static`, native JS bundles, or the folders named with `--bundle-dir`). Anyone who opens the app can read it. Runs in your CI **after the build step**: `mushi radar scan --push`. Keys that are public by design (the Supabase anon key, the Mushi SDK key) are not flagged, and only where and which kind of key is sent, never the key. |
+| An app nobody uses that still spends | No SDK heartbeat, report or page view for 30 days while AI spend, deployed edge functions or working stored provider keys are still live. Comes with a retire checklist. |
+| Every connected key still works | A key Mushi holds for this app that the provider now rejects: the connectors (GitHub, Supabase, Sentry, AI spend, RevenueCat, the stores), the integrations (Linear, Cursor Cloud, Claude Code, Langfuse, Jira, PagerDuty, Slack) and the AI keys under Settings → API Keys. Read from the latest probe, daily read, health check or key test, at most 7 days old. |
+| Store keys have the permissions they need | A Google Play or App Store Connect key missing a permission a switched-on capability needs (reading, or releasing once release actions are on). |
+| No keys left unused for 90 days | A Mushi SDK key or a stored provider key nobody used in 90 days. Console and MCP keys are not judged, because Mushi does not record every use of them. |
+| Paid features can be switched off | A feature that costs money per use with no kill switch, or AI spend with no paid feature declared. Reads `spend.paidFeatures`. |
+| AI providers have a spending limit | OpenAI or Anthropic used by this app with no monthly limit declared, or spend at 80% of the declared limit. Mushi cannot cap your own provider keys; only the provider can. Reads `spend.providerLimits`. |
 
 A check with nothing to look at says **Not checked**. It is never shown as passing.
+
+The two spend checks read a `spend` block in `mushi.recipe.json`. It is what
+you declare; Mushi cannot read a provider's own limit:
+
+```json
+{
+  "spend": {
+    "paidFeatures": [
+      { "name": "AI tutor", "provider": "openai", "killSwitch": "env:AI_TUTOR_ENABLED" }
+    ],
+    "providerLimits": { "openai": 50, "anthropic": 30 }
+  }
+}
+```
+
+`killSwitch` names the flag or env var that turns the feature off without a new
+build (`env:NAME` or `flag:name`). `providerLimits` is the monthly limit in US
+dollars you set in the provider's console.
 
 The public checks read a `store` block in `mushi.recipe.json`:
 
@@ -2859,6 +2914,33 @@ It ends with a short pre-submission checklist, each item marked high, medium
 or low risk. Reading the claims uses your own AI key; without one, that check
 says **Not checked**. This is a check against your code, not legal advice.
 
+### Store reviews as reports
+
+A one-star review is a bug report from someone who never opened your widget.
+Switch on **Store reviews as reports** on the Recipe page and Mushi reads the
+app's App Store and Google Play reviews every 6 hours, through the App Store
+Connect and Google Play sources bound to that app (see below). Each new review
+at or under your star threshold becomes a report in the queue, with
+`source: store_review`, and is diagnosed like any other report.
+
+| Setting | Default |
+|---------|---------|
+| On or off | Off. Each app opts in. Owners and admins switch it. |
+| Star threshold | 1 and 2 stars. Pick 1 star only, up to any rating. |
+
+- Each review becomes a report **once**. Mushi remembers every review it has
+  read, including the ones above the threshold, so an edit or a re-read never
+  files it again.
+- Reviews older than 30 days are recorded but not filed, so switching it on
+  does not flood the queue with old reviews. At most 25 reports per store per
+  run; the rest follow on the next run.
+- The reviewer's name is never stored. Review text is treated like widget
+  text: data for the diagnosis, never instructions.
+- Google Play only returns reviews added or edited in the last week, so a Play
+  app is covered from the day you switch it on.
+- **Pull now** reads right away (once per 10 minutes). Viewers cannot pull. A store that refuses the
+  key shows its own error; it never reads as "no reviews".
+
 ## Connected sources
 
 Each part of the recipe can read from a source. GitHub, Supabase and Sentry use
@@ -2888,6 +2970,27 @@ env files, lockfiles, generated exports and migrations are never written. The
 draft stays a draft, so your CI does not run until you mark it ready. A
 listing change is published by your own CI after you merge.
 
+### From the console
+
+Select the **Gates**, **Env** or **Routes** card on the Recipe page and open the
+**Change** tab:
+
+| Card | What the form edits |
+|------|---------------------|
+| Gates | `gates.budgets` (a number per metric) and `gates.cadence` (how often a gate must run, such as `P1D`) in `mushi.recipe.json` |
+| Env | `env.required` in `mushi.recipe.json`: each variable **name** and where it must be set (GitHub Actions, a GitHub environment, or runtime). Optionally the same names in `.env.example`. There is no field for a value. |
+| Routes | The inventory as text: the file `routes.inventory` names, else `inventory.yaml` |
+
+**Preview diff** shows exactly what would change and nothing is written.
+**Open draft PR** opens one draft pull request with that diff, and the tab
+follows it until the link appears. A file that is not in `change.allowPaths`
+stays read-only and the tab says why. A new `mushi.recipe.json` must still
+parse as a recipe (64 KB cap, schema, no secrets), and a new inventory must
+still pass inventory ingest; otherwise the preview lists the file as refused
+with the first problems, and no PR can be opened. If someone changed the file on the
+default branch after your preview, the PR is refused, so it can never undo
+their change. Preview again to start from the new version.
+
 A store action, such as raising a Google Play rollout to 20%, is different: it
 calls the store directly. It needs a separate write key, and every single
 action needs a team owner or admin to approve it in the console and then run
@@ -2901,6 +3004,33 @@ For a repo Mushi has no token for, push the recipe from your existing CI job:
 `POST /v1/ingest/recipe/events` takes build and deploy events from any CI,
 including Jenkins or a cron on a server.
 
+`mushi recipe check` runs the same deviance rules as Mushi's own scan, with the
+same rule ids, over your tracked files, so it reports the same findings and the
+same score. With `--push` it sends the scan along with the recipe. Mushi does
+not take the CLI's word for it: it judges every pushed value again with your
+rules and tokens and writes each finding's text and suggested token itself,
+applies your rules' severities, judges contrast from the tokens, computes the
+score, and records the `design.deviance_score` metric. Only a push of your
+default branch becomes the score shown in the console (the connected repo's
+default branch, else `ci.defaultBranch` in `mushi.recipe.json`, else `main`);
+a pull-request run keeps its findings and the CI gate but never replaces it.
+Push with a CLI key kept in your CI secrets (`mushi login` mints one with
+`mcp:read`). The SDK key (`report:write` only) ships inside your app, web or
+native, so anyone may hold it. A push made with the SDK key, or with any key a
+browser has used, keeps its findings and the CI gate, but never sets the shown
+score or dispatches a fix. A finding whose file path is not a plain code path
+(spaces, for example) is refused. A push from a CLI older than this engine is kept
+but never replaces the score shown in the console either. Update the server before the
+CLI if you self-host.
+
+```yaml
+- run: npx @mushi-mushi/cli recipe check --push
+  env:
+    MUSHI_API_KEY: ${{ secrets.MUSHI_CLI_KEY }} # a `mushi login` key, not the SDK key
+```
+
+Add `--max-score 30` to fail the step above a fixed score without asking Mushi.
+
 ## In your editor
 
 | MCP tool | Returns |
@@ -2909,7 +3039,36 @@ including Jenkins or a cron on a server.
 | `get_design_tokens` | The normalized tokens and a CSS-variable / TS-name map, so a fix uses tokens instead of literals |
 | `get_design_deviance` | The score, the per-rule breakdown, the trend and the top findings |
 | `get_store_status` | The latest store review: listing vs live, claims vs code, screenshots and the checklist |
-| `get_fix_context` | Now includes a `recipe` block (at most 4 KB) with the tokens to use |
+| `get_fix_context` | Now includes a `recipe` block (at most 4 KB) with the tokens to use, and `recipe.context` for the bug itself (below) |
+| `explain_finding` | One finding by id: what the check is, why it fired, the file and line, the fix in one sentence, and whether the latest run still reports it |
+
+To check again right after a fix, without waiting for the daily run, use the
+run-now tools. Each needs a key with `mcp:write`, only records a new run, and
+is rate limited per project:
+
+| MCP tool | Runs | At most |
+|---|---|---|
+| `refresh_recipe` | Re-reads `mushi.recipe.json` and the token files | Once every 5 minutes |
+| `run_design_deviance` | Refreshes the tokens and starts a new deviance scan (poll `get_design_deviance`) | Once every 5 minutes |
+| `run_radar` | The hole checks (poll `get_radar`) | Once every 10 minutes |
+| `run_store_review` | The store review (read it again with `get_store_status`) | Once every 30 minutes |
+
+### What the fixer gets with each bug
+
+The `recipe` block in `get_fix_context`, and the same block in the prompt of a
+fix Mushi writes itself, also carries `context`: three things a fix gets wrong
+when nobody tells it.
+
+| Section | What it says | When it is empty |
+|---|---|---|
+| `schema` | The tables the error names (in its message, stack trace or a failed `/rest/v1/…` request), with their columns from the latest schema snapshot. If the error says a table does not exist and the snapshot has no such table either, it is listed under `missing`: a migration may not be applied. | `not_connected` until the daily drift scan has a snapshot of your Supabase schema; `unknown` when the error names no table. |
+| `deploy` | Whether your last merged fix is live: `live` (a deploy target serves the fix commit), `deployed_since_merge` (a target started serving a new commit after the merge, matched by time because a squash merge changes the sha), `not_live` or `probe_failed`. | `no_merged_fix`, or `unknown` until a deploy target in `mushi.recipe.json` reports its version. |
+| `radar` | The app's open hole-check findings, with their fixes. | `unknown` until the hole checks have run once. |
+
+Each section has its own `state` and a plain-English `note`, and a section that
+was never checked never reads as fine. The context takes at most half of the
+4 KB; when it would not fit, hole-check findings are cut first, then columns,
+then extra tables. The deploy state is always kept.
 
 ---
 
@@ -4345,7 +4504,7 @@ at `/v1/agent-card` for proxies that strip dotfiles.
 ```mermaid
 flowchart TB
   subgraph Inbound["Inbound to Mushi"]
-    MCP["MCP — both stdio AND Streamable HTTP<br/>84 tools / 8 resources / 4 prompts"]
+    MCP["MCP — both stdio AND Streamable HTTP<br/>93 tools / 8 resources / 4 prompts"]
     REST["REST /v1/admin/*<br/>OpenAPI 3.1 at /openapi.json<br/>adminOrApiKey({ scope: 'mcp:read|write' })"]
     A2A["A2A v1.0.0 /v1/a2a/tasks<br/>create / get / cancel / SSE subscribe"]
     AGUI["AG-UI v0.4 SSE<br/>fix dispatch stream<br/>API key OR JWT"]
@@ -4393,7 +4552,7 @@ your client:
 }
 ```
 
-The full tool catalog (84 tools, 8 resources, 4 prompts) lives in
+The full tool catalog (93 tools, 8 resources, 4 prompts) lives in
 [`@mushi-mushi/mcp`](/sdks/mcp) — see also the generated catalog at
 [`MCP tools reference`](/sdks/mcp-tools). Tools that move money
 (`dispatch_fix`, `transition_status`, `submit_fix_result`, `trigger_judge`,
@@ -4569,7 +4728,7 @@ helpful message for unregistered ids.
 
 | Orchestrator                                        | Recommended path                 | Why                                                                                                                                                                                                              |
 | --------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Cursor / Cursor Agents**                          | stdio MCP                        | Already supported, 84 tools instantly. Add `@mushi-mushi/mcp` to `mcpServers` in agent config                                                                                                                   |
+| **Cursor / Cursor Agents**                          | stdio MCP                        | Already supported, 93 tools instantly. Add `@mushi-mushi/mcp` to `mcpServers` in agent config                                                                                                                   |
 | **Claude Agent SDK / Claude Desktop / Claude Code** | stdio MCP                        | Same path, same surface                                                                                                                                                                                          |
 | **OpenAI Agents SDK** (TS / Python)                 | Streamable HTTP MCP              | Per OpenAI's MCP guide, Streamable HTTP and stdio are preferred over deprecated SSE. Mushi's hosted MCP at `/functions/v1/mcp` fits                                                                              |
 | **ChatGPT Agent**                                   | Streamable HTTP MCP              | Same — no subprocess in the hosted runtime                                                                                                                                                                       |
@@ -6174,6 +6333,36 @@ mushi lessons show <id>
 mushi sync-lessons              # pull promoted rules → .mushi/lessons.json
 ```
 
+### Sentry issues already open
+
+The Sentry webhook only sees new issues. `mushi sentry import` brings in the
+ones already open, so they get the same diagnosis. Running it twice is safe: an
+issue already imported links to its report.
+
+```bash
+mushi sentry import                                  # newest unresolved issues
+mushi sentry import WEB-1A2 WEB-1A3                  # by id or short id (up to 10)
+mushi sentry import --query "level:error" --since-days 7
+mushi sentry import --query "level:error" --cursor <next>   # next page, printed after each import
+```
+
+It needs the Sentry org slug, project slug and an auth token with `event:read`
+and `project:read` (console: **Integrations → Sentry**).
+
+### Reporter updates held for review
+
+When reporter updates are in review mode, each status message waits in the
+outbox until you send it. Sending and discarding reach a real person, so both
+need `--yes`.
+
+```bash
+mushi outbox list
+mushi outbox edit <messageId> "Fixed in 1.4, thanks for the report"
+mushi outbox release <messageId> --yes
+mushi outbox release <messageId> --text "Fixed in 1.4" --yes
+mushi outbox discard <messageId> --yes
+```
+
 ---
 
 ## Agentic fixes
@@ -6249,16 +6438,98 @@ mushi qa run <storyId>
 mushi audit                        # full-stack project health audit
 ```
 
+### Gate findings
+
+`mushi audit findings` lists each finding from the recent gate runs with its
+file and line. `mushi audit explain` says why one fired, what it prevents and
+how to fix it. `--gate` takes any gate name: one this CLI version does not list
+is still sent to the server, with a warning.
+
+```bash
+mushi audit findings
+mushi audit findings --gate code_health --severity error
+mushi audit findings --all                      # include allowlisted findings
+mushi audit explain <findingId>
+```
+
+### Code health
+
+Oversized files and bundle size that your CI posts to `POST /v1/ingest/metrics`.
+
+```bash
+mushi code-health show [--days 30]
+mushi code-health stats
+```
+
+---
+
+## Your repo
+
+These read the GitHub repo connected to the project. Mushi reads it through
+the GitHub connection and does not clone it.
+
+```bash
+mushi repo digest > digest.txt                  # one token-budgeted text for an LLM; summary goes to stderr
+mushi repo digest --report <reportId>           # start from the files in that report's stack trace and fixes
+mushi repo digest --path src/auth --budget 40000 --out digest.txt
+
+mushi repo diagram show                         # the architecture diagram as an outline
+mushi repo diagram generate [--force]           # draw it for the latest commit
+mushi repo diagram publish --yes                # make it a public page (owners and admins)
+mushi repo diagram unpublish --yes
+```
+
+`publish` shows where the page will go before it publishes. It sends the hash
+of exactly what the preview showed, so a diagram that changed in between is
+refused. A private repo can only be published from the console.
+
+---
+
+## Releases
+
+Release notes that credit the people who reported each fix and tell them it
+shipped.
+
+```bash
+mushi releases draft 1.4.0 [--since 2026-09-01]  # notes from the fixes merged in the window; nothing is sent
+mushi releases list [--status draft]
+mushi releases show <releaseId>
+mushi releases edit <releaseId> --body-file notes.md
+mushi releases publish <releaseId> --yes         # resolves the fixed reports and messages each credited reporter
+mushi releases delete <releaseId> --yes          # drafts only
+mushi releases stats
+```
+
+---
+
+## Spend limits
+
+```bash
+mushi budgets show                              # monthly AI budget, auto-fix caps, plan spend cap, auto-fix on/off
+mushi budgets autofix off                       # fixes you start yourself always run
+mushi billing cap 100                           # the plan's hard monthly cap
+```
+
+The monthly AI budget and the auto-fix caps are changed in the console
+(**Settings → General → Spend limits**), because that setting takes a signed-in
+session, not an API key.
+
 ---
 
 ## App recipe
 
 ```bash
 mushi recipe init                    # write a starter mushi.recipe.json from what the repo shows
-mushi recipe check                   # validate it and its token files; list colours that match no token
-mushi recipe check --push            # send the recipe and findings to Mushi from your existing CI job
+mushi recipe check                   # validate it and its token files; run Mushi's deviance rules and print the 0–100 score
+mushi recipe check --max-score 30    # also fail when the score is above 30
+mushi recipe check --push            # send the recipe and the scan from your existing CI job; fails above the project's limit when that gate is on
 mushi recipe show                    # each part of the recipe and its state
 ```
+
+For `--push`, give CI a `mushi login` key (it carries `mcp:read`). A push with
+the SDK key (`report:write` only) keeps its findings and the CI gate, but never
+sets the score the console shows or dispatches a design fix, because that key
+ships inside your app.
 
 ---
 
@@ -6268,10 +6539,68 @@ Checks that catch a problem before a user hits it. `scan` runs in your own CI
 job; Mushi never clones your repo.
 
 ```bash
-mushi radar scan                     # storage deletes done in SQL; lists the build files the store rules read
-mushi radar scan --push              # send results to Mushi (one extra step in your existing CI job)
+mushi radar scan                     # storage deletes done in SQL, secret keys in the built app; lists the build files the store rules read
+mushi radar scan --push              # send results to Mushi (one extra step in your existing CI job, after the build step)
+mushi radar scan --bundle-dir web/dist   # scan only these built client folders (repeatable), e.g. to leave out a server dist
 mushi radar show                     # every hole check for this project and what it found
 ```
+
+Run `scan` **after your build step**: it also reads the built app (`dist`,
+`build`, `out`, `.next/static`, `.output/public`, `.svelte-kit/output/client`,
+`.vercel/output/static`, native JS bundles) for secret keys. A `dist` that holds
+server code counts too; name the client folders with `--bundle-dir` to leave it
+out. With no build output, that check is left out and reads "Not checked",
+never a pass.
+Only the file, the line and the kind of key are sent, never the key itself.
+The Supabase anon key and the Mushi SDK key are public by design and are not
+flagged.
+
+### One CI step for both checks
+
+`radar scan --push` and `recipe check --push` belong in a job you already
+run, so they cost no extra job. Both need `@mushi-mushi/cli` 0.29.0 or later;
+an older CLI answers "unknown command", and the packaged action stops with
+that version in its error instead. Store a project key as a repo secret first.
+The SDK ingest key works; an account-level (org) key does not. Both commands
+read the checked-out repo, so the job needs `actions/checkout` before them,
+and `radar scan` also reads the built app, so put the step after your build.
+
+**Copy-paste `run:` step**, for any CI system:
+
+```yaml
+- name: Mushi checks
+  run: |
+    npx --yes @mushi-mushi/cli@latest radar scan --push
+    npx --yes @mushi-mushi/cli@latest recipe check --push
+  env:
+    MUSHI_API_KEY: ${{ secrets.MUSHI_INGEST_KEY }}
+```
+
+**Packaged GitHub Action**, the same CLI with the inputs spelled out:
+
+```yaml
+- uses: actions/checkout@v4
+- uses: kensaurus/mushi-mushi/packages/cli@master
+  with:
+    api-key: ${{ secrets.MUSHI_INGEST_KEY }}
+    upload-sourcemaps: 'false'   # set 'true' (the default) to also upload source maps
+    radar-scan: 'true'
+    recipe-check: 'true'
+    # working-directory: apps/web   # if the app is not at the repo root
+    # fail-on-error: 'false'        # warn instead of failing the job
+```
+
+| Input | Default | What it does |
+|---|---|---|
+| `radar-scan` | `false` | Runs `mushi radar scan --push`. Findings do not fail the job; they show on the hole checks. |
+| `recipe-check` | `false` | Runs `mushi recipe check --push`. An invalid `mushi.recipe.json` (or none) fails the step. |
+| `fail-on-error` | `true` | `false` turns a failed check or an unreachable Mushi into a warning. |
+| `working-directory` | `.` | The repo root both checks read. |
+| `upload-sourcemaps` | `true` | The action's original source-map upload. Uses `release`, `sourcemaps-dir`, `dry-run`. |
+
+Run it on pushes to your default branch. `recipe check --push` records the
+commit SHA and branch from `GITHUB_SHA` and `GITHUB_REF_NAME`, and on a pull
+request the branch is the merge ref.
 
 ---
 
@@ -6337,6 +6666,30 @@ mushi sourcemaps upload --release 1.4.2 --dir ./dist
 mushi deploy check                   # edge-function health + latency
 mushi test                           # synthetic report end-to-end
 ```
+
+---
+
+## Several apps
+
+For a team with more than one app. These read team-wide data, so they need an
+account-level key (console: **Connect → MCP → account key**), not a key bound
+to one project. If you belong to several teams, the error lists each one with
+the `--org ` to pass.
+
+```bash
+mushi portfolio show                 # each app: health, open reports, holes, SDK version, last release
+mushi portfolio findings             # the same problem repeated across apps, SDK skew, integration holes
+mushi portfolio resources            # domains, accounts and buckets shared between apps
+mushi connectors list                # connectors with status and last error (read-only)
+mushi connectors status <id>
+mushi connectors actions             # requested connector actions and whether they ran
+mushi funnel show                    # one funnel, every app side by side
+mushi funnel set --steps signup,first_report,fix_merged --window 7d
+mushi releases calendar              # what is waiting to ship in each app, and one suggested batch
+```
+
+Adding, probing or editing a connector takes credentials, so it stays in the
+console.
 
 ---
 
@@ -7177,7 +7530,7 @@ read the contract before drafting a fix.
 ```
 
 See [`@mushi-mushi/mcp`](https://www.npmjs.com/package/@mushi-mushi/mcp)
-on npm for the full **84-tool** catalog and
+on npm for the full **93-tool** catalog and
 [Connecting your orchestrator](/concepts/orchestrator-interop) for the
 non-MCP surfaces (REST, A2A, AG-UI SSE).
 
@@ -11777,6 +12130,19 @@ Running it again is safe: issues already imported answer `linked`. If one app
 reports to two Sentry projects (say a frontend and a backend), list the second
 in `sentry_extra_project_slugs` and pick it with `"sentryProject"`.
 
+In the console, all of this is on the Sentry card:
+
+- **More Sentry projects** (edit the card) takes up to 10 extra project slugs,
+  comma-separated. It saves `sentry_extra_project_slugs`; clearing the field
+  removes them. Over the API, send a string array to
+  `PUT /v1/admin/integrations/platform/sentry`
+  (`{ "sentry_extra_project_slugs": ["sbc-be"] }`; `[]` or `null` clears it).
+- **Import existing Sentry issues** has a Sentry project picker (shown when
+  more than one project is configured) and a **Seen in** choice (any time, or
+  the last 7, 14, 30 or 90 days). A windowed search imports 10 at a time;
+  **Load next page** repeats the same search from where the last page ended
+  until Sentry has no more.
+
 Behavior:
 
 - **Deduped per Sentry issue** — repeat alerts land on the same report;
@@ -11870,6 +12236,7 @@ small card.
 | **Dispatch fix** | Runs the fix agent and opens a draft PR. Swaps to *Install GitHub App* / *Enable Autofix* when the prerequisites are missing |
 | **Resolve ✓** | Marks the report resolved and notifies the reporter |
 | **Dismiss** | Marks it dismissed (noise, duplicate, won't fix), behind a confirm dialog |
+| **Reply to reporter** | Opens a box for a message the person who reported the bug sees word for word in "Your reports" in your app. Only shown when the report came from your app's widget |
 
 Resolve and Dismiss run the same transition contract as the console — plugin
 event, linked-issue resolution, and reporter notification — so acting from
@@ -11881,6 +12248,27 @@ it in channel history.
 
   **Assign is deliberately absent.** Reports have no assignee column, so an
   "Assign" button would be a UI with nothing behind it.
+
+## Slash commands
+
+With **Slash Commands → `/mushi`** pointed at
+`<functions-url>/api/v1/webhooks/slack/commands`, the hosted app answers:
+
+| Command | What happens |
+| --- | --- |
+| `/mushi list` | The latest 10 open reports, linked to the console |
+| `/mushi open ` | One report's summary and console link |
+| `/mushi resolve ` | Marks it resolved, the same as the card's **Resolve ✓** |
+| `/mushi reply  ` | Answers the person who reported it. Same path as **Reply to reporter**: they see your message word for word in your app, and get an email or push only if they opted in |
+| `/mushi voice ` | Voice intake by text; see [Voice intake](/integrations/voice-intake) |
+
+`` is the full report id or its first 6+ characters. Replies are capped at
+2,000 characters and only reach reports filed from your app's widget.
+
+The reporter sees a reply from "Developer". Every reply sent from Slack, by
+`/mushi reply` or the card's button, also writes a `report.reporter_replied`
+entry to the console's audit log naming the Slack user (and, for the command,
+the channel) it came from.
 
 ## Package
 
@@ -12564,6 +12952,7 @@ npx supabase functions deploy agent-status-poll --no-verify-jwt
 npx supabase functions deploy recipe-collector --no-verify-jwt
 npx supabase functions deploy radar-scan --no-verify-jwt
 npx supabase functions deploy operator-digest --no-verify-jwt
+npx supabase functions deploy store-review-intake --no-verify-jwt
 ```
 
 For closed-loop evolution workers (`mistake-clusterer`, `mistake-summarizer`, `release-builder`, `experiment-analyzer`, `anomaly-detector`, …) and cron setup, follow [`SELF_HOSTED.md`](https://github.com/kensaurus/mushi-mushi/blob/master/SELF_HOSTED.md).
@@ -15165,6 +15554,11 @@ GET /v1/admin/code-health?project_id=<uuid>
 POST /v1/ingest/metrics   # CI push — apiKeyAuth, prefix allow-list bundle.* / code_health.*
 ```
 
+From your editor, the MCP tool `get_code_health` returns the same data
+(trends default to the last 30 days; pass `days` for more). Pass a god file's
+`id` to `explain_finding` for its fix in one sentence. A project key reads its
+own project; an account-level key needs `projectId` (`project_id` on the API).
+
 ---
 
 ## Related pages
@@ -16108,6 +16502,8 @@ An AI drawing of the main parts of your app and how they connect. Mushi reads th
 - Click a part to read what it does and open its folder or file on GitHub at that commit.
 - Badges on each part count its open bug reports and its code findings from the last 30 days. Click the part to list them: reports open their detail page, findings open the file and line on GitHub. A report lands on a part through its stack trace or the files its fixes changed; reports and findings in files no part covers are counted under the diagram.
 - **Public page** (optional, owner or admin): share the diagram at `kensaur.us/mushi-mushi/r//`. The preview shows exactly what becomes public: part names, descriptions and paths, never file contents. A private repo needs you to tick a consent box first. The page shows the commit it was drawn from, keeps showing that drawing until you publish again, and **Unpublish** removes it. Visitors can report a wrong or unwanted diagram privately: the report goes to Mushi's own inbox, never to a public issue. Once live, the card gives you a README badge to copy and a Markdown copy of the page for AI agents. Search engines index the page.
+- **From your editor:** the MCP tool `get_repo_diagram` returns the latest diagram; pass `overlay: true` to also get the open reports and findings on each part. It reads the stored drawing and never draws a new one.
+- **With an API key:** the preview, publish and unpublish routes take a key with `mcp:read` (preview) or `mcp:write` (publish, unpublish) as well as the console session. A key can publish a public repo's diagram. A private repo's diagram can only be published from the console, because the consent box is a person reading the preview.
 
 ### Graph
 
@@ -16235,6 +16631,23 @@ The CLI reads your project's `MUSHI_PROJECT_ID` and `MUSHI_API_KEY` from environ
 ### Or enable auto-indexing
 
 In **Settings → Codebase Indexing**, toggle **Auto-index on push**. The Mushi GitHub App listens for `push` events and re-indexes changed files automatically.
+
+Connected with a Personal Access Token instead of the App? Add a repo webhook in GitHub (**Settings → Webhooks**). Point it at the URL the Codebase indexing card shows (your API endpoint plus `/v1/webhooks/github`). Use content type `application/json` and the webhook secret the card revealed, and tick **Pushes** and **Check runs**. Each push to the default branch then re-indexes the changed files.
+
+### How much of a large repo is indexed
+
+Your plan sets how many files the index may hold: 300 on the free plan, and more on paid plans. The hourly sweep fetches files in batches, starting with the files named in open error stack traces and your application source. It keeps going until the whole repo or the plan limit is covered.
+
+The Codebase indexing card shows coverage in files, for example `1,500 of 4,700 files`, in one of four states:
+
+- **all**: every indexable file is in the index.
+- **still filling**: later sweeps will add more files.
+- **plan limit**: the limit is reached. Diagnoses and fixes only see the indexed files. A path filter limits the sweep, and the count, to the directories that matter.
+- **stuck**: the last sweep could not add a file, for example because GitHub kept refusing a file or the embedding API kept rejecting it. The card shows the error. The sweep retries daily instead of hourly.
+
+The path filter is the repo's `path_globs`, the same globs the fix worker uses to pick its target files. They limit indexing too: a sweep indexes only matching files, and removes files a narrowed filter no longer matches from the index (unless the project indexes more than one repo, since they share one index). `**/` also matches the repo root, so `**/*.ts` includes `index.ts` and `src/**/*.ts` includes `src/a.ts`. If you set globs on a repo only to route fixes, check that they cover the code you want diagnoses to see.
+
+"Last sweep" counts partial sweeps too. A partial sweep is never shown as a complete index. Pushes count against the plan limit as well: a push re-indexes files already in the index, and adds new files only while the index is under the limit.
 
   Only files tracked by git are indexed. Add large generated directories (`dist/`, `.next/`, `node_modules/`) to `.mushiignore` to skip them.
 
@@ -16614,6 +17027,35 @@ When `agent = cursor_cloud`, the fix row shows two additional UI elements:
 
 The artifact gallery is visible in the expanded fix detail when artifacts are present.
 
+### Notes-only pull requests
+
+A cloud agent (Cursor or the GitHub Copilot agent) that cannot find the cause
+is told to finish without a pull request. If it opens one anyway, Mushi reads
+the PR's changed files before trusting it. A PR whose changes are only notes
+is not a fix. Notes are a `NEEDS_INVESTIGATION` file, a new markdown file, or
+TODO comments. Editing an existing doc page counts as a real change, and so
+does any `.txt` file such as `requirements.txt`.
+
+The GitHub Copilot agent opens its draft PR before it pushes anything. So
+while an agent is still working, a PR with no files or only notes is attached
+to the fix but not judged yet. The report does not move and nobody is
+notified. The PR is judged on the files the agent left once the agent
+finishes. An empty PR from a finished agent also needs investigation.
+
+When the PR is not a fix:
+
+- the fix row is marked **needs investigation** (`failure_category:
+  validation_rejected`) and keeps the PR link so you can read the notes and
+  close the PR;
+- the report keeps its status instead of moving to **Fixing**;
+- your team gets the usual "fix failed" notification.
+
+Mushi reads the files with the project's GitHub token. If it cannot read them
+while the agent is still working (GitHub errors, rate limits, a missing
+token), the PR waits like an empty one and is read again when the agent
+finishes. If the files still cannot be read after the agent has finished, the
+PR is trusted and the fix timeline says the contents were not checked.
+
 ## Dispatching a fix
 
 You can dispatch a fix from four places:
@@ -16767,7 +17209,47 @@ returns a severity-ranked scorecard in ~10 seconds.
 | **DB advisors** | Security + performance findings from Supabase MCP |
 | **RLS gaps** | Tables without row-level security |
 | **Error log** | Recent backend ERROR-level log count |
-| **Gate runs** | G3 API contract, G6 spec drift, G7 orphan endpoints, G8 unknown frontend calls, schema drift, G5 status claim |
+| **Gate runs** | The newest run of every check in the last 7 days, by name: the inventory gates (G1–G8), schema drift, code health, the recipe drift checks (design, CI, deploy, env vars), Mushi setup checks, the app hole checks and the store review checklist |
+
+If a part of the audit could not be read (the settings, the advisors, the logs,
+the table list or the gate runs), the page lists it and the verdict reads
+**Incomplete**, never **All clear**. A count Mushi could not read is shown as
+`—`, not `0`.
+
+---
+
+## Open findings by check
+
+Below the scorecard, every open finding of each check's newest run is listed
+with its rule, file and line. This list is available on **every plan**; it
+reads `GET /v1/admin/inventory/:projectId/findings`, the same data as the MCP
+tool `list_gate_findings`. Running gates, crawls and test generation still need
+a plan with the inventory features.
+
+### Mushi setup checks and "Apply suggested caps"
+
+Once a day Mushi checks its own setup for each app (gate `radar`): a provider
+key the provider now rejects, a webhook that never delivered, a stale code
+index, and **missing spend caps**. The spend-cap check flags a project with no
+monthly AI budget, and auto-fix limits that are not set (a warning while
+auto-fix is on, a note while it is off).
+
+That finding has an **Apply suggested caps** button. It shows each cap before
+anything changes:
+
+- a monthly AI budget of about twice your last 30 days of AI spend, at least
+  $10, so it does not stop triage on the day you apply it;
+- $2 of auto-fix spend per 30 days and 3 automatic fixes a day.
+
+The suggestion comes from the last daily check, so the button reads your
+current settings first, and again when you confirm. A cap someone set since the
+check ran is left as it is, and the dialog names it. If every suggested cap is
+already set, nothing is sent. If the current settings cannot be read, nothing is
+sent either. The button saves the remaining caps through
+`PATCH /v1/admin/settings` and needs a signed-in project admin, so an API key or
+MCP client cannot apply them. Change or clear them any time in
+**Settings → General → Spend limits**. The finding clears on the next daily
+check.
 
 ---
 
@@ -16793,6 +17275,7 @@ mushi audit --project-id <uuid>
 - [Code health](/admin/code-health) — bundle + god-file trends from CI ingest
 - [Drift scanner](/admin/drift) — scheduled schema drift findings
 - [Integration health](/admin/health) — Slack / Sentry / GitHub probe status
+- [Inventory](/admin/inventory) — the same findings next to the inventory graph (inventory plans)
 
 ---
 
@@ -17177,7 +17660,9 @@ Traces are visible in [Integration health](/admin/health) with a direct link.
 
 The **Codebase index** card shows the indexing status for the active project's repo —
 `ok`, `stale`, `failed`, `off`, or `never`. The index powers the [Repo page](/admin/repo)
-branch graph and the fix-worker's code context.
+branch graph and the fix-worker's code context. It also shows coverage in files
+against your plan's file limit (see [how much of a large repo is indexed](/admin/explore#how-much-of-a-large-repo-is-indexed)).
+For a repo connected with a Personal Access Token, it shows the webhook URL that turns on push indexing.
 
 ### Cursor Cloud
 
@@ -17638,8 +18123,8 @@ run is active. The drawer doesn't auto-poll to avoid hammering the API during a 
 | **Goal / instructions** | Be specific: *"Improve the onboarding flow for first-time mobile users — focus on step clarity and reducing friction"* is better than *"improve UX"* |
 | **Max iterations** | 3–5 is typical. More iterations = more cost, diminishing returns |
 | **Target score** | 0.8–0.9 is a good range. 1.0 is rarely achievable and will exhaust iterations |
-| **Producer model** | The model generating improvements — use a strong model (claude-4) for best results |
-| **Judge model** | The model scoring results — can be a lighter model to save cost |
+| **Producer model** | The model generating improvements. Default Claude Sonnet 5.5; Opus 5.5 for the hardest pages, Haiku 4.5 for speed. If Anthropic is down the runner falls back to OpenAI on its own |
+| **Judge model** | The model scoring results. Same choices; Haiku 4.5 is a cheaper judge. Only Claude ids are accepted (`claude-…`) |
 | **Critic persona** | The evaluation lens — "UX expert" vs "accessibility auditor" changes what the judge prioritises |
 
 3. Click **Queue run**. The run starts immediately if no other run is active.
@@ -17676,8 +18161,8 @@ run is active. The drawer doesn't auto-poll to avoid hammering the API during a 
 GET    /v1/admin/pdca?project_id=<pid>&limit=50
 GET    /v1/admin/pdca/<id>
 POST   /v1/admin/pdca   { "target_url": "...", "goal": "...", "iterations_target": 5,
-                          "target_score": 0.85, "primary_model": "claude-4-sonnet",
-                          "judge_model": "claude-3-haiku", "project_id": "<pid>" }
+                          "target_score": 0.85, "primary_model": "claude-sonnet-5-5",
+                          "judge_model": "claude-haiku-4-5", "project_id": "<pid>" }
 DELETE /v1/admin/pdca/<id>         (abort)
 POST   /v1/admin/pdca/<id>/trigger (manually trigger queued run)
 ```
@@ -18086,7 +18571,7 @@ Wire Mushi into Cursor, Claude Code, Windsurf, or any MCP client. Once connected
 your agent can read reports, pull fix context, and optionally dispatch fixes —
 without leaving the editor.
 
-The live **Catalog** tab mirrors the server registry (**84 tools**, 8 resources, 4 prompts).
+The live **Catalog** tab mirrors the server registry (**93 tools**, 8 resources, 4 prompts).
 
 ---
 
@@ -18587,7 +19072,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/portfolio
 
 ---
 title: Portfolio
-description: The Portfolio page shows every app in a team at once, with each app's worst recipe state, hole checks and SDK version, plus problems you can fix once across apps.
+description: The Portfolio page shows every app in a team at once, with each app's worst recipe state, hole checks and SDK version, plus fixes that apply across apps.
 ---
 
 # Portfolio
@@ -18607,12 +19092,21 @@ This page **reads only**. It builds on each app's [Recipe](/concepts/app-recipe)
 | Section | What it means |
 |---------|---------------|
 | **Cards** | One per app: the worst recipe state, open reports, the latest release, the Mushi SDK against the latest version, and the hole checks. |
-| **Hole checks** | "Not checked yet" means Mushi has not looked. It is never a pass. |
+| **Hole checks** | "Not checked yet" means Mushi has not looked. It is never a pass. The checks that read your repo come from one step in your existing CI job: see [One CI step for both checks](/sdks/cli#one-ci-step-for-both-checks). |
 | **Fix once** | A problem open in two or more apps. Copy the prompt into your editor to fix it in every repo. |
 | **Mushi SDK versions** | Apps behind the latest release of the same package, and apps that never reported. |
 | **Missing setups** | An integration most of your other apps have and this one does not. |
 
 In **Advanced** mode each card also shows Mushi's own AI spend for that app over 30 days and its monthly budget.
+
+### When something could not be read
+
+If Mushi cannot read part of the page (the AI spend, the caps, the releases,
+the SDK versions, which integrations each app has), a callout at the top names
+it and the affected cells read **Could not read**. They never fall back to
+`$0`, "Not set", "None yet" or "no missing setups". When there are more rows
+than Mushi reads in one go, the total is marked as a lower bound ("at least
+$12.40", "40+").
 
 Below the cards:
 
@@ -18621,9 +19115,83 @@ Below the cards:
 | **Across your apps** | Problems only visible across apps: a deep link or "more apps" link that no longer opens, a shared login that does not allow one app's domain, apps sharing purchases on different Stripe accounts, many apps posting to one channel, CI cost in two repos. See [One login across your apps](../concepts/shared-login). |
 | **Funnel across apps** | One funnel run on every app: the same event names, in the same order, within the same window. Owners and admins pick the steps. An app with product events off, or with no events yet, says so instead of 0%. |
 | **Releases** | For each app: what is live and at what rollout, native changes waiting for a store build, and JS-only changes that can ship as an over-the-air update. It suggests one store release per app to save CI minutes. Your own CI builds and submits. |
-| **Daily digest** | One message a day across all apps. Off until an owner picks Slack, email or push. |
-| **Shared between apps** | Domains, store apps, Supabase projects and channels two or more apps use. |
+| **Spend per app** | What each app cost over 30 days, from every source Mushi can read. See [Spend per app](#spend-per-app). |
+| **Daily digest** | One message a day across all apps. Off until an owner picks where it goes: an app's Slack channel, Discord or Teams webhook, or Telegram chats, email, or push. Once a week (Monday by default) it adds each app's signups and activations. When there were more reports, AI calls or findings than it reads, it says which numbers are lower bounds. See [Daily digest](#daily-digest). |
+| **Shared between apps** | Domains, store apps, Supabase projects and channels two or more apps use. Owners and admins can import what no recipe or source declares from a CSV with the columns `kind, external_id, project` and an optional `role`; each refused row is listed with its line number, and a file is capped at 500 rows and 256 KB. |
+| **Accounts and resilience** | Every account your apps depend on (Apple, Google Play, AWS, Supabase, Vercel, your registrar, Stripe…): the owner email, whether 2FA is on, how many people can get in, a recovery contact, and auto-renew for the registrar and each domain. See below. |
 | **Connected sources** | App Store Connect, Google Play, AI spend, RevenueCat or your own endpoint. Read-only by default. |
+
+---
+
+## Spend per app
+
+One row per app, 30 days, one column per source:
+
+| Column | Where it comes from |
+|--------|---------------------|
+| **Mushi AI** | Mushi's own AI calls for that app (diagnoses, fixes, store review). |
+| **AI provider** | Your own OpenAI or Anthropic bill, from the **AI provider spend** source. An app counts only once it is bound to its OpenAI project or Anthropic workspace. |
+| **CI (est.)** | GitHub Actions minutes as money: estimated billable minutes × $0.006, GitHub's Linux price. macOS minutes count 10× and Windows 2×. Public repositories are free, so this is the list price, not your bill. |
+| **Supabase** | Supabase bills you import, with egress, invocations and other usage. Mushi reads Supabase read-only and cannot see billing. |
+| **Other bills** | Vercel, AWS and other bills you import. |
+
+A source that could not be read says **Couldn't read** and is left out of the
+total; the total then ends in `+` because it is a floor. **Not connected**
+means there is nothing to read yet. Neither one ever shows as $0.
+
+**Import a bill** (owners and admins) takes a CSV:
+
+- a **FOCUS** export, which both Vercel and AWS Data Exports offer;
+- an **AWS Cost and Usage Report** (legacy or 2.0 column names);
+- or any CSV with a `date` (YYYY-MM-DD), a `service` and a `cost` column, plus
+  optional `quantity`, `unit`, `currency` and `app` columns.
+
+Pick the app the bill belongs to, or let each row's `app` column (or an `app`
+or `project` tag) name the app by its name or slug. Rows in another currency
+than USD, with a date that is not YYYY-MM-DD, or naming no app of yours are
+skipped, and the first few are explained. Importing the same bill again
+replaces those days instead of adding to them: each day belongs to the newest
+import that has it. **Remove** takes an import out and gives its days back to
+the next newest import that has them, so removing a corrected bill brings the
+earlier figures back. It says how many rows left the ledger and how many went
+back. The file limit is 5 MB: export daily rather than hourly rows.
+
+The ledger shows each member only the apps they can see. An import for one app
+is listed to that app's members; an import matched by an `app` column is
+listed to the team.
+
+## Daily digest
+
+The digest goes to the places an owner or admin picks. Slack, Discord, Teams
+and Telegram each reuse one app's existing connection from
+[Integrations](./integrations): its Slack channel, its Discord or Teams
+webhook, or the Telegram chats bound to its bot. Nothing new to set up.
+
+On the weekday you pick (Monday by default, in UTC; or never), each app gets
+one more line: how many people did the first step of the
+[team funnel](#what-you-see) in the last 7 days, and how many of them reached
+its last step. An app with product events off gets no line; a funnel that
+could not be read says so instead of showing zero. Without a team funnel there
+are no weekly lines.
+
+## Accounts and resilience
+
+Losing the only login to your Apple, Google Play or registrar account can end
+every app on it. This register keeps, for each account, who owns it and who
+else can get in. It holds **names and contacts only**: never passwords, keys or
+recovery codes, and anything shaped like a key is refused. Everything in it is
+what you declare; Mushi cannot see a provider's own 2FA or renewal settings.
+
+Two checks run on it, and their findings also appear under **Across your apps**:
+
+| Check | When it fires |
+|-------|---------------|
+| `account_single_owner` | One person can sign in and no recovery contact is recorded. The fix names where that provider lets you add a second owner. |
+| `registrar_autorenew_off` | Auto-renew is declared off for a registrar account or a domain. |
+
+**Download as Markdown** saves the whole register as a file to keep offline or
+hand to someone you trust. Owners and admins can change the register; other
+members can read it.
 
 ---
 
@@ -18631,7 +19199,16 @@ Below the cards:
 
 The MCP tools `get_portfolio` and `list_portfolio_findings` return the same
 data. They need an **account-level** key (Connect → MCP); a key bound to one
-project cannot read its sibling apps.
+project cannot read its sibling apps. Both return `readErrors`, and each card
+an `unreadable` list: a part named there is unknown, not empty.
+
+`get_release_calendar` returns the release calendar: what is live per app, the
+merged fixes waiting to ship, and a suggested batch to release now versus next.
+
+The same account-level key can also change the team's funnel definition
+(`PUT /v1/admin/orgs/:orgId/funnel`) and import shared resources from a CSV
+(`POST /v1/ingest/recipe/csv`), with the `mcp:write` scope. Both still need the
+key's owner to be a team owner or admin.
 
 ## Who can see it
 
@@ -19471,6 +20048,74 @@ For each release tag, Mushi:
 4. Click **Generate** — the LLM produces a draft in ~10 seconds.
 5. Review and edit the draft.
 6. Click **Publish**.
+
+The same steps work from a script or an agent with an API key: reads
+(`GET /v1/admin/releases`, `/stats`, `/:id`) take `mcp:read`; drafting,
+editing, deleting a draft and publishing take `mcp:write`. Publishing messages
+every credited reporter, so give a key `mcp:write` only where you would let it
+do that. A key bound to one project only sees that project's releases. An
+account-level key reaches every project you can reach, with your role in each:
+it opens any release in those projects, and `/stats` needs the project named
+with `project_id` (or the `X-Mushi-Project-Id` header).
+
+---
+
+## Release automatically when you ship
+
+Off by default. Turn on **Release automatically when you ship** on the
+Releases overview (project admins only, or
+`PATCH /v1/admin/settings { "auto_release_enabled": true }`). From then on,
+any of these ships a release on its own:
+
+| Trigger | Where it comes from | Version reporters see |
+|---------|---------------------|-----------------------|
+| A GitHub release is **published** (not a draft or pre-release) | The Mushi GitHub App on the repo, subscribed to **Releases** | The tag, e.g. `v2.4.1` |
+| A **production** deployment succeeds (`deployment_status` = success) | The Mushi GitHub App, subscribed to **Deployment statuses** | The deployed tag, or the short commit sha |
+| Your CI posts `release.published` | `POST /v1/ingest/recipe/events` with an agent key (`mcp:write`) kept in CI secrets | The `version` you send |
+
+```bash
+curl -X POST "$MUSHI_API_URL/v1/ingest/recipe/events" \
+  -H "X-Mushi-Api-Key: $MUSHI_CI_KEY" -H "Content-Type: application/json" \
+  -d '{ "events": [ { "type": "release.published", "targetId": "web", "version": "2.4.1" } ] }'
+```
+
+For each trigger, Mushi:
+
+1. skips it if a release with that version already exists;
+2. skips it if no report was marked fixed since the last published release
+   (a deploy with nothing fixed makes no release);
+3. skips it while another automatic draft is open (see below);
+4. drafts the release from those reports and publishes it, so each reporter
+   gets one "your fix is live" message and credits are stamped once
+   delivered.
+
+An automatic release is published without anyone reading it first, and report
+summaries come from your users. So its notes are not written by AI. Each fixed
+report becomes one line, with markdown escaped and links removed.
+
+Only one automatic draft can be open per project, so a GitHub release and the
+deploy it triggers cannot both announce the same fixes. If publishing fails
+before the release goes live, the draft stays under **Drafts**, and
+auto-release pauses until you publish or delete that draft. The
+auto-release card on the Releases overview says so and links to it. If the
+release went live but messaging reporters failed part-way, the log says the
+release is published and some reporters were not told.
+
+The version must be a plain tag, semver or sha (letters, digits, `.`, `_`,
+`+`, `-`, at most 64 characters), because reporters see it.
+
+Send `release.published` with an agent key that has `mcp:write`, minted with
+`mushi login` or in the console and kept in CI secrets. A key that cannot
+release still has its event recorded, and the answer gives the reason:
+
+| Key | `autoReleaseSkipped` |
+|-----|----------------------|
+| The public SDK key (`report:write`), even one used only from a native app | `key_lacks_mcp_write` |
+| An `mcp:write` key that a web page has ever sent | `browser_exposed_key` |
+
+One request releases at most once, for its last `release.published` event. The
+answer gives that version in `autoReleaseVersion` and lists any others in
+`autoReleaseIgnoredVersions`.
 
 ---
 

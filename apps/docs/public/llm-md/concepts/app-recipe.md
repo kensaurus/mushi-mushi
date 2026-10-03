@@ -39,6 +39,15 @@ system, routes and stories, gates, CI/CD, deploy, env names, integrations) on on
 canvas, with a list view on narrow screens. MCP clients read the same data with
 `get_app_recipe`.
 
+Select a card to open its detail panel. Four cards have their own view:
+
+| Card | What the panel shows |
+|------|----------------------|
+| Schema | The tables in the newest schema snapshot (RLS on or off, column count) and what changed since the snapshot before: tables added or removed, columns added or removed, RLS switched |
+| CI/CD | The recent workflow runs with their result and **estimated** billable minutes. GitHub no longer reports billed minutes per run, so Mushi estimates them from job time and runner type. |
+| Deploy | For each target in `deploy.targets`, the commit it should run (the default-branch head) next to the commit and version it reported. A target with no observation says **Not observed**, never Live. |
+| Env names | A matrix of variable names by place: the repo's Actions secrets and variables, each GitHub environment, and runtime. Each cell says Set, Missing, Set but not declared, or **Not checked** when GitHub did not list that place (for example, a token without the secrets permission). Values are never read. |
+
 ## `mushi.recipe.json`
 
 A `mushi.recipe.json` file at your repo root points Mushi at your design tokens.
@@ -75,6 +84,7 @@ format. Mushi also reads the shorthand most repos already ship (`"#abc"`,
 - `design.contrast` declares the foreground/background pairs that must meet WCAG: 4.5:1 by default, 3:1 with `large: true`, or an explicit `min`.
 - `design.rules` turns rules on or off and sets severity, allowed values and ignored files.
 - `change.allowPaths` is the only set of paths a recipe pull request may write.
+- `routes.inventory` is the path of the inventory file your CI ingests, if it is not `inventory.yaml` at the repo root (the same path as the mcp-ci action's `inventory` input). The Routes form edits that file.
 - `design.directions[]` (`{name, status: "active" | "inactive", tokens[], note?}`) lists candidate directions for comparison.
   - `design.tokens[]` stays the only source the drift check reads.
   - At most one direction may be `active`, and its `tokens` must be exactly the `role: "source"` paths. Anything else is rejected with `directions_active_mismatch`.
@@ -166,6 +176,26 @@ If nothing could be judged, the score is **not scored**, never 0. The
 severity, shrinking its allowlist) raises the score at first. Fixing the findings
 it reveals brings the score back down, against a stricter system each time.
 
+### When the score is too high
+
+Both actions are off until a project owner or admin turns them on, on the
+**Design system** page under **When the score is too high**. Each one fires only
+when the score is above the project's threshold (40 unless you change it):
+
+- **Fail the CI check.** `mushi recipe check --push` exits non-zero when the
+  score Mushi computes for the push is above the threshold. A push that could not
+  be scored never fails the check. A push Mushi scored but could not store fails
+  it while this action is on.
+- **Dispatch a fix for new drift.** When a scan finds warn or error findings
+  that were not in the previous scan (same rule, file and value), Mushi opens one
+  design-drift report, or reuses the open one, and dispatches a fix through the
+  normal automatic path. Autofix must be on for the project, and its spend and
+  per-day caps apply. The first scan only sets the baseline, and a CI push acts
+  only for your default branch, so pull-request runs never spend. Only the
+  findings a scan stores (the first 500) are compared, so a large backlog does
+  not dispatch again after every scan. Only an owner or admin signed in to the
+  console can turn this on; an API key can turn it off.
+
 ## Hole checks
 
 Some problems never throw an error, so no user report or crash log will show
@@ -181,8 +211,33 @@ checks** on the Recipe page:
 | Privacy link | The privacy URL you give the stores does not load a real policy page. |
 | Store build rules | Your Android target SDK or iOS build is older than Google Play or the App Store accepts. |
 | Storage deletes in SQL | Rows of `storage.objects` deleted with SQL. The files stay in the bucket and keep costing money. This one runs in your own CI: `mushi radar scan --push`. |
+| Secret keys in the built app | An OpenAI, Anthropic, Stripe live or AWS key, or a Supabase secret or service-role key, inside the built app (`dist`, `build`, `out`, `.next/static`, `.output/public`, `.svelte-kit/output/client`, `.vercel/output/static`, native JS bundles, or the folders named with `--bundle-dir`). Anyone who opens the app can read it. Runs in your CI **after the build step**: `mushi radar scan --push`. Keys that are public by design (the Supabase anon key, the Mushi SDK key) are not flagged, and only where and which kind of key is sent, never the key. |
+| An app nobody uses that still spends | No SDK heartbeat, report or page view for 30 days while AI spend, deployed edge functions or working stored provider keys are still live. Comes with a retire checklist. |
+| Every connected key still works | A key Mushi holds for this app that the provider now rejects: the connectors (GitHub, Supabase, Sentry, AI spend, RevenueCat, the stores), the integrations (Linear, Cursor Cloud, Claude Code, Langfuse, Jira, PagerDuty, Slack) and the AI keys under Settings → API Keys. Read from the latest probe, daily read, health check or key test, at most 7 days old. |
+| Store keys have the permissions they need | A Google Play or App Store Connect key missing a permission a switched-on capability needs (reading, or releasing once release actions are on). |
+| No keys left unused for 90 days | A Mushi SDK key or a stored provider key nobody used in 90 days. Console and MCP keys are not judged, because Mushi does not record every use of them. |
+| Paid features can be switched off | A feature that costs money per use with no kill switch, or AI spend with no paid feature declared. Reads `spend.paidFeatures`. |
+| AI providers have a spending limit | OpenAI or Anthropic used by this app with no monthly limit declared, or spend at 80% of the declared limit. Mushi cannot cap your own provider keys; only the provider can. Reads `spend.providerLimits`. |
 
 A check with nothing to look at says **Not checked**. It is never shown as passing.
+
+The two spend checks read a `spend` block in `mushi.recipe.json`. It is what
+you declare; Mushi cannot read a provider's own limit:
+
+```json
+{
+  "spend": {
+    "paidFeatures": [
+      { "name": "AI tutor", "provider": "openai", "killSwitch": "env:AI_TUTOR_ENABLED" }
+    ],
+    "providerLimits": { "openai": 50, "anthropic": 30 }
+  }
+}
+```
+
+`killSwitch` names the flag or env var that turns the feature off without a new
+build (`env:NAME` or `flag:name`). `providerLimits` is the monthly limit in US
+dollars you set in the provider's console.
 
 The public checks read a `store` block in `mushi.recipe.json`:
 
@@ -224,6 +279,33 @@ It ends with a short pre-submission checklist, each item marked high, medium
 or low risk. Reading the claims uses your own AI key; without one, that check
 says **Not checked**. This is a check against your code, not legal advice.
 
+### Store reviews as reports
+
+A one-star review is a bug report from someone who never opened your widget.
+Switch on **Store reviews as reports** on the Recipe page and Mushi reads the
+app's App Store and Google Play reviews every 6 hours, through the App Store
+Connect and Google Play sources bound to that app (see below). Each new review
+at or under your star threshold becomes a report in the queue, with
+`source: store_review`, and is diagnosed like any other report.
+
+| Setting | Default |
+|---------|---------|
+| On or off | Off. Each app opts in. Owners and admins switch it. |
+| Star threshold | 1 and 2 stars. Pick 1 star only, up to any rating. |
+
+- Each review becomes a report **once**. Mushi remembers every review it has
+  read, including the ones above the threshold, so an edit or a re-read never
+  files it again.
+- Reviews older than 30 days are recorded but not filed, so switching it on
+  does not flood the queue with old reviews. At most 25 reports per store per
+  run; the rest follow on the next run.
+- The reviewer's name is never stored. Review text is treated like widget
+  text: data for the diagnosis, never instructions.
+- Google Play only returns reviews added or edited in the last week, so a Play
+  app is covered from the day you switch it on.
+- **Pull now** reads right away (once per 10 minutes). Viewers cannot pull. A store that refuses the
+  key shows its own error; it never reads as "no reviews".
+
 ## Connected sources
 
 Each part of the recipe can read from a source. GitHub, Supabase and Sentry use
@@ -253,6 +335,27 @@ env files, lockfiles, generated exports and migrations are never written. The
 draft stays a draft, so your CI does not run until you mark it ready. A
 listing change is published by your own CI after you merge.
 
+### From the console
+
+Select the **Gates**, **Env** or **Routes** card on the Recipe page and open the
+**Change** tab:
+
+| Card | What the form edits |
+|------|---------------------|
+| Gates | `gates.budgets` (a number per metric) and `gates.cadence` (how often a gate must run, such as `P1D`) in `mushi.recipe.json` |
+| Env | `env.required` in `mushi.recipe.json`: each variable **name** and where it must be set (GitHub Actions, a GitHub environment, or runtime). Optionally the same names in `.env.example`. There is no field for a value. |
+| Routes | The inventory as text: the file `routes.inventory` names, else `inventory.yaml` |
+
+**Preview diff** shows exactly what would change and nothing is written.
+**Open draft PR** opens one draft pull request with that diff, and the tab
+follows it until the link appears. A file that is not in `change.allowPaths`
+stays read-only and the tab says why. A new `mushi.recipe.json` must still
+parse as a recipe (64 KB cap, schema, no secrets), and a new inventory must
+still pass inventory ingest; otherwise the preview lists the file as refused
+with the first problems, and no PR can be opened. If someone changed the file on the
+default branch after your preview, the PR is refused, so it can never undo
+their change. Preview again to start from the new version.
+
 A store action, such as raising a Google Play rollout to 20%, is different: it
 calls the store directly. It needs a separate write key, and every single
 action needs a team owner or admin to approve it in the console and then run
@@ -266,6 +369,33 @@ For a repo Mushi has no token for, push the recipe from your existing CI job:
 `POST /v1/ingest/recipe/events` takes build and deploy events from any CI,
 including Jenkins or a cron on a server.
 
+`mushi recipe check` runs the same deviance rules as Mushi's own scan, with the
+same rule ids, over your tracked files, so it reports the same findings and the
+same score. With `--push` it sends the scan along with the recipe. Mushi does
+not take the CLI's word for it: it judges every pushed value again with your
+rules and tokens and writes each finding's text and suggested token itself,
+applies your rules' severities, judges contrast from the tokens, computes the
+score, and records the `design.deviance_score` metric. Only a push of your
+default branch becomes the score shown in the console (the connected repo's
+default branch, else `ci.defaultBranch` in `mushi.recipe.json`, else `main`);
+a pull-request run keeps its findings and the CI gate but never replaces it.
+Push with a CLI key kept in your CI secrets (`mushi login` mints one with
+`mcp:read`). The SDK key (`report:write` only) ships inside your app, web or
+native, so anyone may hold it. A push made with the SDK key, or with any key a
+browser has used, keeps its findings and the CI gate, but never sets the shown
+score or dispatches a fix. A finding whose file path is not a plain code path
+(spaces, for example) is refused. A push from a CLI older than this engine is kept
+but never replaces the score shown in the console either. Update the server before the
+CLI if you self-host.
+
+```yaml
+- run: npx @mushi-mushi/cli recipe check --push
+  env:
+    MUSHI_API_KEY: ${{ secrets.MUSHI_CLI_KEY }} # a `mushi login` key, not the SDK key
+```
+
+Add `--max-score 30` to fail the step above a fixed score without asking Mushi.
+
 ## In your editor
 
 | MCP tool | Returns |
@@ -274,4 +404,33 @@ including Jenkins or a cron on a server.
 | `get_design_tokens` | The normalized tokens and a CSS-variable / TS-name map, so a fix uses tokens instead of literals |
 | `get_design_deviance` | The score, the per-rule breakdown, the trend and the top findings |
 | `get_store_status` | The latest store review: listing vs live, claims vs code, screenshots and the checklist |
-| `get_fix_context` | Now includes a `recipe` block (at most 4 KB) with the tokens to use |
+| `get_fix_context` | Now includes a `recipe` block (at most 4 KB) with the tokens to use, and `recipe.context` for the bug itself (below) |
+| `explain_finding` | One finding by id: what the check is, why it fired, the file and line, the fix in one sentence, and whether the latest run still reports it |
+
+To check again right after a fix, without waiting for the daily run, use the
+run-now tools. Each needs a key with `mcp:write`, only records a new run, and
+is rate limited per project:
+
+| MCP tool | Runs | At most |
+|---|---|---|
+| `refresh_recipe` | Re-reads `mushi.recipe.json` and the token files | Once every 5 minutes |
+| `run_design_deviance` | Refreshes the tokens and starts a new deviance scan (poll `get_design_deviance`) | Once every 5 minutes |
+| `run_radar` | The hole checks (poll `get_radar`) | Once every 10 minutes |
+| `run_store_review` | The store review (read it again with `get_store_status`) | Once every 30 minutes |
+
+### What the fixer gets with each bug
+
+The `recipe` block in `get_fix_context`, and the same block in the prompt of a
+fix Mushi writes itself, also carries `context`: three things a fix gets wrong
+when nobody tells it.
+
+| Section | What it says | When it is empty |
+|---|---|---|
+| `schema` | The tables the error names (in its message, stack trace or a failed `/rest/v1/…` request), with their columns from the latest schema snapshot. If the error says a table does not exist and the snapshot has no such table either, it is listed under `missing`: a migration may not be applied. | `not_connected` until the daily drift scan has a snapshot of your Supabase schema; `unknown` when the error names no table. |
+| `deploy` | Whether your last merged fix is live: `live` (a deploy target serves the fix commit), `deployed_since_merge` (a target started serving a new commit after the merge, matched by time because a squash merge changes the sha), `not_live` or `probe_failed`. | `no_merged_fix`, or `unknown` until a deploy target in `mushi.recipe.json` reports its version. |
+| `radar` | The app's open hole-check findings, with their fixes. | `unknown` until the hole checks have run once. |
+
+Each section has its own `state` and a plain-English `note`, and a section that
+was never checked never reads as fine. The context takes at most half of the
+4 KB; when it would not fit, hole-check findings are cut first, then columns,
+then extra tables. The deploy state is always kept.
