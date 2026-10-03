@@ -374,6 +374,20 @@ describe('POST /design/changes', () => {
     expect(arg.markReady).toBe(false)
   })
 
+  it('a rules change that would push mushi.recipe.json past 64 KB is refused, never opened as a PR', async () => {
+    const { app, deps } = harness(seed({ app_recipe_snapshots: [glotSnapshot(P_A)] }))
+    const many = Array.from({ length: 200 }, (_, i) => `${String(i).padStart(3, '0')}${'v'.repeat(97)}`)
+    const rules = { off_token_color: { allowValues: many }, off_token_font: { allowValues: many }, off_scale_spacing: { allowValues: many }, off_scale_radius: { allowValues: many } }
+    const dry = await app.call('POST', url, { body: { kind: 'rules', rules } })
+    expect(dry.status).toBe(200)
+    expect((dry.body.data as { files: unknown[] }).files).toEqual([])
+    expect((dry.body.data as { denied: unknown[] }).denied).toEqual([{ path: 'mushi.recipe.json', reason: expect.stringMatching(/would not load.*cap is 65536/) }])
+    const real = await app.call('POST', url, { body: { kind: 'rules', rules, dryRun: false } })
+    expect(real.status).toBe(400)
+    expect(real.body).toMatchObject({ error: { code: 'PATH_NOT_WRITABLE' } })
+    expect(deps.createPr).not.toHaveBeenCalled()
+  })
+
   it('a member may preview but not open a PR; a malformed body is 400', async () => {
     const { app, deps } = harness(seed({ app_recipe_snapshots: [glotSnapshot(P_A)] }))
     const body = { kind: 'tokens', edits: [{ path: 'color.palette.signal', value: '#B23A2E' }] }
