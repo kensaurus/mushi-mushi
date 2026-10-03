@@ -74,11 +74,37 @@ function worst(findings: readonly { severity: string }[]): 'pass' | 'warn' | 'fa
   return 'pass'
 }
 
-async function writeGateRun(db: Db, projectId: string, gate: string, findings: readonly DriftFinding[], summary: Record<string, unknown>, commitSha: string | null, now: Date): Promise<{ gate: string; status: string; findings: number }> {
+/**
+ * The default-branch head a run judged, and the repo it was read from.
+ * report-deploy-live places a fix merge against `commit_sha` by time, so the
+ * repo is recorded too (`summary.head_repo`): a head from one repo says
+ * nothing about a fix merged into another.
+ */
+interface RunHead {
+  sha: string | null
+  repo: string | null
+}
+
+/**
+ * `started_at` is when collection began, before the head was read;
+ * `completed_at` is when the run was written, after it. A run that completed
+ * before a merge therefore read a head without that merge, and one that
+ * started after it read a head with it (report-deploy-live relies on both).
+ */
+interface RunWindow {
+  startedAt: Date
+  completedAt: Date
+}
+
+async function writeGateRun(db: Db, projectId: string, gate: string, findings: readonly DriftFinding[], summary: Record<string, unknown>, head: RunHead, runWindow: RunWindow): Promise<{ gate: string; status: string; findings: number }> {
   const status = worst(findings)
+  const recorded = { ...summary, head_repo: head.sha ? head.repo : null }
   const { data: run, error } = await db
     .from('gate_runs')
-    .insert({ project_id: projectId, gate, status, summary, findings_count: findings.length, triggered_by: 'recipe-collector', commit_sha: commitSha, started_at: now.toISOString(), completed_at: now.toISOString() })
+    .insert({
+      project_id: projectId, gate, status, summary: recorded, findings_count: findings.length,
+      triggered_by: 'recipe-collector', commit_sha: head.sha, started_at: runWindow.startedAt.toISOString(), completed_at: runWindow.completedAt.toISOString(),
+    })
     .select('id')
     .single()
   if (error || !run) throw new Error(`could not record ${gate}: ${error?.message ?? 'no row'}`)
@@ -89,7 +115,7 @@ async function writeGateRun(db: Db, projectId: string, gate: string, findings: r
       file_path: f.filePath ?? null, suggested_fix: f.suggestedFix ?? null, allowlisted: false,
     })))
     if (fErr) {
-      await db.from('gate_runs').update({ status: 'error', summary: { ...summary, error: `findings not stored: ${fErr.message}` } }).eq('id', runId)
+      await db.from('gate_runs').update({ status: 'error', summary: { ...recorded, error: `findings not stored: ${fErr.message}` } }).eq('id', runId)
       return { gate, status: 'error', findings: 0 }
     }
   }
@@ -177,9 +203,12 @@ export async function collectProjectPhase2(db: Db, projectId: string, deps: Phas
 
   findings.push(...migrationDrift(results))
 
+  const githubRepo = (results.find((r) => r.kind === 'github')?.snapshot?.resources ?? []).find((x) => x.kind === 'repo')?.externalId ?? null
+  const head: RunHead = { sha: github?.headSha || null, repo: githubRepo }
+
   // ci_workflow_runs from the GitHub snapshot.
   if (github?.runs?.length) {
-    const repo = (results.find((r) => r.kind === 'github')?.snapshot?.resources ?? []).find((x) => x.kind === 'repo')?.externalId ?? 'unknown'
+    const repo = githubRepo ?? 'unknown'
     await db.from('ci_workflow_runs').upsert(github.runs.map((x) => ({ project_id: projectId, repo, source: 'github', ...x })), { onConflict: 'project_id,repo,run_id' })
   }
 
@@ -192,6 +221,9 @@ export async function collectProjectPhase2(db: Db, projectId: string, deps: Phas
     findings.push(...d.findings.map(toConnectorFinding))
   }
 
+  // Every connector, and so the GitHub head, has been read by now.
+  const runWindow: RunWindow = { startedAt: now, completedAt: deps.now() }
+
   // Budgets against the latest metric values.
   const budgets = (manifest?.gates?.budgets && typeof manifest.gates.budgets === 'object') ? manifest.gates.budgets as Record<string, number> : null
   const gates: Phase2Summary['gates'] = []
@@ -199,13 +231,13 @@ export async function collectProjectPhase2(db: Db, projectId: string, deps: Phas
     const { data: metrics } = await db.from('metric_series').select('metric_name, value, ts').eq('project_id', projectId).in('metric_name', Object.keys(budgets)).order('ts', { ascending: false }).limit(200)
     const latest: Record<string, number> = {}
     for (const m of (metrics ?? []) as Array<{ metric_name: string; value: number }>) if (!(m.metric_name in latest)) latest[m.metric_name] = Number(m.value)
-    if (Object.keys(latest).length) gates.push(await writeGateRun(db, projectId, 'code_health', budgetDrift(budgets, latest).map(toConnectorFinding), { source: 'recipe-budgets', budgets }, github?.headSha ?? null, now))
+    if (Object.keys(latest).length) gates.push(await writeGateRun(db, projectId, 'code_health', budgetDrift(budgets, latest).map(toConnectorFinding), { source: 'recipe-budgets', budgets }, head, runWindow))
   }
 
   for (const gate of RECIPE_GATES) {
     if (!GATE_SOURCE[gate].some((k) => connected.has(k))) continue
     const own = findings.filter((f) => f.gate === gate)
-    gates.push(await writeGateRun(db, projectId, gate, own, { source: 'connectors', connectors: GATE_SOURCE[gate].filter((k) => connected.has(k)) }, github?.headSha ?? null, now))
+    gates.push(await writeGateRun(db, projectId, gate, own, { source: 'connectors', connectors: GATE_SOURCE[gate].filter((k) => connected.has(k)) }, head, runWindow))
   }
 
   // Shared resources this project uses.
