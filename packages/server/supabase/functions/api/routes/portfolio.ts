@@ -11,6 +11,8 @@
  *     the projects that user can reach (accessibleProjectIdsInOrganization).
  *
  * Shapes: _shared/portfolio-types.ts. Every response is `{ ok: true, data }`.
+ * A column whose read failed or was cut short is listed in `readErrors` and in
+ * the card's `unreadable`; it never reads as zero, "no cap" or "none yet".
  */
 
 import type { Context, Hono, MiddlewareHandler } from 'npm:hono@4'
@@ -35,10 +37,13 @@ import type {
   PortfolioCard,
   PortfolioFindingsResponse,
   PortfolioRadarColumn,
+  PortfolioReadError,
+  PortfolioReadPart,
   PortfolioResponse,
   PortfolioSpendColumn,
   SdkSkewEntry,
 } from '../../_shared/portfolio-types.ts'
+import { readAllPages } from '../../_shared/paged-read.ts'
 import { RECIPE_ELEMENT_KEYS, type ElementState, type RecipeElementKey } from '../../_shared/recipe-types.ts'
 import { DESIGN_GATE } from '../../_shared/design-plane.ts'
 import { RADAR_CI_GATE, RADAR_GATE } from '../../_shared/radar/run.ts'
@@ -104,19 +109,30 @@ export async function portfolioAccess(c: Context, db: Db, rawOrgId: string): Pro
   }
   if (!UUID_RE.test(orgId)) return { ok: false, response: jsonError(c, 'NOT_FOUND', 'Organization not found', 404) }
 
-  const { data: membership } = await db
+  const { data: membership, error: membershipErr } = await db
     .from('organization_members')
     .select('organization_id')
     .eq('organization_id', orgId)
     .eq('user_id', userId)
     .maybeSingle()
+  if (membershipErr) return { ok: false, response: jsonError(c, 'DB_ERROR', 'Could not check your membership of this organization.', 500) }
   if (!membership) return { ok: false, response: jsonError(c, 'FORBIDDEN', 'You are not a member of this organization.', 403) }
 
-  const [{ data: org }, projectIds] = await Promise.all([
-    db.from('organizations').select('name').eq('id', orgId).maybeSingle(),
-    accessibleProjectIdsInOrganization(db, userId, orgId),
-  ])
-  return { ok: true, orgId, orgName: (org as { name?: string | null } | null)?.name ?? null, projectIds }
+  let projectIds: string[]
+  let org: { name?: string | null } | null
+  try {
+    const [orgRes, ids] = await Promise.all([
+      db.from('organizations').select('name').eq('id', orgId).maybeSingle(),
+      // strict: a failed read is a 500, never "no apps in this team yet".
+      accessibleProjectIdsInOrganization(db, userId, orgId, { strict: true }),
+    ])
+    org = (orgRes.data ?? null) as { name?: string | null } | null
+    projectIds = ids
+  } catch (err) {
+    plog.error('portfolio access read failed', { orgId, err: err instanceof Error ? err.message : String(err) })
+    return { ok: false, response: jsonError(c, 'DB_ERROR', 'Could not read the projects of this organization.', 500) }
+  }
+  return { ok: true, orgId, orgName: org?.name ?? null, projectIds }
 }
 
 interface ProjectRow {
@@ -147,30 +163,72 @@ function latestRunsByProject(runs: readonly RunRow[]): RunRow[] {
   return [...byProject.values()].flatMap((rows) => latestPerGate(rows))
 }
 
-async function loadLatestRuns(db: Db, projectIds: string[]): Promise<RunRow[]> {
-  if (projectIds.length === 0) return []
-  const { data, error } = await db
-    .from('gate_runs')
-    .select('id, project_id, gate, status, summary, started_at, completed_at')
-    .in('project_id', projectIds)
-    .order('started_at', { ascending: false })
-    .limit(3000)
-  if (error) throw new Error(`gate_runs: ${error.message}`)
-  return latestRunsByProject((data ?? []) as RunRow[])
+// ── reads ────────────────────────────────────────────────────────────────────
+// Fail-open rule (Plan 020 P-1): a read that fails or is cut short is recorded
+// in `errs` and its column reads "could not read", never $0 / "no cap" /
+// "no release" / "healthy". The project list, gate runs, findings and open
+// reports throw instead: without them the page has nothing true to show.
+
+/** Row ceilings per read; past them the read is reported as truncated. */
+const MAX_RUN_ROWS = 20_000
+const MAX_FINDING_ROWS = 20_000
+const MAX_REPORT_ROWS = 50_000
+const MAX_SPEND_ROWS = 50_000
+const MAX_RELEASE_ROWS = 5_000
+const MAX_SDK_VERSION_ROWS = 5_000
+
+/** Parts whose failure makes a card's own column unknown. */
+const CARD_PARTS: readonly PortfolioReadPart[] = ['gate_runs', 'findings', 'reports', 'sdk', 'spend', 'caps', 'releases', 'kind']
+
+type ReadErrors = PortfolioReadError[]
+
+function noteFailed(errs: ReadErrors, part: PortfolioReadPart, message: string, detail: string): void {
+  plog.warn('portfolio read failed', { part, err: detail })
+  errs.push({ part, kind: 'failed', message })
 }
 
-async function loadOpenFindings(db: Db, runs: readonly RunRow[]): Promise<OpenFindingRow[]> {
+function noteTruncated(errs: ReadErrors, part: PortfolioReadPart, message: string): void {
+  plog.warn('portfolio read truncated', { part })
+  errs.push({ part, kind: 'truncated', message })
+}
+
+async function loadLatestRuns(db: Db, projectIds: string[], errs: ReadErrors): Promise<RunRow[]> {
+  if (projectIds.length === 0) return []
+  const read = await readAllPages<RunRow>(
+    (from, to) => db
+      .from('gate_runs')
+      .select('id, project_id, gate, status, summary, started_at, completed_at', { count: 'exact' })
+      .in('project_id', projectIds)
+      .order('started_at', { ascending: false })
+      .order('id', { ascending: true })
+      .range(from, to),
+    { what: 'gate_runs', maxRows: MAX_RUN_ROWS },
+  )
+  if (read.truncated) {
+    noteTruncated(errs, 'gate_runs', `Only the newest ${MAX_RUN_ROWS.toLocaleString('en-US')} check runs were read; a check that last ran before them is missing from the cards.`)
+  }
+  return latestRunsByProject(read.rows)
+}
+
+async function loadOpenFindings(db: Db, runs: readonly RunRow[], errs: ReadErrors): Promise<OpenFindingRow[]> {
   const runIds = runs.map((r) => r.id)
   if (runIds.length === 0) return []
   const gateOf = new Map(runs.map((r) => [r.id, r.gate]))
-  const { data, error } = await db
-    .from('gate_findings')
-    .select('gate_run_id, project_id, rule_id, severity, message')
-    .in('gate_run_id', runIds)
-    .eq('allowlisted', false)
-    .limit(10000)
-  if (error) throw new Error(`gate_findings: ${error.message}`)
-  return ((data ?? []) as Array<{ gate_run_id: string; project_id: string; rule_id: string; severity: string; message: string | null }>).map((f) => ({
+  type Row = { gate_run_id: string; project_id: string; rule_id: string; severity: string; message: string | null }
+  const read = await readAllPages<Row>(
+    (from, to) => db
+      .from('gate_findings')
+      .select('id, gate_run_id, project_id, rule_id, severity, message', { count: 'exact' })
+      .in('gate_run_id', runIds)
+      .eq('allowlisted', false)
+      .order('id', { ascending: true })
+      .range(from, to),
+    { what: 'gate_findings', maxRows: MAX_FINDING_ROWS },
+  )
+  if (read.truncated) {
+    noteTruncated(errs, 'findings', `More than ${MAX_FINDING_ROWS.toLocaleString('en-US')} open findings: the counts below are a lower bound.`)
+  }
+  return read.rows.map((f) => ({
     project_id: f.project_id,
     gate: gateOf.get(f.gate_run_id) ?? 'unknown',
     rule_id: f.rule_id,
@@ -179,26 +237,44 @@ async function loadOpenFindings(db: Db, runs: readonly RunRow[]): Promise<OpenFi
   }))
 }
 
-async function loadSdk(db: Db, projectIds: string[]): Promise<{ observations: SdkObservationRow[]; latest: Map<string, string> }> {
+/** null when the SDK observations or the version catalog could not be read. */
+async function loadSdk(db: Db, projectIds: string[], errs: ReadErrors): Promise<{ observations: SdkObservationRow[]; latest: Map<string, string> } | null> {
   const [obs, versions] = await Promise.all([
-    projectIds.length ? db.from('project_sdk_observations').select('project_id, sdk_package, sdk_version').in('project_id', projectIds) : Promise.resolve({ data: [], error: null }),
-    db.from('sdk_versions').select('package, version, deprecated').limit(5000),
+    projectIds.length
+      ? db.from('project_sdk_observations').select('project_id, sdk_package, sdk_version').in('project_id', projectIds)
+      : Promise.resolve({ data: [] as SdkObservationRow[], error: null }),
+    db.from('sdk_versions').select('package, version, deprecated').limit(MAX_SDK_VERSION_ROWS),
   ])
+  if (obs.error || versions.error) {
+    noteFailed(errs, 'sdk', 'The Mushi SDK versions could not be read.', (obs.error ?? versions.error)?.message ?? '')
+    return null
+  }
+  const versionRows = (versions.data ?? []) as SdkVersionRow[]
+  if (versionRows.length >= MAX_SDK_VERSION_ROWS) {
+    noteTruncated(errs, 'sdk', 'The Mushi SDK release catalog is larger than Mushi reads; "latest" may be out of date.')
+  }
   return {
-    observations: ((obs as { data: unknown }).data ?? []) as SdkObservationRow[],
-    latest: latestSdkVersions(((versions as { data: unknown }).data ?? []) as SdkVersionRow[]),
+    observations: (obs.data ?? []) as SdkObservationRow[],
+    latest: latestSdkVersions(versionRows),
   }
 }
 
-async function loadPresence(db: Db, projectIds: string[]): Promise<Map<string, Set<IntegrationKey>>> {
+/** null when the integration settings could not be read: holes are then unknown, not "none". */
+async function loadPresence(db: Db, projectIds: string[], errs: ReadErrors): Promise<Map<string, Set<IntegrationKey>> | null> {
   const out = new Map<string, Set<IntegrationKey>>(projectIds.map((id) => [id, new Set<IntegrationKey>()]))
   if (projectIds.length === 0) return out
-  const [{ data: settings }, { data: repos }] = await Promise.all([
+  const [settingsRes, reposRes] = await Promise.all([
     db.from('project_settings')
       .select('project_id, sentry_dsn, sentry_org_slug, slack_channel_id, slack_bot_token_ref, linear_api_key_ref, linear_access_token_ref, supabase_project_ref')
       .in('project_id', projectIds),
     db.from('project_repos').select('project_id').in('project_id', projectIds),
   ])
+  if (settingsRes.error || reposRes.error) {
+    noteFailed(errs, 'integrations', 'Which integrations each app has could not be read, so missing setups are unknown.', (settingsRes.error ?? reposRes.error)?.message ?? '')
+    return null
+  }
+  const settings = settingsRes.data
+  const repos = reposRes.data
   for (const s of (settings ?? []) as Array<Record<string, string | null>>) {
     const set = out.get(s.project_id as string)
     if (!set) continue
@@ -236,71 +312,176 @@ export function radarColumn(runs: readonly RunRow[], findings: readonly OpenFind
   return { checkedAt, status, open, unchecked: Number.isFinite(unchecked) ? unchecked : 0, errored: Number.isFinite(errored) ? errored : 0 }
 }
 
-async function loadSpend(db: Db, projectIds: string[], since: string): Promise<Map<string, PortfolioSpendColumn>> {
-  const out = new Map<string, PortfolioSpendColumn>(projectIds.map((id) => [id, { llmUsd30d: 0, llmCalls30d: 0, autofixCapUsd: null, monthlyLlmBudgetUsd: null }]))
+const EMPTY_SPEND: PortfolioSpendColumn = { llmUsd30d: 0, llmCalls30d: 0, partial: false, autofixCapUsd: null, monthlyLlmBudgetUsd: null, capsKnown: true }
+
+async function loadSpend(db: Db, projectIds: string[], since: string, errs: ReadErrors): Promise<Map<string, PortfolioSpendColumn>> {
+  const out = new Map<string, PortfolioSpendColumn>(projectIds.map((id) => [id, { ...EMPTY_SPEND }]))
   if (projectIds.length === 0) return out
-  const [{ data: calls }, { data: caps }] = await Promise.all([
-    db.from('llm_invocations').select('project_id, cost_usd').in('project_id', projectIds).gte('created_at', since).limit(20000),
+  type CallRow = { project_id: string; cost_usd: number | string | null }
+  const [callsRead, capsRes] = await Promise.all([
+    readAllPages<CallRow>(
+      (from, to) => db
+        .from('llm_invocations')
+        .select('id, project_id, cost_usd', { count: 'exact' })
+        .in('project_id', projectIds)
+        .gte('created_at', since)
+        .order('id', { ascending: true })
+        .range(from, to),
+      { what: 'llm_invocations', maxRows: MAX_SPEND_ROWS },
+    ).catch((err: unknown) => {
+      noteFailed(errs, 'spend', "Mushi's AI spend could not be read.", err instanceof Error ? err.message : String(err))
+      return null
+    }),
     db.from('project_settings').select('project_id, autofix_max_spend_usd, monthly_llm_budget_usd').in('project_id', projectIds),
   ])
-  for (const c of (calls ?? []) as Array<{ project_id: string; cost_usd: number | string | null }>) {
-    const s = out.get(c.project_id)
-    if (!s) continue
-    s.llmCalls30d++
-    const n = Number(c.cost_usd ?? 0)
-    if (Number.isFinite(n)) s.llmUsd30d += n
+  if (!callsRead) {
+    for (const s of out.values()) {
+      s.llmUsd30d = null
+      s.llmCalls30d = null
+    }
+  } else {
+    if (callsRead.truncated) {
+      noteTruncated(errs, 'spend', `More than ${MAX_SPEND_ROWS.toLocaleString('en-US')} AI calls in 30 days: the spend shown is a lower bound.`)
+    }
+    for (const c of callsRead.rows) {
+      const s = out.get(c.project_id)
+      if (!s) continue
+      s.llmCalls30d = (s.llmCalls30d ?? 0) + 1
+      const n = Number(c.cost_usd ?? 0)
+      if (Number.isFinite(n)) s.llmUsd30d = (s.llmUsd30d ?? 0) + n
+    }
+    for (const s of out.values()) {
+      s.partial = callsRead.truncated
+      s.llmUsd30d = Math.round((s.llmUsd30d ?? 0) * 100) / 100
+    }
   }
-  for (const c of (caps ?? []) as Array<{ project_id: string; autofix_max_spend_usd: number | string | null; monthly_llm_budget_usd: number | string | null }>) {
+  if (capsRes.error) {
+    noteFailed(errs, 'caps', 'The spend caps could not be read; they are unknown, not unset.', capsRes.error.message)
+    for (const s of out.values()) s.capsKnown = false
+    return out
+  }
+  for (const c of (capsRes.data ?? []) as Array<{ project_id: string; autofix_max_spend_usd: number | string | null; monthly_llm_budget_usd: number | string | null }>) {
     const s = out.get(c.project_id)
     if (!s) continue
     s.autofixCapUsd = c.autofix_max_spend_usd == null ? null : Number(c.autofix_max_spend_usd)
     s.monthlyLlmBudgetUsd = c.monthly_llm_budget_usd == null ? null : Number(c.monthly_llm_budget_usd)
   }
-  for (const s of out.values()) s.llmUsd30d = Math.round(s.llmUsd30d * 100) / 100
   return out
 }
 
-async function loadOpenReports(db: Db, projectIds: string[]): Promise<Map<string, number>> {
+async function loadOpenReports(db: Db, projectIds: string[], errs: ReadErrors): Promise<Map<string, number>> {
   const out = new Map<string, number>(projectIds.map((id) => [id, 0]))
   if (projectIds.length === 0) return out
-  const { data, error } = await db.from('reports').select('project_id').in('project_id', projectIds).in('status', [...OPEN_REPORT_STATUSES]).limit(20000)
-  if (error) throw new Error(`reports: ${error.message}`)
-  for (const r of (data ?? []) as Array<{ project_id: string }>) out.set(r.project_id, (out.get(r.project_id) ?? 0) + 1)
+  type ReportRow = { project_id: string }
+  const read = await readAllPages<ReportRow>(
+    (from, to) => db
+      .from('reports')
+      .select('id, project_id', { count: 'exact' })
+      .in('project_id', projectIds)
+      .in('status', [...OPEN_REPORT_STATUSES])
+      .order('id', { ascending: true })
+      .range(from, to),
+    { what: 'reports', maxRows: MAX_REPORT_ROWS },
+  )
+  if (read.truncated) {
+    noteTruncated(errs, 'reports', `More than ${MAX_REPORT_ROWS.toLocaleString('en-US')} open reports: the counts shown are a lower bound.`)
+  }
+  for (const r of read.rows) out.set(r.project_id, (out.get(r.project_id) ?? 0) + 1)
   return out
+}
+
+/** Declared kind per project from the current recipe snapshot; null when it could not be read. */
+async function loadDeclaredKinds(db: Db, projectIds: string[], errs: ReadErrors): Promise<Map<string, unknown> | null> {
+  if (projectIds.length === 0) return new Map()
+  const { data, error } = await db.from('app_recipe_snapshots').select('project_id, manifest').in('project_id', projectIds).eq('is_current', true)
+  if (error) {
+    noteFailed(errs, 'kind', 'The app kinds declared in each recipe could not be read.', error.message)
+    return null
+  }
+  return new Map(((data ?? []) as Array<{ project_id: string; manifest: { app?: { kind?: unknown } } | null }>).map((s) => [s.project_id, s.manifest?.app?.kind]))
+}
+
+interface LatestReleases {
+  byProject: Map<string, { version: string; publishedAt: string | null }>
+  /** When the read stopped early, a project with no row found is unknown, not "none yet". */
+  truncated: boolean
+}
+
+async function loadLatestReleases(db: Db, projectIds: string[], errs: ReadErrors): Promise<LatestReleases | null> {
+  const byProject = new Map<string, { version: string; publishedAt: string | null }>()
+  if (projectIds.length === 0) return { byProject, truncated: false }
+  type ReleaseRow = { project_id: string; version: string; published_at: string | null }
+  try {
+    const read = await readAllPages<ReleaseRow>(
+      (from, to) => db
+        .from('releases')
+        .select('id, project_id, version, published_at, created_at', { count: 'exact' })
+        .in('project_id', projectIds)
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: true })
+        .range(from, to),
+      { what: 'releases', maxRows: MAX_RELEASE_ROWS },
+    )
+    for (const r of read.rows) {
+      if (!byProject.has(r.project_id)) byProject.set(r.project_id, { version: r.version, publishedAt: r.published_at })
+    }
+    if (read.truncated) {
+      noteTruncated(errs, 'releases', `Only the newest ${MAX_RELEASE_ROWS.toLocaleString('en-US')} releases were read; an app with no release among them reads "could not read".`)
+    }
+    return { byProject, truncated: read.truncated }
+  } catch (err) {
+    noteFailed(errs, 'releases', 'The releases could not be read.', err instanceof Error ? err.message : String(err))
+    return null
+  }
+}
+
+/** The card columns a page-level read problem makes unknown for this card. */
+function unreadableFor(projectId: string, errs: readonly PortfolioReadError[], releases: LatestReleases | null): PortfolioReadPart[] {
+  const parts = new Set<PortfolioReadPart>()
+  for (const e of errs) {
+    if (!CARD_PARTS.includes(e.part)) continue
+    // A truncated release read only hides apps whose latest release was not reached.
+    if (e.part === 'releases' && e.kind === 'truncated' && releases?.byProject.has(projectId)) continue
+    parts.add(e.part)
+  }
+  return CARD_PARTS.filter((p) => parts.has(p))
 }
 
 /** Build the cards for one page of projects. One project failing never fails the page. */
 export async function buildPortfolio(db: Db, deps: PortfolioRouteDeps, orgId: string, orgName: string | null, projectIds: string[], page: number): Promise<PortfolioResponse> {
   const now = deps.compose.now()
   const sorted = [...projectIds].sort()
-  const { data: projectRows } = sorted.length
-    ? await db.from('projects').select('id, name, slug').in('id', sorted)
-    : { data: [] }
-  const projects = ((projectRows ?? []) as ProjectRow[]).sort((a, b) => (a.name ?? '').localeCompare(b.name ?? '') || a.id.localeCompare(b.id))
+  let projectRows: ProjectRow[] = []
+  if (sorted.length) {
+    const { data, error } = await db.from('projects').select('id, name, slug').in('id', sorted)
+    // Without the project list there is nothing true to show: never "no apps yet".
+    if (error) throw new Error(`projects: ${error.message}`)
+    projectRows = (data ?? []) as ProjectRow[]
+  }
+  const projects = projectRows.sort((a, b) => (a.name ?? '').localeCompare(b.name ?? '') || a.id.localeCompare(b.id))
   const pageProjects = projects.slice((page - 1) * PORTFOLIO_PAGE_SIZE, page * PORTFOLIO_PAGE_SIZE)
   const pageIds = pageProjects.map((p) => p.id)
 
+  const errs: ReadErrors = []
   const since = new Date(now.getTime() - 30 * 86400_000).toISOString()
-  const [runs, sdk, openReports, spend, presence, snapshots, releases] = await Promise.all([
-    loadLatestRuns(db, sorted),
-    loadSdk(db, pageIds),
-    loadOpenReports(db, pageIds),
-    loadSpend(db, pageIds, since),
-    loadPresence(db, sorted),
-    pageIds.length ? db.from('app_recipe_snapshots').select('project_id, manifest').in('project_id', pageIds).eq('is_current', true) : Promise.resolve({ data: [] }),
-    pageIds.length ? db.from('releases').select('project_id, version, published_at, created_at').in('project_id', pageIds).order('created_at', { ascending: false }).limit(500) : Promise.resolve({ data: [] }),
+  const [runs, sdk, openReports, spend, presence, declaredKind, releases] = await Promise.all([
+    loadLatestRuns(db, sorted, errs),
+    loadSdk(db, pageIds, errs),
+    loadOpenReports(db, pageIds, errs),
+    loadSpend(db, pageIds, since, errs),
+    loadPresence(db, sorted, errs),
+    loadDeclaredKinds(db, pageIds, errs),
+    loadLatestReleases(db, pageIds, errs),
   ])
-  const findings = await loadOpenFindings(db, runs)
-  const skew = sdkSkew(pageIds, sdk.observations, sdk.latest)
-  const declaredKind = new Map(((snapshots as { data: unknown }).data as Array<{ project_id: string; manifest: { app?: { kind?: unknown } } | null }> ?? []).map((s) => [s.project_id, s.manifest?.app?.kind]))
-  const latestRelease = new Map<string, { version: string; publishedAt: string | null }>()
-  for (const r of ((releases as { data: unknown }).data ?? []) as Array<{ project_id: string; version: string; published_at: string | null }>) {
-    if (!latestRelease.has(r.project_id)) latestRelease.set(r.project_id, { version: r.version, publishedAt: r.published_at })
-  }
+  const findings = await loadOpenFindings(db, runs, errs)
+  const skew = sdk ? sdkSkew(pageIds, sdk.observations, sdk.latest) : []
 
   const cards = await mapBounded(pageProjects, COMPOSE_CONCURRENCY, async (p): Promise<PortfolioCard> => {
     const sdkEntries: SdkSkewEntry[] = skew.filter((s) => s.projectId === p.id)
-    const kind = inferKind(declaredKind.get(p.id), sdk.observations.filter((o) => o.project_id === p.id).map((o) => o.sdk_package))
+    // Without the declared kind or the SDK list the kind is unknown, not guessed from half the inputs.
+    const kind = declaredKind && sdk
+      ? inferKind(declaredKind.get(p.id), sdk.observations.filter((o) => o.project_id === p.id).map((o) => o.sdk_package))
+      : { kind: null, source: 'unknown' as const }
     const radarRuns = runs.filter((r) => r.project_id === p.id && RADAR_COLUMN_GATES.includes(r.gate))
     const base = {
       projectId: p.id,
@@ -310,9 +491,10 @@ export async function buildPortfolio(db: Db, deps: PortfolioRouteDeps, orgId: st
       kindSource: kind.source,
       openReports: openReports.get(p.id) ?? 0,
       sdk: sdkEntries,
-      latestRelease: latestRelease.get(p.id) ?? null,
+      latestRelease: releases?.byProject.get(p.id) ?? null,
       radar: radarColumn(radarRuns, findings.filter((f) => f.project_id === p.id && RADAR_COLUMN_GATES.includes(f.gate))),
-      spend: spend.get(p.id)!,
+      spend: spend.get(p.id) ?? { ...EMPTY_SPEND },
+      unreadable: unreadableFor(p.id, errs, releases),
     }
     try {
       const { response } = await deps.composeRecipe(db, deps.compose, p.id)
@@ -334,30 +516,40 @@ export async function buildPortfolio(db: Db, deps: PortfolioRouteDeps, orgId: st
     totalProjects: projects.length,
     cards,
     repeatedGroups: groupRepeatedFindings(findings).length,
-    holes: integrationHoles(presence).length,
+    holes: presence ? integrationHoles(presence).length : null,
+    readErrors: errs,
   }
 }
 
+type CrossRow = { id: string; rule_id: string; severity: CrossProjectFinding['severity']; project_ids: string[]; resource_key: string | null; message: string; suggested_fix: { text?: string } | null }
+
+const CROSS_LIMIT = 500
+
 export async function buildPortfolioFindings(db: Db, deps: PortfolioRouteDeps, orgId: string, projectIds: string[]): Promise<PortfolioFindingsResponse> {
   const ids = [...projectIds].sort()
-  const [runs, sdk, presence] = await Promise.all([loadLatestRuns(db, ids), loadSdk(db, ids), loadPresence(db, ids)])
-  const findings = await loadOpenFindings(db, runs)
-  const { data: cross } = await db
+  const errs: ReadErrors = []
+  const [runs, sdk, presence] = await Promise.all([loadLatestRuns(db, ids, errs), loadSdk(db, ids, errs), loadPresence(db, ids, errs)])
+  const findings = await loadOpenFindings(db, runs, errs)
+  const { data: cross, error: crossErr } = await db
     .from('portfolio_findings')
     .select('id, rule_id, severity, project_ids, resource_key, message, suggested_fix')
     .eq('organization_id', orgId)
     .eq('status', 'open')
-    .limit(500)
+    .order('id', { ascending: true })
+    .limit(CROSS_LIMIT)
+  if (crossErr) noteFailed(errs, 'cross_project', 'The problems shared across apps could not be read.', crossErr.message)
+  else if ((cross ?? []).length >= CROSS_LIMIT) noteTruncated(errs, 'cross_project', `Only the first ${CROSS_LIMIT} problems shared across apps are listed.`)
   return {
     organizationId: orgId,
     generatedAt: deps.compose.now().toISOString(),
     groups: groupRepeatedFindings(findings),
-    sdkSkew: sdkSkew(ids, sdk.observations, sdk.latest),
-    holes: integrationHoles(presence),
+    sdkSkew: sdk ? sdkSkew(ids, sdk.observations, sdk.latest) : [],
+    holes: presence ? integrationHoles(presence) : [],
     // A cross-project finding is shown only when the caller can see every project it names.
-    crossProject: ((cross ?? []) as Array<{ id: string; rule_id: string; severity: CrossProjectFinding['severity']; project_ids: string[]; resource_key: string | null; message: string; suggested_fix: { text?: string } | null }>)
+    crossProject: ((crossErr ? [] : cross ?? []) as CrossRow[])
       .filter((f) => f.project_ids.every((p) => ids.includes(p)))
       .map((f) => ({ id: f.id, ruleId: f.rule_id, severity: f.severity, projectIds: f.project_ids, resourceKey: f.resource_key, message: f.message, suggestedFix: f.suggested_fix?.text ?? null })),
+    readErrors: errs,
   }
 }
 

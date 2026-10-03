@@ -95,12 +95,14 @@ export function latestPerGate<T extends Pick<GateRunRow, 'gate' | 'status'>>(row
 async function openFindingCounts(db: Db, runIds: string[]): Promise<Map<string, number>> {
   const out = new Map<string, number>()
   if (runIds.length === 0) return out
-  const { data } = await db
+  const { data, error } = await db
     .from('gate_findings')
     .select('gate_run_id, severity')
     .in('gate_run_id', runIds)
     .eq('allowlisted', false)
     .limit(5000)
+  // A failed read must not count as "no open findings" (Plan 020 P-1).
+  if (error) throw new Error(`gate_findings: ${error.message}`)
   for (const f of (data ?? []) as Array<{ gate_run_id: string; severity: string }>) {
     if (f.severity === 'info') continue
     out.set(f.gate_run_id, (out.get(f.gate_run_id) ?? 0) + 1)
@@ -223,20 +225,28 @@ export async function composeRecipe(db: Db, deps: ComposeDeps, projectId: string
   const [projectRes, settingsRes, snapshot, repo] = await Promise.all([
     db.from('projects').select('id, slug, organization_id').eq('id', projectId).maybeSingle(),
     db.from('project_settings').select('supabase_project_ref, sentry_dsn, sentry_org_slug, sentry_project_slug, slack_channel_id, slack_bot_token_ref, linear_api_key_ref, linear_access_token_ref').eq('project_id', projectId).maybeSingle(),
-    db.from('app_recipe_snapshots').select('*').eq('project_id', projectId).eq('is_current', true).maybeSingle().then((r) => (r.data as SnapshotRow | null) ?? null),
+    db.from('app_recipe_snapshots').select('*').eq('project_id', projectId).eq('is_current', true).maybeSingle().then((r) => {
+      if (r.error) throw new Error(`app_recipe_snapshots: ${r.error.message}`)
+      return (r.data as SnapshotRow | null) ?? null
+    }),
     deps.resolveRepo(db, projectId).catch((err): RecipeRepoResolution => ({ ok: false, repoConnected: true, tokenAvailable: true, reason: errMessage(err) })),
   ])
+  // Fail-open rule (Plan 020 P-1): unread settings would make every element
+  // read "not connected", and unread gate runs "never checked". Both throw, so
+  // the recipe route answers RECIPE_FAILED and the portfolio card reads error.
+  if (settingsRes.error) throw new Error(`project_settings: ${settingsRes.error.message}`)
   const project = (projectRes.data ?? null) as { slug?: string | null; organization_id?: string | null } | null
   const settings = (settingsRes.data ?? {}) as Record<string, string | null>
   const manifest = (snapshot?.manifest ?? null) as RecipeManifest | null
 
   // Gate runs (every gate) — newest first.
-  const { data: gateRows } = await db
+  const { data: gateRows, error: gateErr } = await db
     .from('gate_runs')
     .select('id, gate, status, started_at, completed_at, summary, findings_count, commit_sha')
     .eq('project_id', projectId)
     .order('started_at', { ascending: false })
     .limit(300)
+  if (gateErr) throw new Error(`gate_runs: ${gateErr.message}`)
   const allRuns = (gateRows ?? []) as GateRunRow[]
   // The radar gates (Plan 020) are hole checks with their own column, not recipe gates.
   const latest = latestPerGate(allRuns.filter((r) => (r.gate !== DESIGN_GATE || isScanRun(r)) && !RADAR_GATES.includes(r.gate)))
