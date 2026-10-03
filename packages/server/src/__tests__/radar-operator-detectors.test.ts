@@ -126,6 +126,44 @@ describe('provider_key_invalid inputs: BYOK key tests and integration health che
     expect(evaluateProviderKeys([byokObservation(key({ test_status: 'error_network' }))!], NOW).state).toBe('unknown')
   })
 
+  it('an auth_failed key stays rejected after its last test goes stale, even next to a fresh working key', () => {
+    const revoked = byokObservation(key({ id: 'b2', provider_slug: 'supabase', label: 'drift PAT', status: 'auth_failed', test_status: 'error_auth', last_tested_at: ago(30) }))!
+    const working = byokObservation(key({}))!
+    const r = evaluateProviderKeys([revoked, working], NOW)
+    expect(r.state).toBe('finding')
+    expect(r.findings).toHaveLength(1)
+    expect(r.findings[0]).toMatchObject({ severity: 'error', target: 'drift PAT', evidence: { alsoReportedBy: 'byok_key_invalid' } })
+    expect(r.findings[0].message).toMatch(/Supabase rejects the key for "drift PAT"/)
+    expect(r.findings[0].message).toMatch(/last tested 2026-09-03 and stays marked rejected until a test passes/)
+    expect(r.findings[0].message).toMatch(/schema checks/)
+    expect(r.findings[0].message).toMatch(/setup check \(byok_key_invalid\) reports the same key/)
+    expect(r.findings[0].fix).toContain('supabase.com/dashboard/account/tokens')
+  })
+
+  it('an auth_failed key with no recorded test date is still a rejected key', () => {
+    const o = byokObservation(key({ status: 'auth_failed', test_status: null, last_tested_at: null }))
+    expect(o).toMatchObject({ ok: false, failure: 'credential_rejected', standing: true, at: null })
+    const r = evaluateProviderKeys([o!], NOW)
+    expect(r.state).toBe('finding')
+    expect(r.findings[0].message).toMatch(/no recorded test date/)
+  })
+
+  it('a key whose last test failed with 401 but that is not marked auth_failed is not tied to the setup check', () => {
+    const r = evaluateProviderKeys([byokObservation(key({ status: 'active', test_status: 'error_auth' }))!], NOW)
+    expect(r.state).toBe('finding')
+    expect(r.findings[0].message).not.toMatch(/byok_key_invalid/)
+    expect(r.findings[0].evidence).not.toHaveProperty('alsoReportedBy')
+    // A stale test that is not a standing rejection is not judged.
+    expect(evaluateProviderKeys([byokObservation(key({ status: 'active', test_status: 'error_auth', last_tested_at: ago(30) }))!], NOW).state).toBe('unknown')
+  })
+
+  it('says how many keys were not re-checked instead of counting them as ok', () => {
+    const r = evaluateProviderKeys([byokObservation(key({}))!, byokObservation(key({ id: 'b3', last_tested_at: ago(20) }))!], NOW)
+    expect(r.state).toBe('ok')
+    expect(r.reason).toMatch(/^1 key checked/)
+    expect(r.reason).toMatch(/1 more key was not re-checked in the last 7 days/)
+  })
+
   it('only usable BYOK keys count as live spend', () => {
     expect(['active', 'quota_exhausted', 'auth_failed', 'pending_validation', 'disabled'].filter((status) => isUsableByokKey({ status }))).toEqual(['active', 'quota_exhausted'])
   })
