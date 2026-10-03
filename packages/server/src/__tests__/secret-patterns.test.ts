@@ -40,6 +40,27 @@ describe('findSecrets', () => {
     expect(found.map((m) => m.label)).toEqual(['Anthropic key'])
   })
 
+  it('finds the current OpenAI key formats, whose bodies carry - and _ (built at runtime: no key-shaped literal in the repo)', () => {
+    const body = 'Ab3_' + 'x9-Q'.repeat(10) + 'Zz'
+    for (const prefix of ['proj', 'svcacct', 'admin']) {
+      const key = `sk-${prefix}-${body}`
+      const found = findSecrets(`const k="${key}";`)
+      expect(found.map((m) => m.label)).toEqual(['OpenAI-style key'])
+      // The whole key is claimed, not a 20-character tail.
+      expect(found[0].value).toBe(key)
+      expect(scanForSecrets(`OPENAI_API_KEY=${key}`)).toBe('OpenAI-style key')
+    }
+    // sk-ant- stays the Anthropic key; a short sk-proj- string is not a key.
+    expect(findSecrets(`"${ANTHROPIC}"`).map((m) => m.label)).toEqual(['Anthropic key'])
+    expect(findSecrets('"sk-proj-short"')).toEqual([])
+  })
+
+  it('finds a Supabase secret key, not the publishable one', () => {
+    const tail = 'N7UND0Ugj' + 'KTVK-Uodkm0Hg_xSvEMPvz'
+    expect(findSecrets(`createClient(url, "sb_secret_${tail}")`).map((m) => m.label)).toEqual(['Supabase secret key'])
+    expect(findSecrets(`createClient(url, "sb_publishable_${tail}")`)).toEqual([])
+  })
+
   it('stops at max', () => {
     const text = Array.from({ length: 10 }, (_, i) => `"sk-${String(i).repeat(24)}"`).join('\n')
     expect(findSecrets(text, 3)).toHaveLength(3)

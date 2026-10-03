@@ -26,6 +26,7 @@ export const SECRET_LABELS = [
   'Slack token',
   'Mushi API key',
   'Stripe live key',
+  'Supabase secret key',
 ] as const
 export type SecretLabel = (typeof SECRET_LABELS)[number]
 
@@ -36,7 +37,8 @@ export type SecretLabel = (typeof SECRET_LABELS)[number]
 export const SECRET_PATTERNS: ReadonlyArray<{ re: RegExp; label: SecretLabel }> = [
   { re: /-----BEGIN [A-Z ]*PRIVATE KEY-----/, label: 'private key' },
   { re: /sk-ant-[a-zA-Z0-9_-]{20,}/, label: 'Anthropic key' },
-  { re: /sk-[a-zA-Z0-9]{20,}/, label: 'OpenAI-style key' },
+  // Project, service-account and admin keys (sk-proj-, sk-svcacct-, sk-admin-) and the legacy sk-<48>.
+  { re: /sk-(?:(?:proj|svcacct|admin)-[A-Za-z0-9_-]{20,}|[A-Za-z0-9]{20,})/, label: 'OpenAI-style key' },
   { re: /(?:AKIA|ASIA)[0-9A-Z]{16}/, label: 'AWS access key id' },
   { re: /gh[pousr]_[A-Za-z0-9]{20,}/, label: 'GitHub token' },
   { re: /github_pat_[A-Za-z0-9_]{20,}/, label: 'GitHub fine-grained token' },
@@ -46,6 +48,8 @@ export const SECRET_PATTERNS: ReadonlyArray<{ re: RegExp; label: SecretLabel }> 
   { re: /xox[baprs]-[A-Za-z0-9-]{10,}/, label: 'Slack token' },
   { re: /\bmushi_[A-Za-z0-9]{24,}/, label: 'Mushi API key' },
   { re: /\b(?:sk|rk)_live_[A-Za-z0-9]{16,}/, label: 'Stripe live key' },
+  // Supabase's secret API key bypasses RLS like service_role; sb_publishable_ is public by design.
+  { re: /\bsb_secret_[A-Za-z0-9_-]{20,}/, label: 'Supabase secret key' },
 ]
 
 export interface SecretMatch {
