@@ -15,12 +15,15 @@
 
 import { ciWorkflowDrift, defaultBranchRed, envDrift } from '../recipe-drift.ts'
 import { estimateRunMinutes } from '../ci-minutes.ts'
+import { presentEnvNames } from '../recipe-detail.ts'
 import { isWritablePath, type RecipeManifest } from '../recipe-schema.ts'
 import { parseSupabaseAuthConfig, type DeclaredAuthSettings } from '../supabase-config-toml.ts'
 import { fetchJson, statusReason } from './http-util.ts'
 import { ConnectorError, notConnected, type ConnectorContext, type DriftFinding, type FileEdit, type RecipeConnector } from './types.ts'
 
 const API = 'https://api.github.com'
+/** Deployment environments read per snapshot (two list calls each). */
+export const MAX_ENVIRONMENTS = 10
 
 function repoOf(ctx: ConnectorContext): { owner: string; repo: string } | null {
   const owner = typeof ctx.config.owner === 'string' ? ctx.config.owner : null
@@ -104,10 +107,34 @@ export const githubConnector: RecipeConnector = {
       Object.assign(run, { est_billable_minutes: est.minutes, runner_breakdown: est.breakdown })
     }
 
-    const names: string[] = []
-    for (const kind of ['secrets', 'variables'] as const) {
-      const res = await gh(ctx, `/repos/${r.owner}/${r.repo}/actions/${kind}?per_page=100`)
-      if (res.status === 200) for (const s of (res.body?.[kind] ?? []) as Array<{ name: string }>) names.push(s.name)
+    // A list GitHub refused (no secrets scope, 403) is "not checked", never "empty":
+    // actionsNamesComplete says whether both lists were read.
+    const listNames = async (base: string): Promise<string[] | null> => {
+      const out: string[] = []
+      for (const kind of ['secrets', 'variables'] as const) {
+        const res = await gh(ctx, `${base}/${kind}?per_page=100`)
+        if (res.status !== 200) return null
+        for (const s of (res.body?.[kind] ?? []) as Array<{ name?: unknown }>) if (typeof s.name === 'string') out.push(s.name)
+      }
+      return out
+    }
+    const repoNames = await listNames(`/repos/${r.owner}/${r.repo}/actions`)
+    const names = repoNames ?? []
+    const actionsNamesComplete = repoNames !== null
+
+    // Deployment environments (at most MAX_ENVIRONMENTS): names per environment
+    // that could be read. An environment whose lists were refused is left out.
+    const environmentNames: Record<string, string[]> = {}
+    const envs = await gh(ctx, `/repos/${r.owner}/${r.repo}/environments?per_page=${MAX_ENVIRONMENTS}`)
+    if (envs.status === 200) {
+      const list = ((envs.body?.environments ?? []) as Array<{ name?: unknown }>)
+        .map((e) => e.name)
+        .filter((n): n is string => typeof n === 'string' && /^[\w.-]{1,60}$/.test(n))
+        .slice(0, MAX_ENVIRONMENTS)
+      for (const env of list) {
+        const got = await listNames(`/repos/${r.owner}/${r.repo}/environments/${encodeURIComponent(env)}`)
+        if (got) environmentNames[env] = got
+      }
     }
 
     // Declared migrations: filenames under the manifest's data.migrationsDir at the head SHA.
@@ -138,12 +165,12 @@ export const githubConnector: RecipeConnector = {
         env: { summary: { actionsNames: names.length } },
       },
       resources: [{ kind: 'repo', externalId: `${r.owner}/${r.repo}`, role: 'source' }],
-      facts: { branch, headSha, headCommittedAt, workflowFiles, runs, actionsNames: names, migrationsDir: migDir, migrationFiles, supabaseAuth },
+      facts: { branch, headSha, headCommittedAt, workflowFiles, runs, actionsNames: names, actionsNamesComplete, environmentNames, migrationsDir: migDir, migrationFiles, supabaseAuth },
       cursor: runs[0]?.run_id ? String(runs[0].run_id) : undefined,
     }
   },
   detectDrift(_prev, next, manifest) {
-    const f = next.facts as { branch: string; workflowFiles: Record<string, string>; runs: Array<{ head_branch: string | null; conclusion: string | null; completed_at: string | null }>; actionsNames: string[] }
+    const f = next.facts as { branch: string; workflowFiles: Record<string, string>; runs: Array<{ head_branch: string | null; conclusion: string | null; completed_at: string | null }>; actionsNames: string[]; actionsNamesComplete?: boolean; environmentNames?: Record<string, string[]> }
     type DeclaredEnv = { name: string; in?: unknown; environments?: unknown }
     const m = (manifest && typeof manifest === 'object' ? manifest : {}) as { env?: { required?: unknown } }
     const required = m.env?.required
@@ -151,7 +178,7 @@ export const githubConnector: RecipeConnector = {
     const out: DriftFinding[] = [
       ...ciWorkflowDrift(f.workflowFiles ?? {}),
       ...defaultBranchRed(f.runs ?? [], f.branch),
-      ...(declared.length ? envDrift({ declared: declared.map((e) => ({ name: e.name, in: Array.isArray(e.in) ? e.in : ['github-actions'], environments: Array.isArray(e.environments) ? e.environments : [] })), present: { 'github-actions': f.actionsNames ?? [] }, exampleNames: null }) : []),
+      ...(declared.length ? envDrift({ declared: declared.map((e) => ({ name: e.name, in: Array.isArray(e.in) ? e.in : ['github-actions'], environments: Array.isArray(e.environments) ? e.environments : [] })), present: presentEnvNames(f), exampleNames: null }) : []),
     ]
     return out.map((d) => ({ gate: d.gate, ruleId: d.ruleId, severity: d.severity, message: d.message, filePath: d.filePath ?? null, suggestedFix: d.suggestedFix }))
   },

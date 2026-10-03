@@ -19,6 +19,7 @@ import { DESIGN_PHASE_PATH, DESIGN_SCAN_PHASE } from '../../_shared/design-actio
 import type { RecipeRepoResolution, RecipeRepo } from '../../_shared/recipe-github.ts'
 import type { WorkflowRunSnapshot } from '../../_shared/github.ts'
 import { assetMime } from '../../_shared/design-assets.ts'
+import { ciView, declaredTargets as declaredDeployTargets, deployView, envView, MAX_CI_RUNS, presentEnvNames, schemaView, type ObservationRow } from '../../_shared/recipe-detail.ts'
 import type {
   DesignDirection,
   DesignDirectionsResponse,
@@ -323,7 +324,12 @@ function summary(key: RecipeElementKey, st: { state: ElementState; reason: strin
   return { key, label: ELEMENT_META[key].label, lane: ELEMENT_META[key].lane, state: st.state, reason: st.reason, lastCheckedAt, facts, findingsCount, links }
 }
 
-export async function composeRecipe(db: Db, deps: ComposeDeps, projectId: string): Promise<ComposedRecipe> {
+/**
+ * `detailFor`: also build that element's typed view (schemaView, ciView,
+ * deployView, envView). Only GET /recipe/elements/:element asks; GET /recipe
+ * and the portfolio rollup never pay for these reads.
+ */
+export async function composeRecipe(db: Db, deps: ComposeDeps, projectId: string, opts: { detailFor?: RecipeElementKey } = {}): Promise<ComposedRecipe> {
   const now = deps.now()
   const [projectRes, settingsRes, snapshot, repo] = await Promise.all([
     db.from('projects').select('id, slug, organization_id').eq('id', projectId).maybeSingle(),
@@ -473,11 +479,11 @@ export async function composeRecipe(db: Db, deps: ComposeDeps, projectId: string
   const releaseRows = (releases ?? []) as Array<{ version: string; status: string; published_at: string | null }>
   const rawTargets = (manifest as { deploy?: { targets?: unknown } } | null)?.deploy?.targets
   const declaredTargets = Array.isArray(rawTargets) ? (rawTargets as Array<{ id?: unknown }>).filter((t) => typeof t?.id === 'string') : []
-  const { data: obsRows } = declaredTargets.length
-    ? await db.from('deploy_observations').select('target_id, ok, error, observed_at, observed_version, observed_commit').eq('project_id', projectId).order('observed_at', { ascending: false }).limit(100)
-    : { data: [] }
+  const obsRows = declaredTargets.length
+    ? await latestDeployObservations(db, projectId, declaredTargets.slice(0, MAX_DECLARED_READS).map((t) => t.id as string))
+    : []
   const latestObs = new Map<string, { targetId: string; ok: boolean; observedAt: string; error: string | null; version: string | null; commit: string | null }>()
-  for (const o of (obsRows ?? []) as Array<{ target_id: string; ok: boolean; error: string | null; observed_at: string; observed_version: string | null; observed_commit: string | null }>) {
+  for (const o of obsRows) {
     if (!latestObs.has(o.target_id)) latestObs.set(o.target_id, { targetId: o.target_id, ok: o.ok, observedAt: o.observed_at, error: o.error, version: o.observed_version, commit: o.observed_commit })
   }
   const deployState = deriveElementState({
@@ -552,6 +558,18 @@ export async function composeRecipe(db: Db, deps: ComposeDeps, projectId: string
     integrations: { configured: integrationsList },
   }
 
+  if (opts.detailFor) {
+    const views = await loadElementViews(db, opts.detailFor, {
+      projectId,
+      manifest,
+      releaseVersion: releaseRows[0]?.version ?? null,
+      liveHeadSha: typeof ciDetail.headSha === 'string' ? ciDetail.headSha : null,
+      liveActionsNames: presentNames,
+      fallbackRequired: deps.requiredEnvNames(project?.slug ?? null),
+    })
+    Object.assign(details[opts.detailFor], views)
+  }
+
   const manifestIssues = (snapshot?.validation_errors ?? []) as RecipeIssue[]
   const response: RecipeResponse = {
     projectId,
@@ -569,6 +587,128 @@ export async function composeRecipe(db: Db, deps: ComposeDeps, projectId: string
     snapshotHash: snapshot?.tokens_hash ?? null,
   }
   return { response, details }
+}
+
+// ── Per-element views (GET /recipe/elements/:element only) ───────────────────
+
+interface ViewContext {
+  projectId: string
+  manifest: RecipeManifest | null
+  releaseVersion: string | null
+  /** The default-branch head read live for the CI card, when the repo is connected. */
+  liveHeadSha: string | null
+  /** Repo-level Actions names read live (null = not read or refused). */
+  liveActionsNames: string[] | null
+  fallbackRequired: string[]
+}
+
+type GithubFacts = { headSha?: string; actionsNames?: string[]; actionsNamesComplete?: boolean; environmentNames?: Record<string, string[]> }
+
+/** The current GitHub connector facts, or null when there is no snapshot. A failed read throws (a 500, not "not checked"). */
+async function githubFacts(db: Db, projectId: string): Promise<GithubFacts | null> {
+  const { data, error } = await db.from('connector_snapshots').select('snapshot').eq('project_id', projectId).eq('kind', 'github').eq('is_current', true).eq('ok', true).maybeSingle()
+  if (error) throw new Error(`connector_snapshots read failed: ${error.message}`)
+  const facts = (data as { snapshot?: { facts?: unknown } } | null)?.snapshot?.facts
+  return facts && typeof facts === 'object' ? (facts as GithubFacts) : null
+}
+
+/** A failed read throws: the route answers 500 instead of an empty view that reads as "nothing there". */
+function rows<T>(res: { data: unknown; error: { message: string } | null }, what: string): T[] {
+  if (res.error) throw new Error(`${what} read failed: ${res.error.message}`)
+  return (res.data ?? []) as T[]
+}
+
+const OBSERVATION_COLUMNS = 'target_id, ok, error, observed_at, observed_version, observed_commit, source'
+/** Declared targets read one by one (declaredTargets() caps the list at 20 too). */
+const MAX_DECLARED_READS = 20
+/** Rows scanned for targets the manifest does not declare (a hint list, so bounded). */
+const UNDECLARED_SCAN_ROWS = 200
+
+/** A PostgREST `in` list with every value double-quoted, so an id holding , ( ) or " stays one value. */
+export function postgrestInList(values: readonly string[]): string {
+  return `(${values.map((v) => `"${v.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`).join(',')})`
+}
+
+/**
+ * The latest observation of every target. One indexed read per declared
+ * target (deploy_observations_project covers project, target, observed_at
+ * desc), so a target that reports often can never push another target's rows
+ * out of a shared window and make it read "not observed yet". Undeclared ids
+ * come from one bounded read of everything else. A failed read throws.
+ */
+export async function latestDeployObservations(db: Db, projectId: string, declaredIds: readonly string[]): Promise<ObservationRow[]> {
+  const ids = [...new Set(declaredIds)]
+  const others = db.from('deploy_observations').select(OBSERVATION_COLUMNS).eq('project_id', projectId)
+  const reads = await Promise.all([
+    ...ids.map((id) => db.from('deploy_observations').select(OBSERVATION_COLUMNS).eq('project_id', projectId).eq('target_id', id).order('observed_at', { ascending: false }).limit(1)),
+    (ids.length ? others.not('target_id', 'in', postgrestInList(ids)) : others).order('observed_at', { ascending: false }).limit(UNDECLARED_SCAN_ROWS),
+  ])
+  const seen = new Set<string>()
+  const out: ObservationRow[] = []
+  for (const res of reads) {
+    for (const row of rows<ObservationRow>(res, 'deploy_observations')) {
+      if (seen.has(row.target_id)) continue
+      seen.add(row.target_id)
+      out.push(row)
+    }
+  }
+  return out
+}
+
+export async function loadElementViews(db: Db, element: RecipeElementKey, ctx: ViewContext): Promise<Record<string, unknown>> {
+  if (element === 'schema') {
+    // Two sources keep a table list per snapshot: the drift scanner and the
+    // Supabase connector (older connector rows are kept, just not current).
+    // The newer one wins, and the diff compares within that same source, so
+    // the panel never shows an old list while a fresher read exists.
+    const [scanRes, connRes] = await Promise.all([
+      db.from('backend_schema_snapshots').select('captured_at, schema_json').eq('project_id', ctx.projectId).order('captured_at', { ascending: false }).limit(2),
+      db.from('connector_snapshots').select('observed_at, snapshot').eq('project_id', ctx.projectId).eq('kind', 'supabase').eq('ok', true).order('observed_at', { ascending: false }).limit(2),
+    ])
+    const scanned = rows<{ captured_at: string; schema_json: unknown }>(scanRes, 'backend_schema_snapshots')
+      .map((r) => ({ capturedAt: r.captured_at, tables: r.schema_json }))
+    const connector = rows<{ observed_at: string; snapshot: { facts?: { tables?: unknown } } | null }>(connRes, 'connector_snapshots')
+      .map((r) => ({ capturedAt: r.observed_at, tables: r.snapshot?.facts?.tables }))
+    const useConnector = connector.length > 0 && (scanned.length === 0 || Date.parse(connector[0].capturedAt) > Date.parse(scanned[0].capturedAt))
+    const [latest, previous] = useConnector ? connector : scanned
+    return {
+      schemaView: schemaView(
+        latest ? { ...latest, source: useConnector ? 'supabase_connector' : 'drift_scanner' } : null,
+        previous ?? null,
+      ),
+    }
+  }
+  if (element === 'ci') {
+    const runs = rows<Record<string, unknown>>(
+      await db.from('ci_workflow_runs')
+        .select('run_id, name, event, head_branch, head_sha, status, conclusion, started_at, completed_at, est_billable_minutes, html_url')
+        .eq('project_id', ctx.projectId).order('started_at', { ascending: false, nullsFirst: false }).limit(MAX_CI_RUNS),
+      'ci_workflow_runs',
+    )
+    return { ciView: ciView(runs) }
+  }
+  if (element === 'deploy') {
+    const [observations, facts] = await Promise.all([
+      latestDeployObservations(db, ctx.projectId, declaredDeployTargets(ctx.manifest).map((t) => t.id)),
+      githubFacts(db, ctx.projectId),
+    ])
+    return {
+      deployView: deployView({
+        manifest: ctx.manifest,
+        observations,
+        expectedCommit: ctx.liveHeadSha ?? (typeof facts?.headSha === 'string' ? facts.headSha : null),
+        expectedVersion: ctx.releaseVersion,
+      }),
+    }
+  }
+  if (element === 'env') {
+    const facts = await githubFacts(db, ctx.projectId)
+    const present: Record<string, string[]> = facts ? presentEnvNames(facts) : {}
+    // The live read (cached 5 min) is newer than the daily snapshot for the repo-level names.
+    if (ctx.liveActionsNames) present['github-actions'] = ctx.liveActionsNames
+    return { envView: envView({ manifest: ctx.manifest, fallbackRequired: ctx.fallbackRequired, present }) }
+  }
+  return {}
 }
 
 // ── Design plane ─────────────────────────────────────────────────────────────

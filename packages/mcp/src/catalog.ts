@@ -269,7 +269,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'propose_recipe_change',
     title: 'Propose a recipe change (draft PR)',
     description:
-      'Propose edits to files the app recipe allows (design tokens, budgets in mushi.recipe.json, .env.example declarations, store listing text under store.listingDir) as ONE draft pull request. Dry run by default: returns the diff of each file and any path that is not writable (workflows, env files, lockfiles, generated exports and migrations never are). confirm: true opens the draft PR; it stays a draft so the repo CI does not run until the owner marks it ready, and nothing is merged or published. Confirm with the user before confirm: true. Returns { dryRun, files, denied } or { jobId, status, prUrl }. Write.',
+      'Propose edits to files the app recipe allows (design tokens, budgets in mushi.recipe.json, .env.example declarations, store listing text under store.listingDir) as ONE draft pull request. Dry run by default: returns the diff of each file, with the baseSha it was taken against, and any path that is not writable (workflows, env files, lockfiles, generated exports and migrations never are) or whose new content would not parse (mushi.recipe.json, the inventory). Send each baseSha back on the confirm so a file that changed since is refused. confirm: true opens the draft PR; it stays a draft so the repo CI does not run until the owner marks it ready, and nothing is merged or published. Confirm with the user before confirm: true. Returns { dryRun, files, denied } or { jobId, status, prUrl }. Write.',
     scope: 'mcp:write',
     hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
     returnsUntrusted: true,

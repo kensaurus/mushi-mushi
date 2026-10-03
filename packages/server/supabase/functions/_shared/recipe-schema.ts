@@ -98,6 +98,8 @@ export const recipeManifestSchema = z
     app: z.object({ name: z.string().max(120).optional() }).passthrough().optional(),
     design: designSchema.optional(),
     data: z.object({ migrationsDir: repoPath.optional() }).passthrough().optional(),
+    /** `inventory`: the inventory file the host's CI ingests (the mcp-ci action's `inventory` input); defaults to inventory.yaml. */
+    routes: z.object({ inventory: repoPath.optional() }).passthrough().optional(),
     gates: z
       .object({
         budgets: z.record(z.string(), z.number()).optional(),
@@ -201,12 +203,31 @@ export function parseRecipeManifest(text: string): ManifestParse {
       issues.push({ severity: 'error', code: 'UNSAFE_PATH', message: `design.tokens path "${tf.path}" is not a safe repo path and is ignored.`, file: RECIPE_MANIFEST_PATH })
     }
   }
+  const inventory = parsed.data.routes?.inventory
+  if (inventory !== undefined && !normalizeRepoPath(inventory)) {
+    issues.push({ severity: 'error', code: 'UNSAFE_PATH', message: `routes.inventory "${inventory}" is not a safe repo path, so the console cannot edit the inventory.`, file: RECIPE_MANIFEST_PATH })
+  }
   for (const key of Object.keys(parsed.data.design?.rules ?? {})) {
     if (!(DESIGN_RULE_IDS as readonly string[]).includes(key)) {
       issues.push({ severity: 'info', code: 'UNKNOWN_RULE', message: `design.rules.${key} is not a rule Mushi knows; it is ignored.`, file: RECIPE_MANIFEST_PATH })
     }
   }
   return { ok: true, manifest: parsed.data, issues }
+}
+
+/** Where the inventory lives when mushi.recipe.json does not say (the mcp-ci action's default). */
+export const DEFAULT_INVENTORY_PATH = 'inventory.yaml'
+
+/**
+ * The inventory file the host's CI ingests: `routes.inventory` in
+ * mushi.recipe.json, else inventory.yaml at the repo root. null when the
+ * declared path is not a safe repo path (never silently the default: that
+ * would edit a file nothing reads).
+ */
+export function inventoryPathOf(manifest: RecipeManifest | null): string | null {
+  const declared = manifest?.routes?.inventory
+  if (declared === undefined) return DEFAULT_INVENTORY_PATH
+  return normalizeRepoPath(declared)
 }
 
 // ── Design rules ─────────────────────────────────────────────────────────────

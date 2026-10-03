@@ -1451,6 +1451,13 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     path: z.string().min(1).max(400).describe('Repo-relative path the recipe allows'),
     content: z.string().max(512 * 1024).describe('The full new file content'),
     reason: z.string().max(200).optional(),
+    baseSha: z
+      .string()
+      .min(1)
+      .max(80)
+      .nullable()
+      .optional()
+      .describe("The file's baseSha from the dry run (null = it did not exist). The confirm is refused if the file changed since, so it never reverts someone else's edit"),
   });
   const ELEMENT_INPUT = z.enum(['design', 'gates', 'env', 'routes', 'store', 'release']).describe('Which part of the recipe the edit belongs to');
 

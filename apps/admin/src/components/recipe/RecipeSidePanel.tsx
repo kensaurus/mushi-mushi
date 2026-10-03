@@ -1,16 +1,20 @@
 /**
  * FILE: apps/admin/src/components/recipe/RecipeSidePanel.tsx
  * PURPOSE: Detail panel for the selected Recipe element (GraphSidePanel
- *          pattern). Two tabs:
- *            • What it is — GET /recipe/elements/:element, rendered generically
+ *          pattern). Tabs:
+ *            • What it is — GET /recipe/elements/:element: the typed view for
+ *                           schema, CI, deploy and env (RecipeElementViews),
+ *                           the rest rendered generically
  *            • Drift      — open findings count + where they are rendered
+ *            • Change     — gates, env and routes only: edit form → dry-run
+ *                           diff → draft PR (RecipeChangeTab)
  *          The Drift tab never says "no drift" for an element that has not
  *          been checked: unknown / not_connected / error say so instead.
  */
 
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Btn, Card, ErrorAlert, Loading, SegmentedControl, formatRelative } from '../ui'
+import { Btn, Card, DisclosurePanel, ErrorAlert, Loading, SegmentedControl, formatRelative } from '../ui'
 import { usePageData } from '../../lib/usePageData'
 import { LINK_ACCENT } from '../../lib/chipTone'
 import type { RecipeElementDetail, RecipeElementSummary } from '../../lib/recipeTypes'
@@ -18,13 +22,16 @@ import { RecipeStateChip } from './RecipeStateChip'
 import { RecipeLinkList } from './RecipeLinks'
 import { RecipeDetailValue } from './RecipeDetailValue'
 import { describeLastChecked, elementStateMeta } from './recipeState'
+import { hasChangeTab, RecipeChangeTab } from './RecipeChangeTab'
+import { detailWithoutView, pickElementView, RecipeElementView } from './RecipeElementViews'
 
-type PanelTab = 'what' | 'drift'
+type PanelTab = 'what' | 'drift' | 'change'
 
-const TAB_OPTIONS = [
+const BASE_TABS: Array<{ id: PanelTab; label: string }> = [
   { id: 'what', label: 'What it is' },
   { id: 'drift', label: 'Drift' },
-] as const
+]
+const CHANGE_TABS: Array<{ id: PanelTab; label: string }> = [...BASE_TABS, { id: 'change', label: 'Change' }]
 
 interface RecipeSidePanelProps {
   projectId: string
@@ -47,6 +54,10 @@ export function RecipeSidePanel({ projectId, element, onClose }: RecipeSidePanel
 
   const meta = elementStateMeta(element.state)
   const checked = describeLastChecked(element.lastCheckedAt, formatRelative)
+  const changeKey = hasChangeTab(element.key) ? element.key : null
+  const changeable = changeKey !== null
+  // A Change tab picked on gates falls back to "What it is" on an element without one.
+  const shown: PanelTab = tab === 'change' && !changeable ? 'what' : tab
 
   return (
     <Card className="p-3 self-start space-y-3">
@@ -69,17 +80,19 @@ export function RecipeSidePanel({ projectId, element, onClose }: RecipeSidePanel
       <p className="text-xs text-fg-secondary">{element.reason}</p>
 
       <SegmentedControl<PanelTab>
-        value={tab}
-        options={TAB_OPTIONS}
+        value={shown}
+        options={changeable ? CHANGE_TABS : BASE_TABS}
         onChange={setTab}
         ariaLabel="Element detail view"
         size="sm"
       />
 
-      {tab === 'what' ? (
+      {shown === 'what' ? (
         <WhatItIs projectId={projectId} element={element} />
-      ) : (
+      ) : shown === 'drift' ? (
         <DriftTab element={element} stateLabel={meta.label} />
+      ) : (
+        changeKey && <RecipeChangeTab key={`${projectId}:${changeKey}`} projectId={projectId} element={changeKey} />
       )}
     </Card>
   )
@@ -88,12 +101,21 @@ export function RecipeSidePanel({ projectId, element, onClose }: RecipeSidePanel
 function WhatItIs({ projectId, element }: { projectId: string; element: RecipeElementSummary }) {
   const path = `/v1/admin/projects/${projectId}/recipe/elements/${encodeURIComponent(element.key)}`
   const { data, loading, error, reload } = usePageData<RecipeElementDetail>(path)
+  const view = pickElementView(data?.detail)
 
   return (
     <div className="space-y-3">
       {loading && !data && <Loading text="Loading element detail…" />}
       {error && <ErrorAlert message={error} endpoint={path} onRetry={reload} />}
-      {data && (
+      {data && view && (
+        <>
+          <RecipeElementView view={view} />
+          <DisclosurePanel title="More detail">
+            <RecipeDetailValue value={detailWithoutView(data.detail)} />
+          </DisclosurePanel>
+        </>
+      )}
+      {data && !view && (
         <div className="rounded-sm border border-edge-subtle/60 p-2">
           <RecipeDetailValue value={data.detail} />
         </div>
