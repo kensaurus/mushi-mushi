@@ -399,11 +399,11 @@ function fileContexts(files) {
 
 /**
  * True when a function signature between `from` and `to` declares a
- * parameter `name`: a use at `to` then means the parameter, not the
- * `const` declared before `from`.
+ * parameter `name`, typed or not, plain or destructured (`({ path })`): a use
+ * at `to` then means the parameter, not the `const` declared before `from`.
  */
 function shadowedByParameter(code, name, from, to) {
-  const sig = new RegExp(`(?:function\\s*\\w*\\s*(?:<[^>]*>)?\\s*\\(|=\\s*(?:async\\s*)?\\()[^)]*\\b${name}\\s*\\??\\s*[:,)=]`)
+  const sig = new RegExp(`(?:function\\s*\\w*\\s*(?:<[^>]*>)?\\s*\\(|=\\s*(?:async\\s*)?\\()[^)]*\\b${name}\\s*\\??\\s*[:,)=}]`)
   return sig.test(code.slice(from, to))
 }
 
@@ -480,10 +480,16 @@ function skipTypeArgs(code, i) {
   return i
 }
 
-/** Split `a ? b : c` at depth 0 into its two branches, or null. */
+/**
+ * Split `a ? b : c` at depth 0 into its two branches, or null. A nested
+ * ternary in the first branch (`x ? (y ? A : B) : null`, parenthesized or
+ * not) keeps its own `:`; the outer split is at the colon that closes the
+ * first `?`.
+ */
 function ternaryBranches(expr) {
   let depth = 0
   let q = -1
+  let open = 0
   for (let i = 0; i < expr.length; i++) {
     const ch = expr[i]
     if (ch === "'" || ch === '"' || ch === '`') { i = skipString(expr, i) - 1; continue }
@@ -491,8 +497,10 @@ function ternaryBranches(expr) {
     else if (')]}'.includes(ch)) depth--
     else if (depth === 0 && ch === '?' && expr[i + 1] !== '.' && expr[i + 1] !== '?' && expr[i - 1] !== '?') {
       if (q === -1) q = i
+      open++
     } else if (depth === 0 && ch === ':' && q !== -1) {
-      return [expr.slice(q + 1, i), expr.slice(i + 1)]
+      open--
+      if (open === 0) return [expr.slice(q + 1, i), expr.slice(i + 1)]
     }
   }
   return null
@@ -513,7 +521,10 @@ function argResolves(byFile, ctx, expr, pos, seen = new Set()) {
   if (and) return argResolves(byFile, ctx, and[1], pos, seen)
   if (/^(['"`])\/v1\//.test(e)) return true
   const composed = /^`\$\{\s*([A-Za-z_$][\w$]*)\s*\}/.exec(e)
-  if (composed) return bindingBases(byFile, ctx, composed[1], pos).length > 0
+  if (composed) {
+    // The prefix must resolve as a whole (every ternary branch), not merely hold one path.
+    return argResolves(byFile, ctx, composed[1], pos, seen) && bindingBases(byFile, ctx, composed[1], pos).length > 0
+  }
   if (/^['"`]/.test(e)) return false
   const head = /^([A-Za-z_$][\w$]*)/.exec(e)
   if (!head) return false
@@ -522,11 +533,16 @@ function argResolves(byFile, ctx, expr, pos, seen = new Set()) {
   seen.add(key)
   const binding = findBinding(byFile, ctx, head[1], pos)
   if (!binding) return false
+  const isVariable = /^(?:const|let|var)\b/.test(binding.ctx.code.slice(binding.pos))
+  // `const p = cond ? '/v1/a' : props.url`: every branch must resolve, so one
+  // path literal cannot vouch for a prop beside it.
+  if (isVariable && ternaryBranches(binding.text.trim())) return argResolves(byFile, binding.ctx, binding.text, binding.pos, seen)
   if (directV1Literals(binding.text).length > 0) return true
-  if (composedTemplates(binding.text).some((t) => bindingBases(byFile, binding.ctx, t.name, binding.pos + t.index).length > 0)) return true
-  // `const url = buildUrl(tab)` or `const p = id ? PATH : null`: follow the initializer.
-  return /^(?:const|let|var)\b/.test(binding.ctx.code.slice(binding.pos))
-    && argResolves(byFile, binding.ctx, binding.text, binding.pos, seen)
+  // `const url = buildUrl(tab)` or `const p = `${base}/x``: follow the initializer.
+  if (isVariable) return argResolves(byFile, binding.ctx, binding.text, binding.pos, seen)
+  // A function body that only composes (`return `${BASE}/x``): every prefix must resolve.
+  const inner = composedTemplates(binding.text)
+  return inner.length > 0 && inner.every((t) => argResolves(byFile, binding.ctx, t.name, binding.pos + t.index, seen))
 }
 
 /** The function enclosing `pos` whose FIRST parameter is `param`, or null. */

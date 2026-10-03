@@ -200,6 +200,66 @@ test('a path built from a prop fails the check unless dynamicCalls gives a reaso
   assert.deepEqual(checkParity({ used: used([]), mapping: allowed, mcpTools, cliCommands, dynamicCalls }).errors, [])
 })
 
+test('a destructured prop does not borrow an earlier component\'s path constant', () => {
+  const file = 'apps/admin/src/components/Two.tsx'
+  const files = [{
+    file,
+    source: `
+      function A() {
+        const path = '/v1/admin/a'
+        return usePageData(path)
+      }
+      function B({ path }: Props) {
+        return usePageData(path)
+      }
+      const C = ({ title, path }) => usePageData(path)
+    `,
+  }]
+  assert.deepEqual(extractDynamicCalls(files), [
+    { file, call: 'usePageData', arg: 'path' },
+    { file, call: 'usePageData', arg: 'path' },
+  ])
+})
+
+test('one literal branch does not vouch for a ternary whose other branch is a prop', () => {
+  const file = 'apps/admin/src/components/Mixed.tsx'
+  const files = [{
+    file,
+    source: `
+      export function Mixed({ cond, props }) {
+        const p = cond ? '/v1/admin/a' : props.url
+        apiFetch(p)
+        apiFetch(\`\${p}/x\`)
+        const q = cond ? '/v1/admin/a' : null
+        apiFetch(q)
+        apiFetch(\`\${q}/x\`)
+      }
+    `,
+  }]
+  assert.deepEqual(extractDynamicCalls(files), [
+    { file, call: 'apiFetch', arg: 'p' },
+    { file, call: 'apiFetch', arg: '`${p}/x`' },
+  ])
+})
+
+test('a nested ternary is split at the colon that closes the outer `?`', () => {
+  const file = 'apps/admin/src/lib/useStatus.ts'
+  const resolved = [{
+    file,
+    source: `
+      const path = enabled
+        ? projectId
+          ? \`/v1/admin/activation?project_id=\${projectId}\`
+          : '/v1/admin/activation'
+        : null
+      usePageData(path)
+    `,
+  }]
+  assert.deepEqual(extractDynamicCalls(resolved), [])
+  const leaky = [{ file, source: resolved[0].source.replace(": '/v1/admin/activation'", ': props.url') }]
+  assert.deepEqual(extractDynamicCalls(leaky), [{ file, call: 'usePageData', arg: 'path' }])
+})
+
 test('a dynamicCalls entry for a call that no longer exists is stale', () => {
   const stale = { ...mapping({}), dynamicCalls: { 'apps/admin/src/components/Gone.tsx': { path: 'was a prop' } } }
   const { errors } = checkParity({ used: used([]), mapping: stale, mcpTools, cliCommands, dynamicCalls: [] })
