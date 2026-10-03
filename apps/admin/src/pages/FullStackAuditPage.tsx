@@ -298,7 +298,7 @@ export function FullStackAuditPage() {
           'Detect schema changes that break active API dependencies',
           'See RLS gaps and DB advisor warnings in one view',
         ]}
-        helpHowToUse="Set supabase_project_ref in Project Settings and add your Supabase PAT under Settings → API Keys (slug: supabase). Then click Run audit."
+        helpHowToUse="Set the Supabase project ref in Settings → General, then add a scoped, read-only Supabase access token under Settings → AI keys → Supabase. Then click Run audit."
       >
         <Btn
           variant="primary"

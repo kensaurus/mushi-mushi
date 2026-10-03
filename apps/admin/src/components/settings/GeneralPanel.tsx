@@ -1,7 +1,8 @@
 /**
  * FILE: apps/admin/src/components/settings/GeneralPanel.tsx
  * PURPOSE: General project knobs — Slack notifications, Sentry forwarding,
- *          LLM pipeline model + thresholds, and dedup similarity.
+ *          the Supabase project link, LLM pipeline model + thresholds, and
+ *          dedup similarity.
  *          Loads + persists `/v1/admin/settings` with optimistic save toasts.
  */
 
@@ -13,7 +14,7 @@ import { useToast } from '../../lib/toast'
 import { Section, Input, SelectField, ErrorAlert, Checkbox } from '../ui'
 import { PanelSkeleton } from '../skeletons/PanelSkeleton'
 import { ConfigHelp } from '../ConfigHelp'
-import { slackWebhookUrl, sentryDsn, token } from '../../lib/validators'
+import { slackWebhookUrl, sentryDsn, supabaseProjectRef, token } from '../../lib/validators'
 import { CHIP_TONE } from '../../lib/chipTone'
 import { SettingsChangeHint } from './SettingsChangeHint'
 import { StoredSecretStatus } from './StoredSecretStatus'
@@ -63,7 +64,12 @@ interface ProjectSettings {
    *  plan default (on for Free Cloud, off for paid and self-host). The
    *  server column ships with the GTM loop (docs/plan-gtm.md, C §5). */
   widget_brand_footer?: boolean | null
+  /** Linked Supabase project (20-char ref). The token is a BYOK key. */
+  supabase_project_ref?: string | null
 }
+
+/** Where a scoped Supabase access token is created. */
+const SUPABASE_TOKENS_URL = 'https://supabase.com/dashboard/account/tokens'
 
 export function GeneralPanel() {
   const toast = useToast()
@@ -106,6 +112,7 @@ export function GeneralPanel() {
         { current: settings.crawl_max_runs_per_day ?? 8, saved: saved.crawl_max_runs_per_day ?? 8 },
         { current: settings.tdd_max_gens_per_day ?? 20, saved: saved.tdd_max_gens_per_day ?? 20 },
         { current: settings.fix_branch_template ?? DEFAULT_BRANCH_TEMPLATE, saved: saved.fix_branch_template ?? DEFAULT_BRANCH_TEMPLATE },
+        { current: settings.supabase_project_ref ?? '', saved: saved.supabase_project_ref ?? '' },
       ])
     : 0
 
@@ -298,6 +305,52 @@ export function GeneralPanel() {
           />
         </div>
       </Section>
+
+      <div id="supabase" className="scroll-mt-6">
+        <Section title="Supabase project" className="space-y-3">
+          <SettingEffectCallout>
+            Link your app&apos;s Supabase project so diagnoses can read its schema, advisors, edge
+            functions and logs. Mushi only reads, through Supabase&apos;s read-only mode.
+          </SettingEffectCallout>
+          <div>
+            <Input
+              label="Supabase project ref"
+              helpId="settings.general.supabase_project_ref"
+              type="text"
+              value={settings.supabase_project_ref ?? ''}
+              onChange={(e) => update({ supabase_project_ref: e.target.value.trim() })}
+              placeholder="abcdefghijklmnopqrst"
+              autoComplete="off"
+              spellCheck={false}
+              validate={supabaseProjectRef()}
+            />
+            <p className="text-fg-faint text-3xs mt-0.5">
+              The 20 characters in https://&lt;ref&gt;.supabase.co. Save the ref first, then add the
+              token under AI keys → Supabase.
+            </p>
+            <SettingsChangeHint
+              current={settings.supabase_project_ref ?? ''}
+              saved={saved.supabase_project_ref ?? ''}
+              kind="text"
+            />
+          </div>
+          <ContainedBlock tone="muted">
+            <p className="text-2xs leading-relaxed text-fg-muted">
+              Create a <strong className="text-fg-secondary">scoped</strong> access token at{' '}
+              <a
+                href={SUPABASE_TOKENS_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-accent hover:text-accent-hover underline-offset-2 hover:underline"
+              >
+                supabase.com/dashboard/account/tokens
+              </a>
+              : this one project only; Database, Edge Functions, Advisors and Logs set to Read and
+              nothing else; and an expiry.
+            </p>
+          </ContainedBlock>
+        </Section>
+      </div>
 
       <Section title="Triage AI" className="space-y-3">
         <SettingEffectCallout>

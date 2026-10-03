@@ -3,13 +3,13 @@
 > Auto-generated from [`apps/admin/src/lib/configDocs.ts`](../apps/admin/src/lib/configDocs.ts).
 > Do not edit by hand — run `pnpm gen:config-docs` instead.
 
-_104 configuration knobs across 19 sections · last regenerated 2026-10-02._
+_105 configuration knobs across 19 sections · last regenerated 2026-10-03._
 
 Every knob in the admin console has an in-app `i` icon next to it that opens a longer-form explanation. The same content is mirrored here so you can search, link, and review configuration choices outside the app.
 
 ## Contents
 
-- [Settings → General](#settings-general) (9)
+- [Settings → General](#settings-general) (10)
 - [Settings → BYOK (LLM keys)](#settings-byok-llm-keys-) (3)
 - [Settings → Firecrawl (web research)](#settings-firecrawl-web-research-) (3)
 - [Settings → Dev tools](#settings-dev-tools) (1)
@@ -180,6 +180,22 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 **Where it lives** — table `project_settings.fix_branch_template` · endpoint `PATCH /v1/admin/settings` · read by `fix-worker edge function`
 
 **When to change** — Change it to match your team’s branch convention (e.g. `fixes/{date}-{shortId}`) so Mushi PRs sort alongside your existing branches. Keep `{shortId}` in the template to guarantee uniqueness and avoid branch collisions across reports.
+
+### Supabase project ref
+
+<a id="settings-general-supabase-project-ref"></a>
+
+`settings.general.supabase_project_ref`
+
+**Summary** — Links this Mushi project to your app’s Supabase project so diagnoses can read its schema, advisors, edge functions and logs.
+
+**How it works** — The ref is the 20-character id in `https://<ref>.supabase.co`. Mushi reads that one project with the Supabase access token you add under Settings → AI keys → Supabase, in read-only mode and with SELECT queries only. The token is checked against this ref, so save the ref first. Clearing the ref unlinks the project; the token stays in Vault until you remove it.
+
+**Default** — `Not linked`
+
+**Where it lives** — table `project_settings.supabase_project_ref` · endpoint `PATCH /v1/admin/settings` · read by `backend-drift-scanner`, `api (recipe, backend, db-advisors, fullstack-audit)`, `integration-health-probe`
+
+**When to change** — Set it once when your app runs on Supabase. Create a scoped access token for this one project only, with Database, Edge Functions, Advisors and Logs set to Read, and give it an expiry. Change the ref only if the app moves to another Supabase project.
 
 ## Settings → BYOK (LLM keys)
 

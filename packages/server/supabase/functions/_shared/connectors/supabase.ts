@@ -2,9 +2,10 @@
  * FILE: packages/server/supabase/functions/_shared/connectors/supabase.ts
  * PURPOSE: The Supabase connector (Plan 019 §2b): legacy-backed — the BYOK
  *          `supabase` PAT and `project_settings.supabase_project_ref`.
- *          Supabase PATs cannot be scoped, so Mushi calls ONLY the hosted
- *          Supabase MCP with `read_only=true` and runs only SELECTs (the
- *          console says so before connect).
+ *          The console asks for a scoped PAT (one project; Database, Edge
+ *          Functions, Advisors and Logs at Read). A classic PAT carries the
+ *          owner's full account, so Mushi still calls ONLY the hosted
+ *          Supabase MCP with `read_only=true` and runs only SELECTs.
  *
  * Snapshot: tables, applied migration versions, advisors, edge functions
  * (with source for the auth check), SECURITY DEFINER functions that read
@@ -28,10 +29,10 @@ import {
   type SecretRpcRow,
 } from '../radar/supabase-detectors.ts'
 import { failureOfStatus, statusReason } from './http-util.ts'
+import { SUPABASE_PROJECT_REF_RE as REF_RE } from '../supabase-project-ref.ts'
 import { ConnectorError, notConnected, type ConnectorContext, type DriftFinding, type RecipeConnector } from './types.ts'
 
 const MCP_URL = 'https://mcp.supabase.com/mcp'
-const REF_RE = /^[a-z0-9]{20}$/
 
 export const SQL_APPLIED_MIGRATIONS = 'select version from supabase_migrations.schema_migrations order by version'
 
@@ -119,15 +120,15 @@ export const supabaseConnector: RecipeConnector = {
   kind: 'supabase',
   title: 'Supabase',
   capabilities: ['snapshot', 'drift'],
-  requiredScopes: { snapshot: ['personal access token (cannot be scoped)', 'read_only MCP'] },
-  credentialNote: 'Supabase personal access tokens cannot be limited to read-only. Mushi only calls the hosted Supabase MCP in read-only mode and only runs SELECT queries.',
+  requiredScopes: { snapshot: ['scoped access token: Database, Edge Functions, Advisors, Logs (Read)', 'read_only MCP'] },
+  credentialNote: 'Use a scoped Supabase access token: this one project only, with Database, Edge Functions, Advisors and Logs set to Read, and an expiry. Mushi only calls the hosted Supabase MCP in read-only mode and only runs SELECT queries.',
   async probe(ctx) {
     if (typeof ctx.config.projectRef !== 'string' || !REF_RE.test(ctx.config.projectRef)) return notConnected('Link a Supabase project (its 20-character ref).')
     if (!ctx.readCredential) return notConnected('Add a Supabase access token under API keys.')
     const r = await tool(ctx, 'list_tables', { schemas: ['public'] })
     if (r.status === 401 || r.status === 403) return { ok: false, status: 'error', granted: [], missing: r.status === 403 ? ['read_only MCP'] : [], reason: statusReason('Supabase', r.status), failure: failureOfStatus(r.status) }
     if (r.error) return { ok: false, status: 'error', granted: [], missing: [], reason: r.error, ...(r.status !== 200 ? { failure: failureOfStatus(r.status) } : {}) }
-    return { ok: true, status: 'connected', granted: ['personal access token (cannot be scoped)', 'read_only MCP'], missing: [] }
+    return { ok: true, status: 'connected', granted: ['Database (Read)', 'read_only MCP'], missing: [] }
   },
   async snapshot(ctx) {
     if (typeof ctx.config.projectRef !== 'string' || !REF_RE.test(ctx.config.projectRef) || !ctx.readCredential) {

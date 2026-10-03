@@ -1,4 +1,5 @@
 import { z } from 'npm:zod@3';
+import { isSupabaseProjectRef } from './supabase-project-ref.ts';
 
 export const BYOK_PROVIDERS = [
   'anthropic',
@@ -6,7 +7,14 @@ export const BYOK_PROVIDERS = [
   'firecrawl',
   'browserbase',
   'cursor',
+  // A Supabase personal access token for the project's linked Supabase
+  // project (`project_settings.supabase_project_ref`). Read-only features
+  // only; ask for a scoped token (ADR 0016).
+  'supabase',
 ] as const;
+
+/** Every Supabase personal access token, classic or scoped, starts with this. */
+export const SUPABASE_PAT_PREFIX = 'sbp_';
 
 export type ByokProvider = (typeof BYOK_PROVIDERS)[number];
 export type ByokProbeStatus = 'ok' | 'error_auth' | 'error_network' | 'error_quota';
@@ -46,7 +54,11 @@ export const createByokKeySchema = z
     priority: z.number().int().min(0).max(10_000).optional(),
     baseUrl: z.string().trim().max(2048).optional(),
   })
-  .strict();
+  .strict()
+  .refine((body) => body.provider !== 'supabase' || body.apiKey.startsWith(SUPABASE_PAT_PREFIX), {
+    message: `A Supabase access token starts with "${SUPABASE_PAT_PREFIX}". Create one at supabase.com/dashboard/account/tokens.`,
+    path: ['apiKey'],
+  });
 
 export const patchByokKeySchema = z
   .object({
@@ -124,12 +136,38 @@ export function validateOpenAiBaseUrl(
   return { ok: true, value: url.toString().replace(/\/$/, '') };
 }
 
+export interface ByokProbeOptions {
+  /**
+   * The project's `supabase_project_ref`. A Supabase token is checked against
+   * that one project, so without a valid ref the probe makes no request.
+   */
+  supabaseProjectRef?: string | null;
+}
+
 function probeRequest(
   provider: ByokProvider,
   apiKey: string,
   baseUrl?: string,
+  options: ByokProbeOptions = {},
 ): { url: string; init: RequestInit } {
   switch (provider) {
+    case 'supabase':
+      // Management API read-only query: runs as Supabase's read-only Postgres
+      // role and needs exactly the Database Read permission the link uses.
+      // The ref is validated by the caller (probeByokKey) before it reaches
+      // the path.
+      return {
+        url: `https://api.supabase.com/v1/projects/${options.supabaseProjectRef}/database/query/read-only`,
+        init: {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+            'User-Agent': 'mushi-mushi-byok-probe/1.0',
+          },
+          body: JSON.stringify({ query: 'select 1' }),
+        },
+      };
     case 'anthropic':
       return {
         url: 'https://api.anthropic.com/v1/models',
@@ -175,7 +213,24 @@ function probeRequest(
   }
 }
 
-function mapProbeStatus(status: number): Pick<ByokProbeResult, 'status' | 'keyStatus' | 'detail'> {
+const SUPABASE_PROBE_DETAIL: Record<number, string> = {
+  401: 'Supabase rejected the token. It was revoked, expired or mistyped.',
+  403: 'The token cannot read this project. Scope it to this project with Database Read (plus Edge Functions, Advisors and Logs Read).',
+  404: 'Supabase has no project with this ref, or the token cannot see it. Check the project ref in Settings → General.',
+};
+
+function mapProbeStatus(
+  status: number,
+  provider?: ByokProvider,
+): Pick<ByokProbeResult, 'status' | 'keyStatus' | 'detail'> {
+  const mapped = mapGenericProbeStatus(status);
+  const supabaseDetail = provider === 'supabase' ? SUPABASE_PROBE_DETAIL[status] : undefined;
+  return supabaseDetail ? { ...mapped, detail: supabaseDetail } : mapped;
+}
+
+function mapGenericProbeStatus(
+  status: number,
+): Pick<ByokProbeResult, 'status' | 'keyStatus' | 'detail'> {
   if (status >= 200 && status < 300) {
     return {
       status: 'ok',
@@ -209,9 +264,22 @@ export async function probeByokKey(
   apiKey: string,
   baseUrl?: string,
   fetcher: typeof fetch = fetch,
+  options: ByokProbeOptions = {},
 ): Promise<ByokProbeResult> {
   const startedAt = Date.now();
-  const request = probeRequest(provider, apiKey, baseUrl);
+  if (provider === 'supabase' && !isSupabaseProjectRef(options.supabaseProjectRef)) {
+    // Nothing to check the token against yet. Keep it quarantined and say
+    // what unblocks it, without a network call.
+    return {
+      status: 'error_network',
+      keyStatus: 'pending_validation',
+      detail:
+        'Link the Supabase project first: set its project ref in Settings → General, then test this token again.',
+      httpStatus: 0,
+      latencyMs: 0,
+    };
+  }
+  const request = probeRequest(provider, apiKey, baseUrl, options);
 
   try {
     const response = await fetcher(request.url, {
@@ -220,7 +288,7 @@ export async function probeByokKey(
       signal: AbortSignal.timeout(8_000),
     });
     return {
-      ...mapProbeStatus(response.status),
+      ...mapProbeStatus(response.status, provider),
       httpStatus: response.status,
       latencyMs: Date.now() - startedAt,
     };
