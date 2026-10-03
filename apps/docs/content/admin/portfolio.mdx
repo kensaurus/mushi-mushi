@@ -29,6 +29,15 @@ This page **reads only**. It builds on each app's [Recipe](/concepts/app-recipe)
 
 In **Advanced** mode each card also shows Mushi's own AI spend for that app over 30 days and its monthly budget.
 
+### When something could not be read
+
+If Mushi cannot read part of the page (the AI spend, the caps, the releases,
+the SDK versions, which integrations each app has), a callout at the top names
+it and the affected cells read **Could not read**. They never fall back to
+`$0`, "Not set", "None yet" or "no missing setups". When there are more rows
+than Mushi reads in one go, the total is marked as a lower bound ("at least
+$12.40", "40+").
+
 Below the cards:
 
 | Section | What it means |
@@ -46,7 +55,8 @@ Below the cards:
 
 The MCP tools `get_portfolio` and `list_portfolio_findings` return the same
 data. They need an **account-level** key (Connect → MCP); a key bound to one
-project cannot read its sibling apps.
+project cannot read its sibling apps. Both return `readErrors`, and each card
+an `unreadable` list: a part named there is unknown, not empty.
 
 ## Who can see it
 
