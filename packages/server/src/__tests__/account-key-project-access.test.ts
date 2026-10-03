@@ -141,6 +141,24 @@ describe('assertTargetProjectAccess with an account-level key', () => {
     expect(await check(ctx({ vars: accountKey }), P_STRANGER)).toMatchObject({ ok: false, response: { status: 403 } })
   })
 
+  it('keeps a member\'s role after the request is pinned to the project (one context, two checks)', async () => {
+    const c = ctx({ vars: accountKey, query: { project_id: P_MEMBER } })
+    expect((await resolve(c)).project).toMatchObject({ id: P_MEMBER, organization_role: 'member' })
+    expect(c.vars.projectId).toBe(P_MEMBER)
+    // A pinned projectId must not turn the account key into a bound key, which reads as 'owner'.
+    expect(await check(c, P_MEMBER)).toMatchObject({ ok: true, role: 'member' })
+    const again = await resolve(c)
+    expect(again.project).toMatchObject({ id: P_MEMBER, organization_role: 'member' })
+    const refused = shared.requireProjectAdmin(c as never, again.project as never) as unknown as { status: number }
+    expect(refused.status).toBe(403)
+  })
+
+  it('resolves the pinned project again when the request names none', async () => {
+    const c = ctx({ vars: accountKey })
+    expect((await resolve(c, { overrideProjectId: P_MEMBER })).project?.id).toBe(P_MEMBER)
+    expect((await resolve(c)).project).toMatchObject({ id: P_MEMBER, organization_role: 'member' })
+  })
+
   it('keeps a project-bound key on its own project', async () => {
     expect(await check(ctx({ vars: boundKey(P_OWNED) }), P_OWNED)).toMatchObject({ ok: true, role: 'owner' })
     expect(await check(ctx({ vars: boundKey(P_OWNED) }), P_MEMBER)).toMatchObject({ ok: false, response: { status: 403 } })
