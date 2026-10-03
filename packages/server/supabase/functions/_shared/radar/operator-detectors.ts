@@ -110,13 +110,17 @@ export function evaluateDeadApp(input: DeadAppInput, now: Date): DetectorResult 
 
 /** The newest thing Mushi learned about one stored credential. */
 export interface CredentialObservation {
-  /** Stable per credential: a connector instance id, or `legacy:<kind>` for project settings. */
+  /**
+   * Stable per credential: a connector instance id, `legacy:<kind>` for the
+   * project-settings credentials (a connector snapshot and an integration
+   * health check of the same token share it), `byok:<id>`, or `integration:<kind>`.
+   */
   credentialId: string
   kind: string
   name: string
-  /** Provider for an llm_usage connector (`openai` / `anthropic`), when known. */
+  /** Provider for an llm_usage connector or a BYOK key (`openai`, `anthropic`, ...), when known. */
   provider: string | null
-  source: 'probe' | 'snapshot'
+  source: 'probe' | 'snapshot' | 'health_check' | 'key_test'
   at: string | null
   ok: boolean
   failure: Failure | null
@@ -124,7 +128,103 @@ export interface CredentialObservation {
 
 export const STORE_CONNECTOR_KINDS = ['play_console', 'app_store_connect'] as const
 
-interface CredentialHelp { vendor: string; where: string }
+/** Vendor HTTP status -> why the credential failed (same mapping as the connector probes). */
+export function failureFromHttpStatus(status: number | null): Failure {
+  if (status === 401) return 'credential_rejected'
+  if (status === 403) return 'permission_missing'
+  if (status === 404) return 'not_found'
+  if (status === 429) return 'rate_limited'
+  if (status != null && status >= 500) return 'vendor_error'
+  return 'other'
+}
+
+// -- BYOK keys (byok_keys: tested on save, by "Test key", and daily by integration-health-probe) --
+
+export interface ByokCredentialRow {
+  id: string
+  provider_slug: string
+  label: string | null
+  key_hint: string | null
+  /** pending_validation | active | disabled | quota_exhausted | auth_failed */
+  status: string
+  /** ok | error_auth | error_network | error_quota | null (never tested) */
+  test_status: string | null
+  last_tested_at: string | null
+}
+
+/** BYOK statuses that can still make paid calls (a revoked or quarantined key cannot). */
+const USABLE_BYOK_STATUSES = new Set(['active', 'quota_exhausted'])
+export const isUsableByokKey = (k: Pick<ByokCredentialRow, 'status'>): boolean => USABLE_BYOK_STATUSES.has(k.status)
+
+/** What the last test of a BYOK key said; null when it was never tested or is switched off. */
+export function byokObservation(k: ByokCredentialRow): CredentialObservation | null {
+  if (k.status === 'disabled' || !k.last_tested_at) return null
+  const base = { credentialId: `byok:${k.id}`, kind: 'byok', name: k.label || k.key_hint || k.provider_slug, provider: k.provider_slug, source: 'key_test' as const, at: k.last_tested_at }
+  if (k.test_status === 'error_auth' || k.status === 'auth_failed') return { ...base, ok: false, failure: 'credential_rejected' }
+  if (k.test_status === 'ok') return { ...base, ok: true, failure: null }
+  if (k.test_status === 'error_quota') return { ...base, ok: false, failure: 'rate_limited' }
+  if (k.test_status === 'error_network') return { ...base, ok: false, failure: 'vendor_error' }
+  return { ...base, ok: false, failure: 'other' }
+}
+
+// -- integration health checks (integration_health_history: every 15 minutes, and "Test") --
+
+/**
+ * Integration kinds whose health check uses this project's own credential.
+ * Not here: `anthropic` / `openai` / `firecrawl` / `browserbase` (their rows
+ * describe BYOK keys, read from byok_keys, or the platform's env key) and
+ * `reward_webhook` (an endpoint, not a key).
+ */
+export const INTEGRATION_CREDENTIAL_KINDS = ['github', 'sentry', 'langfuse', 'linear', 'cursor_cloud', 'claude_code_agent', 'jira', 'github_issues', 'pagerduty', 'slack'] as const
+type IntegrationCredentialKind = (typeof INTEGRATION_CREDENTIAL_KINDS)[number]
+
+const INTEGRATION_NAMES: Record<IntegrationCredentialKind, string> = {
+  github: 'GitHub', sentry: 'Sentry', langfuse: 'Langfuse', linear: 'Linear', cursor_cloud: 'Cursor Cloud',
+  claude_code_agent: 'Claude Code agent', jira: 'Jira', github_issues: 'GitHub Issues', pagerduty: 'PagerDuty', slack: 'Slack',
+}
+/** These two share the project-settings token with the legacy connector snapshot of the same kind. */
+const SHARED_WITH_LEGACY_SNAPSHOT = new Set<string>(['github', 'sentry'])
+
+export interface IntegrationHealthRow {
+  kind: string
+  /** ok | degraded | down | unknown */
+  status: string
+  /** Null for rows written before 20261003170200, or when no response came back. */
+  http_status: number | null
+  checked_at: string
+}
+
+const isIntegrationCredentialKind = (k: string): k is IntegrationCredentialKind => (INTEGRATION_CREDENTIAL_KINDS as readonly string[]).includes(k)
+
+/** The newest health check of one integration as a credential observation; null when it says nothing about a key. */
+export function integrationObservation(row: IntegrationHealthRow): CredentialObservation | null {
+  const kind = row.kind
+  if (!isIntegrationCredentialKind(kind)) return null
+  // `unknown` means no credential is configured: nothing to judge.
+  if (row.status === 'unknown') return null
+  const ok = row.status === 'ok'
+  // PagerDuty answers a bad routing key with 400.
+  const failure: Failure | null = ok ? null : kind === 'pagerduty' && row.http_status === 400 ? 'credential_rejected' : failureFromHttpStatus(row.http_status)
+  return {
+    credentialId: SHARED_WITH_LEGACY_SNAPSHOT.has(kind) ? `legacy:${kind}` : `integration:${kind}`,
+    kind, name: INTEGRATION_NAMES[kind], provider: null, source: 'health_check', at: row.checked_at, ok, failure,
+  }
+}
+
+interface CredentialHelp {
+  vendor: string
+  where: string
+  /** What stops working when this key is rejected (default: Mushi's reads from the vendor). */
+  impact?: string
+}
+
+const BYOK_VENDORS: Record<string, { vendor: string; keysAt: string }> = {
+  anthropic: { vendor: 'Anthropic', keysAt: 'https://console.anthropic.com/settings/keys' },
+  openai: { vendor: 'OpenAI', keysAt: 'https://platform.openai.com/api-keys' },
+  firecrawl: { vendor: 'Firecrawl', keysAt: 'https://www.firecrawl.dev/app/api-keys' },
+  browserbase: { vendor: 'Browserbase', keysAt: 'https://www.browserbase.com/settings' },
+  cursor: { vendor: 'Cursor', keysAt: 'https://cursor.com/dashboard/integrations' },
+}
 
 /** Where the owner replaces a key, per connector kind. */
 export function credentialHelp(kind: string, provider: string | null): CredentialHelp {
@@ -138,6 +238,18 @@ export function credentialHelp(kind: string, provider: string | null): Credentia
     case 'revenuecat': return { vendor: 'RevenueCat', where: 'Create a new secret API key (v2, read-only) in the RevenueCat project settings, then rotate it on the connector in Mushi (Portfolio → Connected sources).' }
     case 'play_console': return { vendor: 'Google Play', where: 'Create a new JSON key for the service account in Google Cloud (IAM → Service accounts → Keys), then rotate it on the connector in Mushi (Portfolio → Connected sources).' }
     case 'app_store_connect': return { vendor: 'App Store Connect', where: 'Create a new team API key in App Store Connect (Users and Access → Integrations), then rotate it on the connector in Mushi (Portfolio → Connected sources).' }
+    case 'byok': {
+      const v = (provider ? BYOK_VENDORS[provider] : undefined) ?? { vendor: provider ?? 'the provider', keysAt: 'the provider dashboard' }
+      return { vendor: v.vendor, where: `Create a new key at ${v.keysAt}, add it in Mushi under Settings → API Keys, then remove the old one there.`, impact: `Mushi's ${v.vendor} calls for this app can no longer use it (they fail, or fall back to another key).` }
+    }
+    case 'langfuse': return { vendor: 'Langfuse', where: 'Create new API keys in your Langfuse project settings, then save them in Mushi under Settings → Integrations → Langfuse.', impact: "Mushi's Langfuse traces for this app have stopped." }
+    case 'linear': return { vendor: 'Linear', where: 'Reconnect Linear in Mushi under Settings → Integrations → Linear, or paste a new key from https://linear.app/settings/api.', impact: 'Mushi can no longer create or sync Linear issues for this app.' }
+    case 'cursor_cloud': return { vendor: 'Cursor', where: 'Create a new API key at https://cursor.com/dashboard/integrations, then save it in Mushi under Settings → Integrations → Cursor Cloud.', impact: 'Fixes dispatched to Cursor Cloud for this app fail.' }
+    case 'claude_code_agent': return { vendor: 'Anthropic', where: 'Create a new key at https://console.anthropic.com/settings/keys, then save it in Mushi under Settings → Integrations → Claude Code.', impact: 'Fixes dispatched to the Claude Code agent for this app fail.' }
+    case 'jira': return { vendor: 'Jira', where: 'Create a new API token at https://id.atlassian.com/manage-profile/security/api-tokens, then update the Jira routing in Mushi under Settings → Integrations.', impact: 'Mushi can no longer file Jira issues for this app.' }
+    case 'github_issues': return { vendor: 'GitHub', where: 'Create a new token at https://github.com/settings/tokens, then update the GitHub Issues routing in Mushi under Settings → Integrations.', impact: 'Mushi can no longer file GitHub issues for this app.' }
+    case 'pagerduty': return { vendor: 'PagerDuty', where: 'Copy the integration (routing) key from the PagerDuty service, then update the PagerDuty routing in Mushi under Settings → Integrations.', impact: 'Mushi can no longer page you through PagerDuty for this app.' }
+    case 'slack': return { vendor: 'Slack', where: 'Reconnect Slack in Mushi under Settings → Integrations → Slack.', impact: "Mushi's Slack messages for this app have stopped." }
     default: return { vendor: kind, where: 'Create a new key with the provider, then rotate it on the connector in Mushi (Portfolio → Connected sources).' }
   }
 }
@@ -157,7 +269,7 @@ export function evaluateProviderKeys(obs: readonly CredentialObservation[], now:
   const latest = newestPerCredential(obs)
   if (latest.length === 0) return { ruleId, state: 'unknown', reason: 'No provider credential is connected for this app, so there is no key to check.', findings: [] }
   const fresh = latest.filter((o) => isFresh(o.at, now, CREDENTIAL_FRESH_DAYS))
-  if (fresh.length === 0) return { ruleId, state: 'unknown', reason: `The newest check of each credential is over ${CREDENTIAL_FRESH_DAYS} days old. Press Probe on the connector, or wait for the daily read at 03:35 UTC.`, findings: [] }
+  if (fresh.length === 0) return { ruleId, state: 'unknown', reason: `The newest check of each credential is over ${CREDENTIAL_FRESH_DAYS} days old. Press Probe on the connector or Test on the key (Settings → API Keys), or wait for the next scheduled check.`, findings: [] }
   const isStore = (k: string) => (STORE_CONNECTOR_KINDS as readonly string[]).includes(k)
   const findings: RadarFinding[] = []
   for (const o of fresh) {
@@ -171,8 +283,8 @@ export function evaluateProviderKeys(obs: readonly CredentialObservation[], now:
       ruleId,
       severity: rejected ? 'error' : 'warn',
       message: rejected
-        ? `${help.vendor} rejects the key for "${o.name}" (it was revoked, rotated or mistyped). Everything Mushi reads from ${help.vendor} for this app has stopped.`
-        : `${help.vendor} accepts the key for "${o.name}" but refuses what Mushi reads with it: the key lacks a permission.`,
+        ? `${help.vendor} rejects the key for "${o.name}" (it was revoked, rotated or mistyped). ${help.impact ?? `Everything Mushi reads from ${help.vendor} for this app has stopped.`}`
+        : `${help.vendor} accepts the key for "${o.name}" but refuses what Mushi does with it: the key lacks a permission.`,
       target: o.name,
       fix: rejected ? help.where : `Give the key the read permission listed on the connector, or create one that has it. ${help.where}`,
       evidence: { kind: o.kind, checkedBy: o.source, checkedAt: o.at, failure: o.failure },
@@ -199,6 +311,8 @@ export interface StoreCredentialState {
   lastProbeAt: string | null
   /** The newest daily snapshot failed with a 403 at this time. */
   snapshotDeniedAt: string | null
+  /** The newest daily snapshot succeeded at this time, so the snapshot scopes were granted then. */
+  snapshotOkAt: string | null
 }
 
 export type ScopeCatalog = Readonly<Record<string, Partial<Record<string, readonly string[]>>>>
@@ -233,7 +347,10 @@ export function evaluateStoreScopes(states: readonly StoreCredentialState[], cat
       continue
     }
     const missing = new Set<string>()
-    if (probeFresh) for (const m of s.missingScopes ?? []) if (need.has(m)) missing.add(m)
+    // A snapshot that succeeded after the probe proves the snapshot scopes were granted since.
+    const readWorksSinceProbe = s.snapshotOkAt != null && s.lastProbeAt != null && Date.parse(s.snapshotOkAt) > Date.parse(s.lastProbeAt)
+    const snapshotScopes = new Set(catalog[s.kind]?.snapshot ?? [])
+    if (probeFresh) for (const m of s.missingScopes ?? []) if (need.has(m) && !(readWorksSinceProbe && snapshotScopes.has(m))) missing.add(m)
     if (deniedFresh) for (const m of catalog[s.kind]?.snapshot ?? []) missing.add(m)
     if (missing.size === 0) continue
     const caps = [...new Set([...missing].flatMap((m) => need.get(m) ?? ['snapshot']))]

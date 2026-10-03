@@ -5,6 +5,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import {
+  byokObservation,
   BYOK_USE_TRACKED_SINCE,
   clientBundleFinding,
   evaluateDeadApp,
@@ -13,13 +14,17 @@ import {
   evaluateProviderLimits,
   evaluateStoreScopes,
   evaluateUnusedKeys,
+  integrationObservation,
   isAppHeartbeat,
+  isUsableByokKey,
   paidFeaturesFromManifest,
   providerLimitsFromManifest,
   SDK_KEY_USE_TRACKED_SINCE,
+  type ByokCredentialRow,
   type CredentialObservation,
   type StoreCredentialState,
 } from '../../supabase/functions/_shared/radar/operator-detectors.ts'
+import { historyHttpStatus } from '../../supabase/functions/_shared/integration-probes.ts'
 
 const NOW = new Date('2026-10-03T12:00:00Z')
 const ago = (d: number) => new Date(NOW.getTime() - d * 86_400_000).toISOString()
@@ -96,6 +101,68 @@ describe('provider_key_invalid', () => {
   })
 })
 
+describe('provider_key_invalid inputs: BYOK key tests and integration health checks', () => {
+  const key = (over: Partial<ByokCredentialRow>): ByokCredentialRow => ({
+    id: 'b1', provider_slug: 'anthropic', label: 'main', key_hint: 'sk-ant-...9', status: 'active', test_status: 'ok', last_tested_at: ago(1), ...over,
+  })
+
+  it('a BYOK key the provider rejected (error_auth / auth_failed) is an error finding pointing at Settings → API Keys', () => {
+    const o = byokObservation(key({ status: 'auth_failed', test_status: 'error_auth' }))
+    expect(o).toMatchObject({ credentialId: 'byok:b1', kind: 'byok', provider: 'anthropic', ok: false, failure: 'credential_rejected', source: 'key_test' })
+    const r = evaluateProviderKeys([o!], NOW)
+    expect(r.state).toBe('finding')
+    expect(r.findings[0]).toMatchObject({ severity: 'error', target: 'main' })
+    expect(r.findings[0].message).toMatch(/Anthropic rejects the key for "main"/)
+    expect(r.findings[0].message).not.toMatch(/Everything Mushi reads/)
+    expect(r.findings[0].fix).toMatch(/Settings → API Keys/)
+    expect(r.findings[0].fix).toContain('console.anthropic.com')
+  })
+
+  it('a BYOK key that passed its test is ok; a never-tested or switched-off key says nothing; quota and network are not a bad key', () => {
+    expect(evaluateProviderKeys([byokObservation(key({}))!], NOW).state).toBe('ok')
+    expect(byokObservation(key({ status: 'pending_validation', test_status: null, last_tested_at: null }))).toBeNull()
+    expect(byokObservation(key({ status: 'disabled', test_status: 'error_auth' }))).toBeNull()
+    expect(byokObservation(key({ status: 'quota_exhausted', test_status: 'error_quota' }))).toMatchObject({ ok: false, failure: 'rate_limited' })
+    expect(evaluateProviderKeys([byokObservation(key({ test_status: 'error_network' }))!], NOW).state).toBe('unknown')
+  })
+
+  it('only usable BYOK keys count as live spend', () => {
+    expect(['active', 'quota_exhausted', 'auth_failed', 'pending_validation', 'disabled'].filter((status) => isUsableByokKey({ status }))).toEqual(['active', 'quota_exhausted'])
+  })
+
+  it('an integration health check that got a 401 is a rejected key; 403 is a missing permission; an outage is not', () => {
+    const linear = integrationObservation({ kind: 'linear', status: 'down', http_status: 401, checked_at: ago(0) })
+    expect(linear).toMatchObject({ credentialId: 'integration:linear', name: 'Linear', ok: false, failure: 'credential_rejected', source: 'health_check' })
+    const r = evaluateProviderKeys([linear!], NOW)
+    expect(r.findings[0].message).toMatch(/Linear rejects the key for "Linear"/)
+    expect(r.findings[0].fix).toMatch(/Settings → Integrations → Linear/)
+    expect(integrationObservation({ kind: 'cursor_cloud', status: 'down', http_status: 403, checked_at: ago(0) })).toMatchObject({ failure: 'permission_missing' })
+    expect(integrationObservation({ kind: 'claude_code_agent', status: 'degraded', http_status: 503, checked_at: ago(0) })).toMatchObject({ failure: 'vendor_error' })
+    // A row from before http_status existed, or a probe that threw, says nothing about the key.
+    expect(integrationObservation({ kind: 'sentry', status: 'down', http_status: null, checked_at: ago(0) })).toMatchObject({ failure: 'other' })
+    expect(integrationObservation({ kind: 'pagerduty', status: 'down', http_status: 400, checked_at: ago(0) })).toMatchObject({ failure: 'credential_rejected' })
+  })
+
+  it('the health probes store the vendor status, or null when no response came back', () => {
+    expect(historyHttpStatus({ httpStatus: 401 })).toBe(401)
+    expect(historyHttpStatus({ httpStatus: 0 })).toBeNull()
+  })
+
+  it('skips checks that are not about this project’s own key: not configured, BYOK-backed, platform or webhook rows', () => {
+    expect(integrationObservation({ kind: 'linear', status: 'unknown', http_status: null, checked_at: ago(0) })).toBeNull()
+    for (const kind of ['anthropic', 'openai', 'firecrawl', 'reward_webhook']) {
+      expect(integrationObservation({ kind, status: 'down', http_status: 401, checked_at: ago(0) })).toBeNull()
+    }
+  })
+
+  it('a GitHub health check and the legacy GitHub snapshot are one credential: the newest wins', () => {
+    const health = integrationObservation({ kind: 'github', status: 'ok', http_status: 200, checked_at: ago(0) })!
+    expect(health.credentialId).toBe('legacy:github')
+    const snapshot: CredentialObservation = { credentialId: 'legacy:github', kind: 'github', name: 'GitHub', provider: null, source: 'snapshot', at: ago(1), ok: false, failure: 'credential_rejected' }
+    expect(evaluateProviderKeys([snapshot, health], NOW).state).toBe('ok')
+  })
+})
+
 describe('store_credential_scope_missing', () => {
   const catalog = {
     play_console: { snapshot: ['View app information (read-only)'], act: ['Release apps to testing tracks'] },
@@ -103,7 +170,7 @@ describe('store_credential_scope_missing', () => {
   }
   const state = (over: Partial<StoreCredentialState>): StoreCredentialState => ({
     id: 'i1', kind: 'play_console', name: 'Play glot', status: 'connected', enabledCapabilities: ['snapshot', 'drift'],
-    missingScopes: [], lastProbeAt: ago(1), snapshotDeniedAt: null, ...over,
+    missingScopes: [], lastProbeAt: ago(1), snapshotDeniedAt: null, snapshotOkAt: null, ...over,
   })
   it('is unknown with no store connector', () => {
     expect(evaluateStoreScopes([], catalog, NOW).state).toBe('unknown')
@@ -127,6 +194,18 @@ describe('store_credential_scope_missing', () => {
   })
   it('a probe from before the column existed (missing_scopes null) is undecided, not ok', () => {
     expect(evaluateStoreScopes([state({ missingScopes: null })], catalog, NOW).state).toBe('unknown')
+  })
+  it('a daily snapshot that succeeded after the probe clears the read permission the probe found missing', () => {
+    const probedMissing = { missingScopes: ['View app information (read-only)'], lastProbeAt: ago(3) }
+    expect(evaluateStoreScopes([state(probedMissing)], catalog, NOW).state).toBe('finding')
+    expect(evaluateStoreScopes([state({ ...probedMissing, snapshotOkAt: ago(1) })], catalog, NOW).state).toBe('ok')
+    // An OK snapshot from before the probe proves nothing.
+    expect(evaluateStoreScopes([state({ ...probedMissing, snapshotOkAt: ago(5) })], catalog, NOW).state).toBe('finding')
+  })
+  it('a newer OK snapshot does not clear a release permission (reading never uses it)', () => {
+    const r = evaluateStoreScopes([state({ enabledCapabilities: ['snapshot', 'drift', 'act'], missingScopes: ['Release apps to testing tracks'], lastProbeAt: ago(3), snapshotOkAt: ago(1) })], catalog, NOW)
+    expect(r.state).toBe('finding')
+    expect(r.findings[0].message).toContain('Release apps to testing tracks')
   })
 })
 

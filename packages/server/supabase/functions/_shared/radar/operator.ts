@@ -2,9 +2,10 @@
  * FILE: packages/server/supabase/functions/_shared/radar/operator.ts
  * PURPOSE: Read what the operator detectors need for one project and run
  *          them (Plan 020 Phase 2): heartbeats, reports and page views; the
- *          keys Mushi stores; connector probes and current snapshots; the
- *          recipe manifest's `spend` block. Called by runRadar (radar-scan,
- *          daily, and "Run now").
+ *          keys Mushi stores and their last tests (byok_keys); connector
+ *          probes and current snapshots; the newest integration health check
+ *          per integration; the recipe manifest's `spend` block. Called by
+ *          runRadar (radar-scan, daily, and "Run now").
  *
  * Every read is checked: a read that fails turns the rules that need it into
  * `error` with the reason — never a quiet `ok` or `unknown`.
@@ -16,6 +17,7 @@ import type { getServiceClient } from '../db.ts'
 import { getConnector } from '../connectors/index.ts'
 import type { ConnectorSnapshot } from '../connectors/types.ts'
 import {
+  byokObservation,
   BYOK_USE_TRACKED_SINCE,
   evaluateDeadApp,
   evaluateKillSwitches,
@@ -23,12 +25,17 @@ import {
   evaluateProviderLimits,
   evaluateStoreScopes,
   evaluateUnusedKeys,
+  INTEGRATION_CREDENTIAL_KINDS,
+  integrationObservation,
   isAppHeartbeat,
+  isUsableByokKey,
   paidFeaturesFromManifest,
   providerLimitsFromManifest,
   SDK_KEY_USE_TRACKED_SINCE,
   STORE_CONNECTOR_KINDS,
+  type ByokCredentialRow,
   type CredentialObservation,
+  type IntegrationHealthRow,
   type ProviderSpend,
   type ProviderUse,
   type ScopeCatalog,
@@ -50,10 +57,12 @@ export const OPERATOR_RULES = [
 ] as const satisfies readonly RadarRuleId[]
 type OperatorRule = (typeof OPERATOR_RULES)[number]
 
+type Read = 'keys' | 'byok' | 'activity' | 'connectors' | 'health'
+
 /** Which reads each rule needs; a failed read errors exactly these rules. */
-const NEEDS: Record<OperatorRule, ReadonlyArray<'keys' | 'byok' | 'activity' | 'connectors'>> = {
+const NEEDS: Record<OperatorRule, ReadonlyArray<Read>> = {
   dead_app_live_spend: ['keys', 'byok', 'activity', 'connectors'],
-  provider_key_invalid: ['connectors'],
+  provider_key_invalid: ['connectors', 'byok', 'health'],
   store_credential_scope_missing: ['connectors'],
   key_unused_90d: ['keys', 'byok'],
   paid_feature_no_kill_switch: ['connectors'],
@@ -103,14 +112,14 @@ function llmSpend(snap: SnapshotRow, projectId: string): { provider: string | nu
 }
 
 export async function operatorRadarResults(db: Db, projectId: string, manifest: unknown, now: Date): Promise<DetectorResult[]> {
-  const errors: Partial<Record<'keys' | 'byok' | 'activity' | 'connectors', string>> = {}
+  const errors: Partial<Record<Read, string>> = {}
   const note = (k: keyof typeof errors, what: string, err: { message: string } | null) => {
     if (err && !errors[k]) errors[k] = `Could not read ${what}: ${err.message.slice(0, 200)}`
   }
 
   const [keysRes, byokRes, reportRes, eventRes, snapRes, bindRes, ownedRes] = await Promise.all([
     db.from('project_api_keys').select('id, label, scopes, is_active, created_at, last_seen_at, last_seen_origin, last_seen_user_agent').eq('project_id', projectId),
-    db.from('byok_keys').select('provider_slug, label, key_hint, status, created_at, last_used_at').eq('project_id', projectId),
+    db.from('byok_keys').select('id, provider_slug, label, key_hint, status, test_status, last_tested_at, created_at, last_used_at').eq('project_id', projectId),
     db.from('reports').select('created_at').eq('project_id', projectId).order('created_at', { ascending: false }).limit(1).maybeSingle(),
     db.from('product_events').select('ts').eq('project_id', projectId).order('ts', { ascending: false }).limit(1).maybeSingle(),
     db.from('connector_snapshots').select('kind, connector_instance_id, ok, error_kind, observed_at, snapshot').eq('project_id', projectId).eq('is_current', true),
@@ -125,6 +134,11 @@ export async function operatorRadarResults(db: Db, projectId: string, manifest: 
   note('connectors', 'the connector bindings', bindRes.error)
   note('connectors', 'the connectors', ownedRes.error)
 
+  // The newest health check per integration (one indexed read each: the cron writes every 15 minutes).
+  const healthRes = await Promise.all(INTEGRATION_CREDENTIAL_KINDS.map((kind) =>
+    db.from('integration_health_history').select('kind, status, http_status, checked_at').eq('project_id', projectId).eq('kind', kind).order('checked_at', { ascending: false }).limit(1).maybeSingle()))
+  for (const h of healthRes) note('health', 'the integration health checks', h.error)
+
   const instances = new Map<string, InstanceRow>(((ownedRes.data ?? []) as InstanceRow[]).map((r) => [r.id, r]))
   const boundIds = [...new Set(((bindRes.data ?? []) as Array<{ connector_instance_id: string }>).map((b) => b.connector_instance_id))].filter((id) => !instances.has(id))
   if (boundIds.length > 0) {
@@ -134,7 +148,7 @@ export async function operatorRadarResults(db: Db, projectId: string, manifest: 
   }
 
   const apiKeys = (keysRes.data ?? []) as Array<{ label: string | null; scopes: string[] | null; is_active: boolean | null; created_at: string; last_seen_at: string | null; last_seen_origin: string | null; last_seen_user_agent: string | null }>
-  const byok = ((byokRes.data ?? []) as Array<{ provider_slug: string; label: string | null; key_hint: string | null; status: string; created_at: string; last_used_at: string | null }>)
+  const byok = ((byokRes.data ?? []) as Array<ByokCredentialRow & { created_at: string; last_used_at: string | null }>)
     .filter((k) => k.status !== 'disabled')
   const snaps = (snapRes.data ?? []) as SnapshotRow[]
   const llmSnaps = snaps.filter((s) => s.kind === 'llm_usage')
@@ -166,6 +180,16 @@ export async function operatorRadarResults(db: Db, projectId: string, manifest: 
   for (const s of snaps.filter((x) => x.connector_instance_id == null && LEGACY_CREDENTIAL_KINDS[x.kind])) {
     observations.push({ credentialId: `legacy:${s.kind}`, kind: s.kind, name: LEGACY_CREDENTIAL_KINDS[s.kind], provider: null, source: 'snapshot', at: s.observed_at, ok: s.ok, failure: s.ok ? null : s.error_kind ?? null })
   }
+  // BYOK keys: tested on save, by "Test key", and daily by integration-health-probe (401 -> auth_failed).
+  for (const k of byok) {
+    const o = byokObservation(k)
+    if (o) observations.push(o)
+  }
+  // Integration credentials (Linear, Cursor, Claude Code, Langfuse, routing): the newest health check.
+  for (const h of healthRes) {
+    const o = h.data ? integrationObservation(h.data as IntegrationHealthRow) : null
+    if (o) observations.push(o)
+  }
 
   const catalog: Record<string, ScopeCatalog[string]> = {}
   for (const k of STORE_CONNECTOR_KINDS) catalog[k] = getConnector(k).requiredScopes
@@ -173,10 +197,12 @@ export async function operatorRadarResults(db: Db, projectId: string, manifest: 
     .filter((i): i is InstanceRow & { kind: StoreCredentialState['kind'] } => (STORE_CONNECTOR_KINDS as readonly string[]).includes(i.kind))
     .map((i) => {
       const denied = snaps.find((s) => s.connector_instance_id === i.id && !s.ok && s.error_kind === 'permission_missing')
+      const read = snaps.find((s) => s.connector_instance_id === i.id && s.ok)
       return {
         id: i.id, kind: i.kind, name: i.display_name, status: i.status,
         enabledCapabilities: i.enabled_capabilities ?? ['snapshot', 'drift'],
         missingScopes: i.missing_scopes, lastProbeAt: i.last_probe_at, snapshotDeniedAt: denied?.observed_at ?? null,
+        snapshotOkAt: read?.observed_at ?? null,
       }
     })
 
@@ -218,7 +244,8 @@ export async function operatorRadarResults(db: Db, projectId: string, manifest: 
       providerSpendUsd30d: providerSpend,
       providerSpendVendor,
       liveFunctions,
-      liveProviderKeys: byok.length,
+      // A revoked (auth_failed) or quarantined key cannot spend.
+      liveProviderKeys: byok.filter(isUsableByokKey).length,
     }, now),
     provider_key_invalid: () => evaluateProviderKeys(observations, now),
     store_credential_scope_missing: () => evaluateStoreScopes(storeStates, catalog, now),

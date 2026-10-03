@@ -424,12 +424,68 @@ describe('operator detectors in the scheduled run (Plan 020 Phase 2)', () => {
     const db = { from: (t: string) => (t === 'byok_keys' ? broken : base.from(t)), rpc: base.rpc.bind(base), table: base.table.bind(base) }
     const summary = await run.runRadar(db as never, P_A, deps() as never)
     const byId = new Map(summary.results.map((r) => [r.ruleId as string, r]))
-    for (const id of ['dead_app_live_spend', 'key_unused_90d', 'provider_limit_unset']) {
+    // provider_key_invalid reads the BYOK key tests too, so it cannot answer either.
+    for (const id of ['dead_app_live_spend', 'key_unused_90d', 'provider_limit_unset', 'provider_key_invalid']) {
       expect(byId.get(id)).toMatchObject({ state: 'error' })
       expect(byId.get(id)!.reason).toMatch(/stored provider keys/)
     }
-    expect(byId.get('provider_key_invalid')!.state).toBe('unknown')
+    expect(byId.get('store_credential_scope_missing')!.state).toBe('unknown')
     expect(summary.status).toBe('error')
+  })
+
+  it('a project whose only credential is a BYOK key the provider rejected gets a provider_key_invalid finding', async () => {
+    const db = seed({
+      byok_keys: [
+        { id: 'b1', project_id: P_A, provider_slug: 'openai', label: 'main', key_hint: 'sk-...1', status: 'auth_failed', test_status: 'error_auth', last_tested_at: ago(1), created_at: ago(200), last_used_at: ago(2) },
+      ],
+      // The app is idle and Supabase still runs functions; a revoked key is not "still spending".
+      project_api_keys: [{ id: 'k1', project_id: P_A, label: 'web', scopes: ['report:write'], is_active: true, created_at: ago(400), last_seen_at: ago(60), last_seen_origin: 'https://glot.it', last_seen_user_agent: 'Mozilla/5.0' }],
+      connector_snapshots: [
+        { kind: 'supabase', connector_instance_id: null, project_id: P_A, is_current: true, ok: true, error: null, error_kind: null, observed_at: ago(1), snapshot: { observedAt: ago(1), elements: {}, resources: [], facts: { functions: [{ slug: 'tutor' }], buckets: [], secretRpcs: [], billedStorageBytes: null, pitrEnabled: null } } },
+      ],
+    })
+    const summary = await run.runRadar(db as never, P_A, deps() as never)
+    const res = summary.results.find((r) => r.ruleId === 'provider_key_invalid')!
+    expect(res.state).toBe('finding')
+    const f = db.table('gate_findings').find((x) => x.rule_id === 'provider_key_invalid')!
+    expect(f.severity).toBe('error')
+    expect(f.message).toMatch(/OpenAI rejects the key for "main"/)
+    expect(String((f.suggested_fix as { fix: string }).fix)).toMatch(/Settings → API Keys/)
+    const dead = db.table('gate_findings').find((x) => x.rule_id === 'dead_app_live_spend')!
+    expect(dead.message).toMatch(/1 edge function still deployed/)
+    expect(dead.message).not.toMatch(/provider key/)
+  })
+
+  it('reads the newest integration health check per integration: a Linear 401 is a finding, an older failure is superseded', async () => {
+    const db = seed({
+      integration_health_history: [
+        { project_id: P_A, kind: 'linear', status: 'down', http_status: 401, message: 'HTTP 401', source: 'cron', checked_at: ago(0) },
+        { project_id: P_A, kind: 'linear', status: 'ok', http_status: 200, message: null, source: 'cron', checked_at: ago(1) },
+        { project_id: P_A, kind: 'sentry', status: 'down', http_status: 401, message: 'HTTP 401', source: 'cron', checked_at: ago(2) },
+        { project_id: P_A, kind: 'sentry', status: 'ok', http_status: 200, message: null, source: 'cron', checked_at: ago(0) },
+        // The platform's env key lives on the operator project: never this app's key.
+        { project_id: P_A, kind: 'anthropic', status: 'down', http_status: 401, message: 'HTTP 401', source: 'cron', checked_at: ago(0) },
+        { project_id: P_B, kind: 'cursor_cloud', status: 'down', http_status: 401, message: 'HTTP 401', source: 'cron', checked_at: ago(0) },
+      ],
+    })
+    const summary = await run.runRadar(db as never, P_A, deps() as never)
+    expect(summary.results.find((r) => r.ruleId === 'provider_key_invalid')!.state).toBe('finding')
+    const found = db.table('gate_findings').filter((x) => x.rule_id === 'provider_key_invalid')
+    expect(found.map((x) => x.message)).toEqual([expect.stringMatching(/Linear rejects the key/)])
+  })
+
+  it('a failed integration health read errors provider_key_invalid, never a quiet ok', async () => {
+    const base = seed({ byok_keys: [{ id: 'b1', project_id: P_A, provider_slug: 'openai', label: 'main', key_hint: null, status: 'active', test_status: 'ok', last_tested_at: ago(1), created_at: ago(10), last_used_at: ago(1) }] })
+    const broken: unknown = new Proxy({}, {
+      get: (_t, prop) => prop === 'then'
+        ? (ok: (v: unknown) => unknown) => Promise.resolve({ data: null, error: { message: 'column integration_health_history.http_status does not exist' } }).then(ok)
+        : () => broken,
+    })
+    const db = { from: (t: string) => (t === 'integration_health_history' ? broken : base.from(t)), rpc: base.rpc.bind(base), table: base.table.bind(base) }
+    const summary = await run.runRadar(db as never, P_A, deps() as never)
+    const r = summary.results.find((x) => x.ruleId === 'provider_key_invalid')!
+    expect(r.state).toBe('error')
+    expect(r.reason).toMatch(/integration health checks.*http_status/)
   })
 
   it('CI ingest: key_in_client_bundle stores the server-written message and the kind of key, never the key', async () => {
