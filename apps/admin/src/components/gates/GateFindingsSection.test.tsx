@@ -7,7 +7,8 @@
  * PURPOSE: The findings list (every plan, ADR 0018) shows the newest run per
  *          gate with plain-English gate names, says "not checked yet" when
  *          nothing ran, and a `spend_cap_unset` finding applies its suggested
- *          caps through PATCH /v1/admin/settings only after confirmation.
+ *          caps through PATCH /v1/admin/settings only after confirmation, and
+ *          never overwrites a cap that is set by then.
  */
 
 import { act, createElement } from 'react'
@@ -106,16 +107,30 @@ describe('GateFindingsSection', () => {
     expect(container.textContent).not.toContain('found nothing open')
   })
 
+  /** Route the section's findings read and the button's settings reads. */
+  function serve(settings: Array<{ ok: boolean; data?: Record<string, unknown>; error?: { message: string } }>) {
+    let n = 0
+    apiFetch.mockImplementation(async (path: string) => {
+      if (path.startsWith('/v1/admin/settings')) return settings[Math.min(n++, settings.length - 1)]
+      return { ok: true, data: payload }
+    })
+  }
+  const unset = { ok: true, data: { monthly_llm_budget_usd: null, autofix_max_spend_usd: null } }
+
   it('applies the suggested caps only after confirming, to the finding’s project', async () => {
-    apiFetch.mockResolvedValue({ ok: true, data: payload })
+    serve([unset])
     apiFetchMutate.mockResolvedValue({ ok: true, data: {} })
     render()
     await flush()
 
-    act(() => button('Apply suggested caps')!.click())
+    await act(async () => {
+      button('Apply suggested caps')!.click()
+    })
+    await flush()
+    expect(apiFetch).toHaveBeenCalledWith('/v1/admin/settings?project_id=p1', { cache: 'no-store' })
     expect(apiFetchMutate).not.toHaveBeenCalled()
     expect(document.body.textContent).toContain('Monthly AI budget: $25.')
-    expect(document.body.textContent).toContain('Caps that are already set are not changed.')
+    expect(document.body.textContent).not.toContain('left as they are')
 
     await act(async () => {
       button('Apply caps')!.click()
@@ -129,12 +144,83 @@ describe('GateFindingsSection', () => {
     expect(container.textContent).toContain('Applied. This check clears on its next daily run.')
   })
 
+  it('never overwrites a cap set after the daily check ran', async () => {
+    serve([{ ok: true, data: { monthly_llm_budget_usd: 80, autofix_max_spend_usd: null } }])
+    apiFetchMutate.mockResolvedValue({ ok: true, data: {} })
+    render()
+    await flush()
+    await act(async () => {
+      button('Apply suggested caps')!.click()
+    })
+    await flush()
+    expect(document.body.textContent).not.toContain('Monthly AI budget: $25.')
+    expect(document.body.textContent).toContain('Already set since the check ran, left as they are: Monthly AI budget.')
+    await act(async () => {
+      button('Apply caps')!.click()
+    })
+    await flush()
+    expect(apiFetchMutate).toHaveBeenCalledWith('/v1/admin/settings?project_id=p1', {
+      method: 'PATCH',
+      body: JSON.stringify({ autofix_max_spend_usd: 2 }),
+    })
+  })
+
+  it('re-reads at confirm time and drops a cap set while the dialog was open', async () => {
+    serve([unset, { ok: true, data: { monthly_llm_budget_usd: null, autofix_max_spend_usd: 9 } }])
+    apiFetchMutate.mockResolvedValue({ ok: true, data: {} })
+    render()
+    await flush()
+    await act(async () => {
+      button('Apply suggested caps')!.click()
+    })
+    await flush()
+    await act(async () => {
+      button('Apply caps')!.click()
+    })
+    await flush()
+    expect(apiFetchMutate).toHaveBeenCalledWith('/v1/admin/settings?project_id=p1', {
+      method: 'PATCH',
+      body: JSON.stringify({ monthly_llm_budget_usd: 25 }),
+    })
+    expect(toast.success.mock.calls[0][1]).toContain('Left as they were: Auto-fix spend limit.')
+  })
+
+  it('says the caps are already set and sends nothing when every suggested cap exists', async () => {
+    serve([{ ok: true, data: { monthly_llm_budget_usd: 80, autofix_max_spend_usd: 4 } }])
+    render()
+    await flush()
+    await act(async () => {
+      button('Apply suggested caps')!.click()
+    })
+    await flush()
+    expect(apiFetchMutate).not.toHaveBeenCalled()
+    expect(button('Apply caps')).toBeUndefined()
+    expect(container.textContent).toContain('These caps are already set. This check clears on its next daily run.')
+  })
+
+  it('sends nothing when the current caps cannot be read', async () => {
+    serve([{ ok: false, error: { message: 'Database error' } }])
+    render()
+    await flush()
+    await act(async () => {
+      button('Apply suggested caps')!.click()
+    })
+    await flush()
+    expect(apiFetchMutate).not.toHaveBeenCalled()
+    expect(button('Apply caps')).toBeUndefined()
+    expect(toast.error).toHaveBeenCalledWith('Could not check the current spend caps', 'Database error')
+    expect(button('Apply suggested caps')).toBeDefined()
+  })
+
   it('keeps the button when the save is refused', async () => {
-    apiFetch.mockResolvedValue({ ok: true, data: payload })
+    serve([unset])
     apiFetchMutate.mockResolvedValue({ ok: false, error: { message: 'Only project admins can change settings' } })
     render()
     await flush()
-    act(() => button('Apply suggested caps')!.click())
+    await act(async () => {
+      button('Apply suggested caps')!.click()
+    })
+    await flush()
     await act(async () => {
       button('Apply caps')!.click()
     })
