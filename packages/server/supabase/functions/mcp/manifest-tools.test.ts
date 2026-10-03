@@ -167,6 +167,72 @@ Deno.test('get_repo_digest maps the catalog arguments onto the digest route', as
   assertEquals(tools.get_repo_digest.annotations?.readOnlyHint, true);
 });
 
+Deno.test('run-now tools POST to their run routes for the hinted project', async () => {
+  const { tools, calls } = recordingTools(() => ({ started: true }));
+  await tools.run_radar.handler({}, CTX);
+  await tools.refresh_recipe.handler({}, CTX);
+  await tools.run_design_deviance.handler({}, CTX);
+  await tools.run_store_review.handler({ projectId: 'p-2' }, CTX);
+  assertEquals(
+    calls.map((c) => [c.init.method, c.path]),
+    [
+      ['POST', `/v1/admin/projects/${CTX.projectIdHint}/radar/run`],
+      ['POST', `/v1/admin/projects/${CTX.projectIdHint}/recipe/refresh`],
+      ['POST', `/v1/admin/projects/${CTX.projectIdHint}/design/deviance/run`],
+      ['POST', '/v1/admin/projects/p-2/store/review'],
+    ],
+  );
+  for (const name of ['run_radar', 'refresh_recipe', 'run_design_deviance', 'run_store_review']) {
+    assertEquals(tools[name].scope, 'mcp:write', `${name} scope`);
+    assertEquals(tools[name].annotations?.destructiveHint, false, `${name} destructiveHint`);
+  }
+});
+
+Deno.test('get_release_calendar, get_code_health and explain_finding read their routes', async () => {
+  const { tools, calls } = recordingTools(() => ({}));
+  await tools.get_release_calendar.handler({}, CTX);
+  await tools.get_release_calendar.handler({ organizationId: 'org-1' }, CTX);
+  await tools.get_code_health.handler({}, CTX);
+  await tools.get_code_health.handler({ days: 90 }, CTX);
+  await tools.explain_finding.handler({ findingId: 'f-1' }, CTX);
+  assertEquals(calls.map((c) => c.path), [
+    '/v1/admin/orgs/current/releases',
+    '/v1/admin/orgs/org-1/releases',
+    `/v1/admin/code-health?project_id=${CTX.projectIdHint}&days=30`,
+    `/v1/admin/code-health?project_id=${CTX.projectIdHint}&days=90`,
+    '/v1/admin/findings/f-1',
+  ]);
+  let threw = false;
+  try {
+    await tools.explain_finding.handler({}, CTX);
+  } catch (err) {
+    threw = err instanceof TestMcpError && /findingId is required/.test(err.message);
+  }
+  assertEquals(threw, true);
+});
+
+Deno.test('get_repo_diagram adds the overlay only when asked and a diagram exists', async () => {
+  const diagramPath = `/v1/admin/projects/${CTX.projectIdHint}/codebase/diagram`;
+  const drawn = recordingTools((path) =>
+    path.endsWith('/overlay') ? { nodes: { api: { reports: [] } } } : { diagram: { id: 'd1' }, publication: { published: false } },
+  );
+  assertEquals(await drawn.tools.get_repo_diagram.handler({}, CTX), { diagram: { id: 'd1' }, publication: { published: false } });
+  assertEquals(await drawn.tools.get_repo_diagram.handler({ overlay: true }, CTX), {
+    diagram: { id: 'd1' },
+    publication: { published: false },
+    overlay: { nodes: { api: { reports: [] } } },
+  });
+  assertEquals(drawn.calls.map((c) => c.path), [diagramPath, diagramPath, `${diagramPath}/overlay`]);
+
+  const empty = recordingTools(() => ({ diagram: null, publication: { published: false } }));
+  assertEquals(await empty.tools.get_repo_diagram.handler({ overlay: true }, CTX), {
+    diagram: null,
+    publication: { published: false },
+    overlay: null,
+  });
+  assertEquals(empty.calls.length, 1);
+});
+
 Deno.test('ask_codebase sends the message list the chat route requires', async () => {
   const { tools, calls } = recordingTools();
   await tools.ask_codebase.handler({ question: 'where is auth?', filePath: 'src/auth.ts', threadId: 't-1' }, CTX);

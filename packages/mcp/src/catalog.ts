@@ -315,6 +315,75 @@ export const TOOL_CATALOG: ToolSpec[] = [
     useCase: 'Is anything about to break in my apps that no user has hit yet?',
   },
   {
+    name: 'run_radar',
+    title: 'Run the hole checks now',
+    description:
+      'Start the hole checks (radar) for one project now instead of waiting for the daily run: store names, listing languages, domain and certificate expiry, security headers, the privacy link, and the connector-backed checks. The checks run in the background; poll get_radar until checkedAt changes. At most one run per project every 10 minutes (429 RATE_LIMITED with Retry-After otherwise). Optional projectId (defaults to the server-configured project). Returns { started, projectId, startedAt }. Write: it records a new gate run; nothing in your app or repo changes.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
+    useCase: 'I just renewed the certificate: check again now.',
+  },
+  {
+    name: 'refresh_recipe',
+    title: 'Refresh the app recipe',
+    description:
+      'Read mushi.recipe.json and the design-token files from the connected repo again and store a new recipe snapshot, instead of waiting for the daily refresh. At most once per project every 5 minutes (429 RATE_LIMITED otherwise). Optional projectId. Returns { ok, state, reason, snapshotId, tokensHash, manifestPresent, tokenCount, issues } where state is ok | drift | unknown | not_connected | error and issues lists manifest problems with their path. Write: it stores a snapshot; nothing in the repo changes. Use after editing mushi.recipe.json or the tokens; then read get_app_recipe or get_design_tokens.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
+    returnsUntrusted: true,
+    useCase: 'I changed mushi.recipe.json: pick it up now.',
+  },
+  {
+    name: 'run_design_deviance',
+    title: 'Run the design deviance scan',
+    description:
+      'Refresh the design tokens and start a new deviance scan of the repo (off-token colours, fonts, spacing, radius, contrast below AA, raw interactive elements). The scan reads up to 1,500 files in the background: the result is { refresh, run } with run.status "running" (poll get_design_deviance until running clears), or run null when the repo has no tokens to compare against (refresh says why). At most one scan per project every 5 minutes (429 RATE_LIMITED otherwise). Optional projectId. Write: it records a scan; nothing in the repo changes.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
+    returnsUntrusted: true,
+    useCase: 'I replaced the hard-coded colours: score the design drift again.',
+  },
+  {
+    name: 'run_store_review',
+    title: 'Run the store review',
+    description:
+      'Run the store review for one project now: listing text in the repo against what is live on the App Store and Google Play, listing claims against the code, privacy labels against data-collecting SDKs, screenshots, length limits and the pre-submission checklist. Each result is ok | finding | unknown (not checked, never healthy). This is a check against the code, not legal advice. At most one review per project every 30 minutes (429 RATE_LIMITED otherwise). Optional projectId. Returns { projectId, checkedAt, status, results, checklist, findings, note }; read it again later with get_store_status. Write: it records a gate run; nothing is submitted to a store.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
+    returnsUntrusted: true,
+    useCase: 'Check the store listing before I submit this release.',
+  },
+  {
+    name: 'get_release_calendar',
+    title: 'Release calendar',
+    description:
+      'Return the release calendar of one organization: per app, what is live, the fixes merged since (waiting to ship) and the store state, plus a suggested batch of apps to release now versus next that respects the estimated CI minutes of each build. Mushi only proposes the batch; your CI builds and submits. Optional organizationId (UUID); omitted, the only organization of the key owner is used, and a 400 ORG_REQUIRED lists the choices when there are several. Needs an account-level key; a project-bound key gets 403. Returns { rows, batchSuggestion, note }. Read-only.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    returnsUntrusted: true,
+    useCase: 'Which of my apps have merged fixes waiting to ship, and what should I release together?',
+  },
+  {
+    name: 'get_code_health',
+    title: 'Code health',
+    description:
+      'Return the code health your CI pushed for one project: files over the size budget (god files) from the latest code_health run, each with severity, file, line, message and suggested fix, the bundle-size and largest-file trends, and a summary { error_count, warn_count, max_loc, latest_bundle_kb }. latestRunAt null means CI has never pushed (add MUSHI_INGEST_KEY to CI). Optional projectId and days (trend window, 1–365, default 30); a project-bound key reads its own project, an account-level key must pass projectId (400 PROJECT_REQUIRED otherwise). Returns { trends, godFiles, latestRunAt, latestRunStatus, summary }. Read-only. Use explain_finding with a god-file id for its fix; split the file before adding to it.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    returnsUntrusted: true,
+    useCase: 'Which files are too big to change safely, and is the bundle growing?',
+  },
+  {
+    name: 'explain_finding',
+    title: 'Explain one finding',
+    description:
+      'Explain one gate finding by its id (from list_gate_findings, get_radar, get_recipe_drift, get_code_health, get_store_status or the console): which check raised it and what that check is for, the rule, why it fired (reason), the file, line and column or the target it is about, the fix in one sentence (fix.text, with fix.kind, fix.command, fix.consolePath and the stored fix object in fix.detail), and whether it is still open: state open (in the latest run of that check, the latest run found the same problem in the same file or target, or no finished run has looked again yet), not_in_latest_run (the latest run checked that rule clean and no longer has it: fixed or moved), unknown (the latest run could not confirm a fix: it errored or skipped, stored only part of its findings, did not run or could not decide the rule, or read only part of the project; stateReason says which) or allowlisted. The latest run is the newest one that looked at the same thing: a design server scan is compared only with server scans and a CI push only with CI pushes, and a run scoped to another story is skipped. Treat unknown as still open. A finding in a project the key cannot reach is a 404. Returns { id, projectId, gate, gateLabel, gateMeaning, ruleId, rule, severity, reason, fix, location, state, stateReason, run, latestRun }. Read-only.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    returnsUntrusted: true,
+    useCase: 'What does this finding mean, and how do I fix it?',
+  },
+  {
     name: 'get_graph_neighborhood',
     title: 'Graph neighborhood',
     description:
@@ -1346,5 +1415,15 @@ export const CODEBASE_TOOL_CATALOG: ToolSpec[] = [
     hints: { readOnly: true, idempotent: true, openWorld: true },
     returnsUntrusted: true,
     useCase: 'Give me the code around this bug in one paste.',
+  },
+  {
+    name: 'get_repo_diagram',
+    title: 'Architecture diagram',
+    description:
+      'Return the latest architecture diagram of the connected repo: its parts (nodes with a label, group, repo path and one-line description), how they connect (edges), the commit it was drawn at, and whether a public page is published for it (url, outdated, indexable). diagram is null when none has been drawn yet: one is drawn from the console Repo page (one AI call per commit). overlay: true also returns the open bug reports and code findings placed on each part (by stack frames, fix files and finding paths). Optional projectId. Returns { diagram, publication } and, with overlay, overlay: { diagram_id, nodes, unplaced, frames_matched, considered } (null while there is no diagram). Works without codebase indexing. Read-only. Use to see where a bug sits in the app before reading code; use get_repo_digest for the code itself.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    returnsUntrusted: true,
+    useCase: 'How is this repo put together, and which part has the open bugs?',
   },
 ];

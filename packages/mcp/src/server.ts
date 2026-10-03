@@ -1584,6 +1584,118 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     },
   );
 
+  const PROJECT_ID_INPUT = z.object({
+    projectId: z.string().optional().describe('Project UUID — defaults to the server-configured project when omitted'),
+  });
+
+  // Run-now triggers for the recipe, design, radar and store checks. Each one
+  // only records a new run (rate limited server-side); nothing in the repo or
+  // a store changes.
+  server.registerTool(
+    'run_radar',
+    {
+      title: titleOf('run_radar'),
+      description: descOf('run_radar'),
+      annotations: annotationsFor('run_radar'),
+      inputSchema: PROJECT_ID_INPUT,
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      return jsonText(await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/radar/run`, { method: 'POST' }));
+    },
+  );
+
+  server.registerTool(
+    'refresh_recipe',
+    {
+      title: titleOf('refresh_recipe'),
+      description: descOf('refresh_recipe'),
+      annotations: annotationsFor('refresh_recipe'),
+      inputSchema: PROJECT_ID_INPUT,
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      return jsonText(await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/recipe/refresh`, { method: 'POST' }));
+    },
+  );
+
+  server.registerTool(
+    'run_design_deviance',
+    {
+      title: titleOf('run_design_deviance'),
+      description: descOf('run_design_deviance'),
+      annotations: annotationsFor('run_design_deviance'),
+      inputSchema: PROJECT_ID_INPUT,
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      return jsonText(await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/design/deviance/run`, { method: 'POST' }));
+    },
+  );
+
+  server.registerTool(
+    'run_store_review',
+    {
+      title: titleOf('run_store_review'),
+      description: descOf('run_store_review'),
+      annotations: annotationsFor('run_store_review'),
+      inputSchema: PROJECT_ID_INPUT,
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      return jsonText(
+        await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/store/review`, { method: 'POST' }, { minTimeoutMs: 90_000 }),
+      );
+    },
+  );
+
+  server.registerTool(
+    'get_release_calendar',
+    {
+      title: titleOf('get_release_calendar'),
+      description: descOf('get_release_calendar'),
+      annotations: annotationsFor('get_release_calendar'),
+      inputSchema: ORG_ID_INPUT,
+    },
+    async (args) => {
+      const org = encodeURIComponent(args.organizationId ?? 'current');
+      return jsonText(await apiCall(`/v1/admin/orgs/${org}/releases`));
+    },
+  );
+
+  server.registerTool(
+    'get_code_health',
+    {
+      title: titleOf('get_code_health'),
+      description: descOf('get_code_health'),
+      annotations: annotationsFor('get_code_health'),
+      inputSchema: z.object({
+        projectId: z.string().optional().describe('Project UUID — defaults to the server-configured project when omitted'),
+        days: z.number().int().min(1).max(365).optional().describe('Trend window in days (default 30)'),
+      }),
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      const qs = new URLSearchParams({ project_id: pid, days: String(args.days ?? 30) });
+      return jsonText(await apiCall(`/v1/admin/code-health?${qs}`));
+    },
+  );
+
+  server.registerTool(
+    'explain_finding',
+    {
+      title: titleOf('explain_finding'),
+      description: descOf('explain_finding'),
+      annotations: annotationsFor('explain_finding'),
+      inputSchema: z.object({
+        findingId: z.string().uuid().describe('Gate finding id (the id field of a finding in list_gate_findings, get_radar, get_code_health…)'),
+      }),
+    },
+    async (args) => {
+      return jsonText(await apiCall(`/v1/admin/findings/${encodeURIComponent(args.findingId)}`));
+    },
+  );
+
   server.registerTool(
     'suggest_fix',
     {
@@ -4599,6 +4711,37 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         { minTimeoutMs: 90_000 },
       );
       return jsonText(data);
+    },
+  );
+
+  server.registerTool(
+    'get_repo_diagram',
+    {
+      title: titleOf('get_repo_diagram', CODEBASE_TOOL_CATALOG),
+      description: descOf('get_repo_diagram', CODEBASE_TOOL_CATALOG),
+      annotations: annotationsFor('get_repo_diagram', CODEBASE_TOOL_CATALOG),
+      inputSchema: z.object({
+        projectId: z.string().optional().describe('Project UUID (defaults to configured project)'),
+        overlay: z
+          .boolean()
+          .optional()
+          .describe('Also place the open bug reports and code findings on each part of the diagram'),
+      }),
+    },
+    async (args) => {
+      const pid = encodeURIComponent(await resolveProjectId(args.projectId));
+      const data = await apiCall<{ diagram: unknown; publication: unknown }>(
+        `/v1/admin/projects/${pid}/codebase/diagram`,
+      );
+      if (args.overlay !== true) return jsonText(data);
+      // No diagram yet: the overlay route answers 404 NO_DIAGRAM, so skip it.
+      const overlay = data.diagram
+        ? await apiCall<unknown>(`/v1/admin/projects/${pid}/codebase/diagram/overlay`, undefined, {
+            // One GitHub tree read plus up to a few hundred reports.
+            minTimeoutMs: 60_000,
+          })
+        : null;
+      return jsonText({ ...data, overlay });
     },
   );
 

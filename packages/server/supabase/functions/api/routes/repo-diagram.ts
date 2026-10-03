@@ -5,9 +5,9 @@
  *
  *   GET    /v1/admin/projects/:id/codebase/diagram                  latest diagram + publish state
  *   POST   /v1/admin/projects/:id/codebase/diagram                  generate for the current SHA (on demand only)
- *   GET    /v1/admin/projects/:id/codebase/diagram/publish-preview  exactly what would be public
- *   POST   /v1/admin/projects/:id/codebase/diagram/publish          publish (owner/admin, console only)
- *   DELETE /v1/admin/projects/:id/codebase/diagram/publish          unpublish
+ *   GET    /v1/admin/projects/:id/codebase/diagram/publish-preview  exactly what would be public (mcp:read)
+ *   POST   /v1/admin/projects/:id/codebase/diagram/publish          publish (owner/admin; mcp:write; a private repo only from the console)
+ *   DELETE /v1/admin/projects/:id/codebase/diagram/publish          unpublish (owner/admin; mcp:write)
  *   GET    /v1/admin/projects/:id/codebase/diagram/overlay          open reports + findings per node
  *   GET    /v1/public/diagrams/:owner/:repo                         the public page's data
  *
@@ -21,6 +21,10 @@
  * regenerate between preview and publish is refused instead of publishing
  * something nobody reviewed. A published page is a frozen copy: regenerating
  * does not change it until the owner publishes again.
+ *
+ * Every route takes the console JWT or an API key (adminOrApiKey). A key can
+ * publish a public repo's diagram; a private repo's needs a person to read
+ * the preview in the console, so decidePublish refuses it for a key.
  */
 
 import type { Hono } from 'npm:hono@4'
@@ -30,7 +34,7 @@ import { z } from 'npm:zod@3'
 
 import { getServiceClient } from '../../_shared/db.ts'
 import { log } from '../../_shared/logger.ts'
-import { adminOrApiKey, jwtAuth } from '../../_shared/auth.ts'
+import { adminOrApiKey } from '../../_shared/auth.ts'
 import { ASSIST_EFFORT, ASSIST_FALLBACK, ASSIST_MODEL, THINKING_HEADROOM_TOKENS } from '../../_shared/models.ts'
 import { claudeGenerateObject } from '../../_shared/claude-messages.ts'
 import { generateValidatedObject } from '../../_shared/structured-output.ts'
@@ -54,6 +58,7 @@ import {
   fetchRepoVisibility,
   isValidRepoSlug,
   layoutDiagram,
+  privateRepoNeedsConsoleMessage,
   publicDiagramPayload,
   publicPayloadHash,
   publicationOutdated,
@@ -531,7 +536,7 @@ export function registerRepoDiagramRoutes(app: Hono<{ Variables: Variables }>): 
 
   // What the public page would show for the latest diagram, its hash (the
   // publish call must echo it), and whether GitHub says the repo is private.
-  app.get('/v1/admin/projects/:id/codebase/diagram/publish-preview', jwtAuth, async (c) => {
+  app.get('/v1/admin/projects/:id/codebase/diagram/publish-preview', readAuth, async (c) => {
     const projectId = c.req.param('id')!
     const db = getServiceClient()
     const access = await callerCanAccessProject(c, db, c.get('userId') as string, projectId)
@@ -554,6 +559,8 @@ export function registerRepoDiagramRoutes(app: Hono<{ Variables: Variables }>): 
       return c.json({ ok: false, error: { code: 'GITHUB_UNAVAILABLE', message: 'Could not check whether the repo is public on GitHub.' } }, 502)
     }
     const payload = publicDiagramPayload({ ...row, repo_owner: vis.owner, repo_name: vis.repo })
+    const isAdmin = access.role === 'owner' || access.role === 'admin'
+    const privateByKey = vis.private && c.get('authMethod') === 'apiKey'
     return c.json({
       ok: true,
       data: {
@@ -564,17 +571,19 @@ export function registerRepoDiagramRoutes(app: Hono<{ Variables: Variables }>): 
         // Where the page will live: the crawlable /r/ page when the page store
         // is set up, else the interactive docs view.
         url: livePublicUrl(vis.owner, vis.repo, storeConfig() !== null),
-        can_publish: (access.role === 'owner' || access.role === 'admin') && vis.canWrite,
-        publish_blocked_reason: !(access.role === 'owner' || access.role === 'admin')
+        can_publish: isAdmin && vis.canWrite && !privateByKey,
+        publish_blocked_reason: !isAdmin
           ? 'Only a project owner or admin can publish.'
           : !vis.canWrite
             ? "Only someone with write access to this repo on GitHub can publish its diagram. The project's GitHub token cannot push to it."
-            : null,
+            : privateByKey
+              ? privateRepoNeedsConsoleMessage()
+              : null,
       },
     })
   })
 
-  app.post('/v1/admin/projects/:id/codebase/diagram/publish', jwtAuth, async (c) => {
+  app.post('/v1/admin/projects/:id/codebase/diagram/publish', writeAuth, async (c) => {
     const projectId = c.req.param('id')!
     const userId = c.get('userId') as string
     const db = getServiceClient()
@@ -622,6 +631,7 @@ export function registerRepoDiagramRoutes(app: Hono<{ Variables: Variables }>): 
       repoPrivate: vis.private,
       confirmPrivate: body.confirm_private === true,
       publishedByOtherProject: !!taken && taken.project_id !== projectId,
+      viaApiKey: c.get('authMethod') === 'apiKey',
     })
     if (!decision.ok) {
       return c.json({ ok: false, error: { code: decision.code, message: decision.message } }, decision.status)
@@ -708,7 +718,7 @@ export function registerRepoDiagramRoutes(app: Hono<{ Variables: Variables }>): 
     })
   })
 
-  app.delete('/v1/admin/projects/:id/codebase/diagram/publish', jwtAuth, async (c) => {
+  app.delete('/v1/admin/projects/:id/codebase/diagram/publish', writeAuth, async (c) => {
     const projectId = c.req.param('id')!
     const userId = c.get('userId') as string
     const db = getServiceClient()

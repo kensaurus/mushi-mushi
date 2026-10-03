@@ -2,18 +2,22 @@
  * portfolio-funnel.ts — the cross-app funnel rollup (Plan 020 §8).
  *
  *   GET /v1/admin/orgs/:orgId/funnel   adminOrApiKey(mcp:read)  one funnel, every app, side by side
- *   PUT /v1/admin/orgs/:orgId/funnel   jwtAuth, owner/admin     set the org's funnel (event names + window)
+ *   PUT /v1/admin/orgs/:orgId/funnel   adminOrApiKey(mcp:write), owner/admin  set the org's funnel (event names + window)
  *
  * One definition per organization (org_funnel_definitions), run per app over
  * the existing public.product_funnel RPC, so every app is measured the same
  * way. Each app row says what it is: `ok` with step counts, `off` when the
  * app turned product events off, `no_events` when nothing entered the first
  * step, or `error`. An org with no definition is `not_set_up`, never zeros.
+ *
+ * Both routes take the console JWT or an account-level API key; a key bound
+ * to one project is refused by portfolioAccess, and the PUT also needs the
+ * key owner to be a team owner or admin.
  */
 
 import type { Hono, MiddlewareHandler } from 'npm:hono@4'
 import { z } from 'npm:zod@3'
-import { adminOrApiKey, jwtAuth } from '../../_shared/auth.ts'
+import { adminOrApiKey } from '../../_shared/auth.ts'
 import { getServiceClient } from '../../_shared/db.ts'
 import { log } from '../../_shared/logger.ts'
 import { mapBounded } from '../../_shared/portfolio.ts'
@@ -30,14 +34,14 @@ type Db = ReturnType<typeof getServiceClient>
 export interface FunnelRouteDeps {
   getServiceClient: () => Db
   adminOrApiKeyRead: MiddlewareHandler
-  jwtAuth: MiddlewareHandler
+  adminOrApiKeyWrite: MiddlewareHandler
   now: () => Date
 }
 
 export const defaultFunnelDeps: FunnelRouteDeps = {
   getServiceClient,
   adminOrApiKeyRead: adminOrApiKey({ scope: 'mcp:read' }) as MiddlewareHandler,
-  jwtAuth: jwtAuth as MiddlewareHandler,
+  adminOrApiKeyWrite: adminOrApiKey({ scope: 'mcp:write' }) as MiddlewareHandler,
   now: () => new Date(),
 }
 
@@ -128,7 +132,7 @@ export function registerPortfolioFunnelRoutes(app: Hono<{ Variables: Variables }
     })
   })
 
-  app.put('/v1/admin/orgs/:orgId/funnel', deps.jwtAuth, async (c) => {
+  app.put('/v1/admin/orgs/:orgId/funnel', deps.adminOrApiKeyWrite, async (c) => {
     const db = deps.getServiceClient()
     const access = await portfolioAccess(c, db, c.req.param('orgId') ?? '')
     if (!access.ok) return access.response

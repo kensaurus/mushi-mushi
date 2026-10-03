@@ -34,7 +34,8 @@ export interface ManifestToolDef {
     | 'account_overview'
     | 'submit_fix_result'
     | 'codebase_chat'
-    | 'skills_list';
+    | 'skills_list'
+    | 'repo_diagram';
   /**
    * Optional MCP annotation overrides (production-readiness audit item #18).
    * Every manifest tool used to get a bare `{ readOnlyHint, openWorldHint }`
@@ -373,6 +374,22 @@ export function buildManifestTools(deps: {
             );
           }
           return { ok: true, fixId: created.fixId };
+        }
+
+        if (spec.transform === 'repo_diagram') {
+          // stdio's get_repo_diagram: the stored diagram, and with overlay the
+          // open reports and findings per part. No diagram yet means the
+          // overlay route would 404 NO_DIAGRAM, so it is skipped.
+          const diagramPath = interpolatePath(spec.path, args, ctx);
+          const data = (await apiCall(diagramPath, { headers: ctx.authHeaders })) as {
+            diagram?: unknown;
+            publication?: unknown;
+          };
+          if (args.overlay !== true) return data;
+          const overlay = data?.diagram
+            ? await apiCall(`${diagramPath}/overlay`, { headers: ctx.authHeaders })
+            : null;
+          return { ...data, overlay };
         }
 
         if (spec.transform === 'codebase_chat') {

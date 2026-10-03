@@ -202,6 +202,16 @@ describe('decidePublish', () => {
   it('keeps one public page per repo', () => {
     expect(decidePublish({ ...base, publishedByOtherProject: true })).toMatchObject({ ok: false, code: 'ALREADY_PUBLISHED' })
   })
+  it('lets an API key publish a public repo, but never a private one, even with confirm_private', () => {
+    // The private-repo confirmation is a person reading the preview in the console.
+    expect(decidePublish({ ...base, viaApiKey: true })).toEqual({ ok: true })
+    expect(decidePublish({ ...base, viaApiKey: true, repoPrivate: true, confirmPrivate: true })).toMatchObject({ ok: false, status: 403, code: 'PRIVATE_REPO_NEEDS_CONSOLE' })
+    expect(decidePublish({ ...base, viaApiKey: true, repoPrivate: true })).toMatchObject({ code: 'PRIVATE_REPO_NEEDS_CONSOLE' })
+  })
+  it('still checks write access and the preview hash first for an API key', () => {
+    expect(decidePublish({ ...base, viaApiKey: true, repoPrivate: true, repoWriteAccess: false })).toMatchObject({ code: 'REPO_WRITE_REQUIRED' })
+    expect(decidePublish({ ...base, viaApiKey: true, repoPrivate: true, currentHash: 'h2' })).toMatchObject({ code: 'STALE_PREVIEW' })
+  })
 })
 
 describe('isValidRepoSlug', () => {
