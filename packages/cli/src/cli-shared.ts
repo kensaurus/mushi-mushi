@@ -58,8 +58,58 @@ export async function probeEndpointHealth(endpoint: string): Promise<EndpointHea
  * `{ ok: true, data: T }` or `{ ok: false, error: { code, message } }`.
  */
 export interface ApiOk<T> { ok: true; data: T; meta?: Record<string, unknown> }
-export interface ApiError { ok: false; error: { code: string; message: string }; httpStatus?: number }
+/**
+ * `error` always carries `code` and `message`; some routes add details
+ * (portfolio's ORG_REQUIRED lists the caller's `organizations`).
+ */
+export interface ApiError {
+  ok: false
+  error: { code: string; message: string; [detail: string]: unknown }
+  httpStatus?: number
+}
 export type ApiResult<T> = ApiOk<T> | ApiError
+
+/**
+ * Some older routes answer `{ ok: false, error: 'text' }` or a zod
+ * `flatten()` object instead of `{ code, message }`. Coerce any of them so
+ * `die()` never prints `undefined — undefined`.
+ */
+function normalizeApiError(error: unknown, httpStatus?: number): ApiError['error'] {
+  const fallbackCode = httpStatus ? `HTTP_${httpStatus}` : 'API_ERROR'
+  if (typeof error === 'string') return { code: fallbackCode, message: error }
+  if (error && typeof error === 'object') {
+    const e = error as Record<string, unknown>
+    if (typeof e['code'] === 'string' && typeof e['message'] === 'string') {
+      return e as ApiError['error']
+    }
+    // zod flatten(): { formErrors: string[], fieldErrors: { field: string[] } }
+    const formErrors = Array.isArray(e['formErrors']) ? (e['formErrors'] as unknown[]).map(String) : []
+    const fieldErrors = e['fieldErrors'] && typeof e['fieldErrors'] === 'object'
+      ? Object.entries(e['fieldErrors'] as Record<string, unknown>).map(
+          ([field, msgs]) => `${field}: ${Array.isArray(msgs) ? msgs.join(', ') : String(msgs)}`,
+        )
+      : []
+    const parts = [...formErrors, ...fieldErrors]
+    if (parts.length > 0) return { code: 'VALIDATION_ERROR', message: parts.join('; ') }
+    return {
+      ...e,
+      code: typeof e['code'] === 'string' ? e['code'] : fallbackCode,
+      message: typeof e['message'] === 'string' ? e['message'] : `Request failed${httpStatus ? ` (${httpStatus})` : ''}`,
+    }
+  }
+  return { code: fallbackCode, message: `Request failed${httpStatus ? ` (${httpStatus})` : ''}` }
+}
+
+export interface ApiCallOptions {
+  /** Per-call timeout. Slow routes (an LLM diagram, a release draft, a Sentry import) pass more than the 15 s default. */
+  timeoutMs?: number
+  /**
+   * The route answers a download (Markdown, CSV) rather than a JSON envelope:
+   * a successful non-JSON body comes back as `{ ok: true, data: text }`.
+   * Errors still arrive as JSON envelopes and are handled as usual.
+   */
+  text?: boolean
+}
 
 /**
  * Make an authenticated request to a Mushi sync endpoint.
@@ -74,7 +124,9 @@ export async function apiCall<T = unknown>(
   path: string,
   config: CliConfig,
   options: RequestInit = {},
+  callOptions: ApiCallOptions = {},
 ): Promise<ApiResult<T>> {
+  const timeoutMs = callOptions.timeoutMs ?? API_TIMEOUT_MS
   const endpoint = config.endpoint
   if (!endpoint) {
     return {
@@ -93,7 +145,7 @@ export async function apiCall<T = unknown>(
   // the two signals so whichever fires first wins. AbortSignal.any was
   // standardised in Node 20 — matches the CLI's `engines.node: ">=20"`.
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), API_TIMEOUT_MS)
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
   const signals = [controller.signal, getAbortSignal()]
   const compositeSignal = AbortSignal.any
     ? AbortSignal.any(signals)
@@ -125,6 +177,7 @@ export async function apiCall<T = unknown>(
       try { body = await res.json() } catch { body = null }
     } else {
       const text = await res.text()
+      if (callOptions.text && res.ok) return { ok: true, data: text as T }
       try { body = JSON.parse(text) } catch {
         // Non-JSON body — surface as a structured error.
         body = {
@@ -157,6 +210,15 @@ export async function apiCall<T = unknown>(
       }
     }
 
+    // `{ ok: false, error: 'text' }` or a zod flatten() object: give it a code and message.
+    if (typeof body === 'object' && body !== null && (body as { ok?: unknown }).ok === false) {
+      return {
+        ok: false,
+        httpStatus: res.status,
+        error: normalizeApiError((body as { error?: unknown }).error, res.status),
+      }
+    }
+
     return body as ApiResult<T>
   } catch (err) {
     clearTimeout(timer)
@@ -165,7 +227,7 @@ export async function apiCall<T = unknown>(
         ok: false,
         error: {
           code: 'TIMEOUT',
-          message: `Request timed out after ${API_TIMEOUT_MS / 1000}s. Check your network or endpoint.`,
+          message: `Request timed out after ${timeoutMs / 1000}s. Check your network or endpoint.`,
         },
       }
     }

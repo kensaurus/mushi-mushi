@@ -9,7 +9,71 @@ import { pathMatchesScope } from '../../_shared/codebase-scope.ts';
 import { unverifiedGithubInstallsAllowed } from '../../_shared/github-install-trust.ts';
 import { resolveProjectGithubToken } from '../../_shared/github.ts';
 import { resolveBranchForConnect } from '../../_shared/github-branch.ts';
+import { dereferenceMaybeVault, storeSettingsSecret } from '../../_shared/settings-secrets.ts';
+import { isVaultRef } from '../../_shared/vault-ref.ts';
 import type { KnowledgeGraph } from '../../_shared/codebase-graph-build.ts';
+import {
+  DEFAULT_INDEX_FILE_CAP,
+  INDEX_FILE_CAP_ENV,
+  describeIndexCoverage,
+  indexFileCapForPlan,
+  latestIso,
+  isIndexCoverageState,
+  type IndexCoverageState,
+} from '../../_shared/index-coverage.ts';
+import { resolveProjectPlan } from '../../_shared/quota.ts';
+
+/** The project_repos columns the codebase stats read. */
+interface CodebaseRepoRow {
+  repo_url: string | null
+  default_branch: string | null
+  path_globs: string[] | null
+  last_indexed_at: string | null
+  last_index_error: string | null
+  last_index_attempt_at: string | null
+  github_app_installation_id: number | null
+  indexing_enabled: boolean | null
+  index_swept_at: string | null
+  index_files_indexed: number | null
+  index_files_eligible: number | null
+  index_file_cap: number | null
+  index_tree_truncated: boolean | null
+  index_coverage_state: string | null
+}
+
+/** Coverage as the console shows it; null until a sweep has measured it. */
+export function codebaseCoverageView(repo: Pick<
+  CodebaseRepoRow,
+  'index_files_indexed' | 'index_files_eligible' | 'index_file_cap' | 'index_tree_truncated' | 'index_coverage_state' | 'index_swept_at' | 'last_indexed_at'
+> | null): {
+  indexed_files: number
+  eligible_files: number
+  file_cap: number | null
+  truncated: boolean
+  state: IndexCoverageState
+  summary: string | null
+  measured_at: string | null
+} | null {
+  const state = repo?.index_coverage_state
+  if (!repo || repo.index_files_indexed == null || repo.index_files_eligible == null) return null
+  if (!isIndexCoverageState(state)) return null
+  const truncated = repo.index_tree_truncated === true
+  return {
+    indexed_files: repo.index_files_indexed,
+    eligible_files: repo.index_files_eligible,
+    file_cap: repo.index_file_cap,
+    truncated,
+    state,
+    summary: describeIndexCoverage({
+      indexed: repo.index_files_indexed,
+      eligible: repo.index_files_eligible,
+      cap: repo.index_file_cap,
+      truncated,
+      state,
+    }),
+    measured_at: latestIso(repo.index_swept_at, repo.last_indexed_at),
+  }
+}
 
 export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }>): void {
   // ---------------------------------------------------------------------------
@@ -307,13 +371,34 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
       .eq('project_id', projectId)
       .maybeSingle();
 
-    const webhookSecret = currentSettings?.github_webhook_secret ?? (await generateWebhookSecret());
+    // Keep a readable existing secret (the GitHub side already has it). A
+    // missing or unreadable one is replaced, and `webhook_secret_issued` makes
+    // the card reveal the new value. The column only ever stores a Vault ref.
+    const storedSecret = (currentSettings?.github_webhook_secret as string | null | undefined) ?? null;
+    const existingSecret = await dereferenceMaybeVault(db, storedSecret);
+    const webhookSecretIssued = !existingSecret;
+    const webhookSecret = existingSecret ?? (await generateWebhookSecret());
+    let webhookSecretRef: string | null = null;
+    if (webhookSecretIssued || !isVaultRef(storedSecret)) {
+      try {
+        webhookSecretRef = await storeSettingsSecret(db, projectId, 'github', 'github_webhook_secret', webhookSecret);
+      } catch (err) {
+        console.error('[project-codebase] could not store webhook secret in Vault', {
+          projectId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        return c.json(
+          { ok: false, error: { code: 'VAULT_WRITE_FAILED', message: 'Could not store the webhook secret securely. Retry in a moment.' } },
+          500,
+        );
+      }
+    }
     const { error: settingsErr } = await db
       .from('project_settings')
       .update({
         codebase_index_enabled: true,
         codebase_repo_url: repoUrl,
-        github_webhook_secret: webhookSecret,
+        ...(webhookSecretRef ? { github_webhook_secret: webhookSecretRef } : {}),
         ...(promotedPendingInstallation ? { github_app_installation_id_pending: null } : {}),
       })
       .eq('project_id', projectId);
@@ -325,7 +410,7 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
       repo_url: repoUrl,
       default_branch: defaultBranch,
       installation_id: installationId,
-      issued_webhook_secret: !currentSettings?.github_webhook_secret,
+      issued_webhook_secret: webhookSecretIssued,
     }).catch(() => {});
 
     return c.json({
@@ -334,7 +419,7 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
         repo_url: repoUrl,
         default_branch: defaultBranch,
         webhook_secret: webhookSecret,
-        webhook_secret_issued: !currentSettings?.github_webhook_secret,
+        webhook_secret_issued: webhookSecretIssued,
         indexed_files_eta_seconds: 90,
       },
     });
@@ -389,9 +474,22 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
     }
 
     const webhookSecret = await generateWebhookSecret();
+    let webhookSecretRef: string;
+    try {
+      webhookSecretRef = await storeSettingsSecret(db, projectId, 'github', 'github_webhook_secret', webhookSecret);
+    } catch (err) {
+      console.error('[project-codebase] could not store rotated webhook secret in Vault', {
+        projectId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return c.json(
+        { ok: false, error: { code: 'VAULT_WRITE_FAILED', message: 'Could not store the webhook secret securely. Retry in a moment.' } },
+        500,
+      );
+    }
     const { error: writeErr } = await db
       .from('project_settings')
-      .update({ github_webhook_secret: webhookSecret })
+      .update({ github_webhook_secret: webhookSecretRef })
       .eq('project_id', projectId);
     if (writeErr) return dbError(c, writeErr);
 
@@ -418,7 +516,7 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
       );
     }
 
-    const [{ data: settings }, { data: primaryRepo }, { count: indexedFiles }] = await Promise.all([
+    const [{ data: settings }, { data: primaryRepo }, { count: indexedChunks }, fileCap, { data: languageRows }] = await Promise.all([
       db
         .from('project_settings')
         .select('codebase_index_enabled, codebase_repo_url, github_webhook_secret')
@@ -427,7 +525,7 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
       db
         .from('project_repos')
         .select(
-          'repo_url, default_branch, last_indexed_at, last_index_error, last_index_attempt_at, github_app_installation_id, indexing_enabled',
+          'repo_url, default_branch, path_globs, last_indexed_at, last_index_error, last_index_attempt_at, github_app_installation_id, indexing_enabled, index_swept_at, index_files_indexed, index_files_eligible, index_file_cap, index_tree_truncated, index_coverage_state',
         )
         .eq('project_id', projectId)
         .eq('is_primary', true)
@@ -437,21 +535,53 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
         .select('*', { count: 'exact', head: true })
         .eq('project_id', projectId)
         .is('tombstoned_at', null),
+      // The plan's coverage ceiling, live, so an upgrade shows at once (the
+      // next sweep uses it). A plan read error says so instead of guessing.
+      resolveProjectPlan(db, projectId)
+        .then((plan) => indexFileCapForPlan(plan, Deno.env.get(INDEX_FILE_CAP_ENV)))
+        .catch(() => null),
+      // One whole-file row per indexed file (same sample the Explore stats use).
+      db
+        .from('project_codebase_files')
+        .select('language')
+        .eq('project_id', projectId)
+        .is('tombstoned_at', null)
+        .is('symbol_name', null)
+        .limit(5000),
     ]);
 
+    const repo = primaryRepo as CodebaseRepoRow | null;
+    const coverage = codebaseCoverageView(repo);
+    const languageDistribution: Record<string, number> = {};
+    for (const row of (languageRows ?? []) as Array<{ language: string | null }>) {
+      if (row.language) languageDistribution[row.language] = (languageDistribution[row.language] ?? 0) + 1;
+    }
     return c.json({
       ok: true,
       data: {
         codebase_index_enabled: !!settings?.codebase_index_enabled,
-        repo_url: primaryRepo?.repo_url ?? settings?.codebase_repo_url ?? null,
-        default_branch: primaryRepo?.default_branch ?? null,
-        installation_id: primaryRepo?.github_app_installation_id ?? null,
-        indexing_enabled: primaryRepo?.indexing_enabled ?? null,
-        indexed_files: indexedFiles ?? 0,
-        last_indexed_at: primaryRepo?.last_indexed_at ?? null,
-        last_index_attempt_at: primaryRepo?.last_index_attempt_at ?? null,
-        last_index_error: primaryRepo?.last_index_error ?? null,
+        repo_url: repo?.repo_url ?? settings?.codebase_repo_url ?? null,
+        default_branch: repo?.default_branch ?? null,
+        installation_id: repo?.github_app_installation_id ?? null,
+        indexing_enabled: repo?.indexing_enabled ?? null,
+        path_globs: repo?.path_globs && repo.path_globs.length > 0 ? repo.path_globs : null,
+        // Chunk rows (a file is split into several); coverage below is in files.
+        indexed_files: indexedChunks ?? 0,
+        indexed_chunks: indexedChunks ?? 0,
+        file_cap: fileCap?.cap ?? repo?.index_file_cap ?? DEFAULT_INDEX_FILE_CAP,
+        file_cap_source: fileCap?.source ?? 'unavailable',
+        plan_id: fileCap?.planId ?? null,
+        at_file_cap: coverage?.state === 'capped',
+        coverage,
+        language_distribution: languageDistribution,
+        // Last sweep that covered every eligible file; a partial one sets index_swept_at only.
+        last_indexed_at: repo?.last_indexed_at ?? null,
+        index_swept_at: repo?.index_swept_at ?? null,
+        last_index_attempt_at: repo?.last_index_attempt_at ?? null,
+        last_index_error: repo?.last_index_error ?? null,
         has_webhook_secret: !!settings?.github_webhook_secret,
+        // PAT-connected repos get push indexing through the api's repo webhook.
+        push_webhook_path: repo && !repo.github_app_installation_id ? '/v1/webhooks/github' : null,
       },
     });
   });
@@ -489,6 +619,7 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
       layers: emptyLayers,
       topLanguages: [] as string[],
       lastIndexedAt: null as string | null,
+      indexCoverage: null as ReturnType<typeof codebaseCoverageView>,
       lastIndexAttemptAt: null as string | null,
       lastIndexError: null as string | null,
       topPriority: 'no_project' as
@@ -535,7 +666,7 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
       db
         .from('project_repos')
         .select(
-          'repo_url, default_branch, last_indexed_at, last_index_error, last_index_attempt_at, indexing_enabled',
+          'repo_url, default_branch, last_indexed_at, last_index_error, last_index_attempt_at, indexing_enabled, index_swept_at, index_files_indexed, index_files_eligible, index_file_cap, index_tree_truncated, index_coverage_state',
         )
         .eq('project_id', pid)
         .eq('is_primary', true)
@@ -575,7 +706,9 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
     const codebaseIndexEnabled = !!settings?.codebase_index_enabled
     const indexingEnabled = primaryRepo?.indexing_enabled ?? null
     const repoUrl = primaryRepo?.repo_url ?? settings?.codebase_repo_url ?? null
-    const lastIndexedAt = primaryRepo?.last_indexed_at ?? null
+    // The last successful sweep, complete or partial (coverage says which).
+    const lastIndexedAt = latestIso(primaryRepo?.last_indexed_at ?? null, primaryRepo?.index_swept_at ?? null)
+    const indexCoverage = codebaseCoverageView(primaryRepo as CodebaseRepoRow | null)
     const lastIndexAttemptAt = primaryRepo?.last_index_attempt_at ?? null
     const lastIndexError = primaryRepo?.last_index_error ?? null
 
@@ -624,7 +757,9 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
       topPriorityTo = scoped('/explore?tab=index')
     } else {
       topPriority = 'ready'
-      topPriorityLabel = `${indexedFiles.toLocaleString()} files ready · ${withEmbeddings.toLocaleString()} embedded for semantic search.`
+      topPriorityLabel = indexCoverage && indexCoverage.state !== 'complete' && indexCoverage.summary
+        ? `Partly indexed: ${indexCoverage.summary}. Answers only see those files.`
+        : `${indexedFiles.toLocaleString()} files ready · ${withEmbeddings.toLocaleString()} embedded for semantic search.`
       topPriorityTo = scoped('/explore?tab=ask')
     }
 
@@ -647,6 +782,7 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
         lastIndexedAt,
         lastIndexAttemptAt,
         lastIndexError,
+        indexCoverage,
         topPriority,
         topPriorityLabel,
         topPriorityTo,

@@ -20,7 +20,15 @@ can execute without additional context.
 
 **Category we own.** The bug mediator for AI-built apps — one queue between your users, your monitoring (Sentry/Crashlytics/Rollbar), your tracker (Linear/Jira/GitHub), your chat (Slack/Discord/Teams), and your coding agents, where every bug gets a plain-English diagnosis and a ready fix. (Not "error monitoring", not "observability" — those are someone else's ops-coded words.)
 
+**The app recipe** (ADR 0016) is diagnosis context, not a new category: every
+recipe element is optional, renders "not connected" when empty, and changes
+ship only as reviewed draft PRs. It never leads a public surface.
+
 **Primary buyer.** The solo / indie **vibe coder** who builds fast with AI (Cursor, Claude Code, Lovable, Bolt), ships to real users, then loses afternoons when something breaks because they don't fully grasp the generated code. Small teams and agencies are secondary; the enterprise SRE running Sentry + Datadog + Firebase is explicitly *not* who we lead with.
+
+**Portfolio operator** (ADR 0017) is the same vibe coder with several apps.
+Portfolio and radar features never lead a public surface; the claim is
+"nobody bundles this for a solo operator", never "nobody does this".
 
 **The three things we will not do** (drift tripwires):
 
@@ -95,6 +103,10 @@ Cron, billing, retention, and platform hygiene workers live alongside the 19 pip
 | `invitation-reminders` | Pending invite reminder cron |
 | `recompute-tester-reputation` | Tester marketplace reputation recompute |
 | `reward-payout-aggregator` | Aggregates reward payout batches |
+| `recipe-collector` | Daily (03:35 UTC) refresh of each project's `mushi.recipe.json` + DTCG tokens into `app_recipe_snapshots`, then the `design_drift` deviance scan (Plan 019 Phase 1b) |
+| `radar-scan` | Daily (04:05 UTC) hole checks per project (Plan 020): public probes (store names, listing locales, domain and certificate expiry, security headers, privacy link) and store-policy rules read from the repo → `gate_runs` gate `portfolio_radar`. Host CI pushes `portfolio_radar_ci` via `POST /v1/ingest/radar` (`mushi radar scan --push`) |
+| `operator-digest` | Hourly at :20; sends each organization's opt-in daily digest (new reports, holes, releases, AI spend jump; weekly signups/activations per app on `gtm_weekday`) once a day at its `send_hour_utc` to Slack, Discord, Teams, Telegram (each through one project's existing connection), email or push (Plan 020 §9; `operator_digest_settings`, off by default) |
+| `store-review-intake` | Every 6 hours at :45; per-project opt-in (`project_settings.store_review_intake_enabled`): reads App Store / Google Play reviews through the project's bound store connectors, dedupes in `store_review_items`, files reviews at or under `store_review_max_rating` (default 2) as reports with `source = 'store_review'` |
 | `healthz` | Unauthenticated liveness + cheap DB probe (`{status, db, version}`); `verify_jwt = false` |
 | `linear-oauth-callback` | Completes Linear OAuth; vaults tokens; registers inbound webhook |
 | `webhooks-linear` | Linear issue push webhooks (HMAC); resolves linked reports on completed/cancelled |
@@ -247,7 +259,7 @@ Live App URL
 | Group | Commands |
 | --- | --- |
 | **Setup & account** | `mushi init`, `mushi setup`, `mushi connect`, `mushi login`, `mushi upgrade`, `mushi reset`, `mushi whoami`, `mushi doctor`, `mushi ping`, `mushi completion`, `mushi nudge` |
-| **Project & deploy** | `mushi project`, `mushi config`, `mushi deploy check`, `mushi selfhost up/doctor`, `mushi index`, `mushi sourcemaps upload`, `mushi audit` |
+| **Project & deploy** | `mushi project`, `mushi config`, `mushi deploy check`, `mushi selfhost up/doctor`, `mushi index`, `mushi sourcemaps upload`, `mushi audit`, `mushi radar scan/show`, `mushi recipe init/check/show`, `mushi store pull` |
 | **Reports & lessons** | `mushi reports list/show/search/triage/…`, `mushi lessons list/show`, `mushi sync-lessons`, `mushi feedback board` |
 | **Fixes** | `mushi fix`, `mushi fixes tail/refresh-ci/merge`, `mushi console watch <reportId>` |
 | **QA / TDD** | `mushi qa stories/runs/run`, `mushi tdd gen/pending/approve/improve/run`, `mushi stories map` |
@@ -323,7 +335,7 @@ mushi billing cap 0                    # clear spend cap
 
 ### MCP Tools
 
-Full catalog: **80 tools** in [`packages/mcp/src/catalog.ts`](packages/mcp/src/catalog.ts) — generated docs at [`apps/docs/content/sdks/mcp-tools.mdx`](apps/docs/content/sdks/mcp-tools.mdx). Vibe-coder incident loop: [`apps/docs/content/quickstart/incident-loop.mdx`](apps/docs/content/quickstart/incident-loop.mdx) (`get_fix_context` → prompt `summarize_report_for_fix`).
+Full catalog: **117 tools** in [`packages/mcp/src/catalog.ts`](packages/mcp/src/catalog.ts) — generated docs at [`apps/docs/content/sdks/mcp-tools.mdx`](apps/docs/content/sdks/mcp-tools.mdx). Vibe-coder incident loop: [`apps/docs/content/quickstart/incident-loop.mdx`](apps/docs/content/quickstart/incident-loop.mdx) (`get_fix_context` → prompt `summarize_report_for_fix`).
 
 Core MCP tools (`mcp:read` scope): `get_recent_reports`, `get_report_detail`, `get_fix_context`, `query_lessons`, `list_lessons`, `list_qa_story_runs`, `get_qa_story_run`
 
@@ -611,7 +623,7 @@ Server-hosted **Codebase Understand** surface in the admin console — parity wi
 | `project_codebase_wiki_sources` / `…_knowledge_*` | Wiki ingest + RAG merge via `match_knowledge_chunks` |
 | `project_settings.codebase_index_scope_paths` | Scoped subdirectory indexing |
 
-**MCP tools:** `ask_codebase`, `get_file_summary`, `get_codebase_tour`, `search_codebase`, `get_codebase_domains`, `analyze_codebase_impact`, `analyze_wiki_knowledge`.
+**MCP tools:** `ask_codebase`, `get_file_summary`, `get_codebase_tour`, `search_codebase`, `get_codebase_domains`, `analyze_codebase_impact`, `analyze_wiki_knowledge`, `get_repo_digest` (on the default feature set; needs no index).
 
 Graph builder concepts attributed to **Understand-Anything (MIT)** — see `packages/codebase-graph/README.md` and `_shared/codebase-graph-build.ts`.
 

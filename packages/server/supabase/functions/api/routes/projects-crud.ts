@@ -1,3 +1,4 @@
+import { readPublicPageStoreConfig, regeneratePublicSitemap, removeProjectPublicPage } from '../../_shared/public-page-store.ts';
 import type { Hono } from 'npm:hono@4';
 import type { Variables } from '../types.ts';
 import { getServiceClient } from '../../_shared/db.ts';
@@ -171,7 +172,7 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
         db
           .from('project_repos')
           .select(
-            'id, project_id, repo_url, role, default_branch, is_primary, indexing_enabled, last_indexed_at, last_index_attempt_at, last_index_error, github_app_installation_id, created_at',
+            'id, project_id, repo_url, role, default_branch, is_primary, indexing_enabled, last_indexed_at, last_index_attempt_at, last_index_error, github_app_installation_id, created_at, index_swept_at, index_coverage_state, index_files_indexed, index_files_eligible',
           )
           .in('project_id', projectIds)
           .order('is_primary', { ascending: false })
@@ -387,6 +388,11 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
       last_index_error: string | null;
       github_app_installation_id: number | null;
       created_at: string;
+      /** Since 20261003160000: last sweep (complete or partial) and its coverage. */
+      index_swept_at?: string | null;
+      index_coverage_state?: string | null;
+      index_files_indexed?: number | null;
+      index_files_eligible?: number | null;
     }
     const reposByProject: Record<string, RepoRow[]> = {};
     for (const r of (repos.data ?? []) as RepoRow[]) {
@@ -543,6 +549,10 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
         last_index_attempt_at: r.last_index_attempt_at,
         last_index_error: r.last_index_error,
         github_app_connected: r.github_app_installation_id != null,
+        index_swept_at: r.index_swept_at ?? null,
+        index_coverage_state: r.index_coverage_state ?? null,
+        index_files_indexed: r.index_files_indexed ?? null,
+        index_files_eligible: r.index_files_eligible ?? null,
       }));
       const settingsGithubUrl = settingsGithubByProject[p.id] ?? null;
       const primaryRepo =
@@ -559,6 +569,10 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
               last_index_attempt_at: null,
               last_index_error: null,
               github_app_connected: true,
+              index_swept_at: null,
+              index_coverage_state: null,
+              index_files_indexed: null,
+              index_files_eligible: null,
             }
           : null);
 
@@ -1218,8 +1232,41 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
       );
     }
 
+    // A published diagram page lives in S3, outside the cascade: remove it
+    // while the publication row still names it. If that fails, stop: deleting
+    // the project would drop the only record of a page that stays public.
+    const pageRemoval = await removeProjectPublicPage(
+      db,
+      projectId,
+      readPublicPageStoreConfig((name) => Deno.env.get(name)),
+      (err) => log.error('project delete: public diagram page removal failed', { project_id: projectId, error: String(err) }),
+    );
+    if (pageRemoval === 'failed') {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'PUBLIC_PAGE_REMOVAL_FAILED',
+            message: "Could not remove this project's public diagram page. Try again in a minute, or unpublish it first.",
+          },
+        },
+        503,
+      );
+    }
+
     const { error: deleteErr } = await db.from('projects').delete().eq('id', projectId);
     if (deleteErr) return dbError(c, deleteErr);
+
+    // The cascade dropped the publication row; drop its URL from the /r/
+    // sitemap too. Best-effort: a failure leaves one dead URL until the next
+    // publish or unpublish rewrites the file.
+    if (pageRemoval === 'deleted') {
+      await regeneratePublicSitemap(
+        db,
+        readPublicPageStoreConfig((name) => Deno.env.get(name)),
+        (err) => log.warn('project delete: /r/ sitemap regeneration failed', { project_id: projectId, error: String(err) }),
+      );
+    }
 
     // Sentry breadcrumb-style log. Real monitoring hook: filter by
     // `category:project.deleted` to spot accidental mass-deletions.

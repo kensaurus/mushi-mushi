@@ -64,8 +64,8 @@ const STAGE_LABEL: Record<StageKey, string> = {
 }
 
 interface FunnelWeek extends Record<StageKey, number> {
-  /** ISO week start (YYYY-MM-DD). */
-  week: string
+  /** ISO week start (YYYY-MM-DD), as company_funnel_weekly returns it. */
+  week_start: string
 }
 
 interface FunnelSource {
@@ -185,7 +185,7 @@ export function GrowthPage() {
                 <StatCard
                   label="Signups"
                   value={fmt(latest.signups)}
-                  detail={`week of ${shortWeek(latest.week)}`}
+                  detail={`week of ${shortWeek(latest.week_start)}`}
                   trend={weeks.map((w) => w.signups ?? 0)}
                 />
                 <StatCard
@@ -274,7 +274,7 @@ export function GrowthPage() {
           <Section title={`Activated projects — last ${weeks.length} weeks`}>
             <LineSparkline
               values={weeks.map((w) => w.activated ?? 0)}
-              xLabels={weeks.map((w) => shortWeek(w.week))}
+              xLabels={weeks.map((w) => shortWeek(w.week_start))}
               height={64}
               showAxes
               scaleToData
@@ -302,8 +302,8 @@ export function GrowthPage() {
                 </thead>
                 <tbody>
                   {[...weeks].reverse().map((w) => (
-                    <tr key={w.week} className="border-t border-edge-subtle align-top">
-                      <td className="py-2 pr-3 font-mono text-fg-muted whitespace-nowrap">{shortWeek(w.week)}</td>
+                    <tr key={w.week_start} className="border-t border-edge-subtle align-top">
+                      <td className="py-2 pr-3 font-mono text-fg-muted whitespace-nowrap">{shortWeek(w.week_start)}</td>
                       {STAGES.map((stage, i) => {
                         const value = w[stage] ?? 0
                         const prev = i > 0 ? (w[STAGES[i - 1]] ?? 0) : null

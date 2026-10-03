@@ -1,7 +1,8 @@
 /**
  * FILE: agent-status-poll.test.ts
  * PURPOSE: The cloud-agent poller: candidate selection window (2 min … 24 h,
- *          open, no PR, 20 per tick), working / completed / failed
+ *          open, 20 per tick, including attempts holding a PR the agent
+ *          opened while still working), working / completed / failed
  *          transitions through the REAL applyCloudAgentOutcome, branch
  *          learning while still working, the 24 h give-up, and vendor
  *          errors leaving the row for the next tick.
@@ -13,6 +14,8 @@ import { createFakeDb, findQueries, hasFilter, type FakeQuery } from './__stubs_
 const mocks = vi.hoisted(() => ({
   notifyTeamFixEvent: vi.fn(async () => undefined),
   dispatchPluginEventDetached: vi.fn(async () => undefined),
+  resolveProjectGithubToken: vi.fn(async (): Promise<string | null> => null),
+  fetchPullRequestFiles: vi.fn(async (): Promise<unknown> => null),
 }))
 
 vi.mock('../../supabase/functions/_shared/logger.ts', () => {
@@ -23,7 +26,13 @@ vi.mock('../../supabase/functions/_shared/db.ts', () => ({ getServiceClient: () 
 vi.mock('../../supabase/functions/_shared/sentry.ts', () => ({ withSentry: (_n: string, h: unknown) => h }))
 vi.mock('../../supabase/functions/_shared/auth.ts', () => ({ requireServiceRoleAuth: () => null }))
 vi.mock('../../supabase/functions/_shared/byok.ts', () => ({ resolveLlmKey: async () => null }))
-vi.mock('../../supabase/functions/_shared/github.ts', () => ({ parseGithubRepoUrl: () => null }))
+vi.mock('../../supabase/functions/_shared/github.ts', () => ({
+  parseGithubRepoUrl: () => null,
+  // Default no token: the PR content check reports "not checked" and the PR
+  // is trusted. Tests that judge a PR give it a token and files.
+  resolveProjectGithubToken: (...args: unknown[]) => mocks.resolveProjectGithubToken(...(args as [])),
+  fetchPullRequestFiles: (...args: unknown[]) => mocks.fetchPullRequestFiles(...(args as [])),
+}))
 vi.mock('../../supabase/functions/_shared/github-pr.ts', () => ({
   generateCursorCloudBranchName: (id: string) => `bugfix/MUSHI-${id}-cursor-cloud`,
   validateFixBranchName: () => undefined,
@@ -77,17 +86,24 @@ function fakeAdapter(poll: () => Promise<CloudPollResult>): CloudAgentAdapter {
 beforeEach(() => {
   mocks.notifyTeamFixEvent.mockClear()
   mocks.dispatchPluginEventDetached.mockClear()
+  mocks.resolveProjectGithubToken.mockReset()
+  mocks.resolveProjectGithubToken.mockResolvedValue(null)
+  mocks.fetchPullRequestFiles.mockReset()
+  mocks.fetchPullRequestFiles.mockResolvedValue(null)
 })
 
 describe('runAgentStatusPoll — selection', () => {
-  it('scans open cloud attempts without a PR inside the 2 min … 24 h window, oldest first, 20 per tick', async () => {
+  it('scans open cloud attempts inside the 2 min … 24 h window, oldest first, 20 per tick, PR or not', async () => {
     const { db, queries } = pollDb([])
     await runAgentStatusPoll(db, { now: NOW, adapterFor: () => fakeAdapter(async () => ({ status: 'working' })) })
     const scans = findQueries(queries, 'fix_attempts', 'select')
     expect(scans).toHaveLength(2)
     const open = scans.find((q) => hasFilter(q, 'gte', 'started_at'))!
     expect(open.filters).toContainEqual({ method: 'in', args: ['agent', ['cursor_cloud', 'github_cloud_agent']] })
-    expect(open.filters).toContainEqual({ method: 'is', args: ['pr_url', null] })
+    // An open attempt with a pr_url is one whose PR arrived while the agent
+    // worked; it must still be polled so its PR gets judged when it finishes.
+    expect(hasFilter(open, 'is', 'pr_url')).toBe(false)
+    expect(hasFilter(scans.find((q) => !hasFilter(q, 'gte', 'started_at'))!, 'is', 'pr_url')).toBe(false)
     expect(open.filters).toContainEqual({ method: 'lt', args: ['started_at', new Date(NOW.getTime() - POLL_MIN_AGE_MS).toISOString()] })
     expect(open.filters).toContainEqual({ method: 'gte', args: ['started_at', new Date(NOW.getTime() - POLL_MAX_AGE_MS).toISOString()] })
     expect(open.filters).toContainEqual({ method: 'limit', args: [POLL_BATCH] })
@@ -141,6 +157,35 @@ describe('runAgentStatusPoll — transitions', () => {
     const summary = await runAgentStatusPoll(db, { now: NOW, adapterFor: () => fakeAdapter(async () => ({ status: 'completed' })) })
     expect(summary).toMatchObject({ completedNoPr: 1 })
     expect(findQueries(queries, 'fix_dispatch_jobs', 'update')[0].payload).toMatchObject({ status: 'completed_no_pr' })
+  })
+
+  it('a pending PR (attached while the agent worked) is judged when the agent finishes: no files means needs investigation', async () => {
+    mocks.resolveProjectGithubToken.mockResolvedValue('ghs_x')
+    mocks.fetchPullRequestFiles.mockResolvedValue({ files: [], complete: true })
+    const { db, queries } = pollDb([attempt({ agent: 'github_cloud_agent', pr_url: 'https://github.com/o/r/pull/7' })])
+    const summary = await runAgentStatusPoll(db, { now: NOW, adapterFor: () => fakeAdapter(async () => ({ status: 'completed' })) })
+    expect(summary).toMatchObject({ scanned: 1, needsInvestigation: 1, completedNoPr: 0, prOpened: 0 })
+    expect(mocks.fetchPullRequestFiles).toHaveBeenCalledWith('ghs_x', { owner: 'o', repo: 'r' }, 7)
+    const verdict = findQueries(queries, 'fix_attempts', 'update').find((q) => (q.payload as { status?: string }).status === 'failed')!
+    expect(String((verdict.payload as { error: string }).error)).toMatch(/^needs_investigation: /)
+    expect(findQueries(queries, 'reports', 'update')[0].payload).not.toHaveProperty('status')
+    expect(mocks.notifyTeamFixEvent.mock.calls.map((c) => c[3])).toEqual(['fix_failed'])
+  })
+
+  it('a pending PR that now carries code moves the report to fixing once the agent finishes', async () => {
+    mocks.resolveProjectGithubToken.mockResolvedValue('ghs_x')
+    mocks.fetchPullRequestFiles.mockResolvedValue({
+      files: [{ filename: 'src/a.ts', status: 'modified', additions: 1, deletions: 1, patch: '-a\n+b' }],
+      complete: true,
+    })
+    const { db, queries } = pollDb([attempt({ agent: 'github_cloud_agent', pr_url: 'https://github.com/o/r/pull/7' })])
+    const summary = await runAgentStatusPoll(db, {
+      now: NOW,
+      adapterFor: () => fakeAdapter(async () => ({ status: 'completed', prUrl: 'https://github.com/o/r/pull/7' })),
+    })
+    expect(summary).toMatchObject({ prOpened: 1, needsInvestigation: 0 })
+    expect(findQueries(queries, 'reports', 'update')[0].payload).toMatchObject({ status: 'fixing' })
+    expect(mocks.notifyTeamFixEvent.mock.calls.map((c) => c[3])).toEqual(['fix_pr_opened'])
   })
 
   it('vendor error leaves the row for the next tick (errors counted, nothing written)', async () => {

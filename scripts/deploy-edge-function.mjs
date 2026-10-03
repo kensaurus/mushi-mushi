@@ -29,9 +29,147 @@
 
 import { readFileSync, statSync } from 'node:fs'
 import { readdir } from 'node:fs/promises'
-import { join, relative, sep } from 'node:path'
+import { dirname, join, relative, resolve, sep } from 'node:path'
 import { execFileSync } from 'node:child_process'
 import process from 'node:process'
+import { createRequire } from 'node:module'
+import { pathToFileURL } from 'node:url'
+
+// The deploy endpoint rejects a request over about 5 MB ("request entity too
+// large"). Past this many bytes the upload is compacted: comments dropped by
+// TypeScript's own parser and printer (never by regex, which cannot tell a
+// comment from a `//` inside a string or template), JSON minified. Smaller
+// functions upload byte-for-byte, so their stack traces keep source lines.
+export const UPLOAD_COMPACT_BYTES = 4_800_000
+
+function loadTypescript() {
+  const roots = [process.env.MUSHI_TYPESCRIPT_DIR, SERVER_PKG_ABS, new URL('../apps/admin/', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')]
+  for (const root of roots) {
+    if (!root) continue
+    try {
+      return createRequire(join(root, 'package.json'))('typescript')
+    } catch {
+      // try the next root
+    }
+  }
+  return null
+}
+
+/** One file's upload bytes with comments removed (TypeScript) or whitespace removed (JSON). */
+export function compactSource(ts, rel, buf) {
+  if (rel.endsWith('.json')) return Buffer.from(JSON.stringify(JSON.parse(buf.toString('utf8'))), 'utf8')
+  if (!/\.(ts|tsx|mts)$/.test(rel)) return buf
+  const src = buf.toString('utf8')
+  // Directives that live in comments (Deno pragmas, type-check suppressions):
+  // keep those files exactly as written.
+  if (/@deno-types|\/\/\/\s*<reference|@jsxImportSource|@ts-(ignore|expect-error|nocheck)/.test(src)) return buf
+  const kind = rel.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS
+  const sf = ts.createSourceFile(rel, src, ts.ScriptTarget.Latest, true, kind)
+  const out = stripCommentsAndIndent(ts, sf, src)
+  // Self-check: the compacted file must parse to the same tree with the same
+  // literal text. If it does not, upload the file as written.
+  const outSf = ts.createSourceFile(rel, out, ts.ScriptTarget.Latest, true, kind)
+  if (parseFingerprint(ts, outSf) !== parseFingerprint(ts, sf)) {
+    console.error(`> ${rel}: compacted form parses differently; uploading it unchanged`)
+    return buf
+  }
+  return Buffer.from(out, 'utf8')
+}
+
+/** Node kinds in order (JSDoc excluded: it exists only because of comments) plus every literal's text. */
+export function parseFingerprint(ts, sf) {
+  const literal = LITERAL_KINDS(ts)
+  const kinds = []
+  const lits = []
+  const visit = (n) => {
+    if (n.kind >= ts.SyntaxKind.FirstJSDocNode && n.kind <= ts.SyntaxKind.LastJSDocNode) return
+    kinds.push(n.kind)
+    if (literal.has(n.kind)) lits.push(n.getText(sf))
+    for (const c of n.getChildren(sf)) visit(c)
+  }
+  visit(sf)
+  return `${kinds.join(',')}\u0000${JSON.stringify(lits)}`
+}
+
+const LITERAL_KINDS = (ts) => new Set([
+  ts.SyntaxKind.StringLiteral, ts.SyntaxKind.NoSubstitutionTemplateLiteral, ts.SyntaxKind.TemplateHead,
+  ts.SyntaxKind.TemplateMiddle, ts.SyntaxKind.TemplateTail, ts.SyntaxKind.RegularExpressionLiteral, ts.SyntaxKind.JsxText,
+])
+
+/**
+ * Removes comments from the original text (positions come from the parser's
+ * trivia scan, which never looks inside a string, template or regex), then
+ * drops leading indentation and blank lines on lines that start outside a
+ * literal. Code, literals and line breaks between statements stay as written;
+ * a removed comment that spanned a line break leaves a line break, so
+ * automatic semicolon insertion reads the code the same way.
+ */
+export function stripCommentsAndIndent(ts, sf, src) {
+  const literal = LITERAL_KINDS(ts)
+  const protectedRanges = []
+  const comments = new Map()
+  const addComments = (ranges) => {
+    for (const r of ranges ?? []) {
+      const text = src.slice(r.pos, r.end)
+      if (text.startsWith('///') || /@ts-|@deno-types|eslint|biome-ignore/.test(text)) continue
+      comments.set(r.pos, r)
+    }
+  }
+  const visit = (node) => {
+    if (literal.has(node.kind)) protectedRanges.push([node.getStart(sf), node.end])
+    addComments(ts.getLeadingCommentRanges(src, node.pos))
+    addComments(ts.getTrailingCommentRanges(src, node.end))
+    for (const child of node.getChildren(sf)) visit(child)
+  }
+  visit(sf)
+  // 1. Drop comments (a multi-line one becomes a line break).
+  let text = ''
+  let cursor = 0
+  const shifts = [] // [originalPos, outputPos] so literal ranges map onto the output
+  for (const r of [...comments.values()].sort((a, b) => a.pos - b.pos)) {
+    if (r.pos < cursor) continue
+    text += src.slice(cursor, r.pos)
+    if (src.slice(r.pos, r.end).includes('\n')) text += '\n'
+    // Positions from r.end on move by (output length now − r.end).
+    shifts.push([r.end, text.length])
+    cursor = r.end
+  }
+  text += src.slice(cursor)
+  const mapPos = (p) => {
+    let delta = 0
+    for (const [orig, out] of shifts) {
+      if (orig > p) break
+      delta = out - orig
+    }
+    return p + delta
+  }
+  const inLiteral = protectedRanges.map(([s, e]) => [mapPos(s), mapPos(e)]).sort((a, b) => a[0] - b[0])
+  const insideLiteral = (pos) => {
+    let lo = 0
+    let hi = inLiteral.length - 1
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1
+      const [s, e] = inLiteral[mid]
+      if (pos <= s) hi = mid - 1
+      else if (pos >= e) lo = mid + 1
+      else return true
+    }
+    return false
+  }
+  // 2. Trim indentation and drop blank lines that start outside every literal.
+  const out = []
+  let lineStart = 0
+  for (const line of text.split('\n')) {
+    if (insideLiteral(lineStart)) out.push(line)
+    else if (line.trim() !== '') {
+      // Leading whitespace only: a line can start in code and end inside a
+      // template literal, so its trailing whitespace may be literal text.
+      out.push(line.trimStart())
+    }
+    lineStart += line.length + 1
+  }
+  return out.join('\n') + '\n'
+}
 
 const SUPABASE_API = 'https://api.supabase.com'
 const FUNCTIONS_ROOT_REL = 'supabase/functions'
@@ -73,6 +211,43 @@ async function walk(dir) {
     }
   }
   return out
+}
+
+const TEST_FILE = /(\.test\.tsx?|_test\.ts)$|[\\/]__tests__[\\/]/
+
+// Relative specifiers a module can load: static and dynamic imports,
+// re-exports, side-effect imports and `new URL('…', import.meta.url)` assets.
+const RELATIVE_SPECIFIERS = [
+  /\bfrom\s*['"](\.{1,2}\/[^'"]+)['"]/g,
+  /\bimport\s*\(\s*['"](\.{1,2}\/[^'"]+)['"]\s*\)/g,
+  /\bimport\s*['"](\.{1,2}\/[^'"]+)['"]/g,
+  /new URL\(\s*['"](\.{1,2}\/[^'"]+)['"]\s*,\s*import\.meta\.url\s*\)/g,
+]
+
+/**
+ * The files one function needs: its own directory (minus tests) plus the
+ * _shared files it reaches through relative imports. Uploading all of _shared
+ * for every function pushed `api` past the deploy endpoint's request size
+ * limit ("request entity too large", 2026-10-03). A specifier that names no
+ * file (an import written inside a comment) is skipped; a real missing
+ * import still fails the server-side bundle, so nothing ships broken.
+ */
+export function functionUploadFiles(fnFiles) {
+  const seen = new Set()
+  const visit = (abs) => {
+    if (seen.has(abs) || TEST_FILE.test(abs)) return
+    seen.add(abs)
+    if (!/\.(ts|tsx|js|mjs)$/.test(abs)) return
+    const src = readFileSync(abs, 'utf8')
+    for (const re of RELATIVE_SPECIFIERS) {
+      for (const m of src.matchAll(re)) {
+        const target = resolve(dirname(abs), m[1])
+        if (statSync(target, { throwIfNoEntry: false })?.isFile()) visit(target)
+      }
+    }
+  }
+  for (const f of fnFiles) visit(f)
+  return [...seen]
 }
 
 function toForwardSlash(p) {
@@ -174,7 +349,7 @@ async function main() {
 
   const fnFiles = await walk(fnDirAbs)
   const sharedFiles = await walk(sharedDirAbs)
-  const allFiles = [...fnFiles, ...sharedFiles]
+  const allFiles = flag('--all-shared') ? [...fnFiles, ...sharedFiles] : functionUploadFiles(fnFiles)
   if (allFiles.length === 0) {
     console.error('error: no source files discovered')
     process.exit(1)
@@ -213,10 +388,35 @@ async function main() {
     `  deployedAt: ${JSON.stringify(deployedAt)},\n` +
     `}\n`
 
-  let totalBytes = 0
-  for (const abs of allFiles) {
+  const entries = allFiles.map((abs) => {
     const rel = toForwardSlash(`${FUNCTIONS_ROOT_REL}/${relative(fnRootAbs, abs)}`)
-    const buf = rel === deployInfoRel ? Buffer.from(stampedDeployInfo, 'utf8') : readFileSync(abs)
+    return { rel, buf: rel === deployInfoRel ? Buffer.from(stampedDeployInfo, 'utf8') : readFileSync(abs) }
+  })
+  const rawBytes = entries.reduce((n, e) => n + e.buf.byteLength, 0)
+  if (rawBytes > UPLOAD_COMPACT_BYTES) {
+    const ts = loadTypescript()
+    if (!ts) {
+      console.error(`error: ${slug} is ${(rawBytes / 1024).toFixed(1)} KiB, over the ${(UPLOAD_COMPACT_BYTES / 1024).toFixed(0)} KiB upload budget, and compacting it needs the typescript package (run pnpm install, or set MUSHI_TYPESCRIPT_DIR).`)
+      process.exit(1)
+    }
+    for (const e of entries) e.buf = compactSource(ts, e.rel, e.buf)
+    console.error(`> compacted ${(rawBytes / 1024).toFixed(1)} KiB -> ${(entries.reduce((n, e) => n + e.buf.byteLength, 0) / 1024).toFixed(1)} KiB (comments dropped, JSON minified)`)
+  }
+  // --dump <dir>: write the exact upload to disk (for `deno check` on it) and stop.
+  const dumpAt = process.argv.indexOf('--dump')
+  if (dumpAt !== -1) {
+    const { mkdirSync, writeFileSync } = await import('node:fs')
+    const dir = process.argv[dumpAt + 1]
+    for (const e of entries) {
+      const out = join(dir, e.rel)
+      mkdirSync(dirname(out), { recursive: true })
+      writeFileSync(out, e.buf)
+    }
+    console.error(`> wrote ${entries.length} files to ${dir}; nothing deployed`)
+    process.exit(0)
+  }
+  let totalBytes = 0
+  for (const { rel, buf } of entries) {
     totalBytes += buf.byteLength
     form.append('file', new Blob([buf]), rel)
   }
@@ -253,7 +453,7 @@ async function main() {
   process.exit(1)
 }
 
-main().catch((err) => {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main().catch((err) => {
   console.error('unexpected:', err)
   process.exit(1)
 })

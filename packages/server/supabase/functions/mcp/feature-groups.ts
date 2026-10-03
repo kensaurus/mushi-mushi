@@ -74,6 +74,35 @@ export const TOOL_FEATURE_MAP: Record<string, FeatureGroup> = {
   get_inventory: 'inventory',
   diff_inventory: 'inventory',
   list_gate_findings: 'inventory',
+  // App Recipe + design plane (Plan 019) — default-on with the inventory tools
+  get_app_recipe: 'inventory',
+  get_design_tokens: 'inventory',
+  get_portfolio: 'inventory',
+  list_portfolio_findings: 'inventory',
+  get_radar: 'inventory',
+  get_recipe_drift: 'inventory',
+  list_connectors: 'inventory',
+  propose_recipe_change: 'inventory',
+  propose_portfolio_change: 'inventory',
+  request_connector_action: 'inventory',
+  get_store_status: 'inventory',
+  get_design_deviance: 'inventory',
+  // Run-now triggers + the by-id finding explanation
+  run_radar: 'inventory',
+  refresh_recipe: 'inventory',
+  run_design_deviance: 'inventory',
+  run_store_review: 'inventory',
+  get_release_calendar: 'inventory',
+  explain_finding: 'inventory',
+  // Console parity for the recipe, design and store panels (reads and settings)
+  get_auto_release_status: 'inventory',
+  get_design_settings: 'inventory',
+  set_design_settings: 'inventory',
+  get_recipe_sources: 'inventory',
+  get_recipe_change: 'inventory',
+  get_store_reviews: 'inventory',
+  pull_store_reviews: 'inventory',
+  set_store_review_intake: 'inventory',
 
   // setup
   diagnose_setup: 'setup',
@@ -105,6 +134,16 @@ export const TOOL_FEATURE_MAP: Record<string, FeatureGroup> = {
   get_account_overview: 'admin',
   get_project_context: 'admin',
   get_pipeline_logs: 'admin',
+  // Portfolio operator records (ADR 0017): the accounts register, the spend
+  // ledger and shared resources. Off the lean default; account-level key.
+  get_accounts_register: 'admin',
+  save_register_account: 'admin',
+  remove_register_account: 'admin',
+  set_domain_auto_renew: 'admin',
+  get_spend_ledger: 'admin',
+  import_spend_bill: 'admin',
+  remove_spend_import: 'admin',
+  import_portfolio_resources: 'admin',
 
   // usage / billing / product analytics (Mushi.track() funnels)
   get_usage: 'usage',
@@ -138,6 +177,7 @@ export const TOOL_FEATURE_MAP: Record<string, FeatureGroup> = {
   // audit
   run_fullstack_audit: 'audit',
   get_backend_health: 'audit',
+  get_code_health: 'audit',
 
   // codebase understand
   ask_codebase: 'codebase',
@@ -147,6 +187,10 @@ export const TOOL_FEATURE_MAP: Record<string, FeatureGroup> = {
   get_codebase_domains: 'codebase',
   analyze_codebase_impact: 'codebase',
   analyze_wiki_knowledge: 'codebase',
+  // The digest needs no index, so it ships on the default surface (Plan 020 §10.3.1).
+  get_repo_digest: 'fixes',
+  // The diagram reads the stored drawing, so it needs no index either.
+  get_repo_diagram: 'fixes',
 
   // docs / orientation
   search_mushi_docs: 'docs',

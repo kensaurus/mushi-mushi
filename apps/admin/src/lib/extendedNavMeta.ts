@@ -552,6 +552,10 @@ export function fullstackAuditNavBadge(
   stats: NavStatSlices['fullstackAudit'],
 ): WorkspaceNavBadge | null {
   if (!stats) return null
+  // A failed read is never "nothing to see": flag it so the page gets opened.
+  if (stats.topPriority === 'unknown') {
+    return attentionBadge(1, 'warn', 'Full-stack audit could not read its checks')
+  }
   if (stats.errorCount > 0 || stats.failedGateCount > 0) {
     const count = Math.max(stats.errorCount, stats.failedGateCount)
     return attentionBadge(

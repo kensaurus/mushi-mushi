@@ -152,6 +152,8 @@ describe('runLinearAgentDispatch', () => {
       reportId: 'rep-9',
       requestedBy: null,
       skipMembershipCheck: true,
+      // Delegating the issue to the agent is a person's request.
+      trigger: 'manual',
       metadata: {
         source: 'linear',
         requestedBy: 'linear-agent',

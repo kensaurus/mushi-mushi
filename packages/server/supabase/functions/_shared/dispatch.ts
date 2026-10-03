@@ -19,6 +19,7 @@ import { getServiceClient } from './db.ts'
 import { log } from './logger.ts'
 import { notifyTeamFixEvent } from './team-notify.ts'
 import { featureRequestDispatchBlock } from './report-category.ts'
+import type { DispatchTrigger } from './autofix-budget.ts'
 
 export interface DispatchResult {
   ok: boolean
@@ -49,6 +50,12 @@ interface DispatchInput {
   userId?: string
   /** Extra context stored in dispatch_metadata (e.g. { source: 'slack', slackUser: 'U...' }). */
   metadata?: Record<string, unknown>
+  /**
+   * 'manual' when a person asked for this fix (Slack button, voice
+   * confirmation, Linear delegation). The auto-fix caps apply only to
+   * 'automatic' dispatches — see _shared/autofix-budget.ts.
+   */
+  trigger: DispatchTrigger
 }
 
 export async function dispatchFixForReport(input: DispatchInput): Promise<DispatchResult> {
@@ -135,7 +142,7 @@ export async function dispatchFixForReport(input: DispatchInput): Promise<Dispat
       report_id: input.reportId,
       ...(input.requestedBy ? { requested_by: input.requestedBy } : {}),
       status: 'queued',
-      ...(input.metadata ? { dispatch_metadata: input.metadata } : {}),
+      dispatch_metadata: { ...(input.metadata ?? {}), trigger: input.trigger },
     })
     .select('id, status, created_at')
     .single()

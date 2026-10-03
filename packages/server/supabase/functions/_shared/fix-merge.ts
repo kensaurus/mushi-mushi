@@ -18,9 +18,12 @@ import { notifyReportStatusTransition } from './report-status-notify.ts';
 import { resolveExternalIssue } from './integrations.ts';
 import { emitProductEvent } from './product-events.ts';
 import {
+  decideFixingReport,
+  FIXING_GRACE_MS,
   PR_CLOSED_UNMERGED_LABEL,
   preFixReportStatus,
   shouldRevertReportOnPrClose,
+  type FixingAttemptView,
 } from './fix-loop-status.ts';
 import { resolveLinkedSentryIssues } from './sentry-resolve-back.ts';
 import { keepAlive } from './background.ts';
@@ -46,7 +49,7 @@ export async function mergeGithubPullRequest(
   ref: GithubRepoRef,
   pullNumber: number,
   opts?: { mergeMethod?: MergeMethod; commitTitle?: string },
-): Promise<{ merged: boolean; alreadyMerged: boolean; sha?: string; message?: string }> {
+): Promise<{ merged: boolean; alreadyMerged: boolean; sha?: string; message?: string; mergedAt?: string | null }> {
   const pr = await fetchPullRequest(token, ref, pullNumber);
   if (pr?.draft) {
     const ready = await markPullRequestReady(token, ref, pullNumber);
@@ -80,7 +83,8 @@ export async function mergeGithubPullRequest(
     const body = await res.json().catch(() => ({})) as { message?: string };
     const msg = body.message ?? `GitHub merge rejected (${res.status})`;
     if (/already been merged|not mergeable/i.test(msg)) {
-      return { merged: true, alreadyMerged: true, message: msg };
+      // When GitHub actually merged it earlier, keep that time (finalizeFixMerge).
+      return { merged: true, alreadyMerged: true, message: msg, mergedAt: pr?.mergedAt ?? null };
     }
     return { merged: false, alreadyMerged: false, message: msg };
   }
@@ -107,6 +111,19 @@ export async function mergeGithubPullRequest(
   };
 }
 
+/**
+ * When the PR merged: GitHub's `merged_at` when the caller has it and it is
+ * a real past time, else `now` (the moment Mushi noticed). Without the GitHub
+ * App, a merge is noticed by the ci-sync poll minutes later, and
+ * report-deploy-live places deploy runs before or after `fix_attempts.merged_at`,
+ * so the noticed-at time would misplace a run taken inside that lag.
+ */
+export function resolveMergedAt(githubMergedAt: string | null | undefined, now: Date): string {
+  const t = githubMergedAt ? Date.parse(githubMergedAt) : NaN;
+  if (Number.isNaN(t) || t > now.getTime()) return now.toISOString();
+  return new Date(t).toISOString();
+}
+
 /** Idempotent post-merge bookkeeping shared by console merge + GitHub webhooks. */
 export async function finalizeFixMerge(
   db: Db,
@@ -116,13 +133,16 @@ export async function finalizeFixMerge(
     prNumber?: number | null;
     repository?: string | null;
     actorUserId?: string | null;
+    /** GitHub's `merged_at` for the PR, when the caller read it. */
+    mergedAt?: string | null;
   },
 ): Promise<{ justMerged: boolean; reportStatus: string | null }> {
-  const now = new Date().toISOString();
+  const nowDate = new Date();
+  const now = nowDate.toISOString();
 
   const { data: mergedRow } = await db
     .from('fix_attempts')
-    .update({ merged_at: now, pr_state: 'merged' })
+    .update({ merged_at: resolveMergedAt(meta.mergedAt, nowDate), pr_state: 'merged' })
     .eq('id', attempt.id)
     .is('merged_at', null)
     .select('id')
@@ -131,6 +151,25 @@ export async function finalizeFixMerge(
 
   if (!justMerged && attempt.merged_at) {
     await db.from('fix_attempts').update({ pr_state: 'merged' }).eq('id', attempt.id);
+  }
+
+  // A cloud agent's PR attached while the agent was still working leaves its
+  // attempt open (agent-adapters attachPendingPr) until the agent finishes.
+  // Merged first, the attempt is done: close it, or agent-status-poll keeps
+  // polling it and its 24 h expiry reports a merged fix as failed.
+  const { error: openCloseErr } = await db
+    .from('fix_attempts')
+    .update({ status: 'completed', completed_at: now })
+    .eq('id', attempt.id)
+    .in('status', ['running', 'queued', 'dispatched', 'pending']);
+  if (openCloseErr) {
+    log.error('closing the still-open attempt of a merged PR failed', { fixAttemptId: attempt.id, err: openCloseErr.message });
+  } else {
+    await db
+      .from('fix_dispatch_jobs')
+      .update({ status: 'completed', pr_url: meta.prUrl, finished_at: now })
+      .eq('fix_attempt_id', attempt.id)
+      .in('status', ['queued', 'running']);
   }
 
   const { data: report } = await db
@@ -366,6 +405,134 @@ export async function finalizeFixClosedUnmerged(
   }).catch((e) => log.warn('Plugin dispatch failed', { event: 'report.status_changed', err: String(e) }));
 
   return { justClosed, reportStatus: nextStatus };
+}
+
+export interface FixingReconcileSummary {
+  scanned: number;
+  finalized: number;
+  reverted: number;
+  flagged: number;
+}
+
+const RECONCILE_PAGE = 50;
+const RECONCILE_MAX_PAGES = 20;
+
+/**
+ * Second phase of the ci-sync sweep: no report stays in 'fixing' once
+ * nothing behind it is alive (see decideFixingReport). Covers what the PR
+ * lifecycle sync cannot see: a merge whose bookkeeping crashed, an attempt
+ * that failed after an earlier PR was closed, a PR Mushi can never read.
+ *
+ * Pages through every past-grace 'fixing' report (up to 1,000 per tick). A
+ * report it keeps (PR open, attempt live) does not change, so a single
+ * oldest-first batch would re-read the same kept rows every tick and never
+ * reach a stuck one behind them. Rows it acts on leave the result set, so the
+ * next page starts after the rows kept so far.
+ */
+export async function reconcileStuckFixingReports(
+  db: Db,
+  now: Date = new Date(),
+): Promise<FixingReconcileSummary> {
+  const summary: FixingReconcileSummary = { scanned: 0, finalized: 0, reverted: 0, flagged: 0 };
+  const cutoff = new Date(now.getTime() - FIXING_GRACE_MS).toISOString();
+  let offset = 0;
+  for (let page = 0; page < RECONCILE_MAX_PAGES; page++) {
+    const { data: reports, error } = await db
+      .from('reports')
+      .select('id, project_id, status, updated_at, processing_error, category, severity, stage1_classification, fix_pr_url')
+      .eq('status', 'fixing')
+      .lt('updated_at', cutoff)
+      .order('updated_at', { ascending: true })
+      .order('id', { ascending: true })
+      .range(offset, offset + RECONCILE_PAGE - 1);
+    if (error) {
+      log.warn('fixing-report scan failed', { err: error.message });
+      break;
+    }
+    if (!reports?.length) break;
+    const acted = await reconcileFixingPage(db, reports, now, summary);
+    offset += reports.length - acted;
+    if (reports.length < RECONCILE_PAGE) break;
+  }
+  return summary;
+}
+
+interface FixingReportRow {
+  id: string;
+  project_id: string;
+  status: string | null;
+  updated_at: string | null;
+  processing_error: string | null;
+  category: string | null;
+  severity: string | null;
+  stage1_classification: unknown;
+  fix_pr_url: string | null;
+}
+
+/** Applies each report's verdict; returns how many rows left the 'fixing' scan. */
+async function reconcileFixingPage(
+  db: Db,
+  reports: FixingReportRow[],
+  now: Date,
+  summary: FixingReconcileSummary,
+): Promise<number> {
+  let acted = 0;
+  const { data: attemptRows } = await db
+    .from('fix_attempts')
+    .select('id, project_id, report_id, agent, branch, commit_sha, pr_url, pr_number, pr_state, merged_at, status, created_at, completed_at')
+    .in('report_id', reports.map((r) => r.id));
+  const byReport = new Map<string, Array<FixingAttemptView & FixAttemptMergeRow>>();
+  for (const a of (attemptRows ?? []) as Array<FixingAttemptView & FixAttemptMergeRow>) {
+    const list = byReport.get(a.report_id) ?? [];
+    list.push(a);
+    byReport.set(a.report_id, list);
+  }
+
+  for (const report of reports) {
+    summary.scanned++;
+    const attempts = (byReport.get(report.id) ?? []).filter((a) => a.project_id === report.project_id);
+    const verdict = decideFixingReport({ report, attempts, now });
+
+    if (verdict.action === 'finalize_merged') {
+      const attempt = attempts.find((a) => a.id === verdict.attemptId);
+      if (!attempt?.pr_url) continue;
+      await finalizeFixMerge(db, attempt, { prUrl: attempt.pr_url, prNumber: attempt.pr_number });
+      summary.finalized++;
+      acted++;
+    } else if (verdict.action === 'flag_unreadable') {
+      // The updated_at trigger moves the row past the scan cutoff.
+      await db
+        .from('reports')
+        .update({ processing_error: verdict.processingError })
+        .eq('id', report.id)
+        .eq('status', 'fixing');
+      summary.flagged++;
+      acted++;
+    } else if (verdict.action === 'revert') {
+      const nextStatus = preFixReportStatus(report);
+      const { data: reverted } = await db
+        .from('reports')
+        .update({
+          status: nextStatus,
+          processing_error: verdict.processingError,
+          ...(report.fix_pr_url ? { fix_pr_url: null, fix_branch: null } : {}),
+        })
+        .eq('id', report.id)
+        .eq('project_id', report.project_id)
+        .eq('status', 'fixing')
+        .select('id')
+        .maybeSingle();
+      if (!reverted) continue;
+      summary.reverted++;
+      acted++;
+      dispatchPluginEventDetached(db, report.project_id, 'report.status_changed', {
+        report: { id: report.id, status: nextStatus },
+        previousStatus: 'fixing',
+        actor: { kind: 'system' },
+      }).catch((e) => log.warn('Plugin dispatch failed', { event: 'report.status_changed', err: String(e) }));
+    }
+  }
+  return acted;
 }
 
 export function parsePrRepoRef(prUrl: string | null | undefined): GithubRepoRef | null {

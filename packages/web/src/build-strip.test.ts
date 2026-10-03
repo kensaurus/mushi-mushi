@@ -10,7 +10,8 @@ import { createRequire } from 'node:module';
 import { TextDecoder as NodeTextDecoder, TextEncoder as NodeTextEncoder } from 'node:util';
 import { describe, it, expect, vi } from 'vitest';
 import { getWidgetStyles } from './styles';
-import { renderStep } from './widget-render';
+import { renderKit, renderView, type RenderKit, type ViewRegions } from './widget-render';
+import type * as Views from './widget-views';
 import { MushiWidget, type WidgetCallbacks } from './widget';
 
 const require = createRequire(import.meta.url);
@@ -47,6 +48,7 @@ async function bundleWithPlugin<T>(entry: string): Promise<T> {
 }
 
 const ws = (html: string) => html.replace(/\s+/g, ' ').replace(/> </g, '><').trim();
+const wsAll = (v: ViewRegions) => Object.values(v).map(ws).join('|');
 
 describe('build-time template whitespace strip', () => {
   it('ships the same stylesheet minus comments and insignificant whitespace', async () => {
@@ -76,14 +78,19 @@ describe('build-time template whitespace strip', () => {
     Object.defineProperty(window, 'matchMedia', {
       writable: true, configurable: true, value: vi.fn().mockReturnValue({ matches: false }),
     });
-    const built = await bundleWithPlugin<{ renderStep: typeof renderStep }>('./widget-render.ts');
+    const built = await bundleWithPlugin<{ renderView: typeof renderView; renderKit: RenderKit }>('./widget-render.ts');
+    // The on-demand views chunk ships through the same plugin: compare it too.
+    const builtViews = await bundleWithPlugin<typeof Views>('./widget-views.ts');
+    builtViews.initViews(built.renderKit);
+    const sourceViews = await import('./widget-views');
+    sourceViews.initViews(renderKit);
     const cb: WidgetCallbacks = {
       onSubmit: () => {}, onOpen: () => {}, onClose: () => {}, onScreenshotRequest: () => {},
       onReporterReportsRequest: () => Promise.resolve([]),
     };
     const w = new MushiWidget({ betaMode: { enabled: true, appName: 'Demo' } }, cb);
     w.mount();
-    const ctxOf = () => (w as unknown as { renderCtx(): Parameters<typeof renderStep>[0] }).renderCtx();
+    const ctxOf = () => (w as unknown as { renderCtx(): Parameters<typeof renderView>[0] }).renderCtx();
     const steps: Array<() => void> = [
       () => w.open(),
       () => { w.close(); w.open({ category: 'bug' }); },
@@ -92,11 +99,17 @@ describe('build-time template whitespace strip', () => {
     for (const go of steps) {
       go();
       const ctx = { ...ctxOf(), submittedAt: new Date(0) };
-      expect(ws(built.renderStep(ctx))).toBe(ws(renderStep(ctx)));
-      for (const step of ['success', 'report-detail', 'reports', 'account'] as const) {
-        expect(ws(built.renderStep({ ...ctx, step }))).toBe(ws(renderStep({ ...ctx, step })));
+      const src = { ...ctx, views: sourceViews };
+      const out = { ...ctx, views: builtViews };
+      expect(wsAll(built.renderView(out))).toBe(wsAll(renderView(src)));
+      for (const step of ['success', 'report-detail', 'reports', 'account', 'assistant', 'roadmap', 'leaderboard', 'cross-app-reports'] as const) {
+        const shipped = wsAll(built.renderView({ ...out, step }));
+        expect(shipped).toBe(wsAll(renderView({ ...src, step })));
+        // The real view rendered, not the loading state.
+        expect(shipped).not.toContain('Loading reports');
       }
     }
     w.destroy();
-  });
+    // Bundling with esbuild under a loaded full run takes several seconds.
+  }, 30_000);
 });

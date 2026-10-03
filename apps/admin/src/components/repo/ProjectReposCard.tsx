@@ -10,10 +10,11 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { apiFetch } from '../../lib/supabase'
-import { Badge, Btn, Card, CodeValue, ErrorAlert, RelativeTime, Tooltip } from '../ui'
+import { Badge, Btn, Card, CodeValue, ErrorAlert, Tooltip } from '../ui'
 import { ContainedBlock, SignalChip, ActionPill, ActionPillRow } from '../report-detail/ReportSurface'
 import { IconGit, IconPencil, IconTrash } from '../icons'
 import { CHIP_TONE } from '../../lib/chipTone'
+import { RepoIndexStatus } from './RepoIndexStatus'
 
 interface ProjectRepo {
   id: string
@@ -22,6 +23,11 @@ interface ProjectRepo {
   github_app_installation_id: string | null
   indexing_enabled: boolean | null
   last_indexed_at: string | null
+  /** Last sweep, complete or partial (older servers omit it). */
+  index_swept_at?: string | null
+  index_coverage_state?: string | null
+  index_files_indexed?: number | null
+  index_files_eligible?: number | null
   role: string
   path_globs: string[] | null
   is_primary: boolean
@@ -224,11 +230,7 @@ export function ProjectReposCard({ projectId }: Props) {
             {repo.path_globs && repo.path_globs.length > 0 && (
               <p className="text-2xs text-fg-faint font-mono">globs: {repo.path_globs.join(', ')}</p>
             )}
-            {repo.last_indexed_at && (
-              <p className="text-2xs text-fg-faint">
-                Indexed <RelativeTime value={repo.last_indexed_at} />
-              </p>
-            )}
+            <RepoIndexStatus repo={repo} variant="line" />
 
             {editingId === repo.id && (
               <RepoForm
@@ -260,7 +262,8 @@ export function ProjectReposCard({ projectId }: Props) {
         <p className="text-2xs text-fg-faint leading-relaxed">
           <strong>Multi-repo tip:</strong> add a backend repo to fan out fix PRs across all
           codebases in one dispatch. Set <code>path_globs</code> (e.g.{' '}
-          <code>src/**,api/**</code>) so the fix worker targets the right files.
+          <code>src/**,api/**</code>) so the fix worker targets the right files. The same globs
+          also limit which files the codebase index holds.
         </p>
       )}
     </Card>
@@ -337,7 +340,7 @@ function RepoForm({
           placeholder="src/**, api/**"
           className="w-full rounded-sm border border-edge bg-surface-raised text-xs px-2 py-1"
         />
-        <p className="text-3xs text-fg-faint mt-0.5">Leave blank to match all files.</p>
+        <p className="text-3xs text-fg-faint mt-0.5">Leave blank to match all files. Also limits which files are indexed.</p>
       </div>
       <label className="flex items-center gap-2 cursor-pointer">
         <input

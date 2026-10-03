@@ -60,6 +60,7 @@ export type FieldValidatorName =
   | 'email'
   | 'sentryDsn'
   | 'slug'
+  | 'sentrySlugList'
   | 'token'
   | 'tokenLong'
   | 'jiraProjectKey'
@@ -80,6 +81,9 @@ export interface PlatformFieldDef {
   /** Named validator from `lib/validators.ts`. Card resolves this to a
    *  real validator function. Empty / undefined = no validation. */
   validator?: FieldValidatorName
+  /** Comma-separated in the form, a string array on the wire
+   *  (see lib/platformIntegrationForm.ts). */
+  list?: boolean
 }
 
 export interface PlatformDef {
@@ -248,6 +252,7 @@ export const PLATFORM_DEFS: PlatformDef[] = [
     fields: [
       { name: 'sentry_org_slug', label: 'Org slug', placeholder: 'my-company', help: 'The segment after sentry.io/organizations/ in your Sentry URL.', required: true, helpId: 'integrations.sentry.org_slug', validator: 'slug' },
       { name: 'sentry_project_slug', label: 'Project slug', placeholder: 'web-app', help: 'Optional — narrows event search to one project (faster enrichment).', helpId: 'integrations.sentry.project_slug', validator: 'slug' },
+      { name: 'sentry_extra_project_slugs', label: 'More Sentry projects', placeholder: 'api, worker', help: 'Optional — other Sentry projects this app reports to (say a backend), comma-separated, up to 10. Import can pull from any of them.', validator: 'sentrySlugList', list: true },
       { name: 'sentry_auth_token_ref', label: 'Auth token', placeholder: 'sntrys_… or sntryu_…', type: 'password', help: 'Auth token with project:read + event:read (import, enrichment) and event:write (resolve on merge). Create at sentry.io/settings/account/api/auth-tokens/.', required: true, helpId: 'integrations.sentry.auth_token', validator: 'token' },
       { name: 'sentry_dsn', label: 'DSN (optional)', placeholder: 'https://abc@o0.ingest.sentry.io/0', help: 'DSN for the SDK to send events. Only needed if you want Mushi reports forwarded as Sentry events.', helpId: 'settings.general.sentry_dsn', validator: 'sentryDsn' },
       { name: 'sentry_webhook_secret', label: 'Webhook secret', placeholder: 'shared-secret', type: 'password', help: 'The Client Secret of the Sentry internal integration whose webhook URL is the receive URL on this card. Sentry signs every delivery with it.', helpId: 'settings.general.sentry_webhook_secret', validator: 'token' },

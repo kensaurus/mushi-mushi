@@ -111,7 +111,9 @@ async function resolveOpenAi(projectId?: string): Promise<ResolvedOpenAi | null>
   if (projectId) {
     try {
       const db = getServiceClient()
-      const r = await resolveLlmKey(db, projectId, 'openai')
+      // Embeddings are not counted in llm_invocations, so the LLM budget
+      // neither counts nor blocks them (_shared/llm-budget.ts).
+      const r = await resolveLlmKey(db, projectId, 'openai', { purpose: 'embedding' })
       if (r) {
         return {
           key: r.key,

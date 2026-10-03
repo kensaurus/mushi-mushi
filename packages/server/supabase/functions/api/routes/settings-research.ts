@@ -1,4 +1,5 @@
 import type { Hono } from 'npm:hono@4';
+import { isSpendLimitField, SPEND_LIMIT_FIELDS, validateSpendLimit } from '../../_shared/autofix-budget.ts';
 import type { Variables } from '../types.ts';
 
 import { getServiceClient } from '../../_shared/db.ts';
@@ -15,7 +16,13 @@ import {
   requireProjectAdmin,
   callerCanAccessProject,
 } from '../shared.ts';
-import { isVaultRef } from '../../_shared/vault-ref.ts';
+import {
+  isSecretSettingsColumn,
+  maskSettingsRow,
+  planSecretSettingWrite,
+  SECRET_MASK,
+  storeSettingsSecret,
+} from '../../_shared/settings-secrets.ts';
 import {
   canManageProjectSdkConfig,
   coerceSdkConfigUpdate,
@@ -207,13 +214,19 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     if ('response' in resolvedProject) return resolvedProject.response;
     const project = resolvedProject.project;
 
-    const { data } = await db
+    const { data, error } = await db
       .from('project_settings')
       .select('*')
       .eq('project_id', project.id)
-      .single();
+      .maybeSingle();
+    // A failed read is a 500, never `{}`: the console reads `{}` as "nothing
+    // set" (Apply suggested caps would then overwrite caps that exist).
+    if (error) return dbError(c, error);
 
-    return c.json({ ok: true, data: data ?? {} });
+    // mcp:read keys and the MCP project://settings resource read this route:
+    // secrets come back as SECRET_MASK plus `<column>_set`, never the value
+    // or its Vault ref.
+    return c.json({ ok: true, data: data ? maskSettingsRow(data as Record<string, unknown>) : {} });
   });
 
   app.get('/v1/admin/settings/stats', jwtAuth, async (c) => {
@@ -418,13 +431,34 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       'voice_languages',
       'telegram_bot_token_ref',
       'github_user_token_ref',
+      // Spend limits (Settings → General → Spend limits). Validated below.
+      ...SPEND_LIMIT_FIELDS,
+      // Opt-in auto-release (migration 20261003130000): publishing messages
+      // reporters, so project admins only. Validated below.
+      'auto_release_enabled',
     ];
     // Secrets submitted raw are written to Supabase Vault and persisted as
-    // `vault://<name>` — same auto-vault contract as
-    // PUT /v1/admin/integrations/platform/:kind (integrations.ts). Masked
-    // values from a GET round-trip ("…abcd") are ignored so a partial form
-    // submit can never replace a real token with its mask.
-    const VAULTED_VOICE_FIELDS = new Set(['telegram_bot_token_ref', 'github_user_token_ref']);
+    // `vault://<name>` — same auto-vault contract (and the same Vault names)
+    // as PUT /v1/admin/integrations/platform/:kind (integrations.ts). Masked
+    // values ("…abcd") and the stored ref echoed back by a full-row form save
+    // are ignored, so a form round-trip never replaces a real secret.
+    const VAULTED_FIELD_KIND: Record<string, string> = {
+      telegram_bot_token_ref: 'voice',
+      github_user_token_ref: 'voice',
+      sentry_webhook_secret: 'sentry',
+    };
+    const vaultedInBody =
+      body && typeof body === 'object' ? Object.keys(VAULTED_FIELD_KIND).filter((k) => k in body) : [];
+    let storedSecrets: Record<string, string | null> = {};
+    if (vaultedInBody.length > 0) {
+      const { data: storedRow, error: storedErr } = await db
+        .from('project_settings')
+        .select(vaultedInBody.join(', '))
+        .eq('project_id', project.id)
+        .maybeSingle();
+      if (storedErr) return dbError(c, storedErr);
+      storedSecrets = (storedRow ?? {}) as unknown as Record<string, string | null>;
+    }
     const VOICE_LANGUAGE_RE = /^[a-z]{2,3}(-[A-Za-z]{2,4})?$/;
     // Free-text banner fields are served verbatim on the UNAUTHENTICATED
     // public SDK config endpoint — enforce the same caps as
@@ -441,10 +475,36 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     const updates: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(body)) {
       if (!allowed.includes(key)) continue;
+      // The GET above returns SECRET_MASK for set secrets; a form that sends
+      // the whole row back has not changed them.
+      if (value === SECRET_MASK && isSecretSettingsColumn(key)) continue;
       if (key === 'widget_brand_footer') {
         if (value !== null && typeof value !== 'boolean') {
           return c.json(
             { error: { code: 'VALIDATION_ERROR', message: 'widget_brand_footer must be a boolean or null' } },
+            400,
+          );
+        }
+        updates[key] = value;
+        continue;
+      }
+      if (isSpendLimitField(key)) {
+        // Limits bound what the project spends: project admins only.
+        const forbidden = requireProjectAdmin(c, project);
+        if (forbidden) return forbidden;
+        const verdict = validateSpendLimit(key, value);
+        if (!verdict.ok) {
+          return c.json({ error: { code: 'VALIDATION_ERROR', message: verdict.message } }, 400);
+        }
+        updates[key] = verdict.value;
+        continue;
+      }
+      if (key === 'auto_release_enabled') {
+        const forbidden = requireProjectAdmin(c, project);
+        if (forbidden) return forbidden;
+        if (typeof value !== 'boolean') {
+          return c.json(
+            { error: { code: 'VALIDATION_ERROR', message: 'auto_release_enabled must be a boolean' } },
             400,
           );
         }
@@ -489,39 +549,38 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         updates[key] = tags;
         continue;
       }
-      if (VAULTED_VOICE_FIELDS.has(key)) {
-        if (value === null || value === '') {
+      const vaultKind = VAULTED_FIELD_KIND[key];
+      if (vaultKind) {
+        const plan = planSecretSettingWrite(value, storedSecrets[key]);
+        if (plan.action === 'skip') continue;
+        if (plan.action === 'clear') {
           updates[key] = null;
           continue;
         }
-        if (typeof value !== 'string') continue;
-        const raw = value.trim();
-        if (!raw || (raw.startsWith('…') && raw.length <= 6)) continue;
         // References are minted here, never accepted from the client: a
         // stored `vault://<name>` is resolved by name with the service role.
-        if (isVaultRef(raw)) {
+        if (plan.action === 'reject') {
           return c.json(
-            { error: { code: 'VAULT_REF_NOT_ALLOWED', message: `${key}: paste the token itself. Mushi stores it in Vault.` } },
+            { error: { code: 'VAULT_REF_NOT_ALLOWED', message: `${key}: paste the secret itself. Mushi stores it in Vault.` } },
             400,
           );
         }
         const forbidden = requireProjectAdmin(c, project);
         if (forbidden) return forbidden;
-        const secretName = `mushi/integration/${project.id}/voice/${key}`;
-        const { error: vaultErr } = await db.rpc('vault_store_secret', {
-          secret_name: secretName,
-          secret_value: raw,
-        });
-        if (vaultErr) {
-          // Never persist a raw bot/user token in project_settings: fail the
-          // write instead (unlike webhook secrets, these tokens can act as the user).
-          log.error('vault_store_secret failed for voice secret', { scope: 'settings', field: key, err: vaultErr.message });
+        try {
+          updates[key] = await storeSettingsSecret(db, project.id as string, vaultKind, key, plan.value);
+        } catch (err) {
+          // Never persist a raw secret in project_settings: fail the write.
+          log.error('vault_store_secret failed for settings secret', {
+            scope: 'settings',
+            field: key,
+            err: err instanceof Error ? err.message : String(err),
+          });
           return c.json(
             { error: { code: 'DB_ERROR', message: `Could not store ${key} in Vault. Retry in a moment.` } },
             500,
           );
         }
-        updates[key] = `vault://${secretName}`;
         continue;
       }
       const cap = textCaps[key];

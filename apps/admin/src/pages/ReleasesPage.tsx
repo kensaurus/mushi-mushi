@@ -33,6 +33,7 @@ import {
 import { ReleasesStatusBanner } from '../components/releases/ReleasesStatusBanner'
 import { ReleasesSnapshotStrip } from '../components/releases/ReleasesSnapshotStrip'
 import { ReleasesProvenanceReadout } from '../components/releases/ReleasesProvenanceReadout'
+import { AutoReleaseCard } from '../components/releases/AutoReleaseCard'
 import {
   InlineProof,
   SignalChip,
@@ -219,16 +220,20 @@ function ReleaseDrawer({ release, onClose, onPublished }: { release: Release; on
         ok: boolean
         data?: Release
         notified?: number
-        delivery?: { reporters_notified?: number; reporters_held?: number; reporters_failed?: number }
+        delivery?: { reporters_notified?: number; reporters_held?: number; reporters_failed?: number; reports_already_released?: number }
         error?: string
       }
       if (!res.ok) throw new Error(res.error ?? 'Publish failed')
       const told = res.delivery?.reporters_notified ?? 0
       const held = res.delivery?.reporters_held ?? 0
       const failed = res.delivery?.reporters_failed ?? 0
+      const alreadyShipped = res.delivery?.reports_already_released ?? 0
       const ticketMsg = ticketCount > 0 ? ` · ${ticketCount} feedback ticket${ticketCount === 1 ? '' : 's'} marked shipped` : ''
       const heldMsg = held > 0 ? ` · ${held} waiting in the Outbox` : ''
-      toast.success(`Published! ${told} reporter${told === 1 ? '' : 's'} told it shipped${heldMsg}${ticketMsg}.`)
+      const shippedMsg = alreadyShipped > 0
+        ? ` · ${alreadyShipped} fix${alreadyShipped === 1 ? '' : 'es'} already shipped in an earlier release (not messaged again)`
+        : ''
+      toast.success(`Published! ${told} reporter${told === 1 ? '' : 's'} told it shipped${heldMsg}${shippedMsg}${ticketMsg}.`)
       if (failed > 0) toast.error(`${failed} reporter message${failed === 1 ? '' : 's'} could not be delivered — see Notifications.`)
       onPublished()
       onClose()
@@ -402,7 +407,7 @@ function ReleasesList({
                 <td className="px-3 py-2.5">{statusBadge(r.status)}</td>
                 <td className="hidden px-3 py-2.5 sm:table-cell">
                   <SignalChip tone={r.fixed_report_ids.length > 0 ? 'brand' : 'neutral'}>
-                    {r.fixed_report_ids.length} fixes
+                    {r.fixed_report_ids.length} fix{r.fixed_report_ids.length === 1 ? '' : 'es'}
                   </SignalChip>
                 </td>
                 <td className="hidden px-3 py-2.5 md:table-cell">
@@ -698,6 +703,7 @@ export function ReleasesPage() {
           )}
           </>
           )}
+          {activeProjectId ? <AutoReleaseCard projectId={activeProjectId} /> : null}
         </>
       )}
 

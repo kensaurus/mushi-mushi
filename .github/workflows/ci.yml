@@ -387,6 +387,12 @@ jobs:
       - name: Check MCP catalog count
         run: pnpm check:catalog-count
 
+      - name: Check console / MCP / CLI surface parity
+        # Every API route the admin console calls needs an MCP tool, a `mushi`
+        # command, or an explicit reason in scripts/surface-parity.json.
+        # `node scripts/check-surface-parity.mjs --suggest` prints entries.
+        run: pnpm check:surface-parity
+
       - name: Check MCP registry manifest
         # packages/mcp/server.json must match packages/mcp/package.json's version
         # AND satisfy the registry schema. `description` has maxLength 100 and is

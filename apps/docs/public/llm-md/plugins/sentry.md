@@ -41,6 +41,25 @@ the Sentry card, the `import_sentry_issues` MCP tool, or
 `{ "issueIds": ["WEB-12"] }` (ids or short ids, at most 10) or
 `{ "query": "is:unresolved", "limit": 5 }`.
 
+For a whole backlog, add `"sinceDays": 30` and `"limit": 10`, then send the
+`nextCursor` from each answer back as `"cursor"` until it comes back `null`.
+Running it again is safe: issues already imported answer `linked`. If one app
+reports to two Sentry projects (say a frontend and a backend), list the second
+in `sentry_extra_project_slugs` and pick it with `"sentryProject"`.
+
+In the console, all of this is on the Sentry card:
+
+- **More Sentry projects** (edit the card) takes up to 10 extra project slugs,
+  comma-separated. It saves `sentry_extra_project_slugs`; clearing the field
+  removes them. Over the API, send a string array to
+  `PUT /v1/admin/integrations/platform/sentry`
+  (`{ "sentry_extra_project_slugs": ["sbc-be"] }`; `[]` or `null` clears it).
+- **Import existing Sentry issues** has a Sentry project picker (shown when
+  more than one project is configured) and a **Seen in** choice (any time, or
+  the last 7, 14, 30 or 90 days). A windowed search imports 10 at a time;
+  **Load next page** repeats the same search from where the last page ended
+  until Sentry has no more.
+
 Behavior:
 
 - **Deduped per Sentry issue** — repeat alerts land on the same report;

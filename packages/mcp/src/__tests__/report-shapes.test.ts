@@ -19,7 +19,14 @@ import { describe, it, expect, afterEach } from 'vitest'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { createMushiServer } from '../server.js'
-import { projectReportDetail, reportEvidenceOf, triageRecommendedActions } from '../report-shapes.js'
+import {
+  designExcerptFilesOf,
+  designExcerptQueryOf,
+  projectReportDetail,
+  recipeFromExcerpt,
+  reportEvidenceOf,
+  triageRecommendedActions,
+} from '../report-shapes.js'
 
 const API_ENDPOINT = 'https://api.test.mushimushi.dev'
 const PROJECT_ID = '11111111-1111-4111-8111-111111111111'
@@ -254,5 +261,101 @@ describe('report tools over MCP', () => {
     expect(res.structuredContent).toMatchObject({ planId: 'hobby', diagnosesUsed: 3, reportsUsed: 12 })
     expect(fetchLog.urls.at(-1)).toBe(`${API_ENDPOINT}/v1/admin/billing/stats`)
     expect(fetchLog.headers.at(-1)?.['x-mushi-project-id']).toBe(PROJECT_ID)
+  })
+})
+
+describe('design plane in get_fix_context (Plan 019)', () => {
+  const EXCERPT = {
+    state: 'drift',
+    set: 'default',
+    tokens: [{ path: 'color.action.primary', value: '#0055FF', cssVar: '--color-action-primary', ts: 'colorActionPrimary' }],
+    findings: [{ file: 'src/Pay.tsx', line: 12, rule: 'off_token_color', value: '#0056ff', use: '--color-action-primary' }],
+    score: 31,
+    note: '1 open finding in the files you asked about.',
+    truncated: false,
+  }
+  const withFiles = {
+    ...DETAIL_ROW,
+    fix_attempts: [
+      { id: 'fix-newest', status: 'running', files_changed: ['src/Pay.tsx', 'src/a,b.tsx'] },
+      { id: 'fix-oldest', status: 'failed', files_changed: ['src/Pay.tsx', 'src/Cart.tsx'] },
+    ],
+    fix_packet: '## Relevant code\n### `src/checkout/Button.tsx`\n```\nx\n```',
+  }
+
+  it('designExcerptFilesOf reads fix attempts first, then the fix packet, deduplicated', () => {
+    expect(designExcerptFilesOf(withFiles)).toEqual(['src/Pay.tsx', 'src/Cart.tsx', 'src/checkout/Button.tsx'])
+    expect(designExcerptFilesOf({ fix_attempts: null, fix_packet: null })).toEqual([])
+  })
+
+  it('recipeFromExcerpt never returns null and never passes through an unknown state', () => {
+    expect(recipeFromExcerpt(EXCERPT)).toBe(EXCERPT)
+    expect(recipeFromExcerpt({})).toMatchObject({ state: 'error' })
+    expect(recipeFromExcerpt(null)).toMatchObject({ state: 'error' })
+    expect(recipeFromExcerpt({ state: 'green', note: 'x' })).toMatchObject({ state: 'error' })
+  })
+
+  it('adds the design excerpt for the report files, inside the untrusted wrapper', async () => {
+    const fetchLog = stubFetch({
+      [`/v1/admin/reports/${REPORT_ID}`]: withFiles,
+      [`/v1/admin/projects/${PROJECT_ID}/design/excerpt`]: EXCERPT,
+    })
+    const c = await connect(fetchLog.stub)
+    const res = await c.callTool({ name: 'get_fix_context', arguments: { reportId: REPORT_ID } })
+    expect(res.isError).toBeFalsy()
+    expect((res.structuredContent as { recipe: unknown }).recipe).toEqual(EXCERPT)
+    const excerptUrl = fetchLog.urls.find((u) => u.includes('/design/excerpt'))!
+    expect(new URL(excerptUrl).searchParams.get('files')).toBe('src/Pay.tsx,src/Cart.tsx,src/checkout/Button.tsx')
+    // The report id makes the excerpt carry the fixer context (schema, deploy, radar).
+    expect(new URL(excerptUrl).searchParams.get('reportId')).toBe(REPORT_ID)
+    expect((res.content as Array<{ text: string }>)[0]!.text.startsWith('<mushi-data role="')).toBe(true)
+  })
+
+  it('designExcerptQueryOf sends the files and the report id, and skips an id that is not a UUID', () => {
+    const q = new URLSearchParams(designExcerptQueryOf(withFiles).slice(1))
+    expect(q.get('files')).toBe('src/Pay.tsx,src/Cart.tsx,src/checkout/Button.tsx')
+    expect(q.get('reportId')).toBe(REPORT_ID)
+    expect(designExcerptQueryOf({ id: REPORT_ID })).toBe(`?reportId=${REPORT_ID}`)
+    expect(designExcerptQueryOf({ id: '1 or 1=1', fix_attempts: null })).toBe('')
+  })
+
+  it('passes the fixer context through to recipe.context', async () => {
+    const withContext = {
+      ...EXCERPT,
+      context: {
+        schema: { state: 'ok', note: 'Tables the error names.', snapshotAt: '2026-10-01T00:00:00Z', tables: [{ name: 'orders', columns: ['id uuid'] }], missing: [] },
+        deploy: { state: 'not_live', note: 'web still serves the commit it served before the fix merged.', lastFix: null, targets: [] },
+        radar: { state: 'unknown', note: 'The hole checks have not run for this project yet.', checkedAt: null, findings: [] },
+        truncated: false,
+      },
+    }
+    const c = await connect(stubFetch({
+      [`/v1/admin/reports/${REPORT_ID}`]: DETAIL_ROW,
+      [`/v1/admin/projects/${PROJECT_ID}/design/excerpt`]: withContext,
+    }).stub)
+    const res = await c.callTool({ name: 'get_fix_context', arguments: { reportId: REPORT_ID } })
+    const recipe = (res.structuredContent as { recipe: typeof withContext }).recipe
+    expect(recipe.context.schema.tables[0].name).toBe('orders')
+    expect(recipe.context.deploy.state).toBe('not_live')
+  })
+
+  it('still succeeds with recipe { state: error, note } when the excerpt read fails', async () => {
+    const c = await connect(stubFetch({ [`/v1/admin/reports/${REPORT_ID}`]: DETAIL_ROW }).stub)
+    const res = await c.callTool({ name: 'get_fix_context', arguments: { reportId: REPORT_ID } })
+    expect(res.isError).toBeFalsy()
+    const recipe = (res.structuredContent as { recipe: { state: string; note: string } }).recipe
+    expect(recipe.state).toBe('error')
+    expect(recipe.note).toMatch(/design excerpt/)
+  })
+
+  it('get_design_tokens forwards its filters and wraps the repo content', async () => {
+    const fetchLog = stubFetch({
+      [`/v1/admin/projects/${PROJECT_ID}/design/tokens`]: { projectId: PROJECT_ID, set: 'default', tokens: [], nameMap: {}, total: 0 },
+    })
+    const c = await connect(fetchLog.stub)
+    const res = await c.callTool({ name: 'get_design_tokens', arguments: { group: 'color', type: 'color' } })
+    expect(res.isError).toBeFalsy()
+    expect(fetchLog.urls.at(-1)).toBe(`${API_ENDPOINT}/v1/admin/projects/${PROJECT_ID}/design/tokens?group=color&type=color`)
+    expect((res.content as Array<{ text: string }>)[0]!.text.startsWith('<mushi-data role="get_design_tokens"')).toBe(true)
   })
 })

@@ -44,6 +44,8 @@ import {
 } from '@mushi-mushi/core';
 
 import { MushiWidget } from './widget';
+import { deviceHasReports, markDeviceHasReports, recordToastShown, toastAllowed } from './reporter-inbox';
+import { reporterChannels, subscribeBrowserPush, type MushiReporterUpdates } from '@mushi-mushi/core/reporter-channels';
 import { mergeRuntimeConfig } from './runtime-merge';
 import { exposeMarketingRecorder } from './marketing-recorder';
 import {
@@ -571,8 +573,19 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
   /** Set when the host screenshotProvider was refused permission this attempt. */
   let screenshotProviderDenied = false;
 
+  // onReporterUpdate: the v2 feed on the inbox-refresh cadence; no listener, no request.
+  const reporterUpdateListeners = new Set<(u: MushiReporterUpdates) => void>();
+  const rc = reporterChannels(apiClient);
+  async function emitReporterUpdates(): Promise<MushiReporterUpdates | null> {
+    const res = await rc.getUpdates(reporterTokenForProject());
+    const updates = res.ok ? res.data ?? null : null;
+    if (updates) for (const cb of reporterUpdateListeners) try { cb(updates); } catch { /* host bug */ }
+    return updates;
+  }
+
   function syncReporterInboxQuiet(): void {
     void widget.refreshReporterInboxQuiet();
+    if (reporterUpdateListeners.size) void emitReporterUpdates();
   }
 
   function stopReporterInboxPolling(): void {
@@ -584,22 +597,96 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     reporterPollVisibleHandler = null;
   }
 
+  /**
+   * Plan 018 §4.4: every 5 minutes while the page is visible, plus once when
+   * it becomes visible — and never from a device that has not filed a report.
+   */
   function startReporterInboxPolling(): void {
     stopReporterInboxPolling();
     if (!reporterNotificationsEnabled) return;
-    const POLL_MS = 60_000;
+    const POLL_MS = 5 * 60_000;
     const tick = () => {
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      if (!deviceHasReports(projectId)) return;
       syncReporterInboxQuiet();
     };
     reporterPollTimer = setInterval(tick, POLL_MS);
     if (typeof document !== 'undefined') {
       reporterPollVisibleHandler = () => {
-        if (document.visibilityState === 'visible') syncReporterInboxQuiet();
+        if (document.visibilityState === 'visible') tick();
       };
       document.addEventListener('visibilitychange', reporterPollVisibleHandler);
     }
-    syncReporterInboxQuiet();
+    tick();
+  }
+
+  /** What the project offers (`/v1/sdk/config` → `reporter`); null until known. */
+  let reporterOffer: MushiRuntimeSdkConfig['reporter'] | null = null;
+
+  /**
+   * Opt-ins appear only for a channel the project offers AND the host allows:
+   * email unless `notifications.email: false`, push only with a service worker
+   * (`notifications.webPush`). The address is prefilled from identify() only
+   * with `emailFromIdentity`, and the box is never pre-ticked.
+   */
+  function syncReporterChannels(): void {
+    const n = activeConfig.notifications ?? bootstrapConfig.notifications;
+    widget.setReporterChannels({
+      email: Boolean(reporterOffer?.emailEnabled) && n?.email !== false,
+      push: Boolean(reporterOffer?.pushEnabled && reporterOffer.vapidPublicKey) && Boolean(n?.webPush),
+      emailPrefill: n?.emailFromIdentity ? userInfo?.email ?? '' : '',
+    });
+  }
+
+  /** Latest "Your reports" rows, for the next-visit toast. */
+  let lastReporterReports: MushiReporterReport[] = [];
+
+  /**
+   * Plan 018 §4.2: once, at first idle after init, a toast near the launcher
+   * when this device's reports have unread updates. At most one per session
+   * and one per 24 hours; hosts turn it off with `notifications.toast: false`.
+   */
+  function scheduleUpdateToast(): void {
+    if (!deviceHasReports(projectId)) return;
+    // This device has reports: warm the Your reports chunk at idle.
+    const idleWarm = (globalThis as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => void }).requestIdleCallback;
+    if (idleWarm) idleWarm(() => void widget.preloadViews(), { timeout: 8000 });
+    else setTimeout(() => void widget.preloadViews(), 3000);
+    if (bootstrapConfig.notifications?.toast === false || !toastAllowed(projectId)) return;
+    const run = async () => {
+      // A malformed feed counts as no feed: fall back to the list.
+      const feed = await emitReporterUpdates();
+      const updates = feed && typeof feed.unread_total === 'number' && Array.isArray(feed.latest) ? feed : null;
+      if (updates && !updates.unread_total) return;
+      // Titles and statuses come from the list; it also lights the header badge.
+      await widget.refreshReporterInboxQuiet();
+      const shown = updates
+        ? widget.showUpdatesFeedToast(updates, lastReporterReports)
+        : await widget.showUpdatesToast(lastReporterReports);
+      if (shown) recordToastShown(projectId);
+    };
+    const idle = (globalThis as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => void }).requestIdleCallback;
+    if (idle) idle(() => void run(), { timeout: 5000 });
+    else setTimeout(() => void run(), 2000);
+  }
+
+  /**
+   * Mark a report's updates read (§2.3) with POST /v1/reporter/reports/:id/read.
+   * A server without that route gets the old path: match the in-app rows on
+   * `payload.reportId` and mark each one read.
+   */
+  async function markReporterReportRead(reportId: string): Promise<number | null> {
+    const token = getReporterToken(projectId);
+    const v2 = await rc.markReportRead(reportId, token);
+    if (v2.ok) return v2.data?.unread_total ?? null;
+    const list = await apiClient.listNotifications(token, { limit: 50 });
+    if (!list.ok) return null;
+    const rows = (list.data?.notifications ?? []).filter((n) => {
+      const payload = (n.payload ?? {}) as Record<string, unknown>;
+      return !n.read_at && (payload.reportId === reportId || n.report_id === reportId);
+    });
+    await Promise.all(rows.map((n) => apiClient.markNotificationRead(String(n.id), token)));
+    return null;
   }
 
   function wireRewardsForIdentifiedUser(
@@ -934,7 +1021,23 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     async onReporterReportsRequest() {
       const result = await apiClient.listReporterReports(getReporterToken(projectId));
       if (!result.ok) throw new Error(result.error?.message ?? 'Could not load reports');
-      return result.data?.reports ?? [];
+      lastReporterReports = result.data?.reports ?? [];
+      if (lastReporterReports.length) markDeviceHasReports(projectId);
+      return lastReporterReports;
+    },
+    onReporterMarkRead: (reportId) => markReporterReportRead(reportId),
+    async onReporterReportRequest(reportId) {
+      const res = await rc.getReport(reportId, getReporterToken(projectId));
+      // null → the widget falls back to the comments call (servers before Plan 018 Phase 2).
+      return res.ok && res.data ? { report: res.data.report as Partial<MushiReporterReport>, timeline: res.data.timeline } : null;
+    },
+    async onReporterEmailOptIn(email) {
+      const res = await rc.setPrefs(getReporterToken(projectId), { email, channels: { email: true } });
+      if (!res.ok) throw new Error(res.error?.code ?? 'EMAIL_OPT_IN_FAILED');
+    },
+    async onReporterPushSubscribe() {
+      const res = await sdk.subscribeReporterPush();
+      if (!res.ok) throw new Error(res.reason);
     },
     async onReporterCommentsRequest(reportId) {
       const result = await apiClient.listReporterComments(reportId, getReporterToken(projectId));
@@ -1040,7 +1143,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       });
       return res.ok ? (res.data ?? null) : null;
     },
-  }, MUSHI_SDK_VERSION);
+  });
   void brandRefReady.then((ref) => widget.setBrandRef(ref));
   syncCaptureModules();
 
@@ -1135,6 +1238,8 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
   function applyRuntimeConfig(runtime: MushiRuntimeSdkConfig) {
     runtimeConfigLoaded = true;
     reporterNotificationsEnabled = runtime.reporterNotificationsEnabled !== false;
+    reporterOffer = runtime.enabled === false ? null : runtime.reporter ?? null;
+    syncReporterChannels();
     if (runtime.enabled === false) {
       activeConfig = bootstrapConfig;
       clearCachedRuntimeConfig(config.projectId);
@@ -1175,6 +1280,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
 
   void checkSdkFreshness();
   startReporterInboxPolling();
+  scheduleUpdateToast();
 
   log.info('Initialized', { projectId: config.projectId });
 
@@ -1446,6 +1552,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     if (result.ok) {
       log.info('Report sent', { reportId: result.data?.reportId });
       emit('report:sent', { reportId: result.data?.reportId });
+      markDeviceHasReports(projectId);
       syncReporterInboxQuiet();
       // If the server response includes a Cursor agent dispatch (classify-report
       // triggered a cursor_cloud fix via the autofix_agent setting), emit
@@ -1829,6 +1936,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       widget.setIdentifiedUser(
         (userInfo.name || userInfo.email) ? { name: userInfo.name, email: userInfo.email } : null,
       );
+      syncReporterChannels();
       if (traits) {
         for (const [k, v] of Object.entries(traits)) {
           if (k !== 'email' && k !== 'name') customMetadata[`user.${k}`] = v;
@@ -2016,6 +2124,38 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       widget.recorderOpenMyReports();
     },
 
+    getReporterUpdates: emitReporterUpdates,
+
+    async markReportRead(reportId: string) {
+      const res = await rc.markReportRead(reportId, reporterTokenForProject());
+      return res.ok ? res.data?.unread_total ?? 0 : null;
+    },
+
+    onReporterUpdate(cb) {
+      reporterUpdateListeners.add(cb);
+      void emitReporterUpdates();
+      return () => void reporterUpdateListeners.delete(cb);
+    },
+
+    async getNotificationPrefs() {
+      const res = await rc.getPrefs(reporterTokenForProject());
+      return res.ok ? res.data ?? null : null;
+    },
+
+    setNotificationPrefs: (update) => rc.setPrefs(reporterTokenForProject(), update),
+
+    async subscribeReporterPush() {
+      const sw = activeConfig.notifications?.webPush;
+      // The permission prompt needs the click's user activation, so use the
+      // key runtime config already delivered; fetch only as a last resort.
+      let key = reporterOffer?.vapidPublicKey ?? null;
+      if (sw && !key) {
+        const cfg = await apiClient.getSdkConfig();
+        key = cfg.ok ? cfg.data?.reporter?.vapidPublicKey ?? null : null;
+      }
+      return subscribeBrowserPush(rc, reporterTokenForProject(), sw ? sw.serviceWorkerPath : null, key);
+    },
+
     async getHallOfFame(limit = 20): Promise<MushiHallOfFameEntry[]> {
       const result = await apiClient.getHallOfFame(limit);
       if (!result.ok) return [];
@@ -2080,8 +2220,11 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
   // is logged + breadcrumbed and swallowed, returning a type-safe fallback.
   // Non-void methods need a real fallback so the host doesn't choke on
   // `undefined` (e.g. `.map` over a list); everything else returns void.
+  // The reporter-channel calls never reject (they resolve { ok: false } / null).
   const PUBLIC_API_FALLBACKS: Record<string, unknown> = {
     on: () => {}, // returns a no-op unsubscribe
+    // mushi-mushi-allowlist: no-op unsubscribe
+    onReporterUpdate: () => {},
     isOpen: false,
     getBreadcrumbs: [],
     captureEvent: null,
@@ -2354,6 +2497,12 @@ function createNoopInstance(): MushiSDKInstance {
     reopenReport: async () => null,
     openMyReports: () => {},
     getHallOfFame: async () => [],
+    getReporterUpdates: async () => null,
+    markReportRead: async () => null,
+    onReporterUpdate: () => () => {},
+    getNotificationPrefs: async () => null,
+    setNotificationPrefs: async () => ({ ok: false }),
+    subscribeReporterPush: async () => ({ ok: false, reason: 'off' }),
   };
 }
 

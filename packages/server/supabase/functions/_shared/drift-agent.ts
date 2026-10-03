@@ -151,8 +151,9 @@ export function walkContractDrift(
     }
   }
 
+  // A node with no handler field (inventory API dependency) is not flagged.
   for (const node of inventoryNodes) {
-    if (!node.handler || node.handler.trim() === '') {
+    if (node.handler !== undefined && node.handler.trim() === '') {
       findings.push({
         finding_type: 'dead_handler',
         severity: 'warn',

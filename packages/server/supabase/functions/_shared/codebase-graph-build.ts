@@ -13,6 +13,8 @@ export interface IndexedFileRow {
   language: string | null
   content_preview: string | null
   content_hash?: string | null
+  /** Relative imports of the whole file, extracted at index time. */
+  imports?: string[] | null
 }
 
 export interface KnowledgeGraphNode {
@@ -54,11 +56,13 @@ const EXPORT_RE = /^\s*export\s+/m
 
 export function fingerprintFile(row: IndexedFileRow) {
   const preview = row.content_preview ?? ''
-  let importCount = 0
-  let m: RegExpExecArray | null
-  IMPORT_RE.lastIndex = 0
-  while ((m = IMPORT_RE.exec(preview)) !== null) {
-    if (m[1] ?? m[2]) importCount++
+  let importCount = row.imports?.length ?? 0
+  if (!row.imports) {
+    let m: RegExpExecArray | null
+    IMPORT_RE.lastIndex = 0
+    while ((m = IMPORT_RE.exec(preview)) !== null) {
+      if (m[1] ?? m[2]) importCount++
+    }
   }
   return {
     filePath: row.file_path,
@@ -98,17 +102,43 @@ function detectLayer(filePath: string): string {
   return 'other'
 }
 
-function extractImports(content: string): string[] {
-  const imports: string[] = []
+/** Relative import specifiers in `content`, in order, without duplicates. */
+export function extractRelativeImports(content: string): string[] {
+  const seen = new Set<string>()
   let m: RegExpExecArray | null
   IMPORT_RE.lastIndex = 0
   while ((m = IMPORT_RE.exec(content)) !== null) {
     const p = m[1] ?? m[2]
-    if (p && p.startsWith('.')) imports.push(p)
+    if (p && p.startsWith('.')) seen.add(p)
   }
-  return imports
+  return [...seen]
 }
 
+const RESOLVE_SUFFIXES = ['', '.ts', '.tsx', '.js', '.jsx', '/index.ts', '/index.tsx', '/index.js']
+
+function resolveImportTarget(pathToId: Map<string, string>, fromPath: string, imp: string): string | undefined {
+  const resolved = resolveRelative(fromPath, imp)
+  // TS ESM imports name the emitted file: './x.js' is ./x.ts on disk.
+  const bases = /\.jsx?$/.test(resolved) ? [resolved, resolved.replace(/\.jsx?$/, '')] : [resolved]
+  for (const base of bases) {
+    for (const suffix of RESOLVE_SUFFIXES) {
+      const id = pathToId.get(base + suffix)
+      if (id) return id
+    }
+  }
+  return undefined
+}
+
+/**
+ * Build a UA-shaped graph from indexed file rows (file + symbol nodes).
+ *
+ * Every indexed path gets a file node. A file whose chunks all carry a symbol
+ * has no symbol-less row, so it gets a synthetic `file:<path>` node; before,
+ * such files had no node and lost every import edge. Imports come from each
+ * row's `imports` (extracted from the whole file at index time), falling back
+ * to the 600-character preview of a symbol-less row for rows indexed before
+ * that column existed.
+ */
 export function buildGraphFromIndex(args: {
   projectName: string
   commitSha?: string | null
@@ -120,26 +150,36 @@ export function buildGraphFromIndex(args: {
   const pathToId = new Map<string, string>()
   const languages = new Set<string>()
 
-  for (const row of args.fileRows.filter((r) => !r.symbol_name)) {
-    pathToId.set(row.file_path, row.id)
+  const plainRows = args.fileRows.filter((r) => !r.symbol_name)
+  const symbolRows = (args.symbolRows ?? args.fileRows).filter((r) => r.symbol_name)
+
+  const pushFileNode = (id: string, row: IndexedFileRow, summary: string | undefined) => {
+    pathToId.set(row.file_path, id)
     if (row.language) languages.add(row.language)
     nodes.push({
-      id: row.id,
+      id,
       type: 'file',
       name: row.file_path.split('/').pop() ?? row.file_path,
       filePath: row.file_path,
-      summary: row.content_preview?.slice(0, 240) ?? undefined,
+      summary,
       tags: [detectLayer(row.file_path)],
       metadata: { layer: detectLayer(row.file_path) },
     })
   }
 
-  for (const row of args.symbolRows ?? args.fileRows.filter((r) => r.symbol_name)) {
-    if (!row.symbol_name) continue
+  for (const row of plainRows) {
+    if (pathToId.has(row.file_path)) continue
+    pushFileNode(row.id, row, row.content_preview?.slice(0, 240) ?? undefined)
+  }
+  for (const row of symbolRows) {
+    if (!pathToId.has(row.file_path)) pushFileNode(`file:${row.file_path}`, row, undefined)
+  }
+
+  for (const row of symbolRows) {
     nodes.push({
       id: row.id,
       type: 'function',
-      name: row.symbol_name,
+      name: row.symbol_name as string,
       filePath: row.file_path,
       lineRange:
         row.line_start != null && row.line_end != null
@@ -154,17 +194,29 @@ export function buildGraphFromIndex(args: {
     }
   }
 
-  for (const row of args.fileRows.filter((r) => !r.symbol_name && r.content_preview)) {
-    const preview = row.content_preview as string
-    for (const imp of extractImports(preview)) {
-      const resolved = resolveRelative(row.file_path, imp)
-      const targetId =
-        pathToId.get(resolved) ??
-        pathToId.get(resolved + '.ts') ??
-        pathToId.get(resolved + '.tsx') ??
-        pathToId.get(resolved + '/index.ts')
-      if (!targetId || targetId === row.id) continue
-      edges.push({ source: row.id, target: targetId, type: 'imports', direction: 'directed' })
+  const importsByPath = new Map<string, string[]>()
+  for (const row of [...plainRows, ...symbolRows]) {
+    if (row.imports && row.imports.length > 0 && !importsByPath.has(row.file_path)) {
+      importsByPath.set(row.file_path, row.imports)
+    }
+  }
+  for (const row of plainRows) {
+    if (!importsByPath.has(row.file_path) && row.content_preview) {
+      importsByPath.set(row.file_path, extractRelativeImports(row.content_preview))
+    }
+  }
+
+  const seenEdges = new Set<string>()
+  for (const [filePath, imports] of importsByPath) {
+    const sourceId = pathToId.get(filePath)
+    if (!sourceId) continue
+    for (const imp of imports) {
+      const targetId = resolveImportTarget(pathToId, filePath, imp)
+      if (!targetId || targetId === sourceId) continue
+      const key = `${sourceId}>${targetId}`
+      if (seenEdges.has(key)) continue
+      seenEdges.add(key)
+      edges.push({ source: sourceId, target: targetId, type: 'imports', direction: 'directed' })
     }
   }
 
@@ -195,6 +247,12 @@ export function buildGraphFromIndex(args: {
   }
 }
 
+/**
+ * Replace the changed files' nodes and keep the rest. An edge from the new
+ * build survives when both its ends exist in the merged graph — an import
+ * from a changed file to an unchanged one used to be dropped because only
+ * edges between two changed files were kept.
+ */
 export function mergeGraphUpdate(
   existing: KnowledgeGraph | null,
   next: KnowledgeGraph,
@@ -204,10 +262,16 @@ export function mergeGraphUpdate(
   const changed = new Set(changedPaths)
   const keptNodes = existing.nodes.filter((n) => !n.filePath || !changed.has(n.filePath))
   const keptIds = new Set(keptNodes.map((n) => n.id))
+  const newNodes = next.nodes.filter((n) => !keptIds.has(n.id))
+  const allIds = new Set([...keptIds, ...newNodes.map((n) => n.id)])
   const keptEdges = existing.edges.filter((e) => keptIds.has(e.source) && keptIds.has(e.target))
-  const newNodes = next.nodes.filter((n) => !n.filePath || changed.has(n.filePath) || !keptIds.has(n.id))
-  const newNodeIds = new Set(newNodes.map((n) => n.id))
-  const newEdges = next.edges.filter((e) => newNodeIds.has(e.source) && newNodeIds.has(e.target))
+  const keptEdgeKeys = new Set(keptEdges.map((e) => `${e.source}>${e.target}>${e.type}`))
+  const newEdges = next.edges.filter(
+    (e) =>
+      allIds.has(e.source) &&
+      allIds.has(e.target) &&
+      !keptEdgeKeys.has(`${e.source}>${e.target}>${e.type}`),
+  )
   return {
     ...next,
     nodes: [...keptNodes, ...newNodes],

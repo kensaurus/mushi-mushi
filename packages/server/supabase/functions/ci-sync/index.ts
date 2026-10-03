@@ -7,8 +7,9 @@
  *             the admin UI (`/v1/admin/fixes/:id/refresh-ci`) so a user can
  *             pull the latest CI state without waiting for the next cron.
  *
- *          2. `{}` — sweep every `completed` attempt that has a `pr_number`
- *             and either no `check_run_updated_at` or one older than 1 h.
+ *          2. `{}` — sweep `completed` attempts with an unmerged, not-closed
+ *             PR, oldest-visited first (round-robin on updated_at, revisit
+ *             after 15 min), then reconcile reports stuck in 'fixing'.
  *             Driven by the `mushi-ci-sync-10m` pg_cron. Small bounded batch
  *             (20 rows per tick) to keep the function well under the 150 s
  *             runtime limit and avoid GitHub rate-limit spikes.
@@ -41,11 +42,20 @@ import {
   type CheckRunSnapshot,
   type GithubRepoRef,
 } from '../_shared/github.ts'
-import { finalizeFixClosedUnmerged, finalizeFixMerge } from '../_shared/fix-merge.ts'
+import { finalizeFixClosedUnmerged, finalizeFixMerge, reconcileStuckFixingReports } from '../_shared/fix-merge.ts'
 import { prLifecycleFrom, type PrLifecycle } from '../_shared/fix-loop-status.ts'
 
 const log = rootLog.child('ci-sync')
 const app = new Hono()
+
+/**
+ * How soon the sweep re-reads an open PR. GitHub pull_request webhooks do not
+ * reach Mushi today (2026-10-02: no deliveries in the function logs), so this
+ * poll is the only way a merge or close is noticed. It was 1 h; report
+ * 469f6962 stayed 'fixing' 47 minutes after the close-handling deploy because
+ * of it.
+ */
+const SWEEP_REVISIT_MS = 15 * 60_000
 
 interface FixAttemptRow {
   id: string
@@ -86,6 +96,7 @@ async function syncPrLifecycle(
         prUrl: attempt.pr_url!,
         prNumber,
         repository: `${ref.owner}/${ref.repo}`,
+        mergedAt: pr.mergedAt ?? null,
       })
     }
   } else if (state === 'closed') {
@@ -175,41 +186,30 @@ app.post('/ci-sync', async (c) => {
     return c.json({ ok: result.ok, data: result })
   }
 
-  const cutoff = new Date(Date.now() - 60 * 60_000).toISOString()
+  const cutoff = new Date(Date.now() - SWEEP_REVISIT_MS).toISOString()
   const batchLimit = Number(Deno.env.get('MUSHI_CI_SYNC_BATCH') ?? '20') | 0
 
-  // Prefer attempts that have NEVER been sync'd (check_run_updated_at IS
-  // NULL) over stale ones so first-time PR backfills don't starve behind
-  // hourly refreshes of already-tracked PRs.
-  const { data: neverSynced } = await db
+  // One round-robin queue on updated_at: every visit stamps the row, so an
+  // attempt whose PR can never be read (no token, repo gone) moves to the
+  // back instead of refilling every batch. The old "never synced first" query
+  // re-selected those rows each tick and starved every other open PR.
+  // pr_url, not pr_number: syncPrLifecycle parses the number from the URL.
+  const { data: due } = await db
     .from('fix_attempts')
     .select(ATTEMPT_COLUMNS)
     .eq('status', 'completed')
-    .not('pr_number', 'is', null)
+    .not('pr_url', 'is', null)
     .is('merged_at', null)
     .or('pr_state.is.null,pr_state.in.(open,draft)')
-    .is('check_run_updated_at', null)
+    .lt('updated_at', cutoff)
+    .order('updated_at', { ascending: true })
     .limit(batchLimit)
-
-  let rows: FixAttemptRow[] = (neverSynced ?? []) as FixAttemptRow[]
-  if (rows.length < batchLimit) {
-    const remaining = batchLimit - rows.length
-    const { data: stale } = await db
-      .from('fix_attempts')
-      .select(ATTEMPT_COLUMNS)
-      .eq('status', 'completed')
-      .not('pr_number', 'is', null)
-      .is('merged_at', null)
-      .or('pr_state.is.null,pr_state.in.(open,draft)')
-      .lt('check_run_updated_at', cutoff)
-      .order('check_run_updated_at', { ascending: true, nullsFirst: true })
-      .limit(remaining)
-    rows = rows.concat((stale ?? []) as FixAttemptRow[])
-  }
+  const rows: FixAttemptRow[] = (due ?? []) as FixAttemptRow[]
 
   const results: Array<{ id: string; ok: boolean; reason?: string; conclusion?: string | null; prState?: PrLifecycle | null }> = []
   for (const attempt of rows) {
     const r = await syncOne(db, attempt)
+    await db.from('fix_attempts').update({ updated_at: new Date().toISOString() }).eq('id', attempt.id)
     results.push({
       id: attempt.id,
       ok: r.ok,
@@ -218,8 +218,15 @@ app.post('/ci-sync', async (c) => {
       prState: r.prState ?? null,
     })
   }
-  log.info('ci-sync sweep complete', { processed: results.length, succeeded: results.filter((r) => r.ok).length })
-  return c.json({ ok: true, data: { processed: results.length, results } })
+
+  // Phase 2: no report stays in 'fixing' once nothing behind it is alive.
+  const fixing = await reconcileStuckFixingReports(db)
+  log.info('ci-sync sweep complete', {
+    processed: results.length,
+    succeeded: results.filter((r) => r.ok).length,
+    fixing,
+  })
+  return c.json({ ok: true, data: { processed: results.length, results, fixing } })
 })
 
 Deno.serve(withSentry('ci-sync', app.fetch))

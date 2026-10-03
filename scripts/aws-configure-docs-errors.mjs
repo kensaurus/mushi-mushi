@@ -151,6 +151,29 @@ export function buildResponseHeadersPolicyConfig(headers) {
 }
 
 /**
+ * Canonical form of a ResponseHeadersPolicyConfig for comparison: keys
+ * sorted, and the empty objects CloudFront adds on read (an unset
+ * XSSProtection comes back as {}) dropped. Without this every run reported
+ * "update" because the live config never stringified the same as ours.
+ */
+export function normalizePolicyConfig(value) {
+  if (Array.isArray(value)) return value.map(normalizePolicyConfig)
+  if (!value || typeof value !== 'object') return value
+  const out = {}
+  for (const key of Object.keys(value).sort()) {
+    const v = normalizePolicyConfig(value[key])
+    if (v === undefined) continue
+    if (v && typeof v === 'object' && !Array.isArray(v) && Object.keys(v).length === 0) continue
+    out[key] = v
+  }
+  return out
+}
+
+export function policyConfigMatches(current, desired) {
+  return JSON.stringify(normalizePolicyConfig(current)) === JSON.stringify(normalizePolicyConfig(desired))
+}
+
+/**
  * The bucket website configuration with ErrorDocument pointed at the docs
  * 404 page; everything else (IndexDocument, RoutingRules) is kept.
  * Returns `null` when nothing needs to change.
@@ -236,8 +259,7 @@ function main() {
     }
   } else {
     const current = awsJson(['cloudfront', 'get-response-headers-policy', '--id', policyId])
-    const same =
-      JSON.stringify(current.ResponseHeadersPolicy.ResponseHeadersPolicyConfig) === JSON.stringify(policyConfig)
+    const same = policyConfigMatches(current.ResponseHeadersPolicy.ResponseHeadersPolicyConfig, policyConfig)
     if (same) {
       console.log(`✓ response headers policy ${POLICY_NAME} (${policyId}) is current`)
     } else {

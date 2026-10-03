@@ -107,6 +107,11 @@ npx supabase functions deploy experiment-analyzer --no-verify-jwt
 
 # Phase 6 — Anomaly detection
 npx supabase functions deploy anomaly-detector --no-verify-jwt
+
+# App recipe / design plane (Plan 019): daily mushi.recipe.json + token refresh and deviance scan
+npx supabase functions deploy recipe-collector --no-verify-jwt
+npx supabase functions deploy radar-scan --no-verify-jwt
+npx supabase functions deploy operator-digest --no-verify-jwt
 ```
 
 #### Voice intake, Telegram and cloud agents

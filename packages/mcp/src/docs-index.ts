@@ -31,7 +31,7 @@ function docUrl(route: string): string {
   return route === '/' ? MUSHI_DOCS_BASE : MUSHI_DOCS_BASE + route
 }
 
-/** 203 pages, generated from llms.txt. */
+/** 206 pages, generated from llms.txt. */
 export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
   {
     title: "Mushi Mushi — know why your AI-built app broke, with the fix ready",
@@ -192,7 +192,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/admin/explore",
     markdown: "admin/explore.md",
     keywords: ["admin", "explore", "codebase", "atlas"],
-    headings: ["Tab groups", "Map views", "Graph", "Layers", "Search", "The detail panel", "Layer filter chips", "Stats bar"],
+    headings: ["Tab groups", "Copy digest", "Map views", "Diagram", "Graph", "Layers", "Search", "The detail panel"],
     excerpt: "Visual, searchable map of every indexed source file — explore architectural layers, import dependencies, and find code by meaning.",
   },
   {
@@ -228,7 +228,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/admin/fixes",
     markdown: "admin/fixes.md",
     keywords: ["admin", "fixes", "fix", "drafts", "prs"],
-    headings: ["The fixes list", "Streaming view", "Spec-validation warnings", "Cursor Cloud Agent runs", "Dispatching a fix", "Webhooks", "CI feedback on open PRs", "Merging from the console"],
+    headings: ["The fixes list", "Streaming view", "Spec-validation warnings", "Cursor Cloud Agent runs", "Notes-only pull requests", "Dispatching a fix", "Webhooks", "CI feedback on open PRs"],
     excerpt: "The Fixes page tracks every draft pull request Mushi opened from a bug report, from the moment a fix run starts until the PR is ready or the run fails.",
   },
   {
@@ -237,7 +237,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/admin/fullstack-audit",
     markdown: "admin/fullstack-audit.md",
     keywords: ["admin", "fullstack-audit", "fullstack", "audit", "full-stack"],
-    headings: ["Scorecard sections", "Prerequisites", "CLI", "Related pages"],
+    headings: ["Scorecard sections", "Open findings by check", "Mushi setup checks and \"Apply suggested caps\"", "Prerequisites", "CLI", "Related pages"],
     excerpt: "The Full-stack audit runs one health check across RLS gaps, recent backend errors and API contract drift, and returns a readable scorecard.",
   },
   {
@@ -376,6 +376,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     excerpt: "The Overview page is the organization-wide portfolio view — seven-day activity and open tickets for every connected project at a glance.",
   },
   {
+    title: "Portfolio",
+    url: docUrl("/admin/portfolio"),
+    route: "/admin/portfolio",
+    markdown: "admin/portfolio.md",
+    keywords: ["admin", "portfolio"],
+    headings: ["What you see", "When something could not be read", "Spend per app", "Daily digest", "Accounts and resilience", "From your editor", "Who can see it"],
+    excerpt: "The Portfolio page shows every app in a team at once, with each app's worst recipe state, hole checks and SDK version, plus fixes that apply across apps.",
+  },
+  {
     title: "Projects",
     url: docUrl("/admin/projects"),
     route: "/admin/projects",
@@ -435,7 +444,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/admin/releases",
     markdown: "admin/releases.md",
     keywords: ["admin", "releases"],
-    headings: ["What it generates", "Creating a release", "Release entry fields", "SDK surface", "Related pages"],
+    headings: ["What it generates", "Creating a release", "Release automatically when you ship", "Release entry fields", "SDK surface", "Related pages"],
     excerpt: "The Releases page drafts a changelog for each version from the fixes that shipped, crediting the users whose reports led to each fix.",
   },
   {
@@ -691,6 +700,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     excerpt: "How Mushi keeps bug reports honest — reporter reputation against spam and point farming, and prompt-fatigue limits so real users are not nagged.",
   },
   {
+    title: "App recipe and design system",
+    url: docUrl("/concepts/app-recipe"),
+    route: "/concepts/app-recipe",
+    markdown: "concepts/app-recipe.md",
+    keywords: ["concepts", "app-recipe", "app", "recipe", "design", "system"],
+    headings: ["The five states", "mushi.recipe.json", "The design system page", "Directions", "The deviance check", "The deviance score", "When the score is too high", "Hole checks"],
+    excerpt: "The App Recipe records what your app is made of, so a diagnosis can say what changed and a fix can respect your design system.",
+  },
+  {
     title: "Architecture",
     url: docUrl("/concepts/architecture"),
     route: "/concepts/architecture",
@@ -833,6 +851,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     keywords: ["concepts", "runtime-config", "runtime", "config"],
     headings: ["Setup default", "When host init wins", "Console tuning without rebuild", "Widget draft persistence", "Troubleshooting", "Related"],
     excerpt: "How the Mushi SDK fetches widget and capture settings from the console at startup, how they merge with your init options, and when to turn it off.",
+  },
+  {
+    title: "One login and one purchase across your apps",
+    url: docUrl("/concepts/shared-login"),
+    route: "/concepts/shared-login",
+    markdown: "concepts/shared-login.md",
+    keywords: ["concepts", "shared-login", "shared", "login", "one", "purchase", "across", "apps"],
+    headings: ["Signing in once", "What Mushi checks", "Keeping a purchase in every app", "Sending users between your apps", "Comparing apps"],
+    excerpt: "How to let people sign in once and keep what they bought across several of your apps, and what Mushi checks so it keeps working.",
   },
   {
     title: "Where the report button lives",
@@ -1218,7 +1245,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/plugins/slack",
     markdown: "plugins/slack.md",
     keywords: ["plugins", "slack", "app"],
-    headings: ["Setup", "What's on the card", "Acting from the channel", "Package", "Events", "Troubleshooting"],
+    headings: ["Setup", "What's on the card", "Acting from the channel", "Slash commands", "Package", "Events", "Troubleshooting"],
     excerpt: "Triage Mushi bug reports from Slack — each classified report posts as a card with its root cause and buttons to dispatch a fix, resolve or dismiss.",
   },
   {
@@ -1344,7 +1371,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/quickstart/react-native",
     markdown: "quickstart/react-native.md",
     keywords: ["quickstart", "react-native", "react", "native"],
-    headings: ["1. Install", "2. Mount the provider", "3. Verify"],
+    headings: ["1. Install", "2. Mount the provider", "Optional native modules", "3. Verify"],
     excerpt: "Add shake-to-report bug capture to a React Native or Expo app with @mushi-mushi/react-native — install, mount the provider, and verify the first report.",
   },
   {
@@ -1461,7 +1488,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/sdks/cli",
     markdown: "sdks/cli.md",
     keywords: ["sdks", "cli", "@mushi-mushi/cli"],
-    headings: ["Console ↔ CLI setup loop", "Setup & health", "mushi doctor", "mushi nudge", "Reports & lessons", "Agentic fixes", "mushi fix", "mushi fixes"],
+    headings: ["Console ↔ CLI setup loop", "Setup & health", "mushi doctor", "mushi nudge", "Reports & lessons", "Sentry issues already open", "Reporter updates held for review", "Agentic fixes"],
     excerpt: "Reference for @mushi-mushi/cli — log in, connect a project, run doctor, list reports, dispatch agent fixes and merge their pull requests from the terminal.",
   },
   {

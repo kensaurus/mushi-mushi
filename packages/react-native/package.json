@@ -13,12 +13,6 @@
     "typecheck": "tsc --noEmit",
     "size": "size-limit"
   },
-  "size-limit": [
-    {
-      "path": "dist/index.js",
-      "limit": "22 KB"
-    }
-  ],
   "peerDependencies": {
     "@react-native-async-storage/async-storage": ">=1.19",
     "@react-native-community/netinfo": ">=11",

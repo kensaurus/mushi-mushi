@@ -1,0 +1,489 @@
+{
+  "$schema": "https://design-tokens.github.io/community-group/format/2025.10/schema.json",
+  "$description": "glot.it art direction Nang Lamp: semantic roles and scales.",
+  "color": {
+    "$type": "color",
+    "surface": {
+      "base": {
+        "$value": "{color.palette.canvas}",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "platforms": [
+              "web",
+              "capacitor"
+            ],
+            "cssVar": "--color-bg",
+            "ts": "colors.bg"
+          }
+        }
+      },
+      "raised": {
+        "$value": "{color.palette.screen}",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "platforms": [
+              "web",
+              "capacitor"
+            ],
+            "cssVar": "--color-surface",
+            "ts": "colors.surface"
+          }
+        }
+      },
+      "sunken": {
+        "$value": "{color.palette.shadow}",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "platforms": [
+              "web",
+              "capacitor"
+            ],
+            "cssVar": "--color-surface-sunken"
+          }
+        }
+      }
+    },
+    "text": {
+      "primary": {
+        "$value": "{color.palette.screen-hot}",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "platforms": [
+              "web",
+              "capacitor"
+            ],
+            "cssVar": "--color-text-primary",
+            "ts": "colors.textPrimary"
+          }
+        }
+      },
+      "secondary": {
+        "$value": "{color.palette.muted-on-canvas}",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "platforms": [
+              "web",
+              "capacitor"
+            ],
+            "cssVar": "--color-text-secondary",
+            "ts": "colors.textSecondary"
+          }
+        }
+      },
+      "onRaised": {
+        "$value": "{color.palette.shadow}"
+      },
+      "onRaisedSecondary": {
+        "$value": "{color.palette.shadow-2}"
+      }
+    },
+    "action": {
+      "primary": {
+        "$value": "{color.palette.signal}",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "platforms": [
+              "web",
+              "capacitor"
+            ],
+            "cssVar": "--color-cta",
+            "ts": "colors.cta"
+          }
+        }
+      },
+      "onPrimary": {
+        "$value": "{color.palette.on-signal}",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "platforms": [
+              "web",
+              "capacitor"
+            ],
+            "cssVar": "--color-on-cta",
+            "ts": "colors.ctaForeground"
+          }
+        }
+      }
+    },
+    "feedback": {
+      "reward": {
+        "$value": "{color.palette.turmeric}",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "platforms": [
+              "web",
+              "capacitor"
+            ],
+            "cssVar": "--color-accent",
+            "ts": "colors.accent"
+          }
+        }
+      }
+    },
+    "line": {
+      "default": {
+        "$value": "{color.palette.shadow}",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "platforms": [
+              "web",
+              "capacitor"
+            ],
+            "cssVar": "--color-border"
+          }
+        }
+      },
+      "strong": {
+        "$value": "{color.palette.shadow}",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "platforms": [
+              "web",
+              "capacitor"
+            ],
+            "cssVar": "--color-border-strong"
+          }
+        }
+      }
+    },
+    "tone": {
+      "mid": {
+        "$value": "{color.toneInk.mid}",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "platforms": [
+              "web",
+              "capacitor"
+            ],
+            "cssVar": "--color-tone-mid",
+            "ts": "toneColors.mid"
+          }
+        },
+        "$description": "Always paired with a contour glyph; colour is never the only cue"
+      },
+      "low": {
+        "$value": "{color.toneInk.low}",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "platforms": [
+              "web",
+              "capacitor"
+            ],
+            "cssVar": "--color-tone-low",
+            "ts": "toneColors.low"
+          }
+        },
+        "$description": "Always paired with a contour glyph; colour is never the only cue"
+      },
+      "falling": {
+        "$value": "{color.toneInk.falling}",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "platforms": [
+              "web",
+              "capacitor"
+            ],
+            "cssVar": "--color-tone-falling",
+            "ts": "toneColors.falling"
+          }
+        },
+        "$description": "Always paired with a contour glyph; colour is never the only cue"
+      },
+      "high": {
+        "$value": "{color.toneInk.high}",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "platforms": [
+              "web",
+              "capacitor"
+            ],
+            "cssVar": "--color-tone-high",
+            "ts": "toneColors.high"
+          }
+        },
+        "$description": "Always paired with a contour glyph; colour is never the only cue"
+      },
+      "rising": {
+        "$value": "{color.toneInk.rising}",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "platforms": [
+              "web",
+              "capacitor"
+            ],
+            "cssVar": "--color-tone-rising",
+            "ts": "toneColors.rising"
+          }
+        },
+        "$description": "Always paired with a contour glyph; colour is never the only cue"
+      }
+    }
+  },
+  "font": {
+    "family": {
+      "$type": "fontFamily",
+      "display": {
+        "$value": [
+          "Pridi",
+          "serif"
+        ],
+        "$description": "Thai serif with Latin, playbill voice"
+      },
+      "body": {
+        "$value": [
+          "Noto Sans Thai Looped",
+          "sans-serif"
+        ],
+        "$description": "looped; width axis 62.5–100 gives the label voice",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "platforms": [
+              "web",
+              "capacitor"
+            ],
+            "cssVar": "--font-sans",
+            "ts": "fontFamily.sans"
+          }
+        }
+      },
+      "label": {
+        "$value": [
+          "JetBrains Mono",
+          "monospace"
+        ],
+        "$description": "counters; labels use Noto Sans Thai Looped 700 at wdth 70, the Thai answer to Archivo's width trick"
+      }
+    },
+    "weight": {
+      "$type": "fontWeight",
+      "regular": {
+        "$value": 400
+      },
+      "semibold": {
+        "$value": 600
+      },
+      "bold": {
+        "$value": 700
+      }
+    },
+    "size": {
+      "$type": "dimension",
+      "label": {
+        "$value": {
+          "value": 13,
+          "unit": "px"
+        }
+      },
+      "body": {
+        "$value": {
+          "value": 17,
+          "unit": "px"
+        }
+      },
+      "title": {
+        "$value": {
+          "value": 28,
+          "unit": "px"
+        }
+      },
+      "prompt": {
+        "$value": {
+          "value": 64,
+          "unit": "px"
+        },
+        "$description": "The Thai word under study; looped face so letter heads stay visible"
+      }
+    },
+    "lineHeight": {
+      "$type": "number",
+      "thaiBody": {
+        "$value": 1.6,
+        "$description": "Never below 1.5 for Thai body: stacked tone marks and vowels"
+      },
+      "thaiDisplay": {
+        "$value": 1.5
+      },
+      "latin": {
+        "$value": 1.4
+      }
+    },
+    "letterSpacing": {
+      "$type": "dimension",
+      "none": {
+        "$value": {
+          "value": 0,
+          "unit": "px"
+        },
+        "$description": "Never letterspace Thai"
+      }
+    }
+  },
+  "typography": {
+    "$type": "typography",
+    "prompt": {
+      "$value": {
+        "fontFamily": "{font.family.display}",
+        "fontWeight": "{font.weight.semibold}",
+        "fontSize": "{font.size.prompt}",
+        "lineHeight": "{font.lineHeight.thaiDisplay}",
+        "letterSpacing": "{font.letterSpacing.none}"
+      }
+    },
+    "title": {
+      "$value": {
+        "fontFamily": "{font.family.display}",
+        "fontWeight": "{font.weight.semibold}",
+        "fontSize": "{font.size.title}",
+        "lineHeight": "{font.lineHeight.thaiDisplay}",
+        "letterSpacing": "{font.letterSpacing.none}"
+      }
+    },
+    "body": {
+      "$value": {
+        "fontFamily": "{font.family.body}",
+        "fontWeight": "{font.weight.regular}",
+        "fontSize": "{font.size.body}",
+        "lineHeight": "{font.lineHeight.thaiBody}",
+        "letterSpacing": "{font.letterSpacing.none}"
+      }
+    },
+    "label": {
+      "$value": {
+        "fontFamily": "{font.family.label}",
+        "fontWeight": "{font.weight.semibold}",
+        "fontSize": "{font.size.label}",
+        "lineHeight": "{font.lineHeight.latin}",
+        "letterSpacing": "{font.letterSpacing.none}"
+      }
+    }
+  },
+  "space": {
+    "$type": "dimension",
+    "1": {
+      "$value": {
+        "value": 4,
+        "unit": "px"
+      }
+    },
+    "2": {
+      "$value": {
+        "value": 8,
+        "unit": "px"
+      }
+    },
+    "3": {
+      "$value": {
+        "value": 12,
+        "unit": "px"
+      }
+    },
+    "4": {
+      "$value": {
+        "value": 16,
+        "unit": "px"
+      }
+    },
+    "6": {
+      "$value": {
+        "value": 24,
+        "unit": "px"
+      }
+    },
+    "8": {
+      "$value": {
+        "value": 32,
+        "unit": "px"
+      }
+    },
+    "target": {
+      "min": {
+        "$value": {
+          "value": 44,
+          "unit": "px"
+        },
+        "$description": "WCAG 2.5.5 / Apple HIG floor"
+      },
+      "primary": {
+        "$value": {
+          "value": 56,
+          "unit": "px"
+        },
+        "$description": "Primary action and answer tiles in the lesson loop"
+      }
+    },
+    "hud": {
+      "$value": {
+        "value": 52,
+        "unit": "px"
+      }
+    }
+  },
+  "radius": {
+    "$type": "dimension",
+    "control": {
+      "$value": {
+        "value": 0,
+        "unit": "px"
+      }
+    },
+    "card": {
+      "$value": {
+        "value": 0,
+        "unit": "px"
+      }
+    },
+    "round": {
+      "$value": {
+        "value": 9999,
+        "unit": "px"
+      },
+      "$description": "True circles only (audio button, rivets)"
+    }
+  },
+  "motion": {
+    "duration": {
+      "$type": "duration",
+      "quick": {
+        "$value": {
+          "value": 200,
+          "unit": "ms"
+        }
+      },
+      "base": {
+        "$value": {
+          "value": 260,
+          "unit": "ms"
+        }
+      },
+      "advance": {
+        "$value": {
+          "value": 460,
+          "unit": "ms"
+        },
+        "$description": "Item-to-item transition in the lesson loop"
+      }
+    },
+    "easing": {
+      "$type": "cubicBezier",
+      "standard": {
+        "$value": [
+          0.4,
+          0,
+          0.2,
+          1
+        ]
+      }
+    }
+  },
+  "border": {
+    "width": {
+      "$type": "dimension",
+      "outline": {
+        "$value": {
+          "value": 2,
+          "unit": "px"
+        }
+      }
+    }
+  }
+}

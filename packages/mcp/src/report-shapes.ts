@@ -196,6 +196,71 @@ export function fixContextOf(report: Row): Row {
   }
 }
 
+/** The states a recipe element, and get_fix_context's `recipe`, can be in. */
+export const RECIPE_STATES = ['ok', 'drift', 'unknown', 'not_connected', 'error'] as const
+
+/** The design excerpt route accepts at most this many paths in ?files=. */
+const DESIGN_EXCERPT_MAX_FILES = 20
+
+/**
+ * Repo paths get_fix_context asks the design excerpt about: the files the
+ * report's fix attempts changed (newest attempt first), then the files the fix
+ * packet quotes under "Relevant code". Deduplicated and capped at the route's
+ * 20. A path with a comma is skipped, because ?files= is comma-separated.
+ * @internal Exported for unit tests only.
+ */
+export function designExcerptFilesOf(report: Row): string[] {
+  const out: string[] = []
+  const add = (path: unknown) => {
+    if (typeof path !== 'string') return
+    const p = path.trim()
+    if (!p || p.includes(',') || out.includes(p) || out.length >= DESIGN_EXCERPT_MAX_FILES) return
+    out.push(p)
+  }
+  const attempts = Array.isArray(report.fix_attempts) ? (report.fix_attempts as Row[]) : []
+  for (const attempt of attempts) {
+    if (Array.isArray(attempt?.files_changed)) attempt.files_changed.forEach(add)
+  }
+  if (typeof report.fix_packet === 'string') {
+    for (const m of report.fix_packet.matchAll(/^### `([^`\n]+)`$/gm)) add(m[1])
+  }
+  return out
+}
+
+/**
+ * The design excerpt query for get_fix_context: the files above, plus the
+ * report id so the excerpt also carries the fixer context (tables the stack
+ * trace names, the last fix's deploy state, open radar findings). Empty, or
+ * `?files=…&reportId=…`.
+ */
+export function designExcerptQueryOf(report: Row): string {
+  const params = new URLSearchParams()
+  const files = designExcerptFilesOf(report)
+  if (files.length > 0) params.set('files', files.join(','))
+  if (typeof report.id === 'string' && /^[0-9a-f-]{36}$/i.test(report.id)) params.set('reportId', report.id)
+  const query = params.toString()
+  return query ? `?${query}` : ''
+}
+
+/**
+ * get_fix_context's `recipe` field from what the design excerpt route
+ * answered. The excerpt already says `not_connected` (with a note) when the
+ * project has no design tokens; anything without a known state becomes an
+ * error. Never null, so an agent can always read `recipe.state`.
+ */
+export function recipeFromExcerpt(excerpt: unknown): Row {
+  const row = excerpt && typeof excerpt === 'object' ? (excerpt as Row) : null
+  if (!row || !(RECIPE_STATES as readonly unknown[]).includes(row.state)) {
+    return recipeError('The design excerpt came back without a state.')
+  }
+  return typeof row.note === 'string' ? row : { ...row, note: '' }
+}
+
+/** get_fix_context's `recipe` when the design excerpt could not be read. */
+export function recipeError(note: string): Row {
+  return { state: 'error', note }
+}
+
 /** Free text the similarity route can embed for a report, or null when it has none. */
 export function similarityQueryOf(report: Row): string | null {
   for (const field of ['summary', 'description'] as const) {

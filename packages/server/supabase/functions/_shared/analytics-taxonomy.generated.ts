@@ -163,6 +163,30 @@ export const MUSHI_EVENTS = {
       "plan"
     ]
   },
+  "repo_digest_created": {
+    "surface": "server",
+    "required": [
+      "project_id"
+    ]
+  },
+  "repo_diagram_generated": {
+    "surface": "server",
+    "required": [
+      "project_id"
+    ]
+  },
+  "repo_diagram_published": {
+    "surface": "server",
+    "required": [
+      "project_id"
+    ]
+  },
+  "public_diagram_viewed": {
+    "surface": "server",
+    "required": [
+      "project_id"
+    ]
+  },
   "loop_impression": {
     "surface": "web",
     "required": []

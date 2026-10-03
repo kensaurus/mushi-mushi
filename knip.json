@@ -54,6 +54,11 @@
         "!playground/**"
       ]
     },
+    "packages/react-native": {
+      "entry": [
+        "src/bundling/*.ts!"
+      ]
+    },
     "packages/capacitor": {
       "ignoreBinaries": [
         "pod"
@@ -68,7 +73,13 @@
       "ignoreBinaries": [
         "supabase",
         "icacls"
-      ]
+      ],
+      "ignoreIssues": {
+        "src/recipe/engine/**": [
+          "exports",
+          "types"
+        ]
+      }
     },
     "packages/create-mushi-mushi": {
       "project": [

@@ -1,0 +1,129 @@
+{
+  "version": 1,
+  "app": {
+    "name": "mushi-mushi",
+    "kind": "site",
+    "platforms": [
+      "web"
+    ]
+  },
+  "design": {
+    "tokens": [
+      {
+        "path": "packages/brand/tokens/brand.tokens.json",
+        "role": "source",
+        "format": "dtcg-2025.10"
+      }
+    ],
+    "literalScan": {
+      "globs": [
+        "apps/admin/src/**/*.{ts,tsx,css}",
+        "packages/brand/src/**/*.{ts,tsx,css}",
+        "packages/marketing-ui/src/**/*.{ts,tsx,css}",
+        "packages/react/src/**/*.{ts,tsx,css}",
+        "packages/react-native/src/**/*.{ts,tsx,css}"
+      ],
+      "ignore": [
+        "**/*.test.*"
+      ]
+    }
+  },
+  "data": {
+    "provider": "supabase",
+    "migrationsDir": "packages/server/supabase/migrations"
+  },
+  "ci": {
+    "provider": "github-actions",
+    "defaultBranch": "master",
+    "workflows": {
+      "android.yml": {
+        "role": "ci"
+      },
+      "auto-add-to-roadmap.yml": {
+        "role": "ci"
+      },
+      "ci.yml": {
+        "role": "ci"
+      },
+      "cursor-cloud-dogfood.yml": {
+        "role": "ci"
+      },
+      "deno-check.yml": {
+        "role": "ci"
+      },
+      "deploy-admin.yml": {
+        "role": "deploy"
+      },
+      "deploy-docs.yml": {
+        "role": "deploy"
+      },
+      "deploy-edge-functions.yml": {
+        "role": "deploy"
+      },
+      "deploy-hosted-mcp.yml": {
+        "role": "deploy"
+      },
+      "deploy-testers.yml": {
+        "role": "deploy"
+      },
+      "flutter.yml": {
+        "role": "ci"
+      },
+      "infra-cf-docs-behavior.yml": {
+        "role": "ci"
+      },
+      "ios.yml": {
+        "role": "ci"
+      },
+      "labels-sync.yml": {
+        "role": "ci"
+      },
+      "nightly-prod-pdca.yml": {
+        "role": "ci"
+      },
+      "npm-bootstrap.yml": {
+        "role": "ci"
+      },
+      "pr-guard.yml": {
+        "role": "ci"
+      },
+      "publish-mcp-registry.yml": {
+        "role": "deploy"
+      },
+      "publish-vscode-extension.yml": {
+        "role": "deploy"
+      },
+      "release.yml": {
+        "role": "deploy"
+      },
+      "scorecard.yml": {
+        "role": "ci"
+      },
+      "secret-scan.yml": {
+        "role": "ci"
+      },
+      "security.yml": {
+        "role": "ci"
+      },
+      "verify-fix.yml": {
+        "role": "ci"
+      },
+      "weekly-digest.yml": {
+        "role": "ci"
+      }
+    }
+  },
+  "env": {
+    "environments": [
+      "production"
+    ],
+    "required": [],
+    "example": ".env.example"
+  },
+  "change": {
+    "allowPaths": [
+      "mushi.recipe.json",
+      "packages/brand/tokens/**"
+    ]
+  }
+}

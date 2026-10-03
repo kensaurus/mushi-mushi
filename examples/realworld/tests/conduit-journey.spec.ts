@@ -69,8 +69,9 @@ async function waitForStub(
  * Drive the real Mushi widget to file a full report: open trigger → pick Bug
  * category → type description → submit.
  *
- * The widget has a multi-step flow (01/03 category picker → 02/03 form → 03/03
- * confirmation). Playwright CSS locators pierce the widget's open shadow DOM.
+ * Works with both the one-screen report (Plan 018: optional type chips above the
+ * textarea) and the older 3-step flow. Playwright CSS locators pierce the
+ * widget's open shadow DOM.
  */
 async function submitWidgetReport(page: Page, description: string): Promise<void> {
   // Step 1: open the widget by clicking the edge-tab trigger

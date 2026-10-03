@@ -64,7 +64,8 @@ maintainer deep-dive: [SDK_RUNTIME_CONFIG.md](https://github.com/kensaurus/mushi
 
 ## Features
 
-- Shadow-DOM widget with CSS isolation, light/dark auto-theme, keyboard-first (`Esc` / `⌘+Enter`), and `prefers-reduced-motion`.
+- One-screen report: free text first, optional type chips, one attachments row, Send. Reporters see their reports, plain-English statuses, developer replies, and "Fixed in v1.4 — does it work now?" in **Your reports**.
+- Shadow-DOM widget with CSS isolation, host-adaptive theming (CSS tokens), light/dark, keyboard-first (`Esc` / `⌘+Enter`, focus trap), and `prefers-reduced-motion`.
 - Screenshot, console ring buffer, network (fetch interceptor), Web Vitals, and a repro timeline of routes + clicks.
 - IndexedDB offline queue with auto-sync, on-device spam pre-filter, client-side rate limiting, and a payload-size guard that degrades instead of wedging the queue.
 - Host element is zero-sized with `pointer-events: none`; only visible controls opt back in. Verify with `Mushi.diagnose()`.
@@ -121,7 +122,7 @@ Mushi.init({
 });
 ```
 
-The details step renders the attached screenshot as a visible preview (not just a checkmark) with a **Remove** control and a configurable privacy caption (`widget.screenshotSensitiveHint`). A "Mark up" overlay lets reporters highlight / blur / arrow before submitting.
+The report screen renders the attached screenshot as a thumbnail (tap to enlarge) with a **Remove** control and a configurable privacy caption (`widget.screenshotSensitiveHint`). A "Mark up" overlay lets reporters highlight / blur / arrow before submitting.
 </details>
 
 <details>
@@ -217,7 +218,7 @@ const mushi = Mushi.init({
 mushi.show();
 mushi.hide();
 mushi.setTrigger('manual');          // switch posture at runtime
-mushi.openWith('bug');               // open straight into a category
+mushi.openWith('bug');               // open the report screen with the Bug type picked
 mushi.attachTo('#support-menu');     // bind the launcher to your element
 ```
 
@@ -314,7 +315,20 @@ Screenshot capture uses canvas / SVG `foreignObject` serialization — it does n
 
 ## Bundle size
 
-~7 KB brotli, enforced at 89.5 KB gzipped (105 KB uncompressed) in CI. Requires `@mushi-mushi/core` (installed automatically, not bundled inline). The widget's visual system — washi paper, sumi ink, vermillion 朱 accent, system serif — lives in [`src/styles.ts`](./src/styles.ts).
+~7 KB brotli, enforced at 89.5 KB gzipped (105 KB uncompressed) in CI. Requires `@mushi-mushi/core` (installed automatically, not bundled inline). The widget looks like part of your app by default: your page's font, system light/dark colours, and an accent taken from `widget.accent`, then your `--mushi-accent`, `accent-color` or `<meta name="theme-color">` (ignored when it would vanish against the panel). Every colour is a CSS token you can set on `:root` or `#mushi-mushi-widget`, and CSS wins over JS config:
+
+```css
+#mushi-mushi-widget {
+  --mushi-accent: #b8860b;      /* Send button, focus ring */
+  --mushi-accent-fg: #000;      /* text on the accent */
+  --mushi-font: Georgia, serif; /* default: inherit */
+  --mushi-bg: Canvas; --mushi-fg: CanvasText;
+  /* also: --mushi-muted, --mushi-surface, --mushi-border, --mushi-success,
+     --mushi-error, --mushi-radius, --mushi-shadow, --mushi-font-size */
+}
+```
+
+Styles live in [`src/styles.ts`](./src/styles.ts).
 
 ## License
 
@@ -323,4 +337,4 @@ MIT
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 60 edge functions · 383 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 64 edge functions · 410 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

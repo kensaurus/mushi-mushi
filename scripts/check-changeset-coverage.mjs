@@ -17,7 +17,11 @@
  * snapshots or mocks. README, manifest and test-only edits do not require a
  * release, and neither does a file whose only changed lines are license-header
  * comments (`// SPDX-License-Identifier:` / `// Copyright (c)`), which the
- * bundler drops. Packages that are private or listed in .changeset/config.json#ignore
+ * bundler drops, nor does a file whose only change is the
+ * `@mushi-mushi/mcp@<version>` pin that scripts/sync-mcp-pin.mjs rewrites
+ * during `pnpm version-packages` (the Changesets "version packages" PR
+ * consumes the changesets and bumps that pin in cli and mcp source; it is the
+ * release itself, not an unreleased change). Packages that are private or listed in .changeset/config.json#ignore
  * are never publishable, so they are skipped.
  *
  * Base: the merge-base of HEAD and `origin/master` (override: --base <ref>).
@@ -84,6 +88,31 @@ export function isLicenseHeaderOnlyPatch(patch) {
     if (!LICENSE_HEADER_LINE.test(line.slice(1))) return false
   }
   return changed > 0
+}
+
+const MCP_PIN_RE = /@mushi-mushi\/mcp@(?:latest|\d+\.\d+\.\d+(?:-[\w.]+)?)/g
+
+/**
+ * True when a `git diff -U0` patch only changes the `@mushi-mushi/mcp@<version>`
+ * literal: every removed line has an added twin that is identical once the pin
+ * is masked. Release tooling (scripts/sync-mcp-pin.mjs) writes these; they are
+ * the release, not a change that needs one. Any other difference counts.
+ */
+export function isVersionPinOnlyPatch(patch) {
+  const removed = []
+  const added = []
+  for (const line of patch.split(/\r?\n/)) {
+    if (line.startsWith('+++') || line.startsWith('---')) continue
+    if (line.startsWith('-')) removed.push(line.slice(1))
+    else if (line.startsWith('+')) added.push(line.slice(1))
+  }
+  if (removed.length === 0 || removed.length !== added.length) return false
+  const hasPin = new RegExp(MCP_PIN_RE.source)
+  if (!removed.some((l) => hasPin.test(l))) return false
+  const mask = (l) => l.replace(MCP_PIN_RE, '@mushi-mushi/mcp@<pin>')
+  const a = removed.map(mask).sort()
+  const b = added.map(mask).sort()
+  return a.every((l, i) => l === b[i])
 }
 
 /**
@@ -169,7 +198,10 @@ function main() {
     packages: readPackages(),
     ignored: new Set(config.ignore ?? []),
     covered: readCovered(),
-    isHeaderOnly: (file) => isLicenseHeaderOnlyPatch(git(['diff', '-U0', mergeBase, '--', file])),
+    isHeaderOnly: (file) => {
+      const patch = git(['diff', '-U0', mergeBase, '--', file])
+      return isLicenseHeaderOnlyPatch(patch) || isVersionPinOnlyPatch(patch)
+    },
   })
 
   if (uncovered.length === 0) {

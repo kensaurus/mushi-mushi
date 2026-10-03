@@ -35,6 +35,7 @@ export default {
   // Check — measure quality
   judge: 'Judge dashboard',
   'code-health': 'Code health',
+  portfolio: 'Portfolio (all apps)',
   health: 'Integration health',
   'qa-coverage': 'QA Coverage',
   intelligence: 'Intelligence reports',

@@ -70,13 +70,22 @@ interface MultiRepoConfig extends OrchestratorConfig {
   }) => Promise<CoordinationPlan>
 }
 
-const matchesGlob = (path: string, glob: string): boolean => {
+/**
+ * Whether a file matches one of a repo's `path_globs`. Same rules as the
+ * server's index path filter (pathMatchesAnyGlob in _shared/codebase-scope.ts):
+ * `**` spans directories, and `**` followed by a slash also matches zero
+ * directories, so `src/` + `**` + `/*.ts` matches src/a.ts too.
+ * @internal Exported for unit tests only.
+ */
+export const matchesGlob = (path: string, glob: string): boolean => {
   const re = new RegExp(
     '^' +
       glob
         .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+        .replace(/\*\*\//g, '\u0002')
         .replace(/\*\*/g, '\u0001')
         .replace(/\*/g, '[^/]*')
+        .replace(/\u0002/g, '(?:.*/)?')
         .replace(/\u0001/g, '.*') +
       '$',
   )

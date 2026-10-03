@@ -1,0 +1,154 @@
+{
+  "$schema": "https://design-tokens.github.io/community-group/format/2025.10/schema.json",
+  "$description": "Pha Khram component tokens. Every value aliases a semantic token.",
+  "button": {
+    "primary": {
+      "background": {
+        "$type": "color",
+        "$value": "{color.action.primary}"
+      },
+      "hover": {
+        "$type": "color",
+        "$value": "{color.action.primaryHover}"
+      },
+      "foreground": {
+        "$type": "color",
+        "$value": "{color.text.onAction}"
+      },
+      "radius": {
+        "$type": "dimension",
+        "$value": "{radius.control}"
+      },
+      "minHeight": {
+        "$type": "dimension",
+        "$value": "{space.target.primary}"
+      },
+      "label": {
+        "$type": "typography",
+        "$value": "{typography.body}"
+      }
+    }
+  },
+  "choice": {
+    "background": {
+      "$type": "color",
+      "$value": "{color.surface.base}"
+    },
+    "border": {
+      "$type": "color",
+      "$value": "{color.line.default}"
+    },
+    "borderSelected": {
+      "$type": "color",
+      "$value": "{color.line.focus}"
+    },
+    "foreground": {
+      "$type": "color",
+      "$value": "{color.text.primary}"
+    },
+    "correctMark": {
+      "$type": "color",
+      "$value": "{color.text.signal}"
+    },
+    "radius": {
+      "$type": "dimension",
+      "$value": "{radius.control}"
+    },
+    "minHeight": {
+      "$type": "dimension",
+      "$value": "{space.target.primary}"
+    }
+  },
+  "hud": {
+    "height": {
+      "$type": "dimension",
+      "$value": "{space.hud}"
+    },
+    "foreground": {
+      "$type": "color",
+      "$value": "{color.text.primary}"
+    },
+    "label": {
+      "$type": "color",
+      "$value": "{color.text.secondary}"
+    },
+    "exitTarget": {
+      "$type": "dimension",
+      "$value": "{space.target.min}"
+    }
+  },
+  "progress": {
+    "warp": {
+      "$type": "color",
+      "$value": "{color.line.default}"
+    },
+    "woven": {
+      "$type": "color",
+      "$value": "{color.dye.deep}"
+    },
+    "current": {
+      "$type": "color",
+      "$value": "{color.line.focus}"
+    }
+  },
+  "actionBar": {
+    "background": {
+      "$type": "color",
+      "$value": "{color.surface.base}"
+    },
+    "rule": {
+      "$type": "color",
+      "$value": "{color.line.default}"
+    }
+  },
+  "prompt": {
+    "word": {
+      "$type": "typography",
+      "$value": "{typography.prompt}"
+    },
+    "foreground": {
+      "$type": "color",
+      "$value": "{color.text.primary}"
+    }
+  },
+  "lessonFeedback": {
+    "positive": {
+      "$type": "color",
+      "$value": "{color.text.signal}"
+    },
+    "neutral": {
+      "$type": "color",
+      "$value": "{color.text.secondary}"
+    },
+    "reward": {
+      "$type": "color",
+      "$value": "{color.feedback.reward}"
+    },
+    "enter": {
+      "$type": "duration",
+      "$value": "{motion.duration.base}"
+    }
+  },
+  "loom": {
+    "background": {
+      "$type": "color",
+      "$value": "{color.surface.base}"
+    },
+    "warp": {
+      "$type": "color",
+      "$value": "{color.line.default}"
+    },
+    "shuttle": {
+      "$type": "color",
+      "$value": "{color.line.focus}"
+    },
+    "advance": {
+      "$type": "duration",
+      "$value": "{motion.duration.shuttle}"
+    },
+    "ease": {
+      "$type": "cubicBezier",
+      "$value": "{motion.easing.shuttle}"
+    }
+  }
+}

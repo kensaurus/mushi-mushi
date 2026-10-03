@@ -11,6 +11,9 @@
  *   PATCH /v1/admin/reporter-outbox/:id            adminOrApiKey(mcp:write)  edit a held message
  *   GET   /v1/admin/reporter-updates-mode          adminOrApiKey(mcp:read)   'auto' | 'review'
  *   PUT   /v1/admin/reporter-updates-mode          jwtAuth                   switch modes
+ *   GET   /v1/admin/projects/:id/reporter-settings jwtAuth                   mode, email / push gates, templates,
+ *                                                                            provider status, 7-day ledger reasons
+ *   PUT   /v1/admin/projects/:id/reporter-settings jwtAuth (owner / admin)   update any of the above
  *
  * Direct developer replies are never held; only pipeline messages (fix
  * started, fixed, released, closed) wait in the Outbox in review mode.
@@ -36,6 +39,12 @@ import {
 } from '../../_shared/reporter-copy.ts';
 import { stampDeliveredReleaseCredits } from '../../_shared/release-reporters.ts';
 import { log } from '../../_shared/logger.ts';
+import { emailProviderConfigured } from '../../_shared/email.ts';
+import { getVapidConfig } from '../../_shared/web-push.ts';
+import { TEMPLATABLE_TYPES, sanitizeTemplates } from '../../_shared/reporter-email.ts';
+import { REPORTER_COPY_EN } from '../../_shared/reporter-copy.ts';
+import { parseReporterSettingsUpdate, summarizeDeliveries } from '../../_shared/reporter-settings.ts';
+import { canManageProjectSdkConfig } from '../helpers.ts';
 import { callerProjectIds, canAccessReportProject, dbError, jsonError, parseUuidParam } from '../shared.ts';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -76,7 +85,115 @@ function heldResponse(c: Context, outcome: HeldActionResult): Response {
   return jsonError(c, 'DB_ERROR', outcome.message, 500);
 }
 
+/** The built-in wording each template replaces (what reporters see without one). */
+const DEFAULT_TEMPLATE_COPY: Record<(typeof TEMPLATABLE_TYPES)[number], string> = {
+  reviewing: REPORTER_COPY_EN.timeline.reviewing,
+  fix_started: REPORTER_COPY_EN.timeline.fix_started,
+  fixed: REPORTER_COPY_EN.timeline.fixed,
+  released: REPORTER_COPY_EN.timeline.released,
+  closed: REPORTER_COPY_EN.closedReason.none,
+  duplicate_linked: REPORTER_COPY_EN.timeline.duplicate_linked,
+};
+
+const LEDGER_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** Everything the console's "Updates to reporters" card shows for one project. */
+async function reporterSettingsView(db: Db, projectId: string): Promise<{ ok: true; data: Record<string, unknown> } | { ok: false; error: { message?: string } }> {
+  const since = new Date(Date.now() - LEDGER_WINDOW_MS).toISOString();
+  const [settingsRes, ledgerRes, verifiedRes, pushRes] = await Promise.all([
+    db
+      .from('project_settings')
+      .select('reporter_updates_mode, reporter_email_enabled, reporter_push_enabled, reporter_templates')
+      .eq('project_id', projectId)
+      .maybeSingle(),
+    db
+      .from('notification_deliveries')
+      .select('channel, status, error_message')
+      .eq('project_id', projectId)
+      .in('channel', ['email', 'push'])
+      .gte('created_at', since)
+      .limit(5000),
+    db
+      .from('reporter_notification_prefs')
+      .select('reporter_token_hash', { count: 'exact', head: true })
+      .eq('project_id', projectId)
+      .not('email_verified_at', 'is', null)
+      .is('unsubscribed_at', null),
+    db
+      .from('reporter_push_subscriptions')
+      .select('id', { count: 'exact', head: true })
+      .eq('project_id', projectId),
+  ]);
+  if (settingsRes.error) return { ok: false, error: settingsRes.error };
+  if (ledgerRes.error) return { ok: false, error: ledgerRes.error };
+  const row = (settingsRes.data ?? {}) as Record<string, unknown>;
+  return {
+    ok: true,
+    data: {
+      project_id: projectId,
+      mode: row.reporter_updates_mode === 'review' ? 'review' : 'auto',
+      email_enabled: row.reporter_email_enabled === true,
+      push_enabled: row.reporter_push_enabled === true,
+      templates: sanitizeTemplates(row.reporter_templates),
+      default_copy: DEFAULT_TEMPLATE_COPY,
+      // Whether this server can send at all. 'not_configured' email means
+      // RESEND_API_KEY / RESEND_FROM_EMAIL are unset: opted-in reporters get
+      // in-app updates only and the ledger records `skipped not_configured`.
+      providers: {
+        email: emailProviderConfigured() ? 'configured' : 'not_configured',
+        push: getVapidConfig() ? 'configured' : 'not_configured',
+      },
+      subscribers: { email: verifiedRes.count ?? 0, push: pushRes.count ?? 0 },
+      deliveries_7d: summarizeDeliveries(
+        (ledgerRes.data ?? []) as Array<{ channel: string; status: string; error_message: string | null }>,
+      ),
+    },
+  };
+}
+
 export function registerReporterAdminRoutes(app: Hono<{ Variables: Variables }>): void {
+  app.get('/v1/admin/projects/:id/reporter-settings', jwtAuth, async (c) => {
+    const idParsed = parseUuidParam(c);
+    if (!idParsed.ok) return idParsed.error;
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+    if (!(await canAccessReportProject(c, db, userId, idParsed.value))) {
+      return jsonError(c, 'NOT_FOUND', 'Project not found', 404);
+    }
+    const view = await reporterSettingsView(db, idParsed.value);
+    if (!view.ok) return dbError(c, view.error);
+    return c.json({ ok: true, data: view.data });
+  });
+
+  app.put('/v1/admin/projects/:id/reporter-settings', jwtAuth, async (c) => {
+    const idParsed = parseUuidParam(c);
+    if (!idParsed.ok) return idParsed.error;
+    const projectId = idParsed.value;
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+    if (!(await canManageProjectSdkConfig(db, projectId, userId))) {
+      return jsonError(c, 'FORBIDDEN', 'Only a project owner or admin can change reporter updates', 403);
+    }
+    const body = await readJson(c);
+    if (!body) return jsonError(c, 'BAD_REQUEST', 'Invalid JSON body', 400);
+    const parsed = parseReporterSettingsUpdate(body);
+    if (!parsed.ok) {
+      return c.json({ ok: false, error: { code: parsed.code, message: parsed.message, field: parsed.field } }, 422);
+    }
+    if (Object.keys(parsed.patch).length > 0) {
+      const { error } = await db
+        .from('project_settings')
+        .upsert({ project_id: projectId, ...parsed.patch }, { onConflict: 'project_id' });
+      if (error) return dbError(c, error);
+      await logAudit(db, projectId, userId, 'settings.updated', 'project_settings', projectId, {
+        reporter_settings: Object.keys(parsed.patch),
+      });
+    }
+    const view = await reporterSettingsView(db, projectId);
+    if (!view.ok) return dbError(c, view.error);
+    return c.json({ ok: true, data: view.data });
+  });
+
   app.post('/v1/admin/reports/:id/request-info', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {
     const idParsed = parseUuidParam(c);
     if (!idParsed.ok) return idParsed.error;

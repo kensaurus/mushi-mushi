@@ -29,12 +29,14 @@ vi.mock('../../supabase/functions/_shared/github.ts', () => ({
 vi.mock('../../supabase/functions/_shared/plugins.ts', () => ({
   dispatchPluginEventDetached: (...args: unknown[]) => mocks.dispatchPluginEventDetached(...(args as [])),
 }))
-vi.mock('../../supabase/functions/_shared/team-notify.ts', () => ({ notifyTeamFixEvent: vi.fn() }))
-vi.mock('../../supabase/functions/_shared/report-status-notify.ts', () => ({ notifyReportStatusTransition: vi.fn() }))
+vi.mock('../../supabase/functions/_shared/team-notify.ts', () => ({ notifyTeamFixEvent: vi.fn(async () => undefined) }))
+vi.mock('../../supabase/functions/_shared/report-status-notify.ts', () => ({ notifyReportStatusTransition: vi.fn(async () => undefined) }))
 vi.mock('../../supabase/functions/_shared/integrations.ts', () => ({ resolveExternalIssue: vi.fn() }))
 vi.mock('../../supabase/functions/_shared/product-events.ts', () => ({ emitProductEvent: vi.fn() }))
+vi.mock('../../supabase/functions/_shared/sentry-resolve-back.ts', () => ({ resolveLinkedSentryIssues: vi.fn(async () => undefined) }))
+vi.mock('../../supabase/functions/_shared/background.ts', () => ({ keepAlive: () => undefined }))
 
-import { finalizeFixClosedUnmerged } from '../../supabase/functions/_shared/fix-merge.ts'
+import { finalizeFixClosedUnmerged, finalizeFixMerge } from '../../supabase/functions/_shared/fix-merge.ts'
 import {
   fixFailureBucket,
   isFixCountedFailed,
@@ -186,14 +188,30 @@ describe('finalizeFixClosedUnmerged', () => {
   })
 })
 
+describe('finalizeFixMerge on a cloud agent PR merged before the agent finished', () => {
+  it('closes the still-open attempt and its job, so the poller stops and its 24 h expiry cannot report a merged fix as failed', async () => {
+    const { db, queries } = createFakeDb((q) => (q.table === 'fix_attempts' && q.op === 'update' ? { data: { id: ATTEMPT.id } } : { data: null }))
+    await finalizeFixMerge(db as never, { ...ATTEMPT, agent: 'github_cloud_agent' } as never, { prUrl: ATTEMPT.pr_url, prNumber: 424 })
+    const close = findQueries(queries, 'fix_attempts', 'update').find((q) => (q.payload as { status?: string }).status === 'completed')
+    expect(close).toBeDefined()
+    expect(eqValue(close!, 'id')).toBe(ATTEMPT.id)
+    // Only an attempt that is still open; a finished one keeps its status.
+    expect(close!.filters).toContainEqual({ method: 'in', args: ['status', ['running', 'queued', 'dispatched', 'pending']] })
+    const job = findQueries(queries, 'fix_dispatch_jobs', 'update')[0]
+    expect(job.payload).toMatchObject({ status: 'completed', pr_url: ATTEMPT.pr_url })
+    expect(hasFilter(job, 'in', 'status')).toBe(true)
+  })
+})
+
 describe('every PR-lifecycle path uses the shared close bookkeeping', () => {
   it('ci-sync reads the PR, finalizes merged and closed PRs, and drops ended PRs from the sweep', () => {
     const src = read('ci-sync/index.ts')
     expect(src).toMatch(/fetchPullRequest\(/)
     expect(src).toMatch(/finalizeFixClosedUnmerged\(/)
     expect(src).toMatch(/finalizeFixMerge\(/)
-    // Both sweep queries skip merged / closed PRs.
-    expect(src.match(/\.or\('pr_state\.is\.null,pr_state\.in\.\(open,draft\)'\)/g)?.length).toBe(2)
+    // The sweep queue (one round-robin query since 2026-10-02) skips merged / closed PRs.
+    expect(src.match(/\.or\('pr_state\.is\.null,pr_state\.in\.\(open,draft\)'\)/g)?.length).toBe(1)
+    expect(src).toMatch(/\.is\('merged_at', null\)\s*\.or\('pr_state\.is\.null,pr_state\.in\.\(open,draft\)'\)/)
   })
 
   it('the pull_request.closed webhook routes unmerged closes through the shared helper', () => {

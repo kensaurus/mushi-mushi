@@ -160,6 +160,12 @@ export interface CreatePrOptions {
   /** Lines appended to the last commit's message body, e.g. `Fixes WEB-12`
    *  so Sentry's GitHub integration resolves the issue when it lands. */
   commitTrailers?: string[]
+  /**
+   * Lift the draft gate after opening the PR (default true, which is what
+   * fix-worker and sdk-upgrade-worker rely on). Recipe PRs pass false so the
+   * PR stays a draft and the host's CI does not run until the owner chooses.
+   */
+  markReady?: boolean
 }
 
 export interface PrResult {
@@ -251,7 +257,7 @@ export async function fetchBaseFileState(
 
 /**
  * Create a GitHub branch, commit the given files, open a draft PR, and
- * immediately mark it ready-for-review so CI can run.
+ * (unless `markReady: false`) immediately mark it ready-for-review so CI can run.
  *
  * Returns the PR URL, number, branch, and last commit SHA.
  */
@@ -272,6 +278,7 @@ export async function createPrFromFiles(
     reportId,
     category,
     commitTrailers = [],
+    markReady = true,
   } = opts
 
   const baseHeaders = {
@@ -346,14 +353,16 @@ export async function createPrFromFiles(
   })) as { number: number; html_url: string }
 
   // Lift draft gate so CI runs and the console merge API works.
-  const readyResult = await markPullRequestReady(token, { owner, repo }, prRes.number)
-  if (!readyResult.ok) {
-    log.warn('github-pr: could not mark PR ready for review', {
-      prNumber: prRes.number,
-      message: readyResult.message,
-    })
-  } else if (!readyResult.alreadyReady) {
-    log.info('github-pr: marked draft PR ready for review', { prNumber: prRes.number })
+  if (markReady) {
+    const readyResult = await markPullRequestReady(token, { owner, repo }, prRes.number)
+    if (!readyResult.ok) {
+      log.warn('github-pr: could not mark PR ready for review', {
+        prNumber: prRes.number,
+        message: readyResult.message,
+      })
+    } else if (!readyResult.alreadyReady) {
+      log.info('github-pr: marked draft PR ready for review', { prNumber: prRes.number })
+    }
   }
 
   // Best-effort labels.

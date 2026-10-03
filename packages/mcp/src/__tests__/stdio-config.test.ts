@@ -88,6 +88,24 @@ describe('resolveStdioCredentials', () => {
     // `${MUSHI_API_KEY:-}` expanded by the client to '' still falls through.
     expect(resolveStdioCredentials({ MUSHI_API_KEY: '' }, CLI_WITH_KEY, DEFAULT_ENDPOINT).apiKey).toBe('mushi_fromcli')
   })
+
+  it('accepts an http endpoint for a local self-host', () => {
+    const r = resolveStdioCredentials({ MUSHI_API_ENDPOINT: 'http://127.0.0.1:54321/functions/v1/api' }, CLI_WITH_KEY, DEFAULT_ENDPOINT)
+    expect(r.endpoint).toBe('http://127.0.0.1:54321/functions/v1/api')
+    expect(r.endpointError).toBeNull()
+  })
+
+  it.each(['file:///etc/passwd', 'javascript:alert(1)', 'not a url', 'ftp://files.example/api', '//host.example/api'])(
+    'refuses the configured endpoint %s, and never falls back to the default with the key',
+    (endpoint) => {
+      const fromCli = resolveStdioCredentials({}, { ...CLI_WITH_KEY, endpoint }, DEFAULT_ENDPOINT)
+      expect(fromCli.endpoint).toBe('')
+      expect(fromCli.endpointError).toContain(`"endpoint" in ${CLI_WITH_KEY.path}`)
+      const fromEnv = resolveStdioCredentials({ MUSHI_API_ENDPOINT: endpoint }, CLI_WITH_KEY, DEFAULT_ENDPOINT)
+      expect(fromEnv.endpoint).toBe('')
+      expect(fromEnv.endpointError).toContain('MUSHI_API_ENDPOINT')
+    },
+  )
 })
 
 describe('missingApiKeyReport', () => {

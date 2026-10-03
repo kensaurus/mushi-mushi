@@ -72,10 +72,16 @@ export const PERSONA_OPTIONS = [
   { value: 'senior-dev', label: 'Senior developer (clean code)' },
 ] as const
 
+/** Producer + judge default. Mirrors PDCA_DEFAULT_MODEL in
+ *  packages/server/supabase/functions/_shared/pdca-models.ts. */
+export const PDCA_DEFAULT_MODEL = 'claude-sonnet-5-5'
+
+/** Claude only: the runner falls back to OpenAI by itself when Anthropic is
+ *  down, so GPT is not a choice here (the server refuses non-Claude ids). */
 export const MODEL_OPTIONS = [
-  { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
-  { value: 'claude-opus-4-7', label: 'Claude Opus 4.7' },
-  { value: 'gpt-5.4', label: 'GPT-5.4' },
+  { value: PDCA_DEFAULT_MODEL, label: 'Claude Sonnet 5.5 (default)' },
+  { value: 'claude-opus-5-5', label: 'Claude Opus 5.5' },
+  { value: 'claude-haiku-4-5', label: 'Claude Haiku 4.5 (fastest)' },
 ] as const
 
 export function scoreTone(pct: number): 'ok' | 'warn' | 'danger' {

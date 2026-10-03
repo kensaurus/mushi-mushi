@@ -153,6 +153,21 @@ export interface ReporterCopy {
     addWords: string;
     developerReplied: string;
     updates: string;
+    /** Receipt after sending (replaces the form in place). */
+    receipt: string;
+    trackIt: string;
+    done: string;
+    /** Email opt-in on the receipt / report detail (never pre-ticked). */
+    emailOptIn: string;
+    emailPlaceholder: string;
+    emailSubmit: string;
+    emailCheckInbox: string;
+    emailInvalid: string;
+    emailFailed: string;
+    /** Next-visit toast. */
+    toastReplied: string;
+    toastFixed: string;
+    view: string;
   };
 }
 
@@ -233,6 +248,18 @@ const EN: ReporterCopy = {
     addWords: 'Add a few words',
     developerReplied: 'Developer replied: “{text}”',
     updates: '{n} updates on your reports',
+    receipt: "Sent. We'll let you know here when there's news.",
+    trackIt: 'Track it',
+    done: 'Done',
+    emailOptIn: 'Get updates by email',
+    emailPlaceholder: 'you@example.com',
+    emailSubmit: 'Email me updates',
+    emailCheckInbox: 'Check your inbox and tap the link to confirm.',
+    emailInvalid: 'That does not look like an email address.',
+    emailFailed: "Couldn't set up email updates. Try again later.",
+    toastReplied: 'The developer replied to your report',
+    toastFixed: 'Your bug is fixed',
+    view: 'View',
   },
 };
 
@@ -313,6 +340,18 @@ const JA: ReporterCopy = {
     addWords: 'もう少し詳しく書いてください',
     developerReplied: '開発者からの返信:「{text}」',
     updates: 'あなたの報告に {n} 件の更新があります',
+    receipt: '送信しました。進展があればここでお知らせします。',
+    trackIt: '経過を見る',
+    done: '閉じる',
+    emailOptIn: 'メールで更新を受け取る',
+    emailPlaceholder: 'you@example.com',
+    emailSubmit: 'メールで受け取る',
+    emailCheckInbox: '受信トレイのメールのリンクをタップして確認してください。',
+    emailInvalid: 'メールアドレスの形式が正しくありません。',
+    emailFailed: 'メール通知を設定できませんでした。後でもう一度お試しください。',
+    toastReplied: '開発者があなたの報告に返信しました',
+    toastFixed: 'あなたが報告した不具合が修正されました',
+    view: '見る',
   },
 };
 
@@ -393,6 +432,18 @@ const ES: ReporterCopy = {
     addWords: 'Agrega algunas palabras',
     developerReplied: 'El desarrollador respondió: “{text}”',
     updates: '{n} novedades en tus reportes',
+    receipt: 'Enviado. Te avisaremos aquí cuando haya novedades.',
+    trackIt: 'Seguirlo',
+    done: 'Listo',
+    emailOptIn: 'Recibir novedades por correo',
+    emailPlaceholder: 'tu@ejemplo.com',
+    emailSubmit: 'Enviarme novedades',
+    emailCheckInbox: 'Revisa tu correo y toca el enlace para confirmar.',
+    emailInvalid: 'Eso no parece un correo electrónico.',
+    emailFailed: 'No pudimos activar las novedades por correo. Inténtalo más tarde.',
+    toastReplied: 'El desarrollador respondió a tu reporte',
+    toastFixed: 'Tu error está corregido',
+    view: 'Ver',
   },
 };
 
@@ -473,6 +524,18 @@ const TH: ReporterCopy = {
     addWords: 'เพิ่มรายละเอียดอีกเล็กน้อย',
     developerReplied: 'นักพัฒนาตอบว่า: “{text}”',
     updates: 'มีความคืบหน้า {n} รายการในรายงานของคุณ',
+    receipt: 'ส่งแล้ว เราจะแจ้งคุณที่นี่เมื่อมีความคืบหน้า',
+    trackIt: 'ติดตาม',
+    done: 'เสร็จ',
+    emailOptIn: 'รับความคืบหน้าทางอีเมล',
+    emailPlaceholder: 'you@example.com',
+    emailSubmit: 'ส่งความคืบหน้าทางอีเมล',
+    emailCheckInbox: 'ตรวจสอบกล่องจดหมายแล้วแตะลิงก์เพื่อยืนยัน',
+    emailInvalid: 'ดูเหมือนจะไม่ใช่อีเมลที่ถูกต้อง',
+    emailFailed: 'ตั้งค่าการแจ้งทางอีเมลไม่สำเร็จ ลองใหม่ภายหลัง',
+    toastReplied: 'นักพัฒนาตอบกลับรายงานของคุณแล้ว',
+    toastFixed: 'บั๊กที่คุณรายงานได้รับการแก้ไขแล้ว',
+    view: 'ดู',
   },
 };
 
@@ -541,7 +604,9 @@ function isCanonical(status: string): status is ReporterCanonicalStatus {
 /** True when the row is a feature request rather than a bug. */
 export function isReporterIdea(input: Pick<ReporterStatusInput, 'user_category'>): boolean {
   const cat = (input.user_category ?? '').trim().toLowerCase().replace(/[\s-]+/g, '_');
-  return cat === 'feature_request' || cat === 'idea';
+  // The web widget and the ingest path send 'feature'; older clients sent
+  // 'Feature request'. The server's isFeatureRequest() accepts the same set.
+  return cat === 'feature' || cat === 'feature_request' || cat === 'idea';
 }
 
 /**
@@ -634,4 +699,90 @@ export function reporterTimelineText(
 /** Reporter-facing label for a category chip. */
 export function reporterCategoryLabel(category: ReporterCategory, locale: string = 'en'): string {
   return reporterCopy(locale).categories[category];
+}
+
+// ---------------------------------------------------------------------------
+// Widget rules shared by web and React Native (Plan 018 §1.1, §2.3, §4.2)
+// ---------------------------------------------------------------------------
+
+/** A few words are enough; an attachment speaks for itself (§1.1). */
+export const REPORTER_MIN_DESCRIPTION = 8;
+
+/** Characters Send needs: `min` (default 8), or 0 with a screenshot / element attached. */
+export function reporterRequiredLength(min: number | undefined, hasAttachment: boolean): number {
+  if (hasAttachment) return 0;
+  return typeof min === 'number' && Number.isFinite(min) && min >= 0 ? Math.floor(min) : REPORTER_MIN_DESCRIPTION;
+}
+
+/** Whether Send is enabled: some text or an attachment, and enough words. */
+export function reporterCanSend(text: string, hasAttachment: boolean, min?: number): boolean {
+  const trimmed = text.trim();
+  if (!trimmed && !hasAttachment) return false;
+  return trimmed.length >= reporterRequiredLength(min, hasAttachment);
+}
+
+/** Wire category for an optional chip: none → `other` (triage sets the type); Idea → a feature request. */
+export function reporterChipToReport(
+  chip: ReporterCategory | null,
+): { category: 'bug' | 'slow' | 'visual' | 'confusing' | 'other'; userCategory?: string } {
+  if (!chip) return { category: 'other' };
+  if (chip === 'idea') return { category: 'other', userCategory: 'feature' };
+  return { category: chip };
+}
+
+/** One entry of `GET /v1/reporter/reports/:id` → `timeline` (subset the widgets read). */
+export interface ReporterTimelineEntry {
+  kind: string;
+  text: string;
+  /** Developer- or project-written text: show `text` as is. */
+  custom?: boolean;
+  body?: string;
+  version?: string;
+  closed_reason?: string;
+}
+
+/** True for the people talking (developer / reporter), false for pipeline events. */
+export function isReporterConversation(entry: Pick<ReporterTimelineEntry, 'kind'>): boolean {
+  return entry.kind === 'comment' || entry.kind === 'reporter_comment' || entry.kind === 'info_requested';
+}
+
+/** Text for one timeline entry in the reporter's locale; custom wording is shown as is. */
+export function reporterTimelineEntryText(entry: ReporterTimelineEntry, locale: string = 'en'): string {
+  if (entry.custom || !(REPORTER_TIMELINE_KINDS as readonly string[]).includes(entry.kind)) return entry.text;
+  return reporterTimelineText(
+    entry.kind as ReporterTimelineKind,
+    { text: entry.body ?? null, version: entry.version ?? null, closed_reason: entry.closed_reason ?? null },
+    locale,
+  );
+}
+
+export const REPORTER_TOAST_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+/** The next-visit toast: one per session and at most one a day, only with something unread (§4.2). */
+export function reporterShouldShowToast(input: {
+  enabled: boolean;
+  unreadTotal: number;
+  shownThisSession: boolean;
+  lastShownAt: number | null;
+  now: number;
+}): boolean {
+  if (!input.enabled || input.unreadTotal <= 0 || input.shownThisSession) return false;
+  return input.lastShownAt === null || input.now - input.lastShownAt >= REPORTER_TOAST_INTERVAL_MS;
+}
+
+/** "The developer replied…", "Your bug is fixed", or "3 updates on your reports". */
+export function reporterToastMessage(
+  updates: { unread_total: number; latest: Array<{ kind: string | null }> },
+  locale: string = 'en',
+): string {
+  const ui = reporterCopy(locale).ui;
+  const kind = updates.unread_total === 1 ? updates.latest[0]?.kind : null;
+  if (kind === 'comment' || kind === 'info_requested') return ui.toastReplied;
+  if (kind === 'fixed' || kind === 'released') return ui.toastFixed;
+  return ui.updates.replace('{n}', String(updates.unread_total));
+}
+
+/** A typo screen for the email opt-in box; the server validates the address. */
+export function isPlausibleReporterEmail(raw: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(raw.trim());
 }

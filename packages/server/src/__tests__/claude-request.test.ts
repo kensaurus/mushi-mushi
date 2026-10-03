@@ -26,6 +26,8 @@ vi.mock('../../supabase/functions/_shared/byok.ts', () => ({
   ],
   markKeyStatus: vi.fn(async () => {}),
   markKeyUsed: vi.fn(async () => {}),
+  // Budget enforcement is covered in llm-budget-enforcement.test.ts.
+  enforceLlmBudget: async () => {},
 }))
 
 vi.mock('../../supabase/functions/_shared/hosted-llm-billing.ts', () => ({

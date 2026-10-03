@@ -127,8 +127,16 @@ describe('cursor-webhook — outcome mapping', () => {
     expect(await res.json()).toMatchObject({ ok: true, applied: true, fixAttemptId: 'fa-1' })
     expect(mocks.apply).toHaveBeenCalledTimes(1)
     const [, target, outcome] = mocks.apply.mock.calls[0] as unknown as [unknown, Record<string, unknown>, Record<string, unknown>]
-    expect(target).toEqual({ attemptId: 'fa-1', projectId: PROJECT, reportId: REPORT, agent: 'cursor_cloud' })
-    expect(outcome).toEqual({ kind: 'pr_opened', prUrl: 'https://github.com/o/r/pull/12', branch: 'bugfix/MUSHI-r-cursor-cloud', summary: 'Fixed the crash' })
+    // pendingPrUrl: a PR attached while the agent worked is judged on FINISHED.
+    expect(target).toEqual({ attemptId: 'fa-1', projectId: PROJECT, reportId: REPORT, agent: 'cursor_cloud', pendingPrUrl: null })
+    // FINISHED is final: the PR's files are what the agent left, so they get judged.
+    expect(outcome).toEqual({
+      kind: 'pr_opened',
+      prUrl: 'https://github.com/o/r/pull/12',
+      branch: 'bugfix/MUSHI-r-cursor-cloud',
+      summary: 'Fixed the crash',
+      agentFinished: true,
+    })
     // X-Webhook-ID remembered on the attempt for dedupe.
     const dedupeWrite = findQueries(queries, 'fix_attempts', 'update')[0]
     expect(dedupeWrite.payload).toMatchObject({ external_agent_ref: expect.objectContaining({ webhook_ids: ['wh-1'], last_webhook_status: 'FINISHED' }) })

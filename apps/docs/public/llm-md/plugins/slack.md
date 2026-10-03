@@ -51,6 +51,7 @@ small card.
 | **Dispatch fix** | Runs the fix agent and opens a draft PR. Swaps to *Install GitHub App* / *Enable Autofix* when the prerequisites are missing |
 | **Resolve ✓** | Marks the report resolved and notifies the reporter |
 | **Dismiss** | Marks it dismissed (noise, duplicate, won't fix), behind a confirm dialog |
+| **Reply to reporter** | Opens a box for a message the person who reported the bug sees word for word in "Your reports" in your app. Only shown when the report came from your app's widget |
 
 Resolve and Dismiss run the same transition contract as the console — plugin
 event, linked-issue resolution, and reporter notification — so acting from
@@ -62,6 +63,27 @@ it in channel history.
 
   **Assign is deliberately absent.** Reports have no assignee column, so an
   "Assign" button would be a UI with nothing behind it.
+
+## Slash commands
+
+With **Slash Commands → `/mushi`** pointed at
+`<functions-url>/api/v1/webhooks/slack/commands`, the hosted app answers:
+
+| Command | What happens |
+| --- | --- |
+| `/mushi list` | The latest 10 open reports, linked to the console |
+| `/mushi open ` | One report's summary and console link |
+| `/mushi resolve ` | Marks it resolved, the same as the card's **Resolve ✓** |
+| `/mushi reply  ` | Answers the person who reported it. Same path as **Reply to reporter**: they see your message word for word in your app, and get an email or push only if they opted in |
+| `/mushi voice ` | Voice intake by text; see [Voice intake](/integrations/voice-intake) |
+
+`` is the full report id or its first 6+ characters. Replies are capped at
+2,000 characters and only reach reports filed from your app's widget.
+
+The reporter sees a reply from "Developer". Every reply sent from Slack, by
+`/mushi reply` or the card's button, also writes a `report.reporter_replied`
+entry to the console's audit log naming the Slack user (and, for the command,
+the channel) it came from.
 
 ## Package
 

@@ -156,7 +156,7 @@ npx expo install react-native-view-shot   # v4+ on Expo SDK 55; v5+ for Fabric /
 
 > **Masking sensitive screens.** `captureScreen()` grabs whatever is on screen. The preview + Remove control is the reporter's consent gate — finance apps can keep screenshots on with a custom caption instead of disabling capture entirely. For screens that must never be photographed, set `capture: { screenshot: false }` while they're focused, or use `expo-screen-capture` to mark the view secure. Full doc: [`docs/SDK_SCREENSHOT_PREVIEW.md`](../../docs/SDK_SCREENSHOT_PREVIEW.md).
 
-> **Metro / Hermes hosts.** The published dist uses esbuild `__require()` for optional peers. Host apps may need a postinstall patch (see yen-yen `scripts/patch-mushi.mjs`) so Metro resolves `react-native-view-shot` and `@react-native-community/netinfo`.
+> **Metro / Hermes hosts.** Optional peers (`react-native-view-shot`, `@react-native-community/netinfo`, `expo-sensors`) load with a literal `require()` inside `try/catch`, which Metro treats as optional. To skip loading entirely, pass them in: `<MushiProvider netInfo={NetInfo} viewShot={ViewShot} expoSensors={ExpoSensors}>`. Versions 0.21–0.23 shipped an esbuild `__require()` shim that crashed under Metro and needed a postinstall patch; drop that patch when you upgrade.
 
 ## Identifying the reporter
 
@@ -199,4 +199,4 @@ MIT
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 60 edge functions · 383 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 64 edge functions · 410 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
