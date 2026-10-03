@@ -42,6 +42,8 @@ export interface ExplainRunRow {
   started_at: string
   completed_at: string | null
   commit_sha: string | null
+  /** The run's own summary: its phase (design_drift) and story scope (inventory gates) pick what it is compared with. */
+  summary?: unknown
 }
 
 /** The newest finished run of the same gate, and the matching finding in it, if any. */
@@ -80,36 +82,83 @@ export interface LatestRunEvidence {
 /** Statuses of a run that finished and checked what it was asked to (error and skipped did not). */
 const COMPLETE_RUN_STATUSES: ReadonlySet<string> = new Set(['pass', 'warn', 'fail'])
 
+/** Per-rule states that mean the rule ran to the end on this run (radar and store summaries). */
+const CHECKED_RULE_STATES: ReadonlySet<string> = new Set(['ok', 'finding'])
+
+/** `mushi recipe check` stops collecting off-token literals at this many (the ingest schema caps it too). */
+export const CI_SCAN_FINDINGS_CAP = 500
+
 /**
  * Why a finding missing from the latest run is NOT evidence it was fixed, or
- * null when it is. A run that errored or skipped, stored fewer findings than
- * it found (a storage cap, or a findings insert that failed), did not run the
- * finding's rule or could not decide it (radar and store runs record a state
- * per rule in summary.results; only `ok` means checked and clean), or could
- * only be searched by a message that embeds counts or dates, proves nothing.
+ * null when it is. Each of these proves nothing:
+ *  - the run errored or skipped, unless its own record shows the finding's rule
+ *    ran to the end (radar and store runs record a state per rule in
+ *    summary.results: `ok` and `finding` mean it ran; a run is `error` when
+ *    one connector failed, which says nothing about the others);
+ *  - the rule has a per-rule entry that is not `ok` or `finding`, or no entry;
+ *  - the run stored fewer findings than it found (a storage cap, or a findings
+ *    insert that failed, recorded as summary.findings_not_stored);
+ *  - the run read only part of the project: it stopped at its file limit
+ *    (summary.truncated), read no files at all (summary.scannedFiles 0), or is
+ *    a CI scan that hit the CLI's 500-finding cap;
+ *  - the run could only be searched by a message that embeds counts or dates.
  */
 export function absenceUnproven(e: LatestRunEvidence): string | null {
-  if (!COMPLETE_RUN_STATUSES.has(e.status)) {
+  const summary = asRecord(e.summary)
+  const results = summary && Array.isArray(summary.results) ? summary.results.map(asRecord) : null
+  const entry = results && e.ruleId !== null ? results.find((r) => r !== null && r.ruleId === e.ruleId) ?? null : null
+  if (results && e.ruleId !== null) {
+    if (!entry) return `the latest run did not run the ${e.ruleId} rule.`
+    if (!CHECKED_RULE_STATES.has(String(entry.state))) {
+      const why = str(entry.reason)
+      return `the ${e.ruleId} rule was "${String(entry.state)}" in the latest run, not checked${why ? ` (${why})` : ''}.`
+    }
+  } else if (!COMPLETE_RUN_STATUSES.has(e.status)) {
     return `the latest run ended with status "${e.status}", so it did not check everything.`
   }
   if (e.findingsCount !== null && e.findingsCount > 0 && (e.storedCount === null || e.storedCount < e.findingsCount)) {
     return `the latest run found ${e.findingsCount} problem${e.findingsCount === 1 ? '' : 's'} but stored only ${e.storedCount ?? 'an unknown number of them'}, so this one may be among those not stored.`
   }
-  const summary = asRecord(e.summary)
-  if (summary && Array.isArray(summary.results) && e.ruleId !== null) {
-    const entry = summary.results
-      .map(asRecord)
-      .find((r) => r !== null && r.ruleId === e.ruleId)
-    if (!entry) return `the latest run did not run the ${e.ruleId} rule.`
-    if (entry.state !== 'ok') {
-      const why = str(entry.reason)
-      return `the ${e.ruleId} rule was "${String(entry.state)}" in the latest run, not checked clean${why ? ` (${why})` : ''}.`
-    }
+  const notStored = summary && typeof summary.findings_not_stored === 'number' ? summary.findings_not_stored : 0
+  if (notStored > 0) {
+    return `the latest run could not store ${notStored} of the problems it found, so this one may be among them.`
+  }
+  if (summary?.truncated === true) {
+    return 'the latest run stopped at its file limit, so it may not have read the file this finding is in.'
+  }
+  if (summary && summary.scannedFiles === 0) {
+    return 'the latest run read no files, so it checked nothing.'
+  }
+  if (summary?.phase === 'ci_scan' && (e.findingsCount ?? 0) >= CI_SCAN_FINDINGS_CAP) {
+    return `the latest CI scan reported ${CI_SCAN_FINDINGS_CAP} problems, the most it sends, so it may have stopped before this one.`
   }
   if (e.matchedBy === 'message') {
     return 'this finding has no file or target to look for, and its message (which can carry counts or dates) is not in the latest run.'
   }
   return null
+}
+
+/**
+ * Which design_drift runs a finding can be compared with. A server scan reads
+ * the whole repo with every rule; a CI push (`mushi recipe check --push`,
+ * phase `ci_scan`) checks only off-token hex literals in the files the host's
+ * CI matched, so one kind's silence says nothing about the other's findings.
+ */
+export function designRunPhase(summary: unknown): 'scan' | 'ci_scan' {
+  return asRecord(summary)?.phase === 'ci_scan' ? 'ci_scan' : 'scan'
+}
+
+/** The story subtree an inventory-gates run was scoped to, or null for a whole-project run. */
+export function runStoryScope(summary: unknown): string | null {
+  return str(asRecord(summary)?.story_node_id)
+}
+
+/**
+ * A run scoped to a story examined only that subtree: it covers a finding only
+ * when it is unscoped, or scoped to the same story as the finding's own run.
+ */
+export function runCoversScope(ownStory: string | null, runStory: string | null): boolean {
+  return runStory === null || runStory === ownStory
 }
 
 export interface FindingFix {
@@ -260,7 +309,10 @@ function stateOf(
         : 'Allowlisted: someone marked it as accepted, so it no longer counts against the gate.',
     }
   }
-  if (!latest || latest.id === finding.gate_run_id) {
+  if (!latest) {
+    return { state: 'open', reason: 'No finished run of this check has looked again since it was found.' }
+  }
+  if (latest.id === finding.gate_run_id) {
     return { state: 'open', reason: 'It is in the latest run of this check.' }
   }
   if (latest.matchingFindingId) {
