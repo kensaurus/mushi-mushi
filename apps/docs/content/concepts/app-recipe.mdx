@@ -275,3 +275,15 @@ including Jenkins or a cron on a server.
 | `get_design_deviance` | The score, the per-rule breakdown, the trend and the top findings |
 | `get_store_status` | The latest store review: listing vs live, claims vs code, screenshots and the checklist |
 | `get_fix_context` | Now includes a `recipe` block (at most 4 KB) with the tokens to use |
+| `explain_finding` | One finding by id: what the check is, why it fired, the file and line, the fix in one sentence, and whether the latest run still reports it |
+
+To check again right after a fix, without waiting for the daily run, use the
+run-now tools. Each needs a key with `mcp:write`, only records a new run, and
+is rate limited per project:
+
+| MCP tool | Runs | At most |
+|---|---|---|
+| `refresh_recipe` | Re-reads `mushi.recipe.json` and the token files | Once every 5 minutes |
+| `run_design_deviance` | Refreshes the tokens and starts a new deviance scan (poll `get_design_deviance`) | Once every 5 minutes |
+| `run_radar` | The hole checks (poll `get_radar`) | Once every 10 minutes |
+| `run_store_review` | The store review (read it again with `get_store_status`) | Once every 30 minutes |
