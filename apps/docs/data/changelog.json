@@ -1,38 +1,12 @@
 [
   {
-    "majorMinor": "next",
-    "headline": "Unreleased",
-    "pending": true,
-    "versions": [],
+    "majorMinor": "1.31",
+    "headline": null,
+    "pending": false,
+    "versions": [
+      "1.31.0"
+    ],
     "highlights": [
-      {
-        "title": "Free text first.",
-        "description": "Type chips are optional. \"Idea\" files a feature request."
-      },
-      {
-        "title": "Easier to send.",
-        "description": "Send enables after a few words (`widget.minDescriptionLength`, default 8), or right away when a screenshot is attached."
-      },
-      {
-        "title": "Timeline thread.",
-        "description": "The thread shows the report's timeline: what happened and when, in the reporter's language, with the developer's replies."
-      },
-      {
-        "title": "Reduce Motion.",
-        "description": "The sheet opens and closes instantly when Reduce Motion is on."
-      },
-      {
-        "title": "Receipt.",
-        "description": "After sending, the form becomes a receipt with \"Track it\" and \"Done\"."
-      },
-      {
-        "title": "Email opt-in.",
-        "description": "When the app offers email updates, the receipt asks for an address. It is never pre-ticked, and a confirmation email goes out first."
-      },
-      {
-        "title": "Return toast.",
-        "description": "A short \"The developer replied\" / \"Your bug is fixed\" toast appears when the app returns to the foreground: once per session, once a day, and only on devices that sent a report. Turn it off with `notifications: { toast: false }`."
-      },
       {
         "title": "One-screen report.",
         "description": "The 3-step category → intent → details flow is gone. Reporters type first, optionally pick a type chip (Bug, Slow, Looks wrong, Confusing, Idea, plus your own categories under \"More…\"), optionally narrow it with a sub-chip, attach a screenshot or point at an element, and press Send. `minDescriptionLength` now defaults to 8 (halved for Japanese, Chinese and Korean); an element the reporter picked, or a screenshot they asked for, also enables Send. With no chip picked the report is sent as `category: 'other'` and the classifier assigns the type."
@@ -66,7 +40,16 @@
         "description": "The panel is built once and patched region by region, so a poll or a config update no longer rebuilds what the reporter is typing. Focus moves into the dialog, Tab stays inside, Escape closes (or goes back from a report), focus returns to the launcher, chips are a roving radio group, and \"Sent\" / reply status / errors are announced. All motion respects `prefers-reduced-motion`."
       }
     ],
-    "packages": []
+    "packages": [
+      {
+        "name": "@mushi-mushi/core",
+        "version": "1.31.0"
+      },
+      {
+        "name": "@mushi-mushi/web",
+        "version": "1.31.0"
+      }
+    ]
   },
   {
     "majorMinor": "1.30",
@@ -1151,6 +1134,21 @@
     ]
   },
   {
+    "majorMinor": "0.29",
+    "headline": null,
+    "pending": false,
+    "versions": [
+      "0.29.0"
+    ],
+    "highlights": [],
+    "packages": [
+      {
+        "name": "@mushi-mushi/cli",
+        "version": "0.29.0"
+      }
+    ]
+  },
+  {
     "majorMinor": "0.28",
     "headline": null,
     "pending": false,
@@ -1244,10 +1242,47 @@
     "versions": [
       "0.24.0"
     ],
-    "highlights": [],
+    "highlights": [
+      {
+        "title": "Free text first.",
+        "description": "Type chips are optional. \"Idea\" files a feature request."
+      },
+      {
+        "title": "Easier to send.",
+        "description": "Send enables after a few words (`widget.minDescriptionLength`, default 8), or right away when a screenshot is attached."
+      },
+      {
+        "title": "Timeline thread.",
+        "description": "The thread shows the report's timeline: what happened and when, in the reporter's language, with the developer's replies."
+      },
+      {
+        "title": "Reduce Motion.",
+        "description": "The sheet opens and closes instantly when Reduce Motion is on."
+      },
+      {
+        "title": "Receipt.",
+        "description": "After sending, the form becomes a receipt with \"Track it\" and \"Done\"."
+      },
+      {
+        "title": "Email opt-in.",
+        "description": "When the app offers email updates, the receipt asks for an address. It is never pre-ticked, and a confirmation email goes out first."
+      },
+      {
+        "title": "Return toast.",
+        "description": "A short \"The developer replied\" / \"Your bug is fixed\" toast appears when the app returns to the foreground: once per session, once a day, and only on devices that sent a report. Turn it off with `notifications: { toast: false }`."
+      }
+    ],
     "packages": [
       {
         "name": "@mushi-mushi/cli",
+        "version": "0.24.0"
+      },
+      {
+        "name": "@mushi-mushi/mcp",
+        "version": "0.24.0"
+      },
+      {
+        "name": "@mushi-mushi/react-native",
         "version": "0.24.0"
       }
     ]
@@ -2214,7 +2249,7 @@
       },
       {
         "name": "mushi-mushi",
-        "version": "0.8.2"
+        "version": "0.8.3"
       }
     ]
   },
@@ -2436,7 +2471,7 @@
       },
       {
         "name": "create-mushi-mushi",
-        "version": "0.6.2"
+        "version": "0.6.3"
       },
       {
         "name": "mushi-mushi",
@@ -2951,7 +2986,7 @@
       },
       {
         "name": "@mushi-mushi/plugin-slack-app",
-        "version": "0.2.9"
+        "version": "0.2.10"
       },
       {
         "name": "@mushi-mushi/plugin-zapier",

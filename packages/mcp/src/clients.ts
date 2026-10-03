@@ -54,7 +54,7 @@ import { MUSHI_ICON_PNG_URL } from './branding.js'
  * editor launch. Synced to package.json by `scripts/sync-mcp-pin.mjs` — never
  * hand-edit the version.
  */
-export const MCP_PIN_SPEC = '@mushi-mushi/mcp@0.23.0'
+export const MCP_PIN_SPEC = '@mushi-mushi/mcp@0.24.0'
 
 // ─── Internal config shapes ────────────────────────────────────────────────────
 
