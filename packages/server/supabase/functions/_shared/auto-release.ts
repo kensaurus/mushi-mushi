@@ -64,7 +64,8 @@ export interface AutoReleaseDeps {
 
 /** With no published release yet, look back as far as release-builder does. */
 export const AUTO_RELEASE_DEFAULT_WINDOW_DAYS = 30
-const MAX_VERSION_LENGTH = 100
+/** A tag, semver or short sha: what a reporter may see as "fixed in …". */
+export const AUTO_RELEASE_VERSION_RE = /^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/
 
 // ─── Trigger parsing (pure) ──────────────────────────────────────────────────
 
@@ -108,6 +109,9 @@ export function triggerFromGithubDeploymentStatus(payload: {
 }
 
 function releaseTitle(trigger: AutoReleaseTrigger, version: string): string {
+  // Only the GitHub release name (written by the repo's maintainers on a
+  // signed delivery) or a fixed "Deployed <sha>" arrives as a title; the CI
+  // push path never sets one.
   if (trigger.title?.trim()) return trigger.title.trim().slice(0, 200)
   return /^v\d/i.test(version) ? version : `v${version}`
 }
@@ -169,8 +173,12 @@ export async function runAutoRelease(
   }
   if ((settings as { auto_release_enabled?: boolean } | null)?.auto_release_enabled !== true) return { status: 'disabled' }
 
-  const version = trigger.version.trim().slice(0, MAX_VERSION_LENGTH)
-  if (!version) return { status: 'failed', error: 'the trigger carried no version' }
+  // The version lands in every reporter's "fixed in …" message and can come
+  // from a CI push, so only a plain version string is accepted.
+  const version = trigger.version.trim()
+  if (!AUTO_RELEASE_VERSION_RE.test(version)) {
+    return { status: 'failed', error: `"${version.slice(0, 40)}" is not a version (letters, digits, . _ + - only, at most 64)` }
+  }
 
   const { data: existing, error: existingErr } = await db
     .from('releases')

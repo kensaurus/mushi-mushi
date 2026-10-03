@@ -178,6 +178,16 @@ describe('runAutoRelease', () => {
     expect(d.publish).not.toHaveBeenCalled()
   })
 
+  it('refuses a version that is not a plain tag / semver / sha (it reaches every reporter)', async () => {
+    const d = deps()
+    for (const version of ['', '   ', 'v1 <script>', 'see https://evil.example', 'x'.repeat(65), '-1.0']) {
+      const out = await runAutoRelease(seed() as never, P, { source: 'recipe_event', version }, d)
+      expect(out.status).toBe('failed')
+    }
+    expect(d.draft).not.toHaveBeenCalled()
+    expect((await runAutoRelease(seed() as never, P, { source: 'recipe_event', version: '2026.10.03+build.7' }, d)).status).toBe('published')
+  })
+
   it('a failed publish keeps the draft for a person and says so', async () => {
     const d = deps({ publish: vi.fn(async () => ({ ok: false as const, status: 500 as const, error: 'release published, but x' })) })
     expect(await runAutoRelease(seed() as never, P, trigger, d)).toEqual({

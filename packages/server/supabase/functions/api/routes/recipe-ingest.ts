@@ -16,7 +16,7 @@
 
 import type { Context, Hono, MiddlewareHandler } from 'npm:hono@4'
 import { z } from 'npm:zod@3'
-import { adminOrApiKey, apiKeyAuth, jwtAuth } from '../../_shared/auth.ts'
+import { adminOrApiKey, apiKeyAuth, jwtAuth, mcpKeyBrowserExposure } from '../../_shared/auth.ts'
 import { getServiceClient } from '../../_shared/db.ts'
 import { log } from '../../_shared/logger.ts'
 import { snapshotFromSource, DESIGN_GATE } from '../../_shared/design-plane.ts'
@@ -177,13 +177,19 @@ export function registerRecipeIngestRoutes(app: Hono<{ Variables: Variables }>, 
     if (!parsed.success) return jsonError(c, 'VALIDATION_ERROR', parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ').slice(0, 500), 400)
     const now = deps.now().toISOString()
     let stored = 0
-    // A shipped version may auto-release (opt-in, checked inside); once per version per request.
+    // A shipped version may auto-release (opt-in, checked inside); once per
+    // version per request. Auto-release messages reporters, so a key that a
+    // web page has sent (the public SDK key) cannot trigger it.
     const releasedVersions = new Set<string>()
     const autoRelease = deps.scheduleAutoRelease ?? scheduleAutoRelease
+    const keyExposure = mcpKeyBrowserExposure(
+      { origin: c.req.header('Origin'), referer: c.req.header('Referer'), secFetchSite: c.req.header('Sec-Fetch-Site') },
+      (c.get('apiKeyBrowserSignals') as { last_seen_origin?: string | null; browser_seen_at?: string | null } | undefined) ?? {},
+    )
     for (const e of parsed.data.events) {
       if (e.type === 'release.published' && !releasedVersions.has(e.version)) {
         releasedVersions.add(e.version)
-        void autoRelease(db, projectId, { source: 'recipe_event', version: e.version, commit: e.commit ?? null })
+        if (!keyExposure) void autoRelease(db, projectId, { source: 'recipe_event', version: e.version, commit: e.commit ?? null })
       }
       if (e.type === 'build.completed') {
         const { error } = await db.from('ci_workflow_runs').upsert({
@@ -201,7 +207,15 @@ export function registerRecipeIngestRoutes(app: Hono<{ Variables: Variables }>, 
         if (!error) stored++
       }
     }
-    return c.json({ ok: true, data: { received: parsed.data.events.length, stored, autoReleaseChecked: releasedVersions.size } })
+    return c.json({
+      ok: true,
+      data: {
+        received: parsed.data.events.length,
+        stored,
+        autoReleaseChecked: keyExposure ? 0 : releasedVersions.size,
+        ...(keyExposure && releasedVersions.size > 0 ? { autoReleaseSkipped: 'browser_exposed_key' } : {}),
+      },
+    })
   })
 
   app.post('/v1/ingest/recipe/csv', deps.jwtAuth, async (c) => {

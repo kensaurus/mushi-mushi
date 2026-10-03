@@ -296,10 +296,17 @@ export function IntegrationsPage() {
         return
       }
     }
+    const payload = def ? platformSaveBody(def, body, platform?.[kind] ?? {}) : body
+    if (Object.keys(payload).length === 0) {
+      clearInlineError(kind)
+      toast.success(`No changes to save for ${kind}`)
+      setEditing(null)
+      return
+    }
     setSaving(kind)
     const res = await apiFetch(`/v1/admin/integrations/platform/${kind}`, {
       method: 'PUT',
-      body: JSON.stringify(def ? platformSaveBody(def, body, platform?.[kind] ?? {}) : body),
+      body: JSON.stringify(payload),
     })
     setSaving(null)
     if (!res.ok) {
