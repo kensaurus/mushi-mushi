@@ -39,6 +39,15 @@ system, routes and stories, gates, CI/CD, deploy, env names, integrations) on on
 canvas, with a list view on narrow screens. MCP clients read the same data with
 `get_app_recipe`.
 
+Select a card to open its detail panel. Four cards have their own view:
+
+| Card | What the panel shows |
+|------|----------------------|
+| Schema | The tables in the newest schema snapshot (RLS on or off, column count) and what changed since the snapshot before: tables added or removed, columns added or removed, RLS switched |
+| CI/CD | The recent workflow runs with their result and **estimated** billable minutes. GitHub no longer reports billed minutes per run, so Mushi estimates them from job time and runner type. |
+| Deploy | For each target in `deploy.targets`, the commit it should run (the default-branch head) next to the commit and version it reported. A target with no observation says **Not observed**, never Live. |
+| Env names | A matrix of variable names by place: the repo's Actions secrets and variables, each GitHub environment, and runtime. Each cell says Set, Missing, Set but not declared, or **Not checked** when GitHub did not list that place (for example, a token without the secrets permission). Values are never read. |
+
 ## `mushi.recipe.json`
 
 A `mushi.recipe.json` file at your repo root points Mushi at your design tokens.

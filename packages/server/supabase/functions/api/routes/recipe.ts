@@ -173,7 +173,7 @@ export function registerRecipeRoutes(app: Hono<{ Variables: Variables }>, deps: 
       return jsonError(c, 'VALIDATION_ERROR', `element must be one of ${RECIPE_ELEMENT_KEYS.join(', ')}`, 400)
     }
     try {
-      const { response, details } = await composeRecipe(db, deps, access.projectId)
+      const { response, details } = await composeRecipe(db, deps, access.projectId, { detailFor: element })
       return c.json({ ok: true, data: { element: response.elements[element], detail: details[element] } })
     } catch (err) {
       rlog.error('recipe element failed', { projectId: access.projectId, element, err: String(err) })

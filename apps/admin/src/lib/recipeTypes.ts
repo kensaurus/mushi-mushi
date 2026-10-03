@@ -92,8 +92,98 @@ export interface RecipeResponse {
 
 export interface RecipeElementDetail {
   element: RecipeElementSummary
-  /** Element-specific detail; shapes are documented per element in recipe.ts. */
+  /**
+   * Element-specific detail; shapes are documented per element in recipe.ts.
+   * GET /recipe/elements/:element (never GET /recipe) adds one typed view:
+   * `schemaView`, `ciView`, `deployView` or `envView` (below).
+   */
   detail: Record<string, unknown>
+}
+
+// ── Per-element detail views (GET /recipe/elements/:element only) ───────────
+
+export interface SchemaTableRow {
+  name: string
+  schema: string | null
+  rls: boolean | null
+  columns: number | null
+}
+
+export interface SchemaTableChange {
+  name: string
+  addedColumns: string[]
+  removedColumns: string[]
+  rls: { from: boolean | null; to: boolean | null } | null
+}
+
+export interface SchemaView {
+  source: 'drift_scanner' | 'supabase_connector' | null
+  capturedAt: string | null
+  tables: SchemaTableRow[]
+  totalTables: number
+  diff: { previousCapturedAt: string; added: string[]; removed: string[]; changed: SchemaTableChange[] } | null
+}
+
+export interface CiRunRow {
+  runId: number
+  name: string | null
+  event: string | null
+  branch: string | null
+  headSha: string | null
+  status: string | null
+  conclusion: string | null
+  startedAt: string | null
+  completedAt: string | null
+  estMinutes: number | null
+  url: string | null
+}
+
+export interface CiView {
+  runs: CiRunRow[]
+  estMinutesTotal: number | null
+  estimatedRuns: number
+  note: string
+}
+
+export type DeployTargetStatus = 'live' | 'behind' | 'probe_failed' | 'unobserved' | 'not_comparable'
+
+export interface DeployTargetRow {
+  id: string
+  kind: string | null
+  environment: string | null
+  probe: string | null
+  expected: { commit: string | null; version: string | null }
+  observed: { commit: string | null; version: string | null; at: string; ok: boolean; error: string | null; source: string } | null
+  status: DeployTargetStatus
+  reason: string
+}
+
+export interface DeployView {
+  expectedCommit: string | null
+  expectedVersion: string | null
+  targets: DeployTargetRow[]
+  undeclared: string[]
+}
+
+/** `not_checked`: the names there could not be listed, so nothing is claimed. */
+export type EnvCell = 'present' | 'missing' | 'extra' | 'not_required' | 'not_checked'
+
+export interface EnvMatrixColumn {
+  key: string
+  label: string
+  checked: boolean
+}
+
+export interface EnvMatrixRow {
+  name: string
+  declared: boolean
+  cells: Record<string, EnvCell>
+}
+
+export interface EnvView {
+  columns: EnvMatrixColumn[]
+  rows: EnvMatrixRow[]
+  truncated: boolean
 }
 
 export interface RecipeRefreshResult {
