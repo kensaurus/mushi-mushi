@@ -258,6 +258,11 @@ describe('wiring', () => {
     expect(repoSweep.indexOf('tombstonePaths(')).toBeLessThan(repoSweep.indexOf('fetchFileForIndex('))
     expect(repoSweep.indexOf('if (filteredAway')).toBeLessThan(repoSweep.indexOf('tombstonePaths('))
     expect(indexer).toContain('if (error) throw new Error(`tombstoning files outside the path filter failed: ${error.message}`);')
+    // The multi-repo guard reads the repo count strictly.
+    expect(repoSweep).toContain('indexingRepos: await countIndexingRepos(db, projectId),')
+    const count = indexer.slice(indexer.indexOf('async function countIndexingRepos('), indexer.indexOf('async function countIndexingRepos(') + 700)
+    expect(count).toContain(".eq('indexing_enabled', true)")
+    expect(count).toContain('if (error) throw new Error(`indexing repo count failed: ${error.message}`);')
   })
 
   it('the sweep counts only storable blobs and reports unstorable fetches to the coverage measure', () => {
@@ -584,9 +589,21 @@ describe('path filter: globstar and narrowing', () => {
       indexedPaths: new Set(['src/a.ts', 'scripts/b.ts', 'gone/c.ts']),
       indexableTreePaths: ['src/a.ts', 'scripts/b.ts', 'scripts/new.ts'],
       eligible,
+      indexingRepos: 1,
     })
     // gone/c.ts is not in the tree (a truncated listing could omit it): left alone.
     expect(out).toEqual(['scripts/b.ts'])
-    expect(pathsOutsideFilter({ indexedPaths: new Set(['a.ts']), indexableTreePaths: ['a.ts'], eligible: () => true })).toEqual([])
+    expect(pathsOutsideFilter({ indexedPaths: new Set(['a.ts']), indexableTreePaths: ['a.ts'], eligible: () => true, indexingRepos: 1 })).toEqual([])
+  })
+
+  it('a project indexing several repos tombstones nothing (the index is per project)', () => {
+    // Backend repo (api/**) also has src/index.ts, which is the frontend's indexed file.
+    const backend = indexPathFilter({ scope: null, pathGlobs: ['api/**'] })
+    expect(pathsOutsideFilter({
+      indexedPaths: new Set(['src/index.ts', 'api/a.ts']),
+      indexableTreePaths: ['src/index.ts', 'api/a.ts'],
+      eligible: backend,
+      indexingRepos: 2,
+    })).toEqual([])
   })
 })
