@@ -123,6 +123,36 @@ mushi lessons show <id>
 mushi sync-lessons              # pull promoted rules → .mushi/lessons.json
 ```
 
+### Sentry issues already open
+
+The Sentry webhook only sees new issues. `mushi sentry import` brings in the
+ones already open, so they get the same diagnosis. Running it twice is safe: an
+issue already imported links to its report.
+
+```bash
+mushi sentry import                                  # newest unresolved issues
+mushi sentry import WEB-1A2 WEB-1A3                  # by id or short id (up to 10)
+mushi sentry import --query "level:error" --since-days 7
+mushi sentry import --query "level:error" --cursor <next>   # next page, printed after each import
+```
+
+It needs the Sentry org slug, project slug and an auth token with `event:read`
+and `project:read` (console: **Integrations → Sentry**).
+
+### Reporter updates held for review
+
+When reporter updates are in review mode, each status message waits in the
+outbox until you send it. Sending and discarding reach a real person, so both
+need `--yes`.
+
+```bash
+mushi outbox list
+mushi outbox edit <messageId> "Fixed in 1.4, thanks for the report"
+mushi outbox release <messageId> --yes
+mushi outbox release <messageId> --text "Fixed in 1.4" --yes
+mushi outbox discard <messageId> --yes
+```
+
 ---
 
 ## Agentic fixes
@@ -198,16 +228,98 @@ mushi qa run <storyId>
 mushi audit                        # full-stack project health audit
 ```
 
+### Gate findings
+
+`mushi audit findings` lists each finding from the recent gate runs with its
+file and line. `mushi audit explain` says why one fired, what it prevents and
+how to fix it. `--gate` takes any gate name: one this CLI version does not list
+is still sent to the server, with a warning.
+
+```bash
+mushi audit findings
+mushi audit findings --gate code_health --severity error
+mushi audit findings --all                      # include allowlisted findings
+mushi audit explain <findingId>
+```
+
+### Code health
+
+Oversized files and bundle size that your CI posts to `POST /v1/ingest/metrics`.
+
+```bash
+mushi code-health show [--days 30]
+mushi code-health stats
+```
+
+---
+
+## Your repo
+
+These read the GitHub repo connected to the project. Mushi reads it through
+the GitHub connection and does not clone it.
+
+```bash
+mushi repo digest > digest.txt                  # one token-budgeted text for an LLM; summary goes to stderr
+mushi repo digest --report <reportId>           # start from the files in that report's stack trace and fixes
+mushi repo digest --path src/auth --budget 40000 --out digest.txt
+
+mushi repo diagram show                         # the architecture diagram as an outline
+mushi repo diagram generate [--force]           # draw it for the latest commit
+mushi repo diagram publish --yes                # make it a public page (owners and admins)
+mushi repo diagram unpublish --yes
+```
+
+`publish` shows where the page will go before it publishes. It sends the hash
+of exactly what the preview showed, so a diagram that changed in between is
+refused. A private repo can only be published from the console.
+
+---
+
+## Releases
+
+Release notes that credit the people who reported each fix and tell them it
+shipped.
+
+```bash
+mushi releases draft 1.4.0 [--since 2026-09-01]  # notes from the fixes merged in the window; nothing is sent
+mushi releases list [--status draft]
+mushi releases show <releaseId>
+mushi releases edit <releaseId> --body-file notes.md
+mushi releases publish <releaseId> --yes         # resolves the fixed reports and messages each credited reporter
+mushi releases delete <releaseId> --yes          # drafts only
+mushi releases stats
+```
+
+---
+
+## Spend limits
+
+```bash
+mushi budgets show                              # monthly AI budget, auto-fix caps, plan spend cap, auto-fix on/off
+mushi budgets autofix off                       # fixes you start yourself always run
+mushi billing cap 100                           # the plan's hard monthly cap
+```
+
+The monthly AI budget and the auto-fix caps are changed in the console
+(**Settings → General → Spend limits**), because that setting takes a signed-in
+session, not an API key.
+
 ---
 
 ## App recipe
 
 ```bash
 mushi recipe init                    # write a starter mushi.recipe.json from what the repo shows
-mushi recipe check                   # validate it and its token files; list colours that match no token
-mushi recipe check --push            # send the recipe and findings to Mushi from your existing CI job
+mushi recipe check                   # validate it and its token files; run Mushi's deviance rules and print the 0–100 score
+mushi recipe check --max-score 30    # also fail when the score is above 30
+mushi recipe check --push            # send the recipe and the scan from your existing CI job; fails above the project's limit when that gate is on
 mushi recipe show                    # each part of the recipe and its state
 ```
+
+For `--push`, give CI a `mushi login` key (it carries `mcp:read`). A push with
+the SDK key (`report:write` only) keeps its findings and the CI gate, but never
+sets the score the console shows or dispatches a design fix, because that key
+ships inside your app.
 
 ---
 
@@ -217,10 +329,68 @@ Checks that catch a problem before a user hits it. `scan` runs in your own CI
 job; Mushi never clones your repo.
 
 ```bash
-mushi radar scan                     # storage deletes done in SQL; lists the build files the store rules read
-mushi radar scan --push              # send results to Mushi (one extra step in your existing CI job)
+mushi radar scan                     # storage deletes done in SQL, secret keys in the built app; lists the build files the store rules read
+mushi radar scan --push              # send results to Mushi (one extra step in your existing CI job, after the build step)
+mushi radar scan --bundle-dir web/dist   # scan only these built client folders (repeatable), e.g. to leave out a server dist
 mushi radar show                     # every hole check for this project and what it found
 ```
+
+Run `scan` **after your build step**: it also reads the built app (`dist`,
+`build`, `out`, `.next/static`, `.output/public`, `.svelte-kit/output/client`,
+`.vercel/output/static`, native JS bundles) for secret keys. A `dist` that holds
+server code counts too; name the client folders with `--bundle-dir` to leave it
+out. With no build output, that check is left out and reads "Not checked",
+never a pass.
+Only the file, the line and the kind of key are sent, never the key itself.
+The Supabase anon key and the Mushi SDK key are public by design and are not
+flagged.
+
+### One CI step for both checks
+
+`radar scan --push` and `recipe check --push` belong in a job you already
+run, so they cost no extra job. Both need `@mushi-mushi/cli` 0.29.0 or later;
+an older CLI answers "unknown command", and the packaged action stops with
+that version in its error instead. Store a project key as a repo secret first.
+The SDK ingest key works; an account-level (org) key does not. Both commands
+read the checked-out repo, so the job needs `actions/checkout` before them,
+and `radar scan` also reads the built app, so put the step after your build.
+
+**Copy-paste `run:` step**, for any CI system:
+
+```yaml
+- name: Mushi checks
+  run: |
+    npx --yes @mushi-mushi/cli@latest radar scan --push
+    npx --yes @mushi-mushi/cli@latest recipe check --push
+  env:
+    MUSHI_API_KEY: ${{ secrets.MUSHI_INGEST_KEY }}
+```
+
+**Packaged GitHub Action**, the same CLI with the inputs spelled out:
+
+```yaml
+- uses: actions/checkout@v4
+- uses: kensaurus/mushi-mushi/packages/cli@master
+  with:
+    api-key: ${{ secrets.MUSHI_INGEST_KEY }}
+    upload-sourcemaps: 'false'   # set 'true' (the default) to also upload source maps
+    radar-scan: 'true'
+    recipe-check: 'true'
+    # working-directory: apps/web   # if the app is not at the repo root
+    # fail-on-error: 'false'        # warn instead of failing the job
+```
+
+| Input | Default | What it does |
+|---|---|---|
+| `radar-scan` | `false` | Runs `mushi radar scan --push`. Findings do not fail the job; they show on the hole checks. |
+| `recipe-check` | `false` | Runs `mushi recipe check --push`. An invalid `mushi.recipe.json` (or none) fails the step. |
+| `fail-on-error` | `true` | `false` turns a failed check or an unreachable Mushi into a warning. |
+| `working-directory` | `.` | The repo root both checks read. |
+| `upload-sourcemaps` | `true` | The action's original source-map upload. Uses `release`, `sourcemaps-dir`, `dry-run`. |
+
+Run it on pushes to your default branch. `recipe check --push` records the
+commit SHA and branch from `GITHUB_SHA` and `GITHUB_REF_NAME`, and on a pull
+request the branch is the merge ref.
 
 ---
 
@@ -286,6 +456,30 @@ mushi sourcemaps upload --release 1.4.2 --dir ./dist
 mushi deploy check                   # edge-function health + latency
 mushi test                           # synthetic report end-to-end
 ```
+
+---
+
+## Several apps
+
+For a team with more than one app. These read team-wide data, so they need an
+account-level key (console: **Connect → MCP → account key**), not a key bound
+to one project. If you belong to several teams, the error lists each one with
+the `--org ` to pass.
+
+```bash
+mushi portfolio show                 # each app: health, open reports, holes, SDK version, last release
+mushi portfolio findings             # the same problem repeated across apps, SDK skew, integration holes
+mushi portfolio resources            # domains, accounts and buckets shared between apps
+mushi connectors list                # connectors with status and last error (read-only)
+mushi connectors status <id>
+mushi connectors actions             # requested connector actions and whether they ran
+mushi funnel show                    # one funnel, every app side by side
+mushi funnel set --steps signup,first_report,fix_merged --window 7d
+mushi releases calendar              # what is waiting to ship in each app, and one suggested batch
+```
+
+Adding, probing or editing a connector takes credentials, so it stays in the
+console.
 
 ---
 
