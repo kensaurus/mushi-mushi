@@ -1,3 +1,6 @@
+import { mkdtempSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import type * as ConfigModule from '../config.js'
 import { errorReply, okReply, runCli } from '../test-harness.js'
@@ -115,5 +118,40 @@ describe('mushi portfolio findings', () => {
     const run = await runCli(registerPortfolioCommands, ['portfolio', 'findings'], () =>
       okReply({ organizationId: ORG, groups: [], sdkSkew: [], holes: [], crossProject: [] }))
     expect(run.stdout).toContain('No repeated problems')
+  })
+})
+
+describe('mushi portfolio import', () => {
+  const csvFile = (content: string) => {
+    const file = join(mkdtempSync(join(tmpdir(), 'mushi-resources-')), 'resources.csv')
+    writeFileSync(file, content)
+    return file
+  }
+
+  it('posts the CSV with the organization in the body and lists refused rows', async () => {
+    const file = csvFile('kind,external_id,project\ndomain,glot.it,glot-it\nbogus,x,glot-it')
+    const run = await runCli(registerPortfolioCommands, ['portfolio', 'import', file], () => okReply({ imported: 1, errorCount: 1, errors: ['line 3: unknown kind "bogus"'], skippedOverLimit: 0 }))
+    expect(run.calls[0]).toMatchObject({
+      method: 'POST',
+      path: '/v1/ingest/recipe/csv',
+      body: { organizationId: 'current', csv: 'kind,external_id,project\ndomain,glot.it,glot-it\nbogus,x,glot-it' },
+    })
+    expect(run.stdout).toContain('Imported 1 row(s); 1 refused.')
+    expect(run.stdout).toContain('line 3: unknown kind')
+  })
+
+  it('passes --org and refuses a malformed one before calling the API', async () => {
+    const file = csvFile('kind,external_id,project')
+    const run = await runCli(registerPortfolioCommands, ['portfolio', 'import', file, '--org', ORG], () => okReply({ imported: 0, errorCount: 0, errors: [], skippedOverLimit: 0 }))
+    expect(run.calls[0]!.body).toMatchObject({ organizationId: ORG })
+    const bad = await runCli(registerPortfolioCommands, ['portfolio', 'import', file, '--org', 'nope'])
+    expect(bad.calls).toHaveLength(0)
+  })
+
+  it('shows the owner/admin refusal', async () => {
+    const file = csvFile('kind,external_id,project')
+    const run = await runCli(registerPortfolioCommands, ['portfolio', 'import', file], () => errorReply(403, 'FORBIDDEN', 'Only team owners and admins can import resources.'))
+    expect(run.exitCode).toBe(1)
+    expect(run.stderr).toContain('FORBIDDEN')
   })
 })

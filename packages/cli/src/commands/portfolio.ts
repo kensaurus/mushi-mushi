@@ -1,14 +1,21 @@
 /**
  * FILE: packages/cli/src/commands/portfolio.ts
- * PURPOSE: `mushi portfolio show|findings` — every app in your team on one
- *          screen, and the problems repeated across them. Console parity for
- *          the Portfolio page (GET /v1/admin/orgs/:orgId/portfolio[/findings]).
- *          Needs an account-level key; a key bound to one project is refused.
+ * PURPOSE: `mushi portfolio show|findings|resources|import` — every app in
+ *          your team on one screen, the problems repeated across them, and the
+ *          accounts, domains and buckets they share. Console parity for the
+ *          Portfolio page (GET /v1/admin/orgs/:orgId/portfolio[/findings],
+ *          …/portfolio/resources, POST /v1/ingest/recipe/csv). Needs an
+ *          account-level key; a key bound to one project is refused.
  */
 
 import type { Command } from 'commander'
-import { apiCall, outputIsJson, requireConfig } from '../cli-shared.js'
+import { readFileSync, statSync } from 'node:fs'
+import { apiCall, outputIsJson, requireConfig, requireUuid } from '../cli-shared.js'
 import { dieOrgError, oneLine, orgSegment } from '../command-helpers.js'
+import { MushiCliError } from '../errors.js'
+
+/** The api's cap on a resource CSV. */
+const MAX_RESOURCE_CSV_BYTES = 256 * 1024
 
 type Severity = 'info' | 'warn' | 'error'
 
@@ -175,5 +182,39 @@ export function registerPortfolioCommands(program: Command): void {
         return
       }
       for (const line of renderPortfolioResources(result.data)) console.log(line)
+    })
+
+  portfolio
+    .command('import <file>')
+    .description('Record shared resources from a CSV: kind,external_id,project[,role] (team owners and admins)')
+    .option(ORG_HELP, ORG_DESC)
+    .option('--json', 'Machine-readable JSON output')
+    .action(async (file: string, opts: { org?: string; json?: boolean }) => {
+      let size: number
+      try {
+        size = statSync(file).size
+      } catch {
+        throw new MushiCliError('E_INVALID_INPUT', `Cannot read ${file}.`)
+      }
+      if (size > MAX_RESOURCE_CSV_BYTES) throw new MushiCliError('E_INVALID_INPUT', `${file} is over 256 KB.`, 'split it into several files')
+      const csv = readFileSync(file, 'utf8')
+      // The route takes the organization in the body; `current` resolves the key owner's only one.
+      const organizationId = opts.org && opts.org !== 'current' ? requireUuid(opts.org, 'organization id') : 'current'
+      const config = requireConfig()
+      const result = await apiCall<{ imported: number; errorCount: number; errors: string[]; skippedOverLimit: number }>(
+        '/v1/ingest/recipe/csv',
+        config,
+        { method: 'POST', body: JSON.stringify({ organizationId, csv }) },
+      )
+      if (!result.ok) dieOrgError(result)
+      const r = result.data
+      if (outputIsJson(opts.json)) {
+        console.log(JSON.stringify(r, null, 2))
+        return
+      }
+      console.log(`Imported ${r.imported} row(s); ${r.errorCount} refused.`)
+      for (const e of r.errors) console.log(`  ${oneLine(e, 120)}`)
+      if (r.errorCount > r.errors.length) console.log(`  … ${r.errorCount - r.errors.length} more`)
+      if (r.skippedOverLimit > 0) console.log(`  ${r.skippedOverLimit} row(s) past the 500-row limit were not read; import them in a second file.`)
     })
 }

@@ -2,9 +2,32 @@ import type { Command } from 'commander'
 import { execFileSync } from 'node:child_process'
 import { existsSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { apiCall, die, outputIsJson, requireConfig, requireUuid } from '../cli-shared.js'
+import { apiCall, die, fmtDate, outputIsJson, requireConfig, requireUuid } from '../cli-shared.js'
+import { MushiCliError } from '../errors.js'
 import { checkRecipe, MANIFEST, pushPayload, starterManifest } from '../recipe/local.js'
 import { describeCheck, localLimitExceeded, pushVerdict, type RecipePushAnswer } from '../recipe/report.js'
+
+const SOURCE_ELEMENTS = ['gates', 'env', 'routes'] as const
+
+interface RecipeSources {
+  ok: boolean
+  element: string
+  reason?: string
+  branch?: string
+  headSha?: string
+  files: Array<{ path: string; exists: boolean; content: string | null; sha: string | null; writable: boolean; reason: string | null }>
+}
+
+interface RecipeChangeJob {
+  id: string
+  element: string
+  status: string
+  pr_url: string | null
+  branch: string | null
+  error: string | null
+  created_at: string
+  finished_at: string | null
+}
 
 interface RecipeElement {
   label: string
@@ -120,5 +143,55 @@ export function registerRecipeCommands(program: Command): void {
       }
       console.log(`Worst: ${res.data.worst}`)
       for (const e of Object.values(res.data.elements)) console.log(`  ${e.state.padEnd(14)} ${e.label} — ${e.reason}`)
+    })
+
+  recipe
+    .command('sources')
+    .description('The repo files a recipe change may edit for one element, with the sha to send back as baseSha')
+    .requiredOption('--element <element>', SOURCE_ELEMENTS.join(' | '))
+    .option('--project-id <id>', 'Project ID (defaults to the configured project)')
+    .option('--json', 'Machine-readable JSON output (includes each file\'s content)')
+    .action(async (opts: { element: string; projectId?: string; json?: boolean }) => {
+      if (!(SOURCE_ELEMENTS as readonly string[]).includes(opts.element)) {
+        throw new MushiCliError('E_INVALID_INPUT', `--element must be one of ${SOURCE_ELEMENTS.join(', ')}`)
+      }
+      const config = requireConfig({ needsProject: !opts.projectId })
+      const projectId = requireUuid(opts.projectId ?? config.projectId!, 'project id')
+      const res = await apiCall<RecipeSources>(`/v1/admin/projects/${projectId}/recipe/sources?element=${opts.element}`, config)
+      if (!res.ok) die(res)
+      if (outputIsJson(opts.json)) {
+        console.log(JSON.stringify(res.data, null, 2))
+        return
+      }
+      if (!res.data.ok) {
+        console.log(`Nothing editable: ${res.data.reason ?? 'unknown reason'}`)
+        return
+      }
+      console.log(`${res.data.element} on ${res.data.branch ?? '?'} @ ${(res.data.headSha ?? '').slice(0, 7)}`)
+      for (const f of res.data.files) {
+        const state = !f.exists ? 'new file' : f.content === null ? 'not shown' : `${f.content.length} chars, sha ${(f.sha ?? '').slice(0, 7)}`
+        console.log(`  ${f.writable ? 'writable' : 'locked  '} ${f.path}  (${state})${f.reason ? ` — ${f.reason}` : ''}`)
+      }
+    })
+
+  recipe
+    .command('change <jobId>')
+    .description('One recipe change job: queued, running, pr_opened, rejected or failed')
+    .option('--project-id <id>', 'Project ID (defaults to the configured project)')
+    .option('--json', 'Machine-readable JSON output')
+    .action(async (jobId: string, opts: { projectId?: string; json?: boolean }) => {
+      const id = requireUuid(jobId, 'job id')
+      const config = requireConfig({ needsProject: !opts.projectId })
+      const projectId = requireUuid(opts.projectId ?? config.projectId!, 'project id')
+      const res = await apiCall<RecipeChangeJob>(`/v1/admin/projects/${projectId}/recipe/changes/${id}`, config)
+      if (!res.ok) die(res)
+      if (outputIsJson(opts.json)) {
+        console.log(JSON.stringify(res.data, null, 2))
+        return
+      }
+      const j = res.data
+      console.log(`${j.element} change ${j.id}: ${j.status} (started ${fmtDate(j.created_at)}${j.finished_at ? `, finished ${fmtDate(j.finished_at)}` : ''})`)
+      if (j.pr_url) console.log(`  Draft PR: ${j.pr_url}`)
+      if (j.error) console.log(`  ${j.error}`)
     })
 }

@@ -123,3 +123,20 @@ describe('mushi releases calendar', () => {
     expect(run.stderr).toContain('--org o1')
   })
 })
+
+describe('mushi releases auto-release', () => {
+  it('passes the project by query and says nothing blocks when there is no draft', async () => {
+    const run = await runCli(registerReleasesCommands, ['releases', 'auto-release'], () => okReply({ blockingDraft: null }))
+    expect(run.calls[0]!.path).toBe(`/v1/admin/releases/auto-release?project_id=${PID}`)
+    expect(run.stdout).toContain('Nothing blocks auto-release')
+  })
+
+  it('names the blocking draft and how to clear it', async () => {
+    const run = await runCli(registerReleasesCommands, ['releases', 'auto-release'], () => okReply({
+      blockingDraft: { id: RID, version: '1.4.0', createdAt: '2026-10-01T00:00:00Z', autoSource: 'ci', stale: true },
+    }))
+    expect(run.stdout).toContain('blocked by draft 1.4.0')
+    expect(run.stdout).toContain('stale')
+    expect(run.stdout).toContain(`mushi releases publish ${RID} --yes`)
+  })
+})

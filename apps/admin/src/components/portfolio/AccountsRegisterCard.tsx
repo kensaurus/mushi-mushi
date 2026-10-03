@@ -63,8 +63,11 @@ export function AccountsRegisterCard({ orgId }: { orgId: string }) {
       setNotice({ tone: 'danger', text: payload.error })
       return
     }
+    const body = JSON.stringify(payload.body)
     const ok = await run(
-      () => apiFetchMutate<{ id: string }>(editing ? `${path}/${editing}` : path, { method: editing ? 'PATCH' : 'POST', body: JSON.stringify(payload.body) }),
+      () => (editing
+        ? apiFetchMutate<{ id: string }>(`/v1/admin/orgs/${orgId}/accounts/${editing}`, { method: 'PATCH', body })
+        : apiFetchMutate<{ id: string }>(`/v1/admin/orgs/${orgId}/accounts`, { method: 'POST', body })),
       editing ? 'Account updated.' : 'Account added to the register.',
     )
     if (ok) {

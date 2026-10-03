@@ -44,6 +44,9 @@ import { registerSentryCommands } from './commands/sentry.js'
 import { registerOutboxCommands } from './commands/outbox.js'
 import { registerBudgetsCommands } from './commands/budgets.js'
 import { registerRepoCommands } from './commands/repo.js'
+import { registerAccountsCommands } from './commands/accounts.js'
+import { registerSpendCommands } from './commands/spend.js'
+import { registerDesignCommands } from './commands/design.js'
 import { setGlobalOutputFormat } from './cli-shared.js'
 import { printAndExit } from './errors.js'
 
@@ -133,6 +136,9 @@ registerSentryCommands(program)
 registerOutboxCommands(program)
 registerBudgetsCommands(program)
 registerRepoCommands(program)
+registerAccountsCommands(program)
+registerSpendCommands(program)
+registerDesignCommands(program)
 // Registered last so buildCommandTree() sees every command above when the
 // action runs (Commander builds the tree during these synchronous calls;
 // the action itself only executes later, at parseAsync() time).

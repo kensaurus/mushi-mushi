@@ -30,6 +30,8 @@ export interface RecordedCall {
 export interface ScriptedReply {
   status?: number
   body: unknown
+  /** Answer with this content type and `body` as raw text (a download) instead of JSON. */
+  contentType?: string
 }
 
 export type Responder = (call: RecordedCall) => ScriptedReply
@@ -84,6 +86,9 @@ export async function runCli(
     }
     calls.push(call)
     const reply = respond(call)
+    if (reply.contentType) {
+      return new Response(String(reply.body), { status: reply.status ?? 200, headers: { 'content-type': reply.contentType } })
+    }
     return new Response(JSON.stringify(reply.body), {
       status: reply.status ?? 200,
       headers: { 'content-type': 'application/json' },
