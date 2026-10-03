@@ -8,7 +8,10 @@
 
 import type { PlatformDef } from '../components/integrations/types'
 
-/** "a, b  c,,b" → ["a", "b", "c"] (trimmed, deduped, order kept). */
+/**
+ * "a, b  c,,b" → ["a", "b", "c"] (trimmed, deduped, order kept).
+ * @internal Exported for unit tests only.
+ */
 export function parseListInput(raw: string): string[] {
   return [...new Set(raw.split(/[\s,]+/).map((s) => s.trim()).filter(Boolean))]
 }

@@ -41,6 +41,7 @@ interface BundleSecretFinding {
   label: SecretLabel
 }
 
+/** @internal Exported for unit tests only. */
 export interface BundleScan {
   /** Build output folders found (repo-relative). Empty = nothing built yet: the check did not run. */
   roots: string[]
@@ -145,6 +146,7 @@ function findBundleRoots(root: string): string[] {
  * A match that is public by design is not a leak: the Supabase anon key (a
  * JWT with role `anon`) and the Mushi SDK key (`NEXT_PUBLIC_MUSHI_API_KEY`,
  * report-only). A JWT counts only when its role says it is privileged.
+ * @internal Exported for unit tests only.
  */
 export function isClientSafeMatch(m: Pick<SecretMatch, 'label' | 'value'>): boolean {
   if (m.label === 'Mushi API key') return true
@@ -163,7 +165,7 @@ export function isClientSafeMatch(m: Pick<SecretMatch, 'label' | 'value'>): bool
  * `--bundle-dir` folders as repo-relative roots. Each must be a folder inside
  * the repo: a typo is an error, never "no secrets found".
  */
-export function bundleRootsFromFlags(root: string, dirs: readonly string[]): string[] {
+function bundleRootsFromFlags(root: string, dirs: readonly string[]): string[] {
   const roots: string[] = []
   for (const d of dirs) {
     const full = resolve(root, d)
@@ -179,6 +181,7 @@ export function bundleRootsFromFlags(root: string, dirs: readonly string[]): str
  * Secret keys in the built app. Reads only build output; the matched text
  * never leaves this function. `bundleDirs` (from --bundle-dir) replaces the
  * folder discovery, e.g. to leave out a server-side `dist`.
+ * @internal Exported for unit tests only.
  */
 export function scanBuiltBundles(root: string, readFile: (path: string) => string = (p) => readFileSync(p, 'utf8'), bundleDirs?: readonly string[]): BundleScan {
   const roots = bundleDirs && bundleDirs.length > 0 ? bundleRootsFromFlags(root, bundleDirs) : findBundleRoots(root)
@@ -253,7 +256,10 @@ export function scanLocalRepo(root: string, readFile: (path: string) => string =
   return { scannedFiles, truncated, unreadable, findings, configFiles, bundle: scanBuiltBundles(root, readFile, opts.bundleDirs) }
 }
 
-/** The ingest route takes at most this many findings per push. */
+/**
+ * The ingest route takes at most this many findings per push.
+ * @internal Exported for unit tests only.
+ */
 export const MAX_PUSH_FINDINGS = 200
 /** The bundle check keeps at least this many slots, so a flood of storage findings cannot hide a leaked key. */
 const MIN_BUNDLE_FINDINGS = 50

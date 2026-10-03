@@ -159,7 +159,7 @@ interface CrossProjectFinding {
 // ── Spend ledger (gap #22): mirror of _shared/spend-ledger.ts ───────────────
 
 export type BillVendor = 'vercel' | 'aws' | 'supabase' | 'other'
-export type LedgerSourceState = 'ok' | 'not_connected' | 'error'
+type LedgerSourceState = 'ok' | 'not_connected' | 'error'
 
 export interface LedgerSource {
   state: LedgerSourceState
@@ -180,7 +180,7 @@ export interface LedgerApp {
   complete: boolean
 }
 
-export interface LedgerImport {
+interface LedgerImport {
   id: string
   vendor: BillVendor
   projectId: string | null

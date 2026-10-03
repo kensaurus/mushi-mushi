@@ -32,7 +32,10 @@ export interface RepoIndexView {
   coverage: string | null
 }
 
-/** Null until a sweep has run. Rows from before the coverage columns read as indexed. */
+/**
+ * Null until a sweep has run. Rows from before the coverage columns read as indexed.
+ * @internal Exported for unit tests only.
+ */
 export function repoIndexView(repo: RepoIndexFields): RepoIndexView | null {
   const at = lastIndexSweepAt({ last_indexed_at: repo.last_indexed_at, index_swept_at: repo.index_swept_at ?? null })
   if (!at) return null

@@ -23,7 +23,7 @@ export const ENV_EXAMPLE_PATH = '.env.example'
 export const DEFAULT_INVENTORY_PATH = 'inventory.yaml'
 const MAX_FILE_CHARS = 512 * 1024
 
-export const ENV_NAME_RE = /^[A-Z][A-Z0-9_]*$/
+const ENV_NAME_RE = /^[A-Z][A-Z0-9_]*$/
 const METRIC_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$/
 const GATE_RE = /^[a-z][a-z0-9_]{0,59}$/
 const ISO_DURATION_RE = /^P(?=\d|T\d)(?:\d+W)?(?:\d+D)?(?:T(?:\d+H)?(?:\d+M)?)?$/i
@@ -50,25 +50,25 @@ export function parseManifest(text: string | null): ParsedManifest {
 }
 
 /** Indentation of a JSON document (2 spaces by default), as the server detects it. */
-export function detectIndent(text: string): string | number {
+function detectIndent(text: string): string | number {
   const m = /\n([ \t]+)"/.exec(text)
   return m ? m[1] : 2
 }
 
-export function serializeLike(doc: unknown, original: string): string {
+function serializeLike(doc: unknown, original: string): string {
   const body = JSON.stringify(doc, null, detectIndent(original))
   return original.endsWith('\n') ? `${body}\n` : body
 }
 
 // ── gates: budgets and cadence ───────────────────────────────────────────────
 
-export interface BudgetRow {
+interface BudgetRow {
   metric: string
   /** Kept as the typed text so a half-typed number is not lost. */
   limit: string
 }
 
-export interface CadenceRow {
+interface CadenceRow {
   gate: string
   /** ISO 8601 duration, e.g. P1D or P7D. */
   every: string
@@ -89,8 +89,9 @@ export function gatesDraftFrom(doc: Json): GatesDraft {
   }
 }
 
-export type ValidatedGates = { ok: true; budgets: Record<string, number>; cadence: Record<string, string> } | { ok: false; errors: string[] }
+type ValidatedGates = { ok: true; budgets: Record<string, number>; cadence: Record<string, string> } | { ok: false; errors: string[] }
 
+/** @internal Exported for unit tests only. */
 export function validateGates(draft: GatesDraft): ValidatedGates {
   const errors: string[] = []
   const budgets: Record<string, number> = {}
@@ -116,7 +117,10 @@ export function validateGates(draft: GatesDraft): ValidatedGates {
   return errors.length ? { ok: false, errors } : { ok: true, budgets, cadence }
 }
 
-/** Replace `gates.budgets` / `gates.cadence`, dropping a key (and `gates`) that ends up empty. */
+/**
+ * Replace `gates.budgets` / `gates.cadence`, dropping a key (and `gates`) that ends up empty.
+ * @internal Exported for unit tests only.
+ */
 export function applyGates(text: string, budgets: Record<string, number>, cadence: Record<string, string>): { ok: true; text: string } | { ok: false; error: string } {
   const parsed = parseManifest(text)
   if (!parsed.ok) return parsed
@@ -171,8 +175,9 @@ export function newEnvRow(): EnvRow {
   return { name: '', actions: true, runtime: false, githubEnvironments: '', original: null }
 }
 
-export type ValidatedEnv = { ok: true; required: Json[]; names: string[] } | { ok: false; errors: string[] }
+type ValidatedEnv = { ok: true; required: Json[]; names: string[] } | { ok: false; errors: string[] }
 
+/** @internal Exported for unit tests only. */
 export function validateEnv(rows: readonly EnvRow[]): ValidatedEnv {
   const errors: string[] = []
   const required: Json[] = []
@@ -197,7 +202,7 @@ export function validateEnv(rows: readonly EnvRow[]): ValidatedEnv {
   return errors.length ? { ok: false, errors } : { ok: true, required, names }
 }
 
-export function applyEnv(text: string, required: Json[]): { ok: true; text: string } | { ok: false; error: string } {
+function applyEnv(text: string, required: Json[]): { ok: true; text: string } | { ok: false; error: string } {
   const parsed = parseManifest(text)
   if (!parsed.ok) return parsed
   const doc = parsed.doc
@@ -211,6 +216,7 @@ export function applyEnv(text: string, required: Json[]): { ok: true; text: stri
 
 const EXAMPLE_KEY_RE = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=/
 
+/** @internal Exported for unit tests only. */
 export function exampleKeys(text: string | null): string[] {
   return (text ?? '').split(/\r?\n/).map((l) => EXAMPLE_KEY_RE.exec(l)?.[1]).filter((k): k is string => Boolean(k))
 }
@@ -219,6 +225,7 @@ export function exampleKeys(text: string | null): string[] {
  * `.env.example` with a `NAME=` line for every declared name it lacks, and the
  * lines of names removed from the recipe dropped. Existing lines (and their
  * placeholder values) are kept as they are; Mushi never writes a value.
+ * @internal Exported for unit tests only.
  */
 export function syncEnvExample(text: string | null, names: readonly string[], removed: readonly string[]): string {
   const original = text ?? ''

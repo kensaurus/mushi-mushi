@@ -504,7 +504,7 @@ function LanguageSparkline({ distribution }: { distribution: Record<string, numb
   )
 }
 
-export function AutofixToggleRow({
+function AutofixToggleRow({
   enabled,
   saving,
   canToggle,

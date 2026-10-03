@@ -102,14 +102,14 @@ export interface RecipeElementDetail {
 
 // ── Per-element detail views (GET /recipe/elements/:element only) ───────────
 
-export interface SchemaTableRow {
+interface SchemaTableRow {
   name: string
   schema: string | null
   rls: boolean | null
   columns: number | null
 }
 
-export interface SchemaTableChange {
+interface SchemaTableChange {
   name: string
   addedColumns: string[]
   removedColumns: string[]
@@ -124,7 +124,7 @@ export interface SchemaView {
   diff: { previousCapturedAt: string; added: string[]; removed: string[]; changed: SchemaTableChange[] } | null
 }
 
-export interface CiRunRow {
+interface CiRunRow {
   runId: number
   name: string | null
   event: string | null
@@ -147,7 +147,7 @@ export interface CiView {
 
 export type DeployTargetStatus = 'live' | 'behind' | 'probe_failed' | 'unobserved' | 'not_comparable'
 
-export interface DeployTargetRow {
+interface DeployTargetRow {
   id: string
   kind: string | null
   environment: string | null
@@ -168,13 +168,13 @@ export interface DeployView {
 /** `not_checked`: the names there could not be listed, so nothing is claimed. */
 export type EnvCell = 'present' | 'missing' | 'extra' | 'not_required' | 'not_checked'
 
-export interface EnvMatrixColumn {
+interface EnvMatrixColumn {
   key: string
   label: string
   checked: boolean
 }
 
-export interface EnvMatrixRow {
+interface EnvMatrixRow {
   name: string
   declared: boolean
   cells: Record<string, EnvCell>
@@ -214,7 +214,7 @@ export interface RecipeHistoryResponse {
   latestDiff: TokenDiff | null
 }
 
-export interface TokenDiff {
+interface TokenDiff {
   fromSnapshotId: string
   toSnapshotId: string
   added: string[]
@@ -538,15 +538,6 @@ export interface RecipeChangeEdit {
   baseSha?: string | null
 }
 
-export interface RecipeChangeRequest {
-  element: RecipeChangeElement
-  edits: RecipeChangeEdit[]
-  dryRun?: boolean
-  /** false: answer 202 with a job id and open the PR in the background. */
-  wait?: boolean
-  title?: string
-}
-
 export interface RecipeChangeDryRun {
   dryRun: true
   ok: boolean
@@ -609,7 +600,7 @@ export interface DesignExcerpt {
 // ── Fixer context: schema, last fix's deploy state, radar ────────────────────
 
 /** Tables the report's stack trace and failed requests name, from the latest schema snapshot. */
-export interface FixSchemaContext {
+interface FixSchemaContext {
   /** ok: tables found · drift: a named table is missing from the snapshot · unknown: none named · not_connected: no snapshot · error: read failed. */
   state: ElementState
   note: string
@@ -620,10 +611,10 @@ export interface FixSchemaContext {
   missing: string[]
 }
 
-export type FixDeployState = 'live' | 'deployed_since_merge' | 'not_live' | 'probe_failed' | 'unknown' | 'no_merged_fix' | 'error'
+type FixDeployState = 'live' | 'deployed_since_merge' | 'not_live' | 'probe_failed' | 'unknown' | 'no_merged_fix' | 'error'
 
 /** Whether the project's last merged fix is live, from deploy observations and deploy_drift. */
-export interface FixDeployContext {
+interface FixDeployContext {
   state: FixDeployState
   note: string
   lastFix: { reportId: string | null; prUrl: string | null; mergedAt: string } | null
@@ -632,7 +623,7 @@ export interface FixDeployContext {
 }
 
 /** The project's open hole-check (radar) findings. */
-export interface FixRadarContext {
+interface FixRadarContext {
   /** drift: open findings · ok: checked, none open · unknown: never checked · error: read failed. */
   state: ElementState
   note: string
@@ -640,7 +631,7 @@ export interface FixRadarContext {
   findings: Array<{ rule: string; severity: string; message: string; fix: string | null }>
 }
 
-export interface FixRecipeContext {
+interface FixRecipeContext {
   schema: FixSchemaContext
   deploy: FixDeployContext
   radar: FixRadarContext
@@ -650,7 +641,7 @@ export interface FixRecipeContext {
 
 // ── Directions board ─────────────────────────────────────────────────────────
 
-export interface DirectionAsset {
+interface DirectionAsset {
   path: string
   kind: 'icon' | 'illustration' | 'image' | 'font' | 'lottie' | string
   /** Short-lived signed URL (relative to the api base, e.g. `/v1/design-assets/…`); null when it cannot be signed or is not an image. */
@@ -658,7 +649,7 @@ export interface DirectionAsset {
   size: number | null
 }
 
-export interface DirectionFont {
+interface DirectionFont {
   /** Token path, e.g. `font.family.display`. */
   path: string
   role: string
