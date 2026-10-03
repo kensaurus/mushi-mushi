@@ -29,43 +29,60 @@ export function registerRadarCommands(program: Command): void {
 
   radar
     .command('scan')
-    .description('Scan this repo for storage deletes done in SQL and read the build settings the store rules check')
+    .description('Scan this repo and its built app for storage deletes done in SQL and secret keys, and read the build settings the store rules check')
     .option('--dir <path>', 'Repo root to scan', '.')
-    .option('--push', 'Send the results to Mushi (run this in your existing CI job)')
+    .option('--bundle-dir <path...>', 'Built client folders to scan for secret keys instead of finding them (repeatable; e.g. to leave out a server-side dist)')
+    .option('--push', 'Send the results to Mushi (run this in your existing CI job, after the build step)')
     .option('--json', 'Machine-readable JSON output')
     .addHelpText('after', `
 What it checks here:
-  storage_sql_delete   deleting storage.objects rows with SQL leaves the files in
-                       the bucket, still billed. Delete through the Storage API.
+  storage_sql_delete     deleting storage.objects rows with SQL leaves the files in
+                         the bucket, still billed. Delete through the Storage API.
+  key_in_client_bundle   a secret key (OpenAI, Stripe live, Supabase secret, …) in
+                         the built app (dist, build, out, .next/static,
+                         .output/public, .svelte-kit/output/client,
+                         .vercel/output/static, native JS bundles, or the
+                         folders given with --bundle-dir). Anyone who opens
+                         the app can read it. Public keys
+                         by design (Supabase anon key, Mushi SDK key) are not flagged.
+                         Only where and which kind of key is sent, never the key.
 With --push, Mushi also checks your Android target SDK and iOS build settings
 against the current Google Play and App Store rules, from the build files only.
 
-Add one step to your existing CI job (no new job needed):
+Add one step to your existing CI job, after the build step (no new job needed):
   - run: npx mushi-mushi radar scan --push
     env:
       MUSHI_API_KEY: \${{ secrets.MUSHI_INGEST_KEY }}`)
-    .action(async (opts: { dir: string; push?: boolean; json?: boolean }) => {
+    .action(async (opts: { dir: string; bundleDir?: string[]; push?: boolean; json?: boolean }) => {
       const root = resolve(opts.dir)
       let scan
       try {
-        scan = scanLocalRepo(root)
+        scan = scanLocalRepo(root, undefined, { bundleDirs: opts.bundleDir })
       } catch (err) {
-        process.stderr.write(`error: could not read ${root}: ${(err as Error).message}\n`)
+        process.stderr.write(`error: could not scan ${root}: ${(err as Error).message}\n`)
         process.exitCode = 1
         return
       }
       const json = outputIsJson(opts.json)
       if (!opts.push) {
+        const b = scan.bundle
         if (json) {
-          console.log(JSON.stringify({ scannedFiles: scan.scannedFiles, truncated: scan.truncated, findings: scan.findings, configFiles: Object.keys(scan.configFiles) }, null, 2))
+          console.log(JSON.stringify({ scannedFiles: scan.scannedFiles, truncated: scan.truncated, findings: scan.findings, configFiles: Object.keys(scan.configFiles), bundle: b }, null, 2))
         } else {
           console.log(`Scanned ${scan.scannedFiles} files${scan.truncated ? ' (stopped at the file limit)' : ''}${scan.unreadable ? ` (${scan.unreadable} could not be read)` : ''}.`)
           if (scan.findings.length === 0) console.log('No storage deletes done in SQL.')
           for (const f of scan.findings) console.log(`  WARN  ${f.message}`)
+          if (b.scannedFiles === 0) {
+            console.log('No built app found (dist, build, out, .next/static, .output/public, ...), so secret keys in the bundle were not checked. Run this after your build step, or name the folder with --bundle-dir.')
+          } else {
+            console.log(`Scanned ${b.scannedFiles} built files in ${b.roots.join(', ')}${b.truncated ? ' (stopped at the file limit)' : ''}${b.unreadable ? ` (${b.unreadable} could not be read)` : ''}.`)
+            if (b.findings.length === 0) console.log('No secret keys in the built app.')
+            for (const f of b.findings) console.log(`  ERROR ${f.filePath}:${f.line} contains a ${f.label}. Revoke it and move the call behind your server.`)
+          }
           console.log(`Build files for the store rules: ${Object.keys(scan.configFiles).join(', ') || 'none found'}`)
           console.log('Run with --push to send these to Mushi.')
         }
-        if (scan.findings.length > 0) process.exitCode = 1
+        if (scan.findings.length > 0 || b.findings.length > 0) process.exitCode = 1
         return
       }
       const config = requireConfig()

@@ -8,8 +8,9 @@
  *
  * Reads never show a check that did not run as passing (see _shared/radar/run.ts).
  * The CI ingest stores only server-written messages: the CI sends rule ids,
- * file paths and line numbers, plus build-config files that are parsed and
- * never stored.
+ * file paths and line numbers (and, for `key_in_client_bundle`, which kind of
+ * key from a fixed list, never the key), plus build-config files that are
+ * parsed and never stored.
  */
 
 import type { Context, Hono, MiddlewareHandler } from 'npm:hono@4'
@@ -22,6 +23,8 @@ import { defaultRadarRunDeps } from '../../_shared/radar/default-deps.ts'
 import { CI_ONLY_RULES, RADAR_CI_GATE, RADAR_GATE, readRadar, recordCiRadar, runRadar, type RadarRunDeps } from '../../_shared/radar/run.ts'
 import { isRepoScanPath } from '../../_shared/radar/repo-scan.ts'
 import { RADAR_RULES, RADAR_RULE_IDS, type RadarFinding, type RadarRuleId } from '../../_shared/radar/types.ts'
+import { clientBundleFinding } from '../../_shared/radar/operator-detectors.ts'
+import { SECRET_LABELS, type SecretLabel } from '../../_shared/secret-patterns.ts'
 import { callerCanAccessProject, jsonError } from '../shared.ts'
 import type { Variables } from '../types.ts'
 import { classifyIngestRateLimitError } from './ingest-rate-limit.ts'
@@ -73,13 +76,16 @@ const ciPushSchema = z.object({
     ruleId: z.enum(RADAR_RULE_IDS),
     filePath: z.string().min(1).max(400),
     line: z.number().int().min(1).max(10_000_000).optional(),
+    /** key_in_client_bundle only: which kind of key, never the key. */
+    kind: z.enum(SECRET_LABELS).optional(),
   })).max(200).default([]),
   files: z.record(z.string().max(400), z.string()).default({}),
 })
 
 /** Server-written text for a CI finding: the CI sends where, Mushi says what. */
-function ciFinding(f: { ruleId: RadarRuleId; filePath: string; line?: number }): RadarFinding {
+function ciFinding(f: { ruleId: RadarRuleId; filePath: string; line?: number; kind?: SecretLabel }): RadarFinding {
   const where = `${f.filePath}${f.line ? `:${f.line}` : ''}`
+  if (f.ruleId === 'key_in_client_bundle') return clientBundleFinding(f.filePath, f.line ?? null, f.kind ?? null)
   if (f.ruleId === 'storage_sql_delete') {
     return {
       ruleId: f.ruleId,

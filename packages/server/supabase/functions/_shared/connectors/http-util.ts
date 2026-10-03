@@ -2,10 +2,11 @@
  * FILE: packages/server/supabase/functions/_shared/connectors/http-util.ts
  * PURPOSE: Small helpers the vendor connectors share: a JSON GET/POST
  *          through ctx.fetch with a deadline, and the status → probe mapping
- *          (401 = credential rejected, 403 = missing scope, 5xx = vendor down).
+ *          (401 = credential rejected, 403 = missing scope, 5xx = vendor down),
+ *          as a sentence for people and as a ProbeFailure the radar reads.
  */
 
-import type { ConnectorContext } from './types.ts'
+import { ConnectorError, type ConnectorContext, type ProbeFailure } from './types.ts'
 
 export interface JsonResponse<T = unknown> {
   status: number
@@ -39,4 +40,19 @@ export function statusReason(vendor: string, status: number): string {
   if (status === 429) return `${vendor} is rate-limiting this credential. Mushi will try again later.`
   if (status >= 500) return `${vendor} answered with a server error (${status}). Mushi will try again later.`
   return `${vendor} answered ${status}.`
+}
+
+/** The same mapping as statusReason, as a value the radar can read without parsing text. */
+export function failureOfStatus(status: number): ProbeFailure {
+  if (status === 401) return 'credential_rejected'
+  if (status === 403) return 'permission_missing'
+  if (status === 404) return 'not_found'
+  if (status === 429) return 'rate_limited'
+  if (status >= 500) return 'vendor_error'
+  return 'other'
+}
+
+/** A ConnectorError for a vendor's HTTP answer: the sentence plus its classification. */
+export function vendorError(vendor: string, status: number): ConnectorError {
+  return new ConnectorError(statusReason(vendor, status), 'error', failureOfStatus(status))
 }

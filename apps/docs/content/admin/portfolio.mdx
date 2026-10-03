@@ -47,7 +47,29 @@ Below the cards:
 | **Releases** | For each app: what is live and at what rollout, native changes waiting for a store build, and JS-only changes that can ship as an over-the-air update. It suggests one store release per app to save CI minutes. Your own CI builds and submits. |
 | **Daily digest** | One message a day across all apps. Off until an owner picks Slack, email or push. When there were more reports, AI calls or findings than it reads, it says which numbers are lower bounds. |
 | **Shared between apps** | Domains, store apps, Supabase projects and channels two or more apps use. Owners and admins can import what no recipe or source declares from a CSV with the columns `kind, external_id, project` and an optional `role`; each refused row is listed with its line number, and a file is capped at 500 rows and 256 KB. |
+| **Accounts and resilience** | Every account your apps depend on (Apple, Google Play, AWS, Supabase, Vercel, your registrar, Stripe…): the owner email, whether 2FA is on, how many people can get in, a recovery contact, and auto-renew for the registrar and each domain. See below. |
 | **Connected sources** | App Store Connect, Google Play, AI spend, RevenueCat or your own endpoint. Read-only by default. |
+
+---
+
+## Accounts and resilience
+
+Losing the only login to your Apple, Google Play or registrar account can end
+every app on it. This register keeps, for each account, who owns it and who
+else can get in. It holds **names and contacts only**: never passwords, keys or
+recovery codes, and anything shaped like a key is refused. Everything in it is
+what you declare; Mushi cannot see a provider's own 2FA or renewal settings.
+
+Two checks run on it, and their findings also appear under **Across your apps**:
+
+| Check | When it fires |
+|-------|---------------|
+| `account_single_owner` | One person can sign in and no recovery contact is recorded. The fix names where that provider lets you add a second owner. |
+| `registrar_autorenew_off` | Auto-renew is declared off for a registrar account or a domain. |
+
+**Download as Markdown** saves the whole register as a file to keep offline or
+hand to someone you trust. Owners and admins can change the register; other
+members can read it.
 
 ---
 

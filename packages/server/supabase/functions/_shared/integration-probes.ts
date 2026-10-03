@@ -59,6 +59,15 @@ export interface ProbeResult {
   latencyMs: number
 }
 
+/**
+ * `integration_health_history.http_status` for a probe: the vendor's status,
+ * or null when no response came back (0). The radar's provider_key_invalid
+ * reads it to tell a rejected key (401) from an outage.
+ */
+export function historyHttpStatus(probe: Pick<ProbeResult, 'httpStatus'>): number | null {
+  return Number.isInteger(probe.httpStatus) && probe.httpStatus >= 100 && probe.httpStatus <= 599 ? probe.httpStatus : null
+}
+
 /** Subset of project_settings used for platform probes. */
 export interface PlatformSettings {
   sentry_org_slug?: string | null
