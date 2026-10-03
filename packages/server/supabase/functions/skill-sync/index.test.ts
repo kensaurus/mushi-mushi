@@ -9,9 +9,12 @@
  *   - parseFrontmatter: valid, missing delimiters, missing required fields
  *   - parseChainSlugs: cursor path patterns, skills/ paths, deduplication
  *   - categoryFromSlug: all known prefixes, unknown prefix fallback
- *   - containsSecretPattern: various secret patterns and clean content
+ *   - scanForSecrets (the shared _shared/secret-scan.ts guard skill-sync uses):
+ *     various secret patterns and clean content
  *   - description length enforcement (≤ 1024 chars per spec)
  */
+
+import { scanForSecrets } from '../_shared/secret-scan.ts'
 
 // ── Inline the pure helpers so tests run without Deno runtime deps ────────────
 // IMPORTANT: these copies MUST stay in sync with index.ts by hand whenever
@@ -78,18 +81,6 @@ function parseChainSlugs(body: string): string[] {
     if (slug && !slugs.includes(slug)) slugs.push(slug)
   }
   return slugs
-}
-
-const SECRET_PATTERNS = [
-  /sk-[A-Za-z0-9]{20,}/,
-  /(?:AKIA|ASIA)[A-Z0-9]{16}/,
-  /ghp_[A-Za-z0-9]{36}/,
-  /crsr_[A-Za-z0-9]{32,}/,
-  /-----BEGIN (?:RSA |EC )?PRIVATE KEY-----/,
-]
-
-function containsSecretPattern(text: string): boolean {
-  return SECRET_PATTERNS.some((re) => re.test(text))
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -271,42 +262,42 @@ Also see skills/test-unit/SKILL.md.
   if (!slugs.includes('test-unit')) throw new Error('missing test-unit')
 })
 
-// ── containsSecretPattern ─────────────────────────────────────────────────────
+// ── scanForSecrets (shared guard) ─────────────────────────────────────────────────
 
-test('containsSecretPattern: detects OpenAI-style key', () => {
+test('scanForSecrets: detects OpenAI-style key', () => {
   const text = `Here is a key: sk-abcdefghij1234567890ABCD for testing` // gitleaks:allow -- synthetic fixture asserting the scanner fires
-  if (!containsSecretPattern(text)) throw new Error('should have detected OpenAI key pattern')
+  if (!scanForSecrets(text)) throw new Error('should have detected OpenAI key pattern')
 })
 
-test('containsSecretPattern: detects AWS access key ID', () => {
+test('scanForSecrets: detects AWS access key ID', () => {
   const text = `AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE` // gitleaks:allow check-no-secrets: ignore-line -- AWS's documented fake example key, used to assert the scanner fires
-  if (!containsSecretPattern(text)) throw new Error('should have detected AKIA pattern')
+  if (!scanForSecrets(text)) throw new Error('should have detected AKIA pattern')
 })
 
-test('containsSecretPattern: detects GitHub PAT', () => {
+test('scanForSecrets: detects GitHub PAT', () => {
   const text = `TOKEN=ghp_abcdefghijklmnopqrstuvwxyz1234567890AB` // gitleaks:allow -- synthetic fixture asserting the scanner fires
-  if (!containsSecretPattern(text)) throw new Error('should have detected ghp_ token')
+  if (!scanForSecrets(text)) throw new Error('should have detected ghp_ token')
 })
 
-test('containsSecretPattern: detects PEM private key header', () => {
+test('scanForSecrets: detects PEM private key header', () => {
   const text = `-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAK...` // gitleaks:allow -- synthetic fixture asserting the scanner fires
-  if (!containsSecretPattern(text)) throw new Error('should have detected PEM key')
+  if (!scanForSecrets(text)) throw new Error('should have detected PEM key')
 })
 
-test('containsSecretPattern: returns false for clean content', () => {
+test('scanForSecrets: returns false for clean content', () => {
   const text = `
 # Skill: workflow-fix-and-ship
 
 This skill fixes bugs and ships them. No secrets here.
 Use \`gh pr create\` to open a pull request.
 `
-  if (containsSecretPattern(text)) throw new Error('false positive on clean content')
+  if (scanForSecrets(text)) throw new Error('false positive on clean content')
 })
 
-test('containsSecretPattern: returns false for partial key-like strings that are too short', () => {
+test('scanForSecrets: returns false for partial key-like strings that are too short', () => {
   // sk- followed by <20 chars should NOT match (OpenAI keys are longer)
   const text = `color: sk-red or sk-12345`
-  if (containsSecretPattern(text)) throw new Error('false positive on short sk- string')
+  if (scanForSecrets(text)) throw new Error('false positive on short sk- string')
 })
 
 // ── Description length enforcement ───────────────────────────────────────────

@@ -12,11 +12,23 @@
  *
  * Signing reuses storage.ts's inline SigV4 (no AWS SDK on the edge runtime).
  * Path-style URLs, because the bucket name contains dots.
+ *
+ * It also keeps `mushi-mushi/r/sitemap.xml` (every page whose static file
+ * exists) in step: publish, unpublish and project delete regenerate it from
+ * `public_repo_diagrams`. The docs sitemap is built at docs deploy time and
+ * cannot know pages published after it.
  */
 
+import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { sigV4 } from './storage.ts'
 import type { PublicDiagramPayload } from './repo-diagram.ts'
-import { publicPageKeys, renderPublicDiagramHtml, renderPublicDiagramMarkdown } from './public-diagram-page.ts'
+import {
+  escapeHtml,
+  publicPageKeys,
+  publicPageUrls,
+  renderPublicDiagramHtml,
+  renderPublicDiagramMarkdown,
+} from './public-diagram-page.ts'
 
 type FetchLike = (url: string, init?: RequestInit) => Promise<Response>
 
@@ -35,6 +47,13 @@ export interface PublicPageStoreConfig {
 }
 
 export type StaticPageStatus = 'written' | 'deleted' | 'not_configured' | 'failed'
+
+/** S3 key of the `/r/` sitemap. Inside the IAM user's `mushi-mushi/r/*` grant. */
+export const SITEMAP_KEY = 'mushi-mushi/r/sitemap.xml'
+/** The sitemaps.org protocol allows 50,000 URLs per file. */
+const SITEMAP_MAX_URLS = 50_000
+/** PostgREST returns at most 1000 rows per request. */
+const SITEMAP_PAGE_ROWS = 1000
 
 /** Read the store config at call time (never at module load: Deno CI runs tests with no env permission). */
 export function readPublicPageStoreConfig(get: (name: string) => string | undefined): PublicPageStoreConfig | null {
@@ -156,4 +175,98 @@ export async function deletePublicPage(
   await deleteObject(cfg, keys.html, fetchImpl)
   await deleteObject(cfg, keys.markdown, fetchImpl)
   return 'deleted'
+}
+
+// ── /r/ sitemap ──────────────────────────────────────────────────────────
+
+export interface SitemapEntry {
+  owner: string
+  repo: string
+  /** When the static file was last written (ISO). */
+  lastmod: string | null
+}
+
+/**
+ * sitemaps.org XML for the published pages. `<loc>` is the page's canonical
+ * URL (GitHub's spelling, as in the page's own `<link rel="canonical">`).
+ * Sorted, so an unchanged set renders byte-identical. An empty set is still
+ * a valid file: after the last unpublish the sitemap lists nothing.
+ */
+export function renderPublicSitemap(entries: ReadonlyArray<SitemapEntry>): string {
+  const rows = [...entries]
+    .sort((a, b) => `${a.owner}/${a.repo}`.toLowerCase().localeCompare(`${b.owner}/${b.repo}`.toLowerCase()))
+    .slice(0, SITEMAP_MAX_URLS)
+    .map((e) => {
+      const loc = `    <loc>${escapeHtml(publicPageUrls(e.owner, e.repo, '').page)}</loc>`
+      const ms = e.lastmod ? Date.parse(e.lastmod) : NaN
+      const lastmod = Number.isFinite(ms) ? `\n    <lastmod>${new Date(ms).toISOString()}</lastmod>` : ''
+      return `  <url>\n${loc}${lastmod}\n  </url>`
+    })
+  return [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+    ...rows,
+    '</urlset>',
+    '',
+  ].join('\n')
+}
+
+/**
+ * Every publication whose static file exists (`static_page_at` set). Rows
+ * without it point at the unindexed interactive view, so they stay out.
+ * Throws on a read error: a sitemap built from a partial read would drop
+ * live pages.
+ */
+export async function loadSitemapEntries(db: SupabaseClient): Promise<SitemapEntry[]> {
+  const out: SitemapEntry[] = []
+  for (let from = 0; from < SITEMAP_MAX_URLS; from += SITEMAP_PAGE_ROWS) {
+    const { data, error } = await db
+      .from('public_repo_diagrams')
+      .select('project_id, payload, static_page_at')
+      .not('static_page_at', 'is', null)
+      .order('project_id', { ascending: true })
+      .range(from, from + SITEMAP_PAGE_ROWS - 1)
+    if (error) throw new Error(`public_repo_diagrams read failed: ${error.message}`)
+    const rows = (data ?? []) as Array<{ payload?: { owner?: unknown; repo?: unknown } | null; static_page_at?: string | null }>
+    for (const r of rows) {
+      const owner = r.payload?.owner
+      const repo = r.payload?.repo
+      if (typeof owner !== 'string' || typeof repo !== 'string' || !owner || !repo) continue
+      out.push({ owner, repo, lastmod: r.static_page_at ?? null })
+    }
+    if (rows.length < SITEMAP_PAGE_ROWS) break
+  }
+  return out
+}
+
+export async function writePublicSitemap(
+  cfg: PublicPageStoreConfig | null,
+  entries: ReadonlyArray<SitemapEntry>,
+  fetchImpl: FetchLike = fetch,
+): Promise<StaticPageStatus> {
+  if (!cfg) return 'not_configured'
+  await putObject(cfg, SITEMAP_KEY, renderPublicSitemap(entries), 'application/xml; charset=utf-8', fetchImpl)
+  return 'written'
+}
+
+/**
+ * Rewrite the sitemap from the current publications. Called after publish
+ * (once `static_page_at` is set), after unpublish (once the row is gone) and
+ * after project delete. Never throws: a stale sitemap only delays indexing,
+ * so it must not fail the publish, and the next publish or unpublish
+ * rewrites it in full.
+ */
+export async function regeneratePublicSitemap(
+  db: SupabaseClient,
+  cfg: PublicPageStoreConfig | null,
+  onError: (err: unknown) => void,
+  fetchImpl: FetchLike = fetch,
+): Promise<StaticPageStatus> {
+  if (!cfg) return 'not_configured'
+  try {
+    return await writePublicSitemap(cfg, await loadSitemapEntries(db), fetchImpl)
+  } catch (err) {
+    onError(err)
+    return 'failed'
+  }
 }

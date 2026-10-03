@@ -22,6 +22,12 @@ import type { Variables } from '../types.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { adminOrApiKey } from '../../_shared/auth.ts';
 import { ownedProjectIds } from '../shared.ts';
+import { codebaseIndexDoctorCheck, type IndexDoctorRepo } from '../../_shared/index-coverage.ts';
+
+/** The project_repos columns the codebase-index check reads. */
+interface DoctorRepoRow extends IndexDoctorRepo {
+  project_id: string;
+}
 
 export interface DoctorCheck {
   name: string;
@@ -72,7 +78,7 @@ export function registerDoctorRoutes(app: Hono<{ Variables: Variables }>): void 
       projectIds.length
         ? db
             .from('project_repos')
-            .select('project_id, last_indexed_at, last_index_error')
+            .select('project_id, last_indexed_at, last_index_error, index_swept_at, index_files_indexed, index_files_eligible, index_file_cap, index_tree_truncated, index_coverage_state')
             .in('project_id', projectIds)
             .eq('is_primary', true)
         : Promise.resolve({ data: [], error: null }),
@@ -166,31 +172,10 @@ export function registerDoctorRoutes(app: Hono<{ Variables: Variables }>): void 
       ((settingsRes.data ?? []) as Array<{ project_id: string }>).map((s) => s.project_id),
     );
     const repoByProject = new Map(
-      ((reposRes.data ?? []) as Array<{ project_id: string; last_indexed_at: string | null; last_index_error: string | null }>).map(
-        (r) => [r.project_id, r],
-      ),
+      ((reposRes.data ?? []) as DoctorRepoRow[]).map((r) => [r.project_id, r]),
     );
     for (const pid of enabledProjects) {
-      const repo = repoByProject.get(pid);
-      if (!repo || !repo.last_indexed_at) {
-        checks.push({
-          name: `codebase_index:${pid}`,
-          status: 'fail',
-          summary: 'Codebase indexing is enabled but no sweep has completed — diagnoses run without code context.',
-          hint: 'Re-run the sweep from the console Integrations card, and verify the GitHub App installation.',
-        });
-      } else if (repo.last_index_error) {
-        checks.push({
-          name: `codebase_index:${pid}`,
-          status: 'warn',
-          summary: `Index issue: ${repo.last_index_error.slice(0, 200)}`,
-          hint: repo.last_index_error.startsWith('partial:')
-            ? 'Raise MUSHI_REPO_INDEX_SWEEP_FILE_CAP or narrow the repo to index the rest.'
-            : 'Fix the recorded error, then re-run the sweep from the Integrations card.',
-        });
-      } else {
-        checks.push({ name: `codebase_index:${pid}`, status: 'pass', summary: `Indexed (last sweep ${repo.last_indexed_at}).` });
-      }
+      checks.push(codebaseIndexDoctorCheck(pid, repoByProject.get(pid)));
     }
 
     // ── Observability transports ───────────────────────────────────────
