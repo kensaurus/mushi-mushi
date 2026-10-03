@@ -23,6 +23,7 @@ import {
   evaluateProviderLimits,
   evaluateStoreScopes,
   evaluateUnusedKeys,
+  isAppHeartbeat,
   paidFeaturesFromManifest,
   providerLimitsFromManifest,
   SDK_KEY_USE_TRACKED_SINCE,
@@ -108,7 +109,7 @@ export async function operatorRadarResults(db: Db, projectId: string, manifest: 
   }
 
   const [keysRes, byokRes, reportRes, eventRes, snapRes, bindRes, ownedRes] = await Promise.all([
-    db.from('project_api_keys').select('id, label, scopes, is_active, created_at, last_seen_at').eq('project_id', projectId),
+    db.from('project_api_keys').select('id, label, scopes, is_active, created_at, last_seen_at, last_seen_origin, last_seen_user_agent').eq('project_id', projectId),
     db.from('byok_keys').select('provider_slug, label, key_hint, status, created_at, last_used_at').eq('project_id', projectId),
     db.from('reports').select('created_at').eq('project_id', projectId).order('created_at', { ascending: false }).limit(1).maybeSingle(),
     db.from('product_events').select('ts').eq('project_id', projectId).order('ts', { ascending: false }).limit(1).maybeSingle(),
@@ -132,14 +133,15 @@ export async function operatorRadarResults(db: Db, projectId: string, manifest: 
     for (const r of (bound.data ?? []) as InstanceRow[]) instances.set(r.id, r)
   }
 
-  const apiKeys = (keysRes.data ?? []) as Array<{ label: string | null; scopes: string[] | null; is_active: boolean | null; created_at: string; last_seen_at: string | null }>
+  const apiKeys = (keysRes.data ?? []) as Array<{ label: string | null; scopes: string[] | null; is_active: boolean | null; created_at: string; last_seen_at: string | null; last_seen_origin: string | null; last_seen_user_agent: string | null }>
   const byok = ((byokRes.data ?? []) as Array<{ provider_slug: string; label: string | null; key_hint: string | null; status: string; created_at: string; last_used_at: string | null }>)
     .filter((k) => k.status !== 'disabled')
   const snaps = (snapRes.data ?? []) as SnapshotRow[]
   const llmSnaps = snaps.filter((s) => s.kind === 'llm_usage')
 
   // ── inputs ──
-  const lastSdkHeartbeat = apiKeys.map((k) => k.last_seen_at).filter((x): x is string => Boolean(x)).sort().pop() ?? null
+  // Only a heartbeat from the app itself counts as use; the host's CI pushes with an SDK key too.
+  const lastSdkHeartbeat = apiKeys.filter((k) => isAppHeartbeat(k.last_seen_origin, k.last_seen_user_agent)).map((k) => k.last_seen_at).filter((x): x is string => Boolean(x)).sort().pop() ?? null
   let providerSpend: number | null = null
   let providerSpendVendor: string | null = null
   for (const s of llmSnaps.filter((x) => x.ok)) {

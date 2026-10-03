@@ -94,13 +94,14 @@ async function audit(db: Db, orgId: string, actorId: string, action: string, res
 async function loadRegister(db: Db, orgId: string, projectIds: readonly string[]) {
   const [res, uses] = await Promise.all([
     db.from('portfolio_resources').select(REGISTER_COLUMNS).eq('organization_id', orgId).in('kind', ['account', 'domain']).limit(1000),
-    projectIds.length ? db.from('portfolio_resource_uses').select('resource_id').in('project_id', [...projectIds]).limit(5000) : Promise.resolve({ data: [], error: null }),
+    projectIds.length ? db.from('portfolio_resource_uses').select('resource_id, project_id').in('project_id', [...projectIds]).limit(5000) : Promise.resolve({ data: [], error: null }),
   ])
   if (res.error) throw new Error(`portfolio_resources: ${res.error.message}`)
   if (uses.error) throw new Error(`portfolio_resource_uses: ${uses.error.message}`)
-  const used = new Set(((uses.data ?? []) as Array<{ resource_id: string }>).map((u) => u.resource_id))
-  const rows = ((res.data ?? []) as unknown as RegisterRow[]).filter((r) => r.kind === 'account' || used.has(r.id))
-  const register = registerFromRows(rows)
+  // Only uses by projects the caller can see, so a domain only another team's app uses stays hidden.
+  const usesOf = new Map<string, string[]>()
+  for (const u of (uses.data ?? []) as Array<{ resource_id: string; project_id: string }>) usesOf.set(u.resource_id, [...(usesOf.get(u.resource_id) ?? []), u.project_id])
+  const register = registerFromRows((res.data ?? []) as unknown as RegisterRow[], usesOf)
   return { ...register, findings: accountRegisterRules(register.accounts, register.domains) }
 }
 

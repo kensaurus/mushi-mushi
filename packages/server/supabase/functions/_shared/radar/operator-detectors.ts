@@ -45,7 +45,21 @@ function latestIso(values: ReadonlyArray<string | null>): string | null {
 
 // ── dead_app_live_spend ──────────────────────────────────────────────────────
 
+/** A native app's HTTP stack or a webview shell, from the heartbeat's User-Agent. */
+const APP_CLIENT_UA = /okhttp|cfnetwork|darwin|dalvik|expo|react-?native|capacitor/i
+
+/**
+ * Was a key's latest heartbeat the app itself? A browser or webview sends an
+ * Origin; a native app has a native HTTP stack. The host's CI (`mushi radar
+ * scan --push`, recipe pushes) and server scripts send neither, so a retired
+ * app whose CI still runs does not look alive.
+ */
+export function isAppHeartbeat(origin: string | null, userAgent: string | null): boolean {
+  return Boolean(origin?.trim()) || Boolean(userAgent && APP_CLIENT_UA.test(userAgent))
+}
+
 export interface DeadAppInput {
+  /** Latest SDK heartbeat that came from the app itself (see isAppHeartbeat), not from CI. */
   lastSdkHeartbeat: string | null
   lastReport: string | null
   lastPageView: string | null

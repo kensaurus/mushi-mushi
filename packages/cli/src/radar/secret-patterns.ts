@@ -12,6 +12,7 @@
  * Edit both together.
  */
 
+/** @public Read by the server's radar ingest schema (the kind of key a CI finding names). */
 export const SECRET_LABELS = [
   'private key',
   'Anthropic key',
@@ -28,7 +29,10 @@ export const SECRET_LABELS = [
 ] as const
 export type SecretLabel = (typeof SECRET_LABELS)[number]
 
-/** In order: the first label that matches is the one `scanForSecrets` reports. */
+/**
+ * In order: the first label that matches is the one `scanForSecrets` reports.
+ * @public Read by the server's scanForSecrets.
+ */
 export const SECRET_PATTERNS: ReadonlyArray<{ re: RegExp; label: SecretLabel }> = [
   { re: /-----BEGIN [A-Z ]*PRIVATE KEY-----/, label: 'private key' },
   { re: /sk-ant-[a-zA-Z0-9_-]{20,}/, label: 'Anthropic key' },

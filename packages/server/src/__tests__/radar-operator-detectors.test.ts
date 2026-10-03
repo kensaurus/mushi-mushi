@@ -13,6 +13,7 @@ import {
   evaluateProviderLimits,
   evaluateStoreScopes,
   evaluateUnusedKeys,
+  isAppHeartbeat,
   paidFeaturesFromManifest,
   providerLimitsFromManifest,
   SDK_KEY_USE_TRACKED_SINCE,
@@ -48,6 +49,17 @@ describe('dead_app_live_spend', () => {
   })
   it('is ok when the app is idle and every spend source reads zero', () => {
     expect(evaluateDeadApp({ ...quiet, providerSpendUsd30d: 0, providerSpendVendor: 'OpenAI', liveFunctions: 0, liveProviderKeys: 0 }, NOW).state).toBe('ok')
+  })
+})
+
+describe('isAppHeartbeat', () => {
+  it('counts a browser (Origin) or a native client, never CI or a server script', () => {
+    expect(isAppHeartbeat('https://glot.it', 'Mozilla/5.0')).toBe(true)
+    expect(isAppHeartbeat('capacitor://localhost', null)).toBe(true)
+    expect(isAppHeartbeat(null, 'okhttp/4.12.0')).toBe(true)
+    expect(isAppHeartbeat(null, 'glot/412 CFNetwork/1494 Darwin/23.0.0')).toBe(true)
+    expect(isAppHeartbeat(null, 'node')).toBe(false)
+    expect(isAppHeartbeat('', null)).toBe(false)
   })
 })
 

@@ -33,13 +33,13 @@ export interface RegisterAccount {
   autoRenew: boolean | null
 }
 
-export interface RegisterDomain {
+interface RegisterDomain {
   id: string
   domain: string
   autoRenew: boolean | null
 }
 
-export interface RegisterFinding {
+interface RegisterFinding {
   ruleId: string
   severity: 'info' | 'warn' | 'error'
   resourceKey: string | null

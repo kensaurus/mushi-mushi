@@ -33,7 +33,7 @@ export interface LocalRadarScan {
 }
 
 /** Where a secret key sits in the built app; the key itself never leaves the machine. */
-export interface BundleSecretFinding {
+interface BundleSecretFinding {
   filePath: string
   line: number
   label: SecretLabel

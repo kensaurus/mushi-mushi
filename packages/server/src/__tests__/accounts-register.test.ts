@@ -59,24 +59,26 @@ describe('register rules', () => {
   it('registrar_autorenew_off: only when declared off, for registrar accounts and domains', () => {
     const rules = reg.accountRegisterRules(
       [account({ provider: 'registrar', name: 'Porkbun', externalId: 'registrar:porkbun', adminCount: 2, autoRenew: false }), account({ provider: 'registrar', name: 'Other', externalId: 'registrar:other', adminCount: 2, autoRenew: null })],
-      [{ id: D1, domain: 'glot.it', autoRenew: false }, { id: D_HIDDEN, domain: 'kensaur.us', autoRenew: null }],
+      [{ id: D1, domain: 'glot.it', autoRenew: false, projectIds: [P1] }, { id: D_HIDDEN, domain: 'kensaur.us', autoRenew: null, projectIds: [P1] }],
     )
     expect(rules.map((r) => [r.ruleId, r.resourceKey])).toEqual([['registrar_autorenew_off', 'account:registrar:porkbun'], ['registrar_autorenew_off', 'domain:glot.it']])
     expect(rules[1].message).toContain('declared off for glot.it')
+    expect(rules[1].projectIds).toEqual([P1])
   })
 
-  it('maps rows, defaulting a bad provider to other and a missing admin count to 1', () => {
+  it('maps rows, defaulting a bad provider to other and a missing admin count to 1, and drops domains nothing uses', () => {
     const r = reg.registerFromRows([
       { id: A1, kind: 'account', external_id: 'x:y', display_name: null, account_provider: 'nope', owner_email: null, two_factor_declared: null, recovery_contact: null, admin_count: null, auto_renew: null, updated_at: null },
       { id: D1, kind: 'domain', external_id: 'glot.it', display_name: null, account_provider: null, owner_email: null, two_factor_declared: null, recovery_contact: null, admin_count: 1, auto_renew: true, updated_at: null },
-    ])
+      { id: D_HIDDEN, kind: 'domain', external_id: 'unused.example', display_name: null, account_provider: null, owner_email: null, two_factor_declared: null, recovery_contact: null, admin_count: 1, auto_renew: false, updated_at: null },
+    ], new Map([[D1, [P1, P1]]]))
     expect(r.accounts[0]).toMatchObject({ provider: 'other', name: 'x:y', adminCount: 1 })
-    expect(r.domains).toEqual([{ id: D1, domain: 'glot.it', autoRenew: true }])
+    expect(r.domains).toEqual([{ id: D1, domain: 'glot.it', autoRenew: true, projectIds: [P1] }])
   })
 
   it('the Markdown export lists accounts, domains and what to fix, and escapes table cells', () => {
     const accounts = [account({ name: 'A | B' })]
-    const domains = [{ id: D1, domain: 'glot.it', autoRenew: false }]
+    const domains = [{ id: D1, domain: 'glot.it', autoRenew: false, projectIds: [P1] }]
     const md = reg.renderRegisterMarkdown({ organizationName: 'Kenji', generatedAt: NOW.toISOString(), accounts, domains, findings: reg.accountRegisterRules(accounts, domains) })
     expect(md).toContain('# Accounts and resilience register — Kenji')
     expect(md).toContain('| A \\| B | Apple Developer | k@example.com | yes | 1 | — | — |')
@@ -225,5 +227,15 @@ describe('the org collector writes the register rules', () => {
     db.table('portfolio_resources')[0].admin_count = 2
     await phase2.collectOrgPortfolio(db as never, ORG, deps as never)
     expect(db.table('portfolio_findings').filter((f) => f.status === 'open')).toEqual([])
+  })
+
+  it('a domain finding names the projects that use the domain; a domain nothing uses never surfaces', async () => {
+    const db = seed({ portfolio_findings: [] })
+    db.table('portfolio_resources').find((r) => r.id === D1)!.auto_renew = false
+    const deps = { now: () => NOW, probe: vi.fn(), runtime: { fetch: vi.fn(), now: () => NOW } }
+    await phase2.collectOrgPortfolio(db as never, ORG, deps as never)
+    const open = db.table('portfolio_findings').filter((f) => f.status === 'open')
+    // D_HIDDEN is also declared off, but no project uses it: no finding, so no member learns its name.
+    expect(open.map((f) => [f.rule_id, f.resource_key, f.project_ids])).toEqual([['registrar_autorenew_off', 'domain:glot.it', [P1]]])
   })
 })
