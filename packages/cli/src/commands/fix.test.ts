@@ -50,6 +50,19 @@ describe('mushi fix --repo', () => {
     expect(run.error?.code).toBe('E_INVALID_INPUT')
   })
 
+  it('--wait polls the dispatch job the route returned', async () => {
+    let polls = 0
+    const run = await runCli(registerFixCommands, ['fix', REPORT, '--wait'], (call) => {
+      if (call.method === 'POST') return dispatchReply
+      polls++
+      expect(call.path).toBe('/v1/admin/fixes/dispatch/d-1')
+      return okReply({ status: 'completed', pr_url: 'https://github.com/acme/app/pull/7' })
+    })
+    expect(polls).toBe(1)
+    expect(run.error).toBeNull()
+    expect(run.exitCode).toBe(0)
+  }, 20_000)
+
   it('sends no targetRepoId without --repo', async () => {
     const run = await runCli(registerFixCommands, ['fix', REPORT], () => dispatchReply)
     expect(run.calls[0]!.body).toEqual({ reportId: REPORT, projectId: TEST_PROJECT_ID, agent: 'claude_code' })

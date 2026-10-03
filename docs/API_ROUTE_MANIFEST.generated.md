@@ -8,9 +8,9 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 
 | Auth | Count |
 | --- | ---: |
-| `adminOrApiKey` | 161 |
+| `adminOrApiKey` | 162 |
 | `apiKeyAuth` | 58 |
-| `jwtAuth` | 338 |
+| `jwtAuth` | 337 |
 | `jwtOrApiKey` | 3 |
 | `unknown` | 91 |
 
@@ -126,7 +126,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | POST | `/v1/admin/fixes/:id/refresh-ci` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/query-fixes-repo.ts` |
 | GET | `/v1/admin/fixes/:id/timeline` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/query-fixes-repo.ts` |
 | POST | `/v1/admin/fixes/dispatch` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/fix-dispatch.ts` |
-| GET | `/v1/admin/fixes/dispatch/:id` | `jwtAuth` | `packages/server/supabase/functions/api/routes/fix-dispatch.ts` |
+| GET | `/v1/admin/fixes/dispatch/:id` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/fix-dispatch.ts` |
 | GET | `/v1/admin/fixes/dispatch/:id/stream` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/fix-dispatch.ts` |
 | GET | `/v1/admin/fixes/dispatches` | `jwtAuth` | `packages/server/supabase/functions/api/routes/fix-dispatch.ts` |
 | POST | `/v1/admin/fixes/dispatches/:id/cancel` | `jwtAuth` | `packages/server/supabase/functions/api/routes/fix-dispatch.ts` |

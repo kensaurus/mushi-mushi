@@ -387,7 +387,7 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
     return c.json({ ok: true, data: { dispatches: dispatches ?? [] } });
   });
 
-  app.get('/v1/admin/fixes/dispatch/:id', jwtAuth, async (c) => {
+  app.get('/v1/admin/fixes/dispatch/:id', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
     const userId = c.get('userId') as string;
     const dispatchId = c.req.param('id')!;
     const db = getServiceClient();

@@ -141,7 +141,7 @@ Examples:
     }
 
     const result = await apiCall<{
-      fixId?: string; status?: string; agentId?: string; runId?: string; prUrl?: string
+      dispatchId?: string; fixId?: string; status?: string; agentId?: string; runId?: string; prUrl?: string
     }>('/v1/admin/fixes/dispatch', cfg, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -153,15 +153,16 @@ Examples:
       process.exit(1)
     }
 
-    const { fixId, status, agentId, runId, prUrl } = result.data
-    emitEvent('dispatch.ok', { fixId, status, agentId, runId, prUrl })
+    const { dispatchId, fixId, status, agentId, runId, prUrl } = result.data
+    emitEvent('dispatch.ok', { dispatchId, fixId, status, agentId, runId, prUrl })
 
     if (!opts.wait) {
       process.exit(0)
     }
 
-    if (!fixId) {
-      console.error('No fixId returned — cannot poll.')
+    // The route answers with the dispatch job id; poll that job.
+    if (!dispatchId) {
+      console.error('No dispatchId returned — cannot poll.')
       process.exit(1)
     }
 
@@ -173,7 +174,7 @@ Examples:
     for (let i = 0; i < MAX_POLLS; i++) {
       await new Promise(r => setTimeout(r, POLL_MS))
       const pollResult = await apiCall<{ status?: string; pr_url?: string; error?: string; cursor_agent_id?: string }>(
-        `/v1/admin/fixes/${fixId}`,
+        `/v1/admin/fixes/dispatch/${dispatchId}`,
         cfg,
       )
       if (!pollResult.ok) {

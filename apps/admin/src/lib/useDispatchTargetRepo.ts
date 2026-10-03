@@ -45,6 +45,8 @@ export function useDispatchTargetRepo(projectId: string | null | undefined): Dis
     targetRepoId,
     setTargetRepoId: setChoice,
     target,
-    dispatchTargetRepoId: repos.length > 1 && targetRepoId ? targetRepoId : undefined,
+    // The primary is the server's own default, and leaving it unsent keeps the
+    // normal cross-repo fan-out; a non-primary pick means that repo only.
+    dispatchTargetRepoId: repos.length > 1 && targetRepoId && targetRepoId !== primaryId ? targetRepoId : undefined,
   }
 }

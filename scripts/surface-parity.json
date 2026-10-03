@@ -102,7 +102,7 @@
     "GET /v1/admin/fixes": {"allow": "jwt-only"},
     "GET /v1/admin/fixes/:id": {"mcp": ["submit_fix_result"], "cli": ["fix"]},
     "GET /v1/admin/fixes/:id/timeline": {"mcp": ["get_fix_timeline"]},
-    "GET /v1/admin/fixes/dispatch/:id": {"allow": "jwt-only"},
+    "GET /v1/admin/fixes/dispatch/:id": {"cli": ["fix"]},
     "GET /v1/admin/fixes/dispatch/:id/stream": {"allow": "editor-equivalent", "note": "The console's live view of one dispatch. The editor follows a fix with get_fix_timeline after dispatch_fix; the terminal with `mushi fix --wait` or `mushi fixes tail`."},
     "GET /v1/admin/fixes/dispatches": {"allow": "jwt-only"},
     "GET /v1/admin/fixes/stats": {"allow": "jwt-only"},

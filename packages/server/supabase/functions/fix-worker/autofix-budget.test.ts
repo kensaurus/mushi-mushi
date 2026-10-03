@@ -182,10 +182,10 @@ Deno.test('a sibling job never fans out again', () => {
   assertEquals(isSiblingDispatch({ coordination_id: null, dispatch_metadata: { trigger: 'manual' } }), false)
 })
 
-Deno.test('a person choosing the repo is still a primary dispatch', () => {
+Deno.test('a repo a person chose means that repo only: the job never fans out', () => {
   assertEquals(
     isSiblingDispatch({ coordination_id: null, dispatch_metadata: { trigger: 'manual', target_repo_id: 'r2' } }),
-    false,
+    true,
   )
   assertEquals(
     isSiblingDispatch({ coordination_id: null, dispatch_metadata: { trigger: 'automatic', target_repo_id: 'r2' } }),

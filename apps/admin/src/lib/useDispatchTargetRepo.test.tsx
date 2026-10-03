@@ -73,7 +73,8 @@ describe('useDispatchTargetRepo', () => {
     await render()
     expect(pageData.paths).toContain('/v1/admin/repo/repos?project_id=project-1')
     expect(latest?.targetRepoId).toBe('repo-front')
-    expect(latest?.dispatchTargetRepoId).toBe('repo-front')
+    // The primary is the server default; leaving it unsent keeps the fan-out.
+    expect(latest?.dispatchTargetRepoId).toBeUndefined()
     expect(latest?.target).toEqual(FRONTEND)
 
     await act(async () => latest?.setTargetRepoId('repo-back'))
