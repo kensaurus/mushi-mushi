@@ -15,7 +15,7 @@ Wire Mushi into Cursor, Claude Code, Windsurf, or any MCP client. Once connected
 your agent can read reports, pull fix context, and optionally dispatch fixes —
 without leaving the editor.
 
-The live **Catalog** tab mirrors the server registry (**93 tools**, 8 resources, 4 prompts).
+The live **Catalog** tab mirrors the server registry (**117 tools**, 8 resources, 4 prompts).
 
 ---
 
