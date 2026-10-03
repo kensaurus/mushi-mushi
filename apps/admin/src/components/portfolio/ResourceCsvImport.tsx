@@ -11,19 +11,19 @@ import { useState } from 'react'
 import { Btn, Callout } from '../ui'
 import { apiFetchMutate } from '../../lib/supabase'
 
-export interface CsvImportResult {
+interface CsvImportResult {
   imported: number
   errors: string[]
   skippedOverLimit: number
 }
 
 /** The server's cap; checked here so a too-large file never makes a round trip. */
-export const CSV_MAX_BYTES = 256 * 1024
+const CSV_MAX_BYTES = 256 * 1024
 
-export const CSV_EXAMPLE = 'kind,external_id,project,role\ndomain,glot.it,glot-it,site\nsupabase_project,abcd1234,yen-yen,backend'
+const CSV_EXAMPLE = 'kind,external_id,project,role\ndomain,glot.it,glot-it,site\nsupabase_project,abcd1234,yen-yen,backend'
 
 /** One line for the result: what was saved and what was not. */
-export function describeCsvImport(r: CsvImportResult): { tone: 'ok' | 'warn'; text: string } {
+function describeCsvImport(r: CsvImportResult): { tone: 'ok' | 'warn'; text: string } {
   const saved = `Imported ${r.imported} row${r.imported === 1 ? '' : 's'}.`
   const parts = [saved]
   if (r.errors.length > 0) parts.push(`${r.errors.length} row${r.errors.length === 1 ? ' was' : 's were'} not saved.`)

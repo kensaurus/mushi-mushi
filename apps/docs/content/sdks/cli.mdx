@@ -204,8 +204,9 @@ mushi audit                        # full-stack project health audit
 
 ```bash
 mushi recipe init                    # write a starter mushi.recipe.json from what the repo shows
-mushi recipe check                   # validate it and its token files; list colours that match no token
-mushi recipe check --push            # send the recipe and findings to Mushi from your existing CI job
+mushi recipe check                   # validate it and its token files; run Mushi's deviance rules and print the 0–100 score
+mushi recipe check --max-score 30    # also fail when the score is above 30
+mushi recipe check --push            # send the recipe and the scan from your existing CI job; fails above the project's limit when that gate is on
 mushi recipe show                    # each part of the recipe and its state
 ```
 

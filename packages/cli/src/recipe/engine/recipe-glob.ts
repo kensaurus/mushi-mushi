@@ -9,8 +9,8 @@
  * segment) and `{a,b,c}` alternation (no nesting). Matching is case-sensitive,
  * like git on Linux. Everything else is literal.
  *
- * Kept byte-identical in packages/cli/src/recipe/recipe-glob.ts (`mushi recipe
- * check`), asserted by packages/server/src/__tests__/radar-repo-scan.test.ts.
+ * Engine file: kept byte-identical in packages/cli/src/recipe/engine/ (`mushi
+ * recipe check`), asserted by packages/server/src/__tests__/design-engine-parity.test.ts.
  */
 
 /**

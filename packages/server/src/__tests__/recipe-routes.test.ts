@@ -64,6 +64,7 @@ class FakeApp {
   }
   get(path: string, ...h: Handler[]) { this.add('GET', path, h) }
   post(path: string, ...h: Handler[]) { this.add('POST', path, h) }
+  put(path: string, ...h: Handler[]) { this.add('PUT', path, h) }
   async call(method: string, url: string, opts: { body?: unknown; vars?: Record<string, unknown> } = {}): Promise<JsonResult> {
     const [path, qs] = url.split('?')
     for (const [key, r] of this.routes) {
@@ -190,6 +191,7 @@ const READ_ROUTES = (pid: string) => [
   `/v1/admin/projects/${pid}/design/tokens`,
   `/v1/admin/projects/${pid}/design/deviance`,
   `/v1/admin/projects/${pid}/design/excerpt`,
+  `/v1/admin/projects/${pid}/design/settings`,
 ]
 const WRITE_ROUTES = (pid: string) => [
   `/v1/admin/projects/${pid}/recipe/refresh`,
@@ -426,6 +428,27 @@ describe('deviance runs', () => {
     const dev = (await app.call('GET', `/v1/admin/projects/${P_A}/design/deviance`)).body.data as { latest: { runId: string }; findings: Array<{ rule_id: string }> }
     expect(dev.latest.runId).toBe('run-2')
     expect(dev.findings.map((f) => f.rule_id)).toEqual(['off_token_color'])
+  })
+
+  it('design settings: off by default, owners and admins change them, members cannot', async () => {
+    const db = seed({ project_settings: [{ project_id: P_A, autofix_enabled: false }] })
+    const { app } = harness(db)
+    const got = await app.call('GET', `/v1/admin/projects/${P_A}/design/settings`)
+    expect(got.body.data).toEqual({ threshold: 40, failCi: false, autofix: false, autofixEnabled: false, canEdit: true })
+    expect((await app.call('GET', `/v1/admin/projects/${P_A}/design/settings`, { vars: { userId: 'member-a' } })).body.data).toMatchObject({ canEdit: false })
+
+    const member = await app.call('PUT', `/v1/admin/projects/${P_A}/design/settings`, { body: { failCi: true }, vars: { userId: 'member-a' } })
+    expect(member.status).toBe(403)
+    expect((await app.call('PUT', `/v1/admin/projects/${P_A}/design/settings`, { body: { threshold: 101 } })).status).toBe(400)
+    expect((await app.call('PUT', `/v1/admin/projects/${P_A}/design/settings`, { body: {} })).status).toBe(400)
+    expect((await app.call('PUT', `/v1/admin/projects/${P_A}/design/settings`, { body: { failCi: true, extra: 1 } })).status).toBe(400)
+
+    const put = await app.call('PUT', `/v1/admin/projects/${P_A}/design/settings`, { body: { threshold: 25, failCi: true, autofix: true } })
+    expect(put.status).toBe(200)
+    expect(put.body.data).toEqual({ threshold: 25, failCi: true, autofix: true, autofixEnabled: false, canEdit: true })
+    expect(db.table('project_settings')[0]).toMatchObject({ design_deviance_threshold: 25, design_deviance_fail_ci: true, design_drift_autofix: true })
+    // Another organization's project stays invisible.
+    expect((await app.call('PUT', `/v1/admin/projects/${P_B}/design/settings`, { body: { failCi: true } })).status).toBe(404)
   })
 
   it('a CI push scored with the shared engine (phase scan, source ci) is the latest scan', async () => {

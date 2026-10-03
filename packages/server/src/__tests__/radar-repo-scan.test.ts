@@ -267,13 +267,3 @@ describe('repo-scan-core is shared with the CLI', () => {
     expect(cli).toBe(server)
   })
 })
-
-describe('recipe-glob is shared with the CLI', () => {
-  it('the server and CLI copies are byte-identical', async () => {
-    const { readFileSync } = await import('node:fs')
-    const { resolve } = await import('node:path')
-    const server = readFileSync(resolve(__dirname, '../../supabase/functions/_shared/recipe-glob.ts'), 'utf8')
-    const cli = readFileSync(resolve(__dirname, '../../../cli/src/recipe/recipe-glob.ts'), 'utf8')
-    expect(cli).toBe(server)
-  })
-})
