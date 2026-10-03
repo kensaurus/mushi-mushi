@@ -7,16 +7,30 @@
  *          which tells each reporter their bug is live. Off by default.
  *
  *          Reads and writes `auto_release_enabled` through
- *          GET / PATCH /v1/admin/settings (project admins only on write).
+ *          GET / PATCH /v1/admin/settings (project admins only on write), and
+ *          reads GET /v1/admin/releases/auto-release: only one automatic draft
+ *          may be open per project, so a draft whose publish failed pauses
+ *          auto-release until someone publishes or deletes it. The card says
+ *          so instead of letting it stall silently.
  */
 
 import { useCallback, useEffect, useState } from 'react'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
-import { Card, ErrorAlert, Toggle } from '../ui'
+import { Btn, Callout, Card, ErrorAlert, Toggle } from '../ui'
 
 interface AutoReleaseSettings {
   auto_release_enabled?: boolean
+}
+
+/** Mirrors OpenAutoDraft in packages/server/supabase/functions/_shared/auto-release.ts. */
+export interface BlockingAutoDraft {
+  id: string
+  version: string
+  createdAt: string
+  autoSource: 'github_release' | 'github_deployment' | 'recipe_event'
+  /** No run is still working on it: it blocks auto-release until a person acts. */
+  stale: boolean
 }
 
 export function AutoReleaseCard({ projectId }: { projectId: string }) {
@@ -25,18 +39,30 @@ export function AutoReleaseCard({ projectId }: { projectId: string }) {
   // False when the server has no such column yet (migration not applied).
   const [available, setAvailable] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [blocking, setBlocking] = useState<BlockingAutoDraft | null>(null)
+  const [blockingError, setBlockingError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
   const load = useCallback(async () => {
     setLoadError(null)
-    const res = await apiFetch<AutoReleaseSettings>('/v1/admin/settings')
+    setBlockingError(null)
+    const [res, blockRes] = await Promise.all([
+      apiFetch<AutoReleaseSettings>('/v1/admin/settings'),
+      apiFetch<{ blockingDraft: BlockingAutoDraft | null }>('/v1/admin/releases/auto-release'),
+    ])
     if (!res.ok) {
       setLoadError(res.error?.message ?? 'Could not load the auto-release setting')
-      return
+    } else {
+      const value = res.data?.auto_release_enabled
+      setAvailable(typeof value === 'boolean')
+      setEnabled(value === true)
     }
-    const value = res.data?.auto_release_enabled
-    setAvailable(typeof value === 'boolean')
-    setEnabled(value === true)
+    if (!blockRes.ok) {
+      setBlocking(null)
+      setBlockingError(blockRes.error?.message ?? 'Could not check for a stuck automatic release')
+    } else {
+      setBlocking(blockRes.data?.blockingDraft ?? null)
+    }
   }, [])
 
   useEffect(() => {
@@ -71,7 +97,9 @@ export function AutoReleaseCard({ projectId }: { projectId: string }) {
             no report was fixed.
           </p>
           <p className="text-2xs text-fg-faint leading-snug">
-            GitHub events need the Mushi GitHub App on the repo with the Releases and Deployments events.
+            GitHub events need the Mushi GitHub App on the repo with the Releases and Deployments events. A CI event
+            needs an agent key with <code className="font-mono">mcp:write</code> kept in CI secrets; the public SDK key
+            records the event but never releases.
           </p>
         </div>
         <Toggle
@@ -84,7 +112,29 @@ export function AutoReleaseCard({ projectId }: { projectId: string }) {
       {!available && enabled !== null ? (
         <p className="text-2xs text-fg-faint">Auto-release becomes available after the next server update.</p>
       ) : null}
+      {blocking?.stale ? (
+        <Callout
+          tone="warn"
+          label="Auto-release is paused"
+          action={
+            <Btn variant="ghost" size="sm" to="/releases?tab=drafts">
+              Open drafts
+            </Btn>
+          }
+        >
+          <p className="text-2xs text-fg-secondary leading-snug">
+            The automatic release <span className="font-mono">{blocking.version}</span> has been a draft since{' '}
+            {new Date(blocking.createdAt).toLocaleString()} because its publish did not finish. Mushi releases nothing
+            else automatically until you publish or delete it under Drafts.
+          </p>
+        </Callout>
+      ) : blocking ? (
+        <p className="text-2xs text-fg-faint">
+          Publishing the automatic release <span className="font-mono">{blocking.version}</span> now.
+        </p>
+      ) : null}
       {loadError ? <ErrorAlert title="Auto-release" message={loadError} /> : null}
+      {blockingError ? <ErrorAlert title="Auto-release status" message={blockingError} /> : null}
     </Card>
   )
 }
