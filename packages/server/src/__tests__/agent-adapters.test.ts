@@ -724,6 +724,9 @@ describe('cursor_cloud adapter', () => {
     expect(body.agentId).toBe(expectedAgentId)
     expect(body.autoCreatePR).toBe(true)
     expect(body.repos).toEqual([{ url: 'https://github.com/o/r', startingRef: 'main' }])
+    // Cursor v1 rejects envVars next to a client agentId; the ids ride in the prompt.
+    expect(body).not.toHaveProperty('envVars')
+    expect(String((body.prompt as { text?: string } | string | undefined) && JSON.stringify(body.prompt))).toMatch(/Mushi ids for this fix: project /)
     expect((init.headers as Record<string, string>).Authorization).toBe('Bearer crsr_pool')
   })
 

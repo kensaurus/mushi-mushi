@@ -358,8 +358,14 @@ const cursorAdapter: CloudAgentAdapter = {
 
     const agentId = await deterministicCursorAgentId(input.dispatchId)
     try {
+      // Cursor v1 refuses envVars together with a client-chosen agentId
+      // (400 validation_error, 2026-10-03). The deterministic agentId is what
+      // keeps a retried dispatch from starting a second agent, so the ids the
+      // agent needs travel in the prompt instead; none of them is a secret.
       const created = await createCursorAgentV1(client, {
-        prompt: input.prompt,
+        prompt: `${input.prompt}
+
+Mushi ids for this fix: project ${input.projectId}, report ${input.reportId}, fix attempt ${input.attemptId}.`,
         repoUrl: input.repoUrl,
         startingRef: input.baseRef,
         agentId,
@@ -367,11 +373,6 @@ const cursorAdapter: CloudAgentAdapter = {
         model: input.model,
         autoCreatePR: true,
         skipReviewerRequest: true,
-        envVars: {
-          MUSHI_PROJECT_ID: input.projectId,
-          MUSHI_REPORT_ID: input.reportId,
-          MUSHI_FIX_ATTEMPT_ID: input.attemptId,
-        },
       })
       return {
         externalAgentId: created.agent.id,
