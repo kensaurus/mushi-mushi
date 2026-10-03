@@ -352,16 +352,19 @@ function requestedOrganizationId(c: Context): string | null {
 
 /**
  * An account-level (org-scoped) API key: no bound project, reaches every
- * project its owner can reach (callerProjectIds lists them all).
+ * project its owner can reach (callerProjectIds lists them all). Decided from
+ * the key alone, never from `projectId`: resolving a project pins
+ * `projectId` on the request, and the key must not then read as a
+ * project-bound key, which is treated as the project's owner.
  */
 function isAccountKey(c: Context): boolean {
-  return c.get('authMethod') === 'apiKey' && Boolean(c.get('isOrgScopedKey')) && !c.get('projectId');
+  return c.get('authMethod') === 'apiKey' && Boolean(c.get('isOrgScopedKey'));
 }
 
 /**
  * {@link resolveOwnedProject} for an account-level key. The project must be
- * named (project_id / X-Mushi-Project-Id, or the route's URL id): there is no
- * "first project" fallback for a key. The key acts with its owner's real role
+ * named (project_id / X-Mushi-Project-Id, or the route's URL id) or already
+ * pinned earlier in the request: there is no "first project" fallback for a key. The key acts with its owner's real role
  * on that project (never a blanket 'owner', so requireProjectAdmin still
  * refuses a member's key), and a project the owner cannot reach is a 404.
  */
@@ -371,7 +374,9 @@ async function resolveAccountKeyProject(
   userId: string,
   options: ResolveOwnedProjectOptions,
 ): Promise<OwnedProjectResolution> {
-  const requested = (options.overrideProjectId ?? requestedProjectId(c)) || null;
+  // The project named on this request, else the one an earlier check pinned.
+  const requested =
+    (options.overrideProjectId ?? requestedProjectId(c)) || (c.get('projectId') as string | null | undefined) || null;
   if (!requested) {
     if (options.noProjectResponse) return { response: options.noProjectResponse() };
     return {
@@ -420,10 +425,10 @@ export async function resolveOwnedProject(
   options: ResolveOwnedProjectOptions = {},
 ): Promise<OwnedProjectResolution> {
   // API-key callers are pinned to the key's project — never elevated via owner_id.
+  if (isAccountKey(c)) return resolveAccountKeyProject(c, db, userId, options);
   if (c.get('authMethod') === 'apiKey') {
     const bound = c.get('projectId') as string | undefined;
     if (!bound) {
-      if (isAccountKey(c)) return resolveAccountKeyProject(c, db, userId, options);
       return { response: jsonForbidden(c, 'API key missing project binding') };
     }
     const requested = options.overrideProjectId ?? requestedProjectId(c);
