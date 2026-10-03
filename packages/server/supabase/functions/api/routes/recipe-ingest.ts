@@ -28,6 +28,7 @@ import type { Variables } from '../types.ts'
 import { classifyIngestRateLimitError } from './ingest-rate-limit.ts'
 import { portfolioAccess } from './portfolio.ts'
 import { isScanRun, latestPerGate } from './recipe-compose.ts'
+import { scheduleAutoRelease, type AutoReleaseTrigger } from '../../_shared/auto-release.ts'
 
 const ilog = log.child('recipe-ingest')
 const RECIPE_DRIFT_GATES = ['ci_drift', 'deploy_drift', 'env_drift', 'schema_drift', 'design_drift'] as const
@@ -43,6 +44,8 @@ export interface RecipeIngestDeps {
   jwtAuth: MiddlewareHandler
   adminOrApiKeyRead: MiddlewareHandler
   now: () => Date
+  /** Opt-in auto-release on `release.published` (defaults to the real one). */
+  scheduleAutoRelease?: (db: Db, projectId: string, trigger: AutoReleaseTrigger) => unknown
 }
 
 export const defaultRecipeIngestDeps: RecipeIngestDeps = {
@@ -51,6 +54,7 @@ export const defaultRecipeIngestDeps: RecipeIngestDeps = {
   jwtAuth: jwtAuth as MiddlewareHandler,
   adminOrApiKeyRead: adminOrApiKey({ scope: 'mcp:read' }) as MiddlewareHandler,
   now: () => new Date(),
+  scheduleAutoRelease,
 }
 
 const pushSchema = z.object({
@@ -173,7 +177,14 @@ export function registerRecipeIngestRoutes(app: Hono<{ Variables: Variables }>, 
     if (!parsed.success) return jsonError(c, 'VALIDATION_ERROR', parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ').slice(0, 500), 400)
     const now = deps.now().toISOString()
     let stored = 0
+    // A shipped version may auto-release (opt-in, checked inside); once per version per request.
+    const releasedVersions = new Set<string>()
+    const autoRelease = deps.scheduleAutoRelease ?? scheduleAutoRelease
     for (const e of parsed.data.events) {
+      if (e.type === 'release.published' && !releasedVersions.has(e.version)) {
+        releasedVersions.add(e.version)
+        void autoRelease(db, projectId, { source: 'recipe_event', version: e.version, commit: e.commit ?? null })
+      }
       if (e.type === 'build.completed') {
         const { error } = await db.from('ci_workflow_runs').upsert({
           project_id: projectId, repo: 'external', run_id: syntheticRunId(e.id), workflow_path: e.workflow ?? null, name: e.workflow ?? null,
@@ -190,7 +201,7 @@ export function registerRecipeIngestRoutes(app: Hono<{ Variables: Variables }>, 
         if (!error) stored++
       }
     }
-    return c.json({ ok: true, data: { received: parsed.data.events.length, stored } })
+    return c.json({ ok: true, data: { received: parsed.data.events.length, stored, autoReleaseChecked: releasedVersions.size } })
   })
 
   app.post('/v1/ingest/recipe/csv', deps.jwtAuth, async (c) => {

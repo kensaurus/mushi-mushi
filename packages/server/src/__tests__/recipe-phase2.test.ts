@@ -321,9 +321,29 @@ describe('recipe ingest routes', () => {
       ] },
       vars: { projectId: P1 },
     })
-    expect(res.body.data).toEqual({ received: 2, stored: 2 })
+    expect(res.body.data).toEqual({ received: 2, stored: 2, autoReleaseChecked: 0 })
     expect(db.table('ci_workflow_runs')[0]).toMatchObject({ source: 'webhook', conclusion: 'failure', repo: 'external' })
     expect(db.table('deploy_observations')[0]).toMatchObject({ source: 'webhook', target_id: 'vps' })
+  })
+
+  it('hands each release.published version to auto-release once (the opt-in is checked there)', async () => {
+    const db = seed()
+    const scheduleAutoRelease = vi.fn()
+    const app = new FakeApp()
+    ingest.registerRecipeIngestRoutes(app as never, {
+      getServiceClient: () => db as never, apiKeyAuth: pass, jwtAuth: pass, adminOrApiKeyRead: pass, now: () => NOW, scheduleAutoRelease,
+    } as never)
+    const res = await app.call('POST', '/v1/ingest/recipe/events', {
+      body: { events: [
+        { type: 'release.published', targetId: 'web', version: '2.0.0', commit: 'abc1234' },
+        { type: 'release.published', targetId: 'api', version: '2.0.0' },
+        { type: 'deploy.completed', targetId: 'web', version: '2.0.0', ok: true },
+      ] },
+      vars: { projectId: P1 },
+    })
+    expect(res.body.data).toEqual({ received: 3, stored: 3, autoReleaseChecked: 1 })
+    expect(scheduleAutoRelease).toHaveBeenCalledTimes(1)
+    expect(scheduleAutoRelease).toHaveBeenCalledWith(db, P1, { source: 'recipe_event', version: '2.0.0', commit: 'abc1234' })
   })
 
   it('imports shared resources from CSV for owners only, and reports bad lines', async () => {

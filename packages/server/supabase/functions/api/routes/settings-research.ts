@@ -430,6 +430,9 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       'github_user_token_ref',
       // Spend limits (Settings → General → Spend limits). Validated below.
       ...SPEND_LIMIT_FIELDS,
+      // Opt-in auto-release (migration 20261003130000): publishing messages
+      // reporters, so project admins only. Validated below.
+      'auto_release_enabled',
     ];
     // Secrets submitted raw are written to Supabase Vault and persisted as
     // `vault://<name>` — same auto-vault contract (and the same Vault names)
@@ -491,6 +494,18 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
           return c.json({ error: { code: 'VALIDATION_ERROR', message: verdict.message } }, 400);
         }
         updates[key] = verdict.value;
+        continue;
+      }
+      if (key === 'auto_release_enabled') {
+        const forbidden = requireProjectAdmin(c, project);
+        if (forbidden) return forbidden;
+        if (typeof value !== 'boolean') {
+          return c.json(
+            { error: { code: 'VALIDATION_ERROR', message: 'auto_release_enabled must be a boolean' } },
+            400,
+          );
+        }
+        updates[key] = value;
         continue;
       }
       if (key === 'voice_intake_enabled') {

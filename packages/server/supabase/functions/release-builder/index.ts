@@ -29,6 +29,10 @@ const bodySchema = z.object({
   title: z.string().optional(),
   window_start: z.string().optional(), // ISO date - start of the release window
   window_end: z.string().optional(),   // ISO date - end of window (default: now)
+  // Set only by the opt-in auto-release (_shared/auto-release.ts). The
+  // uq_releases_one_auto_draft index then allows one automatic draft per
+  // project at a time; a second concurrent trigger gets a 409.
+  auto_source: z.enum(['github_release', 'github_deployment', 'recipe_event']).optional(),
 })
 
 Deno.serve(
@@ -47,7 +51,7 @@ Deno.serve(
       })
     }
 
-    const { project_id, version, title, window_start, window_end } = parsed.data
+    const { project_id, version, title, window_start, window_end, auto_source } = parsed.data
     const db = getServiceClient()
 
     const windowEnd = window_end ? new Date(window_end) : new Date()
@@ -147,11 +151,18 @@ Keep it warm, human, and specific. Avoid developer jargon. Max 400 words.`,
         status: 'draft',
         fixed_report_ids: reports.map((r) => r.id),
         credited_reporter_ids: [...userById.values()].map((u) => u.id),
+        ...(auto_source ? { auto_source } : {}),
       })
       .select()
       .single()
 
     if (releaseErr) {
+      if (auto_source && releaseErr.code === '23505') {
+        return new Response(
+          JSON.stringify({ ok: false, code: 'AUTO_DRAFT_EXISTS', error: 'An automatic release draft is already open for this project.' }),
+          { status: 409, headers: { 'content-type': 'application/json' } },
+        )
+      }
       return new Response(JSON.stringify({ ok: false, error: releaseErr.message }), {
         status: 500, headers: { 'content-type': 'application/json' },
       })

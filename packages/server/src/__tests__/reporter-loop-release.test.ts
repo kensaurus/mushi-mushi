@@ -108,6 +108,41 @@ describe('notifyReleaseReporters + stampDeliveredReleaseCredits', () => {
   })
 })
 
+describe('publishRelease (shared by manual publish and auto-release)', () => {
+  it('publishes a draft, messages its reporter, stamps the credit, and names the actor', async () => {
+    const { publishRelease } = await import('../../supabase/functions/_shared/release-publish.ts')
+    const { runStatusTransitionSideEffects } = await import('../../supabase/functions/_shared/report-transition.ts')
+    const open = { id: 'r1', project_id: PROJECT, status: 'fixing', reporter_token_hash: 'rk1_a' }
+    const fake = db([open], 'auto', {
+      releases: [{ ...RELEASE, status: 'draft', published_at: null, fixed_report_ids: ['r1'], fulfilled_ticket_ids: [] }],
+    })
+    const res = await publishRelease(fake as never, RELEASE.id, { kind: 'system', id: 'auto-release:github_release' })
+    expect(res).toMatchObject({ ok: true, notified: 1, ticketsFulfilled: 0, delivery: { reporters_notified: 1, credits_stamped: 1 } })
+    expect(fake.table('releases')[0]).toMatchObject({ status: 'published' })
+    expect(fake.table('reports')[0]).toMatchObject({ status: 'fixed', fixed_release_id: RELEASE.id })
+    expect(runStatusTransitionSideEffects).toHaveBeenCalledWith(
+      fake,
+      expect.objectContaining({ actor: { kind: 'system', id: 'auto-release:github_release' }, notifyReporter: false }),
+    )
+
+    // Publishing again is a 404, not a second round of messages.
+    const again = await publishRelease(fake as never, RELEASE.id, { kind: 'admin', id: 'u1' })
+    expect(again).toEqual({ ok: false, status: 404, error: 'Release not found or already published' })
+    expect(fake.table('reporter_notifications')).toHaveLength(1)
+  })
+
+  it('a console user id still reaches the transition side effects as an admin actor', async () => {
+    const { runStatusTransitionSideEffects } = await import('../../supabase/functions/_shared/report-transition.ts')
+    const open = { id: 'r5', project_id: PROJECT, status: 'fixing', reporter_token_hash: null }
+    const fake = db([open])
+    await rel.notifyReleaseReporters(fake as never, { ...RELEASE, fixed_report_ids: ['r5'] }, 'u42')
+    expect(runStatusTransitionSideEffects).toHaveBeenCalledWith(
+      fake,
+      expect.objectContaining({ reportId: 'r5', actor: { kind: 'admin', id: 'u42' } }),
+    )
+  })
+})
+
 describe('release-builder draft', () => {
   it('never lists a report an earlier release already shipped (its reporter would hear "shipped" twice)', async () => {
     const { readFileSync } = await import('node:fs')
