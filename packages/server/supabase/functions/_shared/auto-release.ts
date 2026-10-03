@@ -12,9 +12,21 @@
  *
  * Guards, in order: opt-in → a release with this version already exists →
  * nothing fixed since the last published release (no empty releases on every
- * deploy) → one automatic draft per project at a time (the
- * uq_releases_one_auto_draft index; release-builder answers 409) → publish.
- * A draft that fails to publish stays in the console for a person.
+ * deploy) → one automatic draft per project at a time (checked before
+ * drafting, so a blocked trigger spends no release-builder call; the
+ * uq_releases_one_auto_draft index and release-builder's 409 close the race)
+ * → publish.
+ *
+ * Failure modes, as the outcome reports them:
+ *   - the draft could not be made: nothing was written (`failed`);
+ *   - the draft was made but publishing failed before its status flipped:
+ *     the draft stays under Drafts (`failed`, published: false). It also
+ *     blocks every later auto-release until a person publishes or deletes
+ *     it, so the console (GET /v1/admin/releases/auto-release) shows it and
+ *     the log turns to a warning once it is older than AUTO_DRAFT_STALE_MS;
+ *   - the release went live but linking tickets, telling reporters or
+ *     stamping credits failed part-way (`failed`, published: true): some
+ *     reporters may not have been told.
  *
  * No Deno globals at module scope, so vitest imports it with injected deps.
  */
@@ -40,9 +52,19 @@ export type AutoReleaseOutcome =
   | { status: 'disabled' }
   | { status: 'duplicate'; releaseId: string }
   | { status: 'nothing_to_release' }
-  | { status: 'draft_in_progress' }
+  | { status: 'draft_in_progress'; blocking: OpenAutoDraft | null }
   | { status: 'published'; releaseId: string; delivery: ReleaseDelivery & { credits_stamped: number; credits_pending: number } }
-  | { status: 'failed'; error: string; releaseId?: string }
+  | { status: 'failed'; error: string; releaseId?: string; published?: boolean }
+
+/** The automatic draft that holds uq_releases_one_auto_draft for a project. */
+export interface OpenAutoDraft {
+  id: string
+  version: string
+  createdAt: string
+  autoSource: AutoReleaseSource
+  /** Older than AUTO_DRAFT_STALE_MS: no run is still working on it. */
+  stale: boolean
+}
 
 export interface AutoReleaseDraftInput {
   project_id: string
@@ -64,6 +86,12 @@ export interface AutoReleaseDeps {
 
 /** With no published release yet, look back as far as release-builder does. */
 export const AUTO_RELEASE_DEFAULT_WINDOW_DAYS = 30
+/**
+ * An automatic draft lives for one release-builder call plus one publish
+ * (seconds). Older than this, the run that made it is gone and the draft
+ * blocks auto-release until a person acts.
+ */
+export const AUTO_DRAFT_STALE_MS = 10 * 60 * 1000
 /** A tag, semver or short sha: what a reporter may see as "fixed in …". */
 export const AUTO_RELEASE_VERSION_RE = /^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/
 
@@ -150,6 +178,42 @@ async function draftViaReleaseBuilder(input: AutoReleaseDraftInput): Promise<Aut
   return { ok: true, releaseId, reportCount: body.data?.reportCount ?? 0 }
 }
 
+// ─── The blocking draft ──────────────────────────────────────────────────────
+
+/**
+ * The project's open automatic draft, if any. A read error is returned, never
+ * read as "none": a caller that guessed "none" would draft a second release.
+ */
+export async function findOpenAutoDraft(
+  db: SupabaseClient,
+  projectId: string,
+  now: Date,
+): Promise<{ ok: true; draft: OpenAutoDraft | null } | { ok: false; error: string }> {
+  const { data, error } = await db
+    .from('releases')
+    .select('id, version, created_at, auto_source')
+    .eq('project_id', projectId)
+    .eq('status', 'draft')
+    .not('auto_source', 'is', null)
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle()
+  if (error) return { ok: false, error: `reading automatic drafts failed: ${error.message}` }
+  if (!data) return { ok: true, draft: null }
+  const row = data as { id: string; version: string; created_at: string; auto_source: AutoReleaseSource }
+  const age = now.getTime() - new Date(row.created_at).getTime()
+  return {
+    ok: true,
+    draft: {
+      id: row.id,
+      version: row.version,
+      createdAt: row.created_at,
+      autoSource: row.auto_source,
+      stale: Number.isFinite(age) && age > AUTO_DRAFT_STALE_MS,
+    },
+  }
+}
+
 // ─── Orchestration ───────────────────────────────────────────────────────────
 
 export async function runAutoRelease(
@@ -216,6 +280,10 @@ export async function runAutoRelease(
   if (candErr) return { status: 'failed', error: `reading fixed reports failed: ${candErr.message}` }
   if (!candidates || (candidates as unknown[]).length === 0) return { status: 'nothing_to_release' }
 
+  const open = await findOpenAutoDraft(db, projectId, now)
+  if (!open.ok) return { status: 'failed', error: open.error }
+  if (open.draft) return { status: 'draft_in_progress', blocking: open.draft }
+
   const drafted = await draft({
     project_id: projectId,
     version,
@@ -224,7 +292,11 @@ export async function runAutoRelease(
     auto_source: trigger.source,
   })
   if (!drafted.ok) {
-    if (drafted.busy) return { status: 'draft_in_progress' }
+    if (drafted.busy) {
+      // Lost the race to another trigger between the check and the insert.
+      const raced = await findOpenAutoDraft(db, projectId, now)
+      return { status: 'draft_in_progress', blocking: raced.ok ? raced.draft : null }
+    }
     return { status: 'failed', error: drafted.error }
   }
   if (drafted.reportCount === 0) {
@@ -234,7 +306,9 @@ export async function runAutoRelease(
   }
 
   const published = await publish(db, drafted.releaseId, { kind: 'system', id: `auto-release:${trigger.source}` })
-  if (!published.ok) return { status: 'failed', error: published.error, releaseId: drafted.releaseId }
+  if (!published.ok) {
+    return { status: 'failed', error: published.error, releaseId: drafted.releaseId, published: published.published }
+  }
   return { status: 'published', releaseId: drafted.releaseId, delivery: published.delivery }
 }
 
@@ -251,8 +325,21 @@ export function scheduleAutoRelease(
   const run = runAutoRelease(db, projectId, trigger, deps)
     .then((outcome) => {
       const fields = { projectId, source: trigger.source, version: trigger.version, status: outcome.status }
-      if (outcome.status === 'failed') arLog.error('auto-release failed', { ...fields, error: outcome.error })
-      else arLog.info('auto-release', fields)
+      if (outcome.status === 'failed') {
+        arLog.error(
+          outcome.published ? 'auto-release published, but reporter delivery failed part-way' : 'auto-release failed',
+          { ...fields, error: outcome.error, releaseId: outcome.releaseId ?? null },
+        )
+      } else if (outcome.status === 'draft_in_progress' && (outcome.blocking?.stale ?? true)) {
+        // A stale (or unreadable) blocking draft is not a run in progress: it
+        // stops every auto-release until a person publishes or deletes it.
+        arLog.warn('auto-release blocked by an automatic draft nobody published', {
+          ...fields,
+          blockingReleaseId: outcome.blocking?.id ?? null,
+          blockingVersion: outcome.blocking?.version ?? null,
+          blockingSince: outcome.blocking?.createdAt ?? null,
+        })
+      } else arLog.info('auto-release', fields)
       return outcome
     })
     .catch((err) => {
@@ -262,4 +349,57 @@ export function scheduleAutoRelease(
   const edgeRuntime = (globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } }).EdgeRuntime
   if (edgeRuntime?.waitUntil) edgeRuntime.waitUntil(run)
   return run
+}
+
+// ─── GitHub App webhook: release / deployment_status ────────────────────────
+
+export type GithubShipPayload = Parameters<typeof triggerFromGithubRelease>[0] &
+  Parameters<typeof triggerFromGithubDeploymentStatus>[0] & {
+    repository?: { full_name?: string }
+    installation?: { id?: number }
+  }
+
+export interface GithubShipRouting {
+  /** HTTP status for GitHub: 202 handled or ignored, 500 so GitHub redelivers. */
+  status: 202 | 500
+  body: Record<string, unknown>
+  /** Projects an auto-release was scheduled for (the audit row takes the first). */
+  projectIds: string[]
+}
+
+/**
+ * Route a `release` / `deployment_status` delivery from the Mushi GitHub App
+ * to the projects bound to that repo under THAT installation (the same
+ * routing as push, without requiring indexing). A failed lookup is a 500 so
+ * GitHub redelivers: answering "no project" would drop a real ship.
+ */
+export async function routeGithubShipEvent(
+  db: SupabaseClient,
+  event: 'release' | 'deployment_status',
+  payload: GithubShipPayload,
+  schedule: (db: SupabaseClient, projectId: string, trigger: AutoReleaseTrigger) => unknown = scheduleAutoRelease,
+): Promise<GithubShipRouting> {
+  const trigger = event === 'release' ? triggerFromGithubRelease(payload) : triggerFromGithubDeploymentStatus(payload)
+  if (!trigger) return { status: 202, body: { ok: true, ignored: `${event}_not_a_production_ship` }, projectIds: [] }
+  const installationId = payload.installation?.id
+  const repo = payload.repository?.full_name
+  if (!installationId || !repo) {
+    return { status: 202, body: { ok: true, ignored: 'missing_repo_or_installation' }, projectIds: [] }
+  }
+  const { data, error } = await db
+    .from('project_repos')
+    .select('project_id')
+    .eq('repo_url', `https://github.com/${repo}`)
+    .eq('github_app_installation_id', installationId)
+    .limit(10)
+  if (error) {
+    arLog.error('auto-release: project_repos lookup failed', { event, repo, err: error.message })
+    return { status: 500, body: { ok: false, error: 'project_repos lookup failed; redeliver' }, projectIds: [] }
+  }
+  const projectIds = [...new Set(((data ?? []) as Array<{ project_id: string }>).map((r) => r.project_id))]
+  if (projectIds.length === 0) {
+    return { status: 202, body: { ok: true, ignored: 'no_project_for_repo', repoFullName: repo }, projectIds }
+  }
+  for (const pid of projectIds) void schedule(db, pid, trigger)
+  return { status: 202, body: { ok: true, autoRelease: { queued: projectIds.length, version: trigger.version } }, projectIds }
 }

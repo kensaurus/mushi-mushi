@@ -22,6 +22,9 @@ vi.mock('../../supabase/functions/_shared/release-publish.ts', () => ({
 }))
 
 import {
+  AUTO_DRAFT_STALE_MS,
+  findOpenAutoDraft,
+  routeGithubShipEvent,
   runAutoRelease,
   triggerFromGithubDeploymentStatus,
   triggerFromGithubRelease,
@@ -163,10 +166,46 @@ describe('runAutoRelease', () => {
     )
   })
 
-  it('a concurrent automatic draft (409 from release-builder) is reported, not retried or published', async () => {
-    const d = deps({ draft: vi.fn(async () => ({ ok: false as const, busy: true, error: 'open' })) })
-    expect(await runAutoRelease(seed() as never, P, trigger, d)).toEqual({ status: 'draft_in_progress' })
+  it('a concurrent automatic draft (409 from release-builder) is reported with the draft that won, not retried or published', async () => {
+    const db = seed()
+    const d = deps({
+      draft: vi.fn(async () => {
+        // The other trigger's insert lands between our check and our insert.
+        db.table('releases').push({ id: 'rel-race', project_id: P, version: '1.4.1', status: 'draft', auto_source: 'github_deployment', created_at: NOW.toISOString() })
+        return { ok: false as const, busy: true, error: 'open' }
+      }),
+    })
+    expect(await runAutoRelease(db as never, P, trigger, d)).toEqual({
+      status: 'draft_in_progress',
+      blocking: { id: 'rel-race', version: '1.4.1', createdAt: NOW.toISOString(), autoSource: 'github_deployment', stale: false },
+    })
     expect(d.publish).not.toHaveBeenCalled()
+  })
+
+  it('an open automatic draft blocks the trigger BEFORE release-builder is called (no LLM spend, no 409 round trip)', async () => {
+    const created = new Date(NOW.getTime() - 3 * 60 * 60 * 1000).toISOString()
+    const db = seed({
+      releases: [{ id: 'rel-stuck', project_id: P, version: '1.3.9', status: 'draft', auto_source: 'recipe_event', created_at: created }],
+    })
+    const d = deps()
+    expect(await runAutoRelease(db as never, P, trigger, d)).toEqual({
+      status: 'draft_in_progress',
+      blocking: { id: 'rel-stuck', version: '1.3.9', createdAt: created, autoSource: 'recipe_event', stale: true },
+    })
+    expect(d.draft).not.toHaveBeenCalled()
+    expect(d.publish).not.toHaveBeenCalled()
+  })
+
+  it('an unreadable draft check fails the run instead of drafting a second release', async () => {
+    const { db } = createFakeDb((q) => {
+      if (q.table === 'project_settings') return { data: { auto_release_enabled: true } }
+      if (q.table === 'reports') return { data: [{ id: 'r1' }] }
+      if (q.table === 'releases' && q.filters.some((f) => f.method === 'not')) return { error: { message: 'timeout' } }
+      return { data: null }
+    })
+    const d = deps()
+    expect(await runAutoRelease(db, P, trigger, d)).toEqual({ status: 'failed', error: 'reading automatic drafts failed: timeout' })
+    expect(d.draft).not.toHaveBeenCalled()
   })
 
   it('drops an empty draft when another release took the reports first', async () => {
@@ -188,34 +227,137 @@ describe('runAutoRelease', () => {
     expect((await runAutoRelease(seed() as never, P, { source: 'recipe_event', version: '2026.10.03+build.7' }, d)).status).toBe('published')
   })
 
-  it('a failed publish keeps the draft for a person and says so', async () => {
-    const d = deps({ publish: vi.fn(async () => ({ ok: false as const, status: 500 as const, error: 'release published, but x' })) })
+  it('a publish that fails before the status flips leaves the draft for a person (published: false)', async () => {
+    const d = deps({
+      publish: vi.fn(async () => ({ ok: false as const, status: 500 as const, error: 'connection reset', published: false })),
+    })
     expect(await runAutoRelease(seed() as never, P, trigger, d)).toEqual({
       status: 'failed',
-      error: 'release published, but x',
+      error: 'connection reset',
       releaseId: 'rel-new',
+      published: false,
+    })
+  })
+
+  it('a publish that fails after the release went live says it is live with partial reporter delivery (published: true)', async () => {
+    const d = deps({
+      publish: vi.fn(async () => ({
+        ok: false as const,
+        status: 500 as const,
+        error: 'release published, but stamping credits failed',
+        published: true,
+      })),
+    })
+    expect(await runAutoRelease(seed() as never, P, trigger, d)).toEqual({
+      status: 'failed',
+      error: 'release published, but stamping credits failed',
+      releaseId: 'rel-new',
+      published: true,
     })
   })
 })
 
-describe('wiring', () => {
-  it('the GitHub App webhook routes release + deployment_status to auto-release without requiring indexing', () => {
-    const src = readFileSync(resolve(FUNCTIONS, 'webhooks-github-indexer/index.ts'), 'utf-8')
-    const block = src.slice(src.indexOf("if (event === 'release' || event === 'deployment_status')"), src.indexOf("if (event !== 'push'"))
-    expect(block).toContain('triggerFromGithubRelease(shipPayload)')
-    expect(block).toContain('triggerFromGithubDeploymentStatus(shipPayload)')
-    expect(block).toContain(".eq('github_app_installation_id', shipInstallationId)")
-    expect(block).toContain('scheduleAutoRelease(shipDb, pid, trigger)')
-    expect(block).not.toContain('indexing_enabled')
+describe('findOpenAutoDraft', () => {
+  it('finds only an automatic DRAFT of this project, and marks it stale after AUTO_DRAFT_STALE_MS', async () => {
+    const fresh = new Date(NOW.getTime() - 60_000).toISOString()
+    const old = new Date(NOW.getTime() - AUTO_DRAFT_STALE_MS - 1).toISOString()
+    const db = makeFakeDb({
+      releases: [
+        { id: 'manual', project_id: P, version: '1', status: 'draft', auto_source: null, created_at: old },
+        { id: 'shipped', project_id: P, version: '2', status: 'published', auto_source: 'github_release', created_at: old },
+        { id: 'other-project', project_id: 'p2', version: '3', status: 'draft', auto_source: 'github_release', created_at: old },
+      ],
+    })
+    expect(await findOpenAutoDraft(db as never, P, NOW)).toEqual({ ok: true, draft: null })
+    db.table('releases').push({ id: 'auto', project_id: P, version: '4', status: 'draft', auto_source: 'recipe_event', created_at: fresh })
+    expect(await findOpenAutoDraft(db as never, P, NOW)).toEqual({
+      ok: true,
+      draft: { id: 'auto', version: '4', createdAt: fresh, autoSource: 'recipe_event', stale: false },
+    })
+    expect(await findOpenAutoDraft(db as never, P, new Date(NOW.getTime() + AUTO_DRAFT_STALE_MS))).toMatchObject({
+      draft: { id: 'auto', stale: true },
+    })
+  })
+})
+
+describe('routeGithubShipEvent (GitHub App release / deployment_status)', () => {
+  const release = (overrides: Record<string, unknown> = {}) => ({
+    action: 'published',
+    release: { tag_name: 'v1.4.0', name: 'Autumn' },
+    repository: { full_name: 'acme/web' },
+    installation: { id: 42 },
+    ...overrides,
   })
 
-  it('manual publish and auto-release share one publish path; release-builder accepts auto_source', () => {
+  it('schedules auto-release for each project bound to the repo under THIS installation, without needing indexing', async () => {
+    const db = makeFakeDb({
+      project_repos: [
+        { project_id: 'p-a', repo_url: 'https://github.com/acme/web', github_app_installation_id: 42, indexing_enabled: false },
+        { project_id: 'p-a', repo_url: 'https://github.com/acme/web', github_app_installation_id: 42 },
+        { project_id: 'p-b', repo_url: 'https://github.com/acme/web', github_app_installation_id: 42 },
+        { project_id: 'p-other-install', repo_url: 'https://github.com/acme/web', github_app_installation_id: 7 },
+      ],
+    })
+    const schedule = vi.fn()
+    const out = await routeGithubShipEvent(db as never, 'release', release(), schedule)
+    expect(out).toEqual({ status: 202, body: { ok: true, autoRelease: { queued: 2, version: 'v1.4.0' } }, projectIds: ['p-a', 'p-b'] })
+    expect(schedule).toHaveBeenCalledTimes(2)
+    expect(schedule).toHaveBeenCalledWith(db, 'p-a', { source: 'github_release', version: 'v1.4.0', title: 'Autumn', commit: null })
+  })
+
+  it('ignores non-production deploys, drafts, missing routing data and unbound repos with a 202', async () => {
+    const db = makeFakeDb({ project_repos: [] })
+    const schedule = vi.fn()
+    expect(await routeGithubShipEvent(db as never, 'release', release({ release: { tag_name: 'v1', draft: true } }), schedule)).toEqual({
+      status: 202, body: { ok: true, ignored: 'release_not_a_production_ship' }, projectIds: [],
+    })
+    expect(
+      await routeGithubShipEvent(
+        db as never,
+        'deployment_status',
+        { deployment_status: { state: 'success', environment: 'Preview' }, deployment: { sha: 'a1b2c3d4e5f6a7b8' }, repository: { full_name: 'acme/web' }, installation: { id: 42 } },
+        schedule,
+      ),
+    ).toMatchObject({ status: 202, body: { ignored: 'deployment_status_not_a_production_ship' } })
+    expect(await routeGithubShipEvent(db as never, 'release', release({ installation: undefined }), schedule)).toMatchObject({
+      status: 202, body: { ignored: 'missing_repo_or_installation' },
+    })
+    expect(await routeGithubShipEvent(db as never, 'release', release(), schedule)).toEqual({
+      status: 202, body: { ok: true, ignored: 'no_project_for_repo', repoFullName: 'acme/web' }, projectIds: [],
+    })
+    expect(schedule).not.toHaveBeenCalled()
+  })
+
+  it('a failed project_repos lookup is a 500 so GitHub redelivers, never "no project"', async () => {
+    const { db } = createFakeDb((q) => (q.table === 'project_repos' ? { error: { message: 'connection refused' } } : { data: null }))
+    const schedule = vi.fn()
+    const out = await routeGithubShipEvent(db, 'release', release(), schedule)
+    expect(out.status).toBe(500)
+    expect(out.body).toMatchObject({ ok: false })
+    expect(schedule).not.toHaveBeenCalled()
+  })
+})
+
+describe('wiring', () => {
+  it('the GitHub App webhook hands release + deployment_status to routeGithubShipEvent and answers with its status', () => {
+    const src = readFileSync(resolve(FUNCTIONS, 'webhooks-github-indexer/index.ts'), 'utf-8')
+    const block = src.slice(src.indexOf("if (event === 'release' || event === 'deployment_status')"), src.indexOf("if (event !== 'push'"))
+    expect(block).toContain('routeGithubShipEvent(getDb(), event,')
+    expect(block).toContain('return c.json(routed.body, routed.status)')
+  })
+
+  it('manual publish and auto-release share one publish path', () => {
     expect(readFileSync(resolve(FUNCTIONS, 'api/routes/releases.ts'), 'utf-8')).toContain(
       "publishRelease(db, idParsed.value, { kind: 'admin', id: userId })",
     )
-    const builder = readFileSync(resolve(FUNCTIONS, 'release-builder/index.ts'), 'utf-8')
-    expect(builder).toContain("auto_source: z.enum(['github_release', 'github_deployment', 'recipe_event']).optional()")
-    expect(builder).toContain("code: 'AUTO_DRAFT_EXISTS'")
+  })
+
+  it('the console route for the blocking draft is registered before /:id', () => {
+    const src = readFileSync(resolve(FUNCTIONS, 'api/routes/releases.ts'), 'utf-8')
+    const autoAt = src.indexOf("app.get('/v1/admin/releases/auto-release'")
+    expect(autoAt).toBeGreaterThan(0)
+    expect(autoAt).toBeLessThan(src.indexOf("app.get('/v1/admin/releases/:id'"))
+    expect(src.slice(autoAt, src.indexOf('// ─── Draft a new release'))).toContain('findOpenAutoDraft(db,')
   })
 
   it('the setting is an admin-only boolean on PATCH /v1/admin/settings', () => {

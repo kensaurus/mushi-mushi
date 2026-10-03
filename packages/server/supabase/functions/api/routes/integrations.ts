@@ -382,8 +382,16 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
       resolveEffectivePlatformSettings(db, project.id as string),
       db.from('project_settings').select('*').eq('project_id', project.id).maybeSingle(),
     ]);
+    // Without the row every untracked card field (Sentry slug, DSN, toggles,
+    // extra slugs) would come back null and the card would show it unset.
+    // select('*') does not fail on a column a pending migration adds, so an
+    // error here is a real read failure: say so instead of serving nulls.
     if (rawRowRes.error) {
-      log.warn('platform GET: project_settings row unreadable', { projectId: project.id, err: rawRowRes.error.message });
+      log.error('platform GET: project_settings row unreadable', { projectId: project.id, err: rawRowRes.error.message });
+      return c.json(
+        { ok: false, error: { code: 'SETTINGS_UNREADABLE', message: "Could not read this project's integration settings. Try again." } },
+        500,
+      );
     }
     const projectRow = (rawRowRes.data ?? null) as Record<string, unknown> | null;
 

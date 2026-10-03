@@ -127,8 +127,28 @@ describe('publishRelease (shared by manual publish and auto-release)', () => {
 
     // Publishing again is a 404, not a second round of messages.
     const again = await publishRelease(fake as never, RELEASE.id, { kind: 'admin', id: 'u1' })
-    expect(again).toEqual({ ok: false, status: 404, error: 'Release not found or already published' })
+    expect(again).toEqual({ ok: false, status: 404, error: 'Release not found or already published', published: false })
     expect(fake.table('reporter_notifications')).toHaveLength(1)
+  })
+
+  it('a credit-stamping failure after the status flipped says the release is live (published: true)', async () => {
+    const { publishRelease } = await import('../../supabase/functions/_shared/release-publish.ts')
+    const open = { id: 'r9', project_id: PROJECT, status: 'fixing', reporter_token_hash: 'rk1_z' }
+    const fake = db([open], 'auto', {
+      releases: [{ ...RELEASE, status: 'draft', published_at: null, fixed_report_ids: ['r9'], fulfilled_ticket_ids: [] }],
+    })
+    const orig = fake.from.bind(fake)
+    // The reporter is messaged; reading the credits back afterwards fails.
+    const failing: Record<string, unknown> = {
+      select: () => failing,
+      eq: () => failing,
+      is: () => failing,
+      then: (ok: (v: unknown) => unknown) => Promise.resolve({ data: null, error: { message: 'credits down' } }).then(ok),
+    }
+    ;(fake as unknown as { from: (t: string) => unknown }).from = (t: string) => (t === 'release_credits' ? failing : orig(t))
+    const res = await publishRelease(fake as never, RELEASE.id, { kind: 'admin', id: 'u1' })
+    expect(res).toMatchObject({ ok: false, status: 500, published: true })
+    expect(fake.table('releases')[0]).toMatchObject({ status: 'published' })
   })
 
   it('a console user id still reaches the transition side effects as an admin actor', async () => {

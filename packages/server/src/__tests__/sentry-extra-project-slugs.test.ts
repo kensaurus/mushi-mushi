@@ -102,4 +102,13 @@ describe('integrations route wiring', () => {
     expect(src).toContain('platformCardValues(')
     expect(src).toContain(".from('project_settings').select('*')")
   })
+
+  it('the platform GET refuses to serve null card values when the project row is unreadable', () => {
+    const get = src.slice(src.indexOf("app.get('/v1/admin/integrations/platform'"), src.indexOf('const maskField'))
+    // The error branch must end the request before projectRow is read.
+    const onError = get.slice(get.indexOf('if (rawRowRes.error)'), get.indexOf('const projectRow'))
+    expect(onError).toContain('return c.json(')
+    expect(onError).toContain("code: 'SETTINGS_UNREADABLE'")
+    expect(onError).toMatch(/\s500,\s/)
+  })
 })
