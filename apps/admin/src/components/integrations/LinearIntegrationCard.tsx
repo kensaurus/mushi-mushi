@@ -261,7 +261,9 @@ export function LinearIntegrationCard({
                 className="font-mono text-xs"
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
-                autoComplete="off"
+                // new-password, not off: Chrome ignores off on a password box
+                // and fills the saved console login into nearby text fields.
+                autoComplete="new-password"
               />
             </div>
             <div className="w-32 shrink-0">

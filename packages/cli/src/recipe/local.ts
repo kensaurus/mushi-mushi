@@ -112,6 +112,20 @@ function readJson(path: string): unknown {
   }
 }
 
+const FIXTURE_DIR = /(^|\/)(__tests__|__fixtures__|__mocks__|fixtures|tests?|e2e|examples?)\//
+
+/** The remote's default branch (origin/HEAD), else the conventional `main`. */
+function gitDefaultBranch(root: string): string {
+  try {
+    const ref = execFileSync('git', ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim()
+    const branch = ref.replace(/^origin\//, '')
+    if (branch) return branch
+  } catch {
+    // no remote HEAD recorded (fresh clone without it, or not a git checkout)
+  }
+  return 'main'
+}
+
 /** A first mushi.recipe.json from what the repo shows. Every value is a starting point to edit. */
 export function starterManifest(root: string): Record<string, unknown> {
   const files = walk(root, 5000)
@@ -119,17 +133,37 @@ export function starterManifest(root: string): Record<string, unknown> {
   const deps = { ...(pkg?.dependencies ?? {}), ...(pkg?.devDependencies ?? {}) }
   const native = files.some((f) => /^capacitor\.config\.(ts|js|json)$/.test(f)) || 'expo' in deps || 'react-native' in deps || files.some((f) => f.startsWith('android/') || f.startsWith('ios/'))
   const platforms = ['web', ...(files.some((f) => f.startsWith('android/')) || 'expo' in deps ? ['android'] : []), ...(files.some((f) => f.startsWith('ios/')) || 'expo' in deps ? ['ios'] : [])]
-  const tokens = files.filter((f) => /\.tokens\.json$/.test(f) || /(^|\/)dtcg\/[^/]+\.json$/.test(f)).slice(0, 20)
+  // Token files inside tests, fixtures and examples are someone else's design, not this app's.
+  const tokens = files
+    .filter((f) => !FIXTURE_DIR.test(f) && (/\.tokens\.json$/.test(f) || /(^|\/)dtcg\/[^/]+\.json$/.test(f)))
+    .slice(0, 20)
   const workflows = files.filter((f) => /^\.github\/workflows\/[^/]+\.ya?ml$/.test(f))
+  // A monorepo keeps its UI under apps/<name>/src or packages/<name>/src; scan those too.
+  const sourceRoots = [...new Set(files
+    .filter((f) => !FIXTURE_DIR.test(f) && /^(apps|packages)\/[^/]+\/src\/.+\.(tsx|css)$/.test(f))
+    .map((f) => f.split('/').slice(0, 3).join('/')))].slice(0, 12)
+  const literalGlobs = sourceRoots.length
+    ? sourceRoots.map((r) => `${r}/**/*.{ts,tsx,css}`)
+    : ['src/**/*.{ts,tsx,css}', 'app/**/*.{ts,tsx,css}']
+  const migrationsDir = files.find((f) => !FIXTURE_DIR.test(f) && /(^|\/)supabase\/migrations\/[^/]+\.sql$/.test(f))?.replace(/\/[^/]+$/, '')
   const manifest: Record<string, unknown> = {
     version: 1,
     app: { name: pkg?.name ?? root.split(/[\\/]/).pop(), kind: native ? 'app' : 'site', platforms },
   }
   if (tokens.length) {
-    manifest.design = { tokens: tokens.map((path) => ({ path, role: 'source', format: 'dtcg-2025.10' })), literalScan: { globs: ['src/**/*.{ts,tsx,css}', 'app/**/*.{ts,tsx,css}'], ignore: ['**/*.test.*'] } }
+    manifest.design = { tokens: tokens.map((path) => ({ path, role: 'source', format: 'dtcg-2025.10' })), literalScan: { globs: literalGlobs, ignore: ['**/*.test.*'] } }
   }
-  if (files.some((f) => f.startsWith('supabase/migrations/'))) manifest.data = { provider: 'supabase', migrationsDir: 'supabase/migrations' }
-  if (workflows.length) manifest.ci = { provider: 'github-actions', defaultBranch: 'main', workflows: Object.fromEntries(workflows.map((w) => [w.slice('.github/workflows/'.length), { role: 'ci' }])) }
+  if (migrationsDir) manifest.data = { provider: 'supabase', migrationsDir }
+  if (workflows.length) {
+    manifest.ci = {
+      provider: 'github-actions',
+      defaultBranch: gitDefaultBranch(root),
+      workflows: Object.fromEntries(workflows.map((w) => {
+        const name = w.slice('.github/workflows/'.length)
+        return [name, { role: /^(deploy|publish|release)/.test(name) ? 'deploy' : 'ci' }]
+      })),
+    }
+  }
   if (existsSync(join(root, '.env.example'))) manifest.env = { environments: ['production'], required: [], example: '.env.example' }
   manifest.change = { allowPaths: [MANIFEST, ...[...new Set(tokens.map((t) => `${t.split('/').slice(0, -1).join('/') || '.'}/**`))]] }
   return manifest

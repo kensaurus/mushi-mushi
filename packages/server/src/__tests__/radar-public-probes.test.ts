@@ -283,17 +283,29 @@ describe('visibleText', () => {
   })
 
   it('stays linear on hostile input', () => {
-    const inputs = [
-      '<script>'.repeat(50_000),
-      '</script'.repeat(50_000),
-      '<a'.repeat(100_000),
-      `<script>${'</'.repeat(100_000)}`,
-      '<!--'.repeat(50_000),
+    // Scaling, not a wall-clock ceiling: 4x the input must cost about 4x the
+    // time. Best of 3 runs each, so a busy CI runner does not decide it.
+    const inputs: Array<(n: number) => string> = [
+      (n) => '<script>'.repeat(n),
+      (n) => '</script'.repeat(n),
+      (n) => '<a'.repeat(n * 2),
+      (n) => `<script>${'</'.repeat(n * 2)}`,
+      (n) => '<!--'.repeat(n),
     ]
-    for (const html of inputs) {
-      const started = performance.now()
-      visibleText(html)
-      expect(performance.now() - started).toBeLessThan(500)
+    const cost = (html: string) => {
+      let best = Infinity
+      for (let i = 0; i < 3; i++) {
+        const started = performance.now()
+        visibleText(html)
+        best = Math.min(best, performance.now() - started)
+      }
+      return best
+    }
+    for (const make of inputs) {
+      const small = cost(make(12_500))
+      const large = cost(make(50_000))
+      expect(large).toBeLessThan(Math.max(small, 2) * 10)
+      expect(large).toBeLessThan(5_000)
     }
   })
 })

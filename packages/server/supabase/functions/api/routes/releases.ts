@@ -172,7 +172,11 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
 
     if (draftCount > 0) {
       topPriority = 'drafts_pending'
-      topPriorityLabel = `${totalContributors} contributor${totalContributors === 1 ? '' : 's'} credited · ${totalFixesLinked} fix${totalFixesLinked === 1 ? '' : 'es'} linked — review Markdown and publish to notify reporters.`
+      // The banner is about the drafts, so count only what the drafts carry.
+      const drafts = releases.filter((r) => r.status === 'draft')
+      const draftFixes = drafts.reduce((sum, r) => sum + ((r.fixed_report_ids as string[] | null)?.length ?? 0), 0)
+      const draftContributors = drafts.reduce((sum, r) => sum + ((r.credited_reporter_ids as string[] | null)?.length ?? 0), 0)
+      topPriorityLabel = `${draftContributors} contributor${draftContributors === 1 ? '' : 's'} credited · ${draftFixes} fix${draftFixes === 1 ? '' : 'es'} linked — review Markdown and publish to notify reporters.`
       topPriorityTo = '/releases?tab=drafts'
     } else if (releases.length === 0 && fixedReportsCount > 0) {
       topPriority = 'no_releases'

@@ -13,7 +13,7 @@
  * can act before the month ends.
  *
  * Budget is stored in project_settings.monthly_llm_budget_usd via
- * PUT /v1/admin/org/budget. The user can edit inline.
+ * PATCH /v1/admin/settings (owner-only, the same field Settings → Spend edits). The user can edit inline.
  *
  * Phase E5, Round 9 (2026-05-21).
  */
@@ -21,7 +21,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Card, Btn } from '../ui'
 import { CHIP_TONE } from '../../lib/chipTone'
-import { apiFetch } from '../../lib/supabase'
+import { apiFetch, apiFetchMutate } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
 import type { DailySpendSeries } from './dailySpendSeries'
 
@@ -66,15 +66,16 @@ export function BudgetForecastCard({ projectId, series, monthToDateUsd, fmtSpend
   useEffect(() => {
     if (!projectId) return
     let cancelled = false
-    apiFetch<{ monthly_llm_budget_usd: number | null }>(
-      `/v1/admin/org/budget?projectId=${projectId}`,
+    apiFetch<{ monthly_llm_budget_usd?: number | string | null }>(
+      `/v1/admin/settings?project_id=${encodeURIComponent(projectId)}`,
     ).then((res) => {
       if (cancelled) return
       if (res.ok && res.data) {
-        setBudget(res.data.monthly_llm_budget_usd)
-        if (res.data.monthly_llm_budget_usd !== null) {
-          setBudgetInput(String(res.data.monthly_llm_budget_usd))
-        }
+        // numeric columns arrive as strings from PostgREST
+        const raw = res.data.monthly_llm_budget_usd
+        const value = raw == null ? null : Number(raw)
+        setBudget(value)
+        if (value !== null) setBudgetInput(String(value))
       }
     })
     return () => { cancelled = true }
@@ -85,9 +86,9 @@ export function BudgetForecastCard({ projectId, series, monthToDateUsd, fmtSpend
     const val = parseFloat(budgetInput)
     const budgetToSave = !budgetInput.trim() ? null : isNaN(val) || val <= 0 ? null : val
     setSaving(true)
-    const res = await apiFetch('/v1/admin/org/budget', {
-      method: 'PUT',
-      body: JSON.stringify({ projectId, monthly_llm_budget_usd: budgetToSave }),
+    const res = await apiFetchMutate(`/v1/admin/settings?project_id=${encodeURIComponent(projectId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ monthly_llm_budget_usd: budgetToSave }),
     })
     setSaving(false)
     if (res.ok) {

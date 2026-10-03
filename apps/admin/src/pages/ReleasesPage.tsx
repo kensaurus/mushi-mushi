@@ -407,7 +407,7 @@ function ReleasesList({
                 <td className="px-3 py-2.5">{statusBadge(r.status)}</td>
                 <td className="hidden px-3 py-2.5 sm:table-cell">
                   <SignalChip tone={r.fixed_report_ids.length > 0 ? 'brand' : 'neutral'}>
-                    {r.fixed_report_ids.length} fixes
+                    {r.fixed_report_ids.length} fix{r.fixed_report_ids.length === 1 ? '' : 'es'}
                   </SignalChip>
                 </td>
                 <td className="hidden px-3 py-2.5 md:table-cell">

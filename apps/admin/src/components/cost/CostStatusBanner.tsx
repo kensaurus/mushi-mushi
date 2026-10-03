@@ -146,7 +146,7 @@ export function CostStatusBanner({ stats, onTab, plainBanner = false }: Props) {
         <>
           {fmtUsd(stats.spend24hUsd)} in 24h · {stats.calls24h} calls
           {stats.lastCallAt ? (
-            <> · last call <RelativeTime value={stats.lastCallAt} /></>
+            <> · last call&nbsp;<RelativeTime value={stats.lastCallAt} /></>
           ) : null}
           {stats.byokCalls24h > 0 ? ` · ${stats.byokCalls24h} BYOK` : ''}
         </>
