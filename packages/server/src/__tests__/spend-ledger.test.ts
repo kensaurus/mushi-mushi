@@ -9,6 +9,8 @@
  *   - a source that fails to read is `error` with no amount, never $0;
  *   - only owners and admins import, and only into their team's apps.
  */
+import { readdirSync, readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { makeFakeDb, type FakeDb } from './__stubs__/fake-supabase.ts'
 
@@ -214,7 +216,7 @@ describe('buildSpendLedger', () => {
 // ── routes ───────────────────────────────────────────────────────────────────
 
 type Ctx = {
-  req: { json: () => Promise<unknown>; param: (k: string) => string | undefined; query: () => undefined; header: () => undefined }
+  req: { raw: Request; json: () => Promise<unknown>; param: (k: string) => string | undefined; query: () => undefined; header: (name: string) => string | undefined }
   get: (k: string) => unknown
   set: (k: string, v: unknown) => void
   json: (body: unknown, status?: number) => { body: unknown; status: number }
@@ -231,14 +233,18 @@ class FakeApp {
   get(p: string, ...h: Handler[]) { this.add('GET', p, h) }
   post(p: string, ...h: Handler[]) { this.add('POST', p, h) }
   delete(p: string, ...h: Handler[]) { this.add('DELETE', p, h) }
-  async call(method: string, url: string, opts: { body?: unknown; vars?: Record<string, unknown> } = {}): Promise<Res> {
+  /** `rawBody` sends a body as-is; `headers` overrides the request headers (e.g. a lying content-length). */
+  async call(method: string, url: string, opts: { body?: unknown; rawBody?: string; headers?: Record<string, string>; vars?: Record<string, unknown> } = {}): Promise<Res> {
     for (const r of this.routes) {
       const m = r.pattern.exec(url)
       if (r.method !== method || !m) continue
       const params = Object.fromEntries(r.keys.map((k, i) => [k, m[i + 1]]))
       const vars: Record<string, unknown> = { userId: 'owner', authMethod: 'jwt', ...opts.vars }
+      const text = opts.rawBody ?? (opts.body === undefined ? undefined : JSON.stringify(opts.body))
+      const raw = new Request(`https://api.test${url}`, { method, body: method === 'GET' || method === 'DELETE' ? undefined : text })
+      const headers = new Map(Object.entries({ ...(text === undefined ? {} : { 'content-length': String(new TextEncoder().encode(text).byteLength) }), ...opts.headers }))
       const c: Ctx = {
-        req: { json: async () => opts.body, param: (k: string) => params[k], query: () => undefined, header: () => undefined },
+        req: { raw, json: async () => opts.body, param: (k: string) => params[k], query: () => undefined, header: (name: string) => headers.get(name.toLowerCase()) },
         get: (k: string) => vars[k], set: (k: string, v: unknown) => { vars[k] = v },
         json: (body: unknown, status = 200) => ({ body, status }),
       }
@@ -258,7 +264,10 @@ class FakeApp {
 function harness(db: FakeDb) {
   const app = new FakeApp()
   const pass = (async (_c: unknown, next: () => Promise<void>) => next()) as never
-  routes.registerSpendLedgerRoutes(app as never, { getServiceClient: () => db as never, adminOrApiKeyRead: pass, jwtAuth: pass, now: () => NOW })
+  // The clock moves a minute per call, so each import is strictly newer than the one before.
+  let tick = 0
+  const now = () => new Date(NOW.getTime() + (tick++) * 60_000)
+  routes.registerSpendLedgerRoutes(app as never, { getServiceClient: () => db as never, adminOrApiKeyRead: pass, jwtAuth: pass, now })
   return app
 }
 
@@ -318,7 +327,186 @@ describe('spend routes', () => {
     expect((await app.call('DELETE', `/v1/admin/orgs/${ORG}/spend/imports/${importId}`, { vars: { userId: 'member' } })).status).toBe(403)
     const del = await app.call('DELETE', `/v1/admin/orgs/${ORG}/spend/imports/${importId}`)
     expect(del.status).toBe(200)
+    expect(del.body.data).toMatchObject({ importId, rowsRemoved: 2, rowsRestored: 0, restoredFrom: 0 })
     expect(db.table('spend_ledger_entries')).toHaveLength(0)
     expect(db.table('spend_bill_imports')).toHaveLength(0)
+  })
+})
+
+describe('re-imports and removals reconcile', () => {
+  // Plain CSVs for one app: September 28 to 30, then a bill overlapping the 30th, then one for the 30th only.
+  const A = 'date,service,cost\n2026-09-28,Functions,1\n2026-09-29,Functions,2\n2026-09-30,Functions,3'
+  const B = 'date,service,cost\n2026-09-30,Functions,30\n2026-10-01,Functions,40'
+  const C = 'date,service,cost\n2026-09-30,Functions,300'
+
+  async function importBill(app: FakeApp, csvText: string): Promise<string> {
+    const res = await app.call('POST', `/v1/admin/orgs/${ORG}/spend/imports`, { body: { vendor: 'vercel', projectId: P1, csv: csvText } })
+    expect(res.status).toBe(200)
+    return (res.body.data as { importId: string }).importId
+  }
+
+  /** day → [amount, owning import] for the app's Vercel rows. */
+  function ledger(db: FakeDb): Record<string, [number, string]> {
+    return Object.fromEntries(db.table('spend_ledger_entries')
+      .filter((e) => e.project_id === P1 && e.vendor === 'vercel')
+      .map((e) => [String(e.day), [Number(e.amount_usd), String(e.import_id)]]))
+  }
+
+  it('keeps each import\'s own rows', async () => {
+    const db = seedLedger({ spend_ledger_entries: [] })
+    const a = await importBill(harness(db), A)
+    expect(db.table('spend_bill_import_rows').filter((r) => r.import_id === a)).toHaveLength(3)
+  })
+
+  it('removing the newer import hands the overlapping day back to the older one, which stays listed', async () => {
+    const db = seedLedger({ spend_ledger_entries: [] })
+    const app = harness(db)
+    const a = await importBill(app, A)
+    const b = await importBill(app, B)
+    expect(ledger(db)).toEqual({ '2026-09-28': [1, a], '2026-09-29': [2, a], '2026-09-30': [30, b], '2026-10-01': [40, b] })
+
+    const del = await app.call('DELETE', `/v1/admin/orgs/${ORG}/spend/imports/${b}`)
+    expect(del.status).toBe(200)
+    expect(del.body.data).toMatchObject({ rowsRemoved: 1, rowsRestored: 1, restoredFrom: 1 })
+    expect(ledger(db)).toEqual({ '2026-09-28': [1, a], '2026-09-29': [2, a], '2026-09-30': [3, a] })
+
+    const view = await app.call('GET', `/v1/admin/orgs/${ORG}/spend`)
+    const data = view.body.data as { imports: Array<{ id: string; totalUsd: number }>; apps: Array<{ projectId: string; bills: { usd: number | null } }> }
+    expect(data.imports.map((i) => [i.id, i.totalUsd])).toEqual([[a, 6]])
+    expect(data.apps.find((x) => x.projectId === P1)?.bills.usd).toBe(6)
+  })
+
+  it('removing the older import leaves the days a later import replaced, and says nothing came back', async () => {
+    const db = seedLedger({ spend_ledger_entries: [] })
+    const app = harness(db)
+    const a = await importBill(app, A)
+    const b = await importBill(app, B)
+    const del = await app.call('DELETE', `/v1/admin/orgs/${ORG}/spend/imports/${a}`)
+    expect(del.body.data).toMatchObject({ rowsRemoved: 2, rowsRestored: 0, restoredFrom: 0 })
+    expect(ledger(db)).toEqual({ '2026-09-30': [30, b], '2026-10-01': [40, b] })
+
+    // An import whose every day a later one replaced removes nothing from the ledger.
+    const c = await importBill(app, C)
+    const d = await importBill(app, C)
+    const delC = await app.call('DELETE', `/v1/admin/orgs/${ORG}/spend/imports/${c}`)
+    expect(delC.body.data).toMatchObject({ rowsRemoved: 0, rowsRestored: 0 })
+    expect(ledger(db)['2026-09-30']).toEqual([300, d])
+  })
+
+  it('falls back to the next newest import, not the oldest', async () => {
+    const db = seedLedger({ spend_ledger_entries: [] })
+    const app = harness(db)
+    const a = await importBill(app, A)
+    const b = await importBill(app, B)
+    const c = await importBill(app, C)
+    expect(ledger(db)['2026-09-30']).toEqual([300, c])
+    await app.call('DELETE', `/v1/admin/orgs/${ORG}/spend/imports/${c}`)
+    expect(ledger(db)['2026-09-30']).toEqual([30, b])
+    await app.call('DELETE', `/v1/admin/orgs/${ORG}/spend/imports/${b}`)
+    expect(ledger(db)).toEqual({ '2026-09-28': [1, a], '2026-09-29': [2, a], '2026-09-30': [3, a] })
+  })
+
+  it('a removal that fails half way is finished by trying again', async () => {
+    const real = seedLedger({ spend_ledger_entries: [] })
+    let failNextDelete = false
+    const db = new Proxy(real, {
+      get: (t, prop, r) => {
+        if (prop !== 'from') return Reflect.get(t, prop, r)
+        return (name: string) => {
+          const q = t.from(name)
+          if (name !== 'spend_ledger_entries' || !failNextDelete) return q
+          q.delete = (() => {
+            failNextDelete = false
+            const failed = { data: null, error: { message: 'connection reset' } }
+            const chain: Record<string, unknown> = new Proxy({}, { get: (_x, p) => (p === 'then' ? (ok: (v: unknown) => unknown) => Promise.resolve(failed).then(ok) : () => chain) })
+            return chain
+          }) as typeof q.delete
+          return q
+        }
+      },
+    }) as FakeDb
+    const app = harness(db)
+    const a = await importBill(app, A)
+    const b = await importBill(app, B)
+    failNextDelete = true
+    const first = await app.call('DELETE', `/v1/admin/orgs/${ORG}/spend/imports/${b}`)
+    expect(first.status).toBe(500)
+    // The overlapping day is already back with A; B still owns October 1 and is still listed.
+    expect(ledger(real)).toEqual({ '2026-09-28': [1, a], '2026-09-29': [2, a], '2026-09-30': [3, a], '2026-10-01': [40, b] })
+    expect(real.table('spend_bill_imports').map((i) => i.id)).toContain(b)
+    const retry = await app.call('DELETE', `/v1/admin/orgs/${ORG}/spend/imports/${b}`)
+    expect(retry.status).toBe(200)
+    expect(retry.body.data).toMatchObject({ rowsRemoved: 1, rowsRestored: 0 })
+    expect(ledger(real)).toEqual({ '2026-09-28': [1, a], '2026-09-29': [2, a], '2026-09-30': [3, a] })
+    expect(real.table('spend_bill_imports').map((i) => i.id)).toEqual([a])
+  })
+})
+
+describe('bill import size cap', () => {
+  it('counts the CSV in bytes, not characters', async () => {
+    // 1.8 million three-byte characters: under 5 million characters, over 5 MB.
+    const csvText = `date,service,cost\n2026-10-01,${'€'.repeat(1_800_000)},1`
+    expect(csvText.length).toBeLessThan(routes.MAX_BILL_CSV_BYTES)
+    const db = seedLedger({ spend_ledger_entries: [] })
+    const res = await harness(db).call('POST', `/v1/admin/orgs/${ORG}/spend/imports`, { body: { vendor: 'vercel', projectId: P1, csv: csvText } })
+    expect(res.status).toBe(413)
+    expect(res.body.error?.code).toBe('PAYLOAD_TOO_LARGE')
+    expect(db.table('spend_bill_imports')).toHaveLength(0)
+  })
+
+  it('refuses a declared length over the cap before reading the body, and a body that is not JSON', async () => {
+    const app = harness(seedLedger())
+    const big = await app.call('POST', `/v1/admin/orgs/${ORG}/spend/imports`, { body: { vendor: 'vercel', projectId: P1, csv: VERCEL_FOCUS }, headers: { 'content-length': String(routes.MAX_IMPORT_BODY_BYTES + 1) } })
+    expect(big.status).toBe(413)
+    const bad = await app.call('POST', `/v1/admin/orgs/${ORG}/spend/imports`, { rawBody: '{"vendor": "vercel", "csv": ' })
+    expect(bad.status).toBe(400)
+    expect(bad.body.error?.code).toBe('VALIDATION_ERROR')
+  })
+})
+
+describe('spend ledger RLS (read from the migration SQL; no Postgres in this suite)', () => {
+  const migrationsDir = resolve(__dirname, '../../supabase/migrations')
+  /** The last `create policy <name>` statement across the migrations, in apply order. */
+  function latestPolicy(name: string): string {
+    const files = readdirSync(migrationsDir).filter((f) => f.endsWith('.sql')).sort()
+    let found = ''
+    for (const f of files) {
+      // A Windows checkout may carry CRLF.
+      const sql = readFileSync(resolve(migrationsDir, f), 'utf8').replace(/\r\n/g, '\n')
+      const at = sql.lastIndexOf(`create policy ${name}\n`)
+      if (at >= 0) found = sql.slice(at, sql.indexOf(';', at))
+    }
+    expect(found, `policy ${name}`).not.toBe('')
+    return found.replace(/\s+/g, ' ')
+  }
+
+  it('ledger rows and each import\'s kept rows are visible to members of that app only', () => {
+    for (const name of ['spend_ledger_entries_member_select', 'spend_bill_import_rows_member_select']) {
+      const p = latestPolicy(name)
+      expect(p).toContain('private.is_project_member(project_id)')
+      expect(p).not.toContain('is_org_member')
+    }
+  })
+
+  it('a one-app import follows that app; an app-column import follows the team', () => {
+    expect(latestPolicy('spend_bill_imports_member_select')).toContain(
+      'when project_id is null then (select private.is_org_member(organization_id)) else (select private.is_project_member(project_id)) end',
+    )
+  })
+})
+
+describe('imports listed under the ledger', () => {
+  it('lists imports for the caller\'s apps and app-column imports, never another app\'s', async () => {
+    const P3 = '1000000c-0000-4000-8000-000000000000'
+    const imp = (id: string, projectId: string | null, at: string) => ({ id, organization_id: ORG, project_id: projectId, vendor: 'aws', filename: `${id}.csv`, format: 'generic', rows_read: 1, rows_imported: 1, rows_skipped: 0, total_usd: 1, period_start: null, period_end: null, created_at: at })
+    const db = seedLedger({
+      spend_bill_imports: [
+        imp('mine', P1, '2026-10-01T00:00:00Z'),
+        imp('hidden', P3, '2026-10-02T00:00:00Z'),
+        imp('team', null, '2026-10-03T00:00:00Z'),
+      ],
+    })
+    const r = await ledger.buildSpendLedger(db as never, { organizationId: ORG, projects: [{ id: P1, name: 'glot.it' }], now: NOW })
+    expect(r.imports.map((i) => i.id)).toEqual(['team', 'mine'])
   })
 })

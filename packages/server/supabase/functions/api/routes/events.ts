@@ -37,6 +37,7 @@ import type { Variables } from '../types.ts';
 import { apiKeyAuth } from '../../_shared/auth.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { log } from '../../_shared/logger.ts';
+import { readBodyCapped } from '../../_shared/read-body-capped.ts';
 import { resolveEndUser } from '../../_shared/end-user-resolver.ts';
 import { reporterKeyOrNull } from '../../_shared/reporter-token.ts';
 import { isAutomatedUserAgent } from '../../_shared/automated-agent.ts';
@@ -131,34 +132,8 @@ export function admitEventNames<T extends { name: string }>(
   return { admitted, overCap };
 }
 
-/**
- * Read at most `limit` bytes of a request body. Returns null when the body is
- * larger. Content-Length alone is not a cap: a chunked request omits it.
- * Exported for tests.
- */
-export async function readBodyCapped(req: Request, limit: number): Promise<string | null> {
-  if (!req.body) return '';
-  const reader = req.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    total += value.byteLength;
-    if (total > limit) {
-      await reader.cancel().catch(() => {});
-      return null;
-    }
-    chunks.push(value);
-  }
-  const bytes = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return new TextDecoder().decode(bytes);
-}
+/** Read at most `limit` bytes of a body (re-exported for the existing tests). */
+export { readBodyCapped };
 
 /**
  * Keep a client timestamp only when it is plausible; otherwise use the receive

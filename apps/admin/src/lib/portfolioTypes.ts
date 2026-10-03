@@ -177,6 +177,17 @@ export interface SpendLedgerResponse {
   imports: LedgerImport[]
 }
 
+/** DELETE /v1/admin/orgs/:orgId/spend/imports/:importId */
+export interface BillRemovalResult {
+  importId: string
+  /** Rows that left the ledger: no other import had those days. */
+  rowsRemoved: number
+  /** Rows handed back to the next newest import that had them. */
+  rowsRestored: number
+  /** How many earlier imports got rows back. */
+  restoredFrom: number
+}
+
 export interface BillImportResult {
   importId: string
   format: string
