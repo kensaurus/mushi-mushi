@@ -4,7 +4,7 @@ PURPOSE: Allow sdk_upgrade_jobs.status = 'awaiting_lockfile' (ADR 0019).
 
 OVERVIEW:
 - When the host repo has .github/workflows/mushi-sdk-lockfile.yml, the
-  runner pushes the @mushi-mushi/* bump and parks the job in
+  runner pushes the @mushi-mushi package bump and parks the job in
   'awaiting_lockfile'. The host workflow refreshes the lockfile; the
   sdk-release-sync cron then opens the PR and moves the job to
   status 'completed' / release_status 'pr_opened' (after 30 min at most).
