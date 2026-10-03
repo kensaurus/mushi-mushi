@@ -101,10 +101,10 @@ describe('resolveOwnedProject with an account-level key', () => {
     }
   })
 
-  it('answers the route\'s own no-project response when it has one', async () => {
+  it('ignores the route\'s empty no-project payload, which is meant for a user with no projects', async () => {
     const c = ctx({ vars: accountKey })
-    const out = await resolve(c, { noProjectResponse: () => c.json({ ok: true }, 200) })
-    expect(out.response).toMatchObject({ status: 200, body: { ok: true } })
+    const out = await resolve(c, { noProjectResponse: () => c.json({ ok: true, data: { reason: 'no_project' } }, 200) })
+    expect(out.response).toMatchObject({ status: 400, body: { error: { code: 'PROJECT_REQUIRED' } } })
   })
 
   it('rejects a non-uuid project and a project outside the named organization', async () => {
@@ -162,5 +162,42 @@ describe('assertTargetProjectAccess with an account-level key', () => {
   it('keeps a project-bound key on its own project', async () => {
     expect(await check(ctx({ vars: boundKey(P_OWNED) }), P_OWNED)).toMatchObject({ ok: true, role: 'owner' })
     expect(await check(ctx({ vars: boundKey(P_OWNED) }), P_MEMBER)).toMatchObject({ ok: false, response: { status: 403 } })
+  })
+})
+
+describe('resolveAccessibleOrg with an account-level key', () => {
+  type OrgAccess = { ok: boolean; organizationId?: string; role?: string; response?: { status: number; body: { error?: { code: string } } } }
+  const org = async (c: Ctx) =>
+    (await shared.resolveAccessibleOrg(c as never, db() as never, KEY_OWNER)) as unknown as OrgAccess
+
+  it('uses the owner\'s membership role in a named organization', async () => {
+    expect(await org(ctx({ vars: accountKey, headers: { 'X-Mushi-Org-Id': ORG } }))).toMatchObject({ ok: true, organizationId: ORG, role: 'member' })
+  })
+
+  it('refuses an organization the owner is not a member of, and a non-uuid', async () => {
+    expect(await org(ctx({ vars: accountKey, query: { organization_id: ORG_B } }))).toMatchObject({ ok: false, response: { status: 403 } })
+    expect(await org(ctx({ vars: accountKey, query: { organization_id: 'nope' } }))).toMatchObject({ ok: false, response: { status: 400 } })
+  })
+
+  it('needs an organization named or a project pinned', async () => {
+    expect(await org(ctx({ vars: accountKey }))).toMatchObject({ ok: false, response: { status: 400, body: { error: { code: 'ORG_REQUIRED' } } } })
+  })
+
+  it('keeps a member\'s role after a project resolver pinned the request (one context, two checks)', async () => {
+    const c = ctx({ vars: accountKey, query: { project_id: P_MEMBER } })
+    expect((await resolve(c)).project).toMatchObject({ id: P_MEMBER, organization_role: 'member' })
+    expect(c.vars.projectId).toBe(P_MEMBER)
+    // The pinned projectId must not make the account key read as a bound key, which resolves as 'owner'.
+    expect(await org(c)).toMatchObject({ ok: true, organizationId: ORG, role: 'member' })
+  })
+
+  it('refuses a named organization that is not the pinned project\'s', async () => {
+    const c = ctx({ vars: accountKey, query: { organization_id: ORG_B } })
+    c.vars.projectId = P_MEMBER
+    expect(await org(c)).toMatchObject({ ok: false, response: { status: 403 } })
+  })
+
+  it('still resolves a project-bound key as the owner of its project\'s organization', async () => {
+    expect(await org(ctx({ vars: boundKey(P_MEMBER) }))).toMatchObject({ ok: true, organizationId: ORG, role: 'owner' })
   })
 })

@@ -364,7 +364,8 @@ function isAccountKey(c: Context): boolean {
 /**
  * {@link resolveOwnedProject} for an account-level key. The project must be
  * named (project_id / X-Mushi-Project-Id, or the route's URL id) or already
- * pinned earlier in the request: there is no "first project" fallback for a key. The key acts with its owner's real role
+ * pinned earlier in the request: there is no "first project" fallback for a key,
+ * and no route's empty no-project payload either (always 400 PROJECT_REQUIRED). The key acts with its owner's real role
  * on that project (never a blanket 'owner', so requireProjectAdmin still
  * refuses a member's key), and a project the owner cannot reach is a 404.
  */
@@ -377,8 +378,9 @@ async function resolveAccountKeyProject(
   // The project named on this request, else the one an earlier check pinned.
   const requested =
     (options.overrideProjectId ?? requestedProjectId(c)) || (c.get('projectId') as string | null | undefined) || null;
+  // Never the route's noProjectResponse: those empty payloads mean "this user
+  // has no project yet", which is false for a key that simply named none.
   if (!requested) {
-    if (options.noProjectResponse) return { response: options.noProjectResponse() };
     return {
       response: jsonError(
         c,
@@ -649,8 +651,67 @@ export type AccessibleOrgResolution =
   | { ok: false; response: Response };
 
 /**
+ * {@link resolveAccessibleOrg} for an account-level key. The organization is
+ * the one named on the request, else the org of the project an earlier check
+ * pinned; the two must agree. The key acts with its owner's real membership
+ * role there, never the bound-key 'owner' shortcut, so a member's account key
+ * stays a member after a project resolver has set `projectId`.
+ */
+async function resolveAccountKeyOrg(
+  c: Context,
+  db: ReturnType<typeof getServiceClient>,
+  userId: string,
+  requested: string | null,
+): Promise<AccessibleOrgResolution> {
+  if (requested && !UUID_RE.test(requested)) {
+    return { ok: false, response: jsonValidationError(c, 'organization_id must be a UUID') };
+  }
+  const pinnedProjectId = (c.get('projectId') as string | null | undefined) || null;
+  let pinnedOrg: string | null = null;
+  if (pinnedProjectId) {
+    const { data: project, error } = await db
+      .from('projects')
+      .select('organization_id')
+      .eq('id', pinnedProjectId)
+      .maybeSingle();
+    if (error) return { ok: false, response: jsonError(c, 'DB_ERROR', 'Could not read the project', 500) };
+    pinnedOrg = (project?.organization_id as string | null | undefined) ?? null;
+    if (requested && pinnedOrg && requested !== pinnedOrg) {
+      return { ok: false, response: jsonForbidden(c, 'Project is not in the active organization') };
+    }
+  }
+  const organizationId = requested ?? pinnedOrg;
+  if (!organizationId) {
+    return {
+      ok: false,
+      response: jsonError(
+        c,
+        'ORG_REQUIRED',
+        'This account-level API key reaches several organizations: name one with organization_id (or the X-Mushi-Org-Id header).',
+        400,
+      ),
+    };
+  }
+  const { data: membership, error: memberErr } = await db
+    .from('organization_members')
+    .select('role')
+    .eq('organization_id', organizationId)
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (memberErr) return { ok: false, response: jsonError(c, 'DB_ERROR', 'Could not read the organization membership', 500) };
+  const role = (membership?.role as OrgRole | undefined) ?? null;
+  if (!role) {
+    return { ok: false, response: jsonForbidden(c, 'Access to this organization is not allowed') };
+  }
+  c.set('organizationId', organizationId);
+  return { ok: true, organizationId, role };
+}
+
+/**
  * Validates `X-Mushi-Org-Id` for JWT callers (membership gate, fail closed).
- * API-key callers resolve org from the bound project and reject header mismatches.
+ * Project-bound keys resolve the org from the bound project and reject header
+ * mismatches; account-level keys use their owner's membership
+ * ({@link resolveAccountKeyOrg}).
  */
 export async function resolveAccessibleOrg(
   c: Context,
@@ -659,6 +720,7 @@ export async function resolveAccessibleOrg(
 ): Promise<AccessibleOrgResolution> {
   const requested = requestedOrganizationId(c);
 
+  if (isAccountKey(c)) return resolveAccountKeyOrg(c, db, userId, requested);
   if (c.get('authMethod') === 'apiKey') {
     const boundProjectId = c.get('projectId') as string | undefined;
     if (!boundProjectId) {
