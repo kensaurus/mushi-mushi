@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { isClientSafeMatch, scanBuiltBundles, scanLocalRepo, toIngestBody, type BundleScan } from './scan.js'
+import { isClientSafeMatch, MAX_PUSH_FINDINGS, scanBuiltBundles, scanLocalRepo, toIngestBody, type BundleScan, type LocalRadarScan } from './scan.js'
 
 const NO_BUNDLE: BundleScan = { roots: [], scannedFiles: 0, truncated: false, unreadable: 0, findings: [] }
 
@@ -104,10 +104,77 @@ describe('key_in_client_bundle', () => {
     expect(toIngestBody({ scannedFiles: 1, truncated: false, unreadable: 0, findings: [], configFiles: {}, bundle: b }, null)).toMatchObject({ partial: ['key_in_client_bundle'] })
   })
 
+  it('finds the client output of Nuxt, SvelteKit and the Vercel build output, never their server folders', () => {
+    const leak = `x="${'sk_live_' + 'n'.repeat(20)}"\n`
+    const root = repo({
+      'apps/nuxt/.output/public/_nuxt/entry.js': leak,
+      'apps/nuxt/.output/server/index.mjs': leak,
+      'apps/kit/.svelte-kit/output/client/_app/start.js': leak,
+      'apps/kit/.svelte-kit/output/server/index.js': leak,
+      '.vercel/output/static/assets/app.js': leak,
+      '.vercel/output/functions/api.func/index.js': leak,
+    })
+    const b = scanBuiltBundles(root)
+    expect(b.roots).toEqual(['.vercel/output/static', 'apps/kit/.svelte-kit/output/client', 'apps/nuxt/.output/public'])
+    expect(b.findings.map((f) => f.filePath).sort()).toEqual([
+      '.vercel/output/static/assets/app.js',
+      'apps/kit/.svelte-kit/output/client/_app/start.js',
+      'apps/nuxt/.output/public/_nuxt/entry.js',
+    ])
+  })
+
+  it('--bundle-dir replaces discovery (a server dist stays out), and a missing or outside folder is an error', () => {
+    const leak = `x="${'sk_live_' + 'm'.repeat(20)}"\n`
+    const root = repo({ 'api/dist/server.js': leak, 'web/dist/app.js': leak })
+    expect(scanBuiltBundles(root).roots).toEqual(['api/dist', 'web/dist'])
+    const only = scanLocalRepo(root, undefined, { bundleDirs: ['web/dist', './web/dist'] }).bundle
+    expect(only.roots).toEqual(['web/dist'])
+    expect(only.findings.map((f) => f.filePath)).toEqual(['web/dist/app.js'])
+    expect(() => scanBuiltBundles(root, undefined, ['web/missing'])).toThrow()
+    expect(() => scanBuiltBundles(root, undefined, ['../elsewhere'])).toThrow(/inside/)
+    expect(() => scanBuiltBundles(root, undefined, ['web/dist/app.js'])).toThrow(/not a folder/)
+  })
+
   it('isClientSafeMatch: anon and signed-in JWTs and the Mushi SDK key are public; a service-role JWT is not', () => {
     expect(isClientSafeMatch({ label: 'JWT', value: jwt({ role: 'anon' }) })).toBe(true)
     expect(isClientSafeMatch({ label: 'JWT', value: jwt({ role: 'service_role' }) })).toBe(false)
     expect(isClientSafeMatch({ label: 'Mushi API key', value: 'mushi_' + 'a'.repeat(30) })).toBe(true)
     expect(isClientSafeMatch({ label: 'Stripe live key', value: 'sk_live_x' })).toBe(false)
+  })
+})
+
+describe('the push stays under the ingest limit without hiding a rule', () => {
+  const scanWith = (storage: number, bundle: Array<{ filePath: string; line: number }>): LocalRadarScan => ({
+    scannedFiles: 10, truncated: false, unreadable: 0, configFiles: {},
+    findings: Array.from({ length: storage }, (_, i) => ({
+      ruleId: 'storage_sql_delete' as const, severity: 'warn' as const, message: 'x', target: `${i}.sql`,
+      filePath: `supabase/migrations/${i}.sql`, line: 1, fix: 'x', evidence: { snippet: '' },
+    })),
+    bundle: { roots: ['dist'], scannedFiles: 5, truncated: false, unreadable: 0, findings: bundle.map((b) => ({ ...b, label: 'Stripe live key' as const })) },
+  })
+  const rules = (body: Record<string, unknown>) => (body.findings as Array<{ ruleId: string }>).map((f) => f.ruleId)
+
+  it('a leaky build repeating a key across 300 chunks cannot push the storage finding out', () => {
+    const bundle = Array.from({ length: 300 }, (_, i) => ({ filePath: `dist/assets/chunk-${i}.js`, line: 1 }))
+    const body = toIngestBody(scanWith(1, bundle), null)
+    expect((body.findings as unknown[]).length).toBeLessThanOrEqual(MAX_PUSH_FINDINGS)
+    expect(rules(body)).toContain('storage_sql_delete')
+    // The bundle rule was cut: it is partial, and the storage rule is not.
+    expect(body.partial).toEqual(['key_in_client_bundle'])
+  })
+
+  it('both rules flooding: each keeps its share and both are marked partial', () => {
+    const bundle = Array.from({ length: 300 }, (_, i) => ({ filePath: `dist/c-${i}.js`, line: 1 }))
+    const body = toIngestBody(scanWith(300, bundle), null)
+    expect(rules(body).filter((r) => r === 'storage_sql_delete')).toHaveLength(150)
+    expect(rules(body).filter((r) => r === 'key_in_client_bundle')).toHaveLength(50)
+    expect(body.partial).toEqual(['storage_sql_delete', 'key_in_client_bundle'])
+  })
+
+  it('one finding per file and kind of key: repeats in one chunk do not use up the push', () => {
+    const bundle = Array.from({ length: 60 }, (_, i) => ({ filePath: 'dist/app.js', line: i + 1 }))
+    const body = toIngestBody(scanWith(0, bundle), null)
+    expect(body.findings).toEqual([{ ruleId: 'key_in_client_bundle', filePath: 'dist/app.js', line: 1, kind: 'Stripe live key' }])
+    expect(body).not.toHaveProperty('partial', expect.arrayContaining(['key_in_client_bundle']))
   })
 })

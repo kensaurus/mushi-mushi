@@ -3,14 +3,16 @@
  * PURPOSE: The local half of the radar (Plan 020 Phases 1–2): walk the repo,
  *          find `storage_sql_delete`, gather the build-config files the
  *          store-policy rules read, and look through the BUILT app (dist,
- *          build, out, .next/static, native JS bundles) for secret keys
- *          (`key_in_client_bundle`), so the host's CI can push them with
+ *          build, out, .next/static, .output/public, .svelte-kit/output/client,
+ *          .vercel/output/static, native JS bundles, or the folders named with
+ *          --bundle-dir) for secret keys (`key_in_client_bundle`), so the
+ *          host's CI can push them with
  *          `mushi radar scan --push`. Mushi never clones a repo; this runs in
  *          the repo's own CI job, after the build step.
  */
 
 import { readdirSync, readFileSync, statSync } from 'node:fs'
-import { join, relative, sep } from 'node:path'
+import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { isRepoScanPath, scanStorageSqlDelete, type StorageScanFinding } from './repo-scan-core.js'
 import { findSecrets, type SecretLabel, type SecretMatch } from './secret-patterns.js'
 
@@ -81,8 +83,18 @@ function listRepoFiles(root: string, limit = MAX_FILES): { files: string[]; trun
 
 // ── key_in_client_bundle ─────────────────────────────────────────────────────
 
-/** Folder names that hold a built web app. `.next` counts only for `.next/static` (the rest is server code). */
+/** Folder names that hold a built web app. */
 const BUNDLE_DIR_NAMES = new Set(['dist', 'build', 'out', 'web-build', 'storybook-static'])
+/**
+ * Framework build folders whose name starts with a dot: only the part shipped
+ * to the browser counts (the rest is server code).
+ */
+const DOT_CLIENT_OUTPUTS: Readonly<Record<string, readonly string[]>> = {
+  '.next': ['static'],
+  '.output': ['public'], // Nuxt / Nitro
+  '.svelte-kit': ['output/client'],
+  '.vercel': ['output/static'], // Vercel Build Output API
+}
 /** Inside a build folder: server output and native build intermediates are not shipped to the client. */
 const BUNDLE_SKIP_DIRS = new Set(['server', 'node_modules', 'intermediates', 'tmp', 'kotlin', 'cache', '.cache'])
 const BUNDLE_EXT = /\.(?:js|mjs|cjs|html|bundle|jsbundle)$/i
@@ -110,11 +122,14 @@ function findBundleRoots(root: string): string[] {
         roots.push(rel)
         continue
       }
-      if (e.name === '.next') {
-        try {
-          if (statSync(join(full, 'static')).isDirectory()) roots.push(`${rel}/static`)
-        } catch {
-          // no client output in this .next
+      const clientParts = DOT_CLIENT_OUTPUTS[e.name]
+      if (clientParts) {
+        for (const part of clientParts) {
+          try {
+            if (statSync(join(full, part)).isDirectory()) roots.push(`${rel}/${part}`)
+          } catch {
+            // no client output of this kind here
+          }
         }
         continue
       }
@@ -144,9 +159,29 @@ export function isClientSafeMatch(m: Pick<SecretMatch, 'label' | 'value'>): bool
   }
 }
 
-/** Secret keys in the built app. Reads only build output; the matched text never leaves this function. */
-export function scanBuiltBundles(root: string, readFile: (path: string) => string = (p) => readFileSync(p, 'utf8')): BundleScan {
-  const roots = findBundleRoots(root)
+/**
+ * `--bundle-dir` folders as repo-relative roots. Each must be a folder inside
+ * the repo: a typo is an error, never "no secrets found".
+ */
+export function bundleRootsFromFlags(root: string, dirs: readonly string[]): string[] {
+  const roots: string[] = []
+  for (const d of dirs) {
+    const full = resolve(root, d)
+    const rel = relative(root, full)
+    if (rel === '' || rel.startsWith('..') || isAbsolute(rel)) throw new Error(`--bundle-dir ${d} must be a folder inside ${root}`)
+    if (!statSync(full).isDirectory()) throw new Error(`--bundle-dir ${d} is not a folder`)
+    roots.push(rel.split(sep).join('/'))
+  }
+  return [...new Set(roots)].sort()
+}
+
+/**
+ * Secret keys in the built app. Reads only build output; the matched text
+ * never leaves this function. `bundleDirs` (from --bundle-dir) replaces the
+ * folder discovery, e.g. to leave out a server-side `dist`.
+ */
+export function scanBuiltBundles(root: string, readFile: (path: string) => string = (p) => readFileSync(p, 'utf8'), bundleDirs?: readonly string[]): BundleScan {
+  const roots = bundleDirs && bundleDirs.length > 0 ? bundleRootsFromFlags(root, bundleDirs) : findBundleRoots(root)
   const out: BundleScan = { roots, scannedFiles: 0, truncated: false, unreadable: 0, findings: [] }
   const walk = (dir: string) => {
     if (out.truncated) return
@@ -185,7 +220,7 @@ export function scanBuiltBundles(root: string, readFile: (path: string) => strin
   return out
 }
 
-export function scanLocalRepo(root: string, readFile: (path: string) => string = (p) => readFileSync(p, 'utf8')): LocalRadarScan {
+export function scanLocalRepo(root: string, readFile: (path: string) => string = (p) => readFileSync(p, 'utf8'), opts: { bundleDirs?: readonly string[] } = {}): LocalRadarScan {
   const { files, truncated, unreadable: unreadableDirs } = listRepoFiles(root)
   let unreadable = unreadableDirs
   const findings: StorageScanFinding[] = []
@@ -215,8 +250,13 @@ export function scanLocalRepo(root: string, readFile: (path: string) => string =
     scannedFiles++
     findings.push(...scanStorageSqlDelete(rel, text))
   }
-  return { scannedFiles, truncated, unreadable, findings, configFiles, bundle: scanBuiltBundles(root, readFile) }
+  return { scannedFiles, truncated, unreadable, findings, configFiles, bundle: scanBuiltBundles(root, readFile, opts.bundleDirs) }
 }
+
+/** The ingest route takes at most this many findings per push. */
+export const MAX_PUSH_FINDINGS = 200
+/** The bundle check keeps at least this many slots, so a flood of storage findings cannot hide a leaked key. */
+const MIN_BUNDLE_FINDINGS = 50
 
 /**
  * The body for POST /v1/ingest/radar: rule ids, paths, lines and the kind of
@@ -233,10 +273,23 @@ export function toIngestBody(scan: LocalRadarScan, commitSha: string | null): Re
     scanned.push('key_in_client_bundle')
     if (scan.bundle.truncated || scan.bundle.unreadable > 0) partial.push('key_in_client_bundle')
   }
+  // A minified build repeats a key across chunks: one finding per file and kind of key.
+  const seen = new Set<string>()
+  const bundle = scan.bundle.findings.filter((f) => {
+    const k = `${f.filePath}\u0000${f.label}`
+    if (seen.has(k)) return false
+    seen.add(k)
+    return true
+  })
+  // Split the push between the rules; a rule whose findings were cut is partial, never a pass.
+  const bundleTake = Math.min(bundle.length, Math.max(MIN_BUNDLE_FINDINGS, MAX_PUSH_FINDINGS - scan.findings.length))
+  const storageTake = Math.min(scan.findings.length, MAX_PUSH_FINDINGS - bundleTake)
+  if (storageTake < scan.findings.length && !partial.includes('storage_sql_delete')) partial.push('storage_sql_delete')
+  if (bundleTake < bundle.length && !partial.includes('key_in_client_bundle')) partial.push('key_in_client_bundle')
   const findings = [
-    ...scan.bundle.findings.map((f) => ({ ruleId: 'key_in_client_bundle', filePath: f.filePath, line: f.line, kind: f.label })),
-    ...scan.findings.map((f) => ({ ruleId: f.ruleId, filePath: f.filePath, line: f.line })),
-  ].slice(0, 200)
+    ...scan.findings.slice(0, storageTake).map((f) => ({ ruleId: f.ruleId, filePath: f.filePath, line: f.line })),
+    ...bundle.slice(0, bundleTake).map((f) => ({ ruleId: 'key_in_client_bundle', filePath: f.filePath, line: f.line, kind: f.label })),
+  ]
   return {
     ...(commitSha && /^[0-9a-f]{7,64}$/i.test(commitSha) ? { commitSha } : {}),
     scanned,
