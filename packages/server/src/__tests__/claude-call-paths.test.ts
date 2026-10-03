@@ -37,7 +37,25 @@ const MIGRATED: Array<{ file: string; constants: string[] }> = [
 /** Model constants a `createAnthropic` provider may still be called with. */
 const AI_SDK_V4_SAFE = new Set(['ANTHROPIC_HAIKU', 'NL_QUERY_SUMMARY_MODEL'])
 
+/** Migrated files that still make a Haiku call on `createAnthropic`; every other one must not import it. */
+const HAIKU_ON_V4 = new Set(['mistake-summarizer/index.ts', '_shared/nl-query.ts', 'generate-synthetic/index.ts'])
+
+/** The argument of every `anthropic…(…)` provider call, whatever its shape. */
+function providerCalls(src: string): string[] {
+  return [...src.matchAll(/\banthropic\w*\(\s*([^)]+?)\s*\)/g)].map((m) => m[1])
+}
+
 const modelValues = models as unknown as Record<string, unknown>
+
+describe('providerCalls', () => {
+  it('captures every argument shape, not only constants and literals', () => {
+    expect(providerCalls(`anthropic(model)`)).toEqual(['model'])
+    expect(providerCalls(`anthropic(args.modelId)`)).toEqual(['args.modelId'])
+    expect(providerCalls(`anthropicFast( ANTHROPIC_HAIKU )`)).toEqual(['ANTHROPIC_HAIKU'])
+    expect(providerCalls(`anthropic('claude-sonnet-4-6')`)).toEqual(["'claude-sonnet-4-6'"])
+    expect(providerCalls(`createAnthropic({ apiKey })\nif (!anthropicKey) {}`)).toEqual([])
+  })
+})
 
 describe('gap #14b: Sonnet callers use claude-messages.ts', () => {
   for (const { file, constants } of MIGRATED) {
@@ -50,10 +68,14 @@ describe('gap #14b: Sonnet callers use claude-messages.ts', () => {
       })
 
       it('hands a createAnthropic provider only Haiku', () => {
-        // `anthropic(X)`, `anthropicFast(X)`, `createAnthropic({...})(X)`.
-        const calls = [...src.matchAll(/\banthropic\w*\(\s*([A-Z_][A-Z0-9_]*|'[^']*')\s*\)/g)].map((m) => m[1])
+        // `anthropic(X)`, `anthropicFast(X)`: whatever X is. A variable such
+        // as `anthropic(model)` or `anthropic(args.modelId)` (the shapes
+        // before the move) is not a Haiku constant, so it fails here too.
+        const calls = [...providerCalls(src)]
         for (const arg of calls) expect(AI_SDK_V4_SAFE.has(arg), `${file} passes ${arg} to the AI SDK v4 provider`).toBe(true)
         expect(src).not.toMatch(/createAnthropic\([^)]*\)\(/)
+        if (HAIKU_ON_V4.has(file)) expect(calls.length, `${file} is listed as keeping a Haiku call`).toBeGreaterThan(0)
+        else expect(src, `${file} has no Haiku path, so it must not load the AI SDK v4 Anthropic provider`).not.toMatch(/@ai-sdk\/anthropic/)
       })
 
       it('routes to Sonnet 5.5, which only the claude-messages path can call', () => {
