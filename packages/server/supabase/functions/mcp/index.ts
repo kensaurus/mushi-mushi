@@ -1913,6 +1913,13 @@ const UNTRUSTED_TOOLS: ReadonlySet<string> = new Set([
   'propose_recipe_change',
   'propose_portfolio_change',
   'get_store_status',
+  'refresh_recipe',
+  'run_design_deviance',
+  'run_store_review',
+  'get_release_calendar',
+  'get_code_health',
+  'explain_finding',
+  'get_repo_diagram',
 ])
 
 /**

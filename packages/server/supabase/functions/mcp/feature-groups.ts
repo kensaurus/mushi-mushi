@@ -87,6 +87,13 @@ export const TOOL_FEATURE_MAP: Record<string, FeatureGroup> = {
   request_connector_action: 'inventory',
   get_store_status: 'inventory',
   get_design_deviance: 'inventory',
+  // Run-now triggers + the by-id finding explanation
+  run_radar: 'inventory',
+  refresh_recipe: 'inventory',
+  run_design_deviance: 'inventory',
+  run_store_review: 'inventory',
+  get_release_calendar: 'inventory',
+  explain_finding: 'inventory',
 
   // setup
   diagnose_setup: 'setup',
@@ -151,6 +158,7 @@ export const TOOL_FEATURE_MAP: Record<string, FeatureGroup> = {
   // audit
   run_fullstack_audit: 'audit',
   get_backend_health: 'audit',
+  get_code_health: 'audit',
 
   // codebase understand
   ask_codebase: 'codebase',
@@ -162,6 +170,8 @@ export const TOOL_FEATURE_MAP: Record<string, FeatureGroup> = {
   analyze_wiki_knowledge: 'codebase',
   // The digest needs no index, so it ships on the default surface (Plan 020 §10.3.1).
   get_repo_digest: 'fixes',
+  // The diagram reads the stored drawing, so it needs no index either.
+  get_repo_diagram: 'fixes',
 
   // docs / orientation
   search_mushi_docs: 'docs',
