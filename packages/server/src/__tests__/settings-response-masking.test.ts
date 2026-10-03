@@ -164,6 +164,28 @@ describe('GET /v1/admin/settings', () => {
     expect(data.slack_channel_id).toBe('C123')
     expect(data.sentry_dsn).toBe('https://pub@o0.ingest.sentry.io/1')
   })
+
+  it('returns the spend caps as plain values (the console re-checks them before applying suggested caps)', async () => {
+    db.table('project_settings')[0].monthly_llm_budget_usd = 40
+    db.table('project_settings')[0].autofix_max_spend_usd = null
+    const data = (await app.call('GET', '/v1/admin/settings', ctx())).body.data as Record<string, unknown>
+    expect(data.monthly_llm_budget_usd).toBe(40)
+    expect(data.autofix_max_spend_usd).toBeNull()
+  })
+
+  it('answers {} only when the project has no settings row', async () => {
+    db = makeFakeDb({ project_settings: [] })
+    const res = await app.call('GET', '/v1/admin/settings', ctx())
+    expect(res.status).toBe(200)
+    expect(res.body.data).toEqual({})
+  })
+
+  it('a failed read is a 500, never {} (which would read as "nothing is set")', async () => {
+    db = makeFakeDb({ project_settings: [{ project_id: PROJECT }] }, { failRead: (t) => (t === 'project_settings' ? 'statement timeout' : null) })
+    const res = await app.call('GET', '/v1/admin/settings', ctx())
+    expect(res.status).toBe(500)
+    expect(res.body.data).toBeUndefined()
+  })
 })
 
 describe('PATCH /v1/admin/settings', () => {

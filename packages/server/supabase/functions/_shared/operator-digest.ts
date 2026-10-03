@@ -11,6 +11,8 @@
  */
 
 import type { getServiceClient } from './db.ts'
+import { mapWithConcurrency } from './concurrency.ts'
+import { PagedReadError, readAllPages, type PageCount, type PageResult } from './paged-read.ts'
 
 /**
  * Report statuses that still wait on a decision. Same list as
@@ -42,6 +44,8 @@ export interface DigestData {
   organizationName: string | null
   generatedAt: string
   projects: DigestProjectLine[]
+  /** Reads that stopped at their row ceiling: the counts they feed are lower bounds. */
+  truncated: string[]
 }
 
 export interface ComposedDigest {
@@ -96,6 +100,8 @@ export function composeDigest(data: DigestData, consoleUrl: string): ComposedDig
   const unchecked = data.projects.filter((p) => !p.radar.checked && !p.radar.failed).length
   const lines = scored.map((x) => x.l.text)
   if (unchecked > 0) lines.push(`${unchecked} app${unchecked === 1 ? ' has' : 's have'} not had hole checks yet.`)
+  // A read cut short is said out loud: its counts are at least what is shown, never exact.
+  if (data.truncated.length > 0) lines.push(`Some numbers are lower bounds: there were more ${data.truncated.join(', ')} than the digest reads.`)
   const org = data.organizationName ?? 'your apps'
   const title = `Mushi daily digest for ${org}`
   const body = lines.length ? lines.map((l) => `• ${l}`).join('\n') : 'Nothing new across your apps today.'
@@ -111,61 +117,100 @@ function failOnReadError(what: string, res: { error?: { message?: string } | nul
   if (res.error) throw new Error(`digest: could not read ${what}: ${res.error.message ?? 'unknown error'}`)
 }
 
+/** Row ceiling per digest read; past it the read is named in `DigestData.truncated`. */
+const MAX_DIGEST_ROWS = 50_000
+/** Newest-run reads in flight at once: one per app and hole-check gate. */
+const RUN_READ_CONCURRENCY = 10
+
+/**
+ * Every row of one digest read, paged past the server's row cap. A failed
+ * read throws (the callers send nothing); a read cut short at its ceiling is
+ * named in `truncated`, so its counts are shown as lower bounds.
+ */
+async function readAllOrThrow<T>(
+  what: string,
+  truncated: string[],
+  fetchPage: (from: number, to: number, count: PageCount) => PromiseLike<PageResult<T>>,
+): Promise<T[]> {
+  try {
+    const read = await readAllPages<T>(fetchPage, { what, maxRows: MAX_DIGEST_ROWS })
+    if (read.truncated) truncated.push(what)
+    return read.rows
+  } catch (err) {
+    const detail = err instanceof PagedReadError ? err.message.slice(what.length + 2) : err instanceof Error ? err.message : String(err)
+    throw new Error(`digest: could not read ${what}: ${detail}`)
+  }
+}
+
+type RunRow = { id: string; project_id: string; gate: string; status: string; summary: { errored?: number } | null }
+const DIGEST_RADAR_GATES = ['portfolio_radar', 'portfolio_radar_ci']
+
 /** Read what the digest needs for every project of the organization. Throws when a read fails. */
 export async function collectDigest(db: Db, organizationId: string, now: Date): Promise<DigestData> {
-  const [orgRes, projectsRes] = await Promise.all([
-    db.from('organizations').select('name').eq('id', organizationId).maybeSingle(),
-    db.from('projects').select('id, name, slug').eq('organization_id', organizationId).limit(100),
-  ])
+  const truncated: string[] = []
+  const orgRes = await db.from('organizations').select('name').eq('id', organizationId).maybeSingle()
   failOnReadError('organization', orgRes)
-  failOnReadError('projects', projectsRes)
-  const org = orgRes.data
-  const projects = projectsRes.data
-  const rows = (projects ?? []) as Array<{ id: string; name: string | null; slug: string | null }>
+  const rows = await readAllOrThrow<{ id: string; name: string | null; slug: string | null }>('projects', truncated, (from, to, count) =>
+    db.from('projects').select('id, name, slug', { count }).eq('organization_id', organizationId).order('id', { ascending: true }).range(from, to))
   const ids = rows.map((p) => p.id)
   const day = new Date(now.getTime() - 86400_000).toISOString()
   const week = new Date(now.getTime() - 8 * 86400_000).toISOString()
-  const empty = { data: [] as unknown[], error: null }
-  const [reports, openReports, runs, releases, spend] = ids.length
-    ? await Promise.all([
-      db.from('reports').select('project_id').in('project_id', ids).gte('created_at', day).limit(5000),
-      db.from('reports').select('project_id').in('project_id', ids).in('status', [...DIGEST_OPEN_STATUSES]).limit(20000),
-      db.from('gate_runs').select('id, project_id, gate, status, summary, started_at').in('project_id', ids).in('gate', ['portfolio_radar', 'portfolio_radar_ci']).order('started_at', { ascending: false }).limit(500),
-      db.from('releases').select('project_id, status, published_at').in('project_id', ids).order('created_at', { ascending: false }).limit(500),
-      db.from('llm_invocations').select('project_id, cost_usd, created_at').in('project_id', ids).gte('created_at', week).limit(50000),
-    ])
-    : [empty, empty, empty, empty, empty]
-  // A failed read must not turn into "nothing new": the callers catch this and send nothing.
-  for (const [name, res] of [['reports', reports], ['open reports', openReports], ['hole-check runs', runs], ['releases', releases], ['spend', spend]] as const) failOnReadError(name, res)
 
+  type ProjectRef = { project_id: string }
+  type SpendRow = { project_id: string; cost_usd: number | string | null; created_at: string }
+  // The newest run of each hole-check gate, one row per app and gate. A window
+  // read over every app's runs could be cut short at its row ceiling and drop
+  // an app's newest run; a fallback over older runs then read a stale one.
+  const runKeys = ids.flatMap((projectId) => DIGEST_RADAR_GATES.map((gate) => ({ projectId, gate })))
+  const newestRuns = (): Promise<RunRow[]> => mapWithConcurrency(runKeys, RUN_READ_CONCURRENCY, async ({ projectId, gate }) => {
+    const res = await db.from('gate_runs').select('id, project_id, gate, status, summary, started_at').eq('project_id', projectId).eq('gate', gate)
+      .order('started_at', { ascending: false }).order('id', { ascending: true }).limit(1).maybeSingle()
+    failOnReadError('hole-check runs', res)
+    return (res.data as RunRow | null) ?? null
+  }).then((rows) => rows.filter((r): r is RunRow => r !== null))
+  const [reports, openReports, latestRuns, drafts, published, spend] = ids.length
+    ? await Promise.all([
+      readAllOrThrow<ProjectRef>('reports', truncated, (from, to, count) =>
+        db.from('reports').select('id, project_id', { count }).in('project_id', ids).gte('created_at', day).order('id', { ascending: true }).range(from, to)),
+      readAllOrThrow<ProjectRef>('open reports', truncated, (from, to, count) =>
+        db.from('reports').select('id, project_id', { count }).in('project_id', ids).in('status', [...DIGEST_OPEN_STATUSES]).order('id', { ascending: true }).range(from, to)),
+      newestRuns(),
+      readAllOrThrow<ProjectRef>('draft releases', truncated, (from, to, count) =>
+        db.from('releases').select('id, project_id', { count }).in('project_id', ids).eq('status', 'draft').order('id', { ascending: true }).range(from, to)),
+      readAllOrThrow<ProjectRef>('releases', truncated, (from, to, count) =>
+        db.from('releases').select('id, project_id', { count }).in('project_id', ids).eq('status', 'published').gte('published_at', day).order('id', { ascending: true }).range(from, to)),
+      readAllOrThrow<SpendRow>('AI calls', truncated, (from, to, count) =>
+        db.from('llm_invocations').select('id, project_id, cost_usd, created_at', { count }).in('project_id', ids).gte('created_at', week).order('id', { ascending: true }).range(from, to)),
+    ])
+    : [[], [], [], [], [], []] as [ProjectRef[], ProjectRef[], RunRow[], ProjectRef[], ProjectRef[], SpendRow[]]
+
+  // However old, an app's newest run counts: never "not checked yet" while it has one.
   const latestRun = new Map<string, { id: string; project_id: string; failed: boolean; skipped: boolean }>()
-  for (const r of ((runs as { data: unknown }).data ?? []) as Array<{ id: string; project_id: string; gate: string; status: string; summary: { errored?: number } | null }>) {
-    const key = `${r.project_id}:${r.gate}`
-    if (!latestRun.has(key)) latestRun.set(key, { id: r.id, project_id: r.project_id, failed: r.status === 'error' || Number(r.summary?.errored ?? 0) > 0, skipped: r.status === 'skipped' })
+  for (const r of latestRuns) {
+    latestRun.set(`${r.project_id}:${r.gate}`, { id: r.id, project_id: r.project_id, failed: r.status === 'error' || Number(r.summary?.errored ?? 0) > 0, skipped: r.status === 'skipped' })
   }
   const runIds = [...latestRun.values()].map((r) => r.id)
-  const findingsRes = runIds.length
-    ? await db.from('gate_findings').select('project_id, severity').in('gate_run_id', runIds).eq('allowlisted', false).limit(5000)
-    : { data: [], error: null }
-  failOnReadError('hole-check findings', findingsRes)
-  const findings = findingsRes.data
+  const findings = runIds.length
+    ? await readAllOrThrow<{ project_id: string; severity: string }>('hole-check findings', truncated, (from, to, count) =>
+      db.from('gate_findings').select('id, project_id, severity', { count }).in('gate_run_id', runIds).eq('allowlisted', false).order('id', { ascending: true }).range(from, to))
+    : []
 
-  const count = (list: unknown, id: string) => ((list as { data: unknown }).data as Array<{ project_id: string }> ?? []).filter((r) => r.project_id === id).length
+  const countFor = (list: readonly ProjectRef[], id: string) => list.filter((r) => r.project_id === id).length
   return {
     organizationId,
-    organizationName: (org as { name?: string | null } | null)?.name ?? null,
+    organizationName: (orgRes.data as { name?: string | null } | null)?.name ?? null,
     generatedAt: now.toISOString(),
+    truncated,
     projects: rows.map((p) => {
-      const f = ((findings ?? []) as Array<{ project_id: string; severity: string }>).filter((x) => x.project_id === p.id)
-      const rel = (((releases as { data: unknown }).data ?? []) as Array<{ project_id: string; status: string; published_at: string | null }>).filter((r) => r.project_id === p.id)
-      const calls = (((spend as { data: unknown }).data ?? []) as Array<{ project_id: string; cost_usd: number | string | null; created_at: string }>).filter((c) => c.project_id === p.id)
+      const f = findings.filter((x) => x.project_id === p.id)
+      const calls = spend.filter((c) => c.project_id === p.id)
       const last24 = calls.filter((c) => c.created_at >= day).reduce((n, c) => n + (Number(c.cost_usd) || 0), 0)
       const prior = calls.filter((c) => c.created_at < day).reduce((n, c) => n + (Number(c.cost_usd) || 0), 0)
       return {
         projectId: p.id,
         name: p.name ?? p.slug ?? p.id.slice(0, 8),
-        newReports24h: count(reports, p.id),
-        openReports: count(openReports, p.id),
+        newReports24h: countFor(reports, p.id),
+        openReports: countFor(openReports, p.id),
         radar: {
           error: f.filter((x) => x.severity === 'error').length,
           warn: f.filter((x) => x.severity === 'warn').length,
@@ -173,8 +218,8 @@ export async function collectDigest(db: Db, organizationId: string, now: Date): 
           checked: [...latestRun.values()].some((r) => r.project_id === p.id && !r.failed && !r.skipped),
           failed: [...latestRun.values()].some((r) => r.project_id === p.id && r.failed),
         },
-        draftReleases: rel.filter((r) => r.status === 'draft').length,
-        publishedReleases24h: rel.filter((r) => r.status === 'published' && r.published_at && r.published_at >= day).length,
+        draftReleases: countFor(drafts, p.id),
+        publishedReleases24h: countFor(published, p.id),
         spend: { last24hUsd: Math.round(last24 * 100) / 100, avgPrior7dUsd: Math.round((prior / 7) * 100) / 100 },
       }
     }),

@@ -213,7 +213,12 @@ export function evaluateUnauthenticatedPaidFunctions(fns: readonly EdgeFunctionI
 
 // ── backups ──────────────────────────────────────────────────────────────────
 
-export function evaluateBackups(input: { pitrEnabled: boolean | null; storageBytes: number | null }): [Phase2Result<'pitr_disabled'>, Phase2Result<'storage_not_backed_up'>] {
+/**
+ * `storageObjects` (optional): objects counted across buckets. A bucket can
+ * list objects whose size metadata is missing, so 0 bytes with objects is
+ * still "files are stored" — never "nothing is stored".
+ */
+export function evaluateBackups(input: { pitrEnabled: boolean | null; storageBytes: number | null; storageObjects?: number | null }): [Phase2Result<'pitr_disabled'>, Phase2Result<'storage_not_backed_up'>] {
   const pitr: Phase2Result<'pitr_disabled'> = input.pitrEnabled === null
     ? { ruleId: 'pitr_disabled', state: 'unknown', reason: 'Could not read the backup settings.', findings: [] }
     : input.pitrEnabled
@@ -232,7 +237,7 @@ export function evaluateBackups(input: { pitrEnabled: boolean | null; storageByt
         }
   const store: Phase2Result<'storage_not_backed_up'> = input.storageBytes === null
     ? { ruleId: 'storage_not_backed_up', state: 'unknown', reason: 'Could not read how much is in Storage.', findings: [] }
-    : input.storageBytes === 0
+    : input.storageBytes === 0 && !(input.storageObjects && input.storageObjects > 0)
       ? { ruleId: 'storage_not_backed_up', state: 'ok', reason: 'Nothing is stored in Storage.', findings: [] }
       : {
           ruleId: 'storage_not_backed_up',

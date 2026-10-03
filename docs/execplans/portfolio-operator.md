@@ -1,6 +1,6 @@
 # Portfolio Operator — Mushi for one person running many apps, sites and services
 
-> Status: `PLANNED` (research and design spec, no code yet). Researched 2026-10-02.
+> Status: `IN PROGRESS`. Researched 2026-10-02. Phases 1, 3 and 4 are built, Phase 0 is built apart from regenerating the generated MCP docs, and Phase 2 is partial (checked against the code 2026-10-03; see [PLANS.md](./PLANS.md) Plan 020 and §12.1 below). Seven §4.2 detectors are not in the code yet (`dead_app_live_spend`, `provider_key_invalid`, `store_credential_scope_missing`, `key_unused_90d`, `key_in_client_bundle`, `paid_feature_no_kill_switch`, `provider_limit_unset`). Apply and deploy are tracked per release batch.
 > Registered as Plan 020 in [PLANS.md](./PLANS.md). The sequencing gate was struck and the §15 decisions taken on 2026-10-02: [ADR 0017](../adr/0017-strike-the-plan-019-020-sequencing-gate.md).
 > Foundation: [Plan 019 — App Recipe Control Plane](./app-recipe-control-plane.md) and [ADR 0016](../adr/0016-mushi-as-the-app-recipe-control-plane.md). The owner delegated its acceptance on 2026-10-02 (Phases 1, 1b and P1 proceed; 2, P2, 3 and any `act` stay gated), though the file still reads "Proposed". This plan **builds on** Plan 019's recipe data model, connector interface (§2b), `portfolio_resources` and portfolio rollup (§3b). It does not redefine any of them.
 > Positioning companion: [`docs/marketing/portfolio-positioning.md`](../marketing/portfolio-positioning.md).
@@ -460,15 +460,19 @@ Plan 019's sequencing gate (ADR 0016) applies to every gated 020 phase: gated ph
 
 ### 12.1 Phase 0 checklist
 
-- [ ] P-1: probe `byok_keys` in `integration-health-probe`; a revoked key writes an `error` health row and `byok_key_invalid`; Deno test with a 401 fixture.
-- [ ] P-2: enforce `monthly_llm_budget_usd` in the shared LLM path (or relabel it "alert only"); test over and under budget.
-- [ ] P-3: fix or retire `contract-graph-builder` and `drift-walker`; no swallowed errors.
-- [ ] P-6: a default autofix cap at project creation; a `spend_cap_unset` finding for existing projects.
-- [ ] `index_branch_mismatch` / `index_stale` detectors and the fix-worker read-before-write guard.
-- [ ] `webhook_never_delivered` over `integration_health_history` and inbound delivery counts.
-- [ ] `_shared/repo-digest.ts` (tree + contents at a pinned SHA, token counting, budget, secret scan); MCP `get_repo_digest`; console "Copy digest" on `/explore` and on report detail (scoped to the report's files via `analyze_codebase_impact`).
-- [ ] Diagram v0: LLM graph AST → path validation → React Flow on `/explore`; stored per SHA.
-- [ ] Catalog, manifest and docs synced (`check:catalog-sync`, `check:admin-docs-coverage`).
+Checked against the code on 2026-10-03.
+
+- [x] P-1: probe `byok_keys` in `integration-health-probe`; a revoked key writes an `error` health row and `byok_key_invalid`; Deno test with a 401 fixture (`integration-health-probe/byok-health.test.ts`).
+- [x] P-2: enforce `monthly_llm_budget_usd` in the shared LLM path (`_shared/llm-budget.ts`, called from `llm-failover.ts` and `byok.ts`); `llm-budget-enforcement.test.ts`.
+- [x] P-3: `contract-graph-builder` rebuilt over `_shared/contract-snapshot.ts` (an unset source reads `not_configured`); it and `drift-walker` check every read and write and answer 500 / 502 with the failed step.
+- [x] P-6: default autofix caps for new projects (`20261002140200`); `spend_cap_unset` for existing projects flags a missing auto-fix cap (auto-fix on or off) or a missing monthly AI budget, with "Apply suggested caps" on the finding (2026-10-03).
+- [x] `index_branch_mismatch` / `index_stale` detectors (`_shared/radar.ts`) and the fix-worker read-before-write guard (`_shared/fix-file-guard.ts`).
+- [x] `webhook_never_delivered` over `integration_health_history` and inbound delivery counts.
+- [x] `_shared/repo-digest.ts`; MCP `get_repo_digest`; console "Copy digest" on `/explore` and on report detail (`CopyRepoDigestButton` with the report id).
+- [x] Diagram v0 (`_shared/repo-diagram.ts`, `ExploreDiagramPanel` on `/explore`).
+- [x] `mcp-discovery-tools.json` (the hosted tools/list schema) synced with the catalog, including the `radar` gate; `gate-ids-parity.test.ts` checks its gate enum and description (2026-10-03).
+- [ ] Generated MCP docs regenerated at merge (`apps/docs/content/sdks/mcp-tools.mdx`, `apps/docs/public/llm-md/sdks/mcp-tools.md`, `apps/docs/public/llms-full.txt`, the two `docs-index.ts` files), so `check:mcp-tools-doc` and `gen-mcp-docs-index --check` pass.
+- [ ] `check:admin-docs-coverage` warns about the `/recipe`, `/design`, `/analytics`, `/growth` and `/email/reporter` pages. These pages come from other plans and were not added in Phase 0.
 
 ### 12.2 Release batching
 

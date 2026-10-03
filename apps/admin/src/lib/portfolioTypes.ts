@@ -41,6 +41,27 @@ export interface PortfolioCard {
   latestRelease: { version: string; publishedAt: string | null } | null
   radar: PortfolioRadarColumn
   spend: PortfolioSpendColumn
+  /** Columns of this card whose read failed or was cut short: unknown, not empty. */
+  unreadable: PortfolioReadPart[]
+}
+
+export type PortfolioReadPart =
+  | 'gate_runs'
+  | 'findings'
+  | 'reports'
+  | 'sdk'
+  | 'spend'
+  | 'caps'
+  | 'releases'
+  | 'kind'
+  | 'integrations'
+  | 'cross_project'
+
+export interface PortfolioReadError {
+  part: PortfolioReadPart
+  /** `failed`: the read errored. `truncated`: more rows matched than were read. */
+  kind: 'failed' | 'truncated'
+  message: string
 }
 
 /**
@@ -65,10 +86,15 @@ export interface PortfolioRadarColumn {
  * findings: missing caps are reported by the Phase 0 detector, not here.
  */
 interface PortfolioSpendColumn {
-  llmUsd30d: number
-  llmCalls30d: number
+  /** null when the spend could not be read. */
+  llmUsd30d: number | null
+  llmCalls30d: number | null
+  /** True when more calls matched than were summed: the totals are a lower bound. */
+  partial: boolean
   autofixCapUsd: number | null
   monthlyLlmBudgetUsd: number | null
+  /** False when the caps could not be read: null caps then mean "unknown", not "no cap". */
+  capsKnown: boolean
 }
 
 interface FindingGroup {
@@ -102,7 +128,10 @@ export interface PortfolioResponse {
   cards: PortfolioCard[]
   /** Counts only; the list is on /portfolio/findings. */
   repeatedGroups: number
-  holes: number
+  /** null when the integrations could not be read. */
+  holes: number | null
+  /** Every read that failed or was cut short; empty when the page is complete. */
+  readErrors: PortfolioReadError[]
 }
 
 export interface PortfolioFindingsResponse {
@@ -113,6 +142,8 @@ export interface PortfolioFindingsResponse {
   holes: IntegrationHole[]
   /** Rules that are genuinely cross-project (shared auth, deep links, shared channels…), Phase P2. */
   crossProject: CrossProjectFinding[]
+  /** A part listed here means its list above is unknown, not empty. */
+  readErrors: PortfolioReadError[]
 }
 
 interface CrossProjectFinding {

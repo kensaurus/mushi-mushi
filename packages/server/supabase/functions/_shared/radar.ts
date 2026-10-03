@@ -10,7 +10,8 @@
  *
  * Rules:
  *   byok_key_invalid        a stored provider key the provider now rejects
- *   spend_cap_unset         auto-fix is on with no spend or daily cap
+ *   spend_cap_unset         no monthly AI budget, or no auto-fix spend / daily
+ *                           cap (warn when auto-fix is on; info when it is off)
  *   webhook_never_delivered an inbound integration configured 7+ days ago that
  *                           never had a delivery accepted
  *   index_branch_mismatch   the code index follows a branch that is not the
@@ -93,32 +94,93 @@ export function detectByokKeyInvalid(
 
 // ── spend_cap_unset ──────────────────────────────────────────────────────
 
-export function detectSpendCapUnset(settings: {
+/** The suggested monthly AI budget never goes below this. */
+export const MIN_SUGGESTED_MONTHLY_LLM_BUDGET_USD = 10
+
+/**
+ * A monthly AI budget that does not cut off today's usage: about twice the
+ * last 30 days of spend, rounded up to $5, never below $10. The budget stops
+ * every AI call once reached (_shared/llm-budget.ts), so a suggestion below
+ * current spend would turn triage off the day it is applied.
+ */
+export function suggestMonthlyLlmBudgetUsd(recentSpendUsd: number | null | undefined): number {
+  const spend = typeof recentSpendUsd === 'number' && Number.isFinite(recentSpendUsd) && recentSpendUsd > 0 ? recentSpendUsd : 0
+  return Math.max(MIN_SUGGESTED_MONTHLY_LLM_BUDGET_USD, Math.ceil((spend * 2) / 5) * 5)
+}
+
+export interface SpendCapSettings {
   autofix_enabled: boolean | null
   autofix_max_spend_usd: number | null
   autofix_max_dispatches_per_day: number | null
-}): RadarFinding[] {
-  if (!settings.autofix_enabled) return []
-  const missing: string[] = []
-  if (settings.autofix_max_spend_usd == null) missing.push('a 30-day spend cap')
-  if (settings.autofix_max_dispatches_per_day == null) missing.push('a daily dispatch cap')
-  if (missing.length === 0) return []
+  monthly_llm_budget_usd: number | null
+  /** The project's AI spend over the last 30 days; read only when no monthly budget is set. */
+  llm_spend_30d_usd?: number | null
+}
+
+/**
+ * Plan 020 §4.2 #10: a NULL auto-fix cap or a NULL monthly AI budget. The
+ * budget is flagged whether auto-fix is on or off (triage and chat spend too);
+ * missing auto-fix caps are a `warn` while auto-fix is on and an `info` while
+ * it is off (nothing spends today, but turning it on would be uncapped).
+ *
+ * `suggested_fix.values` holds only the missing fields, so applying it
+ * (PATCH /v1/admin/settings) never overwrites a cap that is already set.
+ */
+export function detectSpendCapUnset(settings: SpendCapSettings): RadarFinding[] {
+  const missingAutofix: string[] = []
+  if (settings.autofix_max_spend_usd == null) missingAutofix.push('30-day spend cap')
+  if (settings.autofix_max_dispatches_per_day == null) missingAutofix.push('daily dispatch cap')
+  const budgetMissing = settings.monthly_llm_budget_usd == null
+  if (missingAutofix.length === 0 && !budgetMissing) return []
+
+  const autofixOn = Boolean(settings.autofix_enabled)
+  const values: Record<string, number> = {}
+  const problems: string[] = []
+  const suggestions: string[] = []
+
+  if (budgetMissing) {
+    const budget = suggestMonthlyLlmBudgetUsd(settings.llm_spend_30d_usd)
+    values.monthly_llm_budget_usd = budget
+    problems.push("No monthly AI budget is set, so nothing limits this project's AI spend (triage, fixes and chat).")
+    const spend = settings.llm_spend_30d_usd
+    suggestions.push(
+      typeof spend === 'number' && Number.isFinite(spend)
+        ? `a $${budget} monthly AI budget (the last 30 days cost $${spend.toFixed(2)})`
+        : `a $${budget} monthly AI budget`,
+    )
+  }
+  if (missingAutofix.length > 0) {
+    problems.push(
+      autofixOn
+        ? `Auto-fix is on with no ${missingAutofix.join(' and no ')}. Mushi can start fixes on its own, so nothing limits what they spend.`
+        : `Auto-fix is off, but it has no ${missingAutofix.join(' and no ')}: if it is turned on, nothing limits what its fixes spend.`,
+    )
+    if (settings.autofix_max_spend_usd == null) {
+      values.autofix_max_spend_usd = DEFAULT_AUTOFIX_MAX_SPEND_USD
+      suggestions.push(`$${DEFAULT_AUTOFIX_MAX_SPEND_USD} of auto-fix spend per 30 days`)
+    }
+    if (settings.autofix_max_dispatches_per_day == null) {
+      values.autofix_max_dispatches_per_day = DEFAULT_AUTOFIX_MAX_DISPATCHES_PER_DAY
+      suggestions.push(`${DEFAULT_AUTOFIX_MAX_DISPATCHES_PER_DAY} automatic fixes a day`)
+    }
+  }
+
   return [
     {
       rule_id: 'spend_cap_unset',
-      severity: 'warn',
+      severity: budgetMissing || (autofixOn && missingAutofix.length > 0) ? 'warn' : 'info',
       message:
-        `Auto-fix is on with no ${missing.join(' and no ')}. Mushi can start fixes on its own, so nothing ` +
-        `limits what they spend. Suggested: $${DEFAULT_AUTOFIX_MAX_SPEND_USD} per 30 days and ` +
-        `${DEFAULT_AUTOFIX_MAX_DISPATCHES_PER_DAY} dispatches a day. Fixes you start yourself are never blocked by a cap.`,
+        `${problems.join(' ')} Suggested: ${suggestions.join(', ')}. ` +
+        'Fixes you start yourself are never blocked by the auto-fix caps; the monthly budget stops every AI call until the 1st once reached.',
       suggested_fix: {
         kind: 'console',
         path: '/settings?tab=general#spend-limits',
-        // Same fields the console saves through PATCH /v1/admin/settings.
-        values: {
-          autofix_max_spend_usd: settings.autofix_max_spend_usd ?? DEFAULT_AUTOFIX_MAX_SPEND_USD,
-          autofix_max_dispatches_per_day: settings.autofix_max_dispatches_per_day ?? DEFAULT_AUTOFIX_MAX_DISPATCHES_PER_DAY,
-        },
+        // One-click apply from the console only: a signed-in project admin
+        // sends the fields still unset to PATCH /v1/admin/settings (jwtAuth).
+        // An API key or MCP client cannot apply it; it links to `path`.
+        method: 'PATCH',
+        endpoint: '/v1/admin/settings',
+        values,
       },
     },
   ]

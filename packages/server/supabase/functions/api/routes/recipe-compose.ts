@@ -36,6 +36,8 @@ import type {
   RecipeResponse,
 } from '../../_shared/recipe-types.ts'
 import { RECIPE_ELEMENT_KEYS } from '../../_shared/recipe-types.ts'
+import { readAllPages } from '../../_shared/paged-read.ts'
+import { GATE_IDS } from '../../_shared/gate-ids.ts'
 
 type Db = ReturnType<typeof getServiceClient>
 
@@ -92,24 +94,78 @@ export function latestPerGate<T extends Pick<GateRunRow, 'gate' | 'status'>>(row
   return [...seen.values()]
 }
 
-async function openFindingCounts(db: Db, runIds: string[]): Promise<Map<string, number>> {
+/** Rows read before switching to one exact count per run. */
+const MAX_OPEN_FINDING_ROWS = 5_000
+
+/**
+ * Open (not allowlisted) error and warn findings per run. A failed read
+ * throws: it must not count as "no open findings" (Plan 020 P-1). The rows
+ * are paged past the server's row cap; when there are more than
+ * MAX_OPEN_FINDING_ROWS, each run is counted exactly instead, so a busy
+ * project never reads low.
+ */
+export async function openFindingCounts(db: Db, runIds: string[]): Promise<Map<string, number>> {
   const out = new Map<string, number>()
   if (runIds.length === 0) return out
-  const { data } = await db
-    .from('gate_findings')
-    .select('gate_run_id, severity')
-    .in('gate_run_id', runIds)
-    .eq('allowlisted', false)
-    .limit(5000)
-  for (const f of (data ?? []) as Array<{ gate_run_id: string; severity: string }>) {
-    if (f.severity === 'info') continue
-    out.set(f.gate_run_id, (out.get(f.gate_run_id) ?? 0) + 1)
+  type Row = { id: string; gate_run_id: string }
+  const read = await readAllPages<Row>(
+    (from, to, count) => db
+      .from('gate_findings')
+      .select('id, gate_run_id', { count })
+      .in('gate_run_id', runIds)
+      .eq('allowlisted', false)
+      .in('severity', ['error', 'warn'])
+      .order('id', { ascending: true })
+      .range(from, to),
+    { what: 'gate_findings', maxRows: MAX_OPEN_FINDING_ROWS },
+  )
+  if (!read.truncated) {
+    for (const f of read.rows) out.set(f.gate_run_id, (out.get(f.gate_run_id) ?? 0) + 1)
+    return out
+  }
+  for (const runId of runIds) {
+    const { count, error } = await db
+      .from('gate_findings')
+      .select('id', { count: 'exact', head: true })
+      .eq('gate_run_id', runId)
+      .eq('allowlisted', false)
+      .in('severity', ['error', 'warn'])
+    if (error) throw new Error(`gate_findings: ${error.message}`)
+    if (typeof count !== 'number') throw new Error('gate_findings: no count returned')
+    if (count > 0) out.set(runId, count)
   }
   return out
 }
 
 export function isScanRun(r: Pick<GateRunRow, 'summary'>): boolean {
   return (r.summary as { phase?: string } | null)?.phase !== 'refresh'
+}
+
+/** The gates the recipe reads: every live gate except the radar hole checks (Plan 020), which have their own column. */
+export const RECIPE_GATES: readonly string[] = GATE_IDS.filter((g) => !RADAR_GATES.includes(g))
+
+/**
+ * The newest finished run of each of `gates`, read one gate at a time.
+ * A shared "newest N runs" page would let busy gates (daily radar runs,
+ * per-push CI runs) push an older failing gate out, and that gate would read
+ * as never run. Same filters as latestPerGate + isScanRun, in the query:
+ * running / queued runs are skipped, and a design refresh is not a scan (a
+ * run with no phase is one, as in isScanRun). A failed read throws (P-1).
+ */
+export async function loadLatestGateRuns(db: Db, projectId: string, gates: readonly string[]): Promise<GateRunRow[]> {
+  const reads = await Promise.all(gates.map(async (gate) => {
+    let q = db
+      .from('gate_runs')
+      .select('id, gate, status, started_at, completed_at, summary, findings_count, commit_sha')
+      .eq('project_id', projectId)
+      .eq('gate', gate)
+      .not('status', 'in', '(running,queued)')
+    if (gate === DESIGN_GATE) q = q.or('summary->>phase.is.null,summary->>phase.neq.refresh')
+    const { data, error } = await q.order('started_at', { ascending: false }).limit(1).maybeSingle()
+    if (error) throw new Error(`gate_runs (${gate}): ${error.message}`)
+    return (data as GateRunRow | null) ?? null
+  }))
+  return reads.filter((r): r is GateRunRow => r !== null)
 }
 
 /** A `running` row older than STUCK_SCAN_MS never finished; it reads as `error`, never as running forever. */
@@ -223,23 +279,21 @@ export async function composeRecipe(db: Db, deps: ComposeDeps, projectId: string
   const [projectRes, settingsRes, snapshot, repo] = await Promise.all([
     db.from('projects').select('id, slug, organization_id').eq('id', projectId).maybeSingle(),
     db.from('project_settings').select('supabase_project_ref, sentry_dsn, sentry_org_slug, sentry_project_slug, slack_channel_id, slack_bot_token_ref, linear_api_key_ref, linear_access_token_ref').eq('project_id', projectId).maybeSingle(),
-    db.from('app_recipe_snapshots').select('*').eq('project_id', projectId).eq('is_current', true).maybeSingle().then((r) => (r.data as SnapshotRow | null) ?? null),
+    db.from('app_recipe_snapshots').select('*').eq('project_id', projectId).eq('is_current', true).maybeSingle().then((r) => {
+      if (r.error) throw new Error(`app_recipe_snapshots: ${r.error.message}`)
+      return (r.data as SnapshotRow | null) ?? null
+    }),
     deps.resolveRepo(db, projectId).catch((err): RecipeRepoResolution => ({ ok: false, repoConnected: true, tokenAvailable: true, reason: errMessage(err) })),
   ])
+  // Fail-open rule (Plan 020 P-1): unread settings would make every element
+  // read "not connected", and unread gate runs "never checked". Both throw, so
+  // the recipe route answers RECIPE_FAILED and the portfolio card reads error.
+  if (settingsRes.error) throw new Error(`project_settings: ${settingsRes.error.message}`)
   const project = (projectRes.data ?? null) as { slug?: string | null; organization_id?: string | null } | null
   const settings = (settingsRes.data ?? {}) as Record<string, string | null>
   const manifest = (snapshot?.manifest ?? null) as RecipeManifest | null
 
-  // Gate runs (every gate) — newest first.
-  const { data: gateRows } = await db
-    .from('gate_runs')
-    .select('id, gate, status, started_at, completed_at, summary, findings_count, commit_sha')
-    .eq('project_id', projectId)
-    .order('started_at', { ascending: false })
-    .limit(300)
-  const allRuns = (gateRows ?? []) as GateRunRow[]
-  // The radar gates (Plan 020) are hole checks with their own column, not recipe gates.
-  const latest = latestPerGate(allRuns.filter((r) => (r.gate !== DESIGN_GATE || isScanRun(r)) && !RADAR_GATES.includes(r.gate)))
+  const latest = await loadLatestGateRuns(db, projectId, RECIPE_GATES)
   const findingCounts = await openFindingCounts(db, latest.map((r) => r.id))
   /** Open findings of an element's own drift gate (Phase 2); undefined when that gate never ran. */
   const driftOf = (gate: string): number | undefined => {
