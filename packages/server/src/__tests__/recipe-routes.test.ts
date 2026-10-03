@@ -577,3 +577,62 @@ describe('POST /recipe/refresh', () => {
     expect(deps.refresh).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('GET /recipe/elements/:element views (gap #17)', () => {
+  const col = (name: string) => ({ name, type: 'text', nullable: false })
+
+  it('schema, ci, deploy and env each carry their typed view from stored data', async () => {
+    const snap = glotSnapshot(P_A)
+    snap.manifest = {
+      ...snap.manifest,
+      deploy: { targets: [{ id: 'web', kind: 'vercel', probe: { type: 'version_json' } }, { id: 'ios', kind: 'app-store' }] },
+      env: { required: [{ name: 'NEXT_PUBLIC_MUSHI_PROJECT_ID' }, { name: 'SENTRY_AUTH_TOKEN', in: ['github-environment:production'] }] },
+    } as never
+    const db = seed({
+      app_recipe_snapshots: [snap],
+      backend_schema_snapshots: [
+        { project_id: P_A, captured_at: '2026-10-02T03:05:00Z', schema_hash: 'a'.repeat(64), schema_json: [{ name: 'profiles', schema: 'public', rls_enabled: true, columns: [col('id'), col('bio')] }] },
+        { project_id: P_A, captured_at: '2026-10-01T03:05:00Z', schema_hash: 'b'.repeat(64), schema_json: [{ name: 'profiles', schema: 'public', rls_enabled: true, columns: [col('id')] }, { name: 'old', schema: 'public', rls_enabled: true, columns: [] }] },
+      ],
+      ci_workflow_runs: [{ project_id: P_A, run_id: 7, name: 'CI', head_branch: 'main', status: 'completed', conclusion: 'success', started_at: '2026-10-02T09:00:00Z', est_billable_minutes: 3, html_url: 'https://github.com/kensaurus/glot.it/actions/runs/7' }],
+      deploy_observations: [{ project_id: P_A, target_id: 'web', ok: true, error: null, observed_at: '2026-10-02T10:00:00Z', observed_version: '1.0.0', observed_commit: 'head999', source: 'version_json' }],
+      connector_snapshots: [{ project_id: P_A, kind: 'github', is_current: true, ok: true, snapshot: { facts: { headSha: 'head999', actionsNames: ['NEXT_PUBLIC_MUSHI_PROJECT_ID'], actionsNamesComplete: true, environmentNames: { production: [] } } } }],
+    })
+    const { app } = harness(db)
+    const get = async (el: string) => ((await app.call('GET', `/v1/admin/projects/${P_A}/recipe/elements/${el}`)).body.data as { detail: Record<string, unknown> }).detail
+
+    const schema = (await get('schema')).schemaView as { source: string; tables: Array<{ name: string }>; diff: { removed: string[]; changed: Array<{ addedColumns: string[] }> } }
+    expect(schema.source).toBe('drift_scanner')
+    expect(schema.tables.map((t) => t.name)).toEqual(['profiles'])
+    expect(schema.diff.removed).toEqual(['public.old'])
+    expect(schema.diff.changed[0].addedColumns).toEqual(['bio'])
+
+    const ci = (await get('ci')).ciView as { runs: Array<{ runId: number; estMinutes: number }>; estMinutesTotal: number }
+    expect(ci.runs).toMatchObject([{ runId: 7, estMinutes: 3 }])
+    expect(ci.estMinutesTotal).toBe(3)
+
+    const deploy = (await get('deploy')).deployView as { expectedCommit: string; targets: Array<{ id: string; status: string }> }
+    expect(deploy.expectedCommit).toBe('head999')
+    expect(deploy.targets.map((t) => [t.id, t.status])).toEqual([['web', 'live'], ['ios', 'unobserved']])
+
+    const env = (await get('env')).envView as { rows: Array<{ name: string; cells: Record<string, string> }> }
+    expect(env.rows.find((r) => r.name === 'SENTRY_AUTH_TOKEN')!.cells['github-environment:production']).toBe('missing')
+    expect(env.rows.find((r) => r.name === 'NEXT_PUBLIC_MUSHI_PROJECT_ID')!.cells['github-actions']).toBe('present')
+  })
+
+  it('GET /recipe does not pay for the view reads, and a failed view read is a 500, not an empty view', async () => {
+    const db = seed({ app_recipe_snapshots: [glotSnapshot(P_A)], ci_workflow_runs: [] })
+    const seen: string[] = []
+    const counting = new Proxy(db, { get: (t, prop, r) => (prop === 'from' ? (name: string) => { seen.push(name); return t.from(name) } : Reflect.get(t, prop, r)) })
+    const { app } = harness(counting as FakeDb)
+    expect((await app.call('GET', `/v1/admin/projects/${P_A}/recipe`)).status).toBe(200)
+    expect(seen).not.toContain('ci_workflow_runs')
+    expect(seen.filter((n) => n === 'backend_schema_snapshots')).toHaveLength(1)
+
+    const failed = { data: null, error: { message: 'statement timeout' } }
+    const chain: Record<string, unknown> = new Proxy({}, { get: (_t, prop) => (prop === 'then' ? (ok: (v: unknown) => unknown) => Promise.resolve(failed).then(ok) : () => chain) })
+    const broken = new Proxy(db, { get: (t, prop, r) => (prop === 'from' ? (name: string) => (name === 'ci_workflow_runs' ? chain : t.from(name)) : Reflect.get(t, prop, r)) })
+    const { app: b } = harness(broken as FakeDb)
+    expect((await b.call('GET', `/v1/admin/projects/${P_A}/recipe/elements/ci`)).status).toBe(500)
+  })
+})

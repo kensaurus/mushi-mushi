@@ -93,8 +93,113 @@ export interface RecipeResponse {
 
 export interface RecipeElementDetail {
   element: RecipeElementSummary
-  /** Element-specific detail; shapes are documented per element in recipe.ts. */
+  /**
+   * Element-specific detail; shapes are documented per element in recipe.ts.
+   * GET /recipe/elements/:element (never GET /recipe) adds one typed view:
+   * `schemaView`, `ciView`, `deployView` or `envView` (below).
+   */
   detail: Record<string, unknown>
+}
+
+// ── Per-element detail views (GET /recipe/elements/:element only) ───────────
+
+export interface SchemaTableRow {
+  name: string
+  schema: string | null
+  /** null when the source does not say (the connector's table list has no RLS for some rows). */
+  rls: boolean | null
+  /** null when the source lists tables without columns. */
+  columns: number | null
+}
+
+export interface SchemaTableChange {
+  name: string
+  addedColumns: string[]
+  removedColumns: string[]
+  /** Set when RLS was switched on or off between the two snapshots. */
+  rls: { from: boolean | null; to: boolean | null } | null
+}
+
+export interface SchemaView {
+  /** Where the table list came from; null when no snapshot exists yet. */
+  source: 'drift_scanner' | 'supabase_connector' | null
+  capturedAt: string | null
+  tables: SchemaTableRow[]
+  /** Tables beyond the cap are left out. */
+  totalTables: number
+  /** Diff against the snapshot before; null when there is only one. */
+  diff: { previousCapturedAt: string; added: string[]; removed: string[]; changed: SchemaTableChange[] } | null
+}
+
+export interface CiRunRow {
+  runId: number
+  name: string | null
+  event: string | null
+  branch: string | null
+  headSha: string | null
+  status: string | null
+  conclusion: string | null
+  startedAt: string | null
+  completedAt: string | null
+  /** Estimated billable minutes (GitHub closed the usage APIs); null when not estimated. */
+  estMinutes: number | null
+  /** https only. */
+  url: string | null
+}
+
+export interface CiView {
+  runs: CiRunRow[]
+  /** Sum over the listed runs that have an estimate. */
+  estMinutesTotal: number | null
+  estimatedRuns: number
+  note: string
+}
+
+export type DeployTargetStatus = 'live' | 'behind' | 'probe_failed' | 'unobserved' | 'not_comparable'
+
+export interface DeployTargetRow {
+  id: string
+  kind: string | null
+  environment: string | null
+  probe: string | null
+  expected: { commit: string | null; version: string | null }
+  observed: { commit: string | null; version: string | null; at: string; ok: boolean; error: string | null; source: string } | null
+  status: DeployTargetStatus
+  /** Plain-English reason for the status. */
+  reason: string
+}
+
+export interface DeployView {
+  /** The default-branch head every target should be running. */
+  expectedCommit: string | null
+  expectedVersion: string | null
+  targets: DeployTargetRow[]
+  /** Targets with observations that mushi.recipe.json no longer declares. */
+  undeclared: string[]
+}
+
+/** `not_checked`: the names there could not be listed, so nothing is claimed. */
+export type EnvCell = 'present' | 'missing' | 'extra' | 'not_required' | 'not_checked'
+
+export interface EnvMatrixColumn {
+  /** `github-actions`, `github-environment:<name>` or `runtime`. */
+  key: string
+  label: string
+  checked: boolean
+}
+
+export interface EnvMatrixRow {
+  name: string
+  /** Declared in env.required, or required by the Mushi SDK for this stack; false = only found in GitHub. */
+  declared: boolean
+  cells: Record<string, EnvCell>
+}
+
+export interface EnvView {
+  columns: EnvMatrixColumn[]
+  rows: EnvMatrixRow[]
+  /** Undeclared names beyond the cap are left out. */
+  truncated: boolean
 }
 
 export interface RecipeRefreshResult {

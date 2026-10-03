@@ -2,7 +2,9 @@
  * FILE: apps/admin/src/components/recipe/RecipeSidePanel.tsx
  * PURPOSE: Detail panel for the selected Recipe element (GraphSidePanel
  *          pattern). Tabs:
- *            • What it is — GET /recipe/elements/:element, rendered generically
+ *            • What it is — GET /recipe/elements/:element: the typed view for
+ *                           schema, CI, deploy and env (RecipeElementViews),
+ *                           the rest rendered generically
  *            • Drift      — open findings count + where they are rendered
  *            • Change     — gates, env and routes only: edit form → dry-run
  *                           diff → draft PR (RecipeChangeTab)
@@ -12,7 +14,7 @@
 
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Btn, Card, ErrorAlert, Loading, SegmentedControl, formatRelative } from '../ui'
+import { Btn, Card, DisclosurePanel, ErrorAlert, Loading, SegmentedControl, formatRelative } from '../ui'
 import { usePageData } from '../../lib/usePageData'
 import { LINK_ACCENT } from '../../lib/chipTone'
 import type { RecipeElementDetail, RecipeElementSummary } from '../../lib/recipeTypes'
@@ -21,6 +23,7 @@ import { RecipeLinkList } from './RecipeLinks'
 import { RecipeDetailValue } from './RecipeDetailValue'
 import { describeLastChecked, elementStateMeta } from './recipeState'
 import { hasChangeTab, RecipeChangeTab } from './RecipeChangeTab'
+import { detailWithoutView, pickElementView, RecipeElementView } from './RecipeElementViews'
 
 type PanelTab = 'what' | 'drift' | 'change'
 
@@ -98,12 +101,21 @@ export function RecipeSidePanel({ projectId, element, onClose }: RecipeSidePanel
 function WhatItIs({ projectId, element }: { projectId: string; element: RecipeElementSummary }) {
   const path = `/v1/admin/projects/${projectId}/recipe/elements/${encodeURIComponent(element.key)}`
   const { data, loading, error, reload } = usePageData<RecipeElementDetail>(path)
+  const view = pickElementView(data?.detail)
 
   return (
     <div className="space-y-3">
       {loading && !data && <Loading text="Loading element detail…" />}
       {error && <ErrorAlert message={error} endpoint={path} onRetry={reload} />}
-      {data && (
+      {data && view && (
+        <>
+          <RecipeElementView view={view} />
+          <DisclosurePanel title="More detail">
+            <RecipeDetailValue value={detailWithoutView(data.detail)} />
+          </DisclosurePanel>
+        </>
+      )}
+      {data && !view && (
         <div className="rounded-sm border border-edge-subtle/60 p-2">
           <RecipeDetailValue value={data.detail} />
         </div>
