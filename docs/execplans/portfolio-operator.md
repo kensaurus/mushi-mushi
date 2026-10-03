@@ -1,6 +1,6 @@
 # Portfolio Operator — Mushi for one person running many apps, sites and services
 
-> Status: `IN PROGRESS`. Researched 2026-10-02. Phases 0, 1, 3 and 4 are built and Phase 2 is partial (checked against the code 2026-10-03; see [PLANS.md](./PLANS.md) Plan 020 and §12.1 below). Seven §4.2 detectors are not in the code yet (`dead_app_live_spend`, `provider_key_invalid`, `store_credential_scope_missing`, `key_unused_90d`, `key_in_client_bundle`, `paid_feature_no_kill_switch`, `provider_limit_unset`). Apply and deploy are tracked per release batch.
+> Status: `IN PROGRESS`. Researched 2026-10-02. Phases 1, 3 and 4 are built, Phase 0 is built apart from regenerating the generated MCP docs, and Phase 2 is partial (checked against the code 2026-10-03; see [PLANS.md](./PLANS.md) Plan 020 and §12.1 below). Seven §4.2 detectors are not in the code yet (`dead_app_live_spend`, `provider_key_invalid`, `store_credential_scope_missing`, `key_unused_90d`, `key_in_client_bundle`, `paid_feature_no_kill_switch`, `provider_limit_unset`). Apply and deploy are tracked per release batch.
 > Registered as Plan 020 in [PLANS.md](./PLANS.md). The sequencing gate was struck and the §15 decisions taken on 2026-10-02: [ADR 0017](../adr/0017-strike-the-plan-019-020-sequencing-gate.md).
 > Foundation: [Plan 019 — App Recipe Control Plane](./app-recipe-control-plane.md) and [ADR 0016](../adr/0016-mushi-as-the-app-recipe-control-plane.md). The owner delegated its acceptance on 2026-10-02 (Phases 1, 1b and P1 proceed; 2, P2, 3 and any `act` stay gated), though the file still reads "Proposed". This plan **builds on** Plan 019's recipe data model, connector interface (§2b), `portfolio_resources` and portfolio rollup (§3b). It does not redefine any of them.
 > Positioning companion: [`docs/marketing/portfolio-positioning.md`](../marketing/portfolio-positioning.md).
@@ -470,7 +470,9 @@ Checked against the code on 2026-10-03.
 - [x] `webhook_never_delivered` over `integration_health_history` and inbound delivery counts.
 - [x] `_shared/repo-digest.ts`; MCP `get_repo_digest`; console "Copy digest" on `/explore` and on report detail (`CopyRepoDigestButton` with the report id).
 - [x] Diagram v0 (`_shared/repo-diagram.ts`, `ExploreDiagramPanel` on `/explore`).
-- [ ] Catalog, manifest and docs synced: `sync-mcp-discovery-card --check` needs a regeneration after the 2026-10-03 gate-findings changes, and `check:admin-docs-coverage` warns about `/recipe`, `/design`, `/analytics`, `/growth` and `/email/reporter` pages.
+- [x] `mcp-discovery-tools.json` (the hosted tools/list schema) synced with the catalog, including the `radar` gate; `gate-ids-parity.test.ts` checks its gate enum and description (2026-10-03).
+- [ ] Generated MCP docs regenerated at merge (`apps/docs/content/sdks/mcp-tools.mdx`, `apps/docs/public/llm-md/sdks/mcp-tools.md`, `apps/docs/public/llms-full.txt`, the two `docs-index.ts` files), so `check:mcp-tools-doc` and `gen-mcp-docs-index --check` pass.
+- [ ] `check:admin-docs-coverage` warns about the `/recipe`, `/design`, `/analytics`, `/growth` and `/email/reporter` pages. These pages come from other plans and were not added in Phase 0.
 
 ### 12.2 Release batching
 
