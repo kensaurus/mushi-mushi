@@ -1066,9 +1066,11 @@ ${
       validateFixProposal(fix, repo.pathGlobs);
 
       // The model flags its own low-confidence output with needsHumanReview.
-      // That used to be stored as review_passed=false and the PR opened anyway
-      // (PR #424, a blind rewrite of apps/docs/app/layout.tsx). A flagged fix
-      // never reaches GitHub; the proposal stays on the attempt for a human.
+      // PR #424 was a blind whole-file rewrite opened anyway. Fixes are now
+      // find/replace edits anchored to the real file, so a flagged fix whose
+      // edits apply cleanly opens as a DRAFT PR (never marked ready, labelled
+      // needs-review, banner in the body) for a person to judge. A flagged fix
+      // that cannot be applied to the real files is still stopped here.
       const reviewBlock = (f: FixOutput, reason: string) =>
         blockFixAttempt(db, trace, dispatch, fixAttemptId, reason.slice(0, 450), {
           files_changed: f.files.map((x) => x.path),
@@ -1082,7 +1084,7 @@ ${
         });
       const reviewFailedReason = (f: FixOutput) =>
         `review_failed: the fix model flagged its own change for human review. ${f.rationale}`;
-      if (!fixReviewPassed(fix)) {
+      if (!fixReviewPassed(fix) && !(ghToken && base)) {
         llmSpan.end({ model: usedModel, inputTokens, outputTokens, latencyMs: Date.now() - llmStart });
         return await reviewBlock(fix, reviewFailedReason(fix));
       }
@@ -1113,10 +1115,6 @@ ${
           if (retried instanceof Response) return retried;
           fix = retried;
           validateFixProposal(fix, repo.pathGlobs);
-          if (!fixReviewPassed(fix)) {
-            llmSpan.end({ model: usedModel, inputTokens, outputTokens, latencyMs: Date.now() - llmStart });
-            return await reviewBlock(fix, reviewFailedReason(fix));
-          }
           await readMissing(fix);
           applied = materializeFixFiles(fix.files, baseStates);
           if (applied.errors.length > 0) {
@@ -1279,7 +1277,9 @@ ${
           title: fix.summary,
           body: buildPrBody({ ...fix, files: prFiles }, dispatch.report_id),
           files: prFiles,
-          labels: ['mushi-autofix'],
+          labels: fixReviewPassed(fix) ? ['mushi-autofix'] : ['mushi-autofix', 'needs-review'],
+          // A fix the model flagged stays a draft: CI and merge wait for a person.
+          markReady: fixReviewPassed(fix),
           // `Fixes <SHORT-ID>` for Sentry-linked reports (sentry-resolve-back.ts).
           commitTrailers: sentryFixesTrailers(
             await sentryShortIdsForReport(db, dispatch.project_id, dispatch.report_id),

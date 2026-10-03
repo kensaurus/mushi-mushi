@@ -172,17 +172,27 @@ describe('fix-worker wiring', () => {
   // that the review gate runs before anything is applied or written.
   const tokenResolve = src.indexOf('const ghToken = await resolveGithubToken(')
   const firstModelCall = src.indexOf('await generateFix(null)')
-  const reviewGate = src.indexOf('if (!fixReviewPassed(fix))')
+  const reviewGate = src.indexOf('if (!fixReviewPassed(fix) && !(ghToken && base))')
   const materialize = src.indexOf('materializeFixFiles(fix.files, baseStates)')
   const fileGuard = src.indexOf('assessFixFiles(materialized, baseStates')
   const prCreate = src.indexOf('await createPrFromFiles(')
 
-  it('runs the review gate before any edit is applied or GitHub write, so no review_passed=false fix opens a PR', () => {
+  it('runs the review gate before any edit is applied or GitHub write', () => {
     expect(tokenResolve).toBeGreaterThan(0)
     expect(tokenResolve).toBeLessThan(firstModelCall)
     expect(reviewGate).toBeGreaterThan(firstModelCall)
     expect(reviewGate).toBeLessThan(materialize)
     expect(reviewGate).toBeLessThan(prCreate)
+  })
+
+  it('a fix the model flagged reaches GitHub only as a draft PR labelled needs-review', () => {
+    // Flagged + no way to apply edits to real files: stopped (the PR #424 case).
+    expect(reviewGate).toBeGreaterThan(0)
+    // Flagged + edits applied cleanly: a draft that is never marked ready.
+    expect(src).toContain('markReady: fixReviewPassed(fix),')
+    expect(src).toContain("labels: fixReviewPassed(fix) ? ['mushi-autofix'] : ['mushi-autofix', 'needs-review'],")
+    // A second failure to apply the edits still ends the attempt without a PR.
+    expect(src).toMatch(/the fix's edits could not be applied/)
   })
 
   it('runs the blind-write guard on the patched files before the PR and commits only the files it kept', () => {
