@@ -6,6 +6,8 @@
  *          - mcp-publisher is a pinned, checksum-verified release, the same one
  *            in both workflows that run it.
  *          - Post-publish steps survive a failure in a sibling step.
+ *          - The sdk_versions catalogue refresh authenticates with OIDC, not a
+ *            Supabase key, from a job that runs no repository code.
  */
 
 import assert from 'node:assert/strict'
@@ -83,7 +85,6 @@ describe('post-publish steps', () => {
     'Audit signatures of installed dependencies',
     'Aggregate public changelog',
     'Commit aggregated changelog',
-    'Sync published versions to sdk_versions catalog',
     'Published packages summary',
   ]) {
     it(`"${name}" still runs when a sibling post-publish step failed`, () => {
@@ -140,6 +141,23 @@ describe('jobs after the publish', () => {
       /\n {4}if: \$\{\{ !cancelled\(\) && needs\.release\.outputs\.published == 'true' && contains\(needs\.release\.outputs\.publishedPackages, '"@mushi-mushi\/mcp"'\) \}\}/,
     )
     assert.match(text, /continue-on-error: true/)
+  })
+
+  it('the catalog-sync job holds only an OIDC token and runs no repository code', () => {
+    const text = job('catalog-sync')
+    assert.deepEqual(permissions(text), { 'id-token': 'write' })
+    assert.match(text, /\n {4}needs: release\n/)
+    assert.match(text, /\n {4}if: \$\{\{ !cancelled\(\) && needs\.release\.outputs\.published == 'true' \}\}/)
+    assert.match(text, /\n {4}timeout-minutes: 5\n/)
+    assert.doesNotMatch(code(text), /actions\/checkout|pnpm|npm install|setup-node/)
+    assert.match(text, /OIDC_AUDIENCE: mushi-sdk-catalog\n/)
+    assert.match(text, /functions\/v1\/sdk-versions-cron/)
+    assert.match(text, /::add-mask::/)
+  })
+
+  it('no Supabase service-role key is in scope anywhere in the release workflow', () => {
+    assert.doesNotMatch(release, /SUPABASE_SERVICE_ROLE_KEY/)
+    assert.doesNotMatch(release, /sync-sdk-versions/)
   })
 
   it('the SBOM job attaches release assets without an OIDC token', () => {
