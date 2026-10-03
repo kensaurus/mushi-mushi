@@ -86,9 +86,19 @@ async function isOrgAdmin(db: Db, orgId: string, userId: string): Promise<boolea
   return role === 'owner' || role === 'admin'
 }
 
+/** The change is already saved; a lost audit row must still be visible in the logs. */
 async function audit(db: Db, orgId: string, actorId: string, action: string, resourceId: string, metadata: Record<string, unknown>) {
-  await db.from('org_audit_events').insert({ organization_id: orgId, actor_id: actorId, action, resource_type: 'portfolio_account', resource_id: resourceId, metadata }).then(() => {}, () => {})
+  try {
+    const { error } = await db.from('org_audit_events').insert({ organization_id: orgId, actor_id: actorId, action, resource_type: 'portfolio_account', resource_id: resourceId, metadata })
+    if (error) alog.error('audit event not stored', { orgId, action, resourceId, err: error.message })
+  } catch (err) {
+    alog.error('audit event not stored', { orgId, action, resourceId, err: (err as Error)?.message })
+  }
 }
+
+/** Postgres unique_violation: two saves of the same provider and name raced past the duplicate check. */
+const isUniqueViolation = (err: { code?: string } | null): boolean => err?.code === '23505'
+const ACCOUNT_EXISTS_MESSAGE = 'An account with that provider and name is already in the register.'
 
 /** Accounts of the organization plus the domains its visible projects use. Throws on a failed read. */
 async function loadRegister(db: Db, orgId: string, projectIds: readonly string[]) {
@@ -164,8 +174,9 @@ export function registerAccountsRegisterRoutes(app: Hono<{ Variables: Variables 
     if (countErr) return jsonError(c, 'DB_ERROR', 'The register could not be read.', 500)
     if (((existing ?? []) as unknown[]).length >= MAX_ACCOUNTS) return jsonError(c, 'TOO_MANY_ACCOUNTS', `A register holds at most ${MAX_ACCOUNTS} accounts.`, 400)
     const externalId = accountExternalId(body.provider, body.displayName)
-    const { data: dup } = await w.db.from('portfolio_resources').select('id').eq('organization_id', w.orgId).eq('kind', 'account').eq('external_id', externalId).maybeSingle()
-    if (dup) return jsonError(c, 'ACCOUNT_EXISTS', 'An account with that provider and name is already in the register.', 409)
+    const { data: dup, error: dupErr } = await w.db.from('portfolio_resources').select('id').eq('organization_id', w.orgId).eq('kind', 'account').eq('external_id', externalId).maybeSingle()
+    if (dupErr) return jsonError(c, 'DB_ERROR', 'The register could not be read.', 500)
+    if (dup) return jsonError(c, 'ACCOUNT_EXISTS', ACCOUNT_EXISTS_MESSAGE, 409)
     const now = deps.now().toISOString()
     const { data: row, error } = await w.db.from('portfolio_resources').insert({
       organization_id: w.orgId, kind: 'account', external_id: externalId, metadata: {},
@@ -173,6 +184,7 @@ export function registerAccountsRegisterRoutes(app: Hono<{ Variables: Variables 
       two_factor_declared: body.twoFactorDeclared ?? null, recovery_contact: body.recoveryContact ?? null,
       admin_count: body.adminCount ?? 1, auto_renew: body.autoRenew ?? null, created_at: now, updated_at: now,
     }).select('id').single()
+    if (isUniqueViolation(error)) return jsonError(c, 'ACCOUNT_EXISTS', ACCOUNT_EXISTS_MESSAGE, 409)
     if (error || !row) return jsonError(c, 'DB_ERROR', 'The account could not be saved.', 500)
     const id = (row as { id: string }).id
     await audit(w.db, w.orgId, w.userId, 'portfolio_account.created', id, { provider: body.provider })
@@ -184,13 +196,15 @@ export function registerAccountsRegisterRoutes(app: Hono<{ Variables: Variables 
     if (!w.ok) return w
     const id = c.req.param('id') ?? ''
     if (!UUID_RE.test(id)) return { ok: false as const, response: jsonError(c, 'NOT_FOUND', 'Not found', 404) }
-    const { data: row } = await w.db.from('portfolio_resources').select(REGISTER_COLUMNS).eq('id', id).eq('organization_id', w.orgId).eq('kind', kind).maybeSingle()
+    const { data: row, error: rowErr } = await w.db.from('portfolio_resources').select(REGISTER_COLUMNS).eq('id', id).eq('organization_id', w.orgId).eq('kind', kind).maybeSingle()
+    if (rowErr) return { ok: false as const, response: jsonError(c, 'DB_ERROR', 'The register could not be read.', 500) }
     if (!row) return { ok: false as const, response: jsonError(c, 'NOT_FOUND', 'Not found', 404) }
     if (kind === 'domain') {
       // Same visibility as the read: a domain one of the caller's projects uses.
-      const { data: use } = w.projectIds.length
+      const { data: use, error: useErr } = w.projectIds.length
         ? await w.db.from('portfolio_resource_uses').select('resource_id').eq('resource_id', id).in('project_id', w.projectIds).limit(1).maybeSingle()
-        : { data: null }
+        : { data: null, error: null }
+      if (useErr) return { ok: false as const, response: jsonError(c, 'DB_ERROR', 'The register could not be read.', 500) }
       if (!use) return { ok: false as const, response: jsonError(c, 'NOT_FOUND', 'Not found', 404) }
     }
     return { ...w, row: row as unknown as RegisterRow }
@@ -212,8 +226,9 @@ export function registerAccountsRegisterRoutes(app: Hono<{ Variables: Variables 
       update.account_provider = provider
       update.display_name = name
       if (update.external_id !== w.row.external_id) {
-        const { data: dup } = await w.db.from('portfolio_resources').select('id').eq('organization_id', w.orgId).eq('kind', 'account').eq('external_id', update.external_id as string).maybeSingle()
-        if (dup) return jsonError(c, 'ACCOUNT_EXISTS', 'An account with that provider and name is already in the register.', 409)
+        const { data: dup, error: dupErr } = await w.db.from('portfolio_resources').select('id').eq('organization_id', w.orgId).eq('kind', 'account').eq('external_id', update.external_id as string).maybeSingle()
+        if (dupErr) return jsonError(c, 'DB_ERROR', 'The register could not be read.', 500)
+        if (dup) return jsonError(c, 'ACCOUNT_EXISTS', ACCOUNT_EXISTS_MESSAGE, 409)
       }
     }
     if (body.ownerEmail !== undefined) update.owner_email = body.ownerEmail
@@ -222,6 +237,7 @@ export function registerAccountsRegisterRoutes(app: Hono<{ Variables: Variables 
     if (body.adminCount !== undefined) update.admin_count = body.adminCount
     if (body.autoRenew !== undefined) update.auto_renew = body.autoRenew
     const { error } = await w.db.from('portfolio_resources').update(update).eq('id', w.row.id)
+    if (isUniqueViolation(error)) return jsonError(c, 'ACCOUNT_EXISTS', ACCOUNT_EXISTS_MESSAGE, 409)
     if (error) return jsonError(c, 'DB_ERROR', 'The account could not be updated.', 500)
     await audit(w.db, w.orgId, w.userId, 'portfolio_account.updated', w.row.id, { fields: Object.keys(body) })
     return c.json({ ok: true, data: { id: w.row.id } })

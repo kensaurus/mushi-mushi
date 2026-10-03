@@ -90,7 +90,32 @@ describe('register rules', () => {
 
 // ── routes ───────────────────────────────────────────────────────────────────
 
-type Handler = (c: any, next?: () => Promise<void>) => Promise<unknown> | unknown
+/** The slice of Hono's Context these routes use. */
+interface FakeCtx {
+  req: { json: () => Promise<unknown>; param: (k: string) => string | undefined; query: () => undefined; header: () => undefined }
+  get: (k: string) => unknown
+  set: (k: string, v: unknown) => void
+  header: () => void
+  json: (body: unknown, status?: number) => { body: unknown; status: number }
+}
+type Handler = (c: FakeCtx, next?: () => Promise<void>) => Promise<unknown> | unknown
+
+/** What the tests read from a response: the JSON envelope, or the text and type of a download. */
+interface RouteBody {
+  ok: boolean
+  data: {
+    id: string
+    canEdit: boolean
+    deleted: boolean
+    accounts: Array<Record<string, unknown>>
+    domains: Array<{ domain: string }>
+    findings: Array<{ ruleId: string }>
+  }
+  error: { code: string; message: string }
+  text: string
+  type: string | null
+}
+
 class FakeApp {
   routes: Array<{ method: string; pattern: RegExp; keys: string[]; handlers: Handler[] }> = []
   private add(method: string, path: string, handlers: Handler[]) {
@@ -101,13 +126,13 @@ class FakeApp {
   post(p: string, ...h: Handler[]) { this.add('POST', p, h) }
   patch(p: string, ...h: Handler[]) { this.add('PATCH', p, h) }
   delete(p: string, ...h: Handler[]) { this.add('DELETE', p, h) }
-  async call(method: string, url: string, opts: { body?: unknown; vars?: Record<string, unknown> } = {}): Promise<{ status: number; body: any }> {
+  async call(method: string, url: string, opts: { body?: unknown; vars?: Record<string, unknown> } = {}): Promise<{ status: number; body: RouteBody }> {
     for (const r of this.routes) {
       const m = r.pattern.exec(url)
       if (r.method !== method || !m) continue
       const params = Object.fromEntries(r.keys.map((k, i) => [k, m[i + 1]]))
       const vars: Record<string, unknown> = { userId: 'owner', authMethod: 'jwt', ...opts.vars }
-      const c = {
+      const c: FakeCtx = {
         req: { json: async () => opts.body, param: (k: string) => params[k], query: () => undefined, header: () => undefined },
         get: (k: string) => vars[k], set: (k: string, v: unknown) => { vars[k] = v }, header: () => {},
         json: (body: unknown, status = 200) => ({ body, status }),
@@ -119,8 +144,8 @@ class FakeApp {
         if (result === undefined && short !== undefined) result = short
       }
       await go(0)
-      if (result instanceof Response) return { status: result.status, body: { text: await result.text(), type: result.headers.get('content-type') } }
-      return result as { status: number; body: any }
+      if (result instanceof Response) return { status: result.status, body: { text: await result.text(), type: result.headers.get('content-type') } as RouteBody }
+      return result as { status: number; body: RouteBody }
     }
     throw new Error(`no route ${method} ${url}`)
   }
@@ -142,6 +167,32 @@ function seed(extra: Record<string, unknown[]> = {}): FakeDb {
     portfolio_resource_uses: [{ resource_id: D1, project_id: P1, role: 'site', source: 'manifest' }],
     ...extra,
   } as never, { autoId: true })
+}
+
+/**
+ * Another save of the same account lands between the duplicate check and this
+ * write: the check sees nothing, the database's unique key answers 23505.
+ */
+function racingDb(db: FakeDb): FakeDb {
+  const nothing = { data: null, error: null }
+  const conflict = { data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint "portfolio_resources_organization_id_kind_external_id_key"' } }
+  const resolved = (v: unknown): unknown => new Proxy({}, { get: (_t, prop) => (prop === 'then' ? (ok: (x: unknown) => unknown) => Promise.resolve(v).then(ok) : () => resolved(v)) })
+  return new Proxy(db, {
+    get: (t, prop, r) => prop === 'from'
+      ? (name: string) => {
+          const q = t.from(name)
+          if (name !== 'portfolio_resources') return q
+          return new Proxy(q, {
+            get: (qt, qp, qr) => {
+              if (qp === 'insert' || qp === 'update') return () => resolved(conflict)
+              // The duplicate lookup (by external_id) sees nothing yet.
+              if (qp === 'eq') return (k: string, v: unknown) => (k === 'external_id' ? resolved(nothing) : Reflect.apply(Reflect.get(qt, qp, qr) as (a: string, b: unknown) => unknown, qr, [k, v]))
+              return Reflect.get(qt, qp, qr)
+            },
+          })
+        }
+      : Reflect.get(t, prop, r),
+  })
 }
 
 function harness(db: FakeDb) {
@@ -180,6 +231,36 @@ describe('accounts register routes', () => {
     expect(secret.body.error.code).toBe('SECRET_DETECTED')
     expect((await app.call('POST', `/v1/admin/orgs/${ORG}/accounts`, { body: { provider: 'aws', displayName: 'x', password: 'hunter2' } })).status).toBe(400)
     expect(db.table('portfolio_resources').filter((r) => r.kind === 'account')).toHaveLength(1)
+  })
+
+  it('two saves of the same account at once: the loser gets 409 ACCOUNT_EXISTS, not a 500', async () => {
+    const db = seed()
+    const created = await harness(db).call('POST', `/v1/admin/orgs/${ORG}/accounts`, { body: { provider: 'stripe', displayName: 'Payments' } })
+    const id = created.body.data.id
+    const raced = harness(racingDb(db))
+    const post = await raced.call('POST', `/v1/admin/orgs/${ORG}/accounts`, { body: { provider: 'stripe', displayName: 'Payments' } })
+    expect(post.status).toBe(409)
+    expect(post.body.error.code).toBe('ACCOUNT_EXISTS')
+    const rename = await raced.call('PATCH', `/v1/admin/orgs/${ORG}/accounts/${id}`, { body: { displayName: 'Payments EU' } })
+    expect(rename.status).toBe(409)
+    expect(rename.body.error.code).toBe('ACCOUNT_EXISTS')
+  })
+
+  it('a failed duplicate lookup is a 500, never a save past an unchecked duplicate', async () => {
+    const db = seed()
+    const failed = { data: null, error: { message: 'statement timeout' } }
+    const chain: unknown = new Proxy({}, { get: (_t, prop) => (prop === 'then' ? (ok: (v: unknown) => unknown) => Promise.resolve(failed).then(ok) : () => chain) })
+    // Count read works, the duplicate lookup (the second read) times out.
+    let reads = 0
+    const flaky = new Proxy(db, {
+      get: (t, prop, r) => prop === 'from'
+        ? (name: string) => (name === 'portfolio_resources' && ++reads === 2 ? chain : t.from(name))
+        : Reflect.get(t, prop, r),
+    })
+    const res = await harness(flaky).call('POST', `/v1/admin/orgs/${ORG}/accounts`, { body: { provider: 'stripe', displayName: 'Payments' } })
+    expect(res.status).toBe(500)
+    expect(res.body.error.code).toBe('DB_ERROR')
+    expect(db.table('portfolio_resources').filter((x) => x.kind === 'account')).toHaveLength(0)
   })
 
   it('updates an account (a recovery contact clears the rule) and deletes it', async () => {
