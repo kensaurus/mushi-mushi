@@ -185,10 +185,12 @@ export async function collectDigest(db: Db, organizationId: string, now: Date): 
   }
   keep(recentRuns)
   // An app whose latest check is older than the window still has one: read it, never "not checked yet".
-  const stale = ids.filter((id) => DIGEST_RADAR_GATES.some((g) => !latestRun.has(`${id}:${g}`)))
-  if (stale.length) {
+  // Per gate, and only for the apps missing that gate, so a recent run is never re-read with its history.
+  for (const gate of DIGEST_RADAR_GATES) {
+    const stale = ids.filter((id) => !latestRun.has(`${id}:${gate}`))
+    if (stale.length === 0) continue
     keep(await readAllOrThrow<RunRow>('older hole-check runs', truncated, (from, to, count) =>
-      db.from('gate_runs').select('id, project_id, gate, status, summary, started_at', { count }).in('project_id', stale).in('gate', DIGEST_RADAR_GATES)
+      db.from('gate_runs').select('id, project_id, gate, status, summary, started_at', { count }).in('project_id', stale).eq('gate', gate)
         .lt('started_at', month).order('started_at', { ascending: false }).order('id', { ascending: true }).range(from, to)))
   }
   const runIds = [...latestRun.values()].map((r) => r.id)

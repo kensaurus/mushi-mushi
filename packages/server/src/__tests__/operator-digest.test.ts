@@ -270,6 +270,31 @@ describe('collectDigest past the server row cap', () => {
     expect(data.projects[0].radar).toEqual({ error: 0, warn: 1, checked: true, failed: false })
   })
 
+  it('never re-reads the history of a gate that ran in the last 30 days', async () => {
+    const db = makeFakeDb({
+      organizations: [{ id: ORG, name: 'A' }],
+      projects: [{ id: P1, name: 'glot.it', organization_id: ORG }],
+      reports: [], releases: [], llm_invocations: [], gate_findings: [],
+      // A recent scheduled run, 1,100 older ones, and no host-CI run at all.
+      gate_runs: [
+        { id: 'r-new', project_id: P1, gate: 'portfolio_radar', status: 'pass', summary: {}, started_at: '2026-10-02T04:05:00Z' },
+        ...Array.from({ length: 1_100 }, (_, i) => ({ id: `r-old-${String(i).padStart(5, '0')}`, project_id: P1, gate: 'portfolio_radar', status: 'pass', summary: {}, started_at: OLD })),
+      ],
+    } as never, { maxRows: 1_000 })
+    let gateRunReads = 0
+    const counted = new Proxy(db, {
+      get: (t, prop, r) => (prop === 'from' ? (name: string) => {
+        if (name === 'gate_runs') gateRunReads++
+        return t.from(name)
+      } : Reflect.get(t, prop, r)),
+    })
+    const data = await digest.collectDigest(counted as never, ORG, NOW)
+    // One recent read and one (empty) older read for the host-CI gate; none of the 1,100 old rows.
+    expect(gateRunReads).toBe(2)
+    expect(data.truncated).toEqual([])
+    expect(data.projects[0].radar).toMatchObject({ checked: true, failed: false })
+  })
+
   it('says a cut-short read out loud as a lower bound', () => {
     const d = digest.composeDigest({ organizationId: ORG, organizationName: 'A', generatedAt: '', truncated: ['open reports'], projects: [line({})] }, 'u')
     expect(d.hasContent).toBe(true)
