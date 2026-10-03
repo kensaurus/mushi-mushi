@@ -19,6 +19,7 @@ export default {
 
   // Do — make the fix
   connect: 'Connect hub (console)',
+  'sdk-upgrade-lockfile': 'SDK upgrade lockfile helper',
   'cli-auth': 'CLI device auth',
   'mcp-auth': 'MCP OAuth consent',
   'setup-copilot': 'Setup Copilot',
