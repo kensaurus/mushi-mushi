@@ -63,6 +63,6 @@ pass).
   in one click from there.
 - The route is now reachable by more callers; its cost is one indexed select of
   at most 50 runs and 500 findings, already bounded.
-- `entitlements.test.ts` and the route test pin both halves: the findings read
-  answers on a plan without `inventory_v2`, and the rest of the prefix still
-  returns 402.
+- `inventory-findings-plan.test.ts` pins both halves and the `except` entry:
+  the findings read answers on a plan without `inventory_v2`, and the rest of
+  the prefix still returns 402.

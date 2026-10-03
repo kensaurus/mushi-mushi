@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { describeSpendCaps, latestOpenFindings, spendCapSuggestion } from './gateFindings'
-import { GATE_IDS, GATE_LABELS, gateLabel } from './gateLabels'
+import { describeSpendCaps, findingsReadTruncated, latestOpenFindings, spendCapSuggestion } from './gateFindings'
+import { gateLabel } from './gateLabels'
 
 describe('latestOpenFindings', () => {
   it('keeps the newest finished run per gate, drops allowlisted, most severe first', () => {
@@ -19,6 +19,27 @@ describe('latestOpenFindings', () => {
       ],
     })
     expect(out.map((f) => [f.id, f.gate])).toEqual([['c', 'code_health'], ['a', 'radar']])
+  })
+})
+
+describe('design refresh runs and the route caps', () => {
+  it('a design refresh run never hides the latest design scan', () => {
+    const out = latestOpenFindings({
+      runs: [
+        { id: 'refresh', gate: 'design_drift', status: 'pass', summary: { phase: 'refresh' } },
+        { id: 'scan', gate: 'design_drift', status: 'fail', summary: {} },
+      ],
+      findings: [{ id: 'f', gate_run_id: 'scan', severity: 'warn', message: 'off-token colour' }],
+    })
+    expect(out.map((f) => f.id)).toEqual(['f'])
+  })
+
+  it('reports a read that hit the 50-run or 500-finding cap', () => {
+    const runs = Array.from({ length: 50 }, (_, i) => ({ id: `r${i}`, gate: 'code_health', status: 'pass' }))
+    expect(findingsReadTruncated({ runs, findings: [] })).toBe(true)
+    expect(findingsReadTruncated({ runs: runs.slice(0, 3), findings: [] })).toBe(false)
+    const findings = Array.from({ length: 500 }, (_, i) => ({ id: `f${i}`, gate_run_id: 'r0', message: 'm' }))
+    expect(findingsReadTruncated({ runs: runs.slice(0, 1), findings })).toBe(true)
   })
 })
 
@@ -41,7 +62,10 @@ describe('spendCapSuggestion', () => {
 
 describe('gate labels', () => {
   it('labels every gate, including the setup and hole checks', () => {
-    for (const gate of GATE_IDS) expect(GATE_LABELS[gate].length, gate).toBeGreaterThan(3)
+    // Every gate is pinned by packages/server/src/__tests__/gate-ids-parity.test.ts.
+    for (const gate of ['ci_drift', 'deploy_drift', 'env_drift', 'design_drift', 'code_health', 'portfolio_radar', 'portfolio_radar_ci']) {
+      expect(gateLabel(gate), gate).not.toBe(gate)
+    }
     expect(gateLabel('radar')).toBe('Mushi setup checks')
     expect(gateLabel('store_review')).toBe('Store review checklist')
     expect(gateLabel('not_a_gate')).toBe('not_a_gate')

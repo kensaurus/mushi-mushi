@@ -8,7 +8,7 @@
  * render as its raw id on the Full-stack audit page.
  */
 
-export const GATE_IDS = [
+const GATE_IDS = [
   'dead_handler',
   'mock_leak',
   'api_contract',
@@ -31,7 +31,7 @@ export const GATE_IDS = [
 
 export type GateId = (typeof GATE_IDS)[number]
 
-export const GATE_LABELS: Record<GateId, string> = {
+const GATE_LABELS: Record<GateId, string> = {
   dead_handler: 'Dead handlers (G1)',
   mock_leak: 'Mock data in production (G2)',
   api_contract: 'API contract (G3)',
@@ -52,7 +52,7 @@ export const GATE_LABELS: Record<GateId, string> = {
   store_review: 'Store review checklist',
 }
 
-export function isGateId(gate: string): gate is GateId {
+function isGateId(gate: string): gate is GateId {
   return (GATE_IDS as readonly string[]).includes(gate)
 }
 

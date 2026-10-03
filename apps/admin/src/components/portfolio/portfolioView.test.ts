@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import type { PortfolioCard } from '../../lib/portfolioTypes'
 import {
   budgetText,
-  COULD_NOT_READ,
   kindLabel,
   openReportsText,
   radarLabel,
@@ -83,9 +82,9 @@ describe('radarStateMeta', () => {
       openReports: 3,
       radar: { checkedAt: '2026-10-02T00:00:00Z', status: 'pass', open: { error: 0, warn: 0, info: 0 }, unchecked: 0, errored: 0 },
     })
-    expect(spendText(unread)).toBe(COULD_NOT_READ)
-    expect(budgetText(unread)).toBe(COULD_NOT_READ)
-    expect(releaseText(unread)).toBe(COULD_NOT_READ)
+    expect(spendText(unread)).toBe('Could not read')
+    expect(budgetText(unread)).toBe('Could not read')
+    expect(releaseText(unread)).toBe('Could not read')
     expect(openReportsText(unread)).toBe('3+')
     expect(kindLabel(unread)).toBe('Kind: could not read')
     expect(sdkLabel(unread.sdk, unread.unreadable).text).toBe('SDK: could not read')

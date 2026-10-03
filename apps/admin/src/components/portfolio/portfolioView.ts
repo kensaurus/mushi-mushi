@@ -23,7 +23,7 @@ export function sortPortfolioCards(cards: readonly PortfolioCard[]): PortfolioCa
   )
 }
 
-export const COULD_NOT_READ = 'Could not read'
+const COULD_NOT_READ = 'Could not read'
 
 export function radarLabel(r: PortfolioRadarColumn, unreadable: readonly PortfolioReadPart[] = []): { text: string; tone: BadgeTone; hint: string } {
   if (unreadable.includes('gate_runs') || unreadable.includes('findings')) {
