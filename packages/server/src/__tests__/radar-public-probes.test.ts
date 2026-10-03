@@ -9,6 +9,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
+  decodeEntities,
   PUBLIC_PROBE_RULES,
   appleLocale,
   missingSecurityHeaders,
@@ -310,5 +311,12 @@ describe('runPublicProbes', () => {
     const results = await runPublicProbes(t, throwing, NOW)
     expect(results).toHaveLength(6)
     expect(results.every((r) => r.state === 'unknown' && r.findings.length === 0)).toBe(true)
+  })
+})
+
+describe('decodeEntities', () => {
+  it('decodes valid numeric entities and keeps out-of-range ones as written instead of throwing', () => {
+    expect(decodeEntities('A&#66;&#x43;')).toBe('ABC')
+    expect(decodeEntities('x&#99999999;y&#x110000;z')).toBe('x&#99999999;y&#x110000;z')
   })
 })

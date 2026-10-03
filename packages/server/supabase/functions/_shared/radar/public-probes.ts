@@ -87,10 +87,16 @@ export function parseItunesLookup(text: string): StoreListing | null {
   }
 }
 
-function decodeEntities(s: string): string {
+/** A numeric entity outside Unicode (e.g. `&#99999999;`) would make fromCodePoint throw; keep it as written. */
+function codePointOrRaw(raw: string, cp: number): string {
+  return Number.isInteger(cp) && cp >= 0 && cp <= 0x10ffff ? String.fromCodePoint(cp) : raw
+}
+
+/** @internal Exported for unit tests only. */
+export function decodeEntities(s: string): string {
   return s
-    .replace(/&#(\d+);/g, (_m, d) => String.fromCodePoint(Number(d)))
-    .replace(/&#x([0-9a-f]+);/gi, (_m, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d{1,8});/g, (m, d) => codePointOrRaw(m, Number(d)))
+    .replace(/&#x([0-9a-f]{1,8});/gi, (m, h) => codePointOrRaw(m, parseInt(h, 16)))
     .replace(/&quot;/g, '"')
     .replace(/&#39;|&apos;/g, "'")
     .replace(/&lt;/g, '<')
