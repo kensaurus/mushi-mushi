@@ -414,6 +414,27 @@ describe('deviance runs', () => {
     expect(ex.findings).toEqual([{ file: 'app/page.tsx', line: 4, rule: 'off_token_color', value: '#E8387F', use: '--color-cta' }])
     expect(ex.score).toBe(21)
   })
+
+  it('a newer push from an old CLI (ci_scan, no score) never blanks the shown score or findings', async () => {
+    const run = { id: 'run-2', project_id: P_A, gate: 'design_drift', status: 'warn', started_at: '2026-10-02T11:30:00Z', completed_at: '2026-10-02T11:31:00Z', summary: { phase: 'scan', score: 21, scannedFiles: 3, scannedLines: 900, matchedFiles: 3, breakdown: [], counts: { off_token_color: 1 } }, findings_count: 1, commit_sha: 'abc' }
+    const legacy = { id: 'run-ci', project_id: P_A, gate: 'design_drift', status: 'warn', started_at: '2026-10-02T11:50:00Z', completed_at: '2026-10-02T11:50:00Z', summary: { phase: 'ci_scan', source: 'ci', score: null, scannedFiles: 9, storedFindings: 1 }, findings_count: 1, commit_sha: 'def' }
+    const finding = { id: 'f1', gate_run_id: 'run-2', project_id: P_A, severity: 'warn', rule_id: 'off_token_color', message: 'Colour #E8387F is not in your tokens.', file_path: 'app/page.tsx', line: 4, col: 9, allowlisted: false, suggested_fix: { value: '#E8387F', suggestion: null } }
+    const legacyFinding = { id: 'f2', gate_run_id: 'run-ci', project_id: P_A, severity: 'warn', rule_id: 'off_token_literal', message: 'x', file_path: 'app/x.tsx', line: 1, col: null, allowlisted: false, suggested_fix: null }
+    const { app } = harness(seed({ app_recipe_snapshots: [glotSnapshot(P_A)], gate_runs: [legacy, run], gate_findings: [finding, legacyFinding] }))
+    const d = (await app.call('GET', `/v1/admin/projects/${P_A}/design`)).body.data as { deviance: { latest: { runId: string; score: number } } }
+    expect(d.deviance.latest).toMatchObject({ runId: 'run-2', score: 21 })
+    const dev = (await app.call('GET', `/v1/admin/projects/${P_A}/design/deviance`)).body.data as { latest: { runId: string }; findings: Array<{ rule_id: string }> }
+    expect(dev.latest.runId).toBe('run-2')
+    expect(dev.findings.map((f) => f.rule_id)).toEqual(['off_token_color'])
+  })
+
+  it('a CI push scored with the shared engine (phase scan, source ci) is the latest scan', async () => {
+    const run = { id: 'run-2', project_id: P_A, gate: 'design_drift', status: 'warn', started_at: '2026-10-02T11:30:00Z', completed_at: '2026-10-02T11:31:00Z', summary: { phase: 'scan', score: 21, scannedFiles: 3, scannedLines: 900 }, findings_count: 1, commit_sha: 'abc' }
+    const ci = { id: 'run-ci', project_id: P_A, gate: 'design_drift', status: 'pass', started_at: '2026-10-02T11:50:00Z', completed_at: '2026-10-02T11:50:00Z', summary: { phase: 'scan', source: 'ci', score: 4, scannedFiles: 12, scannedLines: 2400 }, findings_count: 0, commit_sha: 'def' }
+    const { app } = harness(seed({ app_recipe_snapshots: [glotSnapshot(P_A)], gate_runs: [ci, run] }))
+    const d = (await app.call('GET', `/v1/admin/projects/${P_A}/design`)).body.data as { deviance: { latest: { runId: string; score: number } } }
+    expect(d.deviance.latest).toMatchObject({ runId: 'run-ci', score: 4 })
+  })
 })
 
 // ── the Directions board ─────────────────────────────────────────────────────

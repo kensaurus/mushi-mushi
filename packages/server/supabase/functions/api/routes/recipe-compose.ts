@@ -108,8 +108,16 @@ async function openFindingCounts(db: Db, runIds: string[]): Promise<Map<string, 
   return out
 }
 
+/**
+ * Whether a design_drift run is a deviance scan the score and the deviance
+ * list may come from. Not a scan: a failed refresh (`refresh`), and a push
+ * from a CLI older than the shared rule engine (`ci_scan`: rule
+ * `off_token_literal`, no score). A CI push scored with the shared engine is
+ * written as `phase: 'scan', source: 'ci'` and counts like a server scan.
+ */
 export function isScanRun(r: Pick<GateRunRow, 'summary'>): boolean {
-  return (r.summary as { phase?: string } | null)?.phase !== 'refresh'
+  const phase = (r.summary as { phase?: string } | null)?.phase
+  return phase !== 'refresh' && phase !== 'ci_scan'
 }
 
 /** A `running` row older than STUCK_SCAN_MS never finished; it reads as `error`, never as running forever. */
