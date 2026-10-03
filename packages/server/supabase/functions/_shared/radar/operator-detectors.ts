@@ -124,6 +124,12 @@ export interface CredentialObservation {
   at: string | null
   ok: boolean
   failure: Failure | null
+  /**
+   * The failure is the credential's current stored state, not only what a past
+   * check saw: a BYOK key marked auth_failed stays that way until a test passes,
+   * so it is judged however old its last test is.
+   */
+  standing?: boolean
 }
 
 export const STORE_CONNECTOR_KINDS = ['play_console', 'app_store_connect'] as const
@@ -156,11 +162,17 @@ export interface ByokCredentialRow {
 const USABLE_BYOK_STATUSES = new Set(['active', 'quota_exhausted'])
 export const isUsableByokKey = (k: Pick<ByokCredentialRow, 'status'>): boolean => USABLE_BYOK_STATUSES.has(k.status)
 
-/** What the last test of a BYOK key said; null when it was never tested or is switched off. */
+/**
+ * What the last test of a BYOK key said; null when it was never tested or is
+ * switched off. A key marked auth_failed is rejected now, whenever it was last
+ * tested: Mushi skips it until a test passes again.
+ */
 export function byokObservation(k: ByokCredentialRow): CredentialObservation | null {
-  if (k.status === 'disabled' || !k.last_tested_at) return null
+  if (k.status === 'disabled') return null
   const base = { credentialId: `byok:${k.id}`, kind: 'byok', name: k.label || k.key_hint || k.provider_slug, provider: k.provider_slug, source: 'key_test' as const, at: k.last_tested_at }
-  if (k.test_status === 'error_auth' || k.status === 'auth_failed') return { ...base, ok: false, failure: 'credential_rejected' }
+  if (k.status === 'auth_failed') return { ...base, ok: false, failure: 'credential_rejected', standing: true }
+  if (!k.last_tested_at) return null
+  if (k.test_status === 'error_auth') return { ...base, ok: false, failure: 'credential_rejected' }
   if (k.test_status === 'ok') return { ...base, ok: true, failure: null }
   if (k.test_status === 'error_quota') return { ...base, ok: false, failure: 'rate_limited' }
   if (k.test_status === 'error_network') return { ...base, ok: false, failure: 'vendor_error' }
@@ -218,12 +230,15 @@ interface CredentialHelp {
   impact?: string
 }
 
-const BYOK_VENDORS: Record<string, { vendor: string; keysAt: string }> = {
+interface ByokVendor { vendor: string; keysAt: string; impact?: string }
+const BYOK_VENDORS: Record<string, ByokVendor> = {
   anthropic: { vendor: 'Anthropic', keysAt: 'https://console.anthropic.com/settings/keys' },
   openai: { vendor: 'OpenAI', keysAt: 'https://platform.openai.com/api-keys' },
   firecrawl: { vendor: 'Firecrawl', keysAt: 'https://www.firecrawl.dev/app/api-keys' },
   browserbase: { vendor: 'Browserbase', keysAt: 'https://www.browserbase.com/settings' },
   cursor: { vendor: 'Cursor', keysAt: 'https://cursor.com/dashboard/integrations' },
+  // A personal access token: the Schema-Repair diagnostic and backend-drift-scanner read the app's Supabase project with it.
+  supabase: { vendor: 'Supabase', keysAt: 'https://supabase.com/dashboard/account/tokens', impact: "Mushi's Supabase schema checks for this app (the Schema-Repair diagnostic and the daily backend drift scan) have stopped." },
 }
 
 /** Where the owner replaces a key, per connector kind. */
@@ -239,8 +254,8 @@ export function credentialHelp(kind: string, provider: string | null): Credentia
     case 'play_console': return { vendor: 'Google Play', where: 'Create a new JSON key for the service account in Google Cloud (IAM → Service accounts → Keys), then rotate it on the connector in Mushi (Portfolio → Connected sources).' }
     case 'app_store_connect': return { vendor: 'App Store Connect', where: 'Create a new team API key in App Store Connect (Users and Access → Integrations), then rotate it on the connector in Mushi (Portfolio → Connected sources).' }
     case 'byok': {
-      const v = (provider ? BYOK_VENDORS[provider] : undefined) ?? { vendor: provider ?? 'the provider', keysAt: 'the provider dashboard' }
-      return { vendor: v.vendor, where: `Create a new key at ${v.keysAt}, add it in Mushi under Settings → API Keys, then remove the old one there.`, impact: `Mushi's ${v.vendor} calls for this app can no longer use it (they fail, or fall back to another key).` }
+      const v: ByokVendor = (provider ? BYOK_VENDORS[provider] : undefined) ?? { vendor: provider ?? 'the provider', keysAt: 'the provider dashboard' }
+      return { vendor: v.vendor, where: `Create a new key at ${v.keysAt}, add it in Mushi under Settings → API Keys, then remove the old one there.`, impact: v.impact ?? `Mushi's ${v.vendor} calls for this app can no longer use it (they fail, or fall back to another key).` }
     }
     case 'langfuse': return { vendor: 'Langfuse', where: 'Create new API keys in your Langfuse project settings, then save them in Mushi under Settings → Integrations → Langfuse.', impact: "Mushi's Langfuse traces for this app have stopped." }
     case 'linear': return { vendor: 'Linear', where: 'Reconnect Linear in Mushi under Settings → Integrations → Linear, or paste a new key from https://linear.app/settings/api.', impact: 'Mushi can no longer create or sync Linear issues for this app.' }
@@ -268,33 +283,43 @@ export function evaluateProviderKeys(obs: readonly CredentialObservation[], now:
   const ruleId = 'provider_key_invalid' as const
   const latest = newestPerCredential(obs)
   if (latest.length === 0) return { ruleId, state: 'unknown', reason: 'No provider credential is connected for this app, so there is no key to check.', findings: [] }
-  const fresh = latest.filter((o) => isFresh(o.at, now, CREDENTIAL_FRESH_DAYS))
-  if (fresh.length === 0) return { ruleId, state: 'unknown', reason: `The newest check of each credential is over ${CREDENTIAL_FRESH_DAYS} days old. Press Probe on the connector or Test on the key (Settings → API Keys), or wait for the next scheduled check.`, findings: [] }
+  // A check older than a week no longer says whether the key works, except a standing rejection (it holds until a test passes).
+  const judged = latest.filter((o) => isFresh(o.at, now, CREDENTIAL_FRESH_DAYS) || o.standing === true)
+  const stale = latest.length - judged.length
+  if (judged.length === 0) return { ruleId, state: 'unknown', reason: `The newest check of each credential is over ${CREDENTIAL_FRESH_DAYS} days old. Press Probe on the connector or Test on the key (Settings → API Keys), or wait for the next scheduled check.`, findings: [] }
   const isStore = (k: string) => (STORE_CONNECTOR_KINDS as readonly string[]).includes(k)
   const findings: RadarFinding[] = []
-  for (const o of fresh) {
+  for (const o of judged) {
     if (o.ok) continue
     // A store key's missing permission is store_credential_scope_missing; here only a rejected key counts.
     const rejected = o.failure === 'credential_rejected'
     const denied = o.failure === 'permission_missing' && !isStore(o.kind)
     if (!rejected && !denied) continue
     const help = credentialHelp(o.kind, o.provider)
+    const lastCheck = o.at == null ? 'It has no recorded test date.' : isFresh(o.at, now, CREDENTIAL_FRESH_DAYS) ? '' : `It was last tested ${o.at.slice(0, 10)} and stays marked rejected until a test passes.`
+    // byok_key_invalid (Mushi's own setup check) flags every auth_failed key too: say so, so one key reads as one problem.
+    const sameAsSetup = o.kind === 'byok' && o.standing === true ? "Mushi's setup check (byok_key_invalid) reports the same key; replacing it clears both." : ''
     findings.push({
       ruleId,
       severity: rejected ? 'error' : 'warn',
-      message: rejected
-        ? `${help.vendor} rejects the key for "${o.name}" (it was revoked, rotated or mistyped). ${help.impact ?? `Everything Mushi reads from ${help.vendor} for this app has stopped.`}`
-        : `${help.vendor} accepts the key for "${o.name}" but refuses what Mushi does with it: the key lacks a permission.`,
+      message: [
+        rejected
+          ? `${help.vendor} rejects the key for "${o.name}" (it was revoked, rotated or mistyped). ${help.impact ?? `Everything Mushi reads from ${help.vendor} for this app has stopped.`}`
+          : `${help.vendor} accepts the key for "${o.name}" but refuses what Mushi does with it: the key lacks a permission.`,
+        lastCheck,
+        sameAsSetup,
+      ].filter(Boolean).join(' '),
       target: o.name,
       fix: rejected ? help.where : `Give the key the read permission listed on the connector, or create one that has it. ${help.where}`,
-      evidence: { kind: o.kind, checkedBy: o.source, checkedAt: o.at, failure: o.failure },
+      evidence: { kind: o.kind, checkedBy: o.source, checkedAt: o.at, failure: o.failure, ...(sameAsSetup ? { alsoReportedBy: 'byok_key_invalid' } : {}) },
     })
   }
   if (findings.length > 0) return { ruleId, state: 'finding', reason: `${plural(findings.length, 'key')} ${findings.length === 1 ? 'does' : 'do'} not work.`, findings }
-  const working = fresh.filter((o) => o.ok).length
-  if (working === 0) return { ruleId, state: 'unknown', reason: `Mushi could not reach the providers to check ${plural(fresh.length, 'key')} (they failed for another reason than the key).`, findings: [] }
-  const undecided = fresh.length - working
-  return { ruleId, state: 'ok', reason: `${plural(working, 'key')} checked in the last ${CREDENTIAL_FRESH_DAYS} days; every provider accepted ${working === 1 ? 'it' : 'them'}${undecided ? ` (${undecided} could not be reached)` : ''}.`, findings: [] }
+  const working = judged.filter((o) => o.ok).length
+  const notRechecked = stale ? ` ${plural(stale, 'more key')} ${stale === 1 ? 'was' : 'were'} not re-checked in the last ${CREDENTIAL_FRESH_DAYS} days, so ${stale === 1 ? 'it is' : 'they are'} not judged.` : ''
+  if (working === 0) return { ruleId, state: 'unknown', reason: `Mushi could not reach the providers to check ${plural(judged.length, 'key')} (they failed for another reason than the key).${notRechecked}`, findings: [] }
+  const undecided = judged.length - working
+  return { ruleId, state: 'ok', reason: `${plural(working, 'key')} checked in the last ${CREDENTIAL_FRESH_DAYS} days; every provider accepted ${working === 1 ? 'it' : 'them'}${undecided ? ` (${undecided} could not be reached)` : ''}.${notRechecked}`, findings: [] }
 }
 
 // ── store_credential_scope_missing ──────────────────────────────────────────
