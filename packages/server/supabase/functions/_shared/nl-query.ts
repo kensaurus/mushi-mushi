@@ -6,9 +6,9 @@ import { createTrace } from './observability.ts'
 import { resolveLlmKey } from './byok.ts'
 import { LlmBudgetExceededError } from './llm-budget.ts'
 import { detectGraphQuery, executeGraphQuery } from './graph-nl.ts'
-import { NL_QUERY_PLANNER_MODEL, NL_QUERY_SUMMARY_MODEL } from './models.ts'
+import { NL_QUERY_PLANNER_EFFORT, NL_QUERY_PLANNER_MODEL, NL_QUERY_SUMMARY_MODEL } from './models.ts'
+import { claudeGenerateObject } from './claude-messages.ts'
 import { getPromptForStage } from './prompt-ab.ts'
-import { generateValidatedObject } from './structured-output.ts'
 
 // These text checks are defence in depth, not the tenant boundary. The boundary
 // is in the database (migration 20260923000003_nl_query_role_containment):
@@ -199,6 +199,8 @@ export async function executeNaturalLanguageQuery(
     : null
   const apiKey = resolved?.key ?? Deno.env.get('ANTHROPIC_API_KEY')
   if (!apiKey) throw new Error('No Anthropic key available (BYOK or env)')
+  // The Sonnet planner goes through claude-messages.ts (Sonnet 5.5 rejects the
+  // AI SDK v4 call shape); the Haiku summariser stays on the AI SDK.
   const anthropic = createAnthropic({ apiKey })
   const trace = createTrace('nl-query', {
     question: question.slice(0, 100),
@@ -212,8 +214,12 @@ export async function executeNaturalLanguageQuery(
     : { promptTemplate: null, promptVersion: null, isCandidate: false }
   const nlPlanBasePrompt = nlPlanSelection.promptTemplate
     ?? `You are a SQL query generator. Generate a single SELECT query that answers the user's question about their bug reports.`
-  const { object: queryPlan, usage: planUsage } = await generateValidatedObject(sqlSchema, {
-    model: anthropic(NL_QUERY_PLANNER_MODEL),
+  // claudeGenerateObject validates the reply against sqlSchema before returning.
+  const { object: queryPlan, usage: planUsage } = await claudeGenerateObject({
+    apiKey,
+    model: NL_QUERY_PLANNER_MODEL,
+    effort: NL_QUERY_PLANNER_EFFORT,
+    schema: sqlSchema,
     system: `${nlPlanBasePrompt}\n\n${SCHEMA_CONTEXT}`,
     prompt: question,
   })

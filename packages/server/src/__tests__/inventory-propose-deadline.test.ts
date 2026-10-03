@@ -91,6 +91,17 @@ vi.mock('./__stubs__/npm-stub.ts', () => ({
   captureException: () => {},
   captureMessage: () => {},
 }))
+// The proposer reaches Claude through claude-messages.ts (Sonnet 5.5 rejects
+// the AI SDK v4 call shape), so the model call is intercepted there.
+vi.mock('../../supabase/functions/_shared/claude-messages.ts', () => ({
+  claudeGenerateText: async (args: Record<string, unknown>) => {
+    generateTextCalls.push(args)
+    return {
+      text: '```json\n' + JSON.stringify({ inventory: INVENTORY, rationale_by_story: { s1: 'because' } }) + '\n```',
+      usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 },
+    }
+  },
+}))
 vi.mock('../../supabase/functions/_shared/llm-failover.ts', () => ({
   // Run the proposer with a fake resolved key, like the real helper does.
   withLlmFailover: async (_db: unknown, _p: string, _v: string, run: (r: { key: string }) => Promise<unknown>) =>
@@ -176,6 +187,21 @@ describe('proposeAndPersist writes the values the schema allows', () => {
     expect(generateTextCalls).toHaveLength(1)
     const signal = generateTextCalls[0].abortSignal as AbortSignal | undefined
     expect(signal).toBeInstanceOf(AbortSignal)
+  })
+
+  it('calls Sonnet 5.5 by default and maps a retired stored override onto it', async () => {
+    await proposeAndPersist(fakeDb() as never, 'p1', null)
+    expect(generateTextCalls[0].model).toBe('claude-sonnet-5-5')
+    // Adaptive thinking counts toward max_tokens: the 8k reply cap needs headroom.
+    expect(generateTextCalls[0].maxTokens as number).toBeGreaterThan(8192)
+
+    generateTextCalls.length = 0
+    await proposeAndPersist(fakeDb() as never, 'p1', null, 'claude-sonnet-4-5-20250929')
+    expect(generateTextCalls[0].model).toBe('claude-sonnet-5-5')
+
+    generateTextCalls.length = 0
+    await proposeAndPersist(fakeDb() as never, 'p1', null, 'claude-opus-4-8')
+    expect(generateTextCalls[0].model).toBe('claude-opus-4-8')
   })
 
   it('takes the deadline from the run budget, not a fixed constant', async () => {

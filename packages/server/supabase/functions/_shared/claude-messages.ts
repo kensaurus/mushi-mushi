@@ -51,6 +51,8 @@ export interface ClaudeCallOptions {
   effort?: ClaudeEffort
   /** Per-call HTTP timeout; the SDK's own retries are off (failover owns retries). */
   timeoutMs?: number
+  /** Caller deadline (e.g. a cron's run budget); aborts the request when it fires. */
+  abortSignal?: AbortSignal
 }
 
 interface FinalMessageLike {
@@ -64,6 +66,11 @@ interface FinalMessageLike {
 
 function client(opts: ClaudeCallOptions): Anthropic {
   return new Anthropic({ apiKey: opts.apiKey, maxRetries: 0, timeout: opts.timeoutMs ?? DEFAULT_TIMEOUT_MS })
+}
+
+/** Per-request SDK options: only the caller's abort signal, when it has one. */
+function requestOptions(opts: ClaudeCallOptions): { signal: AbortSignal } | undefined {
+  return opts.abortSignal ? { signal: opts.abortSignal } : undefined
 }
 
 function requestFor(opts: ClaudeCallOptions, outputSchema?: Record<string, unknown>) {
@@ -140,7 +147,7 @@ function outputSchemaFor<T>(schema: ZodType<T>): Record<string, unknown> {
 /** Structured output (`generateObject` replacement). */
 export async function claudeGenerateObject<T>(opts: ClaudeCallOptions & { schema: ZodType<T> }) {
   const body = requestFor(opts, outputSchemaFor(opts.schema))
-  const message = (await client(opts).beta.messages.create(body as never)) as unknown as FinalMessageLike
+  const message = (await client(opts).beta.messages.create(body as never, requestOptions(opts))) as unknown as FinalMessageLike
   assertNotRefused(message, opts.model)
   return { object: parseObject(opts.schema, message), ...legacyResult(message) }
 }
@@ -148,7 +155,7 @@ export async function claudeGenerateObject<T>(opts: ClaudeCallOptions & { schema
 /** Plain text (`generateText` replacement). */
 export async function claudeGenerateText(opts: ClaudeCallOptions) {
   const body = requestFor(opts)
-  const message = (await client(opts).beta.messages.create(body as never)) as unknown as FinalMessageLike
+  const message = (await client(opts).beta.messages.create(body as never, requestOptions(opts))) as unknown as FinalMessageLike
   assertNotRefused(message, opts.model)
   return { text: responseText(message.content), ...legacyResult(message) }
 }
@@ -184,7 +191,7 @@ function streamDeltas(opts: ClaudeCallOptions, outputSchema: Record<string, unkn
   const final = deferred<FinalMessageLike>()
   async function* deltas(): AsyncGenerator<string> {
     try {
-      const stream = client(opts).beta.messages.stream(requestFor(opts, outputSchema) as never)
+      const stream = client(opts).beta.messages.stream(requestFor(opts, outputSchema) as never, requestOptions(opts))
       for await (const event of stream as AsyncIterable<{ type: string; delta?: { type: string; text?: string } }>) {
         if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta' && event.delta.text) {
           yield event.delta.text

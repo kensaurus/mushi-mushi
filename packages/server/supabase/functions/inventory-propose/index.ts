@@ -50,8 +50,6 @@
 // ============================================================
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
-import { createAnthropic } from 'npm:@ai-sdk/anthropic@1'
-import { generateText } from 'npm:ai@4'
 import { stringify as yamlStringify } from 'npm:yaml@2'
 
 import { getServiceClient } from '../_shared/db.ts'
@@ -61,7 +59,9 @@ import { safeErrorResponse } from '../_shared/safe-error.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { parseBody, InventoryProposeBodySchema } from '../_shared/validate.ts'
 import { withLlmFailover, WalletDeniedError } from '../_shared/llm-failover.ts'
-import { ANTHROPIC_SONNET } from '../_shared/models.ts'
+import { INVENTORY_PROPOSE_EFFORT, INVENTORY_PROPOSE_MODEL, THINKING_HEADROOM_TOKENS } from '../_shared/models.ts'
+import { claudeGenerateText } from '../_shared/claude-messages.ts'
+import { resolveClaudeModel } from '../_shared/claude-request.ts'
 import { getPromptForStage } from '../_shared/prompt-ab.ts'
 import {
   validateInventoryObject,
@@ -265,7 +265,6 @@ async function runProposer(args: {
   systemPrompt?: string
   timeoutMs: number
 }): Promise<{ inventory: Inventory; rationale: Record<string, string>; tokens: { in: number; out: number } }> {
-  const anthropic = createAnthropic({ apiKey: args.apiKey })
   const messages: Array<{ role: 'system' | 'user'; content: string }> = [
     { role: 'system', content: args.systemPrompt ?? SYSTEM_PROMPT },
     { role: 'user', content: args.prompt },
@@ -277,14 +276,18 @@ async function runProposer(args: {
     })
   }
 
-  // generateText + manual JSON parse. See `extractFencedJson` for the
-  // rationale on why we don't use generateObject here.
-  const result = await generateText({
-    model: anthropic(args.modelId),
+  // Plain text + manual JSON parse, then validateInventoryObject. See
+  // `extractFencedJson` for why this is not a structured-output call.
+  const result = await claudeGenerateText({
+    apiKey: args.apiKey,
+    model: args.modelId,
+    effort: INVENTORY_PROPOSE_EFFORT,
     messages,
-    maxTokens: 8192,
+    // 8k of inventory JSON plus room for adaptive thinking.
+    maxTokens: 8192 + THINKING_HEADROOM_TOKENS,
     // Without this the call can outlive the edge runtime itself.
     abortSignal: AbortSignal.timeout(args.timeoutMs),
+    timeoutMs: args.timeoutMs,
   })
 
   let out: ModelOutput
@@ -358,7 +361,8 @@ async function proposeAndPersist(
   // Defensive: if the project has no `slug`, force a schema-valid id.
   if (!/^[a-z0-9][a-z0-9-_]*$/i.test(app.id)) app.id = 'app'
 
-  const modelId = modelOverride ?? ANTHROPIC_SONNET
+  // A stored override from the Sonnet 4.5 era maps onto the current default.
+  const modelId = resolveClaudeModel(modelOverride, INVENTORY_PROPOSE_MODEL)
   const prompt = buildUserPrompt(observations, current, app)
 
   // Resolve the managed system prompt from prompt_versions (stage 'inventory-propose').

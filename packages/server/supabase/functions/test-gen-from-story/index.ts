@@ -12,7 +12,6 @@
  */
 
 import { generateObject } from 'npm:ai@4'
-import { createAnthropic } from 'npm:@ai-sdk/anthropic@1'
 import { createOpenAI } from 'npm:@ai-sdk/openai@1'
 import { z } from 'npm:zod@3'
 
@@ -21,7 +20,8 @@ import { log as rootLog } from '../_shared/logger.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { withAnthropicOrOpenAi, LlmFailoverError } from '../_shared/llm-failover.ts'
-import { TEST_GEN_MODEL, STAGE2_FALLBACK } from '../_shared/models.ts'
+import { TEST_GEN_EFFORT, TEST_GEN_MODEL, STAGE2_FALLBACK, THINKING_HEADROOM_TOKENS } from '../_shared/models.ts'
+import { claudeGenerateObject } from '../_shared/claude-messages.ts'
 import { logAudit } from '../_shared/audit.ts'
 import { createTrace } from '../_shared/observability.ts'
 import { tagLangfuseTrace } from '../_shared/sentry.ts'
@@ -254,16 +254,19 @@ Write a comprehensive Playwright TDD test for this user story.`
       // withAnthropicOrOpenAi takes TWO separate callbacks (anthropicFn,
       // openAiFn) and returns { result, usedProvider }. Each callback receives
       // exactly one ResolvedKey from its own provider pool.
-      const { result } = await withAnthropicOrOpenAi(
+      const { result, usedProvider } = await withAnthropicOrOpenAi(
         db,
         project_id,
         async (anthropicKey) => {
-          const { object } = await generateObject({
-            model: createAnthropic({ apiKey: anthropicKey.key })(TEST_GEN_MODEL),
+          const { object } = await claudeGenerateObject({
+            apiKey: anthropicKey.key,
+            model: TEST_GEN_MODEL,
+            effort: TEST_GEN_EFFORT,
             system: SYSTEM_PROMPT,
             prompt,
             schema: testGenSchema,
-            maxTokens: 8000,
+            // An 8k Playwright spec plus room for adaptive thinking.
+            maxTokens: 8000 + THINKING_HEADROOM_TOKENS,
           })
           return object
         },
@@ -279,7 +282,7 @@ Write a comprehensive Playwright TDD test for this user story.`
         },
       )
       output = result
-      llmSpan.end({ model: TEST_GEN_MODEL })
+      llmSpan.end({ model: usedProvider === 'openai' ? STAGE2_FALLBACK : TEST_GEN_MODEL })
       await trace.end()
     } catch (err) {
       llmSpan.end({ model: TEST_GEN_MODEL, error: err instanceof Error ? err.message : String(err) })
