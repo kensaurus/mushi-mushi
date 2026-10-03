@@ -288,6 +288,15 @@ describe('connector routes', () => {
     const unsupported = await app.call('PATCH', `/v1/admin/orgs/${ORG}/connectors/${id}`, { body: { enabledCapabilities: ['propose'] } })
     expect(unsupported.body.error.code).toBe('CAPABILITY_NOT_SUPPORTED')
   })
+
+  it('stores why a probe failed and what it found missing, for the radar', async () => {
+    const db = seed()
+    const { app } = connectorHarness(db, vi.fn(async () => json(401, { error: { message: 'invalid key' } })))
+    const res = await app.call('POST', `/v1/admin/orgs/${ORG}/connectors`, { body: { kind: 'llm_usage', displayName: 'OpenAI', config: { provider: 'openai' }, readCredential: 'sk-admin-abc' } })
+    expect(res.body.data.probe).toMatchObject({ ok: false, failure: 'credential_rejected' })
+    expect(db.table('connector_instances')[0]).toMatchObject({ last_probe_failure: 'credential_rejected', missing_scopes: [] })
+    expect(res.body.data.instance).toMatchObject({ last_probe_failure: 'credential_rejected', missing_scopes: [] })
+  })
 })
 
 describe('recipe ingest routes', () => {

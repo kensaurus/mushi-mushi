@@ -31,7 +31,7 @@ import { portfolioAccess } from './portfolio.ts'
 
 const clog = log.child('connectors')
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-const INSTANCE_FIELDS = ['id', 'organization_id', 'project_id', 'kind', 'display_name', 'granted_scopes', 'enabled_capabilities', 'config', 'status', 'status_reason', 'last_probe_at', 'last_ok_at', 'last_error', 'created_at', 'updated_at'] as const
+const INSTANCE_FIELDS = ['id', 'organization_id', 'project_id', 'kind', 'display_name', 'granted_scopes', 'missing_scopes', 'last_probe_failure', 'enabled_capabilities', 'config', 'status', 'status_reason', 'last_probe_at', 'last_ok_at', 'last_error', 'created_at', 'updated_at'] as const
 const INSTANCE_COLUMNS = INSTANCE_FIELDS.join(', ')
 
 /** Whitelist the public fields, so a credential ref can never ride along whatever the select returned. */
@@ -109,6 +109,8 @@ async function probeInstance(db: Db, deps: ConnectorRouteDeps, row: { id: string
   const now = deps.now().toISOString()
   await db.from('connector_instances').update({
     status: result.status, status_reason: result.reason ?? null, granted_scopes: result.granted, last_probe_at: now,
+    // What was missing and why it failed, for the radar's store_credential_scope_missing / provider_key_invalid.
+    missing_scopes: result.missing, last_probe_failure: result.ok ? null : result.failure ?? null,
     ...(result.ok ? { last_ok_at: now, last_error: null } : { last_error: result.reason ?? null }), updated_at: now,
   }).eq('id', row.id)
   return result

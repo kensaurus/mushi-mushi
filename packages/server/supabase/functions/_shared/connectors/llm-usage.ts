@@ -16,7 +16,7 @@
  * config: { provider: 'openai' | 'anthropic' }  readCredential: the admin key.
  */
 
-import { fetchJson, statusReason } from './http-util.ts'
+import { failureOfStatus, fetchJson, statusReason, vendorError } from './http-util.ts'
 import { ConnectorError, notConnected, type ConnectorContext, type RecipeConnector } from './types.ts'
 
 const DAYS = 30
@@ -66,14 +66,14 @@ export const llmUsageConnector: RecipeConnector = {
     if (!ctx.readCredential) return notConnected(`Add an ${p === 'openai' ? 'OpenAI' : 'Anthropic'} admin key.`)
     const res = await costs(ctx, p, new Date(ctx.now().getTime() - 86400_000))
     if (res.status === 200) return { ok: true, status: 'connected', granted: ['cost report'], missing: [] }
-    return { ok: false, status: 'error', granted: [], missing: res.status === 403 ? ['cost report'] : [], reason: statusReason(p === 'openai' ? 'OpenAI' : 'Anthropic', res.status) }
+    return { ok: false, status: 'error', granted: [], missing: res.status === 403 ? ['cost report'] : [], reason: statusReason(p === 'openai' ? 'OpenAI' : 'Anthropic', res.status), failure: failureOfStatus(res.status) }
   },
   async snapshot(ctx, bindings) {
     const p = provider(ctx)
     if (!p || !ctx.readCredential) throw new ConnectorError('AI provider spend is not connected.', 'not_connected')
     const since = new Date(ctx.now().getTime() - DAYS * 86400_000)
     const res = await costs(ctx, p, since)
-    if (res.status !== 200) throw new ConnectorError(statusReason(p === 'openai' ? 'OpenAI' : 'Anthropic', res.status))
+    if (res.status !== 200) throw vendorError(p === 'openai' ? 'OpenAI' : 'Anthropic', res.status)
     const rows = p === 'openai' ? parseOpenAiCosts(res.body) : parseAnthropicCosts(res.body)
     const projectOf = new Map(bindings.map((b) => [b.externalId, b.projectId]))
     const perProject = new Map<string, number>()

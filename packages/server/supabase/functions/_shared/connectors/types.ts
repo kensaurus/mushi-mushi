@@ -49,13 +49,24 @@ export type ConnectorCapability = (typeof CONNECTOR_CAPABILITIES)[number]
 /** How a connector instance stands right now. `blocked` = a party outside Mushi refuses (e.g. an unaccepted agreement). */
 export type ConnectorStatus = 'connected' | 'not_connected' | 'blocked' | 'error'
 
+/**
+ * Why a vendor said no, from its HTTP status (http-util `failureOfStatus`).
+ * Stored on connector_instances.last_probe_failure and
+ * connector_snapshots.error_kind so the radar never parses `reason` text.
+ */
+export const PROBE_FAILURES = ['credential_rejected', 'permission_missing', 'not_found', 'rate_limited', 'vendor_error', 'other'] as const
+export type ProbeFailure = (typeof PROBE_FAILURES)[number]
+
 export interface ProbeResult {
   ok: boolean
   status: ConnectorStatus
   granted: string[]
+  /** Scopes the probe found missing. Only ones it actually checked. */
   missing: string[]
   /** Plain-English reason, always set when ok is false. */
   reason?: string
+  /** Set when the vendor answered with an HTTP status that says why. */
+  failure?: ProbeFailure
 }
 
 export interface ConnectorContext {
@@ -151,7 +162,7 @@ export interface RecipeConnector {
 }
 
 export class ConnectorError extends Error {
-  constructor(message: string, readonly status: ConnectorStatus = 'error') {
+  constructor(message: string, readonly status: ConnectorStatus = 'error', readonly failure?: ProbeFailure) {
     super(message)
     this.name = 'ConnectorError'
   }

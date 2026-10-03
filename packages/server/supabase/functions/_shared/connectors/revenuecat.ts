@@ -11,7 +11,7 @@
  * readCredential: a v2 secret key with read-only permissions.
  */
 
-import { fetchJson, statusReason } from './http-util.ts'
+import { failureOfStatus, fetchJson, statusReason, vendorError } from './http-util.ts'
 import { ConnectorError, notConnected, type ConnectorContext, type DriftFinding, type RecipeConnector } from './types.ts'
 
 const API = 'https://api.revenuecat.com/v2'
@@ -39,7 +39,7 @@ export const revenuecatConnector: RecipeConnector = {
     if (!ctx.readCredential) return notConnected('Add a RevenueCat v2 secret key with read-only permissions.')
     const res = await rc(ctx, '/projects?limit=1')
     if (res.status === 200) return { ok: true, status: 'connected', granted: ['project configuration: read only'], missing: [] }
-    return { ok: false, status: 'error', granted: [], missing: res.status === 403 ? ['project configuration: read only'] : [], reason: statusReason('RevenueCat', res.status) }
+    return { ok: false, status: 'error', granted: [], missing: res.status === 403 ? ['project configuration: read only'] : [], reason: statusReason('RevenueCat', res.status), failure: failureOfStatus(res.status) }
   },
   async snapshot(ctx, bindings) {
     if (!ctx.readCredential) throw new ConnectorError('RevenueCat is not connected.', 'not_connected')
@@ -52,7 +52,7 @@ export const revenuecatConnector: RecipeConnector = {
         rc(ctx, `/projects/${rcId}/offerings?limit=100`),
         rc(ctx, `/projects/${rcId}/apps?limit=100`),
       ])
-      for (const r of [ent, off, apps]) if (r.status !== 200) throw new ConnectorError(statusReason('RevenueCat', r.status))
+      for (const r of [ent, off, apps]) if (r.status !== 200) throw vendorError('RevenueCat', r.status)
       projects.push({
         rcProjectId: rcId,
         projectIds,

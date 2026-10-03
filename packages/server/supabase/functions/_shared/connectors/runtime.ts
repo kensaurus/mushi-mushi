@@ -19,7 +19,7 @@ import { dereferenceMaybeVault } from '../integration-probes.ts'
 import { resolveCredential } from './credentials.ts'
 import { getConnector, LEGACY_BACKED } from './index.ts'
 import { validateSnapshot } from './schema.ts'
-import { ConnectorError, type ConnectorBinding, type ConnectorContext, type ConnectorKind, type ConnectorSnapshot, type ConnectorStatus, type DriftFinding, type RecipeConnector } from './types.ts'
+import { ConnectorError, type ConnectorBinding, type ConnectorContext, type ConnectorKind, type ConnectorSnapshot, type ConnectorStatus, type DriftFinding, type ProbeFailure, type RecipeConnector } from './types.ts'
 
 type Db = ReturnType<typeof getServiceClient>
 
@@ -131,7 +131,7 @@ function withDeadline<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   ])
 }
 
-async function storeSnapshot(db: Db, entry: ConnectorEntry, ok: boolean, snapshot: ConnectorSnapshot | null, error: string | null): Promise<void> {
+async function storeSnapshot(db: Db, entry: ConnectorEntry, ok: boolean, snapshot: ConnectorSnapshot | null, error: string | null, errorKind: ProbeFailure | null = null): Promise<void> {
   const key = entry.instanceId
     ? db.from('connector_snapshots').update({ is_current: false }).eq('connector_instance_id', entry.instanceId).eq('project_id', entry.ctx.projectId as string)
     : db.from('connector_snapshots').update({ is_current: false }).is('connector_instance_id', null).eq('kind', entry.connector.kind).eq('project_id', entry.ctx.projectId as string)
@@ -143,6 +143,8 @@ async function storeSnapshot(db: Db, entry: ConnectorEntry, ok: boolean, snapsho
     organization_id: entry.ctx.organizationId,
     ok,
     error,
+    // Why the vendor said no (401 / 403 / …), read by the radar's provider_key_invalid.
+    error_kind: ok ? null : errorKind,
     snapshot,
     is_current: true,
     observed_at: entry.ctx.now().toISOString(),
@@ -177,7 +179,8 @@ export async function runConnector(db: Db, entry: ConnectorEntry, manifest: unkn
     const status: ConnectorStatus = err instanceof ConnectorError ? err.status : 'error'
     const reason = ((err as Error)?.message ?? String(err)).slice(0, 300)
     if (status === 'not_connected') return { kind, instanceId: entry.instanceId, status, reason, snapshot: null, findings: [] }
-    await storeSnapshot(db, entry, false, null, reason).catch(() => {})
+    const errorKind = err instanceof ConnectorError ? err.failure ?? null : null
+    await storeSnapshot(db, entry, false, null, reason, errorKind).catch(() => {})
     return { kind, instanceId: entry.instanceId, status, reason, snapshot: null, findings: [] }
   }
 }

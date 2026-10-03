@@ -19,6 +19,7 @@ import { supabaseRadarResults } from '../connectors/supabase.ts'
 import { llmUsageConnector } from '../connectors/llm-usage.ts'
 import { revenuecatConnector } from '../connectors/revenuecat.ts'
 import type { ConnectorSnapshot } from '../connectors/types.ts'
+import { operatorRadarResults } from './operator.ts'
 import {
   RADAR_RULE_IDS,
   RADAR_RULES,
@@ -27,6 +28,7 @@ import {
   type PublicProbeTarget,
   type RadarFinding,
   type RadarRuleId,
+  type RadarRuleSource,
   type RepoFacts,
 } from './types.ts'
 
@@ -37,7 +39,7 @@ export const RADAR_CI_GATE = 'portfolio_radar_ci'
 /** A host-CI policy report newer than this makes the scheduled run skip its own repo read. */
 export const CI_FACTS_FRESH_DAYS = 14
 /** Rules only the host's CI can check (whole-repo scans; Mushi never clones). */
-export const CI_ONLY_RULES: readonly RadarRuleId[] = ['storage_sql_delete']
+export const CI_ONLY_RULES: readonly RadarRuleId[] = ['storage_sql_delete', 'key_in_client_bundle']
 const POLICY_RULES: readonly RadarRuleId[] = ['play_target_sdk_behind', 'ios_sdk_behind']
 const MAX_STORED_FINDINGS = 200
 
@@ -296,6 +298,7 @@ export async function runRadar(db: Db, projectId: string, deps: RadarRunDeps, tr
   const manifest = (snap as { manifest?: unknown } | null)?.manifest ?? null
   const results: DetectorResult[] = await runPublicProbes(target, deps.fetcher, now)
   results.push(...await connectorRadarResults(db, projectId, manifest))
+  results.push(...await operatorRadarResults(db, projectId, manifest, now))
 
   const ci = await latestRun(db, projectId, RADAR_CI_GATE)
   const ciFresh = ci?.completed_at && now.getTime() - Date.parse(ci.completed_at) < CI_FACTS_FRESH_DAYS * 86400_000 &&
@@ -352,7 +355,7 @@ export interface RadarDetectorView {
   ruleId: RadarRuleId
   title: string
   prevents: string
-  source: 'public_probe' | 'repo_scan' | 'host_ci' | 'connector'
+  source: RadarRuleSource
   state: DetectorState
   reason: string
   checkedAt: string | null
@@ -393,9 +396,11 @@ export async function readRadar(db: Db, projectId: string): Promise<RadarView> {
     const meta = RADAR_RULES[ruleId]
     const hit = answerFrom(ruleId)
     if (!hit) {
-      const reason = CI_ONLY_RULES.includes(ruleId)
-        ? 'Not checked yet. This check runs in your CI: add `mushi radar scan --push` to your existing CI job.'
-        : 'Not checked yet.'
+      const reason = ruleId === 'key_in_client_bundle'
+        ? 'Not checked yet. This check reads your built app in CI: add `mushi radar scan --push` after the build step of your existing CI job.'
+        : CI_ONLY_RULES.includes(ruleId)
+          ? 'Not checked yet. This check runs in your CI: add `mushi radar scan --push` to your existing CI job.'
+          : 'Not checked yet.'
       return { ruleId, title: meta.title, prevents: meta.prevents, source: meta.source, state: 'unknown', reason, checkedAt: null, from: null, findings: [] }
     }
     return {

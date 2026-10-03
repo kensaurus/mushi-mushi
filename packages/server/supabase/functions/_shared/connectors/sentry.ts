@@ -12,7 +12,7 @@
  */
 
 import { integrationDrift } from '../recipe-drift.ts'
-import { fetchJson, statusReason } from './http-util.ts'
+import { failureOfStatus, fetchJson, statusReason, vendorError } from './http-util.ts'
 import { ConnectorError, notConnected, type ConnectorContext, type DriftFinding, type RecipeConnector } from './types.ts'
 
 const SLUG = /^[a-z0-9][a-z0-9_-]{0,63}$/i
@@ -38,14 +38,14 @@ export const sentryConnector: RecipeConnector = {
     if (!ctx.readCredential) return notConnected('No Sentry token is stored for this project.')
     const res = await sentry(ctx, `/organizations/${org}/projects/`)
     if (res.status === 200) return { ok: true, status: 'connected', granted: ['org:read', 'project:read'], missing: [] }
-    return { ok: false, status: 'error', granted: [], missing: res.status === 403 ? ['org:read', 'project:read'] : [], reason: statusReason('Sentry', res.status) }
+    return { ok: false, status: 'error', granted: [], missing: res.status === 403 ? ['org:read', 'project:read'] : [], reason: statusReason('Sentry', res.status), failure: failureOfStatus(res.status) }
   },
   async snapshot(ctx) {
     const org = ctx.config.orgSlug
     const project = ctx.config.projectSlug
     if (typeof org !== 'string' || !SLUG.test(org) || !ctx.readCredential) throw new ConnectorError('Sentry is not connected for this project.', 'not_connected')
     const projects = await sentry(ctx, `/organizations/${org}/projects/`)
-    if (projects.status !== 200) throw new ConnectorError(statusReason('Sentry', projects.status))
+    if (projects.status !== 200) throw vendorError('Sentry', projects.status)
     const slugs = ((projects.body ?? []) as Array<{ slug?: string }>).map((p) => String(p.slug ?? '')).filter(Boolean)
     let latestRelease: string | null = null
     if (typeof project === 'string' && SLUG.test(project) && slugs.includes(project)) {
