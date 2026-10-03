@@ -367,9 +367,21 @@ const RECIPE_EXCERPT_OUTPUT = z
       .optional()
       .describe('Design deviance score 0–100, lower is better; null = not scored'),
     truncated: z.boolean().optional().describe('True when the excerpt was cut to stay under 4 KB'),
+    context: z
+      .looseObject({
+        schema: z
+          .unknown()
+          .describe('{ state, note, snapshotAt, tables: [{ name, columns }], missing }: tables the stack trace names, from the latest schema snapshot'),
+        deploy: z
+          .unknown()
+          .describe('{ state: live | deployed_since_merge | not_live | probe_failed | unknown | no_merged_fix | error, note, lastFix, targets }'),
+        radar: z.unknown().describe('{ state, note, checkedAt, findings: [{ rule, severity, message, fix }] }: open hole checks'),
+      })
+      .optional()
+      .describe('Backend and release context for this bug; each section has its own state, and unknown never means healthy'),
   })
   .describe(
-    "Design excerpt (≤ 4 KB) for the report's project: tokens with CSS var / TS names, the deviance score, and findings in the files this fix touches. Never null; when it could not be read, { state: 'error', note }.",
+    "Design excerpt (≤ 4 KB) for the report's project: tokens with CSS var / TS names, the deviance score, findings in the files this fix touches, and context (tables the stack trace names, whether the last fix is live, open hole checks). Never null; when it could not be read, { state: 'error', note }.",
   );
 
 /** True when a text block was already wrapped by a handler (wrappedJson*). */
