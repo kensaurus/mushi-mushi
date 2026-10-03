@@ -32,32 +32,48 @@ export function digestConsoleUrl(): string {
 
 const MAX_TELEGRAM_CHATS = 5
 
-/** A project's Discord or Teams webhook URL, dereferenced when it is stored as a Vault ref. */
-async function projectWebhook(db: Db, projectId: string, column: 'discord_webhook_url' | 'teams_webhook_url'): Promise<string | null> {
+const WEBHOOK_LABEL = { discord_webhook_url: 'Discord', teams_webhook_url: 'Teams' } as const
+
+/**
+ * A project's Discord or Teams webhook URL, dereferenced when it is stored as
+ * a Vault ref. A failed read is its own error, never "no webhook": the digest
+ * must not blame a missing connection for a database or Vault failure.
+ */
+async function projectWebhook(
+  db: Db,
+  projectId: string,
+  column: keyof typeof WEBHOOK_LABEL,
+): Promise<{ url: string } | { url: null; error: string }> {
+  const label = WEBHOOK_LABEL[column]
   const { data, error } = await db.from('project_settings').select(column).eq('project_id', projectId).maybeSingle()
-  if (error) return null
+  if (error) return { url: null, error: `that project's ${label} webhook could not be read` }
   const stored = (data as Record<string, string | null> | null)?.[column] ?? null
-  return dereferenceMaybeVault(db as never, stored)
+  if (!stored) return { url: null, error: `that project has no ${label} webhook` }
+  const url = await dereferenceMaybeVault(db as never, stored)
+  // A stored ref that dereferences to nothing is a Vault failure, not a missing webhook.
+  if (!url) return { url: null, error: `that project's ${label} webhook could not be read from the vault` }
+  return { url }
 }
 
 export const liveDeliveryDeps: DeliveryDeps = {
   async sendSlack(db: Db, projectId: string, text: string) {
-    const { data } = await db.from('project_settings').select('slack_channel_id').eq('project_id', projectId).maybeSingle()
+    const { data, error } = await db.from('project_settings').select('slack_channel_id').eq('project_id', projectId).maybeSingle()
+    if (error) return { ok: false, error: "that project's Slack channel could not be read" }
     const channel = (data as { slack_channel_id?: string | null } | null)?.slack_channel_id
     if (!channel) return { ok: false, error: 'that project has no Slack channel connected' }
     const r = await sendBotMessage({ db, projectId, channel, text })
     return { ok: r.ok, error: r.ok ? undefined : r.error ?? 'Slack refused the message' }
   },
   async sendDiscord(db: Db, projectId: string, title: string, body: string) {
-    const url = await projectWebhook(db, projectId, 'discord_webhook_url')
-    if (!url) return { ok: false, error: 'that project has no Discord webhook' }
+    const hook = await projectWebhook(db, projectId, 'discord_webhook_url')
+    if (hook.url === null) return { ok: false, error: hook.error }
     // Embed descriptions hold 4096 characters.
-    return sendDiscordNotification(url, body.slice(0, 4000), { title: title.slice(0, 250), color: 0x7c3aed })
+    return sendDiscordNotification(hook.url, body.slice(0, 4000), { title: title.slice(0, 250), color: 0x7c3aed })
   },
   async sendTeams(db: Db, projectId: string, title: string, body: string) {
-    const url = await projectWebhook(db, projectId, 'teams_webhook_url')
-    if (!url) return { ok: false, error: 'that project has no Teams webhook' }
-    return sendTeamsText(url, title, body)
+    const hook = await projectWebhook(db, projectId, 'teams_webhook_url')
+    if (hook.url === null) return { ok: false, error: hook.error }
+    return sendTeamsText(hook.url, title, body)
   },
   async sendTelegram(db: Db, projectId: string, text: string) {
     const { data, error } = await db.from('telegram_chat_bindings').select('chat_id').eq('project_id', projectId).limit(MAX_TELEGRAM_CHATS)
@@ -82,11 +98,18 @@ export const liveDeliveryDeps: DeliveryDeps = {
     return { sent: r.sent, error: r.error }
   },
   async adminRecipients(db: Db, organizationId: string) {
-    const { data } = await db.from('organization_members').select('user_id, role').eq('organization_id', organizationId).in('role', ['owner', 'admin']).limit(20)
+    const { data, error } = await db.from('organization_members').select('user_id, role').eq('organization_id', organizationId).in('role', ['owner', 'admin']).limit(20)
+    if (error) throw new Error(error.message)
     const people = (data ?? []) as Array<{ user_id: string }>
+    // One failed lookup marks that person only; the others still get the digest.
     return Promise.all(people.map(async (m) => {
-      const { data: u } = await db.auth.admin.getUserById(m.user_id)
-      return { userId: m.user_id, email: u?.user?.email ?? null }
+      try {
+        const { data: u, error: uErr } = await db.auth.admin.getUserById(m.user_id)
+        if (uErr) return { userId: m.user_id, email: null, emailError: uErr.message }
+        return { userId: m.user_id, email: u?.user?.email ?? null }
+      } catch (e) {
+        return { userId: m.user_id, email: null, emailError: String((e as Error)?.message ?? e) }
+      }
     }))
   },
 }
