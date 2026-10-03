@@ -635,6 +635,19 @@ function blockReturns(code, textPos, text, bodyAt) {
   return out
 }
 
+/** True when `expr` has `||` outside brackets and strings. */
+function hasTopLevelOr(expr) {
+  let depth = 0
+  for (let i = 0; i < expr.length; i++) {
+    const ch = expr[i]
+    if (ch === "'" || ch === '"' || ch === '`') { i = skipString(expr, i) - 1; continue }
+    if ('([{'.includes(ch)) depth++
+    else if (')]}'.includes(ch)) depth--
+    else if (depth === 0 && ch === '|' && expr[i + 1] === '|') return true
+  }
+  return false
+}
+
 /**
  * Can the gate tell which route this call argument reaches? Yes when it is
  * (or each ternary branch is) `null`, one '/v1/…' literal spanning the whole
@@ -659,6 +672,8 @@ function argResolves(byFile, ctx, expr, pos, seen = new Set()) {
   if (e === 'null' || e === 'undefined') return true
   const branches = ternaryBranches(e)
   if (branches) return branches.every((b) => argResolves(byFile, ctx, b, pos, seen))
+  // `props.url || cond && '/v1/x'` is `props.url || (…)`: the prop can be the path.
+  if (hasTopLevelOr(e)) return false
   const and = /^[^'"`]+?&&([\s\S]+)$/.exec(e)
   if (and) return argResolves(byFile, ctx, and[1], pos, seen)
   if (/^['"`]/.test(e)) {

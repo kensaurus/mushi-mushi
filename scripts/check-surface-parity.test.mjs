@@ -276,6 +276,10 @@ test('a literal joined to anything else is not resolved, inline or through a con
         const base = '/v1/admin/d'
         apiFetch(base + tail)
         apiFetch(base)
+        const e = props.url || enabled && '/v1/admin/e'
+        apiFetch(e)
+        const f = (props.url || enabled) && '/v1/admin/f'
+        apiFetch(f)
       }
     `,
   }]
@@ -285,6 +289,7 @@ test('a literal joined to anything else is not resolved, inline or through a con
     { file, call: 'apiFetch', arg: 'b' },
     { file, call: 'apiFetch', arg: 'c' },
     { file, call: 'apiFetch', arg: 'base + tail' },
+    { file, call: 'apiFetch', arg: 'e' },
   ])
 })
 
