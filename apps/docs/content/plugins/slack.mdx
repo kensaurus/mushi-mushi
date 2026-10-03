@@ -80,6 +80,11 @@ With **Slash Commands → `/mushi`** pointed at
 `<id>` is the full report id or its first 6+ characters. Replies are capped at
 2,000 characters and only reach reports filed from your app's widget.
 
+The reporter sees a reply from "Developer". Every reply sent from Slack, by
+`/mushi reply` or the card's button, also writes a `report.reporter_replied`
+entry to the console's audit log naming the Slack user (and, for the command,
+the channel) it came from.
+
 ## Package
 
 [`@mushi-mushi/plugin-slack-app`](https://www.npmjs.com/package/@mushi-mushi/plugin-slack-app)

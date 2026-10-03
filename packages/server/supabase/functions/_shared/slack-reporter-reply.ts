@@ -13,10 +13,14 @@
  *
  * The Slack user is not a Mushi identity (same trust posture as the other
  * card buttons): the reply is attributed to the project owner, and Slack
- * signature verification is what authorises the click.
+ * signature verification is what authorises the click. Every sent reply
+ * writes an `audit_logs` row (`report.reporter_replied`, actor_type `slack`)
+ * naming the Slack user and channel, so the console's audit log shows who
+ * messaged the reporter.
  */
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
+import { logAudit } from './audit.ts'
 import { fetchWithTimeout } from './http.ts'
 import { log } from './logger.ts'
 import { postReporterReply } from './reporter-comms.ts'
@@ -131,6 +135,7 @@ export async function openReporterReplyModal(
 }
 
 interface ViewSubmissionPayload {
+  user?: { id?: string }
   view?: {
     callback_id?: string
     private_metadata?: string
@@ -154,6 +159,15 @@ export function parseReporterReplySubmission(
 
 export type SendSlackReplyResult = { ok: true } | { ok: false; message: string }
 
+/** Who sent the reply from Slack, for the audit row. */
+export interface SlackReplyActor {
+  /** Slack user id (`U…`); null only when Slack's payload left it out. */
+  slackUserId: string | null
+  slackChannelId?: string | null
+  /** `slash_command` (`/mushi reply`) or `card_modal` (the card's button). */
+  via: 'slash_command' | 'card_modal'
+}
+
 /**
  * Send a reply from Slack (the card's modal or `/mushi reply`). Checks the
  * report can be answered (a widget reporter, not closed as spam) and posts
@@ -161,7 +175,7 @@ export type SendSlackReplyResult = { ok: true } | { ok: false; message: string }
  */
 export async function sendSlackReporterReply(
   db: SupabaseClient,
-  input: { reportId: string; message: string },
+  input: { reportId: string; message: string; actor: SlackReplyActor },
 ): Promise<SendSlackReplyResult> {
   const message = input.message.trim()
   if (!message) return { ok: false, message: 'Write a reply first.' }
@@ -178,20 +192,46 @@ export async function sendSlackReporterReply(
     return { ok: false, message: 'This report has no one to reply to.' }
   }
 
+  let result: Awaited<ReturnType<typeof postReporterReply>>
   try {
-    const result = await postReporterReply(db as never, {
+    result = await postReporterReply(db as never, {
       projectId: r.project_id,
       reportId: input.reportId,
       message,
       authorName: 'Developer',
     })
-    if (result.status !== 201) {
-      replyLog.error('slack reporter reply failed', { reportId: input.reportId, status: result.status })
-      return { ok: false, message: 'Could not send the reply. Try again in a minute.' }
-    }
   } catch (err) {
     replyLog.error('slack reporter reply threw', { reportId: input.reportId, err: String(err) })
     return { ok: false, message: 'Could not send the reply. Try again in a minute.' }
+  }
+  if (result.status !== 201 || !result.authorUserId) {
+    replyLog.error('slack reporter reply failed', { reportId: input.reportId, status: result.status })
+    return { ok: false, message: 'Could not send the reply. Try again in a minute.' }
+  }
+
+  // The comment is attributed to the project owner; the audit row records the
+  // Slack user who actually sent it, and from where. The reply is already
+  // delivered by now, so an audit failure is logged as an error rather than
+  // reported as "not sent" (which would invite a duplicate reply).
+  const comment = (result.body as { data?: { comment?: { id?: string } } }).data?.comment
+  try {
+    await logAudit(
+      db,
+      r.project_id,
+      result.authorUserId,
+      'report.reporter_replied',
+      'report',
+      input.reportId,
+      {
+        via: input.actor.via,
+        slack_user_id: input.actor.slackUserId,
+        slack_channel_id: input.actor.slackChannelId ?? null,
+        comment_id: comment?.id ?? null,
+      },
+      { actorType: 'slack' },
+    )
+  } catch (err) {
+    replyLog.error('slack reporter reply audit failed', { reportId: input.reportId, err: String(err) })
   }
   return { ok: true }
 }
@@ -207,7 +247,11 @@ export async function submitSlackReporterReply(
   const parsed = parseReporterReplySubmission(payload)
   if (!parsed.ok) return { response_action: 'errors', errors: { [REPLY_BLOCK_ID]: parsed.error } }
 
-  const sent = await sendSlackReporterReply(db, { reportId: parsed.reportId, message: parsed.message })
+  const sent = await sendSlackReporterReply(db, {
+    reportId: parsed.reportId,
+    message: parsed.message,
+    actor: { slackUserId: payload.user?.id ?? null, via: 'card_modal' },
+  })
   if (!sent.ok) return { response_action: 'errors', errors: { [REPLY_BLOCK_ID]: sent.message } }
   return { response_action: 'clear' }
 }
