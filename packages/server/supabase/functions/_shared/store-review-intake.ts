@@ -196,6 +196,28 @@ export interface StoreIntakeDeps {
   classify: (db: Db, reportId: string, projectId: string) => Promise<void> | void
 }
 
+/** Projects one cron run pulls at most; the rest wait for the next run. */
+export const MAX_PROJECTS_PER_RUN = 50
+
+/**
+ * The opted-in projects to pull this run, least recently pulled first, so that
+ * past MAX_PROJECTS_PER_RUN every project still gets its turn. Postgres sorts
+ * NULLs last when ascending, so never-pulled projects are put first explicitly.
+ * A read failure throws: the caller reports it instead of pulling nothing.
+ */
+export async function projectsDueForStoreReviews(db: Db, only: string | null = null): Promise<string[]> {
+  let q = db
+    .from('project_settings')
+    .select('project_id')
+    .eq('store_review_intake_enabled', true)
+    .order('store_review_last_pulled_at', { ascending: true, nullsFirst: true })
+    .limit(MAX_PROJECTS_PER_RUN)
+  if (only) q = q.eq('project_id', only)
+  const { data, error } = await q
+  if (error) throw new Error(`could not read the projects to pull: ${error.message}`)
+  return ((data ?? []) as Array<{ project_id: string }>).map((r) => r.project_id)
+}
+
 /** The App Store apps and Play packages bound to this project through its store connectors. */
 export async function loadStoreSources(db: Db, projectId: string, deps: Pick<StoreIntakeDeps, 'fetch' | 'now'>): Promise<StoreSource[]> {
   const { data: project, error: pErr } = await db.from('projects').select('organization_id').eq('id', projectId).maybeSingle()

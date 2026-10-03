@@ -16,7 +16,7 @@ import { getServiceClient } from '../_shared/db.ts'
 import { log } from '../_shared/logger.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
-import { runStoreReviewIntake, type StoreIntakeDeps } from '../_shared/store-review-intake.ts'
+import { projectsDueForStoreReviews, runStoreReviewIntake, type StoreIntakeDeps } from '../_shared/store-review-intake.ts'
 import { queueReportClassification } from '../_shared/report-classification.ts'
 
 declare const Deno: {
@@ -25,7 +25,6 @@ declare const Deno: {
 
 const ilog = log.child('store-review-intake')
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-const MAX_PROJECTS = 50
 
 const liveDeps: StoreIntakeDeps = {
   fetch: (url, init) => fetch(url, init),
@@ -51,23 +50,24 @@ async function handler(req: Request): Promise<Response> {
     }
   }
 
-  let q = db.from('project_settings').select('project_id').eq('store_review_intake_enabled', true).limit(MAX_PROJECTS)
-  if (only) q = q.eq('project_id', only)
-  const { data, error } = await q
-  if (error) {
-    ilog.error('failed to read the projects to pull', { err: error.message })
-    return json({ ok: false, error: error.message }, 500)
+  let projectIds: string[]
+  try {
+    projectIds = await projectsDueForStoreReviews(db, only)
+  } catch (err) {
+    const message = String((err as Error)?.message ?? err).slice(0, 300)
+    ilog.error('failed to read the projects to pull', { err: message })
+    return json({ ok: false, error: message }, 500)
   }
 
   const results: Array<{ projectId: string; status: string; filed: number }> = []
-  for (const row of (data ?? []) as Array<{ project_id: string }>) {
+  for (const projectId of projectIds) {
     try {
-      const r = await runStoreReviewIntake(db, row.project_id, liveDeps)
-      results.push({ projectId: row.project_id, status: r.status, filed: r.filed })
+      const r = await runStoreReviewIntake(db, projectId, liveDeps)
+      results.push({ projectId, status: r.status, filed: r.filed })
     } catch (err) {
       const message = String((err as Error)?.message ?? err).slice(0, 300)
-      ilog.error('store review intake failed', { projectId: row.project_id, err: message })
-      results.push({ projectId: row.project_id, status: 'failed', filed: 0 })
+      ilog.error('store review intake failed', { projectId, err: message })
+      results.push({ projectId, status: 'failed', filed: 0 })
     }
   }
   return json({ ok: true, data: { projects: results.length, results } })

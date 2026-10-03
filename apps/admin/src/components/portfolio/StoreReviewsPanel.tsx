@@ -5,8 +5,8 @@
  * under the star threshold (default 1–2 stars) as a report, once.
  *
  * Data: GET  /v1/admin/projects/:id/store/reviews
- *       PUT  /v1/admin/projects/:id/store/reviews/settings
- *       POST /v1/admin/projects/:id/store/reviews/pull (1 per 10 min)
+ *       PUT  /v1/admin/projects/:id/store/reviews/settings (owners and admins)
+ *       POST /v1/admin/projects/:id/store/reviews/pull (1 per 10 min, not viewers)
  */
 
 import { useState } from 'react'
@@ -20,6 +20,10 @@ interface StoreReviewsData {
   settings: { enabled: boolean; maxRating: number; lastPulledAt: string | null; lastStatus: string | null; lastError: string | null }
   sources: Array<{ store: string; appId: string; connected: boolean }>
   recent: Array<{ store: string; reviewId: string; rating: number | null; reportId: string | null; reviewCreatedAt: string | null; seenAt: string }>
+  /** Owners and admins switch the intake and set the threshold. */
+  canManage: boolean
+  /** Everyone but viewers can pull now. */
+  canPull: boolean
 }
 
 const SELECT = 'rounded-sm border border-edge bg-surface-root px-2 py-1 text-xs'
@@ -59,7 +63,18 @@ export function StoreReviewsPanel({ projectId }: { projectId: string }) {
   return (
     <Section
       title="Store reviews as reports"
-      action={<Btn size="sm" variant="ghost" onClick={pull} loading={busy} disabled={busy || !s?.enabled}>Pull now</Btn>}
+      action={(
+        <Btn
+          size="sm"
+          variant="ghost"
+          onClick={pull}
+          loading={busy}
+          disabled={busy || !s?.enabled || !data?.canPull}
+          title={data && !data.canPull ? 'Viewers cannot pull store reviews.' : undefined}
+        >
+          Pull now
+        </Btn>
+      )}
     >
       <p className="mb-3 text-xs text-fg-muted">
         Low-star App Store and Google Play reviews land in your reports queue, each once, with a diagnosis like any other report. Read-only toward the stores; reviewer names are never stored.
@@ -73,8 +88,9 @@ export function StoreReviewsPanel({ projectId }: { projectId: string }) {
       {loading && !data && <Loading text="Reading the store review settings…" />}
       {data && s && (
         <div className="flex flex-col gap-3 text-sm">
-          <fieldset className="flex flex-col gap-2" disabled={busy}>
+          <fieldset className="flex flex-col gap-2" disabled={busy || !data.canManage}>
             <legend className="sr-only">Store reviews as reports</legend>
+            {!data.canManage && <p className="text-xs text-fg-muted">Owners and admins only.</p>}
             <label className="flex items-center gap-2">
               <input type="checkbox" checked={s.enabled} onChange={(e) => save({ enabled: e.target.checked })} />
               <span>File new store reviews as reports</span>

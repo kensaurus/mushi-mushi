@@ -6,7 +6,8 @@
  * FILE: apps/admin/src/components/portfolio/StoreReviewsPanel.test.tsx
  * PURPOSE: Store reviews as reports (gap #23) is off by default: "Pull now"
  *          stays disabled until it is switched on, switching it on PUTs the
- *          setting, and a filed review links to its report.
+ *          setting, and a filed review links to its report. Only owners
+ *          and admins can switch it; viewers cannot pull.
  */
 
 import { act, createElement } from 'react'
@@ -15,7 +16,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const P1 = '1000000a-0000-4000-8000-000000000000'
-const state = vi.hoisted(() => ({ enabled: false }))
+const state = vi.hoisted(() => ({ enabled: false, canManage: true, canPull: true }))
 const mocks = vi.hoisted(() => ({ apiFetch: vi.fn(), reload: vi.fn() }))
 
 vi.mock('../../lib/supabase', () => ({ apiFetch: mocks.apiFetch, apiFetchMutate: mocks.apiFetch }))
@@ -28,6 +29,8 @@ vi.mock('../../lib/usePageData', () => ({
         { store: 'app_store', reviewId: 'r1', rating: 1, reportId: 'rep-1', reviewCreatedAt: '2026-10-02T08:00:00Z', seenAt: '2026-10-03T00:00:00Z' },
         { store: 'play', reviewId: 'gp5', rating: 5, reportId: null, reviewCreatedAt: null, seenAt: '2026-10-03T00:00:00Z' },
       ],
+      canManage: state.canManage,
+      canPull: state.canPull,
     },
     loading: false,
     error: null,
@@ -47,6 +50,8 @@ describe('StoreReviewsPanel', () => {
 
   beforeEach(() => {
     state.enabled = false
+    state.canManage = true
+    state.canPull = true
     mocks.apiFetch.mockReset()
     mocks.apiFetch.mockResolvedValue({ ok: true, data: { status: 'ok', filed: 1, stores: [{ store: 'app_store', appId: '6761582648', status: 'ok', fetched: 3, newReviews: 2, filed: 1, detail: null }] } })
     container = document.createElement('div')
@@ -93,5 +98,24 @@ describe('StoreReviewsPanel', () => {
     })
     expect(mocks.apiFetch.mock.calls[0][0]).toBe(`/v1/admin/projects/${P1}/store/reviews/pull`)
     expect(container.textContent).toContain('1 new report filed. · App Store: 2 new reviews, 1 filed')
+  })
+
+  it('a member sees the settings locked to owners and admins but can still pull', async () => {
+    state.enabled = true
+    state.canManage = false
+    await render()
+    const toggle = container.querySelector<HTMLInputElement>('input[type="checkbox"]')!
+    expect(toggle.closest('fieldset')?.disabled).toBe(true)
+    expect(container.textContent).toContain('Owners and admins only.')
+    expect(pullButton().disabled).toBe(false)
+  })
+
+  it('a viewer cannot pull', async () => {
+    state.enabled = true
+    state.canManage = false
+    state.canPull = false
+    await render()
+    expect(pullButton().disabled).toBe(true)
+    expect(pullButton().title).toBe('Viewers cannot pull store reviews.')
   })
 })
