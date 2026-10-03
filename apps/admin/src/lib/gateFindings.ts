@@ -84,7 +84,8 @@ export type SpendCapValues = Partial<Record<SpendCapField, number>>
 const SPEND_CAP_FIELDS: readonly SpendCapField[] = ['monthly_llm_budget_usd', 'autofix_max_spend_usd', 'autofix_max_dispatches_per_day']
 
 /**
- * The caps a `spend_cap_unset` finding suggests, ready to send to
+ * The caps a `spend_cap_unset` finding suggests. They are checked against the
+ * current settings (planSpendCaps) before anything is sent to
  * PATCH /v1/admin/settings. null for any other finding, or when the
  * suggestion carries nothing valid (never a partial guess).
  */
@@ -100,6 +101,37 @@ export function spendCapSuggestion(f: Pick<GateFindingRow, 'rule_id' | 'suggeste
     if (typeof v === 'number' && Number.isFinite(v) && v > 0) out[field] = v
   }
   return Object.keys(out).length > 0 ? out : null
+}
+
+const SPEND_CAP_LABEL: Record<SpendCapField, string> = {
+  monthly_llm_budget_usd: 'Monthly AI budget',
+  autofix_max_spend_usd: 'Auto-fix spend limit',
+  autofix_max_dispatches_per_day: 'Automatic fixes per day',
+}
+
+export interface SpendCapPlan {
+  /** Suggested caps that are still unset now: the only ones the apply sends. */
+  toSet: SpendCapValues
+  /** Plain-English names of suggested caps someone set after the check ran; left as they are. */
+  alreadySet: string[]
+}
+
+/**
+ * Split a suggestion against the project's current settings (GET
+ * /v1/admin/settings). The suggestion comes from the last daily check, so a
+ * cap set since then is never overwritten: any non-null current value counts
+ * as set.
+ */
+export function planSpendCaps(values: SpendCapValues, current: Readonly<Record<string, unknown>>): SpendCapPlan {
+  const toSet: SpendCapValues = {}
+  const alreadySet: string[] = []
+  for (const field of SPEND_CAP_FIELDS) {
+    const suggested = values[field]
+    if (suggested == null) continue
+    if (current[field] != null) alreadySet.push(SPEND_CAP_LABEL[field])
+    else toSet[field] = suggested
+  }
+  return { toSet, alreadySet }
 }
 
 /** One plain-English line per cap, for the confirmation dialog. */

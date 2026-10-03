@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { describeSpendCaps, findingsReadTruncated, latestOpenFindings, spendCapSuggestion } from './gateFindings'
+import { describeSpendCaps, findingsReadTruncated, latestOpenFindings, planSpendCaps, spendCapSuggestion } from './gateFindings'
 import { gateLabel } from './gateLabels'
 
 describe('latestOpenFindings', () => {
@@ -57,6 +57,25 @@ describe('spendCapSuggestion', () => {
     expect(lines).toHaveLength(2)
     expect(lines[0]).toMatch(/\$25.*stops/)
     expect(lines[1]).toBe('Automatic fixes per day: 3.')
+  })
+})
+
+describe('planSpendCaps', () => {
+  const suggested = { monthly_llm_budget_usd: 25, autofix_max_spend_usd: 2, autofix_max_dispatches_per_day: 3 }
+
+  it('keeps only the caps that are still unset now', () => {
+    expect(planSpendCaps(suggested, { monthly_llm_budget_usd: 0, autofix_max_spend_usd: null })).toEqual({
+      toSet: { autofix_max_spend_usd: 2, autofix_max_dispatches_per_day: 3 },
+      alreadySet: ['Monthly AI budget'],
+    })
+  })
+
+  it('sets nothing when every suggested cap exists', () => {
+    expect(planSpendCaps({ autofix_max_spend_usd: 2 }, { autofix_max_spend_usd: '7.50' })).toEqual({ toSet: {}, alreadySet: ['Auto-fix spend limit'] })
+  })
+
+  it('treats a project with no settings row as nothing set', () => {
+    expect(planSpendCaps(suggested, {})).toEqual({ toSet: suggested, alreadySet: [] })
   })
 })
 

@@ -214,11 +214,14 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     if ('response' in resolvedProject) return resolvedProject.response;
     const project = resolvedProject.project;
 
-    const { data } = await db
+    const { data, error } = await db
       .from('project_settings')
       .select('*')
       .eq('project_id', project.id)
-      .single();
+      .maybeSingle();
+    // A failed read is a 500, never `{}`: the console reads `{}` as "nothing
+    // set" (Apply suggested caps would then overwrite caps that exist).
+    if (error) return dbError(c, error);
 
     // mcp:read keys and the MCP project://settings resource read this route:
     // secrets come back as SECRET_MASK plus `<column>_set`, never the value
