@@ -94,6 +94,14 @@ describe('classifyIndexerError — Sentry noise routing for sweep failures', () 
     });
   });
 
+  describe('config', () => {
+    it('a scope or path filter that matches nothing is operator config, not a bug', () => {
+      expect(
+        classifyIndexerError(new Error('filter_matches_nothing: the codebase scope and path filter (api/401/**) match none of the 4,714 indexable files')),
+      ).toBe('config');
+    });
+  });
+
   describe('priority ordering', () => {
     it('prefers the explicit "no_token" phrase over generic digit matches', () => {
       expect(classifyIndexerError(new Error('no_token: 401 fallback also empty'))).toBe('auth');

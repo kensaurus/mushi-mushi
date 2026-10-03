@@ -23,7 +23,7 @@
 
 import { latestIso } from './index-coverage.ts';
 
-export type SweepErrorKind = 'auth' | 'permission' | 'transient' | 'unknown';
+export type SweepErrorKind = 'auth' | 'permission' | 'config' | 'transient' | 'unknown';
 
 /**
  * Classify an error thrown anywhere in the sweep pipeline.
@@ -34,6 +34,8 @@ export type SweepErrorKind = 'auth' | 'permission' | 'transient' | 'unknown';
  *   2. Bare 401 / 403 status → auth.
  *   3. "Resource not accessible" / 404 → permission (token is valid but
  *      the project lost access to the specific repo; same operator action).
+ *   3b. A project scope or path filter that matches no file in the repo →
+ *      config (the operator fixes the filter; retries do not help).
  *   4. 5xx, network failures, OpenAI TPM hits → transient (the hourly cron
  *      will retry; warn so a sustained spike is still detectable in
  *      Supabase Logs by counting `kind=transient` rows).
@@ -48,6 +50,7 @@ export function classifyIndexerError(err: unknown): SweepErrorKind {
   // check the unambiguous auth phrases before the bare 4xx/5xx digit rules.
   if (/no[_\s]?token|bad credentials|requires authentication/i.test(msg)) return 'auth';
   if (/resource not accessible|not\s+accessible/i.test(msg)) return 'permission';
+  if (/^filter_matches_nothing:/.test(msg)) return 'config';
   if (/\b(401)\b/.test(msg)) return 'auth';
   if (/\b(403)\b/.test(msg)) return 'auth';
   if (/\b(404)\b/.test(msg)) return 'permission';

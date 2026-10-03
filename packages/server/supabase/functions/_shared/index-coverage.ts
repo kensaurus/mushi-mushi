@@ -78,11 +78,13 @@ export function indexFileCapForPlan(
 }
 
 /**
- * Which files this sweep fetches: at most `runBudget` paths, in
- * prioritizeSweepFiles order (open Sentry frame files, then unindexed
- * application source, …). New files are admitted only while the index holds
- * fewer than `planCap` eligible files; files already in the index are
- * refreshed regardless, and frame files (known fix sites) always go first.
+ * Which files this sweep fetches: at most `runBudget` paths. Frame files
+ * (known fix sites) always go first; then every file new to the index, in
+ * prioritizeSweepFiles order, while the index holds fewer than `planCap`
+ * eligible files; then refreshes of indexed files. New files of any tier
+ * come before refreshes so a filling repo always makes progress: a repo
+ * whose source is indexed but whose tests are not used to spend the whole
+ * budget re-fetching source and never fill (pushes keep indexed files fresh).
  */
 export function selectSweepFiles(input: {
   treePaths: readonly string[]
@@ -103,6 +105,7 @@ export function selectSweepFiles(input: {
   for (const p of input.treePaths) if (input.indexedPaths.has(p)) indexedEligible++
   let room = Math.max(0, input.planCap - indexedEligible)
   const out: string[] = []
+  const refresh: string[] = []
   for (const p of ordered) {
     if (out.length >= budget) break
     const isNew = !input.indexedPaths.has(p)
@@ -111,13 +114,39 @@ export function selectSweepFiles(input: {
       if (isNew) room = Math.max(0, room - 1)
       continue
     }
-    if (isNew) {
-      if (room === 0) continue
-      room--
+    if (!isNew) {
+      refresh.push(p)
+      continue
     }
+    if (room === 0) continue
+    room--
+    out.push(p)
+  }
+  for (const p of refresh) {
+    if (out.length >= budget) break
     out.push(p)
   }
   return out
+}
+
+/**
+ * Null when the eligible set is fine; otherwise the error a sweep records
+ * instead of coverage. A project scope or path filter that matches none of
+ * the repo's indexable files would otherwise measure "0 of 0 files,
+ * complete" while the index still holds the old files.
+ */
+export function emptyEligibleError(input: {
+  indexableFiles: number
+  eligibleFiles: number
+  pathGlobs: readonly string[] | null
+}): string | null {
+  if (input.eligibleFiles > 0 || input.indexableFiles === 0) return null
+  const globs = (input.pathGlobs ?? []).filter((g) => g.trim() !== '')
+  return (
+    `filter_matches_nothing: the codebase scope${globs.length > 0 ? ` and path filter (${globs.join(', ')})` : ''} ` +
+    `match none of the ${input.indexableFiles.toLocaleString('en-US')} indexable files in this repo; nothing was indexed. ` +
+    'Fix the path filter on the Codebase indexing card (or the scope in Settings).'
+  ).slice(0, 500)
 }
 
 /**
