@@ -14,7 +14,7 @@ import { cadenceDays, deriveElementState, ELEMENT_META, worstState, type Element
 import { judgingSet, toSetSummary, type StoredTokens } from '../../_shared/design-sets.ts'
 import { effectiveDesignRules, isWritablePath, RECIPE_MANIFEST_PATH, type RecipeManifest } from '../../_shared/recipe-schema.ts'
 import { evaluateContrast } from '../../_shared/design-deviance.ts'
-import { DESIGN_GATE, STUCK_SCAN_MS, type SnapshotRow } from '../../_shared/design-plane.ts'
+import { CI_BRANCH_SCAN_PHASE, DESIGN_GATE, STUCK_SCAN_MS, type SnapshotRow } from '../../_shared/design-plane.ts'
 import type { RecipeRepoResolution, RecipeRepo } from '../../_shared/recipe-github.ts'
 import type { WorkflowRunSnapshot } from '../../_shared/github.ts'
 import { assetMime } from '../../_shared/design-assets.ts'
@@ -110,14 +110,15 @@ async function openFindingCounts(db: Db, runIds: string[]): Promise<Map<string, 
 
 /**
  * Whether a design_drift run is a deviance scan the score and the deviance
- * list may come from. Not a scan: a failed refresh (`refresh`), and a push
- * from a CLI older than the shared rule engine (`ci_scan`: rule
- * `off_token_literal`, no score). A CI push scored with the shared engine is
- * written as `phase: 'scan', source: 'ci'` and counts like a server scan.
+ * list may come from. Not a scan: a failed refresh (`refresh`), a push from a
+ * CLI older than the shared rule engine (`ci_scan`: rule `off_token_literal`,
+ * no score), and a CI push of a branch other than the default
+ * (`ci_branch_scan`: a PR run is not the app's state). A default-branch CI
+ * push is written as `phase: 'scan', source: 'ci'` and counts like a server scan.
  */
 export function isScanRun(r: Pick<GateRunRow, 'summary'>): boolean {
   const phase = (r.summary as { phase?: string } | null)?.phase
-  return phase !== 'refresh' && phase !== 'ci_scan'
+  return phase !== 'refresh' && phase !== 'ci_scan' && phase !== CI_BRANCH_SCAN_PHASE
 }
 
 /** A `running` row older than STUCK_SCAN_MS never finished; it reads as `error`, never as running forever. */

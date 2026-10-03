@@ -8,9 +8,11 @@
  *              snapshot's rules, a disabled rule or skipped file is dropped,
  *              contrast is judged here from the tokens, and the score is
  *              computed here with scoreDeviance;
- *            - the run is written as `phase: 'scan', source: 'ci'`, its
- *              findings in the shape loadRunFindings reads, and the
- *              `design.deviance_score` metric;
+ *            - a default-branch push is written as `phase: 'scan',
+ *              source: 'ci'`, its findings in the shape loadRunFindings
+ *              reads, and the `design.deviance_score` metric; a push of any
+ *              other branch is `phase: 'ci_branch_scan'` (findings and the CI
+ *              gate, never the shown score, metric or auto-fix baseline);
  *            - the project's opt-in actions run (design-actions.ts): the CI
  *              gate always, the auto-fix only for a push of the default branch.
  */
@@ -19,7 +21,7 @@ import type { getServiceClient } from './db.ts'
 import { actOnDesignDeviance, devianceGate, loadDesignActionSettings, type ActOutcome, type DevianceGate } from './design-actions.ts'
 import { devianceStatus, LITERAL_RULES, sortFindings } from './design-deviance.ts'
 import type { DesignRuleId, DevianceFinding, DevianceSuggestion } from './design-engine-types.ts'
-import { DESIGN_GATE, loadCurrentSnapshot, recordDevianceMetric, storeScanFindings } from './design-plane.ts'
+import { CI_BRANCH_SCAN_PHASE, DESIGN_GATE, loadCurrentSnapshot, recordDevianceMetric, storeScanFindings } from './design-plane.ts'
 import { effectiveDesignRules } from './design-rules.ts'
 import { scoreDeviance } from './design-scan.ts'
 import { judgingSet } from './design-set-plan.ts'
@@ -102,8 +104,13 @@ export async function recordCiDeviance(
   const status = devianceStatus(findings)
   const total = Object.values(scored.counts).reduce((a, b) => a + (b ?? 0), 0)
   const startedAt = deps.now().toISOString()
+  // Only a push of the default branch is the app's design state. Any other
+  // branch (every PR run) is stored as its own phase, which never becomes the
+  // shown score, the metric or the auto-fix baseline, and may never spend.
+  const onDefault = input.branch === (await defaultBranchOf(db, projectId))
+  const phase = onDefault ? 'scan' : CI_BRANCH_SCAN_PHASE
   const base = {
-    phase: 'scan',
+    phase,
     source: 'ci',
     branch: input.branch,
     score: scored.score,
@@ -119,7 +126,7 @@ export async function recordCiDeviance(
   }
   const { data: run, error: runErr } = await db
     .from('gate_runs')
-    .insert({ project_id: projectId, gate: DESIGN_GATE, status: 'running', commit_sha: input.commitSha, triggered_by: 'ci', summary: { phase: 'scan', source: 'ci' }, started_at: startedAt })
+    .insert({ project_id: projectId, gate: DESIGN_GATE, status: 'running', commit_sha: input.commitSha, triggered_by: 'ci', summary: { phase, source: 'ci' }, started_at: startedAt })
     .select('id')
     .single()
   if (runErr || !run) throw new Error(`gate_runs insert failed: ${runErr?.message ?? 'no row returned'}`)
@@ -131,14 +138,12 @@ export async function recordCiDeviance(
     stored = await storeScanFindings(db, projectId, runId, findings)
   } catch (err) {
     const message = (err as Error)?.message ?? String(err)
-    await db.from('gate_runs').update({ status: 'error', summary: { phase: 'scan', source: 'ci', error: message.slice(0, 500) }, completed_at: deps.now().toISOString() }).eq('id', runId)
+    await db.from('gate_runs').update({ status: 'error', summary: { phase, source: 'ci', error: message.slice(0, 500) }, completed_at: deps.now().toISOString() }).eq('id', runId)
     return { status: 'error', runId, score: null, clientScore, storedFindings: 0, droppedFindings: dropped, gate: null, action: null, reason: message }
   }
 
   const settings = await loadDesignActionSettings(db, projectId)
   const gate = settings.ok ? devianceGate(settings.settings, scored.score) : null
-  // Only a push of the default branch may spend: every PR push also runs the check.
-  const onDefault = input.branch === (await defaultBranchOf(db, projectId))
   const action: ActOutcome = onDefault
     ? await deps.act(db, { projectId, runId, score: scored.score, findings, branch: input.branch }, settings)
     : { action: 'not_default_branch' }
@@ -147,7 +152,7 @@ export async function recordCiDeviance(
   const summary = { ...base, storedFindings: stored, droppedFindings: dropped, ...(action.action === 'off' ? {} : { action }) }
   const { error: upErr } = await db.from('gate_runs').update({ status, summary, findings_count: total, completed_at: completedAt }).eq('id', runId)
   if (upErr) throw new Error(`gate_runs update failed: ${upErr.message}`)
-  await recordDevianceMetric(db, projectId, set.name, completedAt, scored.score)
+  if (onDefault) await recordDevianceMetric(db, projectId, set.name, completedAt, scored.score)
   return {
     status,
     runId,

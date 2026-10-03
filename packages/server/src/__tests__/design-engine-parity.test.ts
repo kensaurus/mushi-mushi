@@ -34,6 +34,8 @@ let dtcg: typeof import('../../supabase/functions/_shared/dtcg.ts')
 let sets: typeof import('../../supabase/functions/_shared/design-sets.ts')
 let ingest: typeof import('../../supabase/functions/api/routes/recipe-ingest.ts')
 let cli: typeof import('../../../cli/src/recipe/local.ts')
+let compose: typeof import('../../supabase/functions/api/routes/recipe-compose.ts')
+let actions: typeof import('../../supabase/functions/_shared/design-actions.ts')
 
 beforeAll(async () => {
   ;(globalThis as { Deno?: unknown }).Deno = { env: { get: (k: string) => process.env[k] } }
@@ -43,6 +45,8 @@ beforeAll(async () => {
   sets = await import('../../supabase/functions/_shared/design-sets.ts')
   ingest = await import('../../supabase/functions/api/routes/recipe-ingest.ts')
   cli = await import('../../../cli/src/recipe/local.ts')
+  compose = await import('../../supabase/functions/api/routes/recipe-compose.ts')
+  actions = await import('../../supabase/functions/_shared/design-actions.ts')
 })
 
 describe('the engine is one source in two places', () => {
@@ -233,10 +237,10 @@ describe('POST /v1/ingest/recipe scores the scan the CLI pushed', () => {
     const local = cli.checkRecipe(writeRepo(REPO))
     const db = makeFakeDb({ projects: [{ id: P, organization_id: null }], app_recipe_snapshots: [], project_settings: [{ project_id: P }], project_repos: [] } as never, { autoId: true })
     const { push } = ingestApp(db)
-    const res = await push({ commitSha: 'abcdef1', branch: 'feature/x', files: local.files, deviance: cli.pushPayload(local) }, P)
+    const res = await push({ commitSha: 'abcdef1', branch: 'main', files: local.files, deviance: cli.pushPayload(local) }, P)
     expect(res.status).toBe(200)
     const dev = res.body.data.deviance as { status: string; score: number; clientScore: number | null; droppedFindings: number; gate: { enabled: boolean }; action: { action: string } }
-    expect(dev).toMatchObject({ score: local.design!.score, clientScore: null, droppedFindings: 0, gate: { enabled: false }, action: { action: 'not_default_branch' } })
+    expect(dev).toMatchObject({ score: local.design!.score, clientScore: null, droppedFindings: 0, gate: { enabled: false }, action: { action: 'off' } })
 
     const run = db.table('gate_runs').find((r) => r.gate === 'design_drift')!
     expect(run).toMatchObject({ status: 'fail', triggered_by: 'ci', commit_sha: 'abcdef1' })
@@ -284,8 +288,38 @@ describe('POST /v1/ingest/recipe scores the scan the CLI pushed', () => {
     const pr = await app.push({ commitSha: 'abcdef1', branch: 'feature/x', files: local.files, deviance: cli.pushPayload(local) }, P)
     expect(pr.body.data.deviance).toMatchObject({ gate: { enabled: true, failAbove: 0, exceeded: true }, action: { action: 'not_default_branch' } })
     expect(app.act).not.toHaveBeenCalled()
+    // A PR run keeps its findings and the gate, but is never the shown score or the metric.
+    const prRun = db.table('gate_runs').find((r) => r.commit_sha === 'abcdef1')!
+    expect(prRun.summary).toMatchObject({ phase: 'ci_branch_scan', branch: 'feature/x' })
+    expect(compose.isScanRun(prRun as never)).toBe(false)
+    expect(db.table('metric_series')).toHaveLength(0)
     const main = await app.push({ commitSha: 'abcdef2', branch: 'trunk', files: local.files, deviance: cli.pushPayload(local) }, P)
     expect(main.body.data.deviance).toMatchObject({ action: { action: 'baseline' } })
     expect(app.act).toHaveBeenCalledTimes(1)
+    expect(compose.isScanRun(db.table('gate_runs').find((r) => r.commit_sha === 'abcdef2') as never)).toBe(true)
+    expect(db.table('metric_series')).toHaveLength(1)
+  })
+
+  it('drift that arrives through a PR is still new when the default branch pushes it, and dispatches', async () => {
+    const local = cli.checkRecipe(writeRepo(REPO))
+    const baseline = { id: 'run-base', project_id: P, gate: 'design_drift', status: 'pass', summary: { phase: 'scan', score: 0 }, started_at: '2026-10-01T00:00:00Z', completed_at: '2026-10-01T00:01:00Z' }
+    const db = makeFakeDb({
+      projects: [{ id: P, organization_id: null }],
+      app_recipe_snapshots: [],
+      project_settings: [{ project_id: P, design_deviance_threshold: 0, design_drift_autofix: true, autofix_enabled: true }],
+      project_repos: [{ project_id: P, is_primary: true, default_branch: 'main' }],
+      gate_runs: [baseline],
+      gate_findings: [],
+      reports: [],
+    } as never, { autoId: true })
+    const dispatch = vi.fn(async () => ({ ok: true, dispatchId: 'job-1', status: 'queued' }))
+    const realAct = vi.fn((d: never, input: never, settings: never) => actions.actOnDesignDeviance(d, input, settings, { dispatch: dispatch as never, now: () => new Date('2026-10-03T12:00:00Z') }))
+    const app = ingestApp(db, realAct as never)
+    // The PR run is newer than the baseline; were it a scan, main would find nothing new.
+    await app.push({ commitSha: 'abc0001', branch: 'feature/x', files: local.files, deviance: cli.pushPayload(local) }, P)
+    const res = await app.push({ commitSha: 'abc0002', branch: 'main', files: local.files, deviance: cli.pushPayload(local) }, P)
+    expect(res.body.data.deviance).toMatchObject({ action: { action: 'dispatched', dispatchId: 'job-1' } })
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({ trigger: 'automatic', projectId: P }))
+    expect(db.table('reports')).toHaveLength(1)
   })
 })
