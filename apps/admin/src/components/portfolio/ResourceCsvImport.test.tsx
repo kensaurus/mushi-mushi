@@ -5,7 +5,8 @@
 /**
  * FILE: apps/admin/src/components/portfolio/ResourceCsvImport.test.tsx
  * PURPOSE: The CSV import posts the picked file to /v1/ingest/recipe/csv for
- *          the active team, lists every row the server refused, says when rows
+ *          the active team, counts every row the server refused (listing the
+ *          first 50 and how many more), says when rows
  *          were past the 500-row limit, and refreshes the card only when a row
  *          was saved. The card shows the import only to owners and admins.
  */
@@ -63,7 +64,7 @@ describe('ResourceCsvImport', () => {
   }
 
   it('posts the file for the team, lists refused rows and refreshes the card', async () => {
-    api.apiFetchMutate.mockResolvedValue({ ok: true, data: { imported: 1, errors: ['line 3: project not found in this team'], skippedOverLimit: 0 } })
+    api.apiFetchMutate.mockResolvedValue({ ok: true, data: { imported: 1, errorCount: 1, errors: ['line 3: project not found in this team'], skippedOverLimit: 0 } })
     const onImported = vi.fn()
     act(() => root.render(createElement(ResourceCsvImport, { orgId: ORG, onImported })))
     expect(importButton().disabled).toBe(true)
@@ -83,7 +84,7 @@ describe('ResourceCsvImport', () => {
   })
 
   it('says how many rows were saved, and which were skipped past the 500-row limit', async () => {
-    api.apiFetchMutate.mockResolvedValueOnce({ ok: true, data: { imported: 2, errors: [], skippedOverLimit: 0 } })
+    api.apiFetchMutate.mockResolvedValueOnce({ ok: true, data: { imported: 2, errorCount: 0, errors: [], skippedOverLimit: 0 } })
     act(() => root.render(createElement(ResourceCsvImport, { orgId: ORG, onImported: vi.fn() })))
     await pickFile('kind,external_id,project\n')
     await act(async () => {
@@ -93,13 +94,28 @@ describe('ResourceCsvImport', () => {
     expect(container.textContent).toContain('Imported 2 rows.')
     expect(container.querySelector('ul[aria-label="Rows that were not saved"]')).toBeNull()
 
-    api.apiFetchMutate.mockResolvedValueOnce({ ok: true, data: { imported: 500, errors: [], skippedOverLimit: 4 } })
+    api.apiFetchMutate.mockResolvedValueOnce({ ok: true, data: { imported: 500, errorCount: 0, errors: [], skippedOverLimit: 4 } })
     await pickFile('kind,external_id,project\n')
     await act(async () => {
       importButton().click()
       await flush()
     })
     expect(container.textContent).toContain('4 rows past the 500-row limit were skipped')
+  })
+
+  it('counts every refused row when the server lists only the first 50', async () => {
+    const listed = Array.from({ length: 50 }, (_, i) => `line ${i + 2}: unknown kind "bogus"`)
+    api.apiFetchMutate.mockResolvedValue({ ok: true, data: { imported: 0, errorCount: 73, errors: listed, skippedOverLimit: 0 } })
+    act(() => root.render(createElement(ResourceCsvImport, { orgId: ORG, onImported: vi.fn() })))
+    await pickFile('kind,external_id,project\n')
+    await act(async () => {
+      importButton().click()
+      await flush()
+    })
+    expect(container.textContent).toContain('Imported 0 rows. 73 rows were not saved.')
+    const list = container.querySelector('ul[aria-label="Rows that were not saved"]')!
+    expect(list.querySelectorAll('li')).toHaveLength(51)
+    expect(list.textContent).toContain('… and 23 more')
   })
 
   it('shows the server error and does not refresh when nothing was saved', async () => {
