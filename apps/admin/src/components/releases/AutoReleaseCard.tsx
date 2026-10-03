@@ -24,7 +24,7 @@ interface AutoReleaseSettings {
 }
 
 /** Mirrors OpenAutoDraft in packages/server/supabase/functions/_shared/auto-release.ts. */
-export interface BlockingAutoDraft {
+interface BlockingAutoDraft {
   id: string
   version: string
   createdAt: string
