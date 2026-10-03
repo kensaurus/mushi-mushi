@@ -22,7 +22,7 @@
 import { Hono } from 'npm:hono@4'
 import { adminOrApiKey } from '../../_shared/auth.ts'
 import { getServiceClient } from '../../_shared/db.ts'
-import { readAllPages } from '../../_shared/paged-read.ts'
+import { readAllPages, type PageCount } from '../../_shared/paged-read.ts'
 import { resolveSupabasePat, getSupabaseAdvisors, getLogs, listTables } from '../../_shared/supabase-mcp-client.ts'
 import { resolveOwnedProject } from '../shared.ts'
 import { log } from '../../_shared/logger.ts'
@@ -109,6 +109,7 @@ const STATS_WINDOW_MS = 14 * 24 * 60 * 60 * 1000
 const AUDIT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
 const COUNT_CHUNK = 100
 const MAX_AUDIT_RUNS = 2_000
+const MAX_STATS_RUNS = 10_000
 
 type StatsCounts = Pick<FullstackAuditStats, 'errorCount' | 'warnCount' | 'failedGateCount' | 'topPriority' | 'readError'>
 
@@ -124,15 +125,22 @@ function unknownStats(readError: string): StatsCounts {
  */
 export async function readFullstackAuditStats(db: Db, projectId: string, nowMs: number): Promise<StatsCounts> {
   const since = new Date(nowMs - STATS_WINDOW_MS).toISOString()
-  let runsQuery = db
-    .from('gate_runs')
-    .select('id, status')
-    .eq('project_id', projectId)
-    .gte('completed_at', since)
-    .neq('gate', 'code_health')
-  for (const g of RESTATING_GATES) runsQuery = runsQuery.neq('gate', g)
-  const [runsRes, ...restatingRes] = await Promise.all([
-    runsQuery,
+  type StatsRun = { id: string; status: string }
+  const pageRuns = (from: number, to: number, count: PageCount) => {
+    let q = db
+      .from('gate_runs')
+      .select('id, status', { count })
+      .eq('project_id', projectId)
+      .gte('completed_at', since)
+      .neq('gate', 'code_health')
+    for (const g of RESTATING_GATES) q = q.neq('gate', g)
+    return q.order('completed_at', { ascending: false }).order('id', { ascending: true }).range(from, to)
+  }
+  const [runsRead, ...restatingRes] = await Promise.all([
+    readAllPages<StatsRun>(pageRuns, { what: 'gate_runs', maxRows: MAX_STATS_RUNS }).catch((err: unknown) => {
+      alog.warn('audit stats: gate_runs read failed', { projectId, err: err instanceof Error ? err.message : String(err) })
+      return null
+    }),
     ...RESTATING_GATES.map((gate) =>
       db
         .from('gate_runs')
@@ -144,14 +152,19 @@ export async function readFullstackAuditStats(db: Db, projectId: string, nowMs: 
         .limit(1)
         .maybeSingle()),
   ])
-  const failedRead = [runsRes, ...restatingRes].find((r) => r.error)
+  const failedRead = restatingRes.find((r) => r.error)
   if (failedRead?.error) {
     alog.warn('audit stats: gate_runs read failed', { projectId, err: failedRead.error.message })
-    return unknownStats('The recent check runs could not be read.')
+  }
+  if (!runsRead || failedRead?.error) return unknownStats('The recent check runs could not be read.')
+  // Counts over a cut-short list would read low (or "healthy"): unknown instead.
+  if (runsRead.truncated) {
+    alog.warn('audit stats: gate_runs read truncated', { projectId, total: runsRead.total })
+    return unknownStats(`More than ${MAX_STATS_RUNS.toLocaleString('en-US')} check runs in 14 days, so the counts are not known.`)
   }
   const recentRuns = [
-    ...((runsRes.data ?? []) as Array<{ id: string; status: string }>),
-    ...restatingRes.map((r) => r.data as { id: string; status: string } | null).filter((r): r is { id: string; status: string } => r !== null),
+    ...runsRead.rows,
+    ...restatingRes.map((r) => r.data as StatsRun | null).filter((r): r is StatsRun => r !== null),
   ]
   const failedGateCount = recentRuns.filter((r) => r.status === 'fail').length
 
@@ -199,9 +212,9 @@ export async function readLatestGateRuns(
   const since = new Date(nowMs - AUDIT_WINDOW_MS).toISOString()
   try {
     const read = await readAllPages<GateRunRow>(
-      (from, to) => db
+      (from, to, count) => db
         .from('gate_runs')
-        .select('id, gate, status, findings_count, completed_at', { count: 'exact' })
+        .select('id, gate, status, findings_count, completed_at', { count })
         .eq('project_id', projectId)
         .gte('started_at', since)
         .order('started_at', { ascending: false })

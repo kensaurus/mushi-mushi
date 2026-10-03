@@ -199,6 +199,24 @@ describe('GET /v1/admin/orgs/:orgId/portfolio', () => {
     expect(glot.spend).toMatchObject({ llmCalls30d: 2_500, llmUsd30d: 25, partial: false })
     expect(res.body.data.readErrors).toEqual([])
   })
+
+  it('finds the latest SDK release even when the catalog is longer than one 1,000-row response', async () => {
+    // 1,200 older releases come first in the table: a single capped read would never reach 1.29.0.
+    const old = Array.from({ length: 1_200 }, (_, i) => ({ package: '@mushi-mushi/node', version: `0.${i}.0`, deprecated: false }))
+    const db = seed({
+      sdk_versions: [
+        ...old,
+        { package: '@mushi-mushi/web', version: '1.28.0', deprecated: false },
+        { package: '@mushi-mushi/web', version: '1.29.0', deprecated: false },
+        { package: '@mushi-mushi/react-native', version: '0.21.0', deprecated: false },
+      ],
+    }, { maxRows: 1_000 })
+    const res = await harness(db).app.call(`/v1/admin/orgs/${ORG_A}/portfolio`)
+    const glot = res.body.data.cards.find((c: { projectId: string }) => c.projectId === pid(1))
+    expect(glot.sdk[0]).toMatchObject({ version: '1.28.0', latest: '1.29.0', status: 'behind' })
+    expect(glot.unreadable).not.toContain('sdk')
+    expect(res.body.data.readErrors).toEqual([])
+  })
 })
 
 describe('portfolio fail-open: a failed read is never $0, "no cap", "none yet" or "no holes"', () => {

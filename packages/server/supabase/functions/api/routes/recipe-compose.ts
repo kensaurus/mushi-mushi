@@ -36,6 +36,7 @@ import type {
   RecipeResponse,
 } from '../../_shared/recipe-types.ts'
 import { RECIPE_ELEMENT_KEYS } from '../../_shared/recipe-types.ts'
+import { readAllPages } from '../../_shared/paged-read.ts'
 
 type Db = ReturnType<typeof getServiceClient>
 
@@ -92,20 +93,45 @@ export function latestPerGate<T extends Pick<GateRunRow, 'gate' | 'status'>>(row
   return [...seen.values()]
 }
 
-async function openFindingCounts(db: Db, runIds: string[]): Promise<Map<string, number>> {
+/** Rows read before switching to one exact count per run. */
+const MAX_OPEN_FINDING_ROWS = 5_000
+
+/**
+ * Open (not allowlisted) error and warn findings per run. A failed read
+ * throws: it must not count as "no open findings" (Plan 020 P-1). The rows
+ * are paged past the server's row cap; when there are more than
+ * MAX_OPEN_FINDING_ROWS, each run is counted exactly instead, so a busy
+ * project never reads low.
+ */
+export async function openFindingCounts(db: Db, runIds: string[]): Promise<Map<string, number>> {
   const out = new Map<string, number>()
   if (runIds.length === 0) return out
-  const { data, error } = await db
-    .from('gate_findings')
-    .select('gate_run_id, severity')
-    .in('gate_run_id', runIds)
-    .eq('allowlisted', false)
-    .limit(5000)
-  // A failed read must not count as "no open findings" (Plan 020 P-1).
-  if (error) throw new Error(`gate_findings: ${error.message}`)
-  for (const f of (data ?? []) as Array<{ gate_run_id: string; severity: string }>) {
-    if (f.severity === 'info') continue
-    out.set(f.gate_run_id, (out.get(f.gate_run_id) ?? 0) + 1)
+  type Row = { id: string; gate_run_id: string }
+  const read = await readAllPages<Row>(
+    (from, to, count) => db
+      .from('gate_findings')
+      .select('id, gate_run_id', { count })
+      .in('gate_run_id', runIds)
+      .eq('allowlisted', false)
+      .in('severity', ['error', 'warn'])
+      .order('id', { ascending: true })
+      .range(from, to),
+    { what: 'gate_findings', maxRows: MAX_OPEN_FINDING_ROWS },
+  )
+  if (!read.truncated) {
+    for (const f of read.rows) out.set(f.gate_run_id, (out.get(f.gate_run_id) ?? 0) + 1)
+    return out
+  }
+  for (const runId of runIds) {
+    const { count, error } = await db
+      .from('gate_findings')
+      .select('id', { count: 'exact', head: true })
+      .eq('gate_run_id', runId)
+      .eq('allowlisted', false)
+      .in('severity', ['error', 'warn'])
+    if (error) throw new Error(`gate_findings: ${error.message}`)
+    if (typeof count !== 'number') throw new Error('gate_findings: no count returned')
+    if (count > 0) out.set(runId, count)
   }
   return out
 }
