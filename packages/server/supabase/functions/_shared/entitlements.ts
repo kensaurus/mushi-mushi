@@ -264,13 +264,16 @@ export function requireFeature(flag: FeatureFlag) {
 export const GATED_ROUTES: ReadonlyArray<{
   prefix: string
   flag: FeatureFlag
+  /** Routes under the prefix that are NOT gated (route patterns, `:param` style). */
+  except?: readonly string[]
 }> = [
   { prefix: '/v1/admin/sso', flag: 'sso' },
   { prefix: '/v1/admin/byok', flag: 'byok' },
   { prefix: '/v1/admin/plugins', flag: 'plugins' },
   { prefix: '/v1/admin/intelligence', flag: 'intelligence_reports' },
   { prefix: '/v1/org', flag: 'teams' },
-  { prefix: '/v1/admin/inventory', flag: 'inventory_v2' },
+  // ADR 0018: reading gate findings is free on every plan.
+  { prefix: '/v1/admin/inventory', flag: 'inventory_v2', except: ['/v1/admin/inventory/:projectId/findings'] },
 ]
 
 /** Primary dogfood account — Pro-shaped inventory API before tier rollout. */

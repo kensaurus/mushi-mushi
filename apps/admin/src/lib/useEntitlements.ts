@@ -42,7 +42,7 @@ interface EntitlementResponse {
   projectId?: string
   organizationId?: string | null
   featureFlags: Partial<Record<FeatureFlag, boolean>>
-  gatedRoutes: Array<{ prefix: string; flag: FeatureFlag; allowed: boolean }>
+  gatedRoutes: Array<{ prefix: string; flag: FeatureFlag; allowed: boolean; except?: string[] }>
   isSuperAdmin: boolean
   hasProject: boolean
   userEmail?: string | null

@@ -10,7 +10,7 @@
  *   GET    /v1/admin/inventory/:projectId/diff              — between two SHAs
  *   POST   /v1/admin/inventory/:projectId/reconcile         — trigger crawler
  *   GET    /v1/admin/inventory/:projectId/user-stories      — denorm tree
- *   GET    /v1/admin/inventory/:projectId/findings          — gate findings
+ *   GET    /v1/admin/inventory/:projectId/findings          — gate findings (every plan, ADR 0018)
  *   POST   /v1/admin/inventory/:projectId/gates/run         — run gates
  *   GET    /v1/admin/inventory/:projectId/synthetic/:id     — synth history
  *   POST   /v1/admin/inventory/:projectId/test-gen/...      — test generator
@@ -663,8 +663,11 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
 
   // ============================================================
   // GET /v1/admin/inventory/:projectId/findings
+  // Read-only, on every plan (ADR 0018): the findings Mushi already wrote —
+  // setup checks, drift, hole checks — are never behind inventory_v2. The
+  // write and run routes of this prefix keep the gate.
   // ============================================================
-  app.get('/v1/admin/inventory/:projectId/findings', adminOrApiKey(), inventoryV2, async (c) => {
+  app.get('/v1/admin/inventory/:projectId/findings', adminOrApiKey(), async (c) => {
     const projectId = c.req.param('projectId')!
     const gate = c.req.query('gate')
     const severity = c.req.query('severity')
