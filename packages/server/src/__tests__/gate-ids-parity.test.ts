@@ -48,6 +48,10 @@ describe('gate ids', () => {
     expect(constList('packages/mcp/src/server.ts', 'GATE_IDS')).toEqual(live)
   })
 
+  it('the server gate list (the recipe reads the newest run of each) is exactly the live gates', () => {
+    expect(constList('packages/server/supabase/functions/_shared/gate-ids.ts', 'GATE_IDS')).toEqual(live)
+  })
+
   it('hosted list_gate_findings accepts exactly the live gates', () => {
     expect(constList('packages/server/supabase/functions/mcp/index.ts', 'LIST_GATE_FINDINGS_GATES')).toEqual(live)
   })
