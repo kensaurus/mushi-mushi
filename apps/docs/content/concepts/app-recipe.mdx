@@ -253,6 +253,24 @@ env files, lockfiles, generated exports and migrations are never written. The
 draft stays a draft, so your CI does not run until you mark it ready. A
 listing change is published by your own CI after you merge.
 
+### From the console
+
+Select the **Gates**, **Env** or **Routes** card on the Recipe page and open the
+**Change** tab:
+
+| Card | What the form edits |
+|------|---------------------|
+| Gates | `gates.budgets` (a number per metric) and `gates.cadence` (how often a gate must run, such as `P1D`) in `mushi.recipe.json` |
+| Env | `env.required` in `mushi.recipe.json`: each variable **name** and where it must be set (GitHub Actions, a GitHub environment, or runtime). Optionally the same names in `.env.example`. There is no field for a value. |
+| Routes | `inventory.yaml` as text |
+
+**Preview diff** shows exactly what would change and nothing is written.
+**Open draft PR** opens one draft pull request with that diff, and the tab
+follows it until the link appears. A file that is not in `change.allowPaths`
+stays read-only and the tab says why. If someone changed the file on the
+default branch after your preview, the PR is refused, so it can never undo
+their change. Preview again to start from the new version.
+
 A store action, such as raising a Google Play rollout to 20%, is different: it
 calls the store directly. It needs a separate write key, and every single
 action needs a team owner or admin to approve it in the console and then run
