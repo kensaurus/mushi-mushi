@@ -42,7 +42,7 @@ import { installStdoutGuard } from './stdout-guard.js';
 import { normalizeArgAliases, snakeAliasOf } from './arg-aliases.js';
 import {
   RECIPE_STATES,
-  designExcerptFilesOf,
+  designExcerptQueryOf,
   fixContextOf,
   inventoryActionNodeIdOf,
   projectReportDetail,
@@ -746,7 +746,9 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
 
   /**
    * get_fix_context's `recipe`: the design excerpt for the report's project,
-   * scoped to the files its fix attempts and fix packet name. Never throws and
+   * scoped to the files its fix attempts and fix packet name, plus `context`
+   * (tables the stack trace names, the last fix's deploy state, open radar
+   * findings) for the report itself. Never throws and
    * never returns null — a failed read is { state: 'error', note }, so the fix
    * context itself still succeeds.
    */
@@ -759,8 +761,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       typeof report.project_id === 'string' && report.project_id
         ? report.project_id
         : fallbackProjectId;
-    const files = designExcerptFilesOf(report);
-    const query = files.length > 0 ? `?${new URLSearchParams({ files: files.join(',') })}` : '';
+    const query = designExcerptQueryOf(report);
     try {
       return recipeFromExcerpt(
         await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/design/excerpt${query}`, {

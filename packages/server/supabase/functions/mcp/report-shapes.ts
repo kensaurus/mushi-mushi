@@ -227,6 +227,21 @@ export function designExcerptFilesOf(report: Row): string[] {
 }
 
 /**
+ * The design excerpt query for get_fix_context: the files above, plus the
+ * report id so the excerpt also carries the fixer context (tables the stack
+ * trace names, the last fix's deploy state, open radar findings). Empty, or
+ * `?files=…&reportId=…`.
+ */
+export function designExcerptQueryOf(report: Row): string {
+  const params = new URLSearchParams()
+  const files = designExcerptFilesOf(report)
+  if (files.length > 0) params.set('files', files.join(','))
+  if (typeof report.id === 'string' && /^[0-9a-f-]{36}$/i.test(report.id)) params.set('reportId', report.id)
+  const query = params.toString()
+  return query ? `?${query}` : ''
+}
+
+/**
  * get_fix_context's `recipe` field from what the design excerpt route
  * answered. The excerpt already says `not_connected` (with a note) when the
  * project has no design tokens; anything without a known state becomes an

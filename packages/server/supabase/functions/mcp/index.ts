@@ -112,7 +112,7 @@ import { buildManifestTools } from './manifest-tools.ts'
 import { HOSTED_RESOURCE_URIS, hostedResourceTarget } from './hosted-resources.ts'
 import { normalizeArgAliases } from './arg-aliases.ts'
 import {
-  designExcerptFilesOf,
+  designExcerptQueryOf,
   fixContextOf,
   inventoryActionNodeIdOf,
   projectReportDetail,
@@ -347,8 +347,10 @@ const DESIGN_EXCERPT_TIMEOUT_MS = 8000
 
 /**
  * get_fix_context's `recipe`: the design excerpt for the report's project,
- * scoped to the files its fix attempts and fix packet name (report-shapes.ts,
- * shared with stdio). Never throws and never returns null — a failed or slow
+ * scoped to the files its fix attempts and fix packet name, plus the fixer
+ * context for the report itself (`context`: tables its stack trace names, the
+ * last fix's deploy state, open radar findings) (designExcerptQueryOf in
+ * report-shapes.ts, shared with stdio). Never throws and never returns null — a failed or slow
  * read is { state: 'error', note }, so the fix context itself still succeeds.
  */
 async function designRecipeFor(
@@ -363,8 +365,7 @@ async function designRecipeFor(
         ? fallbackProjectId
         : null
   if (!pid) return recipeError('The report has no project id, so the design excerpt was not read.')
-  const files = designExcerptFilesOf(report)
-  const query = files.length > 0 ? `?${new URLSearchParams({ files: files.join(',') })}` : ''
+  const query = designExcerptQueryOf(report)
   try {
     return recipeFromExcerpt(
       await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/design/excerpt${query}`, {
