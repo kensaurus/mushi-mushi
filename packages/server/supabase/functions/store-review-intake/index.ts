@@ -36,7 +36,7 @@ function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 }
 
-async function handler(req: Request): Promise<Response> {
+export async function handler(req: Request): Promise<Response> {
   const authResp = requireServiceRoleAuth(req)
   if (authResp) return authResp
   const db = getServiceClient()
@@ -54,9 +54,9 @@ async function handler(req: Request): Promise<Response> {
   try {
     projectIds = await projectsDueForStoreReviews(db, only)
   } catch (err) {
-    const message = String((err as Error)?.message ?? err).slice(0, 300)
-    ilog.error('failed to read the projects to pull', { err: message })
-    return json({ ok: false, error: message }, 500)
+    // The cause goes to the log; the caller gets a stable code and a fixed message.
+    ilog.error('failed to read the projects to pull', { err: String((err as Error)?.message ?? err).slice(0, 300) })
+    return json({ ok: false, error: { code: 'PROJECTS_READ_FAILED', message: 'Could not read the projects to pull.' } }, 500)
   }
 
   const results: Array<{ projectId: string; status: string; filed: number }> = []

@@ -130,7 +130,7 @@ export async function npmLatestStable(name: string, fetchImpl: typeof fetch = fe
   if (!NPM_NAME_RE.test(name)) return null
   let res: Response
   try {
-    res = await fetchImpl(`https://registry.npmjs.org/${name.replace('/', '%2f')}`, {
+    res = await fetchImpl(`https://registry.npmjs.org/${name.replace(/\//g, '%2f')}`, {
       headers: { Accept: 'application/vnd.npm.install-v1+json' },
       signal: AbortSignal.timeout(8_000),
     })

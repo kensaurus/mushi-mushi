@@ -287,4 +287,17 @@ describe('crossPromoChecks', () => {
     expect(by('cross_promo_untracked').sort()).toEqual(['https://play.google.com/store/apps/details?id=com.gone', 'https://site.example/apps'])
     expect(unknown.map((u) => u.resourceKey).sort()).toEqual(['cross_promo_link:https://apps.apple.com/app/id1?ct=from-glot', 'cross_promo_link:https://site.example/apps'])
   })
+
+  it('gives App Store advice only for apple.com hosts, not for a host that merely ends in "apple.com"', () => {
+    const fixFor = (url: string) => {
+      const { findings } = crossPromoChecks([{ fromProjectId: 'glot', toProjectId: null, url }], { [url]: { status: 200 } }, projects)
+      return findings.find((f) => f.ruleId === 'cross_promo_untracked')?.suggestedFix ?? ''
+    }
+    expect(fixFor('https://apps.apple.com/app/id1')).toContain('campaign token')
+    expect(fixFor('https://apple.com/app')).toContain('campaign token')
+    for (const hostile of ['https://evilapple.com/app', 'https://apple.com.evil.example/app', 'https://notapple.com/x']) {
+      expect(fixFor(hostile), hostile).toContain('utm_source')
+      expect(fixFor(hostile), hostile).not.toContain('campaign token')
+    }
+  })
 })

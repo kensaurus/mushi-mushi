@@ -11,10 +11,13 @@
  */
 
 import type { Command } from 'commander'
-import { writeFileSync } from 'node:fs'
 import { apiCall, outputIsJson, requireConfig, requireUuid } from '../cli-shared.js'
 import { dieOrgError, oneLine, orgSegment, requireYes } from '../command-helpers.js'
 import { MushiCliError } from '../errors.js'
+import { writeUserOutputFile } from '../file-io.js'
+
+/** The register is names and metadata only; a few MB is already far past any real one. */
+const MAX_EXPORT_FILE_BYTES = 8 * 1024 * 1024
 
 const PROVIDERS = ['apple', 'google_play', 'aws', 'supabase', 'vercel', 'registrar', 'stripe', 'github', 'cloudflare', 'other'] as const
 
@@ -135,7 +138,10 @@ export function registerAccountsCommands(program: Command): void {
       const result = await apiCall<string>(`/v1/admin/orgs/${orgSegment(opts.org)}/accounts/export`, config, {}, { text: true })
       if (!result.ok) dieOrgError(result)
       if (opts.out) {
-        writeFileSync(opts.out, result.data)
+        // Intended flow: the user asked for the export in the file they named.
+        // Only that path is written, only bounded text, and only the owner can
+        // read a newly created file (it lists who can recover each account).
+        writeUserOutputFile(opts.out, result.data, { maxBytes: MAX_EXPORT_FILE_BYTES, mode: 0o600 })
         console.log(`Wrote ${opts.out}.`)
         return
       }

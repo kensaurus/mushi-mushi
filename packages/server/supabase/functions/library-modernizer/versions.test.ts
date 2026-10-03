@@ -89,3 +89,15 @@ Deno.test('npm latest stable: dist-tags.latest, or the highest release when late
   const down: typeof fetch = (() => Promise.reject(new TypeError('fetch failed'))) as typeof fetch
   assertEquals(await npmLatestStable('pkg', down), null)
 })
+
+Deno.test('npm latest stable: a scoped name is one registry path segment, and an extra slash is refused', async () => {
+  const urls: string[] = []
+  const recording: typeof fetch = ((url: string | URL | Request) => {
+    urls.push(String(url))
+    return Promise.resolve(new Response(JSON.stringify({ 'dist-tags': { latest: '1.0.0' } })))
+  }) as typeof fetch
+  assertEquals(await npmLatestStable('@sentry/react', recording), '1.0.0')
+  assertEquals(urls, ['https://registry.npmjs.org/@sentry%2freact'])
+  assertEquals(await npmLatestStable('@a/b/c', recording), null)
+  assertEquals(urls.length, 1)
+})

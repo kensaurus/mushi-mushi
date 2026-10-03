@@ -541,15 +541,77 @@ export async function probeSecurityHeaders(target: PublicProbeTarget, fetcher: P
 
 // ── privacy URL ──────────────────────────────────────────────────────────────
 
-/** Visible text of an HTML page: no scripts, styles or tags, whitespace collapsed. */
+/** Elements whose content is never shown as page text. */
+const RAW_TEXT_ELEMENTS = ['script', 'style', 'noscript'] as const
+
+function isTagNameEnd(ch: string | undefined): boolean {
+  return ch === undefined || ch === '>' || ch === '/' || /\s/.test(ch)
+}
+
+/** `html` at `at` starts with `name` (ASCII, case-insensitive) followed by a tag-name end. */
+function nameAt(html: string, at: number, name: string): boolean {
+  return html.slice(at, at + name.length).toLowerCase() === name && isTagNameEnd(html[at + name.length])
+}
+
+/** Index just past the `>` that closes the tag whose name ends before `from`; the end of input if none. */
+function tagEnd(html: string, from: number): number {
+  const gt = html.indexOf('>', from)
+  return gt === -1 ? html.length : gt + 1
+}
+
+/**
+ * Visible text of an HTML page: no scripts, styles or tags, whitespace
+ * collapsed. A single left-to-right scan, the way a browser tokenizes:
+ * `<script>`, `<style>` and `<noscript>` run to their end tag in any case and
+ * with any attributes or whitespace before the `>` (`</script >`,
+ * `</SCRIPT\n>`); an unclosed one runs to the end of the input; comments run
+ * to `-->`; any other tag runs to its `>`. Linear in the input length.
+ */
 export function visibleText(html: string): string {
-  return decodeEntities(
-    html
-      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-      .replace(/<noscript[\s\S]*?<\/noscript>/gi, ' ')
-      .replace(/<[^>]+>/g, ' '),
-  ).replace(/\s+/g, ' ').trim()
+  const out: string[] = []
+  let i = 0
+  while (i < html.length) {
+    const lt = html.indexOf('<', i)
+    if (lt === -1) {
+      out.push(html.slice(i))
+      break
+    }
+    out.push(html.slice(i, lt))
+    if (html.startsWith('<!--', lt)) {
+      const close = html.indexOf('-->', lt + 4)
+      i = close === -1 ? html.length : close + 3
+      out.push(' ')
+      continue
+    }
+    const raw = RAW_TEXT_ELEMENTS.find((name) => nameAt(html, lt + 1, name))
+    if (raw) {
+      // Skip to the matching end tag: `</` + the same name + a tag-name end.
+      let j = tagEnd(html, lt + 1 + raw.length)
+      let end = html.length
+      while (j < html.length) {
+        const close = html.indexOf('</', j)
+        if (close === -1) break
+        if (nameAt(html, close + 2, raw)) {
+          end = tagEnd(html, close + 2 + raw.length)
+          break
+        }
+        j = close + 2
+      }
+      i = end
+      out.push(' ')
+      continue
+    }
+    const next = html[lt + 1]
+    if (next !== undefined && (/[A-Za-z!?]/.test(next) || (next === '/' && /[A-Za-z]/.test(html[lt + 2] ?? '')))) {
+      i = tagEnd(html, lt + 1)
+      out.push(' ')
+      continue
+    }
+    // A `<` that opens no tag (`a < b`) is text.
+    out.push('<')
+    i = lt + 1
+  }
+  return decodeEntities(out.join('')).replace(/\s+/g, ' ').trim()
 }
 
 const MIN_POLICY_CHARS = 300

@@ -169,8 +169,9 @@ export function accountRegisterRules(accounts: readonly RegisterAccount[], domai
   return out
 }
 
+/** A Markdown table cell: backslashes escaped first, then the pipe that would end the cell. */
 function cell(v: string | null | undefined): string {
-  const s = (v ?? '').replace(/\r?\n/g, ' ').replace(/\|/g, '\\|').trim()
+  const s = (v ?? '').replace(/\\/g, '\\\\').replace(/\r?\n/g, ' ').replace(/\|/g, '\\|').trim()
   return s || '—'
 }
 

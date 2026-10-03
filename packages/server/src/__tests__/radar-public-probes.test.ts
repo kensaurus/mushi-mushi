@@ -24,6 +24,7 @@ import {
   probeTls,
   registrableDomain,
   runPublicProbes,
+  visibleText,
   type ProbeFetcher,
   type ProbeResponse,
 } from '../../supabase/functions/_shared/radar/public-probes.ts'
@@ -254,6 +255,45 @@ describe('review_risk_privacy_url', () => {
     const none = await probePrivacyUrl(target(), fetcherOf({}))
     expect(none).toMatchObject({ state: 'unknown', reason: 'No privacy URL declared in mushi.recipe.json store.privacyUrl.' })
     expect((await probePrivacyUrl(target({ privacyUrl: url }), fetcherOf({ [url]: new Error('timeout') }))).state).toBe('unknown')
+  })
+})
+
+describe('visibleText', () => {
+  it('drops script, style and noscript bodies whatever the end tag looks like', () => {
+    expect(visibleText('a<script>var x = "hidden"</script >b')).toBe('a b')
+    expect(visibleText('a<SCRIPT type="module">hidden</SCRIPT\n>b')).toBe('a b')
+    expect(visibleText('a<script>hidden</script foo="bar">b')).toBe('a b')
+    expect(visibleText('a<style>p{color:red}</Style>b<noscript>hidden</noscript>c')).toBe('a b c')
+    // `</scripts>` is not the end tag; the script runs on to the real one.
+    expect(visibleText('a<script>x</scripts>still hidden</script>b')).toBe('a b')
+  })
+
+  it('treats an unclosed script as running to the end, and comments as hidden', () => {
+    expect(visibleText('shown<script>never shown')).toBe('shown')
+    expect(visibleText('a<!-- <script>x</script> hidden -->b')).toBe('a b')
+    expect(visibleText('a<!-- never closed')).toBe('a')
+  })
+
+  it('strips tags, keeps a bare `<`, and decodes entities only after stripping', () => {
+    expect(visibleText('<p class="x">Privacy</p><br/>policy')).toBe('Privacy policy')
+    expect(visibleText('1 < 2 and 3 > 2')).toBe('1 < 2 and 3 > 2')
+    expect(visibleText('&lt;script&gt;text&lt;/script&gt;')).toBe('<script>text</script>')
+    expect(visibleText('<scriptx>shown</scriptx>')).toBe('shown')
+  })
+
+  it('stays linear on hostile input', () => {
+    const inputs = [
+      '<script>'.repeat(50_000),
+      '</script'.repeat(50_000),
+      '<a'.repeat(100_000),
+      `<script>${'</'.repeat(100_000)}`,
+      '<!--'.repeat(50_000),
+    ]
+    for (const html of inputs) {
+      const started = performance.now()
+      visibleText(html)
+      expect(performance.now() - started).toBeLessThan(500)
+    }
   })
 })
 

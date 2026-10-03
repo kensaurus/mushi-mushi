@@ -166,7 +166,7 @@ function expandAuthAliases(source, text) {
   const aliasRe = /\b(\w+)\s*(?::\s*\w+\s*)?=\s*(adminOrApiKey\w*|jwtAuth|apiKeyAuth|requireAuth\w*|jwtOrApiKey|requireServiceRoleAuth)\b/g
   let m
   while ((m = aliasRe.exec(source)) !== null) {
-    if (new RegExp(`\\b${m[1]}\\b`).test(expanded)) expanded += ` ${m[2]}`
+    if (new RegExp(`\\b${reName(m[1])}\\b`).test(expanded)) expanded += ` ${m[2]}`
   }
   return expanded
 }
@@ -200,7 +200,7 @@ export function extractServerRoutes(files) {
       if (router && router.prefix === null) router.prefix = prefix
     }
     for (const router of routers) {
-      const useRe = new RegExp(`\\b${router.name}\\.use\\(`, 'g')
+      const useRe = new RegExp(`\\b${reName(router.name)}\\.use\\(`, 'g')
       useRe.lastIndex = router.pos
       if (useRe.exec(source)) router.auth = readBalanced(source, useRe.lastIndex)
     }
@@ -452,9 +452,9 @@ function fileContexts(files) {
   return byFile
 }
 
-/** `name` as a RegExp source (`$` is legal in identifiers). */
+/** `name` as a RegExp source: every metacharacter escaped (`$` is legal in identifiers). */
 function reName(name) {
-  return name.replace(/\$/g, '\\$')
+  return name.replace(/[\\^$.*+?()[\]{}|/-]/g, '\\$&')
 }
 
 /** Words before `(` that open a condition or an operand, never a parameter list. */
@@ -955,7 +955,7 @@ export function extractDynamicCalls(files) {
     unresolved = []
     for (const ctx of byFile.values()) {
       const names = [...shared, ...local.get(ctx.file), ...ADMIN_URL_OPTION_CALLS, 'fetch']
-      const re = new RegExp(`\\b(${names.join('|')})\\b\\s*`, 'g')
+      const re = new RegExp(`\\b(${names.map(reName).join('|')})\\b\\s*`, 'g')
       let m
       while ((m = re.exec(ctx.code)) !== null) {
         if (/(?:function|\.)\s*$/.test(ctx.code.slice(Math.max(0, m.index - 40), m.index))) continue

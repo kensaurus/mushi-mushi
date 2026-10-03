@@ -9,26 +9,33 @@
  *                     own Supabase schema, from backend-drift-scanner)
  *
  * Stores the result in `contract_snapshots` and returns each source's state.
- * A failed read is a 500 with the reason; a source that is simply not set up
- * is reported as `not_configured` / `not_connected`, never as an empty,
- * healthy snapshot. Called by drift-walker before every walk.
+ * A failed read is a 500 naming the step that failed (the database error goes
+ * to the log, not the response); a source that is simply not set up is
+ * reported as `not_configured` / `not_connected`, never as an empty, healthy
+ * snapshot. Called by drift-walker before every walk.
  *
  * POST body: { project_id: string }
  */
 
 import { getServiceClient } from '../_shared/db.ts'
+import { log } from '../_shared/logger.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { safeFetch } from '../_shared/inventory-guards.ts'
 import {
   countContractEdges,
+  describeOpenApiFetchError,
   inventoryNodesFromApiDeps,
   isOpenApiDocument,
   pgSchemaFromBackendSnapshot,
   type SourceStatus,
 } from '../_shared/contract-snapshot.ts'
 
-function fail(status: number, error: string): Response {
+const clog = log.child('contract-graph-builder')
+
+/** A JSON error response. `detail` (a database or runtime error) is logged, never returned. */
+function fail(status: number, error: string, detail?: string): Response {
+  if (detail !== undefined) clog.error(error, { detail })
   return new Response(JSON.stringify({ ok: false, error }), {
     status,
     headers: { 'content-type': 'application/json' },
@@ -53,7 +60,7 @@ Deno.serve(
       .select('openapi_spec_url, openapi_spec_path')
       .eq('project_id', projectId)
       .maybeSingle()
-    if (settingsErr) return fail(500, `project_settings: ${settingsErr.message}`)
+    if (settingsErr) return fail(500, 'Could not read the project settings.', settingsErr.message)
 
     let openapi: unknown = null
     let openapiStatus: SourceStatus
@@ -80,7 +87,8 @@ Deno.serve(
           openapiStatus = { state: 'ok' }
         }
       } catch (err) {
-        openapiStatus = { state: 'error', detail: String(err instanceof Error ? err.message : err).slice(0, 200) }
+        clog.warn('OpenAPI fetch failed', { projectId, err: String(err instanceof Error ? err.message : err).slice(0, 300) })
+        openapiStatus = { state: 'error', detail: describeOpenApiFetchError(err) }
       }
     }
 
@@ -91,7 +99,7 @@ Deno.serve(
       .eq('project_id', projectId)
       .eq('node_type', 'api_dep')
       .limit(2000)
-    if (invErr) return fail(500, `graph_nodes: ${invErr.message}`)
+    if (invErr) return fail(500, 'Could not read the inventory routes.', invErr.message)
     const inventoryNodes = inventoryNodesFromApiDeps(
       (apiDeps ?? []) as Array<{ id: string; label: string | null; metadata: Record<string, unknown> | null }>,
     )
@@ -107,7 +115,7 @@ Deno.serve(
       .order('captured_at', { ascending: false })
       .limit(1)
       .maybeSingle()
-    if (schemaErr) return fail(500, `backend_schema_snapshots: ${schemaErr.message}`)
+    if (schemaErr) return fail(500, 'Could not read the schema snapshot.', schemaErr.message)
     const pgSchema = schemaSnap
       ? pgSchemaFromBackendSnapshot(schemaSnap.schema_json as Array<Record<string, unknown>> | null)
       : null
@@ -128,7 +136,7 @@ Deno.serve(
       })
       .select('id')
       .single()
-    if (error || !snapshot) return fail(500, `contract_snapshots: ${error?.message ?? 'no row returned'}`)
+    if (error || !snapshot) return fail(500, 'Could not save the contract snapshot.', error?.message ?? 'no row returned')
 
     return new Response(
       JSON.stringify({

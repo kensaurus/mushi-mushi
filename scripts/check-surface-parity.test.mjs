@@ -18,6 +18,10 @@ import {
   normalizeAdminLiteral,
 } from './check-surface-parity.mjs'
 
+// A route registered with a template literal, kept in a plain string so the
+// fixture below needs no escaped backticks or `${`.
+const TEMPLATE_ROUTE = 'app.post(`/v1/admin/orgs/:orgId/actions/:actionId/$' + '{verb}`, deps.jwtAuth, async (c) => {})'
+
 const serverFiles = [
   {
     file: 'routes/portfolio.ts',
@@ -28,7 +32,7 @@ const serverFiles = [
       app.get('/v1/admin/reports/stats', jwtAuth, async (c) => {})
       app.get('/v1/admin/reports/:id', adminOrApiKey(), async (c) => {})
       for (const verb of ['approve']) {
-        app.post(\`/v1/admin/orgs/:orgId/actions/:actionId/\${verb}\`, deps.jwtAuth, async (c) => {})
+        ${TEMPLATE_ROUTE}
       }
     `,
   },
@@ -130,6 +134,20 @@ test('a call built from a same-file path constant (`${path}/x`) is a console rou
         const findings = usePageData(\`\${path}/findings\`)
       }
     `,
+  }]
+  assert.deepEqual(usedKeys(files), ['GET /v1/admin/orgs/:orgId/portfolio/findings'])
+  assert.deepEqual(extractDynamicCalls(files), [])
+})
+
+test('a path constant whose name holds `$` is matched as a literal name', () => {
+  const files = [{
+    file: 'apps/admin/src/pages/PortfolioPage.tsx',
+    source: [
+      'function OrgPortfolio({ orgId }) {',
+      '  const path$ = `/v1/admin/orgs/$' + '{orgId}/portfolio`',
+      '  const findings = usePageData(`$' + '{path$}/findings`)',
+      '}',
+    ].join('\n'),
   }]
   assert.deepEqual(usedKeys(files), ['GET /v1/admin/orgs/:orgId/portfolio/findings'])
   assert.deepEqual(extractDynamicCalls(files), [])

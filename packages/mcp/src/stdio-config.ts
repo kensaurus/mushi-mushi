@@ -50,12 +50,30 @@ export interface ResolvedStdioCredentials {
   apiKeySource: 'env' | 'cli-config' | ''
   /** Env vars whose value was an unexpanded placeholder, with that literal value. */
   placeholders: Array<{ name: CredentialEnvVar; value: string }>
+  /**
+   * Set when the configured endpoint is not an http(s) URL. `endpoint` is then
+   * '' — the key is never sent anywhere, and never to the default endpoint
+   * instead of the one the operator meant.
+   */
+  endpointError: string | null
+}
+
+/** An absolute http: or https: URL: the only kind of endpoint the key may be sent to. */
+function isHttpUrl(value: string): boolean {
+  try {
+    const u = new URL(value)
+    return u.protocol === 'https:' || u.protocol === 'http:'
+  } catch {
+    return false
+  }
 }
 
 /**
  * Precedence: env var → CLI config → default. An empty env value falls
  * through (manifest configs use `${MUSHI_API_KEY:-}`, which expands to '' when
  * unset), and so does an unexpanded placeholder — it is never a usable value.
+ * A configured endpoint that is not an http(s) URL is an error, not a reason
+ * to fall back.
  */
 export function resolveStdioCredentials(
   env: Readonly<Record<string, string | undefined>>,
@@ -75,12 +93,19 @@ export function resolveStdioCredentials(
   const envProject = fromEnv('MUSHI_PROJECT_ID')
   const envEndpoint = fromEnv('MUSHI_API_ENDPOINT')
   const cliKey = cli.apiKey?.trim() ?? ''
+  const cliEndpoint = cli.endpoint?.trim() ?? ''
+  const configured = envEndpoint || cliEndpoint
+  const endpointError =
+    configured && !isHttpUrl(configured)
+      ? `${envEndpoint ? 'MUSHI_API_ENDPOINT' : `"endpoint" in ${cli.path}`} is not an http(s) URL: ${JSON.stringify(configured.slice(0, 200))}`
+      : null
   return {
     apiKey: envKey || cliKey,
     projectId: envProject || cli.projectId?.trim() || '',
-    endpoint: envEndpoint || cli.endpoint?.trim() || defaultEndpoint,
+    endpoint: endpointError ? '' : configured || defaultEndpoint,
     apiKeySource: envKey ? 'env' : cliKey ? 'cli-config' : '',
     placeholders,
+    endpointError,
   }
 }
 

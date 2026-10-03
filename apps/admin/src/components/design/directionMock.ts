@@ -170,8 +170,35 @@ export function mockChoices(word: string, sample: string): string[] {
   return out
 }
 
-/** A server asset path (relative to the api base) → an absolute URL, or null when unsafe. */
-export function directionAssetUrl(url: string | null, apiBase: string): string | null {
-  if (!url || !url.startsWith('/') || url.startsWith('//')) return null
-  return `${apiBase}${url}`
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]'])
+
+/**
+ * A server asset path (relative to the api base) → an absolute URL for an
+ * `<img src>`, or null when unsafe. The api base can come from a setting
+ * stored in this browser, so the joined URL is parsed and checked: it must
+ * stay on the api's origin and under its path, and be https (http only on a
+ * loopback host, for local development). Anything else, a `javascript:` or
+ * `data:` URL included, is refused.
+ */
+export function directionAssetUrl(
+  url: string | null,
+  apiBase: string,
+  pageOrigin: string = typeof window === 'undefined' ? 'http://localhost' : window.location.origin,
+): string | null {
+  if (!url || !url.startsWith('/') || url.startsWith('//') || url.includes('\\')) return null
+  let base: URL
+  let asset: URL
+  try {
+    base = new URL(apiBase || '/', pageOrigin)
+    asset = new URL(`${apiBase}${url}`, pageOrigin)
+  } catch {
+    return null
+  }
+  if (asset.origin !== base.origin || asset.username || asset.password) return null
+  const basePath = base.pathname.endsWith('/') ? base.pathname.slice(0, -1) : base.pathname
+  if (!asset.pathname.startsWith(`${basePath}/`)) return null
+  const href = asset.href
+  if (href.startsWith('https://')) return href
+  if (href.startsWith('http://') && LOOPBACK_HOSTS.has(asset.hostname)) return href
+  return null
 }

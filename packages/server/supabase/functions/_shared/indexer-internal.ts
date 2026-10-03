@@ -35,8 +35,9 @@ function json(body: Record<string, unknown>, status: number): Response {
 /**
  * Route an internal request. Returns null only when `raw` is not an internal
  * request (not JSON, or no known `mode`), so the caller treats it as a
- * GitHub webhook delivery. A handler that throws becomes a 500 JSON that
- * names the error; it never falls through.
+ * GitHub webhook delivery. A handler that throws becomes a 500 JSON with a
+ * stable code and a fixed message; it never falls through. The error itself
+ * goes to the log only, never into the response.
  */
 export async function dispatchInternalIndexerRequest(
   raw: string,
@@ -60,10 +61,12 @@ export async function dispatchInternalIndexerRequest(
   try {
     return mode === 'sweep' ? await handlers.sweep(body) : await handlers.push(body)
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
-    log.error(`internal ${mode} failed`, { error: message })
+    const detail = err instanceof Error ? err.message : String(err)
+    log.error(`internal ${mode} failed`, { error: detail })
     return json(
-      { ok: false, error: { code: mode === 'sweep' ? 'SWEEP_FAILED' : 'PUSH_INDEX_FAILED', message: message.slice(0, 500) } },
+      mode === 'sweep'
+        ? { ok: false, error: { code: 'SWEEP_FAILED', message: 'The index sweep failed. The indexer logs have the cause.' } }
+        : { ok: false, error: { code: 'PUSH_INDEX_FAILED', message: 'Indexing the push failed. The indexer logs have the cause.' } },
       500,
     )
   }

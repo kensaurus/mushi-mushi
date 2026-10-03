@@ -43,7 +43,7 @@ export function publicPageKeys(owner: string, repo: string): { html: string; mar
 }
 
 export function publicPageUrls(owner: string, repo: string, sha: string): PublicPageUrls {
-  const page = `${SITE}/r/${owner}/${repo}`
+  const page = `${SITE}/r/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`
   const subject = `Wrong or unwanted diagram: ${owner}/${repo}`
   const body = `Page: ${page}\nCommit: ${sha}\n\nWhat is wrong, or why it should not be public:\n`
   const tag = `diagram:${owner}/${repo}`.replace(/[^A-Za-z0-9._:\-/]/g, '').slice(0, 64)
@@ -51,7 +51,7 @@ export function publicPageUrls(owner: string, repo: string, sha: string): Public
     page,
     markdown: `${page}.md`,
     interactive: `${SITE}/docs/r?repo=${encodeURIComponent(`${owner}/${repo}`)}`,
-    github: `https://github.com/${owner}/${repo}`,
+    github: `https://github.com/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`,
     signup: `${SITE}/admin/signup?src=${encodeURIComponent(tag)}`,
     reportMailto: `mailto:${REPORT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`,
     badgeImage: 'https://img.shields.io/badge/architecture-diagram-c2410c',
@@ -88,25 +88,52 @@ function escapeMd(s: string): string {
   return s.replace(/([\\`*_[\]<>|#])/g, '\\$1').replace(/\r?\n/g, ' ')
 }
 
+/**
+ * A Markdown code span inside a table cell: backslashes are escaped first,
+ * then the pipe that would end the cell. Backticks and line breaks are dropped.
+ */
+function mdCodeCell(s: string): string {
+  return s.replace(/\\/g, '\\\\').replace(/`/g, '').replace(/\r?\n/g, ' ').replace(/\|/g, '\\|')
+}
+
+/** An encoded URL as a Markdown link target: parentheses cannot end the link early. */
+function mdLinkTarget(url: string): string {
+  return url.replace(/\(/g, '%28').replace(/\)/g, '%29')
+}
+
+/** A commit id as published: hex only, so it is inert in a URL and a code span. */
+function safeSha(sha: string): string {
+  return /^[0-9a-f]{4,64}$/i.test(sha) ? sha : ''
+}
+
+/** A coordinate from the stored payload: a finite number, never markup. */
+function num(v: unknown): number {
+  const n = typeof v === 'number' ? v : Number(v)
+  return Number.isFinite(n) ? n : 0
+}
+
 function treeUrl(owner: string, repo: string, sha: string, path: string): string {
-  return `https://github.com/${owner}/${repo}/tree/${sha}/${path.split('/').map(encodeURIComponent).join('/')}`
+  const segments = path.split('/').map(encodeURIComponent).join('/')
+  return `https://github.com/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/tree/${encodeURIComponent(safeSha(sha))}/${segments}`
 }
 
 function canvasSize(d: PublicDiagramPayload): { width: number; height: number } {
   let w = 0
   let h = 0
   for (const g of d.groups) {
-    w = Math.max(w, g.x + g.w)
-    h = Math.max(h, g.y + g.h)
+    w = Math.max(w, num(g.x) + num(g.w))
+    h = Math.max(h, num(g.y) + num(g.h))
   }
   for (const n of d.nodes) {
-    w = Math.max(w, n.x + NODE_W)
-    h = Math.max(h, n.y + NODE_H)
+    w = Math.max(w, num(n.x) + NODE_W)
+    h = Math.max(h, num(n.y) + NODE_H)
   }
   return { width: w + 32, height: h + 32 }
 }
 
-function edgePath(from: { x: number; y: number }, to: { x: number; y: number }): string {
+function edgePath(fromNode: { x: number; y: number }, toNode: { x: number; y: number }): string {
+  const from = { x: num(fromNode.x), y: num(fromNode.y) }
+  const to = { x: num(toNode.x), y: num(toNode.y) }
   const sy = from.y + NODE_H / 2
   const ty = to.y + NODE_H / 2
   if (Math.abs(from.x - to.x) < 1) {
@@ -143,9 +170,10 @@ function svg(d: PublicDiagramPayload): string {
     '<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" class="arrow"/></marker></defs>',
   )
   for (const g of d.groups) {
+    const [x, y, w, h] = [num(g.x), num(g.y), num(g.w), num(g.h)]
     parts.push(
-      `<g><rect class="group" x="${g.x}" y="${g.y}" width="${g.w}" height="${g.h}" rx="8"/>`,
-      `<text class="group-label" x="${g.x + 12}" y="${g.y + 22}">${escapeHtml(g.label.toUpperCase())}</text></g>`,
+      `<g><rect class="group" x="${x}" y="${y}" width="${w}" height="${h}" rx="8"/>`,
+      `<text class="group-label" x="${x + 12}" y="${y + 22}">${escapeHtml(g.label.toUpperCase())}</text></g>`,
     )
   }
   for (const e of d.edges) {
@@ -155,12 +183,13 @@ function svg(d: PublicDiagramPayload): string {
     parts.push(`<path class="edge" d="${edgePath(from, to)}" marker-end="url(#arrow)"><title>${escapeHtml(`${from.label} → ${to.label}${e.label ? ` (${e.label})` : ''}`)}</title></path>`)
   }
   for (const n of d.nodes) {
+    const [x, y] = [num(n.x), num(n.y)]
     const label = escapeHtml(clip(n.label, 28))
     const path = escapeHtml(n.path ? (n.path.length > 34 ? `…${n.path.slice(-33)}` : n.path) : '—')
     const inner = [
-      `<rect class="node" x="${n.x}" y="${n.y}" width="${NODE_W}" height="${NODE_H}" rx="4"/>`,
-      `<text class="node-label" x="${n.x + 10}" y="${n.y + 26}">${label}</text>`,
-      `<text class="node-path" x="${n.x + 10}" y="${n.y + 46}">${path}</text>`,
+      `<rect class="node" x="${x}" y="${y}" width="${NODE_W}" height="${NODE_H}" rx="4"/>`,
+      `<text class="node-label" x="${x + 10}" y="${y + 26}">${label}</text>`,
+      `<text class="node-path" x="${x + 10}" y="${y + 46}">${path}</text>`,
       `<title>${escapeHtml(n.description || n.label)}</title>`,
     ].join('')
     parts.push(n.path ? `<a href="${escapeHtml(treeUrl(d.owner, d.repo, d.sha, n.path))}">${inner}</a>` : `<g>${inner}</g>`)
@@ -207,8 +236,12 @@ export function renderPublicDiagramHtml(d: PublicDiagramPayload): string {
       ...(n.path ? { codeRepository: treeUrl(d.owner, d.repo, d.sha, n.path) } : {}),
     })),
   }
-  // `</` inside JSON-LD would end the script element early.
-  const jsonLdText = JSON.stringify(jsonLd).replace(/</g, '\\u003c')
+  // `</` inside JSON-LD would end the script element early; `>` and `&` are
+  // escaped as well so no markup survives in the data.
+  const jsonLdText = JSON.stringify(jsonLd)
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/&/g, '\\u0026')
 
   const partsList = d.nodes
     .map((n) => {
@@ -248,7 +281,7 @@ export function renderPublicDiagramHtml(d: PublicDiagramPayload): string {
 <body>
 <main>
 <h1>${escapeHtml(`${d.owner}/${d.repo}`)}</h1>
-<p class="meta">Architecture drawn by AI from commit <a href="${escapeHtml(`${u.github}/tree/${d.sha}`)}"><code>${escapeHtml(d.sha.slice(0, 7))}</code></a>${drawnText ? ` on ${escapeHtml(drawnText)}` : ''}. Every file path was checked against the repo at that commit. It can still be wrong about what a part does.</p>
+<p class="meta">Architecture drawn by AI from commit <a href="${escapeHtml(`${u.github}/tree/${encodeURIComponent(safeSha(d.sha))}`)}"><code>${escapeHtml(d.sha.slice(0, 7))}</code></a>${drawnText ? ` on ${escapeHtml(drawnText)}` : ''}. Every file path was checked against the repo at that commit. It can still be wrong about what a part does.</p>
 <p class="meta"><a href="${escapeHtml(u.interactive)}">Open the interactive view</a> · <a href="${escapeHtml(u.markdown)}">Markdown</a> · <a href="${escapeHtml(u.reportMailto)}">Report a wrong or unwanted diagram</a></p>
 <div class="canvas">
 ${svg(d)}
@@ -276,7 +309,7 @@ export function renderPublicDiagramMarkdown(d: PublicDiagramPayload): string {
   const lines = [
     `# ${escapeMd(`${d.owner}/${d.repo}`)}: architecture`,
     '',
-    `Drawn by AI from commit \`${d.sha}\`. Every file path was checked against the repo at that commit; descriptions can still be wrong.`,
+    `Drawn by AI from commit \`${safeSha(d.sha)}\`. Every file path was checked against the repo at that commit; descriptions can still be wrong.`,
     '',
     `- Page: ${u.page}`,
     `- Repository: ${u.github}`,
@@ -287,7 +320,7 @@ export function renderPublicDiagramMarkdown(d: PublicDiagramPayload): string {
     '| --- | --- | --- | --- |',
     ...d.nodes.map(
       (n) =>
-        `| ${escapeMd(n.label)} | ${escapeMd(groupLabel.get(n.group) ?? n.group)} | ${n.path ? `[\`${n.path.replace(/`/g, '').replace(/\r?\n/g, ' ').replace(/\|/g, '\\|')}\`](${treeUrl(d.owner, d.repo, d.sha, n.path)})` : ''} | ${escapeMd(n.description)} |`,
+        `| ${escapeMd(n.label)} | ${escapeMd(groupLabel.get(n.group) ?? n.group)} | ${n.path ? `[\`${mdCodeCell(n.path)}\`](${mdLinkTarget(treeUrl(d.owner, d.repo, d.sha, n.path))})` : ''} | ${escapeMd(n.description)} |`,
     ),
   ]
   if (d.edges.length > 0) {

@@ -10,11 +10,11 @@
  */
 
 import type { Command } from 'commander'
-import { readFileSync, statSync } from 'node:fs'
 import { basename } from 'node:path'
 import { apiCall, fmtDate, outputIsJson, requireConfig, requireUuid } from '../cli-shared.js'
 import { dieOrgError, oneLine, orgSegment, requireYes } from '../command-helpers.js'
 import { MushiCliError } from '../errors.js'
+import { readTextFileCapped } from '../file-io.js'
 
 const VENDORS = ['vercel', 'aws', 'supabase', 'other'] as const
 /** The api's cap on the CSV itself; refused here before the upload. */
@@ -101,14 +101,10 @@ export function registerSpendCommands(program: Command): void {
     .action(async (file: string, opts: { vendor: string; projectId?: string; org?: string; json?: boolean }) => {
       if (!(VENDORS as readonly string[]).includes(opts.vendor)) throw new MushiCliError('E_INVALID_INPUT', `--vendor must be one of ${VENDORS.join(', ')}`)
       const projectId = opts.projectId ? requireUuid(opts.projectId, 'project id') : undefined
-      let size: number
-      try {
-        size = statSync(file).size
-      } catch {
-        throw new MushiCliError('E_INVALID_INPUT', `Cannot read ${file}.`)
-      }
-      if (size > MAX_BILL_CSV_BYTES) throw new MushiCliError('E_INVALID_INPUT', `${file} is over 5 MB.`, 'export daily rather than hourly rows, or split it by month')
-      const csv = readFileSync(file, 'utf8')
+      const read = readTextFileCapped(file, MAX_BILL_CSV_BYTES)
+      if (read.kind === 'absent') throw new MushiCliError('E_INVALID_INPUT', `Cannot read ${file}.`)
+      if (read.kind === 'too_large') throw new MushiCliError('E_INVALID_INPUT', `${file} is over 5 MB.`, 'export daily rather than hourly rows, or split it by month')
+      const csv = read.text
       const config = requireConfig()
       const result = await apiCall<ImportResult>(
         `/v1/admin/orgs/${orgSegment(opts.org)}/spend/imports`,
