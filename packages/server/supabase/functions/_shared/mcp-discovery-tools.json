@@ -1894,6 +1894,27 @@
       },
       "returnsUntrusted": true
     },
+    "get_recipe_drift": {
+      "title": "Recipe drift",
+      "description": "Return what drifted from the app recipe, with a fix for each: CI workflows (no concurrency or timeout, macOS on every run, long artifact retention, crons more than daily, the default branch red), deploys (a merged fix not live yet, a failed version probe, web and mobile on different versions), env names declared but missing in CI, migrations in the repo but not applied, and off-token design values. For each gate it says when it last ran (never_run means not checked, never healthy). Returns { projectId, gates: { <gate>: { status, checkedAt, commitSha } }, findings: [{ gate, ruleId, severity, message, filePath, line, suggestedFix }] }. Read-only. Mushi never runs DDL or edits workflows: apply schema and CI fixes from your editor.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Recipe drift",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "description": "Project UUID — defaults to the server-configured project when omitted (`project_id` is accepted too.)",
+            "type": "string"
+          }
+        }
+      },
+      "returnsUntrusted": true
+    },
     "get_repo_digest": {
       "title": "Repo digest (paste-ready code)",
       "description": "Return the connected GitHub repo as one paste-ready text digest at a pinned commit: a directory tree plus file contents, ranked README → manifests → entry points → source → tests and cut to a token budget (budgetTokens, default 50,000, max 200,000; counts are estimates). Scope it to a folder (path) or to one bug (reportId: the report's stack-frame files, fix files and related code first, then the files that import them). Sensitive files (.env, keys) are never included, and a file that looks like it holds a secret is replaced with a notice. Returns { sha, ref, total_tokens, budget_tokens, files: [{ path, tokens, truncated }], dropped_counts, redacted, scope, text }. Works without codebase indexing. Read-only. Use to hand yourself the code around a bug before fixing it; use get_fix_context for the diagnosis, or search_codebase to find one thing.",
