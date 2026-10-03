@@ -114,7 +114,8 @@ export async function accessibleProjectIdsInOrganization(
     .eq('user_id', userId)
     .maybeSingle()
   if (opts.strict) failOnReadError(membershipRes, 'organization_members')
-  if (!membershipRes.data) return []
+  const membership = membershipRes.data
+  if (!membership) return []
 
   const all = await accessibleProjectIds(db, userId, opts)
   if (all.length === 0) return []

@@ -57,6 +57,7 @@ const REVIEWED = new Map<string, 'keyed' | 'stored' | 'sentinel'>([
   ['_shared/anti-gaming.ts reporter_tokens', 'stored'], // caller passes the key, or 'tester:<id>'
   ['_shared/product-events.ts anon_id', 'stored'], // payload.anonId; no caller passes a raw id
   ['_shared/sentry-ingest.ts reporter_token_hash', 'sentinel'], // 'sentry-webhook'
+  ['_shared/design-actions.ts reporter_token_hash', 'sentinel'], // 'cron:design-drift' (DESIGN_DRIFT_REPORTER)
   ['_shared/voice-intake.ts reporter_token_hash', 'sentinel'], // 'voice-intake'
   ['library-modernizer/index.ts reporter_token_hash', 'sentinel'], // 'cron:library-modernizer'
   ['status-reconciler/index.ts reporter_token_hash', 'sentinel'], // 'cron:status-reconciler'
