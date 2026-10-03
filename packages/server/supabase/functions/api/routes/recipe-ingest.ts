@@ -106,6 +106,22 @@ export function parseCsvLine(line: string): string[] {
   return out
 }
 
+/**
+ * The CSV import is a signed-in owner's or admin's action (the route is
+ * jwtAuth). A failed role read answers false, so the import fails closed.
+ */
+async function canImportResources(c: Context, db: Db, orgId: string): Promise<boolean> {
+  if (c.get('authMethod') === 'apiKey') return false
+  const userId = c.get('userId') as string | undefined
+  if (!userId) return false
+  const { data, error } = await db.from('organization_members').select('role').eq('organization_id', orgId).eq('user_id', userId).maybeSingle()
+  if (error) {
+    ilog.warn('org role read failed', { orgId, err: error.message })
+    return false
+  }
+  return ['owner', 'admin'].includes((data as { role?: string } | null)?.role ?? '')
+}
+
 export function registerRecipeIngestRoutes(app: Hono<{ Variables: Variables }>, deps: RecipeIngestDeps = defaultRecipeIngestDeps): void {
   app.post('/v1/ingest/recipe', deps.apiKeyAuth, async (c) => {
     const projectId = c.get('projectId') as string | null
@@ -200,11 +216,11 @@ export function registerRecipeIngestRoutes(app: Hono<{ Variables: Variables }>, 
     if (body.csv.length > 256 * 1024) return jsonError(c, 'PAYLOAD_TOO_LARGE', 'The CSV is over 256 KB.', 413)
     const access = await portfolioAccess(c, db, body.organizationId)
     if (!access.ok) return access.response
-    const { data: role } = await db.from('organization_members').select('role').eq('organization_id', access.orgId).eq('user_id', c.get('userId') as string).maybeSingle()
-    if (!['owner', 'admin'].includes((role as { role?: string } | null)?.role ?? '')) return jsonError(c, 'FORBIDDEN', 'Only team owners and admins can import resources.', 403)
+    if (!(await canImportResources(c, db, access.orgId))) return jsonError(c, 'FORBIDDEN', 'Only team owners and admins can import resources.', 403)
     const { data: projects } = await db.from('projects').select('id, slug, name').in('id', access.projectIds.length ? access.projectIds : ['00000000-0000-0000-0000-000000000000'])
     const resolveProject = (ref: string) => ((projects ?? []) as Array<{ id: string; slug: string | null; name: string | null }>).find((p) => p.id === ref || p.slug === ref || p.name === ref)?.id ?? null
-    const lines = body.csv.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
+    // Excel's "CSV UTF-8" starts the file with a byte-order mark, which would hide the `kind` header.
+    const lines = body.csv.replace(/^﻿/, '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
     const header = parseCsvLine(lines.shift() ?? '').map((h) => h.toLowerCase())
     const col = (name: string) => header.indexOf(name)
     if (col('kind') < 0 || col('external_id') < 0 || col('project') < 0) return jsonError(c, 'VALIDATION_ERROR', 'The CSV needs the columns kind, external_id, project (and optionally role).', 400)
@@ -234,10 +250,11 @@ export function registerRecipeIngestRoutes(app: Hono<{ Variables: Variables }>, 
     const access = await portfolioAccess(c, db, c.req.param('orgId') ?? '')
     if (!access.ok) return access.response
     try {
-      const [{ data: resources }, { data: uses }, { data: findings }] = await Promise.all([
+      const [{ data: resources }, { data: uses }, { data: findings }, canImport] = await Promise.all([
         db.from('portfolio_resources').select('id, kind, external_id, metadata').eq('organization_id', access.orgId).limit(1000),
         access.projectIds.length ? db.from('portfolio_resource_uses').select('resource_id, project_id, role, source, observed_at').in('project_id', access.projectIds).limit(5000) : Promise.resolve({ data: [] }),
         db.from('portfolio_findings').select('id, rule_id, severity, project_ids, resource_key, message, suggested_fix, updated_at').eq('organization_id', access.orgId).eq('status', 'open').limit(500),
+        canImportResources(c, db, access.orgId),
       ])
       const useRows = (uses ?? []) as Array<{ resource_id: string; project_id: string; role: string; source: string }>
       const used = new Set(useRows.map((u) => u.resource_id))
@@ -245,6 +262,8 @@ export function registerRecipeIngestRoutes(app: Hono<{ Variables: Variables }>, 
         ok: true,
         data: {
           organizationId: access.orgId,
+          // Whether this caller may POST /v1/ingest/recipe/csv (a signed-in owner or admin).
+          canImport,
           // Only resources a visible project uses, so a member never learns another team's ids.
           resources: ((resources ?? []) as Array<{ id: string; kind: string; external_id: string }>).filter((r) => used.has(r.id)).map((r) => ({
             id: r.id, kind: r.kind, externalId: r.external_id,
