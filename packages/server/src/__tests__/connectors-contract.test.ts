@@ -186,6 +186,43 @@ describe('connector specifics', () => {
     expect(r.reason).toMatch(/Agreements/)
   })
 
+  it('a probe says why it failed: 401 is credential_rejected with nothing missing, only a 403 names a missing scope', async () => {
+    const play = registry.getConnector('play_console')
+    expect(await play.probe(ctx('play_console', always(401, { error: 'invalid_grant' })) as never)).toMatchObject({ ok: false, failure: 'credential_rejected', missing: [] })
+    const denied = await play.probe(ctx('play_console', async (u) => (u.includes('oauth2') ? json(200, { access_token: 't' }) : json(403, {}))) as never)
+    expect(denied).toMatchObject({ ok: false, failure: 'permission_missing', missing: ['View app information (read-only)'] })
+    expect((await play.probe(ctx('play_console', offline) as never)).missing).toEqual([])
+    const asc = await registry.getConnector('app_store_connect').probe(ctx('app_store_connect', always(403, { errors: [{ code: 'FORBIDDEN_ERROR' }] })) as never)
+    expect(asc).toMatchObject({ ok: false, failure: 'permission_missing' })
+    expect(asc.missing).toHaveLength(1)
+    expect(await registry.getConnector('sentry').probe(ctx('sentry', always(401)) as never)).toMatchObject({ failure: 'credential_rejected' })
+  })
+
+  it('a failed snapshot stores why it failed (error_kind) for the radar', async () => {
+    const db = makeFakeDb({})
+    const entry = { connector: registry.getConnector('revenuecat'), instanceId: 'i1', bindings: SETUP.revenuecat.bindings, ctx: { ...ctx('revenuecat', always(401)), db } }
+    const res = await runtime.runConnector(db as never, entry as never, null)
+    expect(res.status).toBe('error')
+    expect(db.table('connector_snapshots')[0]).toMatchObject({ ok: false, error_kind: 'credential_rejected' })
+  })
+
+  it('a snapshot that could not be stored is an error with the reason, never connected or a silent drop', async () => {
+    const base = makeFakeDb({})
+    const failed = { data: null, error: { message: 'column "error_kind" does not exist' } }
+    const chain: unknown = new Proxy({}, { get: (_t, prop) => (prop === 'then' ? (ok: (v: unknown) => unknown) => Promise.resolve(failed).then(ok) : () => chain) })
+    const db = new Proxy(base, { get: (t, prop, r) => (prop === 'from' ? (name: string) => (name === 'connector_snapshots' ? chain : t.from(name)) : Reflect.get(t, prop, r)) })
+    // The vendor answers fine; only the write fails.
+    const okEntry = { connector: registry.getConnector('revenuecat'), instanceId: 'i1', bindings: SETUP.revenuecat.bindings, ctx: { ...ctx('revenuecat', vi.fn(async (u: string, i?: RequestInit) => recorded(u, i))), db } }
+    const stored = await runtime.runConnector(db as never, okEntry as never, null)
+    expect(stored.status).toBe('error')
+    expect(stored.reason).toMatch(/Could not store the .* snapshot: column "error_kind" does not exist/)
+    // The vendor said no and that failure could not be written either: the result still says both.
+    const badEntry = { ...okEntry, ctx: { ...okEntry.ctx, fetch: always(401) } }
+    const denied = await runtime.runConnector(db as never, badEntry as never, null)
+    expect(denied.status).toBe('error')
+    expect(denied.reason).toMatch(/error_kind/)
+  })
+
   it('GitHub proposeChange drops workflow, env and out-of-allowlist paths', async () => {
     const c = registry.getConnector('github')
     const manifest = { version: 1, change: { allowPaths: ['mushi.recipe.json', 'tokens/**'] } }

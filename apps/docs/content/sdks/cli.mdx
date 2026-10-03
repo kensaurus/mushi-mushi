@@ -223,10 +223,21 @@ Checks that catch a problem before a user hits it. `scan` runs in your own CI
 job; Mushi never clones your repo.
 
 ```bash
-mushi radar scan                     # storage deletes done in SQL; lists the build files the store rules read
-mushi radar scan --push              # send results to Mushi (one extra step in your existing CI job)
+mushi radar scan                     # storage deletes done in SQL, secret keys in the built app; lists the build files the store rules read
+mushi radar scan --push              # send results to Mushi (one extra step in your existing CI job, after the build step)
+mushi radar scan --bundle-dir web/dist   # scan only these built client folders (repeatable), e.g. to leave out a server dist
 mushi radar show                     # every hole check for this project and what it found
 ```
+
+Run `scan` **after your build step**: it also reads the built app (`dist`,
+`build`, `out`, `.next/static`, `.output/public`, `.svelte-kit/output/client`,
+`.vercel/output/static`, native JS bundles) for secret keys. A `dist` that holds
+server code counts too; name the client folders with `--bundle-dir` to leave it
+out. With no build output, that check is left out and reads "Not checked",
+never a pass.
+Only the file, the line and the kind of key are sent, never the key itself.
+The Supabase anon key and the Mushi SDK key are public by design and are not
+flagged.
 
 ### One CI step for both checks
 
@@ -235,7 +246,8 @@ run, so they cost no extra job. Both need `@mushi-mushi/cli` 0.29.0 or later;
 an older CLI answers "unknown command", and the packaged action stops with
 that version in its error instead. Store a project key as a repo secret first.
 The SDK ingest key works; an account-level (org) key does not. Both commands
-read the checked-out repo, so the job needs `actions/checkout` before them.
+read the checked-out repo, so the job needs `actions/checkout` before them,
+and `radar scan` also reads the built app, so put the step after your build.
 
 **Copy-paste `run:` step**, for any CI system:
 

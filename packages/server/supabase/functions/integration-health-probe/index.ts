@@ -30,6 +30,7 @@ import { safeErrorResponse } from '../_shared/safe-error.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { startCronRun } from '../_shared/telemetry.ts'
 import {
+  historyHttpStatus,
   probeIntegration,
   type IntegrationKind,
 } from '../_shared/integration-probes.ts'
@@ -290,6 +291,8 @@ async function handler(req: Request): Promise<Response> {
       latency_ms: number
       message: string | null
       source: string
+      /** Vendor HTTP status (null = no response); BYOK rows leave it unset. */
+      http_status?: number | null
     }> = []
 
     for (let i = 0; i < tasks.length; i += CONCURRENCY) {
@@ -310,6 +313,7 @@ async function handler(req: Request): Promise<Response> {
             latency_ms: probe.latencyMs,
             message: probe.detail || (probe.httpStatus ? `HTTP ${probe.httpStatus}` : null),
             source: 'cron',
+            http_status: historyHttpStatus(probe),
           })
           probed++
         } else {

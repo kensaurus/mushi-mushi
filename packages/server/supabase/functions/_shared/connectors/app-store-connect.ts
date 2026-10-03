@@ -18,10 +18,11 @@
  */
 
 import { signJwt } from './jwt.ts'
-import { fetchJson, statusReason } from './http-util.ts'
+import { failureOfStatus, fetchJson, statusReason, vendorError } from './http-util.ts'
 import { ConnectorError, notConnected, type ConnectorContext, type ProbeResult, type RecipeConnector } from './types.ts'
 
 const API = 'https://api.appstoreconnect.apple.com'
+const ASC_READ_SCOPE = 'a team API key with a read role (Developer or App Manager)'
 
 export const AGREEMENT_BLOCKED_REASON =
   'Apple is refusing API access until the account holder accepts the current agreement in App Store Connect (Business → Agreements). Nothing is wrong with the key.'
@@ -59,7 +60,7 @@ export const appStoreConnectConnector: RecipeConnector = {
   kind: 'app_store_connect',
   title: 'App Store Connect',
   capabilities: ['snapshot', 'drift'],
-  requiredScopes: { snapshot: ['a team API key with a read role (Developer or App Manager)'] },
+  requiredScopes: { snapshot: [ASC_READ_SCOPE] },
   credentialNote: 'Apple team API keys cannot be limited to one app: the key can see every app on the team. Mushi only reads versions and builds with it. Listings are published by your own CI, never by Mushi.',
   async probe(ctx): Promise<ProbeResult> {
     const key = parseKey(ctx.readCredential)
@@ -72,7 +73,7 @@ export const appStoreConnectConnector: RecipeConnector = {
     }
     if (isAgreementBlock(res.status, res.body)) return { ok: false, status: 'blocked', granted: [], missing: [], reason: AGREEMENT_BLOCKED_REASON }
     if (res.status === 200) return { ok: true, status: 'connected', granted: ['apps:read'], missing: [] }
-    return { ok: false, status: 'error', granted: [], missing: [], reason: statusReason('App Store Connect', res.status) }
+    return { ok: false, status: 'error', granted: [], missing: res.status === 403 ? [ASC_READ_SCOPE] : [], reason: statusReason('App Store Connect', res.status), failure: failureOfStatus(res.status) }
   },
   async snapshot(ctx, bindings) {
     const key = parseKey(ctx.readCredential)
@@ -82,7 +83,7 @@ export const appStoreConnectConnector: RecipeConnector = {
     for (const b of apps) {
       const v = await asc(ctx, key, `/v1/apps/${b.externalId}/appStoreVersions?limit=5&fields[appStoreVersions]=versionString,appVersionState,appStoreState,createdDate`)
       if (isAgreementBlock(v.status, v.body)) throw new ConnectorError(AGREEMENT_BLOCKED_REASON, 'blocked')
-      if (v.status !== 200) throw new ConnectorError(statusReason('App Store Connect', v.status))
+      if (v.status !== 200) throw vendorError('App Store Connect', v.status)
       const builds = await asc(ctx, key, `/v1/builds?filter[app]=${b.externalId}&sort=-uploadedDate&limit=1&fields[builds]=version,processingState,uploadedDate`)
       const lb = builds.status === 200 ? (builds.body?.data?.[0]?.attributes ?? null) : null
       out.push({

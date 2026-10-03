@@ -31,7 +31,7 @@ import { portfolioAccess } from './portfolio.ts'
 
 const clog = log.child('connectors')
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-const INSTANCE_FIELDS = ['id', 'organization_id', 'project_id', 'kind', 'display_name', 'granted_scopes', 'enabled_capabilities', 'config', 'status', 'status_reason', 'last_probe_at', 'last_ok_at', 'last_error', 'created_at', 'updated_at'] as const
+const INSTANCE_FIELDS = ['id', 'organization_id', 'project_id', 'kind', 'display_name', 'granted_scopes', 'missing_scopes', 'last_probe_failure', 'enabled_capabilities', 'config', 'status', 'status_reason', 'last_probe_at', 'last_ok_at', 'last_error', 'created_at', 'updated_at'] as const
 const INSTANCE_COLUMNS = INSTANCE_FIELDS.join(', ')
 
 /** Whitelist the public fields, so a credential ref can never ride along whatever the select returned. */
@@ -92,6 +92,9 @@ async function audit(db: Db, orgId: string, actorId: string, action: string, res
   await db.from('org_audit_events').insert({ organization_id: orgId, actor_id: actorId, action, resource_type: 'connector', resource_id: resourceId, metadata }).then(() => {}, () => {})
 }
 
+/** A probe ran but its result could not be written: the connector would keep showing a stale status. */
+class ProbeNotStored extends Error {}
+
 async function probeInstance(db: Db, deps: ConnectorRouteDeps, row: { id: string; kind: string; organization_id: string; project_id: string | null; config: Record<string, unknown>; read_credential_ref: string | null; write_credential_ref: string | null }): Promise<ProbeResult> {
   const connector = getConnector(row.kind)
   const ctx: ConnectorContext = {
@@ -107,12 +110,20 @@ async function probeInstance(db: Db, deps: ConnectorRouteDeps, row: { id: string
     result = { ok: false, status: 'error', granted: [], missing: [], reason: ((err as Error)?.message ?? String(err)).slice(0, 300) }
   }
   const now = deps.now().toISOString()
-  await db.from('connector_instances').update({
+  const { error } = await db.from('connector_instances').update({
     status: result.status, status_reason: result.reason ?? null, granted_scopes: result.granted, last_probe_at: now,
+    // What was missing and why it failed, for the radar's store_credential_scope_missing / provider_key_invalid.
+    missing_scopes: result.missing, last_probe_failure: result.ok ? null : result.failure ?? null,
     ...(result.ok ? { last_ok_at: now, last_error: null } : { last_error: result.reason ?? null }), updated_at: now,
   }).eq('id', row.id)
+  if (error) {
+    clog.error('connector probe not stored', { instanceId: row.id, kind: row.kind, err: error.message })
+    throw new ProbeNotStored(error.message)
+  }
   return result
 }
+
+const PROBE_NOT_SAVED = 'The check ran, but its result could not be saved, so the connector still shows its previous status. Press Check again in a minute.'
 
 async function replaceBindings(db: Db, instanceId: string, bindings: Array<{ projectId: string; externalId: string; role: string }>, allowed: string[]): Promise<string | null> {
   for (const b of bindings) if (!allowed.includes(b.projectId)) return 'A binding names a project that is not in this team.'
@@ -190,7 +201,14 @@ export function registerConnectorRoutes(app: Hono<{ Variables: Variables }>, dep
       if (error) return jsonError(c, 'DB_ERROR', 'The connector could not be saved.', 500)
       const bindErr = await replaceBindings(db, id, body.bindings, access.projectIds)
       if (bindErr) return jsonError(c, 'VALIDATION_ERROR', bindErr, 400)
-      const probe = await probeInstance(db, deps, row)
+      let probe: ProbeResult
+      try {
+        probe = await probeInstance(db, deps, row)
+      } catch (err) {
+        // The connector and its credential are saved; only the first check is not.
+        if (err instanceof ProbeNotStored) return jsonError(c, 'PROBE_NOT_SAVED', `The connector was saved. ${PROBE_NOT_SAVED}`, 500)
+        throw err
+      }
       await audit(db, access.orgId, c.get('userId') as string, 'connector.created', id, { kind: body.kind, status: probe.status })
       const { data: saved } = await db.from('connector_instances').select(INSTANCE_COLUMNS).eq('id', id).maybeSingle()
       return c.json({ ok: true, data: { instance: publicInstance(saved as unknown as Record<string, unknown> | null), probe } }, 201)
@@ -216,7 +234,12 @@ export function registerConnectorRoutes(app: Hono<{ Variables: Variables }>, dep
   app.post('/v1/admin/orgs/:orgId/connectors/:id/probe', deps.jwtAuth, async (c) => {
     const w = await withInstance(c)
     if (!w.ok) return w.response
-    return c.json({ ok: true, data: await probeInstance(w.db, deps, w.row as never) })
+    try {
+      return c.json({ ok: true, data: await probeInstance(w.db, deps, w.row as never) })
+    } catch (err) {
+      if (err instanceof ProbeNotStored) return jsonError(c, 'PROBE_NOT_SAVED', PROBE_NOT_SAVED, 500)
+      throw err
+    }
   })
 
   app.patch('/v1/admin/orgs/:orgId/connectors/:id', deps.jwtAuth, async (c) => {

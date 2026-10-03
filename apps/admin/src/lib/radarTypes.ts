@@ -20,7 +20,8 @@ interface RadarDetectorView {
   ruleId: string
   title: string
   prevents: string
-  source: 'public_probe' | 'repo_scan' | 'host_ci' | 'connector'
+  /** `mushi` = read from rows Mushi already keeps (SDK heartbeats, stored keys). */
+  source: 'public_probe' | 'repo_scan' | 'host_ci' | 'connector' | 'mushi'
   state: DetectorState
   reason: string
   checkedAt: string | null

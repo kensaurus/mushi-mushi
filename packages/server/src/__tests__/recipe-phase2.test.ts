@@ -299,6 +299,32 @@ describe('connector routes', () => {
     const unsupported = await app.call('PATCH', `/v1/admin/orgs/${ORG}/connectors/${id}`, { body: { enabledCapabilities: ['propose'] } })
     expect(unsupported.body.error.code).toBe('CAPABILITY_NOT_SUPPORTED')
   })
+
+  it('a probe whose result could not be saved answers 500, never a 200 over a stale status', async () => {
+    const db = seed()
+    const failing = failUpdates(db, 'connector_instances')
+    const { app } = connectorHarness(failing)
+    const created = await app.call('POST', `/v1/admin/orgs/${ORG}/connectors`, { body: { kind: 'llm_usage', displayName: 'OpenAI', config: { provider: 'openai' }, readCredential: 'sk-admin-abc' } })
+    expect(created.status).toBe(500)
+    expect(created.body.error.code).toBe('PROBE_NOT_SAVED')
+    expect(created.body.error.message).toMatch(/The connector was saved/)
+    const id = String(db.table('connector_instances')[0].id)
+    const probed = await app.call('POST', `/v1/admin/orgs/${ORG}/connectors/${id}/probe`)
+    expect(probed.status).toBe(500)
+    expect(probed.body.error.code).toBe('PROBE_NOT_SAVED')
+    // With writes working again, the same probe is stored and returned.
+    const { app: healthy } = connectorHarness(db)
+    expect((await healthy.call('POST', `/v1/admin/orgs/${ORG}/connectors/${id}/probe`)).status).toBe(200)
+  })
+
+  it('stores why a probe failed and what it found missing, for the radar', async () => {
+    const db = seed()
+    const { app } = connectorHarness(db, vi.fn(async () => json(401, { error: { message: 'invalid key' } })))
+    const res = await app.call('POST', `/v1/admin/orgs/${ORG}/connectors`, { body: { kind: 'llm_usage', displayName: 'OpenAI', config: { provider: 'openai' }, readCredential: 'sk-admin-abc' } })
+    expect(res.body.data.probe).toMatchObject({ ok: false, failure: 'credential_rejected' })
+    expect(db.table('connector_instances')[0]).toMatchObject({ last_probe_failure: 'credential_rejected', missing_scopes: [] })
+    expect(res.body.data.instance).toMatchObject({ last_probe_failure: 'credential_rejected', missing_scopes: [] })
+  })
 })
 
 describe('recipe ingest routes', () => {
@@ -505,3 +531,17 @@ describe('a rejected CI push fails the CI step', () => {
     expect(res.body.error.code).toBe('RECIPE_REJECTED')
   })
 })
+
+/** Every update on one table fails like a rejected CHECK or a missing column; reads and inserts still work. */
+function failUpdates(db: FakeDb, table: string): FakeDb {
+  const failed = { data: null, error: { message: 'column "last_probe_failure" does not exist' } }
+  const chain: unknown = new Proxy({}, { get: (_t, prop) => (prop === 'then' ? (ok: (v: unknown) => unknown) => Promise.resolve(failed).then(ok) : () => chain) })
+  return new Proxy(db, {
+    get: (t, prop, r) => prop === 'from'
+      ? (name: string) => {
+          const q = t.from(name)
+          return name === table ? new Proxy(q, { get: (qt, qp, qr) => (qp === 'update' ? () => chain : Reflect.get(qt, qp, qr)) }) : q
+        }
+      : Reflect.get(t, prop, r),
+  })
+}

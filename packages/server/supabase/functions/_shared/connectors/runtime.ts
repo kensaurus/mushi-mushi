@@ -16,12 +16,15 @@ import { resolveRecipeRepo } from '../recipe-github.ts'
 import { resolveSupabasePat } from '../supabase-mcp-client.ts'
 import { resolveEffectivePlatformSettings } from '../integration-settings.ts'
 import { dereferenceMaybeVault } from '../integration-probes.ts'
+import { log } from '../logger.ts'
 import { resolveCredential } from './credentials.ts'
 import { getConnector, LEGACY_BACKED } from './index.ts'
 import { validateSnapshot } from './schema.ts'
-import { ConnectorError, type ConnectorBinding, type ConnectorContext, type ConnectorKind, type ConnectorSnapshot, type ConnectorStatus, type DriftFinding, type RecipeConnector } from './types.ts'
+import { ConnectorError, type ConnectorBinding, type ConnectorContext, type ConnectorKind, type ConnectorSnapshot, type ConnectorStatus, type DriftFinding, type ProbeFailure, type RecipeConnector } from './types.ts'
 
 type Db = ReturnType<typeof getServiceClient>
+
+const rlog = log.child('connector-runtime')
 
 export const CONNECTOR_TIMEOUT_MS = 45_000
 const MAX_CONNECTORS_PER_PROJECT = 10
@@ -131,22 +134,26 @@ function withDeadline<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   ])
 }
 
-async function storeSnapshot(db: Db, entry: ConnectorEntry, ok: boolean, snapshot: ConnectorSnapshot | null, error: string | null): Promise<void> {
+async function storeSnapshot(db: Db, entry: ConnectorEntry, ok: boolean, snapshot: ConnectorSnapshot | null, error: string | null, errorKind: ProbeFailure | null = null): Promise<void> {
   const key = entry.instanceId
     ? db.from('connector_snapshots').update({ is_current: false }).eq('connector_instance_id', entry.instanceId).eq('project_id', entry.ctx.projectId as string)
     : db.from('connector_snapshots').update({ is_current: false }).is('connector_instance_id', null).eq('kind', entry.connector.kind).eq('project_id', entry.ctx.projectId as string)
-  await key.eq('is_current', true)
-  await db.from('connector_snapshots').insert({
+  const retired = await key.eq('is_current', true)
+  if (retired.error) throw new Error(`Could not store the ${entry.connector.title} snapshot: ${retired.error.message}`)
+  const { error: insertErr } = await db.from('connector_snapshots').insert({
     connector_instance_id: entry.instanceId,
     kind: entry.connector.kind,
     project_id: entry.ctx.projectId,
     organization_id: entry.ctx.organizationId,
     ok,
     error,
+    // Why the vendor said no (401 / 403 / …), read by the radar's provider_key_invalid.
+    error_kind: ok ? null : errorKind,
     snapshot,
     is_current: true,
     observed_at: entry.ctx.now().toISOString(),
   })
+  if (insertErr) throw new Error(`Could not store the ${entry.connector.title} snapshot: ${insertErr.message}`)
 }
 
 async function previousSnapshot(db: Db, entry: ConnectorEntry): Promise<ConnectorSnapshot | null> {
@@ -177,7 +184,15 @@ export async function runConnector(db: Db, entry: ConnectorEntry, manifest: unkn
     const status: ConnectorStatus = err instanceof ConnectorError ? err.status : 'error'
     const reason = ((err as Error)?.message ?? String(err)).slice(0, 300)
     if (status === 'not_connected') return { kind, instanceId: entry.instanceId, status, reason, snapshot: null, findings: [] }
-    await storeSnapshot(db, entry, false, null, reason).catch(() => {})
+    const errorKind = err instanceof ConnectorError ? err.failure ?? null : null
+    try {
+      await storeSnapshot(db, entry, false, null, reason, errorKind)
+    } catch (storeErr) {
+      // The failure itself could not be recorded: say so in the result and the log, never drop it.
+      const msg = ((storeErr as Error)?.message ?? String(storeErr)).slice(0, 300)
+      rlog.error('connector failure snapshot not stored', { kind, instanceId: entry.instanceId, projectId: entry.ctx.projectId, err: msg })
+      return { kind, instanceId: entry.instanceId, status, reason: `${reason} (${msg})`.slice(0, 600), snapshot: null, findings: [] }
+    }
     return { kind, instanceId: entry.instanceId, status, reason, snapshot: null, findings: [] }
   }
 }
