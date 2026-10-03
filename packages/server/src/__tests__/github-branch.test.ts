@@ -184,7 +184,11 @@ describe('wiring', () => {
     const src = read('webhooks-github-indexer/index.ts')
     expect(src).toMatch(/fetchRepoTreeWithBranchFallback\(/)
     expect(src).not.toMatch(/throw new Error\(`tree fetch \$\{treeRes\.status\}`\)/)
-    expect(src.match(/default_branch: stats\.correctedBranch/g)?.length).toBe(2)
+    // One bookkeeping update serves a failed and a successful sweep (gap 16a,
+    // sweepOutcome), so the corrected branch is written once, beside the
+    // outcome's columns and outside any `outcome.ok` branch.
+    expect(src.match(/default_branch: stats\.correctedBranch/g)?.length).toBe(1)
+    expect(src).toMatch(/\.\.\.outcome\.update,[\s\S]{0,400}\.\.\.\(stats\.correctedBranch \? \{ default_branch: stats\.correctedBranch \} : \{\}\)/)
   })
 
   it('both repo-connect routes resolve the branch from GitHub', () => {
