@@ -60,10 +60,15 @@ anything changes:
   $10, so it does not stop triage on the day you apply it;
 - $2 of auto-fix spend per 30 days and 3 automatic fixes a day.
 
-Only caps that are not set yet are sent; the button saves them through
-`PATCH /v1/admin/settings` and needs a project admin. Change or clear them any
-time in **Settings → General → Spend limits**. The finding clears on the next
-daily check.
+The suggestion comes from the last daily check, so the button reads your
+current settings first, and again when you confirm. A cap someone set since the
+check ran is left as it is, and the dialog names it. If every suggested cap is
+already set, nothing is sent. If the current settings cannot be read, nothing is
+sent either. The button saves the remaining caps through
+`PATCH /v1/admin/settings` and needs a signed-in project admin, so an API key or
+MCP client cannot apply them. Change or clear them any time in
+**Settings → General → Spend limits**. The finding clears on the next daily
+check.
 
 ---
 
