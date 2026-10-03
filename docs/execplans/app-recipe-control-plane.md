@@ -413,7 +413,7 @@ The credential and scope column records the design intent. Vendor permission mod
 
 **List fallback.** Below 768 px, and for screen readers, the canvas is replaced by an ordered list of the same cards. The list is also the default under `prefers-reduced-motion`.
 
-**Report detail tie-in.** When a report's fix is merged but `deploy_drift.not_deployed` is open for its target, the report header shows "Fixed — not live yet (prod is on `a1b2c3d`)".
+**Report detail tie-in.** When a report's fix is merged and a deploy target still runs a commit from before the merge (the head of a `deploy_drift` run that completed before the merge, or a commit the target ran before it), the report header shows "Fixed — not live yet (prod is on `a1b2c3d`)". Every target on the head of a run that started after the merge shows "Fixed and live". An open `not_deployed` finding alone is not used: it means the target is behind the newest head, which may already contain the fix. Implemented in `_shared/report-deploy-live.ts`.
 
 ---
 

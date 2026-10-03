@@ -707,10 +707,11 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
     // shares one generator instead of each reshaping the row. Best-effort: RAG
     // hints and blast radius enrich the packet when available but never block
     // the response.
-    // Merged fix → is it live? Joins the merge to the project's deploy_drift
-    // run, its open not_deployed findings and the latest deploy_observations
-    // commit. null unless the report reads as fixed, a fix merged and a
-    // deploy target was observed; `unknown` (never `live`) on a failed read.
+    // Merged fix → is it live? Places each deploy target's newest commit
+    // before or after the merge (deploy_drift run heads, earlier
+    // deploy_observations). null unless the report reads as fixed, a fix
+    // merged and a deploy target reported a commit; `unknown` (never `live`)
+    // on a failed read.
     const [{ fixPacket: fix_packet }, deploy_live] = await Promise.all([
       buildReportFixPacket(
         db,
