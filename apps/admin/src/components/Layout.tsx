@@ -1297,7 +1297,10 @@ export function Layout({ children }: { children: ReactNode }) {
         <PageHelpProvider>
           <main id="main-content" className={`flex-1 min-h-0 overflow-y-auto overscroll-y-contain bg-surface ${appChromeMainClass}`}>
             <div
-              className={`${PAGE_SHELL_CLASS[pageShellWidth]} motion-safe:transition-[transform,opacity] motion-safe:duration-base`}
+              // pb-20 clears the docked setup-guide pill (fixed bottom-4): without it the
+              // last control on a page (the Connect "Create Upgrade PR" button) sat
+              // under the pill with no scroll room left to uncover it.
+              className={`${PAGE_SHELL_CLASS[pageShellWidth]} pb-20 motion-safe:transition-[transform,opacity] motion-safe:duration-base`}
               data-page-width={pageShellWidth}
             >
               {!focusMode && <GlobalStatusStrip />}
