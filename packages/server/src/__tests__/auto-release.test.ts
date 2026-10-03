@@ -36,7 +36,7 @@ const P = 'p1'
 const NOW = new Date('2026-10-03T12:00:00Z')
 
 const DELIVERY = {
-  reports_listed: 1, reports_resolved: 1, reports_not_found: 0, reports_skipped_dismissed: 0,
+  reports_listed: 1, reports_resolved: 1, reports_not_found: 0, reports_skipped_dismissed: 0, reports_already_released: 0,
   reporters_notified: 1, reporters_held: 0, reporters_failed: 0, reports_without_reporter: 0,
   credits_stamped: 1, credits_pending: 0,
 }

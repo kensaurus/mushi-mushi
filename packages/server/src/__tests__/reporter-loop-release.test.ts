@@ -82,6 +82,28 @@ describe('notifyReleaseReporters + stampDeliveredReleaseCredits', () => {
     expect(fake.table('reporter_notifications')).toHaveLength(0)
   })
 
+  it('a second release listing a report another release already shipped does not message, award or re-stamp it', async () => {
+    const { awardPoints } = await import('../../supabase/functions/_shared/reputation.ts')
+    const open = { id: 'r1', project_id: PROJECT, status: 'fixing', reporter_token_hash: 'rk1_a' }
+    const fake = db([open])
+    const first = await rel.notifyReleaseReporters(fake as never, { ...RELEASE, fixed_report_ids: ids(open) }, { kind: 'system', id: 'auto-release:github_release' })
+    expect(first).toMatchObject({ ok: true, delivery: { reports_resolved: 1, reporters_notified: 1, reports_already_released: 0 } })
+    vi.mocked(awardPoints).mockClear()
+
+    // Same fix shipped under a different version string ('v1.4.0' tag vs CI '1.4.0').
+    const second = { id: 'aaaaaaaa-0000-4000-8000-000000000002', project_id: PROJECT, version: 'v1.4.0' }
+    const res = await rel.notifyReleaseReporters(fake as never, { ...second, fixed_report_ids: ids(open) }, { kind: 'system', id: 'auto-release:ci' })
+    expect(res).toMatchObject({ ok: true, delivery: { reports_resolved: 0, reports_already_released: 1, reporters_notified: 0 } })
+    expect(fake.table('reports')[0]).toMatchObject({ fixed_release_id: RELEASE.id, fixed_in_version: '1.4.0' })
+    expect(fake.table('reporter_notifications')).toHaveLength(1)
+    expect(awardPoints).not.toHaveBeenCalled()
+
+    // Re-publishing the release that owns the report stays allowed and idempotent.
+    const again = await rel.notifyReleaseReporters(fake as never, { ...RELEASE, fixed_report_ids: ids(open) }, 'u1')
+    expect(again).toMatchObject({ ok: true, delivery: { reports_resolved: 1, reports_already_released: 0 } })
+    expect(fake.table('reporter_notifications')).toHaveLength(1)
+  })
+
   it('ignores report ids from another project', async () => {
     const foreign = { id: 'r9', project_id: 'other', status: 'fixing', reporter_token_hash: 'rk1_x' }
     const fake = db([foreign])
