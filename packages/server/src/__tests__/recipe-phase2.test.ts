@@ -368,3 +368,14 @@ describe('a rejected CI push fails the CI step', () => {
     expect(res.body.error.code).toBe('RECIPE_REJECTED')
   })
 })
+
+describe('gateRunConnectors', () => {
+  it('records every connected source that fed the gate, so a later run that missed one is not read as a fix', () => {
+    const all = new Set(['github', 'supabase', 'sentry', 'play_console'])
+    // schema_drift runs on Supabase alone, but migration_unapplied also reads GitHub.
+    expect(phase2.gateRunConnectors('schema_drift', all)).toEqual(['supabase', 'github'])
+    expect(phase2.gateRunConnectors('schema_drift', new Set(['supabase']))).toEqual(['supabase'])
+    expect(phase2.gateRunConnectors('deploy_drift', all)).toEqual(['github', 'play_console'])
+    expect(phase2.gateRunConnectors('env_drift', new Set(['sentry']))).toEqual(['sentry'])
+  })
+})

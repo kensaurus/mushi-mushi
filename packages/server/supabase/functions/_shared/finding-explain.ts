@@ -42,6 +42,10 @@ export interface ExplainRunRow {
   started_at: string
   completed_at: string | null
   commit_sha: string | null
+  /** The run's own summary: its phase (design_drift) and story scope (inventory gates) pick what it is compared with. */
+  summary?: unknown
+  /** gate_runs.triggered_by: which writer recorded the run (see comparesByWriter). */
+  triggered_by?: string | null
 }
 
 /** The newest finished run of the same gate, and the matching finding in it, if any. */
@@ -50,9 +54,190 @@ export interface ExplainLatestRun {
   completed_at: string | null
   /** The same rule at the same place in that run; null when the run no longer has it. */
   matchingFindingId: string | null
+  /** The matching finding in that run is allowlisted there (with this reason, when one was given). */
+  matchingAllowlisted?: boolean
+  matchingAllowlistReason?: string | null
+  /**
+   * Set when the run does not have the finding but that is no evidence it was
+   * fixed (see absenceUnproven); the finding is then `unknown`, never fixed.
+   */
+  uncheckedReason: string | null
 }
 
-export type FindingOpenState = 'open' | 'not_in_latest_run' | 'allowlisted'
+export type FindingOpenState = 'open' | 'not_in_latest_run' | 'unknown' | 'allowlisted'
+
+/** How the newer run was searched for the same finding: by file, by stored target, or (weakest) by message. */
+export type FindingMatchKey = 'file' | 'target' | 'message'
+
+/** What a finished gate run says about the rules it ran, read back to judge a missing finding. */
+export interface LatestRunEvidence {
+  status: string
+  /** gate_runs.findings_count: what the run found, before any storage cap. */
+  findingsCount: number | null
+  /** gate_findings rows actually stored for the run; null when not counted. */
+  storedCount: number | null
+  summary: unknown
+  ruleId: string | null
+  matchedBy: FindingMatchKey
+  /** Sources the finding's own run read that the latest run did not reach (see sourcesNotReached). */
+  sourcesNotReached?: readonly string[]
+  /** The run's writer reports changes since its previous run, not standing state (see reportsChangesOnly). */
+  reportsChangesOnly?: boolean
+}
+
+/** Statuses of a run that finished and checked what it was asked to (error and skipped did not). */
+const COMPLETE_RUN_STATUSES: ReadonlySet<string> = new Set(['pass', 'warn', 'fail'])
+
+/** Per-rule states that mean the rule ran to the end on this run (radar and store summaries). */
+const CHECKED_RULE_STATES: ReadonlySet<string> = new Set(['ok', 'finding'])
+
+/** `mushi recipe check` stops collecting off-token literals at this many (the ingest schema caps it too). */
+export const CI_SCAN_FINDINGS_CAP = 500
+
+/**
+ * Why a finding missing from the latest run is NOT evidence it was fixed, or
+ * null when it is. Each of these proves nothing:
+ *  - the run errored or skipped, unless its own record shows the finding's rule
+ *    ran to the end (radar and store runs record a state per rule in
+ *    summary.results: `ok` and `finding` mean it ran; a run is `error` when
+ *    one connector failed, which says nothing about the others);
+ *  - the rule has a per-rule entry that is not `ok` or `finding`, or no entry;
+ *  - the run stored fewer findings than it found (a storage cap, or a findings
+ *    insert that failed, recorded as summary.findings_not_stored);
+ *  - the run read only part of the project: it stopped at its file limit
+ *    (summary.truncated), read no files at all (summary.scannedFiles 0), or is
+ *    a CI scan that hit the CLI's 500-finding cap;
+ *  - the run could only be searched by a message that embeds counts or dates;
+ *  - the run's writer reports only what changed since its previous run;
+ *  - the run did not reach a source (connector) the finding's own run read.
+ */
+export function absenceUnproven(e: LatestRunEvidence): string | null {
+  if (e.reportsChangesOnly) {
+    return 'this check reports what changed since its previous run, not what is still wrong, so a newer run without it proves nothing.'
+  }
+  if (e.sourcesNotReached && e.sourcesNotReached.length > 0) {
+    return `the latest run could not reach ${e.sourcesNotReached.join(', ')}, which the run that found this read.`
+  }
+  const summary = asRecord(e.summary)
+  const results = summary && Array.isArray(summary.results) ? summary.results.map(asRecord) : null
+  const entry = results && e.ruleId !== null ? results.find((r) => r !== null && r.ruleId === e.ruleId) ?? null : null
+  if (results && e.ruleId !== null) {
+    if (!entry) return `the latest run did not run the ${e.ruleId} rule.`
+    if (!CHECKED_RULE_STATES.has(String(entry.state))) {
+      const why = str(entry.reason)
+      return `the ${e.ruleId} rule was "${String(entry.state)}" in the latest run, not checked${why ? ` (${why})` : ''}.`
+    }
+  } else if (!COMPLETE_RUN_STATUSES.has(e.status)) {
+    return `the latest run ended with status "${e.status}", so it did not check everything.`
+  }
+  if (e.findingsCount !== null && e.findingsCount > 0 && (e.storedCount === null || e.storedCount < e.findingsCount)) {
+    return `the latest run found ${e.findingsCount} problem${e.findingsCount === 1 ? '' : 's'} but stored only ${e.storedCount ?? 'an unknown number of them'}, so this one may be among those not stored.`
+  }
+  const notStored = summary && typeof summary[FINDINGS_NOT_STORED_KEY] === 'number' ? summary[FINDINGS_NOT_STORED_KEY] : 0
+  if (notStored > 0) {
+    return `the latest run could not store ${notStored} of the problems it found, so this one may be among them.`
+  }
+  if (summary?.truncated === true) {
+    return 'the latest run stopped at its file limit, so it may not have read the file this finding is in.'
+  }
+  if (summary && summary.scannedFiles === 0) {
+    return 'the latest run read no files, so it checked nothing.'
+  }
+  if (summary?.phase === 'ci_scan' && (e.findingsCount ?? 0) >= CI_SCAN_FINDINGS_CAP) {
+    return `the latest CI scan reported ${CI_SCAN_FINDINGS_CAP} problems, the most it sends, so it may have stopped before this one.`
+  }
+  if (e.matchedBy === 'message') {
+    return 'this finding has no file or target to look for, and its message (which can carry counts or dates) is not in the latest run.'
+  }
+  return null
+}
+
+/** gate_runs.summary key for findings a gate found but could not insert (read back by absenceUnproven). */
+export const FINDINGS_NOT_STORED_KEY = 'findings_not_stored'
+
+/**
+ * The summary a gate run is closed with: unchanged when every finding it found
+ * was stored, else with {@link FINDINGS_NOT_STORED_KEY} set to how many were
+ * not, so a reader never takes a finding that failed to insert for one the
+ * gate no longer sees.
+ */
+export function withFindingsNotStored(summary: Record<string, unknown>, stored: number, found: number): Record<string, unknown> {
+  const notStored = Math.max(0, found - stored)
+  return notStored > 0 ? { ...summary, [FINDINGS_NOT_STORED_KEY]: notStored } : summary
+}
+
+/**
+ * Which design_drift runs a finding can be compared with. A server scan reads
+ * the whole repo with every rule; a CI push (`mushi recipe check --push`,
+ * phase `ci_scan`) checks only off-token hex literals in the files the host's
+ * CI matched, so one kind's silence says nothing about the other's findings.
+ */
+export function designRunPhase(summary: unknown): 'scan' | 'ci_scan' {
+  return asRecord(summary)?.phase === 'ci_scan' ? 'ci_scan' : 'scan'
+}
+
+/**
+ * Gates that more than one writer records runs for, each checking different
+ * things, so a finding is compared only with later runs of its own writer
+ * (gate_runs.triggered_by):
+ *  - code_health: CI ingest (`ci_push`, god files per file) and recipe budgets
+ *    (`recipe-collector`, budget_exceeded only, no file);
+ *  - schema_drift: recipe connectors (`recipe-collector`, migration_unapplied)
+ *    and the schema snapshot diff (`backend-drift-scanner`).
+ * design_drift is split by summary.phase instead (designRunPhase). Other gates
+ * mix cron and manual triggers of the same check, so they are not split.
+ */
+const MULTI_WRITER_GATES: ReadonlySet<string> = new Set(['code_health', 'schema_drift'])
+
+export function comparesByWriter(gate: string): boolean {
+  return MULTI_WRITER_GATES.has(gate)
+}
+
+/**
+ * Writers whose runs record what changed since their previous run, not what is
+ * still wrong: backend-drift-scanner writes a schema_drift run only when the
+ * schema hash moved, with the tables added, removed or modified since the last
+ * snapshot. A later run without "table X removed" says nothing about table X.
+ */
+const CHANGE_ONLY_WRITERS: Readonly<Record<string, string>> = {
+  schema_drift: 'backend-drift-scanner',
+}
+
+export function reportsChangesOnly(gate: string, triggeredBy: string | null | undefined): boolean {
+  return triggeredBy != null && CHANGE_ONLY_WRITERS[gate] === triggeredBy
+}
+
+/** The sources (connectors) a run recorded in summary.connectors, or null when it recorded none. */
+export function runSources(summary: unknown): string[] | null {
+  const connectors = asRecord(summary)?.connectors
+  return Array.isArray(connectors) ? connectors.filter((k): k is string => typeof k === 'string') : null
+}
+
+/**
+ * Sources the finding's own run read that a later run did not reach. Connector
+ * gates (deploy_drift, env_drift, schema_drift, ci_drift) write a run when any
+ * one source connected, so a finding from a source that failed next time is
+ * simply absent. A later run that records no sources at all reached none.
+ */
+export function sourcesNotReached(ownSummary: unknown, latestSummary: unknown): string[] {
+  const own = runSources(ownSummary)
+  if (!own) return []
+  const reached = new Set(runSources(latestSummary) ?? [])
+  return own.filter((k) => !reached.has(k))
+}
+
+/** The story subtree an inventory-gates run was scoped to, or null for a whole-project run. */
+export function runStoryScope(summary: unknown): string | null {
+  return str(asRecord(summary)?.story_node_id)
+}
+
+/**
+ * A run scoped to a story examined only that subtree: it covers a finding only
+ * when it is unscoped, or scoped to the same story as the finding's own run.
+ */
+export function runCoversScope(ownStory: string | null, runStory: string | null): boolean {
+  return runStory === null || runStory === ownStory
+}
 
 export interface FindingFix {
   /** One sentence or a snippet to apply; null when the gate stored no fix it could be read from. */
@@ -167,12 +352,27 @@ export function fixOf(suggested: unknown): FindingFix {
   return base
 }
 
-function targetOf(suggested: unknown): string | null {
+/**
+ * The stable thing a file-less finding is about (a domain, host, URL, route or
+ * API path) and the suggested_fix key it is stored under, so a newer run can
+ * be searched for the same target instead of a message that embeds counts or
+ * dates ("expires in 12 days (2026-10-15)").
+ */
+export function findingTargetKey(suggested: unknown): { key: 'target' | 'route' | 'path'; value: string } | null {
   const o = asRecord(suggested)
   if (!o) return null
+  const target = str(o.target)
+  if (target) return { key: 'target', value: target }
+  const route = str(o.route)
+  if (route) return { key: 'route', value: route }
   // `path` is a console path when the fix has a kind (console step), and the
   // API path the finding is about otherwise (unknown_call, spec_drift).
-  return str(o.target) ?? str(o.route) ?? (str(o.kind) ? null : str(o.path))
+  const path = str(o.kind) ? null : str(o.path)
+  return path ? { key: 'path', value: path } : null
+}
+
+function targetOf(suggested: unknown): string | null {
+  return findingTargetKey(suggested)?.value ?? null
 }
 
 function stateOf(
@@ -187,11 +387,28 @@ function stateOf(
         : 'Allowlisted: someone marked it as accepted, so it no longer counts against the gate.',
     }
   }
-  if (!latest || latest.id === finding.gate_run_id) {
+  if (!latest) {
+    return { state: 'open', reason: 'No finished run of this check has looked again since it was found.' }
+  }
+  if (latest.id === finding.gate_run_id) {
     return { state: 'open', reason: 'It is in the latest run of this check.' }
   }
   if (latest.matchingFindingId) {
+    if (latest.matchingAllowlisted) {
+      return {
+        state: 'allowlisted',
+        reason: latest.matchingAllowlistReason
+          ? `A newer run still finds it, and it is allowlisted there: ${latest.matchingAllowlistReason}`
+          : 'A newer run still finds it, and someone marked it there as accepted.',
+      }
+    }
     return { state: 'open', reason: 'A newer run of this check found the same problem in the same place.' }
+  }
+  if (latest.uncheckedReason) {
+    return {
+      state: 'unknown',
+      reason: `The latest run of this check could not confirm it is fixed: ${latest.uncheckedReason}`,
+    }
   }
   return {
     state: 'not_in_latest_run',
