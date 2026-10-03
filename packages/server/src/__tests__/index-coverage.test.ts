@@ -17,6 +17,7 @@ import { describe, expect, it } from 'vitest'
 import {
   admitPushPaths,
   DEFAULT_INDEX_FILE_CAP,
+  emptyEligibleError,
   describeIndexCoverage,
   indexFileCapForPlan,
   indexPathFilter,
@@ -89,6 +90,16 @@ describe('selectSweepFiles', () => {
     const indexed = new Set(tree.slice(0, 30))
     const out = selectSweepFiles({ treePaths: tree, framePaths: ['src/file45.ts'], indexedPaths: indexed, planCap: 30, runBudget: 5 })
     expect(out[0]).toBe('src/file45.ts')
+  })
+
+  it('new files of any tier come before refreshes, so a filling repo always progresses', () => {
+    // Source fully indexed (more files than the budget), tests not yet: the
+    // old order spent the whole budget re-fetching source every hour.
+    const source = Array.from({ length: 40 }, (_, i) => `src/s${String(i).padStart(2, '0')}.ts`)
+    const tests = Array.from({ length: 10 }, (_, i) => `tests/t${i}.test.ts`)
+    const out = selectSweepFiles({ treePaths: [...source, ...tests], framePaths: [], indexedPaths: new Set(source), planCap: 1000, runBudget: 20 })
+    expect(out.slice(0, 10).sort()).toEqual([...tests].sort())
+    expect(out).toHaveLength(20)
   })
 
   it('a zero budget fetches nothing', () => {
@@ -226,7 +237,8 @@ describe('wiring', () => {
   })
 
   it('the sweep counts only storable blobs and reports unstorable fetches to the coverage measure', () => {
-    expect(indexer).toContain("eligible(t.path) && isStorableBlob(t)")
+    expect(indexer).toContain("filter((t) => t.type === 'blob' && isStorableBlob(t))")
+    expect(indexer).toContain('const files = blobs.filter((t) => eligible(t.path));')
     expect(indexer).toContain("if (got.skip === 'unstorable') {")
     expect(indexer).toMatch(/indexedPaths: new Set\(\[\.\.\.indexedBefore, \.\.\.writtenPaths\]\),\s*unstorablePaths,/)
   })
@@ -244,6 +256,8 @@ describe('wiring', () => {
     expect(sweep).toContain('path_globs')
     expect(sweep).toContain('indexPathFilter({')
     expect(sweep).toContain('scope: await loadIndexScopeStrict(db, repo.project_id)')
+    // …and fails the run when they match nothing.
+    expect(indexer).toContain('if (filteredAway && !(opts.targetFramePaths?.length)) throw new Error(filteredAway);')
     expect(indexer).toContain("if (error) throw new Error(`codebase scope read failed: ${error.message}`);")
   })
 
@@ -301,6 +315,16 @@ describe('path filter (gap 16b: the remediation the coverage callout gives)', ()
     expect(f('packages/x/src/a.ts')).toBe(false)
     expect(f('apps/web/src/logo.png')).toBe(false)
     expect(indexPathFilter({ scope: null, pathGlobs: null })('lib/a.ts')).toBe(true)
+  })
+
+  it('a filter that matches nothing is an error, not a complete 0 of 0 index', () => {
+    const err = emptyEligibleError({ indexableFiles: 4714, eligibleFiles: 0, pathGlobs: ['services/**'] })
+    expect(err).toContain('filter_matches_nothing')
+    expect(err).toContain('services/**')
+    expect(err).toContain('4,714 indexable files')
+    expect(emptyEligibleError({ indexableFiles: 4714, eligibleFiles: 3, pathGlobs: ['src/**'] })).toBeNull()
+    // An empty repo is simply complete.
+    expect(emptyEligibleError({ indexableFiles: 0, eligibleFiles: 0, pathGlobs: null })).toBeNull()
   })
 
   it('a filter shrinks the eligible set and can turn capped into complete', () => {

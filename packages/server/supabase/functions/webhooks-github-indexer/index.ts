@@ -46,6 +46,7 @@ import {
   INDEX_FILE_CAP_ENV,
   MAX_INDEXED_FILE_BYTES,
   admitPushPaths,
+  emptyEligibleError,
   isStorableBlob,
   indexFileCapForPlan,
   indexPathFilter,
@@ -974,7 +975,7 @@ async function handleSweep(
           owner,
           name,
           repo.default_branch ?? 'main',
-          { targetFramePaths, fileCap, pathFilter },
+          { targetFramePaths, fileCap, pathFilter, pathGlobs: (repo as { path_globs?: string[] | null }).path_globs ?? null },
         );
         if (targetFramePaths.length > 0) {
           log.info('sweep: frame-path index', { repo: repo.repo_url, ...stats });
@@ -1304,7 +1305,12 @@ async function sweepIndexRepo(
   owner: string,
   repo: string,
   branch: string,
-  opts: { targetFramePaths?: string[]; fileCap?: IndexFileCap | null; pathFilter?: (path: string) => boolean } = {},
+  opts: {
+    targetFramePaths?: string[];
+    fileCap?: IndexFileCap | null;
+    pathFilter?: (path: string) => boolean;
+    pathGlobs?: string[] | null;
+  } = {},
 ): Promise<{
   /** Chunks embedded (new or changed text). */
   inserted: number;
@@ -1342,8 +1348,18 @@ async function sweepIndexRepo(
   const tree = resolved.tree;
   // Empty blobs and blobs over the fetch limit can never be stored; leaving
   // them out of the eligible set keeps coverage able to reach complete.
-  const eligible = opts.pathFilter ?? indexPathFilter({ scope: null, pathGlobs: null });
-  const files = (tree.tree ?? []).filter((t) => t.type === 'blob' && eligible(t.path) && isStorableBlob(t));
+  const indexable = indexPathFilter({ scope: null, pathGlobs: null });
+  const eligible = opts.pathFilter ?? indexable;
+  const blobs = (tree.tree ?? []).filter((t) => t.type === 'blob' && isStorableBlob(t));
+  const files = blobs.filter((t) => eligible(t.path));
+  // A scope or path filter that matches nothing must not read as a complete
+  // (0 of 0) index: fail the run so last_index_error says what to fix.
+  const filteredAway = emptyEligibleError({
+    indexableFiles: blobs.filter((t) => indexable(t.path)).length,
+    eligibleFiles: files.length,
+    pathGlobs: opts.pathGlobs ?? null,
+  });
+  if (filteredAway && !(opts.targetFramePaths?.length)) throw new Error(filteredAway);
   let inserted = 0;
   let skipped = 0;
   let failed = 0;
