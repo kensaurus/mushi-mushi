@@ -20,9 +20,25 @@
  *
  * Fail closed: every call to apiFetch, apiFetchMutate, apiFetchRaw or
  * usePageData (and to any function that forwards its first parameter to
- * one) must have a first argument the check can resolve this way. One it
- * cannot follow (a prop, a computed string) fails unless "dynamicCalls" in
- * the mapping gives a reason for that file and argument text.
+ * one), the `url` option of every openSseStream call, and every raw fetch
+ * whose argument writes a '/v1/…' API path must be resolvable this way: one
+ * literal spanning the whole argument, a template opening with a resolvable
+ * path binding or `${API_URL}/v1/…`, a name whose initializer resolves, a
+ * call to a function (or an IIFE) whose every return resolves, or a ternary
+ * or `&&` whose branches do. A prop, a concatenation (`'/v1/x/' + id`) or a
+ * `??`/`||` fallback fails unless "dynamicCalls" in the mapping gives a
+ * reason for that file and argument text. An arrow or function parameter
+ * shadows an outer path constant of the same name.
+ *
+ * A literal whose run-time `${…}` lands on a static server segment
+ * (`/projects/${id}/${action}` against `/projects/:id/pause` and `/resume`)
+ * reaches a set of routes the check can only over-approximate: every route
+ * in the set counts as used, and the literal fails unless "computedPaths"
+ * gives a reason for that file and literal (`${…}` written as `${}`).
+ *
+ * Out of scope: a raw fetch whose argument never writes '/v1/' (Supabase
+ * auth and REST, signed upload URLs, static files) and a fetch wrapper's
+ * parameter (ConnectionStatus' timedFetch probes health URLs only).
  *
  * Fails when:
  *   - a console route has no entry (add an MCP tool, a CLI command, or a reason);
@@ -32,7 +48,9 @@
  *   - `jwt-only` is used on a route that also accepts an API key;
  *   - an entry is stale (the console no longer calls that route);
  *   - a console call's path cannot be resolved and has no "dynamicCalls"
- *     reason, or a "dynamicCalls" reason names a call that no longer exists.
+ *     reason, or a "dynamicCalls" reason names a call that no longer exists;
+ *   - a literal fills a static server segment at run time and has no
+ *     "computedPaths" reason, or a "computedPaths" reason is stale.
  * Admin literals that match no server route (dynamic prefixes, external
  * paths) are counted and listed with --verbose; they never fail the check.
  *
@@ -344,8 +362,19 @@ function composedTemplates(text) {
  * `? : . && || +`).
  */
 function readExpression(source, from, limit = 4000) {
-  let start = from
-  while (start < source.length && /\s/.test(source[start])) start++
+  const start = skipSpace(source, from)
+  return source.slice(start, expressionEnd(source, start, limit))
+}
+
+/** Index of the first non-whitespace character at or after `from`. */
+function skipSpace(source, from) {
+  let i = from
+  while (i < source.length && /\s/.test(source[i])) i++
+  return i
+}
+
+/** Where the expression opening at `start` ends (see readExpression). */
+function expressionEnd(source, start, limit = 4000) {
   let depth = 0
   let i = start
   const stop = Math.min(source.length, start + limit)
@@ -364,7 +393,28 @@ function readExpression(source, from, limit = 4000) {
     }
     i++
   }
-  return source.slice(start, i)
+  return i
+}
+
+/** Index just past the bracket that closes the one opening at `start`. */
+function closeBracket(source, start) {
+  let depth = 0
+  for (let i = start; i < source.length; i++) {
+    const ch = source[i]
+    if (ch === "'" || ch === '"' || ch === '`') { i = skipString(source, i) - 1; continue }
+    if (ch === '(' || ch === '[' || ch === '{') depth++
+    else if (ch === ')' || ch === ']' || ch === '}') {
+      depth--
+      if (depth === 0) return i + 1
+    }
+  }
+  return source.length
+}
+
+/** Where an arrow body that starts at `from` ends: its block, or its expression. */
+function arrowBodyEnd(source, from) {
+  const start = skipSpace(source, from)
+  return source[start] === '{' ? closeBracket(source, start) : expressionEnd(source, start)
 }
 
 /** A top-level `function NAME(` up to the next top-level declaration. */
@@ -398,28 +448,46 @@ function fileContexts(files) {
 }
 
 /**
- * True when a function signature between `from` and `to` declares a
- * parameter `name`, typed or not, plain or destructured (`({ path })`): a use
- * at `to` then means the parameter, not the `const` declared before `from`.
+ * True when a parameter `name` declared between `from` and `to` is in scope
+ * at `to`, so a use there means the parameter, not the `const` declared
+ * before `from`. Covers function signatures and `= (…) =>` assignments
+ * (typed or not, plain or destructured: `({ path })`), and arrow callbacks
+ * passed as arguments (`.map((path) => …)`, `useCallback(async (path: string)
+ * => …)`, `path => …`) whose body reaches `to`.
  */
 function shadowedByParameter(code, name, from, to) {
+  const slice = code.slice(from, to)
   const sig = new RegExp(`(?:function\\s*\\w*\\s*(?:<[^>]*>)?\\s*\\(|=\\s*(?:async\\s*)?\\()[^)]*\\b${name}\\s*\\??\\s*[:,)=}]`)
-  return sig.test(code.slice(from, to))
+  if (sig.test(slice)) return true
+  const declares = new RegExp(`(?:^|[\\s,({])${name}\\s*\\??\\s*(?:[:,)=}]|$)`)
+  // `(params) =>` with one level of nested parens in the list, an optional
+  // return type, or a bare `name =>`.
+  const arrow = /\(((?:[^()]|\([^()]*\))*)\)\s*(?::[^=;{}]*?)?=>|(?<![\w$.])([A-Za-z_$][\w$]*)\s*=>/g
+  for (const m of slice.matchAll(arrow)) {
+    const params = m[1] !== undefined ? declares.test(m[1]) : m[2] === name
+    if (params && arrowBodyEnd(code, from + m.index + m[0].length) >= to) return true
+  }
+  return false
 }
 
 /**
  * Where `name` is bound for a use at `pos`: the nearest earlier `const`/`let`
- * initializer, a top-level `function`, or a relative named import.
+ * initializer, a top-level `function`, or a relative named import. `textPos`
+ * is the absolute offset of `text` in the file.
  */
 function findBinding(byFile, ctx, name, pos) {
   const declRe = new RegExp(`\\b(?:const|let|var)\\s+${name}\\s*(?::[^=;\\n]+)?=(?![=>])`, 'g')
   let best = null
   for (const m of ctx.code.matchAll(declRe)) if (m.index < pos) best = m
   if (best && !shadowedByParameter(ctx.code, name, best.index + best[0].length, pos)) {
-    return { ctx, pos: best.index, text: readExpression(ctx.code, best.index + best[0].length) }
+    const textPos = skipSpace(ctx.code, best.index + best[0].length)
+    return { ctx, pos: best.index, textPos, isVariable: true, text: readExpression(ctx.code, textPos) }
   }
   const fn = new RegExp(`(?:^|\\n)(?:export\\s+)?(?:async\\s+)?function\\s+${name}\\b`).exec(ctx.code)
-  if (fn) return { ctx, pos: fn.index, text: readTopLevelFunction(ctx.code, fn.index) }
+  if (fn) {
+    const textPos = fn.index + fn[0].indexOf('function')
+    return { ctx, pos: fn.index, textPos, isVariable: false, text: readTopLevelFunction(ctx.code, textPos) }
+  }
   const imported = ctx.imports.get(name)
   const target = imported && byFile.get(imported.file)
   return target ? findBinding(byFile, target, imported.name, target.code.length) : null
@@ -437,7 +505,7 @@ function bindingBases(byFile, ctx, name, pos, seen = new Set()) {
   if (!binding) return []
   const bases = directV1Literals(binding.text)
   for (const t of composedTemplates(binding.text)) {
-    for (const base of bindingBases(byFile, binding.ctx, t.name, binding.pos + t.index, seen)) bases.push(base + t.rest)
+    for (const base of bindingBases(byFile, binding.ctx, t.name, binding.textPos + t.index, seen)) bases.push(base + t.rest)
   }
   return bases
 }
@@ -507,42 +575,154 @@ function ternaryBranches(expr) {
 }
 
 /**
+ * `NAME`, `NAME!`, `NAME(…)` or `NAME<T>(…)` spanning all of `e`, as
+ * `{ name, call }`, or null. `base + tail` and `props.url` are not references.
+ */
+function wholeReference(e) {
+  const head = /^[A-Za-z_$][\w$]*/.exec(e)
+  if (!head) return null
+  let i = skipSpace(e, skipTypeArgs(e, skipSpace(e, head[0].length)))
+  let call = false
+  if (e[i] === '(') {
+    call = true
+    i = skipSpace(e, closeBracket(e, i))
+  } else {
+    i = skipSpace(e, head[0].length)
+  }
+  if (e[i] === '!') i = skipSpace(e, i + 1)
+  return i === e.length ? { name: head[0], call } : null
+}
+
+/**
+ * What a function binding can return, as `{ text, pos }` with absolute
+ * offsets: an arrow's expression body, or every `return` in a block body
+ * (nested callbacks' returns included, so the check errs toward failing).
+ */
+function functionReturns(code, textPos, text) {
+  const body = functionBody(text)
+  if (!body) return []
+  if (!body.block) return [{ text: readExpression(code, textPos + body.at), pos: textPos + body.at }]
+  return blockReturns(code, textPos, text, body.at)
+}
+
+/**
+ * Where the body of the function `text` opens, as `{ at, block }`, or null
+ * when `text` is not a function (`function (…) {`, `(…) =>`, `x =>`).
+ */
+function functionBody(text) {
+  if (/^(?:async\s+)?function\b/.test(text)) {
+    const at = text.indexOf('{', closeBracket(text, text.indexOf('(')))
+    return at === -1 ? null : { at, block: true }
+  }
+  let i = skipSpace(text, /^async\b/.test(text) ? 5 : 0)
+  i = skipSpace(text, skipTypeArgs(text, i))
+  if (text[i] === '(') i = closeBracket(text, i)
+  else if (/[A-Za-z_$]/.test(text[i] ?? '')) i += /^[A-Za-z_$][\w$]*/.exec(text.slice(i))[0].length
+  else return null
+  const arrow = /^\s*(?::[^=;{}]*?)?=>/.exec(text.slice(i))
+  if (!arrow) return null
+  i = skipSpace(text, i + arrow[0].length)
+  return { at: i, block: text[i] === '{' }
+}
+
+function blockReturns(code, textPos, text, bodyAt) {
+  const body = text.slice(bodyAt, closeBracket(text, bodyAt))
+  const out = []
+  for (const m of body.matchAll(/\breturn\b/g)) {
+    const at = textPos + bodyAt + m.index + m[0].length
+    out.push({ text: readExpression(code, at), pos: at })
+  }
+  return out
+}
+
+/**
  * Can the gate tell which route this call argument reaches? Yes when it is
- * (or each ternary branch is) `null`, a '/v1/…' literal, a template opening
- * with a resolvable path binding, or a name or call whose binding holds one.
+ * (or each ternary branch is) `null`, one '/v1/…' literal spanning the whole
+ * expression, a template opening with a resolvable path binding or with
+ * `${API_URL}/v1/…`, a name whose initializer resolves, or a call to a
+ * function whose every return resolves. A literal joined to anything else
+ * (`'/v1/x/' + id`), a `??`/`||` fallback and a member read (`props.url`)
+ * do not resolve.
  */
 function argResolves(byFile, ctx, expr, pos, seen = new Set()) {
-  const e = expr.trim()
+  let e = expr.trim()
+  while (e.startsWith('(') && closeBracket(e, 0) === e.length) e = e.slice(1, -1).trim()
   if (e === '') return false
+  // `(() => { …; return `/v1/x?${qs}` })()`: every return must resolve.
+  const iife = e.startsWith('(') ? /^\s*\(\s*\)$/.exec(e.slice(closeBracket(e, 0))) : null
+  if (iife) {
+    const at = ctx.code.indexOf(e, pos)
+    if (at === -1) return false
+    const returns = functionReturns(ctx.code, skipSpace(ctx.code, at + 1), e.slice(1, closeBracket(e, 0) - 1).trim())
+    return returns.length > 0 && returns.every((r) => argResolves(byFile, ctx, r.text, r.pos, seen))
+  }
   if (e === 'null' || e === 'undefined') return true
   const branches = ternaryBranches(e)
   if (branches) return branches.every((b) => argResolves(byFile, ctx, b, pos, seen))
   const and = /^[^'"`]+?&&([\s\S]+)$/.exec(e)
   if (and) return argResolves(byFile, ctx, and[1], pos, seen)
-  if (/^(['"`])\/v1\//.test(e)) return true
-  const composed = /^`\$\{\s*([A-Za-z_$][\w$]*)\s*\}/.exec(e)
-  if (composed) {
+  if (/^['"`]/.test(e)) {
+    if (skipString(e, 0) !== e.length) return false
+    if (/^(['"`])\/v1\//.test(e)) return true
+    const composed = /^`\$\{\s*([A-Za-z_$][\w$]*)\s*\}/.exec(e)
+    if (!composed) return false
+    const bases = bindingBases(byFile, ctx, composed[1], pos)
+    // `${RESOLVED_API_URL}/v1/…`: a base URL, then the path written out.
+    if (bases.length === 0) return readAdminLiteral(e, 0).text.slice(3).startsWith('/v1/')
     // The prefix must resolve as a whole (every ternary branch), not merely hold one path.
-    return argResolves(byFile, ctx, composed[1], pos, seen) && bindingBases(byFile, ctx, composed[1], pos).length > 0
+    return argResolves(byFile, ctx, composed[1], pos, seen)
   }
-  if (/^['"`]/.test(e)) return false
-  const head = /^([A-Za-z_$][\w$]*)/.exec(e)
-  if (!head) return false
-  const key = `${ctx.file}#${head[1]}@${pos}`
+  const ref = wholeReference(e)
+  if (!ref) return false
+  const key = `${ctx.file}#${ref.name}@${pos}`
   if (seen.has(key)) return false
   seen.add(key)
-  const binding = findBinding(byFile, ctx, head[1], pos)
+  const binding = findBinding(byFile, ctx, ref.name, pos)
   if (!binding) return false
-  const isVariable = /^(?:const|let|var)\b/.test(binding.ctx.code.slice(binding.pos))
-  // `const p = cond ? '/v1/a' : props.url`: every branch must resolve, so one
-  // path literal cannot vouch for a prop beside it.
-  if (isVariable && ternaryBranches(binding.text.trim())) return argResolves(byFile, binding.ctx, binding.text, binding.pos, seen)
-  if (directV1Literals(binding.text).length > 0) return true
-  // `const url = buildUrl(tab)` or `const p = `${base}/x``: follow the initializer.
-  if (isVariable) return argResolves(byFile, binding.ctx, binding.text, binding.pos, seen)
-  // A function body that only composes (`return `${BASE}/x``): every prefix must resolve.
-  const inner = composedTemplates(binding.text)
-  return inner.length > 0 && inner.every((t) => argResolves(byFile, binding.ctx, t.name, binding.pos + t.index, seen))
+  const init = binding.text.trim()
+  const isFunction = !binding.isVariable || functionBody(init) !== null
+  if (ref.call !== isFunction) return false
+  // `const url = buildUrl(tab)`, `const p = `${base}/x``, `const p = c ? '/v1/a' : null`.
+  if (!isFunction) return argResolves(byFile, binding.ctx, init, binding.textPos, seen)
+  const returns = functionReturns(binding.ctx.code, binding.textPos, binding.text)
+  return returns.length > 0 && returns.every((r) => argResolves(byFile, binding.ctx, r.text, r.pos, seen))
+}
+
+/** Helpers that take the API path as the `url` option of their first argument. */
+export const ADMIN_URL_OPTION_CALLS = ['openSseStream']
+
+/** A '/v1/…' API path written after a quote or a `${API_URL}`. '/auth/v1/' is not one. */
+const API_PATH = /(?:['"`]|\})\/v1\//
+
+/** Does a fetch argument (or the initializer of the name passed) write an API path? */
+function writesApiPath(byFile, ctx, arg, pos) {
+  if (API_PATH.test(arg)) return true
+  const ref = wholeReference(arg)
+  if (!ref || ref.call) return false
+  const binding = findBinding(byFile, ctx, ref.name, pos)
+  return Boolean(binding?.isVariable && API_PATH.test(binding.text))
+}
+
+/**
+ * The value text of property `key` in the object literal `text`
+ * (`{ url: x, … }` gives 'x'; shorthand `{ url }` gives 'url'), or null.
+ */
+function objectProperty(text, key) {
+  if (!text.startsWith('{')) return null
+  let i = 1
+  while (i < text.length) {
+    i = skipSpace(text, i)
+    const k = /^(?:([A-Za-z_$][\w$]*)|(['"])([^'"]*)\2)/.exec(text.slice(i))
+    if (k && (k[1] ?? k[3]) === key) {
+      const j = skipSpace(text, i + k[0].length)
+      if (text[j] === ':') return readExpression(text, j + 1).trim()
+      if (text[j] === ',' || text[j] === '}') return key
+    }
+    const end = expressionEnd(text, i)
+    if (text[end] !== ',') return null
+    i = end + 1
+  }
+  return null
 }
 
 /** The function enclosing `pos` whose FIRST parameter is `param`, or null. */
@@ -574,14 +754,28 @@ export function extractDynamicCalls(files) {
     let grew = false
     unresolved = []
     for (const ctx of byFile.values()) {
-      const re = new RegExp(`\\b(${[...shared, ...local.get(ctx.file)].join('|')})\\b\\s*`, 'g')
+      const names = [...shared, ...local.get(ctx.file), ...ADMIN_URL_OPTION_CALLS, 'fetch']
+      const re = new RegExp(`\\b(${names.join('|')})\\b\\s*`, 'g')
       let m
       while ((m = re.exec(ctx.code)) !== null) {
         if (/(?:function|\.)\s*$/.test(ctx.code.slice(Math.max(0, m.index - 40), m.index))) continue
         let i = skipTypeArgs(ctx.code, re.lastIndex)
         while (/\s/.test(ctx.code[i] ?? '')) i++
         if (ctx.code[i] !== '(') continue
-        const arg = readExpression(ctx.code, i + 1).trim()
+        let arg = readExpression(ctx.code, i + 1).trim()
+        if (m[1] === 'fetch') {
+          // Raw fetch also reaches Supabase, signed URLs and static files: it
+          // is checked once its argument writes an API path.
+          if (!writesApiPath(byFile, ctx, arg, m.index)) continue
+          if (!argResolves(byFile, ctx, arg, m.index)) unresolved.push({ file: ctx.file, call: m[1], arg })
+          continue
+        }
+        if (ADMIN_URL_OPTION_CALLS.includes(m[1])) {
+          // The path is the `url` option; without one the call is unchecked.
+          arg = objectProperty(arg, 'url') ?? arg
+          if (!argResolves(byFile, ctx, arg, m.index)) unresolved.push({ file: ctx.file, call: m[1], arg })
+          continue
+        }
         if (argResolves(byFile, ctx, arg, m.index)) continue
         const forwarder = /^[A-Za-z_$][\w$]*$/.test(arg) ? forwardingFunction(ctx.code, arg, m.index) : null
         if (forwarder) {
@@ -639,6 +833,16 @@ function routeSegments(routePath) {
 
 /** Server paths an admin literal reaches; the most specific match wins. */
 export function matchAdminLiteral(segs, routes) {
+  return bestMatch(segs, routes).paths
+}
+
+/**
+ * The most specific server paths for `segs`, and `computed`: how many of the
+ * literal's `${…}` segments land on a static server segment in that match.
+ * Above 0, the literal picks the route at run time (`/projects/${id}/${action}`
+ * reaches every `/projects/:id/<static>`), so the gate cannot tell which one.
+ */
+function bestMatch(segs, routes) {
   let best = []
   let bestScore = null
   const byPath = new Map()
@@ -669,20 +873,28 @@ export function matchAdminLiteral(segs, routes) {
       best.push(routePath)
     }
   }
-  return best
+  return { paths: best, computed: bestScore ? bestScore[0] : 0 }
 }
 
-/** `{ used: Map<key, route>, unresolved: literal[] }` for the console. */
+/**
+ * `{ used: Map<key, route>, unresolved: literal[], computed: call[] }` for the
+ * console. `computed` lists each literal that fills a static server segment
+ * with a run-time value, as `{ file, arg: literal, routes }`.
+ * Those routes still count as used; the literal itself fails the check unless
+ * "computedPaths" gives a reason for that file and literal text.
+ */
 export function consoleRoutes(adminLiterals, routes) {
   const used = new Map()
   const unresolved = []
+  const computed = new Map()
   for (const lit of adminLiterals) {
     const segs = normalizeAdminLiteral(lit.literal)
-    const paths = segs ? matchAdminLiteral(segs, routes) : []
+    const { paths, computed: dynamicSegments } = segs ? bestMatch(segs, routes) : { paths: [], computed: 0 }
     if (paths.length === 0) {
       unresolved.push(lit)
       continue
     }
+    if (dynamicSegments > 0) computed.set(`${lit.file}\u0000${lit.literal}`, { file: lit.file, arg: lit.literal, routes: paths })
     for (const r of routes) {
       if (!paths.includes(r.path)) continue
       const key = `${r.method} ${r.path}`
@@ -690,7 +902,7 @@ export function consoleRoutes(adminLiterals, routes) {
       used.get(key).from.add(lit.file)
     }
   }
-  return { used, unresolved }
+  return { used, unresolved, computed: [...computed.values()] }
 }
 
 // ── MCP tools and CLI commands ───────────────────────────────────────────────
@@ -731,26 +943,36 @@ export function extractCliCommands(files) {
 
 // ── The check ────────────────────────────────────────────────────────────────
 
-export function checkParity({ used, mapping, mcpTools, cliCommands, dynamicCalls = [] }) {
+/**
+ * Check `found` ({ file, arg }) against `allowed` ({ file: { arg: reason } }):
+ * an unlisted one gets `unlisted(item)`, and a listed one that `found` no
+ * longer holds is stale, so neither allowlist can grow silently.
+ */
+function checkAllowlist(found, allowed, key, unlisted, errors) {
+  const seen = new Set()
+  for (const item of found) {
+    const reason = allowed[item.file]?.[item.arg]
+    if (typeof reason === 'string' && reason.trim()) seen.add(`${item.file}\u0000${item.arg}`)
+    else errors.push(unlisted(item))
+  }
+  for (const [file, args] of Object.entries(allowed)) {
+    for (const arg of Object.keys(args)) {
+      if (!seen.has(`${file}\u0000${arg}`)) errors.push(`${key} ${file} "${arg}": stale entry; no console call uses it any more. Remove it from ${PATHS.mapping}.`)
+    }
+  }
+}
+
+export function checkParity({ used, mapping, mcpTools, cliCommands, dynamicCalls = [], computedPaths = [] }) {
   const errors = []
   // A console call whose path the gate cannot resolve is a route it cannot
-  // see. It fails unless "dynamicCalls" names it, and a named call that no
-  // longer exists fails as stale, so the allowlist cannot grow silently.
-  const allowedDynamic = mapping.dynamicCalls ?? {}
-  const seenDynamic = new Set()
-  for (const call of dynamicCalls) {
-    const reason = allowedDynamic[call.file]?.[call.arg]
-    if (typeof reason === 'string' && reason.trim()) {
-      seenDynamic.add(`${call.file}\u0000${call.arg}`)
-      continue
-    }
-    errors.push(`${call.file}: ${call.call}(${call.arg}, …) builds its path in a way this check cannot follow, so the route it calls is unchecked. Use a '/v1/…' literal or a same-file path constant, or add a reason under "dynamicCalls" in ${PATHS.mapping}.`)
-  }
-  for (const [file, args] of Object.entries(allowedDynamic)) {
-    for (const arg of Object.keys(args)) {
-      if (!seenDynamic.has(`${file}\u0000${arg}`)) errors.push(`dynamicCalls ${file} "${arg}": stale entry; no console call passes that argument any more. Remove it from ${PATHS.mapping}.`)
-    }
-  }
+  // see. It fails unless "dynamicCalls" names it (by file and argument text).
+  checkAllowlist(dynamicCalls, mapping.dynamicCalls ?? {}, 'dynamicCalls', (call) =>
+    `${call.file}: ${call.call}(${call.arg}, …) builds its path in a way this check cannot follow, so the route it calls is unchecked. Use a '/v1/…' literal or a same-file path constant, or add a reason under "dynamicCalls" in ${PATHS.mapping}.`, errors)
+  // A path that picks a static segment at run time reaches a set of routes the
+  // gate can only over-approximate. It fails unless "computedPaths" names it
+  // (by file and the path with each `${…}` written as `${}`).
+  checkAllowlist(computedPaths, mapping.computedPaths ?? {}, 'computedPaths', (p) =>
+    `${p.file}: path ${p.arg} fills a static server segment with a run-time value, so it may reach any of ${p.routes.length} route(s) (${p.routes.slice(0, 3).join(', ')}${p.routes.length > 3 ? ', …' : ''}). Write each static segment out, or add a reason under "computedPaths" in ${PATHS.mapping}.`, errors)
   const reasons = mapping.reasons ?? {}
   const entries = mapping.routes ?? {}
   const stats = { routes: used.size, mcp: 0, cli: 0, allowed: 0, byReason: {} }
@@ -792,12 +1014,12 @@ export function loadInputs(root = ROOT) {
   const routes = extractServerRoutes(readSources(root, PATHS.api))
   const adminFiles = readSources(root, PATHS.admin)
   const adminLiterals = extractAdminLiterals(adminFiles)
+  const { used, unresolved, computed: computedPaths } = consoleRoutes(adminLiterals, routes)
   const dynamicCalls = extractDynamicCalls(adminFiles)
-  const { used, unresolved } = consoleRoutes(adminLiterals, routes)
   const mcpTools = extractMcpTools(readFileSync(path.join(root, PATHS.mcpCatalog), 'utf8'))
   const cliCommands = extractCliCommands(readSources(root, PATHS.cliCommands))
   const mapping = JSON.parse(readFileSync(path.join(root, PATHS.mapping), 'utf8'))
-  return { routes, used, unresolved, dynamicCalls, mcpTools, cliCommands, mapping }
+  return { routes, used, unresolved, dynamicCalls, computedPaths, mcpTools, cliCommands, mapping }
 }
 
 function main() {
@@ -828,7 +1050,7 @@ function main() {
   }
   const reasons = Object.entries(stats.byReason).map(([k, n]) => `${k} ${n}`).join(', ')
   console.log(
-    `Surface parity OK: ${stats.routes} console routes; ${stats.mcp} with an MCP tool, ${stats.cli} with a CLI command, ${stats.allowed} allowlisted (${reasons || 'none'}); ${inputs.dynamicCalls.length} dynamic call(s) with a stated reason; ${inputs.unresolved.length} admin literals matched no route.`,
+    `Surface parity OK: ${stats.routes} console routes; ${stats.mcp} with an MCP tool, ${stats.cli} with a CLI command, ${stats.allowed} allowlisted (${reasons || 'none'}); ${inputs.dynamicCalls.length} dynamic call(s) and ${inputs.computedPaths.length} computed path(s) with a stated reason; ${inputs.unresolved.length} admin literals matched no route.`,
   )
 }
 

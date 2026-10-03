@@ -260,6 +260,146 @@ test('a nested ternary is split at the colon that closes the outer `?`', () => {
   assert.deepEqual(extractDynamicCalls(leaky), [{ file, call: 'usePageData', arg: 'path' }])
 })
 
+test('a literal joined to anything else is not resolved, inline or through a const', () => {
+  const file = 'apps/admin/src/components/Concat.tsx'
+  const files = [{
+    file,
+    source: `
+      export function Concat({ id, tail, props }) {
+        apiFetch('/v1/admin/projects/' + id + '/brand-new', { method: 'POST' })
+        const a = props.override ?? '/v1/admin/a'
+        apiFetch(a)
+        const b = props.url || '/v1/admin/b'
+        apiFetch(b)
+        const c = '/v1/admin/c/' + tail
+        apiFetch(c)
+        const base = '/v1/admin/d'
+        apiFetch(base + tail)
+        apiFetch(base)
+      }
+    `,
+  }]
+  assert.deepEqual(extractDynamicCalls(files), [
+    { file, call: 'apiFetch', arg: "'/v1/admin/projects/' + id + '/brand-new'" },
+    { file, call: 'apiFetch', arg: 'a' },
+    { file, call: 'apiFetch', arg: 'b' },
+    { file, call: 'apiFetch', arg: 'c' },
+    { file, call: 'apiFetch', arg: 'base + tail' },
+  ])
+})
+
+test('a new route reached by concatenation fails the check end to end', () => {
+  const routes = extractServerRoutes([{ file: 'routes/radar.ts', source: "app.post('/v1/admin/projects/:id/brand-new', adminOrApiKeyWrite, async (c) => {})" }])
+  const files = [{ file: 'apps/admin/src/components/New.tsx', source: "export const go = (id) => apiFetch('/v1/admin/projects/' + id + '/brand-new', { method: 'POST' })\n" }]
+  const { used: seen } = consoleRoutes(extractAdminLiterals(files), routes)
+  const { errors } = checkParity({ used: seen, mapping: mapping({}), mcpTools, cliCommands, dynamicCalls: extractDynamicCalls(files) })
+  assert.equal(errors.length, 1)
+  assert.match(errors[0], /New\.tsx: apiFetch\('\/v1\/admin\/projects\/' \+ id \+ '\/brand-new', …\) builds its path/)
+})
+
+test('a function binding resolves only when every return does; an IIFE likewise', () => {
+  const file = 'apps/admin/src/lib/paths.ts'
+  // Top-level functions start a line, as in a real module.
+  const source = [
+    'export function good(id: string): string {',
+    '  if (!id) return null',
+    '  return `/v1/admin/x/${id}`',
+    '}',
+    'export function bad(p: { override?: string }) {',
+    "  return p.override ?? '/v1/admin/x'",
+    '}',
+    'const arrow = (id: string) => `/v1/admin/y/${id}`',
+    'const catalogUrl = (() => {',
+    "  const qs = new URLSearchParams({ limit: '200' })",
+    '  return `/v1/admin/skills?${qs}`',
+    '})()',
+    'apiFetch(good(id))',
+    'apiFetch(bad(p))',
+    'apiFetch(arrow(id))',
+    'usePageData(catalogUrl)',
+  ].join('\n')
+  const files = [{ file, source }]
+  assert.deepEqual(extractDynamicCalls(files), [{ file, call: 'apiFetch', arg: 'bad(p)' }])
+})
+
+test('an arrow-callback parameter shadows an outer path constant', () => {
+  const file = 'apps/admin/src/components/Shadow.tsx'
+  const files = [{
+    file,
+    source: `
+      export function Shadow({ items }) {
+        const path = '/v1/admin/known'
+        items.map((path) => apiFetch(\`\${path}/secret\`))
+        const run = useCallback(async (path: string) => apiFetch(\`\${path}/secret\`), [])
+        items.forEach(path => apiFetch(\`\${path}/secret\`))
+        items.map((path) => path.length)
+        return usePageData(\`\${path}/ok\`)
+      }
+    `,
+  }]
+  const arg = '`${path}/secret`'
+  assert.deepEqual(extractDynamicCalls(files), [
+    { file, call: 'apiFetch', arg },
+    { file, call: 'apiFetch', arg },
+    { file, call: 'apiFetch', arg },
+  ])
+  const literals = extractAdminLiterals(files).map((l) => l.literal)
+  assert.ok(!literals.includes('/v1/admin/known/secret'), literals.join(', '))
+  assert.ok(literals.includes('/v1/admin/known/ok'), literals.join(', '))
+})
+
+test('a run-time segment that lands on a static server segment needs a computedPaths reason', () => {
+  const routes = extractServerRoutes([{
+    file: 'routes/projects.ts',
+    source: `
+      app.post('/v1/admin/projects/:id/pause', adminOrApiKey(), async (c) => {})
+      app.post('/v1/admin/projects/:id/resume', adminOrApiKey(), async (c) => {})
+      app.get('/v1/admin/reports/:id', adminOrApiKey(), async (c) => {})
+    `,
+  }])
+  const file = 'apps/admin/src/components/Toggle.tsx'
+  const files = [{ file, source: "apiFetch(`/v1/admin/projects/${p.id}/${p.action}`, { method: 'POST' })\napiFetch(`/v1/admin/reports/${id}`)\n" }]
+  const { used: seen, computed } = consoleRoutes(extractAdminLiterals(files), routes)
+  assert.deepEqual(computed, [{ file, arg: '/v1/admin/projects/${}/${}', routes: ['/v1/admin/projects/:id/pause', '/v1/admin/projects/:id/resume'] }])
+  const routeMap = mapping({
+    'POST /v1/admin/projects/:id/pause': { allow: 'parity-debt' },
+    'POST /v1/admin/projects/:id/resume': { allow: 'parity-debt' },
+    'GET /v1/admin/reports/:id': { allow: 'parity-debt' },
+  })
+  const failing = checkParity({ used: seen, mapping: routeMap, mcpTools, cliCommands, computedPaths: computed })
+  assert.equal(failing.errors.length, 1)
+  assert.match(failing.errors[0], /Toggle\.tsx: path \/v1\/admin\/projects\/\$\{\}\/\$\{\} fills a static server segment .* 2 route\(s\)/)
+  const allowed = { ...routeMap, computedPaths: { [file]: { '/v1/admin/projects/${}/${}': "action is 'pause' | 'resume'" } } }
+  assert.deepEqual(checkParity({ used: seen, mapping: allowed, mcpTools, cliCommands, computedPaths: computed }).errors, [])
+  const stale = checkParity({ used: seen, mapping: allowed, mcpTools, cliCommands, computedPaths: [] })
+  assert.equal(stale.errors.length, 1)
+  assert.match(stale.errors[0], /computedPaths .*Toggle\.tsx .*stale entry/)
+})
+
+test('openSseStream is checked through its url option, raw fetch once it writes an API path', () => {
+  const file = 'apps/admin/src/lib/streams.ts'
+  const files = [{
+    file,
+    source: `
+      await openSseStream({ url: \`\${RESOLVED_API_URL}/v1/admin/fixes/dispatch/\${id}/stream\`, bearer, onEvent: (e) => handle(e, { a: 1 }) })
+      await openSseStream({ bearer, url: props.url })
+      await openSseStream(opts)
+      await fetch(\`\${RESOLVED_API_URL}/v1/admin/ask-mushi/messages/stream\`, { method: 'POST' })
+      await fetch(\`\${RESOLVED_API_URL}/v1/admin/\` + tail)
+      const u = \`\${RESOLVED_API_URL}/v1/admin/\` + tail
+      await fetch(u)
+      await fetch(\`\${SUPABASE_URL}/auth/v1/health\`)
+      await fetch(target.signedUrl, { method: 'PUT' })
+    `,
+  }]
+  assert.deepEqual(extractDynamicCalls(files), [
+    { file, call: 'openSseStream', arg: 'props.url' },
+    { file, call: 'openSseStream', arg: 'opts' },
+    { file, call: 'fetch', arg: '`${RESOLVED_API_URL}/v1/admin/` + tail' },
+    { file, call: 'fetch', arg: 'u' },
+  ])
+})
+
 test('a dynamicCalls entry for a call that no longer exists is stale', () => {
   const stale = { ...mapping({}), dynamicCalls: { 'apps/admin/src/components/Gone.tsx': { path: 'was a prop' } } }
   const { errors } = checkParity({ used: used([]), mapping: stale, mcpTools, cliCommands, dynamicCalls: [] })
