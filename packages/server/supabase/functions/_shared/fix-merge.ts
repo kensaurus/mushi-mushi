@@ -49,7 +49,7 @@ export async function mergeGithubPullRequest(
   ref: GithubRepoRef,
   pullNumber: number,
   opts?: { mergeMethod?: MergeMethod; commitTitle?: string },
-): Promise<{ merged: boolean; alreadyMerged: boolean; sha?: string; message?: string }> {
+): Promise<{ merged: boolean; alreadyMerged: boolean; sha?: string; message?: string; mergedAt?: string | null }> {
   const pr = await fetchPullRequest(token, ref, pullNumber);
   if (pr?.draft) {
     const ready = await markPullRequestReady(token, ref, pullNumber);
@@ -83,7 +83,8 @@ export async function mergeGithubPullRequest(
     const body = await res.json().catch(() => ({})) as { message?: string };
     const msg = body.message ?? `GitHub merge rejected (${res.status})`;
     if (/already been merged|not mergeable/i.test(msg)) {
-      return { merged: true, alreadyMerged: true, message: msg };
+      // When GitHub actually merged it earlier, keep that time (finalizeFixMerge).
+      return { merged: true, alreadyMerged: true, message: msg, mergedAt: pr?.mergedAt ?? null };
     }
     return { merged: false, alreadyMerged: false, message: msg };
   }
@@ -110,6 +111,19 @@ export async function mergeGithubPullRequest(
   };
 }
 
+/**
+ * When the PR merged: GitHub's `merged_at` when the caller has it and it is
+ * a real past time, else `now` (the moment Mushi noticed). Without the GitHub
+ * App, a merge is noticed by the ci-sync poll minutes later, and
+ * report-deploy-live places deploy runs before or after `fix_attempts.merged_at`,
+ * so the noticed-at time would misplace a run taken inside that lag.
+ */
+export function resolveMergedAt(githubMergedAt: string | null | undefined, now: Date): string {
+  const t = githubMergedAt ? Date.parse(githubMergedAt) : NaN;
+  if (Number.isNaN(t) || t > now.getTime()) return now.toISOString();
+  return new Date(t).toISOString();
+}
+
 /** Idempotent post-merge bookkeeping shared by console merge + GitHub webhooks. */
 export async function finalizeFixMerge(
   db: Db,
@@ -119,13 +133,16 @@ export async function finalizeFixMerge(
     prNumber?: number | null;
     repository?: string | null;
     actorUserId?: string | null;
+    /** GitHub's `merged_at` for the PR, when the caller read it. */
+    mergedAt?: string | null;
   },
 ): Promise<{ justMerged: boolean; reportStatus: string | null }> {
-  const now = new Date().toISOString();
+  const nowDate = new Date();
+  const now = nowDate.toISOString();
 
   const { data: mergedRow } = await db
     .from('fix_attempts')
-    .update({ merged_at: now, pr_state: 'merged' })
+    .update({ merged_at: resolveMergedAt(meta.mergedAt, nowDate), pr_state: 'merged' })
     .eq('id', attempt.id)
     .is('merged_at', null)
     .select('id')

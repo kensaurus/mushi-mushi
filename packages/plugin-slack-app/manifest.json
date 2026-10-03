@@ -10,8 +10,8 @@
       {
         "command": "/mushi",
         "url": "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api/v1/webhooks/slack/commands",
-        "description": "Dictate a request, or list / open / resolve Mushi reports",
-        "usage_hint": "voice <text> | list | open <id> | resolve <id> | help",
+        "description": "Dictate a request, or list / open / resolve / reply to Mushi reports",
+        "usage_hint": "voice <text> | list | open <id> | resolve <id> | reply <id> <message> | help",
         "should_escape": false
       }
     ],

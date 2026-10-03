@@ -96,6 +96,7 @@ async function syncPrLifecycle(
         prUrl: attempt.pr_url!,
         prNumber,
         repository: `${ref.owner}/${ref.repo}`,
+        mergedAt: pr.mergedAt ?? null,
       })
     }
   } else if (state === 'closed') {

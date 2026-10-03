@@ -171,6 +171,8 @@ export interface PullRequestSnapshot {
   nodeId?: string | null
   /** ISO time GitHub closed (or merged) the PR; null while open. */
   closedAt?: string | null
+  /** ISO time GitHub merged the PR; null unless merged. */
+  mergedAt?: string | null
 }
 
 export interface PullRequestDetails extends PullRequestSnapshot {
@@ -209,6 +211,7 @@ export async function fetchPullRequest(
     merged?: boolean
     node_id?: string
     closed_at?: string | null
+    merged_at?: string | null
   }
   return {
     number: body.number ?? pullNumber,
@@ -217,6 +220,7 @@ export async function fetchPullRequest(
     merged: body.merged === true,
     nodeId: body.node_id ?? null,
     closedAt: body.closed_at ?? null,
+    mergedAt: body.merged_at ?? null,
   }
 }
 

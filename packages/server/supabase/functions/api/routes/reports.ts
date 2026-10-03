@@ -21,6 +21,7 @@ import { buildReportFixPacket } from './report-agent-context.ts';
 import { inventoryAnchorOf } from './report-agent-context-helpers.ts';
 import { getStorageAdapter } from '../../_shared/storage.ts';
 import { runInBackground } from '../../_shared/background.ts';
+import { loadReportDeployLive, type MergedFixRow } from '../../_shared/report-deploy-live.ts';
 
 /** `reports_closed_reason_check` values (migration 20261002120000). */
 const CLOSED_REASONS = new Set(['duplicate', 'not_reproducible', 'wont_fix', 'working_as_intended', 'spam']);
@@ -706,11 +707,24 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
     // shares one generator instead of each reshaping the row. Best-effort: RAG
     // hints and blast radius enrich the packet when available but never block
     // the response.
-    const { fixPacket: fix_packet } = await buildReportFixPacket(
-      db,
-      data as Record<string, unknown>,
-      inventoryAnchorOf(inventoryAnchorRes.data),
-    );
+    // Merged fix → is it live? Places each deploy target's newest commit
+    // before or after the merge (deploy_drift run heads, earlier
+    // deploy_observations). null unless the report reads as fixed, a fix
+    // merged and a declared production deploy target reported a commit;
+    // `unknown` (never `live`) on a failed read or when a merged attempt's PR
+    // is in a repo other than the one the deploy heads come from.
+    const [{ fixPacket: fix_packet }, deploy_live] = await Promise.all([
+      buildReportFixPacket(
+        db,
+        data as Record<string, unknown>,
+        inventoryAnchorOf(inventoryAnchorRes.data),
+      ),
+      loadReportDeployLive(
+        db,
+        { project_id: data.project_id as string, status: (data.status as string | null) ?? null },
+        (fixesRes.data ?? []) as MergedFixRow[],
+      ),
+    ]);
 
     return c.json({
       ok: true,
@@ -737,6 +751,7 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
         })(),
         llm_invocations: invocationsRes.data ?? [],
         fix_attempts: fixesRes.data ?? [],
+        deploy_live,
         project_name: (projectRes.data as { name?: string | null } | null)?.name ?? null,
         judge_eval: judgeRes.data ?? null,
         inventory_action: inventoryAnchorRes.data ?? null,

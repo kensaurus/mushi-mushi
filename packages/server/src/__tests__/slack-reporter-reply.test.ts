@@ -10,7 +10,7 @@ import { makeFakeDb, type Row } from './__stubs__/fake-supabase'
 const token = vi.hoisted(() => ({ value: 'xoxb-test' as string | null }))
 
 vi.mock('../../supabase/functions/_shared/logger.ts', () => {
-  const noop = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {}, child: () => noop }
+  const noop = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {}, audit: () => {}, child: () => noop }
   return { log: noop }
 })
 vi.mock('../../supabase/functions/_shared/slack.ts', () => ({ resolveSlackBotToken: async () => token.value }))
@@ -37,6 +37,7 @@ function db(report: Row = {}) {
 
 function submission(text: string | null, reportId = REPORT) {
   return {
+    user: { id: 'U0CLICKER' },
     view: {
       callback_id: 'reply_reporter',
       private_metadata: reportId,
@@ -89,6 +90,21 @@ describe('submitSlackReporterReply', () => {
     })
     // The trigger writes the in-app row; the helper must not write a second one.
     expect(fake.table('reporter_notifications')).toHaveLength(0)
+  })
+
+  it('records the Slack user who sent it in the audit log, not only the owner it is attributed to', async () => {
+    const fake = db()
+    await m.submitSlackReporterReply(fake as never, submission('Thanks!'))
+    const audit = fake.table('audit_logs')
+    expect(audit).toHaveLength(1)
+    expect(audit[0]).toMatchObject({
+      project_id: 'p1',
+      actor_id: 'owner-1',
+      actor_type: 'slack',
+      action: 'report.reporter_replied',
+      resource_id: REPORT,
+      metadata: { via: 'card_modal', slack_user_id: 'U0CLICKER', comment_id: fake.table('report_comments')[0].id },
+    })
   })
 
   it('shows field errors in the modal for an empty, too long or stale submit', async () => {

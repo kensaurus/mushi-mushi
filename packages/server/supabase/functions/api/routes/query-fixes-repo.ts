@@ -995,6 +995,8 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       prNumber: attempt.pr_number,
       repository: `${ref.owner}/${ref.repo}`,
       actorUserId: userId,
+      // A fresh merge happened just now; an already-merged PR keeps GitHub's time.
+      mergedAt: mergeResult.alreadyMerged ? mergeResult.mergedAt ?? null : null,
     });
 
     await logAudit(
