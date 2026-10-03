@@ -40,6 +40,10 @@ export interface ReportRow {
   report_group_id?: string | null
   last_reporter_reply_at?: string | null
   last_admin_reply_at?: string | null
+  /** When a person last opened this report in the console (stamped by
+   *  GET /v1/admin/reports/:id on a JWT read) or replied to the reporter
+   *  (the report_comments trigger). Drives the unread "reply" dot. */
+  admin_seen_at?: string | null
   // 2026-05-07 SDK observability boost — surfaced on the row so the
   // hover popover ("breadcrumb peek") and the inline tag chips can
   // render without a second round-trip when the user mouses over a row.
@@ -161,6 +165,28 @@ export function severityLabelShort(s: string | null): string {
     case 'low':      return 'Low'
     default:         return severityLabel(s)
   }
+}
+
+function parseTime(iso: string | null | undefined): number | null {
+  if (!iso) return null
+  const t = Date.parse(iso)
+  return Number.isNaN(t) ? null : t
+}
+
+/**
+ * The reporter wrote after anyone on the team last looked (Plan 018
+ * decision 10: `last_reporter_reply_at > admin_seen_at`, or never seen).
+ * Opening the report in the console stamps `admin_seen_at`, so the dot clears
+ * without a reply. An admin reply also counts as seen: rows replied to before
+ * `admin_seen_at` existed carry only `last_admin_reply_at`.
+ */
+export function hasUnseenReporterReply(
+  row: Pick<ReportRow, 'last_reporter_reply_at' | 'last_admin_reply_at' | 'admin_seen_at'>,
+): boolean {
+  const replied = parseTime(row.last_reporter_reply_at)
+  if (replied === null) return false
+  const seen = Math.max(parseTime(row.admin_seen_at) ?? -Infinity, parseTime(row.last_admin_reply_at) ?? -Infinity)
+  return replied > seen
 }
 
 export function formatRelative(iso: string): string {
