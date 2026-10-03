@@ -18,7 +18,7 @@ import { join, relative, sep } from 'node:path'
 import type { DesignRuleId, DevianceBreakdownEntry, DevianceFinding } from './engine/design-engine-types.ts'
 import { computeDeviance, readScanTokens, selectScanFiles, tokenFilePaths, type LocalFile } from './engine/design-scan.ts'
 import { judgingSet } from './engine/design-set-plan.ts'
-import { normalizeRepoPath } from './engine/recipe-glob.ts'
+import { matchGlob, normalizeRepoPath } from './engine/recipe-glob.ts'
 import { readTextFileCapped } from '../file-io.js'
 import { readScanManifest, type LocalIssue } from './manifest-shape.js'
 
@@ -126,32 +126,184 @@ function gitDefaultBranch(root: string): string {
   return 'main'
 }
 
+interface RootPackage {
+  name?: string
+  dependencies?: Record<string, string>
+  devDependencies?: Record<string, string>
+  scripts?: Record<string, unknown>
+  workspaces?: unknown
+}
+
+/** Env templates checked in at the repo root, in the order `mushi recipe init` prefers them. */
+const ENV_EXAMPLES = ['.env.example', '.env.local.example', '.env.sample', '.env.template']
+/** Top-level folders a root-level app (Next.js, Vite, Expo) keeps its UI in. */
+const ROOT_APP_DIRS = ['app', 'src', 'components', 'features', 'lib', 'hooks', 'pages']
+const MAX_LITERAL_GLOBS = 30
+const MAX_READ_BYTES = 512 * 1024
+const MAX_SCRIPT_FILES = 400
+/** Workflow steps that ship something: store uploads, hosting deploys, OTA bundles, package publishes. */
+const DEPLOY_STEPS = [
+  /upload-google-play/i,
+  /upload-testflight/i,
+  /\baltool\b/i,
+  /app-store-connect/i,
+  /\baws\s+s3\s+sync\b/i,
+  /\bwrangler\s+(pages\s+)?deploy\b/i,
+  /cloudflare\/wrangler-action/i,
+  /\bvercel\s+(deploy|--prod)\b/i,
+  /\bsupabase\s+functions\s+deploy\b/i,
+  /\bcapgo\b/i,
+  /\beas\s+update\b/i,
+  /\b(npm|pnpm|yarn)\s+publish\b/i,
+  /\bchangeset\s+publish\b/i,
+]
+const WRITES_FILE = /\b(writeFileSync|writeFile|createWriteStream|outputFileSync|outputFile|outputJsonSync|outputJson|writeJsonSync|writeJson|writeTextFile|write_text)\b/
+
+function readCapped(root: string, path: string): string | null {
+  const f = readTextFileCapped(join(root, path), MAX_READ_BYTES)
+  return f.kind === 'file' ? f.text : null
+}
+
+/** The workspace globs the root declares: package.json `workspaces` (array or `{ packages }`) and pnpm-workspace.yaml `packages:`. */
+function workspacePatterns(root: string, pkg: RootPackage | null): string[] {
+  const out: string[] = []
+  const ws = pkg?.workspaces
+  const list = Array.isArray(ws) ? ws : isObject(ws) && Array.isArray(ws.packages) ? ws.packages : []
+  for (const p of list) if (typeof p === 'string') out.push(p)
+  const yaml = readCapped(root, 'pnpm-workspace.yaml')
+  if (yaml) {
+    let inPackages = false
+    for (const line of yaml.split(/\r?\n/)) {
+      if (/^packages\s*:/.test(line)) {
+        inPackages = true
+        continue
+      }
+      if (/^\S/.test(line)) inPackages = false
+      const item = inPackages ? /^\s+-\s*["']?([^"'#]+?)["']?\s*(#.*)?$/.exec(line) : null
+      if (item) out.push(item[1]!)
+    }
+  }
+  return out.map((p) => p.trim().replace(/^\.\//, '').replace(/\/+$/, '')).filter(Boolean)
+}
+
+/** The package manager the lockfile shows, as the prefix that runs a package.json script. */
+function scriptRunner(files: ReadonlySet<string>): string {
+  if (files.has('pnpm-lock.yaml')) return 'pnpm'
+  if (files.has('yarn.lock')) return 'yarn'
+  if (files.has('bun.lockb') || files.has('bun.lock')) return 'bun run'
+  return 'npm run'
+}
+
+/**
+ * How a token file is produced. A script under scripts/ that names the path
+ * and writes a file, or a package.json script whose command names it, is a
+ * generator; a `--check` script that references it also marks it generated.
+ * The generator is recorded as the root package.json script that runs it.
+ */
+function tokenOrigin(
+  tokenPath: string,
+  scripts: ReadonlyArray<[string, string]>,
+  scriptFiles: ReadonlyArray<{ path: string; text: string }>,
+  runner: string,
+): { role: 'source' } | { role: 'export'; generator?: string } {
+  const isCheck = (name: string, cmd: string) => /(^|\s)--check(\s|=|$)/.test(cmd) || /(^|:)check$/.test(name)
+  const namesToken = (file: { path: string; text: string }) => {
+    if (file.text.includes(tokenPath)) return true
+    // A script inside a package may name the token relative to that package.
+    const pkgDir = file.path.includes('/scripts/') ? file.path.slice(0, file.path.indexOf('/scripts/')) : ''
+    return pkgDir !== '' && tokenPath.startsWith(`${pkgDir}/`) && file.text.includes(tokenPath.slice(pkgDir.length + 1))
+  }
+  const mentioning = scriptFiles.filter(namesToken)
+  const writers = mentioning.filter((f) => WRITES_FILE.test(f.text))
+  const runs = (cmd: string, file: string) => cmd.includes(file)
+
+  let generator: string | undefined
+  let generated = false
+  for (const [name, cmd] of scripts) {
+    if (isCheck(name, cmd)) continue
+    if (cmd.includes(tokenPath) || writers.some((w) => runs(cmd, w.path))) {
+      generated = true
+      generator ??= `${runner} ${name}`
+    }
+  }
+  if (writers.length) {
+    generated = true
+    if (!generator) {
+      const w = writers[0]!.path
+      generator = /\.(m?js|cjs)$/.test(w) ? `node ${w}` : w
+    }
+  }
+  const checked = scripts.some(([name, cmd]) => isCheck(name, cmd) && (cmd.includes(tokenPath) || mentioning.some((f) => runs(cmd, f.path))))
+  if (!generated && !checked) return { role: 'source' }
+  return generator && generator.length <= 200 ? { role: 'export', generator } : { role: 'export' }
+}
+
 /** A first mushi.recipe.json from what the repo shows. Every value is a starting point to edit. */
 export function starterManifest(root: string): Record<string, unknown> {
-  const files = walk(root, 5000)
-  const pkg = readJson(join(root, 'package.json')) as { name?: string; dependencies?: Record<string, string>; devDependencies?: Record<string, string> } | null
+  // The tracked files, as checkRecipe and the server read them; a walk only outside git (or before the first add).
+  const tracked = listRepoFiles(root).map((e) => e.path)
+  const files = tracked.length ? tracked : walk(root)
+  const fileSet = new Set(files)
+  const pkg = readJson(join(root, 'package.json')) as RootPackage | null
   const deps = { ...(pkg?.dependencies ?? {}), ...(pkg?.devDependencies ?? {}) }
+  const rootScripts: Array<[string, string]> = Object.entries(pkg?.scripts ?? {}).filter((e): e is [string, string] => typeof e[1] === 'string')
   const native = files.some((f) => /^capacitor\.config\.(ts|js|json)$/.test(f)) || 'expo' in deps || 'react-native' in deps || files.some((f) => f.startsWith('android/') || f.startsWith('ios/'))
   const platforms = ['web', ...(files.some((f) => f.startsWith('android/')) || 'expo' in deps ? ['android'] : []), ...(files.some((f) => f.startsWith('ios/')) || 'expo' in deps ? ['ios'] : [])]
+  // A folder holding ARCHIVED.md is retired code: not this app's design, sources or migrations.
+  const archived = files.filter((f) => f.endsWith('/ARCHIVED.md')).map((f) => f.slice(0, -'/ARCHIVED.md'.length))
+  const isArchived = (f: string) => archived.some((d) => f.startsWith(`${d}/`))
+  const live = (f: string) => !FIXTURE_DIR.test(f) && !isArchived(f)
   // Token files inside tests, fixtures and examples are someone else's design, not this app's.
-  const tokens = files
-    .filter((f) => !FIXTURE_DIR.test(f) && (/\.tokens\.json$/.test(f) || /(^|\/)dtcg\/[^/]+\.json$/.test(f)))
+  const tokenPaths = files
+    .filter((f) => live(f) && (/\.tokens\.json$/.test(f) || /(^|\/)dtcg\/[^/]+\.json$/.test(f)))
     .slice(0, 20)
   const workflows = files.filter((f) => /^\.github\/workflows\/[^/]+\.ya?ml$/.test(f))
-  // A monorepo keeps its UI under apps/<name>/src or packages/<name>/src; scan those too.
-  const sourceRoots = [...new Set(files
-    .filter((f) => !FIXTURE_DIR.test(f) && /^(apps|packages)\/[^/]+\/src\/.+\.(tsx|css)$/.test(f))
-    .map((f) => f.split('/').slice(0, 3).join('/')))].slice(0, 12)
-  const literalGlobs = sourceRoots.length
-    ? sourceRoots.map((r) => `${r}/**/*.{ts,tsx,css}`)
+
+  // Literal scan: a root-level app's folders, then each workspace (or, with none declared, apps|packages/<name>/src).
+  const hasSource = (dir: string, ext: RegExp) => files.some((f) => f.startsWith(`${dir}/`) && live(f) && ext.test(f))
+  const rootIsApp = files.some((f) => /^(next|vite)\.config\.(js|mjs|cjs|ts|mts)$/.test(f)) || 'expo' in deps || rootScripts.some(([name]) => name === 'dev' || name === 'build')
+  const rootDirs = rootIsApp ? ROOT_APP_DIRS.filter((d) => hasSource(d, /\.(ts|tsx|css)$/)) : []
+  const patterns = workspacePatterns(root, pkg)
+  let packageRoots: string[]
+  if (patterns.length) {
+    const include = patterns.filter((p) => !p.startsWith('!'))
+    const exclude = patterns.filter((p) => p.startsWith('!')).map((p) => p.slice(1))
+    const pkgDirs = [...new Set(files.filter((f) => f.endsWith('/package.json') && !f.includes('node_modules/')).map((f) => f.slice(0, -'/package.json'.length)))]
+    packageRoots = pkgDirs
+      .filter((d) => !isArchived(`${d}/`) && include.some((p) => matchGlob(d, p)) && !exclude.some((p) => matchGlob(d, p)))
+      .sort()
+      .flatMap((d) => (hasSource(`${d}/src`, /\.(tsx|css)$/) ? [`${d}/src`] : hasSource(d, /\.(tsx|css)$/) ? [d] : []))
+  } else {
+    packageRoots = [...new Set(files
+      .filter((f) => live(f) && /^(apps|packages)\/[^/]+\/src\/.+\.(tsx|css)$/.test(f))
+      .map((f) => f.split('/').slice(0, 3).join('/')))]
+  }
+  const scanRoots = [...new Set([...rootDirs, ...packageRoots])].slice(0, MAX_LITERAL_GLOBS)
+  const literalGlobs = scanRoots.length
+    ? scanRoots.map((r) => `${r}/**/*.{ts,tsx,css}`)
     : ['src/**/*.{ts,tsx,css}', 'app/**/*.{ts,tsx,css}']
-  const migrationsDir = files.find((f) => !FIXTURE_DIR.test(f) && /(^|\/)supabase\/migrations\/[^/]+\.sql$/.test(f))?.replace(/\/[^/]+$/, '')
+  const migrationsDir = files.find((f) => live(f) && /(^|\/)supabase\/migrations\/[^/]+\.sql$/.test(f))?.replace(/\/[^/]+$/, '')
+
+  const tokens = tokenPaths.length
+    ? (() => {
+        const scriptFiles = files
+          .filter((f) => live(f) && !f.includes('node_modules/') && /(^|\/)scripts\/.+\.(m?[jt]s|c[jt]s|py|sh)$/.test(f))
+          .slice(0, MAX_SCRIPT_FILES)
+          .flatMap((path) => {
+            const text = readCapped(root, path)
+            return text === null ? [] : [{ path, text }]
+          })
+        const runner = scriptRunner(fileSet)
+        return tokenPaths.map((path) => ({ path, ...tokenOrigin(path, rootScripts, scriptFiles, runner), format: 'dtcg-2025.10' }))
+      })()
+    : []
+
   const manifest: Record<string, unknown> = {
     version: 1,
     app: { name: pkg?.name ?? root.split(/[\\/]/).pop(), kind: native ? 'app' : 'site', platforms },
   }
   if (tokens.length) {
-    manifest.design = { tokens: tokens.map((path) => ({ path, role: 'source', format: 'dtcg-2025.10' })), literalScan: { globs: literalGlobs, ignore: ['**/*.test.*'] } }
+    manifest.design = { tokens, literalScan: { globs: literalGlobs, ignore: ['**/*.test.*'] } }
   }
   if (migrationsDir) manifest.data = { provider: 'supabase', migrationsDir }
   if (workflows.length) {
@@ -160,12 +312,17 @@ export function starterManifest(root: string): Record<string, unknown> {
       defaultBranch: gitDefaultBranch(root),
       workflows: Object.fromEntries(workflows.map((w) => {
         const name = w.slice('.github/workflows/'.length)
-        return [name, { role: /^(deploy|publish|release)/.test(name) ? 'deploy' : 'ci' }]
+        const steps = (readCapped(root, w) ?? '').split(/\r?\n/).filter((l) => !/^\s*#/.test(l)).join('\n')
+        const deploys = /^(deploy|publish|release)/.test(name) || DEPLOY_STEPS.some((re) => re.test(steps))
+        return [name, { role: deploys ? 'deploy' : 'ci' }]
       })),
     }
   }
-  if (existsSync(join(root, '.env.example'))) manifest.env = { environments: ['production'], required: [], example: '.env.example' }
-  manifest.change = { allowPaths: [MANIFEST, ...[...new Set(tokens.map((t) => `${t.split('/').slice(0, -1).join('/') || '.'}/**`))]] }
+  const envExample = ENV_EXAMPLES.find((p) => existsSync(join(root, p)))
+  if (envExample) manifest.env = { environments: ['production'], required: [], example: envExample }
+  // A generated export is never writable (isWritablePath refuses it), so only source folders are allowed.
+  const sourceDirs = tokens.filter((t) => t.role === 'source').map((t) => `${t.path.split('/').slice(0, -1).join('/') || '.'}/**`)
+  manifest.change = { allowPaths: [MANIFEST, ...new Set(sourceDirs)] }
   return manifest
 }
 
