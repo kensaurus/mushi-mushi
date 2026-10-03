@@ -1,4 +1,4 @@
-import { readPublicPageStoreConfig, removeProjectPublicPage } from '../../_shared/public-page-store.ts';
+import { readPublicPageStoreConfig, regeneratePublicSitemap, removeProjectPublicPage } from '../../_shared/public-page-store.ts';
 import type { Hono } from 'npm:hono@4';
 import type { Variables } from '../types.ts';
 import { getServiceClient } from '../../_shared/db.ts';
@@ -1243,6 +1243,17 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
 
     const { error: deleteErr } = await db.from('projects').delete().eq('id', projectId);
     if (deleteErr) return dbError(c, deleteErr);
+
+    // The cascade dropped the publication row; drop its URL from the /r/
+    // sitemap too. Best-effort: a failure leaves one dead URL until the next
+    // publish or unpublish rewrites the file.
+    if (pageRemoval === 'deleted') {
+      await regeneratePublicSitemap(
+        db,
+        readPublicPageStoreConfig((name) => Deno.env.get(name)),
+        (err) => log.warn('project delete: /r/ sitemap regeneration failed', { project_id: projectId, error: String(err) }),
+      );
+    }
 
     // Sentry breadcrumb-style log. Real monitoring hook: filter by
     // `category:project.deleted` to spot accidental mass-deletions.
