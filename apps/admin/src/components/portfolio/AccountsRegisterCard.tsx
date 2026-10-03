@@ -91,11 +91,18 @@ export function AccountsRegisterCard({ orgId }: { orgId: string }) {
         return
       }
       const blob = new Blob([await res.text()], { type: 'text/markdown;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
-      a.href = URL.createObjectURL(blob)
+      a.href = url
       a.download = `accounts-register-${new Date().toISOString().slice(0, 10)}.md`
+      // Firefox ignores a click on a detached anchor, and revoking the URL in the same tick can
+      // cancel the download in Firefox and Safari: attach, click, then clean up on the next tick.
+      document.body.appendChild(a)
       a.click()
-      URL.revokeObjectURL(a.href)
+      setTimeout(() => {
+        a.remove()
+        URL.revokeObjectURL(url)
+      }, 0)
     } catch {
       setNotice({ tone: 'danger', text: 'The register could not be exported. Check your connection and try again.' })
     } finally {

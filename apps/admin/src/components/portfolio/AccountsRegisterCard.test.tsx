@@ -124,12 +124,21 @@ describe('AccountsRegisterCard', () => {
     const createObjectURL = vi.fn(() => 'blob:x')
     const revokeObjectURL = vi.fn()
     Object.assign(URL, { createObjectURL, revokeObjectURL })
-    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    // The anchor must be in the document when clicked, and the URL still alive.
+    const seenAtClick: Array<{ attached: boolean; revoked: boolean }> = []
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      seenAtClick.push({ attached: document.body.contains(this), revoked: revokeObjectURL.mock.calls.length > 0 })
+    })
     await render(DATA)
     await act(async () => { button('Download as Markdown').click(); await flush() })
     expect(mocks.raw).toHaveBeenCalledWith(`/v1/admin/orgs/${ORG}/accounts/export`)
     expect(createObjectURL).toHaveBeenCalledTimes(1)
     expect(click).toHaveBeenCalledTimes(1)
+    expect(seenAtClick).toEqual([{ attached: true, revoked: false }])
+    // Cleaned up on the next tick: the URL is revoked and the anchor removed.
+    await act(async () => { await new Promise((r) => setTimeout(r, 5)) })
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:x')
+    expect(document.querySelector('a[download]')).toBeNull()
     click.mockRestore()
   })
 })
