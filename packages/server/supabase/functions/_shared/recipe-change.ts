@@ -32,7 +32,7 @@ import type { getServiceClient } from './db.ts'
 import type { createPrFromFiles, findOpenPrByHeadPrefix } from './github-pr.ts'
 import { unifiedDiff } from './design-change.ts'
 import { parseInventoryYaml } from './inventory.ts'
-import { inventoryPathOf, isWritablePath, parseRecipeManifest, RECIPE_MANIFEST_PATH, type RecipeManifest } from './recipe-schema.ts'
+import { ENV_TEMPLATE_NAME, inventoryPathOf, isWritablePath, parseRecipeManifest, RECIPE_MANIFEST_PATH, type RecipeManifest } from './recipe-schema.ts'
 import { normalizeRepoPath } from './recipe-glob.ts'
 import type { readRepoFile, RecipeRepo, RecipeRepoResolution } from './recipe-github.ts'
 import { scanForSecrets } from './secret-scan.ts'
@@ -344,8 +344,6 @@ export async function streamRecipeChangeJob(io: RecipeJobStreamIo, opts: { pollM
 export const RECIPE_SOURCE_ELEMENTS = ['gates', 'env', 'routes'] as const
 export type RecipeSourceElement = (typeof RECIPE_SOURCE_ELEMENTS)[number]
 
-/** An env template's file name: `.env` plus optional segments, ending in .example, .sample or .template. */
-const ENV_TEMPLATE_NAME = /^\.env(\.[A-Za-z0-9_-]+)*\.(example|sample|template)$/
 
 /**
  * The env template mushi.recipe.json names in `env.example`, else
