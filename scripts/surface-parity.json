@@ -1,5 +1,5 @@
 {
-  "$comment": "Console route → MCP tool / CLI command map, checked by scripts/check-surface-parity.mjs (pnpm check:surface-parity). Keys are METHOD + Hono path. Each entry names \"mcp\" tools, \"cli\" commands (without 'mushi'), or an \"allow\" reason code from \"reasons\"; \"note\" is free text. \"dynamicCalls\" maps an admin file to the first-argument text of a console call whose path the check cannot resolve, with the reason; a listed call that no longer exists fails as stale.",
+  "$comment": "Console route → MCP tool / CLI command map, checked by scripts/check-surface-parity.mjs (pnpm check:surface-parity). Keys are METHOD + Hono path. Each entry names \"mcp\" tools, \"cli\" commands (without 'mushi'), or an \"allow\" reason code from \"reasons\"; \"note\" is free text. \"dynamicCalls\" maps an admin file to the first-argument text of a console call whose path the check cannot resolve, with the reason; a listed call that no longer exists fails as stale. \"computedPaths\" maps an admin file to a path (each ${…} written as ${}) that fills a static server segment at run time, with the reason; it is stale the same way.",
   "reasons": {
     "jwt-only": "The route accepts only a signed-in console session (jwtAuth). MCP tools and the CLI authenticate with an API key, so they cannot call it. Widening its auth is a deliberate decision; after that, map a tool or command here.",
     "public": "Unauthenticated or signature-checked endpoint (public pages, invitation preview, webhook receivers, push key). The console links to it or calls it anonymously; it is not an operator action.",
@@ -548,6 +548,20 @@
   "dynamicCalls": {
     "apps/admin/src/components/pdca-flow/PipelineActionPanel.tsx": {
       "judgeRunEndpoint": "A prop that defaults to '/v1/admin/judge/run' (mapped as POST /v1/admin/judge/run); the only caller, PdcaFlow, passes none."
+    }
+  },
+  "computedPaths": {
+    "apps/admin/src/components/notifications/ReporterOutboxPanel.tsx": {
+      "/v1/admin/reporter-outbox/${}/${}": "action is typed 'release' | 'discard', exactly the two POST routes under /reporter-outbox/:id; both are mapped."
+    },
+    "apps/admin/src/components/report-detail/TesterSubmissionCard.tsx": {
+      "/v1/admin/tester-submissions/${}/${}": "action is ReviewAction ('accept' | 'informative' | 'duplicate' | 'spam'), exactly the four POST routes under /tester-submissions/:id; all are mapped."
+    },
+    "apps/admin/src/lib/reporterEmailLink.ts": {
+      "/v1/public/reporter/email/${}?t=${}": "link.action is ReporterEmailAction ('verify' | 'unsubscribe'), checked by parseReporterEmailLink before the call; both paths (GET and POST each) are mapped as public."
+    },
+    "apps/admin/src/pages/AntiGamingPage.tsx": {
+      "/v1/admin/tester-redemptions/${}/${}": "action is typed 'approve' | 'deny', exactly the two POST routes under /tester-redemptions/:id; both are mapped."
     }
   }
 }
