@@ -18,7 +18,7 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { log } from './logger.ts'
 import { buildNotificationMessage, createNotification, notifyFollowers } from './notifications.ts'
-import { runStatusTransitionSideEffects } from './report-transition.ts'
+import { runStatusTransitionSideEffects, type TransitionActor } from './report-transition.ts'
 import { toStoredStatus } from './report-status.ts'
 import { awardPoints } from './reputation.ts'
 
@@ -38,8 +38,11 @@ export interface ReleaseDelivery {
 export async function notifyReleaseReporters(
   db: SupabaseClient,
   release: { id: string; project_id: string; version: string; fixed_report_ids?: string[] | null },
-  actorUserId: string,
+  /** A console user id, or the actor itself (auto-release passes kind 'system'). */
+  actorOrUserId: string | TransitionActor,
 ): Promise<{ ok: true; delivery: ReleaseDelivery } | { ok: false; error: string }> {
+  const actor: TransitionActor =
+    typeof actorOrUserId === 'string' ? { kind: 'admin', id: actorOrUserId } : actorOrUserId
   const fixedIds = [...new Set(release.fixed_report_ids ?? [])]
   const delivery: ReleaseDelivery = {
     reports_listed: fixedIds.length,
@@ -69,7 +72,9 @@ export async function notifyReleaseReporters(
       delivery.reports_skipped_dismissed++
       continue
     }
-    const verified = report.status === 'verified'
+    // Read before the update below: the status the reporter last saw.
+    const previousStatus = report.status
+    const verified = previousStatus === 'verified'
     const patch: Record<string, unknown> = { fixed_in_version: release.version, fixed_release_id: release.id }
     if (!verified) patch.status = 'fixed'
     const { error: updErr } = await db
@@ -84,15 +89,15 @@ export async function notifyReleaseReporters(
     }
     delivery.reports_resolved++
 
-    if (!verified && toStoredStatus(report.status) !== 'fixed') {
+    if (!verified && toStoredStatus(previousStatus) !== 'fixed') {
       // Plugins and linked issues; the reporter hears `released` below, not `fixed`.
       runStatusTransitionSideEffects(db, {
         reportId: report.id,
         projectId: release.project_id,
         reporterTokenHash: report.reporter_token_hash,
-        previousStatus: report.status,
+        previousStatus,
         newStatus: 'fixed',
-        actor: { kind: 'admin', id: actorUserId },
+        actor,
         notifyReporter: false,
       })
       if (report.reporter_token_hash) {

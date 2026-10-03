@@ -33,6 +33,7 @@ import {
 import { ReleasesStatusBanner } from '../components/releases/ReleasesStatusBanner'
 import { ReleasesSnapshotStrip } from '../components/releases/ReleasesSnapshotStrip'
 import { ReleasesProvenanceReadout } from '../components/releases/ReleasesProvenanceReadout'
+import { AutoReleaseCard } from '../components/releases/AutoReleaseCard'
 import {
   InlineProof,
   SignalChip,
@@ -698,6 +699,7 @@ export function ReleasesPage() {
           )}
           </>
           )}
+          {activeProjectId ? <AutoReleaseCard projectId={activeProjectId} /> : null}
         </>
       )}
 

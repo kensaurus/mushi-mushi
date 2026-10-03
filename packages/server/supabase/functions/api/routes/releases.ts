@@ -31,7 +31,7 @@ import {
 } from '../shared.ts'
 import { log } from '../../_shared/logger.ts'
 import { reporterKey } from '../../_shared/reporter-token.ts'
-import { notifyReleaseReporters, stampDeliveredReleaseCredits } from '../../_shared/release-reporters.ts'
+import { publishRelease } from '../../_shared/release-publish.ts'
 
 async function assertReleaseRowAccess(
   c: Parameters<typeof assertTargetProjectAccess>[0],
@@ -372,63 +372,18 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
     const rowAccess = await assertReleaseRowAccess(c, db, userId, idParsed.value)
     if (!rowAccess.ok) return rowAccess.response
 
-    // Mark as published
-    const { data: release, error } = await db
-      .from('releases')
-      .update({ status: 'published', published_at: new Date().toISOString() })
-      .eq('id', c.req.param('id')!)
-      .eq('status', 'draft')
-      .select()
-      .single()
-
-    if (error) return c.json({ ok: false, error: error.message }, 500)
-    if (!release) return c.json({ ok: false, error: 'Release not found or already published' }, 404)
-
-    const publishedAt = release.published_at ?? new Date().toISOString()
-    const ticketIds = (release.fulfilled_ticket_ids ?? []) as string[]
-    if (ticketIds.length > 0) {
-      const { error: ticketsError } = await db
-        .from('support_tickets')
-        .update({
-          shipped_in_release_id: release.id,
-          shipped_at: publishedAt,
-          status: 'resolved',
-        })
-        .in('id', ticketIds)
-        // fulfilled_ticket_ids is caller-supplied: only this project's tickets.
-        .eq('project_id', release.project_id)
-        .is('shipped_in_release_id', null)
-      if (ticketsError) {
-        return c.json(
-          {
-            ok: false,
-            error: `release published, but linking ${ticketIds.length} support ticket(s) failed: ${ticketsError.message}`,
-          },
-          500,
-        )
-      }
-    }
-
-    // ── Reports this release fixed (Plan 018 §5) ─────────────────────────────
-    // One `released` message per reporter (held in review mode); verified
-    // reports keep their status, dismissed ones are skipped. Credits are
-    // stamped only where a delivered ledger row exists.
-    const linked = await notifyReleaseReporters(db, release, userId)
-    if (!linked.ok) {
-      return c.json({ ok: false, error: `release published, but ${linked.error}` }, 500)
-    }
-    const credits = await stampDeliveredReleaseCredits(db, release.id)
-    if (!credits.ok) {
-      return c.json({ ok: false, error: `release published, but ${credits.error}` }, 500)
-    }
+    // Mark published, ship tickets, message each reporter (Plan 018 §5) and
+    // stamp delivered credits — the same path the opt-in auto-release takes.
+    const published = await publishRelease(db, idParsed.value, { kind: 'admin', id: userId })
+    if (!published.ok) return c.json({ ok: false, error: published.error }, published.status)
 
     return c.json({
       ok: true,
-      data: release,
+      data: published.release,
       // Credits whose reporter actually received the release message.
-      notified: credits.stamped,
-      tickets_fulfilled: ticketIds.length,
-      delivery: { ...linked.delivery, credits_stamped: credits.stamped, credits_pending: credits.pending },
+      notified: published.notified,
+      tickets_fulfilled: published.ticketsFulfilled,
+      delivery: published.delivery,
     })
   })
 
