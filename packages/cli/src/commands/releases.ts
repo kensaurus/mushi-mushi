@@ -20,7 +20,7 @@ const DRAFT_TIMEOUT_MS = 120_000
 /** Publishing messages each credited reporter before it answers. */
 const PUBLISH_TIMEOUT_MS = 60_000
 
-export interface ReleaseRow {
+interface ReleaseRow {
   id: string
   project_id: string
   version: string
@@ -36,13 +36,13 @@ export interface ReleaseRow {
 }
 
 /** POST /v1/admin/releases/draft answers release-builder's payload. */
-export interface ReleaseDraftData {
+interface ReleaseDraftData {
   release: ReleaseRow
   creditCount: number
   reportCount: number
 }
 
-export interface ReleaseDelivery {
+interface ReleaseDelivery {
   reports_listed: number
   reports_resolved: number
   reporters_notified: number
@@ -52,7 +52,7 @@ export interface ReleaseDelivery {
   credits_pending?: number
 }
 
-export interface ReleaseCalendarData {
+interface ReleaseCalendarData {
   rows: Array<{
     projectId: string
     name: string
@@ -66,7 +66,7 @@ export interface ReleaseCalendarData {
   note?: string
 }
 
-export function renderReleaseList(rows: ReleaseRow[], total: number): string[] {
+function renderReleaseList(rows: ReleaseRow[], total: number): string[] {
   if (rows.length === 0) return ['No releases yet. Draft one with: mushi releases draft 1.2.0']
   const lines = [`${pad('VERSION', 12)}${pad('STATUS', 11)}${pad('FIXES', 7)}${pad('CREATED', 18)}ID`]
   for (const r of rows) {
@@ -76,7 +76,7 @@ export function renderReleaseList(rows: ReleaseRow[], total: number): string[] {
   return lines
 }
 
-export function renderPublish(release: ReleaseRow, delivery: ReleaseDelivery | undefined, ticketsFulfilled: number | undefined): string[] {
+function renderPublish(release: ReleaseRow, delivery: ReleaseDelivery | undefined, ticketsFulfilled: number | undefined): string[] {
   const lines = [`Published ${release.version}.`]
   if (delivery) {
     lines.push(`  Reports resolved: ${delivery.reports_resolved} of ${delivery.reports_listed}`)
@@ -87,7 +87,7 @@ export function renderPublish(release: ReleaseRow, delivery: ReleaseDelivery | u
   return lines
 }
 
-export function renderCalendar(data: ReleaseCalendarData): string[] {
+function renderCalendar(data: ReleaseCalendarData): string[] {
   if (data.rows.length === 0) return ['No apps in this team yet.']
   const lines: string[] = []
   for (const r of data.rows) {

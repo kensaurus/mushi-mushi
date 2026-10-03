@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type * as ConfigModule from '../config.js'
 import { errorReply, okReply, runCli } from '../test-harness.js'
-import { OUTBOX_TEXT_MAX, registerOutboxCommands } from './outbox.js'
+import { registerOutboxCommands } from './outbox.js'
 
 vi.mock('../config.js', async (importOriginal) => {
   const actual = await importOriginal<typeof ConfigModule>()
@@ -67,7 +67,7 @@ describe('mushi outbox edit', () => {
   })
 
   it('refuses text over the cap', async () => {
-    const run = await runCli(registerOutboxCommands, ['outbox', 'edit', MID, 'x'.repeat(OUTBOX_TEXT_MAX + 1)])
+    const run = await runCli(registerOutboxCommands, ['outbox', 'edit', MID, 'x'.repeat(1001)])
     expect(run.calls).toHaveLength(0)
     expect(run.error?.code).toBe('E_INVALID_INPUT')
   })

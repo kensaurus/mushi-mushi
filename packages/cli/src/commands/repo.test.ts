@@ -4,7 +4,6 @@ import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import type * as ConfigModule from '../config.js'
 import { okReply, runCli } from '../test-harness.js'
-import type { RepoDigestData } from './repo.js'
 import { registerRepoCommands } from './repo.js'
 
 vi.mock('../config.js', async (importOriginal) => {
@@ -18,7 +17,7 @@ vi.mock('../config.js', async (importOriginal) => {
 const PID = '11111111-2222-4333-8444-555555555555'
 const REPORT = '44444444-5555-4666-8777-888888888888'
 
-const digest: RepoDigestData = {
+const digest = {
   owner: 'me', repo: 'app', sha: 'abcdef1234567', ref: 'main', budget_tokens: 50000, total_tokens: 1200, eligible_files: 40,
   files: [{ path: 'src/login.ts', tokens: 300, truncated: false }],
   dropped_counts: { budget: 12, binary: 0 }, redacted: [{ path: '.env.example', label: 'AWS key' }], tree_truncated: false,

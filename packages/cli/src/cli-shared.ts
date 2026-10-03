@@ -74,7 +74,7 @@ export type ApiResult<T> = ApiOk<T> | ApiError
  * `flatten()` object instead of `{ code, message }`. Coerce any of them so
  * `die()` never prints `undefined — undefined`.
  */
-export function normalizeApiError(error: unknown, httpStatus?: number): ApiError['error'] {
+function normalizeApiError(error: unknown, httpStatus?: number): ApiError['error'] {
   const fallbackCode = httpStatus ? `HTTP_${httpStatus}` : 'API_ERROR'
   if (typeof error === 'string') return { code: fallbackCode, message: error }
   if (error && typeof error === 'object') {

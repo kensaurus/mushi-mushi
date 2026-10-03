@@ -15,16 +15,16 @@ import { apiCall, die, outputIsJson, requireConfig } from '../cli-shared.js'
 import { resolveProjectId } from '../command-helpers.js'
 import { MushiCliError } from '../errors.js'
 
-export const SPEND_LIMIT_FIELDS = [
+const SPEND_LIMIT_FIELDS = [
   'monthly_llm_budget_usd',
   'autofix_max_spend_usd',
   'autofix_max_dispatches_per_day',
   'autofix_approval_cost_threshold_usd',
 ] as const
 
-export type SpendLimitField = (typeof SPEND_LIMIT_FIELDS)[number]
+type SpendLimitField = (typeof SPEND_LIMIT_FIELDS)[number]
 
-export interface BudgetsView {
+interface BudgetsView {
   projectId: string
   limits: Record<SpendLimitField, number | null>
   monthlySpendCapUsd: number | null
@@ -44,11 +44,11 @@ function numberOrNull(v: unknown): number | null {
   return Number.isFinite(n) ? n : null
 }
 
-export function pickLimits(settings: Record<string, unknown>): Record<SpendLimitField, number | null> {
+function pickLimits(settings: Record<string, unknown>): Record<SpendLimitField, number | null> {
   return Object.fromEntries(SPEND_LIMIT_FIELDS.map((f) => [f, numberOrNull(settings[f])])) as Record<SpendLimitField, number | null>
 }
 
-export function renderBudgets(view: BudgetsView): string[] {
+function renderBudgets(view: BudgetsView): string[] {
   const lines = [`Spend limits for project ${view.projectId}`]
   for (const f of SPEND_LIMIT_FIELDS) {
     const meta = LABELS[f]

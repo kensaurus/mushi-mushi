@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type * as ConfigModule from '../config.js'
 import { errorReply, okReply, runCli } from '../test-harness.js'
-import { parseFunnelSteps, registerFunnelCommands } from './funnel.js'
+import { registerFunnelCommands } from './funnel.js'
 
 vi.mock('../config.js', async (importOriginal) => {
   const actual = await importOriginal<typeof ConfigModule>()
@@ -11,14 +11,21 @@ vi.mock('../config.js', async (importOriginal) => {
   }
 })
 
-describe('parseFunnelSteps', () => {
-  it('accepts 2-8 distinct event names', () => {
-    expect(parseFunnelSteps('signup, first_report ,fix_merged')).toEqual(['signup', 'first_report', 'fix_merged'])
+describe('mushi funnel set: step validation', () => {
+  it('trims 2-8 distinct event names', async () => {
+    const run = await runCli(registerFunnelCommands, ['funnel', 'set', '--steps', 'signup, first_report ,fix_merged'], () =>
+      okReply({ steps: ['signup', 'first_report', 'fix_merged'], window: '7d', lookbackDays: 30, updatedAt: 'now' }))
+    expect(run.calls[0]!.body).toEqual({ steps: ['signup', 'first_report', 'fix_merged'], window: '7d', lookbackDays: 30 })
   })
-  it('rejects one step, bad names and repeats', () => {
-    expect(() => parseFunnelSteps('signup')).toThrow(/2 to 8/)
-    expect(() => parseFunnelSteps('signup,First-Report')).toThrow(/Not an event name/)
-    expect(() => parseFunnelSteps('signup,signup')).toThrow(/different event/)
+
+  it.each([
+    ['signup', /2 to 8/],
+    ['signup,First-Report', /Not an event name/],
+    ['signup,signup', /different event/],
+  ])('rejects %s before calling the API', async (steps, message) => {
+    const run = await runCli(registerFunnelCommands, ['funnel', 'set', '--steps', steps])
+    expect(run.calls).toHaveLength(0)
+    expect(run.error?.message).toMatch(message)
   })
 })
 

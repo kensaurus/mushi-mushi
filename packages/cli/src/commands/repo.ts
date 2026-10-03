@@ -21,7 +21,7 @@ const DIAGRAM_TIMEOUT_MS = 120_000
 /** Publishing writes the static page and its Markdown twin. */
 const PUBLISH_TIMEOUT_MS = 60_000
 
-export interface RepoDigestData {
+interface RepoDigestData {
   owner: string
   repo: string
   sha: string
@@ -52,13 +52,13 @@ type Publication =
   | { published: false }
   | { published: true; url: string; markdown_url?: string; badge_markdown: string; indexable: boolean; commit_sha: string }
 
-export interface DiagramData {
+interface DiagramData {
   diagram: DiagramRow | null
   publication: Publication
   reused?: boolean
 }
 
-export interface PublishPreview {
+interface PublishPreview {
   diagram_id: string
   repo_private: boolean
   payload_hash: string
@@ -67,7 +67,7 @@ export interface PublishPreview {
   publish_blocked_reason: string | null
 }
 
-export function digestQuery(opts: { report?: string; path?: string; ref?: string; budget?: string; include?: string; exclude?: string }): URLSearchParams {
+function digestQuery(opts: { report?: string; path?: string; ref?: string; budget?: string; include?: string; exclude?: string }): URLSearchParams {
   const qs = new URLSearchParams()
   if (opts.report) qs.set('report_id', requireUuid(opts.report, 'report id'))
   if (opts.path) qs.set('path', opts.path)
@@ -78,7 +78,7 @@ export function digestQuery(opts: { report?: string; path?: string; ref?: string
   return qs
 }
 
-export function digestSummary(d: RepoDigestData): string[] {
+function digestSummary(d: RepoDigestData): string[] {
   const dropped = Object.entries(d.dropped_counts).filter(([, n]) => n > 0).map(([why, n]) => `${n} ${why}`).join(', ')
   const lines = [
     `${d.owner}/${d.repo}@${d.sha.slice(0, 7)} (${d.ref}) — ${d.scope.label}`,
@@ -90,7 +90,7 @@ export function digestSummary(d: RepoDigestData): string[] {
   return lines
 }
 
-export function renderDiagram(data: DiagramData): string[] {
+function renderDiagram(data: DiagramData): string[] {
   const d = data.diagram
   if (!d) return ['No diagram yet. Make one with: mushi repo diagram generate']
   const lines = [`${d.repo_owner}/${d.repo_name}@${d.commit_sha.slice(0, 7)} — updated ${fmtDate(d.updated_at)}${d.model ? ` by ${d.model}` : ''}`]

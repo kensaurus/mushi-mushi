@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type * as ConfigModule from '../config.js'
 import { errorReply, okReply, runCli } from '../test-harness.js'
-import { buildSentryImportBody, nextPageCommand, registerSentryCommands } from './sentry.js'
+import { registerSentryCommands } from './sentry.js'
 
 vi.mock('../config.js', async (importOriginal) => {
   const actual = await importOriginal<typeof ConfigModule>()
@@ -13,27 +13,36 @@ vi.mock('../config.js', async (importOriginal) => {
 
 const PID = '11111111-2222-4333-8444-555555555555'
 
-describe('buildSentryImportBody', () => {
-  it('sends issue ids alone', () => {
-    expect(buildSentryImportBody(['WEB-1', 'WEB-2'], {})).toEqual({ issueIds: ['WEB-1', 'WEB-2'] })
-  })
-  it('refuses ids mixed with a search, and out-of-range numbers', () => {
-    expect(() => buildSentryImportBody(['WEB-1'], { query: 'is:unresolved' })).toThrow(/not both/)
-    expect(() => buildSentryImportBody(['WEB-1'], { sentryProject: 'web' })).toThrow(/not both/)
-    expect(() => buildSentryImportBody([], { limit: '11' })).toThrow(/--limit/)
-    expect(() => buildSentryImportBody([], { sinceDays: '91' })).toThrow(/--since-days/)
-    expect(() => buildSentryImportBody(Array.from({ length: 11 }, (_, i) => `W-${i}`), {})).toThrow(/at most 10/)
-  })
-  it('builds a search body', () => {
-    expect(buildSentryImportBody([], { query: 'level:error', limit: '5', sinceDays: '7', sentryProject: 'web' }))
-      .toEqual({ query: 'level:error', limit: 5, sinceDays: 7, sentryProject: 'web' })
-  })
-})
+const emptyImport = {
+  items: [], created: [], linked: [], failed: 0, indexing: { queued: false, paths: 0 }, sentryProject: 'web', sentryProjects: ['web'], nextCursor: null,
+}
 
-describe('nextPageCommand', () => {
-  it('repeats the search flags with the cursor', () => {
-    expect(nextPageCommand({ query: 'level:error', sinceDays: '7' }, '0:10:0'))
-      .toBe('mushi sentry import --query "level:error" --since-days 7 --cursor 0:10:0')
+describe('mushi sentry import: request body', () => {
+  it('sends issue ids alone', async () => {
+    const run = await runCli(registerSentryCommands, ['sentry', 'import', 'WEB-1', 'WEB-2'], () => okReply(emptyImport))
+    expect(run.calls[0]!.body).toEqual({ issueIds: ['WEB-1', 'WEB-2'] })
+  })
+
+  it.each([
+    [['WEB-1', '--query', 'is:unresolved'], /not both/],
+    [['WEB-1', '--sentry-project', 'web'], /not both/],
+    [['--limit', '11'], /--limit/],
+    [['--since-days', '91'], /--since-days/],
+    [Array.from({ length: 11 }, (_, i) => `W-${i}`), /at most 10/],
+  ])('refuses %j before calling the API', async (args, message) => {
+    const run = await runCli(registerSentryCommands, ['sentry', 'import', ...args])
+    expect(run.calls).toHaveLength(0)
+    expect(run.error?.message).toMatch(message)
+  })
+
+  it('builds a search body', async () => {
+    const run = await runCli(
+      registerSentryCommands,
+      ['sentry', 'import', '--query', 'level:error', '--limit', '5', '--since-days', '7', '--sentry-project', 'web'],
+      () => okReply({ ...emptyImport, nextCursor: '0:10:0' }),
+    )
+    expect(run.calls[0]!.body).toEqual({ query: 'level:error', limit: 5, sinceDays: 7, sentryProject: 'web' })
+    expect(run.stdout).toContain('More issues: mushi sentry import --query "level:error" --since-days 7 --limit 5 --sentry-project web --cursor 0:10:0')
   })
 })
 
