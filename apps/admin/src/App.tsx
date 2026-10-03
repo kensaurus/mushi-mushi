@@ -60,6 +60,7 @@ const FullStackAuditPage = lazy(() => import('./pages/FullStackAuditPage').then(
 const CodeHealthPage = lazy(() => import('./pages/CodeHealthPage').then(m => ({ default: m.CodeHealthPage })))
 const RecipePage = lazy(() => import('./pages/RecipePage').then(m => ({ default: m.RecipePage })))
 const DesignPage = lazy(() => import('./pages/DesignPage').then(m => ({ default: m.DesignPage })))
+const PortfolioPage = lazy(() => import('./pages/PortfolioPage').then(m => ({ default: m.PortfolioPage })))
 const PromptLabPage = lazy(() => import('./pages/PromptLabPage').then(m => ({ default: m.PromptLabPage })))
 const IntelligencePage = lazy(() => import('./pages/IntelligencePage').then(m => ({ default: m.IntelligencePage })))
 const CompliancePage = lazy(() => import('./pages/CompliancePage').then(m => ({ default: m.CompliancePage })))
@@ -396,6 +397,7 @@ export function App() {
                   <Route path="/code-health" element={<CodeHealthPage />} />
                   <Route path="/recipe" element={<RecipePage />} />
                   <Route path="/design" element={<DesignPage />} />
+                  <Route path="/portfolio" element={<PortfolioPage />} />
                   <Route path="/prompt-lab" element={<PromptLabPage />} />
                   <Route path="/fine-tuning" element={<Navigate to="/prompt-lab" replace />} />
                   <Route path="/intelligence" element={<IntelligencePage />} />

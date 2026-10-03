@@ -1,7 +1,7 @@
 # App Recipe Control Plane — one page per app showing what it is made of, where it drifted, and a reviewed PR to fix it
 
 > Status: `PLANNED` (design spec, no code yet). Researched and audited 2026-10-02.
-> Registered as Plan 019 in [PLANS.md](./PLANS.md). Decision record: [ADR 0016](../adr/0016-mushi-as-the-app-recipe-control-plane.md) (Accepted, owner-delegated, 2026-10-02: Phases 1, 1b and P1 now; Phases 2, P2 and 3 behind the sequencing gate).
+> Registered as Plan 019 in [PLANS.md](./PLANS.md). Decision record: [ADR 0016](../adr/0016-mushi-as-the-app-recipe-control-plane.md) (Accepted, owner-delegated, 2026-10-02: Phases 1, 1b and P1 now; the sequencing gate for Phases 2, P2 and 3 was struck by the owner on 2026-10-02, [ADR 0017](../adr/0017-strike-the-plan-019-020-sequencing-gate.md)).
 > Scope: `packages/server` (api, `_shared`, connectors, two new functions, migrations), `apps/admin` (the Recipe and Portfolio pages), `packages/mcp`, `packages/cli`, and glot.it as the pilot host.
 > Related: **Plan 020 (in progress)**, the broader portfolio-operator research (GTM, analytics, marketing, cross-app notifications, sign-up funnels), being written separately at [portfolio-operator.md](./portfolio-operator.md). This plan owns the recipe data model, the connector interface and the portfolio rollup of recipes. Plan 020 builds on them and does not redefine them.
 

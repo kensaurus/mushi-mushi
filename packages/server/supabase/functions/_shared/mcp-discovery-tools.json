@@ -1603,6 +1603,29 @@
         ]
       }
     },
+    "get_portfolio": {
+      "title": "Portfolio — every app at once",
+      "description": "Return every project in one organization as a card: the worst App Recipe state (ok | drift | unknown | not_connected | error; unknown and not_connected never mean healthy), open reports, the latest release, the Mushi SDK version against the latest release of the same package, the hole-check (radar) status with open findings by severity (never_run means not checked yet), and the 30-day LLM spend Mushi itself used. Optional organizationId (UUID); omitted, the only organization of the key owner is used, and a 400 ORG_REQUIRED lists the choices when there are several. Needs an account-level key; a project-bound key gets 403. Returns { organizationId, organizationName, cards, totalProjects, repeatedGroups, holes }. Read-only. Use list_portfolio_findings for the problems open in two or more apps.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Portfolio — every app at once",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "organizationId": {
+            "description": "Organization UUID — defaults to the key owner's only organization when omitted",
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          }
+        }
+      },
+      "returnsUntrusted": true
+    },
     "get_product_events_summary": {
       "title": "Product events summary",
       "description": "Summarise the Mushi.track() product events this project received in the trailing windowDays (default 30): event names with counts and distinct users, daily volume, and top properties. Returns { window_days, events_total, persons, identified, anonymous, events_per_day: [{ day, count }], top_events: [{ name, count, persons }] }. Read-only. Use first to learn which event names exist before calling query_funnel or get_user_paths; use run_nl_query for ad-hoc SQL over the same rows.",
@@ -1677,6 +1700,41 @@
           "runId"
         ]
       }
+    },
+    "get_radar": {
+      "title": "Hole checks (radar)",
+      "description": "Return the hole checks that catch a problem before a user hits it: store names that differ between the App Store and Google Play, a store listing missing a language, a domain or HTTPS certificate about to expire, missing security headers, a broken privacy link, storage rows deleted with SQL (files left behind and billed), and an Android target SDK or iOS build that the stores will refuse. scope \"project\" (default; projectId optional) returns every check with state ok | finding | unknown | error, a plain-English reason, and each finding with its fix; unknown means not checked and never means healthy. scope \"organization\" (organizationId optional, account-level key) returns the open findings of every app. Read-only. To run the checks again, use the console Recipe page.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Hole checks (radar)",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "description": "project (default) or organization",
+            "type": "string",
+            "enum": [
+              "project",
+              "organization"
+            ]
+          },
+          "projectId": {
+            "description": "Project UUID — defaults to the server-configured project (scope project) (`project_id` is accepted too.)",
+            "type": "string"
+          },
+          "organizationId": {
+            "description": "Organization UUID — defaults to the key owner's only organization (scope organization)",
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          }
+        }
+      },
+      "returnsUntrusted": true
     },
     "get_recent_reports": {
       "title": "Recent bug reports",
@@ -2219,6 +2277,27 @@
         ]
       }
     },
+    "get_store_status": {
+      "title": "Store review status",
+      "description": "Return the latest store review of an app: listing text in the repo vs what is live on the App Store and Google Play (listing_drift, a language out of sync, store length limits), listing claims checked against the code (listing_claim_contradicts_code: for example \"never leaves your phone\" while the code uploads, or \"open source\" for a private repo), privacy labels vs data-collecting SDKs, iOS screenshots that look Android-shaped or older than recent releases, and a pre-submission checklist with a risk per item. Each result is ok | finding | unknown (not checked, never healthy). This is a check against the code, not legal advice. status never_run means it has not run yet; it runs from the console. Returns { projectId, checkedAt, status, results, checklist, findings }. Read-only.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Store review status",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "description": "Project UUID — defaults to the server-configured project when omitted (`project_id` is accepted too.)",
+            "type": "string"
+          }
+        }
+      },
+      "returnsUntrusted": true
+    },
     "get_two_way_comms_health": {
       "title": "Two-way communication health",
       "description": "Summarize SDK ↔ admin two-way reporter health for a host app: last SDK heartbeat, app version/platform last seen, unread reporter messages, recent reporter replies, and pending QA/TDD follow-ups. Use after wiring @mushi-mushi/web in a Vite/Capacitor app to confirm reports land in the console and admin/MCP replies reach the in-app widget.",
@@ -2622,9 +2701,32 @@
         ]
       }
     },
+    "list_connectors": {
+      "title": "Connectors",
+      "description": "List the sources connected to an organization: each connector instance with its kind, status (connected | not_connected | blocked | error; blocked means an outside party refuses, for example an App Store agreement not accepted), the scopes it was granted, enabled capabilities and the projects it is bound to, plus the kinds that can be added and those still planned. Never returns credentials. Optional organizationId; account-level key needed. Returns { organizationId, available, planned, instances, legacy }. Read-only.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Connectors",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "organizationId": {
+            "description": "Organization UUID — defaults to the key owner's only organization when omitted",
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          }
+        }
+      },
+      "returnsUntrusted": true
+    },
     "list_gate_findings": {
       "title": "Gate findings",
-      "description": "List recent inventory gate runs and their findings for a project, newest first. Returns { runs: [{ id, gate, status, findings_count, … }], findings: [{ severity, rule_id, message, file_path, node_id, … }] }. Filter by gate (dead_handler | mock_leak | api_contract | crawl | status_claim | spec_drift | orphan_endpoint | unknown_call | schema_drift | code_health | design_drift | ci_drift | deploy_drift | env_drift) or finding severity (info | warn | error). The *_drift gates are the App Recipe checks: design_drift is code that drifts off the design tokens, ci_drift / deploy_drift / env_drift are CI, deploy and env vars that drift from the recipe. Read-only. Use to see which CI gates failed on the last crawl; use diff_inventory to compare two commits, or get_inventory for the full snapshot.",
+      "description": "List recent inventory gate runs and their findings for a project, newest first. Returns { runs: [{ id, gate, status, findings_count, … }], findings: [{ severity, rule_id, message, file_path, node_id, … }] }. Filter by gate (dead_handler | mock_leak | api_contract | crawl | status_claim | spec_drift | orphan_endpoint | unknown_call | schema_drift | code_health | design_drift | ci_drift | deploy_drift | env_drift | portfolio_radar | portfolio_radar_ci | store_review) or finding severity (info | warn | error). The *_drift gates are the App Recipe checks: design_drift is code that drifts off the design tokens, ci_drift / deploy_drift / env_drift are CI, deploy and env vars that drift from the recipe; portfolio_radar / portfolio_radar_ci / store_review are the app hole checks (prefer get_radar). Read-only. Use to see which CI gates failed on the last crawl; use diff_inventory to compare two commits, or get_inventory for the full snapshot.",
       "scope": "mcp:read",
       "annotations": {
         "title": "Gate findings",
@@ -2656,7 +2758,10 @@
               "design_drift",
               "ci_drift",
               "deploy_drift",
-              "env_drift"
+              "env_drift",
+              "portfolio_radar",
+              "portfolio_radar_ci",
+              "store_review"
             ]
           },
           "severity": {
@@ -2761,6 +2866,29 @@
           "projectId"
         ]
       }
+    },
+    "list_portfolio_findings": {
+      "title": "Portfolio findings — fix once",
+      "description": "Return what to fix across the apps of one organization: groups of the same finding rule open in two or more projects (rule, gate, highest severity, affected projectIds, a sample message and one paste-ready fix prompt), the Mushi SDK version per project and package (current | behind | unknown), and integrations most sibling projects have but one lacks. Open means the latest completed gate run per project and gate, not allowlisted; info findings are left out. Optional organizationId as for get_portfolio. Needs an account-level key. Returns { organizationId, groups, sdkSkew, holes }. Read-only. Fix a group repo by repo with list_gate_findings in each project.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Portfolio findings — fix once",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "organizationId": {
+            "description": "Organization UUID — defaults to the key owner's only organization when omitted",
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          }
+        }
+      },
+      "returnsUntrusted": true
     },
     "list_projects": {
       "title": "List accessible projects",
@@ -3051,6 +3179,179 @@
         ],
         "additionalProperties": false
       }
+    },
+    "propose_portfolio_change": {
+      "title": "Fix once across apps (draft PRs)",
+      "description": "Propose the same kind of recipe edit in up to 10 repos of one organization, one draft PR per repo with a shared batch id. Dry run by default (the diff and denied paths of each repo); confirm: true opens the drafts. One repo failing never rolls back the others; each result says what happened. Needs an account-level key. Confirm with the user before confirm: true. Returns { dryRun, plans } or { batchId, opened, results }. Write.",
+      "scope": "mcp:write",
+      "annotations": {
+        "title": "Fix once across apps (draft PRs)",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "organizationId": {
+            "description": "Organization UUID — defaults to the key owner's only organization",
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "element": {
+            "type": "string",
+            "enum": [
+              "design",
+              "gates",
+              "env",
+              "routes",
+              "store",
+              "release"
+            ],
+            "description": "Which part of the recipe the edit belongs to"
+          },
+          "changes": {
+            "minItems": 1,
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "projectId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "edits": {
+                  "minItems": 1,
+                  "maxItems": 30,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "path": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 400,
+                        "description": "Repo-relative path the recipe allows"
+                      },
+                      "content": {
+                        "type": "string",
+                        "maxLength": 524288,
+                        "description": "The full new file content"
+                      },
+                      "reason": {
+                        "type": "string",
+                        "maxLength": 200
+                      }
+                    },
+                    "required": [
+                      "path",
+                      "content"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "projectId",
+                "edits"
+              ]
+            }
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "confirm": {
+            "description": "true opens one draft PR per repo; omitted or false is a dry run",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "element",
+          "changes"
+        ]
+      },
+      "returnsUntrusted": true
+    },
+    "propose_recipe_change": {
+      "title": "Propose a recipe change (draft PR)",
+      "description": "Propose edits to files the app recipe allows (design tokens, budgets in mushi.recipe.json, .env.example declarations, store listing text under store.listingDir) as ONE draft pull request. Dry run by default: returns the diff of each file and any path that is not writable (workflows, env files, lockfiles, generated exports and migrations never are). confirm: true opens the draft PR; it stays a draft so the repo CI does not run until the owner marks it ready, and nothing is merged or published. Confirm with the user before confirm: true. Returns { dryRun, files, denied } or { jobId, status, prUrl }. Write.",
+      "scope": "mcp:write",
+      "annotations": {
+        "title": "Propose a recipe change (draft PR)",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "description": "Project UUID — defaults to the server-configured project when omitted (`project_id` is accepted too.)",
+            "type": "string"
+          },
+          "element": {
+            "type": "string",
+            "enum": [
+              "design",
+              "gates",
+              "env",
+              "routes",
+              "store",
+              "release"
+            ],
+            "description": "Which part of the recipe the edit belongs to"
+          },
+          "edits": {
+            "minItems": 1,
+            "maxItems": 30,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 400,
+                  "description": "Repo-relative path the recipe allows"
+                },
+                "content": {
+                  "type": "string",
+                  "maxLength": 524288,
+                  "description": "The full new file content"
+                },
+                "reason": {
+                  "type": "string",
+                  "maxLength": 200
+                }
+              },
+              "required": [
+                "path",
+                "content"
+              ]
+            }
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "confirm": {
+            "description": "true opens the draft PR; omitted or false is a dry run",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "element",
+          "edits"
+        ]
+      },
+      "returnsUntrusted": true
     },
     "query_funnel": {
       "title": "Ordered funnel over product events",
@@ -3350,6 +3651,65 @@
         "required": [
           "reportId",
           "message"
+        ]
+      }
+    },
+    "request_connector_action": {
+      "title": "Request a store action (needs approval)",
+      "description": "Ask for one connector action, for example set_rollout or promote_track on a Google Play connector. This only creates a request: nothing runs until a team owner or admin approves it in the console and then runs it there. An API key or this tool can never approve or run it. The approval binds the exact payload and expires after an hour. Confirm with the user first. Returns { id, status: \"pending_approval\", payloadSha256 }. Write.",
+      "scope": "mcp:write",
+      "annotations": {
+        "title": "Request a store action (needs approval)",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "organizationId": {
+            "description": "Organization UUID — defaults to the key owner's only organization",
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "connectorId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "description": "Connector instance id (list_connectors)"
+          },
+          "action": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60,
+            "description": "For example set_rollout or promote_track"
+          },
+          "payload": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {},
+            "description": "The exact action input; the approval binds its hash"
+          },
+          "projectId": {
+            "description": "(`project_id` is accepted too.)",
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "reason": {
+            "description": "Why, shown to the approver",
+            "type": "string",
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "connectorId",
+          "action",
+          "payload"
         ]
       }
     },

@@ -1,0 +1,56 @@
+# Portfolio
+
+Source: https://kensaur.us/mushi-mushi/docs/admin/portfolio
+
+---
+title: Portfolio
+description: The Portfolio page shows every app in a team at once, with each app's worst recipe state, hole checks and SDK version, plus problems you can fix once across apps.
+---
+
+# Portfolio
+
+**Route:** `/portfolio` (also from the team switcher: **All this team's apps**)
+
+> **Scenario:** You run five apps. One has an old Mushi SDK, two have the same
+> oversized-file finding, and one never got Sentry set up. You want to see all
+> of that in one place and fix each problem once, not five times.
+
+This page **reads only**. It builds on each app's [Recipe](/concepts/app-recipe).
+
+---
+
+## What you see
+
+| Section | What it means |
+|---------|---------------|
+| **Cards** | One per app: the worst recipe state, open reports, the latest release, the Mushi SDK against the latest version, and the hole checks. |
+| **Hole checks** | "Not checked yet" means Mushi has not looked. It is never a pass. |
+| **Fix once** | A problem open in two or more apps. Copy the prompt into your editor to fix it in every repo. |
+| **Mushi SDK versions** | Apps behind the latest release of the same package, and apps that never reported. |
+| **Missing setups** | An integration most of your other apps have and this one does not. |
+
+In **Advanced** mode each card also shows Mushi's own AI spend for that app over 30 days and its monthly budget.
+
+Below the cards:
+
+| Section | What it means |
+|---------|---------------|
+| **Across your apps** | Problems only visible across apps: a deep link or "more apps" link that no longer opens, a shared login that does not allow one app's domain, apps sharing purchases on different Stripe accounts, many apps posting to one channel, CI cost in two repos. See [One login across your apps](../concepts/shared-login). |
+| **Funnel across apps** | One funnel run on every app: the same event names, in the same order, within the same window. Owners and admins pick the steps. An app with product events off, or with no events yet, says so instead of 0%. |
+| **Releases** | For each app: what is live and at what rollout, native changes waiting for a store build, and JS-only changes that can ship as an over-the-air update. It suggests one store release per app to save CI minutes. Your own CI builds and submits. |
+| **Daily digest** | One message a day across all apps. Off until an owner picks Slack, email or push. |
+| **Shared between apps** | Domains, store apps, Supabase projects and channels two or more apps use. |
+| **Connected sources** | App Store Connect, Google Play, AI spend, RevenueCat or your own endpoint. Read-only by default. |
+
+---
+
+## From your editor
+
+The MCP tools `get_portfolio` and `list_portfolio_findings` return the same
+data. They need an **account-level** key (Connect → MCP); a key bound to one
+project cannot read its sibling apps.
+
+## Who can see it
+
+Members of the team see the team's apps they can reach. A member of another
+team gets a 403.

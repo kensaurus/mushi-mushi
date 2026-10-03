@@ -32,6 +32,9 @@ import { registerBillingCommands } from './commands/billing.js'
 import { registerCompletionCommand } from './commands/completion-cli.js'
 import { registerSelfhostCommands } from './commands/selfhost.js'
 import { registerProfileCommands } from './commands/profile.js'
+import { registerRadarCommands } from './commands/radar.js'
+import { registerRecipeCommands } from './commands/recipe.js'
+import { registerStoreCommands } from './commands/store.js'
 import { setGlobalOutputFormat } from './cli-shared.js'
 import { printAndExit } from './errors.js'
 
@@ -109,6 +112,9 @@ registerSkillsCommands(program)
 registerBillingCommands(program)
 registerSelfhostCommands(program)
 registerProfileCommands(program)
+registerRadarCommands(program)
+registerRecipeCommands(program)
+registerStoreCommands(program)
 // Registered last so buildCommandTree() sees every command above when the
 // action runs (Commander builds the tree during these synchronous calls;
 // the action itself only executes later, at parseAsync() time).

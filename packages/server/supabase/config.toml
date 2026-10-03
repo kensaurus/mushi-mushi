@@ -366,6 +366,14 @@ verify_jwt = false
 [functions.recipe-collector]
 verify_jwt = false
 
+# Cron-invoked daily (mushi-radar-scan-daily, 04:05 UTC); Plan 020 hole checks.
+[functions.radar-scan]
+verify_jwt = false
+
+# Cron-invoked hourly (mushi-operator-digest-hourly, :20); Plan 020 operator digest.
+[functions.operator-digest]
+verify_jwt = false
+
 # Invoked by the api function or by another internal function.
 [functions.contract-graph-builder]
 verify_jwt = false

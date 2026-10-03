@@ -37,6 +37,8 @@ import {
   RecipeGithubError,
   resolveRecipeRepo,
   type RecipeRepo,
+  type RepoFile,
+  type TreeEntry,
 } from './recipe-github.ts'
 import { effectiveDesignRules, parseRecipeManifest, RECIPE_MANIFEST_MAX_BYTES, RECIPE_MANIFEST_PATH, type RecipeManifest } from './recipe-schema.ts'
 import { scanForSecrets } from './secret-scan.ts'
@@ -116,22 +118,54 @@ function issue(code: string, message: string, severity: RecipeIssue['severity'] 
 
 // ── Refresh ──────────────────────────────────────────────────────────────────
 
+/**
+ * Where the recipe files come from: the repo at the default-branch head
+ * (GitHub, read by Mushi) or files the host's CI pushed to
+ * POST /v1/ingest/recipe (for repos Mushi has no token for).
+ */
+export interface RecipeFileSource {
+  kind: 'repo_file' | 'ci_ingest'
+  head: { sha: string; branch: string }
+  readFile(path: string, maxBytes: number): Promise<RepoFile>
+  listTree(): Promise<{ entries: TreeEntry[]; truncated: boolean }>
+}
+
 export async function refreshRecipeSnapshot(db: Db, projectId: string, triggeredBy = 'manual'): Promise<RecipeRefreshResult> {
-  const fail = async (reason: string, state: RecipeRefreshResult['state'] = 'error'): Promise<RecipeRefreshResult> => {
-    if (state === 'error') await recordDesignError(db, projectId, 'refresh', reason, null, triggeredBy)
-    return { ok: false, state, reason, snapshotId: null, tokensHash: null, manifestPresent: false, tokenCount: 0, issues: [] }
-  }
   let resolved
   try {
     resolved = await resolveRecipeRepo(db, projectId)
   } catch (err) {
-    return fail(String((err as Error).message ?? err))
+    const reason = String((err as Error).message ?? err)
+    await recordDesignError(db, projectId, 'refresh', reason, null, triggeredBy)
+    return { ok: false, state: 'error', reason, snapshotId: null, tokensHash: null, manifestPresent: false, tokenCount: 0, issues: [] }
   }
-  if (!resolved.ok) return fail(resolved.reason, 'not_connected')
+  if (!resolved.ok) return { ok: false, state: 'not_connected', reason: resolved.reason, snapshotId: null, tokensHash: null, manifestPresent: false, tokenCount: 0, issues: [] }
   const repo = resolved.repo
+  let head
   try {
-    const head = await getDefaultHead(repo)
-    const manifestFile = await readRepoFile(repo, head.sha, RECIPE_MANIFEST_PATH, RECIPE_MANIFEST_MAX_BYTES)
+    head = await getDefaultHead(repo)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    await recordDesignError(db, projectId, 'refresh', message, null, triggeredBy)
+    return { ok: false, state: 'error', reason: message, snapshotId: null, tokensHash: null, manifestPresent: false, tokenCount: 0, issues: [] }
+  }
+  return snapshotFromSource(db, projectId, {
+    kind: 'repo_file',
+    head,
+    readFile: (path, maxBytes) => readRepoFile(repo, head.sha, path, maxBytes),
+    listTree: () => listTree(repo, head.sha),
+  }, triggeredBy)
+}
+
+/** Build and store the current recipe snapshot from any file source. */
+export async function snapshotFromSource(db: Db, projectId: string, source: RecipeFileSource, triggeredBy = 'manual'): Promise<RecipeRefreshResult> {
+  const fail = async (reason: string, state: RecipeRefreshResult['state'] = 'error'): Promise<RecipeRefreshResult> => {
+    if (state === 'error') await recordDesignError(db, projectId, 'refresh', reason, null, triggeredBy)
+    return { ok: false, state, reason, snapshotId: null, tokensHash: null, manifestPresent: false, tokenCount: 0, issues: [] }
+  }
+  const head = source.head
+  try {
+    const manifestFile = await source.readFile(RECIPE_MANIFEST_PATH, RECIPE_MANIFEST_MAX_BYTES)
     const issues: RecipeIssue[] = []
     let manifest: RecipeManifest | null = null
     if (manifestFile.kind === 'too_large') {
@@ -147,7 +181,7 @@ export async function refreshRecipeSnapshot(db: Db, projectId: string, triggered
     let stored: StoredTokens = { version: 1, active: null, sets: [] }
     let components: DesignComponentEntry[] = []
     if (manifest) {
-      const tree = await listTree(repo, head.sha).catch((err) => {
+      const tree = await source.listTree().catch((err) => {
         issues.push(issue('TREE_UNAVAILABLE', `Could not list the repo tree, so sibling directions and components are skipped: ${String((err as Error).message ?? err)}`, 'warn'))
         return { entries: [], truncated: false }
       })
@@ -163,7 +197,7 @@ export async function refreshRecipeSnapshot(db: Db, projectId: string, triggered
       for (const set of plan.sets) {
         const files = []
         for (const f of set.files) {
-          const file = await readRepoFile(repo, head.sha, f.path, MAX_TOKEN_FILE_BYTES)
+          const file = await source.readFile(f.path, MAX_TOKEN_FILE_BYTES)
           if (file.kind === 'absent') {
             issues.push(issue('TOKEN_FILE_MISSING', `${f.path} is listed but does not exist on ${head.branch}.`, set.active ? 'error' : 'warn', f.path))
             continue
@@ -192,7 +226,7 @@ export async function refreshRecipeSnapshot(db: Db, projectId: string, triggered
       const css: StoredCss[] = []
       for (const entry of (manifest.design?.css ?? []).slice(0, 10) as Array<{ path: string; role?: string; scopes?: string[] }>) {
         try {
-          const file = await readRepoFile(repo, head.sha, entry.path, 512 * 1024)
+          const file = await source.readFile(entry.path, 512 * 1024)
           if (file.kind !== 'file') {
             issues.push(issue('CSS_FILE_UNREADABLE', `${entry.path} is ${file.kind === 'absent' ? 'missing' : 'over 512 KB'}; its scopes were not read.`, 'warn', entry.path))
             continue
@@ -237,7 +271,7 @@ export async function refreshRecipeSnapshot(db: Db, projectId: string, triggered
         .insert({
           project_id: projectId,
           commit_sha: head.sha,
-          source: 'repo_file',
+          source: source.kind,
           manifest,
           tokens: stored,
           tokens_hash: tokensHash,

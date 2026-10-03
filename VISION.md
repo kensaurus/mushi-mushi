@@ -48,6 +48,7 @@ it.
 | | |
 |---|---|
 | **Primary buyer** | The solo / indie **vibe coder** — builds fast with AI (Cursor, Claude Code, Lovable, Bolt), ships to real users, then loses whole afternoons when something breaks because they don't fully grasp the generated code. |
+| **The same buyer, later** | The vibe coder who now runs several apps, sites and services alone — a **portfolio operator**. Same person, same editor, same diagnosis; Mushi also checks every app they connect for holes that never throw. Never a separate hero. |
 | **Secondary** | Small teams and agencies who feel the same pain at slightly larger scale. |
 | **Explicitly NOT (for now)** | The enterprise SRE running Sentry + Datadog + Firebase who wants a fourth integration hub. We may serve them later via the Enterprise tier — but **we do not lead with them, market to them, or shape the README around them.** That audience pulled the product off its wedge once already. |
 
@@ -163,6 +164,9 @@ Before building or featuring anything, ask: **"Does this help a solo vibe-coder
 understand and fix a bug faster, without leaving their editor?"**
 
 - **Yes →** it's Bucket A or B. Can lead.
+  A hole found before a user hits it is a bug fixed in zero minutes: a check
+  that prevents or explains a bug in at least one app passes. Cost and CI
+  minutes on their own still do not.
 - **No, but operators need it →** Bucket C. Build it if you want, but it goes in
   `docs/operators/`, never the hero.
 - **It only matters to enterprise buyers →** Enterprise tier, gated, never the

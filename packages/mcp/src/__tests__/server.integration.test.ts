@@ -156,6 +156,11 @@ describe('MCP protocol handshake', () => {
       // Codebase Understand: ask_codebase triggers LLM generation (mcp:write);
       // get_file_summary / get_codebase_tour are read-only.
       'ask_codebase',
+      // App recipe changes and store actions (Plan 019 Phase 3 / Plan 020 Phase 4):
+      // dry run by default; an action request never runs until a person approves it.
+      'propose_recipe_change',
+      'propose_portfolio_change',
+      'request_connector_action',
     ])
     for (const t of tools) {
       expect(t.annotations, `${t.name} annotations`).toBeTruthy()
