@@ -620,6 +620,23 @@ describe('GET /recipe/elements/:element views (gap #17)', () => {
     expect(env.rows.find((r) => r.name === 'NEXT_PUBLIC_MUSHI_PROJECT_ID')!.cells['github-actions']).toBe('present')
   })
 
+  it('the schema view uses the newer source, and diffs within that source', async () => {
+    const db = seed({
+      app_recipe_snapshots: [glotSnapshot(P_A)],
+      backend_schema_snapshots: [{ project_id: P_A, captured_at: '2026-06-01T03:05:00Z', schema_hash: 'a'.repeat(64), schema_json: [{ name: 'stale', schema: 'public', rls_enabled: true, columns: [] }] }],
+      connector_snapshots: [
+        { project_id: P_A, kind: 'supabase', is_current: true, ok: true, observed_at: '2026-10-02T03:35:00Z', snapshot: { facts: { tables: [{ name: 'profiles', rls: true }, { name: 'events', rls: false }] } } },
+        { project_id: P_A, kind: 'supabase', is_current: false, ok: true, observed_at: '2026-10-01T03:35:00Z', snapshot: { facts: { tables: [{ name: 'profiles', rls: true }] } } },
+      ],
+    })
+    const { app } = harness(db)
+    const res = await app.call('GET', `/v1/admin/projects/${P_A}/recipe/elements/schema`)
+    const view = (res.body.data as { detail: { schemaView: { source: string; capturedAt: string; tables: Array<{ name: string }>; diff: { added: string[] } } } }).detail.schemaView
+    expect(view).toMatchObject({ source: 'supabase_connector', capturedAt: '2026-10-02T03:35:00Z' })
+    expect(view.tables.map((t) => t.name)).toEqual(['events', 'profiles'])
+    expect(view.diff.added).toEqual(['public.events'])
+  })
+
   it('GET /recipe does not pay for the view reads, and a failed view read is a 500, not an empty view', async () => {
     const db = seed({ app_recipe_snapshots: [glotSnapshot(P_A)], ci_workflow_runs: [] })
     const seen: string[] = []
