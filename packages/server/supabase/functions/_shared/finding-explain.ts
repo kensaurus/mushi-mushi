@@ -1,0 +1,231 @@
+/**
+ * FILE: packages/server/supabase/functions/_shared/finding-explain.ts
+ * PURPOSE: Turn one gate_findings row into a plain-English explanation —
+ *          what the check is, why it fired, where, how to fix it, and whether
+ *          it is still open — for GET /v1/admin/findings/:findingId and the
+ *          explain_finding MCP tool. Pure: the route does the reads.
+ *
+ * Every gate stores its fix in `suggested_fix` with its own shape (radar and
+ * store review `{ fix }`, recipe drift `{ kind, text }`, design deviance
+ * `{ value, suggestion }`, setup checks `{ kind, step | path | command }`,
+ * inventory gates `{ explanation }`). fixOf() reads all of them into one
+ * sentence and always passes the raw object through as `detail`, so a shape
+ * it does not know loses nothing.
+ *
+ * `message`, `file_path` and the fix can come from a host CI push, so the MCP
+ * tool wraps the result as untrusted data.
+ */
+
+import { RADAR_RULES, type RadarRuleId } from './radar/types.ts'
+
+export interface ExplainFindingRow {
+  id: string
+  gate_run_id: string
+  project_id: string
+  severity: string
+  rule_id: string | null
+  message: string
+  file_path: string | null
+  line: number | null
+  col: number | null
+  node_id: string | null
+  suggested_fix: unknown
+  allowlisted: boolean
+  allowlist_reason: string | null
+  created_at: string
+}
+
+export interface ExplainRunRow {
+  id: string
+  gate: string
+  status: string
+  started_at: string
+  completed_at: string | null
+  commit_sha: string | null
+}
+
+/** The newest finished run of the same gate, and the matching finding in it, if any. */
+export interface ExplainLatestRun {
+  id: string
+  completed_at: string | null
+  /** The same rule at the same place in that run; null when the run no longer has it. */
+  matchingFindingId: string | null
+}
+
+export type FindingOpenState = 'open' | 'not_in_latest_run' | 'allowlisted'
+
+export interface FindingFix {
+  /** One sentence or a snippet to apply; null when the gate stored no fix it could be read from. */
+  text: string | null
+  kind: string | null
+  /** A console path such as /settings?tab=keys, when the fix is a console step. */
+  consolePath: string | null
+  command: string | null
+  /** The stored suggested_fix, unchanged. */
+  detail: unknown
+}
+
+export interface FindingExplanation {
+  id: string
+  projectId: string
+  gate: string
+  gateLabel: string
+  /** What the gate checks, in one sentence. */
+  gateMeaning: string
+  ruleId: string | null
+  rule: { title: string; prevents: string } | null
+  severity: string
+  /** Why it fired: the finding's own message. */
+  reason: string
+  fix: FindingFix
+  location: { filePath: string | null; line: number | null; col: number | null; target: string | null }
+  state: FindingOpenState
+  stateReason: string
+  allowlistReason: string | null
+  createdAt: string
+  run: { id: string; status: string; startedAt: string; completedAt: string | null; commitSha: string | null }
+  latestRun: { id: string; completedAt: string | null; findingId: string | null } | null
+}
+
+/** Every gate_runs.gate value, with a console label and what it checks. */
+export const GATE_MEANINGS: Readonly<Record<string, { label: string; meaning: string }>> = {
+  dead_handler: { label: 'Dead handler', meaning: 'A button or form in the inventory whose handler does nothing (no network call, no state change).' },
+  mock_leak: { label: 'Mock leak', meaning: 'Mock or fixture data reachable from production code.' },
+  api_contract: { label: 'API contract', meaning: 'A frontend call whose request or response does not match the backend route it hits.' },
+  crawl: { label: 'Crawl', meaning: 'A live-app crawl found a page or action that fails for a real user.' },
+  status_claim: { label: 'Status claim', meaning: 'An inventory action claims a status (for example "verified") that its tests and observations do not support.' },
+  spec_drift: { label: 'Spec drift', meaning: 'The OpenAPI or inventory spec disagrees with the routes the code really serves.' },
+  orphan_endpoint: { label: 'Orphan endpoint', meaning: 'A backend route no frontend has called in 30 days: dead code, or a caller Mushi cannot see.' },
+  unknown_call: { label: 'Unknown call', meaning: 'The app calls a network path no backend declares: a likely 404 or a missing deploy.' },
+  schema_drift: { label: 'Schema drift', meaning: 'The live database schema changed from the last snapshot or from the migrations in the repo.' },
+  code_health: { label: 'Code health', meaning: 'A file too large to change safely, or a bundle over its size budget, pushed from your CI.' },
+  design_drift: { label: 'Design drift', meaning: 'Code that uses a hard-coded colour, size or font instead of the design tokens.' },
+  ci_drift: { label: 'CI drift', meaning: 'A CI workflow that drifts from the recipe: no concurrency or timeout, macOS on every run, long artifact retention, or a red default branch.' },
+  deploy_drift: { label: 'Deploy drift', meaning: 'What is live differs from what was merged: a fix not deployed yet, a failed version probe, or web and mobile on different versions.' },
+  env_drift: { label: 'Env drift', meaning: 'An environment variable the app declares is missing where it runs (CI or deploy).' },
+  portfolio_radar: { label: 'Hole check', meaning: 'A problem no user has hit yet: an expiring domain or certificate, store listings out of sync, missing security headers, a broken privacy link.' },
+  portfolio_radar_ci: { label: 'Hole check (CI)', meaning: 'A hole found by the scan your CI ran on the repo, for example an outdated store SDK target.' },
+  store_review: { label: 'Store review', meaning: 'The store listing checked against the code and the live stores: claims the code contradicts, privacy labels, screenshots, length limits.' },
+  radar: { label: 'Mushi setup check', meaning: 'Part of the Mushi setup itself is not working: a rejected AI key, a webhook that never arrives, no spend cap on autofix.' },
+}
+
+const RADAR_RULE_LOOKUP: Readonly<Record<string, { title: string; prevents: string }>> = RADAR_RULES
+
+function isRadarRuleId(id: string): id is RadarRuleId {
+  return Object.prototype.hasOwnProperty.call(RADAR_RULE_LOOKUP, id)
+}
+
+function str(v: unknown): string | null {
+  return typeof v === 'string' && v.trim() !== '' ? v : null
+}
+
+function asRecord(v: unknown): Record<string, unknown> | null {
+  return typeof v === 'object' && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : null
+}
+
+/** Read any stored suggested_fix shape into one fix. */
+export function fixOf(suggested: unknown): FindingFix {
+  const empty: FindingFix = { text: null, kind: null, consolePath: null, command: null, detail: suggested ?? null }
+  const plain = str(suggested)
+  if (plain) return { ...empty, text: plain }
+  const o = asRecord(suggested)
+  if (!o) return empty
+
+  const kind = str(o.kind)
+  const command = str(o.command)
+  const consolePath = str(o.console_path) ?? (kind === 'console' ? str(o.path) : null)
+  const base: FindingFix = { ...empty, kind, command, consolePath }
+
+  // radar / store review, recipe drift, setup steps, inventory gates
+  const direct = str(o.fix) ?? str(o.text) ?? str(o.step) ?? str(o.explanation)
+  if (direct) return { ...base, text: direct }
+
+  // design deviance: the literal and the nearest token to use instead
+  const suggestion = asRecord(o.suggestion)
+  const token = suggestion ? str(suggestion.token) : null
+  if (token) {
+    const literal = str(o.value)
+    const cssVar = suggestion ? str(suggestion.cssVar) : null
+    return {
+      ...base,
+      text: `Replace ${literal ? `\`${literal}\`` : 'the hard-coded value'} with the design token ${token}${cssVar ? ` (var(${cssVar}))` : ''}.`,
+    }
+  }
+
+  if (command) return { ...base, text: `Run \`${command}\`.` }
+
+  // console settings: fields to save
+  const values = asRecord(o.values)
+  if (consolePath) {
+    const pairs = values ? Object.entries(values).map(([k, v]) => `${k} = ${String(v)}`) : []
+    return { ...base, text: `Open ${consolePath} in the Mushi console${pairs.length ? ` and set ${pairs.join(', ')}` : ''}.` }
+  }
+  const field = str(o.field)
+  if (field && o.value !== undefined && o.value !== null) {
+    return { ...base, text: `Set ${field} to ${String(o.value)}.` }
+  }
+  return base
+}
+
+function targetOf(suggested: unknown): string | null {
+  const o = asRecord(suggested)
+  if (!o) return null
+  // `path` is a console path when the fix has a kind (console step), and the
+  // API path the finding is about otherwise (unknown_call, spec_drift).
+  return str(o.target) ?? str(o.route) ?? (str(o.kind) ? null : str(o.path))
+}
+
+function stateOf(
+  finding: ExplainFindingRow,
+  latest: ExplainLatestRun | null,
+): { state: FindingOpenState; reason: string } {
+  if (finding.allowlisted) {
+    return {
+      state: 'allowlisted',
+      reason: finding.allowlist_reason
+        ? `Allowlisted: ${finding.allowlist_reason}`
+        : 'Allowlisted: someone marked it as accepted, so it no longer counts against the gate.',
+    }
+  }
+  if (!latest || latest.id === finding.gate_run_id) {
+    return { state: 'open', reason: 'It is in the latest run of this check.' }
+  }
+  if (latest.matchingFindingId) {
+    return { state: 'open', reason: 'A newer run of this check found the same problem in the same place.' }
+  }
+  return {
+    state: 'not_in_latest_run',
+    reason: 'The latest run of this check no longer reports it: it was fixed, or the code moved.',
+  }
+}
+
+export function explainFinding(
+  finding: ExplainFindingRow,
+  run: ExplainRunRow,
+  latest: ExplainLatestRun | null,
+): FindingExplanation {
+  const gate = GATE_MEANINGS[run.gate] ?? { label: run.gate, meaning: 'A Mushi check on this project.' }
+  const rule = finding.rule_id && isRadarRuleId(finding.rule_id)
+    ? { title: RADAR_RULE_LOOKUP[finding.rule_id].title, prevents: RADAR_RULE_LOOKUP[finding.rule_id].prevents }
+    : null
+  const { state, reason } = stateOf(finding, latest)
+  return {
+    id: finding.id,
+    projectId: finding.project_id,
+    gate: run.gate,
+    gateLabel: gate.label,
+    gateMeaning: gate.meaning,
+    ruleId: finding.rule_id,
+    rule,
+    severity: finding.severity,
+    reason: finding.message,
+    fix: fixOf(finding.suggested_fix),
+    location: { filePath: finding.file_path, line: finding.line, col: finding.col, target: targetOf(finding.suggested_fix) },
+    state,
+    stateReason: reason,
+    allowlistReason: finding.allowlist_reason,
+    createdAt: finding.created_at,
+    run: { id: run.id, status: run.status, startedAt: run.started_at, completedAt: run.completed_at, commitSha: run.commit_sha },
+    latestRun: latest ? { id: latest.id, completedAt: latest.completed_at, findingId: latest.id === finding.gate_run_id ? finding.id : latest.matchingFindingId } : null,
+  }
+}
