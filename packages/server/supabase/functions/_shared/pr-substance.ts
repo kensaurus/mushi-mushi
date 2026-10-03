@@ -28,15 +28,29 @@ export type PrSubstanceVerdict =
   | { speculative: false }
   | { speculative: true; reason: string; files: string[] }
 
-const DOC_EXTENSIONS = new Set(['md', 'mdx', 'markdown', 'txt', 'rst', 'adoc'])
+// No `txt`: requirements.txt, CMakeLists.txt and robots.txt are code.
+const DOC_EXTENSIONS = new Set(['md', 'mdx', 'markdown', 'rst', 'adoc'])
+const NOTE_NAME_RE = /^needs[_-]?investigation/i
 
-/** A file whose only job is prose: by extension, or a NEEDS_INVESTIGATION note. */
+const baseName = (path: string): string => path.split('/').pop() ?? path
+
+/** A prose file: by extension, or a NEEDS_INVESTIGATION note. */
 export function isDocFile(path: string): boolean {
-  const base = path.split('/').pop() ?? path
-  if (/^needs[_-]?investigation/i.test(base)) return true
+  const base = baseName(path)
+  if (NOTE_NAME_RE.test(base)) return true
   const dot = base.lastIndexOf('.')
   if (dot <= 0) return false
   return DOC_EXTENSIONS.has(base.slice(dot + 1).toLowerCase())
+}
+
+/**
+ * A file whose only job is a note: a NEEDS_INVESTIGATION file, or a prose
+ * file the PR ADDS. Editing an existing doc is a change (a docs bug fixed
+ * in an .mdx page is a real fix), and so is any doc edit that deletes lines.
+ */
+export function isNoteFile(file: PrChangedFile): boolean {
+  if (NOTE_NAME_RE.test(baseName(file.filename))) return true
+  return file.status === 'added' && file.deletions === 0 && isDocFile(file.filename)
 }
 
 const TODO_MARKER_RE = /\b(TODO|FIXME|XXX|NEEDS[ _-]?INVESTIGATION)\b/i
@@ -74,16 +88,17 @@ export function isTodoOnlyChange(file: PrChangedFile): boolean {
 function isNotesOnly(file: PrChangedFile): boolean {
   // A removed or renamed-away file is a code change whatever its type.
   if (file.status === 'removed') return false
-  if (isDocFile(file.filename)) return true
+  if (isNoteFile(file)) return true
   return isTodoOnlyChange(file)
 }
 
 /**
  * Speculative when every changed file is notes. `complete: false` (the
  * listing hit its page cap) is always substantive: an unseen file may be the
- * real fix. So is an empty PR: the GitHub Copilot agent opens its draft PR
- * before it pushes, so "no files yet" proves nothing (callers record the PR
- * as unchecked instead).
+ * real fix. An empty PR is not judged here: the GitHub Copilot agent opens
+ * its draft PR before it pushes, so the caller decides by whether the agent
+ * has finished (applyCloudAgentOutcome waits while it runs, and treats an
+ * empty PR from a finished agent as no fix).
  */
 export function classifyPrSubstance(files: PrChangedFile[], opts: { complete: boolean }): PrSubstanceVerdict {
   if (!opts.complete || files.length === 0) return { speculative: false }

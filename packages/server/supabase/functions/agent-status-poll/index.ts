@@ -9,8 +9,11 @@
  * it ends:
  *
  *   - candidates: agent ∈ DISPATCHABLE_CLOUD_AGENTS, status still open,
- *     pr_url NULL, started ≥ 2 min ago (the fix-worker's own bookkeeping and
- *     a v0 webhook get first shot) and < 24 h ago; 20 per tick, oldest first;
+ *     started ≥ 2 min ago (the fix-worker's own bookkeeping and a v0 webhook
+ *     get first shot) and < 24 h ago; 20 per tick, oldest first. An open
+ *     attempt may already hold a pr_url: the agent opened its PR while still
+ *     working (GitHub Copilot opens it before pushing), so the PR was
+ *     attached unjudged and the verdict waits for the finished run here;
  *   - each is polled through its adapter (`_shared/agent-adapters.ts`) and
  *     the outcome applied with `applyCloudAgentOutcome` — the same
  *     idempotent path `cursor-webhook` and `webhooks-github-indexer` use, so
@@ -94,7 +97,6 @@ export async function runAgentStatusPoll(db: SupabaseClient, opts: PollOptions =
     .select(ATTEMPT_COLUMNS)
     .in('agent', kinds)
     .in('status', OPEN_STATUSES)
-    .is('pr_url', null)
     .lt('started_at', maxAgeIso)
     .order('started_at', { ascending: true })
     .limit(POLL_BATCH)
@@ -120,7 +122,6 @@ export async function runAgentStatusPoll(db: SupabaseClient, opts: PollOptions =
     .select(ATTEMPT_COLUMNS)
     .in('agent', kinds)
     .in('status', OPEN_STATUSES)
-    .is('pr_url', null)
     .lt('started_at', minAgeIso)
     .gte('started_at', maxAgeIso)
     .order('started_at', { ascending: true })
@@ -132,7 +133,13 @@ export async function runAgentStatusPoll(db: SupabaseClient, opts: PollOptions =
 
   for (const row of (rows ?? []) as FixAttemptRow[]) {
     summary.scanned++
-    const target = { attemptId: row.id, projectId: row.project_id, reportId: row.report_id, agent: row.agent }
+    const target = {
+      attemptId: row.id,
+      projectId: row.project_id,
+      reportId: row.report_id,
+      agent: row.agent,
+      pendingPrUrl: row.pr_url,
+    }
     try {
       const adapter = adapterFor(row.agent)
       const poll = await adapter.poll({ db, projectId: row.project_id, attempt: row })

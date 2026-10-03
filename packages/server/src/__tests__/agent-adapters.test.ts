@@ -184,6 +184,7 @@ describe('pollResultToOutcome', () => {
       prUrl: 'https://github.com/o/r/pull/1',
       branch: 'b',
       summary: null,
+      agentFinished: true,
     })
     expect(pollResultToOutcome({ status: 'completed' })).toEqual({ kind: 'completed_no_pr', summary: null })
     expect(pollResultToOutcome({ status: 'failed', error: 'x' })).toEqual({ kind: 'failed', error: 'x' })
@@ -314,7 +315,7 @@ describe('applyCloudAgentOutcome', () => {
     const res = await applyCloudAgentOutcome(
       db,
       TARGET,
-      { kind: 'pr_opened', prUrl: 'https://github.com/o/r/pull/12', branch: 'b' },
+      { kind: 'pr_opened', prUrl: 'https://github.com/o/r/pull/12', branch: 'b', agentFinished: true },
       { inspectPr },
     )
     expect(res).toEqual({ applied: true, needsInvestigation: true })
@@ -351,7 +352,7 @@ describe('applyCloudAgentOutcome', () => {
     const res = await applyCloudAgentOutcome(
       db,
       TARGET,
-      { kind: 'pr_opened', prUrl: 'https://github.com/o/r/pull/12' },
+      { kind: 'pr_opened', prUrl: 'https://github.com/o/r/pull/12', agentFinished: true },
       {
         inspectPr: async () => ({
           kind: 'read',
@@ -405,19 +406,148 @@ describe('applyCloudAgentOutcome', () => {
     })
   })
 
-  it('pr_opened on a PR with no files yet (Copilot opens before pushing) trusts it and records it unchecked', async () => {
+  it('pr_opened while the agent still works, on a PR with no files yet: PR attached, attempt left open, report untouched, nobody notified', async () => {
+    const { db, queries } = createFakeDb((q) => (q.table === 'fix_attempts' && q.op === 'update' ? { data: [{ id: 'fa-1' }] } : { data: null }))
+    const res = await applyCloudAgentOutcome(
+      db,
+      { ...TARGET, agent: 'github_cloud_agent' },
+      { kind: 'pr_opened', prUrl: 'https://github.com/o/r/pull/12', branch: 'copilot/fix-1' },
+      { inspectPr: async () => ({ kind: 'read', complete: true, files: [] }) },
+    )
+    expect(res).toEqual({ applied: true, awaitingChanges: true })
+    const attach = findQueries(queries, 'fix_attempts', 'update')
+    expect(attach).toHaveLength(1)
+    expect(attach[0].payload).toEqual({ pr_url: 'https://github.com/o/r/pull/12', pr_state: 'open', branch: 'copilot/fix-1', branch_name: 'copilot/fix-1' })
+    expect(attach[0].payload).not.toHaveProperty('status')
+    expect(attach[0].filters).toContainEqual({ method: 'is', args: ['pr_url', null] })
+    expect(hasFilter(attach[0], 'in', 'status')).toBe(true)
+    expect(findQueries(queries, 'reports', 'update')).toHaveLength(0)
+    expect(findQueries(queries, 'fix_dispatch_jobs', 'update')).toHaveLength(0)
+    expect(findQueries(queries, 'fix_events', 'insert')[0].payload).toMatchObject({
+      kind: 'pr_opened',
+      status: 'pending',
+      dedupe_key: 'cloud-pr-pending:fa-1',
+    })
+    expect(mocks.notifyTeamFixEvent).not.toHaveBeenCalled()
+    expect(mocks.dispatchPluginEventDetached).not.toHaveBeenCalled()
+  })
+
+  it('pr_opened while the agent still works, on a notes-only PR so far: also waits instead of judging early', async () => {
     const { db, queries } = createFakeDb((q) => (q.table === 'fix_attempts' && q.op === 'update' ? { data: [{ id: 'fa-1' }] } : { data: null }))
     const res = await applyCloudAgentOutcome(
       db,
       { ...TARGET, agent: 'github_cloud_agent' },
       { kind: 'pr_opened', prUrl: 'https://github.com/o/r/pull/12' },
-      { inspectPr: async () => ({ kind: 'read', complete: true, files: [] }) },
+      {
+        inspectPr: async () => ({
+          kind: 'read',
+          complete: true,
+          files: [{ filename: 'PLAN.md', status: 'added', additions: 4, deletions: 0, patch: '+- [ ] look at login' }],
+        }),
+      },
+    )
+    expect(res).toEqual({ applied: true, awaitingChanges: true })
+    expect(findQueries(queries, 'reports', 'update')).toHaveLength(0)
+    expect(mocks.notifyTeamFixEvent).not.toHaveBeenCalled()
+  })
+
+  it('the finished agent with code: the pending attempt is claimed on its own PR, the report moves to fixing, the team hears once', async () => {
+    const updates: string[] = []
+    const { db, queries } = createFakeDb((q) => {
+      if (q.table === 'fix_attempts' && q.op === 'update') {
+        // First writer (pr_url IS NULL) loses: the PR was attached while the agent worked.
+        const pending = hasFilter(q, 'eq', 'pr_url')
+        updates.push(pending ? 'pending' : 'first')
+        return { data: pending ? [{ id: 'fa-1' }] : [] }
+      }
+      return { data: null }
+    })
+    const res = await applyCloudAgentOutcome(
+      db,
+      { ...TARGET, agent: 'github_cloud_agent', pendingPrUrl: 'https://github.com/o/r/pull/12' },
+      { kind: 'pr_opened', prUrl: 'https://github.com/o/r/pull/12', agentFinished: true },
+      {
+        inspectPr: async () => ({
+          kind: 'read',
+          complete: true,
+          files: [{ filename: 'src/login.ts', status: 'modified', additions: 1, deletions: 1, patch: '-a\n+if (!user) return' }],
+        }),
+      },
     )
     expect(res).toEqual({ applied: true })
+    expect(updates).toEqual(['first', 'pending'])
+    const claim = findQueries(queries, 'fix_attempts', 'update')[1]
+    expect(claim.payload).toMatchObject({ status: 'completed', pr_url: 'https://github.com/o/r/pull/12' })
+    // The indexer owns pr_state (a Copilot PR is a draft): the claim must not reset it.
+    expect(claim.payload).not.toHaveProperty('pr_state')
+    expect(eqValue(claim, 'pr_url')).toBe('https://github.com/o/r/pull/12')
+    expect(claim.filters).toContainEqual({ method: 'in', args: ['pr_state', ['open', 'draft']] })
     expect(findQueries(queries, 'reports', 'update')[0].payload).toMatchObject({ status: 'fixing' })
-    expect(findQueries(queries, 'fix_events', 'insert')[0].payload).toMatchObject({
-      payload: expect.objectContaining({ contentCheck: 'not_checked: the pull request has no files yet' }),
+    expect(mocks.notifyTeamFixEvent).toHaveBeenCalledTimes(1)
+    expect(mocks.notifyTeamFixEvent).toHaveBeenCalledWith(db, PROJECT, REPORT, 'fix_pr_opened', expect.anything())
+  })
+
+  it('the finished agent whose PR still changes nothing, or only notes: needs investigation, report never moves', async () => {
+    for (const files of [
+      [],
+      [{ filename: 'NEEDS_INVESTIGATION.md', status: 'added', additions: 9, deletions: 0, patch: '+# checked' }],
+    ]) {
+      mocks.notifyTeamFixEvent.mockClear()
+      const { db, queries } = createFakeDb((q) => (q.table === 'fix_attempts' && q.op === 'update' ? { data: [{ id: 'fa-1' }] } : { data: null }))
+      const res = await applyCloudAgentOutcome(
+        db,
+        { ...TARGET, agent: 'github_cloud_agent' },
+        { kind: 'pr_opened', prUrl: 'https://github.com/o/r/pull/12', agentFinished: true },
+        { inspectPr: async () => ({ kind: 'read', complete: true, files }) },
+      )
+      expect(res).toEqual({ applied: true, needsInvestigation: true })
+      expect(findQueries(queries, 'fix_attempts', 'update')[0].payload).toMatchObject({ status: 'failed', failure_category: 'validation_rejected' })
+      const reportUpdate = findQueries(queries, 'reports', 'update')[0]
+      expect(reportUpdate.payload).not.toHaveProperty('status')
+      expect(mocks.notifyTeamFixEvent).not.toHaveBeenCalledWith(db, PROJECT, REPORT, 'fix_pr_opened', expect.anything())
+    }
+  })
+
+  it('"finished without a PR" on an attempt holding a pending PR judges that PR instead of dropping it', async () => {
+    const { db, queries } = createFakeDb((q) => (q.table === 'fix_attempts' && q.op === 'update' ? { data: [{ id: 'fa-1' }] } : { data: null }))
+    const inspectPr = vi.fn(async () => ({ kind: 'read' as const, complete: true, files: [] }))
+    const res = await applyCloudAgentOutcome(
+      db,
+      { ...TARGET, agent: 'github_cloud_agent', pendingPrUrl: 'https://github.com/o/r/pull/12' },
+      { kind: 'completed_no_pr', summary: 'done' },
+      { inspectPr },
+    )
+    expect(inspectPr).toHaveBeenCalledWith(db, PROJECT, 'https://github.com/o/r/pull/12')
+    expect(res).toEqual({ applied: true, needsInvestigation: true })
+    expect(String((findQueries(queries, 'fix_attempts', 'update')[0].payload as { error: string }).error))
+      .toContain('changes no files')
+  })
+
+  it('the finished agent whose PR was closed meanwhile: the attempt is closed so the report can be re-dispatched', async () => {
+    const { db, queries } = createFakeDb((q) => {
+      if (q.table === 'fix_attempts' && q.op === 'update') {
+        return { data: hasFilter(q, 'eq', 'pr_state') ? [{ id: 'fa-1' }] : [] }
+      }
+      return { data: null }
     })
+    const res = await applyCloudAgentOutcome(
+      db,
+      { ...TARGET, agent: 'github_cloud_agent' },
+      { kind: 'pr_opened', prUrl: 'https://github.com/o/r/pull/12', agentFinished: true },
+      {
+        inspectPr: async () => ({
+          kind: 'read',
+          complete: true,
+          files: [{ filename: 'src/a.ts', status: 'modified', additions: 1, deletions: 0, patch: '+fix()' }],
+        }),
+      },
+    )
+    expect(res).toEqual({ applied: true })
+    const close = findQueries(queries, 'fix_attempts', 'update').find((q) => hasFilter(q, 'eq', 'pr_state'))!
+    expect(close.payload).toMatchObject({ status: 'failed' })
+    expect(eqValue(close, 'pr_state')).toBe('closed')
+    expect(findQueries(queries, 'reports', 'update')).toHaveLength(0)
+    expect(findQueries(queries, 'fix_events', 'insert')[0].payload).toMatchObject({ kind: 'failed', dedupe_key: 'cloud-final:fa-1' })
   })
 
   it('a throwing inspector is treated as unread, never as a failed outcome', async () => {
