@@ -161,6 +161,11 @@ describe('MCP protocol handshake', () => {
       'propose_recipe_change',
       'propose_portfolio_change',
       'request_connector_action',
+      // Run-now tools: each starts a server-side run (repo reads, live probes).
+      'run_radar',
+      'refresh_recipe',
+      'run_design_deviance',
+      'run_store_review',
     ])
     for (const t of tools) {
       expect(t.annotations, `${t.name} annotations`).toBeTruthy()
