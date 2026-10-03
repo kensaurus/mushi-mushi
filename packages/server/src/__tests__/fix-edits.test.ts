@@ -183,6 +183,10 @@ describe('isCommentOnlyFix', () => {
     expect(isCommentOnlyFix([{ path: 'a.ts', reason: 'r', edits: [{ find: 'export const a = 1', replace: '// NOTE: placeholder touch only\nexport const a = 1' }] }])).toBe(true)
     expect(isCommentOnlyFix([{ path: 'a.tsx', reason: 'r', edits: [{ find: 'export function Hero() {', replace: '/* NOTE: the real LCP element is unconfirmed.\n * Capture a trace first. */\nexport function Hero() {' }] }])).toBe(true)
   })
+  it('treats both HTML comment closers as comments', () => {
+    expect(isCommentOnlyFix([{ path: 'i.html', reason: 'r', edits: [{ find: '<p>x</p>', replace: '<!-- note\n-->\n<p>x</p>' }] }])).toBe(true)
+    expect(isCommentOnlyFix([{ path: 'i.html', reason: 'r', edits: [{ find: '<p>x</p>', replace: '<!-- note\n--!>\n<p>x</p>' }] }])).toBe(true)
+  })
   it('passes a real code change, and treats an empty proposal as comment-only', () => {
     expect(isCommentOnlyFix([{ path: 'a.ts', reason: 'r', edits: [{ find: 'if (error) throw new Error(error);', replace: 'if (error) throw new Error(describeError(error));' }] }])).toBe(false)
     expect(isCommentOnlyFix([{ path: 'n.ts', reason: 'r', contents: '// only a comment\n' }])).toBe(true)

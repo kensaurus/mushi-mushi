@@ -191,7 +191,8 @@ export function editRetryPrompt(errors: readonly string[]): string {
   ].join('\n')
 }
 
-const COMMENT_OR_BLANK = /^\s*(?:$|\/\/|\/\*|\*\/?(?:\s|$)|#(?!!)|<!--|-->|--\s)/
+// HTML also closes a comment with `--!>` (CodeQL js/bad-tag-filter).
+const COMMENT_OR_BLANK = /^\s*(?:$|\/\/|\/\*|\*\/?(?:\s|$)|#(?!!)|<!--|--!?>|--\s)/
 
 /** A line with trailing and inline comments removed, so "code // note" equals "code". */
 function codeOf(line: string): string {
