@@ -251,7 +251,7 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
   // rule (uq_releases_one_auto_draft), so a draft whose publish failed stops
   // every later automatic release until a person publishes or deletes it.
   // Registered before /:id so "auto-release" is never parsed as an id.
-  app.get('/v1/admin/releases/auto-release', jwtAuth, async (c) => {
+  app.get('/v1/admin/releases/auto-release', readAuth, async (c) => {
     const db = getServiceClient()
     const userId = c.get('userId') as string
     const resolvedProject = await resolveOwnedProject(c, db, userId, {
