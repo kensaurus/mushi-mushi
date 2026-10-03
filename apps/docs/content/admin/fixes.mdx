@@ -85,6 +85,23 @@ When `agent = cursor_cloud`, the fix row shows two additional UI elements:
 
 The artifact gallery is visible in the expanded fix detail when artifacts are present.
 
+### Notes-only pull requests
+
+A cloud agent (Cursor or the GitHub Copilot agent) that cannot find the cause
+is told to finish without a pull request. If it opens one anyway, Mushi reads
+the PR's changed files before trusting it. A PR that only adds notes (a
+`NEEDS_INVESTIGATION.md`, other markdown, or TODO comments) is not a fix:
+
+- the fix row is marked **needs investigation** (`failure_category:
+  validation_rejected`) and keeps the PR link so you can read the notes and
+  close the PR;
+- the report keeps its status instead of moving to **Fixing**;
+- your team gets the usual "fix failed" notification.
+
+Mushi reads the files with the project's GitHub token. When it has none, the
+PR is trusted as before and the fix timeline says the contents were not
+checked.
+
 ## Dispatching a fix
 
 You can dispatch a fix from four places:

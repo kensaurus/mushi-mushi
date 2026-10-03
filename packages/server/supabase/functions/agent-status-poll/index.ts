@@ -54,6 +54,8 @@ export interface PollSummary {
   scanned: number
   working: number
   prOpened: number
+  /** PRs that only added notes: closed as needs-investigation, report left open. */
+  needsInvestigation: number
   completedNoPr: number
   failed: number
   expired: number
@@ -77,6 +79,7 @@ export async function runAgentStatusPoll(db: SupabaseClient, opts: PollOptions =
     scanned: 0,
     working: 0,
     prOpened: 0,
+    needsInvestigation: 0,
     completedNoPr: 0,
     failed: 0,
     expired: 0,
@@ -163,7 +166,8 @@ export async function runAgentStatusPoll(db: SupabaseClient, opts: PollOptions =
         summary.skipped++
         continue
       }
-      if (outcome.kind === 'pr_opened') summary.prOpened++
+      if (applied.needsInvestigation) summary.needsInvestigation++
+      else if (outcome.kind === 'pr_opened') summary.prOpened++
       else if (outcome.kind === 'completed_no_pr') summary.completedNoPr++
       else summary.failed++
     } catch (err) {
