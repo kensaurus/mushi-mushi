@@ -184,7 +184,21 @@ The CLI reads your project's `MUSHI_PROJECT_ID` and `MUSHI_API_KEY` from environ
 
 In **Settings → Codebase Indexing**, toggle **Auto-index on push**. The Mushi GitHub App listens for `push` events and re-indexes changed files automatically.
 
+Connected with a Personal Access Token instead of the App? Add a repo webhook in GitHub (**Settings → Webhooks**). Point it at the URL the Codebase indexing card shows (your API endpoint plus `/v1/webhooks/github`). Use content type `application/json` and the webhook secret the card revealed, and tick **Pushes** and **Check runs**. Each push to the default branch then re-indexes the changed files.
+
 </Steps>
+
+### How much of a large repo is indexed
+
+Your plan sets how many files the index may hold: 300 on the free plan, and more on paid plans. The hourly sweep fetches files in batches, starting with the files named in open error stack traces and your application source. It keeps going until the whole repo or the plan limit is covered.
+
+The Codebase indexing card shows coverage in files, for example `1,500 of 4,700 files`, in one of three states:
+
+- **all**: every indexable file is in the index.
+- **still filling**: later sweeps will add more files.
+- **plan limit**: the limit is reached. Diagnoses and fixes only see the indexed files, so use a path filter to choose which ones.
+
+"Last sweep" counts partial sweeps too. A partial sweep is never shown as a complete index.
 
 <Callout type="tip">
   Only files tracked by git are indexed. Add large generated directories (`dist/`, `.next/`, `node_modules/`) to `.mushiignore` to skip them.

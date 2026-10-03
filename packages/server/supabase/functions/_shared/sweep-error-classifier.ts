@@ -21,6 +21,8 @@
  * and the per-repo `last_index_error` for the admin UI to surface.
  */
 
+import { latestIso } from './index-coverage.ts';
+
 export type SweepErrorKind = 'auth' | 'permission' | 'transient' | 'unknown';
 
 /**
@@ -77,9 +79,11 @@ export function classifyIndexerError(err: unknown): SweepErrorKind {
  * True when a repo's most recent index attempt failed outright.
  *
  * `last_index_error` alone is not the signal: successful sweeps also write
- * benign notes there ("partial: indexed 300 of 1844 eligible files"). A failed
- * sweep never advances `last_indexed_at`, while a successful one writes both
- * timestamps from separate `Date()` calls a few ms apart, hence the allowance.
+ * benign notes there ("partial: some chunks failed"). A failed sweep never
+ * advances the sweep timestamps, while a successful one writes the attempt
+ * and sweep timestamps together, hence the allowance. Since 20261003160000 a
+ * partial sweep (plan cap, still filling) advances `index_swept_at` and not
+ * `last_indexed_at`, so the later of the two is the last success.
  *
  * Used by the GitHub integration probe so a dead index shows as a degraded
  * GitHub card instead of hiding behind a healthy repo-access check (the
@@ -91,13 +95,15 @@ export function isCodebaseIndexFailing(
     last_index_error: string | null
     last_indexed_at: string | null
     last_index_attempt_at: string | null
+    index_swept_at?: string | null
   },
   allowanceMs = 60_000,
 ): boolean {
   if (!row.last_index_error || !row.last_index_attempt_at) return false
-  if (!row.last_indexed_at) return true
+  const lastSuccess = latestIso(row.last_indexed_at, row.index_swept_at)
+  if (!lastSuccess) return true
   const attempted = Date.parse(row.last_index_attempt_at)
-  const indexed = Date.parse(row.last_indexed_at)
+  const indexed = Date.parse(lastSuccess)
   if (!Number.isFinite(attempted) || !Number.isFinite(indexed)) return false
   return attempted - indexed > allowanceMs
 }

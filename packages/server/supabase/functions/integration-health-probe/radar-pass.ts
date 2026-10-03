@@ -21,6 +21,7 @@ import {
   type RadarFinding,
 } from '../_shared/radar.ts'
 import { parseGithubRepoUrl } from '../_shared/github.ts'
+import { latestIso } from '../_shared/index-coverage.ts'
 
 export interface RadarPassDeps {
   /** GitHub facts for a primary repo, or null when GitHub cannot be read. */
@@ -101,7 +102,7 @@ async function collectFindings(
   const repos = must(
     await db
       .from('project_repos')
-      .select('repo_url, default_branch, indexed_branch, last_indexed_at, github_app_installation_id, indexing_enabled, is_primary')
+      .select('repo_url, default_branch, indexed_branch, last_indexed_at, index_swept_at, github_app_installation_id, indexing_enabled, is_primary')
       .eq('project_id', projectId),
     'project_repos',
   ) as Array<{
@@ -109,6 +110,8 @@ async function collectFindings(
     default_branch: string | null
     indexed_branch: string | null
     last_indexed_at: string | null
+    /** Last successful sweep, complete or partial (20261003160000). */
+    index_swept_at?: string | null
     github_app_installation_id: number | null
     indexing_enabled: boolean | null
     is_primary: boolean | null
@@ -145,7 +148,9 @@ async function collectFindings(
             repo_url: primary.repo_url,
             configured_branch: primary.default_branch,
             indexed_branch: primary.indexed_branch,
-            last_indexed_at: primary.last_indexed_at,
+            // Staleness is about the last sweep: a partial sweep is recent
+            // code too (coverage is reported on the index card, not here).
+            last_indexed_at: latestIso(primary.last_indexed_at, primary.index_swept_at),
           },
           facts,
           deps.nowMs,

@@ -57,6 +57,7 @@ import {
   REPORTER_REPLY_MAX_CHARS,
 } from '../../_shared/reporter-reply-signals.ts';
 import { runInBackground } from '../../_shared/background.ts';
+import { githubSignatureMatches, routePatPushWebhook, type PushForwardRequest } from '../../_shared/github-push-forward.ts';
 import { resolveReporterAuth } from './reporter-auth.ts';
 import { reporterKey } from '../../_shared/reporter-token.ts';
 import { claimIpRateLimit, extractClientIp } from './cli-auth.ts';
@@ -887,13 +888,48 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
   });
 
   // ============================================================
-  // GITHUB CHECK-RUN WEBHOOK (V5.3 §2.10 — closes the PDCA loop)
+  // GITHUB REPO WEBHOOK: check runs (V5.3 §2.10, closes the PDCA loop)
+  // and pushes for PAT-connected repos (gap #16b, push indexing)
   // ============================================================
   // Configure in GitHub: Settings → Webhooks → Add webhook
   //   Payload URL: <api>/v1/webhooks/github
   //   Content type: application/json
   //   Secret: the value project_settings.github_webhook_secret refers to in Vault
-  //   Events: "Check runs" + "Check suites"
+  //   Events: "Check runs" + "Check suites" + "Pushes"
+  // A repo with the Mushi GitHub App installed gets pushes through the App
+  // instead; this route skips those repos so nothing is indexed twice.
+
+  /**
+   * Hand a verified push to webhooks-github-indexer's internal `mode: 'push'`
+   * (internal-caller auth, like the codebase "Index now" kick). Runs in the
+   * background so GitHub gets its answer inside its 10-second window.
+   */
+  async function forwardPushToIndexer(req: PushForwardRequest): Promise<void> {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const internalSecret =
+      Deno.env.get('MUSHI_INTERNAL_CALLER_SECRET') ?? Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if (!supabaseUrl || !internalSecret) throw new Error('indexer forward not configured (SUPABASE_URL / internal secret)');
+    runInBackground(
+      fetch(`${supabaseUrl}/functions/v1/webhooks-github-indexer`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${internalSecret}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'push',
+          project_id: req.projectId,
+          repo_id: req.repoId,
+          delivery_id: req.deliveryId,
+          payload: req.payload,
+        }),
+        signal: AbortSignal.timeout(150_000),
+      }).then(async (res) => {
+        if (!res.ok) {
+          const detail = await res.text().then((t) => t.slice(0, 300)).catch(() => '');
+          log.warn('PAT push index failed', { projectId: req.projectId, status: res.status, detail });
+        }
+      }),
+      'pat-push-index',
+    );
+  }
 
   app.post('/v1/webhooks/github', async (c) => {
     const t0 = Date.now();
@@ -918,6 +954,30 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
         return c.json({ ok: false, error: { code: 'DUPLICATE', message: 'Duplicate delivery' } }, 409);
       }
       throw err;
+    }
+
+    if (event === 'push') {
+      let pushed;
+      try {
+        pushed = await routePatPushWebhook(
+          { body, signature: sig, deliveryId },
+          { db: getServiceClient(), forward: forwardPushToIndexer },
+        );
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        log.error('PAT push routing failed', { error: message });
+        await auditRow.resolve('error', 500, Date.now() - t0, message);
+        return c.json({ ok: false, error: { code: 'PUSH_FORWARD_FAILED', message: 'Could not hand the push to the indexer' } }, 500);
+      }
+      // Lets the radar count accepted deliveries per project (webhook_never_delivered).
+      if (pushed.projectIds[0]) await auditRow.setProject(pushed.projectIds[0]);
+      await auditRow.resolve(
+        pushed.outcome,
+        pushed.status,
+        Date.now() - t0,
+        pushed.outcome === 'accepted' ? undefined : String((pushed.body.error as { code?: string } | undefined)?.code ?? ''),
+      );
+      return c.json(pushed.body, pushed.status);
     }
 
     if (event !== 'check_run' && event !== 'check_suite') {
@@ -982,7 +1042,7 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
         .single();
       const secret = await dereferenceMaybeVault(db, (settings?.github_webhook_secret as string | null) ?? null);
       if (!secret) continue;
-      if (await verifyGithubSignature(sig, body, secret)) {
+      if (await githubSignatureMatches(sig, body, secret)) {
         verified = true;
         verifiedProjectId = cand.project_id;
         break;
@@ -1019,32 +1079,6 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
     await auditRow.resolve('accepted', 200, Date.now() - t0);
     return c.json({ ok: true, data: { updated: targetIds.length, verified } });
   });
-
-  async function verifyGithubSignature(
-    headerSig: string,
-    body: string,
-    secret: string,
-  ): Promise<boolean> {
-    const expected = headerSig.startsWith('sha256=') ? headerSig.slice('sha256='.length) : '';
-    if (!expected) return false;
-    const enc = new TextEncoder();
-    const key = await crypto.subtle.importKey(
-      'raw',
-      enc.encode(secret),
-      { name: 'HMAC', hash: 'SHA-256' },
-      false,
-      ['sign'],
-    );
-    const sig = await crypto.subtle.sign('HMAC', key, enc.encode(body));
-    const computed = Array.from(new Uint8Array(sig))
-      .map((b) => b.toString(16).padStart(2, '0'))
-      .join('');
-    if (computed.length !== expected.length) return false;
-    let diff = 0;
-    for (let i = 0; i < computed.length; i++)
-      diff |= computed.charCodeAt(i) ^ expected.charCodeAt(i);
-    return diff === 0;
-  }
 
   // ============================================================
   // SDK STATUS

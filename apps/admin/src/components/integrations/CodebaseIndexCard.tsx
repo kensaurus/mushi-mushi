@@ -6,9 +6,11 @@
  *          and emits "INVESTIGATION_NEEDED.md" stubs.
  *
  * Data contract:
- *   - GET  /v1/admin/projects/:id/codebase/stats → indexed_files +
- *          last_indexed_at + repo_url + has_webhook_secret +
- *          language_distribution + at_file_cap + path_globs
+ *   - GET  /v1/admin/projects/:id/codebase/stats → indexed chunks,
+ *          coverage in files (indexed / eligible, complete | filling |
+ *          capped), the plan's file_cap, last_indexed_at (complete sweeps
+ *          only) + index_swept_at (any sweep), repo_url, has_webhook_secret,
+ *          path_globs, and push_webhook_path for PAT-connected repos
  *   - POST /v1/admin/projects/:id/codebase/enable → upserts project_repos,
  *          flips codebase_index_enabled, kicks an immediate sweep, and
  *          returns a freshly-generated webhook secret on first enable.
@@ -44,26 +46,18 @@ import {
 import { useToast } from '../../lib/toast'
 import { GitHubAppInstallButton, GitHubPatDisclosure } from './GitHubAppInstallButton'
 import { CHIP_TONE } from '../../lib/chipTone'
+import { RESOLVED_EXTERNAL_API_URL } from '../../lib/env'
+import {
+  coverageView,
+  fileCapHint,
+  indexedChunks,
+  lastSweptAt,
+  shouldPollCodebaseStats,
+  type CodebaseStats,
+} from '../../lib/codebaseCoverage'
 
 const SUPPORTED_EXTENSIONS = ['ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs', 'py', 'pyi', 'go', 'rs']
 const PATH_GLOB_PRESETS = ['src/**', 'app/**', 'apps/*/src/**', 'packages/*/src/**']
-
-interface CodebaseStats {
-  codebase_index_enabled: boolean
-  repo_url: string | null
-  default_branch: string | null
-  installation_id: number | null
-  indexing_enabled: boolean | null
-  path_globs: string[] | null
-  indexed_files: number
-  file_cap: number
-  at_file_cap: boolean
-  language_distribution: Record<string, number>
-  last_indexed_at: string | null
-  last_index_attempt_at: string | null
-  last_index_error: string | null
-  has_webhook_secret: boolean
-}
 
 interface AutofixState {
   autofix_enabled: boolean
@@ -102,15 +96,23 @@ function buildStatsRows(stats: CodebaseStats, hasFiles: boolean): DetailRowItem[
       hint: 'Branch the sweeper pulls from on each push.',
     },
     {
-      label: 'Indexed files',
-      value: stats.at_file_cap
-        ? `${stats.indexed_files.toLocaleString()} (cap reached \u2014 ${stats.file_cap} max)`
-        : stats.indexed_files.toLocaleString(),
+      label: 'Indexed chunks',
+      value: indexedChunks(stats).toLocaleString(),
       mono: true,
-      tone: hasFiles ? (stats.at_file_cap ? 'warn' : 'ok') : 'warn',
-      hint: `Number of file-chunks in pgvector. Sweeper stops at ${stats.file_cap} files per run.`,
+      tone: hasFiles ? 'ok' : 'warn',
+      hint: 'Searchable pieces of code (functions and blocks) in the index. A file is split into several; coverage below counts files.',
     },
   ]
+  if (stats.coverage) {
+    const view = coverageView(stats.coverage, stats.file_cap)
+    rows.push({ label: 'Coverage', value: view.value, mono: true, tone: view.tone, hint: view.hint })
+  }
+  rows.push({
+    label: 'Plan limit',
+    value: `${stats.file_cap.toLocaleString()} files`,
+    mono: true,
+    hint: fileCapHint(stats.file_cap_source),
+  })
   if (stats.path_globs && stats.path_globs.length > 0) {
     rows.push({
       label: 'Path filter',
@@ -119,11 +121,14 @@ function buildStatsRows(stats: CodebaseStats, hasFiles: boolean): DetailRowItem[
       hint: 'Only files matching these globs are indexed. Empty = all supported extensions.',
     })
   }
-  if (stats.last_indexed_at) {
+  const swept = lastSweptAt(stats)
+  if (swept) {
     rows.push({
       label: 'Last sweep',
-      value: <RelativeTime value={stats.last_indexed_at} />,
-      hint: 'When the most recent successful sweep finished.',
+      value: <RelativeTime value={swept} />,
+      hint: stats.coverage && stats.coverage.state !== 'complete'
+        ? 'When the most recent sweep finished. It covered part of the repo; see Coverage.'
+        : 'When the most recent successful sweep finished.',
     })
   }
   if (stats.last_index_error) {
@@ -206,9 +211,7 @@ export function CodebaseIndexCard({ projectId }: Props) {
   }
 
   useEffect(() => {
-    if (editing) return
-    if (stats && stats.indexed_files > 0 && stats.last_indexed_at) return
-    if (!stats?.codebase_index_enabled) return
+    if (!shouldPollCodebaseStats(stats, editing)) return
     const t = setInterval(() => { void loadStats() }, 5000)
     return () => clearInterval(t)
   }, [editing, stats, loadStats])
@@ -274,7 +277,8 @@ export function CodebaseIndexCard({ projectId }: Props) {
   }
 
   const enabled = !!stats?.codebase_index_enabled
-  const hasFiles = (stats?.indexed_files ?? 0) > 0
+  const hasFiles = stats ? indexedChunks(stats) > 0 : false
+  const coverageCallout = stats?.coverage ? coverageView(stats.coverage, stats.file_cap).callout : null
 
   return (
     <Card className="p-3 space-y-2.5">
@@ -328,20 +332,34 @@ export function CodebaseIndexCard({ projectId }: Props) {
               </code>
             ))}
           </p>
-          <p>
-            <span className="font-medium text-fg-secondary">File cap: </span>
-            {stats?.file_cap ?? 300} files per sweep run (set via{' '}
-            <code className="font-mono bg-surface-overlay px-0.5 rounded-sm">MUSHI_REPO_INDEX_SWEEP_FILE_CAP</code>).
-            {stats?.at_file_cap && (
-              <span className="text-warn ml-1">
-                {WARNING_SIGN} Cap reached {EM_DASH} some files were not indexed. Add a path filter to narrow the scope.
-              </span>
-            )}
-          </p>
+          {stats && (
+            <p>
+              <span className="font-medium text-fg-secondary">File limit: </span>
+              {stats.file_cap.toLocaleString()} files on {stats.plan_id ? `the ${stats.plan_id} plan` : 'this project'}.{' '}
+              {fileCapHint(stats.file_cap_source)} Each sweep fetches a batch of files, and the hourly sweep
+              continues until the repo or the limit is covered.
+              {stats.at_file_cap && (
+                <span className="text-warn ml-1">
+                  {WARNING_SIGN} Limit reached {EM_DASH} some files were not indexed. Add a path filter to narrow the scope.
+                </span>
+              )}
+            </p>
+          )}
+          {stats?.push_webhook_path && (
+            <p data-testid="codebase-push-webhook">
+              <span className="font-medium text-fg-secondary">Push indexing with a Personal Access Token: </span>
+              in GitHub, open the repo&apos;s Settings {EM_DASH} Webhooks and add{' '}
+              <code className="font-mono bg-surface-overlay px-0.5 rounded-sm wrap-anywhere">{`${RESOLVED_EXTERNAL_API_URL}${stats.push_webhook_path}`}</code>{' '}
+              with content type <code className="font-mono bg-surface-overlay px-0.5 rounded-sm">application/json</code>, the
+              webhook secret from this card, and the <span className="font-medium">Pushes</span> and{' '}
+              <span className="font-medium">Check runs</span> events. Each push to the default branch then re-indexes the
+              changed files. The GitHub App does this without a webhook.
+            </p>
+          )}
           {Object.keys(stats?.language_distribution ?? {}).length > 0 && (
             <div>
               <span className="font-medium text-fg-secondary">Languages indexed: </span>
-              <LanguageSparkline distribution={stats!.language_distribution} />
+              <LanguageSparkline distribution={stats?.language_distribution ?? {}} />
             </div>
           )}
         </div>
@@ -351,13 +369,13 @@ export function CodebaseIndexCard({ projectId }: Props) {
         <DetailRows items={buildStatsRows(stats, hasFiles)} />
       )}
 
-      {enabled && hasFiles && stats?.at_file_cap && (
-        <div className={`flex items-start gap-2 rounded ${CHIP_TONE.warnSubtle} px-2 py-1.5 text-2xs`}>
-          <span aria-hidden="true">{WARNING_SIGN}</span>
-          <span>
-            Indexed {stats.indexed_files.toLocaleString()} of {stats.file_cap} max files.
-            Some source files may have been skipped. Add a path filter below to index the most relevant directories.
-          </span>
+      {enabled && hasFiles && coverageCallout && (
+        <div
+          className={`flex items-start gap-2 rounded ${coverageCallout.tone === 'warn' ? CHIP_TONE.warnSubtle : CHIP_TONE.infoSubtle} px-2 py-1.5 text-2xs`}
+          data-testid="codebase-coverage-callout"
+        >
+          {coverageCallout.tone === 'warn' && <span aria-hidden="true">{WARNING_SIGN}</span>}
+          <span>{coverageCallout.text}</span>
         </div>
       )}
 
