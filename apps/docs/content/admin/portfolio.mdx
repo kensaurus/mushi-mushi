@@ -48,6 +48,14 @@ The MCP tools `get_portfolio` and `list_portfolio_findings` return the same
 data. They need an **account-level** key (Connect → MCP); a key bound to one
 project cannot read its sibling apps.
 
+`get_release_calendar` returns the release calendar: what is live per app, the
+merged fixes waiting to ship, and a suggested batch to release now versus next.
+
+The same account-level key can also change the team's funnel definition
+(`PUT /v1/admin/orgs/:orgId/funnel`) and import shared resources from a CSV
+(`POST /v1/ingest/recipe/csv`), with the `mcp:write` scope. Both still need the
+key's owner to be a team owner or admin.
+
 ## Who can see it
 
 Members of the team see the team's apps they can reach. A member of another

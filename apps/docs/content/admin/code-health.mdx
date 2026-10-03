@@ -54,6 +54,10 @@ GET /v1/admin/code-health?project_id=<uuid>
 POST /v1/ingest/metrics   # CI push — apiKeyAuth, prefix allow-list bundle.* / code_health.*
 ```
 
+From your editor, the MCP tool `get_code_health` returns the same data
+(trends default to the last 30 days; pass `days` for more). Pass a god file's
+`id` to `explain_finding` for its fix in one sentence.
+
 ---
 
 ## Related pages
