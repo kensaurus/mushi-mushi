@@ -776,7 +776,7 @@ export function ReportsPage() {
                   // The tile counts non-dismissed reports of that severity
                   // from the window; open exactly that list.
                   const next = new URLSearchParams(searchParams)
-                  for (const [k, v] of Object.entries(kpiTileFilter(sev || null, windowDays))) {
+                  for (const [k, v] of Object.entries(kpiTileFilter(sev || null, windowDays, { status, days }))) {
                     if (v) next.set(k, v)
                     else next.delete(k)
                   }

@@ -132,9 +132,16 @@ export function optionLabel(options: ReadonlyArray<{ value: string; label: strin
 export function kpiTileFilter(
   severity: string | null,
   windowDays: number,
+  current: { status: string; days: string } = { status: '', days: '' },
 ): Record<'severity' | 'days' | 'status', string> {
-  if (!severity) return { severity: '', days: '', status: '' }
-  return { severity, days: String(windowDays), status: 'active' }
+  if (severity) return { severity, days: String(windowDays), status: 'active' }
+  // Clearing the tile removes only what the tile set; a status or window
+  // the user picked afterwards stays.
+  return {
+    severity: '',
+    status: current.status === 'active' ? '' : current.status,
+    days: current.days === String(windowDays) ? '' : current.days,
+  }
 }
 
 /** Default direction on a column's first click. Severity: worst first. */
