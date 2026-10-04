@@ -35,6 +35,7 @@ function server(opts: { sessionId?: string | null; sse?: boolean; expireFirstCal
   return { seen, fetchImpl }
 }
 
+const TOKEN = 'fake'
 const URL_ = 'https://mcp.example/mcp?project_ref=abc&read_only=true'
 
 beforeEach(() => resetMcpSessions())
@@ -42,7 +43,7 @@ beforeEach(() => resetMcpSessions())
 describe('mcpCallTool', () => {
   it('initializes, then calls with the session id and protocol version', async () => {
     const s = server()
-    const r = await mcpCallTool({ url: URL_, token: 'tok-12345678', fetchImpl: s.fetchImpl }, 'list_tables')
+    const r = await mcpCallTool({ url: URL_, token: TOKEN, fetchImpl: s.fetchImpl }, 'list_tables')
     expect(r.error).toBeNull()
     expect(r.result?.content?.[0]?.text).toBe('[{"name":"reports"}]')
     expect(s.seen.map((x) => x.method)).toEqual(['initialize', 'notifications/initialized', 'tools/call'])
@@ -51,34 +52,34 @@ describe('mcpCallTool', () => {
 
   it('reads an SSE answer', async () => {
     const s = server({ sse: true })
-    const r = await mcpCallTool({ url: URL_, token: 'tok-12345678', fetchImpl: s.fetchImpl }, 'list_tables')
+    const r = await mcpCallTool({ url: URL_, token: TOKEN, fetchImpl: s.fetchImpl }, 'list_tables')
     expect(r.result?.content?.[0]?.text).toBe('[{"name":"reports"}]')
   })
 
   it('reuses the session for the next call', async () => {
     const s = server()
-    await mcpCallTool({ url: URL_, token: 'tok-12345678', fetchImpl: s.fetchImpl }, 'list_tables')
-    await mcpCallTool({ url: URL_, token: 'tok-12345678', fetchImpl: s.fetchImpl }, 'get_advisors')
+    await mcpCallTool({ url: URL_, token: TOKEN, fetchImpl: s.fetchImpl }, 'list_tables')
+    await mcpCallTool({ url: URL_, token: TOKEN, fetchImpl: s.fetchImpl }, 'get_advisors')
     expect(s.seen.filter((x) => x.method === 'initialize')).toHaveLength(1)
   })
 
   it('starts a new session when the server forgot the old one', async () => {
     const s = server({ expireFirstCall: true })
-    const r = await mcpCallTool({ url: URL_, token: 'tok-12345678', fetchImpl: s.fetchImpl }, 'list_tables')
+    const r = await mcpCallTool({ url: URL_, token: TOKEN, fetchImpl: s.fetchImpl }, 'list_tables')
     expect(r.error).toBeNull()
     expect(s.seen.filter((x) => x.method === 'initialize')).toHaveLength(2)
   })
 
   it('works with a stateless server that returns no session id', async () => {
     const s = server({ sessionId: null })
-    const r = await mcpCallTool({ url: URL_, token: 'tok-12345678', fetchImpl: s.fetchImpl }, 'list_tables')
+    const r = await mcpCallTool({ url: URL_, token: TOKEN, fetchImpl: s.fetchImpl }, 'list_tables')
     expect(r.error).toBeNull()
     expect(s.seen[2]?.session).toBeNull()
   })
 
   it('reports an initialize failure in words instead of throwing', async () => {
     const s = server({ initStatus: 401 })
-    const r = await mcpCallTool({ url: URL_, token: 'tok-12345678', fetchImpl: s.fetchImpl }, 'list_tables')
+    const r = await mcpCallTool({ url: URL_, token: TOKEN, fetchImpl: s.fetchImpl }, 'list_tables')
     expect(r.status).toBe(401)
     expect(r.error).toMatch(/initialize failed: HTTP 401/)
   })

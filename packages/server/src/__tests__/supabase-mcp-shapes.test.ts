@@ -94,7 +94,7 @@ async function withFetch<T>(impl: typeof fetch, run: () => Promise<T>): Promise<
   }
 }
 
-const opts = (tag: string) => ({ projectRef: `abcdefghijklmnopqr${tag}`, pat: `tok-${tag}-12345678` })
+const opts = (tag: string) => ({ projectRef: `abcdefghijklmnopqr${tag}`, pat: `fake-${tag}` })
 
 describe('tool arguments sent to the hosted MCP', () => {
   it('asks get_advisors for both types', async () => {
