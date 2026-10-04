@@ -7,6 +7,7 @@ import { Badge, Btn, Card, DetailRows, Loading, RelativeTime } from '../componen
 import { ContainedBlock, InlineProof, SignalChip } from '../components/report-detail/ReportSurface'
 import { loginPathForLocation } from '../lib/authRedirect'
 import { CHIP_TONE } from '../lib/chipTone'
+import { humanizeApiError } from '../lib/humanizeApiError'
 
 type PreviewStatus = 'pending' | 'accepted' | 'revoked' | 'expired'
 
@@ -207,6 +208,8 @@ export function AcceptInvitePage() {
   // it as a quoted block (not a paragraph) signals "this is from a
   // human, not the system".
   const inviterLabel = preview.inviter.name ?? preview.inviter.email ?? 'A teammate'
+  // Plain words, never the raw RPC error text (e.g. "invitation_email_mismatch").
+  const acceptErrorView = acceptError ? humanizeApiError(acceptError.message, acceptError.code) : null
   const emailMismatchHint =
     acceptError?.code === 'EMAIL_MISMATCH' ? (
       <p className="mt-2 text-xs text-warn">
@@ -288,8 +291,10 @@ export function AcceptInvitePage() {
             </Btn>
             {acceptError && (
               <ContainedBlock tone="warn" className="mt-3">
-                <p className="text-xs text-warn">{acceptError.message}</p>
-                {emailMismatchHint}
+                <p className="text-xs font-medium text-warn">{acceptErrorView?.title}</p>
+                {emailMismatchHint ?? (
+                  <p className="mt-1 text-xs text-fg-muted">{acceptErrorView?.hint}</p>
+                )}
               </ContainedBlock>
             )}
             <InlineProof className="mt-3">

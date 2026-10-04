@@ -225,12 +225,14 @@ export function FeedbackModal({ onClose, initialType = 'bug', onSubmitted }: Fee
             )}
             <p className="text-2xs text-fg-muted">Closing in a moment…</p>
             <div className="pt-2 flex justify-center gap-2">
-              <Link
+              <Btn
                 to={submittedTicketId ? `/feedback?ticket=${submittedTicketId}` : '/feedback'}
                 onClick={onClose}
+                size="sm"
+                variant="ghost"
               >
-                <Btn size="sm" variant="ghost">View my submissions</Btn>
-              </Link>
+                View my submissions
+              </Btn>
               <Btn size="sm" variant="cancel" onClick={onClose}>Close now</Btn>
             </div>
           </div>
