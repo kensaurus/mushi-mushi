@@ -21,7 +21,7 @@
     "@mushi-mushi/marketing-ui": "workspace:*",
     "@mushi-mushi/mcp": "workspace:*",
     "@mushi-mushi/web": "workspace:*",
-    "@react-three/drei": "^10.7.7",
+    "@react-three/drei": "^10.7.9",
     "@react-three/fiber": "^9.6.1",
     "@theguild/remark-mermaid": "^0.3.0",
     "motion": "^12.42.2",
