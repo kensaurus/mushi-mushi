@@ -12,13 +12,15 @@ interface FilterSelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   options: readonly string[]
   /** Override auto-generated id; defaults to filter-{slugified-label}. */
   id?: string
+  /** Human label for an option value; the raw value shows when omitted. */
+  optionLabel?: (value: string) => string
 }
 
 /** Compact filter-bar select chrome — matches FilterSelect. */
 export const FILTER_SELECT_CLASS =
   'bg-surface-raised border border-edge-subtle rounded-sm px-2 py-1 text-xs text-fg-secondary hover:border-edge focus-visible:outline-none focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand/40 motion-safe:transition-opacity motion-safe:duration-150'
 
-export function FilterSelect({ label, options, id, className = '', ...rest }: FilterSelectProps) {
+export function FilterSelect({ label, options, id, className = '', optionLabel, ...rest }: FilterSelectProps) {
   const selectId = id ?? `filter-${label.toLowerCase().replace(/\s+/g, '-')}`
   return (
     <label className="inline-flex flex-col gap-0.5">
@@ -31,7 +33,7 @@ export function FilterSelect({ label, options, id, className = '', ...rest }: Fi
       >
         <option value="">All {label}</option>
         {options.filter(Boolean).map((opt) => (
-          <option key={opt} value={opt}>{opt}</option>
+          <option key={opt} value={opt}>{optionLabel ? optionLabel(opt) : opt}</option>
         ))}
       </select>
     </label>

@@ -41,6 +41,9 @@ interface Props {
   repoUrl?: string | null
   /** Table row — shorter label, width-constrained trigger. */
   variant?: 'default' | 'table'
+  /** Why this report cannot be dispatched (e.g. a feature request), from
+   *  `dispatchBlock()` — the same gate the report page uses. */
+  blockReason?: string | null
 }
 
 const POPOVER_PAD = 10
@@ -59,6 +62,7 @@ export function DispatchFixPreflight({
   preflight,
   repoUrl,
   variant = 'default',
+  blockReason = null,
 }: Props) {
   const [open, setOpen] = useState(false)
   const [popoverStyle, setPopoverStyle] = useState<CSSProperties>({})
@@ -137,9 +141,10 @@ export function DispatchFixPreflight({
   // incrementally.
   const failingChecks = preflight?.failing ?? []
   const preflightBlocked = !!preflight && (!preflight.loading && !preflight.ready)
+  const queueBlocked = preflightBlocked || Boolean(blockReason)
 
   const handleConfirm = () => {
-    if (preflightBlocked) return
+    if (queueBlocked) return
     setOpen(false)
     onConfirm()
   }
@@ -220,7 +225,11 @@ export function DispatchFixPreflight({
             <li className="flex items-start gap-1">
               <span aria-hidden="true" className="text-fg-faint mt-0.5">→</span>
               <span>
-                <span className="font-medium">Status streams here.</span>{' '}
+                {/* The table row does not stream progress (it queues and
+                    reloads); the report page and the Fixes page do. */}
+                <span className="font-medium">
+                  {isTable ? 'Progress shows on the Fixes page.' : 'Status streams here.'}
+                </span>{' '}
                 <span className="text-fg-muted">
                   Queued → running → PR ready (typically 2–6 minutes).
                 </span>
@@ -314,18 +323,20 @@ export function DispatchFixPreflight({
                 type="button"
                 size="sm"
                 variant="primary"
-                disabled={preflightBlocked}
+                disabled={queueBlocked}
                 onClick={(e) => {
                   e.stopPropagation()
                   handleConfirm()
                 }}
                 title={
-                  preflightBlocked
-                    ? `Fix the ${failingChecks.length} prerequisite${failingChecks.length === 1 ? '' : 's'} above first`
-                    : undefined
+                  blockReason
+                    ? blockReason
+                    : preflightBlocked
+                      ? `Fix the ${failingChecks.length} prerequisite${failingChecks.length === 1 ? '' : 's'} above first`
+                      : undefined
                 }
               >
-                {preflightBlocked ? 'Resolve prerequisites first' : 'Queue fix worker →'}
+                {blockReason ? 'Cannot dispatch yet' : preflightBlocked ? 'Resolve prerequisites first' : 'Queue fix worker →'}
               </Btn>
             </div>
           </div>

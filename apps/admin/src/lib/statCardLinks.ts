@@ -10,7 +10,7 @@ import type { InboxStats } from '../components/inbox/types'
 /* ── Dashboard ─────────────────────────────────────────────────────────── */
 
 export const dashboardLinks = {
-  backlog: '/reports?tab=queue',
+  backlog: '/reports?status=new&sort=created_at&dir=asc',
   reports14d: '/reports',
   fixes: '/fixes',
   focus: (stats: DashboardStats) => stats.topPriorityTo ?? '/dashboard?tab=loop',
@@ -19,10 +19,12 @@ export const dashboardLinks = {
 /* ── Reports ───────────────────────────────────────────────────────────── */
 
 export const reportsLinks = {
-  total14d: '/reports?tab=queue',
-  untriaged: '/reports?tab=queue',
-  critical14d: '/reports?tab=severity',
-  dismissed14d: '/reports?tab=queue',
+  // /reports reads filters, not a `tab` param: every link carries the
+  // filters that reproduce the count it sits next to.
+  total14d: '/reports?days=14',
+  untriaged: '/reports?status=new',
+  critical14d: '/reports?severity=critical&days=14',
+  dismissed14d: '/reports?status=dismissed&days=14',
 } as const
 
 /* ── Fixes ─────────────────────────────────────────────────────────────── */
@@ -93,10 +95,13 @@ export const repoLinks = {
 /* ── Inbox ───────────────────────────────────────────────────────────── */
 
 export const inboxLinks = {
-  open: (stats: InboxStats) => stats.topPriorityTo ?? '/inbox?tab=inbox',
+  // No top priority means nothing is open: the Actions tab says so.
+  open: (stats: InboxStats) => stats.topPriorityTo ?? '/inbox?tab=actions',
   clear: '/dashboard',
-  backlog: '/reports?tab=queue',
-  critical: '/reports?tab=severity',
+  // Backlog = New reports waiting over an hour: oldest first.
+  backlog: '/reports?status=new&sort=created_at&dir=asc',
+  // Same predicate as criticalReports14d (dashboard.ts inbox stats).
+  critical: '/reports?status=open&severity=critical&days=14',
 } as const
 
 /* ── Judge ─────────────────────────────────────────────────────────────── */

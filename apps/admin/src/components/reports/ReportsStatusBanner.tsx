@@ -77,15 +77,15 @@ export function ReportsStatusBanner({
     return (
       <StatusBannerShell
         tone="danger"
-        title={`${stats.critical14d} critical bug${stats.critical14d === 1 ? '' : 's'} need review`}
+        title={`${stats.criticalUntriaged14d} critical bug${stats.criticalUntriaged14d === 1 ? '' : 's'} need review`}
         subtitle={
           stats.topPriorityLabel ??
           'Critical bugs block user workflows — confirm severity and dispatch fixes first.'
         }
         action={
           <StatusBannerAction
-            label={actions.triage ?? `Review ${stats.critical14d} critical`}
-            to={stats.topPriorityTo ?? scopedHref('/reports?tab=queue&severity=critical', pid)}
+            label={actions.triage ?? `Review ${stats.criticalUntriaged14d} critical`}
+            to={stats.topPriorityTo ?? scopedHref('/reports?status=new&severity=critical&days=14', pid)}
             tone="danger"
           />
         }
@@ -102,7 +102,7 @@ export function ReportsStatusBanner({
         action={
           <StatusBannerAction
             label={actions.backlog ?? `Review ${stats.openBacklog} waiting`}
-            to={stats.topPriorityTo ?? scopedHref('/reports?tab=queue&status=new', pid)}
+            to={stats.topPriorityTo ?? scopedHref('/reports?status=new&sort=created_at&dir=asc', pid)}
             tone="warn"
           />
         }
@@ -141,7 +141,7 @@ export function ReportsStatusBanner({
           ) : (
             <StatusBannerAction
               label={actions.queue ?? 'Open queue'}
-              to={stats.topPriorityTo ?? scopedHref('/reports?tab=queue', pid)}
+              to={stats.topPriorityTo ?? scopedHref('/reports?status=new', pid)}
               tone="info"
             />
           )
