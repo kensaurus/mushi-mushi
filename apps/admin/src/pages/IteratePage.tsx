@@ -16,6 +16,7 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { usePageCopy } from '../lib/copy'
 import { useIterateUx, resolveQuickIterateTab } from '../lib/iterateModeUx'
+import { useQuickstartLandingTab } from '../lib/useQuickstartTab'
 import { SetupNudge } from '../components/SetupNudge'
 import { useToast } from '../lib/toast'
 import { PageHeaderBar } from '../components/PageHeaderBar'
@@ -182,11 +183,15 @@ export function IteratePage() {
     [copy?.tabLabels, stats.total, stats.queued, stats.running],
   )
 
-  useEffect(() => {
-    if (!ux.isQuickstart || statsLoading) return
-    const quickTab = resolveQuickIterateTab(stats)
-    if (activeTab !== quickTab) setActiveTab(quickTab)
-  }, [ux.isQuickstart, statsLoading, stats, activeTab, setActiveTab])
+  // Quick mode opens the posture tab once; links and clicks then win.
+  useQuickstartLandingTab({
+    enabled: ux.isQuickstart,
+    ready: !statsLoading,
+    tabParam: searchParams.get('tab'),
+    activeTab: activeTab,
+    quickTab: resolveQuickIterateTab(stats),
+    setActiveTab: setActiveTab,
+  })
 
   const openDetail = useCallback(
     async (run: PdcaRun) => {

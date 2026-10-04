@@ -35,6 +35,7 @@ import {
   type DefinitionChipItem, } from '../components/ui'
 import { usePageCopy } from '../lib/copy'
 import { useRepoUx, resolveQuickRepoTab } from '../lib/repoModeUx'
+import { useQuickstartLandingTab } from '../lib/useQuickstartTab'
 import { FixGitGraph, type FixTimelineEvent } from '../components/FixGitGraph'
 import { useRealtimeReload } from '../lib/realtime'
 import { IconGit } from '../components/icons'
@@ -290,11 +291,15 @@ export function RepoPage() {
     [searchParams, setSearchParams],
   )
 
-  useEffect(() => {
-    if (!ux.isQuickstart || !activeProjectId || statsLoading) return
-    const quickTab = resolveQuickRepoTab(repoStats)
-    if (activeTab !== quickTab) setActiveTab(quickTab)
-  }, [ux.isQuickstart, activeProjectId, statsLoading, repoStats, activeTab, setActiveTab])
+  // Quick mode opens the posture tab once; links and clicks then win.
+  useQuickstartLandingTab({
+    enabled: ux.isQuickstart && Boolean(activeProjectId),
+    ready: !statsLoading,
+    tabParam: tabParam,
+    activeTab: activeTab,
+    quickTab: resolveQuickRepoTab(repoStats),
+    setActiveTab: setActiveTab,
+  })
 
   const [overview, setOverview] = useState<RepoOverview | null>(null)
   const [activity, setActivity] = useState<RepoActivityEvent[] | null>(null)
