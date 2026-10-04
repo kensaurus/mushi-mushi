@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { ConfirmDialog } from '../ConfirmDialog'
 import { Btn, Badge, ErrorAlert } from '../ui'
 import { Modal } from '../Modal'
 import { apiFetch } from '../../lib/supabase'
@@ -108,6 +109,7 @@ export function ProposalReviewModal({
   const [editedYaml, setEditedYaml] = useState<string | null>(null)
   const [busy, setBusy] = useState<'save' | 'accept' | 'discard' | null>(null)
   const [validationIssues, setValidationIssues] = useState<unknown[] | null>(null)
+  const [confirmDiscard, setConfirmDiscard] = useState(false)
 
   // Body scroll lock + Esc-close + focus trap + focus restore are now
   // handled by the shared <Modal/> primitive (see components/Modal.tsx
@@ -133,8 +135,7 @@ export function ProposalReviewModal({
       setEditedYaml(null)
       q.reload()
     } else if (res.error?.code === 'VALIDATION_FAILED') {
-      const issues = (res.error as { issues?: unknown[] }).issues ?? []
-      setValidationIssues(issues)
+      setValidationIssues(res.error.issues ?? [])
     } else {
       toast.push({ tone: 'error', message: 'Save failed', description: res.error?.message ?? '' })
     }
@@ -149,8 +150,7 @@ export function ProposalReviewModal({
       toast.success('Inventory accepted', 'It is now your active inventory.')
       onAccepted()
     } else if (res.error?.code === 'VALIDATION_FAILED') {
-      const issues = (res.error as { issues?: unknown[] }).issues ?? []
-      setValidationIssues(issues)
+      setValidationIssues(res.error.issues ?? [])
     } else {
       toast.push({ tone: 'error', message: 'Accept failed', description: res.error?.message ?? '' })
     }
@@ -160,6 +160,7 @@ export function ProposalReviewModal({
     setBusy('discard')
     const res = await apiFetch(`${path}/discard`, { method: 'POST', body: '{}' })
     setBusy(null)
+    setConfirmDiscard(false)
     if (res.ok) {
       toast.success('Discarded')
       onDiscarded()
@@ -191,7 +192,7 @@ export function ProposalReviewModal({
 
   const headerActions = isDraft ? (
     <div className="flex flex-wrap items-center gap-2">
-      <Btn type="button" size="sm" variant="danger" onClick={discard} disabled={busy != null}>
+      <Btn type="button" size="sm" variant="danger" onClick={() => setConfirmDiscard(true)} disabled={busy != null}>
         Discard
       </Btn>
       <Btn
@@ -264,6 +265,11 @@ export function ProposalReviewModal({
       {validationIssues && (
         <div className="-mx-4 px-4 py-2 border-b border-edge-subtle bg-danger-muted/40">
           <p className="text-xs font-semibold text-danger">YAML rejected by validator</p>
+          {validationIssues.length === 0 ? (
+            <p className="mt-1 text-2xs text-danger">
+              The validator gave no line details. Check the YAML tab for a missing schema_version or a broken indent.
+            </p>
+          ) : null}
           <ul className="mt-1 text-2xs text-danger space-y-0.5 max-h-32 overflow-auto">
             {(validationIssues as Array<{ path?: string; message?: string }>)
               .slice(0, 12)
@@ -297,6 +303,21 @@ export function ProposalReviewModal({
           />
         )}
       </div>
+      {confirmDiscard ? (
+        <ConfirmDialog
+          title="Discard this draft inventory?"
+          body={
+            editedYaml
+              ? 'The draft and your unsaved YAML edits are thrown away. A new draft needs another AI run.'
+              : 'The draft is thrown away. A new draft needs another AI run.'
+          }
+          confirmLabel="Discard draft"
+          tone="danger"
+          loading={busy === 'discard'}
+          onCancel={() => setConfirmDiscard(false)}
+          onConfirm={discard}
+        />
+      ) : null}
     </Modal>
   )
 }

@@ -1,19 +1,23 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Btn, ErrorAlert } from '../ui'
 
 interface Props {
   onParsed?: (yaml: string) => void
+  /** Clear drops the chosen file, so "Ingest selected file" cannot send it. */
+  onCleared?: () => void
   disabled?: boolean
 }
 
-export function InventoryYamlDropzone({ onParsed, disabled }: Props) {
+export function InventoryYamlDropzone({ onParsed, onCleared, disabled }: Props) {
   const [err, setErr] = useState<string | null>(null)
+  const inputRef = useRef<HTMLInputElement | null>(null)
   return (
     <div className="rounded-md border border-dashed border-edge-subtle p-4 space-y-2">
       <p className="text-2xs text-fg-muted">
         Select a local <code>inventory.yaml</code> to preview — ingestion validates on the server.
       </p>
       <input
+        ref={inputRef}
         type="file"
         accept=".yml,.yaml,text/yaml"
         disabled={disabled}
@@ -21,7 +25,10 @@ export function InventoryYamlDropzone({ onParsed, disabled }: Props) {
         onChange={async (e) => {
           setErr(null)
           const file = e.target.files?.[0]
-          if (!file) return
+          if (!file) {
+            onCleared?.()
+            return
+          }
           const text = await file.text()
           if (text.length > 1_000_000) {
             setErr('File exceeds 1 MB limit.')
@@ -45,7 +52,17 @@ export function InventoryYamlDropzone({ onParsed, disabled }: Props) {
         }}
       />
       {err && <ErrorAlert message={err} />}
-      <Btn size="sm" variant="ghost" type="button" disabled={disabled} onClick={() => setErr(null)}>
+      <Btn
+        size="sm"
+        variant="ghost"
+        type="button"
+        disabled={disabled}
+        onClick={() => {
+          setErr(null)
+          if (inputRef.current) inputRef.current.value = ''
+          onCleared?.()
+        }}
+      >
         Clear
       </Btn>
     </div>

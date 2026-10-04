@@ -1,5 +1,7 @@
 import { useMemo, useState, useEffect, useRef } from 'react'
-import { Btn, Card, Badge, ErrorAlert, Input } from '../ui'
+import { Link } from 'react-router-dom'
+import { PageLoadError } from '../PageLoadError'
+import { Btn, Card, Badge, Input } from '../ui'
 import { IconNote } from '../icons'
 import { ContainedBlock, SignalChip } from '../report-detail/ReportSurface'
 import { apiFetch } from '../../lib/supabase'
@@ -305,7 +307,9 @@ export function DiscoveryTab({ projectId, onAccepted }: Props) {
         testidCount={routes.reduce((s, r) => s + r.observed_testids.length, 0)}
       />
 
-      {discovery.error && <ErrorAlert message={discovery.error} onRetry={discovery.reload} />}
+      {discovery.error && (
+        <PageLoadError error={discovery.error} onRetry={discovery.reload} resource="discovery data" />
+      )}
 
       {/* NEW: Map from live app — active crawl path */}
       <LiveCrawlCard
@@ -879,7 +883,7 @@ function LiveCrawlCard({
       {quotaExhausted && (
         <div className={`rounded-md ${CHIP_TONE.warnSubtle} px-3 py-2 text-2xs`}>
           Daily crawl budget reached — resets at 00:00 UTC, or raise the limit in{' '}
-          <a href="/settings?tab=general" className="underline">Settings → General</a>.
+          <Link to="/settings?tab=general" className="underline">Settings → General</Link>.
         </div>
       )}
 
@@ -921,8 +925,13 @@ function LiveCrawlCard({
                 className="w-full h-8 rounded-md border border-edge bg-surface text-xs px-2 text-fg"
               >
                 <option value="firecrawl">Firecrawl (cloud, no setup)</option>
-                <option value="browserbase">Browserbase (BYOK)</option>
+                <option value="browserbase" disabled>
+                  Browserbase (not available for crawls yet)
+                </option>
               </select>
+              <p className="text-2xs text-fg-faint">
+                Live crawls run on Firecrawl. Browserbase is used for QA story runs, not for mapping.
+              </p>
             </div>
           </div>
           <label className="flex items-center gap-2 cursor-pointer text-2xs text-fg-muted">
