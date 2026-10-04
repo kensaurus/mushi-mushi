@@ -7,31 +7,30 @@
  * PURPOSE: The sidebar's counters cost ONE request per context. Layout and
  *          PipelineStatusRibbon used to mount two hook instances that each
  *          fired ~12 requests; the store now shares one nav-meta call, maps
- *          its `counts` without inventing zeros' meaning, and only fans out
- *          per slice when the API build has no nav-meta route at all.
+ *          its `counts`, and only fans out per slice when the API build has
+ *          no nav-meta route at all.
  */
 
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WorkspaceNavMetaResponse } from './workspaceNavMetaResponse'
+import type { NavCounts } from './useNavCounts'
+import { EMPTY_NAV_STAT_SLICES } from './extendedNavMeta'
 
 const api = vi.hoisted(() => ({ apiFetch: vi.fn() }))
 const fallback = vi.hoisted(() => ({ fetchNavSlicesFallback: vi.fn() }))
+const entitlements = vi.hoisted(() => ({ isSuperAdmin: false, inventory: false }))
 
 vi.mock('./supabase', () => ({ apiFetch: api.apiFetch }))
 vi.mock('./realtime', () => ({ useRealtimeReload: () => ({ channelState: 'idle' }) }))
-vi.mock('./useEntitlements', () => ({ useEntitlements: () => ({ isSuperAdmin: false, has: () => false }) }))
+vi.mock('./useEntitlements', () => ({
+  useEntitlements: () => ({
+    isSuperAdmin: entitlements.isSuperAdmin,
+    has: (flag: string) => flag === 'inventory_v2' && entitlements.inventory,
+  }),
+}))
 vi.mock('./fetchNavSlicesFallback', () => ({ fetchNavSlicesFallback: fallback.fetchNavSlicesFallback }))
-
-import {
-  navCountsFromNavMeta,
-  navMetaPath,
-  resetNavCountsStore,
-  useNavCounts,
-  type NavCounts,
-} from './useNavCounts'
-import { EMPTY_NAV_STAT_SLICES } from './extendedNavMeta'
 
 function navMeta(overrides: Partial<WorkspaceNavMetaResponse> = {}): WorkspaceNavMetaResponse {
   return {
@@ -71,9 +70,17 @@ let container: HTMLDivElement
 let root: Root
 const seen: Record<string, NavCounts> = {}
 
-function Reader({ id }: { id: string }) {
-  seen[id] = useNavCounts(id === 'layout' ? { live: true } : {})
-  return null
+/** Fresh module per test: the store is module-level by design. */
+async function renderReaders(ids: string[]) {
+  vi.resetModules()
+  const { useNavCounts } = await import('./useNavCounts')
+  function Reader({ id }: { id: string }) {
+    seen[id] = useNavCounts(id === 'layout' ? { live: true } : {})
+    return null
+  }
+  await act(async () => {
+    root.render(createElement('div', null, ...ids.map((id) => createElement(Reader, { key: id, id }))))
+  })
 }
 
 beforeEach(() => {
@@ -82,7 +89,8 @@ beforeEach(() => {
   root = createRoot(container)
   api.apiFetch.mockReset()
   fallback.fetchNavSlicesFallback.mockReset()
-  resetNavCountsStore()
+  entitlements.isSuperAdmin = false
+  entitlements.inventory = false
 })
 
 afterEach(() => {
@@ -90,21 +98,30 @@ afterEach(() => {
   container.remove()
 })
 
-describe('navMetaPath', () => {
-  it('always asks for counts and only adds gated parts when allowed', () => {
-    expect(navMetaPath({ inventoryEnabled: false, isSuperAdmin: false, fresh: false })).toBe(
-      '/v1/admin/workspace/nav-meta?include=counts',
-    )
-    expect(navMetaPath({ inventoryEnabled: true, isSuperAdmin: true, fresh: true })).toBe(
-      '/v1/admin/workspace/nav-meta?include=counts%2Cinventory%2Csuperadmin&fresh=1',
+describe('useNavCounts', () => {
+  it('two readers share ONE nav-meta request that asks for the counters', async () => {
+    api.apiFetch.mockResolvedValue({ ok: true, data: navMeta() })
+    await renderReaders(['layout', 'ribbon'])
+    expect(api.apiFetch).toHaveBeenCalledTimes(1)
+    expect(api.apiFetch.mock.calls[0][0]).toBe('/v1/admin/workspace/nav-meta?include=counts')
+    expect(seen.layout.fixesFailed).toBe(2)
+    expect(seen.ribbon.fixesFailed).toBe(2)
+  })
+
+  it('asks for inventory and super-admin numbers only when the user has them', async () => {
+    entitlements.isSuperAdmin = true
+    entitlements.inventory = true
+    api.apiFetch.mockResolvedValue({ ok: true, data: navMeta() })
+    await renderReaders(['layout'])
+    expect(api.apiFetch.mock.calls[0][0]).toBe(
+      '/v1/admin/workspace/nav-meta?include=counts%2Cinventory%2Csuperadmin',
     )
   })
-})
 
-describe('navCountsFromNavMeta', () => {
-  it('maps every counter and takes integration issues from the dashboard slice', () => {
-    const c = navCountsFromNavMeta(navMeta())
-    expect(c).toMatchObject({
+  it('maps every counter, taking integration issues from the dashboard slice', async () => {
+    api.apiFetch.mockResolvedValue({ ok: true, data: navMeta() })
+    await renderReaders(['layout'])
+    expect(seen.layout).toMatchObject({
       fixesInFlight: 1,
       fixesFailed: 2,
       prsOpen: 3,
@@ -117,40 +134,24 @@ describe('navCountsFromNavMeta', () => {
       healthIssues: 2,
       projectCount: 3,
       projectsNeedingAttention: 1,
+      // A failed counter renders no badge (0 with hideWhenZero).
+      judgeDisagreements: 0,
+      memberCount: null,
       ready: true,
     })
-    // A failed counter shows no badge (0 with hideWhenZero), not a number.
-    expect(c.judgeDisagreements).toBe(0)
-    expect(c.memberCount).toBeNull()
   })
 
-  it('treats an older API without counts as no badges', () => {
-    const c = navCountsFromNavMeta(navMeta({ counts: undefined }))
-    expect(c.fixesFailed).toBe(0)
-    expect(c.untriagedBacklog).toBe(0)
-    expect(c.healthIssues).toBe(2)
-  })
-})
-
-describe('useNavCounts store', () => {
-  it('two readers share one nav-meta request', async () => {
-    api.apiFetch.mockResolvedValue({ ok: true, data: navMeta() })
-    await act(async () => {
-      root.render(
-        createElement('div', null, createElement(Reader, { id: 'layout' }), createElement(Reader, { id: 'ribbon' })),
-      )
-    })
-    expect(api.apiFetch).toHaveBeenCalledTimes(1)
-    expect(api.apiFetch.mock.calls[0][0]).toBe('/v1/admin/workspace/nav-meta?include=counts')
-    expect(seen.layout.fixesFailed).toBe(2)
-    expect(seen.ribbon.fixesFailed).toBe(2)
+  it('shows no counter badges from an older API without counts', async () => {
+    api.apiFetch.mockResolvedValue({ ok: true, data: navMeta({ counts: undefined }) })
+    await renderReaders(['layout'])
+    expect(seen.layout.fixesFailed).toBe(0)
+    expect(seen.layout.untriagedBacklog).toBe(0)
+    expect(seen.layout.healthIssues).toBe(2)
   })
 
   it('does not fan out per slice when nav-meta is down (5xx)', async () => {
     api.apiFetch.mockResolvedValue({ ok: false, error: { code: 'HTTP_ERROR', message: '503: unavailable' } })
-    await act(async () => {
-      root.render(createElement(Reader, { id: 'layout' }))
-    })
+    await renderReaders(['layout'])
     expect(api.apiFetch).toHaveBeenCalledTimes(1)
     expect(fallback.fetchNavSlicesFallback).not.toHaveBeenCalled()
     expect(seen.layout.ready).toBe(true)
@@ -163,9 +164,7 @@ describe('useNavCounts store', () => {
         : { ok: true, data: { projectCount: 2, neverIngestedCount: 0, staleKeyCount: 0 } },
     )
     fallback.fetchNavSlicesFallback.mockResolvedValue(EMPTY_NAV_STAT_SLICES)
-    await act(async () => {
-      root.render(createElement(Reader, { id: 'layout' }))
-    })
+    await renderReaders(['layout'])
     expect(fallback.fetchNavSlicesFallback).toHaveBeenCalledTimes(1)
     expect(seen.layout.projectCount).toBe(2)
   })

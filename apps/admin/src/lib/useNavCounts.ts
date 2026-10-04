@@ -156,7 +156,7 @@ const NAV_COUNT_TABLES = [
  * `fresh=1` skips the server's short per-user cache (sent after a realtime
  * change, when the cached copy is known to be stale).
  */
-export function navMetaPath(opts: {
+function navMetaPath(opts: {
   inventoryEnabled: boolean
   isSuperAdmin: boolean
   fresh: boolean
@@ -180,7 +180,7 @@ function countOrZero(value: number | null | undefined): number {
 }
 
 /** Pure mapping from one nav-meta answer to the sidebar's counters. */
-export function navCountsFromNavMeta(data: WorkspaceNavMetaResponse): NavCounts {
+function navCountsFromNavMeta(data: WorkspaceNavMetaResponse): NavCounts {
   const slices = normalizeNavSlices(data.slices)
   const counts = data.counts ?? null
   const neverIngestedCount = data.projects?.neverIngestedCount ?? 0
@@ -320,16 +320,6 @@ function requestLoad(ctx: LoadContext, fresh: boolean): void {
     return
   }
   void runLoad(ctx, fresh)
-}
-
-/** Test hook: drop the shared snapshot. */
-export function resetNavCountsStore(): void {
-  snapshot = INITIAL
-  loadedKey = null
-  inflightKey = null
-  rerun = null
-  loadSeq++
-  for (const l of listeners) l()
 }
 
 /**

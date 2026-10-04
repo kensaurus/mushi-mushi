@@ -127,8 +127,6 @@ export const CHECK_SUB_GROUPS: Record<
   },
 }
 
-export const CHECK_HUB_PATH = '/health?hub=check'
-
 /**
  * Quick and Beginner sidebars (Oct 2026 navigation pass). The PDCA sections
  * read as an internal process; a solo builder thinks "find and fix bugs, look
