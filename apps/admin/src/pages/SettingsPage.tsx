@@ -100,7 +100,10 @@ function SettingsPageBody({ byokEnabled }: { byokEnabled: boolean }) {
     validate: isStoredTab,
   });
   const param = searchParams.get('tab');
-  const active: SettingsTabId = isTabId(param) ? param : (storedTab ?? 'general');
+  // Quick mode hides the tab strip, so a remembered tab could strand you on
+  // it; there the link or Quick mode's own pick decides.
+  const rememberedTab = ux.hideTabs ? null : storedTab;
+  const active: SettingsTabId = isTabId(param) ? param : (rememberedTab ?? 'general');
 
   const statsPath = activeProjectId ? '/v1/admin/settings/stats' : null;
   const {
@@ -144,14 +147,13 @@ function SettingsPageBody({ byokEnabled }: { byokEnabled: boolean }) {
     [searchParams, setSearchParams, setStoredTab],
   );
 
-  // Quick mode picks a starting tab only when neither a link nor your own
-  // last choice says which one to show.
+  // Quick mode picks a starting tab when no link says which one to show.
   useEffect(() => {
     if (!ux.isQuickstart || !activeProjectId || statsLoading) return;
-    if (!shouldResolveQuickSettingsTab(param) || storedTab !== null) return;
+    if (!shouldResolveQuickSettingsTab(param) || rememberedTab !== null) return;
     const quickTab = resolveQuickSettingsTab(stats);
     if (active !== quickTab) setActive(quickTab);
-  }, [ux.isQuickstart, activeProjectId, statsLoading, stats, active, param, storedTab, setActive]);
+  }, [ux.isQuickstart, activeProjectId, statsLoading, stats, active, param, rememberedTab, setActive]);
 
   const keyProblems = keySummary ? keySummary.attention + keySummary.expiring + keySummary.checking : 0;
   const criticalCount =

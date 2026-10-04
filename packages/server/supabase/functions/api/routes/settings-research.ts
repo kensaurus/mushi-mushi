@@ -35,6 +35,11 @@ import { parseSentryDsnSetting, sentrySelfHostedHosts } from '../../_shared/sent
 import { prepareByokSecret } from '../../_shared/byok-key-rules.ts';
 import { parseByokExpiry } from '../../_shared/byok-expiry.ts';
 import {
+  countByokKeyHealth,
+  legacyKeyStatus,
+  type ByokKeyHealthInput,
+} from '../../_shared/byok-key-health.ts';
+import {
   isLegacyByokProvider,
   LEGACY_BYOK_PROVIDERS,
   type LegacyByokProvider,
@@ -282,6 +287,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       byokKeysPassing: 0,
       byokKeysFailing: 0,
       byokKeysUntested: 0,
+      byokKeysExpiring: 0,
       githubRepoConfigured: false,
       autofixEnabled: false,
     };
@@ -302,6 +308,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
             'byok_anthropic_key_ref, byok_anthropic_test_status, ' +
             'byok_openai_key_ref, byok_openai_test_status, ' +
             'byok_firecrawl_key_ref, byok_firecrawl_test_status, ' +
+            'byok_browserbase_key_ref, byok_browserbase_test_status, ' +
             'github_repo_url, autofix_enabled, ' +
             'crawl_max_pages_per_day, crawl_max_runs_per_day, tdd_max_gens_per_day',
         )
@@ -309,9 +316,8 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         .maybeSingle(),
       db
         .from('byok_keys')
-        .select('provider_slug, test_status, status')
-        .eq('project_id', project.id)
-        .neq('status', 'disabled'),
+        .select('id, provider_slug, test_status, status, cooldown_until')
+        .eq('project_id', project.id),
     ]);
 
     if (error) return dbError(c, error);
@@ -329,55 +335,62 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
 
     const row = (data as Record<string, unknown> | null) ?? {};
 
-    // Derive BYOK counts from the byok_keys pool table (source of truth).
-    // Fall back to legacy key_ref presence so existing single-key setups
-    // continue to show as "configured" until they migrate to the pool.
-    const activePoolKeys = (poolKeys ?? []) as Array<{
+    // Count every saved key with the same rules the console's key rows use
+    // (_shared/byok-key-health.ts ⇄ admin keyStatus.ts, parity-tested), so
+    // the sidebar badge, this page's hero and each row tell one story.
+    // A turned-off key counts as neither configured nor failing.
+    const poolRows = (poolKeys ?? []) as Array<{
+      id: string;
       provider_slug: string;
       test_status: string | null;
       status: string;
+      cooldown_until: string | null;
     }>;
-    let byokKeysConfigured = activePoolKeys.length;
-    let byokKeysPassing = 0;
-    let byokKeysFailing = 0;
-    let byokKeysUntested = 0;
-    for (const k of activePoolKeys) {
-      if (k.test_status === 'ok') byokKeysPassing += 1;
-      else if (k.test_status && k.test_status.startsWith('error')) byokKeysFailing += 1;
-      else byokKeysUntested += 1;
+    // expires_at arrives with migration 20261004150000; read it on its own so
+    // a database without the column still serves stats (no known expiry).
+    const expiryById = new Map<string, string | null>();
+    if (poolRows.length > 0) {
+      const expiryResult = await db
+        .from('byok_keys')
+        .select('id, expires_at')
+        .eq('project_id', project.id);
+      if (!expiryResult.error) {
+        for (const r of (expiryResult.data ?? []) as Array<{ id: string; expires_at?: string | null }>) {
+          expiryById.set(r.id, r.expires_at ?? null);
+        }
+      }
     }
+    const healthInputs: ByokKeyHealthInput[] = poolRows.map((k) => ({
+      provider_slug: k.provider_slug,
+      status: k.status,
+      test_status: k.test_status,
+      cooldown_until: k.cooldown_until,
+      expires_at: expiryById.get(k.id) ?? null,
+    }));
+    for (const provider of ['anthropic', 'openai', 'firecrawl', 'browserbase'] as const) {
+      if (!row[`byok_${provider}_key_ref`]) continue;
+      const testStatus = (row[`byok_${provider}_test_status`] as string | null) ?? null;
+      healthInputs.push({
+        provider_slug: provider,
+        status: legacyKeyStatus(testStatus),
+        test_status: testStatus,
+        legacy: true,
+      });
+    }
+    const health = countByokKeyHealth(healthInputs);
+    const byokKeysPassing = health.working;
+    const byokKeysFailing = health.attention;
+    const byokKeysUntested = health.checking;
+    const byokKeysExpiring = health.expiring;
+    const byokKeysConfigured = health.working + health.attention + health.checking + health.expiring;
 
-    // Per-provider configured flag: pool has at least one active key OR legacy ref exists
-    const poolProviders = new Set(activePoolKeys.map((k) => k.provider_slug));
-    const byokAnthropicConfigured =
-      poolProviders.has('anthropic') || Boolean(row.byok_anthropic_key_ref);
-    const byokOpenaiConfigured = poolProviders.has('openai') || Boolean(row.byok_openai_key_ref);
-    const byokFirecrawlConfigured =
-      poolProviders.has('firecrawl') || Boolean(row.byok_firecrawl_key_ref);
-
-    // Fold in legacy single-key refs whose provider has no pool row yet, so a
-    // project that hasn't migrated to the pool still reports its keys as
-    // "configured" instead of 0. Each legacy key MUST also land in exactly one
-    // of passing/failing/untested using its own test-status column — otherwise
-    // the invariant `passing + failing + untested === configured` breaks, the
-    // tooltip reads "0 passing, 0 failing, 0 untested of N configured", and the
-    // SettingsStatusBanner's "untested keys" warning never fires for legacy-
-    // only projects.
-    const classifyByokStatus = (testStatus: string | null | undefined) => {
-      if (testStatus === 'ok') byokKeysPassing += 1;
-      else if (testStatus && testStatus.startsWith('error')) byokKeysFailing += 1;
-      else byokKeysUntested += 1;
-      byokKeysConfigured += 1;
-    };
-    if (!poolProviders.has('anthropic') && Boolean(row.byok_anthropic_key_ref)) {
-      classifyByokStatus(row.byok_anthropic_test_status as string | null);
-    }
-    if (!poolProviders.has('openai') && Boolean(row.byok_openai_key_ref)) {
-      classifyByokStatus(row.byok_openai_test_status as string | null);
-    }
-    if (!poolProviders.has('firecrawl') && Boolean(row.byok_firecrawl_key_ref)) {
-      classifyByokStatus(row.byok_firecrawl_test_status as string | null);
-    }
+    // Per-provider configured flag: a key that is not turned off, pooled or legacy.
+    const savedProviders = new Set(
+      healthInputs.filter((k) => k.status !== 'disabled').map((k) => k.provider_slug),
+    );
+    const byokAnthropicConfigured = savedProviders.has('anthropic');
+    const byokOpenaiConfigured = savedProviders.has('openai');
+    const byokFirecrawlConfigured = savedProviders.has('firecrawl');
 
     return c.json({
       ok: true,
@@ -406,6 +419,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         byokKeysPassing,
         byokKeysFailing,
         byokKeysUntested,
+        byokKeysExpiring,
         githubRepoConfigured: Boolean(row.github_repo_url),
         autofixEnabled: Boolean(row.autofix_enabled),
         crawlMaxPagesPerDay: (row.crawl_max_pages_per_day as number | null) ?? 150,
@@ -2895,14 +2909,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       (provider) => {
         if (!legacyRow[`byok_${provider}_key_ref`]) return [];
         const testStatus = (legacyRow[`byok_${provider}_test_status`] as string | null) ?? null;
-        const status =
-          testStatus === 'ok'
-            ? 'active'
-            : testStatus === 'error_quota'
-              ? 'quota_exhausted'
-              : testStatus === 'error_auth'
-                ? 'auth_failed'
-                : 'pending_validation';
+        const status = legacyKeyStatus(testStatus);
         return [
           {
             id: `legacy:${provider}`,

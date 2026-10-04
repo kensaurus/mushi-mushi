@@ -423,7 +423,7 @@ export function ByokPanel() {
               <span className="text-fg-muted">{k.label}</span>
             ) : null}
           </p>
-          <RowStatus status={{ ...view, expiresAt: poolKey?.expires_at ?? null }} />
+          <RowStatus status={view} />
           <p className="text-xs text-fg-muted">
             {k.created_at ? `Added ${formatDay(k.created_at)}` : 'Added before key history'}
             {expires ? ` · expires ${expires}` : ''}
@@ -456,7 +456,7 @@ export function ByokPanel() {
         <div className="flex shrink-0 flex-wrap items-center gap-1.5">
           {view.action === 'remove' ? (
             <Btn size="sm" variant="primary" type="button" onClick={() => setRemoveTarget(k)}>
-              Remove old key
+              {legacy ? 'Remove old key' : 'Remove key'}
             </Btn>
           ) : view.action === 'replace' ? (
             <Btn size="sm" variant="primary" type="button" onClick={() => openAddForm(k.provider_slug)}>

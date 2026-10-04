@@ -45,7 +45,7 @@ export function settingsBannerPriority(
   const attention = keySummary ? keySummary.attention : stats.byokKeysFailing
   const unchecked = keySummary ? keySummary.checking : stats.byokKeysUntested
   if (attention > 0) return 'keys_attention'
-  if (keySummary && keySummary.expiring > 0) return 'keys_expiring'
+  if ((keySummary ? keySummary.expiring : (stats.byokKeysExpiring ?? 0)) > 0) return 'keys_expiring'
   if (!hasAnthropicKey) return 'no_anthropic'
   if (!stats.sdkConfigEnabled) return 'sdk_off'
   if (unchecked > 0) return 'keys_unchecked'
@@ -83,7 +83,7 @@ export function SettingsStatusBanner({
       )
     }
     case 'keys_expiring': {
-      const n = keySummary?.expiring ?? 0
+      const n = keySummary ? keySummary.expiring : (stats.byokKeysExpiring ?? 0)
       return (
         <StatusBannerShell
           tone="warn"

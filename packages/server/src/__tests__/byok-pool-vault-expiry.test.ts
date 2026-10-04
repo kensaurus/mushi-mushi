@@ -235,3 +235,61 @@ describe('S1: integration settings validate sentry_dsn', () => {
     expect(validatePlatformBody({ sentry_dsn: null })).toBeNull()
   })
 })
+
+describe('K1: settings stats count keys like the console rows', () => {
+  it('counts a superseded legacy key as needing attention and an expiring key separately', async () => {
+    const soon = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString()
+    db = makeFakeDb(
+      {
+        project_settings: [
+          {
+            project_id: P,
+            byok_anthropic_key_ref: `vault://mushi/byok/${P}/anthropic`,
+            byok_anthropic_test_status: 'ok',
+          },
+        ],
+        byok_keys: [
+          { ...POOL_ROW, provider_slug: 'anthropic' },
+          { ...POOL_ROW, id: '3000000b-0000-4000-8000-000000000003', provider_slug: 'openai', expires_at: soon },
+          {
+            ...POOL_ROW,
+            id: '3000000b-0000-4000-8000-000000000004',
+            provider_slug: 'cursor',
+            status: 'disabled',
+          },
+        ],
+      },
+      { autoId: true },
+    )
+    const { status, json } = await call('GET', '/v1/admin/settings/stats')
+    expect(status).toBe(200)
+    expect(json.data).toMatchObject({
+      byokKeysPassing: 1,
+      byokKeysFailing: 1, // the old anthropic key, replaced by the pooled one
+      byokKeysExpiring: 1,
+      byokKeysUntested: 0,
+      byokKeysConfigured: 3, // the turned-off cursor key is not counted
+      byokAnthropicConfigured: true,
+      byokOpenaiConfigured: true,
+    })
+  })
+
+  it('counts a quota key whose cooldown has ended as working', async () => {
+    db = makeFakeDb(
+      {
+        project_settings: [{ project_id: P }],
+        byok_keys: [
+          {
+            ...POOL_ROW,
+            status: 'quota_exhausted',
+            test_status: 'error_quota',
+            cooldown_until: new Date(Date.now() - 60_000).toISOString(),
+          },
+        ],
+      },
+      { autoId: true },
+    )
+    const { json } = await call('GET', '/v1/admin/settings/stats')
+    expect(json.data).toMatchObject({ byokKeysPassing: 1, byokKeysFailing: 0 })
+  })
+})

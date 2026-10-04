@@ -16,6 +16,12 @@
  *   expires within 7 days            → expiring  "Expires in N days"
  *   old single key next to a working
  *   pooled key of the same provider  → attention "Old key, replaced by your newer one — remove it"
+ *   rejected or expired, while another
+ *   key of the provider works        → attention, action Remove (it was already replaced)
+ *
+ * The server counts keys with the same rules (_shared/byok-key-health.ts);
+ * packages/server/src/__tests__/byok-key-health-parity.test.ts runs both on the
+ * same fixtures. Change both together.
  */
 
 import type { ConnectionState } from '../ui/ConnectionStatus'
@@ -53,6 +59,8 @@ export interface KeyStatusView {
   label?: string
   detail: string
   action: KeyAction
+  /** Set on an expiring key so the chip can say "Expires in N days". */
+  expiresAt?: string | null
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -70,6 +78,17 @@ function formatDay(iso: string): string {
 /** A pooled key of this provider is the one the runtime will actually use. */
 export function hasWorkingPoolKey(keys: readonly PoolKey[], provider: string, now = Date.now()): boolean {
   return keys.some((k) => k.provider_slug === provider && isRuntimeEligiblePoolKey(k, now))
+}
+
+/** Another key of the same provider works, so this one has been replaced. */
+function replacedByAnother(key: ManagedKey, pool: readonly PoolKey[], now: number): boolean {
+  return pool.some(
+    (k) =>
+      k.id !== key.id &&
+      k.provider_slug === key.provider_slug &&
+      isRuntimeEligiblePoolKey(k, now) &&
+      !(k.expires_at && Date.parse(k.expires_at) <= now),
+  )
 }
 
 export function keyStatusView(
@@ -91,12 +110,19 @@ export function keyStatusView(
   const expiresAt = isLegacyKey(key) ? null : (key.expires_at ?? null)
   const expiresMs = expiresAt ? Date.parse(expiresAt) : NaN
   if (Number.isFinite(expiresMs) && expiresMs <= now) {
-    return {
-      state: 'attention',
-      label: 'Expired',
-      detail: `Expired on ${formatDay(expiresAt!)} — replace it with a new key.`,
-      action: 'replace',
-    }
+    return replacedByAnother(key, context.pool, now)
+      ? {
+          state: 'attention',
+          label: 'Expired',
+          detail: `Expired on ${formatDay(expiresAt!)}. Another key is working, so remove this one.`,
+          action: 'remove',
+        }
+      : {
+          state: 'attention',
+          label: 'Expired',
+          detail: `Expired on ${formatDay(expiresAt!)} — replace it with a new key.`,
+          action: 'replace',
+        }
   }
 
   if (key.status === 'disabled') {
@@ -109,11 +135,17 @@ export function keyStatusView(
   }
 
   if (key.test_status === 'error_auth' || key.status === 'auth_failed') {
-    return {
-      state: 'attention',
-      detail: 'The provider rejected this key — replace it.',
-      action: 'replace',
-    }
+    return replacedByAnother(key, context.pool, now)
+      ? {
+          state: 'attention',
+          detail: 'The provider rejected this key. Another key is working, so remove this one.',
+          action: 'remove',
+        }
+      : {
+          state: 'attention',
+          detail: 'The provider rejected this key — replace it.',
+          action: 'replace',
+        }
   }
 
   if (key.test_status === 'error_quota' || key.status === 'quota_exhausted') {
@@ -152,6 +184,7 @@ export function keyStatusView(
       state: 'expiring',
       detail: `Works until ${formatDay(expiresAt!)}. Create a new key before then and add it here.`,
       action: 'replace',
+      expiresAt,
     }
   }
 
