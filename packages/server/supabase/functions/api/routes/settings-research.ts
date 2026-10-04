@@ -2773,19 +2773,19 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       topPriority = 'firecrawl_not_configured';
       topPriorityLabel =
         'Add a BYOK Firecrawl API key in Settings → Firecrawl before running web research.';
-      topPriorityTo = '/settings?tab=firecrawl';
+      topPriorityTo = '/settings?tab=byok#key-firecrawl';
     } else if (firecrawlTestStatus === 'error_auth') {
       topPriority = 'firecrawl_auth_failed';
       topPriorityLabel = `Firecrawl rejected key ${firecrawlKeyHint} — re-test in Settings.`;
-      topPriorityTo = '/settings?tab=firecrawl';
+      topPriorityTo = '/settings?tab=byok#key-firecrawl';
     } else if (firecrawlTestStatus && firecrawlTestStatus !== 'ok') {
       topPriority = 'firecrawl_error';
       topPriorityLabel = `Firecrawl test status: ${firecrawlTestStatus} — fix connectivity or quota in Settings.`;
-      topPriorityTo = '/settings?tab=firecrawl';
+      topPriorityTo = '/settings?tab=byok#key-firecrawl';
     } else if (firecrawlConfigured && !firecrawlTestStatus) {
       topPriority = 'firecrawl_untested';
       topPriorityLabel = 'Key saved but not tested — run Test connection in Settings → Firecrawl.';
-      topPriorityTo = '/settings?tab=firecrawl';
+      topPriorityTo = '/settings?tab=byok#key-firecrawl';
     } else if (sessions === 0) {
       topPriority = 'ready_no_sessions';
       topPriorityLabel = `Firecrawl ready · ${allowedDomains.length} allowed domain${allowedDomains.length === 1 ? '' : 's'} · run your first search.`;

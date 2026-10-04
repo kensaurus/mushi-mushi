@@ -243,7 +243,7 @@ export interface FindingFix {
   /** One sentence or a snippet to apply; null when the gate stored no fix it could be read from. */
   text: string | null
   kind: string | null
-  /** A console path such as /settings?tab=keys, when the fix is a console step. */
+  /** A console path such as /settings?tab=byok, when the fix is a console step. */
   consolePath: string | null
   command: string | null
   /** The stored suggested_fix, unchanged. */

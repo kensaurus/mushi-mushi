@@ -1,6 +1,6 @@
 /**
  * FILE: apps/admin/src/components/settings/ByokPanel.tsx
- * PURPOSE: Settings → Your AI keys. One row per provider (logo, what it does,
+ * PURPOSE: Settings → AI keys. One row per provider (logo, what it does,
  *          whether it works, the one thing to do), and under it each saved
  *          key with its own plain-English status and buttons. Several keys
  *          per provider form a pool: when one runs out, the next is tried.
@@ -81,14 +81,14 @@ const PROVIDER_META: Record<string, ProviderMeta> = {
     purpose: 'Reads public web pages, such as library docs, while diagnosing and mapping your app.',
     placeholder: 'fc-…',
     consoleUrl: 'https://www.firecrawl.dev/app/api-keys',
-    emptyDetail: "No key of your own. Web research uses Mushi's shared key when the server has one.",
+    emptyDetail: "No key of your own. Web tools use Mushi's shared key when the server has one.",
   },
   browserbase: {
     name: 'Browserbase',
     purpose: 'Runs your scheduled browser tests in a cloud browser on your own account.',
     placeholder: 'bb-…',
     consoleUrl: 'https://www.browserbase.com/settings',
-    emptyDetail: "No key of your own. Cloud browser tests use Mushi's shared account when the server has one.",
+    emptyDetail: "No key of your own. Scheduled browser tests use Mushi's shared account when the server has one.",
   },
   supabase: {
     name: 'Supabase (read-only)',
@@ -389,7 +389,7 @@ export function ByokPanel() {
 
   if (byokLocked) {
     return (
-      <SettingsList title="Your AI keys">
+      <SettingsList title="AI keys">
         <div className="py-3">
           <UpgradePrompt flag="byok" currentPlan={entitlements.planName} />
         </div>
@@ -551,7 +551,7 @@ export function ByokPanel() {
   return (
     <>
       <SettingsList
-        title="Your AI keys"
+        title="AI keys"
         description="Keys for the AI and web services Mushi uses for this project. They are stored encrypted and billed to your own accounts. Add more than one key for a service and Mushi switches to the next when one runs out."
       >
         {DISPLAY_PROVIDERS.map((provider) => {

@@ -82,7 +82,7 @@ export function BrowserbasePanel() {
   const configured = Boolean(poolKey || legacyKey || cfg?.configured);
   const status = providerStatusView('browserbase', allKeys, legacyKeys, {
     providerName: NAME,
-    emptyDetail: "No key of your own. Cloud browser tests use Mushi's shared account when the server has one.",
+    emptyDetail: "No key of your own. Scheduled browser tests use Mushi's shared account when the server has one.",
   });
   const keyHint = poolKey?.key_hint ?? legacyKey?.key_hint ?? cfg?.keyHint ?? null;
   const sessions = cfg?.sessionCount ?? 0;

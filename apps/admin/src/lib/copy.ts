@@ -1694,7 +1694,7 @@ export const COPY: CopyRegistry = {
     },
     '/settings': {
       title: 'Settings',
-      description: 'Your AI keys, alerts, and developer options.',
+      description: 'Alerts, AI keys, web tools, voice reports, and the SDK connection.',
     },
     '/onboarding': {
       title: 'Setup wizard',
