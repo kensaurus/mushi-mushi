@@ -51,6 +51,9 @@ import { IntegrationsPageIntro } from '../components/integrations/IntegrationsPa
 import { isIntegrationsBannerVisible } from '../lib/integrationsExplainer'
 import { usePageCopy } from '../lib/copy'
 import { draftFromSaved, platformSaveBody } from '../lib/platformIntegrationForm'
+import { readIntegrationOAuthReturn } from '../lib/integrationOAuthReturn'
+import { describeApiFailure } from '../lib/humanizeApiError'
+import { useScrollToHash } from '../lib/useScrollToHash'
 
 export function IntegrationsPage() {
   const toast = useToast()
@@ -61,54 +64,20 @@ export function IntegrationsPage() {
   useEffect(() => {
     if (activeProjectId) setActiveProjectIdSnapshot(activeProjectId)
   }, [activeProjectId])
-  // The GitHub App install callback redirects here with result params. Surface
-  // them once as toasts, then strip them so a refresh doesn't re-toast.
+  // GitHub App, Linear and Slack install round trips land here with result
+  // params. Surface them once as a toast, then strip them so a refresh does
+  // not repeat it. Slack's result used to be ignored entirely.
   useEffect(() => {
+    const result = readIntegrationOAuthReturn(window.location.search)
+    if (!result) return
+    const { tone, title, description } = result.toast
+    if (tone === 'success') toast.success(title, description)
+    else toast.error(title, description)
     const params = new URLSearchParams(window.location.search)
-    const connected = params.get('github_connected')
-    const pendingApproval = params.get('github_pending_approval')
-    const githubError = params.get('github_error')
-    if (!connected && !pendingApproval && !githubError) return
-    if (connected) {
-      toast.success('GitHub App connected', 'Installation linked to this project.')
-    } else if (pendingApproval) {
-      toast.success(
-        'GitHub install requested',
-        'An org admin must approve the installation on GitHub. It links automatically once approved.',
-      )
-    } else if (githubError) {
-      const detail =
-        githubError === 'missing_installation_id'
-          ? 'GitHub did not return an installation id. Retry the install from this page.'
-          : githubError === 'link_failed'
-            ? 'The installation could not be saved. Retry, or check server logs for github-app-callback.'
-            : githubError
-      toast.error('GitHub App install failed', detail)
-    }
-    for (const key of ['github_connected', 'github_pending_approval', 'github_error', 'installation_id']) {
-      params.delete(key)
-    }
+    for (const key of result.consumedKeys) params.delete(key)
     const next = params.toString()
-    window.history.replaceState(null, '', `${window.location.pathname}${next ? `?${next}` : ''}`)
+    window.history.replaceState(null, '', `${window.location.pathname}${next ? `?${next}` : ''}${window.location.hash}`)
     // Empty deps: runs once on mount to consume the redirect params.
-  }, [])
-  // Linear OAuth callback redirect: ?connected=linear
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const connected = params.get('connected')
-    const linearError = params.get('linear_error')
-    if (connected === 'linear') {
-      toast.success('Linear workspace connected', 'Reports will now create Linear issues and sync status.')
-      params.delete('connected')
-    } else if (linearError) {
-      toast.error('Linear connect failed', linearError)
-      params.delete('linear_error')
-    } else {
-      return
-    }
-    const next = params.toString()
-    window.history.replaceState(null, '', `${window.location.pathname}${next ? `?${next}` : ''}`)
-    // Empty deps: runs once on mount.
   }, [])
   const setup = useSetupStatus(activeProjectId)
   const copy = usePageCopy('/integrations')
@@ -151,7 +120,18 @@ export function IntegrationsPage() {
     historyQuery.reload()
     routingQuery.reload()
     statsQuery.reload()
-  }, [platformQuery, historyQuery, routingQuery, statsQuery])
+    settingsQuery.reload()
+  }, [platformQuery, historyQuery, routingQuery, statsQuery, settingsQuery])
+  // Channel cards (Slack / Discord / Teams) read their state from the settings
+  // stats; re-read them after a save so the status line is never stale.
+  const reloadChannels = useCallback(() => {
+    settingsQuery.reload()
+    statsQuery.reload()
+  }, [settingsQuery, statsQuery])
+  // Credential writes are owner/admin only on the server. Older APIs without
+  // the flag keep the controls enabled; the server still refuses.
+  const canManage = platformQuery.data?.canManage !== false
+  const kindLabel = (kind: Kind) => PLATFORM_DEFS.find((d) => d.kind === kind)?.label ?? kind
 
   /** True when GitHub is effectively configured (project, org, or env-backed). */
   const githubConnected = useMemo(() => {
@@ -208,10 +188,8 @@ export function IntegrationsPage() {
     })
     setApplyingKind(null)
     if (!res.ok) {
-      toast.error(
-        `Failed to apply ${kind} to all projects`,
-        (res.error as { message?: string })?.message ?? 'Unknown error',
-      )
+      const t = describeApiFailure(res.error, `Could not copy ${kindLabel(kind)} to all projects`)
+      toast.error(t.title, t.description)
     } else {
       const data = res.data as { applied?: number; skipped?: number; failed?: number; projectNames?: string[] } | null
       const count = data?.applied ?? 0
@@ -300,7 +278,7 @@ export function IntegrationsPage() {
     const payload = def ? platformSaveBody(def, body, platform?.[kind] ?? {}) : body
     if (Object.keys(payload).length === 0) {
       clearInlineError(kind)
-      toast.success(`No changes to save for ${kind}`)
+      toast.success(`No changes to save for ${kindLabel(kind)}`)
       setEditing(null)
       return
     }
@@ -311,15 +289,22 @@ export function IntegrationsPage() {
     })
     setSaving(null)
     if (!res.ok) {
-      const msg = res.error?.message ?? res.error?.code ?? 'Unknown error'
-      toast.error(`Failed to save ${kind}`, msg)
-      setInlineErrors((e) => ({ ...e, [kind]: msg }))
+      const t = describeApiFailure(res.error, `Could not save ${kindLabel(kind)}`)
+      toast.error(t.title, t.description)
+      setInlineErrors((e) => ({ ...e, [kind]: t.description }))
       return
     }
     clearInlineError(kind)
-    toast.success(`Saved ${kind} integration`)
+    toast.success(`${kindLabel(kind)} saved`)
     setEditing(null)
     reloadAll()
+  }
+
+  /** One plain sentence per probe outcome; `unknown` means nothing to test yet. */
+  const toastProbeResult = (label: string, data: { status: string; latencyMs: number; detail?: string }) => {
+    if (data.status === 'ok') toast.success(`${label} is working`, `Answered in ${data.latencyMs}ms`)
+    else if (data.status === 'unknown') toast.info(`${label} not checked`, data.detail || 'Add the missing details on the card, then test again.')
+    else toast.error(`${label} is not working`, data.detail || 'Check the credentials on the card, then test again.')
   }
 
   const testKind = async (kind: Kind) => {
@@ -329,12 +314,12 @@ export function IntegrationsPage() {
       { method: 'POST' },
     )
     setTesting(null)
+    const label = kind === 'linear' ? 'Linear' : kindLabel(kind)
     if (!res.ok) {
-      toast.error(`Probe failed for ${kind}`, res.error?.message)
+      const t = describeApiFailure(res.error, `Could not test ${label}`)
+      toast.error(t.title, t.description)
     } else if (res.data) {
-      const probeStatus = res.data.status
-      if (probeStatus === 'ok') toast.success(`${kind} healthy`, `${res.data.latencyMs}ms`)
-      else toast.error(`${kind} probe ${probeStatus}`, res.data.detail)
+      toastProbeResult(label, res.data)
     }
     reloadAll()
   }
@@ -349,11 +334,10 @@ export function IntegrationsPage() {
     )
     setTestingRouting(null)
     if (!res.ok) {
-      toast.error(`Probe failed for ${label}`, res.error?.message)
+      const t = describeApiFailure(res.error, `Could not test ${label}`)
+      toast.error(t.title, t.description)
     } else if (res.data) {
-      const probeStatus = res.data.status
-      if (probeStatus === 'ok') toast.success(`${label} healthy`, `${res.data.latencyMs}ms`)
-      else toast.error(`${label} probe ${probeStatus}`, res.data.detail)
+      toastProbeResult(label, res.data)
     }
     reloadAll()
   }
@@ -386,12 +370,14 @@ export function IntegrationsPage() {
     })
     setRoutingSaving(null)
     if (!res.ok) {
-      toast.error(`Failed to save ${provider.label}`, res.error?.message)
+      const t = describeApiFailure(res.error, `Could not save ${provider.label}`)
+      toast.error(t.title, t.description)
       return
     }
     toast.success(`${provider.label} routing saved`)
     setRoutingEditing(null)
     routingQuery.reload()
+    statsQuery.reload()
   }
 
   const toggleRoutingActive = async (provider: RoutingProviderDef, active: boolean) => {
@@ -402,11 +388,13 @@ export function IntegrationsPage() {
       body: JSON.stringify({ type: provider.type, config: existing.config, isActive: active }),
     })
     if (!res.ok) {
-      toast.error(`Failed to toggle ${provider.label}`, res.error?.message)
+      const t = describeApiFailure(res.error, `Could not ${active ? 'resume' : 'pause'} ${provider.label}`)
+      toast.error(t.title, t.description)
       return
     }
     toast.success(`${provider.label} ${active ? 'enabled' : 'paused'}`)
     routingQuery.reload()
+    statsQuery.reload()
   }
 
   const deleteRouting = (provider: RoutingProviderDef) => {
@@ -421,12 +409,18 @@ export function IntegrationsPage() {
     setDeletingRouting(false)
     setPendingDeleteRouting(null)
     if (!res.ok) {
-      toast.error(`Failed to disconnect ${provider.label}`, res.error?.message)
+      const t = describeApiFailure(res.error, `Could not disconnect ${provider.label}`)
+      toast.error(t.title, t.description)
       return
     }
     toast.success(`${provider.label} disconnected`)
     routingQuery.reload()
+    statsQuery.reload()
   }
+
+  // Banner CTAs and deep links point at a card (#platform-card-sentry);
+  // scroll there once the cards exist.
+  useScrollToHash(!loading && !error)
 
   if (loading) return <PanelSkeleton rows={5} label="Loading integrations" />
   if (error) return <ErrorAlert message={`Failed to load ${merged.failedLabel ?? 'integrations'}: ${error}`} onRetry={merged.retry} />
@@ -520,17 +514,20 @@ export function IntegrationsPage() {
             canPost={Boolean(settingsQuery.data?.slackCanPost)}
             latestProbe={latestByKind['slack']}
             sparkline={sparklineByKind['slack'] ?? []}
+            onChanged={reloadChannels}
           />
           <DiscordIntegrationCard
             projectId={activeProjectId ?? null}
             discordConfigured={Boolean(settingsQuery.data?.discordConfigured)}
             latestProbe={latestByKind['discord']}
             sparkline={sparklineByKind['discord'] ?? []}
+            onChanged={reloadChannels}
           />
           <TeamsIntegrationCard
             projectId={activeProjectId ?? null}
             teamsConfigured={Boolean(settingsQuery.data?.teamsConfigured)}
             latestProbe={latestByKind['teams']}
+            onChanged={reloadChannels}
           />
         </div>
 
@@ -578,6 +575,7 @@ export function IntegrationsPage() {
                     onTest={() => void testKind(def.kind)}
                     onApplyToAll={organizationId ? () => setPendingApplyKind(def.kind) : undefined}
                     applyingToAll={applyingKind === def.kind}
+                    canManage={canManage}
                   />
                 </div>
               ))}
@@ -616,6 +614,7 @@ export function IntegrationsPage() {
                     dependencyAnchorId="platform-card-github"
                     onApplyToAll={organizationId ? () => setPendingApplyKind(def.kind) : undefined}
                     applyingToAll={applyingKind === def.kind}
+                    canManage={canManage}
                   />
                 </div>
               ))}
@@ -624,7 +623,7 @@ export function IntegrationsPage() {
 
           {activeProjectId && (
             <div id="integrations-codebase" className="p-4 border-t border-panel-border scroll-mt-chrome" data-dav-anchor="integrations:verify">
-              <CodebaseIndexCard projectId={activeProjectId} />
+              <CodebaseIndexCard projectId={activeProjectId} canManage={canManage} />
               <DryRunPanel projectId={activeProjectId} />
             </div>
           )}
@@ -642,7 +641,7 @@ export function IntegrationsPage() {
         <div className="p-4">
         <DeploymentReadinessCard
           projectId={activeProjectId ?? null}
-          githubAppInstalled={Boolean(platform?.github?.has_credentials)}
+          githubAppInstalled={githubConnected}
           vercelProjectSlug={vercelSlug}
         />
         </div>
@@ -670,6 +669,7 @@ export function IntegrationsPage() {
             onReload={reloadAll}
             onTest={() => void testKind('linear')}
             testing={testing === 'linear'}
+            canManage={canManage}
           />
         </div>
       </Panel>
@@ -706,6 +706,7 @@ export function IntegrationsPage() {
                 onTest={() => void testRoutingKind(provider.healthKind, provider.label)}
                 onTogglePause={() => existing && void toggleRoutingActive(provider, !existing.is_active)}
                 onDisconnect={() => void deleteRouting(provider)}
+                canManage={canManage}
               />
             )
           })}

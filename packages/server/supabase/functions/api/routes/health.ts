@@ -3,7 +3,7 @@ import type { Variables } from '../types.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { jwtAuth, adminOrApiKey } from '../../_shared/auth.ts';
 import { estimateCallCostUsd } from '../../_shared/pricing.ts';
-import { dbError, callerProjectIds, requireProjectAdmin, resolveOwnedProject } from '../shared.ts';
+import { dbError, callerProjectIds, isProjectAdmin, requireProjectAdmin, resolveOwnedProject } from '../shared.ts';
 
 export function registerHealthRoutes(app: Hono<{ Variables: Variables }>): void {
   // ============================================================
@@ -311,6 +311,8 @@ export function registerHealthRoutes(app: Hono<{ Variables: Variables }>): void 
         redCount,
         amberCount,
         lastLlmCallAt: lastCallRes.data?.created_at ?? null,
+        // Trigger now (POST /health/cron/:job/trigger) is owner/admin only.
+        canRunJobs: isProjectAdmin(activeProject),
         topPriority,
         topPriorityLabel,
         topPriorityTo,

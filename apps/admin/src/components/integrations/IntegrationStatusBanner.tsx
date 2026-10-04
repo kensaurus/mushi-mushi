@@ -52,9 +52,11 @@ export function IntegrationStatusBanner({
               tone="danger"
             />
           ) : (
+            // Probe history lives on these cards, not on /health: the old
+            // /health?fn=integration-probe link landed on an empty filter.
             <StatusBannerAction
-              label={actions.health ?? 'Run health probe'}
-              to={scopedHref('/health?fn=integration-probe', pid)}
+              label={actions.platform ?? 'Fix connections'}
+              to={`${scopedHref('/integrations/config', pid)}#integrations-required`}
               tone="danger"
             />
           )

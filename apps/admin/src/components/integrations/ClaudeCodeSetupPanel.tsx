@@ -19,9 +19,11 @@ interface SetupPayload {
 interface Props {
   /** Show only after Anthropic key is saved (health probe can run). */
   configured: boolean
+  /** Saved Workflow event: the YAML is rendered for it, so reload when it changes. */
+  workflowEvent?: string | null
 }
 
-export function ClaudeCodeSetupPanel({ configured }: Props) {
+export function ClaudeCodeSetupPanel({ configured, workflowEvent }: Props) {
   const [data, setData] = useState<SetupPayload | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -38,7 +40,8 @@ export function ClaudeCodeSetupPanel({ configured }: Props) {
       return
     }
     setData(res.data ?? null)
-  }, [configured])
+    // workflowEvent is a reload trigger: the server renders the YAML for it.
+  }, [configured, workflowEvent])
 
   useEffect(() => {
     void load()

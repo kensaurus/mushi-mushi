@@ -7,7 +7,8 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { Card, Btn, Badge, Input, RelativeTime, Tooltip, ErrorAlert, CopyButton } from '../ui'
+import { Card, Btn, Badge, Input, SecretInput, RelativeTime, Tooltip, ErrorAlert, CopyButton } from '../ui'
+import { ADMIN_ONLY_HINT } from '../../lib/orgPermissions'
 import { RESOLVED_EXTERNAL_API_URL } from '../../lib/env'
 import { useActiveProjectId } from '../ProjectSwitcher'
 import { ConfigHelp } from '../ConfigHelp'
@@ -152,6 +153,11 @@ interface Props {
   onApplyToAll?: () => void
   /** Whether the apply-to-all is in progress. */
   applyingToAll?: boolean
+  /**
+   * False when the caller is a member or viewer: the server refuses their
+   * credential writes, so Edit / Configure / Apply are disabled with a reason.
+   */
+  canManage?: boolean
 }
 
 export function PlatformIntegrationCard({
@@ -175,6 +181,7 @@ export function PlatformIntegrationCard({
   dependencyAnchorId,
   onApplyToAll,
   applyingToAll,
+  canManage = true,
 }: Props) {
   const [overflowOpen, setOverflowOpen] = useState(false)
   const errorRef = useRef<HTMLDivElement>(null)
@@ -223,11 +230,12 @@ export function PlatformIntegrationCard({
   const probeFailing = latestProbe?.status === 'down' || latestProbe?.status === 'degraded'
   const connectionAction = (() => {
     if (isEditing) return undefined
-    if (connection.state === 'not_connected') return { label: 'Connect', onClick: onStartEdit }
+    const edits = (label: string) => (canManage ? { label, onClick: onStartEdit } : undefined)
+    if (connection.state === 'not_connected') return edits('Connect')
     if (connection.state === 'checking') return { label: 'Test now', onClick: onTest }
     if (connection.state === 'attention' && probeFailing) {
       const credentialProblem = /key|token|credential|auth|revoked|401|403/i.test(latestProbe?.message ?? '')
-      return { label: credentialProblem ? 'Replace key' : 'Edit settings', onClick: onStartEdit }
+      return edits(credentialProblem ? 'Replace key' : 'Edit settings')
     }
     if (connection.state === 'attention' && def.kind === 'sentry') {
       // Alert rules are where Sentry's webhook action lives.
@@ -380,10 +388,11 @@ export function PlatformIntegrationCard({
               </Tooltip>
             )}
             {!isEditing && (
-              <Tooltip content={requiredOk ? 'Edit credentials' : 'Configure integration'}>
+              <Tooltip content={!canManage ? ADMIN_ONLY_HINT : requiredOk ? 'Edit credentials' : 'Configure integration'}>
                 <Btn
                   variant={requiredOk ? 'ghost' : 'primary'}
                   onClick={onStartEdit}
+                  disabled={!canManage}
                   aria-label={requiredOk ? 'Edit integration' : 'Configure integration'}
                   className={requiredOk ? 'px-2' : undefined}
                 >
@@ -397,7 +406,7 @@ export function PlatformIntegrationCard({
               </Btn>
             )}
             {/* Overflow menu — "Apply to all projects" */}
-            {onApplyToAll && requiredOk && !isEditing && (
+            {onApplyToAll && canManage && requiredOk && !isEditing && (
               <div className="relative" onBlur={handleOverflowBlur}>
                 <Tooltip content="More actions">
                   <Btn
@@ -482,8 +491,14 @@ export function PlatformIntegrationCard({
                   </span>
                   {field.helpId && <ConfigHelp helpId={field.helpId} />}
                 </label>
-                <Input
-                  type={field.type ?? 'text'}
+                {/* Secrets use SecretInput (type="text", CSS-masked, reveal
+                    toggle) so password managers never offer to save an API
+                    token as the site login. */}
+                {(() => {
+                  const FieldInput = field.type === 'password' ? SecretInput : Input
+                  return (
+                <FieldInput
+                  type={field.type === 'password' ? undefined : (field.type ?? 'text')}
                   placeholder={
                     isDraftEmpty && fieldSource === 'env'
                       ? '(set by environment variable)'
@@ -494,8 +509,10 @@ export function PlatformIntegrationCard({
                   value={draft[field.name] ?? ''}
                   onChange={(e) => onChangeField(field.name, e.target.value)}
                   validate={resolveValidator(field.validator)}
-                  autoComplete={field.type === 'password' ? 'new-password' : 'off'}
+                  autoComplete="off"
                 />
+                  )
+                })()}
                 {/* Source coverage hint — shown when the draft is empty but covered */}
                 {isDraftEmpty && fieldSource === 'env' && (
                   <p className="mt-0.5 text-2xs text-fg-faint leading-snug">
@@ -526,7 +543,10 @@ export function PlatformIntegrationCard({
       )}
 
       {def.kind === 'claude_code_agent' && !isEditing && (
-        <ClaudeCodeSetupPanel configured={requiredOk} />
+        <ClaudeCodeSetupPanel
+          configured={requiredOk}
+          workflowEvent={typeof config.claude_workflow_event === 'string' ? config.claude_workflow_event : null}
+        />
       )}
 
       {def.kind === 'sentry' && !isEditing && requiredOk && (

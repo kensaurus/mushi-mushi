@@ -640,13 +640,22 @@ export const resolveAccessibleProject = resolveOwnedProject;
  * {@link resolveOwnedProject}. Pass `message` when the action is not a
  * credential change, so the refusal names what was refused.
  */
+/**
+ * Whether the caller may make {@link requireProjectAdmin} writes on this
+ * project. GET routes return it so the console can disable owner-only
+ * controls with a reason instead of letting every click end in a 403.
+ */
+export function isProjectAdmin(project: Pick<OwnedProjectRef, 'organization_role'>): boolean {
+  const role = project.organization_role;
+  return role === 'owner' || role === 'admin';
+}
+
 export function requireProjectAdmin(
   c: Context,
   project: Pick<OwnedProjectRef, 'organization_role'>,
   message = 'Only organization owners and admins can change credentials.',
 ): Response | null {
-  const role = project.organization_role;
-  if (role === 'owner' || role === 'admin') return null;
+  if (isProjectAdmin(project)) return null;
   return jsonForbidden(c, message);
 }
 

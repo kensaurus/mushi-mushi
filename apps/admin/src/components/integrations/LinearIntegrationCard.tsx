@@ -19,6 +19,9 @@ import { ConnectionStatus } from '../ui/ConnectionStatus'
 import { connectionFromProbe } from '../../lib/integrationConnection'
 import { useToast } from '../../lib/toast'
 import { HealthSparkline } from './HealthSparkline'
+import { ConfirmDialog } from '../ConfirmDialog'
+import { describeApiFailure } from '../../lib/humanizeApiError'
+import { ADMIN_ONLY_HINT } from '../../lib/orgPermissions'
 import type { HealthRow } from './types'
 
 // ── Linear wordmark SVG (brand color, see allowlist below) ───────────────────
@@ -56,6 +59,8 @@ interface Props {
   /** Runs the live Linear probe (records a health row). */
   onTest?: () => void
   testing?: boolean
+  /** False for members and viewers: connect, save and disconnect are owner/admin only. */
+  canManage?: boolean
 }
 
 export function LinearIntegrationCard({
@@ -68,6 +73,7 @@ export function LinearIntegrationCard({
   onReload,
   onTest,
   testing = false,
+  canManage = true,
 }: Props) {
   const toast = useToast()
 
@@ -97,7 +103,8 @@ export function LinearIntegrationCard({
       if (res.ok && res.data?.url) {
         window.location.href = res.data.url
       } else {
-        toast.error('Could not start Linear connection', res.error?.message)
+        const t = describeApiFailure(res.error, 'Could not start Linear connection')
+        toast.error(t.title, t.description)
         setConnecting(false)
       }
     } catch {
@@ -122,7 +129,8 @@ export function LinearIntegrationCard({
         setApiKey('')
         onReload?.()
       } else {
-        toast.error('Could not save Linear API key', res.error?.message)
+        const t = describeApiFailure(res.error, 'Could not save the Linear API key')
+        toast.error(t.title, t.description)
       }
     } finally {
       setSavingApiKey(false)
@@ -139,7 +147,8 @@ export function LinearIntegrationCard({
         setConfirmDisconnect(false)
         onReload?.()
       } else {
-        toast.error('Could not disconnect Linear', res.error?.message)
+        const t = describeApiFailure(res.error, 'Could not disconnect Linear')
+        toast.error(t.title, t.description)
       }
     } finally {
       setDisconnecting(false)
@@ -150,9 +159,9 @@ export function LinearIntegrationCard({
   const probeFailing = latestProbe?.status === 'down' || latestProbe?.status === 'degraded'
   const connectionAction =
     connection.state === 'not_connected'
-      ? { label: 'Connect workspace', onClick: () => void handleOAuthConnect() }
+      ? canManage ? { label: 'Connect workspace', onClick: () => void handleOAuthConnect() } : undefined
       : connection.state === 'attention' && probeFailing
-        ? { label: 'Reconnect', onClick: () => void handleOAuthConnect() }
+        ? canManage ? { label: 'Reconnect', onClick: () => void handleOAuthConnect() } : undefined
         : connection.state !== 'working' && onTest
           ? { label: connection.state === 'checking' ? 'Test now' : 'Test again', onClick: onTest }
           : undefined
@@ -183,38 +192,17 @@ export function LinearIntegrationCard({
             </span>
           )}
 
-          {linearConnected && !confirmDisconnect && (
+          {linearConnected && (
             <Btn
               type="button"
               variant="ghost"
               size="sm"
               onClick={() => setConfirmDisconnect(true)}
+              disabled={!canManage}
+              title={canManage ? undefined : ADMIN_ONLY_HINT}
             >
               Disconnect
             </Btn>
-          )}
-
-          {confirmDisconnect && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-warn">Disconnect Linear?</span>
-              <Btn
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => setConfirmDisconnect(false)}
-              >
-                Cancel
-              </Btn>
-              <Btn
-                type="button"
-                variant="danger"
-                size="sm"
-                loading={disconnecting}
-                onClick={() => void handleDisconnect()}
-              >
-                {disconnecting ? 'Disconnecting…' : 'Yes, disconnect'}
-              </Btn>
-            </div>
           )}
 
           {/* Not repeated when the status line already offers it. */}
@@ -224,9 +212,9 @@ export function LinearIntegrationCard({
             variant="ghost"
             size="sm"
             onClick={() => void handleOAuthConnect()}
-            disabled={!projectId || connecting}
+            disabled={!projectId || connecting || !canManage}
             loading={connecting}
-            title="Reconnect to refresh permissions"
+            title={canManage ? 'Reconnect to refresh permissions' : ADMIN_ONLY_HINT}
           >
             {connecting ? 'Connecting…' : 'Reconnect'}
           </Btn>
@@ -299,7 +287,8 @@ export function LinearIntegrationCard({
               type="button"
               variant="ghost"
               size="sm"
-              disabled={!apiKey.trim()}
+              disabled={!apiKey.trim() || !canManage}
+              title={canManage ? undefined : ADMIN_ONLY_HINT}
               loading={savingApiKey}
               onClick={() => void handleSaveApiKey()}
               className="shrink-0 self-end"
@@ -309,6 +298,21 @@ export function LinearIntegrationCard({
           </div>
         </div>
       </details>
+
+      {confirmDisconnect && (
+        <ConfirmDialog
+          title="Disconnect Linear?"
+          body="Mushi forgets this project's Linear credentials. New reports stop creating Linear issues and status sync stops until you reconnect. Issues already in Linear stay there."
+          confirmLabel="Disconnect"
+          cancelLabel="Keep connected"
+          tone="danger"
+          loading={disconnecting}
+          onConfirm={() => void handleDisconnect()}
+          onCancel={() => {
+            if (!disconnecting) setConfirmDisconnect(false)
+          }}
+        />
+      )}
     </div>
   )
 }
