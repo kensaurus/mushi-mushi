@@ -8,6 +8,7 @@ import { getIndexFingerprint, loadExploreGraph } from './codebase-understand.ts'
 import { invalidateCodebaseUnderstandCaches } from './codebase-impact-resolve.ts'
 import { buildGraphFromIndex, fingerprintFile, mergeGraphUpdate } from './codebase-graph-build.ts'
 import { log } from './logger.ts'
+import { runWikiIngestForProject } from './wiki-ingest.ts'
 
 const runnerLog = log.child('codebase-analyze-runner')
 
@@ -42,6 +43,23 @@ export async function runCodebaseAnalyzeJob(
 
   try {
     const projectId = job.project_id as string
+
+    // Knowledge sources are docs, not code: they get their own ingest and
+    // must not rebuild the code graph.
+    if (job.trigger === 'wiki_ingest') {
+      const wiki = await runWikiIngestForProject(db, projectId)
+      await db
+        .from('codebase_analyze_jobs')
+        .update({
+          status: 'completed',
+          finished_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          plan: { wiki_sources: wiki.processed, ready: wiki.ready, failed: wiki.failed },
+        })
+        .eq('id', jobId)
+      return { ok: true, status: 'completed', pathsAnalyzed: wiki.processed }
+    }
+
     const fingerprint = await getIndexFingerprint(db, projectId)
 
     const { data: project } = await db.from('projects').select('name').eq('id', projectId).maybeSingle()

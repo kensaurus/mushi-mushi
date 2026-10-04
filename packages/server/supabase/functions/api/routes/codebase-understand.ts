@@ -44,9 +44,32 @@ import {
 } from '../../_shared/codebase-understand.ts'
 import { resolveImpactChangedPaths } from '../../_shared/codebase-impact-resolve.ts'
 import { enqueueCodebaseAnalyzeJob, runCodebaseAnalyzeJob } from '../../_shared/codebase-analyze-runner.ts'
+import { normalizeWikiRoot } from '../../_shared/wiki-ingest.ts'
 import { dbError, callerCanAccessProject } from '../shared.ts'
 
 const routeLog = log.child('codebase-understand')
+
+/**
+ * Start a queued analyze job now (fire-and-forget), like the push indexer
+ * does. No cron drains `codebase_analyze_jobs`, so a job nobody kicks stays
+ * queued forever.
+ */
+function kickAnalyzeWorker(db: ReturnType<typeof getServiceClient>, jobId: string): void {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+  if (supabaseUrl && serviceKey) {
+    fetch(`${supabaseUrl}/functions/v1/codebase-analyze-worker`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${serviceKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ jobId }),
+    }).catch((err) => routeLog.warn('analyze worker invoke failed', { err: String(err) }))
+  } else {
+    void runCodebaseAnalyzeJob(db, jobId)
+  }
+}
 
 /** What every Atlas text call reads back, whichever provider served it. */
 interface AssistTextResult {
@@ -995,20 +1018,7 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
       changedPaths: body.changed_paths,
     })
 
-    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
-    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    if (supabaseUrl && serviceKey) {
-      fetch(`${supabaseUrl}/functions/v1/codebase-analyze-worker`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${serviceKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ jobId }),
-      }).catch((err) => routeLog.warn('analyze worker invoke failed', { err: String(err) }))
-    } else {
-      void runCodebaseAnalyzeJob(db, jobId)
-    }
+    kickAnalyzeWorker(db, jobId)
 
     return c.json({ ok: true, data: { job_id: jobId, status: 'queued' } })
   })
@@ -1112,8 +1122,14 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
       label?: string
     } | null
     if (!body?.kind || !body.root_path?.trim()) {
-      return c.json({ ok: false, error: { code: 'BAD_REQUEST', message: 'kind and root_path required' } }, 400)
+      return c.json({ ok: false, error: { code: 'BAD_REQUEST', message: 'Enter the folder that holds your docs, for example docs/.' } }, 400)
     }
+    // Only repo folders have an ingest path. Accepting the other kinds would
+    // leave a row that can never leave `pending`.
+    if (body.kind !== 'repo_subpath') {
+      return c.json({ ok: false, error: { code: 'UNSUPPORTED_KIND', message: 'Only a folder in the connected repo can be added as knowledge right now.' } }, 400)
+    }
+    const rootPath = normalizeWikiRoot(body.root_path) || '/'
 
     const db = getServiceClient()
     const { data, error } = await db
@@ -1121,11 +1137,11 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
       .insert({
         project_id: projectId,
         kind: body.kind,
-        root_path: body.root_path.trim(),
-        label: body.label?.trim() ?? null,
+        root_path: rootPath,
+        label: body.label?.trim() || null,
         status: 'pending',
       })
-      .select('id, kind, root_path, label, status')
+      .select('id, kind, root_path, label, status, error')
       .single()
     if (error) return dbError(c, error)
 
@@ -1133,9 +1149,40 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
       projectId,
       requestedBy: userId,
       trigger: 'wiki_ingest',
-      changedPaths: [body.root_path.trim()],
+      changedPaths: [rootPath],
     })
+    kickAnalyzeWorker(db, jobId)
 
+    return c.json({ ok: true, data: { source: data, analyze_job_id: jobId } })
+  })
+
+  app.post('/v1/admin/projects/:id/codebase/wiki/sources/:sourceId/retry', writeAuth, async (c) => {
+    const projectId = c.req.param('id')!
+    const sourceId = c.req.param('sourceId')!
+    const userId = c.get('userId') as string
+    const forbidden = await assertProjectAccess(c, projectId, userId)
+    if (forbidden) return forbidden
+
+    const db = getServiceClient()
+    const { data, error } = await db
+      .from('project_codebase_wiki_sources')
+      .update({ status: 'pending', error: null, updated_at: new Date().toISOString() })
+      .eq('id', sourceId)
+      .eq('project_id', projectId)
+      .in('status', ['failed', 'pending', 'ready'])
+      .select('id, kind, root_path, label, status, error')
+      .maybeSingle()
+    if (error) return dbError(c, error)
+    if (!data) {
+      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'That knowledge source is gone or already being read.' } }, 404)
+    }
+    const { jobId } = await enqueueCodebaseAnalyzeJob(db, {
+      projectId,
+      requestedBy: userId,
+      trigger: 'wiki_ingest',
+      changedPaths: [data.root_path as string],
+    })
+    kickAnalyzeWorker(db, jobId)
     return c.json({ ok: true, data: { source: data, analyze_job_id: jobId } })
   })
 
