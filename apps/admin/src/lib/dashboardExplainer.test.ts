@@ -4,7 +4,7 @@
  * linked nowhere).
  */
 import { describe, expect, it } from 'vitest'
-import { deriveDashboardInsight } from './dashboardExplainer'
+import { deriveDashboardInsight, shouldShowPdcaFlow } from './dashboardExplainer'
 
 const QUIET = { openBacklog: 0, fixesInProgress: 0, fixesFailed: 0, integrationIssues: 0, reports14d: 6 }
 
@@ -33,5 +33,19 @@ describe('deriveDashboardInsight', () => {
 
   it('has no action when all is well', () => {
     expect(deriveDashboardInsight(QUIET).action).toBeUndefined()
+  })
+})
+
+describe('shouldShowPdcaFlow (QA 169)', () => {
+  const base = { isAdvanced: true, renderFullDashboard: true, hasPdcaStages: true, showFirstReportHero: false }
+  it('shows the live canvas in advanced mode even though the insight banner always has a verdict', () => {
+    expect(deriveDashboardInsight(QUIET)).not.toBeNull()
+    expect(shouldShowPdcaFlow(base)).toBe(true)
+  })
+  it('hides it in quick mode, before setup, with no stages, or under the first-report hero', () => {
+    expect(shouldShowPdcaFlow({ ...base, isAdvanced: false })).toBe(false)
+    expect(shouldShowPdcaFlow({ ...base, renderFullDashboard: false })).toBe(false)
+    expect(shouldShowPdcaFlow({ ...base, hasPdcaStages: false })).toBe(false)
+    expect(shouldShowPdcaFlow({ ...base, showFirstReportHero: true })).toBe(false)
   })
 })

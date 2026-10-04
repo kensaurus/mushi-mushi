@@ -169,9 +169,7 @@ function PdcaStepNodeInner({ data }: NodeProps) {
             countKey={countKeyRef.current}
             hasHealth={hasHealth}
           />
-          <span className="sr-only">
-            <Link to={node.href}>{node.ctaLabel} full page</Link>
-          </span>
+          {/* No link inside the button (QA 287): the drawer's footer opens the full page. */}
         </button>
       ) : (
         <Link
