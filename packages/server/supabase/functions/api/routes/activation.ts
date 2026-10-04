@@ -23,6 +23,7 @@ import {
 import { buildSetupResponse } from './activation-setup-builder.ts';
 import { buildOnboardingStatsPayload } from './activation-onboarding-builder.ts';
 import { isNonRealReport } from '../../_shared/first-report.ts';
+import { loadIntegrationSignals, loadProjectSetupSignals } from '../../_shared/setup-signals.ts';
 
 export function registerActivationRoutes(app: Hono<{ Variables: Variables }>): void {
   app.get('/v1/admin/activation', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
@@ -130,31 +131,8 @@ async function buildOnboardingStatsForProject(
     .eq('id', projectId)
     .maybeSingle();
 
-  const [keysRes, settingsRes, reportsRes, fixesRes, reposRes, qaRes, firstReportsRes] = await Promise.all([
-    db
-      .from('project_api_keys')
-      .select('project_id, is_active, last_seen_at, last_seen_endpoint_host')
-      .eq('project_id', projectId)
-      .eq('is_active', true),
-    db
-      .from('project_settings')
-      .select('project_id, github_repo_url, sentry_org_slug, byok_anthropic_key_ref')
-      .eq('project_id', projectId)
-      .maybeSingle(),
-    db
-      .from('reports')
-      .select('id, environment, created_at')
-      .eq('project_id', projectId)
-      .order('created_at', { ascending: false })
-      .limit(100),
-    db.from('fix_attempts').select('id, merged_at').eq('project_id', projectId).limit(200),
-    db.from('project_repos').select('project_id').eq('project_id', projectId).limit(1),
-    db
-      .from('qa_stories')
-      .select('id, last_run_status')
-      .eq('project_id', projectId)
-      .eq('last_run_status', 'passed')
-      .limit(1),
+  const [signalsByProject, firstReportsRes] = await Promise.all([
+    loadProjectSetupSignals(db, [projectId]),
     // Oldest reports, filtered in TS below to the first REAL one (console test
     // reports and the marketing seed never count — same predicate as
     // first_report_received). 50 is plenty: a project has at most a handful
@@ -168,42 +146,20 @@ async function buildOnboardingStatsForProject(
       .limit(50),
   ]);
 
-  const hasKey = (keysRes.data ?? []).length > 0;
-  let heartbeat: { last_seen_at: string; last_seen_endpoint_host: string | null } | null = null;
-  for (const k of keysRes.data ?? []) {
-    const seenAt = (k as { last_seen_at?: string | null }).last_seen_at ?? null;
-    if (!seenAt) continue;
-    if (heartbeat && heartbeat.last_seen_at >= seenAt) continue;
-    heartbeat = {
-      last_seen_at: seenAt,
-      last_seen_endpoint_host:
-        (k as { last_seen_endpoint_host?: string | null }).last_seen_endpoint_host ?? null,
-    };
-  }
-
-  let sdkReportSignal = false;
-  const reports = reportsRes.data ?? [];
-  for (const r of reports) {
-    const env = (r.environment ?? {}) as Record<string, unknown>;
-    const platform = typeof env.platform === 'string' ? env.platform : '';
-    if (platform && platform !== 'mushi-admin') sdkReportSignal = true;
-  }
-
-  const hasSdk = Boolean(heartbeat) || sdkReportSignal;
-  const sdkEndpointHost = heartbeat?.last_seen_endpoint_host ?? null;
+  const sig = signalsByProject.get(projectId);
+  const hasKey = sig?.hasKey ?? false;
+  const hasSdk = sig?.hasSdk ?? false;
+  const sdkEndpointHost = sig?.heartbeat?.last_seen_endpoint_host ?? null;
   const sdkHostMismatch = Boolean(
     adminHost && sdkEndpointHost && sdkEndpointHost !== adminHost && hasSdk,
   );
-
-  const settings = settingsRes.data;
-  const hasGithub = Boolean(settings?.github_repo_url) || (reposRes.data ?? []).length > 0;
-  const hasSentry = Boolean(settings?.sentry_org_slug);
-  const hasByok = Boolean(settings?.byok_anthropic_key_ref);
-  const hasQaPassing = (qaRes.data ?? []).length > 0;
-  const reportCount = reports.length;
-  const fixes = fixesRes.data ?? [];
-  const fixCount = fixes.length;
-  const mergedFixCount = fixes.filter((f) => f.merged_at).length;
+  const hasGithub = sig?.hasGithub ?? false;
+  const hasSentry = sig?.hasSentry ?? false;
+  const hasByok = sig?.hasByok ?? false;
+  const hasQaPassing = sig?.hasQaPassing ?? false;
+  const reportCount = sig?.reportCount ?? 0;
+  const fixCount = sig?.fixCount ?? 0;
+  const mergedFixCount = sig?.mergedFixCount ?? 0;
 
   let firstReportAt: string | null = null;
   for (const r of (firstReportsRes.data ?? []) as Array<{
@@ -245,20 +201,20 @@ async function buildPreflightSummary(
   const access = await callerCanAccessProject(c, db, userId, projectId);
   if (!access.allowed) return null;
 
-  const [settingsRes, reposRes, anthropicKey] = await Promise.all([
+  const [settingsRes, integrationSignals, anthropicKey] = await Promise.all([
     db
       .from('project_settings')
-      .select('github_repo_url, codebase_index_enabled, autofix_enabled')
+      .select('codebase_index_enabled, autofix_enabled')
       .eq('project_id', projectId)
       .maybeSingle(),
-    db.from('project_repos').select('repo_url').eq('project_id', projectId).limit(1),
+    loadIntegrationSignals(db, [projectId]),
     // Is a key configured? A probe, not a generation: no budget check.
     resolveLlmKey(db, projectId, 'anthropic', { purpose: 'probe' }),
   ]);
 
   const settings = settingsRes.data;
-  const repos = reposRes.data ?? [];
-  const hasGithub = Boolean(settings?.github_repo_url) || repos.length > 0;
+  // Same rule as the setup checklist: a repo AND a credential to open PRs with.
+  const hasGithub = integrationSignals.get(projectId)?.hasGithub ?? false;
   const hasAnthropic = Boolean(anthropicKey);
   const hasCodebase = Boolean(settings?.codebase_index_enabled);
   const hasAutofix = Boolean(settings?.autofix_enabled);
