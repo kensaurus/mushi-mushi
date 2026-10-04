@@ -144,7 +144,7 @@ export function FirecrawlPanel() {
   const configured = Boolean(poolKey || legacyKey || cfg?.configured);
   const status = providerStatusView('firecrawl', allKeys, legacyKeys, {
     providerName: NAME,
-    emptyDetail: "No key of your own. Web lookups use Mushi's shared key when the server has one.",
+    emptyDetail: "No key of your own. Web research uses Mushi's shared key when the server has one.",
   });
   const keyHint = poolKey?.key_hint ?? legacyKey?.key_hint ?? cfg?.keyHint ?? null;
 
