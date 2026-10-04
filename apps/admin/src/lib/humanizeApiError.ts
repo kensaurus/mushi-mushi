@@ -664,7 +664,9 @@ function isPlainSentence(message: string | null | undefined): message is string 
   // `teams_webhook_url: host is not…` — a snake_case field name up front.
   if (/^[a-z]+_[a-z0-9_]+:/.test(m)) return false
   // `webhookUrl must be…`, `pluginName is required` — an API field name up front.
-  if (/^[a-z]+(?:_[a-z0-9]+|[A-Z][A-Za-z0-9]*)+\b/.test(m)) return false
+  // Two linear patterns (snake_case, camelCase): one alternation inside a `+`
+  // backtracked exponentially on long words (CodeQL js/redos).
+  if (/^[a-z]+(?:_[a-z0-9]+)+\b/.test(m) || /^[a-z]+[A-Z][A-Za-z0-9]*\b/.test(m)) return false
   return true
 }
 
