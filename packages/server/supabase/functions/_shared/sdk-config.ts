@@ -80,6 +80,43 @@ export interface SdkConfigRow {
   reporter_push_enabled?: boolean | null;
 }
 
+/**
+ * Every `project_settings` column the console's GET/PUT
+ * `/v1/admin/projects/:id/sdk-config` reads back through normalizeSdkConfig.
+ * One list for both routes: the PUT used to `.select()` a hand-written list
+ * that omitted `sdk_screenshot_sensitive_hint`, so a saved privacy caption
+ * never read back and the next save of any other field wiped it (QA #29).
+ * sdk-config-columns.test.ts fails if a widget/capture/native column that
+ * normalizeSdkConfig reads is missing here.
+ */
+export const SDK_CONFIG_CONSOLE_COLUMNS = [
+  'project_id',
+  'sdk_config_enabled',
+  'sdk_widget_position',
+  'sdk_widget_theme',
+  'sdk_widget_trigger_text',
+  'sdk_widget_launcher',
+  'sdk_banner_variant',
+  'sdk_banner_position',
+  'sdk_banner_bug_cta',
+  'sdk_banner_feature_cta',
+  'sdk_banner_message',
+  'sdk_banner_label',
+  'sdk_screenshot_sensitive_hint',
+  'sdk_capture_console',
+  'sdk_capture_network',
+  'sdk_capture_performance',
+  'sdk_capture_screenshot',
+  'sdk_capture_element_selector',
+  'sdk_native_trigger_mode',
+  'sdk_min_description_length',
+  'sdk_config_updated_at',
+  'widget_brand_footer',
+] as const;
+
+/** {@link SDK_CONFIG_CONSOLE_COLUMNS} as a PostgREST `select` string. */
+export const SDK_CONFIG_CONSOLE_SELECT = SDK_CONFIG_CONSOLE_COLUMNS.join(', ');
+
 function oneOf<T extends readonly string[]>(
   value: unknown,
   allowed: T,
@@ -238,6 +275,10 @@ export function coerceSdkConfigUpdate(body: Record<string, unknown>): Record<str
   if (typeof widget.bannerBugCta === 'string') {
     const trimmed = widget.bannerBugCta.trim();
     updates.sdk_banner_bug_cta = trimmed ? widget.bannerBugCta.slice(0, 60) : null;
+  } else if (widget.bannerBugCta === null) {
+    // The console sends null when the field is cleared; without this branch
+    // the old custom label survived every save (QA #259).
+    updates.sdk_banner_bug_cta = null;
   }
   if (typeof widget.bannerFeatureCta === 'boolean') updates.sdk_banner_feature_cta = widget.bannerFeatureCta;
   // brandFooter: true/false = explicit override, null = back to the plan default.

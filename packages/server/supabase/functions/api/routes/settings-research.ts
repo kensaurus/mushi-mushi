@@ -24,11 +24,12 @@ import {
   storeSettingsSecret,
 } from '../../_shared/settings-secrets.ts';
 import {
-  canManageProjectSdkConfig,
+  projectConfigDenied,
   coerceSdkConfigUpdate,
   normalizeSdkConfig,
   type SdkConfigRow,
 } from '../helpers.ts';
+import { SDK_CONFIG_CONSOLE_SELECT } from '../../_shared/sdk-config.ts';
 import { validateFixBranchTemplate } from '../../_shared/github-pr.ts';
 import { parseSupabaseProjectRefSetting } from '../../_shared/supabase-project-ref.ts';
 import { isOperatorProject } from '../../_shared/operator-gate.ts';
@@ -1339,18 +1340,12 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     const userId = c.get('userId') as string;
     const db = getServiceClient();
 
-    if (!(await canManageProjectSdkConfig(db, projectId, userId))) {
-      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404);
-    }
+    const denied = await projectConfigDenied(c, db, projectId, userId, 'view SDK settings');
+    if (denied) return denied;
 
     const { data, error } = await db
       .from('project_settings')
-      .select(
-        'project_id, sdk_config_enabled, sdk_widget_position, sdk_widget_theme, sdk_widget_trigger_text, ' +
-          'sdk_widget_launcher, sdk_banner_variant, sdk_banner_position, sdk_banner_bug_cta, sdk_banner_feature_cta, sdk_banner_message, sdk_banner_label, ' +
-          'sdk_capture_console, sdk_capture_network, sdk_capture_performance, sdk_capture_screenshot, ' +
-          'sdk_capture_element_selector, sdk_native_trigger_mode, sdk_min_description_length, sdk_config_updated_at, widget_brand_footer',
-      )
+      .select(SDK_CONFIG_CONSOLE_SELECT)
       .eq('project_id', projectId)
       .maybeSingle();
     if (error) return dbError(c, error);
@@ -1370,20 +1365,14 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
     const db = getServiceClient();
 
-    if (!(await canManageProjectSdkConfig(db, projectId, userId))) {
-      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404);
-    }
+    const denied = await projectConfigDenied(c, db, projectId, userId, 'change SDK settings');
+    if (denied) return denied;
 
     const updates = coerceSdkConfigUpdate(body);
     const { data, error } = await db
       .from('project_settings')
       .upsert({ project_id: projectId, ...updates }, { onConflict: 'project_id' })
-      .select(
-        'project_id, sdk_config_enabled, sdk_widget_position, sdk_widget_theme, sdk_widget_trigger_text, ' +
-          'sdk_widget_launcher, sdk_banner_variant, sdk_banner_position, sdk_banner_bug_cta, sdk_banner_feature_cta, sdk_banner_message, sdk_banner_label, ' +
-          'sdk_capture_console, sdk_capture_network, sdk_capture_performance, sdk_capture_screenshot, ' +
-          'sdk_capture_element_selector, sdk_native_trigger_mode, sdk_min_description_length, sdk_config_updated_at, widget_brand_footer',
-      )
+      .select(SDK_CONFIG_CONSOLE_SELECT)
       .single();
 
     if (error) return dbError(c, error);
