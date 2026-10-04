@@ -47,7 +47,7 @@ export function ResearchStatusBanner({ stats, onTab, onAttach, onRefresh, refres
         title={plainBanner ? 'Web search not set up' : `Firecrawl not configured on ${projectLabel}`}
         subtitle={stats.topPriorityLabel}
         action={
-          <Btn to="/settings?tab=firecrawl" size="sm" variant="primary">{actions.configure ?? 'Configure Firecrawl'}</Btn>
+          <Btn to="/settings?tab=byok#key-firecrawl" size="sm" variant="primary">{actions.configure ?? 'Configure Firecrawl'}</Btn>
         }
       />
     )
@@ -62,7 +62,7 @@ export function ResearchStatusBanner({ stats, onTab, onAttach, onRefresh, refres
         }
         subtitle={stats.topPriorityLabel}
         action={
-          <Btn to="/settings?tab=firecrawl" size="sm" variant="ghost">{actions.fix ?? 'Fix in Settings'}</Btn>
+          <Btn to="/settings?tab=byok#key-firecrawl" size="sm" variant="ghost">{actions.fix ?? 'Fix in Settings'}</Btn>
         }
       />
     )
@@ -75,7 +75,7 @@ export function ResearchStatusBanner({ stats, onTab, onAttach, onRefresh, refres
         title="Firecrawl key saved — test required"
         subtitle={stats.topPriorityLabel}
         action={
-          <Btn to="/settings?tab=firecrawl" size="sm" variant="ghost">{actions.test ?? 'Test connection'}</Btn>
+          <Btn to="/settings?tab=byok#key-firecrawl" size="sm" variant="ghost">{actions.test ?? 'Test connection'}</Btn>
         }
       />
     )

@@ -1985,13 +1985,17 @@ export const CONFIG_DOC_GROUPS: ReadonlyArray<{
   entries: readonly ConfigDoc[];
 }> = [
   { route: 'settings.general', label: 'Settings → General', entries: SETTINGS_GENERAL },
-  { route: 'settings.byok', label: 'Settings → BYOK (LLM keys)', entries: SETTINGS_BYOK },
+  { route: 'settings.byok', label: 'Settings → AI keys (BYOK)', entries: SETTINGS_BYOK },
   {
     route: 'settings.firecrawl',
-    label: 'Settings → Firecrawl (web research)',
+    label: 'Settings → Web tools (Firecrawl)',
     entries: SETTINGS_FIRECRAWL,
   },
-  { route: 'settings.devtools', label: 'Settings → Dev tools', entries: SETTINGS_DEVTOOLS },
+  {
+    route: 'settings.devtools',
+    label: 'Settings → SDK & connection (debug logging)',
+    entries: SETTINGS_DEVTOOLS,
+  },
   { route: 'projects', label: 'Projects', entries: PROJECTS },
   { route: 'integrations', label: 'Integrations', entries: INTEGRATIONS },
   { route: 'storage', label: 'Storage (BYO)', entries: STORAGE },

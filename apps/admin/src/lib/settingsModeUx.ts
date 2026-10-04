@@ -54,7 +54,7 @@ export function resolveQuickSettingsTab(
       return 'byok';
     case 'sdk_off':
     case 'healthy':
-      return 'health';
+      return 'sdk';
     default:
       return 'general';
   }

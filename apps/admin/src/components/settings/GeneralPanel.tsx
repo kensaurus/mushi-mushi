@@ -79,7 +79,7 @@ interface ProjectSettings {
   /** "Bug reports by Mushi" mark on the feedback widget. `null`/absent =
    *  plan default (on for Free Cloud, off for paid and self-host). */
   widget_brand_footer?: boolean | null
-  /** Linked Supabase project (20-char ref). The token is a key under Your AI keys. */
+  /** Linked Supabase project (20-char ref). The token is a key under AI keys. */
   supabase_project_ref?: string | null
 }
 
@@ -175,10 +175,10 @@ export function GeneralPanel() {
   const supabaseRefSaved = Boolean(saved.supabase_project_ref)
   const supabaseKeyView = providerStatusView('supabase', pool.data?.keys ?? [], pool.data?.legacyKeys ?? [], {
     providerName: 'Supabase',
-    emptyDetail: 'Add a read-only token under Your AI keys → Supabase.',
+    emptyDetail: 'Add a read-only token under AI keys → Supabase.',
   })
   const supabaseStatus: RowStatusValue = !supabaseRefSaved
-    ? { state: 'not_connected', detail: 'Save your project ref below, then add a read-only token under Your AI keys.' }
+    ? { state: 'not_connected', detail: 'Save your project ref below, then add a read-only token under AI keys.' }
     : supabaseKeyView
 
   const branchExample = fixBranchExample(settings.fix_branch_template ?? DEFAULT_BRANCH_TEMPLATE)

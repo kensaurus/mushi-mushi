@@ -7,6 +7,8 @@ describe('shouldResolveQuickSettingsTab', () => {
   it('only auto-selects a posture tab when the URL has no explicit tab', () => {
     expect(shouldResolveQuickSettingsTab(null)).toBe(true);
     expect(shouldResolveQuickSettingsTab('byok')).toBe(false);
+    expect(shouldResolveQuickSettingsTab('tools')).toBe(false);
+    // An old id in a link is still an explicit choice.
     expect(shouldResolveQuickSettingsTab('firecrawl')).toBe(false);
   });
 });
@@ -24,7 +26,7 @@ describe('resolveQuickSettingsTab', () => {
   const summary = (over: Partial<KeySummary>): KeySummary =>
     ({ working: 1, attention: 0, expiring: 0, checking: 0, off: 0, total: 1, ...over });
 
-  it('opens Your AI keys when a key is failing (from the saved-keys list)', () => {
+  it('opens AI keys when a key is failing (from the saved-keys list)', () => {
     expect(resolveQuickSettingsTab(ready, summary({ attention: 1 }), true, true)).toBe('byok');
   });
 
@@ -33,12 +35,12 @@ describe('resolveQuickSettingsTab', () => {
     expect(resolveQuickSettingsTab({ ...ready, byokKeysUntested: 2 }, null, true, true)).toBe('byok');
   });
 
-  it('opens Health when the bug widget is off', () => {
-    expect(resolveQuickSettingsTab({ ...ready, sdkConfigEnabled: false }, summary({}), true, true)).toBe('health');
+  it('opens SDK & connection when the bug widget is off', () => {
+    expect(resolveQuickSettingsTab({ ...ready, sdkConfigEnabled: false }, summary({}), true, true)).toBe('sdk');
   });
 
-  it('opens Health when everything is ready', () => {
-    expect(resolveQuickSettingsTab(ready, summary({}), true, true)).toBe('health');
+  it('opens SDK & connection when everything is ready', () => {
+    expect(resolveQuickSettingsTab(ready, summary({}), true, true)).toBe('sdk');
   });
 
   it('opens General for the optional alerts step', () => {
@@ -47,6 +49,6 @@ describe('resolveQuickSettingsTab', () => {
 
   it('skips the optional own-key step on a plan without own keys', () => {
     expect(resolveQuickSettingsTab(ready, null, false, true)).toBe('byok');
-    expect(resolveQuickSettingsTab(ready, null, false, false)).toBe('health');
+    expect(resolveQuickSettingsTab(ready, null, false, false)).toBe('sdk');
   });
 });

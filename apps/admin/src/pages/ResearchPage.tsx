@@ -207,9 +207,9 @@ export function ResearchPage() {
     } else {
       const code = res.error?.code
       if (code === 'FIRECRAWL_NOT_CONFIGURED') {
-        toast.error('Add a Firecrawl API key in Settings → Firecrawl first.')
+        toast.error('Add a Firecrawl API key in Settings → AI keys first.')
       } else if (code === 'FIRECRAWL_AUTH_FAILED') {
-        toast.error('Firecrawl rejected the key. Re-check Settings → Firecrawl.')
+        toast.error('Firecrawl rejected the key. Re-check it in Settings → AI keys.')
       } else if (code === 'RATE_LIMITED') {
         toast.error('Firecrawl rate-limited — try again shortly.')
       } else {
@@ -452,7 +452,7 @@ export function ResearchPage() {
                   tone="info"
                   title="Configure Firecrawl first"
                   description={stats.topPriorityLabel ?? 'Web search requires a BYOK Firecrawl key.'}
-                  cta={{ label: 'Open Firecrawl settings', to: '/settings?tab=firecrawl' }}
+                  cta={{ label: 'Open Firecrawl key', to: '/settings?tab=byok#key-firecrawl' }}
                 />
               )}
               {(stats.topPriority === 'firecrawl_auth_failed' || stats.topPriority === 'firecrawl_error') && (
@@ -460,7 +460,7 @@ export function ResearchPage() {
                   tone="urgent"
                   title="Fix Firecrawl before searching"
                   description={stats.topPriorityLabel ?? 'Re-test the API key in Settings.'}
-                  cta={{ label: 'Fix in Settings', to: '/settings?tab=firecrawl' }}
+                  cta={{ label: 'Fix in Settings', to: '/settings?tab=byok#key-firecrawl' }}
                 />
               )}
               {stats.topPriority === 'ready_no_sessions' && (
@@ -549,7 +549,7 @@ export function ResearchPage() {
                   title="Firecrawl not ready"
                   description="Add and test your Firecrawl API key before searching. The fix-worker also uses this key when local RAG is sparse."
                   action={
-                    <Btn to="/settings?tab=firecrawl" size="sm" variant="primary">Open Firecrawl settings</Btn>
+                    <Btn to="/settings?tab=byok#key-firecrawl" size="sm" variant="primary">Open Firecrawl key</Btn>
                   }
                   hints={[
                     'Set an allow-list of domains to keep results on-topic',
@@ -578,7 +578,7 @@ export function ResearchPage() {
                   {active.results.length === 0 ? (
                     <EmptyState
                       title="No results returned"
-                      description="Try a broader query or relax the domain allow-list in Settings → Firecrawl."
+                      description="Try a broader query or relax the domain allow-list in Settings → Web tools."
                       hints={[
                         'Check allowed domains include the site you expect',
                         `Page cap is ${stats.maxPagesPerCall} results per call`,
