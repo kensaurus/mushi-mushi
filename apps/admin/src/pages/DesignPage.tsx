@@ -20,7 +20,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { Btn, Callout, EmptyState, ErrorAlert, Loading, Section, SegmentedControl } from '../components/ui'
@@ -216,11 +216,10 @@ function ProjectDesign({ projectId }: { projectId: string }) {
         helpHowToUse="Pick a set, check the contrast pairs, then run a deviance check. To change a token or a rule, queue the edit, preview the diff, and confirm: Mushi opens a draft PR and never writes to your repo directly."
         helpFlowPath="/design"
       >
-        <Link to="/recipe">
-          <Btn size="sm" variant="ghost">
-            Recipe
-          </Btn>
-        </Link>
+        {/* One control, one tab stop (QA 293); named as the sidebar names the page. */}
+        <Btn to="/recipe" size="sm" variant="ghost">
+          App blueprint
+        </Btn>
       </PageHeaderBar>
 
       <PagePosture

@@ -63,7 +63,7 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
     const activeProject = resolvedProject.project;
     const pid = activeProject.id;
 
-    const [weekRes, evalCountRes, disagreeRes, lastEvalRes, classifiedRes, promptsRes, ungradedRes] =
+    const [weekRes, evalCountRes, disagreeRes, lastEvalRes, classifiedRes, promptCountRes, activePromptRes, ungradedRes] =
       await Promise.all([
         db.rpc('weekly_judge_scores', { p_project_id: pid, p_weeks: 2 }),
         db
@@ -87,11 +87,16 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
           .select('id', { count: 'exact', head: true })
           .eq('project_id', pid)
           .in('status', ['classified', 'triaged', 'grouped', 'dispatched']),
+        // Counts only: the old read pulled up to 200 prompt rows to count them.
         db
           .from('prompt_versions')
-          .select('id, is_active')
+          .select('id', { count: 'exact', head: true })
+          .or(`project_id.is.null,project_id.eq.${pid}`),
+        db
+          .from('prompt_versions')
+          .select('id', { count: 'exact', head: true })
           .or(`project_id.is.null,project_id.eq.${pid}`)
-          .limit(200),
+          .eq('is_active', true),
         // Exactly what judge-batch would pick up — the stale nudge only makes
         // sense while this is > 0, otherwise a re-run grades nothing.
         db
@@ -115,8 +120,8 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
     const disagreementCount = disagreeRes.count ?? 0;
     const classifiedReports = classifiedRes.count ?? 0;
     const ungradedReports = ungradedRes.count ?? 0;
-    const prompts = promptsRes.data ?? [];
-    const activePromptCount = prompts.filter((p) => p.is_active).length;
+    const promptVersionCount = promptCountRes.count ?? 0;
+    const activePromptCount = activePromptRes.count ?? 0;
 
     const latestWeekScore = latest?.avg_score != null ? Number(latest.avg_score) : null;
     const latestWeekEvalCount = latest?.eval_count ?? 0;
@@ -195,7 +200,7 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
         disagreementRatePct,
         classifiedReports,
         ungradedReports,
-        promptVersionCount: prompts.length,
+        promptVersionCount,
         activePromptCount,
         lastEvalAt,
         staleHours,

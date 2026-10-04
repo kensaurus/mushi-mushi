@@ -9,7 +9,8 @@
  */
 
 import { useState } from 'react'
-import { Badge, Btn, Callout, CopyButton, ErrorAlert, Loading, Section, type BadgeTone } from '../ui'
+import { Badge, Btn, Callout, CopyButton, Loading, Section, type BadgeTone } from '../ui'
+import { PageLoadError } from '../PageLoadError'
 import { usePageData } from '../../lib/usePageData'
 import { apiFetchMutate } from '../../lib/supabase'
 import { radarStateMeta } from './portfolioView'
@@ -66,7 +67,7 @@ export function StorePanel({ projectId }: { projectId: string }) {
           <span role="status">{notice.text}</span>
         </Callout>
       )}
-      {error && <ErrorAlert message={error} endpoint={path} onRetry={reload} />}
+      {error && <PageLoadError error={error} resource="store listings" endpoint={path} onRetry={reload} />}
       {loading && !data && <Loading text="Reading the store review…" />}
       {data && data.status === 'never_run' && <p className="text-sm text-fg-muted">Not checked yet.</p>}
       {data && data.status !== 'never_run' && (

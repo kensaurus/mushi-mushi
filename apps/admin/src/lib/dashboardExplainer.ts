@@ -104,3 +104,18 @@ export function deriveDashboardInsight(s: DashboardInsightInput): DashboardInsig
     sentence: `Nothing waiting to triage${s.reports14d > 0 ? ` — ${s.reports14d} report${s.reports14d === 1 ? '' : 's'} received in the last 14 days` : ''}.`,
   }
 }
+
+/**
+ * Advanced mode shows the live PDCA canvas once the full dashboard renders
+ * and there are stages to draw; the first-report hero replaces it for a
+ * project with no reports yet. The insight banner is NOT a condition: it is
+ * one line above the canvas, and gating on it hid the canvas for good (QA 169).
+ */
+export function shouldShowPdcaFlow(input: {
+  isAdvanced: boolean
+  renderFullDashboard: boolean
+  hasPdcaStages: boolean
+  showFirstReportHero: boolean
+}): boolean {
+  return input.isAdvanced && input.renderFullDashboard && input.hasPdcaStages && !input.showFirstReportHero
+}

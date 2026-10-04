@@ -61,6 +61,151 @@ async function assertReleaseRowAccess(
   return { ok: true, projectId: release.project_id as string, role: access.role ?? null }
 }
 
+type ReleaseStatsDb = ReturnType<typeof getServiceClient>
+
+interface ReleaseStatsCounts {
+  totalReleases: number
+  draftCount: number
+  publishedCount: number
+  fixedReportsCount: number
+  fulfilledTicketsShipped: number
+  openFeedbackTickets: number
+  lastPublishedAt: string | null
+  lastDraftAt: string | null
+  totalFixesLinked: number
+  totalContributors: number
+  draftFixes: number
+  draftContributors: number
+  totalCredits: number
+  creditsNotified: number
+}
+
+const RELEASE_STATS_PAGE = 500
+
+/**
+ * Counts for GET /v1/admin/releases/stats. Counts are exact counts, and the
+ * array totals read only the two array columns, page by page: the route feeds
+ * the sidebar counters (nav-meta) on every page, and the old unbounded select
+ * of every release and every credit capped silently at PostgREST's 1,000
+ * rows. A failed read throws: the banner must not turn an outage into
+ * "0 drafts".
+ */
+async function loadReleaseStatsCounts(db: ReleaseStatsDb, pid: string): Promise<ReleaseStatsCounts> {
+  const must = <T extends { error: { message?: string } | null }>(r: T): T => {
+    if (r.error) throw new Error(r.error.message ?? 'release stats read failed')
+    return r
+  }
+  const headCount = (q: PromiseLike<{ count: number | null; error: { message?: string } | null }>) =>
+    Promise.resolve(q).then((r) => must(r).count ?? 0)
+  const releaseCount = (status?: string) => {
+    let q = db.from('releases').select('id', { count: 'exact', head: true }).eq('project_id', pid)
+    if (status) q = q.eq('status', status)
+    return headCount(q)
+  }
+  const newestAt = async (status: string, col: 'published_at' | 'created_at') => {
+    const r = must(
+      await db
+        .from('releases')
+        .select(col)
+        .eq('project_id', pid)
+        .eq('status', status)
+        .order(col, { ascending: false })
+        .limit(1),
+    )
+    return ((r.data ?? [])[0] as Record<string, string | null> | undefined)?.[col] ?? null
+  }
+
+  const [
+    totalReleases,
+    draftCount,
+    publishedCount,
+    fixedReportsCount,
+    fulfilledTicketsShipped,
+    openFeedbackTickets,
+    lastPublishedAt,
+    lastDraftAt,
+  ] = await Promise.all([
+    releaseCount(),
+    releaseCount('draft'),
+    releaseCount('published'),
+    headCount(db.from('reports').select('id', { count: 'exact', head: true }).eq('project_id', pid).eq('status', 'fixed')),
+    headCount(
+      db
+        .from('support_tickets')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', pid)
+        .not('shipped_in_release_id', 'is', null),
+    ),
+    headCount(
+      db
+        .from('support_tickets')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', pid)
+        .in('status', ['open', 'in_progress']),
+    ),
+    newestAt('published', 'published_at'),
+    newestAt('draft', 'created_at'),
+  ])
+
+  const out: ReleaseStatsCounts = {
+    totalReleases,
+    draftCount,
+    publishedCount,
+    fixedReportsCount,
+    fulfilledTicketsShipped,
+    openFeedbackTickets,
+    lastPublishedAt,
+    lastDraftAt,
+    totalFixesLinked: 0,
+    totalContributors: 0,
+    draftFixes: 0,
+    draftContributors: 0,
+    totalCredits: 0,
+    creditsNotified: 0,
+  }
+  for (let from = 0; from < totalReleases; from += RELEASE_STATS_PAGE) {
+    const { data: page } = must(
+      await db
+        .from('releases')
+        .select('id, status, fixed_report_ids, credited_reporter_ids')
+        .eq('project_id', pid)
+        .order('created_at', { ascending: false })
+        .range(from, from + RELEASE_STATS_PAGE - 1),
+    )
+    const rows = (page ?? []) as Array<{
+      id: string
+      status: string | null
+      fixed_report_ids: string[] | null
+      credited_reporter_ids: string[] | null
+    }>
+    if (rows.length === 0) break
+    for (const r of rows) {
+      const fixes = r.fixed_report_ids?.length ?? 0
+      const contributors = r.credited_reporter_ids?.length ?? 0
+      out.totalFixesLinked += fixes
+      out.totalContributors += contributors
+      if (r.status === 'draft') {
+        out.draftFixes += fixes
+        out.draftContributors += contributors
+      }
+    }
+    const ids = rows.map((r) => r.id)
+    const [credits, notified] = await Promise.all([
+      headCount(db.from('release_credits').select('id', { count: 'exact', head: true }).in('release_id', ids)),
+      headCount(
+        db
+          .from('release_credits')
+          .select('id', { count: 'exact', head: true })
+          .in('release_id', ids)
+          .not('notified_at', 'is', null),
+      ),
+    ])
+    out.totalCredits += credits
+    out.creditsNotified += notified
+  }
+  return out
+}
+
 export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
   const readAuth = adminOrApiKey({ scope: 'mcp:read' })
   const writeAuth = adminOrApiKey({ scope: 'mcp:write' })
@@ -115,58 +260,29 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
     const activeProject = resolvedProject.project
     const pid = activeProject.id
 
-    const [releasesRes, fixedReportsRes, shippedTicketsRes, openTicketsRes] = await Promise.all([
-      db
-        .from('releases')
-        .select('id, status, fixed_report_ids, credited_reporter_ids, published_at, created_at')
-        .eq('project_id', pid)
-        .order('created_at', { ascending: false }),
-      db
-        .from('reports')
-        .select('id', { count: 'exact', head: true })
-        .eq('project_id', pid)
-        .eq('status', 'fixed'),
-      db
-        .from('support_tickets')
-        .select('id', { count: 'exact', head: true })
-        .eq('project_id', pid)
-        .not('shipped_in_release_id', 'is', null),
-      db
-        .from('support_tickets')
-        .select('id', { count: 'exact', head: true })
-        .eq('project_id', pid)
-        .in('status', ['open', 'in_progress']),
-    ])
-
-    const releases = releasesRes.data ?? []
-    const releaseIds = releases.map((r) => r.id as string)
-
-    const creditsRes =
-      releaseIds.length > 0
-        ? await db
-            .from('release_credits')
-            .select('id, notified_at')
-            .in('release_id', releaseIds)
-        : { data: [] as Array<{ id: string; notified_at: string | null }> }
-
-    const credits = creditsRes.data ?? []
-    const draftCount = releases.filter((r) => r.status === 'draft').length
-    const publishedCount = releases.filter((r) => r.status === 'published').length
-    const totalFixesLinked = releases.reduce(
-      (sum, r) => sum + ((r.fixed_report_ids as string[] | null)?.length ?? 0),
-      0,
-    )
-    const totalContributors = releases.reduce(
-      (sum, r) => sum + ((r.credited_reporter_ids as string[] | null)?.length ?? 0),
-      0,
-    )
-    const creditsNotified = credits.filter((c) => c.notified_at != null).length
-    const creditsPending = credits.filter((c) => c.notified_at == null).length
-    const fixedReportsCount = fixedReportsRes.count ?? 0
-    const fulfilledTicketsShipped = shippedTicketsRes.count ?? 0
-    const openFeedbackTickets = openTicketsRes.count ?? 0
-    const lastPublished = releases.find((r) => r.status === 'published')
-    const lastDraft = releases.find((r) => r.status === 'draft')
+    let stats: ReleaseStatsCounts
+    try {
+      stats = await loadReleaseStatsCounts(db, pid)
+    } catch (err) {
+      return dbError(c, { message: err instanceof Error ? err.message : String(err) })
+    }
+    const {
+      totalReleases,
+      draftCount,
+      publishedCount,
+      fixedReportsCount,
+      fulfilledTicketsShipped,
+      openFeedbackTickets,
+      lastPublishedAt,
+      lastDraftAt,
+      totalFixesLinked,
+      totalContributors,
+      draftFixes,
+      draftContributors,
+      totalCredits,
+      creditsNotified,
+    } = stats
+    const creditsPending = totalCredits - creditsNotified
 
     let topPriority = empty.topPriority
     let topPriorityLabel: string | null = null
@@ -175,16 +291,13 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
     if (draftCount > 0) {
       topPriority = 'drafts_pending'
       // The banner is about the drafts, so count only what the drafts carry.
-      const drafts = releases.filter((r) => r.status === 'draft')
-      const draftFixes = drafts.reduce((sum, r) => sum + ((r.fixed_report_ids as string[] | null)?.length ?? 0), 0)
-      const draftContributors = drafts.reduce((sum, r) => sum + ((r.credited_reporter_ids as string[] | null)?.length ?? 0), 0)
       topPriorityLabel = `${draftContributors} contributor${draftContributors === 1 ? '' : 's'} credited · ${draftFixes} fix${draftFixes === 1 ? '' : 'es'} linked — review Markdown and publish to notify reporters.`
       topPriorityTo = '/releases?tab=drafts'
-    } else if (releases.length === 0 && fixedReportsCount > 0) {
+    } else if (totalReleases === 0 && fixedReportsCount > 0) {
       topPriority = 'no_releases'
       topPriorityLabel = `${fixedReportsCount} fixed report${fixedReportsCount === 1 ? '' : 's'} available — generate an AI changelog draft from the Draft tab.`
       topPriorityTo = '/releases?tab=draft'
-    } else if (releases.length === 0 && fixedReportsCount === 0) {
+    } else if (totalReleases === 0 && fixedReportsCount === 0) {
       topPriority = 'no_fixes'
       topPriorityLabel = 'Mark reports as fixed in Reports before generating a release draft.'
       topPriorityTo = '/reports?status=fixed'
@@ -194,7 +307,7 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
       topPriorityTo = '/releases?tab=draft'
     } else {
       topPriority = 'healthy'
-      topPriorityLabel = `${publishedCount} published · ${credits.length} credit${credits.length === 1 ? '' : 's'} · ${openFeedbackTickets} open feedback ticket${openFeedbackTickets === 1 ? '' : 's'}.`
+      topPriorityLabel = `${publishedCount} published · ${totalCredits} credit${totalCredits === 1 ? '' : 's'} · ${openFeedbackTickets} open feedback ticket${openFeedbackTickets === 1 ? '' : 's'}.`
       topPriorityTo = '/releases?tab=published'
     }
 
@@ -207,17 +320,17 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
         projectCount: projectIds.length,
         draftCount,
         publishedCount,
-        totalReleases: releases.length,
+        totalReleases,
         totalFixesLinked,
         totalContributors,
-        totalCredits: credits.length,
+        totalCredits,
         creditsNotified,
         creditsPending,
         fulfilledTicketsShipped,
         fixedReportsCount,
         openFeedbackTickets,
-        lastPublishedAt: lastPublished?.published_at ?? null,
-        lastDraftAt: lastDraft?.created_at ?? null,
+        lastPublishedAt,
+        lastDraftAt,
         topPriority,
         topPriorityLabel,
         topPriorityTo,

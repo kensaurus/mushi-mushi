@@ -171,15 +171,20 @@ describe('critical counts only count open work (#77)', () => {
     expect(stats).toContain("scoped('/reports?status=new&severity=critical&days=14')")
   })
 
-  it('the inbox Plan flag counts open criticals and links to status=open', () => {
+  it('the inbox critical tile counts open criticals; the Plan flag links to exactly what it counts', () => {
     const inbox = routeBody(DASHBOARD, "app.get('/v1/admin/inbox/stats'", 9000)
-    expect(inbox).toContain("sev === 'critical' && (OPEN_REPORT_STATUSES as readonly string[]).includes(status)")
-    expect(inbox).toContain("scoped('/reports?status=open&severity=critical&days=14')")
+    // The tile (link status=open&severity=critical&days=14): open work only.
+    const tile = inbox.slice(inbox.indexOf("'critical reports 14d'"), inbox.indexOf("'critical reports 14d'") + 400)
+    expect(tile).toContain(".in('status', [...OPEN_REPORT_STATUSES])")
+    expect(tile).toContain(".gte('created_at', sinceIso)")
+    // The Plan flag counts the critical triage backlog and links to that list.
+    expect(inbox).toContain("scoped('/reports?severity=critical&status=new')")
   })
 
   it('/v1/admin/dashboard exposes counts.openCritical14d with the same predicate', () => {
     const dash = routeBody(DASHBOARD, "app.get('/v1/admin/dashboard'", 20000)
-    expect(dash).toContain('const openCritical14d =')
+    const count = dash.slice(dash.indexOf("'open critical 14d'"), dash.indexOf("'open critical 14d'") + 400)
+    expect(count).toContain(".in('status', [...OPEN_REPORT_STATUSES])")
     expect(dash).toMatch(/openBacklog,\s+openCritical14d,/)
   })
 })

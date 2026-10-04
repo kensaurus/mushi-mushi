@@ -82,20 +82,21 @@ export function FirstReportHero({ projectId, projectName, onReportSent }: Props)
               variant={status === 'pass' ? 'ghost' : 'primary'}
               onClick={send}
               loading={status === 'running'}
-              disabled={status === 'running' || status === 'pass'}
+              // "Send another" must stay clickable (QA 286): only a send in flight blocks it.
+              disabled={status === 'running'}
             >
               {status === 'pass' ? 'Send another' : 'Send test report'}
             </Btn>
             {status !== 'idle' && (
               <ResultChip tone={statusToTone(status)} at={status === 'pass' ? sentAt : null}>
                 {status === 'running' && 'Submitting test report…'}
-                {status === 'pass' && 'Queued — opening /reports'}
+                {status === 'pass' && 'Test report sent. It shows in Reports in a few seconds.'}
                 {status === 'fail' && (errorMessage ?? 'Submission failed')}
               </ResultChip>
             )}
             {status === 'pass' && (
               <ActionPill to="/reports" tone="brand">
-                Open /reports →
+                Open Reports →
               </ActionPill>
             )}
             <ActionPill to="/onboarding" tone="neutral">

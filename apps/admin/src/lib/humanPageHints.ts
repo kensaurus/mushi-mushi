@@ -38,8 +38,8 @@ export function fixesFailedAction(count: number): string {
 
 export function triageBacklogHint(count: number): string {
   return count === 1
-    ? 'This report has been waiting over an hour. Triage it so auto-fix can pick it up.'
-    : 'These reports have been waiting over an hour. Triage the oldest first so auto-fix can pick them up.'
+    ? 'This report is waiting for triage. Triage it so auto-fix can pick it up.'
+    : 'These reports are waiting for triage. Triage the oldest first so auto-fix can pick them up.'
 }
 
 export function judgeDisagreementHint(ratePct: number): string {
