@@ -39,6 +39,7 @@ import { hasPageOwnedHero } from '../lib/pageHeroOwnership'
 import { shouldDefaultCollapsePipelineRibbon } from '../lib/chromeLayers'
 import { shouldShowPipelineRibbon } from '../lib/pipelineRibbonVisibility'
 import type { PdcaStageId } from '../lib/pdca'
+import { repoLinks } from '../lib/statCardLinks'
 
 type Tone = 'ok' | 'warn' | 'danger' | 'idle'
 
@@ -333,7 +334,8 @@ export function PipelineStatusRibbon({ embedded = false }: { embedded?: boolean 
         : nav.prsOpen === 0
           ? 'No PRs awaiting review'
           : `${nav.prsOpen} PR${nav.prsOpen === 1 ? '' : 's'} awaiting review`,
-    to: '/repo?tab=prs',
+    // Open PRs are listed on the Branches tab (there is no `prs` tab).
+    to: repoLinks.prOpen,
   }
 
   const tiles: RibbonTile[] = [plan, doTile, check, act]

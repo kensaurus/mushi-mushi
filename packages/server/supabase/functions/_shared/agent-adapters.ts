@@ -1136,6 +1136,35 @@ export async function cancelCloudAgentAttempt(
   return { vendorCancelled }
 }
 
+/** Outcome of stopping one Cursor Cloud agent's current run. */
+export type CursorStopOutcome = 'stopped' | 'already_finished' | 'no_key' | 'failed'
+
+/**
+ * Stop the latest run of a Cursor Cloud agent known only by its agent id
+ * (skill pipeline steps store `agent_ref`, not the run id). Cursor v1 has a
+ * run cancel; GET /v1/agents/{id} names the run. A 409 means the run already
+ * ended, which is not a failure. GitHub Agent Tasks has no cancel endpoint,
+ * so only Cursor agents can be stopped from Mushi.
+ */
+export async function stopCursorAgentLatestRun(
+  db: SupabaseClient,
+  projectId: string,
+  agentId: string,
+): Promise<CursorStopOutcome> {
+  const apiKey = await resolveCursorApiKey(db, projectId)
+  if (!apiKey) return 'no_key'
+  try {
+    const agent = await getCursorAgent({ apiKey }, agentId)
+    if (!agent.latestRunId) return 'already_finished'
+    await cancelCursorRun({ apiKey }, agentId, agent.latestRunId)
+    return 'stopped'
+  } catch (err) {
+    if (err instanceof CursorApiError && err.status === 409) return 'already_finished'
+    alog.warn('Cursor agent stop failed', { agentId, err: String(err).slice(0, 200) })
+    return 'failed'
+  }
+}
+
 /** Poll → outcome mapping shared by the cron poller (kept pure for tests). */
 export function pollResultToOutcome(poll: CloudPollResult): CloudAgentOutcome | null {
   switch (poll.status) {

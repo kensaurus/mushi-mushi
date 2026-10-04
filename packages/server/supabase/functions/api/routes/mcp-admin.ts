@@ -599,13 +599,13 @@ export function registerMcpAdminRoutes(parent: Hono<{ Variables: Variables }>) {
     }
     const scopes = rawScopes as typeof allowedScopes[number][]
 
-    // Verify the user owns at least one project (sanity guard — no orphan org keys)
-    const { data: projects } = await db
-      .from('projects')
-      .select('id')
-      .eq('owner_id', userId)
-      .limit(1)
-    if (!projects || projects.length === 0) {
+    // Sanity guard: no orphan account keys. "Has a project" means any project
+    // the user can reach (direct owner, org member, project member) — the
+    // same set an account key resolves at call time. It used to check only
+    // `projects.owner_id`, so an org owner or admin who never created a
+    // project themselves was told to "create a project" (QA #126).
+    const reachable = await ownedProjectIds(db, userId)
+    if (reachable.length === 0) {
       return c.json(
         { ok: false, error: { code: 'NO_PROJECTS', message: 'Create a project before minting an account key.' } },
         400,
@@ -713,10 +713,15 @@ export function registerMcpAdminRoutes(parent: Hono<{ Variables: Variables }>) {
         },
       })
     } finally {
+      // Delete, not deactivate: each test used to leave a revoked
+      // "mcp-test-probe" row in the project's key list (QA #266). Every FK
+      // to project_api_keys is ON DELETE SET NULL, so tool-invocation rows
+      // the probe wrote keep their history.
       await db
         .from('project_api_keys')
-        .update({ is_active: false })
+        .delete()
         .eq('key_hash', keyHash)
+        .eq('label', 'mcp-test-probe')
     }
   })
 }

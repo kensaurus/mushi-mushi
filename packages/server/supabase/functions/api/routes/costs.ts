@@ -30,6 +30,10 @@ interface CostRow {
   cost_usd: number
   occurred_at: string
   source: CostSource
+  /** llm_invocations.status ('success' | 'error'); null for ledger rows. */
+  status: string | null
+  /** Provider error for a failed call, trimmed for display. */
+  error_message: string | null
 }
 
 const SORT_COLUMNS: Record<string, string> = {
@@ -52,8 +56,12 @@ function invocationToRow(row: {
   output_tokens: number | null
   cost_usd: number | null
   created_at: string
+  status?: string | null
+  error_message?: string | null
 }): CostRow {
   return {
+    status: row.status ?? null,
+    error_message: row.error_message ? String(row.error_message).slice(0, 300) : null,
     id: row.id,
     project_id: row.project_id,
     operation: row.stage ? `${row.function_name}:${row.stage}` : row.function_name,
@@ -77,6 +85,8 @@ function ledgerToRow(row: {
   occurred_at: string
 }): CostRow {
   return {
+    status: null,
+    error_message: null,
     id: row.id,
     project_id: row.project_id,
     operation: row.operation,
@@ -96,6 +106,109 @@ function matchesSearch(row: CostRow, q: string): boolean {
     || row.model.toLowerCase().includes(needle)
     || row.id.toLowerCase().includes(needle)
   )
+}
+
+type InvRow = {
+  function_name: string
+  stage: string | null
+  used_model: string
+  input_tokens: number | null
+  output_tokens: number | null
+  cost_usd: number | null
+  created_at: string
+  status: string | null
+  key_source: string | null
+}
+
+type LedgerRow = {
+  occurred_at: string
+  operation: string
+  model: string
+  cost_usd: number
+}
+
+class CostStatsReadError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'CostStatsReadError'
+  }
+}
+
+/** PostgREST returns at most this many rows per request (Supabase `max_rows`). */
+const COST_PAGE = 1000
+
+/** Every row a query matches, read COST_PAGE rows at a time. Throws on a read error. */
+async function readAllPages<T>(
+  what: string,
+  page: (from: number, to: number) => PromiseLike<{ data: unknown[] | null; error: { message?: string } | null }>,
+): Promise<T[]> {
+  const out: T[] = []
+  for (let from = 0; ; from += COST_PAGE) {
+    const { data, error } = await page(from, from + COST_PAGE - 1)
+    if (error) throw new CostStatsReadError(`${what}: ${error.message ?? 'read failed'}`)
+    const rows = (data ?? []) as T[]
+    out.push(...rows)
+    if (rows.length < COST_PAGE) return out
+  }
+}
+
+/**
+ * Spend recorded before `beforeIso`: the persisted cost summed in SQL
+ * (`llm_spend_before`, migration 20261004163000), plus the rows without a
+ * persisted cost priced here with resolveCostUsd, the budget's rule. Until the
+ * migration is applied it reads every older row in pages instead.
+ */
+async function spendBefore(projectId: string, beforeIso: string): Promise<number> {
+  const { data, error } = await db().rpc('llm_spend_before', { p_project_id: projectId, p_before: beforeIso })
+  const missing = error && (error.code === 'PGRST202' || error.code === '42883')
+  if (error && !missing) throw new CostStatsReadError(`llm_spend_before: ${error.message}`)
+
+  const priceRows = (rows: Array<Pick<InvRow, 'used_model' | 'input_tokens' | 'output_tokens' | 'cost_usd'>>) =>
+    rows.reduce((sum, r) => sum + resolveCostUsd(r.used_model, r.input_tokens, r.output_tokens, r.cost_usd), 0)
+
+  if (!missing) {
+    const sums = (data ?? {}) as { persisted_usd?: number | string | null; ledger_usd?: number | string | null; unpriced_rows?: number | null }
+    let total = Number(sums.persisted_usd ?? 0) + Number(sums.ledger_usd ?? 0)
+    if (Number(sums.unpriced_rows ?? 0) > 0) {
+      const unpriced = await readAllPages<Pick<InvRow, 'used_model' | 'input_tokens' | 'output_tokens' | 'cost_usd'>>(
+        'unpriced llm_invocations',
+        (from, to) =>
+          db()
+            .from('llm_invocations')
+            .select('used_model, input_tokens, output_tokens, cost_usd')
+            .eq('project_id', projectId)
+            .lt('created_at', beforeIso)
+            .is('cost_usd', null)
+            .order('created_at', { ascending: true })
+            .range(from, to),
+      )
+      total += priceRows(unpriced)
+    }
+    return total
+  }
+
+  console.warn(JSON.stringify({ level: 'warn', msg: 'llm_spend_before missing: apply migration 20261004163000; paging older rows' }))
+  const [olderInv, olderLedger] = await Promise.all([
+    readAllPages<Pick<InvRow, 'used_model' | 'input_tokens' | 'output_tokens' | 'cost_usd'>>('older llm_invocations', (from, to) =>
+      db()
+        .from('llm_invocations')
+        .select('used_model, input_tokens, output_tokens, cost_usd')
+        .eq('project_id', projectId)
+        .lt('created_at', beforeIso)
+        .order('created_at', { ascending: true })
+        .range(from, to),
+    ),
+    readAllPages<{ cost_usd: number | null }>('older llm_cost_usd', (from, to) =>
+      db()
+        .from('llm_cost_usd')
+        .select('cost_usd')
+        .eq('project_id', projectId)
+        .lt('occurred_at', beforeIso)
+        .order('occurred_at', { ascending: true })
+        .range(from, to),
+    ),
+  ])
+  return priceRows(olderInv) + olderLedger.reduce((sum, r) => sum + Number(r.cost_usd ?? 0), 0)
 }
 
 export function registerCostsRoutes(parent: Hono<{ Variables: Variables }>) {
@@ -146,67 +259,67 @@ export function registerCostsRoutes(parent: Hono<{ Variables: Variables }>) {
       avgCostPerCall24h: 0,
     }
 
-    const [
-      { data: projectRow },
-      invCountRes,
-      ledgerCountRes,
-      invRes,
-      ledgerRes,
-      { data: settingsRow },
-    ] = await Promise.all([
-      db().from('projects').select('id, name').eq('id', projectId).maybeSingle(),
-      db()
-        .from('llm_invocations')
-        .select('id', { count: 'exact', head: true })
-        .eq('project_id', projectId),
-      db()
-        .from('llm_cost_usd')
-        .select('id', { count: 'exact', head: true })
-        .eq('project_id', projectId),
-      db()
-        .from('llm_invocations')
-        .select(
-          'function_name, stage, used_model, input_tokens, output_tokens, cost_usd, created_at, status, key_source',
-        )
-        .eq('project_id', projectId)
-        .gte('created_at', since30d)
-        .order('created_at', { ascending: false })
-        .limit(10000),
-      db()
-        .from('llm_cost_usd')
-        .select('occurred_at, operation, model, cost_usd')
-        .eq('project_id', projectId)
-        .gte('occurred_at', since30d)
-        .order('occurred_at', { ascending: false })
-        .limit(2000),
-      db()
-        .from('project_settings')
-        .select('byok_anthropic_key_ref')
-        .eq('project_id', projectId)
-        .maybeSingle(),
-    ])
-
-    if (!projectRow) return c.json({ ok: true, data: empty })
-
-    type InvRow = {
-      function_name: string
-      stage: string | null
-      used_model: string
-      input_tokens: number | null
-      output_tokens: number | null
-      cost_usd: number | null
-      created_at: string
-      status: string | null
-      key_source: string | null
+    // A failed read answers with an error: an outage must not read as "$0".
+    const must = <T extends { error: { message?: string } | null }>(r: T): T => {
+      if (r.error) throw new CostStatsReadError(r.error.message ?? 'cost stats read failed')
+      return r
     }
 
-    const invRows = (invRes.data ?? []) as InvRow[]
-    const ledgerRows = (ledgerRes.data ?? []) as Array<{
-      occurred_at: string
-      operation: string
-      model: string
-      cost_usd: number
-    }>
+    let projectRow: { id: string; name: string } | null
+    let settingsRow: { byok_anthropic_key_ref: string | null } | null
+    let invocationCount: number
+    let ledgerCount: number
+    let invRows: InvRow[]
+    let ledgerRows: LedgerRow[]
+    let olderSpendUsd: number
+    try {
+      const [projectRes, invCountRes, ledgerCountRes, settingsRes] = await Promise.all([
+        db().from('projects').select('id, name').eq('id', projectId).maybeSingle(),
+        db().from('llm_invocations').select('id', { count: 'exact', head: true }).eq('project_id', projectId),
+        db().from('llm_cost_usd').select('id', { count: 'exact', head: true }).eq('project_id', projectId),
+        db().from('project_settings').select('byok_anthropic_key_ref').eq('project_id', projectId).maybeSingle(),
+      ])
+      projectRow = must(projectRes).data as { id: string; name: string } | null
+      settingsRow = must(settingsRes).data as { byok_anthropic_key_ref: string | null } | null
+      invocationCount = must(invCountRes).count ?? 0
+      ledgerCount = must(ledgerCountRes).count ?? 0
+      if (!projectRow) return c.json({ ok: true, data: empty })
+
+      // Every row of the last 30 days, page by page. `.limit(10000)` returned
+      // at most PostgREST's 1,000 rows, so a busy project's spend was cut off
+      // silently; the cost of a row is resolved in JS (resolveCostUsd), the
+      // same rule the LLM budget enforces.
+      ;[invRows, ledgerRows] = await Promise.all([
+        readAllPages<InvRow>('llm_invocations', (from, to) =>
+          db()
+            .from('llm_invocations')
+            .select('function_name, stage, used_model, input_tokens, output_tokens, cost_usd, created_at, status, key_source')
+            .eq('project_id', projectId)
+            .gte('created_at', since30d)
+            .order('created_at', { ascending: false })
+            .range(from, to),
+        ),
+        readAllPages<LedgerRow>('llm_cost_usd', (from, to) =>
+          db()
+            .from('llm_cost_usd')
+            .select('occurred_at, operation, model, cost_usd')
+            .eq('project_id', projectId)
+            .gte('occurred_at', since30d)
+            .order('occurred_at', { ascending: false })
+            .range(from, to),
+        ),
+      ])
+      olderSpendUsd =
+        invocationCount > invRows.length || ledgerCount > ledgerRows.length
+          ? await spendBefore(projectId, since30d)
+          : 0
+    } catch (err) {
+      if (err instanceof CostStatsReadError) {
+        return c.json({ ok: false, error: { code: 'DB_ERROR', message: 'Could not read LLM spend. Try again in a minute.' } }, 500)
+      }
+      throw err
+    }
+
 
     let totalSpendUsd = 0
     let spend24hUsd = 0
@@ -280,33 +393,8 @@ export function registerCostsRoutes(parent: Hono<{ Variables: Variables }>) {
       if (at >= sinceMonth) spendMonthUsd += cost
     }
 
-    // All-time totals include rows older than 30d — fetch only sums for those.
-    if ((invCountRes.count ?? 0) > invRows.length || (ledgerCountRes.count ?? 0) > ledgerRows.length) {
-      const [olderInv, olderLedger] = await Promise.all([
-        invRows.length < (invCountRes.count ?? 0)
-          ? db()
-            .from('llm_invocations')
-            .select('used_model, input_tokens, output_tokens, cost_usd')
-            .eq('project_id', projectId)
-            .lt('created_at', since30d)
-            .limit(10000)
-          : Promise.resolve({ data: [] as InvRow[] }),
-        ledgerRows.length < (ledgerCountRes.count ?? 0)
-          ? db()
-            .from('llm_cost_usd')
-            .select('cost_usd')
-            .eq('project_id', projectId)
-            .lt('occurred_at', since30d)
-            .limit(2000)
-          : Promise.resolve({ data: [] as Array<{ cost_usd: number }> }),
-      ])
-      for (const row of (olderInv.data ?? []) as InvRow[]) {
-        totalSpendUsd += resolveCostUsd(row.used_model, row.input_tokens, row.output_tokens, row.cost_usd)
-      }
-      for (const row of (olderLedger.data ?? []) as Array<{ cost_usd: number }>) {
-        totalSpendUsd += Number(row.cost_usd ?? 0)
-      }
-    }
+    // All-time total: the last 30 days above plus everything older.
+    totalSpendUsd += olderSpendUsd
 
     let topOperation: string | null = null
     let topOperationUsd = 0
@@ -326,8 +414,6 @@ export function registerCostsRoutes(parent: Hono<{ Variables: Variables }>) {
       }
     }
 
-    const invocationCount = invCountRes.count ?? invRows.length
-    const ledgerCount = ledgerCountRes.count ?? ledgerRows.length
     const totalCalls = invocationCount + ledgerCount
     const avgCostPerCall24h = calls24h > 0 ? spend24hUsd / calls24h : 0
     const spendSpike24h =
@@ -415,36 +501,46 @@ export function registerCostsRoutes(parent: Hono<{ Variables: Variables }>) {
     const q = (c.req.query('q') ?? '').trim()
     const sortCol = SORT_COLUMNS[sortParam] ?? 'created_at'
     const ascending = order === 'asc'
+    // `status=failed` lists the calls the stats banner counts as failed
+    // (status present and not 'success'); `since` bounds the window, so
+    // "N failed calls in 24h → View failures" opens exactly those N rows.
+    const failedOnly = c.req.query('status') === 'failed'
+    const sinceRaw = c.req.query('since')
+    const since = sinceRaw && !Number.isNaN(Date.parse(sinceRaw)) ? new Date(sinceRaw).toISOString() : null
 
     const fetchLimit = q ? 5000 : limit
     const rangeFrom = q ? 0 : (page - 1) * limit
     const rangeTo = q ? fetchLimit - 1 : page * limit - 1
 
+    let invQuery = db()
+      .from('llm_invocations')
+      .select(
+        'id, project_id, function_name, stage, used_model, input_tokens, output_tokens, cost_usd, created_at, status, error_message',
+        { count: 'exact' },
+      )
+      .eq('project_id', projectId)
+    if (failedOnly) invQuery = invQuery.neq('status', 'success')
+    if (since) invQuery = invQuery.gte('created_at', since)
+    let invCountQuery = db()
+      .from('llm_invocations')
+      .select('id', { count: 'exact', head: true })
+      .eq('project_id', projectId)
+    if (failedOnly) invCountQuery = invCountQuery.neq('status', 'success')
+    if (since) invCountQuery = invCountQuery.gte('created_at', since)
+
     const [invRes, invCountRes] = await Promise.all([
-      db()
-        .from('llm_invocations')
-        .select(
-          'id, project_id, function_name, stage, used_model, input_tokens, output_tokens, cost_usd, created_at',
-          { count: 'exact' },
-        )
-        .eq('project_id', projectId)
-        .order(sortCol, { ascending, nullsFirst: false })
-        .range(rangeFrom, rangeTo),
-      q
-        ? db()
-          .from('llm_invocations')
-          .select('id', { count: 'exact', head: true })
-          .eq('project_id', projectId)
-        : Promise.resolve({ count: null as number | null }),
+      invQuery.order(sortCol, { ascending, nullsFirst: false }).range(rangeFrom, rangeTo),
+      q ? invCountQuery : Promise.resolve({ count: null as number | null }),
     ])
 
-    const ledgerRes = q
-      ? await db()
-        .from('llm_cost_usd')
-        .select('id, project_id, operation, model, input_tokens, output_tokens, cost_usd, occurred_at')
-        .eq('project_id', projectId)
-        .order('occurred_at', { ascending: false })
-        .limit(500)
+    // Ledger rows carry no status, so they never match the failed filter.
+    let ledgerQuery = db()
+      .from('llm_cost_usd')
+      .select('id, project_id, operation, model, input_tokens, output_tokens, cost_usd, occurred_at')
+      .eq('project_id', projectId)
+    if (since) ledgerQuery = ledgerQuery.gte('occurred_at', since)
+    const ledgerRes = q && !failedOnly
+      ? await ledgerQuery.order('occurred_at', { ascending: false }).limit(500)
       : { data: [] as never[], error: null }
 
     if (invRes.error) {

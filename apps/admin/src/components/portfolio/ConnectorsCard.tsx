@@ -11,10 +11,15 @@
  */
 
 import { useState } from 'react'
-import { Badge, Btn, Callout, DisclosurePanel, ErrorAlert, Input, Loading, Section, SelectField, Textarea, type BadgeTone } from '../ui'
+import { Badge, Btn, Callout, DisclosurePanel, Input, Loading, Section, SelectField, Textarea, type BadgeTone } from '../ui'
 import { usePageData } from '../../lib/usePageData'
 import { ActionsCard } from './ActionsCard'
+import { BrandIcon } from '../ui/BrandIcon'
 import { apiFetchMutate } from '../../lib/supabase'
+import { actionErrorText } from '../../lib/actionErrorText'
+import { ORG_ADMIN_ONLY_HINT, useOrgCanManage } from '../../lib/useOrgCanManage'
+import { ConfirmDialog } from '../ConfirmDialog'
+import { PageLoadError } from '../PageLoadError'
 
 interface Instance {
   id: string
@@ -26,6 +31,14 @@ interface Instance {
   enabled_capabilities: string[]
   last_probe_at: string | null
   bindings: Array<{ projectId: string; externalId: string; role: string }>
+}
+
+/** The logo to show: the provider for an AI-usage connector, else the connector kind. */
+function connectorBrand(i: Pick<Instance, 'kind' | 'display_name'>): string {
+  if (i.kind !== 'llm_usage') return i.kind
+  if (/anthropic|claude/i.test(i.display_name)) return 'anthropic'
+  if (/openai/i.test(i.display_name)) return 'openai'
+  return i.kind
 }
 
 interface Available {
@@ -75,13 +88,17 @@ export function ConnectorsCard({ orgId, projects }: { orgId: string; projects: A
   const [writeKey, setWriteKey] = useState<Record<string, string>>({})
   const nameOf = (id: string) => projects.find((p) => p.projectId === id)?.name ?? id.slice(0, 8)
   const form = FORM[kind]
+  // Every write here is for owners and admins (QA 177). Remove deletes the
+  // stored credential, so it asks first (QA 44).
+  const { canManage } = useOrgCanManage(orgId)
+  const [confirmRemove, setConfirmRemove] = useState<{ id: string; name: string } | null>(null)
 
   const act = async (fn: () => Promise<{ ok: boolean; error?: { message?: string } | null }>, okText: string) => {
     setBusy(true)
     setNotice(null)
     try {
       const res = await fn()
-      setNotice(res.ok ? { tone: 'info', text: okText } : { tone: 'danger', text: res.error?.message ?? 'That did not work.' })
+      setNotice(res.ok ? { tone: 'info', text: okText } : { tone: 'danger', text: actionErrorText(res.error, 'That did not work. Try again in a minute.') })
     } finally {
       setBusy(false)
       reload()
@@ -110,7 +127,8 @@ export function ConnectorsCard({ orgId, projects }: { orgId: string; projects: A
   return (
     <Section title="Connected sources">
       <p className="mb-3 text-xs text-fg-muted">Optional. Each one lets Mushi read one more thing it checks. Read-only unless you turn on more, and any release action still needs your approval each time.</p>
-      {error && <ErrorAlert message={error} endpoint={path} onRetry={reload} />}
+      {error && <PageLoadError error={error} resource="connected sources" endpoint={path} onRetry={reload} />}
+      {canManage === false && <p className="mb-2 text-xs text-fg-muted">Adding, checking and removing sources: {ORG_ADMIN_ONLY_HINT}</p>}
       {loading && !data && <Loading text="Reading connectors…" />}
       {notice && (
         <Callout tone={notice.tone}>
@@ -128,13 +146,14 @@ export function ConnectorsCard({ orgId, projects }: { orgId: string; projects: A
                 return (
                   <li key={i.id} className="flex flex-col gap-1 py-2 sm:flex-row sm:items-center sm:justify-between">
                     <div className="min-w-0">
-                      <p className="text-sm font-medium text-fg">
-                        {i.display_name} <Badge tone={st.tone} className="ml-1">{st.label}</Badge>
+                      <p className="flex items-center gap-2 text-sm font-medium text-fg">
+                        <BrandIcon brand={connectorBrand(i)} size={16} decorative />
+                        {i.display_name} <Badge tone={st.tone}>{st.label}</Badge>
                       </p>
                       {i.status_reason && <p className="text-xs text-fg-muted">{i.status_reason}</p>}
                       {i.bindings.length > 0 && <p className="text-2xs text-fg-faint">{i.bindings.map((b) => `${nameOf(b.projectId)} → ${b.externalId}`).join(' · ')}</p>}
                     </div>
-                    {(data.available.find((a) => a.kind === i.kind)?.actions.length ?? 0) > 0 && (
+                    {canManage !== false && (data.available.find((a) => a.kind === i.kind)?.actions.length ?? 0) > 0 && (
                       <div className="w-full sm:w-auto">
                         <DisclosurePanel title={i.enabled_capabilities.includes('act') ? 'Release actions: on' : 'Release actions: off'}>
                           <div className="flex flex-col gap-2 p-3">
@@ -148,10 +167,12 @@ export function ConnectorsCard({ orgId, projects }: { orgId: string; projects: A
                         </DisclosurePanel>
                       </div>
                     )}
-                    <div className="flex shrink-0 gap-2">
-                      <Btn size="sm" variant="ghost" disabled={busy} onClick={() => act(() => apiFetchMutate(`${path}/${i.id}/probe`, { method: 'POST', body: '{}' }), 'Checked again.')}>Check</Btn>
-                      <Btn size="sm" variant="ghost" disabled={busy} onClick={() => act(() => apiFetchMutate(`${path}/${i.id}`, { method: 'DELETE' }), 'Removed, with its stored credential.')}>Remove</Btn>
-                    </div>
+                    {canManage !== false && (
+                      <div className="flex shrink-0 gap-2">
+                        <Btn size="sm" variant="ghost" disabled={busy} onClick={() => act(() => apiFetchMutate(`${path}/${i.id}/probe`, { method: 'POST', body: '{}' }), 'Checked again.')}>Check</Btn>
+                        <Btn size="sm" variant="ghost" disabled={busy} onClick={() => setConfirmRemove({ id: i.id, name: i.display_name })}>Remove</Btn>
+                      </div>
+                    )}
                   </li>
                 )
               })}
@@ -163,6 +184,7 @@ export function ConnectorsCard({ orgId, projects }: { orgId: string; projects: A
               .filter((i) => i.enabled_capabilities.includes('act'))
               .map((i) => ({ id: i.id, name: i.display_name, actions: data.available.find((a) => a.kind === i.kind)?.actions ?? [] }))}
           />
+          {canManage !== false && (
           <DisclosurePanel title="Add a source">
             <div className="flex flex-col gap-2 p-3">
               <SelectField label="Kind" value={kind} onChange={(e) => { setKind(e.target.value); setConfigValue('') }}>
@@ -192,7 +214,22 @@ export function ConnectorsCard({ orgId, projects }: { orgId: string; projects: A
               {data.planned.length > 0 && <p className="text-2xs text-fg-faint">Planned, not built yet: {data.planned.join(', ')}.</p>}
             </div>
           </DisclosurePanel>
+          )}
         </div>
+      )}
+      {confirmRemove && (
+        <ConfirmDialog
+          title={`Remove ${confirmRemove.name}?`}
+          body="Mushi stops reading this source and deletes its stored credential. To connect it again you will need the credential from the provider."
+          confirmLabel="Remove source"
+          tone="danger"
+          loading={busy}
+          onCancel={() => setConfirmRemove(null)}
+          onConfirm={async () => {
+            await act(() => apiFetchMutate(`${path}/${confirmRemove.id}`, { method: 'DELETE' }), 'Removed, with its stored credential.')
+            setConfirmRemove(null)
+          }}
+        />
       )}
     </Section>
   )

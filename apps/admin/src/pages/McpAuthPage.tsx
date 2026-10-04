@@ -30,6 +30,7 @@ import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { Btn, ErrorAlert } from '../components/ui'
 import { CHIP_TONE } from '../lib/chipTone'
+import { mcpAuthProjectChoice, type McpAuthProjectChoice, type McpAuthProjectRow } from '../lib/mcpAuthProjects'
 
 type TxnInfo = {
   status: 'pending' | 'approved' | 'denied' | 'expired'
@@ -82,6 +83,8 @@ export function McpAuthPage() {
   const [state, setState] = useState<PageState>('loading')
   const [txnInfo, setTxnInfo] = useState<TxnInfo | null>(null)
   const [projects, setProjects] = useState<ProjectOption[]>([])
+  const [projectChoice, setProjectChoice] = useState<McpAuthProjectChoice['kind']>('ok')
+  const [visibleProjectCount, setVisibleProjectCount] = useState(0)
   const [selectedProject, setSelectedProject] = useState('')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
@@ -95,7 +98,7 @@ export function McpAuthPage() {
     void (async () => {
       const [txnRes, projRes] = await Promise.all([
         apiFetch<TxnInfo>(`/v1/mcp-oauth/request?txn=${encodeURIComponent(txn)}`, { cache: 'no-store' }).catch(() => null),
-        apiFetch<{ projects: ProjectOption[] }>('/v1/admin/projects').catch(() => null),
+        apiFetch<{ projects: McpAuthProjectRow[] }>('/v1/admin/projects').catch(() => null),
       ])
       if (cancelled) return
       if (!txnRes?.ok || !txnRes.data) {
@@ -117,8 +120,11 @@ export function McpAuthPage() {
         return
       }
       setTxnInfo(txnRes.data)
-      const list = projRes?.ok ? (projRes.data?.projects ?? []) : []
-      setProjects(list.map((p) => ({ id: p.id, name: p.name })))
+      const choice = mcpAuthProjectChoice(projRes)
+      setProjectChoice(choice.kind)
+      if (choice.kind === 'no-access') setVisibleProjectCount(choice.visibleCount)
+      const list = choice.kind === 'ok' ? choice.projects : []
+      setProjects(list)
       if (list.length === 1) setSelectedProject(list[0].id)
       setState('ready')
     })()
@@ -274,6 +280,17 @@ export function McpAuthPage() {
                 </option>
               ))}
             </select>
+          ) : projectChoice === 'load-failed' ? (
+            <p className={`rounded-lg px-4 py-3 text-sm ${CHIP_TONE.dangerSubtle}`}>
+              Could not load your projects. Check your connection, reload this page, and pick a project. The
+              request stays open for 10 minutes.
+            </p>
+          ) : projectChoice === 'no-access' ? (
+            <p className={`rounded-lg px-4 py-3 text-sm ${CHIP_TONE.dangerSubtle}`}>
+              You can see {visibleProjectCount} project{visibleProjectCount === 1 ? '' : 's'}, but connecting an
+              editor creates a project key, which needs the owner or admin role. Ask an owner or admin of the
+              project to connect it, or to give you the admin role.
+            </p>
           ) : (
             <p className={`rounded-lg px-4 py-3 text-sm ${CHIP_TONE.dangerSubtle}`}>
               No projects found. Create a project in the console first, then retry the connection from your MCP client.

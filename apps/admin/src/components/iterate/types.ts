@@ -65,12 +65,22 @@ export const STATUS_LABEL: Record<PdcaRun['status'], string> = {
   failed: 'Failed',
 }
 
+/** The critic personas seeded in `agent_personas`
+ *  (migrations/20260520000000_mistake_clusters.sql). The server refuses any
+ *  other slug, so this list must match the seed: a server test checks it. */
 export const PERSONA_OPTIONS = [
-  { value: 'nng-heuristic', label: 'Nielsen Norman (UX heuristics)' },
-  { value: 'accessibility', label: 'Accessibility reviewer' },
-  { value: 'conversion', label: 'Conversion rate optimizer' },
-  { value: 'senior-dev', label: 'Senior developer (clean code)' },
+  { value: 'nng-heuristic', label: 'Nielsen Norman (10 usability heuristics)' },
+  { value: 'wcag-a11y', label: 'WCAG 2.2 accessibility' },
+  { value: 'mobile-first', label: 'Mobile first (thumb reach, touch targets)' },
+  { value: 'glanceable-density', label: 'Glanceable density (2-second read)' },
+  { value: 'tufte-data-density', label: 'Tufte data density (charts and tables)' },
 ] as const
+
+/** A readable name for a stored persona slug (older runs may hold retired ones). */
+export function personaLabel(slug: string | null | undefined): string {
+  const hit = PERSONA_OPTIONS.find((p) => p.value === slug)
+  return hit ? hit.label : slug || 'Unknown persona'
+}
 
 /** Producer + judge default. Mirrors PDCA_DEFAULT_MODEL in
  *  packages/server/supabase/functions/_shared/pdca-models.ts. */

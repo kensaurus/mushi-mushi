@@ -17,9 +17,10 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
-import { useToast } from '../lib/toast'
 import { PageHeaderBar } from '../components/PageHeaderBar'
-import { EmptyState, ErrorAlert, Badge, SegmentedControl } from '../components/ui'
+import { usePublishPageContext } from '../lib/pageContext'
+import { plainApiError } from '../lib/humanizeApiError'
+import { EmptyState, ErrorAlert, Badge, Btn, SegmentedControl } from '../components/ui'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { TesterSubmissionCard } from '../components/report-detail/TesterSubmissionCard'
 
@@ -38,10 +39,20 @@ interface QueueItem {
 
 type StatusFilter = 'pending' | 'all' | 'accepted'
 
+/** Server page size for GET /v1/admin/tester-submissions. */
+export const REVIEW_PAGE_SIZE = 20
+
+/** Pages needed for `total` rows (at least 1). */
+export function reviewPageCount(total: number, pageSize = REVIEW_PAGE_SIZE): number {
+  return Math.max(1, Math.ceil(Math.max(0, total) / pageSize))
+}
+
 export function TesterSubmissionsReviewPage() {
   const projectId = useActiveProjectId()
-  const toast = useToast()
   const [status, setStatus] = useState<StatusFilter>('pending')
+  // The queue used to fetch page 1 only: with more than 20 submissions the
+  // badge said "35" while 20 rendered and the rest were unreachable.
+  const [page, setPage] = useState(1)
   const [items, setItems] = useState<QueueItem[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -56,10 +67,10 @@ export function TesterSubmissionsReviewPage() {
     setError(null)
     try {
       const res = await apiFetch<{ items: QueueItem[]; total: number }>(
-        `/v1/admin/tester-submissions?projectId=${encodeURIComponent(projectId)}&status=${status}`,
+        `/v1/admin/tester-submissions?projectId=${encodeURIComponent(projectId)}&status=${status}&page=${page}`,
       )
       if (!res.ok) {
-        setError(res.error?.message ?? 'Could not load submissions.')
+        setError(plainApiError(res.error, 'Could not load submissions.'))
         setItems([])
         setTotal(0)
         return
@@ -69,16 +80,31 @@ export function TesterSubmissionsReviewPage() {
     } finally {
       setLoading(false)
     }
-  }, [projectId, status])
+  }, [projectId, status, page])
 
   useEffect(() => {
     void load()
   }, [load])
 
+  // A grade moves the row out of the Pending filter; step back if that
+  // emptied the last page.
+  const pageCount = reviewPageCount(total)
+  useEffect(() => {
+    if (page > pageCount) setPage(pageCount)
+  }, [page, pageCount])
+
+  // TesterSubmissionCard shows its own success toast; a second one here
+  // stacked two toasts per grade.
   const handleReviewed = () => {
-    toast.success('Submission updated.')
     void load()
   }
+
+  usePublishPageContext({
+    route: '/rewards/tester-review',
+    title: 'Tester submissions',
+    summary: `${total} ${status === 'all' ? '' : `${status} `}submission${total === 1 ? '' : 's'}`,
+    filters: { status, page: String(page) },
+  })
 
   if (!projectId) {
     return (
@@ -114,7 +140,10 @@ export function TesterSubmissionsReviewPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <SegmentedControl
           value={status}
-          onChange={(v) => setStatus(v)}
+          onChange={(v) => {
+            setStatus(v)
+            setPage(1)
+          }}
           options={[
             { id: 'pending', label: 'Pending' },
             { id: 'accepted', label: 'Accepted' },
@@ -181,6 +210,22 @@ export function TesterSubmissionsReviewPage() {
             </li>
           ))}
         </ul>
+      )}
+
+      {!loading && !error && pageCount > 1 && (
+        <nav aria-label="Submission pages" className="flex items-center justify-between gap-3 text-xs">
+          <span className="text-fg-muted">
+            Showing {(page - 1) * REVIEW_PAGE_SIZE + 1}–{Math.min(page * REVIEW_PAGE_SIZE, total)} of {total}
+          </span>
+          <div className="flex gap-1.5">
+            <Btn variant="ghost" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+              ← Previous
+            </Btn>
+            <Btn variant="ghost" size="sm" disabled={page >= pageCount} onClick={() => setPage((p) => p + 1)}>
+              Next →
+            </Btn>
+          </div>
+        </nav>
       )}
     </div>
   )

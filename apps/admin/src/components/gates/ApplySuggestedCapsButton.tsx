@@ -21,6 +21,8 @@ import { ConfirmDialog } from '../ConfirmDialog'
 import { Btn } from '../ui'
 import { apiFetch, apiFetchMutate } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
+import { describeApiError } from '../../lib/humanizeApiError'
+import { useActiveOrgRole } from '../../lib/useActiveOrgRole'
 import { describeSpendCaps, planSpendCaps, type SpendCapPlan, type SpendCapValues } from '../../lib/gateFindings'
 
 interface Props {
@@ -44,12 +46,18 @@ export function ApplySuggestedCapsButton({ projectId, values, onApplied }: Props
   const toast = useToast()
   const [phase, setPhase] = useState<Phase>('idle')
   const [plan, setPlan] = useState<SpendCapPlan | null>(null)
+  // Spend caps are owner/admin-only on the server: members and viewers get
+  // the next step instead of a button that ends in a 403.
+  const { canManage } = useActiveOrgRole()
 
   /** The current caps, uncached; null (after an error toast) when they could not be read. */
   const readPlan = async (): Promise<SpendCapPlan | null> => {
     const res = await apiFetch<Record<string, unknown>>(`/v1/admin/settings?project_id=${encodeURIComponent(projectId)}`, { cache: 'no-store' })
     if (!res.ok || !res.data) {
-      toast.error('Could not check the current spend caps', res.error?.message ?? 'Nothing was changed. Try again in a moment.')
+      const e = res.error
+        ? describeApiError(res.error, 'Could not check the current spend caps')
+        : { title: 'Could not check the current spend caps', hint: 'Nothing was changed. Try again in a moment.' }
+      toast.error(e.title, e.hint)
       return null
     }
     return planSpendCaps(values, res.data)
@@ -60,6 +68,14 @@ export function ApplySuggestedCapsButton({ projectId, values, onApplied }: Props
       <span className="text-2xs text-ok" role="status">
         {phase === 'applied' ? 'Applied.' : 'These caps are already set.'} This check clears on its next daily run.{' '}
         <Link to={SPEND_LIMITS_PATH} className="text-brand hover:underline">Spend limits</Link>
+      </span>
+    )
+  }
+
+  if (!canManage) {
+    return (
+      <span className="text-2xs text-fg-muted">
+        Only team owners and admins can set spend caps. Ask one of them to apply these.
       </span>
     )
   }
@@ -93,7 +109,12 @@ export function ApplySuggestedCapsButton({ projectId, values, onApplied }: Props
     })
     if (!res.ok) {
       setPhase('idle')
-      toast.error('Could not apply the suggested caps', res.error?.message)
+      if (res.error?.code === 'FORBIDDEN') {
+        toast.error('Could not apply the suggested caps', 'Only team owners and admins can change spend caps. Ask one of them to apply these.')
+      } else {
+        const e = describeApiError(res.error, 'Could not apply the suggested caps')
+        toast.error(e.title, e.hint)
+      }
       return
     }
     setPhase('applied')

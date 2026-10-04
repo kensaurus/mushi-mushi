@@ -10,9 +10,12 @@
  */
 
 import { useState } from 'react'
-import { Badge, Btn, Callout, DisclosurePanel, ErrorAlert, Loading, Section, SelectField, Textarea, type BadgeTone } from '../ui'
+import { Badge, Btn, Callout, DisclosurePanel, Loading, Section, SelectField, Textarea, type BadgeTone } from '../ui'
 import { usePageData } from '../../lib/usePageData'
 import { apiFetchMutate } from '../../lib/supabase'
+import { actionErrorText } from '../../lib/actionErrorText'
+import { ConfirmDialog } from '../ConfirmDialog'
+import { PageLoadError } from '../PageLoadError'
 
 interface ActionRow {
   id: string
@@ -48,13 +51,16 @@ export function ActionsCard({ orgId, connectors }: { orgId: string; connectors: 
   const [payload, setPayload] = useState('{\n  "package": "",\n  "track": "production",\n  "userFraction": 0.1,\n  "versionCodes": [""]\n}')
   const actable = connectors.filter((c) => c.actions.length > 0)
   const chosen = actable.find((c) => c.id === connectorId)
+  // Reject ends a request, and Run now changes the live store listing: both
+  // ask first (QA 44).
+  const [confirm, setConfirm] = useState<{ row: ActionRow; kind: 'reject' | 'execute' } | null>(null)
 
   const run = async (url: string, body: unknown, okText: string) => {
     setBusy(true)
     setNotice(null)
     try {
       const res = await apiFetchMutate(url, { method: 'POST', body: JSON.stringify(body ?? {}) })
-      setNotice(res.ok ? { tone: 'info', text: okText } : { tone: 'danger', text: res.error?.message ?? 'That did not work.' })
+      setNotice(res.ok ? { tone: 'info', text: okText } : { tone: 'danger', text: actionErrorText(res.error, 'That did not work. Try again in a minute.') })
     } finally {
       setBusy(false)
       reload()
@@ -76,7 +82,7 @@ export function ActionsCard({ orgId, connectors }: { orgId: string; connectors: 
   return (
     <Section title="Store actions">
       <p className="mb-3 text-xs text-fg-muted">Nothing here runs on its own. Each action needs your approval, covers exactly the payload shown, expires after an hour, and runs once.</p>
-      {error && <ErrorAlert message={error} endpoint={path} onRetry={reload} />}
+      {error && <PageLoadError error={error} resource="store actions" endpoint={path} onRetry={reload} />}
       {loading && !data && <Loading text="Reading actions…" />}
       {notice && (
         <Callout tone={notice.tone}>
@@ -93,8 +99,8 @@ export function ActionsCard({ orgId, connectors }: { orgId: string; connectors: 
                   <span className="text-sm font-medium text-fg">{a.action} <Badge tone={st.tone} className="ml-1">{st.label}</Badge></span>
                   <div className="flex gap-2">
                     {a.status === 'pending_approval' && <Btn size="sm" disabled={busy} onClick={() => run(`${path}/${a.id}/approve`, { payloadSha256: a.payload_sha256 }, 'Approved for one hour. Run it when ready.')}>Approve</Btn>}
-                    {a.status === 'approved' && <Btn size="sm" disabled={busy} onClick={() => run(`${path}/${a.id}/execute`, {}, 'Ran once.')}>Run now</Btn>}
-                    {(a.status === 'pending_approval' || a.status === 'approved') && <Btn size="sm" variant="ghost" disabled={busy} onClick={() => run(`${path}/${a.id}/reject`, {}, 'Rejected.')}>Reject</Btn>}
+                    {a.status === 'approved' && <Btn size="sm" disabled={busy} onClick={() => setConfirm({ row: a, kind: 'execute' })}>Run now</Btn>}
+                    {(a.status === 'pending_approval' || a.status === 'approved') && <Btn size="sm" variant="ghost" disabled={busy} onClick={() => setConfirm({ row: a, kind: 'reject' })}>Reject</Btn>}
                   </div>
                 </div>
                 <p className="text-2xs text-fg-faint">Asked by {a.requested_by} · {new Date(a.requested_at).toLocaleString()}{a.expires_at ? ` · approval ends ${new Date(a.expires_at).toLocaleTimeString()}` : ''} · hash {a.payload_sha256.slice(0, 12)}</p>
@@ -123,6 +129,26 @@ export function ActionsCard({ orgId, connectors }: { orgId: string; connectors: 
             <div><Btn size="sm" onClick={ask} disabled={busy || !connectorId || !action}>Ask</Btn></div>
           </div>
         </DisclosurePanel>
+      )}
+      {confirm && (
+        <ConfirmDialog
+          title={confirm.kind === 'execute' ? `Run "${confirm.row.action}" now?` : `Reject "${confirm.row.action}"?`}
+          body={
+            confirm.kind === 'execute'
+              ? 'This sends the approved payload to the store once. It changes the live listing or rollout and cannot be undone from Mushi.'
+              : 'The request closes and cannot be approved later. Ask again if you change your mind.'
+          }
+          confirmLabel={confirm.kind === 'execute' ? 'Run now' : 'Reject'}
+          tone="danger"
+          loading={busy}
+          onCancel={() => setConfirm(null)}
+          onConfirm={async () => {
+            const { row, kind } = confirm
+            if (kind === 'execute') await run(`${path}/${row.id}/execute`, {}, 'Ran once.')
+            else await run(`${path}/${row.id}/reject`, {}, 'Rejected.')
+            setConfirm(null)
+          }}
+        />
       )}
     </Section>
   )

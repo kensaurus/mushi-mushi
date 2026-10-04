@@ -1,10 +1,28 @@
-import type { Hono } from 'npm:hono@4';
+import type { Context, Hono } from 'npm:hono@4';
 import type { Variables } from '../types.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { jwtAuth } from '../../_shared/auth.ts';
 import { logAudit } from '../../_shared/audit.ts';
-import { dbError, callerProjectIds } from '../shared.ts';
+import { dbError, callerProjectIds, userCanAccessProject } from '../shared.ts';
+import { queueRetryDenial } from '../../_shared/queue-retry-policy.ts';
+import { denyViewerWrite } from '../viewer-gate.ts';
 import { ingestReport, triggerClassification } from '../helpers.ts';
+
+/**
+ * Bulk flush/recover re-run triage (LLM spend) across the caller's projects.
+ * Viewers are read-only, so those projects are left out. `readable` is the
+ * full set, so a caller who only views projects gets a 403, not "0 flushed".
+ */
+async function writableProjectIds(
+  c: Context,
+  db: ReturnType<typeof getServiceClient>,
+  userId: string,
+): Promise<{ readable: string[]; writable: string[] }> {
+  const readable = await callerProjectIds(c, db, userId);
+  if (!userId) return { readable, writable: readable };
+  const access = await Promise.all(readable.map((id) => userCanAccessProject(db, userId, id)));
+  return { readable, writable: readable.filter((_, i) => access[i]!.allowed && access[i]!.role !== 'viewer') };
+}
 
 export function registerQueueRoutes(app: Hono<{ Variables: Variables }>): void {
   // DLQ admin endpoints
@@ -26,6 +44,9 @@ export function registerQueueRoutes(app: Hono<{ Variables: Variables }>): void {
       deadLetter: 0,
       reportsQueued: 0,
       strandedReports: 0,
+      retryableFailed: 0,
+      stalePending: 0,
+      recoverable: 0,
       oldestPendingMinutes: null as number | null,
       topStage: null as string | null,
       topStageDeadLetter: 0,
@@ -54,17 +75,31 @@ export function registerQueueRoutes(app: Hono<{ Variables: Variables }>): void {
     const todayStart = new Date()
     todayStart.setUTCHours(0, 0, 0, 0)
 
-    const [queueRes, reportsQueuedRes] = await Promise.all([
-      db.from('process_queue')
-        .select('id, status, stage, created_at, started_at')
+    // Same table, scope and row cap as /queue/summary, so the snapshot tiles
+    // and the KPI row read the same numbers. This read `process_queue` (no
+    // such table) until 2026-10-04: the error was dropped and every tile and
+    // the "Queue healthy" banner read 0 whatever the queue held.
+    const strandedCutoff = new Date(Date.now() - 5 * 60_000).toISOString()
+    const [queueRes, reportsQueuedRes, strandedRes] = await Promise.all([
+      db.from('processing_queue')
+        .select('id, status, stage, created_at, started_at, attempts, max_attempts')
         .in('project_id', projectIds)
         .order('created_at', { ascending: false })
-        .limit(500),
+        .limit(5000),
       db.from('reports')
         .select('id', { count: 'exact', head: true })
         .in('project_id', projectIds)
         .eq('status', 'queued'),
+      // What POST /queue/recover would re-fire: reports stuck before triage.
+      db.from('reports')
+        .select('id', { count: 'exact', head: true })
+        .in('project_id', projectIds)
+        .in('status', ['new', 'queued'])
+        .lt('created_at', strandedCutoff)
+        .lt('processing_attempts', 3),
     ])
+    if (queueRes.error) return dbError(c, queueRes.error)
+    if (strandedRes.error) return dbError(c, strandedRes.error)
 
     const items = queueRes.data ?? []
     const pending = items.filter((i) => i.status === 'pending').length
@@ -73,6 +108,16 @@ export function registerQueueRoutes(app: Hono<{ Variables: Variables }>): void {
     const failed = items.filter((i) => i.status === 'failed').length
     const deadLetter = items.filter((i) => i.status === 'dead_letter').length
     const reportsQueued = reportsQueuedRes.count ?? 0
+    const strandedReports = strandedRes.count ?? 0
+    const retryableFailed = items.filter(
+      (i) => i.status === 'failed' && (i.attempts ?? 0) < (i.max_attempts ?? 3),
+    ).length
+    const staleCutoffMs = Date.now() - 15 * 60_000
+    const stalePending = items.filter(
+      (i) => i.status === 'pending' && new Date(i.created_at).getTime() < staleCutoffMs,
+    ).length
+    // "Recover stranded" is offered only when it would do something.
+    const recoverable = strandedReports + retryableFailed + stalePending
 
     const todayItems = items.filter((i) => i.created_at >= todayStart.toISOString())
     const todayCreated = todayItems.length
@@ -129,7 +174,10 @@ export function registerQueueRoutes(app: Hono<{ Variables: Variables }>): void {
         failed,
         deadLetter,
         reportsQueued,
-        strandedReports: 0,
+        strandedReports,
+        retryableFailed,
+        stalePending,
+        recoverable,
         oldestPendingMinutes,
         topStage: topEntry?.[0] ?? null,
         topStageDeadLetter: topEntry?.[1] ?? 0,
@@ -259,6 +307,17 @@ export function registerQueueRoutes(app: Hono<{ Variables: Variables }>): void {
         404,
       );
 
+    const access = await userCanAccessProject(db, userId, item.project_id);
+    const viewerDenied = denyViewerWrite(c, access.role, 'retry pipeline jobs');
+    if (viewerDenied) return viewerDenied;
+
+    // Retrying re-runs classification (LLM spend, may overwrite triage), so
+    // completed and still-active jobs are refused. See queue-retry-policy.ts.
+    const denial = queueRetryDenial(item, Date.now());
+    if (denial) {
+      return c.json({ ok: false, error: { code: 'NOT_RETRYABLE', message: denial } }, 409);
+    }
+
     await db
       .from('processing_queue')
       .update({
@@ -282,7 +341,10 @@ export function registerQueueRoutes(app: Hono<{ Variables: Variables }>): void {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
 
-    const projectIds = await callerProjectIds(c, db, userId);
+    const { readable, writable: projectIds } = await writableProjectIds(c, db, userId);
+    if (readable.length > 0 && projectIds.length === 0) {
+      return denyViewerWrite(c, 'viewer', 'flush queued reports')!;
+    }
     if (projectIds.length === 0) {
       return c.json({ ok: true, data: { flushed: 0, scanned: 0 } });
     }
@@ -324,7 +386,10 @@ export function registerQueueRoutes(app: Hono<{ Variables: Variables }>): void {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
 
-    const projectIds = await callerProjectIds(c, db, userId);
+    const { readable, writable: projectIds } = await writableProjectIds(c, db, userId);
+    if (readable.length > 0 && projectIds.length === 0) {
+      return denyViewerWrite(c, 'viewer', 'recover the pipeline')!;
+    }
     if (projectIds.length === 0) {
       return c.json({ ok: true, data: { reports: 0, queue: 0, reconciled: 0 } });
     }

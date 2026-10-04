@@ -7,6 +7,8 @@
  *          A PR link is only rendered for an https URL the server returned.
  */
 
+import { PROJECT_ADMIN_PR_HINT, useActiveProjectCanManage } from '../../lib/useOrgCanManage'
+import { actionErrorText } from '../../lib/actionErrorText'
 import { Btn, Callout, ErrorAlert } from '../ui'
 import { LINK_ACCENT } from '../../lib/chipTone'
 import { DeniedList, FileDiffs } from '../design/DesignChangePreview'
@@ -80,6 +82,9 @@ interface RecipeChangePreviewProps {
 
 export function RecipeChangePreview({ state, onConfirm, onDiscard }: RecipeChangePreviewProps) {
   const { phase, preview, job, error, note } = state
+  // Opening the PR is for the project team's owners and admins; a member
+  // learned that only after confirming (QA 292).
+  const { canManage } = useActiveProjectCanManage()
   if (phase === 'idle') return null
   if (phase === 'previewing') {
     return (
@@ -99,7 +104,7 @@ export function RecipeChangePreview({ state, onConfirm, onDiscard }: RecipeChang
   const nothing = !preview || preview.files.length === 0
   return (
     <div className="flex flex-col gap-3">
-      {error && <ErrorAlert message={error} />}
+      {error && <ErrorAlert message={actionErrorText({ message: error })} />}
       {preview && (
         <>
           <p className="text-xs text-fg-secondary">
@@ -113,9 +118,11 @@ export function RecipeChangePreview({ state, onConfirm, onDiscard }: RecipeChang
               variant="primary"
               onClick={onConfirm}
               loading={phase === 'submitting'}
-              disabled={phase === 'submitting' || nothing || preview.denied.length > 0}
+              disabled={phase === 'submitting' || nothing || preview.denied.length > 0 || canManage === false}
               title={
-                nothing
+                canManage === false
+                  ? PROJECT_ADMIN_PR_HINT
+                  : nothing
                   ? 'Nothing to open: the preview changes no file'
                   : preview.denied.length > 0
                     ? 'A file in this change is not writable; fix that first'
@@ -136,6 +143,7 @@ export function RecipeChangePreview({ state, onConfirm, onDiscard }: RecipeChang
               Discard preview
             </Btn>
           </div>
+          {canManage === false && <p className="text-xs text-fg-muted">{PROJECT_ADMIN_PR_HINT}</p>}
         </>
       )}
       {!preview && phase === 'error' && (

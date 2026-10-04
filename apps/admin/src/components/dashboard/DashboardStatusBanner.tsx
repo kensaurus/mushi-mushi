@@ -10,6 +10,7 @@ import { StatusBannerAction } from '../StatusBannerAction'
 import {
   fixesFailedAction,
   fixesFailedHint,
+  fixesFailedTitle,
   integrationIssuesHint,
   scopedHref,
   triageBacklogHint,
@@ -85,7 +86,7 @@ export function DashboardStatusBanner({
         action={
           <StatusBannerAction
             label={actions.triage ?? `Triage ${stats.openBacklog} reports`}
-            to={stats.topPriorityTo ?? scopedHref('/reports?tab=queue&status=new', pid)}
+            to={stats.topPriorityTo ?? scopedHref('/reports?status=new', pid)}
             tone="danger"
           />
         }
@@ -97,7 +98,7 @@ export function DashboardStatusBanner({
     return (
       <StatusBannerShell
         tone="danger"
-        title={`${stats.fixesFailed} auto-fix${stats.fixesFailed === 1 ? '' : 'es'} failed`}
+        title={fixesFailedTitle(stats.fixesFailed)}
         subtitle={stats.topPriorityLabel ?? fixesFailedHint(stats.fixesFailed)}
         action={
           <StatusBannerAction

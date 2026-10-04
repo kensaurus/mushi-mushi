@@ -3,6 +3,11 @@
  * PURPOSE: Visual auto-fix pipeline — proportional segment bar + status
  *          glyphs so operators see failures first without reading four
  *          identical stat boxes (NN/g #1 Visibility, #6 Recognition).
+ *
+ *          Every count is a REPORT in its current state (server:
+ *          _shared/fix-report-truth.ts), so `total` is reports with a fix
+ *          attempt in the window, not attempts (glot.it 2026-10-04 read
+ *          "8 Failed · 7 Open PRs" over 4 reports fixed by merged PRs).
  */
 
 import { Link } from 'react-router-dom'
@@ -24,25 +29,26 @@ const SEGMENT_BG: Record<SegmentTone, string> = {
 }
 
 export function FixPipelineMeter({ fixSummary }: Props) {
-  const { total, failed, inProgress, openPrs } = fixSummary
+  const { total, failed, inProgress, openPrs, completed } = fixSummary
   const denom = Math.max(total, 1)
 
   const segments: Array<{ key: string; count: number; tone: SegmentTone; label: string }> = [
-    { key: 'failed', count: failed, tone: 'danger', label: 'Failed' },
+    { key: 'failed', count: failed, tone: 'danger', label: 'Stopped' },
     { key: 'in-progress', count: inProgress, tone: 'info', label: 'In flight' },
-    { key: 'open-prs', count: openPrs, tone: 'ok', label: 'Open PRs' },
+    { key: 'open-prs', count: openPrs, tone: 'info', label: 'Open PRs' },
+    { key: 'fixed', count: completed, tone: 'ok', label: 'Fixed' },
   ]
 
-  const accounted = failed + inProgress + openPrs
+  const accounted = failed + inProgress + openPrs + completed
   const remainder = Math.max(0, total - accounted)
   if (remainder > 0) {
     segments.push({ key: 'other', count: remainder, tone: 'muted', label: 'Other' })
   }
 
   const hasFailure = failed > 0
-  const primaryHref = hasFailure ? '/fixes?status=failed' : openPrs > 0 ? '/fixes?status=open_pr' : '/fixes'
+  const primaryHref = hasFailure ? '/fixes?tab=attempts&status=failed' : openPrs > 0 ? '/fixes?tab=attempts&status=pr_open' : '/fixes'
   const primaryLabel = hasFailure
-    ? `${failed} failed — retry`
+    ? `Auto-fix stopped on ${failed} report${failed === 1 ? '' : 's'} — see why`
     : openPrs > 0
       ? `${openPrs} PR${openPrs === 1 ? '' : 's'} ready`
       : 'Open fixes'
@@ -52,7 +58,7 @@ export function FixPipelineMeter({ fixSummary }: Props) {
       <div
         className="flex h-2.5 w-full overflow-hidden rounded-full border border-edge-subtle/80 bg-surface-overlay/40"
         role="img"
-        aria-label={`Auto-fix pipeline: ${failed} failed, ${inProgress} in flight, ${openPrs} open PRs, ${total} total`}
+        aria-label={`Auto-fix by report: ${failed} stopped, ${inProgress} in flight, ${openPrs} open PRs, ${completed} fixed, ${total} total`}
       >
         {segments.map((seg) => {
           if (seg.count <= 0) return null
@@ -85,7 +91,7 @@ export function FixPipelineMeter({ fixSummary }: Props) {
           ) : null,
         )}
         <SignalChip tone="neutral" className="ml-auto">
-          {total} total
+          {total} {total === 1 ? 'report' : 'reports'}
         </SignalChip>
       </div>
 

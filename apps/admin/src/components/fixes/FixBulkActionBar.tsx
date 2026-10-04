@@ -106,8 +106,8 @@ export function FixBulkActionBar({
             disabled={busy || failedCount === 0}
             title={
               failedCount === 0
-                ? 'None of the selected fixes are in a failed state'
-                : `Re-dispatch the auto-fix agent for ${pluralizeWithCount(failedCount, 'failed fix', 'failed fixes')}`
+                ? 'None of the selected fixes can be retried: their reports are fixed, running, or need a key or a decision first'
+                : `Re-dispatch the auto-fix agent for ${pluralizeWithCount(failedCount, 'unfixed report')}`
             }
           >
             {busy && progressLabel?.startsWith('Re-dispatch') ? progressLabel : `Retry ${failedCount}`}

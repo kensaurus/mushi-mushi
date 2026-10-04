@@ -330,7 +330,7 @@ Sets `projects.archived_at`.  **Irreversible.**
 ### `mushi fixes tail --report-id <id>`
 
 Streams dispatch events for a report in real-time via SSE.  Pairs with
-`mushi doctor --server` for headless debugging without opening the admin console.
+`mushi doctor` for headless debugging without opening the admin console.
 
 ```bash
 mushi fixes tail --report-id 11111111-2222-3333-4444-555555555555
@@ -445,4 +445,4 @@ The CLI is also importable for tooling (used by `create-mushi-mushi`):
 MIT
 
 <!-- mushi-readme-stats-footer -->
-<sub>Monorepo scale (July 2026): 64 edge functions · 413 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 64 edge functions · 422 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

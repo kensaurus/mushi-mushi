@@ -245,12 +245,48 @@ interface SidebarUserCardProps {
   signOut: () => Promise<void> | void
 }
 
+/**
+ * "Sign out of every account on this device" confirmation. Shared by the user
+ * card and the collapsed rail so both ask first and both forget the stored
+ * account sessions (the rail used to sign out at once and leave them).
+ */
+export function SignOutAllDialog({
+  signOut,
+  onClose,
+}: {
+  signOut: () => Promise<void> | void
+  onClose: () => void
+}) {
+  const [signingOut, setSigningOut] = useState(false)
+  const confirm = async () => {
+    setSigningOut(true)
+    try {
+      clearAllAccounts()
+      await signOut()
+    } finally {
+      setSigningOut(false)
+      onClose()
+    }
+  }
+  return (
+    <ConfirmDialog
+      title="Sign out of mushi mushi?"
+      body="This signs out of every account on this device and returns you to the sign-in screen. Any unsaved drafts on this tab will be discarded."
+      confirmLabel="Sign out of all"
+      cancelLabel="Stay signed in"
+      tone="danger"
+      loading={signingOut}
+      onConfirm={confirm}
+      onCancel={onClose}
+    />
+  )
+}
+
 export function SidebarUserCard({ user, signOut }: SidebarUserCardProps) {
   const { signInWithGoogle, signInWithGitHub } = useAuth()
   const { accounts, activeUserId } = useAccounts()
   const [open, setOpen] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
-  const [signingOut, setSigningOut] = useState(false)
   const [busyUserId, setBusyUserId] = useState<string | null>(null)
   const [addingBusy, setAddingBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -300,17 +336,6 @@ export function SidebarUserCard({ user, signOut }: SidebarUserCardProps) {
   const handleRemove = (userId: string) => {
     setError(null)
     removeAccount(userId)
-  }
-
-  const handleConfirmSignOut = async () => {
-    setSigningOut(true)
-    try {
-      clearAllAccounts()
-      await signOut()
-    } finally {
-      setSigningOut(false)
-      setConfirmOpen(false)
-    }
   }
 
   const busy = busyUserId !== null || addingBusy
@@ -418,18 +443,7 @@ export function SidebarUserCard({ user, signOut }: SidebarUserCardProps) {
         </div>
         <PlanBadge density="sidebar" />
       </div>
-      {confirmOpen && (
-        <ConfirmDialog
-          title="Sign out of mushi mushi?"
-          body="This signs out of every account on this device and returns you to the sign-in screen. Any unsaved drafts on this tab will be discarded."
-          confirmLabel="Sign out of all"
-          cancelLabel="Stay signed in"
-          tone="danger"
-          loading={signingOut}
-          onConfirm={handleConfirmSignOut}
-          onCancel={() => setConfirmOpen(false)}
-        />
-      )}
+      {confirmOpen && <SignOutAllDialog signOut={signOut} onClose={() => setConfirmOpen(false)} />}
     </>
   )
 }

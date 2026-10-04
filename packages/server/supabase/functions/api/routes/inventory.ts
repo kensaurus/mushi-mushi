@@ -50,7 +50,8 @@ import {
   type RateLimiter,
   type RateLimitVerdict,
 } from '../../_shared/inventory-guards.ts'
-import { ownedProjectIds, callerProjectIds, resolveOwnedProject } from '../shared.ts'
+import { ownedProjectIds, callerProjectIds, resolveOwnedProject, userCanAccessProject } from '../shared.ts'
+import { denyViewerWrite } from '../viewer-gate.ts'
 
 interface IngestBody {
   yaml?: string
@@ -94,6 +95,24 @@ function rateLimitResponse(
     },
     429,
   )
+}
+
+/**
+ * `assertProjectScope` for writes: any team role may read inventory, but
+ * viewers are read-only. A project-bound API key passed the scope check and
+ * acts as its project's owner.
+ */
+async function assertProjectWriteScope(
+  c: Context<{ Variables: Variables }>,
+  projectId: string,
+  db: ReturnType<typeof getServiceClient>,
+  action: string,
+): ReturnType<typeof assertProjectScope> {
+  const scope = await assertProjectScope(c, projectId, db)
+  if (!scope.ok || scope.authMethod !== 'jwt') return scope
+  const access = await userCanAccessProject(db, scope.userId, projectId)
+  const denied = denyViewerWrite(c, access.role, action)
+  return denied ? { ok: false, response: denied } : scope
 }
 
 export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): void {
@@ -295,7 +314,7 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
     async (c) => {
       const projectId = c.req.param('projectId')!
       const db = getServiceClient()
-      const scope = await assertProjectScope(c, projectId, db)
+      const scope = await assertProjectWriteScope(c, projectId, db, 'upload inventory')
       if (!scope.ok) return scope.response
       const userId = scope.userId
 
@@ -748,7 +767,7 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
     async (c) => {
       const projectId = c.req.param('projectId')!
       const db = getServiceClient()
-      const scope = await assertProjectScope(c, projectId, db)
+      const scope = await assertProjectWriteScope(c, projectId, db, 'propose inventory changes')
       if (!scope.ok) return scope.response
 
       const verdict = applyRateLimit(proposeRateLimiter, projectId, 'propose')
@@ -858,7 +877,7 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
       const projectId = c.req.param('projectId')!
       const proposalId = c.req.param('id')!
       const db = getServiceClient()
-      const scope = await assertProjectScope(c, projectId, db)
+      const scope = await assertProjectWriteScope(c, projectId, db, 'edit inventory proposals')
       if (!scope.ok) return scope.response
 
       let body: { yaml?: string }
@@ -873,7 +892,7 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
       const parsed = parseInventoryYaml(body.yaml)
       if (!parsed.ok || !parsed.inventory) {
         return c.json(
-          { ok: false, error: { code: 'VALIDATION_FAILED', issues: parsed.issues } },
+          { ok: false, error: { code: 'VALIDATION_FAILED', message: 'The YAML has problems. Fix the listed lines and save again.', issues: parsed.issues } },
           422,
         )
       }
@@ -914,7 +933,7 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
       const projectId = c.req.param('projectId')!
       const proposalId = c.req.param('id')!
       const db = getServiceClient()
-      const scope = await assertProjectScope(c, projectId, db)
+      const scope = await assertProjectWriteScope(c, projectId, db, 'accept inventory proposals')
       if (!scope.ok) return scope.response
 
       const { data: prop, error: propErr } = await db
@@ -934,7 +953,7 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
       const parsed = parseInventoryYaml(prop.proposed_yaml as string)
       if (!parsed.ok || !parsed.inventory) {
         return c.json(
-          { ok: false, error: { code: 'VALIDATION_FAILED', issues: parsed.issues } },
+          { ok: false, error: { code: 'VALIDATION_FAILED', message: 'This draft has problems. Fix the listed lines on the YAML tab, save, then accept.', issues: parsed.issues } },
           422,
         )
       }
@@ -998,7 +1017,7 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
       const projectId = c.req.param('projectId')!
       const proposalId = c.req.param('id')!
       const db = getServiceClient()
-      const scope = await assertProjectScope(c, projectId, db)
+      const scope = await assertProjectWriteScope(c, projectId, db, 'discard inventory proposals')
       if (!scope.ok) return scope.response
 
       const { error } = await db
@@ -1144,7 +1163,7 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
     async (c) => {
       const projectId = c.req.param('projectId')!
       const db = getServiceClient()
-      const scope = await assertProjectScope(c, projectId, db)
+      const scope = await assertProjectWriteScope(c, projectId, db, 'change inventory settings')
       if (!scope.ok) return scope.response
 
       let body: {
@@ -1284,7 +1303,7 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
     async (c) => {
       const projectId = c.req.param('projectId')!
       const db = getServiceClient()
-      const scope = await assertProjectScope(c, projectId, db)
+      const scope = await assertProjectWriteScope(c, projectId, db, 'reconcile inventory')
       if (!scope.ok) return scope.response
 
       let body: { story_node_id?: string | null } = {}
@@ -1355,7 +1374,7 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
     async (c) => {
       const projectId = c.req.param('projectId')!
       const db = getServiceClient()
-      const scope = await assertProjectScope(c, projectId, db)
+      const scope = await assertProjectWriteScope(c, projectId, db, 'run inventory gates')
       if (!scope.ok) return scope.response
 
       const verdict = applyRateLimit(gatesRunRateLimiter, projectId, 'gates.run')
@@ -1414,7 +1433,7 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
       const projectId = c.req.param('projectId')!
       const reportId = c.req.param('reportId')!
       const db = getServiceClient()
-      const scope = await assertProjectScope(c, projectId, db)
+      const scope = await assertProjectWriteScope(c, projectId, db, 'generate tests')
       if (!scope.ok) return scope.response
 
       const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
@@ -1437,8 +1456,29 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
           triggered_by: scope.userId,
         }),
       })
-      const json = await resp.json().catch(() => ({}))
-      return c.json({ ok: resp.ok, data: json })
+      // test-gen-from-report answers with its own { ok, data | error }
+      // envelope. Pass it through flat: on success the caller reads
+      // { prUrl, prNumber, branch, path } directly, on failure it gets the
+      // worker's error and status. Wrapping it (data: { ok, data }) at 200 hid
+      // the PR link and turned every failure into "Request failed".
+      const json = (await resp.json().catch(() => null)) as
+        | { ok?: boolean; data?: unknown; error?: string | { code?: string; message?: string } }
+        | null
+      if (resp.ok && json?.ok !== false) {
+        return c.json({ ok: true, data: json?.data ?? null })
+      }
+      const workerError = typeof json?.error === 'string' ? { message: json.error } : json?.error
+      const status = (resp.status >= 400 && resp.status <= 599 ? resp.status : 502) as 400 | 404 | 422 | 500 | 502
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: (workerError as { code?: string } | undefined)?.code ?? 'TEST_GEN_FAILED',
+            message: workerError?.message ?? 'Test generation failed. Try again in a moment.',
+          },
+        },
+        status,
+      )
     },
   )
 
@@ -1483,7 +1523,7 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
       const projectId = c.req.param('projectId')!
       const userId = c.get('userId') as string | undefined
       const db = getServiceClient()
-      const scope = await assertProjectScope(c, projectId, db)
+      const scope = await assertProjectWriteScope(c, projectId, db, 'map stories from the live app')
       if (!scope.ok) return scope.response
 
       const body = await c.req.json().catch(() => ({})) as {
@@ -1692,7 +1732,7 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
       const projectId = c.req.param('projectId')!
       const storyNodeId = c.req.param('storyNodeId')!
       const db = getServiceClient()
-      const scope = await assertProjectScope(c, projectId, db)
+      const scope = await assertProjectWriteScope(c, projectId, db, 'generate tests')
       if (!scope.ok) return scope.response
 
       const body = await c.req.json().catch(() => ({})) as {
@@ -1781,7 +1821,7 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
       const projectId = c.req.param('projectId')!
       const qaStoryId = c.req.param('qaStoryId')!
       const db = getServiceClient()
-      const scope = await assertProjectScope(c, projectId, db)
+      const scope = await assertProjectWriteScope(c, projectId, db, 'approve or reject generated tests')
       if (!scope.ok) return scope.response
 
       const body = await c.req.json().catch(() => ({})) as { status: 'approved' | 'rejected' }

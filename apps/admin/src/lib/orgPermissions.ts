@@ -13,6 +13,15 @@ export function canCreateProject(role: OrgRole | string | null | undefined): boo
   return canManageOrg(role)
 }
 
+/**
+ * Whether to offer "New project" before the role is known. Unknown (still
+ * loading) offers it and lets the server decide; a known member or viewer
+ * gets an explanation instead of a form that 403s.
+ */
+export function offerProjectCreate(role: OrgRole | string | null): boolean {
+  return role === null || canCreateProject(role)
+}
+
 export function canDeleteProject(role: OrgRole | string | null | undefined): boolean {
   return canManageOrg(role)
 }
@@ -30,3 +39,31 @@ export function viewerRoleHint(role: OrgRole | string | null | undefined): strin
   if (role === 'member') return 'Some actions require owner or admin access in this team.'
   return null
 }
+
+/**
+ * Role in the active team, or null when it is not known yet (orgs still
+ * loading, or no team picked while the user belongs to several). Callers
+ * treat null as "may be allowed" and let the server decide, so an owner
+ * never loses a control while the org list is in flight.
+ */
+export function resolveActiveOrgRole(
+  orgs: ReadonlyArray<{ id: string; role: string }> | null | undefined,
+  activeOrgId: string | null,
+): string | null {
+  if (!orgs || orgs.length === 0) return null
+  const match = activeOrgId ? orgs.find((o) => o.id === activeOrgId) : undefined
+  if (match) return match.role
+  return orgs.length === 1 ? orgs[0]!.role : null
+}
+
+/** True unless the active-team role is known and below owner/admin. */
+export function mayManageActiveOrg(role: string | null): boolean {
+  return role == null || canManageOrg(role)
+}
+
+/**
+ * Tooltip / caption for a control the server refuses to members and viewers
+ * (requireProjectAdmin). Pages disable the control and show this instead of
+ * letting the click end in a 403.
+ */
+export const ADMIN_ONLY_HINT = 'Owners and admins only. Ask one of them to make this change.'

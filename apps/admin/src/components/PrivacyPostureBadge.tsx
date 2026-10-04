@@ -17,6 +17,7 @@ import { usePageData } from '../lib/usePageData';
 import { Tooltip } from './ui';
 import { NavRailFlyout } from './sidebar/NavRailFlyout';
 import { CHIP_TONE } from '../lib/chipTone';
+import { useActiveProjectId } from './ProjectSwitcher';
 
 interface PrivacyStatus {
   byok_configured: boolean;
@@ -34,11 +35,19 @@ interface Props {
 }
 
 export function PrivacyPostureBadge({ compact = false }: Props) {
-  const { data, loading, error, reload } = usePageData<PrivacyStatus>('/v1/admin/privacy-status');
+  // No project yet (a brand-new account) is a normal first-run state, not a
+  // privacy failure: render nothing rather than a red "unavailable" chip. A
+  // stale stored project id still gets the server's `no_projects` answer, so
+  // that is treated the same way.
+  const activeProjectId = useActiveProjectId();
+  const { data, loading, error, errorMessage, reload } = usePageData<PrivacyStatus>(
+    activeProjectId ? '/v1/admin/privacy-status' : null,
+  );
 
   const [popoverOpen, setPopoverOpen] = useState(false);
   const badgeRef = useRef<HTMLButtonElement>(null);
 
+  if (!activeProjectId || errorMessage === 'no_projects') return null;
   if (loading) return null;
 
   const isByok = data?.byok_configured ?? false;

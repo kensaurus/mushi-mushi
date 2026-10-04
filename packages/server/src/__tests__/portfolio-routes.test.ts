@@ -148,6 +148,9 @@ describe('GET /v1/admin/orgs/:orgId/portfolio', () => {
       // Nothing is connected or observed in the fixture: no card may read ok.
       expect(card.worst).not.toBe('ok')
       expect(card.radar.status).toBe('never_run')
+      // The headline is explained on the card: each named problem carries its element's own reason.
+      expect(Array.isArray(card.needsLook)).toBe(true)
+      for (const p of card.needsLook) expect(p.reason.length).toBeGreaterThan(0)
     }
     const demo = data.cards.find((c: { name: string }) => c.name === 'mushi-demo')
     expect(demo.sdk).toEqual([expect.objectContaining({ status: 'unknown', package: null })])

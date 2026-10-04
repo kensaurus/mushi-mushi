@@ -37,6 +37,7 @@ import { log } from '../../_shared/logger.ts'
 import { findOpenPrByHeadPrefix } from '../../_shared/github-pr.ts'
 import {
   evaluateSdkUpgradePostGate,
+  isUpgradePrStillRelevant,
   type SdkUpgradePostBody,
   SDK_UPGRADE_ACTIVE_STATUSES,
   SDK_UPGRADE_SETTLED_STATUSES,
@@ -118,6 +119,9 @@ export function registerSdkUpgradeRoutes(app: Hono<{ Variables: Variables }>): v
       if (decision.code === 'ALREADY_IN_PROGRESS' && decision.jobId && blocking?.status !== 'awaiting_lockfile') {
         void scheduleSdkUpgradeRun(decision.jobId)
       }
+      // `data.jobId` too: the console's envelope keeps `data` on an error but
+      // drops extra error fields, so the client could not follow the running
+      // job and showed a raw "ALREADY_IN_PROGRESS" failure (QA #124).
       return c.json({
         ok: false,
         error: {
@@ -125,6 +129,7 @@ export function registerSdkUpgradeRoutes(app: Hono<{ Variables: Variables }>): v
           message: decision.message,
           ...(decision.jobId ? { jobId: decision.jobId } : {}),
         },
+        ...(decision.jobId ? { data: { jobId: decision.jobId } } : {}),
       }, decision.status as 400 | 409)
     }
 
@@ -178,6 +183,7 @@ export function registerSdkUpgradeRoutes(app: Hono<{ Variables: Variables }>): v
               message: 'An SDK upgrade is already in progress for this project.',
               jobId: raced.id,
             },
+            data: { jobId: raced.id },
           }, 409)
         }
       }
@@ -230,7 +236,24 @@ export function registerSdkUpgradeRoutes(app: Hono<{ Variables: Variables }>): v
       .limit(1)
       .maybeSingle()
 
-    return c.json({ ok: true, data: recent ?? null })
+    if (recent) return c.json({ ok: true, data: recent })
+
+    // The last upgrade PR, however old, so the Update center can show it (open
+    // with its CI state, or merged and waiting for the new version in
+    // production) instead of offering a duplicate "Create Upgrade PR".
+    // Closed-unmerged PRs are history, not state.
+    const { data: lastPr } = await db
+      .from('sdk_upgrade_jobs')
+      .select('id, status, pr_url, plan, error, created_at, pr_state, release_status, check_run_status, check_run_conclusion, deploy_status, deploy_url, merged_at')
+      .eq('project_id', projectId)
+      .eq('status', 'completed')
+      .not('pr_url', 'is', null)
+      .gte('finished_at', new Date(Date.now() - 30 * 24 * 60 * 60_000).toISOString())
+      .order('finished_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    return c.json({ ok: true, data: lastPr && isUpgradePrStillRelevant(lastPr) ? lastPr : null })
   })
 
   // -------------------------------------------------------------------------

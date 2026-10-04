@@ -13,8 +13,9 @@ import { useState } from 'react'
 import { apiFetch } from '../../lib/supabase'
 import { usePageData } from '../../lib/usePageData'
 import { useToast } from '../../lib/toast'
-import { Section, Toggle } from '../ui'
-import { ContainedBlock } from '../report-detail/ReportSurface'
+import { Toggle } from '../ui'
+import { IconBell } from '../icons'
+import { SettingsList, SettingsRow } from './SettingsRow'
 
 interface LifecycleEmailsState {
   enabled: boolean
@@ -51,34 +52,31 @@ export function LifecycleEmailsToggle() {
   }
 
   return (
-    <Section title="Your account">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <p className="text-xs font-semibold text-fg">Onboarding emails</p>
-          <ContainedBlock tone="muted" className="mt-1">
-            <p className="text-2xs leading-relaxed text-fg-muted">
-              A short series while you set up: a welcome with your snippet, a nudge if no report has landed
-              after two days, and a one-question check-in after a week. Account-service mail only — no
-              marketing list, no tracking pixels. Saves immediately.
-            </p>
-          </ContainedBlock>
-          {error && (
-            <p className="mt-1 text-2xs text-danger">
-              Could not load this setting ({error}).{' '}
+    <SettingsList title="Your account" description="Settings for you, not just this project. They save straight away.">
+      <SettingsRow
+        icon={<IconBell size={16} />}
+        title="Onboarding emails"
+        purpose="A short series while you set up: a welcome with your snippet, a nudge if no report has arrived after two days, and a one-question check-in after a week. Account email only; no marketing list, no tracking pixels."
+        status={
+          error ? (
+            <p className="text-sm text-danger">
+              Couldn&apos;t load this setting.{' '}
               <button type="button" onClick={reload} className="underline underline-offset-2 hover:text-fg">
                 Retry
               </button>
             </p>
-          )}
-        </div>
-        <Toggle
-          ariaLabel="Onboarding emails"
-          label={enabled ? 'On' : 'Off'}
-          checked={enabled}
-          disabled={loading || saving || Boolean(error)}
-          onChange={(next) => void setEnabled(next)}
-        />
-      </div>
-    </Section>
+          ) : undefined
+        }
+        action={
+          <Toggle
+            ariaLabel="Onboarding emails"
+            label={enabled ? 'On' : 'Off'}
+            checked={enabled}
+            disabled={loading || saving || Boolean(error)}
+            onChange={(next) => void setEnabled(next)}
+          />
+        }
+      />
+    </SettingsList>
   )
 }

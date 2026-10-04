@@ -46,6 +46,7 @@ export function SidebarHealthDot({ tone, count, label, hideWhenZero = false }: P
   const showCount = typeof count === 'number' && count > 0
   return (
     <span
+      role="img"
       aria-label={label}
       title={label}
       className="ml-auto inline-flex items-center gap-1 text-2xs font-medium"

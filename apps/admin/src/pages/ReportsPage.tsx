@@ -16,7 +16,6 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useDispatchPreflight } from '../lib/useDispatchPreflight'
 import {
   EmptyState,
-  ErrorAlert,
   RecommendedAction,
   Tooltip,
   Kbd,
@@ -50,6 +49,11 @@ import { DogfoodNarrativeBanner } from '../components/DogfoodNarrativeBanner'
 import { SdkConnectivityEmptyState } from '../components/SdkHealthSummary'
 import { FirstDiagnosisInline } from '../components/onboarding/FirstDiagnosisScreen'
 import { IconReports } from '../components/icons'
+import { PageLoadError } from '../components/PageLoadError'
+import { ConfirmDialog } from '../components/ConfirmDialog'
+import { DismissReportDialog } from '../components/reports/DismissReportDialog'
+import { bulkConfirmCopy, defaultSortDir, kpiTileFilter, sanitizeListFilters } from '../lib/reportsListFilters'
+import { humanizeDispatchError } from '../lib/dispatchConfirm'
 
 export function ReportsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -69,8 +73,13 @@ export function ReportsPage() {
   const category = searchParams.get('category') ?? ''
   const userCategory = searchParams.get('user_category') ?? ''
   const severity = searchParams.get('severity') ?? ''
-  const platform = searchParams.get('platform') ?? ''
-  const sdkPackage = searchParams.get('sdkPackage') ?? ''
+  // Unknown values from old bookmarks are dropped, not sent (the server
+  // rejects them); legacy React / Capacitor SDK values map to the web SDK.
+  const { platform, sdkPackage, days } = sanitizeListFilters({
+    platform: searchParams.get('platform') ?? '',
+    sdkPackage: searchParams.get('sdkPackage') ?? '',
+    days: searchParams.get('days') ?? '',
+  })
   const component = searchParams.get('component') ?? ''
   const reporter = searchParams.get('reporter') ?? ''
   // Per-user / per-session browsing (2026-08-22): deep-linked from the
@@ -78,6 +87,8 @@ export function ReportsPage() {
   const endUser = searchParams.get('end_user') ?? ''
   const session = searchParams.get('session') ?? ''
   const area = searchParams.get('area') ?? ''
+  // `days` (created in the last N days) is set by the severity KPI tiles and
+  // the critical banners so the list counts what the tile counted.
   const sort = (searchParams.get('sort') as SortField | null) ?? 'created_at'
   const dir = (searchParams.get('dir') as SortDir | null) ?? 'desc'
   const page = Math.max(0, Number(searchParams.get('page') ?? '0') || 0)
@@ -118,13 +129,14 @@ export function ReportsPage() {
     if (endUser) p.set('end_user', endUser)
     if (session) p.set('session', session)
     if (area) p.set('area', area)
+    if (days) p.set('days', days)
     if (q) p.set('q', q)
     p.set('sort', sort)
     p.set('dir', dir)
     p.set('limit', String(PAGE_SIZE))
     p.set('offset', String(page * PAGE_SIZE))
     return p.toString()
-  }, [status, category, userCategory, severity, platform, sdkPackage, component, reporter, endUser, session, area, q, sort, dir, page])
+  }, [status, category, userCategory, severity, platform, sdkPackage, component, reporter, endUser, session, area, days, q, sort, dir, page])
 
   const { data, loading, error, isValidating, lastFetchedAt, reload } = usePageData<{ reports: ReportRow[]; total: number }>(
     // Wait for ProjectSwitcher to hydrate active project so the first fetch
@@ -265,10 +277,9 @@ export function ReportsPage() {
         next.set('dir', dir === 'asc' ? 'desc' : 'asc')
       } else {
         next.set('sort', field)
-        // created_at defaults to newest-first; everything else (status, severity,
-        // component, confidence) defaults to ascending so the lowest/earliest
-        // value sorts to the top on first click.
-        next.set('dir', field === 'created_at' ? 'desc' : 'asc')
+        // created_at → newest first, severity → worst first; the rest
+        // (status, component, confidence) ascending on first click.
+        next.set('dir', defaultSortDir(field))
       }
       next.delete('page')
       setSearchParams(next)
@@ -301,6 +312,10 @@ export function ReportsPage() {
     [searchParams, setSearchParams],
   )
 
+  // Bulk changes that tell reporters their report was closed or fixed. Undo
+  // puts the status back but cannot recall those notices, so ask first.
+  const [pendingBulk, setPendingBulk] = useState<{ action: 'set_status' | 'dismiss'; value?: string } | null>(null)
+
   const runBulk = useCallback(
     async (action: 'set_status' | 'set_severity' | 'dismiss', value?: string) => {
       if (selected.size === 0) return
@@ -315,7 +330,7 @@ export function ReportsPage() {
       )
       setBulkBusy(false)
       if (!res.ok) {
-        toast.error('Bulk action failed', res.error?.message ?? 'Unknown error')
+        toast.error('Bulk action failed', 'Nothing was changed. Try again in a moment.')
         return
       }
       const verb =
@@ -568,6 +583,17 @@ export function ReportsPage() {
     { enabled: !loading, capture: true },
   )
 
+  const requestBulk = useCallback(
+    (action: 'set_status' | 'set_severity' | 'dismiss', value?: string) => {
+      if (action === 'dismiss' || (action === 'set_status' && (value === 'dismissed' || value === 'fixed'))) {
+        setPendingBulk({ action, value })
+      } else {
+        void runBulk(action, value)
+      }
+    },
+    [runBulk],
+  )
+
   const contextChips: ContextChip[] = []
   if (component) contextChips.push({ key: 'component', label: 'Component', value: component })
   if (reporter)
@@ -578,7 +604,7 @@ export function ReportsPage() {
     contextChips.push({ key: 'session', label: 'Session', value: `${session.slice(0, 12)}…` })
   if (area) contextChips.push({ key: 'area', label: 'Area', value: area })
 
-  const hasFilters = Boolean(status || category || userCategory || severity || platform || sdkPackage || component || reporter || endUser || session || area || q)
+  const hasFilters = Boolean(status || category || userCategory || severity || platform || sdkPackage || component || reporter || endUser || session || area || days || q)
   const queuedCount = reports.filter((r) => r.status === 'queued' || r.status === 'new').length
   const criticalQueuedCount = reports.filter(
     (r) => (r.status === 'queued' || r.status === 'new') && r.severity === 'critical',
@@ -646,24 +672,15 @@ export function ReportsPage() {
         () => toast.error('Could not copy link'),
       )
     },
-    [toast],
+    // activeProjectId: the link carries ?project=; a stale closure kept the
+    // first project's id after a project switch.
+    [toast, activeProjectId],
   )
 
-  const handleDismiss = useCallback(
-    async (r: ReportRow) => {
-      const res = await apiFetch(`/v1/admin/reports/${r.id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ status: 'dismissed' }),
-      })
-      if (res.ok) {
-        toast.success('Report dismissed')
-        reload()
-      } else {
-        toast.error('Dismiss failed', res.error?.message)
-      }
-    },
-    [toast, reload],
-  )
+  // The row x asks first (DismissReportDialog): dismissing tells the
+  // reporter their report was closed, and that cannot be taken back.
+  const [dismissTarget, setDismissTarget] = useState<ReportRow | null>(null)
+  const handleDismiss = useCallback((r: ReportRow) => setDismissTarget(r), [])
 
   const handleDispatchFix = useCallback(
     async (r: ReportRow) => {
@@ -682,13 +699,25 @@ export function ReportsPage() {
         return next
       })
       if (!res.ok) {
-        toast.error('Dispatch failed', res.error?.message ?? 'Could not queue fix attempt')
+        const h = humanizeDispatchError(res.error)
+        const target = h.action?.target
+        toast.error(
+          h.title,
+          h.hint,
+          h.action && target?.kind === 'route'
+            ? { label: h.action.label, onClick: () => navigate(target.hash ? `${target.to}#${target.hash}` : target.to) }
+            : undefined,
+        )
         return
       }
-      toast.success('Fix dispatched', 'Track progress on the Fixes page')
+      // This row does not stream progress; the Fixes page does.
+      toast.success('Fix dispatched', 'The agent usually opens a draft PR in 2 to 6 minutes.', {
+        label: 'Watch on Fixes',
+        onClick: () => navigate('/fixes?tab=attempts'),
+      })
       reload()
     },
-    [toast, reload],
+    [toast, reload, navigate],
   )
 
   return (
@@ -743,7 +772,17 @@ export function ReportsPage() {
             children: (
               <ReportsKpiStrip
                 activeSeverity={severity}
-                onFilter={(sev) => setFilter('severity', sev)}
+                onFilter={(sev, windowDays) => {
+                  // The tile counts non-dismissed reports of that severity
+                  // from the window; open exactly that list.
+                  const next = new URLSearchParams(searchParams)
+                  for (const [k, v] of Object.entries(kpiTileFilter(sev || null, windowDays, { status, days }))) {
+                    if (v) next.set(k, v)
+                    else next.delete(k)
+                  }
+                  next.delete('page')
+                  setSearchParams(next)
+                }}
               />
             ),
           },
@@ -781,6 +820,7 @@ export function ReportsPage() {
         severity={severity}
         platform={platform}
         sdkPackage={sdkPackage}
+        days={days}
         contextChips={contextChips}
         hasFilters={hasFilters}
         onSetFilter={setFilter}
@@ -805,10 +845,32 @@ export function ReportsPage() {
         count={selected.size}
         busy={bulkBusy}
         onClear={clearSelection}
-        onSetStatus={(v) => runBulk('set_status', v)}
-        onSetSeverity={(v) => runBulk('set_severity', v)}
-        onDismiss={() => runBulk('dismiss')}
+        onSetStatus={(v) => requestBulk('set_status', v)}
+        onSetSeverity={(v) => requestBulk('set_severity', v)}
+        onDismiss={() => requestBulk('dismiss')}
       />
+
+      {pendingBulk && (
+        <ConfirmDialog
+          {...bulkConfirmCopy(pendingBulk, selected.size)}
+          tone="danger"
+          loading={bulkBusy}
+          onCancel={() => setPendingBulk(null)}
+          onConfirm={async () => {
+            const { action, value } = pendingBulk
+            await runBulk(action, value)
+            setPendingBulk(null)
+          }}
+        />
+      )}
+
+      {dismissTarget && (
+        <DismissReportDialog
+          report={dismissTarget}
+          onClose={() => setDismissTarget(null)}
+          onDismissed={reload}
+        />
+      )}
 
       <StagedChangesBanner
         count={reportsStaged.stagedCount}
@@ -820,7 +882,7 @@ export function ReportsPage() {
       {loading ? (
         <TableSkeleton rows={8} columns={6} showFilters={false} label="Loading reports" />
       ) : error ? (
-        <ErrorAlert message={`Failed to load reports: ${error}`} onRetry={reload} />
+        <PageLoadError error={error} resource="reports" onRetry={reload} />
       ) : reports.length === 0 && hasFilters ? (
         <EmptyState
           icon={<HeroSearch accent="text-fg-faint" />}

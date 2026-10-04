@@ -58,12 +58,26 @@ const ENV_VAR: Record<LlmProvider, string> = {
 };
 
 /** Legacy project_settings column names (backward-compat fallback). */
-const LEGACY_REF_COL: Partial<Record<LlmProvider, string>> = {
+const LEGACY_REF_COL = {
   anthropic: 'byok_anthropic_key_ref',
   openai: 'byok_openai_key_ref',
   firecrawl: 'byok_firecrawl_key_ref',
   browserbase: 'byok_browserbase_key_ref',
-};
+} as const satisfies Partial<Record<LlmProvider, string>>;
+
+/** Providers with a single-key slot in project_settings (`byok_<provider>_*`). */
+export type LegacyByokProvider = keyof typeof LEGACY_REF_COL;
+
+/**
+ * Every provider the legacy single-key routes (`/v1/admin/byok/:provider`)
+ * manage. The console lists a legacy row for each one that has a stored ref,
+ * so those routes must accept exactly this list.
+ */
+export const LEGACY_BYOK_PROVIDERS = Object.keys(LEGACY_REF_COL) as LegacyByokProvider[];
+
+export function isLegacyByokProvider(value: string): value is LegacyByokProvider {
+  return Object.prototype.hasOwnProperty.call(LEGACY_REF_COL, value);
+}
 
 const LEGACY_TEST_STATUS_COL: Partial<Record<LlmProvider, string>> = {
   anthropic: 'byok_anthropic_test_status',
@@ -208,7 +222,7 @@ export async function resolveLlmKeys(
   if (candidates.length > 0) return candidates;
 
   // Step 2: Legacy project_settings columns (back-compat).
-  const refCol = LEGACY_REF_COL[provider];
+  const refCol = isLegacyByokProvider(provider) ? LEGACY_REF_COL[provider] : undefined;
   if (refCol) {
     const testStatusCol = LEGACY_TEST_STATUS_COL[provider];
     const selectCols = [

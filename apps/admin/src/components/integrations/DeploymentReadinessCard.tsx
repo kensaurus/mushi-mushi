@@ -19,7 +19,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { Card } from '../../components/ui'
-import { Btn, Tooltip } from '../ui'
+import { Btn, CopyButton, Tooltip } from '../ui'
 import { apiFetch } from '../../lib/supabase'
 import { isGithubHostname } from '../../lib/githubUrl'
 import { CHIP_TONE } from '../../lib/chipTone'
@@ -77,6 +77,8 @@ interface ChecklistItem {
   description: string
   ctaLabel: string
   ctaHref: string | null
+  /** In-page target (element id) when the fix is on this page, not GitHub. */
+  ctaAnchorId?: string
   snippetLanguage?: 'yaml' | 'json'
   snippet?: string
 }
@@ -118,8 +120,9 @@ export function DeploymentReadinessCard({ projectId, githubAppInstalled, vercelP
           status: 'recommended',
           description:
             'The Deployment Readiness checklist becomes actionable once your project is linked to a GitHub repo. Open the GitHub integration card above to connect.',
-          ctaLabel: 'Scroll to GitHub card',
+          ctaLabel: 'Go to the GitHub card',
           ctaHref: null,
+          ctaAnchorId: 'platform-card-github',
         },
       ]
     }
@@ -282,15 +285,6 @@ const STATUS_TONE: Record<ChecklistItem['status'], { dot: string; pill: string; 
 
 function ReadinessItem({ item }: { item: ChecklistItem }) {
   const tone = STATUS_TONE[item.status]
-  const copySnippet = () => {
-    if (!item.snippet) return
-    try {
-      void navigator.clipboard?.writeText(item.snippet)
-    } catch {
-      // intentionally swallow -- clipboard is best-effort here, the
-      // raw snippet is still visible in the disclosure below.
-    }
-  }
   return (
     <li className="rounded-sm border border-edge-subtle bg-surface-raised p-2.5">
       <div className="flex items-start justify-between gap-2">
@@ -304,6 +298,20 @@ function ReadinessItem({ item }: { item: ChecklistItem }) {
           </div>
           <p className="text-2xs text-fg-muted mt-1 leading-relaxed">{item.description}</p>
         </div>
+        {!item.ctaHref && item.ctaAnchorId && (
+          <Btn
+            size="sm"
+            variant="ghost"
+            className="shrink-0"
+            onClick={() => {
+              const el = document.getElementById(item.ctaAnchorId!)
+              el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+              el?.querySelector<HTMLElement>('button, a, input')?.focus({ preventScroll: true })
+            }}
+          >
+            {item.ctaLabel}
+          </Btn>
+        )}
         {item.ctaHref && (
           <a
             href={item.ctaHref}
@@ -325,14 +333,8 @@ function ReadinessItem({ item }: { item: ChecklistItem }) {
             <pre className="mushi-code-block mushi-code-body text-2xs font-mono border border-code-surface-border rounded-sm p-2 overflow-x-auto whitespace-pre">
               {item.snippet}
             </pre>
-            <Btn
-              variant="ghost"
-              size="sm"
-              onClick={copySnippet}
-              className="absolute top-1 right-1 text-2xs"
-            >
-              Copy
-            </Btn>
+            {/* CopyButton shows "Copied" so the click has visible feedback. */}
+            <CopyButton value={item.snippet} label="Copy snippet" className="absolute top-1 right-1" />
           </div>
         </details>
       )}

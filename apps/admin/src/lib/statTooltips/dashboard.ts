@@ -14,24 +14,24 @@ export function backlogTooltip(stats: DashboardStats, opts: Opts = {}): MetricTo
   const takeaway =
     stats.openBacklog > 0
       ? plain
-        ? `${stats.openBacklog} report${stats.openBacklog === 1 ? '' : 's'} have sat in new or queued status for over an hour. Review them on Reports → Queue before sending to auto-fix.`
-        : `${stats.openBacklog} report${stats.openBacklog === 1 ? '' : 's'} have sat in new or queued status for over an hour. Triage them on Reports → Queue before dispatching fixes.`
+        ? `${stats.openBacklog} report${stats.openBacklog === 1 ? ' is' : 's are'} waiting for triage. Review them on Reports → Queue before sending to auto-fix.`
+        : `${stats.openBacklog} report${stats.openBacklog === 1 ? ' is' : 's are'} waiting for triage. Triage them on Reports → Queue before dispatching fixes.`
       : plain
         ? 'No reports stuck waiting for review — your inbox is current.'
         : 'No reports are stuck waiting for triage — the Plan stage of your PDCA loop is current.'
 
   return metricTip(
     plain
-      ? 'Reports in new or queued status that have been waiting more than one hour.'
-      : 'Reports in new or queued status that have been waiting more than one hour to be triaged.',
-    'Counts reports rows with status new or queued where created_at is older than 60 minutes, within the rolling 14-day window for the active project.',
+      ? 'Reports still waiting for review, any age.'
+      : 'Reports still waiting to be triaged, any age.',
+    'Counts reports whose status is new, queued, pending or submitted: the same list Reports shows for the New filter.',
     takeaway,
     stats.openBacklog > 0
       ? {
           tone: 'warn',
           text: plain
-            ? 'Stale backlog slows the loop — start with the oldest new report.'
-            : 'Stale triage backlog slows the whole loop — start with the oldest new report.',
+            ? 'A backlog slows the loop — start with the oldest new report.'
+            : 'A triage backlog slows the whole loop — start with the oldest new report.',
         }
       : undefined,
   )
@@ -39,7 +39,7 @@ export function backlogTooltip(stats: DashboardStats, opts: Opts = {}): MetricTo
 
 export function backlogDetail(stats: DashboardStats, opts: Opts = {}): string {
   const plain = opts.plainLanguage ?? false
-  return stats.openBacklog > 0 ? (plain ? 'Waiting > 1h' : 'Needs triage > 1h') : 'Queue clear'
+  return stats.openBacklog > 0 ? (plain ? 'Waiting' : 'Needs triage') : 'Queue clear'
 }
 
 export function reports14dTooltip(stats: DashboardStats, opts: Opts = {}): MetricTooltipData {

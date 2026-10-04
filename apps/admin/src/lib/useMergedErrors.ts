@@ -24,6 +24,8 @@
 export interface MergedQuery {
   loading: boolean
   error: string | null
+  /** Stable API code from usePageData, forwarded so PageLoadError can humanize it. */
+  errorCode?: string | null
   data: unknown
   reload: () => void
 }
@@ -33,6 +35,8 @@ export interface MergedErrorsResult {
   loading: boolean
   /** First non-null error message across the bundle, or null. */
   error: string | null
+  /** API code of the first failing query, when the envelope carried one. */
+  errorCode: string | null
   /** Label of the first failing query, useful for naming what broke. */
   failedLabel: string | null
   /** True if any query is currently in an error state. */
@@ -56,6 +60,7 @@ export function useMergedErrors(
   return {
     loading: stillFirstLoad,
     error: failing?.error ?? null,
+    errorCode: failing?.errorCode ?? null,
     failedLabel: failing?.label ?? null,
     anyError: failingIndex >= 0,
     retry: () => {

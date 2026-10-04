@@ -19,7 +19,7 @@ export interface FeatureExplainBurndownItem {
 
 export const FEATURE_EXPLAIN_BURNDOWN: FeatureExplainBurndownItem[] = [
   { route: '/organization/members', label: 'Members', status: 'done', liveData: 'done', notes: 'Role guide + Callout seat FAQ + semantic icons' },
-  { route: '/settings', label: 'Settings', status: 'done', liveData: 'done', notes: 'SettingsTabIntro + settingsTabOverlay from tab-local probe flags' },
+  { route: '/settings', label: 'Settings', status: 'done', liveData: 'done', notes: 'Each tab is a SettingsList with a one-line description; rows carry live status from keyStatus' },
   { route: '/dashboard', label: 'Dashboard', status: 'done', liveData: 'done', notes: 'DashboardPdcaGuide with live stage counts' },
   { route: '/projects', label: 'Projects', status: 'done', liveData: 'done', notes: 'ProjectsHubGuide + projectsHealthOverlay' },
   { route: '/reports', label: 'Reports', status: 'done', liveData: 'done', notes: 'ReportsTriageGuide + reportsSeverityOverlay' },

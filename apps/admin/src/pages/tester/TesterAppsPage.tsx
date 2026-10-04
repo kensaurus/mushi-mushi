@@ -10,6 +10,7 @@ import { usePageData } from '../../lib/usePageData'
 import { TESTER_API_OPTS } from '../../lib/tester-page-data'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
+import { plainApiError } from '../../lib/humanizeApiError'
 import { Btn, Badge, SegmentedControl } from '../../components/ui'
 import { TableSkeleton } from '../../components/skeletons/TableSkeleton'
 import { TesterPageIntro } from '../../components/tester/tester-ui'
@@ -362,7 +363,7 @@ export function TesterAppsPage() {
         toast.success('Joined! Start testing and report bugs to earn points.')
         reload()
       } else {
-        toast.error((res as { error?: { message?: string } }).error?.message ?? 'Could not join.')
+        toast.error(plainApiError(res.error, 'Could not join this app. Try again.'))
       }
     } finally {
       setActing(null)
@@ -377,7 +378,7 @@ export function TesterAppsPage() {
         toast.success('Left the test program.')
         reload()
       } else {
-        toast.error((res as { error?: { message?: string } }).error?.message ?? 'Could not leave.')
+        toast.error(plainApiError(res.error, 'Could not leave this app. Try again.'))
       }
     } finally {
       setActing(null)

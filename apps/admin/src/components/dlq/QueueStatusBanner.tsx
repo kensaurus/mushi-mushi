@@ -63,7 +63,7 @@ export function QueueStatusBanner({
           ) : (
             <StatusBannerAction
               label="Inspect dead-letter queue"
-              to={scopedHref('/queue?tab=items&filter=dead_letter', pid)}
+              to={scopedHref('/queue?status=dead_letter', pid)}
               tone="danger"
             />
           )
@@ -87,7 +87,7 @@ export function QueueStatusBanner({
           ) : (
             <StatusBannerAction
               label="Inspect failures"
-              to={scopedHref('/queue?tab=items&filter=failed', pid)}
+              to={scopedHref('/queue?status=failed', pid)}
               tone="warn"
             />
           )

@@ -148,6 +148,27 @@ const DOT_GRID_COLORS = {
 
 const HINT_KEY = 'mushi.explore.hintSeen'
 
+/**
+ * Storage can throw (Safari private mode, blocked site data, sandboxed
+ * iframes). The hint is a convenience: a failed read shows it, a failed
+ * write just means it shows again next time.
+ */
+function hintSeen(): boolean {
+  try {
+    return window.localStorage.getItem(HINT_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+function rememberHintSeen(): void {
+  try {
+    window.localStorage.setItem(HINT_KEY, '1')
+  } catch {
+    /* storage unavailable: nothing to remember */
+  }
+}
+
 function ZoomControls() {
   const { zoomIn, zoomOut, fitView } = useReactFlow()
   const btn =
@@ -267,8 +288,8 @@ function InnerCanvas({
 
   useEffect(() => {
     if (typeof window === 'undefined') return
-    if (window.localStorage.getItem(HINT_KEY) === '1') { setHintDismissed(true); return }
-    const t = setTimeout(() => { setHintDismissed(true); window.localStorage.setItem(HINT_KEY, '1') }, 6000)
+    if (hintSeen()) { setHintDismissed(true); return }
+    const t = setTimeout(() => { setHintDismissed(true); rememberHintSeen() }, 6000)
     return () => clearTimeout(t)
   }, [])
 
@@ -347,7 +368,7 @@ function InnerCanvas({
             <span>Drag to pan · scroll to zoom · click a file for details</span>
             <button
               type="button"
-              onClick={() => { setHintDismissed(true); window.localStorage.setItem(HINT_KEY, '1') }}
+              onClick={() => { setHintDismissed(true); rememberHintSeen() }}
               className="ml-1 rounded-sm px-1 text-danger hover:bg-danger-muted/50 leading-none"
               aria-label="Dismiss hint"
             >

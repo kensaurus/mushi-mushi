@@ -630,15 +630,30 @@ export async function findSimilarReports(
     }))
 }
 
+/**
+ * A project's dedup threshold, or the default when it is unset or outside
+ * (0, 1]. A failed read falls back to the default: grouping is a suggestion.
+ */
+export async function projectDedupThreshold(
+  db: ReturnType<typeof getServiceClient>,
+  projectId: string,
+): Promise<number> {
+  const { data } = await db.from('project_settings').select('dedup_threshold').eq('project_id', projectId).maybeSingle()
+  const v = Number((data as { dedup_threshold?: unknown } | null)?.dedup_threshold)
+  return Number.isFinite(v) && v > 0 && v <= 1 ? v : DEFAULT_DEDUP_THRESHOLD
+}
+
 export async function suggestGrouping(
   reportId: string,
   projectId: string,
   threshold?: number,
 ): Promise<{ groupId?: string; similarCount: number }> {
-  const similar = await findSimilarReports(reportId, projectId, threshold, 3)
-  if (similar.length === 0) return { similarCount: 0 }
-
   const db = getServiceClient()
+  // The project's Settings → General "Dedup threshold" (it was saved but never
+  // read, so grouping always used the default).
+  const effective = threshold ?? (await projectDedupThreshold(db, projectId))
+  const similar = await findSimilarReports(reportId, projectId, effective, 3)
+  if (similar.length === 0) return { similarCount: 0 }
 
   const existingGroupId = similar.find(s => s.reportGroupId)?.reportGroupId
   if (existingGroupId) {

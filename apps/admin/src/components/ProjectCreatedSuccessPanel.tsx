@@ -9,20 +9,20 @@
  * - API key revealed once (masked by default, toggle to reveal), with a
  *   "shown only once" warning and a copy button
  * - Single prefilled `mushi init --project-id <id> --api-key <key>` command
- * - "Regenerate key" affordance (calls /v1/admin/projects/:id/keys/rotate)
+ * - "Regenerate key" affordance: confirms, then rotates exactly the auto-minted
+ *   key (POST /v1/admin/projects/:id/keys/rotate with its keyId)
  * - If automint failed (apiKey null), falls back to the old "Generate API key" CTA
  *
  * USAGE:
  * - OnboardingPage and ProjectsPage after `useCreateProject` succeeds
  */
 
-import { useState, useCallback } from 'react'
-import { Link } from 'react-router-dom'
+import { useState } from 'react'
 import { Btn, Card, CopyButton } from './ui'
 import { CodeInline } from './CodePanel'
 import { useToast } from '../lib/toast'
 import { buildMushiInitCommand } from '../lib/cliSetupCommands'
-import { apiFetch } from '../lib/supabase'
+import { RotateKeyDialog } from './RotateKeyDialog'
 
 export interface CreatedProjectInfo {
   id: string
@@ -32,6 +32,8 @@ export interface CreatedProjectInfo {
   apiKey?: string | null
   /** 12-char key prefix for display. */
   keyPrefix?: string | null
+  /** Row id of the auto-minted key; Regenerate rotates exactly this key. */
+  apiKeyId?: string | null
 }
 
 interface Props {
@@ -114,7 +116,8 @@ function ApiKeyRevealBlock({
   regenerating,
 }: {
   rawKey: string
-  onRegenerate: () => void
+  /** Omitted when the key's id is unknown: only a named key can be rotated. */
+  onRegenerate?: () => void
   regenerating: boolean
 }) {
   const [visible, setVisible] = useState(false)
@@ -148,6 +151,7 @@ function ApiKeyRevealBlock({
       <p className="text-2xs text-fg-faint">
         This key has <strong>report:write</strong> scope — use it as{' '}
         <code className="font-mono">MUSHI_API_KEY</code> in your SDK config.{' '}
+        {onRegenerate ? (
         <button
           type="button"
           disabled={regenerating}
@@ -157,6 +161,7 @@ function ApiKeyRevealBlock({
           <RefreshIcon spinning={regenerating} />
           Regenerate
         </button>
+        ) : null}
       </p>
     </div>
   )
@@ -169,27 +174,9 @@ export function ProjectCreatedSuccessPanel({
 }: Props) {
   const toast = useToast()
   const [liveKey, setLiveKey] = useState<string | null>(project.apiKey ?? null)
-  const [rotating, setRotating] = useState(false)
-
-  const handleRegenerate = useCallback(async () => {
-    setRotating(true)
-    try {
-      const res = await apiFetch<{ key: string; prefix: string }>(
-        `/v1/admin/projects/${project.id}/keys/rotate`,
-        { method: 'POST' },
-      )
-      if (res.ok && res.data?.key) {
-        setLiveKey(res.data.key)
-        toast.success('Key regenerated — copy the new key above.')
-      } else {
-        toast.error('Could not regenerate key', res.error?.message ?? 'Try again from Settings → API Keys.')
-      }
-    } catch {
-      toast.error('Could not reach the server', 'Check your connection and try again.')
-    } finally {
-      setRotating(false)
-    }
-  }, [project.id, toast])
+  const [liveKeyId, setLiveKeyId] = useState<string | null>(project.apiKeyId ?? null)
+  const [livePrefix, setLivePrefix] = useState<string | null>(project.keyPrefix ?? null)
+  const [confirmRotate, setConfirmRotate] = useState(false)
 
   const initCmd = buildMushiInitCommand(project.id, liveKey)
 
@@ -216,8 +203,9 @@ export function ProjectCreatedSuccessPanel({
       {liveKey ? (
         <ApiKeyRevealBlock
           rawKey={liveKey}
-          onRegenerate={() => void handleRegenerate()}
-          regenerating={rotating}
+          // Without the key's id there is no way to rotate only this key.
+          onRegenerate={liveKeyId ? () => setConfirmRotate(true) : undefined}
+          regenerating={confirmRotate}
         />
       ) : null}
 
@@ -237,18 +225,44 @@ export function ProjectCreatedSuccessPanel({
         ) : null}
       </div>
 
-      {/* CTA row */}
+      {confirmRotate && liveKeyId ? (
+        <RotateKeyDialog
+          projectId={project.id}
+          apiKey={{
+            id: liveKeyId,
+            key_prefix: livePrefix ?? liveKey?.slice(0, 12) ?? 'mushi_',
+            label: 'sdk-ingest',
+            scopes: ['report:write'],
+          }}
+          onCancel={() => setConfirmRotate(false)}
+          onError={(message) => {
+            setConfirmRotate(false)
+            toast.error('Could not regenerate key', message)
+          }}
+          onRotated={(rotated) => {
+            setConfirmRotate(false)
+            setLiveKey(rotated.key)
+            setLiveKeyId(rotated.id)
+            setLivePrefix(rotated.prefix)
+            if (rotated.oldKeyStillActive) {
+              toast.error('New key created, but the old key is still active', 'Revoke it under Projects → Your projects → Keys.')
+            } else {
+              toast.success('Key regenerated — copy the new key above.')
+            }
+          }}
+        />
+      ) : null}
+
+      {/* CTA row — Btn renders the link itself (no button nested in a link, QA bug 264). */}
       <div className="flex flex-wrap gap-2">
         {!liveKey ? (
-          <Link to={`/onboarding?tab=verify&project=${project.id}`}>
-            <Btn size="sm" variant="primary">Generate API key</Btn>
-          </Link>
-        ) : null}
-        <Link to={`/connect?project=${project.id}`}>
-          <Btn size="sm" variant={liveKey ? 'primary' : 'ghost'}>
-            {liveKey ? 'Continue to Connect hub' : 'Open Connect & Update'}
+          <Btn size="sm" variant="primary" to={`/onboarding?tab=verify&project=${project.id}`}>
+            Generate API key
           </Btn>
-        </Link>
+        ) : null}
+        <Btn size="sm" variant={liveKey ? 'primary' : 'ghost'} to={`/connect?project=${project.id}`}>
+          {liveKey ? 'Continue to Connect hub' : 'Open Connect & Update'}
+        </Btn>
         {onDismiss ? (
           <Btn size="sm" variant="ghost" onClick={onDismiss}>
             Dismiss

@@ -103,11 +103,34 @@ export function getDemoReportFixture(id: string = DEFAULT_TEST_REPORT_FIXTURE_ID
  * fixture's written diagnosis — the same columns classify-report writes on a
  * Stage-2 success, with stage2_model 'precomputed' so it is never mistaken for
  * a model output. Null when the fixture carries no diagnosis.
+ *
+ * It also writes the Stage-1 columns fast-filter writes
+ * (`stage1_classification`, `stage1_model`). Without them the console read
+ * the row as "Classified" with a 72% diagnosis AND "Classification pending",
+ * because every "is it classified?" check keys on `stage1_classification`
+ * (REPORT A2, 2026-10-04). There is no `reports.classified_at` column in
+ * production, so it is deliberately not written: an unknown column fails the
+ * whole update and the route falls back to a paid LLM run.
  */
 export function precomputedClassification(fixture: DemoReportFixture): Record<string, unknown> | null {
   const d = fixture.diagnosis
   if (!d) return null
   return {
+    // Same keys as fast-filter's stage1Schema, so every reader of the
+    // Stage-1 object finds what it expects.
+    stage1_classification: {
+      symptom: d.summary,
+      action: fixture.userIntent ?? '',
+      expected: '',
+      actual: d.summary,
+      emotion: '',
+      category: fixture.category,
+      severity: d.severity,
+      confidence: d.confidence,
+      precomputed: true,
+    },
+    stage1_model: 'precomputed',
+    stage1_latency_ms: 0,
     stage2_analysis: {
       category: fixture.category,
       severity: d.severity,

@@ -192,6 +192,7 @@ export interface RecommendedActionInlineAction {
   href?: string
   onClick?: () => void
   tone?: 'primary' | 'ghost' | 'danger'
+  disabled?: boolean
 }
 
 interface RecommendedActionProps {
@@ -273,7 +274,12 @@ function InlineActionEl({ action }: { action: RecommendedActionInlineAction }) {
     )
   }
   return (
-    <button type="button" onClick={action.onClick} className={cls}>
+    <button
+      type="button"
+      onClick={action.onClick}
+      disabled={action.disabled}
+      className={`${cls} disabled:opacity-50 disabled:cursor-not-allowed`}
+    >
       {action.label}
     </button>
   )

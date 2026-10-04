@@ -204,6 +204,7 @@ export function KpiTile({
             valueFormat="count"
             showRangeSummary={showSparkAxes}
             seriesLabel={label}
+            maxXTicks={2}
             height={showSparkAxes ? (isPrimary ? 56 : 44) : 18}
           />
           <ChartAccessibleSummary
@@ -300,6 +301,7 @@ export function LineSparkline({
   showRangeSummary = false,
   seriesLabel: _seriesLabel,
   onRangeSelect,
+  maxXTicks,
 }: {
   values: number[]
   accent?: string
@@ -321,6 +323,8 @@ export function LineSparkline({
   /** Label for summary chips + aria (e.g. "Tokens"). */
   seriesLabel?: string
   onRangeSelect?: (range: { fromIso: string; toIso: string }) => void
+  /** Cap on X-axis labels (narrow KPI tiles pass 2). */
+  maxXTicks?: number
 }) {
   const brush = useBrushSelection({
     dataLength: values.length,
@@ -499,6 +503,7 @@ export function LineSparkline({
         height={plotHeight}
         yTickLabels={yTicks}
         xLabels={axisXIso.length > 0 ? axisXIso : undefined}
+        maxXTicks={maxXTicks}
         yAxisCaption={yAxisCaption}
         xAxisCaption={xAxisCaption}
       >
@@ -897,19 +902,19 @@ function SeverityBarColumn({
         {day.total > 0 ? (
           <ul className="mt-1 space-y-0.5 font-mono text-3xs">
             {day.critical > 0 && (
-              <li className="flex justify-between gap-3"><span className={SEVERITY_TRAFFIC.critical.text}>●</span><span>{day.critical}</span></li>
+              <li className="flex justify-between gap-3"><span className="inline-flex items-center gap-1"><span aria-hidden="true" className={`inline-block h-2 w-2 rounded-sm ${SEVERITY_TRAFFIC.critical.bg}`} />{SEVERITY_TRAFFIC.critical.label}</span><span>{day.critical}</span></li>
             )}
             {day.high > 0 && (
-              <li className="flex justify-between gap-3"><span className={SEVERITY_TRAFFIC.high.text}>●</span><span>{day.high}</span></li>
+              <li className="flex justify-between gap-3"><span className="inline-flex items-center gap-1"><span aria-hidden="true" className={`inline-block h-2 w-2 rounded-sm ${SEVERITY_TRAFFIC.high.bg}`} />{SEVERITY_TRAFFIC.high.label}</span><span>{day.high}</span></li>
             )}
             {day.medium > 0 && (
-              <li className="flex justify-between gap-3"><span className={SEVERITY_TRAFFIC.medium.text}>●</span><span>{day.medium}</span></li>
+              <li className="flex justify-between gap-3"><span className="inline-flex items-center gap-1"><span aria-hidden="true" className={`inline-block h-2 w-2 rounded-sm ${SEVERITY_TRAFFIC.medium.bg}`} />{SEVERITY_TRAFFIC.medium.label}</span><span>{day.medium}</span></li>
             )}
             {day.low > 0 && (
-              <li className="flex justify-between gap-3"><span className={SEVERITY_TRAFFIC.low.text}>●</span><span>{day.low}</span></li>
+              <li className="flex justify-between gap-3"><span className="inline-flex items-center gap-1"><span aria-hidden="true" className={`inline-block h-2 w-2 rounded-sm ${SEVERITY_TRAFFIC.low.bg}`} />{SEVERITY_TRAFFIC.low.label}</span><span>{day.low}</span></li>
             )}
             {day.unscored != null && day.unscored > 0 && (
-              <li className="flex justify-between gap-3"><span className={SEVERITY_TRAFFIC.unscored.text}>●</span><span>{day.unscored}</span></li>
+              <li className="flex justify-between gap-3"><span className="inline-flex items-center gap-1"><span aria-hidden="true" className={`inline-block h-2 w-2 rounded-sm ${SEVERITY_TRAFFIC.unscored.bg}`} />{SEVERITY_TRAFFIC.unscored.label}</span><span>{day.unscored}</span></li>
             )}
           </ul>
         ) : null}

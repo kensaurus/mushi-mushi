@@ -92,6 +92,9 @@ export function ExploreDiagramPanel({ projectId }: Props) {
   if (error) return <ErrorAlert message={error} onRetry={() => void load()} />
 
   const diagram = data?.diagram ?? null
+  // Older servers omit permissions: show the controls and let the server decide.
+  const canDraw = data?.permissions?.can_draw ?? true
+  const canManagePage = data?.permissions?.can_manage_page ?? true
   if (!diagram) {
     return (
       <div data-testid="explore-diagram-empty">
@@ -101,9 +104,15 @@ export function ExploreDiagramPanel({ projectId }: Props) {
           Mushi reads your repo on GitHub at the latest commit and asks AI to draw the main parts and how they connect.
           Every file path is checked against the real repo. It costs one AI call, and nothing changes until you redraw.
         </p>
-        <Btn onClick={() => void draw(false)} loading={drawing}>
-          Draw diagram
-        </Btn>
+        {canDraw ? (
+          <Btn onClick={() => void draw(false)} loading={drawing}>
+            Draw diagram
+          </Btn>
+        ) : (
+          <p className="text-xs text-fg-muted" data-testid="diagram-viewer-note">
+            Viewers cannot draw diagrams. Ask a project member to draw one.
+          </p>
+        )}
       </Card>
       </div>
     )
@@ -136,14 +145,16 @@ export function ExploreDiagramPanel({ projectId }: Props) {
           {new Date(diagram.updated_at).toLocaleString()} · {diagram.graph.nodes.length} parts
           {invalid > 0 && ` · ${invalid} made-up path${invalid === 1 ? '' : 's'} removed`}
         </p>
-        <div className="flex gap-2">
-          <Btn size="sm" variant="ghost" onClick={() => void draw(false)} loading={drawing}>
-            Update to latest commit
-          </Btn>
-          <Btn size="sm" variant="ghost" onClick={() => void draw(true)} loading={drawing}>
-            Redraw
-          </Btn>
-        </div>
+        {canDraw ? (
+          <div className="flex gap-2">
+            <Btn size="sm" variant="ghost" onClick={() => void draw(false)} loading={drawing}>
+              Update to latest commit
+            </Btn>
+            <Btn size="sm" variant="ghost" onClick={() => void draw(true)} loading={drawing}>
+              Redraw
+            </Btn>
+          </div>
+        ) : null}
       </div>
 
       <ExploreDiagramCanvas graph={diagram.graph} selectedId={selectedId} onSelect={setSelectedId} overlay={overlay} />
@@ -228,7 +239,14 @@ export function ExploreDiagramPanel({ projectId }: Props) {
         </div>
       )}
 
-      {data && <ExploreDiagramPublishCard projectId={projectId} publication={data.publication} onChanged={() => void load()} />}
+      {data && (
+        <ExploreDiagramPublishCard
+          projectId={projectId}
+          publication={data.publication}
+          canManage={canManagePage}
+          onChanged={() => void load()}
+        />
+      )}
     </div>
   )
 }

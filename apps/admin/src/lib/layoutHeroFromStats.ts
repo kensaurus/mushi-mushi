@@ -67,7 +67,7 @@ function enrichByPath(pathname: string, counts: NavCounts): {
             failed > 0
               ? `${failed} fix ${failed === 1 ? 'run' : 'runs'} failed — open Fixes before dispatching more.`
               : backlog > 0
-                ? `${backlog} report${backlog === 1 ? '' : 's'} waiting over an hour for triage.`
+                ? `${backlog} report${backlog === 1 ? '' : 's'} waiting for triage.`
                 : integrations > 0
                   ? `${integrations} integration${integrations === 1 ? '' : 's'} failing health checks.`
                   : 'No open bottlenecks on the dashboard right now.',

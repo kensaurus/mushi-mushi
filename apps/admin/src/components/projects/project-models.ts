@@ -59,6 +59,19 @@ export interface ApiKey {
   last_seen_endpoint_host?: string | null
 }
 
+/**
+ * Active / never-used key counts for ONE project. The setup readout used the
+ * workspace-wide totals from /projects/stats next to one project's name and
+ * key prefixes, so the two disagreed (QA bug 135).
+ */
+export function projectKeyCounts(keys: readonly Pick<ApiKey, 'is_active' | 'last_seen_at'>[]): {
+  active: number
+  neverSeen: number
+} {
+  const active = keys.filter((k) => k.is_active)
+  return { active: active.length, neverSeen: active.filter((k) => !k.last_seen_at).length }
+}
+
 type PdcaStageId = 'plan' | 'do' | 'check' | 'act'
 
 export type OrgRole = 'owner' | 'admin' | 'member' | 'viewer' | null
@@ -98,6 +111,12 @@ export interface Project {
   created_at: string
   organization_id: string | null
   organization_role: OrgRole
+  /** Server-computed (api/_shared/project-capabilities.ts). Absent on older servers. */
+  my_role?: 'owner' | 'admin' | 'member' | 'viewer' | null
+  /** May mint/rotate/revoke keys and change SDK, assistant and identity settings. */
+  can_manage?: boolean
+  /** May rename and delete the project. */
+  can_delete?: boolean
   api_keys: ApiKey[]
   active_key_count: number
   member_count: number
@@ -134,8 +153,24 @@ export interface Project {
   }
 }
 
+/**
+ * Rename / Delete. Uses the server's `can_delete`. The old guess read a null
+ * `organization_role` as "owner", but it is null for anyone who reaches the
+ * project through a project_members row or a legacy owner_id, so those
+ * users saw Rename and Delete and always got a 403 (QA bug 129).
+ */
 export function canDeleteProject(project: Project): boolean {
-  if (project.organization_role === null) return true
+  if (typeof project.can_delete === 'boolean') return project.can_delete
+  return project.organization_role === 'owner' || project.organization_role === 'admin'
+}
+
+/**
+ * Keys, SDK config, assistant and signed identity: owner/admin only on the
+ * server. Members saw these controls and got 403s, "Project not found" or a
+ * spinner that never ended (QA bug 128).
+ */
+export function canManageProject(project: Project): boolean {
+  if (typeof project.can_manage === 'boolean') return project.can_manage
   return project.organization_role === 'owner' || project.organization_role === 'admin'
 }
 

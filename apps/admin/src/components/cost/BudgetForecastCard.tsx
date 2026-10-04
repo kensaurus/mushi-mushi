@@ -23,6 +23,10 @@ import { Card, Btn } from '../ui'
 import { CHIP_TONE } from '../../lib/chipTone'
 import { apiFetch, apiFetchMutate } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
+import { describeApiError } from '../../lib/humanizeApiError'
+import { useActiveOrgRole } from '../../lib/useActiveOrgRole'
+import { ConfirmDialog } from '../ConfirmDialog'
+import { parseBudgetInput } from './budgetInput'
 import type { DailySpendSeries } from './dailySpendSeries'
 
 interface Props {
@@ -60,7 +64,12 @@ export function BudgetForecastCard({ projectId, series, monthToDateUsd, fmtSpend
   const [budgetInput, setBudgetInput] = useState('')
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [inputError, setInputError] = useState<string | null>(null)
+  const [confirmClear, setConfirmClear] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  // Spend limits are owner/admin-only on the server; members and viewers see
+  // the budget but not an editor that can only fail.
+  const { canManage } = useActiveOrgRole()
 
   // Load existing budget
   useEffect(() => {
@@ -81,24 +90,50 @@ export function BudgetForecastCard({ projectId, series, monthToDateUsd, fmtSpend
     return () => { cancelled = true }
   }, [projectId])
 
-  const handleSave = useCallback(async () => {
+  const saveBudget = useCallback(async (budgetToSave: number | null) => {
     if (!projectId) return
-    const val = parseFloat(budgetInput)
-    const budgetToSave = !budgetInput.trim() ? null : isNaN(val) || val <= 0 ? null : val
     setSaving(true)
     const res = await apiFetchMutate(`/v1/admin/settings?project_id=${encodeURIComponent(projectId)}`, {
       method: 'PATCH',
       body: JSON.stringify({ monthly_llm_budget_usd: budgetToSave }),
     })
     setSaving(false)
+    setConfirmClear(false)
     if (res.ok) {
       setBudget(budgetToSave)
       setEditing(false)
-      toast.success('Budget saved', budgetToSave ? `Monthly budget set to ${fmtSpend(budgetToSave)}` : 'Budget cleared.')
+      toast.success(
+        budgetToSave ? 'Budget saved' : 'Budget removed',
+        budgetToSave ? `Monthly budget set to ${fmtSpend(budgetToSave)}` : 'AI calls are no longer capped by a monthly budget.',
+      )
+    } else if (res.error?.code === 'FORBIDDEN') {
+      toast.error('Could not change the budget', 'Only team owners and admins can change the monthly budget. Ask one of them to set it.')
     } else {
-      toast.error('Save failed', 'Could not update the budget. Try again.')
+      const e = describeApiError(res.error, 'Could not change the budget')
+      toast.error(e.title, e.hint)
     }
-  }, [projectId, budgetInput, fmtSpend, toast])
+  }, [projectId, fmtSpend, toast])
+
+  // A typo used to clear the budget (and with it the spend cap) behind a
+  // success toast. Invalid input now stays in the editor with a reason, and
+  // removing the budget asks first.
+  const handleSave = useCallback(() => {
+    const parsed = parseBudgetInput(budgetInput)
+    if (parsed.kind === 'invalid') {
+      setInputError(parsed.message)
+      return
+    }
+    setInputError(null)
+    if (parsed.kind === 'clear') {
+      if (budget === null) {
+        setEditing(false)
+        return
+      }
+      setConfirmClear(true)
+      return
+    }
+    void saveBudget(parsed.value)
+  }, [budgetInput, budget, saveBudget])
 
   // Compute forecasts
   const daysTotal = daysInCurrentMonth()
@@ -120,7 +155,12 @@ export function BudgetForecastCard({ projectId, series, monthToDateUsd, fmtSpend
     <Card className="p-4">
       <div className="flex items-center justify-between gap-2 mb-3">
         <p className="text-xs font-medium text-fg-muted uppercase tracking-wide">Month-end forecast</p>
-        {projectId && (
+        {projectId && !canManage && (
+          <span className="text-2xs text-fg-muted" title="Only team owners and admins can change the monthly budget.">
+            {budget !== null ? `Budget: ${fmtSpend(budget)} / mo` : 'No budget set'}
+          </span>
+        )}
+        {projectId && canManage && (
           <div className="flex items-center gap-2">
             {editing ? (
               <>
@@ -131,14 +171,16 @@ export function BudgetForecastCard({ projectId, series, monthToDateUsd, fmtSpend
                   min="0"
                   step="0.01"
                   value={budgetInput}
-                  onChange={(e) => setBudgetInput(e.target.value)}
+                  onChange={(e) => { setBudgetInput(e.target.value); setInputError(null) }}
+                  aria-invalid={inputError != null}
+                  aria-describedby={inputError ? 'budget-input-error' : undefined}
                   placeholder="e.g. 50"
                   className="w-20 rounded border border-edge px-2 py-0.5 text-2xs text-fg bg-surface focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand"
                   onKeyDown={(e) => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') setEditing(false) }}
                   autoFocus
                 />
                 <Btn size="sm" variant="primary" onClick={handleSave} loading={saving}>Save</Btn>
-                <Btn size="sm" variant="cancel" onClick={() => setEditing(false)}>Cancel</Btn>
+                <Btn size="sm" variant="cancel" onClick={() => { setEditing(false); setInputError(null) }}>Cancel</Btn>
               </>
             ) : (
               <Btn size="sm" variant="ghost" onClick={() => { setEditing(true); setTimeout(() => inputRef.current?.focus(), 50) }}>
@@ -148,6 +190,22 @@ export function BudgetForecastCard({ projectId, series, monthToDateUsd, fmtSpend
           </div>
         )}
       </div>
+
+      {inputError && (
+        <p id="budget-input-error" role="alert" className="mb-2 text-2xs text-danger">{inputError}</p>
+      )}
+
+      {confirmClear && budget !== null && (
+        <ConfirmDialog
+          title="Remove the monthly budget?"
+          body={`Mushi stops AI calls when this month's spend reaches the budget. Without one (now ${fmtSpend(budget)} / month), AI spend is not capped until you set a budget again.`}
+          confirmLabel="Remove budget"
+          tone="danger"
+          loading={saving}
+          onConfirm={() => saveBudget(null)}
+          onCancel={() => (saving ? undefined : setConfirmClear(false))}
+        />
+      )}
 
       {/* Budget alert banner */}
       {isOverBudget80 && (

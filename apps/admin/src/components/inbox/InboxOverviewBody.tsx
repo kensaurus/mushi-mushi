@@ -11,6 +11,7 @@ import { isInboxStatusBannerCritical } from './InboxStatusBanner'
 import { ClearChip, GROUP_LABEL, OpenInboxCard } from './inbox-card-parts'
 import { EmptySectionMessage } from '../report-detail/ReportClassification'
 import { ActionPill, ActionPillRow } from '../report-detail/ReportSurface'
+import { scopedHref } from '../../lib/humanPageHints'
 
 export type InboxOverviewMode = 'setup' | 'handoff' | 'preview' | 'clear'
 
@@ -169,10 +170,9 @@ export function InboxOverviewBody({
             <ActionPill tone="neutral" onClick={() => onTab('activity')}>
               View activity
             </ActionPill>
-            <ActionPill
-              to={stats.nextStepTo ?? '/onboarding?tab=verify'}
-              tone="brand"
-            >
+            {/* The label promises a test report, so go where one is sent.
+                In this state the server's nextStepTo is the inbox itself. */}
+            <ActionPill to={scopedHref('/onboarding?tab=verify', stats.projectId)} tone="brand">
               Send test report →
             </ActionPill>
           </ActionPillRow>

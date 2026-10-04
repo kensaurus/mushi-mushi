@@ -95,6 +95,38 @@ export function heartbeatStateFromKeys(
   return best
 }
 
+/**
+ * The live key that heard from the app most recently, or null when no live
+ * key has ever checked in.
+ *
+ * Every "SDK last seen" readout must go through this (or `latestHeartbeatAt`).
+ * Taking the first key with any timestamp is the bug this replaces: with 13
+ * keys, /connect said "108d ago" while the setup checklist said "50m ago".
+ * Timestamps are compared as instants, not strings, so a `+00:00` vs `Z`
+ * suffix can never reorder them.
+ */
+export function freshestHeartbeatKey<T extends HeartbeatKeyLike>(
+  keys: readonly T[] | null | undefined,
+): T | null {
+  let best: T | null = null
+  let bestAt = -Infinity
+  for (const key of keys ?? []) {
+    if (!isLiveKey(key) || !key.last_seen_at) continue
+    const at = Date.parse(key.last_seen_at)
+    if (!Number.isFinite(at) || at <= bestAt) continue
+    best = key
+    bestAt = at
+  }
+  return best
+}
+
+/** Most recent `last_seen_at` across a project's live keys (null = never). */
+export function latestHeartbeatAt(
+  keys: readonly HeartbeatKeyLike[] | null | undefined,
+): string | null {
+  return freshestHeartbeatKey(keys)?.last_seen_at ?? null
+}
+
 /** Sort/priority order — lower is healthier. `unknown` never wins a merge. */
 const HEARTBEAT_RANK: Record<HeartbeatState, number> = {
   fresh: 0,

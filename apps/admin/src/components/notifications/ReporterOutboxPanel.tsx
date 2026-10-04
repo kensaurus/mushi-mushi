@@ -20,6 +20,7 @@ import { useToast } from '../../lib/toast'
 import { Badge, Btn, Card, EmptyState, ErrorAlert, RelativeTime, SegmentedControl } from '../ui'
 import { TableSkeleton } from '../skeletons/TableSkeleton'
 import { ReporterViewPanel } from '../report-detail/ReporterViewPanel'
+import { ConfirmDialog } from '../ConfirmDialog'
 
 interface OutboxMessage {
   id: string
@@ -54,6 +55,8 @@ export function ReporterOutboxPanel({ projectId }: { projectId: string }) {
   const [editing, setEditing] = useState<Record<string, string>>({})
   const [savingMode, setSavingMode] = useState(false)
   const [previewing, setPreviewing] = useState<string | null>(null)
+  // Discarding is irreversible: the reporter never sees the update.
+  const [pendingDiscard, setPendingDiscard] = useState<OutboxMessage | null>(null)
 
   const mode: Mode = modeData?.mode ?? 'auto'
   const messages = data?.messages ?? []
@@ -190,7 +193,7 @@ export function ReporterOutboxPanel({ projectId }: { projectId: string }) {
                         Edit
                       </Btn>
                     )}
-                    <Btn size="sm" variant="ghost" onClick={() => void act(msg, 'discard')} disabled={busy !== null}>
+                    <Btn size="sm" variant="ghost" onClick={() => setPendingDiscard(msg)} disabled={busy !== null}>
                       Discard
                     </Btn>
                     {msg.report_id && (
@@ -210,6 +213,29 @@ export function ReporterOutboxPanel({ projectId }: { projectId: string }) {
             )
           })}
         </ul>
+      )}
+
+      {pendingDiscard && (
+        <ConfirmDialog
+          title="Discard this update?"
+          body="The reporter will never get it, and there is no undo. Send it instead if the reporter should know."
+          confirmLabel="Discard update"
+          cancelLabel="Keep it"
+          tone="danger"
+          loading={busy === pendingDiscard.id}
+          onConfirm={async () => {
+            const msg = pendingDiscard
+            await act(msg, 'discard')
+            setPendingDiscard(null)
+          }}
+          onCancel={() => {
+            if (busy !== pendingDiscard.id) setPendingDiscard(null)
+          }}
+        >
+          <p className="rounded-sm border border-edge-subtle px-2.5 py-2 text-sm text-fg">
+            {pendingDiscard.body_override || pendingDiscard.text}
+          </p>
+        </ConfirmDialog>
       )}
     </div>
   )

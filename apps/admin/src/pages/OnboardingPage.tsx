@@ -14,7 +14,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
-import { useSendTestReport } from '../lib/useSendTestReport'
+import { testReportHref, useSendTestReport } from '../lib/useSendTestReport'
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { PageHeaderBar } from '../components/PageHeaderBar'
@@ -185,6 +185,7 @@ export function OnboardingPage() {
   const [keyCopied, setKeyCopied] = useState(false)
   const [testStatus, setTestStatus] = useState<'idle' | 'running' | 'pass' | 'fail'>('idle')
   const [testRanAt, setTestRanAt] = useState<string | null>(null)
+  const [testReportId, setTestReportId] = useState<string | null>(null)
   // Local "operational" error used by the API key / test-report cards that
   // don't have a hook of their own. Project creation has its own structured
   // error channel via `useCreateProject` below so its surface is
@@ -361,6 +362,7 @@ export function OnboardingPage() {
     setTestRanAt(new Date().toISOString())
     setTestStatus(res.ok ? 'pass' : 'fail')
     if (res.ok) {
+      setTestReportId(res.reportId)
       setup.reload()
       reloadStats()
       // In Quickstart linear flow: pipeline verified → advance to Install SDK.
@@ -381,10 +383,14 @@ export function OnboardingPage() {
   }
 
   function copyToClipboard(text: string, setter: (v: boolean) => void) {
-    navigator.clipboard.writeText(text).then(() => {
-      setter(true)
-      setTimeout(() => setter(false), 2000)
-    })
+    navigator.clipboard.writeText(text).then(
+      () => {
+        setter(true)
+        setTimeout(() => setter(false), 2000)
+      },
+      // A blocked clipboard used to fail silently (QA bug 260).
+      () => toast.error('Clipboard blocked', 'Select the key and copy it by hand. It is shown above until you leave.'),
+    )
   }
 
   const sdkInstalled = !setup.isStepIncomplete('sdk_installed')
@@ -487,7 +493,11 @@ export function OnboardingPage() {
               setProjectName(e.target.value)
               if (createError) clearCreateError()
             }}
-            onKeyDown={(e) => e.key === 'Enter' && createProject()}
+            // Same guard as the Create button: a second Enter while the
+            // first POST is in flight created a duplicate project (QA bug 137).
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !creating && projectName.trim()) void createProject()
+            }}
             autoFocus
             aria-invalid={createError ? true : undefined}
             aria-describedby={createError ? 'onboarding-create-error' : undefined}
@@ -849,7 +859,7 @@ export function OnboardingPage() {
                   )}
                 </p>
                 <div className="mt-2 flex flex-wrap items-center gap-3">
-                  <Btn size="sm" variant="primary" onClick={() => navigate('/integrations')}>
+                  <Btn size="sm" variant="primary" onClick={() => navigate('/integrations/config')}>
                     Connect fix agents →
                   </Btn>
                   <Btn size="sm" variant="ghost" onClick={() => navigate('/dashboard')}>Open dashboard</Btn>
@@ -1141,9 +1151,15 @@ export function OnboardingPage() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Btn to={`/reports?filter=test`} size="sm" variant="primary">
-                Watch the loop →
-              </Btn>
+            {/* /reports reads no `filter` param, so ?filter=test showed every
+                report (QA bug 263). Open the test report itself. */}
+            <Btn
+              to={testReportId ? testReportHref(testReportId, project.project_id) : `/reports?project=${project.project_id}`}
+              size="sm"
+              variant="primary"
+            >
+              Watch the loop →
+            </Btn>
             <Link to="/judge" className="text-xs text-fg-muted underline hover:no-underline">
               See judge scores
             </Link>

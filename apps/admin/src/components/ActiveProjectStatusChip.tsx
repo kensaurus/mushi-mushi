@@ -24,7 +24,12 @@ interface ActiveProjectStatusChipProps {
   className?: string
 }
 
-export function ActiveProjectStatusChip({ snapshot, className = '' }: ActiveProjectStatusChipProps) {
+/**
+ * `className` owns the display utility (default `inline-flex`): passing
+ * `hidden xl:inline-flex` next to a hard-coded `inline-flex` let inline-flex
+ * win, so these chips showed on phones and pushed the header wide.
+ */
+export function ActiveProjectStatusChip({ snapshot, className = 'inline-flex' }: ActiveProjectStatusChipProps) {
   if (!snapshot) return null
 
   const bottleneck = snapshot.pdca_bottleneck
@@ -65,7 +70,7 @@ export function ActiveProjectStatusChip({ snapshot, className = '' }: ActiveProj
     : null
 
   return (
-    <span className={`inline-flex items-center gap-0.5 shrink-0 min-w-0 ${className}`.trim()}>
+    <span className={`items-center gap-0.5 shrink-0 min-w-0 ${className}`.trim()}>
       {showHeartbeat && (
         <Tooltip
           content={
@@ -103,8 +108,11 @@ export function ActiveProjectStatusChip({ snapshot, className = '' }: ActiveProj
             // beside the project switcher on every page — so the healthy
             // state is a bare dot, not another text pill competing for
             // attention. Only trouble gets words.
+            // role="img": an aria-label on a role-less span is ignored by
+            // assistive tech and fails axe (aria-prohibited-attr) on every page.
             <span
-              className="inline-flex h-5 cursor-help items-center px-1"
+              role="img"
+              className="inline-flex h-6 cursor-help items-center px-1"
               aria-label="SDK connected"
             >
               <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-ok" />
@@ -114,7 +122,7 @@ export function ActiveProjectStatusChip({ snapshot, className = '' }: ActiveProj
               to={`/connect?project=${encodeURIComponent(snapshot.id)}`}
               aria-label={`SDK ${HEARTBEAT_LABEL[heartbeat]} — open setup`}
               // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
-              className={`inline-flex h-5 max-w-[6.5rem] cursor-pointer items-center truncate rounded-sm px-1 text-2xs font-medium hover:opacity-90 ${
+              className={`inline-flex h-6 max-w-[6.5rem] cursor-pointer items-center truncate rounded-sm px-1 text-2xs font-medium hover:opacity-90 ${
                 heartbeat === 'never' ? CHIP_TONE.neutral : CHIP_TONE.warnSubtle
               }`}
             >
@@ -158,7 +166,7 @@ export function ActiveProjectStatusChip({ snapshot, className = '' }: ActiveProj
               snapshot.pdca_bottleneck_label,
             )}
             // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
-            className={`inline-flex h-5 max-w-[6.5rem] cursor-pointer items-center truncate rounded-sm px-1 text-2xs font-semibold leading-none hover:opacity-90 ${PDCA_BOTTLENECK_TONE[bottleneck]}`}
+            className={`inline-flex h-6 max-w-[6.5rem] cursor-pointer items-center truncate rounded-sm px-1 text-2xs font-semibold leading-none hover:opacity-90 ${PDCA_BOTTLENECK_TONE[bottleneck]}`}
           >
             {bottleneckChipLabel(bottleneckCtx)}
           </Link>
@@ -171,7 +179,11 @@ export function ActiveProjectStatusChip({ snapshot, className = '' }: ActiveProj
           nowrap={false}
           portal
         >
-          <span className={`inline-flex h-5 cursor-help items-center rounded-sm ${CHIP_TONE.warnSubtle} px-1 text-2xs font-mono font-semibold`}>
+          <span
+            role="img"
+            aria-label="More reports this week than last week"
+            className={`inline-flex h-6 cursor-help items-center rounded-sm ${CHIP_TONE.warnSubtle} px-1 text-2xs font-mono font-semibold`}
+          >
             ↑
           </span>
         </Tooltip>
@@ -207,7 +219,7 @@ export function ActiveProjectStatusChip({ snapshot, className = '' }: ActiveProj
         >
           <Link
             to={`/connect?project=${encodeURIComponent(snapshot.id)}`}
-            className={`inline-flex h-5 cursor-pointer items-center rounded-sm px-1 text-2xs font-medium hover:opacity-90 ${
+            className={`inline-flex h-6 cursor-pointer items-center rounded-sm px-1 text-2xs font-medium hover:opacity-90 ${
               sdkResolution.kind === 'deprecated'
                 ? CHIP_TONE.dangerSubtle
                 : sdkResolution.kind === 'catalog-ahead'

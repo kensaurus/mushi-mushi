@@ -6,7 +6,7 @@ import { jwtAuth } from '../../_shared/auth.ts';
 import { requireFeature } from '../../_shared/entitlements.ts';
 import { logAudit } from '../../_shared/audit.ts';
 import { sendTestDelivery } from '../../_shared/plugins.ts';
-import { dbError, resolveOwnedProject } from '../shared.ts';
+import { dbError, isProjectAdmin, requireProjectAdmin, resolveOwnedProject } from '../shared.ts';
 import { assertSafeOutboundUrl } from '../../_shared/inventory-guards.ts';
 
 export function registerPluginsMarketplaceRoutes(app: Hono<{ Variables: Variables }>): void {
@@ -14,7 +14,7 @@ export function registerPluginsMarketplaceRoutes(app: Hono<{ Variables: Variable
     const userId = c.get('userId') as string;
     const db = getServiceClient();
     const resolvedProject = await resolveOwnedProject(c, db, userId, {
-      noProjectResponse: () => c.json({ ok: true, data: { plugins: [] } }),
+      noProjectResponse: () => c.json({ ok: true, data: { plugins: [], canManage: false } }),
     });
     if ('response' in resolvedProject) return resolvedProject.response;
     const project = resolvedProject.project;
@@ -28,7 +28,8 @@ export function registerPluginsMarketplaceRoutes(app: Hono<{ Variables: Variable
       .order('plugin_name', { ascending: true });
 
     if (error) return dbError(c, error);
-    return c.json({ ok: true, data: { plugins: data ?? [] } });
+    // Every plugin write requires an owner or admin (requireProjectAdmin).
+    return c.json({ ok: true, data: { plugins: data ?? [], canManage: isProjectAdmin(project) } });
   });
 
   app.post('/v1/admin/plugins', jwtAuth, requireFeature('plugins'), async (c) => {
@@ -37,6 +38,8 @@ export function registerPluginsMarketplaceRoutes(app: Hono<{ Variables: Variable
     const db = getServiceClient();
     const resolvedProject = await resolveOwnedProject(c, db, userId);
     if ('response' in resolvedProject) return resolvedProject.response;
+    const pluginForbidden = requireProjectAdmin(c, resolvedProject.project, 'Only organization owners and admins can install or change plugins.');
+    if (pluginForbidden) return pluginForbidden;
     const project = resolvedProject.project;
 
     const pluginName = body.pluginName ?? body.name;
@@ -118,6 +121,8 @@ export function registerPluginsMarketplaceRoutes(app: Hono<{ Variables: Variable
     const db = getServiceClient();
     const resolvedProject = await resolveOwnedProject(c, db, userId);
     if ('response' in resolvedProject) return resolvedProject.response;
+    const pluginForbidden = requireProjectAdmin(c, resolvedProject.project, 'Only organization owners and admins can install or change plugins.');
+    if (pluginForbidden) return pluginForbidden;
     const project = resolvedProject.project;
 
     try {
@@ -157,6 +162,8 @@ export function registerPluginsMarketplaceRoutes(app: Hono<{ Variables: Variable
     const db = getServiceClient();
     const resolvedProject = await resolveOwnedProject(c, db, userId);
     if ('response' in resolvedProject) return resolvedProject.response;
+    const pluginForbidden = requireProjectAdmin(c, resolvedProject.project, 'Only organization owners and admins can install or change plugins.');
+    if (pluginForbidden) return pluginForbidden;
     const project = resolvedProject.project;
 
     const patch: Record<string, unknown> = {};
@@ -222,6 +229,8 @@ export function registerPluginsMarketplaceRoutes(app: Hono<{ Variables: Variable
     const db = getServiceClient();
     const resolvedProject = await resolveOwnedProject(c, db, userId);
     if ('response' in resolvedProject) return resolvedProject.response;
+    const pluginForbidden = requireProjectAdmin(c, resolvedProject.project, 'Only organization owners and admins can install or change plugins.');
+    if (pluginForbidden) return pluginForbidden;
     const project = resolvedProject.project;
 
     const result = await sendTestDelivery(db, project.id, slug);
@@ -261,6 +270,8 @@ export function registerPluginsMarketplaceRoutes(app: Hono<{ Variables: Variable
       const db = getServiceClient();
       const resolvedProject = await resolveOwnedProject(c, db, userId);
       if ('response' in resolvedProject) return resolvedProject.response;
+      const pluginForbidden = requireProjectAdmin(c, resolvedProject.project, 'Only organization owners and admins can install or change plugins.');
+      if (pluginForbidden) return pluginForbidden;
       const project = resolvedProject.project;
 
       const { data: pluginRow, error: lookupErr } = await db

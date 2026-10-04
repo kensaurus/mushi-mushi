@@ -13,7 +13,6 @@ import {
   IdField,
   RecommendedAction,
   EmptyState,
-  ErrorAlert,
   Btn,
   Badge,
   Callout,
@@ -30,6 +29,7 @@ import { useReportComments } from '../lib/reportComments'
 import { trackSelf } from '../lib/track'
 import { isSampleReport, recordDiagnosisViewed } from '../lib/diagnosisViewed'
 import { hasDiagnosis } from '../lib/firstDiagnosis'
+import { isReportClassified } from '../lib/reportDiagnosis'
 import {
   IconUser,
   IconIntelligence,
@@ -45,12 +45,9 @@ import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { FixCiFeedback } from '../components/fixes/FixCiFeedback'
 import { ReportTriageBar } from '../components/report-detail/ReportTriageBar'
-import { PdcaReceiptStrip } from '../components/report-detail/PdcaReceiptStrip'
 import { ReportPdcaStory } from '../components/report-detail/ReportPdcaStory'
 import { BeforeAfterCard } from '../components/report-detail/BeforeAfterCard'
-import { ReportPipelineFlow } from '../components/report-detail/ReportPipelineFlow'
 import { ReportBranchGraph } from '../components/report-detail/ReportBranchGraph'
-import { useAdminMode } from '../lib/mode'
 import { usePlatformIntegrations } from '../lib/usePlatformIntegrations'
 import { recordVisit } from '../lib/recentEntities'
 import {
@@ -89,6 +86,10 @@ import { useProjectSnapshots } from '../lib/useProjectSnapshots'
 import type { SdkStatus } from '../components/SdkVersionBadge'
 import { CHIP_TONE } from '../lib/chipTone'
 import { shortReporterKey } from '../lib/reporterKey'
+import { PageLoadError } from '../components/PageLoadError'
+import { appUrl } from '../lib/appPath'
+import { humanizeApiError } from '../lib/humanizeApiError'
+import { useConfirmedDispatch } from '../components/report-detail/useConfirmedDispatch'
 
 export function ReportDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -222,10 +223,9 @@ export function ReportDetailPage() {
       if (summary) toast.success('Triage saved', summary)
     } else {
       setReport(previous)
-      toast.error(
-        'Could not save triage update',
-        res.error?.message ?? 'The server rejected the change. Try again or check your connection.',
-      )
+      // Plain English, never `message (CODE)`.
+      const humanized = humanizeApiError(res.error?.message ?? 'Request failed', res.error?.code)
+      toast.error('Could not save triage update', humanized?.title ?? 'Try again in a moment.')
     }
     setSaving(false)
   }
@@ -268,14 +268,16 @@ export function ReportDetailPage() {
           }
           primary={{ href: '/reports', label: 'Back to reports' }}
           secondary={{
-            href: 'https://kensaur.us/mushi-mushi/docs/concepts/judge-loop',
-            label: 'Open docs',
+            // The Reports docs explain projects and report links; the old
+            // target (judge-loop) had nothing to do with a missing report.
+            href: 'https://kensaur.us/mushi-mushi/docs/admin/reports',
+            label: 'Reports docs',
             external: true,
           }}
         />
       )
     }
-    return <ErrorAlert message={`Could not load report: ${error}`} onRetry={reload} />
+    return <PageLoadError error={error} resource="this report" onRetry={reload} />
   }
 
   if (!report) return <DetailSkeleton label="Loading report" />
@@ -328,8 +330,8 @@ function RecommendedSkillsSection({ report }: { report: ReportDetail }) {
       }
       addToast({ type: 'success', message: `Pipeline started — track it in Skill Pipelines` })
       navigate('/skills?tab=pipelines')
-    } catch (err) {
-      addToast({ type: 'error', message: String(err) })
+    } catch {
+      addToast({ type: 'error', message: "Couldn't reach Mushi, so the pipeline did not start. Check your connection and try again." })
     } finally {
       setStartingSlug(null)
     }
@@ -351,7 +353,11 @@ function RecommendedSkillsSection({ report }: { report: ReportDetail }) {
         </p>
 
         <div className="flex gap-2 items-center mb-1">
+          <label htmlFor="skill-run-mode" className="text-xs text-fg-muted">
+            Run mode
+          </label>
           <select
+            id="skill-run-mode"
             value={mode}
             onChange={(e) => setMode(e.target.value as 'handoff' | 'cloud')}
             className="input text-xs py-1 h-7"
@@ -392,7 +398,7 @@ function RecommendedSkillsSection({ report }: { report: ReportDetail }) {
         <p className="text-2xs text-fg-muted mt-1">
           Share triage link:{' '}
           <code className="font-mono text-brand">
-            {typeof window !== 'undefined' ? window.location.origin : ''}/reports/{report.id}?skill={displaySkills[0]?.slug}
+            {appUrl(`/reports/${report.id}?skill=${displaySkills[0]?.slug ?? ''}`)}
           </code>
         </p>
       </div>
@@ -402,7 +408,6 @@ function RecommendedSkillsSection({ report }: { report: ReportDetail }) {
 
 function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: ReportDetailViewProps) {
   const toast = useToast()
-  const { isAdvanced } = useAdminMode()
   const { state: dispatchState, dispatch: dispatchFix } = useDispatchFix(report.id, report.project_id)
   // Every dispatch from this page (the triage bar and the recommendation's
   // retry) goes to the repo chosen in the triage bar's Repo select.
@@ -412,8 +417,10 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
     () => dispatchFix(dispatchTargetRepoId ? { targetRepoId: dispatchTargetRepoId } : undefined),
     [dispatchFix, dispatchTargetRepoId],
   )
-  const { comments } = useReportComments({ reportId: report.id, projectId: report.project_id })
-  const commentCount = comments.length
+  // One comment subscription for the page: the recommendation's count and the
+  // triage thread below read the same fetch + realtime channel (REPORT C).
+  const commentThread = useReportComments({ reportId: report.id, projectId: report.project_id })
+  const commentCount = commentThread.comments.length
   const platform = usePlatformIntegrations()
   const latestFix = pickPrimaryFixAttempt(report.fix_attempts)
 
@@ -427,12 +434,27 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
     report.status === 'fixing'
   const nowMs = useNow(1000, isInFlight)
 
+  const preflight = useDispatchPreflight(report.project_id)
+  const isDispatchBusy = dispatchState.status === 'queueing' || dispatchState.status === 'queued' || dispatchState.status === 'running'
+  // Every dispatch control on this page (triage bar, recommendation CTA and
+  // its retries) goes through this one gate + confirm.
+  const confirmed = useConfirmedDispatch({
+    report,
+    preflight,
+    repoChoice,
+    busy: isDispatchBusy,
+    dispatch,
+  })
+  const { request: requestDispatch, block: dispatchBlockState } = confirmed
+
   const recommendation = useMemo(
-    () => deriveRecommendation(report, dispatchState, commentCount, dispatch, nowMs),
-    [report, dispatchState, commentCount, dispatch, nowMs],
+    () => deriveRecommendation(report, dispatchState, commentCount, requestDispatch, nowMs, dispatchBlockState),
+    [report, dispatchState, commentCount, requestDispatch, nowMs, dispatchBlockState],
   )
 
-  const preflight = useDispatchPreflight(report.project_id)
+  // Bumped when a reply reaches the reporter so the Reporter view refetches
+  // ("What the reporter sees" went stale until a page reload).
+  const [reporterViewVersion, setReporterViewVersion] = useState(0)
 
   // Show the preflight banner on reports that could be dispatched: not already
   // in a terminal state, and not currently being fixed.
@@ -445,7 +467,6 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
     dispatchState.status !== 'running' &&
     dispatchState.status !== 'completed'
 
-  const isDispatchBusy = dispatchState.status === 'queueing' || dispatchState.status === 'queued' || dispatchState.status === 'running'
   const reporterShort = report.reporter_token_hash ? shortReporterKey(report.reporter_token_hash) : 'unknown'
   const mergeTarget = latestFix && canMergeFix(latestFix) ? latestFix : null
 
@@ -521,17 +542,9 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
         <GenerateTestButton report={report} />
       </div>
 
-      <ReportPipelineFlow report={report} dispatchState={dispatchState} />
-
-      {!isAdvanced && (
-        <ReportPdcaStory report={report} dispatchState={dispatchState} />
-      )}
-
-      <PdcaReceiptStrip
-        report={report}
-        dispatchState={dispatchState}
-        className="mb-3"
-      />
+      {/* The one Plan → Do → Check → Act progress display (REPORT D): the
+          page used to repeat it as a flow graph and a receipt strip too. */}
+      <ReportPdcaStory report={report} dispatchState={dispatchState} />
 
       <BeforeAfterCard report={report} />
 
@@ -579,11 +592,12 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
         saving={saving}
         savedAt={savedAt}
         dispatchState={dispatchState}
-        onDispatch={dispatch}
+        onRequestDispatch={requestDispatch}
+        dispatchBlock={dispatchBlockState}
         isDispatchBusy={isDispatchBusy}
-        preflight={preflight}
         repoChoice={repoChoice}
       />
+      {confirmed.dialog}
 
       {report.tester_submission && (
         <Section title="Mushi Bounties" className="mb-3">
@@ -596,7 +610,11 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
         </Section>
       )}
 
-      <FixProgressStream reportId={report.id} dispatchState={dispatchState} />
+      <FixProgressStream
+        reportId={report.id}
+        dispatchState={dispatchState}
+        hasFixHistory={(report.fix_attempts?.length ?? 0) > 0}
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         <Section title="User report" icon={<IconUser />}>
@@ -630,7 +648,10 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
         </Section>
 
         <Section title="LLM classification" icon={<IconIntelligence />}>
-          {report.stage1_classification ? (
+          {/* Same "classified?" answer as the story and the recommendation
+              (REPORT A2): a Stage-2 diagnosis without a Stage-1 object is
+              classified, not "pending". */}
+          {isReportClassified(report) ? (
             <ClassificationFields report={report} />
           ) : report.processing_error ? (
             <Callout tone="danger" label="Classification failed">
@@ -727,11 +748,16 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
       </div>
 
       <div className="mt-3">
-        <ReportComments reportId={report.id} projectId={report.project_id} />
+        <ReportComments
+          thread={commentThread}
+          onPosted={(visibleToReporter) => {
+            if (visibleToReporter) setReporterViewVersion((v) => v + 1)
+          }}
+        />
       </div>
 
       <div className="mt-3">
-        <ReporterViewPanel reportId={report.id} />
+        <ReporterViewPanel reportId={report.id} version={reporterViewVersion} />
       </div>
 
       {/* Identifiers live at the bottom: UUIDs are reference material for

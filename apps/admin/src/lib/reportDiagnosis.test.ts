@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { reportDiagnosisView } from './reportDiagnosis'
+import { isReportClassified, reportDiagnosisView } from './reportDiagnosis'
 
 /** Shape of report c0e99783's stage2_analysis (glot.it, 2026-10-02), trimmed. */
 const STAGE2 = {
@@ -72,5 +72,25 @@ describe('reportDiagnosisView', () => {
     expect(reportDiagnosisView({ stage2_analysis: { code_context: { status: 'disabled' } }, stage1_classification: {} }).kind).toBe(
       'stage1_only',
     )
+  })
+})
+
+describe('isReportClassified', () => {
+  it('a test report with status classified and a stage-2 diagnosis but no stage-1 object is classified (REPORT A2)', () => {
+    expect(isReportClassified({ status: 'classified', stage2_analysis: STAGE2 })).toBe(true)
+    expect(isReportClassified({ status: 'new', stage2_analysis: STAGE2 })).toBe(true)
+  })
+
+  it('counts a stage-1 object or a status past classification', () => {
+    expect(isReportClassified({ status: 'new', stage1_classification: { category: 'bug' } })).toBe(true)
+    for (const status of ['classified', 'triaged', 'grouped', 'fixing', 'fixed', 'verified', 'resolved']) {
+      expect(isReportClassified({ status })).toBe(true)
+    }
+  })
+
+  it('a new report with only a hand-set severity, or an empty stage 2, is not classified', () => {
+    expect(isReportClassified({ status: 'new' })).toBe(false)
+    expect(isReportClassified({ status: 'queued', stage2_analysis: { code_context: { status: 'disabled' } } })).toBe(false)
+    expect(isReportClassified({ status: 'dismissed' })).toBe(false)
   })
 })

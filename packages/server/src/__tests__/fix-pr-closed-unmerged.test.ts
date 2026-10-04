@@ -100,11 +100,13 @@ describe('fix-loop-status pure rules', () => {
     expect(fixFailureBucket({ status: 'failed' })).toBe('unknown')
   })
 
+  // Since 2026-10-04 both count per REPORT from its current state
+  // (fix-report-truth.ts, which applies isFixCountedFailed to each report's
+  // latest attempt), never per attempt.
   it('/fixes/stats and /fixes/summary count failures with the shared rule', () => {
     const src = read('api/routes/query-fixes-repo.ts')
-    expect(src.match(/attempts\.filter\(\(a\) => isFixCountedFailed\(a\)\)/g)?.length).toBe(1)
-    expect(src.match(/list\.filter\(\(r\) => isFixCountedFailed\(r\)\)/g)?.length).toBe(1)
-    expect(src).not.toMatch(/const failed = (attempts|list)\.filter\(\(\w\) => \w\.status === 'failed'\)/)
+    expect(src.match(/summarizeFixTruths\(truths\.values\(\)\)/g)?.length).toBe(2)
+    expect(src).not.toMatch(/const failed = (attempts|list)\.filter\(/)
   })
 })
 

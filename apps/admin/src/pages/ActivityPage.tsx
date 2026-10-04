@@ -20,6 +20,7 @@ import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { PageLoadError } from '../components/PageLoadError'
 import { LineSparkline } from '../components/charts'
 import { IconHealth } from '../components/icons'
+import { identitySplit, type UserSplitPayload } from '../lib/activityIdentitySplit'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -49,10 +50,7 @@ interface ActivityData {
     critical: number
     high: number
   }
-  user_split: {
-    identified: number
-    anonymous: number
-  }
+  user_split: UserSplitPayload
 }
 
 // ─── Page ────────────────────────────────────────────────────────────────────
@@ -164,14 +162,8 @@ export function ActivityPage() {
 function ActivityDashboard({ data }: { data: ActivityData }) {
   const dauValues = (data.dau_series ?? []).map((p) => p.dau)
 
-  const identifiedPct =
-    data.user_split.identified + data.user_split.anonymous > 0
-      ? Math.round(
-          (data.user_split.identified /
-            (data.user_split.identified + data.user_split.anonymous)) *
-            100,
-        )
-      : 0
+  const split = identitySplit(data.user_split)
+  const identifiedPct = split.identifiedPct ?? 0
 
   return (
     <div className="space-y-4">
@@ -188,7 +180,7 @@ function ActivityDashboard({ data }: { data: ActivityData }) {
 
       {/* User split + Reports at-a-glance */}
       <div className="grid gap-4 sm:grid-cols-2">
-        <Section title="User identity split">
+        <Section title={split.unit === 'people' ? 'Who uses the app' : 'Sessions by sign-in'}>
           <div className="flex items-center gap-3">
             <div className="h-2 flex-1 overflow-hidden rounded-full bg-edge">
               <div
@@ -196,25 +188,28 @@ function ActivityDashboard({ data }: { data: ActivityData }) {
                 style={{ width: `${identifiedPct}%` }}
               />
             </div>
-            <span className="shrink-0 text-xs text-fg-muted">{identifiedPct}% identified</span>
+            <span className="shrink-0 text-xs text-fg-muted">
+              {split.identifiedPct == null ? 'No visits yet' : `${identifiedPct}% signed in`}
+            </span>
           </div>
           <div className="mt-2 flex gap-4 text-xs text-fg-muted">
             <span className="flex items-center gap-1">
               <span className="inline-block h-2 w-2 rounded-full bg-brand" />
-              Identified: {fmt(data.user_split.identified)}
+              {split.identifiedLabel}: {fmt(split.identified)}
             </span>
             <span className="flex items-center gap-1">
               <span className="inline-block h-2 w-2 rounded-full bg-edge" />
-              Anonymous: {fmt(data.user_split.anonymous)}
+              {split.anonymousLabel}: {fmt(split.anonymous)}
             </span>
           </div>
         </Section>
 
-        <Section title="Reports this period">
+        {/* Open reports of any age, each pill opening the list it counts (QA 175, QA 289). */}
+        <Section title="Open reports">
           <div className="flex gap-4">
-            <CountPill label="Open" value={data.reports.open} />
-            <CountPill label="Critical" value={data.reports.critical} tone="danger" />
-            <CountPill label="High" value={data.reports.high} tone="warn" />
+            <CountPill label="Open" value={data.reports.open} to="/reports?status=open" />
+            <CountPill label="Critical" value={data.reports.critical} tone="danger" to="/reports?status=open&severity=critical" />
+            <CountPill label="High" value={data.reports.high} tone="warn" to="/reports?status=open&severity=high" />
           </div>
           <Link to="/reports" className="mt-3 block text-xs text-brand hover:underline">
             View all reports →
@@ -263,13 +258,26 @@ function ActivityDashboard({ data }: { data: ActivityData }) {
 
 // ─── Small components ─────────────────────────────────────────────────────────
 
-function CountPill({ label, value, tone }: { label: string; value: number; tone?: 'danger' | 'warn' }) {
+function CountPill({
+  label,
+  value,
+  tone,
+  to,
+}: {
+  label: string
+  value: number
+  tone?: 'danger' | 'warn'
+  to: string
+}) {
   const toneClass = tone === 'danger' ? 'text-danger' : tone === 'warn' ? 'text-warn' : 'text-fg'
   return (
-    <div className="flex flex-col items-center">
+    <Link
+      to={to}
+      className="flex flex-col items-center rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+    >
       <span className={`text-2xl font-semibold tabular-nums leading-none ${toneClass}`}>{value}</span>
       <span className="mt-0.5 text-2xs text-fg-faint">{label}</span>
-    </div>
+    </Link>
   )
 }
 

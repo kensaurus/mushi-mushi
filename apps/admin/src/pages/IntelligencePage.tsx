@@ -15,13 +15,13 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { usePageCopy } from '../lib/copy'
 import { useIntelligenceUx, resolveQuickIntelligenceTab } from '../lib/intelligenceModeUx'
+import { useQuickstartLandingTab } from '../lib/useQuickstartTab'
 import { SetupNudge } from '../components/SetupNudge'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { Card,
   Btn,
   Badge,
-  ErrorAlert,
   EmptyState,
   SegmentedControl,
   FreshnessPill,
@@ -30,6 +30,8 @@ import { Card,
 } from '../components/ui'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { useToast } from '../lib/toast'
+import { describeApiError } from '../lib/humanizeApiError'
+import { PageLoadError } from '../components/PageLoadError'
 import {
   ActiveJobCard,
   LastFailureNote,
@@ -109,6 +111,7 @@ export function IntelligencePage() {
     data: statsData,
     loading: statsLoading,
     error: statsError,
+    errorCode: statsErrorCode,
     reload: reloadStats,
     lastFetchedAt: statsFetchedAt,
     isValidating: statsValidating,
@@ -124,6 +127,7 @@ export function IntelligencePage() {
     data: reportsPayload,
     loading: reportsLoading,
     error: reportsError,
+    errorCode: reportsErrorCode,
     reload: reloadReports,
     isValidating: reportsValidating,
   } = usePageData<{ reports: IntelligenceReport[] }>(reportsPath, { deps: [activeProjectId, activeTab] })
@@ -132,6 +136,7 @@ export function IntelligencePage() {
     data: jobsPayload,
     loading: jobsLoading,
     error: jobsError,
+    errorCode: jobsErrorCode,
     reload: reloadJobs,
     isValidating: jobsValidating,
   } = usePageData<{ jobs: IntelligenceJob[] }>(jobsPath, { deps: [activeProjectId, activeTab] })
@@ -140,6 +145,7 @@ export function IntelligencePage() {
     data: findingsPayload,
     loading: findingsLoading,
     error: findingsError,
+    errorCode: findingsErrorCode,
     reload: reloadFindings,
   } = usePageData<{ findings: ModernizationFinding[] }>(findingsPath, { deps: [activeProjectId, activeTab] })
 
@@ -188,11 +194,15 @@ export function IntelligencePage() {
     [setSearchParams],
   )
 
-  useEffect(() => {
-    if (!ux.isQuickstart || statsLoading) return
-    const quickTab = resolveQuickIntelligenceTab(stats)
-    if (activeTab !== quickTab) setActiveTab(quickTab)
-  }, [ux.isQuickstart, statsLoading, stats, activeTab, setActiveTab])
+  // Quick mode opens the posture tab once; links and clicks then win.
+  useQuickstartLandingTab({
+    enabled: ux.isQuickstart,
+    ready: !statsLoading,
+    tabParam: searchParams.get('tab'),
+    activeTab: activeTab,
+    quickTab: resolveQuickIntelligenceTab(stats),
+    setActiveTab: setActiveTab,
+  })
 
   useEffect(() => {
     if (!activeJob) return
@@ -222,7 +232,8 @@ export function IntelligencePage() {
           toast.push({ tone: 'success', message: 'Generation started — watch Pipeline for progress' })
         }
       } else {
-        toast.push({ tone: 'error', message: res.error?.message ?? 'Failed to enqueue job' })
+        const e = describeApiError(res.error, 'Could not start the digest')
+        toast.error(e.title, e.hint)
       }
       reloadAll()
     } finally {
@@ -236,7 +247,8 @@ export function IntelligencePage() {
       toast.push({ tone: 'info', message: 'Job cancelled' })
       reloadAll()
     } else {
-      toast.push({ tone: 'error', message: res.error?.message ?? 'Cancel failed' })
+      const e = describeApiError(res.error, 'Could not cancel the job')
+      toast.error(e.title, e.hint)
     }
   }, [reloadAll, toast])
 
@@ -252,7 +264,8 @@ export function IntelligencePage() {
         reloadFindings()
         reloadStats()
       } else {
-        toast.push({ tone: 'error', message: res.error?.message ?? 'Dispatch failed' })
+        const e = describeApiError(res.error, 'Could not dispatch the upgrade')
+        toast.error(e.title, e.hint)
       }
     } finally {
       setDispatchingId(null)
@@ -266,7 +279,8 @@ export function IntelligencePage() {
       reloadFindings()
       reloadStats()
     } else {
-      toast.push({ tone: 'error', message: res.error?.message ?? 'Dismiss failed' })
+      const e = describeApiError(res.error, 'Could not dismiss the finding')
+      toast.error(e.title, e.hint)
     }
   }, [reloadFindings, reloadStats, toast])
 
@@ -357,7 +371,7 @@ export function IntelligencePage() {
   }
 
   if (statsError) {
-    return <ErrorAlert message={`Failed to load intelligence stats: ${statsError}`} onRetry={reloadStats} />
+    return <PageLoadError error={statsError} code={statsErrorCode} onRetry={reloadStats} />
   }
 
   const bannerSeverity: 'ok' | 'warn' | 'danger' | 'brand' | 'info' | 'neutral' =
@@ -525,7 +539,12 @@ export function IntelligencePage() {
                   tone="info"
                   title="Generate a weekly digest"
                   description={stats.topPriorityLabel ?? 'AI summarizes report volume, fix velocity, and severity drift.'}
-                  cta={{ label: 'Generate this week', to: '/intelligence?tab=overview' }}
+                  cta={{
+                    label: 'Generate this week',
+                    // Starts the job; it used to link back to this tab.
+                    onClick: () => void generateNow(),
+                    disabled: generating || stats.activeJobCount > 0 || !intelligenceUnlocked,
+                  }}
                 />
               )}
               {stats.topPriority === 'pending_findings' && (
@@ -567,7 +586,7 @@ export function IntelligencePage() {
               {reportsLoading ? (
                 <TableSkeleton rows={4} columns={4} showFilters={false} label="Loading reports" />
               ) : reportsError ? (
-                <ErrorAlert message={reportsError} onRetry={reloadReports} />
+                <PageLoadError error={reportsError} code={reportsErrorCode} resource="digests" onRetry={reloadReports} />
               ) : reports.length === 0 ? (
                 <EmptyState
                   title="No intelligence reports yet"
@@ -607,7 +626,9 @@ export function IntelligencePage() {
 
           {activeTab === 'pipeline' && (
             <div className="space-y-4">
-              {findingsError && <ErrorAlert message={findingsError} onRetry={reloadFindings} />}
+              {findingsError && (
+                <PageLoadError error={findingsError} code={findingsErrorCode} resource="modernization findings" onRetry={reloadFindings} />
+              )}
               <ModernizationFindings
                 findings={findings}
                 dispatchingId={dispatchingId}
@@ -617,7 +638,7 @@ export function IntelligencePage() {
                 onDismiss={(id) => void dismissFinding(id)}
               />
               <RecentJobsList jobs={recentJobs} projectName={projectName} loading={jobsLoading} />
-              {jobsError && <ErrorAlert message={jobsError} onRetry={reloadJobs} />}
+              {jobsError && <PageLoadError error={jobsError} code={jobsErrorCode} resource="recent jobs" onRetry={reloadJobs} />}
             </div>
           )}
         </>

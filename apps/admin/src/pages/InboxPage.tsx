@@ -4,10 +4,10 @@
  *          with stats banner, KPI strip, and PDCA action cards from dashboard data.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { Link, useSearchParams } from 'react-router-dom'
-import { ErrorAlert,
+import {
   Btn,
   FreshnessPill,
   AgeChip,
@@ -37,6 +37,7 @@ import { EMPTY_INBOX_STATS, type InboxStats, type InboxTabId } from '../componen
 import type { ActivityItem, DashboardData } from '../components/dashboard/types'
 import { buildInboxCards, type InboxCardGroup } from '../lib/actionInboxFromDashboard'
 import { useInboxUx, resolveQuickInboxTab } from '../lib/inboxModeUx'
+import { useQuickstartLandingTab } from '../lib/useQuickstartTab'
 import {
   ActionPill,
   ActionPillRow,
@@ -47,6 +48,7 @@ import {
 } from '../components/report-detail/ReportSurface'
 import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
 import { CHIP_TONE } from '../lib/chipTone'
+import { PageLoadError } from '../components/PageLoadError'
 
 type Group = InboxCardGroup
 
@@ -136,11 +138,15 @@ export function InboxPage() {
     [searchParams, setSearchParams],
   )
 
-  useEffect(() => {
-    if (!ux.isQuickstart || statsLoading) return
-    const quickTab = resolveQuickInboxTab(stats)
-    if (activeTab !== quickTab) setActiveTab(quickTab)
-  }, [ux.isQuickstart, statsLoading, stats.openActions, activeTab, setActiveTab, stats])
+  // Quick mode opens the posture tab once; links and clicks then win.
+  useQuickstartLandingTab({
+    enabled: ux.isQuickstart,
+    ready: !statsLoading,
+    tabParam: tabParam,
+    activeTab: activeTab,
+    quickTab: resolveQuickInboxTab(stats, activeTab),
+    setActiveTab: setActiveTab,
+  })
 
   const openCards = cards.filter((c) => c.action !== null)
   const clearCards = cards.filter((c) => c.action === null)
@@ -233,8 +239,8 @@ export function InboxPage() {
       </div>
     )
   }
-  if (error) return <ErrorAlert message={error} onRetry={reloadAll} />
-  if (statsError) return <ErrorAlert message={`Failed to load inbox stats: ${statsError}`} onRetry={reloadAll} />
+  if (error) return <PageLoadError error={error} resource="the inbox" onRetry={reloadAll} />
+  if (statsError) return <PageLoadError error={statsError} resource="the inbox counts" onRetry={reloadAll} />
 
   return (
     <div data-inbox-root className={PAGE_CONTENT_STACK} data-testid="mushi-page-inbox">
@@ -499,6 +505,15 @@ export function InboxPage() {
 
       {activeTab === 'activity' && (
         <>
+          {/* Quick mode hides the tab bar, so the Activity view (opened from
+              "View activity") needs its own way back. */}
+          {ux.hideTabs ? (
+            <ActionPillRow>
+              <ActionPill tone="neutral" onClick={() => setActiveTab('overview')}>
+                ← Back to inbox
+              </ActionPill>
+            </ActionPillRow>
+          ) : null}
           {activity.length > 0 ? (
             <section aria-labelledby="inbox-activity">
               <header className="mb-2 flex items-center gap-2">

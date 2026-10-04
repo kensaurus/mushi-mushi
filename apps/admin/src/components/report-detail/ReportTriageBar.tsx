@@ -7,11 +7,9 @@ import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
 import { usePageData } from '../../lib/usePageData'
 import type { DispatchState } from '../../lib/dispatchFix'
-import type { PreflightState } from '../../lib/useDispatchPreflight'
 import type { ReportDetail } from './types'
 import { CHIP_TONE } from '../../lib/chipTone'
-import { ConfirmDialog } from '../ConfirmDialog'
-import { dispatchConfirmBody, featureRequestDispatchBlock, shortRepoName } from '../../lib/dispatchConfirm'
+import { shortRepoName } from '../../lib/dispatchConfirm'
 import type { DispatchTargetRepo } from '../../lib/useDispatchTargetRepo'
 
 // One option per label: 'resolved' is the legacy spelling of 'fixed' (both
@@ -52,9 +50,11 @@ interface ReportTriageBarProps {
   saving: boolean
   savedAt: number | null
   dispatchState: DispatchState
-  onDispatch: () => void | Promise<void>
+  /** Opens the page's dispatch confirm (useConfirmedDispatch().request). */
+  onRequestDispatch: () => void
+  /** The page's dispatch gate (dispatchBlock()); disables the button. */
+  dispatchBlock: { blocked: boolean; reason: string | null }
   isDispatchBusy: boolean
-  preflight?: PreflightState
   /** The project's linked repos and the one the fix goes to. The Repo
    *  select shows only when there is more than one. */
   repoChoice?: DispatchTargetRepo
@@ -73,19 +73,25 @@ export function ReportTriageBar({
   saving,
   savedAt,
   dispatchState,
-  onDispatch,
+  onRequestDispatch,
+  dispatchBlock,
   isDispatchBusy,
-  preflight,
   repoChoice,
 }: ReportTriageBarProps) {
   const [showSaved, setShowSaved] = useState(false)
   const [syncing, setSyncing] = useState(false)
-  const [confirmDispatch, setConfirmDispatch] = useState(false)
   const [closing, setClosing] = useState(false)
   const [closeReason, setCloseReason] = useState('')
   const toast = useToast()
-  const { data: integrationsData } = usePageData<{ integrations: RoutingIntegration[] }>('/v1/admin/integrations')
-  const activeRoutes = (integrationsData?.integrations ?? []).filter((r) => r.is_active)
+  const { data: integrationsData } = usePageData<{ integrations: RoutingIntegration[]; syncDestinations?: string[] }>(
+    '/v1/admin/integrations',
+  )
+  // Where a sync really goes: the server's list, which includes Linear
+  // connected from the console (no project_integrations row). Counting only
+  // the rows read "Sync to 0 destinations" and never called the server.
+  const destinations =
+    integrationsData?.syncDestinations ??
+    (integrationsData?.integrations ?? []).filter((r) => r.is_active).map((r) => r.integration_type)
 
   useEffect(() => {
     if (!savedAt) return
@@ -94,20 +100,9 @@ export function ReportTriageBar({
     return () => clearTimeout(t)
   }, [savedAt])
 
-  // The reporter filed a feature request: the server refuses to auto-fix it
-  // until someone re-categorizes it, so say so on the button.
-  const featureBlock = featureRequestDispatchBlock(report)
-  const dispatchDisabled =
-    report.status === 'fixed' ||
-    report.status === 'dismissed' ||
-    isDispatchBusy ||
-    featureBlock != null ||
-    (preflight != null && !preflight.loading && !preflight.ready)
-  const dispatchBlockReason =
-    featureBlock ??
-    (preflight != null && !preflight.loading && !preflight.ready
-      ? `Preflight: ${preflight.failing.map((c) => c.label).join(', ')}`
-      : undefined)
+  // One gate for every dispatch control on the page (dispatchBlock()).
+  const dispatchDisabled = dispatchBlock.blocked
+  const dispatchBlockReason = dispatchBlock.reason ?? undefined
   const dispatchLabel =
     dispatchState.status === 'idle' ? 'Dispatch fix' :
     dispatchState.status === 'queueing' ? 'Dispatching…' :
@@ -122,7 +117,7 @@ export function ReportTriageBar({
     'Failed — retry'
 
   const syncToIntegrations = async () => {
-    if (activeRoutes.length === 0) {
+    if (destinations.length === 0) {
       toast.info('No routing destinations active', 'Connect Jira, Linear, GitHub Issues, or PagerDuty in Integrations.')
       return
     }
@@ -133,7 +128,7 @@ export function ReportTriageBar({
     )
     setSyncing(false)
     if (!res.ok) {
-      toast.error('Sync failed', res.error?.message ?? 'No external issues were created.')
+      toast.error('Sync failed', 'No external issues were created. Check Integrations for status and credentials.')
       return
     }
     const synced = res.data?.synced ?? []
@@ -141,10 +136,10 @@ export function ReportTriageBar({
       toast.error('Sync attempts failed', 'All routing destinations rejected the request. Check Integrations for status and credentials.')
       return
     }
-    if (synced.length < activeRoutes.length) {
+    if (synced.length < destinations.length) {
       toast.push({
         tone: 'warning',
-        message: `Synced to ${synced.length} of ${activeRoutes.length} destinations: ${synced.map((s) => PROVIDER_LABEL[s.provider] ?? s.provider).join(', ')}. Some destinations failed \u2014 check Integrations health.`,
+        message: `Synced to ${synced.length} of ${destinations.length} destinations: ${synced.map((s) => PROVIDER_LABEL[s.provider] ?? s.provider).join(', ')}. Some destinations failed \u2014 check Integrations health.`,
       })
       return
     }
@@ -232,9 +227,9 @@ export function ReportTriageBar({
           onClick={syncToIntegrations}
           disabled={syncing}
           loading={syncing}
-          title={activeRoutes.length === 0 ? 'No routing destinations active' : `Push to: ${activeRoutes.map((r) => PROVIDER_LABEL[r.integration_type] ?? r.integration_type).join(', ')}`}
+          title={destinations.length === 0 ? 'No routing destinations active' : `Push to: ${destinations.map((t) => PROVIDER_LABEL[t] ?? t).join(', ')}`}
         >
-          {syncing ? 'Syncing\u2026' : `Sync to ${activeRoutes.length || 0} ${activeRoutes.length === 1 ? 'destination' : 'destinations'}`}
+          {syncing ? 'Syncing\u2026' : `Sync to ${destinations.length} ${destinations.length === 1 ? 'destination' : 'destinations'}`}
         </Btn>
         {repoChoice && repoChoice.repos.length > 1 && (
           <SelectField
@@ -257,7 +252,7 @@ export function ReportTriageBar({
         <div className="flex flex-col items-end gap-1">
           <Btn
             variant="primary"
-            onClick={() => setConfirmDispatch(true)}
+            onClick={onRequestDispatch}
             disabled={dispatchDisabled}
             loading={isDispatchBusy && dispatchState.status !== 'completed' && dispatchState.status !== 'failed'}
             leadingIcon={<IconArrowRight />}
@@ -288,22 +283,6 @@ export function ReportTriageBar({
             )}
         </div>
       </div>
-      {confirmDispatch && (
-        <ConfirmDialog
-          title="Dispatch a fix for this report?"
-          body={dispatchConfirmBody(
-            repoChoice?.target
-              ? { repoUrl: repoChoice.target.repo_url, baseBranch: repoChoice.target.default_branch }
-              : { repoUrl: preflight?.repoUrl, baseBranch: preflight?.baseBranch },
-          )}
-          confirmLabel="Dispatch fix"
-          onCancel={() => setConfirmDispatch(false)}
-          onConfirm={() => {
-            setConfirmDispatch(false)
-            void onDispatch()
-          }}
-        />
-      )}
     </Card>
   )
 }

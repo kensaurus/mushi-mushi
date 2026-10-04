@@ -1335,7 +1335,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/quickstart/incident-loop",
     markdown: "quickstart/incident-loop.md",
     keywords: ["quickstart", "incident-loop", "incident", "loop", "bug", "fix", "prompt"],
-    headings: ["Prerequisites", "Step 1 — Capture or pick a report", "Step 2 — Pull fix context", "Step 3 — Generate the fix prompt", "Step 4 — Paste and ship", "Troubleshooting", "See also"],
+    headings: ["No MCP? Copy the fix prompt", "Prerequisites", "Step 1 — Capture or pick a report", "Step 2 — Pull fix context", "Step 3 — Generate the fix prompt", "Step 4 — Paste and ship", "Troubleshooting", "See also"],
     excerpt: "Run npx mushi-mushi, ship, and turn your first user-reported bug into a plain-English diagnosis and a paste-ready fix for Cursor or Claude Code.",
   },
   {

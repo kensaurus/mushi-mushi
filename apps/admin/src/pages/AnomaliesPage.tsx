@@ -4,7 +4,7 @@
  *          Overview | Anomalies | Metrics | Detect.
  */
 
-import { useState, useCallback, useMemo, useEffect } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
@@ -15,7 +15,11 @@ import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageCopy } from '../lib/copy'
 import { useAnomaliesUx, resolveQuickAnomaliesTab } from '../lib/anomaliesModeUx'
+import { useQuickstartLandingTab } from '../lib/useQuickstartTab'
 import { useToast } from '../lib/toast'
+import { describeApiError } from '../lib/humanizeApiError'
+import { parseBoundedInt, utcInputToIso } from '../lib/format'
+import { PageLoadError } from '../components/PageLoadError'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { shouldHideGuideWhenBannerActive, COMMON_HEALTHY_PRIORITIES } from '../lib/pagePostureHelpers'
@@ -25,7 +29,6 @@ import {
   Btn,
   Input,
   EmptyState,
-  ErrorAlert,
   RelativeTime,
   SegmentedControl,
   FreshnessPill,
@@ -122,6 +125,7 @@ export function AnomaliesPage() {
     data: statsData,
     loading: statsLoading,
     error: statsError,
+    errorCode: statsErrorCode,
     reload: reloadStats,
     lastFetchedAt: statsFetchedAt,
     isValidating: statsValidating,
@@ -133,6 +137,7 @@ export function AnomaliesPage() {
     data: anomalyData,
     loading: anomalyLoading,
     error: anomalyError,
+    errorCode: anomalyErrorCode,
     reload: reloadAnomalies,
     isValidating: anomaliesValidating,
   } = usePageData<{ data: AnomalyDetection[]; total: number }>(
@@ -143,6 +148,8 @@ export function AnomaliesPage() {
   const {
     data: metricsData,
     loading: metricsLoading,
+    error: metricsError,
+    errorCode: metricsErrorCode,
     reload: reloadMetrics,
     isValidating: metricsValidating,
   } = usePageData<{ data: MetricPoint[] }>(
@@ -171,11 +178,15 @@ export function AnomaliesPage() {
     reloadMetrics()
   }, [reloadStats, reloadAnomalies, reloadMetrics])
 
-  useEffect(() => {
-    if (!ux.isQuickstart || statsLoading) return
-    const quickTab = resolveQuickAnomaliesTab(stats)
-    if (activeTab !== quickTab) setActiveTab(quickTab)
-  }, [ux.isQuickstart, statsLoading, stats, activeTab, setActiveTab])
+  // Quick mode opens the posture tab once; links and clicks then win.
+  useQuickstartLandingTab({
+    enabled: ux.isQuickstart,
+    ready: !statsLoading,
+    tabParam: searchParams.get('tab'),
+    activeTab: activeTab,
+    quickTab: resolveQuickAnomaliesTab(stats),
+    setActiveTab: setActiveTab,
+  })
 
   const tabOptions = useMemo(
     () =>
@@ -203,7 +214,11 @@ export function AnomaliesPage() {
       method: 'PATCH',
       body: JSON.stringify({ status: 'confirmed', confirmed: true }),
     })
-    if (!res.ok) { toast.error(res.error?.message ?? 'Failed'); return }
+    if (!res.ok) {
+      const e = describeApiError(res.error, 'Could not confirm the anomaly')
+      toast.error(e.title, e.hint)
+      return
+    }
     toast.success('Anomaly confirmed')
     reloadAll()
   }, [reloadAll, toast])
@@ -213,7 +228,11 @@ export function AnomaliesPage() {
       method: 'PATCH',
       body: JSON.stringify({ status: 'dismissed' }),
     })
-    if (!res.ok) { toast.error(res.error?.message ?? 'Failed'); return }
+    if (!res.ok) {
+      const e = describeApiError(res.error, 'Could not dismiss the anomaly')
+      toast.error(e.title, e.hint)
+      return
+    }
     toast.success('Anomaly dismissed')
     reloadAll()
   }, [reloadAll, toast])
@@ -238,7 +257,7 @@ export function AnomaliesPage() {
   }
 
   if (statsError) {
-    return <ErrorAlert message={`Failed to load anomaly stats: ${statsError}`} onRetry={reloadStats} />
+    return <PageLoadError error={statsError} code={statsErrorCode} onRetry={reloadStats} />
   }
 
   const bannerSeverity: 'ok' | 'warn' | 'danger' | 'brand' | 'info' | 'neutral' =
@@ -396,6 +415,8 @@ export function AnomaliesPage() {
           anomalies={anomalies}
           loading={anomalyLoading}
           error={anomalyError}
+          errorCode={anomalyErrorCode}
+          onRetry={reloadAnomalies}
           onConfirm={confirm}
           onDismiss={dismiss}
           projectId={projectId ?? ''}
@@ -406,7 +427,15 @@ export function AnomaliesPage() {
       )}
 
       {activeTab === 'metrics' && (
-        <MetricsTab metrics={metrics} loading={metricsLoading} projectId={projectId ?? ''} onIngest={reloadAll} />
+        <MetricsTab
+          metrics={metrics}
+          loading={metricsLoading}
+          error={metricsError}
+          errorCode={metricsErrorCode}
+          onRetry={reloadMetrics}
+          projectId={projectId ?? ''}
+          onIngest={reloadAll}
+        />
       )}
 
       {activeTab === 'detect' && (
@@ -417,11 +446,13 @@ export function AnomaliesPage() {
 }
 
 function AnomaliesTab({
-  anomalies, loading, error, onConfirm, onDismiss, projectId, noMetrics, onIngestMetrics, onRunDetect,
+  anomalies, loading, error, errorCode, onRetry, onConfirm, onDismiss, projectId, noMetrics, onIngestMetrics, onRunDetect,
 }: {
   anomalies: AnomalyDetection[]
   loading: boolean
   error: string | null
+  errorCode: string | null
+  onRetry: () => void
   onConfirm: (id: string) => void
   onDismiss: (id: string) => void
   projectId: string
@@ -431,7 +462,7 @@ function AnomaliesTab({
 }) {
   if (!projectId) return <EmptyState title="Select a project" description="Pick a project from the switcher to view anomalies." />
   if (loading) return <TableSkeleton rows={5} />
-  if (error) return <ErrorAlert message={error} />
+  if (error) return <PageLoadError error={error} code={errorCode} resource="anomalies" onRetry={onRetry} />
   if (!anomalies.length) {
     return (
       <div className="space-y-3">
@@ -540,9 +571,12 @@ function AnomaliesTab({
   )
 }
 
-function MetricsTab({ metrics, loading, projectId, onIngest }: {
+function MetricsTab({ metrics, loading, error, errorCode, onRetry, projectId, onIngest }: {
   metrics: MetricPoint[]
   loading: boolean
+  error: string | null
+  errorCode: string | null
+  onRetry: () => void
   projectId: string
   onIngest: () => void
 }) {
@@ -553,6 +587,11 @@ function MetricsTab({ metrics, loading, projectId, onIngest }: {
   const ingest = async () => {
     if (!form.metric_name || !form.value) { toast.error('Name + value required'); return }
     if (!projectId) { toast.error('Select a project'); return }
+    // The field is labelled UTC and defaults to the UTC clock, so read it as
+    // UTC (new Date(value) parsed it as local time, shifting points by the
+    // user's offset).
+    const ts = utcInputToIso(form.ts)
+    if (!ts) { toast.error('Check the timestamp', 'Pick a date and time (UTC).'); return }
     setSaving(true)
     try {
       const res = await apiFetch('/v1/admin/metric-series', {
@@ -561,14 +600,16 @@ function MetricsTab({ metrics, loading, projectId, onIngest }: {
           project_id: projectId,
           metric_name: form.metric_name,
           value: parseFloat(form.value),
-          ts: new Date(form.ts).toISOString(),
+          ts,
         }),
       })
-      if (!res.ok) throw new Error(res.error?.message ?? 'Failed')
+      if (!res.ok) {
+        const e = describeApiError(res.error, 'Could not ingest the point')
+        toast.error(e.title, e.hint)
+        return
+      }
       toast.success('Point ingested')
       onIngest()
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : 'Error')
     } finally { setSaving(false) }
   }
 
@@ -600,7 +641,9 @@ function MetricsTab({ metrics, loading, projectId, onIngest }: {
             <Btn variant="primary" size="sm" onClick={ingest} loading={saving}>Ingest</Btn>
           </Card>
 
-          {loading ? <TableSkeleton rows={5} /> : metrics.length === 0 ? (
+          {loading ? <TableSkeleton rows={5} /> : error ? (
+            <PageLoadError error={error} code={errorCode} resource="metric data" onRetry={onRetry} />
+          ) : metrics.length === 0 ? (
             <EmptyState title="No metric data" description="Ingest data points above or send via SDK." />
           ) : (
             <div className="space-y-4">
@@ -651,23 +694,33 @@ function DetectTab({ projectId, onDone, hasMetrics }: { projectId: string; onDon
   const toast = useToast()
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<{ anomalies: number; ids: string[] } | null>(null)
-  const [form, setForm] = useState({ metric_name: '', lookback_hours: 48 })
+  // Lookback stays as typed text and is validated on Run, so a cleared
+  // field is never sent as NaN → null.
+  const [form, setForm] = useState({ metric_name: '', lookback_hours: '48' })
+  const lookbackHours = parseBoundedInt(form.lookback_hours, 1, 720)
 
   const run = async () => {
     if (!projectId) { toast.error('Select a project'); return }
+    if (lookbackHours == null) {
+      toast.error('Check "Lookback (hours)"', 'Enter a whole number from 1 to 720.')
+      return
+    }
     setLoading(true)
     setResult(null)
     try {
       const res = await apiFetch<{ anomalies: number; ids: string[] }>('/v1/admin/anomalies/detect', {
         method: 'POST',
-        body: JSON.stringify({ project_id: projectId, ...form }),
+        body: JSON.stringify({ project_id: projectId, metric_name: form.metric_name, lookback_hours: lookbackHours }),
       })
-      if (!res.ok) throw new Error(res.error?.message ?? 'Detection failed')
+      if (!res.ok) {
+        // describeApiError never passes a raw JSON worker reply through.
+        const e = describeApiError(res.error, 'Detection failed')
+        toast.error(e.title, e.hint)
+        return
+      }
       setResult(res.data ?? { anomalies: 0, ids: [] })
       toast.success(`${res.data?.anomalies ?? 0} anomalies detected`)
       onDone()
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : 'Detection failed')
     } finally { setLoading(false) }
   }
 
@@ -699,9 +752,10 @@ function DetectTab({ projectId, onDone, hasMetrics }: { projectId: string; onDon
         </label>
         <label className="block space-y-1">
           <SignalChip tone="neutral">Lookback (hours)</SignalChip>
-          <Input type="number" min={1} max={720} value={form.lookback_hours} onChange={(e) => setForm((f) => ({ ...f, lookback_hours: parseInt(e.target.value, 10) }))} />
+          <Input type="number" min={1} max={720} value={form.lookback_hours} aria-invalid={lookbackHours == null} onChange={(e) => setForm((f) => ({ ...f, lookback_hours: e.target.value }))} />
         </label>
       </div>
+      {lookbackHours == null && <p className="text-xs text-danger">Enter a whole number of hours from 1 to 720.</p>}
       <Btn variant="primary" onClick={run} loading={loading} disabled={!projectId}>Run detection</Btn>
       {result && (
         <ContainedBlock tone="info">

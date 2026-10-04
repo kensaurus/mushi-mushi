@@ -19,13 +19,16 @@ const STEP_NEXT_LINKS: Record<string, string> = {
   api_key_generated: '/onboarding?tab=verify',
   sdk_installed: '/onboarding?tab=sdk',
   first_report_received: '/onboarding?tab=verify',
-  github_connected: '/integrations',
-  sentry_connected: '/integrations',
+  // /integrations is the public marketing page; the console route is
+  // /integrations/config, and the hash scrolls to the card (Layout's
+  // ScrollToHashAnchor). The page never read a `?tab=` param.
+  github_connected: '/integrations/config#platform-card-github',
+  sentry_connected: '/integrations/config#platform-card-sentry',
   byok_anthropic: '/settings?tab=byok',
-  codebase_indexed: '/integrations/config?tab=codebase',
-  autofix_enabled: '/integrations/config?tab=github',
+  codebase_indexed: '/integrations/config#integrations-codebase',
+  autofix_enabled: '/integrations/config#integrations-codebase',
   first_fix_dispatched: '/reports',
-  slack_connected: '/integrations',
+  slack_connected: '/integrations/config#integrations-slack',
   first_qa_story_passing: '/qa-coverage',
 }
 

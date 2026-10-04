@@ -103,6 +103,7 @@ export function IntegrationHealthDot() {
 
   return (
     <span
+      role="img"
       aria-label={title}
       title={title}
       className={`inline-block w-1.5 h-1.5 rounded-full ml-auto ${COLORS[status]}`}

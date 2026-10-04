@@ -5,7 +5,12 @@
  * OVERVIEW:
  * - Handles all four install methods: deeplink (opens IDE), config-json (reveals
  *   copy block), cli-command (reveals copy block), remote-url (shows URL + headers).
- * - Mints a per-project MCP key before building the install artifact.
+ * - Mints a per-project MCP key before building the install artifact: at most
+ *   one per (project, client, access) per page session, labelled
+ *   "MCP · <client> · <date> · read+write", read+write by default with an
+ *   optional read-only choice (lib/mcpConnect.ts, REPORT A7).
+ * - Writes the published @mushi-mushi/mcp version (sdk_versions catalog) into
+ *   stdio configs, not the version this console was built with.
  * - Used by McpInstallButtons (back-compat wrapper), ConnectStudio client grid, and
  *   the public docs /connect landing (pass apiKey directly; no minting).
  *
@@ -23,30 +28,12 @@
  *   <ClientConnectButton client={cursorClient} projectName="Demo" endpoint="..." mcpHttpUrl="..." apiKey="<placeholder>" />
  */
 
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import type { McpClientDef, McpBuildInput, McpBuildResult } from '@mushi-mushi/mcp/clients'
-import { apiFetch } from '../lib/supabase'
 import { useToast } from '../lib/toast'
 import { LINK_ACCENT } from '../lib/chipTone'
+import { getOrMintMcpKey, getPublishedMcpPinSpec, scopesForAccess, type McpAccess } from '../lib/mcpConnect'
 import { Btn, CodeValue } from './ui'
-
-// ─── Key minting (project-scoped only) ───────────────────────────────────────
-
-async function mintMcpKey(
-  scopes: string[],
-  projectId: string,
-): Promise<string | null> {
-  const res = await apiFetch<{ key: string; prefix: string }>(
-    `/v1/admin/projects/${projectId}/keys`,
-    {
-      method: 'POST',
-      body: JSON.stringify({ scopes }),
-      idempotencyKey: crypto.randomUUID(),
-    },
-  )
-  if (!res.ok || !res.data?.key) return null
-  return res.data.key
-}
 
 // ─── Config copy section ─────────────────────────────────────────────────────
 
@@ -70,8 +57,13 @@ interface ClientConnectButtonProps {
   projectId?: string
   /** Pre-minted or placeholder key (used when projectId is absent, e.g. public page). */
   apiKey?: string
-  /** Additional scopes to include when minting. Default: ['mcp:read']. */
+  /**
+   * Exact scopes to mint with. Omit to use the access choice: read + write by
+   * default (the fix loop's `submit_fix_result` needs mcp:write).
+   */
   scopes?: string[]
+  /** Show a "Read-only key" checkbox under the button (when minting). */
+  accessChoice?: boolean
   /** Style override for the trigger button. */
   variant?: 'primary' | 'ghost'
   size?: 'sm' | 'md'
@@ -88,7 +80,8 @@ export function ClientConnectButton({
   mcpHttpUrl,
   projectId,
   apiKey: preMintedKey,
-  scopes = ['mcp:read'],
+  scopes,
+  accessChoice = false,
   variant = 'primary',
   size = 'md',
   expanded = false,
@@ -97,15 +90,22 @@ export function ClientConnectButton({
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<McpBuildResult | null>(null)
   const [showBlock, setShowBlock] = useState(expanded)
+  const [access, setAccess] = useState<McpAccess>('read_write')
+  const accessId = useId()
+  const mints = !preMintedKey && Boolean(projectId)
+  const mintScopes = scopes ?? scopesForAccess(access)
 
   async function handleConnect() {
     setLoading(true)
     try {
       let apiKey = preMintedKey
+      const pinPromise = getPublishedMcpPinSpec()
       if (!apiKey && projectId) {
-        apiKey = await mintMcpKey(scopes, projectId) ?? undefined
-        if (!apiKey) {
-          toast.error('Key mint failed', 'Could not mint an MCP key — check your plan limits.')
+        try {
+          apiKey = await getOrMintMcpKey({ projectId, clientId: client.id, clientLabel: client.label, scopes: mintScopes })
+        } catch (err) {
+          // The server's own reason (e.g. owner/admin required), not a guess.
+          toast.error('Could not create a key', err instanceof Error ? err.message : undefined)
           return
         }
       }
@@ -120,6 +120,7 @@ export function ClientConnectButton({
         apiKey,
         endpoint,
         mcpHttpUrl,
+        pinSpec: await pinPromise,
       }
       const built = client.build(input)
       setResult(built)
@@ -127,21 +128,24 @@ export function ClientConnectButton({
       if (built.kind === 'deeplink') {
         window.open(built.url, '_self')
         toast.success(`${client.label} install launched`, 'The IDE install dialog should open.')
-      } else {
-        setShowBlock(true)
       }
+      // Deeplinks too: the "Open again" block below only renders with
+      // showBlock set, so it was unreachable (QA bug 125).
+      setShowBlock(true)
     } finally {
       setLoading(false)
     }
   }
 
-  // Label for the trigger button
+  // Label for the trigger button. It is also the accessible name: a separate
+  // aria-label ("Install Mushi MCP in Cursor") hid the visible "Add to Cursor"
+  // from voice-control users (REPORT A14, WCAG 2.5.3 label in name).
   const buttonLabel =
     client.method === 'deeplink'
       ? `Add to ${client.label}`
       : client.method === 'cli-command'
-        ? `Show command`
-        : `Show config`
+        ? `Show ${client.label} command`
+        : `Show ${client.label} config`
 
   return (
     <div>
@@ -152,10 +156,21 @@ export function ClientConnectButton({
           loading={loading}
           disabled={loading}
           onClick={() => void handleConnect()}
-          aria-label={`Install Mushi MCP in ${client.label}`}
         >
           {buttonLabel}
         </Btn>
+      )}
+
+      {!showBlock && mints && accessChoice && !scopes && (
+        <label htmlFor={accessId} className="mt-1.5 flex items-center gap-1.5 text-2xs text-fg-muted">
+          <input
+            id={accessId}
+            type="checkbox"
+            checked={access === 'read_only'}
+            onChange={(e) => setAccess(e.currentTarget.checked ? 'read_only' : 'read_write')}
+          />
+          Read-only key (your agent can read reports but cannot mark them fixed)
+        </label>
       )}
 
       {showBlock && result && (
@@ -209,7 +224,7 @@ export function ClientConnectButton({
           {result.kind === 'deeplink' && (
             // After deeplink was opened, offer a re-open
             <div className="mt-2 flex items-center gap-2">
-              <span className="text-xs text-fg-muted">IDE dialog should have opened.</span>
+              <span className="text-xs text-fg-muted">{client.label} install dialog should have opened.</span>
               <Btn
                 type="button"
                 size="sm"

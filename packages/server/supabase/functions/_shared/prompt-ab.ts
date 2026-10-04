@@ -113,6 +113,21 @@ export async function getPromptForStage(
       .eq('stage', stage)
       .or('is_active.eq.true,is_candidate.eq.true')
     rows = globalRows
+  } else if (!rows.some((r) => (r as PromptVersionRow).is_active && !(r as PromptVersionRow).is_candidate)) {
+    // A project that has only cloned a candidate (Prompt Lab "Clone" saves it
+    // at 0% traffic) has no active row of its own. Its baseline is still the
+    // global active prompt, so traffic_percentage decides the split. Without
+    // this the clone was the only row and was served at 100% the moment it
+    // was saved.
+    const { data: globalActive } = await db
+      .from('prompt_versions')
+      .select('id, version, prompt_template, is_active, is_candidate, traffic_percentage, rollout_paused, rollout_canary_pct, judge_rubric')
+      .is('project_id', null)
+      .eq('stage', stage)
+      .eq('is_active', true)
+      .eq('is_candidate', false)
+      .limit(1)
+    if (globalActive?.length) rows = [...rows, ...globalActive]
   }
 
   if (!rows?.length) {

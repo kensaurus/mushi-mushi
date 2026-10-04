@@ -47,6 +47,9 @@ export function sparseXLabels(labels: string[], maxTicks?: number): SparseXTick[
   if (labels.length <= cap) {
     return labels.map((_, index) => tickAt(index))
   }
+  // Narrow tiles: first and last only. Four ticks in a ~120 px tile ran
+  // together ("Sep 2SSep 25Today", 2026-10-04 audit).
+  if (cap <= 2) return [tickAt(0), tickAt(labels.length - 1)]
   if (cap >= 4 && labels.length >= 10) {
     const i1 = Math.floor(labels.length / 3)
     const i2 = Math.floor((labels.length * 2) / 3)
@@ -58,6 +61,8 @@ export function sparseXLabels(labels: string[], maxTicks?: number): SparseXTick[
 
 export function formatChartCount(n: number): string {
   if (!Number.isFinite(n)) return '—'
+  // Float error on the bottom tick printed "-0.0" on the calls axis.
+  if (Math.abs(n) < 0.05) return '0'
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
   if (n >= 10_000) return `${Math.round(n / 1000)}k`
   if (n >= 1000) return `${(n / 1000).toFixed(1)}k`
@@ -89,7 +94,9 @@ export function buildYTickValues(
   const steps = tickCount - 1
   const out: number[] = []
   for (let i = 0; i <= steps; i++) {
-    out.push(peak - ((peak - floor) * i) / steps)
+    // The last tick is the floor exactly: `peak - (peak - floor)` can land a
+    // hair below 0 and print "-0.0".
+    out.push(i === steps ? floor : peak - ((peak - floor) * i) / steps)
   }
   return out
 }
