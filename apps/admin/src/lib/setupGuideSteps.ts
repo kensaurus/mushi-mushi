@@ -25,6 +25,7 @@
 
 import type { SetupProject, SetupStep } from './useSetupStatus'
 import type { ProjectSnapshot } from './projectSnapshotTypes'
+import { latestHeartbeatAt } from './heartbeat'
 
 export type SetupGuideStepState = 'done' | 'next' | 'blocked' | 'available'
 
@@ -166,11 +167,7 @@ function factsForStep(step: SetupStep, ctx: FactContext): SetupGuideFact[] {
 
     case 'api_key_generated': {
       const keys = (snapshot?.api_keys ?? []).filter((k) => k.is_active !== false && !k.revoked)
-      const lastSeen = keys
-        .map((k) => k.last_seen_at ?? null)
-        .filter((v): v is string => Boolean(v))
-        .sort()
-        .pop()
+      const lastSeen = latestHeartbeatAt(keys)
       return compact([
         keys.length > 0 ? fact('Active keys', String(keys.length), 'ok') : null,
         fact('Last used', relativeTime(lastSeen, now) ?? (keys.length ? 'Not used yet' : null), lastSeen ? 'ok' : 'warn'),

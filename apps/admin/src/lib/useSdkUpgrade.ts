@@ -48,6 +48,8 @@ export interface SdkUpgradeState {
   deployStatus?: string
   deployUrl?: string
   workflowUrl?: string
+  /** Set once the upgrade PR merged (from the job row or a sync). */
+  mergedAt?: string
 }
 
 interface JobRow {
@@ -282,6 +284,7 @@ export function useSdkUpgrade(projectId: string) {
             checkRunConclusion: job.check_run_conclusion ?? undefined,
             deployStatus: job.deploy_status ?? undefined,
             deployUrl: job.deploy_url ?? undefined,
+            mergedAt: job.merged_at ?? undefined,
           }
           persistTerminal(projectId, next)
           setState(next)
@@ -299,6 +302,7 @@ export function useSdkUpgrade(projectId: string) {
       setState({
         status: job.status as SdkUpgradeStatus,
         jobId: job.id,
+        plan: job.plan ?? undefined,
         releaseStatus: job.release_status ?? undefined,
         prState: job.pr_state ?? undefined,
         checkRunStatus: job.check_run_status ?? undefined,
@@ -371,6 +375,7 @@ export function useSdkUpgrade(projectId: string) {
             checkRunConclusion: prior?.check_run_conclusion ?? undefined,
             deployStatus: prior?.deploy_status ?? undefined,
             deployUrl: prior?.deploy_url ?? undefined,
+            mergedAt: prior?.merged_at ?? undefined,
             error: data.message,
           }
           persistTerminal(projectId, next)

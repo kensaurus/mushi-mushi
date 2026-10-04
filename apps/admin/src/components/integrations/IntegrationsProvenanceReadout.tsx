@@ -36,8 +36,15 @@ export function IntegrationsProvenanceReadout({
     },
     {
       label: 'Platform health',
-      value: `${stats.platformHealthy} healthy · ${stats.platformDown} down`,
-      tone: stats.platformDown > 0 ? 'danger' : stats.platformHealthy > 0 ? 'ok' : 'muted',
+      value: `${stats.platformHealthy} working · ${(stats.platformAttention ?? 0)} need attention · ${stats.platformDown} failing`,
+      tone:
+        stats.platformDown > 0
+          ? 'danger'
+          : (stats.platformAttention ?? 0) > 0
+            ? 'warn'
+            : stats.platformHealthy > 0
+              ? 'ok'
+              : 'muted',
     },
     {
       label: 'Routing rules',

@@ -172,7 +172,7 @@ function hrefFor(key: string, fix: FixAttempt): string | null {
     case 'judge':
       return '/judge'
     case 'act':
-      return '/integrations'
+      return '/integrations/config'
   }
   return null
 }
