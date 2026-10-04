@@ -173,6 +173,8 @@ export interface IntegrationStats {
   platformConnected: number
   platformHealthy: number
   platformDown: number
+  /** Connected, not failing, but not proven working (never tested, stale, or no inbound event yet). */
+  platformAttention?: number
   routingActive: number
   routingPaused: number
   routingTotal: number
@@ -186,6 +188,7 @@ export type IntegrationTopPriority =
   | 'no_project'
   | 'platform_down'
   | 'incomplete'
+  | 'attention'
   | 'empty'
   | 'healthy'
 

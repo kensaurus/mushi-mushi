@@ -25,6 +25,7 @@ export function IntegrationsPageIntro({ topPriority, flags }: Props) {
   const needsGuidance =
     topPriority === 'empty' ||
     topPriority === 'incomplete' ||
+    topPriority === 'attention' ||
     topPriority === 'no_project' ||
     topPriority === 'platform_down'
 

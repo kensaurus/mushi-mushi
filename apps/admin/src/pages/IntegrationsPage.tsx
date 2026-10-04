@@ -121,6 +121,7 @@ export function IntegrationsPage() {
     slackConfigured?: boolean
     slackTeamName?: string | null
     slackChannelId?: string | null
+    slackCanPost?: boolean
     discordConfigured?: boolean
     teamsConfigured?: boolean
   }>('/v1/admin/settings/stats')
@@ -516,6 +517,7 @@ export function IntegrationsPage() {
             slackConfigured={Boolean(settingsQuery.data?.slackConfigured)}
             teamName={settingsQuery.data?.slackTeamName ?? null}
             channelId={settingsQuery.data?.slackChannelId ?? null}
+            canPost={Boolean(settingsQuery.data?.slackCanPost)}
             latestProbe={latestByKind['slack']}
             sparkline={sparklineByKind['slack'] ?? []}
           />
@@ -528,6 +530,7 @@ export function IntegrationsPage() {
           <TeamsIntegrationCard
             projectId={activeProjectId ?? null}
             teamsConfigured={Boolean(settingsQuery.data?.teamsConfigured)}
+            latestProbe={latestByKind['teams']}
           />
         </div>
 
@@ -620,7 +623,7 @@ export function IntegrationsPage() {
           </div>
 
           {activeProjectId && (
-            <div className="p-4 border-t border-panel-border" data-dav-anchor="integrations:verify">
+            <div id="integrations-codebase" className="p-4 border-t border-panel-border scroll-mt-chrome" data-dav-anchor="integrations:verify">
               <CodebaseIndexCard projectId={activeProjectId} />
               <DryRunPanel projectId={activeProjectId} />
             </div>
@@ -665,6 +668,8 @@ export function IntegrationsPage() {
             latestProbe={latestByKind['linear']}
             sparkline={sparklineByKind['linear'] ?? []}
             onReload={reloadAll}
+            onTest={() => void testKind('linear')}
+            testing={testing === 'linear'}
           />
         </div>
       </Panel>
@@ -675,7 +680,7 @@ export function IntegrationsPage() {
           Forward triaged reports to your ticketing or paging system. Each provider has its own
           credentials; severity + category routing lives in Settings → Routing.
         </p>
-        <div className="divide-y divide-panel-border" data-dav-anchor="integrations:act">
+        <div id="integrations-routing" className="divide-y divide-panel-border scroll-mt-chrome" data-dav-anchor="integrations:act">
           {ROUTING_PROVIDERS.map((provider) => {
             const existing = routing.find((r) => r.integration_type === provider.type)
             return (
