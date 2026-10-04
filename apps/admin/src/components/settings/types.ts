@@ -4,15 +4,11 @@
 
 export type SettingsTabId = 'general' | 'byok' | 'firecrawl' | 'browserbase' | 'voice' | 'health' | 'dev'
 
-export type SettingsTopPriority =
-  | 'no_project'
-  | 'byok_failing'
-  | 'no_anthropic'
-  | 'sdk_off'
-  | 'untested'
-  | 'routing_optional'
-  | 'healthy'
-
+/**
+ * GET /v1/admin/settings/stats. It has no `topPriority`: what to do next is
+ * worked out on the client by `settingsBannerPriority`, from these counts and
+ * the saved-keys list.
+ */
 export interface SettingsStats {
   hasAnyProject?: boolean
   projectId: string | null
@@ -35,9 +31,6 @@ export interface SettingsStats {
   byokKeysExpiring?: number
   githubRepoConfigured: boolean
   autofixEnabled: boolean
-  topPriority?: SettingsTopPriority
-  topPriorityLabel?: string | null
-  topPriorityTo?: string | null
 }
 
 export const EMPTY_SETTINGS_STATS: SettingsStats = {
@@ -61,7 +54,4 @@ export const EMPTY_SETTINGS_STATS: SettingsStats = {
   byokKeysExpiring: 0,
   githubRepoConfigured: false,
   autofixEnabled: false,
-  topPriority: 'no_project',
-  topPriorityLabel: null,
-  topPriorityTo: null,
 }

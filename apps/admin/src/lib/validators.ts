@@ -407,6 +407,50 @@ export function pagerdutyRoutingKey(opts?: ValidatorOptions): Validator {
 }
 
 /**
+ * Fix branch names. Mirrors `validateFixBranchTemplate` in the server's
+ * `_shared/github-pr.ts`: the template is filled with the same sample values
+ * (first occurrence of each token, like String.replace) and must then match
+ * `<type>/MUSHI-<reportId>-<slug>`.
+ */
+const FIX_BRANCH_RE = /^(feature|bugfix|hotfix|refactor|chore|docs|test|ci)\/MUSHI-[a-f0-9-]+-[a-z0-9][a-z0-9-]*$/
+
+function fillBranchTemplate(
+  template: string,
+  values: { date: string; category: string; shortId: string; reportId: string },
+): string {
+  return template
+    .replace('{date}', values.date)
+    .replace('{category}', values.category)
+    .replace('{shortId}', values.shortId)
+    .replace('{reportId}', values.reportId)
+}
+
+export const FIX_BRANCH_TEMPLATE_RULE =
+  'Start with a type (bugfix/, feature/, hotfix/, refactor/, chore/, docs/, test/ or ci/), then MUSHI-{reportId}-, then lowercase words, {category}, {date} or {shortId}.'
+
+export function fixBranchTemplate(opts?: ValidatorOptions): Validator {
+  return withOptional(opts, (value) => {
+    const sample = fillBranchTemplate(value.trim(), {
+      date: '2026-06-23',
+      category: 'ui-bug',
+      shortId: 'abc12345',
+      reportId: '00000000-0000-4000-8000-000000000001',
+    })
+    return FIX_BRANCH_RE.test(sample) ? null : { message: FIX_BRANCH_TEMPLATE_RULE }
+  })
+}
+
+/** What a template turns into for a real-looking report, for the "Example" line. */
+export function fixBranchExample(template: string, now: Date = new Date()): string {
+  return fillBranchTemplate(template, {
+    date: now.toISOString().slice(0, 10),
+    category: 'bug',
+    shortId: '3f2a9c1e',
+    reportId: '3f2a9c1e-7b4d-4e8a-9c21-5d6e7f8a9b0c',
+  })
+}
+
+/**
  * Supabase project ref: the 20 lowercase letters/digits in
  * `https://<ref>.supabase.co`. Mirrors `parseSupabaseProjectRefSetting` in
  * the server's `_shared/supabase-project-ref.ts`, which rejects anything else.

@@ -1,5 +1,21 @@
 import { describe, expect, it } from 'vitest'
-import { coerceApiResult } from './apiEnvelope'
+import { coerceApiResult, errorFromBareEnvelope } from './apiEnvelope'
+
+// Settings saves showed `400: {"error":{…}}` (suspected-bugs entry 111).
+describe('errorFromBareEnvelope', () => {
+  it('reads a 4xx { error: { code, message } } body as that error', () => {
+    expect(
+      errorFromBareEnvelope({ error: { code: 'INVALID_BRANCH_TEMPLATE', message: 'Branch names must start with a type.' } }),
+    ).toEqual({ code: 'INVALID_BRANCH_TEMPLATE', message: 'Branch names must start with a type.' })
+  })
+
+  it('returns null when there is no readable message', () => {
+    expect(errorFromBareEnvelope({ error: { code: 'X' } })).toBeNull()
+    expect(errorFromBareEnvelope({ message: 'proxy said no' })).toBeNull()
+    expect(errorFromBareEnvelope('nope')).toBeNull()
+    expect(errorFromBareEnvelope({ error: 'string error' })).toBeNull()
+  })
+})
 
 describe('coerceApiResult', () => {
   it('wraps legacy feature-board list payloads', () => {

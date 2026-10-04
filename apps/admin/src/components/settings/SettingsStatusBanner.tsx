@@ -3,8 +3,9 @@
  * PURPOSE: The one line at the top of Settings: the most important thing to
  *          do, with its button. Key problems are counted from the same
  *          saved-keys list the AI keys rows use (`keySummary`), so the banner
- *          and the rows always agree; the server's own priority is only used
- *          when that list could not be read.
+ *          and the rows always agree; the server's counts are only used when
+ *          that list could not be read. Quick mode lands on the tab this
+ *          banner's button opens (settingsModeUx.resolveQuickSettingsTab).
  */
 
 import { Btn } from '../ui'
@@ -129,7 +130,7 @@ export function SettingsStatusBanner({
           title="Settings are ready"
           subtitle="Optional next step: send bug alerts to Slack, or turn Sentry errors into reports."
           action={
-            <Btn to={stats.topPriorityTo ?? '/integrations/config'} size="sm" variant="ghost">
+            <Btn to="/integrations/config" size="sm" variant="ghost">
               {actions.integrations ?? 'Integrations'}
             </Btn>
           }

@@ -16,7 +16,7 @@ import {
   isValidProjectId,
 } from './activeProject'
 import { getActiveOrgIdSnapshot, isValidOrgId } from './activeOrg'
-import { coerceApiResult, type ApiResult } from './apiEnvelope'
+import { coerceApiResult, errorFromBareEnvelope, type ApiResult } from './apiEnvelope'
 import type * as CrossTeamProject from './crossTeamProject'
 
 const authOptions = {
@@ -486,10 +486,15 @@ async function doFetch<T>(
         }
       }
       try {
-        const coerced = coerceApiResult<T>(JSON.parse(body))
+        const parsedBody: unknown = JSON.parse(body)
+        const coerced = coerceApiResult<T>(parsedBody)
         // A non-2xx body without an explicit error envelope (e.g. a proxy's
         // `{ "message": "..." }`) must never coerce into a success.
         if (coerced.ok) {
+          // `{ error: { code, message } }` without `ok:false`: show the
+          // server's sentence, not the raw JSON.
+          const bare = res.status < 500 ? errorFromBareEnvelope(parsedBody) : null
+          if (bare) return attachRequestId({ ok: false, error: bare })
           return attachRequestId({
             ok: false,
             error: { code: 'HTTP_ERROR', message: `${res.status}: ${body.slice(0, 200)}` },
