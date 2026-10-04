@@ -6,7 +6,7 @@
  *          the confirm / cancel gate, and the recent-sessions list.
  *
  * Contract (server: api/routes/intake-voice.ts):
- *   POST /v1/intake/voice/upload-url          → { ok, bucket, path, signedUrl, token }
+ *   POST /v1/intake/voice/upload-url { mime } → { ok, bucket, path, signedUrl, token, mime }
  *   POST /v1/intake/voice                     → { ok, session }
  *   POST /v1/intake/voice/:id/confirm { token } / …/cancel { token }
  *   GET  /v1/intake/voice/sessions?limit=20   → { ok, sessions }
@@ -52,6 +52,8 @@ export interface VoiceUploadTarget {
   path: string
   signedUrl: string
   token: string
+  /** Canonical MIME the server chose for the object (what the bucket accepts). */
+  mime?: string
 }
 
 export const VOICE_SESSIONS_PATH = '/v1/intake/voice/sessions?limit=20'
@@ -98,6 +100,33 @@ export function voiceStatusLabel(status: string): string {
   return VOICE_STATUS_LABEL[status] ?? status.replace(/_/g, ' ')
 }
 
+/**
+ * The status to show. A request still `awaiting_confirm` after its 10-minute
+ * window can no longer be confirmed (the server expires it on the next
+ * attempt), so it reads as expired instead of "Needs confirmation".
+ */
+export function effectiveVoiceStatus(session: Pick<VoiceSession, 'status' | 'expires_at'>, now = Date.now()): string {
+  if (session.status !== 'awaiting_confirm' || !session.expires_at) return session.status
+  const expiresAt = Date.parse(session.expires_at)
+  return Number.isFinite(expiresAt) && expiresAt <= now ? 'expired' : session.status
+}
+
+/**
+ * Voice intake is off by default (ADR 0010): only an explicit `true` turns it
+ * on. A project with no settings row reads back as `{}`, which is off.
+ */
+export function isVoiceIntakeEnabled(settings: { voice_intake_enabled?: boolean | null } | null | undefined): boolean {
+  return settings?.voice_intake_enabled === true
+}
+
+/** A request that can still be confirmed or cancelled from this console. */
+export function canConfirmVoiceSession(
+  session: Pick<VoiceSession, 'status' | 'expires_at' | 'confirm_token'>,
+  now = Date.now(),
+): boolean {
+  return effectiveVoiceStatus(session, now) === 'awaiting_confirm' && Boolean(session.confirm_token)
+}
+
 export const VOICE_ACTION_LABEL: Record<string, string> = {
   create_report: 'Create a bug report',
   open_draft_pr: 'Open a draft PR',
@@ -111,8 +140,61 @@ export function voiceActionLabel(action: string | null | undefined): string {
 
 // ── upload ───────────────────────────────────────────────────────────────────
 
-export async function requestVoiceUploadUrl(): Promise<ApiResult<VoiceUploadTarget>> {
-  return apiFetchMutate<VoiceUploadTarget>('/v1/intake/voice/upload-url')
+/** Accepted formats, in the words shown to the user. */
+export const VOICE_ACCEPTED_FORMATS = '.m4a, .mp3, .ogg, .webm or .wav'
+
+/**
+ * Mirrors the server's `extensionForMime` (_shared/stt.ts): every alias it
+ * accepts, mapped to the canonical type the voice-intake bucket allows.
+ */
+const VOICE_MIME_ALIASES: Record<string, string> = {
+  'audio/ogg': 'audio/ogg',
+  'audio/oga': 'audio/ogg',
+  'audio/opus': 'audio/ogg',
+  'application/ogg': 'audio/ogg',
+  'audio/mp4': 'audio/mp4',
+  'audio/x-m4a': 'audio/mp4',
+  'audio/m4a': 'audio/mp4',
+  'audio/aac': 'audio/mp4',
+  'audio/mpeg': 'audio/mpeg',
+  'audio/mp3': 'audio/mpeg',
+  'audio/webm': 'audio/webm',
+  'video/webm': 'audio/webm',
+  'audio/wav': 'audio/wav',
+  'audio/x-wav': 'audio/wav',
+  'audio/wave': 'audio/wav',
+}
+
+const VOICE_EXTENSION_MIME: Record<string, string> = {
+  ogg: 'audio/ogg',
+  oga: 'audio/ogg',
+  opus: 'audio/ogg',
+  m4a: 'audio/mp4',
+  mp4: 'audio/mp4',
+  aac: 'audio/mp4',
+  mp3: 'audio/mpeg',
+  webm: 'audio/webm',
+  wav: 'audio/wav',
+}
+
+/**
+ * The audio type to ask the server for. `file.type` is empty for some
+ * Windows and Android files and can be an alias, so: a type the server
+ * knows, else the file extension, else null (the caller then names the
+ * formats that work instead of sending a request the server refuses).
+ */
+export function resolveVoiceMime(file: { type?: string; name?: string }): string | null {
+  const base = (file.type ?? '').split(';')[0]!.trim().toLowerCase()
+  const fromType = VOICE_MIME_ALIASES[base]
+  if (fromType) return fromType
+  const name = typeof file.name === 'string' ? file.name : ''
+  const dot = name.lastIndexOf('.')
+  if (dot < 0) return null
+  return VOICE_EXTENSION_MIME[name.slice(dot + 1).toLowerCase()] ?? null
+}
+
+export async function requestVoiceUploadUrl(mime: string): Promise<ApiResult<VoiceUploadTarget>> {
+  return apiFetchMutate<VoiceUploadTarget>('/v1/intake/voice/upload-url', { body: JSON.stringify({ mime }) })
 }
 
 /**
@@ -121,7 +203,9 @@ export async function requestVoiceUploadUrl(): Promise<ApiResult<VoiceUploadTarg
  * (S3 / R2 / GCS presigned) keep working.
  */
 export async function uploadVoiceFile(target: VoiceUploadTarget, file: File | Blob): Promise<{ ok: true } | { ok: false; message: string }> {
-  const contentType = file.type || 'application/octet-stream'
+  // The bucket accepts only canonical audio types, so upload under the type
+  // the server picked for this object, not the browser's guess.
+  const contentType = target.mime || file.type || 'application/octet-stream'
   if (target.token) {
     try {
       const { error } = await supabase.storage.from(target.bucket).uploadToSignedUrl(target.path, target.token, file, {
@@ -178,8 +262,12 @@ export async function uploadAndSubmitVoice(
   file: File | Blob,
   onStage?: (stage: 'signing' | 'uploading' | 'transcribing') => void,
 ): Promise<{ ok: true; session: VoiceSession } | { ok: false; message: string; code?: string }> {
+  const mime = resolveVoiceMime(file as { type?: string; name?: string })
+  if (!mime) {
+    return { ok: false, message: `Mushi can't read this kind of audio file. Use a ${VOICE_ACCEPTED_FORMATS} recording.` }
+  }
   onStage?.('signing')
-  const target = await requestVoiceUploadUrl()
+  const target = await requestVoiceUploadUrl(mime)
   if (!target.ok || !target.data) {
     return { ok: false, message: target.error?.message ?? 'Could not get an upload URL', code: target.error?.code }
   }
