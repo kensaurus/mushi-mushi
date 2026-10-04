@@ -19,7 +19,7 @@ export interface PersonRowKey {
 }
 
 /** Stable identity of a People row: the end user, else the anonymous person's first sighting. */
-export function personKey(p: PersonRowKey): string {
+function personKey(p: PersonRowKey): string {
   return p.end_user_id ?? `anon:${p.external_user_id ?? p.display_name ?? ''}:${p.first_seen_at}`
 }
 
