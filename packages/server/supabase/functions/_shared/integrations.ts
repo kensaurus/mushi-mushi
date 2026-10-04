@@ -3,6 +3,7 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { log } from './logger.ts'
 import { attachTraceparent } from './trace.ts'
 import { linearGql } from './linear.ts'
+import { resolveRoutingSecrets } from './routing-secrets.ts'
 
 const intLog = log.child('integrations')
 
@@ -137,9 +138,10 @@ export async function resolveExternalIssue(
 
   const configBySystem = new Map<string, Record<string, unknown>>()
   for (const intg of integrations ?? []) {
+    // Tokens live in Vault as `vault://` refs; the provider needs the value.
     configBySystem.set(
       intg.integration_type as string,
-      intg.config as Record<string, unknown>,
+      await resolveRoutingSecrets(db, intg.config as Record<string, unknown>),
     )
   }
 
@@ -368,6 +370,8 @@ async function dispatchToProvider(
   db: SupabaseClient,
   projectId: string,
 ): Promise<ExternalIssue | null> {
+  // Tokens live in Vault as `vault://` refs; the provider needs the value.
+  config = await resolveRoutingSecrets(db, config)
   switch (type) {
     case 'jira': return createJiraIssue(config, report, traceparent)
     case 'linear': return createLinearIssue(db, projectId, config, report, traceparent)
