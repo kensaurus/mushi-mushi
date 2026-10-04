@@ -360,8 +360,10 @@ function RowKebab({ detailPath, onCopyLink, onDismiss }: KebabProps) {
         </button>
       </Tooltip>
       <Tooltip portal content="Open in new tab">
-        <a
-          href={detailPath}
+        {/* <Link> (not <a>) so the href carries the router basename; a bare
+            /reports/<id> opens outside the console in production. */}
+        <Link
+          to={detailPath}
           target="_blank"
           rel="noopener noreferrer"
           onClick={(e) => e.stopPropagation()}
@@ -369,7 +371,7 @@ function RowKebab({ detailPath, onCopyLink, onDismiss }: KebabProps) {
           aria-label="Open in new tab"
         >
           <IconExternalLink size={12} />
-        </a>
+        </Link>
       </Tooltip>
       <Tooltip portal content="Dismiss">
         <button

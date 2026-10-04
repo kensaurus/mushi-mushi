@@ -32,6 +32,7 @@ import { supabase, invalidateApiCache } from './supabase'
 import { clearActiveOrg } from './activeOrg'
 import { clearActiveProject } from './activeProject'
 import { notifyAccountSwitched } from './authBroadcast'
+import { hardNavigate } from './appPath'
 import {
   detectProvider,
   displayNameFor,
@@ -245,9 +246,9 @@ export async function switchToAccount(userId: string): Promise<{ error?: string 
   invalidateApiCache()
   notifyAccountSwitched()
 
-  if (typeof window !== 'undefined') {
-    window.location.assign('/dashboard')
-  }
+  // Under the SPA base path (`/mushi-mushi/admin/` in production); a bare
+  // `/dashboard` left the console for the domain root.
+  hardNavigate('/dashboard')
   return {}
 }
 

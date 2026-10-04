@@ -10,7 +10,7 @@
  */
 
 import { useState, useCallback, useEffect, useMemo } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { usePageData } from '../../lib/usePageData'
 import { apiFetch } from '../../lib/supabase'
 import { getActiveProjectIdSnapshot } from '../../lib/activeProject'
@@ -95,6 +95,7 @@ function statusBadge(visibility: PublishedApp['visibility']) {
 export function PublishingTab() {
   const projectId = getActiveProjectIdSnapshot()
   const toast = useToast()
+  const navigate = useNavigate()
 
   const { data, loading, error, reload } = usePageData<PublishedApp>(
     projectId ? `/v1/admin/published-apps/${projectId}` : null,
@@ -382,7 +383,7 @@ export function PublishingTab() {
         <EmptyState
           title="Marketplace publishing requires a Pro plan"
           description="Upgrade your workspace to publish apps to the Mushi Bounties marketplace and start rewarding testers."
-          action={<Btn variant="primary" onClick={() => window.location.href = '/billing'}>Upgrade to Pro</Btn>}
+          action={<Btn variant="primary" onClick={() => navigate('/billing')}>Upgrade to Pro</Btn>}
         />
       )
     }
