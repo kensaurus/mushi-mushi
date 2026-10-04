@@ -368,6 +368,22 @@ export function registerModernizationHealthSuperRoutes(app: Hono<{ Variables: Va
       });
     }
 
+    // The caller's role on the active project, so the console can hide or
+    // disable write controls the API refuses for viewers. Null = unknown
+    // (lookup failed); the UI then leaves controls on and the API decides.
+    let projectRole: string | null = null;
+    if (entitlement.projectId) {
+      try {
+        const access = await callerCanAccessProject(c, db, userId, entitlement.projectId);
+        projectRole = access.role;
+      } catch (err) {
+        log.warn('entitlements_project_role_lookup_failed', {
+          userId,
+          err: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
     const flags = { ...(entitlement.plan.feature_flags ?? {}) } as Record<string, unknown>;
     const em = (userEmail ?? '').toLowerCase();
     if (em && INVENTORY_V2_DOGFOOD_EMAILS.has(em)) {
@@ -387,6 +403,7 @@ export function registerModernizationHealthSuperRoutes(app: Hono<{ Variables: Va
           allowed: flags[r.flag] === true,
         })),
         isSuperAdmin,
+        projectRole,
         // Founder/operator flag (secret MUSHI_OPERATOR_USER_IDS) — drives the
         // /growth nav item; the route itself re-checks via requireOperator.
         operator: isOperatorUser(userId),
@@ -502,10 +519,16 @@ export function registerModernizationHealthSuperRoutes(app: Hono<{ Variables: Va
       return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Not found.' } }, 404);
     }
 
-    const [{ data: projects }, { data: subs }, { data: recentReports }] = await Promise.all([
+    const [
+      { data: projects, error: projectsErr },
+      { data: subs, error: subsErr },
+      { data: recentReports, error: reportsErr },
+    ] = await Promise.all([
       db
         .from('projects')
-        .select('id, name, slug, created_at, plan_tier, data_region')
+        // data_region was dropped (20260527070000); selecting it failed the
+        // whole query and the drawer showed every customer with 0 projects.
+        .select('id, name, slug, created_at, plan_tier, data_residency_region')
         .eq('owner_id', userId)
         .order('created_at', { ascending: false }),
       db
@@ -535,6 +558,16 @@ export function registerModernizationHealthSuperRoutes(app: Hono<{ Variables: Va
         .order('created_at', { ascending: false })
         .limit(20),
     ]);
+
+    // A failed read must never render as "No projects yet".
+    const detailErr = projectsErr ?? subsErr ?? reportsErr;
+    if (detailErr) {
+      log.error('super_admin_user_detail_failed', { err: detailErr.message });
+      return c.json(
+        { ok: false, error: { code: 'INTERNAL', message: "This user's projects could not be loaded. Retry in a moment." } },
+        500,
+      );
+    }
 
     return c.json({
       ok: true,

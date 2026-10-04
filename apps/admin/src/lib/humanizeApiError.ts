@@ -149,6 +149,40 @@ export function humanizeApiError(
         code,
         raw,
       }
+    // Group J (org members, lessons, queue) — kept together to limit merge churn.
+    case 'PROJECT_REQUIRED':
+      return {
+        title: 'Pick a project first.',
+        hint: 'Choose a project in the header switcher, then try again.',
+        severity: 'hard',
+        action: { label: 'Open projects', target: { kind: 'route', to: '/projects' } },
+        code,
+        raw,
+      }
+    case 'OWNER_REQUIRED':
+      return {
+        title: 'Only an owner can do that.',
+        hint: 'Ask a team owner to make this change for you.',
+        severity: 'hard',
+        code,
+        raw,
+      }
+    case 'LAST_OWNER':
+      return {
+        title: 'A team needs at least one owner.',
+        hint: 'Make someone else an owner first, then change this role.',
+        severity: 'hard',
+        code,
+        raw,
+      }
+    case 'NOT_RETRYABLE':
+      return {
+        title: 'Only failed jobs can be retried.',
+        hint: 'Completed, waiting and running jobs are left alone. Open the failed or dead-letter lane.',
+        severity: 'hard',
+        code,
+        raw,
+      }
     default:
       break
   }
