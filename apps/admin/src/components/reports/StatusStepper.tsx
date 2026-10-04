@@ -87,7 +87,7 @@ export function StatusStepper({
   const tableSummary = `${activeLabel} · stage ${activeIdx + 1} of 4`
 
   const barRow = (
-    <div className={`flex items-center gap-px min-w-0 ${isTable ? 'flex-1' : 'w-full max-w-full'}`}>
+    <div className="flex w-full max-w-full min-w-0 items-center gap-px">
       {STATUS_STEPS.map((step, i) => {
         const completed = i < activeIdx
         const active = i === activeIdx
@@ -100,11 +100,15 @@ export function StatusStepper({
         const tooltipBase = STEP_LABELS[step]
         const tooltip = ts ? `${tooltipBase} · ${new Date(ts).toLocaleString()}` : tooltipBase
         const activeRing = active ? 'ring-1 ring-inset ring-fg/15' : ''
+        // Tooltip renders its own `inline-flex` span around the child, and
+        // THAT span is the flex item here. Without `flex-1` on it the
+        // segment's own `flex-1` grew inside an empty wrapper and every bar
+        // rendered 0 px wide (2026-10-04 console audit).
         return (
-          <Tooltip key={step} portal content={tooltip}>
+          <Tooltip key={step} portal content={tooltip} className="flex-1 min-w-0">
             <span
               aria-label={tooltipBase}
-              className={`${barHeight} flex-1 rounded-hairline motion-safe:transition-opacity ${tint} ${activeRing}`}
+              className={`${barHeight} w-full rounded-hairline motion-safe:transition-opacity ${tint} ${activeRing}`}
             />
           </Tooltip>
         )
@@ -125,7 +129,7 @@ export function StatusStepper({
         </span>
       )}
       {isTable ? (
-        <Tooltip portal content={tableSummary}>
+        <Tooltip portal content={tableSummary} className="flex-1 min-w-0">
           {barRow}
         </Tooltip>
       ) : (
