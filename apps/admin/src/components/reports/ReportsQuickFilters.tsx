@@ -22,14 +22,9 @@ import { useActiveProjectSignal } from '../../lib/activeProject'
 import { useRealtimeReload } from '../../lib/realtime'
 import { FilterChip } from '../ui'
 import { FilterChipCell, FilterChipRail } from '../FilterChipRail'
+import { SEVERITY_CHIPS, statusChipCount, type ReportStatusStats } from '../../lib/reportsListFilters'
 
-interface StatsResponse {
-  total?: number
-  /** Reports still waiting on a decision — the `open` chip (OPEN_REPORT_STATUSES server-side). */
-  openCount?: number
-  byStatus?: Record<string, number>
-  bySeverity?: Record<string, number>
-}
+type StatsResponse = ReportStatusStats
 
 interface Props {
   status: string
@@ -49,10 +44,6 @@ const STATUS_BUCKETS: Array<{ value: string; label: string; tone: 'default' | 'w
   { value: 'dismissed',  label: 'Dismissed',   tone: 'default' },
 ]
 
-const SEVERITY_BUCKETS: Array<{ value: string; label: string; tone: 'default' | 'warn' | 'danger' }> = [
-  { value: 'critical', label: 'Critical', tone: 'danger' },
-  { value: 'major',    label: 'Major',    tone: 'warn' },
-]
 
 export function ReportsQuickFilters({ status, severity, onSetFilter }: Props) {
   const [stats, setStats] = useState<StatsResponse | null>(null)
@@ -69,9 +60,7 @@ export function ReportsQuickFilters({ status, severity, onSetFilter }: Props) {
 
   useRealtimeReload(['reports'], load, { debounceMs: 1000 })
 
-  const byStatus = stats?.byStatus ?? {}
   const bySeverity = stats?.bySeverity ?? {}
-  const total = stats?.total ?? 0
 
   return (
     <div
@@ -81,8 +70,7 @@ export function ReportsQuickFilters({ status, severity, onSetFilter }: Props) {
     >
       <FilterChipRail trackId="reports-status" aria-label="Status filters">
         {STATUS_BUCKETS.map((b) => {
-          const count =
-            b.value === '' ? total : b.value === 'open' ? (stats?.openCount ?? 0) : (byStatus[b.value] ?? 0)
+          const count = stats ? statusChipCount(b.value, stats) : 0
           return (
             <FilterChipCell key={b.value || 'all'} active={status === b.value}>
               <FilterChip
@@ -104,7 +92,7 @@ export function ReportsQuickFilters({ status, severity, onSetFilter }: Props) {
         })}
       </FilterChipRail>
       <span aria-hidden className="mx-1 h-4 w-px bg-edge/60" />
-      {SEVERITY_BUCKETS.map((b) => (
+      {SEVERITY_CHIPS.map((b) => (
         <FilterChip
           key={b.value}
           label={b.label}

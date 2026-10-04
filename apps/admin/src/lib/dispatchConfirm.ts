@@ -52,3 +52,54 @@ export function dispatchConfirmBody(input: { repoUrl: string | null | undefined;
     `against ${base}. Nothing merges until you review it.`
   )
 }
+
+/**
+ * Why a fix cannot be dispatched for this report right now, or null when it
+ * can. The one gate every "Dispatch fix" / "Retry dispatch" control uses
+ * (triage bar, recommendation card, /reports row): the recommendation card
+ * used to call dispatch directly, skipping the confirm and this check.
+ * `busy` (a dispatch already in flight) blocks without a reason to show.
+ */
+export function dispatchBlock(input: {
+  report: Parameters<typeof featureRequestDispatchBlock>[0] & { status: string }
+  preflight?: { loading: boolean; ready: boolean; failing: ReadonlyArray<{ label: string }> } | null
+  busy?: boolean
+}): { blocked: boolean; reason: string | null } {
+  const { report, preflight, busy } = input
+  if (report.status === 'fixed' || report.status === 'dismissed') {
+    return { blocked: true, reason: `This report is ${report.status === 'fixed' ? 'fixed' : 'dismissed'}; reopen it to dispatch a fix.` }
+  }
+  const feature = featureRequestDispatchBlock(report)
+  if (feature) return { blocked: true, reason: feature }
+  if (preflight && !preflight.loading && !preflight.ready) {
+    const missing = preflight.failing.map((c) => c.label).join(', ')
+    return { blocked: true, reason: missing ? `Set up first: ${missing}.` : 'Finish the dispatch setup first.' }
+  }
+  if (busy) return { blocked: true, reason: null }
+  return { blocked: false, reason: null }
+}
+
+/**
+ * Plain-English text for a failed POST /v1/admin/fixes/dispatch. Never shows
+ * the error code (it used to read "AUTOFIX_DISABLED: Enable Autofix…").
+ */
+export function dispatchErrorText(error: { code?: string; message?: string } | null | undefined): string {
+  switch (error?.code) {
+    case 'AUTOFIX_DISABLED':
+      return 'Auto-fix is off for this project. Turn it on in Settings, then dispatch again.'
+    case 'FEATURE_REQUEST':
+      return 'This is a feature request. Set its category to the bug type first, then dispatch.'
+    case 'ALREADY_DISPATCHED':
+      return 'A fix is already running for this report. Watch it on the Fixes page.'
+    case 'TARGET_REPO_NOT_IN_PROJECT':
+      return 'That repo is no longer linked to this project. Pick another repo and try again.'
+    case 'REPORT_NOT_FOUND':
+      return 'This report is no longer in the project. Refresh the page.'
+    case 'FORBIDDEN':
+      return 'You do not have access to dispatch fixes on this project.'
+    case 'RATE_LIMITED':
+      return 'Too many dispatches just now. Wait a minute and try again.'
+    default:
+      return 'The fix could not be queued. Try again in a moment.'
+  }
+}

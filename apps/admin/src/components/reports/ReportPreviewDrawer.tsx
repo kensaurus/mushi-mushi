@@ -98,13 +98,15 @@ export function ReportPreviewDrawer({ previewId, onClose, onSeen }: Props) {
       // mount→unmount→remount cycle aborts that shared promise, surfacing a
       // spurious "AbortError" as "Could not load preview". A dedicated fetch
       // keeps this drawer's lifecycle (and its abort) fully its own.
-      const res = await apiFetch<{ report: ReportPreview }>(
+      // GET /v1/admin/reports/:id returns the report flat in `data` (no
+      // `report` key). Reading `data.report` left the drawer blank forever.
+      const res = await apiFetch<ReportPreview>(
         `/v1/admin/reports/${previewId}`,
         { signal: controller.signal, cache: 'no-store' },
       )
       if (latestIdRef.current !== previewId || controller.signal.aborted) return
       if (res.ok && res.data) {
-        setReport(res.data.report)
+        setReport(res.data)
         onSeenRef.current?.(previewId)
       } else setError(res.error?.message ?? 'Failed to load preview')
       setLoading(false)
