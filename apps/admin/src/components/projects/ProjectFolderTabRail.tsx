@@ -4,13 +4,11 @@
  *          tabs on desktop (Finder-like), horizontal scroll chips on compact.
  */
 
-import { Link } from 'react-router-dom'
 import { Badge } from '../ui'
 import { SignalChip } from '../report-detail/ReportSurface'
 import { ProjectFavicon } from '../ProjectFavicon'
 import { sdkOriginFromApiKeys } from '../../lib/resolveProjectDomain'
 import {
-  bottleneckDeepLink,
   bottleneckHumanHeadline,
 } from '../../lib/pdcaBottleneck'
 import type { PdcaStageId } from '../../lib/pdca'
@@ -171,14 +169,11 @@ function ProjectMetaRow({ project }: { project: ProjectFolderTabItem }) {
         </SignalChip>
       ) : null}
       {project.pdca_bottleneck && project.pdca_bottleneck_label ? (
-        <Link
-          to={bottleneckDeepLink(
-            project.pdca_bottleneck,
-            project.id,
-            project.pdca_bottleneck_label,
-          )}
-          onClick={(e) => e.stopPropagation()}
-          className="truncate text-3xs font-medium text-warn hover:underline underline-offset-2"
+        // Text, not a link: this row sits inside the project's <button>,
+        // and a link in a button is two tab stops for one row (QA bug 264).
+        // The selected project's panel links to the bottleneck.
+        <span
+          className="truncate text-3xs font-medium text-warn"
           title={project.pdca_bottleneck_label}
         >
           {bottleneckHumanHeadline({
@@ -186,7 +181,7 @@ function ProjectMetaRow({ project }: { project: ProjectFolderTabItem }) {
             label: project.pdca_bottleneck_label,
             count: project.pdca_bottleneck_count,
           })}
-        </Link>
+        </span>
       ) : null}
     </span>
   )
