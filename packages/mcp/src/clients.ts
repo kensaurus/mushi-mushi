@@ -56,6 +56,13 @@ import { MUSHI_ICON_PNG_URL } from './branding.js'
  */
 export const MCP_PIN_SPEC = '@mushi-mushi/mcp@0.24.2'
 
+const PIN_SPEC_RE = /^@mushi-mushi\/mcp@\d+\.\d+\.\d+$/
+
+/** A caller-supplied pin when it is an exact published spec, else the build pin. */
+function pinOf(pinSpec: string | undefined): string {
+  return pinSpec && PIN_SPEC_RE.test(pinSpec) ? pinSpec : MCP_PIN_SPEC
+}
+
 // ─── Internal config shapes ────────────────────────────────────────────────────
 
 interface StdioConfig {
@@ -118,6 +125,13 @@ export interface McpBuildInput {
    * of an `mcp:read` key for defence in depth. No-op for stdio configs.
    */
   readOnly?: boolean
+  /**
+   * The `@mushi-mushi/mcp@x.y.z` spec to write into stdio configs. The console
+   * passes the published version from the sdk_versions catalog, so a release
+   * reaches its install buttons without a console redeploy. Anything that is
+   * not an exact `@mushi-mushi/mcp@<semver>` falls back to MCP_PIN_SPEC.
+   */
+  pinSpec?: string
 }
 
 export type McpBuildResult =
@@ -156,6 +170,7 @@ function buildStdioConfigObj(
   apiKey: string,
   apiEndpoint: string,
   features: readonly string[] = DEFAULT_FEATURE_GROUPS,
+  pinSpec?: string,
 ): StdioConfig {
   const env: Record<string, string> = {
     MUSHI_API_ENDPOINT: apiEndpoint,
@@ -165,7 +180,7 @@ function buildStdioConfigObj(
   if (projectId) env.MUSHI_PROJECT_ID = projectId
   return {
     command: 'npx',
-    args: ['-y', MCP_PIN_SPEC],
+    args: ['-y', pinOf(pinSpec)],
     env,
     icon: MUSHI_ICON_PNG_URL,
   }
@@ -226,11 +241,11 @@ export const MCP_CLIENTS: McpClientDef[] = [
     method: 'deeplink',
     transport: 'stdio',
     cliIde: 'cursor',
-    build({ projectId, projectName, apiKey, endpoint, features }) {
+    build({ projectId, projectName, apiKey, endpoint, features, pinSpec }) {
       const name = projectId
         ? projectServerName(projectId, projectName)
         : `mushi-${projectName.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 24)}`
-      const config = buildStdioConfigObj(projectId, apiKey, endpoint, features)
+      const config = buildStdioConfigObj(projectId, apiKey, endpoint, features, pinSpec)
       return { kind: 'deeplink', url: encodeCursorDeeplink(name, config) }
     },
   },
@@ -242,11 +257,11 @@ export const MCP_CLIENTS: McpClientDef[] = [
     description: 'One-click install via VS Code MCP extension',
     method: 'deeplink',
     transport: 'stdio',
-    build({ projectId, projectName, apiKey, endpoint, features }) {
+    build({ projectId, projectName, apiKey, endpoint, features, pinSpec }) {
       const name = projectId
         ? projectServerName(projectId, projectName)
         : `mushi-${projectName.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 24)}`
-      const config = buildStdioConfigObj(projectId, apiKey, endpoint, features)
+      const config = buildStdioConfigObj(projectId, apiKey, endpoint, features, pinSpec)
       return { kind: 'deeplink', url: encodeVsCodeDeeplink('vscode', name, config) }
     },
   },
@@ -258,11 +273,11 @@ export const MCP_CLIENTS: McpClientDef[] = [
     description: 'One-click install via VS Code Insiders MCP extension',
     method: 'deeplink',
     transport: 'stdio',
-    build({ projectId, projectName, apiKey, endpoint, features }) {
+    build({ projectId, projectName, apiKey, endpoint, features, pinSpec }) {
       const name = projectId
         ? projectServerName(projectId, projectName)
         : `mushi-${projectName.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 24)}`
-      const config = buildStdioConfigObj(projectId, apiKey, endpoint, features)
+      const config = buildStdioConfigObj(projectId, apiKey, endpoint, features, pinSpec)
       return { kind: 'deeplink', url: encodeVsCodeDeeplink('vscode-insiders', name, config) }
     },
   },
@@ -309,7 +324,7 @@ export const MCP_CLIENTS: McpClientDef[] = [
     description: 'Copy config into cline_mcp_settings.json',
     method: 'config-json',
     transport: 'stdio',
-    build({ projectId, projectName, apiKey, endpoint, features }) {
+    build({ projectId, projectName, apiKey, endpoint, features, pinSpec }) {
       const name = projectId
         ? projectServerName(projectId, projectName)
         : `mushi-${projectName.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 24)}`
@@ -321,7 +336,7 @@ export const MCP_CLIENTS: McpClientDef[] = [
       if (projectId) env.MUSHI_PROJECT_ID = projectId
       const clineConfig = {
         mcpServers: {
-          [name]: { command: 'npx', args: ['-y', MCP_PIN_SPEC], env },
+          [name]: { command: 'npx', args: ['-y', pinOf(pinSpec)], env },
         },
       }
       return {
@@ -361,7 +376,7 @@ export const MCP_CLIENTS: McpClientDef[] = [
     description: 'Copy config into claude_desktop_config.json',
     method: 'config-json',
     transport: 'stdio',
-    build({ projectId, projectName, apiKey, endpoint, features }) {
+    build({ projectId, projectName, apiKey, endpoint, features, pinSpec }) {
       const name = projectId
         ? projectServerName(projectId, projectName)
         : `mushi-${projectName.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 24)}`
@@ -373,7 +388,7 @@ export const MCP_CLIENTS: McpClientDef[] = [
       if (projectId) env.MUSHI_PROJECT_ID = projectId
       const desktopConfig = {
         mcpServers: {
-          [name]: { command: 'npx', args: ['-y', MCP_PIN_SPEC], env },
+          [name]: { command: 'npx', args: ['-y', pinOf(pinSpec)], env },
         },
       }
       // macOS: ~/Library/Application Support/Claude/claude_desktop_config.json
@@ -394,7 +409,7 @@ export const MCP_CLIENTS: McpClientDef[] = [
     method: 'config-json',
     transport: 'stdio',
     cliIde: 'zed',
-    build({ projectId, projectName, apiKey, endpoint, features }) {
+    build({ projectId, projectName, apiKey, endpoint, features, pinSpec }) {
       const name = projectId
         ? projectServerName(projectId, projectName)
         : `mushi-${projectName.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 24)}`
@@ -409,7 +424,7 @@ export const MCP_CLIENTS: McpClientDef[] = [
           [name]: {
             command: {
               path: 'npx',
-              args: ['-y', MCP_PIN_SPEC],
+              args: ['-y', pinOf(pinSpec)],
               env,
             },
             settings: {},
