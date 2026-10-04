@@ -32,6 +32,8 @@ export interface CreatedProject {
   apiKey: string | null
   /** 12-char key prefix for display (e.g. mushi_a1b2c3). */
   keyPrefix: string | null
+  /** Row id of the auto-minted key, so Regenerate rotates exactly that key. */
+  apiKeyId?: string | null
 }
 
 /**

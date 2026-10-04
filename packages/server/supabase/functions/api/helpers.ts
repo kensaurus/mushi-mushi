@@ -14,7 +14,7 @@ import { resolveEndUser } from '../_shared/end-user-resolver.ts';
 import { verifyEndUserToken } from '../_shared/end-user-identity.ts';
 import { createNotification, buildNotificationMessage } from '../_shared/notifications.ts';
 import { dispatchPluginEventDetached } from '../_shared/plugins.ts';
-import { dbError } from './shared.ts';
+import { dbError, userCanAccessProject } from './shared.ts';
 import { isUuid } from './migration-progress-helpers.ts';
 import { childTraceparent } from '../_shared/trace.ts';
 // SEC (Wave 5 Gap-A): PII is now scrubbed at ingest so the at-rest copy in
@@ -162,6 +162,39 @@ export async function canManageProjectSdkConfig(
     .maybeSingle();
 
   return Boolean(member);
+}
+
+/**
+ * Gate for the owner/admin-only project config routes (SDK config, assistant,
+ * identity secret). Returns null when the caller may manage the project.
+ * A caller who can see the project but not manage it gets a plain-English
+ * 403, not "Project not found" (QA #128: members saw "Project not found" for
+ * the project they were looking at, a spinner that never ended, and "Not
+ * configured" for a configured secret). No access at all stays a 404 so the
+ * project's existence is not revealed.
+ */
+export async function projectConfigDenied(
+  c: Context,
+  db: ReturnType<typeof getServiceClient>,
+  projectId: string,
+  userId: string,
+  what: string,
+): Promise<Response | null> {
+  if (await canManageProjectSdkConfig(db, projectId, userId)) return null;
+  const access = await userCanAccessProject(db, userId, projectId);
+  if (access.allowed) {
+    return c.json(
+      {
+        ok: false,
+        error: {
+          code: 'FORBIDDEN',
+          message: `Only project owners and admins can ${what}. Ask an owner or admin of this project.`,
+        },
+      },
+      403,
+    );
+  }
+  return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404);
 }
 
 // ============================================================

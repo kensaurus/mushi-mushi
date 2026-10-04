@@ -23,6 +23,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Card, Btn, Tooltip, MetricTooltipContent } from '../ui'
+import { ConfirmDialog } from '../ConfirmDialog'
 import { CHIP_TONE } from '../../lib/chipTone'
 import { CodeInline } from '../CodePanel'
 import {
@@ -416,6 +417,10 @@ function BulkUpgradeRow({
         </Tooltip>
       )}
 
+      {state.syncError && (
+        <p className="mt-1 text-2xs text-danger-foreground" role="status">{state.syncError}</p>
+      )}
+
       {/* Compact release hint — full actions live in the panel header */}
       {state.status === 'completed' && state.prUrl && state.releaseStatus && (
         <div className="mt-1">
@@ -443,6 +448,9 @@ export function BulkSdkUpgradePanel({ projects }: { projects: BulkUpgradeProject
   const [mergeToken, setMergeToken] = useState(0)
   const [statusMap, setStatusMap] = useState<Record<string, SdkUpgradeStatus>>({})
   const [releaseMetaMap, setReleaseMetaMap] = useState<Record<string, RowReleaseMeta>>({})
+  // Both bulk actions write to GitHub (open PRs; squash-merge PRs). Each asks
+  // first and lists every repo it will touch (QA bug 32).
+  const [confirmBulk, setConfirmBulk] = useState<'merge' | 'open' | null>(null)
 
   const handleStatus = useCallback((id: string, status: SdkUpgradeStatus) => {
     setStatusMap((prev) => (prev[id] === status ? prev : { ...prev, [id]: status }))
@@ -479,11 +487,13 @@ export function BulkSdkUpgradePanel({ projects }: { projects: BulkUpgradeProject
 
   // Rows still worth bulk-opening: never run, idle, or failed — not rows that
   // already have an open PR (completed) or are up to date (completed_no_pr).
-  const pendingCount = eligible.filter((p) => {
+  const pendingRows = eligible.filter((p) => {
     const s = statusMap[p.id]
     return !s || s === 'idle' || s === 'failed'
-  }).length
+  })
+  const pendingCount = pendingRows.length
   const nothingToDo = statuses.length > 0 && !anyInFlight && pendingCount === 0
+  const readyRows = eligible.filter((p) => releaseMetaMap[p.id]?.releaseStatus === 'ready_to_merge')
 
   if (eligible.length === 0) {
     if (projects.length === 0) return null
@@ -584,7 +594,7 @@ export function BulkSdkUpgradePanel({ projects }: { projects: BulkUpgradeProject
               <Btn
                 size="md"
                 variant="ghost"
-                onClick={() => setMergeToken((t) => t + 1)}
+                onClick={() => setConfirmBulk('merge')}
                 leadingIcon={<IconCheck className="h-4 w-4" aria-hidden />}
                 aria-label={`Merge ${readyToMergeCount} PRs that passed CI`}
               >
@@ -607,7 +617,7 @@ export function BulkSdkUpgradePanel({ projects }: { projects: BulkUpgradeProject
               variant="primary"
               loading={anyInFlight}
               disabled={anyInFlight || nothingToDo}
-              onClick={() => setRunToken((t) => t + 1)}
+              onClick={() => setConfirmBulk('open')}
               leadingIcon={
                 nothingToDo
                   ? <IconCheck className="h-4 w-4" aria-hidden />
@@ -638,6 +648,35 @@ export function BulkSdkUpgradePanel({ projects }: { projects: BulkUpgradeProject
         ))}
       </div>
 
+      {confirmBulk === 'merge' && (
+        <ConfirmDialog
+          title={`Merge ${readyRows.length} upgrade PR${readyRows.length === 1 ? '' : 's'} on GitHub?`}
+          body="Each PR below passed CI and is squash-merged into its repo's default branch. A merge cannot be undone from Mushi."
+          details={<BulkRepoList projects={readyRows} meta={releaseMetaMap} />}
+          confirmLabel={`Merge ${readyRows.length}`}
+          tone="danger"
+          onCancel={() => setConfirmBulk(null)}
+          onConfirm={() => {
+            setConfirmBulk(null)
+            setMergeToken((t) => t + 1)
+          }}
+        />
+      )}
+
+      {confirmBulk === 'open' && (
+        <ConfirmDialog
+          title={`Open ${pendingRows.length} upgrade PR${pendingRows.length === 1 ? '' : 's'} on GitHub?`}
+          body="Mushi pushes a branch that bumps @mushi-mushi/* in each repo below and opens a PR for you to review. Nothing merges until you merge it."
+          details={<BulkRepoList projects={pendingRows} meta={releaseMetaMap} />}
+          confirmLabel={`Open ${pendingRows.length} PR${pendingRows.length === 1 ? '' : 's'}`}
+          onCancel={() => setConfirmBulk(null)}
+          onConfirm={() => {
+            setConfirmBulk(null)
+            setRunToken((t) => t + 1)
+          }}
+        />
+      )}
+
       {ineligibleCount > 0 && (
         <p className="border-t border-edge-subtle px-4 py-2 text-2xs text-fg-muted">
           {ineligibleCount} other project{ineligibleCount === 1 ? '' : 's'} ha{ineligibleCount === 1 ? 's' : 've'} no
@@ -646,4 +685,36 @@ export function BulkSdkUpgradePanel({ projects }: { projects: BulkUpgradeProject
       )}
     </Card>
   )
+}
+
+/** The repos (and PR links) a bulk action will touch, shown in its confirm. */
+function BulkRepoList({
+  projects,
+  meta,
+}: {
+  projects: BulkUpgradeProject[]
+  meta: Record<string, RowReleaseMeta>
+}) {
+  return (
+    <ul className="list-disc space-y-0.5 pl-4" data-testid="bulk-upgrade-confirm-list">
+      {projects.map((p) => (
+        <li key={p.id}>
+          <span className="font-medium text-fg">{p.name}</span>
+          {meta[p.id]?.prUrl ? (
+            <>
+              {' '}
+              <a href={meta[p.id]!.prUrl} target="_blank" rel="noopener noreferrer" className="underline">
+                {prLabel(meta[p.id]!.prUrl!)}
+              </a>
+            </>
+          ) : null}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function prLabel(url: string): string {
+  const m = /github\.com\/([^/]+\/[^/]+)\/pull\/(\d+)/.exec(url)
+  return m ? `${m[1]}#${m[2]}` : 'PR'
 }

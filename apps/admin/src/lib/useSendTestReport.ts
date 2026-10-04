@@ -23,7 +23,7 @@ type SendTestReportResult =
   | { ok: false; message: string }
 
 /** Report detail URL pinned to the project the report belongs to. */
-function testReportHref(reportId: string, projectId: string): string {
+export function testReportHref(reportId: string, projectId: string): string {
   return scopedHref(`/reports/${reportId}`, projectId)
 }
 

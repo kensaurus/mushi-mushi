@@ -110,10 +110,13 @@ function SkillsLane({ client }: { client: McpClientDef }) {
           <CopyButton value={skillsCmd} label="Copy" copiedLabel="Copied" size="sm" />
         </div>
         <p className="text-2xs text-fg-muted">
-          Adds <code className="font-mono text-2xs">mushi-health</code>,{' '}
-          <code className="font-mono text-2xs">mushi-integration</code>,{' '}
-          <code className="font-mono text-2xs">workflow-fix-and-ship</code> and more to{' '}
-          {client.label}.
+          {/* The repo's skills/ folder ships these five; workflow-fix-and-ship
+              is not one of them (QA bug 267). */}
+          Adds <code className="font-mono text-2xs">mushi-setup</code>,{' '}
+          <code className="font-mono text-2xs">mushi-health</code>,{' '}
+          <code className="font-mono text-2xs">mushi-debug</code>,{' '}
+          <code className="font-mono text-2xs">mushi-integration</code> and{' '}
+          <code className="font-mono text-2xs">mushi-mushi</code> to {client.label}.
         </p>
       </div>
       <div className="rounded-md border border-edge-subtle bg-surface-hover/30 p-3 text-xs text-fg-muted space-y-1">

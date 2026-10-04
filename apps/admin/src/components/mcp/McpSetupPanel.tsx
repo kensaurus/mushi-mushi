@@ -1,4 +1,3 @@
-import { Link } from 'react-router-dom'
 import { useRef } from 'react'
 import { Badge, Btn, Card, CopyButton, SegmentedControl } from '../ui'
 import { IconIntegrations, IconArrowRight } from '../icons'
@@ -15,6 +14,8 @@ import { RESOLVED_EXTERNAL_API_URL, RESOLVED_MCP_HTTP_URL } from '../../lib/env'
 import { projectServerName } from '../../lib/cursorDeeplink'
 import { MCP_PIN_SPEC } from '@mushi-mushi/mcp/clients'
 import { ClientConnectButton } from '../ClientConnectButton'
+import { RevealedKeyCard } from '../RevealedKeyCard'
+import { docsUrl } from '../../lib/docsUrl'
 import { McpAccountKeyCard } from '../McpAccountKeyCard'
 import { buildSdkInitSnippet, buildSdkInstallSnippet } from '../../lib/mcpPageHelpers'
 import type { validateMcpJsonSyntax } from '../../lib/mcpPageHelpers'
@@ -50,7 +51,8 @@ export interface McpSetupPanelProps {
   detectText: string
   onDetectTextChange: (text: string) => void
   mintingKey: boolean
-  revealedMcpKey: string | null
+  revealedMcpKey: { key: string; scopes: string[] } | null
+  onDismissRevealedKey?: () => void
   onMintMcpReadKey: () => void
   sdkSnippetLang: 'npm' | 'yarn' | 'pnpm'
   onSdkSnippetLangChange: (lang: 'npm' | 'yarn' | 'pnpm') => void
@@ -89,6 +91,7 @@ export function McpSetupPanel({
   onDetectTextChange,
   mintingKey,
   revealedMcpKey,
+  onDismissRevealedKey,
   onMintMcpReadKey,
   sdkSnippetLang,
   onSdkSnippetLangChange,
@@ -184,26 +187,17 @@ export function McpSetupPanel({
           <div className="flex flex-wrap items-center gap-2">
             {activeProjectId ? (
               <>
-                {/* Explicit read-only: the button next to it mints the write key.
-                    ClientConnectButton now defaults to read + write. */}
+                {/* One Cursor button: read + write by default, with a
+                    read-only checkbox. Two identical "Add to Cursor" buttons
+                    (read and write) could not be told apart (QA bug 125). */}
                 <ClientConnectButton
                   client={CURSOR_CLIENT}
                   projectId={activeProjectId}
                   projectName={displayName}
                   endpoint={RESOLVED_EXTERNAL_API_URL}
                   mcpHttpUrl={RESOLVED_MCP_HTTP_URL}
-                  scopes={['mcp:read']}
+                  accessChoice
                   variant="primary"
-                  size="sm"
-                />
-                <ClientConnectButton
-                  client={CURSOR_CLIENT}
-                  projectId={activeProjectId}
-                  projectName={displayName}
-                  endpoint={RESOLVED_EXTERNAL_API_URL}
-                  mcpHttpUrl={RESOLVED_MCP_HTTP_URL}
-                  scopes={['mcp:write']}
-                  variant="ghost"
                   size="sm"
                 />
                 <ClientConnectButton
@@ -224,16 +218,19 @@ export function McpSetupPanel({
           </div>
           <ContainedBlock tone="muted">
             <p className="text-2xs text-fg-muted">
-              <strong>"Add to Cursor"</strong> mints a fresh key and opens your IDE's install dialog — no copy-paste needed.
-              The key is embedded in the deeplink and will not be shown again unless you save it.
+              <strong>"Add to Cursor"</strong> creates one key for this page visit and opens your IDE's install dialog — no
+              copy-paste needed. Clicking again reuses that key. It is embedded in the deeplink and is not shown here.
             </p>
           </ContainedBlock>
-          {revealedMcpKey ? (
-            <ContainedBlock tone="muted">
-              <p className="text-2xs text-fg-muted">
-                Key minted — paste into your snippet if the deeplink did not open your IDE. Not shown again after you leave.
-              </p>
-            </ContainedBlock>
+          {revealedMcpKey && activeProjectId ? (
+            <RevealedKeyCard
+              projectId={activeProjectId}
+              projectName={displayName}
+              apiKey={revealedMcpKey.key}
+              scopes={revealedMcpKey.scopes}
+              onDismiss={() => onDismissRevealedKey?.()}
+              testIdPrefix="mcp-revealed-key"
+            />
           ) : null}
         </div>
       </Card>
@@ -367,12 +364,16 @@ export function McpSetupPanel({
             >
               {connectionTestResult ? 'Re-test' : 'Test connection'}
             </Btn>
-            <Link
-              to="/docs-bridge?topic=cli-setup"
+            {/* /docs-bridge is the docs sign-in handshake, not a docs page:
+                linking it here showed a "missing nonce" error (QA bug 133). */}
+            <a
+              href={docsUrl('/sdks/cli')}
+              target="_blank"
+              rel="noopener noreferrer"
               className={`text-xs ${LINK_ACCENT}`}
             >
               CLI: mushi setup --ide cursor
-            </Link>
+            </a>
           </div>
           {connectionTestResult && (
             <div
@@ -390,7 +391,7 @@ export function McpSetupPanel({
                 <p className="font-medium">{connectionTestResult.message}</p>
                 {!connectionTestResult.ok && (
                   <p className="text-fg-muted">
-                    Run <code className="font-mono bg-surface px-1 rounded">mushi doctor --server</code> for a full diagnostic, or check the Supabase Edge Function logs.
+                    Run <code className="font-mono bg-surface px-1 rounded">mushi doctor</code> for a full diagnostic, or check the Supabase Edge Function logs.
                   </p>
                 )}
                 <p className="text-fg-muted">
@@ -628,9 +629,9 @@ export function McpSetupPanel({
             >
               Copy install command
             </Btn>
-            <Link to={`/onboarding?tab=sdk&project=${activeProjectId}`}>
-              <Btn variant="ghost" size="sm">Open SDK wizard →</Btn>
-            </Link>
+            <Btn variant="ghost" size="sm" to={`/onboarding?tab=sdk&project=${activeProjectId}`}>
+              Open SDK wizard →
+            </Btn>
           </div>
         </Card>
       )}

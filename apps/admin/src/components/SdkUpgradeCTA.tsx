@@ -13,7 +13,7 @@ import { useState } from 'react'
 import { Btn, Tooltip } from './ui'
 import { JobStatusPill } from './ui/job-status-pill'
 import { CodeInline, CodePanel } from './CodePanel'
-import { IconCopy, IconTerminal, IconBolt, IconExternalLink } from './icons'
+import { IconCheck, IconCopy, IconTerminal, IconBolt, IconExternalLink } from './icons'
 import { resolveSdkDisplay } from '../lib/sdkVersionCompare'
 import { useSdkUpgrade } from '../lib/useSdkUpgrade'
 import {
@@ -47,12 +47,10 @@ function UpgradePrButton({
   if (state.status === 'completed' && state.prUrl) {
     return (
       <span className="inline-flex items-center gap-1">
-        <a href={state.prUrl} target="_blank" rel="noopener noreferrer">
-          <Btn size="sm" variant="ghost" className={compact ? 'h-8 gap-1.5' : 'gap-1.5'}>
-            <IconExternalLink className="h-3.5 w-3.5" aria-hidden />
-            <span className={compact ? 'text-xs' : undefined}>View PR</span>
-          </Btn>
-        </a>
+        <Btn size="sm" variant="ghost" href={state.prUrl} className={compact ? 'h-8 gap-1.5' : 'gap-1.5'}>
+          <IconExternalLink className="h-3.5 w-3.5" aria-hidden />
+          <span className={compact ? 'text-xs' : undefined}>View PR</span>
+        </Btn>
         <Btn
           size="sm"
           variant="ghost"
@@ -155,6 +153,7 @@ export function SdkUpgradeCTA({
   projectId,
 }: SdkUpgradeCTAProps) {
   const [copied, setCopied] = useState(false)
+  const [copyFailed, setCopyFailed] = useState(false)
   const resolution = resolveSdkDisplay({
     observedVersion,
     latestVersion,
@@ -174,9 +173,14 @@ export function SdkUpgradeCTA({
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(cmd)
+      setCopyFailed(false)
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
-    } catch { /* ignore */ }
+    } catch {
+      // Clipboard blocked: say so and show the command to copy by hand (QA bug 265).
+      setCopied(false)
+      setCopyFailed(true)
+    }
   }
 
   if (compact) {
@@ -185,10 +189,17 @@ export function SdkUpgradeCTA({
         {projectId && <UpgradePrButton projectId={projectId} compact />}
         <Tooltip content={detail} side="top">
           <Btn size="sm" variant="ghost" className="h-8 gap-1.5" onClick={() => void copy()} aria-label="Copy mushi upgrade command">
-            <IconTerminal className="h-3.5 w-3.5" aria-hidden />
-            <span className="text-xs">{projectId ? 'Copy cmd' : 'Upgrade'}</span>
+            {copied ? <IconCheck className="h-3.5 w-3.5" aria-hidden /> : <IconTerminal className="h-3.5 w-3.5" aria-hidden />}
+            <span className="text-xs" aria-live="polite">
+              {copied ? 'Copied' : projectId ? 'Copy cmd' : 'Upgrade'}
+            </span>
           </Btn>
         </Tooltip>
+        {copyFailed && (
+          <span className="text-2xs text-fg-muted" role="status">
+            Copy blocked. Run <CodeInline>{cmd}</CodeInline>
+          </span>
+        )}
       </span>
     )
   }
