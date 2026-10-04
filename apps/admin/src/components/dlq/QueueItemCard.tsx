@@ -77,7 +77,7 @@ export function QueueItemCard({ item, retrying, canRetry, onRetry }: Props) {
             disabled={retrying}
             loading={retrying}
             className="ml-3 flex-shrink-0"
-            title="Run this job again from the start. This re-runs AI triage for the report."
+            title="Run this job again from the start. Mushi diagnoses the report again."
           >
             Retry
           </Btn>

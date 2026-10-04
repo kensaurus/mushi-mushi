@@ -158,7 +158,7 @@ export function keyStatusView(
         action: 'add_backup',
       }
     }
-    // Cooldown over: the runtime is trying it again, same as any working key.
+    // Cooldown over: the runtime is trying it again, like every working key.
   }
 
   if (key.test_status === 'error_network') {
