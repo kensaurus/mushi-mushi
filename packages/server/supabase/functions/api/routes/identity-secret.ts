@@ -18,7 +18,7 @@
  *     the creation timestamp and "configured" boolean are readable.
  *   - Secret stored ONLY in Supabase Vault via vault_store_secret().
  *     `project_settings.assistant_identity_secret_ref` holds only the Vault UUID.
- *   - All endpoints require jwtAuth + canManageProjectSdkConfig ownership gate.
+ *   - All endpoints require jwtAuth + projectConfigDenied (owner/admin; 403 for members, 404 for strangers).
  *   - Rotate: new secret under a new Vault ID, old Vault entry orphaned.
  *
  * DEPENDENCIES:
@@ -26,7 +26,7 @@
  *   - _shared/db.ts     : getServiceClient
  *   - _shared/logger.ts : log
  *   - _shared/audit.ts  : logAudit
- *   - ../helpers.ts     : canManageProjectSdkConfig
+ *   - ../helpers.ts     : projectConfigDenied
  *   - ../shared.ts      : dbError
  */
 
@@ -36,7 +36,7 @@ import { getServiceClient } from '../../_shared/db.ts'
 import { log as rootLog } from '../../_shared/logger.ts'
 import { jwtAuth } from '../../_shared/auth.ts'
 import { logAudit } from '../../_shared/audit.ts'
-import { canManageProjectSdkConfig } from '../helpers.ts'
+import { projectConfigDenied } from '../helpers.ts'
 import { dbError } from '../shared.ts'
 
 const log = rootLog.child('identity-secret')
@@ -63,9 +63,8 @@ export function registerIdentitySecretRoutes(app: Hono<{ Variables: Variables }>
     const userId = c.get('userId') as string
     const db = getServiceClient()
 
-    if (!(await canManageProjectSdkConfig(db, projectId, userId))) {
-      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404)
-    }
+    const denied = await projectConfigDenied(c, db, projectId, userId, 'rotate the signed-identity secret')
+    if (denied) return denied
 
     const rawSecret = mintIdentitySecret()
     const secretName = `mushi_${projectId}_identity`
@@ -128,9 +127,8 @@ export function registerIdentitySecretRoutes(app: Hono<{ Variables: Variables }>
     const userId = c.get('userId') as string
     const db = getServiceClient()
 
-    if (!(await canManageProjectSdkConfig(db, projectId, userId))) {
-      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404)
-    }
+    const denied = await projectConfigDenied(c, db, projectId, userId, 'view the signed-identity secret')
+    if (denied) return denied
 
     const { data, error } = await db
       .from('project_settings')
@@ -166,9 +164,8 @@ export function registerIdentitySecretRoutes(app: Hono<{ Variables: Variables }>
     const userId = c.get('userId') as string
     const db = getServiceClient()
 
-    if (!(await canManageProjectSdkConfig(db, projectId, userId))) {
-      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404)
-    }
+    const denied = await projectConfigDenied(c, db, projectId, userId, 'disable signed identity')
+    if (denied) return denied
 
     const { error } = await db
       .from('project_settings')
