@@ -6,7 +6,8 @@ import { Card, Btn } from '../ui'
 import { JobStatusPill } from '../ui/job-status-pill'
 import { CHIP_TONE } from '../../lib/chipTone'
 import type { PreflightState } from '../../lib/useDispatchPreflight'
-import { IconGit, IconCheck, IconArrowRight, IconIntegrations } from '../icons'
+import { IconCheck, IconArrowRight, IconIntegrations } from '../icons'
+import { BrandIcon } from '../ui/BrandIcon'
 
 interface GithubConnectionCardProps {
   preflight: PreflightState
@@ -25,7 +26,7 @@ export function GithubConnectionCard({
   return (
     <Card>
       <div className="flex flex-wrap items-center gap-3 p-4">
-        <IconGit className="h-5 w-5 text-fg-muted shrink-0" aria-hidden />
+        <BrandIcon brand="github" size={20} decorative className="text-fg" />
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium text-fg">GitHub repository</p>
           {loading ? (
