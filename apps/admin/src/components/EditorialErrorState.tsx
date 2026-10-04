@@ -4,6 +4,7 @@
  */
 
 import type { ReactNode } from 'react'
+import { withBasePath } from '../lib/appPath'
 
 interface EditorialErrorStateProps {
   /**
@@ -78,14 +79,7 @@ interface ActionProps {
  * passed through untouched.
  */
 function resolveHref(href: string, external?: boolean): string {
-  if (external) return href
-  if (/^[a-z][a-z0-9+.-]*:/i.test(href)) return href
-  if (href.startsWith('//')) return href
-  if (!href.startsWith('/')) return href
-  const base = (import.meta.env.BASE_URL ?? '/').replace(/\/$/, '')
-  if (!base) return href
-  if (href === base || href.startsWith(`${base}/`)) return href
-  return `${base}${href}`
+  return external ? href : withBasePath(href)
 }
 
 function Action({ href, label, external, kind }: ActionProps & { kind: 'primary' | 'secondary' }) {

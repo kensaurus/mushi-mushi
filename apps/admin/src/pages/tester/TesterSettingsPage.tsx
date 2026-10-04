@@ -2,6 +2,7 @@
  * TesterSettingsPage — manage tester profile: handle, bio, expertise tags, KYC, data export/delete.
  */
 import { useState, useEffect } from 'react'
+import { hardNavigate } from '../../lib/appPath'
 import { usePageData } from '../../lib/usePageData'
 import { TESTER_API_OPTS } from '../../lib/tester-page-data'
 import { apiFetch } from '../../lib/supabase'
@@ -92,7 +93,7 @@ export function TesterSettingsPage() {
     try {
       const res = await apiFetch('/v1/tester/delete', { method: 'POST', scope: 'none' })
       if (res.ok) {
-        window.location.href = '/login'
+        hardNavigate('/login')
       } else {
         toast.error(res.error?.message ?? 'Could not delete account.')
         setDeleting(false)

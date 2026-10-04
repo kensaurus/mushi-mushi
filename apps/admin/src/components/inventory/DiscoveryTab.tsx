@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect, useRef } from 'react'
+import { Link } from 'react-router-dom'
 import { Btn, Card, Badge, ErrorAlert, Input } from '../ui'
 import { IconNote } from '../icons'
 import { ContainedBlock, SignalChip } from '../report-detail/ReportSurface'
@@ -879,7 +880,7 @@ function LiveCrawlCard({
       {quotaExhausted && (
         <div className={`rounded-md ${CHIP_TONE.warnSubtle} px-3 py-2 text-2xs`}>
           Daily crawl budget reached — resets at 00:00 UTC, or raise the limit in{' '}
-          <a href="/settings?tab=general" className="underline">Settings → General</a>.
+          <Link to="/settings?tab=general" className="underline">Settings → General</Link>.
         </div>
       )}
 

@@ -7,7 +7,7 @@
  * - Lifetime stats sub-section
  */
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { TesterPageIntro, TesterPrimaryCta, TesterStatGrid, TesterHelpBanner } from '../../components/tester/tester-ui'
 import { usePageData } from '../../lib/usePageData'
 import { TESTER_API_OPTS } from '../../lib/tester-page-data'
@@ -152,6 +152,7 @@ function PendingRedemptionCard({ r }: { r: PendingRedemption }) {
 
 export function TesterWalletPage() {
   const toast = useToast()
+  const navigate = useNavigate()
   const { data: raw, loading, error, reload } = usePageData<WalletResponse | WalletData>(
     '/v1/tester/wallet',
     TESTER_API_OPTS,
@@ -170,7 +171,7 @@ export function TesterWalletPage() {
       return
     }
     if (item.category === 'giftcard' && wallet.kycRequired && !wallet.kycCleared) {
-      window.location.href = '/tester/settings#kyc'
+      navigate('/tester/settings#kyc')
       return
     }
     setRedeeming(item.id)
@@ -191,7 +192,7 @@ export function TesterWalletPage() {
         const msg  = (res as { error?: { code?: string; message?: string } }).error?.message ?? 'Redemption failed.'
         if (code === 'kyc_required') {
           toast.error('Identity verification required. Redirecting to Settings…')
-          window.location.href = '/tester/settings#kyc'
+          navigate('/tester/settings#kyc')
         } else if (code === 'region_not_supported') {
           toast.error('Gift cards are not available in your region.')
         } else if (code === 'budget_exceeded') {
