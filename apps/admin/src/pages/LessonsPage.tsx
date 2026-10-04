@@ -13,6 +13,8 @@ import { useState, useCallback, useMemo, useEffect } from 'react'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
+import { apiErrorText } from '../lib/apiErrorText'
+import { useEntitlements } from '../lib/useEntitlements'
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { useToast } from '../lib/toast'
@@ -132,7 +134,7 @@ function resolveLessonsTab(value: string | null): LessonsTabId {
 
 // ─── Lessons tab ─────────────────────────────────────────────
 
-function LessonsTab() {
+function LessonsTab({ onChanged, canEditProject }: { onChanged: () => void; canEditProject: boolean }) {
   const { data, loading, error, reload } = usePageData<{ data: Lesson[]; meta: { total: number } }>(
     '/v1/admin/lessons?limit=100',
   )
@@ -141,7 +143,7 @@ function LessonsTab() {
   const toast = useToast()
   const [showRetired, setShowRetired] = useState<'active' | 'retired'>('active')
 
-  const { data: retiredData } = usePageData<{ data: Lesson[] }>(
+  const { data: retiredData, reload: reloadRetired } = usePageData<{ data: Lesson[] }>(
     showRetired === 'retired' ? '/v1/admin/lessons?limit=100&retired=true' : null,
   )
 
@@ -155,16 +157,25 @@ function LessonsTab() {
       const res = await apiFetch(`/v1/admin/lessons/${id}`, {
         method: 'PATCH',
         body: JSON.stringify({ retired: !currentlyRetired }),
-      }) as { ok: boolean; error?: string }
-      if (!res.ok) throw new Error(res.error ?? 'Failed')
+      })
+      if (!res.ok) {
+        toast.error(
+          currentlyRetired ? 'Could not restore lesson' : 'Could not retire lesson',
+          apiErrorText(res.error, 'Try again in a moment.'),
+        )
+        return
+      }
       toast.success(currentlyRetired ? 'Lesson restored' : 'Lesson retired')
-      reload?.()
-    } catch (err) {
-      toast.error((err as Error).message)
+      // Both lists change: the row leaves one view and joins the other.
+      reload()
+      reloadRetired()
+      onChanged()
+    } catch {
+      toast.error('Could not update lesson', 'Check your connection and try again.')
     } finally {
       setRetiring(null)
     }
-  }, [reload])
+  }, [reload, reloadRetired, onChanged, toast])
 
   if (error) return <ErrorAlert message={error} />
 
@@ -241,7 +252,8 @@ function LessonsTab() {
                     e.stopPropagation()
                     handleRetire(lesson.id, !!lesson.retired_at)
                   }}
-                  disabled={retiring === lesson.id}
+                  disabled={retiring === lesson.id || !canEditProject}
+                  title={canEditProject ? undefined : 'Viewers can read lessons but cannot change them.'}
                 >
                   {lesson.retired_at ? 'Restore' : 'Retire'}
                 </Btn>
@@ -297,6 +309,8 @@ function LessonsTab() {
               <Btn
                 size="sm"
                 variant={selectedLesson.retired_at ? 'ghost' : 'danger'}
+                disabled={!canEditProject}
+                title={canEditProject ? undefined : 'Viewers can read lessons but cannot change them.'}
                 onClick={() => {
                   handleRetire(selectedLesson.id, !!selectedLesson.retired_at)
                   setSelectedLesson(null)
@@ -314,9 +328,9 @@ function LessonsTab() {
 
 // ─── Clusters tab ─────────────────────────────────────────────
 
-function ClustersTab() {
+function ClustersTab({ onChanged, canEditProject }: { onChanged: () => void; canEditProject: boolean }) {
   const [statusFilter, setStatusFilter] = useState<'all' | 'candidate' | 'promoted'>('candidate')
-  const { data, loading, error } = usePageData<{ data: Cluster[]; meta: { total: number } }>(
+  const { data, loading, error, reload } = usePageData<{ data: Cluster[]; meta: { total: number } }>(
     `/v1/admin/clusters?limit=100${statusFilter !== 'all' ? `&status=${statusFilter}` : ''}`,
   )
   const [promoting, setPromoting] = useState<string | null>(null)
@@ -334,15 +348,22 @@ function ClustersTab() {
       const res = await apiFetch(`/v1/admin/clusters/${cluster.id}/promote`, {
         method: 'POST',
         body: JSON.stringify({ rule_text: cluster.suggested_rule }),
-      }) as { ok: boolean; error?: string }
-      if (!res.ok) throw new Error(res.error ?? 'Failed')
+      })
+      if (!res.ok) {
+        toast.error('Could not promote cluster', apiErrorText(res.error, 'Try again in a moment.'))
+        // ALREADY_PROMOTED means the list is stale: refresh it either way.
+        reload()
+        return
+      }
       toast.success('Cluster promoted to lesson')
-    } catch (err) {
-      toast.error((err as Error).message)
+      reload()
+      onChanged()
+    } catch {
+      toast.error('Could not promote cluster', 'Check your connection and try again.')
     } finally {
       setPromoting(null)
     }
-  }, [toast])
+  }, [toast, reload, onChanged])
 
   if (error) return <ErrorAlert message={error} />
 
@@ -412,6 +433,8 @@ function ClustersTab() {
                   size="sm"
                   variant="ghost"
                   loading={promoting === cluster.id}
+                  disabled={promoting !== null || !canEditProject}
+                  title={canEditProject ? undefined : 'Viewers can read clusters but cannot promote them.'}
                   onClick={() => handlePromote(cluster)}
                 >
                   Promote
@@ -428,6 +451,7 @@ function ClustersTab() {
 // ─── Query Simulator tab ──────────────────────────────────────
 
 function QuerySimTab() {
+  const projectId = useActiveProjectId()
   const [diffText, setDiffText] = useState('')
   const [maxTokens, setMaxTokens] = useState(3000)
   const [loading, setLoading] = useState(false)
@@ -440,21 +464,28 @@ function QuerySimTab() {
       toast.error('Paste a code diff or description first')
       return
     }
+    if (!projectId) {
+      setError('Pick a project in the header switcher, then query again.')
+      return
+    }
     setLoading(true)
     setError(null)
     try {
-      const res = await apiFetch('/v1/admin/lessons/query', {
+      const res = await apiFetch<QueryResult>('/v1/admin/lessons/query', {
         method: 'POST',
-        body: JSON.stringify({ diff_text: diffText, max_tokens: maxTokens, top_k: 15 }),
-      }) as { ok: boolean; data?: QueryResult; error?: string }
-      if (!res.ok) throw new Error(res.error ?? 'Query failed')
+        body: JSON.stringify({ diff_text: diffText, max_tokens: maxTokens, top_k: 15, project_id: projectId }),
+      })
+      if (!res.ok) {
+        setError(apiErrorText(res.error, 'The query did not run. Try again in a moment.'))
+        return
+      }
       setResult(res.data ?? null)
-    } catch (err) {
-      setError((err as Error).message)
+    } catch {
+      setError('Could not reach the server. Check your connection and try again.')
     } finally {
       setLoading(false)
     }
-  }, [diffText, maxTokens])
+  }, [diffText, maxTokens, projectId, toast])
 
   return (
     <div className="space-y-4">
@@ -538,6 +569,7 @@ function QuerySimTab() {
 export function LessonsPage() {
   const copy = usePageCopy('/lessons')
   const ux = useLessonsUx()
+  const { canEditProject } = useEntitlements()
   const projectId = useActiveProjectId()
   const setup = useSetupStatus(projectId)
   const projectName = setup.activeProject?.project_name ?? null
@@ -791,8 +823,8 @@ export function LessonsPage() {
         </div>
       )}
 
-      {activeTab === 'lessons' && <LessonsTab />}
-      {activeTab === 'clusters' && <ClustersTab />}
+      {activeTab === 'lessons' && <LessonsTab onChanged={reloadStats} canEditProject={canEditProject} />}
+      {activeTab === 'clusters' && <ClustersTab onChanged={reloadStats} canEditProject={canEditProject} />}
       {activeTab === 'query' && <QuerySimTab />}
     </div>
   )
