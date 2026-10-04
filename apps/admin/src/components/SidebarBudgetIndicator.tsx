@@ -20,6 +20,7 @@ export function SidebarBudgetIndicator({
     const pct = Math.min(100, Math.round(spend24hUsd * 100))
     return (
       <span
+        role="img"
         className="ml-auto flex items-center gap-1"
         aria-label={label}
         title={label}
@@ -37,6 +38,7 @@ export function SidebarBudgetIndicator({
   if (calls24h <= 0) return null
   return (
     <span
+      role="img"
       aria-label={label}
       title={label}
       className="ml-auto text-2xs font-medium tabular-nums text-fg-muted"

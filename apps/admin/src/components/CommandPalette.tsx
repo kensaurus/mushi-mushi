@@ -16,7 +16,15 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { useCommandPalette } from '../lib/useCommandPalette'
 import { useAdminMode, type AdminMode } from '../lib/mode'
 import { apiFetch } from '../lib/supabase'
-import { STATIC_ROUTES, type PaletteGroup, type StaticRoute } from '../lib/searchIndex'
+import {
+  STATIC_ROUTES,
+  STRONG_PAGE_MATCH,
+  paletteMatchScore,
+  rankPaletteRoutes,
+  type PaletteGroup,
+  type StaticRoute,
+} from '../lib/searchIndex'
+import { NAV_SECTION_META, type NavSectionId } from '../lib/navRegistry'
 import { usePageContext } from '../lib/pageContext'
 import { useRecentEntities } from '../lib/recentEntities'
 import {
@@ -36,6 +44,8 @@ import { PaletteAssistView } from './PaletteAssistView'
 
 interface LiveReport {
   id: string
+  /** Short title written at triage; null until the report is classified. */
+  summary?: string | null
   description: string
   category: string
   severity: string | null
@@ -84,6 +94,26 @@ function writeRecents(ids: string[]) {
 }
 
 const PALETTE_GROUP_ORDER: PaletteGroup[] = ['Start', 'Plan', 'Do', 'Check', 'Act', 'Workspace']
+
+/** Palette headings use the same plain section names as the sidebar. */
+const PALETTE_GROUP_SECTION: Record<PaletteGroup, NavSectionId> = {
+  Start: 'start',
+  Plan: 'plan',
+  Do: 'do',
+  Check: 'check',
+  Act: 'act',
+  Workspace: 'workspace',
+}
+
+const MAX_PAGE_RESULTS = 8
+
+interface PaletteAction {
+  id: string
+  label: string
+  hint: string
+  keywords: string[]
+  onSelect: () => void
+}
 
 function groupRoutes(routes: StaticRoute[]): Record<PaletteGroup, StaticRoute[]> {
   const out = PALETTE_GROUP_ORDER.reduce(
@@ -265,6 +295,25 @@ export function CommandPalette() {
     composingSlash: activeToken?.kind === 'slash',
   })
 
+  // With a query, results are ranked here (cmdk filtering is off): strong
+  // page matches first, then matching reports and fixes, then weaker pages.
+  const trimmedQuery = query.trim()
+  const searching = trimmedQuery.length > 0
+  const rankedPages = useMemo(
+    () => (searching ? rankPaletteRoutes(trimmedQuery) : []),
+    [searching, trimmedQuery],
+  )
+  const strongPages = rankedPages
+    .filter((r) => r.score >= STRONG_PAGE_MATCH)
+    .slice(0, MAX_PAGE_RESULTS)
+    .map((r) => r.route)
+  const weakPages = rankedPages
+    .filter((r) => r.score < STRONG_PAGE_MATCH)
+    .slice(0, Math.max(0, MAX_PAGE_RESULTS - strongPages.length))
+    .map((r) => r.route)
+  const matchesQuery = (label: string, hint: string, keywords: readonly string[]) =>
+    !searching || paletteMatchScore(trimmedQuery, { label, aliases: keywords, description: hint }) > 0
+
   function handleSelect(id: string, action: () => void) {
     if (routeIds.has(id)) {
       const next = [id, ...recents.filter((x) => x !== id)].slice(0, MAX_RECENTS)
@@ -343,6 +392,84 @@ export function CommandPalette() {
       void runAssist(prefix)
     }
   }
+
+  const actions: PaletteAction[] = [
+    {
+      id: 'action:ask-this-page',
+      label: 'What can I do on this page?',
+      hint: 'Ask Mushi about the current screen',
+      keywords: ['help', 'explain', 'how', 'what'],
+      onSelect: () => void runAssist('What can I do on this page?'),
+    },
+    {
+      id: 'action:filter:new-reports',
+      label: 'Open new bug reports',
+      hint: 'Bugs that nobody has looked at yet',
+      keywords: ['inbox', 'new', 'triage', 'untriaged'],
+      onSelect: () => handleSelect('action:filter:new-reports', () => navigate('/reports?status=new')),
+    },
+    {
+      id: 'action:filter:urgent-reports',
+      label: 'Open critical bugs',
+      hint: 'New bugs marked critical',
+      keywords: ['urgent', 'sev1', 'critical', 'escalation'],
+      onSelect: () =>
+        handleSelect('action:filter:urgent-reports', () => navigate('/reports?status=new&severity=critical')),
+    },
+    {
+      id: 'action:fixes:open',
+      label: 'Review drafted fixes',
+      hint: 'Pull requests waiting for your review',
+      keywords: ['pr', 'merge', 'review', 'drafts'],
+      onSelect: () => handleSelect('action:fixes:open', () => navigate('/fixes')),
+    },
+    {
+      id: 'action:health:open',
+      label: 'Check system health',
+      hint: 'Integrations, background jobs and error rate',
+      keywords: ['status', 'monitoring', 'sentry', 'health'],
+      onSelect: () => handleSelect('action:health:open', () => navigate('/health')),
+    },
+    {
+      id: 'action:connect:install',
+      label: 'Install SDK & MCP',
+      hint: 'Connect your app and editor',
+      keywords: ['install', 'sdk', 'connect', 'setup', 'mcp', 'cursor'],
+      onSelect: () => handleSelect('action:connect:install', () => navigate('/connect')),
+    },
+    {
+      id: 'action:connect:upgrade',
+      label: 'Update SDK (upgrade PR)',
+      hint: 'Bump @mushi-mushi packages via a GitHub pull request',
+      keywords: ['upgrade', 'update', 'sdk', 'npm', 'pr', 'version'],
+      onSelect: () => handleSelect('action:connect:upgrade', () => navigate('/connect')),
+    },
+    {
+      id: 'action:explore:understand',
+      label: 'Understand my codebase',
+      hint: 'Ask questions with file citations',
+      keywords: ['codebase', 'explore', 'understand', 'atlas', 'architecture', 'ask'],
+      onSelect: () => handleSelect('action:explore:understand', () => navigate('/explore?tab=ask')),
+    },
+    ...(['quickstart', 'beginner', 'advanced'] as AdminMode[])
+      .filter((m) => m !== mode)
+      .map((m) => ({
+        id: `action:mode:${m}`,
+        label: `Switch to ${m === 'quickstart' ? 'Quick' : `${m[0].toUpperCase()}${m.slice(1)}`} mode`,
+        hint:
+          m === 'quickstart'
+            ? 'Core pages: bugs, fixes, apps, connect, settings'
+            : m === 'beginner'
+              ? 'Core pages plus a few next steps'
+              : 'Every page in the console',
+        keywords: ['mode', 'toggle', m, 'sidebar', 'menu'],
+        onSelect: () => handleSelect(`action:mode:${m}`, () => setMode(m)),
+      })),
+  ]
+  const visibleActions = actions.filter((a) => matchesQuery(a.label, a.hint, a.keywords))
+  const pageActions = (pageCtx?.actions ?? []).filter((a) =>
+    matchesQuery(a.label, a.hint ?? '', ['page', 'here', 'current']),
+  )
 
   const paletteBackdropClass =
     'fixed inset-0 z-50 flex items-start justify-center pt-[10vh] bg-overlay backdrop-blur-sm px-3'
@@ -425,7 +552,7 @@ export function CommandPalette() {
         label="Command palette"
         className="flex flex-col flex-1 min-h-0"
         loop
-        shouldFilter
+        shouldFilter={false}
       >
         <div className="flex items-center gap-2 border-b border-edge/60 px-3 py-2.5">
           <svg
@@ -493,7 +620,7 @@ export function CommandPalette() {
 
         <Command.List className="overflow-y-auto flex-1 min-h-0 py-1 cmdk-list">
           <Command.Empty className="px-4 py-4 text-center text-xs text-fg-muted space-y-2">
-            <p>No keyword matches.</p>
+            <p>Nothing matches. Try a page name or words from a bug report.</p>
             <p className="text-2xs text-fg-faint">
               Try asking: {PALETTE_SAMPLE_QUERIES.map((s) => `"${s}"`).join(' · ')}
             </p>
@@ -513,9 +640,9 @@ export function CommandPalette() {
             </Command.Group>
           )}
 
-          {pageCtx && pageCtx.actions && pageCtx.actions.length > 0 && (
+          {pageActions.length > 0 && pageCtx && (
             <Command.Group heading={`On this page — ${pageCtx.title}`} className="cmdk-group">
-              {pageCtx.actions.map((a) => (
+              {pageActions.map((a) => (
                 <PaletteActionItem
                   key={`page:${a.id}`}
                   id={`page:${a.id}`}
@@ -528,7 +655,7 @@ export function CommandPalette() {
             </Command.Group>
           )}
 
-          {!query.trim() && recentEntities.length > 0 && (
+          {!searching && recentEntities.length > 0 && (
             <Command.Group heading="Recently viewed" className="cmdk-group">
               {recentEntities.slice(0, 8).map((entity) => (
                 <PaletteActionItem
@@ -546,7 +673,7 @@ export function CommandPalette() {
           )}
 
           {recentRoutes.length > 0 && (
-            <Command.Group heading="Recent routes" className="cmdk-group">
+            <Command.Group heading="Recent pages" className="cmdk-group">
               {recentRoutes.map((r) => (
                 <PaletteRouteItem
                   key={`recent-${r.id}`}
@@ -557,125 +684,36 @@ export function CommandPalette() {
             </Command.Group>
           )}
 
-          {PALETTE_GROUP_ORDER.map((group) => {
-            const items = routesByGroup[group]
-            if (!items.length) return null
-            return (
-              <Command.Group key={group} heading={group} className="cmdk-group">
-                {items.map((r) => (
-                  <PaletteRouteItem
-                    key={r.id}
-                    route={r}
-                    onSelect={() => handleSelect(r.id, () => navigate(r.path))}
-                  />
-                ))}
-              </Command.Group>
-            )
-          })}
-
-          <Command.Group heading="Actions" className="cmdk-group">
-            <PaletteActionItem
-              id="action:ask-this-page"
-              label="What can I do on this page?"
-              hint="Ask Mushi about the current screen"
-              keywords={['help', 'explain', 'how', 'what']}
-              onSelect={() => void runAssist('What can I do on this page?')}
-            />
-            <PaletteActionItem
-              id="action:filter:new-reports"
-              label="Open new bug reports"
-              hint="Reports filtered to status=new"
-              keywords={['inbox', 'new', 'triage']}
-              onSelect={() => handleSelect('action:filter:new-reports', () => navigate('/reports?status=new'))}
-            />
-            <PaletteActionItem
-              id="action:filter:urgent-reports"
-              label="Open critical bugs"
-              hint="Reports filtered to severity=critical"
-              keywords={['urgent', 'sev1', 'critical', 'escalation']}
-              onSelect={() =>
-                handleSelect('action:filter:urgent-reports', () =>
-                  navigate('/reports?status=new&severity=critical'),
-                )
-              }
-            />
-            <PaletteActionItem
-              id="action:fixes:open"
-              label="Review drafted fixes"
-              hint="Pull requests waiting for a human review"
-              keywords={['pr', 'merge', 'review', 'drafts']}
-              onSelect={() => handleSelect('action:fixes:open', () => navigate('/fixes'))}
-            />
-            <PaletteActionItem
-              id="action:health:open"
-              label="Check system health"
-              hint="Uptime, queue depth, error rate"
-              keywords={['status', 'monitoring', 'sentry', 'health']}
-              onSelect={() => handleSelect('action:health:open', () => navigate('/health'))}
-            />
-            <PaletteActionItem
-              id="action:connect:install"
-              label="Install SDK & MCP"
-              hint="Connect & Update hub"
-              keywords={['install', 'sdk', 'connect', 'setup', 'mcp', 'cursor']}
-              onSelect={() => handleSelect('action:connect:install', () => navigate('/connect'))}
-            />
-            <PaletteActionItem
-              id="action:connect:upgrade"
-              label="Update SDK (upgrade PR)"
-              hint="Bump @mushi-mushi packages via GitHub PR"
-              keywords={['upgrade', 'update', 'sdk', 'npm', 'pr', 'version']}
-              onSelect={() => handleSelect('action:connect:upgrade', () => navigate('/connect'))}
-            />
-            <PaletteActionItem
-              id="action:explore:understand"
-              label="Understand my codebase"
-              hint="Ask questions with file citations"
-              keywords={['codebase', 'explore', 'understand', 'atlas', 'architecture', 'ask']}
-              onSelect={() => handleSelect('action:explore:understand', () => navigate('/explore?tab=ask'))}
-            />
-            {(['quickstart', 'beginner', 'advanced'] as AdminMode[])
-              .filter((m) => m !== mode)
-              .map((m) => (
-                <PaletteActionItem
-                  key={`mode:${m}`}
-                  id={`action:mode:${m}`}
-                  label={`Switch to ${m[0].toUpperCase()}${m.slice(1)} mode`}
-                  hint={
-                    m === 'quickstart'
-                      ? '3 pages, verb-led copy'
-                      : m === 'beginner'
-                        ? '9 essential pages, guided'
-                        : 'Full 23-page console'
-                  }
-                  keywords={['mode', 'toggle', m]}
-                  onSelect={() =>
-                    handleSelect(`action:mode:${m}`, () => {
-                      setMode(m)
-                    })
-                  }
+          {searching && strongPages.length > 0 && (
+            <Command.Group heading="Pages" className="cmdk-group">
+              {strongPages.map((r) => (
+                <PaletteRouteItem
+                  key={r.id}
+                  route={r}
+                  onSelect={() => handleSelect(r.id, () => navigate(r.path))}
                 />
               ))}
-          </Command.Group>
+            </Command.Group>
+          )}
 
           {runLiveSearch && (
             <>
-              <Command.Group heading={liveLoading ? 'Reports — searching…' : 'Reports'} className="cmdk-group">
+              <Command.Group heading={liveLoading ? 'Bug reports — searching…' : 'Bug reports'} className="cmdk-group">
                 {liveReports.length === 0 && !liveLoading && (
-                  <div className="px-3 py-2 text-2xs text-fg-faint">No matching reports.</div>
+                  <div className="px-3 py-2 text-2xs text-fg-faint">No bug reports match.</div>
                 )}
                 {liveReports.map((r) => (
                   <Command.Item
                     key={`report:${r.id}`}
-                    value={`report:${r.id} ${r.description} ${r.category}`}
+                    value={`report:${r.id}`}
                     onSelect={() =>
                       handleSelect(`report:${r.id}`, () => navigate(`/reports/${r.id}`))
                     }
                     className="cmdk-item"
                   >
-                    <span className="truncate flex-1">{r.description}</span>
+                    <span className="truncate flex-1">{reportTitle(r)}</span>
                     <span className="ml-2 text-3xs text-fg-faint shrink-0">
-                      {r.severity ?? '—'} · {r.status}
+                      {r.severity ?? 'not triaged'} · {r.status}
                     </span>
                   </Command.Item>
                 ))}
@@ -683,17 +721,17 @@ export function CommandPalette() {
 
               <Command.Group heading={liveLoading ? 'Fixes — searching…' : 'Fixes'} className="cmdk-group">
                 {liveFixes.length === 0 && !liveLoading && (
-                  <div className="px-3 py-2 text-2xs text-fg-faint">No matching fixes.</div>
+                  <div className="px-3 py-2 text-2xs text-fg-faint">No fixes match.</div>
                 )}
                 {liveFixes.map((f) => (
                   <Command.Item
                     key={`fix:${f.id}`}
-                    value={`fix:${f.id} ${f.summary ?? ''} ${f.status}`}
+                    value={`fix:${f.id}`}
                     onSelect={() => handleSelect(`fix:${f.id}`, () => navigate(`/fixes#${f.id}`))}
                     className="cmdk-item"
                   >
                     <span className="truncate flex-1">
-                      {f.summary ?? `Fix ${f.id.slice(0, 8)}`}
+                      {f.summary ?? (f.pr_number ? `Fix for PR #${f.pr_number}` : 'Fix without a summary yet')}
                     </span>
                     <span className="ml-2 text-3xs text-fg-faint shrink-0">
                       {f.pr_number ? `PR #${f.pr_number}` : f.status}
@@ -702,6 +740,54 @@ export function CommandPalette() {
                 ))}
               </Command.Group>
             </>
+          )}
+
+          {searching && weakPages.length > 0 && (
+            <Command.Group heading="More pages" className="cmdk-group">
+              {weakPages.map((r) => (
+                <PaletteRouteItem
+                  key={r.id}
+                  route={r}
+                  onSelect={() => handleSelect(r.id, () => navigate(r.path))}
+                />
+              ))}
+            </Command.Group>
+          )}
+
+          {!searching &&
+            PALETTE_GROUP_ORDER.map((group) => {
+              const items = routesByGroup[group]
+              if (!items.length) return null
+              return (
+                <Command.Group
+                  key={group}
+                  heading={NAV_SECTION_META[PALETTE_GROUP_SECTION[group]].title}
+                  className="cmdk-group"
+                >
+                  {items.map((r) => (
+                    <PaletteRouteItem
+                      key={r.id}
+                      route={r}
+                      onSelect={() => handleSelect(r.id, () => navigate(r.path))}
+                    />
+                  ))}
+                </Command.Group>
+              )
+            })}
+
+          {visibleActions.length > 0 && (
+            <Command.Group heading="Actions" className="cmdk-group">
+              {visibleActions.map((a) => (
+                <PaletteActionItem
+                  key={a.id}
+                  id={a.id}
+                  label={a.label}
+                  hint={a.hint}
+                  keywords={a.keywords}
+                  onSelect={a.onSelect}
+                />
+              ))}
+            </Command.Group>
           )}
         </Command.List>
 
@@ -723,6 +809,14 @@ export function CommandPalette() {
       ) : null}
     </AnimatePresence>
   )
+}
+
+/** A report's short title, else the start of what the reporter wrote. */
+function reportTitle(r: LiveReport): string {
+  const summary = r.summary?.trim()
+  if (summary) return summary
+  const description = r.description?.trim() ?? ''
+  return description.length > 120 ? `${description.slice(0, 117)}…` : description || 'Untitled report'
 }
 
 interface PaletteRouteItemProps {

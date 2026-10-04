@@ -67,6 +67,63 @@ import {
   type NavCounts,
 } from './useNavCounts'
 
+/**
+ * Which nav-meta slices each path's badge and page hero read (mirrors the
+ * `resolveNavBadge` switch below and `layoutHeroFromStats`). Paths whose
+ * badge only uses the per-item counters need no slice. Layout sends the
+ * union for the visible sidebar + current page, so Quick and Beginner stop
+ * paying for the 45 stats routes Advanced shows.
+ */
+const PATH_SLICES: Readonly<Record<string, readonly string[]>> = {
+  '/onboarding': ['onboarding'],
+  '/connect': ['onboarding'],
+  '/dashboard': ['dashboard'],
+  '/content': ['contentQuality'],
+  '/projects': ['projects'],
+  '/organization/members': ['members'],
+  '/feature-board': ['featureBoard'],
+  '/rewards': ['rewards'],
+  '/billing': ['billing'],
+  '/audit': ['audit'],
+  '/fullstack-audit': ['fullstackAudit'],
+  '/code-health': ['codeHealth'],
+  '/qa-coverage': ['qaCoverage'],
+  '/lessons': ['lessons'],
+  '/drift': ['drift'],
+  '/releases': ['releases'],
+  '/intelligence': ['intelligence'],
+  '/explore': ['explore'],
+  '/experiments': ['experiments'],
+  '/anomalies': ['anomalies'],
+  '/iterate': ['iterate'],
+  '/research': ['research'],
+  '/prompt-lab': ['promptLab'],
+  '/inventory': ['inventory'],
+  '/graph': ['graph'],
+  '/fixes': ['fixes'],
+  '/repo': ['repo'],
+  '/health': ['health', 'dashboard'],
+  '/skills': ['skills'],
+  '/integrations/config': ['integrations'],
+  '/mcp': ['mcp'],
+  '/marketplace': ['marketplace'],
+  '/settings': ['settings'],
+  '/cost': ['costs'],
+  '/sso': ['sso'],
+  '/compliance': ['compliance'],
+  '/storage': ['storage'],
+  '/query': ['query'],
+}
+
+/** Slices needed to badge `paths` (sidebar items plus the current page). */
+export function navSlicesForPaths(paths: readonly string[]): string[] {
+  const out = new Set<string>(['dashboard'])
+  for (const path of paths) {
+    for (const key of PATH_SLICES[path.split('?')[0] ?? path] ?? []) out.add(key)
+  }
+  return [...out].sort()
+}
+
 export interface NavBadgeExtras {
   criticalReports30d: number
 }
@@ -303,9 +360,10 @@ export function resolveNavBadge(
     case '/skills':
       return sliceBadgeSpec(skillsNavBadge(slices.skills), slices.skills?.catalogTotal ?? 0)
     case '/integrations/config': {
-      const sliceBadge = integrationsNavBadge(slices.integrations)
-      if (sliceBadge) return sliceBadgeSpec(sliceBadge)
-      return { kind: 'integration' }
+      // The self-fetching dot (two more requests) is only the fallback for a
+      // missing slice; a slice with nothing to report means no badge.
+      if (!slices.integrations) return { kind: 'integration' }
+      return sliceBadgeSpec(integrationsNavBadge(slices.integrations))
     }
     case '/mcp':
       return sliceBadgeSpec(mcpNavBadge(slices.mcp))
