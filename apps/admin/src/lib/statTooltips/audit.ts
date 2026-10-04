@@ -39,10 +39,10 @@ export function failCount24hTooltip(stats: AuditStats): MetricTooltipData {
 
   return metricTip(
     'Audit events indicating failure outcomes in the last 24 hours.',
-    'Counts audit_events where action matches failure patterns (fix.failed, integration.disconnected, etc.) or severity = fail.',
+    'Exact count of audit_logs in the last 24h whose action is fix.failed or integration.disconnected. Clicking opens the log with the same filter.',
     takeaway,
     stats.failCount24h > 0
-      ? { tone: 'warn', text: `${stats.failCount24h} failure event${stats.failCount24h === 1 ? '' : 's'} — open Log tab filtered by action.` }
+      ? { tone: 'warn', text: `${stats.failCount24h} failure event${stats.failCount24h === 1 ? '' : 's'} — the card opens the log filtered to exactly these events.` }
       : undefined,
   )
 }
@@ -91,18 +91,18 @@ export function totalEventsDetail(stats: AuditStats): string {
 export function humanActorsTooltip(stats: AuditStats): MetricTooltipData {
   const takeaway =
     stats.humanCount24h > 0
-      ? `${stats.humanCount24h} human-actor event${stats.humanCount24h === 1 ? '' : 's'} in 24h — operators with email or uuid attribution.`
-      : 'No human-attributed audit events in the 24h sample.'
+      ? `${stats.humanCount24h} human-actor event${stats.humanCount24h === 1 ? '' : 's'} in 24h — people acting in the console, CLI or Slack.`
+      : 'No human-attributed audit events in the last 24h.'
 
   return metricTip(
-    'Audit events attributed to human operators (email + uuid) in the last 24 hours.',
-    'audit_events where actor_type = human or actor_id resolves to an authenticated user email.',
+    'Audit events written by people (console, CLI or Slack) in the last 24 hours.',
+    'Exact count of audit_logs where actor_type is user, console, cli or slack — the same filter the Log tab applies.',
     takeaway,
   )
 }
 
 export function humanActorsDetail(): string {
-  return 'Email + uuid in last 24h sample'
+  return 'Console, CLI and Slack in the last 24h'
 }
 
 export function agentActorsTooltip(stats: AuditStats): MetricTooltipData {
@@ -113,13 +113,13 @@ export function agentActorsTooltip(stats: AuditStats): MetricTooltipData {
 
   return metricTip(
     'Audit events attributed to AI agents or LLM pipelines in the last 24 hours.',
-    'audit_events where actor_id matches agent_* patterns or actor_type = agent / llm.',
+    'Exact count of audit_logs where actor_type is agent or api_key (MCP and API-key callers).',
     takeaway,
   )
 }
 
 export function agentActorsDetail(): string {
-  return 'LLM / agent_* ids in last 24h'
+  return 'Agents and API keys in the last 24h'
 }
 
 export function systemActorsTooltip(stats: AuditStats): MetricTooltipData {
@@ -130,11 +130,11 @@ export function systemActorsTooltip(stats: AuditStats): MetricTooltipData {
 
   return metricTip(
     'Audit events from system actors: scheduled cron, webhooks, or unattributed background jobs.',
-    'audit_events where actor_type = system or actor_id is null / cron / webhook identifiers.',
+    'Exact count of audit_logs whose actor_type is neither a person nor an agent (system, cron, webhooks).',
     takeaway,
   )
 }
 
 export function systemActorsDetail(): string {
-  return 'Cron / webhook / null actor'
+  return 'System, cron and webhook jobs'
 }

@@ -6,7 +6,19 @@ import { jwtAuth } from '../../_shared/auth.ts';
 import { requireFeature, resolveActiveEntitlement } from '../../_shared/entitlements.ts';
 import { logAudit } from '../../_shared/audit.ts';
 import { requireEeLicense } from '../../_shared/ee-gate.ts';
-import { callerProjectIds, resolveOwnedProject } from '../shared.ts';
+import { callerProjectIds, dbError, resolveOwnedProject } from '../shared.ts';
+import {
+  AGENT_ACTOR_TYPES,
+  AUDIT_FAIL_ACTIONS,
+  AUDIT_WARN_ACTIONS,
+  HUMAN_ACTOR_TYPES,
+  auditSearchFilter,
+  auditSearchTerms,
+  outcomeActions,
+  parseAuditActorKind,
+  parseAuditOutcome,
+  postgrestList,
+} from '../../_shared/audit-signals.ts';
 
 export function registerSsoAuditRoutes(app: Hono<{ Variables: Variables }>): void {
   // ============================================================
@@ -470,6 +482,9 @@ export function registerSsoAuditRoutes(app: Hono<{ Variables: Variables }>): voi
       latestActorEmail: null as string | null,
       topAction7d: null as string | null,
       topAction7dCount: 0,
+      topAction7dSampleSize: 0,
+      failActions: [...AUDIT_FAIL_ACTIONS] as string[],
+      warnActions: [...AUDIT_WARN_ACTIONS] as string[],
     };
 
     const resolvedProject = await resolveOwnedProject(c, db, userId, {
@@ -487,18 +502,22 @@ export function registerSsoAuditRoutes(app: Hono<{ Variables: Variables }>): voi
     const since24h = new Date(now - 24 * 60 * 60 * 1000).toISOString();
     const since7d = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
 
-    const FAIL_ACTIONS = ['fix.failed', 'integration.disconnected'];
-    const WARN_ACTIONS = ['api_key.revoked', 'plugin.uninstalled'];
-
+    // Exact head counts throughout: the banner, snapshot and actor-mix cards
+    // link to the log filtered the same way, so the numbers must match the
+    // "N matching" the log shows.
+    const ACTOR_KNOWN = postgrestList([...HUMAN_ACTOR_TYPES, ...AGENT_ACTOR_TYPES]);
     const [
       { count: totalEvents },
       { count: events24h },
       { count: events7d },
       { count: activeProjectEvents24h },
       { data: recentRows },
-      { data: failRows },
-      { data: warnRows },
+      { count: failCount24h },
+      { count: warnCount24h },
       { data: topRows },
+      { count: humanCount24h },
+      { count: agentCount24h },
+      { count: systemCount24h },
     ] = await Promise.all([
       db.from('audit_logs').select('id', { count: 'exact', head: true }).in('project_id', projectIds),
       db
@@ -518,56 +537,51 @@ export function registerSsoAuditRoutes(app: Hono<{ Variables: Variables }>): voi
         .gte('created_at', since24h),
       db
         .from('audit_logs')
-        .select('action, actor_email, actor_id, created_at')
+        .select('action, actor_email, created_at')
         .in('project_id', projectIds)
         .order('created_at', { ascending: false })
-        .limit(200),
+        .limit(1),
       db
         .from('audit_logs')
-        .select('id')
+        .select('id', { count: 'exact', head: true })
         .in('project_id', projectIds)
         .gte('created_at', since24h)
-        .in('action', FAIL_ACTIONS),
+        .in('action', [...AUDIT_FAIL_ACTIONS]),
       db
         .from('audit_logs')
-        .select('id')
+        .select('id', { count: 'exact', head: true })
         .in('project_id', projectIds)
         .gte('created_at', since24h)
-        .in('action', WARN_ACTIONS),
+        .in('action', [...AUDIT_WARN_ACTIONS]),
+      // Most-frequent action: the newest rows up to PostgREST's row cap. The
+      // sample size goes back with the count so the UI never presents a
+      // sampled number as the week's total.
       db
         .from('audit_logs')
         .select('action')
         .in('project_id', projectIds)
         .gte('created_at', since7d)
-        .limit(500),
+        .order('created_at', { ascending: false })
+        .limit(1000),
+      db
+        .from('audit_logs')
+        .select('id', { count: 'exact', head: true })
+        .in('project_id', projectIds)
+        .gte('created_at', since24h)
+        .in('actor_type', [...HUMAN_ACTOR_TYPES]),
+      db
+        .from('audit_logs')
+        .select('id', { count: 'exact', head: true })
+        .in('project_id', projectIds)
+        .gte('created_at', since24h)
+        .in('actor_type', [...AGENT_ACTOR_TYPES]),
+      db
+        .from('audit_logs')
+        .select('id', { count: 'exact', head: true })
+        .in('project_id', projectIds)
+        .gte('created_at', since24h)
+        .not('actor_type', 'in', ACTOR_KNOWN),
     ]);
-
-    let humanCount24h = 0;
-    let agentCount24h = 0;
-    let systemCount24h = 0;
-    for (const row of recentRows ?? []) {
-      const createdAt = row.created_at as string;
-      if (createdAt < since24h) continue;
-      const actorId = row.actor_id as string | null;
-      const actorEmail = row.actor_email as string | null;
-      if (
-        actorId &&
-        (actorId.startsWith('agent_') || (actorEmail?.startsWith('agent-') ?? false))
-      ) {
-        agentCount24h += 1;
-      } else if (
-        !actorId ||
-        actorId.startsWith('cron_') ||
-        actorId.startsWith('system_') ||
-        actorId.startsWith('webhook_')
-      ) {
-        systemCount24h += 1;
-      } else if (actorEmail && actorId) {
-        humanCount24h += 1;
-      } else {
-        systemCount24h += 1;
-      }
-    }
 
     const actionCounts = new Map<string, number>();
     for (const row of topRows ?? []) {
@@ -597,17 +611,20 @@ export function registerSsoAuditRoutes(app: Hono<{ Variables: Variables }>): voi
         totalEvents: totalEvents ?? 0,
         events24h: events24h ?? 0,
         events7d: events7d ?? 0,
-        failCount24h: failRows?.length ?? 0,
-        warnCount24h: warnRows?.length ?? 0,
-        humanCount24h,
-        agentCount24h,
-        systemCount24h,
+        failCount24h: failCount24h ?? 0,
+        warnCount24h: warnCount24h ?? 0,
+        humanCount24h: humanCount24h ?? 0,
+        agentCount24h: agentCount24h ?? 0,
+        systemCount24h: systemCount24h ?? 0,
         activeProjectEvents24h: activeProjectEvents24h ?? 0,
         latestEventAt: (latest?.created_at as string | undefined) ?? null,
         latestAction: (latest?.action as string | undefined) ?? null,
         latestActorEmail: (latest?.actor_email as string | undefined) ?? null,
         topAction7d,
         topAction7dCount,
+        topAction7dSampleSize: topRows?.length ?? 0,
+        failActions: [...AUDIT_FAIL_ACTIONS],
+        warnActions: [...AUDIT_WARN_ACTIONS],
       },
     });
   });
@@ -626,9 +643,10 @@ export function registerSsoAuditRoutes(app: Hono<{ Variables: Variables }>): voi
     //   human  -> actor_id is a uuid (auth.users.id) AND actor_email is set
     //   agent  -> actor_id starts with 'agent_' or actor_email like 'agent-%@'
     //   system -> actor_id is null OR starts with 'cron_' / 'system_' / 'webhook_'
-    const actorType = c.req.query('actor_type') as 'human' | 'agent' | 'system' | undefined;
+    const actorType = parseAuditActorKind(c.req.query('actor_type'));
+    const outcome = parseAuditOutcome(c.req.query('outcome'));
     const since = c.req.query('since');
-    const q = c.req.query('q')?.trim();
+    const searchFilter = auditSearchFilter(auditSearchTerms(c.req.query('q')));
     const limit = Math.min(Number(c.req.query('limit') ?? 50), 200);
     const offset = Math.max(Number(c.req.query('offset') ?? 0), 0);
 
@@ -646,20 +664,21 @@ export function registerSsoAuditRoutes(app: Hono<{ Variables: Variables }>): voi
     if (resourceType) query = query.eq('resource_type', resourceType);
     if (actor) query = query.ilike('actor_email', `%${actor}%`);
     if (since) query = query.gte('created_at', since);
-    if (q)
-      query = query.or(`action.ilike.%${q}%,resource_type.ilike.%${q}%,resource_id.ilike.%${q}%`);
+    if (outcome) query = query.in('action', [...outcomeActions(outcome)]);
+    if (searchFilter) query = query.or(searchFilter);
+    // Same groupings as the stats route's actor-mix counts (audit-signals.ts).
     if (actorType === 'human') {
-      // A real human always has both an email and a uuid actor_id.
-      query = query.not('actor_email', 'is', null).not('actor_id', 'is', null);
+      query = query.in('actor_type', [...HUMAN_ACTOR_TYPES]);
     } else if (actorType === 'agent') {
-      query = query.or('actor_id.like.agent_%,actor_email.like.agent-%@%');
+      query = query.in('actor_type', [...AGENT_ACTOR_TYPES]);
     } else if (actorType === 'system') {
-      query = query.or(
-        'actor_id.is.null,actor_id.like.cron_%,actor_id.like.system_%,actor_id.like.webhook_%',
-      );
+      query = query.not('actor_type', 'in', postgrestList([...HUMAN_ACTOR_TYPES, ...AGENT_ACTOR_TYPES]));
     }
 
-    const { data, count } = await query;
+    const { data, count, error } = await query;
+    // A failed query used to come back as an empty page, which the console
+    // shows as "No entries match these filters".
+    if (error) return dbError(c, error);
     return c.json({ ok: true, data: { logs: data ?? [], count: count ?? 0 } });
   });
 

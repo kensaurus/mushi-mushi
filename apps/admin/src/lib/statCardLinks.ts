@@ -260,7 +260,7 @@ export const usersLinks = {
 
 export const auditLinks = {
   events24h: '/audit?tab=log',
-  failures: '/audit?tab=log',
+  failures: '/audit?tab=log&outcome=failure&since=24h',
   actorMix: '/audit?tab=breakdown',
   allTime: '/audit?tab=log',
   // These three cards are rendered ON the breakdown tab, so pointing them
