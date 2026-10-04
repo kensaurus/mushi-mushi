@@ -214,7 +214,13 @@ export function SdkInstallCard({
       {showConnectionStatus && (
         <div className="flex flex-wrap items-center gap-2">
           <ConnectionStatus compact />
-          <span className="text-2xs text-fg-muted">Shows ✓ when the SDK heartbeat or first report lands.</span>
+          {/* This only checks that the console reaches the Mushi backend; it
+              said it tracked the SDK heartbeat, so "All systems healthy"
+              showed before any SDK was installed (QA bug 140). */}
+          <span className="text-2xs text-fg-muted">
+            Checks that Mushi&apos;s backend is reachable. Whether your app&apos;s SDK has checked in shows on each key
+            below (&ldquo;Never used&rdquo; until its first heartbeat).
+          </span>
         </div>
       )}
 

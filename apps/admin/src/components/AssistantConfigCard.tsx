@@ -15,7 +15,22 @@
 import { useCallback, useEffect, useState } from 'react'
 import { apiFetch, invalidateApiCache } from '../lib/supabase'
 import { useToast } from '../lib/toast'
+import { describeActionError } from '../lib/actionError'
 import { Btn, Input, Textarea, Toggle, Callout } from './ui'
+
+/**
+ * "How do I pay, Where is my order" → ['How do I pay', 'Where is my order'].
+ * Parsed on save, not on every keystroke: re-joining after each key removed
+ * spaces and commas as they were typed, so "How do I pay" became
+ * "HowdoIpay" (QA bug 134).
+ */
+export function parseStarterQuestions(text: string): string[] {
+  return text
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .slice(0, 6)
+}
 
 interface AssistantConfig {
   enabled: boolean
@@ -43,6 +58,9 @@ interface AssistantLogRow {
 export function AssistantConfigCard({ projectId }: { projectId: string }) {
   const toast = useToast()
   const [cfg, setCfg] = useState<AssistantConfig | null>(null)
+  // Raw text of the starter-questions field; parsed on save.
+  const [suggestionsText, setSuggestionsText] = useState('')
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [advancedOpen, setAdvancedOpen] = useState(false)
@@ -51,12 +69,19 @@ export function AssistantConfigCard({ projectId }: { projectId: string }) {
 
   const load = useCallback(() => {
     setLoading(true)
+    setLoadError(null)
     void apiFetch<AssistantConfig>(`/v1/admin/projects/${projectId}/assistant`)
       .then((res) => {
-        if (res.ok && res.data) setCfg(res.data)
+        if (res.ok && res.data) {
+          setCfg(res.data)
+          setSuggestionsText(res.data.suggestions.join(', '))
+        } else {
+          // Was ignored, leaving "Loading assistant…" forever (QA bug 128).
+          setLoadError(describeActionError(res.error, 'Could not load the assistant settings.'))
+        }
       })
       .catch(() => {
-        /* network already surfaced via apiFetch → Sentry; keep prior cfg */
+        setLoadError('Could not reach the Mushi API. Check your connection and retry.')
       })
       .finally(() => setLoading(false))
   }, [projectId])
@@ -75,7 +100,7 @@ export function AssistantConfigCard({ projectId }: { projectId: string }) {
         enabled: cfg.enabled,
         label: cfg.label,
         greeting: cfg.greeting,
-        suggestions: cfg.suggestions,
+        suggestions: parseStarterQuestions(suggestionsText),
         knowledge: cfg.knowledge,
       }),
     })
@@ -86,14 +111,9 @@ export function AssistantConfigCard({ projectId }: { projectId: string }) {
       toast.success('Assistant saved')
       load()
     } else {
-      const code = (res.error as { code?: string } | undefined)?.code
-      toast.error(
-        code === 'SECRET_DETECTED'
-          ? (res.error as { message?: string }).message ?? 'Knowledge text contains a secret'
-          : 'Could not save assistant',
-      )
+      toast.error('Could not save assistant', describeActionError(res.error, 'Try again in a moment.'))
     }
-  }, [cfg, projectId, toast, load])
+  }, [cfg, suggestionsText, projectId, toast, load])
 
   const loadLogs = useCallback(() => {
     setLogsLoading(true)
@@ -105,8 +125,21 @@ export function AssistantConfigCard({ projectId }: { projectId: string }) {
       .finally(() => setLogsLoading(false))
   }, [projectId])
 
-  if (loading || !cfg) {
+  if (loading) {
     return <div className="text-2xs text-fg-faint px-1 py-2">Loading assistant…</div>
+  }
+  if (loadError || !cfg) {
+    return (
+      <div className="space-y-2">
+        <div className="text-xs font-medium text-fg">Page-aware assistant</div>
+        <Callout tone="warn" label="Could not load this setting">
+          {loadError ?? 'Could not load the assistant settings.'}
+        </Callout>
+        <Btn size="sm" variant="ghost" onClick={load}>
+          Retry
+        </Btn>
+      </div>
+    )
   }
 
   return (
@@ -143,16 +176,8 @@ export function AssistantConfigCard({ projectId }: { projectId: string }) {
           />
           <Input
             label="Starter questions (comma-separated, up to 6)"
-            value={cfg.suggestions.join(', ')}
-            onChange={(e) =>
-              patch({
-                suggestions: e.target.value
-                  .split(',')
-                  .map((s) => s.trim())
-                  .filter(Boolean)
-                  .slice(0, 6),
-              })
-            }
+            value={suggestionsText}
+            onChange={(e) => setSuggestionsText(e.target.value)}
           />
 
           <details

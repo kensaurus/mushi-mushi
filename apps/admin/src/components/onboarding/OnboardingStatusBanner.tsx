@@ -59,7 +59,8 @@ export function OnboardingStatusBanner({
             : `${stats.reportCount} report${stats.reportCount === 1 ? '' : 's'} ingested${stats.fixCount > 0 ? ` · ${stats.fixCount} fix${stats.fixCount === 1 ? '' : 'es'} dispatched` : ''} — SDK tab stays handy for new environments.`
         }
         action={
-          <Btn to="/reports" size="sm" variant="ghost">{plainLanguage ? 'See bugs' : 'Open dashboard'}</Btn>
+          // The label says where it goes: Reports (QA bug 263).
+          <Btn to="/reports" size="sm" variant="ghost">{plainLanguage ? 'See bugs' : 'Open reports'}</Btn>
         }
       />
     )

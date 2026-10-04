@@ -58,6 +58,7 @@ import {
 } from '../icons'
 import {
   canDeleteProject,
+  canManageProject,
   LINK_CHIP_CLASS,
   relativeTime,
   scopeBadgeTone,
@@ -326,6 +327,7 @@ export function ProjectsListPanel({
                   <IconSend />
                 </Btn>
               </Tooltip>
+              {canManageProject(project) && (
               <div className="flex items-center gap-1" data-testid={`mint-key-${project.id}`}>
                 <label htmlFor={`key-scope-${project.id}`} className="sr-only">
                   API key scope for {project.name}
@@ -366,6 +368,7 @@ export function ProjectsListPanel({
                   </Btn>
                 </Tooltip>
               </div>
+              )}
               {/* Destructive last in tab order on purpose. Gated to
                   org owner/admin (or legacy direct owner). Members and
                   viewers don't see the button at all so they can't
@@ -506,7 +509,7 @@ export function ProjectsListPanel({
                           <Badge className="bg-surface-overlay text-fg-faint">revoked</Badge>
                         )}
                       </div>
-                      {!key.revoked && (
+                      {!key.revoked && canManageProject(project) && (
                         <Btn
                           variant="ghost"
                           size="sm"
@@ -567,6 +570,13 @@ export function ProjectsListPanel({
                 ›
               </span>
             </summary>
+            {!canManageProject(project) ? (
+              <p className="mt-3 rounded-sm border border-edge-subtle bg-surface-raised px-3 py-2 text-xs text-fg-muted" data-testid={`sdk-config-locked-${project.id}`}>
+                Only project owners and admins can change SDK settings, keys, the assistant or signed identity for{' '}
+                <span className="font-medium text-fg-secondary">{project.name}</span>. Ask an owner or admin of this
+                project to make changes or to give you the admin role.
+              </p>
+            ) : (
             <div className="mt-3">
               {/* Pass `revealed?.key` so the snippet shows the real,
                   just-minted plaintext key instead of the `mushi_xxx`
@@ -586,6 +596,7 @@ export function ProjectsListPanel({
                 <IdentitySecretCard projectId={project.id} projectSlug={project.slug} />
               </div>
             </div>
+            )}
           </details>
         </Card>
       )
