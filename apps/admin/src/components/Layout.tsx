@@ -1305,7 +1305,7 @@ export function Layout({ children }: { children: ReactNode }) {
             >
               {!focusMode && <GlobalStatusStrip />}
               {!focusMode && <DavChromeCoachmark />}
-              {!focusMode && <NextBestAction />}
+              {!focusMode && <NextBestAction work={navCounts} />}
               <ScrollToHashAnchor />
               {!focusMode && <RoutePageHelp />}
               {/* Beginner mode uses NextBestAction — skip layout PageHero to avoid

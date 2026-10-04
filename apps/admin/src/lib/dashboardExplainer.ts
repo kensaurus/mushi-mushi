@@ -22,8 +22,11 @@ export function isDashboardGuideExpanded(): boolean {
 export interface DashboardInsightInput {
   openBacklog: number
   fixesInProgress: number
+  /** Reports whose last auto-fix stopped (counted per report). */
   fixesFailed: number
   integrationIssues: number
+  /** Names of the integrations whose last health check was not ok. */
+  failingIntegrations?: Array<{ kind: string; label: string }>
   reports14d: number
 }
 
@@ -32,38 +35,60 @@ export type InsightTone = 'ok' | 'warn' | 'danger'
 export interface DashboardInsight {
   tone: InsightTone
   sentence: string
+  /** Every problem carries its fix: where to go to clear it. */
+  action?: { label: string; to: string }
+}
+
+const plural = (n: number, one: string, many: string) => (n === 1 ? one : many)
+
+function namedList(names: string[]): string {
+  if (names.length <= 1) return names[0] ?? ''
+  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
 }
 
 export function deriveDashboardInsight(s: DashboardInsightInput): DashboardInsight {
   // Most-critical issue wins; fallback to healthy.
+  const stoppedAction = { label: 'See why it stopped', to: '/fixes?tab=attempts&status=failed' }
   if (s.fixesFailed > 0 && s.openBacklog > 0) {
     return {
       tone: 'danger',
-      sentence: `${s.fixesFailed} fix${s.fixesFailed === 1 ? '' : 'es'} failed and ${s.openBacklog} report${s.openBacklog === 1 ? '' : 's'} waiting to triage — the loop is stalled at two points.`,
+      sentence: `Auto-fix stopped on ${s.fixesFailed} ${plural(s.fixesFailed, 'report', 'reports')} and ${s.openBacklog} ${plural(s.openBacklog, 'report is', 'reports are')} waiting to triage — the loop is stalled at two points.`,
+      action: stoppedAction,
     }
   }
   if (s.fixesFailed > 0) {
     return {
       tone: 'danger',
-      sentence: `${s.fixesFailed} auto-fix${s.fixesFailed === 1 ? '' : 'es'} failed${s.fixesInProgress > 0 ? ` (${s.fixesInProgress} still in progress)` : ''}. Review the failure reason and re-trigger or close.`,
+      sentence: `Auto-fix stopped on ${s.fixesFailed} ${plural(s.fixesFailed, 'report', 'reports')}${s.fixesInProgress > 0 ? ` (${s.fixesInProgress} more in progress)` : ''}. Read why the last attempt stopped, then retry or close.`,
+      action: stoppedAction,
     }
   }
   if (s.openBacklog > 5) {
     return {
       tone: 'warn',
       sentence: `${s.openBacklog} reports in the triage backlog — growing queue. Work top-severity items before new bugs pile up.`,
+      action: { label: 'Triage the backlog', to: '/reports?status=new' },
     }
   }
   if (s.openBacklog > 0) {
     return {
       tone: 'warn',
-      sentence: `${s.openBacklog} report${s.openBacklog === 1 ? '' : 's'} waiting to triage${s.fixesInProgress > 0 ? ` · ${s.fixesInProgress} fix${s.fixesInProgress === 1 ? '' : 'es'} in progress` : ''}.`,
+      sentence: `${s.openBacklog} ${plural(s.openBacklog, 'report', 'reports')} waiting to triage${s.fixesInProgress > 0 ? ` · ${s.fixesInProgress} ${plural(s.fixesInProgress, 'fix', 'fixes')} in progress` : ''}.`,
+      action: { label: 'Triage now', to: '/reports?status=new' },
     }
   }
   if (s.integrationIssues > 0) {
+    const named = (s.failingIntegrations ?? []).map((i) => i.label)
+    const first = s.failingIntegrations?.[0]
+    const who = named.length > 0 ? namedList(named) : `${s.integrationIssues} ${plural(s.integrationIssues, 'integration', 'integrations')}`
+    const verb = named.length === 1 || (named.length === 0 && s.integrationIssues === 1) ? 'needs' : 'need'
     return {
       tone: 'warn',
-      sentence: `${s.integrationIssues} integration${s.integrationIssues === 1 ? ' needs' : 's need'} attention — notifications or CI may be degraded.`,
+      sentence: `${who} ${verb} attention — its last health check failed, so notifications or CI may be degraded.`,
+      action: {
+        label: named.length === 1 ? `Fix ${named[0]}` : 'Open integrations',
+        to: first ? `/integrations/config#${encodeURIComponent(first.kind)}` : '/integrations/config',
+      },
     }
   }
   if (s.fixesInProgress > 0) {

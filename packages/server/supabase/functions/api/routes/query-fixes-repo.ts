@@ -44,7 +44,10 @@ import {
   synthesizeFixTimeline,
   type FixTimelineEvent,
 } from '../../_shared/fix-timeline.ts';
-import { fixFailureBucket, isFixCountedFailed } from '../../_shared/fix-loop-status.ts';
+import { isFixCountedFailed } from '../../_shared/fix-loop-status.ts';
+import { summarizeFixTruths } from '../../_shared/fix-report-truth.ts';
+import { loadRecentFixTruths, loadReportFixTruths, reportTitle } from '../../_shared/fix-report-truth-load.ts';
+import { resolveUserDisplays } from '../../_shared/user-display.ts';
 import {
   installationIdForAttempt,
   parseGithubRepoUrl,
@@ -307,39 +310,9 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     // because a single power user often owns 5+ saved prompts and we
     // don't want N admin.getUserById calls when 1 would do (mirrors the
     // organizations.ts inviter-email pattern).
-    const authorIds = Array.from(
-      new Set(rows.map((r) => r.user_id).filter((id): id is string => Boolean(id))),
-    );
-    const authorById = new Map<string, { email: string | null; name: string | null }>();
-    await Promise.all(
-      authorIds.map(async (id) => {
-        try {
-          const { data: row } = await db.auth.admin.getUserById(id);
-          const u = row.user;
-          if (!u) {
-            authorById.set(id, { email: null, name: null });
-            return;
-          }
-          const meta = (u.user_metadata ?? {}) as Record<string, unknown>;
-          const pick = (key: string): string | null => {
-            const v = meta[key];
-            return typeof v === 'string' && v.trim() ? v.trim() : null;
-          };
-          let name = pick('full_name') ?? pick('name') ?? pick('display_name');
-          if (!name && u.email) {
-            const local = u.email.split('@')[0] ?? '';
-            name =
-              local
-                .split(/[._-]+/)
-                .filter(Boolean)
-                .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
-                .join(' ') || null;
-          }
-          authorById.set(id, { email: u.email ?? null, name });
-        } catch {
-          authorById.set(id, { email: null, name: null });
-        }
-      }),
+    const authorById = await resolveUserDisplays(
+      db as unknown as Parameters<typeof resolveUserDisplays>[0],
+      rows.map((r) => r.user_id),
     );
 
     const decorated = rows.map((r) => {
@@ -459,6 +432,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       indexedFiles: 0,
       totalAttempts: 0,
       failed: 0,
+      retryable: 0,
       inProgress: 0,
       completed: 0,
       prsOpen: 0,
@@ -492,7 +466,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
 
     const [attemptsRes, integrationRes, codebaseRes, inflightRes] = await Promise.all([
       db.from('fix_attempts')
-        .select('id, status, pr_url, pr_state, merged_at, check_run_conclusion, failure_category, spec_validation_warnings')
+        .select('id, report_id, check_run_conclusion, spec_validation_warnings')
         .eq('project_id', pid)
         .gte('created_at', since.toISOString())
         .limit(500),
@@ -506,38 +480,41 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       db.from('project_codebase_files')
         .select('id', { count: 'exact', head: true })
         .eq('project_id', pid),
-      db.from('fix_attempts')
-        .select('id', { count: 'exact', head: true })
+      db.from('fix_dispatch_jobs')
+        .select('report_id')
         .eq('project_id', pid)
-        .in('status', ['queued', 'running', 'pending']),
+        .in('status', ['queued', 'running'])
+        .limit(200),
     ])
 
     const attempts = attemptsRes.data ?? []
-    // `failed` matches the console's "Failed / skipped" bucket: failed or
-    // skipped attempts plus PRs that went red on CI or closed unmerged.
-    const failed = attempts.filter((a) => isFixCountedFailed(a)).length
-    const inProgress = attempts.filter((a) => ['queued', 'running', 'pending'].includes(a.status)).length
-    const completed = attempts.filter((a) => a.status === 'completed' && !isFixCountedFailed(a)).length
-    const prsOpen = attempts.filter(
-      (a) => a.pr_url && a.status === 'completed' && !a.merged_at && a.pr_state !== 'merged' && !isFixCountedFailed(a),
-    ).length
+    // Counts are per REPORT and from its current state (fix-report-truth.ts):
+    // a report fixed by a merged PR never counts as failed or open, however
+    // many earlier attempts failed (glot.it 2026-10-04).
+    const { truths } = await loadRecentFixTruths(db as unknown as Parameters<typeof loadRecentFixTruths>[0], [pid])
+    const truth = summarizeFixTruths(truths.values())
+    const failed = truth.failed
+    const retryable = truth.retryable
+    const inProgress = truth.inFlight
+    const completed = truth.fixed
+    const prsOpen = truth.prOpen
     const prsCiPassing = attempts.filter((a) => a.check_run_conclusion === 'success').length
     const specWarnings = attempts.filter((a) => {
       const w = a.spec_validation_warnings as unknown
       return Array.isArray(w) && w.length > 0
     }).length
 
-    const failureBuckets = new Map<string, number>()
-    for (const a of attempts) {
-      if (!isFixCountedFailed(a)) continue
-      const cat = fixFailureBucket(a)
-      failureBuckets.set(cat, (failureBuckets.get(cat) ?? 0) + 1)
-    }
-    const topEntry = [...failureBuckets.entries()].sort((a, b) => b[1] - a[1])[0]
+    const topEntry = truth.failureBreakdown[0]
 
     const hasGithub = !!(integrationRes.data?.github_repo_url) || !!(integrationRes.data?.github_installation_token_ref)
     const indexedFiles = codebaseRes.count ?? 0
-    const inflightDispatches = inflightRes.count ?? inProgress
+    // Dispatches queued before their attempt row exists. A report already
+    // counted in `inProgress` is not counted twice (the strip adds both).
+    const inflightDispatches = new Set(
+      (inflightRes.data ?? [])
+        .map((d) => d.report_id as string)
+        .filter((rid) => truths.get(rid)?.state !== 'in_flight'),
+    ).size
     const successRatePct = completed + failed > 0
       ? Math.round((completed / (completed + failed)) * 100)
       : null
@@ -556,18 +533,21 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       topPriorityTo = '/integrations/config'
     } else if (failed > 0) {
       topPriority = 'failed'
-      topPriorityLabel = `${failed} fix attempt${failed === 1 ? '' : 's'} failed — open each one to read the error, then retry or hand off to Cursor.`
+      topPriorityLabel =
+        retryable > 0
+          ? `${failed} report${failed === 1 ? '' : 's'} still unfixed after the last attempt — ${retryable} can be retried now; open the rest to read why.`
+          : `${failed} report${failed === 1 ? '' : 's'} still unfixed after the last attempt — open ${failed === 1 ? 'it' : 'each one'} to read why and what to do.`
       topPriorityTo = `/fixes?status=failed&project=${encodeURIComponent(pid)}`
-    } else if (inflightDispatches > 0) {
+    } else if (inflightDispatches + inProgress > 0) {
       topPriority = 'inflight'
-      topPriorityLabel = `${inflightDispatches} fix${inflightDispatches === 1 ? '' : 'es'} dispatching — check back shortly.`
+      topPriorityLabel = `${inflightDispatches + inProgress} fix${inflightDispatches + inProgress === 1 ? '' : 'es'} dispatching — check back shortly.`
       topPriorityTo = '/fixes?status=running'
     } else if (prsOpen > 0) {
       topPriority = 'waiting'
       topPriorityLabel = `${prsOpen} PR${prsOpen === 1 ? '' : 's'} open — merge or close to advance the loop.`
       topPriorityTo = '/repo?tab=prs'
     } else {
-      topPriorityLabel = `${completed} fix${completed === 1 ? '' : 'es'} completed in the last 30 days.`
+      topPriorityLabel = `${completed} report${completed === 1 ? '' : 's'} fixed in the last 30 days.`
       topPriorityTo = '/fixes'
     }
 
@@ -583,14 +563,15 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
         indexedFiles,
         totalAttempts: attempts.length,
         failed,
+        retryable,
         inProgress,
         completed,
         prsOpen,
         prsCiPassing,
         specWarnings,
         inflightDispatches,
-        topFailureCategory: topEntry?.[0] ?? null,
-        topFailureCount: topEntry?.[1] ?? 0,
+        topFailureCategory: topEntry?.category ?? null,
+        topFailureCount: topEntry?.count ?? 0,
         successRatePct,
         topPriority,
         topPriorityLabel,
@@ -633,8 +614,31 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     }
 
     const { data } = await query;
+    const fixes = data ?? [];
 
-    return c.json({ ok: true, data: { fixes: data ?? [] } });
+    // Every row carries its report's CURRENT fix state, so the console can
+    // show "Superseded — fixed by PR #N" instead of a red failure, and only
+    // offer Retry on reports that are still unfixed (fix-report-truth.ts).
+    const loaded = await loadReportFixTruths(
+      db as unknown as Parameters<typeof loadReportFixTruths>[0],
+      fixes.map((f) => f.report_id as string),
+    );
+    const enriched = fixes.map((f) => {
+      const t = loaded.truths.get(f.report_id as string);
+      const report = loaded.reports.get(f.report_id as string);
+      return {
+        ...f,
+        report_title: reportTitle(report),
+        report_status: report?.status ?? null,
+        report_fix_state: t?.state ?? null,
+        report_fixed_by_pr: t?.mergedPrNumber ?? null,
+        is_latest_attempt: t ? t.latestAttemptId === f.id : null,
+        retryable: t ? t.retryable && t.latestAttemptId === f.id : false,
+        credential_block: t && t.latestAttemptId === f.id ? t.credential : null,
+      };
+    });
+
+    return c.json({ ok: true, data: { fixes: enriched } });
   });
 
   app.post('/v1/admin/fixes', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {
@@ -690,6 +694,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
           total: 0,
           completed: 0,
           failed: 0,
+          retryable: 0,
           inProgress: 0,
           prsOpen: 0,
           prsCiPassing: 0,
@@ -707,7 +712,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     const { data: rows } = await db
       .from('fix_attempts')
       .select(
-        'id, status, pr_url, pr_number, pr_state, merged_at, check_run_conclusion, started_at, completed_at, created_at, spec_validation_warnings, failure_category',
+        'id, report_id, status, pr_url, pr_number, pr_state, merged_at, check_run_conclusion, started_at, completed_at, created_at, spec_validation_warnings, failure_category',
       )
       .in('project_id', projectIds)
       .gte('created_at', since.toISOString())
@@ -715,20 +720,15 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       .limit(500);
 
     const list = rows ?? [];
-    // Same "failed" rule as /fixes/stats and the console's Failed / skipped
-    // filter (isFixCountedFailed): a red-CI or closed-unmerged PR is a failure.
-    const completed = list.filter((r) => r.status === 'completed' && !isFixCountedFailed(r)).length;
-    const failed = list.filter((r) => isFixCountedFailed(r)).length;
-    const inProgress = list.filter(
-      (r) => r.status === 'queued' || r.status === 'running' || r.status === 'pending',
-    ).length;
-    // GitHub's `check_run.conclusion` enum is success | failure | neutral |
-    // cancelled | skipped | timed_out | action_required | stale — there is no
-    // `merged` value, so the old `!== 'merged'` filter was a no-op. Use the
-    // attempt's own status as the "open" gate; merge state lives elsewhere.
-    const prsOpen = list.filter(
-      (r) => r.pr_url && r.status === 'completed' && !r.merged_at && r.pr_state !== 'merged' && !isFixCountedFailed(r),
-    ).length;
+    // Headline counts are per REPORT from its current state, the same rule
+    // as /fixes/stats (fix-report-truth.ts). The per-day series below stays
+    // per attempt: it is the history of runs, not the current state.
+    const { truths } = await loadRecentFixTruths(db as unknown as Parameters<typeof loadRecentFixTruths>[0], projectIds);
+    const truth = summarizeFixTruths(truths.values());
+    const completed = truth.fixed;
+    const failed = truth.failed;
+    const inProgress = truth.inFlight;
+    const prsOpen = truth.prOpen;
     const prsCiPassing = list.filter((r) => r.check_run_conclusion === 'success').length;
     // Loop-closure: count fix_attempts whose validateAgainstSpec gate raised
     // at least one soft warning over the trailing 30d. Surfaced as a tile
@@ -740,19 +740,9 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       return Array.isArray(w) && w.length > 0;
     }).length;
 
-    // Loop-closure: bucket the 30d failures by failure_category so the
-    // Fixes summary tile can render "12 sandbox_timeout / 4 scope_blocked /
-    // 2 spec_violation" instead of a single opaque "16 failed" number.
-    // Sorted desc by count so the dominant cause is always first.
-    const failureBucketMap = new Map<string, number>();
-    for (const r of list) {
-      if (!isFixCountedFailed(r)) continue;
-      const cat = fixFailureBucket(r);
-      failureBucketMap.set(cat, (failureBucketMap.get(cat) ?? 0) + 1);
-    }
-    const failureBreakdown = [...failureBucketMap.entries()]
-      .map(([category, count]) => ({ category, count }))
-      .sort((a, b) => b.count - a.count);
+    // Why the still-unfixed reports failed, by the cause of their latest
+    // attempt, most common first.
+    const failureBreakdown = truth.failureBreakdown;
 
     const days: { day: string; total: number; completed: number; failed: number }[] = [];
     for (let i = 0; i < 30; i++) {
@@ -776,6 +766,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
         total: list.length,
         completed,
         failed,
+        retryable: truth.retryable,
         inProgress,
         prsOpen,
         prsCiPassing,

@@ -25,6 +25,7 @@ export interface SpecValidationWarning {
 export interface FixAttempt {
   id: string;
   report_id: string;
+  project_id?: string;
   agent: string;
   status: string;
   branch?: string;
@@ -64,6 +65,21 @@ export interface FixAttempt {
   cursor_artifacts?: Array<{ kind: 'screenshot' | 'video' | 'log' | 'file'; path: string; mime: string; url?: string }> | null;
   /** Claude Code / Anthropic workflow run URL — set when agent = 'claude_code_agent'. */
   claude_workflow_run_url?: string | null;
+  /**
+   * The report's CURRENT state, attached by GET /v1/admin/fixes from all of
+   * its attempts (server: _shared/fix-report-truth.ts). Read through
+   * lib/fixReportTruth.ts; absent on an older server, which means unknown.
+   */
+  report_title?: string | null;
+  report_status?: string | null;
+  report_fix_state?: 'resolved' | 'in_flight' | 'pr_open' | 'failed' | 'none' | null;
+  /** PR number of the merged attempt that fixed the report. */
+  report_fixed_by_pr?: number | null;
+  is_latest_attempt?: boolean | null;
+  /** A retry can clear this report right now (latest attempt only). */
+  retryable?: boolean;
+  /** Set on the latest attempt when it failed on a rejected key. keyHealthy null = not checked yet. */
+  credential_block?: { provider: string; keyHealthy: boolean | null } | null;
 }
 
 export interface DispatchJob {

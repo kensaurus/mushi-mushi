@@ -63,6 +63,9 @@ interface AuditEntry {
   project_id: string
   actor_id: string | null
   actor_email: string | null
+  /** Member name / email the server looked up from actor_id (display only). */
+  actor_name?: string | null
+  actor_display_email?: string | null
   action: string
   resource_type: string
   resource_id: string | null
@@ -355,10 +358,14 @@ export function AuditPage() {
         id: 'actor',
         header: 'Actor',
         enableSorting: true,
-        accessorFn: (e) => e.actor_email ?? e.actor_id ?? 'system',
+        accessorFn: (e) => e.actor_name ?? e.actor_display_email ?? e.actor_email ?? (e.actor_id ? 'Unnamed actor' : 'system'),
+        // A name or email, never a raw id; the id stays in the tooltip.
         cell: ({ row }) => (
-          <span className="truncate text-xs text-fg-muted block max-w-56">
-            {row.original.actor_email ?? row.original.actor_id ?? 'system'}
+          <span
+            className="truncate text-xs text-fg-muted block max-w-56"
+            title={row.original.actor_id ?? undefined}
+          >
+            {row.original.actor_name ?? row.original.actor_display_email ?? row.original.actor_email ?? (row.original.actor_id ? 'Unnamed actor' : 'system')}
           </span>
         ),
       },

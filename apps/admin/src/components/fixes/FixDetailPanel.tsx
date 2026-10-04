@@ -11,6 +11,7 @@ import { PdcaReceipt } from './PdcaReceipt'
 import { FixAttemptFlow } from './FixAttemptFlow'
 import { CursorArtifactsGallery } from './CursorArtifactsGallery'
 import { FixErrorPanel } from './FixErrorPanel'
+import { isSuperseded, supersededLabel } from '../../lib/fixReportTruth'
 import { pluralizeWithCount } from '../../lib/format'
 import { formatTokens } from '../charts'
 import type { FixAttempt } from './types'
@@ -246,7 +247,8 @@ export function FixDetailPanel({
         error={fix.error}
         agent={fix.agent}
         category={fix.failure_category}
-        onRetry={isInFlight ? undefined : () => void onRetry()}
+        onRetry={isInFlight || fix.retryable !== true ? undefined : () => void onRetry()}
+        supersededNote={isSuperseded(fix) ? supersededLabel(fix) : null}
       />
     </div>
   )

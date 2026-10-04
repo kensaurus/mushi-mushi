@@ -6,6 +6,9 @@ import { logAudit } from '../../_shared/audit.ts';
 import { dbError, callerProjectIds } from '../shared.ts';
 import { ingestReport, triggerClassification } from '../helpers.ts';
 
+/** Queue job statuses a person can retry: the job stopped without finishing. */
+const RETRYABLE_QUEUE_STATUSES: ReadonlySet<string> = new Set(['failed', 'dead_letter']);
+
 export function registerQueueRoutes(app: Hono<{ Variables: Variables }>): void {
   // DLQ admin endpoints
 
@@ -26,6 +29,9 @@ export function registerQueueRoutes(app: Hono<{ Variables: Variables }>): void {
       deadLetter: 0,
       reportsQueued: 0,
       strandedReports: 0,
+      retryableFailed: 0,
+      stalePending: 0,
+      recoverable: 0,
       oldestPendingMinutes: null as number | null,
       topStage: null as string | null,
       topStageDeadLetter: 0,
@@ -54,17 +60,31 @@ export function registerQueueRoutes(app: Hono<{ Variables: Variables }>): void {
     const todayStart = new Date()
     todayStart.setUTCHours(0, 0, 0, 0)
 
-    const [queueRes, reportsQueuedRes] = await Promise.all([
-      db.from('process_queue')
-        .select('id, status, stage, created_at, started_at')
+    // Same table, scope and row cap as /queue/summary, so the snapshot tiles
+    // and the KPI row read the same numbers. This read `process_queue` (no
+    // such table) until 2026-10-04: the error was dropped and every tile and
+    // the "Queue healthy" banner read 0 whatever the queue held.
+    const strandedCutoff = new Date(Date.now() - 5 * 60_000).toISOString()
+    const [queueRes, reportsQueuedRes, strandedRes] = await Promise.all([
+      db.from('processing_queue')
+        .select('id, status, stage, created_at, started_at, attempts, max_attempts')
         .in('project_id', projectIds)
         .order('created_at', { ascending: false })
-        .limit(500),
+        .limit(5000),
       db.from('reports')
         .select('id', { count: 'exact', head: true })
         .in('project_id', projectIds)
         .eq('status', 'queued'),
+      // What POST /queue/recover would re-fire: reports stuck before triage.
+      db.from('reports')
+        .select('id', { count: 'exact', head: true })
+        .in('project_id', projectIds)
+        .in('status', ['new', 'queued'])
+        .lt('created_at', strandedCutoff)
+        .lt('processing_attempts', 3),
     ])
+    if (queueRes.error) return dbError(c, queueRes.error)
+    if (strandedRes.error) return dbError(c, strandedRes.error)
 
     const items = queueRes.data ?? []
     const pending = items.filter((i) => i.status === 'pending').length
@@ -73,6 +93,16 @@ export function registerQueueRoutes(app: Hono<{ Variables: Variables }>): void {
     const failed = items.filter((i) => i.status === 'failed').length
     const deadLetter = items.filter((i) => i.status === 'dead_letter').length
     const reportsQueued = reportsQueuedRes.count ?? 0
+    const strandedReports = strandedRes.count ?? 0
+    const retryableFailed = items.filter(
+      (i) => i.status === 'failed' && (i.attempts ?? 0) < (i.max_attempts ?? 3),
+    ).length
+    const staleCutoffMs = Date.now() - 15 * 60_000
+    const stalePending = items.filter(
+      (i) => i.status === 'pending' && new Date(i.created_at).getTime() < staleCutoffMs,
+    ).length
+    // "Recover stranded" is offered only when it would do something.
+    const recoverable = strandedReports + retryableFailed + stalePending
 
     const todayItems = items.filter((i) => i.created_at >= todayStart.toISOString())
     const todayCreated = todayItems.length
@@ -129,7 +159,10 @@ export function registerQueueRoutes(app: Hono<{ Variables: Variables }>): void {
         failed,
         deadLetter,
         reportsQueued,
-        strandedReports: 0,
+        strandedReports,
+        retryableFailed,
+        stalePending,
+        recoverable,
         oldestPendingMinutes,
         topStage: topEntry?.[0] ?? null,
         topStageDeadLetter: topEntry?.[1] ?? 0,
@@ -258,6 +291,24 @@ export function registerQueueRoutes(app: Hono<{ Variables: Variables }>): void {
         { ok: false, error: { code: 'NOT_FOUND', message: 'Queue item not found' } },
         404,
       );
+
+    // Only a job that stopped can be retried. Re-queueing a completed job
+    // re-ran classification on a report that was already done.
+    if (!RETRYABLE_QUEUE_STATUSES.has(item.status)) {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'NOT_RETRYABLE',
+            message:
+              item.status === 'completed'
+                ? 'This job already finished — there is nothing to retry.'
+                : 'This job is still waiting or running — retry it only if it fails.',
+          },
+        },
+        409,
+      );
+    }
 
     await db
       .from('processing_queue')

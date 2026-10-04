@@ -268,7 +268,7 @@ export function resolveNavBadge(
           navCounts.fixesFailed > 0 ? navCounts.fixesFailed : navCounts.fixesInFlight,
         label:
           navCounts.fixesFailed > 0
-            ? `${navCounts.fixesFailed} failed fixes — needs attention`
+            ? `Auto-fix stopped on ${navCounts.fixesFailed} ${navCounts.fixesFailed === 1 ? 'report' : 'reports'}`
             : navCounts.fixesInFlight > 0
               ? `${navCounts.fixesInFlight} fixes in flight`
               : 'No active fixes',

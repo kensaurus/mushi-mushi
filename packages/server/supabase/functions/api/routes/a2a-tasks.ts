@@ -76,6 +76,7 @@ import { withIdempotency } from '../../_shared/idempotency.ts';
 import { childTraceparent, extractInboundTraceparent } from '../../_shared/trace.ts';
 import { log } from '../../_shared/logger.ts';
 import { parsePushNotificationConfig } from '../../_shared/a2a-push-config.ts';
+import { fixDispatchResolvedBlock } from '../../_shared/fix-report-truth.ts';
 
 interface FixDispatchRow {
   id: string;
@@ -371,6 +372,21 @@ export function registerA2ATaskRoutes(app: Hono<{ Variables: Variables }>): void
         }
 
         return c.json(rowToA2ATask(job as FixDispatchRow), 201);
+      }
+
+      // Same resolved-report guard as POST /v1/admin/fixes/dispatch: a report
+      // a merged PR fixed, or a human dismissed, is not dispatched again.
+      const [{ data: reportRow }, { data: mergedAttempts }] = await Promise.all([
+        db.from('reports').select('id, status').eq('id', reportId).eq('project_id', projectId).maybeSingle(),
+        db
+          .from('fix_attempts')
+          .select('id, report_id, pr_number, pr_state, merged_at, created_at')
+          .eq('report_id', reportId)
+          .limit(50),
+      ]);
+      const resolvedBlock = reportRow ? fixDispatchResolvedBlock(reportRow, mergedAttempts ?? []) : null;
+      if (resolvedBlock) {
+        return c.json({ error: resolvedBlock }, 409);
       }
 
       // Same in-flight guard as POST /v1/admin/fixes/dispatch — we don't

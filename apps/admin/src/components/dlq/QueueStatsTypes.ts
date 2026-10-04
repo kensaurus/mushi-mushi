@@ -25,6 +25,12 @@ export interface QueueStats {
   deadLetter: number
   reportsQueued: number
   strandedReports: number
+  /** Failed jobs still inside their retry budget. */
+  retryableFailed: number
+  /** Pending jobs older than 15 minutes. */
+  stalePending: number
+  /** What "Recover stranded" would act on: strandedReports + retryableFailed + stalePending. */
+  recoverable: number
   oldestPendingMinutes: number | null
   topStage: string | null
   topStageDeadLetter: number
@@ -48,6 +54,9 @@ export const EMPTY_QUEUE_STATS: QueueStats = {
   deadLetter: 0,
   reportsQueued: 0,
   strandedReports: 0,
+  retryableFailed: 0,
+  stalePending: 0,
+  recoverable: 0,
   oldestPendingMinutes: null,
   topStage: null,
   topStageDeadLetter: 0,

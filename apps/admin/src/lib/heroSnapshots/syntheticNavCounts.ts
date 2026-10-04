@@ -42,6 +42,8 @@ export const READY_NAV_COUNTS_SEED: NavCounts = {
   fixesInFlight: 0,
   fixesFailed: 0,
   prsOpen: 0,
+  fixesRetryable: 0,
+  urgentOpenReports: 0,
   regressedActions: 0,
   inboxOpenActions: 0,
   notificationsUnread: 0,

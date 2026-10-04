@@ -38,6 +38,7 @@ import { estimateCallCostUsd } from '../../_shared/pricing.ts';
 import { ANTHROPIC_SONNET } from '../../_shared/models.ts';
 import { dbError, ownedProjectIds, callerProjectIds, callerCanAccessProject } from '../shared.ts';
 import { featureRequestDispatchBlock } from '../../_shared/report-category.ts';
+import { fixDispatchResolvedBlock } from '../../_shared/fix-report-truth.ts';
 import {
   canManageProjectSdkConfig,
   coerceSdkConfigUpdate,
@@ -150,7 +151,7 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
       // into a PR on the caller's repo and flip its status.
       const { data: ownReport, error: reportErr } = await db
         .from('reports')
-        .select('id, user_category, user_intent, category, stage1_classification, stage2_analysis')
+        .select('id, status, user_category, user_intent, category, stage1_classification, stage2_analysis')
         .eq('id', body.reportId)
         .eq('project_id', body.projectId)
         .maybeSingle();
@@ -167,6 +168,21 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
       const featureBlock = featureRequestDispatchBlock(ownReport);
       if (featureBlock) {
         return c.json({ ok: false, error: { code: 'FEATURE_REQUEST', message: featureBlock } }, 409);
+      }
+
+      // Never re-dispatch a report a merged PR already fixed, or one a human
+      // dismissed: the console's bulk "Retry failed" posts here once per
+      // report, so this one check guards every retry path (glot.it
+      // 2026-10-04 would have re-run 4 fixed bugs).
+      const { data: mergedAttempts, error: mergedErr } = await db
+        .from('fix_attempts')
+        .select('id, report_id, pr_number, pr_state, merged_at, created_at')
+        .eq('report_id', body.reportId)
+        .limit(50);
+      if (mergedErr) return dbError(c, mergedErr);
+      const resolvedBlock = fixDispatchResolvedBlock(ownReport, mergedAttempts ?? []);
+      if (resolvedBlock) {
+        return c.json({ ok: false, error: resolvedBlock }, 409);
       }
 
       const { data: settings, error: settingsErr } = await db
