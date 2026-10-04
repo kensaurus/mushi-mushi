@@ -9,7 +9,6 @@ import { detectGraphQuery, executeGraphQuery } from './graph-nl.ts'
 import { NL_QUERY_PLANNER_EFFORT, NL_QUERY_PLANNER_MODEL, NL_QUERY_SUMMARY_MODEL } from './models.ts'
 import { claudeGenerateObject } from './claude-messages.ts'
 import { withLlmUsage } from './llm-usage.ts'
-import { hostedLlmPreflight, WalletDeniedError } from './hosted-llm-billing.ts'
 import { getPromptForStage } from './prompt-ab.ts'
 
 // These text checks are defence in depth, not the tenant boundary. The boundary
@@ -205,6 +204,9 @@ export async function executeNaturalLanguageQuery(
   // withLlmFailover does for every other billed path.
   const onPlatformKey = !resolved?.key
   if (onPlatformKey && projectIds.length > 0) {
+    // Imported lazily: the billing module reads Deno env at load, which the
+    // permission-less Deno unit tests that import this file cannot do.
+    const { hostedLlmPreflight, WalletDeniedError } = await import('./hosted-llm-billing.ts')
     const preflight = await hostedLlmPreflight({ db, projectId: projectIds[0] })
     if (!preflight.allowed) throw new WalletDeniedError(preflight.reason ?? 'insufficient', preflight.balanceMicro)
   }
