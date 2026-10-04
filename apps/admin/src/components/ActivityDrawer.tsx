@@ -14,6 +14,7 @@ import { RelativeTime, Badge, EmptyState, Loading, DetailRows, type DetailRowIte
 import { debugLog, debugWarn } from '../lib/debug'
 import { ActionPill, ActionPillRow, ContainedBlock, InlineProof, SignalChip } from './report-detail/ReportSurface'
 import { EmptySectionMessage } from './report-detail/ReportClassification'
+import { fixDeepLinkPath } from '../lib/fixDeepLink'
 
 type EventKind =
   | 'dispatched'
@@ -581,7 +582,7 @@ function EventRow({
         </InlineProof>
       )}
       <ActionPillRow className="mt-1">
-        <ActionPill to={`/fixes?expand=${event.fix_attempt_id}`} tone="brand">
+        <ActionPill to={fixDeepLinkPath(event.fix_attempt_id)} tone="brand">
           View fix
         </ActionPill>
         {event.pr_url && (

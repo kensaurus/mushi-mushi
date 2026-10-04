@@ -36,11 +36,10 @@ describe('SLASH_COMMANDS registry', () => {
     }
   })
 
-  it('model overrides only ever target known model aliases', () => {
-    for (const c of SLASH_COMMANDS) {
-      if (c.effect.kind !== 'model-override') continue
-      expect(['sonnet', 'haiku', 'gpt']).toContain(c.effect.model)
-    }
+  // The server chooses the model and the request carries no model field, so a
+  // "/model:haiku" command could only claim a switch that never happens.
+  it('offers no model-switch command', () => {
+    expect(SLASH_COMMANDS.some((c) => c.command.startsWith('/model'))).toBe(false)
   })
 })
 

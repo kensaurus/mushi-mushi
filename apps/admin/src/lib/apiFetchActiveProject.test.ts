@@ -38,7 +38,7 @@ vi.mock('./env', () => ({
 }))
 
 import { setActiveProjectIdSnapshot } from './activeProject'
-import { apiFetch, invalidateApiCache } from './supabase'
+import { activeTenantHeaders, apiFetch, invalidateApiCache } from './supabase'
 
 function jsonResponse(data: unknown) {
   return new Response(JSON.stringify({ ok: true, data }), {
@@ -117,5 +117,23 @@ describe('apiFetch active project scoping', () => {
     expect(requestInitAt(fetchMock, 1).headers).toMatchObject({
       'X-Mushi-Project-Id': '22222222-2222-4222-8222-222222222222',
     })
+  })
+})
+
+describe('activeTenantHeaders (for raw fetch callers such as the Ask Mushi stream)', () => {
+  beforeEach(() => {
+    window.localStorage.clear()
+    window.history.replaceState({}, '', '/')
+  })
+
+  it('carries the same project header apiFetch sends', () => {
+    setActiveProjectIdSnapshot('22222222-2222-4222-8222-222222222222')
+    expect(activeTenantHeaders()).toMatchObject({
+      'X-Mushi-Project-Id': '22222222-2222-4222-8222-222222222222',
+    })
+  })
+
+  it('sends no project header when none is selected', () => {
+    expect(activeTenantHeaders()['X-Mushi-Project-Id']).toBeUndefined()
   })
 })
