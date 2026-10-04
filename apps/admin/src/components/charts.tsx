@@ -902,19 +902,19 @@ function SeverityBarColumn({
         {day.total > 0 ? (
           <ul className="mt-1 space-y-0.5 font-mono text-3xs">
             {day.critical > 0 && (
-              <li className="flex justify-between gap-3"><span className={SEVERITY_TRAFFIC.critical.text}>●</span><span>{day.critical}</span></li>
+              <li className="flex justify-between gap-3"><span className="inline-flex items-center gap-1"><span aria-hidden="true" className={`inline-block h-2 w-2 rounded-sm ${SEVERITY_TRAFFIC.critical.bg}`} />{SEVERITY_TRAFFIC.critical.label}</span><span>{day.critical}</span></li>
             )}
             {day.high > 0 && (
-              <li className="flex justify-between gap-3"><span className={SEVERITY_TRAFFIC.high.text}>●</span><span>{day.high}</span></li>
+              <li className="flex justify-between gap-3"><span className="inline-flex items-center gap-1"><span aria-hidden="true" className={`inline-block h-2 w-2 rounded-sm ${SEVERITY_TRAFFIC.high.bg}`} />{SEVERITY_TRAFFIC.high.label}</span><span>{day.high}</span></li>
             )}
             {day.medium > 0 && (
-              <li className="flex justify-between gap-3"><span className={SEVERITY_TRAFFIC.medium.text}>●</span><span>{day.medium}</span></li>
+              <li className="flex justify-between gap-3"><span className="inline-flex items-center gap-1"><span aria-hidden="true" className={`inline-block h-2 w-2 rounded-sm ${SEVERITY_TRAFFIC.medium.bg}`} />{SEVERITY_TRAFFIC.medium.label}</span><span>{day.medium}</span></li>
             )}
             {day.low > 0 && (
-              <li className="flex justify-between gap-3"><span className={SEVERITY_TRAFFIC.low.text}>●</span><span>{day.low}</span></li>
+              <li className="flex justify-between gap-3"><span className="inline-flex items-center gap-1"><span aria-hidden="true" className={`inline-block h-2 w-2 rounded-sm ${SEVERITY_TRAFFIC.low.bg}`} />{SEVERITY_TRAFFIC.low.label}</span><span>{day.low}</span></li>
             )}
             {day.unscored != null && day.unscored > 0 && (
-              <li className="flex justify-between gap-3"><span className={SEVERITY_TRAFFIC.unscored.text}>●</span><span>{day.unscored}</span></li>
+              <li className="flex justify-between gap-3"><span className="inline-flex items-center gap-1"><span aria-hidden="true" className={`inline-block h-2 w-2 rounded-sm ${SEVERITY_TRAFFIC.unscored.bg}`} />{SEVERITY_TRAFFIC.unscored.label}</span><span>{day.unscored}</span></li>
             )}
           </ul>
         ) : null}
