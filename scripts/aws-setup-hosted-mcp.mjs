@@ -129,7 +129,8 @@ if (!mushiBehavior) {
 
 const CACHING_DISABLED = '4135ea2d-6df8-44a3-9df3-4b5a84be39ad'
 /** Forwards query strings + headers except Host (OAuth authorize needs querystring at origin). */
-const ALL_VIEWER_EXCEPT_HOST_ORP = '216adef6-5c54-4fe5-8490-502b675d6a07'
+// Managed-AllViewerExceptHostHeader (aws cloudfront list-origin-request-policies --type managed).
+const ALL_VIEWER_EXCEPT_HOST_ORP = 'b689b0a8-53d0-40ab-baf2-68738e2966ac'
 // The hosted-MCP route used the User-Agent/Referer policy until 2026-10-04. It
 // forwards no query string, so ?features= and ?read_only=1 were dropped and a
 // read-only connection got write tools.
