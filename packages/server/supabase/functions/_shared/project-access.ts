@@ -23,6 +23,7 @@
 // stays out of the runtime module graph for any function whose
 // import path doesn't otherwise need the live client.
 import type { getServiceClient } from './db.ts'
+import { fanoutMemo } from './request-memo.ts'
 
 /**
  * `strict`: a failed read throws `ProjectAccessReadError` instead of counting
@@ -67,6 +68,19 @@ export async function accessibleProjectIds(
   db: ReturnType<typeof getServiceClient>,
   userId: string,
   opts: AccessReadOptions = {},
+): Promise<string[]> {
+  // Shared across the slices of one nav-meta fan-out (see request-memo.ts);
+  // callers get their own copy so none can mutate another's list.
+  const ids = await fanoutMemo(userId, `accessibleProjectIds:${opts.strict ? 'strict' : 'lenient'}`, () =>
+    readAccessibleProjectIds(db, userId, opts),
+  )
+  return [...ids]
+}
+
+async function readAccessibleProjectIds(
+  db: ReturnType<typeof getServiceClient>,
+  userId: string,
+  opts: AccessReadOptions,
 ): Promise<string[]> {
   const [orgRes, memberRes, ownedRes] = await Promise.all([
     db.from('organization_members').select('organization_id').eq('user_id', userId),
