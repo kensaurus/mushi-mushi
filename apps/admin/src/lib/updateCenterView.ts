@@ -12,7 +12,7 @@
 
 import type { SdkUpgradeState } from './useSdkUpgrade'
 
-export type UpdateCenterMode =
+type UpdateCenterMode =
   /** A job is queued or running right now. */
   | 'working'
   /** Bump pushed; the host lockfile workflow runs, then the PR opens. */
@@ -39,7 +39,7 @@ export interface UpdateCenterProjectLike {
   sdk_status?: 'up-to-date' | 'outdated' | 'deprecated' | 'unknown' | null
 }
 
-export interface PackageVersionRow {
+interface PackageVersionRow {
   package: string
   /** null = not checked yet. */
   installed: string | null

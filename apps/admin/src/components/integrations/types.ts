@@ -209,13 +209,6 @@ export const EMPTY_INTEGRATION_STATS: IntegrationStats = {
   topPriorityTo: null,
 }
 
-export const PLATFORM_STATUS_MAP: Record<HealthRow['status'], string | null | undefined> = {
-  ok: 'ok',
-  degraded: 'degraded',
-  down: 'down',
-  unknown: undefined,
-}
-
 /**
  * Platform def groups:
  *   group 'required' — infra the loop needs to run (wire these first)

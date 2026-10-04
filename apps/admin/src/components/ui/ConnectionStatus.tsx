@@ -42,8 +42,8 @@ const DAY_MS = 24 * 60 * 60 * 1000
 
 /** A verification older than this no longer proves the connection works. */
 const CONNECTION_VERIFIED_FRESH_MS = 7 * DAY_MS
-/** Start warning this long before a credential expires. */
-const CONNECTION_EXPIRY_WARN_MS = 14 * DAY_MS
+/** Start warning this many days before a credential expires (one window, console-wide). */
+export const EXPIRY_WARNING_DAYS = 7
 
 function daysUntil(iso: string | null | undefined, now: number = Date.now()): number | null {
   if (!iso) return null
@@ -58,7 +58,7 @@ function daysUntil(iso: string | null | undefined, now: number = Date.now()): nu
  * - not configured                 → not_connected
  * - the last check failed          → attention
  * - the credential already expired → attention
- * - expires within 14 days         → expiring
+ * - expires within EXPIRY_WARNING_DAYS → expiring
  * - never verified                 → checking ("Not checked yet")
  * - verified longer ago than fresh → attention (re-test)
  * - otherwise                      → working
@@ -71,13 +71,15 @@ export function connectionStateFrom(input: {
   now?: number
   /** Override the freshness window, e.g. for channels only verified by a manual test. */
   staleAfterMs?: number
+  /** Override the expiry warning window (default EXPIRY_WARNING_DAYS). */
+  expiryWarningDays?: number
 }): ConnectionState {
   const now = input.now ?? Date.now()
   if (!input.configured) return 'not_connected'
   if (input.lastError) return 'attention'
   const days = daysUntil(input.expiresAt, now)
   if (days != null && days <= 0) return 'attention'
-  if (days != null && days * DAY_MS <= CONNECTION_EXPIRY_WARN_MS) return 'expiring'
+  if (days != null && days <= (input.expiryWarningDays ?? EXPIRY_WARNING_DAYS)) return 'expiring'
   const verified = input.verifiedAt ? Date.parse(input.verifiedAt) : NaN
   if (!Number.isFinite(verified)) return 'checking'
   if (now - verified > (input.staleAfterMs ?? CONNECTION_VERIFIED_FRESH_MS)) return 'attention'
@@ -122,12 +124,12 @@ export function ConnectionStatus({ state, label, detail, expiresAt, action, clas
   return (
     <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0 ${className}`} data-connection-state={state}>
       <span
-        className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-2xs font-medium ${TONE[state]}`}
+        className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${TONE[state]}`}
       >
         <span className={`h-1.5 w-1.5 rounded-full ${DOT[state]}`} aria-hidden />
         {text}
       </span>
-      {detail ? <span className="text-2xs text-fg-secondary leading-snug min-w-0">{detail}</span> : null}
+      {detail ? <span className="text-xs text-fg-secondary leading-snug min-w-0">{detail}</span> : null}
       {action ? (
         <Btn
           size="sm"
