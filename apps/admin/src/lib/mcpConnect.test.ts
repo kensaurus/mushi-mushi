@@ -47,10 +47,14 @@ describe('getOrMintMcpKey', () => {
     expect(label).toMatch(/^MCP · Cursor · \d{4}-\d{2}-\d{2} · read\+write$/)
   })
 
-  it('forgets a failed mint so the next click retries', async () => {
-    const mint = vi.fn().mockResolvedValueOnce(null).mockRejectedValueOnce(new Error('net')).mockResolvedValueOnce('k')
-    expect(await getOrMintMcpKey(opts, mint)).toBeNull()
-    expect(await getOrMintMcpKey(opts, mint)).toBeNull()
+  it('forgets a failed mint so the next click retries, and passes the real reason on (QA bug 125)', async () => {
+    const mint = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('Owner or admin access required'))
+      .mockRejectedValueOnce('not an Error')
+      .mockResolvedValueOnce('k')
+    await expect(getOrMintMcpKey(opts, mint)).rejects.toThrow('Owner or admin access required')
+    await expect(getOrMintMcpKey(opts, mint)).rejects.toThrow('Could not create an MCP key')
     expect(await getOrMintMcpKey(opts, mint)).toBe('k')
     expect(mint).toHaveBeenCalledTimes(3)
   })

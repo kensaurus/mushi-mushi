@@ -101,14 +101,11 @@ export function ClientConnectButton({
       let apiKey = preMintedKey
       const pinPromise = getPublishedMcpPinSpec()
       if (!apiKey && projectId) {
-        apiKey =
-          (await getOrMintMcpKey({ projectId, clientId: client.id, clientLabel: client.label, scopes: mintScopes })) ??
-          undefined
-        if (!apiKey) {
-          toast.error(
-            'Could not create a key',
-            'Only project owners and admins can create keys. Ask one, or check your plan limits in Billing.',
-          )
+        try {
+          apiKey = await getOrMintMcpKey({ projectId, clientId: client.id, clientLabel: client.label, scopes: mintScopes })
+        } catch (err) {
+          // The server's own reason (e.g. owner/admin required), not a guess.
+          toast.error('Could not create a key', err instanceof Error ? err.message : undefined)
           return
         }
       }
@@ -131,9 +128,10 @@ export function ClientConnectButton({
       if (built.kind === 'deeplink') {
         window.open(built.url, '_self')
         toast.success(`${client.label} install launched`, 'The IDE install dialog should open.')
-      } else {
-        setShowBlock(true)
       }
+      // Deeplinks too: the "Open again" block below only renders with
+      // showBlock set, so it was unreachable (QA bug 125).
+      setShowBlock(true)
     } finally {
       setLoading(false)
     }
@@ -226,7 +224,7 @@ export function ClientConnectButton({
           {result.kind === 'deeplink' && (
             // After deeplink was opened, offer a re-open
             <div className="mt-2 flex items-center gap-2">
-              <span className="text-xs text-fg-muted">IDE dialog should have opened.</span>
+              <span className="text-xs text-fg-muted">{client.label} install dialog should have opened.</span>
               <Btn
                 type="button"
                 size="sm"

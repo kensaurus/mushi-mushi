@@ -22,6 +22,7 @@ import { usePublishPageContext } from '../lib/pageContext'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { SetupNudge } from '../components/SetupNudge'
 import { useToast } from '../lib/toast'
+import { describeActionError } from '../lib/actionError'
 import { usePageCopy } from '../lib/copy'
 import { useMcpUx, resolveQuickMcpTab } from '../lib/mcpModeUx'
 import { McpStatusBanner } from '../components/mcp/McpStatusBanner'
@@ -44,6 +45,7 @@ import {
   buildEnvBlock,
   buildHttpCursorJson,
   isCatalogTabId,
+  mcpTestFailureMessage,
   resolveMcpTab,
   validateMcpJsonSyntax,
 } from '../lib/mcpPageHelpers'
@@ -73,7 +75,9 @@ export function McpPage() {
   const [detectOpen, setDetectOpen] = useState(false)
   const [detectText, setDetectText] = useState('')
   const [mintingKey, setMintingKey] = useState(false)
-  const [revealedMcpKey, setRevealedMcpKey] = useState<string | null>(null)
+  // Kept with its scopes so the setup tab can show the key itself, not only
+  // a clipboard toast (QA bug 127).
+  const [revealedMcpKey, setRevealedMcpKey] = useState<{ key: string; scopes: string[] } | null>(null)
   const [sdkSnippetLang, setSdkSnippetLang] = useState<'npm' | 'yarn' | 'pnpm'>('npm')
   const [mcpJsonDraft, setMcpJsonDraft] = useState('')
 
@@ -160,7 +164,7 @@ export function McpPage() {
       },
     )
     if (!res.ok || !res.data?.key) {
-      toast.error('Could not mint MCP key', res.error?.message ?? 'Unknown error')
+      toast.error('Could not mint MCP key', describeActionError(res.error, 'Try again in a moment.'))
       return null
     }
     if (!targetProjectId || targetProjectId === activeProjectId) reloadAll()
@@ -173,12 +177,13 @@ export function McpPage() {
     try {
       const key = await mintMcpKey(['mcp:read'])
       if (!key) return
-      setRevealedMcpKey(key)
+      setRevealedMcpKey({ key, scopes: ['mcp:read'] })
+      if (activeTab !== 'setup') setTab('setup')
       try {
         await navigator.clipboard.writeText(key)
-        toast.success('mcp:read key copied', 'Paste into your MCP snippet — it will not be shown again.')
+        toast.success('mcp:read key copied', 'It is also shown on the Setup tab until you hide it.')
       } catch {
-        toast.success('mcp:read key minted', 'Copy it now — it will not be shown again.')
+        toast.success('mcp:read key minted', 'Copy it from the Setup tab — it will not be shown again after you leave.')
       }
     } finally {
       setMintingKey(false)
@@ -189,14 +194,15 @@ export function McpPage() {
     if (!activeProjectId) return
     setMintingKey(true)
     try {
-      const key = await mintMcpKey(['mcp:write'])
+      const key = await mintMcpKey(['mcp:read', 'mcp:write'])
       if (!key) return
-      setRevealedMcpKey(key)
+      setRevealedMcpKey({ key, scopes: ['mcp:read', 'mcp:write'] })
+      if (activeTab !== 'setup') setTab('setup')
       try {
         await navigator.clipboard.writeText(key)
-        toast.success('mcp:write key copied', 'Paste into your MCP snippet — it will not be shown again.')
+        toast.success('mcp:write key copied', 'It is also shown on the Setup tab until you hide it.')
       } catch {
-        toast.success('mcp:write key minted', 'Copy it now — it will not be shown again.')
+        toast.success('mcp:write key minted', 'Copy it from the Setup tab — it will not be shown again after you leave.')
       }
     } finally {
       setMintingKey(false)
@@ -225,13 +231,9 @@ export function McpPage() {
         '/v1/admin/mcp/test-connection',
       )
       if (!res.ok || !res.data) {
-        const raw = res.error?.message ?? ''
-        const friendly = raw.includes('NO_PROJECT')
-          ? 'Select a project first.'
-          : raw.includes('MCP_PROBE_FAILED')
-            ? 'Hosted MCP did not respond — the function may be deploying. Wait 30 s and try again.'
-            : raw || 'Connection probe failed — check your API key is active.'
-        setConnectionTestResult({ ok: false, message: friendly, testedAt: Date.now() })
+        // Match on the code, not the message: the message never contained
+        // the code, so every failure showed raw text (QA bug 266).
+        setConnectionTestResult({ ok: false, message: mcpTestFailureMessage(res.error), testedAt: Date.now() })
         return
       }
       const { tool_count: count, expected, healthy } = res.data
@@ -510,6 +512,7 @@ export function McpPage() {
             onDetectTextChange={setDetectText}
             mintingKey={mintingKey}
             revealedMcpKey={revealedMcpKey}
+            onDismissRevealedKey={() => setRevealedMcpKey(null)}
             onMintMcpReadKey={() => void mintMcpReadKey()}
             sdkSnippetLang={sdkSnippetLang}
             onSdkSnippetLangChange={setSdkSnippetLang}
@@ -537,3 +540,4 @@ export function McpPage() {
     </div>
   )
 }
+

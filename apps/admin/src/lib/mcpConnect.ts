@@ -29,6 +29,7 @@
 import { MCP_PIN_SPEC } from '@mushi-mushi/mcp/clients'
 import { apiFetch, supabase } from './supabase'
 import { subscribeAuthBroadcast } from './authBroadcast'
+import { describeActionError } from './actionError'
 
 export type McpAccess = 'read_write' | 'read_only'
 
@@ -45,7 +46,13 @@ export function mcpKeyLabel(clientLabel: string, scopes: readonly string[], now:
   return `MCP · ${clientLabel} · ${now.toISOString().slice(0, 10)} · ${access}`.slice(0, 64)
 }
 
-type Mint = (projectId: string, scopes: string[], label: string) => Promise<string | null>
+/**
+ * Resolves to the new key, or rejects with an Error whose message is the
+ * plain-English reason. Callers used to get null for every failure and showed
+ * "check your plan limits" even when the real reason was a member's missing
+ * owner/admin role (QA bug 125).
+ */
+type Mint = (projectId: string, scopes: string[], label: string) => Promise<string>
 
 const defaultMint: Mint = async (projectId, scopes, label) => {
   const res = await apiFetch<{ key: string; prefix: string }>(`/v1/admin/projects/${projectId}/keys`, {
@@ -53,10 +60,11 @@ const defaultMint: Mint = async (projectId, scopes, label) => {
     body: JSON.stringify({ scopes, label }),
     idempotencyKey: crypto.randomUUID(),
   })
-  return res.ok && res.data?.key ? res.data.key : null
+  if (res.ok && res.data?.key) return res.data.key
+  throw new Error(describeActionError(res.error, 'Could not create an MCP key. Try again in a moment.'))
 }
 
-const minted = new Map<string, Promise<string | null>>()
+const minted = new Map<string, Promise<string>>()
 let authWatchInstalled = false
 
 function installAuthWatch(): void {
@@ -74,27 +82,21 @@ function installAuthWatch(): void {
 /**
  * The page-session MCP key for this project, client and scope set: minted on
  * the first call, reused after. A failed mint is forgotten so the next click
- * retries.
+ * retries, and rejects with the plain-English reason.
  */
 export function getOrMintMcpKey(
   opts: { projectId: string; clientId: string; clientLabel: string; scopes: readonly string[] },
   mint: Mint = defaultMint,
-): Promise<string | null> {
+): Promise<string> {
   installAuthWatch()
   const scopes = [...new Set(opts.scopes)].sort()
   const cacheKey = `${opts.projectId}|${opts.clientId}|${scopes.join(',')}`
   const existing = minted.get(cacheKey)
   if (existing) return existing
-  const pending = mint(opts.projectId, scopes, mcpKeyLabel(opts.clientLabel, scopes)).then(
-    (key) => {
-      if (!key) minted.delete(cacheKey)
-      return key
-    },
-    () => {
-      minted.delete(cacheKey)
-      return null
-    },
-  )
+  const pending = mint(opts.projectId, scopes, mcpKeyLabel(opts.clientLabel, scopes)).catch((err: unknown) => {
+    minted.delete(cacheKey)
+    throw err instanceof Error ? err : new Error('Could not create an MCP key. Try again in a moment.')
+  })
   minted.set(cacheKey, pending)
   return pending
 }
