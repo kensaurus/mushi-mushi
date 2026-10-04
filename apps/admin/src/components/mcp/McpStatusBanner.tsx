@@ -12,6 +12,7 @@ import type { McpStats, McpTabId } from './types'
  * Lands on Your projects with the MCP read + write preset chosen. A bare
  * /projects opened Overview with "SDK ingest" preselected, so following the
  * banner minted another SDK-only key and the banner stayed (QA bug 132).
+ * @internal Exported for unit tests.
  */
 export const MINT_MCP_KEY_HREF = '/projects?tab=list&keyScope=mcp-write'
 

@@ -23,6 +23,7 @@ import { Btn, Input, Textarea, Toggle, Callout } from './ui'
  * Parsed on save, not on every keystroke: re-joining after each key removed
  * spaces and commas as they were typed, so "How do I pay" became
  * "HowdoIpay" (QA bug 134).
+ * @internal Exported for unit tests.
  */
 export function parseStarterQuestions(text: string): string[] {
   return text
