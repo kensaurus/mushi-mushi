@@ -12,9 +12,10 @@ PURPOSE: Two small, additive fixes for Settings → Your AI keys.
    passed `secret_id` to it, PostgREST found no such signature, and every
    removed pool key left its secret behind in Vault.
 
-DEPLOY ORDER: safe in either order. The api function reads expires_at in a
-separate, failure-tolerant query and treats a missing RPC as a non-fatal
-cleanup warning, so deploying code first only delays the fixes.
+DEPLOY ORDER: apply this migration first, then deploy the api function.
+Code first does not break reads (expires_at is read tolerantly, and a missing
+RPC is a non-fatal cleanup warning), but the console's "Add expiry date" would
+fail to save until the column exists.
 */
 
 alter table public.byok_keys

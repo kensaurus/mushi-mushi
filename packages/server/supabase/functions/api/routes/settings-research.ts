@@ -314,10 +314,10 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         )
         .eq('project_id', project.id)
         .maybeSingle(),
-      db
-        .from('byok_keys')
-        .select('id, provider_slug, test_status, status, cooldown_until')
-        .eq('project_id', project.id),
+      // select('*') so expires_at (migration 20261004150000) is read when it
+      // exists without failing when it doesn't, in this one round trip. This
+      // route returns counts only, never the rows.
+      db.from('byok_keys').select('*').eq('project_id', project.id),
     ]);
 
     if (error) return dbError(c, error);
@@ -340,32 +340,18 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     // the sidebar badge, this page's hero and each row tell one story.
     // A turned-off key counts as neither configured nor failing.
     const poolRows = (poolKeys ?? []) as Array<{
-      id: string;
       provider_slug: string;
       test_status: string | null;
       status: string;
       cooldown_until: string | null;
+      expires_at?: string | null;
     }>;
-    // expires_at arrives with migration 20261004150000; read it on its own so
-    // a database without the column still serves stats (no known expiry).
-    const expiryById = new Map<string, string | null>();
-    if (poolRows.length > 0) {
-      const expiryResult = await db
-        .from('byok_keys')
-        .select('id, expires_at')
-        .eq('project_id', project.id);
-      if (!expiryResult.error) {
-        for (const r of (expiryResult.data ?? []) as Array<{ id: string; expires_at?: string | null }>) {
-          expiryById.set(r.id, r.expires_at ?? null);
-        }
-      }
-    }
     const healthInputs: ByokKeyHealthInput[] = poolRows.map((k) => ({
       provider_slug: k.provider_slug,
       status: k.status,
       test_status: k.test_status,
       cooldown_until: k.cooldown_until,
-      expires_at: expiryById.get(k.id) ?? null,
+      expires_at: k.expires_at ?? null,
     }));
     for (const provider of ['anthropic', 'openai', 'firecrawl', 'browserbase'] as const) {
       if (!row[`byok_${provider}_key_ref`]) continue;
