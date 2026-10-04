@@ -11,9 +11,12 @@
  */
 
 import { useState } from 'react'
-import { Btn, Callout, Card, ErrorAlert, Loading, Section } from '../ui'
+import { Btn, Callout, Card, Loading, Section } from '../ui'
 import { usePageData } from '../../lib/usePageData'
 import { apiFetchMutate } from '../../lib/supabase'
+import { actionErrorText } from '../../lib/actionErrorText'
+import { ORG_ADMIN_ONLY_HINT, useOrgCanManage } from '../../lib/useOrgCanManage'
+import { PageLoadError } from '../PageLoadError'
 import type { DigestPreviewResponse, DigestSettingsView } from '../../lib/radarTypes'
 
 interface ProjectOption {
@@ -42,6 +45,9 @@ export function DigestCard({ orgId, projects }: { orgId: string; projects: Proje
   const { data, loading, error, reload } = usePageData<DigestPreviewResponse>(path)
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<{ tone: 'info' | 'danger'; text: string } | null>(null)
+  // Changing or sending the digest is for owners and admins (QA 177): others
+  // see the settings read-only instead of a form that always answers 403.
+  const { canManage } = useOrgCanManage(orgId)
 
   const save = async (patch: Partial<DigestSettingsView>) => {
     if (!data) return
@@ -63,7 +69,7 @@ export function DigestCard({ orgId, projects }: { orgId: string; projects: Proje
           gtmWeekday: next.gtmWeekday,
         }),
       })
-      if (!res.ok) setNotice({ tone: 'danger', text: res.error?.message ?? 'The digest settings could not be saved.' })
+      if (!res.ok) setNotice({ tone: 'danger', text: actionErrorText(res.error, 'The digest settings could not be saved.') })
     } finally {
       setBusy(false)
       reload()
@@ -75,7 +81,7 @@ export function DigestCard({ orgId, projects }: { orgId: string; projects: Proje
     setNotice(null)
     try {
       const res = await apiFetchMutate<{ status: string; channels: Array<{ channel: string; ok: boolean; detail: string }> }>(`${path}/send`, { method: 'POST', body: '{}' })
-      if (!res.ok || !res.data) setNotice({ tone: 'danger', text: res.error?.message ?? 'The digest could not be sent.' })
+      if (!res.ok || !res.data) setNotice({ tone: 'danger', text: actionErrorText(res.error, 'The digest could not be sent.') })
       else if (res.data.status === 'nothing_to_send') setNotice({ tone: 'info', text: 'Nothing new today, so nothing was sent.' })
       else setNotice({ tone: res.data.status === 'sent' ? 'info' : 'danger', text: res.data.channels.map((c) => `${c.channel}: ${c.detail}`).join(' · ') })
     } finally {
@@ -88,7 +94,7 @@ export function DigestCard({ orgId, projects }: { orgId: string; projects: Proje
   return (
     <Section title="Daily digest">
       <p className="mb-3 text-xs text-fg-muted">One message a day across all your apps: new reports, holes found, releases and a jump in AI spend, plus once a week each app's signups and activations from the team funnel. Off until you pick where it goes.</p>
-      {error && <ErrorAlert message={error} endpoint={path} onRetry={reload} />}
+      {error && <PageLoadError error={error} resource="the daily digest" endpoint={path} onRetry={reload} />}
       {loading && !data && <Loading text="Building today's digest…" />}
       {notice && (
         <Callout tone={notice.tone}>
@@ -107,7 +113,8 @@ export function DigestCard({ orgId, projects }: { orgId: string; projects: Proje
               </ul>
             )}
           </Card>
-          <fieldset className="flex flex-col gap-2 text-sm" disabled={busy}>
+          {canManage === false && <p className="text-xs text-fg-muted">Digest settings: {ORG_ADMIN_ONLY_HINT}</p>}
+          <fieldset className="flex flex-col gap-2 text-sm" disabled={busy || canManage !== true}>
             <legend className="sr-only">Where to send the digest</legend>
             <label className="flex items-center gap-2">
               <input type="checkbox" checked={s.enabled} onChange={(e) => save({ enabled: e.target.checked })} />
@@ -153,9 +160,11 @@ export function DigestCard({ orgId, projects }: { orgId: string; projects: Proje
               {s.lastSentAt ? `Last sent ${new Date(s.lastSentAt).toLocaleString()} (${s.lastStatus ?? 'unknown'})` : 'Never sent yet.'}
               {s.lastError ? ` ${s.lastError}` : ''}
             </span>
-            <Btn size="sm" variant="ghost" onClick={sendNow} loading={busy} disabled={busy || !s.enabled}>
-              Send now
-            </Btn>
+            {canManage === true && (
+              <Btn size="sm" variant="ghost" onClick={sendNow} loading={busy} disabled={busy || !s.enabled}>
+                Send now
+              </Btn>
+            )}
           </div>
         </div>
       )}

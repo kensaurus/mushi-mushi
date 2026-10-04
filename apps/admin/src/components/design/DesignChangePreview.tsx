@@ -6,6 +6,8 @@
  *          no PR was opened.
  */
 
+import { PROJECT_ADMIN_PR_HINT, useActiveProjectCanManage } from '../../lib/useOrgCanManage'
+import { actionErrorText } from '../../lib/actionErrorText'
 import { Badge, Btn, Callout, ErrorAlert } from '../ui'
 import { LINK_ACCENT } from '../../lib/chipTone'
 import type { DesignChangeResult, DesignFileChange } from '../../lib/recipeTypes'
@@ -81,6 +83,9 @@ interface DesignChangePreviewProps {
 
 export function DesignChangePreview({ state, onConfirm, onDiscard }: DesignChangePreviewProps) {
   const { phase, preview, result, error } = state
+  // Opening the PR is for the project team's owners and admins; a member
+  // learned that only after confirming (QA 292).
+  const { canManage } = useActiveProjectCanManage()
   if (phase === 'idle') return null
 
   if (phase === 'previewing') {
@@ -125,7 +130,7 @@ export function DesignChangePreview({ state, onConfirm, onDiscard }: DesignChang
 
   return (
     <div className="flex flex-col gap-3">
-      {error && <ErrorAlert message={error} />}
+      {error && <ErrorAlert message={actionErrorText({ message: error })} />}
       {preview && (
         <>
           <p className="text-xs text-fg-secondary">
@@ -139,9 +144,11 @@ export function DesignChangePreview({ state, onConfirm, onDiscard }: DesignChang
               variant="primary"
               onClick={onConfirm}
               loading={phase === 'submitting'}
-              disabled={phase === 'submitting' || preview.files.length === 0}
+              disabled={phase === 'submitting' || preview.files.length === 0 || canManage === false}
               title={
-                preview.files.length === 0
+                canManage === false
+                  ? PROJECT_ADMIN_PR_HINT
+                  : preview.files.length === 0
                   ? 'Nothing to open: the preview changes no file'
                   : phase === 'submitting'
                     ? 'Opening the draft PR…'
@@ -160,6 +167,7 @@ export function DesignChangePreview({ state, onConfirm, onDiscard }: DesignChang
               Discard preview
             </Btn>
           </div>
+          {canManage === false && <p className="text-xs text-fg-muted">{PROJECT_ADMIN_PR_HINT}</p>}
         </>
       )}
       {!preview && phase === 'error' && (

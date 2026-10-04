@@ -11,7 +11,8 @@
  * Data: GET /v1/admin/inventory/:projectId/findings[?gate=]
  */
 
-import { ErrorAlert, Loading } from '../ui'
+import { Loading } from '../ui'
+import { PageLoadError } from '../PageLoadError'
 import { GateFindingCard } from '../inventory/GateFindingCard'
 import { ApplySuggestedCapsButton } from './ApplySuggestedCapsButton'
 import { usePageData } from '../../lib/usePageData'
@@ -39,7 +40,7 @@ export function GateFindingsSection({ projectId, gate, neverRunText, limit = 50 
   const path = `/v1/admin/inventory/${encodeURIComponent(projectId)}/findings${gate ? `?gate=${gate}` : ''}`
   const { data, loading, error, reload } = usePageData<GateFindingsPayload>(path, { deps: [projectId, gate ?? ''] })
 
-  if (error) return <ErrorAlert message={error} endpoint={path} onRetry={reload} />
+  if (error) return <PageLoadError error={error} resource="the findings" endpoint={path} onRetry={reload} />
   if (loading && !data) return <Loading text="Reading the findings…" />
   if (!data) return null
 

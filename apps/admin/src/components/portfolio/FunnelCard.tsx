@@ -9,9 +9,12 @@
  */
 
 import { useState } from 'react'
-import { Badge, Btn, Callout, ErrorAlert, Input, Loading, Section, SelectField, type BadgeTone } from '../ui'
+import { Badge, Btn, Callout, Input, Loading, Section, SelectField, type BadgeTone } from '../ui'
 import { usePageData } from '../../lib/usePageData'
 import { apiFetchMutate } from '../../lib/supabase'
+import { actionErrorText } from '../../lib/actionErrorText'
+import { ORG_ADMIN_ONLY_HINT, useOrgCanManage } from '../../lib/useOrgCanManage'
+import { PageLoadError } from '../PageLoadError'
 
 interface FunnelResponse {
   state: 'ok' | 'not_set_up'
@@ -39,6 +42,8 @@ export function FunnelCard({ orgId }: { orgId: string }) {
   const [convWindow, setConvWindow] = useState<'1d' | '7d' | '30d'>('7d')
   const [saving, setSaving] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
+  // Setting the shared funnel is for owners and admins (QA 177).
+  const { canManage } = useOrgCanManage(orgId)
 
   const startEdit = () => {
     setSteps((data?.definition?.steps ?? []).join(', '))
@@ -57,7 +62,7 @@ export function FunnelCard({ orgId }: { orgId: string }) {
         setEditing(false)
         reload()
       } else {
-        setNotice(res.error?.message ?? 'The funnel could not be saved.')
+        setNotice(actionErrorText(res.error, 'The funnel could not be saved.'))
       }
     } finally {
       setSaving(false)
@@ -65,8 +70,8 @@ export function FunnelCard({ orgId }: { orgId: string }) {
   }
 
   return (
-    <Section title="Funnel across apps" action={data && !editing ? <Btn size="sm" variant="ghost" onClick={startEdit}>{data.definition ? 'Change steps' : 'Set up'}</Btn> : undefined}>
-      {error && <ErrorAlert message={error} endpoint={path} onRetry={reload} />}
+    <Section title="Funnel across apps" action={data && !editing && canManage === true ? <Btn size="sm" variant="ghost" onClick={startEdit}>{data.definition ? 'Change steps' : 'Set up'}</Btn> : undefined}>
+      {error && <PageLoadError error={error} resource="the funnel across apps" endpoint={path} onRetry={reload} />}
       {loading && !data && <Loading text="Reading the funnel…" />}
       {editing && (
         <div className="mb-3 flex flex-col gap-2">
@@ -88,7 +93,10 @@ export function FunnelCard({ orgId }: { orgId: string }) {
         </div>
       )}
       {data && data.state === 'not_set_up' && !editing && (
-        <p className="text-sm text-fg-muted">Not set up. Pick the event names every app sends, in order, to compare sign-up to first use to coming back across apps.</p>
+        <p className="text-sm text-fg-muted">
+          Not set up. Pick the event names every app sends, in order, to compare sign-up to first use to coming back across apps.
+          {canManage === false ? ` Setting it up: ${ORG_ADMIN_ONLY_HINT}` : ''}
+        </p>
       )}
       {data && data.definition && (
         <div className="flex flex-col gap-2">
