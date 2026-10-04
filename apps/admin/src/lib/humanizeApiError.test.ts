@@ -65,8 +65,14 @@ describe('describeApiError', () => {
     expect(d.hint).toMatch(/access/i)
   })
 
+  it('reads the sentence out of a worker JSON reply', () => {
+    expect(
+      describeApiError({ code: 'UPSTREAM_ERROR', message: '{"error":"No metric data for this project"}' }, 'Detection failed').hint,
+    ).toBe('No metric data for this project')
+  })
+
   it('never shows a JSON blob or SQL text', () => {
-    expect(describeApiError({ code: 'SCAN_FAILED', message: '{"error":"boom"}' }, 'Scan failed').hint).not.toMatch(/[{}]/)
+    expect(describeApiError({ code: 'SCAN_FAILED', message: '{"detail":["x"]}' }, 'Scan failed').hint).not.toMatch(/[{}]/)
     expect(describeApiError({ code: 'DB_ERROR', message: 'relation "x" does not exist' }, 'Save failed').hint).not.toMatch(/relation/)
   })
 
