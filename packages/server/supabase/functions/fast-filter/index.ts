@@ -1,6 +1,6 @@
 import { generateObject } from 'npm:ai@4'
 import { createAnthropic } from 'npm:@ai-sdk/anthropic@1'
-import { createOpenAI } from 'npm:@ai-sdk/openai@1'
+import { openAiProvider } from '../_shared/openai-compat.ts'
 import { z } from 'npm:zod@3'
 import { getServiceClient } from '../_shared/db.ts'
 import { scrubReport } from '../_shared/pii-scrubber.ts'
@@ -258,7 +258,7 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
         },
         async (key) => {
           keySource = key.source
-          const openai = createOpenAI({
+          const openai = openAiProvider({
             apiKey: key.key,
             ...(key.baseUrl ? { baseURL: key.baseUrl } : {}),
           })

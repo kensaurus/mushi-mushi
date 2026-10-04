@@ -2773,19 +2773,19 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       topPriority = 'firecrawl_not_configured';
       topPriorityLabel =
         'Add a BYOK Firecrawl API key in Settings → Firecrawl before running web research.';
-      topPriorityTo = '/settings?tab=firecrawl';
+      topPriorityTo = '/settings?tab=byok#key-firecrawl';
     } else if (firecrawlTestStatus === 'error_auth') {
       topPriority = 'firecrawl_auth_failed';
       topPriorityLabel = `Firecrawl rejected key ${firecrawlKeyHint} — re-test in Settings.`;
-      topPriorityTo = '/settings?tab=firecrawl';
+      topPriorityTo = '/settings?tab=byok#key-firecrawl';
     } else if (firecrawlTestStatus && firecrawlTestStatus !== 'ok') {
       topPriority = 'firecrawl_error';
       topPriorityLabel = `Firecrawl test status: ${firecrawlTestStatus} — fix connectivity or quota in Settings.`;
-      topPriorityTo = '/settings?tab=firecrawl';
+      topPriorityTo = '/settings?tab=byok#key-firecrawl';
     } else if (firecrawlConfigured && !firecrawlTestStatus) {
       topPriority = 'firecrawl_untested';
       topPriorityLabel = 'Key saved but not tested — run Test connection in Settings → Firecrawl.';
-      topPriorityTo = '/settings?tab=firecrawl';
+      topPriorityTo = '/settings?tab=byok#key-firecrawl';
     } else if (sessions === 0) {
       topPriority = 'ready_no_sessions';
       topPriorityLabel = `Firecrawl ready · ${allowedDomains.length} allowed domain${allowedDomains.length === 1 ? '' : 's'} · run your first search.`;
@@ -2974,7 +2974,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
           provider: k.provider_slug,
           hint: k.key_hint,
           label: k.label,
-          openRouter: isOpenRouterBaseUrl(k.base_url as string | null),
+          openRouter: k.provider_slug === 'openrouter' || isOpenRouterBaseUrl(k.base_url as string | null),
           credits,
         };
       }),
@@ -2982,7 +2982,9 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
 
     const byProvider = new Map<string, { provider: string; calls: number; costUsd: number; inputTokens: number; outputTokens: number; byokCalls: number }>();
     for (const row of spendRes.data ?? []) {
-      const provider = providerFromModel(row.used_model as string | null);
+      // A vendor-prefixed id (`openai/gpt-5.4`) is what Mushi sends to OpenRouter.
+      const usedModel = (row.used_model as string | null) ?? '';
+      const provider = usedModel.includes('/') ? 'openrouter' : providerFromModel(usedModel);
       const cur = byProvider.get(provider) ?? { provider, calls: 0, costUsd: 0, inputTokens: 0, outputTokens: 0, byokCalls: 0 };
       cur.calls++;
       cur.costUsd += Number(row.cost_usd ?? 0);
@@ -3160,6 +3162,18 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         if (!validation.ok) {
           return c.json(
             { ok: false, error: { code: 'INVALID_BASE_URL', message: validation.message } },
+            400,
+          );
+        }
+        if (isOpenRouterBaseUrl(validation.value)) {
+          return c.json(
+            {
+              ok: false,
+              error: {
+                code: 'INVALID_BASE_URL',
+                message: 'OpenRouter keys have their own row now. Add this key under OpenRouter instead.',
+              },
+            },
             400,
           );
         }

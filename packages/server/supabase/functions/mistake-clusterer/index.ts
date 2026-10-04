@@ -18,7 +18,7 @@
  * Cost discipline: every LLM call writes an llm_invocations row (recordLlmUsage).
  */
 
-import { createOpenAI } from 'npm:@ai-sdk/openai@1'
+import { openAiProvider } from '../_shared/openai-compat.ts'
 import { generateObject } from 'npm:ai@4'
 import { z } from 'npm:zod@3'
 import { getServiceClient } from '../_shared/db.ts'
@@ -271,7 +271,7 @@ Rate the semantic coherence of this cluster and suggest how to name and summaris
               startedAt: Date.now(),
               fallbackReason: anthropicKey ? 'anthropic_failed' : 'no_anthropic_key',
             }
-            const openai = createOpenAI({
+            const openai = openAiProvider({
               apiKey: openaiResolved.key,
               ...(openaiResolved.baseUrl ? { baseURL: openaiResolved.baseUrl } : {}),
             })

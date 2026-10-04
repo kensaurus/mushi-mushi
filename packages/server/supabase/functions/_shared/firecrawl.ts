@@ -355,13 +355,10 @@ export async function probeFirecrawl(
 
   const startedAt = Date.now();
   try {
-    const res = await fetch(`${FIRECRAWL_BASE}/v1/search`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${resolved.key}`,
-      },
-      body: JSON.stringify({ query: 'mushi mushi sdk', limit: 1 }),
+    // Free check: reads the team's remaining credits instead of running a
+    // search, which cost a credit on every test.
+    const res = await fetch(`${FIRECRAWL_BASE}/v2/team/credit-usage`, {
+      headers: { Authorization: `Bearer ${resolved.key}` },
       signal: AbortSignal.timeout(8_000),
     });
     const latencyMs = Date.now() - startedAt;

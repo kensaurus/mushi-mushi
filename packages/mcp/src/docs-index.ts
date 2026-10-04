@@ -1740,8 +1740,8 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/security/byok",
     markdown: "security/byok.md",
     keywords: ["security", "byok", "bring-your-own-key"],
-    headings: ["Setup", "What uses the key", "Audit trail", "Rotation", "Langfuse trace attribution"],
-    excerpt: "Use your own Anthropic or OpenAI API key for a Mushi project, so every classification, judge and fix run bills to your provider account.",
+    headings: ["Setup", "What uses the key", "OpenRouter", "Audit trail", "Rotation", "Langfuse trace attribution"],
+    excerpt: "Use your own Anthropic, OpenAI or OpenRouter key for a Mushi project, so every diagnosis, fix and grading run bills to your provider account.",
   },
   {
     title: "Data residency",

@@ -55,7 +55,7 @@
  */
 
 import { generateObject, NoObjectGeneratedError } from 'npm:ai@4';
-import { createOpenAI } from 'npm:@ai-sdk/openai@1';
+import { openAiProvider } from '../_shared/openai-compat.ts';
 import { z } from 'npm:zod@3';
 import { getServiceClient } from '../_shared/db.ts';
 import { reportError, withSentry, tagLangfuseTrace } from '../_shared/sentry.ts';
@@ -978,7 +978,7 @@ ${
                 const isOpenRouter = openaiBaseUrl?.includes('openrouter.ai') ?? false;
                 usedModel = isOpenRouter ? DEFAULT_OPENAI_MODEL : FIX_FALLBACK;
                 usedKeySource = openaiResolved.source;
-                const openai = createOpenAI({
+                const openai = openAiProvider({
                   apiKey: openaiKey,
                   ...(openaiBaseUrl ? { baseURL: openaiBaseUrl } : {}),
                 });

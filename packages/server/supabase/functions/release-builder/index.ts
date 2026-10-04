@@ -20,7 +20,7 @@
  * removed (deterministicReleaseBody). That also spends no LLM call on it.
  */
 
-import { createOpenAI } from 'npm:@ai-sdk/openai@1'
+import { openAiProvider } from '../_shared/openai-compat.ts'
 import { generateText } from 'npm:ai@4'
 import { z } from 'npm:zod@3'
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
@@ -249,7 +249,7 @@ Keep it warm, human, and specific. Avoid developer jargon. Max 400 words.`,
     if (!openaiResolved) return deterministicReleaseBody(reports)
     const openaiUsage = { ...usageCtx, keySource: openaiResolved.source, model: RELEASE_NOTES_FALLBACK, startedAt: Date.now() }
     try {
-      const openai = createOpenAI({
+      const openai = openAiProvider({
         apiKey: openaiResolved.key,
         ...(openaiResolved.baseUrl ? { baseURL: openaiResolved.baseUrl } : {}),
       })

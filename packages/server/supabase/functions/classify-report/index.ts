@@ -1,5 +1,5 @@
 import { generateObject } from 'npm:ai@4';
-import { createOpenAI } from 'npm:@ai-sdk/openai@1';
+import { openAiProvider } from '../_shared/openai-compat.ts';
 import { z } from 'npm:zod@3';
 import { getServiceClient } from '../_shared/db.ts';
 import { scrubReport } from '../_shared/pii-scrubber.ts';
@@ -654,7 +654,7 @@ ${ontologyContext}${inventoryContext}${mcpContextSection}`;
         // V5.3 §2.7 BYOK extension: OpenAI-compatible base URL routes the same
         // SDK at any gateway (OpenRouter, Together, Fireworks…). Falls back to
         // api.openai.com when unset.
-        const openai = createOpenAI({
+        const openai = openAiProvider({
           apiKey: openaiKey,
           ...(openaiResolved?.baseUrl ? { baseURL: openaiResolved.baseUrl } : {}),
         });

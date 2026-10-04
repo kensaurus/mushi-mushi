@@ -20,7 +20,8 @@ const source = readFileSync(
 
 describe('intelligence-report LLM fallback (MUSHI-MUSHI-SERVER-1S)', () => {
   it('uses the shared cross-provider failover path', () => {
-    expect(source).toContain("import { createOpenAI } from 'npm:@ai-sdk/openai@1'");
+    // openAiProvider wraps createOpenAI so OpenRouter keys get OpenRouter model ids.
+    expect(source).toContain("import { openAiProvider } from '../_shared/openai-compat.ts'");
     expect(source).toContain('withAnthropicOrOpenAi(');
     expect(source).toContain('model: openai(INTELLIGENCE_FALLBACK)');
     expect(source).toContain("usedProvider === 'openai'");
@@ -28,7 +29,7 @@ describe('intelligence-report LLM fallback (MUSHI-MUSHI-SERVER-1S)', () => {
 
   it('preserves an OpenAI-compatible tenant base URL', () => {
     expect(source).toMatch(
-      /createOpenAI\(\{[\s\S]{0,180}apiKey:\s*resolved\.key,[\s\S]{0,180}baseURL:\s*resolved\.baseUrl/,
+      /openAiProvider\(\{[\s\S]{0,180}apiKey:\s*resolved\.key,[\s\S]{0,180}baseURL:\s*resolved\.baseUrl/,
     );
   });
 

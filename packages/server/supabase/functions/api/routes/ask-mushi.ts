@@ -2,7 +2,7 @@ import type { Context, Hono } from 'npm:hono@4';
 import type { Variables } from '../types.ts'
 import { streamSSE } from 'npm:hono@4/streaming';
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
-import { createOpenAI } from 'npm:@ai-sdk/openai@1';
+import { openAiProvider } from '../../_shared/openai-compat.ts';
 import { streamText } from 'npm:ai@4';
 import { z } from 'npm:zod@3';
 
@@ -478,7 +478,7 @@ async function runAskMushiLlmTurn(args: {
       usedModel = ASSIST_FALLBACK;
       fallbackUsed = true;
       keySource = 'env';
-      const openai = createOpenAI({ apiKey: openaiKey });
+      const openai = openAiProvider({ apiKey: openaiKey });
       const result = await generateValidatedObject(AskMushiReplyLlmSchema, {
         model: openai(ASSIST_FALLBACK),
         system: systemPrompt,
@@ -536,7 +536,7 @@ async function runAskMushiLlmTurn(args: {
         usedModel = ASSIST_FALLBACK;
         fallbackUsed = true;
         fallbackReason = 'anthropic unavailable';
-        const openai = createOpenAI({ apiKey: key.key, baseURL: key.baseUrl });
+        const openai = openAiProvider({ apiKey: key.key, baseURL: key.baseUrl });
         return generateValidatedObject(AskMushiReplyLlmSchema, {
           model: openai(ASSIST_FALLBACK),
           system: systemPrompt,
@@ -1073,7 +1073,7 @@ export function registerAskMushiRoutes(app: Hono<{ Variables: Variables }>): voi
             return;
           }
           usedModel = ASSIST_FALLBACK;
-          const openai = createOpenAI({ apiKey: openaiKey });
+          const openai = openAiProvider({ apiKey: openaiKey });
           const result = streamText({
             model: openai(ASSIST_FALLBACK),
             system: systemPrompt,

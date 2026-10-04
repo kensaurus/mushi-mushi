@@ -109,7 +109,7 @@ Before dispatching a fix that touches user data fields, read
 | `region` | Data residency region |
 
 If `byok_configured = false` and the fix touches PII fields, consider
-configuring BYOK first (Settings → API Keys → BYOK) so all LLM calls run
+configuring BYOK first (Settings → AI keys) so all LLM calls run
 against your own account.
 
 ## Scopes

@@ -7,7 +7,7 @@
 import type { Context, Hono } from 'npm:hono@4'
 import type { Variables } from '../types.ts'
 import { streamSSE } from 'npm:hono@4/streaming'
-import { createOpenAI } from 'npm:@ai-sdk/openai@1'
+import { openAiProvider } from '../../_shared/openai-compat.ts'
 import { generateText, streamText } from 'npm:ai@4'
 import { z } from 'npm:zod@3'
 
@@ -312,7 +312,7 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
         },
         async (key) => {
           keySource = key.source
-          const openai = createOpenAI({
+          const openai = openAiProvider({
             apiKey: key.key,
             ...(key.baseUrl ? { baseURL: key.baseUrl } : {}),
           })
@@ -499,7 +499,7 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
           async (key): Promise<AssistStream> => {
             keySource = key.source
             usedModel = ASSIST_FALLBACK
-            const openai = createOpenAI({
+            const openai = openAiProvider({
               apiKey: key.key,
               ...(key.baseUrl ? { baseURL: key.baseUrl } : {}),
             })
@@ -680,7 +680,7 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
         async (key) => {
           keySource = key.source
           usedModel = ASSIST_FALLBACK
-          const openai = createOpenAI({
+          const openai = openAiProvider({
             apiKey: key.key,
             ...(key.baseUrl ? { baseURL: key.baseUrl } : {}),
           })
@@ -815,7 +815,7 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
           async (key) => {
             keySource = key.source
             usedModel = ASSIST_FALLBACK
-            const openai = createOpenAI({ apiKey: key.key, ...(key.baseUrl ? { baseURL: key.baseUrl } : {}) })
+            const openai = openAiProvider({ apiKey: key.key, ...(key.baseUrl ? { baseURL: key.baseUrl } : {}) })
             return assistText(
               await generateText({
                 model: openai(ASSIST_FALLBACK),
@@ -940,7 +940,7 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
         async (key) => {
           keySource = key.source
           usedModel = ASSIST_FALLBACK
-          const openai = createOpenAI({ apiKey: key.key, ...(key.baseUrl ? { baseURL: key.baseUrl } : {}) })
+          const openai = openAiProvider({ apiKey: key.key, ...(key.baseUrl ? { baseURL: key.baseUrl } : {}) })
           return assistText(
             await generateText({
               model: openai(ASSIST_FALLBACK),

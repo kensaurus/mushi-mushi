@@ -1,6 +1,6 @@
 /**
  * FILE: apps/admin/src/components/settings/ByokPanel.tsx
- * PURPOSE: Settings → Your AI keys. One row per provider (logo, what it does,
+ * PURPOSE: Settings → AI keys. One row per provider (logo, what it does,
  *          whether it works, the one thing to do), and under it each saved
  *          key with its own plain-English status and buttons. Several keys
  *          per provider form a pool: when one runs out, the next is tried.
@@ -56,11 +56,18 @@ const PROVIDER_META: Record<string, ProviderMeta> = {
     emptyDetail: "Using Mushi's shared key. Add yours to bill your own Anthropic account.",
   },
   openai: {
-    name: 'OpenAI or OpenRouter',
-    purpose: 'Backup when Anthropic is unavailable. With OpenRouter you can pick other models.',
-    placeholder: 'sk-… or sk-or-v1-…',
+    name: 'OpenAI',
+    purpose: 'Backup when Anthropic is unavailable, search embeddings, and speech-to-text for voice reports.',
+    placeholder: 'sk-proj-…',
     consoleUrl: 'https://platform.openai.com/api-keys',
     emptyDetail: "No backup key of your own. Mushi's shared backup is used when the server has one.",
+  },
+  openrouter: {
+    name: 'OpenRouter',
+    purpose: 'One key for many models. Used as a backup after your OpenAI keys (not for speech-to-text or fine-tuning).',
+    placeholder: 'sk-or-v1-…',
+    consoleUrl: 'https://openrouter.ai/settings/keys',
+    emptyDetail: 'Optional. Add a key to use OpenRouter as a backup and see its remaining credits here.',
   },
   cursor: {
     name: 'Cursor cloud agent',
@@ -74,14 +81,14 @@ const PROVIDER_META: Record<string, ProviderMeta> = {
     purpose: 'Reads public web pages, such as library docs, while diagnosing and mapping your app.',
     placeholder: 'fc-…',
     consoleUrl: 'https://www.firecrawl.dev/app/api-keys',
-    emptyDetail: "No key of your own. Web research uses Mushi's shared key when the server has one.",
+    emptyDetail: "No key of your own. Web tools use Mushi's shared key when the server has one.",
   },
   browserbase: {
     name: 'Browserbase',
     purpose: 'Runs your scheduled browser tests in a cloud browser on your own account.',
     placeholder: 'bb-…',
     consoleUrl: 'https://www.browserbase.com/settings',
-    emptyDetail: "No key of your own. Cloud browser tests use Mushi's shared account when the server has one.",
+    emptyDetail: "No key of your own. Scheduled browser tests use Mushi's shared account when the server has one.",
   },
   supabase: {
     name: 'Supabase (read-only)',
@@ -96,7 +103,7 @@ const PROVIDER_META: Record<string, ProviderMeta> = {
 
 // Kept on one line: byok-lifecycle-contract.test.ts asserts the provider order.
 // prettier-ignore
-const DISPLAY_PROVIDERS = ['anthropic', 'openai', 'cursor', 'firecrawl', 'browserbase', 'supabase'] as const;
+const DISPLAY_PROVIDERS = ['anthropic', 'openai', 'openrouter', 'cursor', 'firecrawl', 'browserbase', 'supabase'] as const;
 
 type ValidationReply =
   | {
@@ -382,7 +389,7 @@ export function ByokPanel() {
 
   if (byokLocked) {
     return (
-      <SettingsList title="Your AI keys">
+      <SettingsList title="AI keys">
         <div className="py-3">
           <UpgradePrompt flag="byok" currentPlan={entitlements.planName} />
         </div>
@@ -544,7 +551,7 @@ export function ByokPanel() {
   return (
     <>
       <SettingsList
-        title="Your AI keys"
+        title="AI keys"
         description="Keys for the AI and web services Mushi uses for this project. They are stored encrypted and billed to your own accounts. Add more than one key for a service and Mushi switches to the next when one runs out."
       >
         {DISPLAY_PROVIDERS.map((provider) => {
@@ -602,7 +609,7 @@ export function ByokPanel() {
               }
             >
               {noticeHere(`provider:${provider}`)}
-              {Array.isArray(credits.data?.spend30d) && (provider === 'anthropic' || provider === 'openai') && (
+              {Array.isArray(credits.data?.spend30d) && (provider === 'anthropic' || provider === 'openai' || provider === 'openrouter') && (
                 <p className="text-xs text-fg-muted">
                   {spendLine(credits.data?.spend30d?.find((s) => s.provider === provider))}
                 </p>
@@ -660,14 +667,14 @@ export function ByokPanel() {
                     {provider === 'openai' && (
                       <div className="space-y-1">
                         <Input
-                          label="Base URL (optional, for OpenRouter and other compatible services)"
+                          label="Base URL (optional, for other OpenAI-compatible services such as Azure or Together)"
                           type="url"
                           value={newBaseUrl}
                           onChange={(e) => {
                             setNewBaseUrl(e.target.value);
                             setBaseUrlError(null);
                           }}
-                          placeholder="https://openrouter.ai/api/v1"
+                          placeholder="https://your-host.example.com/v1"
                           autoComplete="url"
                           error={baseUrlError ?? undefined}
                         />

@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { connectLinks, fixesLinks, inboxLinks, judgeLinks, mcpLinks, onboardingLinks, repoLinks, reportsLinks, settingsLinks, ssoLinks } from './statCardLinks'
+import { connectLinks, fixesLinks, inboxLinks, judgeLinks, mcpLinks, onboardingLinks, repoLinks, reportsLinks, researchLinks, settingsLinks, ssoLinks } from './statCardLinks'
 import { EMPTY_INBOX_STATS } from '../components/inbox/types'
 
 describe('inbox and reports stat links', () => {
@@ -130,24 +130,24 @@ describe('snapshot tile links', () => {
 
 /**
  * Stat cards must land somewhere real (suspected-bugs entries 110 and 257):
- * Settings has no `sdk` tab, and /sso has no tabs at all.
+ * every Settings link names a tab Settings renders (not an old alias), and
+ * /sso has no tabs at all.
  */
 
-
-const SETTINGS_TABS = ['general', 'byok', 'firecrawl', 'browserbase', 'voice', 'health', 'dev']
+import { SETTINGS_TAB_IDS } from '../components/settings/types'
 
 describe('settingsLinks', () => {
   it('points every ?tab= link at a tab Settings renders', () => {
-    for (const to of Object.values(settingsLinks)) {
+    for (const to of [...Object.values(settingsLinks), researchLinks.firecrawl]) {
       const url = new URL(to, 'https://console.test')
       if (url.pathname !== '/settings') continue
       const tab = url.searchParams.get('tab')
-      if (tab) expect(SETTINGS_TABS).toContain(tab)
+      if (tab) expect(SETTINGS_TAB_IDS).toContain(tab)
     }
   })
 
-  it('sends the bug-widget card to Health, where the widget controls are', () => {
-    expect(settingsLinks.sdk).toBe('/settings?tab=health')
+  it('sends the bug-widget card to SDK & connection, where the widget controls are', () => {
+    expect(settingsLinks.sdk).toBe('/settings?tab=sdk')
   })
 })
 

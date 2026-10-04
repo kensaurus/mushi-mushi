@@ -27,7 +27,7 @@ export const QA_PROVIDER_DEFINITIONS: QaProviderDefinition[] = [
     label: 'Browserbase',
     tagline: 'Remote Chromium with screenshots',
     bestFor: 'CI-like confidence for login flows, modals, and multi-step UI without running infra yourself.',
-    requires: 'Browserbase API key under Settings → Cloud browser. Charged to your Browserbase account.',
+    requires: 'Browserbase API key under Settings → AI keys. Charged to your Browserbase account.',
     tradeoffs: 'Slightly slower cold starts; best for stories that need real browser interactions.',
   },
   {
