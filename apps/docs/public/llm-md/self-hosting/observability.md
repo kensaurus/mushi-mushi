@@ -73,7 +73,7 @@ Spans include `report_id`, `attempt_id`, and `stage` tags so you can join OTel t
 
 ## Health dashboard
 
-After deploying, check **Settings → Health** in the admin console. It shows:
+After deploying, check **Settings → SDK & connection** in the admin console. It shows:
 - Provider probe status (Anthropic, OpenAI, Langfuse, Sentry, GitHub)
 - Recent LLM call latency and cost
 - Cron job last-run timestamps

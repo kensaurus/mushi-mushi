@@ -78,7 +78,7 @@ export function SettingsStatusBanner({
         <StatusBannerShell
           tone="danger"
           title={`${plural(n, 'key')} ${n === 1 ? 'needs' : 'need'} your attention`}
-          subtitle="Rejected, out of quota, expired or replaced. Each one says what to do in Your AI keys."
+          subtitle="Rejected, out of quota, expired or replaced. Each one says what to do in AI keys."
           action={go('byok', actions.byok ?? 'Fix keys')}
         />
       )
@@ -109,7 +109,7 @@ export function SettingsStatusBanner({
           tone="warn"
           title="The bug widget is off"
           subtitle={`People using ${projectLabel} can't send bug reports until it is turned on.`}
-          action={go('health', actions.health ?? 'Open Health check')}
+          action={go('sdk', actions.sdk ?? 'Open SDK & connection')}
         />
       )
     case 'keys_unchecked': {
@@ -142,7 +142,7 @@ export function SettingsStatusBanner({
           tone="ok"
           title={`Settings are ready for ${projectLabel}`}
           subtitle="Everything that is set up is working. Send a test bug any time to check the whole path."
-          action={go('health', actions.pipeline ?? 'Send a test bug')}
+          action={go('sdk', actions.pipeline ?? 'Send a test bug')}
         />
       )
   }

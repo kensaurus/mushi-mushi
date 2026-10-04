@@ -2,7 +2,14 @@
  * FILE: apps/admin/src/components/settings/types.ts
  */
 
-export type SettingsTabId = 'general' | 'byok' | 'firecrawl' | 'browserbase' | 'voice' | 'health' | 'dev'
+/**
+ * The Settings tabs, in strip order. Old ids that links and browsers may
+ * still carry (`firecrawl`, `health`, …) are not tabs: lib/settingsTabs.ts
+ * maps them onto these.
+ */
+export const SETTINGS_TAB_IDS = ['general', 'byok', 'tools', 'voice', 'sdk'] as const
+
+export type SettingsTabId = (typeof SETTINGS_TAB_IDS)[number]
 
 /**
  * GET /v1/admin/settings/stats. It has no `topPriority`: what to do next is

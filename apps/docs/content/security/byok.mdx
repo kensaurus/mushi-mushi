@@ -1,6 +1,6 @@
 ---
 title: Bring-your-own-key
-description: Use your own Anthropic or OpenAI API key for a Mushi project, so every classification, judge and fix run bills to your provider account.
+description: Use your own Anthropic, OpenAI or OpenRouter key for a Mushi project, so every diagnosis, fix and grading run bills to your provider account.
 ---
 
 import { Callout } from 'nextra/components'
@@ -13,26 +13,33 @@ Mushi supports project-scoped BYOK. When set, every classifier, judge, fix orche
 
 ## Setup
 
-In the admin console: **Settings → BYOK**.
+In the admin console: **Settings → AI keys**.
 
-1. Paste your `ANTHROPIC_API_KEY` and/or `OPENAI_API_KEY` into the form.
-2. Click **Save**. The values are written into **Supabase Vault** and only resolved at LLM-invocation time via `vault.resolve_secret()`. The DB row stores only the secret ID — the key is never returned to the frontend.
+1. Find the service's row (Anthropic, OpenAI, OpenRouter, Cursor, Firecrawl, Browserbase or Supabase) and click **Add key**. You can paste `OPENAI_API_KEY=sk-…` or a quoted value; Mushi strips the name and quotes.
+2. Click **Save & validate**. Mushi checks the key with the provider first (a free call), then stores it in **Supabase Vault**. The database row keeps only the secret's ID, and the key is never returned to the browser.
+3. Add more than one key for a service and Mushi moves to the next one when a key is rejected or runs out of quota.
 
 <Callout type="warning">
-  Keys take effect on the **next** LLM call. No Edge Function redeploy is required. If you rotate a key, update it here — stale keys return `401` from Anthropic/OpenAI and the health probe on **Settings → Health** will turn red.
+  Keys take effect on the **next** LLM call. No Edge Function redeploy is required. If you rotate a key, update it here — stale keys return `401` from Anthropic/OpenAI and the key shows as rejected on **Settings → AI keys**.
 </Callout>
 
 ## What uses the key
 
-| Function | Models |
+| Function | Model |
 | --- | --- |
-| `classify-report` | Claude 3.5 Haiku (fast classifier) |
-| `fix-worker` | Claude 3.7 Sonnet (fix generation) |
-| `judge-batch` | GPT-4o (cross-model judge) or Claude Opus |
-| `intelligence-report` | Claude 3.7 Sonnet (narrative summary) |
-| `pdca-runner` | Configured per project (`producer_model`, `judge_model`, `critic_model`) |
+| `fast-filter` (first look at each report) | Claude Haiku 4.5, then GPT-5.4 mini |
+| `classify-report` (diagnosis) | Claude Sonnet 5.5, then GPT-5.4 |
+| `fix-worker` (fix drafts) | Claude Sonnet 5.5, then GPT-5.4 |
+| `judge-batch` (fix grading) | Claude Sonnet 5.5, then GPT-5.4 |
+| `intelligence-report` (weekly summary) | Claude Sonnet 5.5, then GPT-5.4 |
+| Search, similar bugs, codebase index | OpenAI `text-embedding-3-small` |
+| Voice reports | OpenAI `gpt-transcribe` |
 
-If only one provider key is set, functions that default to the missing provider fall back to the Mushi platform key. Set both to ensure full isolation.
+Your own keys are used first; when a project has none for a provider, Mushi's platform key is used where the server has one. Set both Anthropic and OpenAI keys to keep every call on your accounts.
+
+## OpenRouter
+
+OpenRouter has its own row. Calls that would go to OpenAI try your OpenAI keys first, then your OpenRouter keys, with OpenRouter's model names (`openai/gpt-5.4`). Speech-to-text and fine-tuning stay on OpenAI, because OpenRouter does not offer them. The OpenRouter row also shows the key's spending limit and usage, read from OpenRouter.
 
 ## Audit trail
 

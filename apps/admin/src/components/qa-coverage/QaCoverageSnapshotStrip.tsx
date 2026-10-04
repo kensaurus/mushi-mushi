@@ -130,7 +130,7 @@ export function QaCoverageSnapshotStrip({
           <Link to="/qa-coverage?tab=stories" className="hover:text-fg underline-offset-2 hover:underline">
             All stories →
           </Link>
-          <Link to="/settings?tab=browserbase" className="hover:text-fg underline-offset-2 hover:underline">
+          <Link to="/settings?tab=byok#key-browserbase" className="hover:text-fg underline-offset-2 hover:underline">
             Browserbase BYOK →
           </Link>
         </div>

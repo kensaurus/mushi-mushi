@@ -44,6 +44,11 @@ const BYOK_KEY_RULES: Readonly<Record<string, ByokKeyRule>> = {
     prefixes: ['sk-'],
     missingPrefix: 'An OpenAI key starts with "sk-" (project keys start with "sk-proj-").',
   },
+  openrouter: {
+    name: 'OpenRouter',
+    prefixes: ['sk-or-'],
+    missingPrefix: 'An OpenRouter key starts with "sk-or-". Create one at openrouter.ai/settings/keys.',
+  },
   firecrawl: {
     name: 'Firecrawl',
     prefixes: ['fc-'],
@@ -87,18 +92,16 @@ const KEY_SIGNATURES: ReadonlyArray<{
 }> = [
   { prefix: 'sk-proj-', name: 'OpenAI', row: 'openai' },
   { prefix: 'sk-ant-', name: 'Anthropic', row: 'anthropic' },
-  { prefix: 'sk-or-', name: 'OpenRouter', row: 'openai' },
+  { prefix: 'sk-or-', name: 'OpenRouter', row: 'openrouter' },
   { prefix: 'sbp_', name: 'Supabase', row: 'supabase' },
   { prefix: 'fc-', name: 'Firecrawl', row: 'firecrawl' },
   { prefix: 'sk-', name: 'OpenAI', row: 'openai', generic: true },
 ];
 
-const OPENROUTER_NEEDS_BASE_URL =
-  'This is an OpenRouter key. Set the base URL to https://openrouter.ai/api/v1 so Mushi sends it to OpenRouter.';
-
 const ROW_NAME: Readonly<Record<string, string>> = {
   anthropic: 'Anthropic',
-  openai: 'OpenAI / OpenRouter',
+  openai: 'OpenAI',
+  openrouter: 'OpenRouter',
   firecrawl: 'Firecrawl',
   supabase: 'Supabase',
 };
@@ -152,7 +155,7 @@ function normalizeSecretPaste(raw: string): SecretPasteResult {
 function checkByokKeyFormat(
   provider: string,
   key: string,
-  opts: { baseUrl?: string | null } = {},
+  _opts: { baseUrl?: string | null } = {},
 ): string | null {
   const rule = BYOK_KEY_RULES[provider];
 
@@ -167,9 +170,6 @@ function checkByokKeyFormat(
   }
 
   if (!rule) return null;
-  if (provider === 'openai' && key.startsWith('sk-or-') && !opts.baseUrl?.trim()) {
-    return OPENROUTER_NEEDS_BASE_URL;
-  }
   if (!rule.prefixes.some((prefix) => key.startsWith(prefix))) return rule.missingPrefix;
   return null;
 }

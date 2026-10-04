@@ -12,7 +12,7 @@
  * so external agents (Cursor Cloud, Devin) can subscribe to progress.
  */
 
-import { createOpenAI } from 'npm:@ai-sdk/openai@1'
+import { openAiProvider } from '../_shared/openai-compat.ts'
 import { generateText, generateObject } from 'npm:ai@4'
 import { z } from 'npm:zod@3'
 import { getServiceClient } from '../_shared/db.ts'
@@ -177,7 +177,7 @@ async function runQaStoryImprover(
         },
         async (openaiKey) => {
           const { object } = await withLlmUsage(db, { ...improveUsage, model: OPENAI_PRIMARY, keySource: openaiKey.source }, () => generateObject({
-            model: createOpenAI({ apiKey: openaiKey.key })(OPENAI_PRIMARY, { structuredOutputs: false }),
+            model: openAiProvider({ apiKey: openaiKey.key, baseURL: openaiKey.baseUrl })(OPENAI_PRIMARY, { structuredOutputs: false }),
             system: IMPROVE_SYSTEM,
             schema: improveSchema,
             prompt: `ORIGINAL TEST:\n\`\`\`typescript\n${(story.script as string).slice(0, 4000)}\n\`\`\`\n\nRECENT FAILURES:\n${failureSummary}`,
@@ -356,7 +356,7 @@ Deno.serve(
             return text.trim()
           },
           async (k) => {
-            const openai = createOpenAI({ apiKey: k.key, ...(k.baseUrl ? { baseURL: k.baseUrl } : {}) })
+            const openai = openAiProvider({ apiKey: k.key, ...(k.baseUrl ? { baseURL: k.baseUrl } : {}) })
             const { text } = await withLlmUsage(db, { ...producerUsage, model: OPENAI_PRIMARY, keySource: k.source }, () => generateText({
               model: openai(OPENAI_PRIMARY),
               prompt: `You are a senior UI engineer.\nGoal: ${goal}${historyCtx}\n\nCurrent page:\n${currentInput.slice(0, 6000)}\n\nReturn only improved markup.`,
@@ -384,7 +384,7 @@ Deno.serve(
             return object
           },
           async (k) => {
-            const openai = createOpenAI({ apiKey: k.key, ...(k.baseUrl ? { baseURL: k.baseUrl } : {}) })
+            const openai = openAiProvider({ apiKey: k.key, ...(k.baseUrl ? { baseURL: k.baseUrl } : {}) })
             const { object, usage } = await withLlmUsage(db, { ...criticUsage, model: OPENAI_PRIMARY, keySource: k.source }, () => generateObject({
               model: openai(OPENAI_PRIMARY, { structuredOutputs: false }),
               schema: rubricSchema,

@@ -4,6 +4,9 @@ import { isSupabaseProjectRef } from './supabase-project-ref.ts';
 export const BYOK_PROVIDERS = [
   'anthropic',
   'openai',
+  // OpenRouter keys (sk-or-…). They also serve OpenAI-compatible calls after
+  // the project's OpenAI keys (_shared/byok.ts).
+  'openrouter',
   'firecrawl',
   'browserbase',
   'cursor',
@@ -183,6 +186,12 @@ function probeRequest(
         url: `${baseUrl ?? DEFAULT_OPENAI_BASE_URL}/models`,
         init: { headers: { Authorization: `Bearer ${apiKey}` } },
       };
+    case 'openrouter':
+      // Free: describes the key (limit, usage) without spending credits.
+      return {
+        url: 'https://openrouter.ai/api/v1/key',
+        init: { headers: { Authorization: `Bearer ${apiKey}` } },
+      };
     case 'cursor':
       return {
         url: 'https://api.cursor.com/v1/me',
@@ -194,16 +203,11 @@ function probeRequest(
         },
       };
     case 'firecrawl':
+      // Free: reads the team's remaining credits. A search here cost a credit
+      // on every "Test key" click.
       return {
-        url: 'https://api.firecrawl.dev/v1/search',
-        init: {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ query: 'mushi mushi sdk', limit: 1 }),
-        },
+        url: 'https://api.firecrawl.dev/v2/team/credit-usage',
+        init: { headers: { Authorization: `Bearer ${apiKey}` } },
       };
     case 'browserbase':
       return {

@@ -79,5 +79,6 @@ export function creditsLine(c: ProviderCredits): CreditsLine {
 export function spendLine(s: ProviderSpend | undefined): string {
   if (!s || s.calls === 0) return 'No AI calls recorded through this service in the last 30 days.'
   const tokens = count.format(s.inputTokens + s.outputTokens)
-  return `Last 30 days: $${s.costUsd.toFixed(2)} across ${count.format(s.calls)} calls (${tokens} tokens), ${count.format(s.byokCalls)} on your keys.`
+  const calls = `${count.format(s.calls)} ${s.calls === 1 ? 'call' : 'calls'}`
+  return `Last 30 days: $${s.costUsd.toFixed(2)} across ${calls} (${tokens} tokens), ${count.format(s.byokCalls)} on your keys.`
 }

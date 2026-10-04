@@ -128,7 +128,7 @@ Playwright scripts, schedule them via cron, and run them on three providers:
 | Provider | Where it runs | When to use |
 |----------|---------------|-------------|
 | `firecrawl_actions` | Firecrawl cloud (Deno-compatible, HTTP) | Default. No setup. Works for content verification and basic navigation. |
-| `browserbase` | Browserbase cloud Chromium | Complex UI interactions. Requires a Browserbase API key — configure via **Settings → Browserbase** in the admin console (stored in Supabase Vault; see [BYOK Providers](#byok-bring-your-own-key-providers)). |
+| `browserbase` | Browserbase cloud Chromium | Complex UI interactions. Requires a Browserbase API key — configure via **Settings → AI keys** in the admin console (stored in Supabase Vault; see [BYOK Providers](#byok-bring-your-own-key-providers)). |
 | `local` | Operator's machine via CLI | Full Playwright access. Not schedulable via edge function. Use `mushi qa run <story-id>`. |
 
 ### Story lifecycle
@@ -194,7 +194,7 @@ Supabase Vault (`vault_store_secret` / `vault_get_secret` helpers). The unified
 `byok_keys` first, falls back to legacy `project_settings.byok_<provider>_key_ref`
 columns for backwards compatibility, then falls back to the environment variable.
 
-Keys are managed self-service via **Settings → API Keys** in the admin console
+Keys are managed self-service via **Settings → AI keys** in the admin console
 (a single table listing all four providers). Set via Settings UI, rotated by
 calling `PUT /v1/admin/byok/:provider` with a new key value.
 

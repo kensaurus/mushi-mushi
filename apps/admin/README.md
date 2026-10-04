@@ -452,7 +452,7 @@ The console operates in two modes — auto-detected from env vars:
 ### Debug Mode
 
 Enable diagnostic console logging via:
-- Settings → Developer Tools → Debug mode toggle
+- Settings → SDK & connection → Debug logging toggle
 - `?debug=true` URL parameter
 - `localStorage.setItem('mushi:debug', 'true')`
 

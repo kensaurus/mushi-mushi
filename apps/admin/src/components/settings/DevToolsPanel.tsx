@@ -1,6 +1,7 @@
 /**
  * FILE: apps/admin/src/components/settings/DevToolsPanel.tsx
- * PURPOSE: Settings → Developer. Options that live only in this browser and
+ * PURPOSE: Settings → SDK & connection → Debug logging. Options that live
+ *          only in this browser and
  *          never touch the backend: debug logging. Apply saves to this
  *          browser without a reload.
  */
@@ -35,12 +36,12 @@ export function DevToolsPanel() {
   return (
     <>
       <SettingsList
-        title="Developer"
+        title="Debug logging (this browser)"
         description="Options for this browser only. They don't change anything for your project or your team."
       >
         <SettingsRow
           icon={<IconTerminal size={16} />}
-          title="Debug logging"
+          title="Log to the browser console"
           purpose="Prints every API call, sign-in event and timing to the browser console. Useful when reporting a console problem."
           action={
             <Toggle

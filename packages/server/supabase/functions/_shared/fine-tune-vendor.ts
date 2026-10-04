@@ -113,7 +113,8 @@ async function resolveOpenAIKey(db: SupabaseClient, projectId: string): Promise<
   // care about the raw token here, but the `source` is implicit (audit log
   // happens upstream in the route that initiates the fine-tune).
   // Over budget rethrows: the env-key fallback below would bypass it.
-  const resolved = await resolveLlmKey(db, projectId, 'openai').catch((err) => {
+  // Fine-tuning runs on OpenAI itself, so OpenRouter keys are left out.
+  const resolved = await resolveLlmKey(db, projectId, 'openai', { openAiOnly: true }).catch((err) => {
     if (err instanceof LlmBudgetExceededError) throw err
     return null
   })

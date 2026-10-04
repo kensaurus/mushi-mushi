@@ -126,8 +126,8 @@ export const integrationsLinks = {
 
 export const settingsLinks = {
   byok: '/settings?tab=byok',
-  // The bug-widget controls live on the Health tab (SdkInstallCard); there is no `sdk` tab.
-  sdk: '/settings?tab=health',
+  // The bug-widget controls (SdkInstallCard) live on the SDK & connection tab.
+  sdk: '/settings?tab=sdk',
   routing: '/integrations/config#integrations-routing',
   classifier: '/settings?tab=general',
 } as const
@@ -239,7 +239,7 @@ export const researchLinks = {
   snippets: '/research?tab=history',
   attached: '/reports',
   unattached: '/research?tab=history',
-  firecrawl: '/settings?tab=byok',
+  firecrawl: '/settings?tab=byok#key-firecrawl',
   domains: '/research?tab=search',
 } as const
 

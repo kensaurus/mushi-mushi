@@ -4209,7 +4209,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       inputSchema: z.object({
         projectId: z.string().describe('Project id'),
         provider: z
-          .enum(['anthropic', 'openai', 'firecrawl', 'browserbase', 'cursor', 'supabase'])
+          .enum(['anthropic', 'openai', 'openrouter', 'firecrawl', 'browserbase', 'cursor', 'supabase'])
           .describe('Provider slug'),
         key: z.string().min(8).max(4096).describe('The API key value to add'),
         label: z.string().optional().describe('Human-readable label for this key'),

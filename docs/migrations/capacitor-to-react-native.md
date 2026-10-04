@@ -690,7 +690,7 @@ function ChatScreen() {
 ### 7.3 Get the install snippet from the admin console
 
 In the Mushi Mushi admin console, on **Onboarding**, **Projects → glot-it**,
-or **Settings → Health**, the **Install SDK** card now includes
+or **Settings → SDK & connection**, the **Install SDK** card now includes
 **React Native**, **Expo**, and **Capacitor** tabs alongside React / Vue /
 Svelte / Vanilla. Pick **React Native** to get a copy-paste-correct snippet
 populated with your real `projectId` and (right after a key mint) `apiKey`.

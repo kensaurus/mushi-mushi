@@ -27,7 +27,7 @@ something goes wrong.
   the SDK for the first time, run `npx mushi-mushi` (not `mushi setup`).
 
   **SDK ingest keys** come from **Setup → Verify** (`report:write` scope).
-  **Settings → API Keys** is for BYOK LLM/Firecrawl keys — not Mushi project
+  **Settings → AI keys** is for BYOK LLM/Firecrawl keys — not Mushi project
   credentials.
 
 ## Browser sign-in flow (recommended)
@@ -189,7 +189,7 @@ To get the values manually:
 | `projectId` | UUID on the [Setup → Steps](https://kensaur.us/mushi-mushi/admin/onboarding?tab=steps) success panel |
 | `apiKey` | [Setup → Verify](https://kensaur.us/mushi-mushi/admin/onboarding?tab=verify) → Generate API key (scope: `report:write`) |
 
-  **Settings → API Keys** is for BYOK LLM/Firecrawl keys — not SDK ingest keys.
+  **Settings → AI keys** is for BYOK LLM/Firecrawl keys — not SDK ingest keys.
   Always use **Setup → Verify** to generate `report:write` project keys.
 
 ## CI / non-interactive
