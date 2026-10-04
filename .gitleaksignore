@@ -74,3 +74,14 @@ fe9eab0773f9f2d4e9ab1da178592d728b5e1680:packages/mcp/scripts/test-all-tools-yen
 # assertion below the fixture separately proves credentials are not returned.
 0400cdce96a853bf158d57cb80e3e7e8ef441aff:packages/server/supabase/functions/_shared/byok-validation.test.ts:generic-api-key:27
 0400cdce96a853bf158d57cb80e3e7e8ef441aff:packages/server/supabase/functions/_shared/byok-validation.test.ts:generic-api-key:31
+
+# PR #437: commit 780eee9f used the placeholder token 'tok-12345678' in a
+# Streamable HTTP test fixture (no real credential). Later commits replace it
+# with 'fake'; the squash-merge commit never contains it.
+780eee9fb519d3c148ffd566ac6a940f1fdc8b31:packages/server/src/__tests__/mcp-http-session.test.ts:generic-api-key:45
+780eee9fb519d3c148ffd566ac6a940f1fdc8b31:packages/server/src/__tests__/mcp-http-session.test.ts:generic-api-key:54
+780eee9fb519d3c148ffd566ac6a940f1fdc8b31:packages/server/src/__tests__/mcp-http-session.test.ts:generic-api-key:60
+780eee9fb519d3c148ffd566ac6a940f1fdc8b31:packages/server/src/__tests__/mcp-http-session.test.ts:generic-api-key:61
+780eee9fb519d3c148ffd566ac6a940f1fdc8b31:packages/server/src/__tests__/mcp-http-session.test.ts:generic-api-key:67
+780eee9fb519d3c148ffd566ac6a940f1fdc8b31:packages/server/src/__tests__/mcp-http-session.test.ts:generic-api-key:74
+780eee9fb519d3c148ffd566ac6a940f1fdc8b31:packages/server/src/__tests__/mcp-http-session.test.ts:generic-api-key:81
