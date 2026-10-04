@@ -42,12 +42,20 @@ export interface UseReportCommentsOptions {
   projectId: string | undefined
 }
 
-export function useReportComments(opts: UseReportCommentsOptions): {
+export interface ReportCommentsThread {
   comments: ReportCommentRow[]
   loading: boolean
   postComment: (body: string, options?: { visibleToReporter?: boolean; parentId?: number }) => Promise<void>
   deleteComment: (id: number) => Promise<void>
-} {
+}
+
+/**
+ * One report's comment thread: an initial fetch plus a realtime channel that
+ * refetches on change. Mount it ONCE per page and pass the result down — each
+ * call opens its own fetch and channel (REPORT C, 2026-10-04: two consumers on
+ * the report page made report_comments load 2x, 4x under StrictMode).
+ */
+export function useReportComments(opts: UseReportCommentsOptions): ReportCommentsThread {
   const { reportId, projectId } = opts
   const [comments, setComments] = useState<ReportCommentRow[]>([])
   const [loading, setLoading] = useState(false)

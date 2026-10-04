@@ -1,8 +1,7 @@
 /**
  * FILE: apps/admin/src/lib/pdcaAct.ts
  * PURPOSE: One answer to "why can't this fix ship yet?" for every Act-stage
- *          surface (PdcaReceipt on /fixes, PdcaReceiptStrip and
- *          ReportPdcaStory on report detail).
+ *          surface (PdcaReceipt on /fixes, ReportPdcaStory on report detail).
  *
  * REGRESSION (2026-10-02, report 469f6962): PR 424 had red CI, the agent
  * had set review_passed=false, and the PR was then closed unmerged, yet all
