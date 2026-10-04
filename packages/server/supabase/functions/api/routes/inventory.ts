@@ -873,7 +873,7 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
       const parsed = parseInventoryYaml(body.yaml)
       if (!parsed.ok || !parsed.inventory) {
         return c.json(
-          { ok: false, error: { code: 'VALIDATION_FAILED', issues: parsed.issues } },
+          { ok: false, error: { code: 'VALIDATION_FAILED', message: 'The YAML has problems. Fix the listed lines and save again.', issues: parsed.issues } },
           422,
         )
       }
@@ -934,7 +934,7 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
       const parsed = parseInventoryYaml(prop.proposed_yaml as string)
       if (!parsed.ok || !parsed.inventory) {
         return c.json(
-          { ok: false, error: { code: 'VALIDATION_FAILED', issues: parsed.issues } },
+          { ok: false, error: { code: 'VALIDATION_FAILED', message: 'This draft has problems. Fix the listed lines on the YAML tab, save, then accept.', issues: parsed.issues } },
           422,
         )
       }

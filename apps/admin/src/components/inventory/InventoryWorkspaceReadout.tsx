@@ -11,8 +11,10 @@ import { IconGlobe, IconHealth } from '../icons'
 
 export interface InventoryWorkspaceReadoutProps {
   projectId: string | null
-  nodeCount?: number
-  storyCount?: number
+  /** Tracked actions (inventory_status_summary.total). */
+  nodeCount?: number | null
+  /** User stories in the active inventory; null while they load. */
+  storyCount?: number | null
 }
 
 export function InventoryWorkspaceReadout({
@@ -33,13 +35,13 @@ export function InventoryWorkspaceReadout({
       wrap: true,
     },
     {
-      label: 'Inventory nodes',
-      value: nodeCount != null ? String(nodeCount) : '—',
+      label: 'Actions tracked',
+      value: nodeCount != null ? String(nodeCount) : 'Not loaded yet',
       tone: nodeCount != null && nodeCount > 0 ? 'info' : 'muted',
     },
     {
       label: 'User stories',
-      value: storyCount != null ? String(storyCount) : '—',
+      value: storyCount != null ? String(storyCount) : 'Not loaded yet',
       tone: storyCount != null && storyCount > 0 ? 'ok' : 'muted',
     },
   ]
