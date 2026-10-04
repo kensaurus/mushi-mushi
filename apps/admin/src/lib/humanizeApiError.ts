@@ -212,7 +212,7 @@ const MUTATION_CODE_TEXT: Record<string, string> = {
  * bare code (`BAD_KIND`), a generic envelope fallback (`Request failed`) or a
  * `column: reason` dump.
  */
-export function isPlainSentence(message: string | null | undefined): message is string {
+function isPlainSentence(message: string | null | undefined): message is string {
   if (!message) return false
   const m = message.trim()
   if (m.length < 8 || !/\s/.test(m)) return false

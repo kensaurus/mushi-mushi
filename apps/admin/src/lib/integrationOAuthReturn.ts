@@ -10,7 +10,7 @@
  * to be ignored, so a cancelled or failed install came back with no message.
  */
 
-export interface OAuthReturnToast {
+interface OAuthReturnToast {
   tone: 'success' | 'error'
   title: string
   description: string
