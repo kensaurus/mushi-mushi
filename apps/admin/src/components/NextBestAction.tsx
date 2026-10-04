@@ -3,13 +3,11 @@
  * PURPOSE: Persistent "what should I do next?" strip rendered below the
  * PageHeader on every page in beginner mode
  *
- *          The strip computes the *single* next action the user should take
- *          across the whole loop, sourced from setup status + active project
- *          counts. The order matches the Plan→Do→Check→Act sequence so the
- *          beginner is always pulled forward, not sideways.
- *
- *          One source of truth: change the rule order below and every page
- *          (Dashboard, Reports, Fixes, Judge, Integrations, etc.) updates.
+ *          The strip shows the *single* next action the user should take,
+ *          from real work first (unfixed urgent reports, stopped fixes, open
+ *          PRs — counted per report, from useNavCounts) and setup gaps after.
+ *          The rule order lives in lib/nextBestAction.ts, so every page
+ *          (Dashboard, Reports, Fixes, Judge, Integrations, etc.) agrees.
  */
 
 import { useLocation } from 'react-router-dom'
@@ -22,21 +20,7 @@ import { shouldShowQuickstartMegaCta } from '../lib/chromePosture'
 import { useSendTestReport } from '../lib/useSendTestReport'
 import { CHIP_TONE } from '../lib/chipTone'
 import { Btn, ResultChip } from './ui'
-
-type NbaTone = 'plan' | 'do' | 'check' | 'act' | 'idle'
-
-interface NbaAction {
-  /** PDCA-aligned tone so the strip colour matches the stage being worked. */
-  tone: NbaTone
-  /** Verb-led headline. */
-  title: string
-  /** One-sentence "why this matters right now". */
-  why?: string
-  /** Primary CTA — internal route or inline trigger (mutually exclusive). */
-  cta:
-    | { kind: 'link'; to: string; label: string }
-    | { kind: 'inline-test-report'; label: string }
-}
+import { computeNextAction, type NbaAction, type NbaTone, type NbaWork } from '../lib/nextBestAction'
 
 const NBA_TONES: Record<NbaTone, { ring: string; bg: string; chipClass: string }> = {
   plan:  { ring: 'border-info/40',   bg: 'bg-info-muted/15',   chipClass: CHIP_TONE.infoSubtle },
@@ -58,7 +42,7 @@ const NBA_LABELS: Record<NbaTone, string> = {
  * Renders the strip below the PageHeader. No-op outside beginner mode so
  * power users on advanced mode get a denser layout.
  */
-export function NextBestAction() {
+export function NextBestAction({ work }: { work: NbaWork }) {
   // ALL hooks must run on every render — early returns below the hook block
   // only. Otherwise React throws "Rendered more hooks than during the
   // previous render" when the strip transitions from hidden (login/loading)
@@ -74,7 +58,7 @@ export function NextBestAction() {
   // Compute the action even when we're going to bail — its identity drives
   // the handoff effect below, which must be declared before any early
   // return. `setup.loading` makes this a no-op (returns null).
-  const action = setup.loading ? null : computeNextAction(setup, pathname)
+  const action = setup.loading ? null : computeNextAction(setup, work, pathname)
 
   // Track the previous gate so we can flash a "✓ Done — next: X" handoff
   // strip for ~1.4s when the user satisfies the current rule.
@@ -184,83 +168,4 @@ function NbaCta({
       {cta.label}
     </Btn>
   )
-}
-
-/**
- * Rule order = beginner journey. The first matching rule wins, so newer
- * users always see the earliest-stage gate; once setup is finished, they
- * see the most-recent operational nudge instead. Pages that already render
- * a stronger CTA (Dashboard's hero, Reports' inline trigger) suppress the
- * strip via the `pathname` skiplist below.
- */
-function computeNextAction(
-  setup: ReturnType<typeof useSetupStatus>,
-  pathname: string,
-): NbaAction | null {
-  // Pages with their own dominant first-action surface: don't double up.
-  // Dashboard renders <FirstReportHero> + <PdcaCockpit>; Onboarding is the
-  // wizard itself. Showing a strip there would be redundant noise.
-  if (pathname === '/' || pathname.startsWith('/onboarding')) return null
-
-  const project = setup.activeProject
-  if (!setup.hasAnyProject || !project) {
-    return {
-      tone: 'plan',
-      title: 'Create your first project',
-      why: 'A project is the inbox for user-felt bugs from one of your apps.',
-      cta: { kind: 'link', to: '/onboarding', label: 'Open setup wizard' },
-    }
-  }
-
-  if (setup.isStepIncomplete('sdk_installed')) {
-    return {
-      tone: 'plan',
-      title: 'Install the Mushi widget in your app',
-      why: 'Without the SDK, end-users have no way to flag bugs.',
-      cta: { kind: 'link', to: '/onboarding', label: 'Open install steps' },
-    }
-  }
-
-  if (project.report_count === 0) {
-    return {
-      tone: 'plan',
-      title: 'Send a test report to see the loop run',
-      why: 'A synthetic report flows through Plan → Do → Check → Act in ~30s.',
-      cta: { kind: 'inline-test-report', label: 'Send test report' },
-    }
-  }
-
-  if (project.fix_count === 0) {
-    return {
-      tone: 'do',
-      title: `Dispatch a fix on your ${project.report_count} waiting ${project.report_count === 1 ? 'report' : 'reports'}`,
-      why: 'Mushi opens a draft PR with rationale. You review the diff, not the ticket.',
-      cta: { kind: 'link', to: '/reports', label: 'Open Reports' },
-    }
-  }
-
-  if (project.merged_fix_count === 0) {
-    return {
-      tone: 'check',
-      title: 'Review the auto-drafted PR',
-      why: 'Judge scores + screenshot diff are ready for your read-through.',
-      cta: { kind: 'link', to: '/fixes', label: 'Open Fixes' },
-    }
-  }
-
-  // Loop closed — surface routing setup as the natural Act-stage next step.
-  if (setup.isStepIncomplete('sentry_connected')) {
-    return {
-      tone: 'act',
-      title: 'Wire merged fixes back to Sentry / Slack',
-      why: 'Close the loop end-to-end so your team sees fixes where they already work.',
-      cta: { kind: 'link', to: '/integrations/config', label: 'Set up routing' },
-    }
-  }
-
-  return {
-    tone: 'idle',
-    title: 'You\u2019re green across the loop. Try the live demo to see it run.',
-    cta: { kind: 'link', to: '/', label: 'Watch the demo' },
-  }
 }

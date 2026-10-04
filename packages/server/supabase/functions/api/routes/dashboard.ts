@@ -113,6 +113,7 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
       criticalReports14d: 0,
       openBacklog: 0,
       failedFixes14d: 0,
+      urgentOpenReports: 0,
       integrationRed: 0,
       integrationAmber: 0,
       judgeStale: false,
@@ -162,6 +163,7 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
       heartbeatRes,
       reportCountRes,
       ungradedRes,
+      urgentRes,
     ] = await Promise.all([
       db
         .from('reports')
@@ -218,6 +220,15 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
         .in('project_id', projectIds)
         .in('status', [...JUDGE_ELIGIBLE_STATUSES])
         .is('judge_evaluated_at', null),
+      // Critical/high reports still waiting on a decision, any age. Not
+      // `criticalReports14d`, which counts by created_at and includes fixed
+      // reports; the "next best action" strip needs current, unfixed work.
+      db
+        .from('reports')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', activeProject.id)
+        .in('severity', ['critical', 'high'])
+        .in('status', [...OPEN_REPORT_STATUSES]),
     ]);
 
     const recentReports = reportsRes.data ?? [];
@@ -392,6 +403,7 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
         criticalReports14d,
         openBacklog,
         failedFixes14d,
+        urgentOpenReports: urgentRes.count ?? 0,
         integrationRed,
         integrationAmber,
         judgeStale,
