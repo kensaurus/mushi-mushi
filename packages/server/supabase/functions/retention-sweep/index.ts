@@ -94,10 +94,12 @@ const handler = async (req: Request): Promise<Response> => {
     const totalDeleted = stats.reduce((sum, s) => sum + s.deleted_count, 0)
     const skippedLegalHold = stats.filter((s) => s.legal_hold).length
     const voice = await sweepVoiceIntake(db)
+    const traces = await sweepLlmTraces(db)
 
     await cron.finish({
-      rowsAffected: totalDeleted + voice.audio_deleted + voice.sessions_expired,
+      rowsAffected: totalDeleted + voice.audio_deleted + voice.sessions_expired + traces.deleted,
       metadata: {
+        llm_traces_deleted: traces.deleted,
         projects_swept: stats.length,
         total_deleted: totalDeleted,
         skipped_legal_hold: skippedLegalHold,
@@ -114,6 +116,7 @@ const handler = async (req: Request): Promise<Response> => {
         skipped_legal_hold: skippedLegalHold,
         per_project: stats,
         voice,
+        llm_traces: traces,
       },
     })
   } catch (err) {
@@ -339,6 +342,80 @@ export async function deleteOldReportsBatch(
   if (deleteErr) return { deleted: 0, error: deleteErr.message }
 
   return { deleted: deletedRows?.length ?? ids.length, error: null }
+}
+
+// ── LLM traces ─────────────────────────────────────────────────────────────
+//
+// project_retention_policies.llm_traces_retention_days, set on the Compliance
+// page. Only projects that saved a policy are swept: with no row the console
+// shows the default, but nothing was chosen, so their history is kept. A
+// legal hold keeps everything. llm_invocations is also the spend ledger (AI
+// budget, auto-fix cap, billing counts read the last 30 days), so the sweep
+// never deletes anything younger than MIN_TRACE_RETENTION_DAYS.
+
+export const MIN_TRACE_RETENTION_DAYS = 35
+const TRACE_BATCH = 1000
+
+/** Days of llm_invocations the sweep keeps for a saved setting. */
+export function traceRetentionDays(saved: number | null | undefined): number {
+  const days = typeof saved === 'number' && Number.isFinite(saved) ? Math.trunc(saved) : 0
+  return Math.max(days, MIN_TRACE_RETENTION_DAYS)
+}
+
+interface TracePolicyRow {
+  project_id: string
+  llm_traces_retention_days: number | null
+  legal_hold: boolean | null
+}
+
+export async function sweepLlmTraces(
+  db: ReturnType<typeof getServiceClient>,
+): Promise<{ projects: number; deleted: number; errors: number }> {
+  const { data: policies, error } = await db
+    .from('project_retention_policies')
+    .select('project_id, llm_traces_retention_days, legal_hold')
+    .returns<TracePolicyRow[]>()
+  if (error) {
+    rlog.error('llm_trace_policies_failed', { err: error.message })
+    return { projects: 0, deleted: 0, errors: 1 }
+  }
+
+  let deleted = 0
+  let errors = 0
+  let projects = 0
+  for (const p of policies ?? []) {
+    if (p.legal_hold) continue
+    projects++
+    const days = traceRetentionDays(p.llm_traces_retention_days)
+    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
+    for (let i = 0; i < 50; i++) {
+      const { data: rows, error: selErr } = await db
+        .from('llm_invocations')
+        .select('id')
+        .eq('project_id', p.project_id)
+        .lt('created_at', cutoff)
+        .order('created_at', { ascending: true })
+        .limit(TRACE_BATCH)
+        .returns<Array<{ id: string }>>()
+      if (selErr) {
+        rlog.error('llm_trace_select_failed', { project_id: p.project_id, err: selErr.message })
+        errors++
+        break
+      }
+      const ids = (rows ?? []).map((r) => r.id)
+      if (ids.length === 0) break
+      const { error: delErr } = await db.from('llm_invocations').delete().in('id', ids)
+      if (delErr) {
+        rlog.error('llm_trace_delete_failed', { project_id: p.project_id, err: delErr.message })
+        errors++
+        break
+      }
+      deleted += ids.length
+      if (ids.length < TRACE_BATCH) break
+    }
+  }
+  if (deleted > 0) rlog.info('llm_traces_swept', { projects, deleted })
+  return { projects, deleted, errors }
 }
 
 // ── Voice intake (plan C6) ─────────────────────────────────────────────────
