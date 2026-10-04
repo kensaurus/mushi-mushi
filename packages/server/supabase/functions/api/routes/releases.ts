@@ -26,6 +26,7 @@ import { resolveEndUser } from '../../_shared/end-user-resolver.ts'
 import {
   assertTargetProjectAccess,
   callerProjectIds,
+  dbError,
   intersectOrgAndProjectScope,
   jsonForbidden,
   jsonNotFound,
@@ -36,6 +37,7 @@ import { log } from '../../_shared/logger.ts'
 import { reporterKey } from '../../_shared/reporter-token.ts'
 import { publishRelease } from '../../_shared/release-publish.ts'
 import { findOpenAutoDraft } from '../../_shared/auto-release.ts'
+import { denyViewerWrite } from '../viewer-gate.ts'
 
 async function assertReleaseRowAccess(
   c: Parameters<typeof assertTargetProjectAccess>[0],
@@ -43,7 +45,7 @@ async function assertReleaseRowAccess(
   userId: string,
   releaseId: string,
 ): Promise<
-  | { ok: true; projectId: string }
+  | { ok: true; projectId: string; role: string | null }
   | { ok: false; response: Response }
 > {
   const { data: release } = await db
@@ -56,7 +58,7 @@ async function assertReleaseRowAccess(
   }
   const access = await assertTargetProjectAccess(c, db, userId, release.project_id as string)
   if (!access.ok) return { ok: false, response: access.response }
-  return { ok: true, projectId: release.project_id as string }
+  return { ok: true, projectId: release.project_id as string, role: access.role ?? null }
 }
 
 export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
@@ -246,7 +248,7 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
     if (status) query = query.eq('status', status)
 
     const { data, count, error } = await query
-    if (error) return c.json({ ok: false, error: error.message }, 500)
+    if (error) return dbError(c, error)
     return c.json({ ok: true, data, meta: { total: count ?? 0, limit, offset } })
   })
 
@@ -277,13 +279,17 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
   })
 
   app.post('/v1/admin/releases/draft', writeAuth, async (c) => {
-    const body = draftSchema.safeParse(await c.req.json())
-    if (!body.success) return c.json({ ok: false, error: body.error.flatten() }, 400)
+    const body = draftSchema.safeParse(await c.req.json().catch(() => null))
+    if (!body.success) {
+      return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: 'Enter a version (for example 1.2.3) and pick a project.' } }, 400)
+    }
 
     const db = getServiceClient()
     const userId = c.get('userId') as string
     const access = await assertTargetProjectAccess(c, db, userId, body.data.project_id)
     if (!access.ok) return access.response
+    const viewerDenied = denyViewerWrite(c, access.role, 'draft releases')
+    if (viewerDenied) return viewerDenied
 
     // Call the release-builder edge function
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
@@ -301,7 +307,7 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
       })
     } catch (err) {
       log.error('fetch release-builder failed', { scope: 'releases/draft', err: String(err) })
-      return c.json({ ok: false, error: 'Could not reach release-builder function' }, 500)
+      return c.json({ ok: false, error: { code: 'RELEASE_BUILDER_UNAVAILABLE', message: 'The release writer did not answer. Try again in a minute.' } }, 502)
     }
 
     // The edge function may return plain-text "Internal Server Error" on crash —
@@ -315,9 +321,19 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
         scope: 'releases/draft',
         preview: rawText.slice(0, 200),
       })
-      return c.json({ ok: false, error: `release-builder error: ${rawText.slice(0, 100)}` }, 500)
+      return c.json({ ok: false, error: { code: 'RELEASE_BUILDER_FAILED', message: 'The release writer failed. Try again in a minute.' } }, 502)
     }
-    if (!res.ok) return c.json({ ok: false, error: (data.error as string) ?? 'release-builder failed' }, 500)
+    if (!res.ok) {
+      const upstream = data.error
+      const message = typeof upstream === 'string'
+        ? upstream
+        : (upstream as { message?: string } | undefined)?.message
+      log.warn('release-builder refused draft', { scope: 'releases/draft', status: res.status, message })
+      return c.json({
+        ok: false,
+        error: { code: 'RELEASE_BUILDER_FAILED', message: message || 'The release writer could not draft this release.' },
+      }, res.status >= 500 ? 502 : 400)
+    }
     return c.json({ ok: true, data: (data as { data?: unknown }).data ?? data })
   })
 
@@ -337,7 +353,7 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
         .eq('release_id', c.req.param('id')!),
     ])
 
-    if (releaseRes.error) return c.json({ ok: false, error: releaseRes.error.message }, 404)
+    if (releaseRes.error) return jsonNotFound(c, 'Release not found')
     return c.json({ ok: true, data: { ...releaseRes.data, credits: creditsRes.data ?? [] } })
   })
 
@@ -356,9 +372,13 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
     if (!idParsed.ok) return idParsed.error
     const rowAccess = await assertReleaseRowAccess(c, db, userId, idParsed.value)
     if (!rowAccess.ok) return rowAccess.response
+    const viewerDenied = denyViewerWrite(c, rowAccess.role, 'edit releases')
+    if (viewerDenied) return viewerDenied
 
-    const body = patchReleaseSchema.safeParse(await c.req.json())
-    if (!body.success) return c.json({ ok: false, error: body.error.flatten() }, 400)
+    const body = patchReleaseSchema.safeParse(await c.req.json().catch(() => null))
+    if (!body.success) {
+      return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: 'That change is not valid. Refresh the draft and try again.' } }, 400)
+    }
 
     const { data, error } = await db
       .from('releases')
@@ -366,9 +386,12 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
       .eq('id', c.req.param('id')!)
       .eq('status', 'draft') // can only edit drafts
       .select()
-      .single()
+      .maybeSingle()
 
-    if (error) return c.json({ ok: false, error: error.message }, 500)
+    if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: 'The draft could not be saved. Try again in a moment.' } }, 500)
+    if (!data) {
+      return c.json({ ok: false, error: { code: 'NOT_A_DRAFT', message: 'This release is already published, so it can no longer be edited.' } }, 409)
+    }
     return c.json({ ok: true, data })
   })
 
@@ -380,14 +403,20 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
     if (!idParsed.ok) return idParsed.error
     const rowAccess = await assertReleaseRowAccess(c, db, userId, idParsed.value)
     if (!rowAccess.ok) return rowAccess.response
+    const viewerDenied = denyViewerWrite(c, rowAccess.role, 'delete release drafts')
+    if (viewerDenied) return viewerDenied
 
-    const { error } = await db
+    const { data: deleted, error } = await db
       .from('releases')
       .delete()
       .eq('id', c.req.param('id')!)
       .eq('status', 'draft')
+      .select('id')
 
-    if (error) return c.json({ ok: false, error: error.message }, 500)
+    if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: 'The draft could not be deleted. Try again in a moment.' } }, 500)
+    if (!deleted || deleted.length === 0) {
+      return c.json({ ok: false, error: { code: 'NOT_A_DRAFT', message: 'Only drafts can be deleted, and this release is already published.' } }, 409)
+    }
     return c.json({ ok: true })
   })
 
@@ -399,12 +428,23 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
     if (!idParsed.ok) return idParsed.error
     const rowAccess = await assertReleaseRowAccess(c, db, userId, idParsed.value)
     if (!rowAccess.ok) return rowAccess.response
+    const viewerDenied = denyViewerWrite(c, rowAccess.role, 'publish releases')
+    if (viewerDenied) return viewerDenied
 
     // Mark published, ship tickets, message each reporter (Plan 018 §5) and
     // stamp delivered credits — the same path the opt-in auto-release takes.
     const published = await publishRelease(db, idParsed.value, { kind: 'admin', id: userId })
     // `published: true` = the release is live but some reporters were not told.
-    if (!published.ok) return c.json({ ok: false, error: published.error, published: published.published }, published.status)
+    if (!published.ok) {
+      log.warn('release publish incomplete', { scope: 'releases/publish', releaseId: idParsed.value, published: published.published, error: published.error })
+      const message = published.published
+        ? 'The release is live, but some follow-up steps failed: linked tickets or reporter messages may be missing. Check Notifications.'
+        : published.status === 404
+          ? 'This release is already published or no longer exists. Refresh the list.'
+          : 'The release could not be published. Try again in a moment.'
+      const code = published.published ? 'PUBLISHED_WITH_ERRORS' : published.status === 404 ? 'NOT_A_DRAFT' : 'PUBLISH_FAILED'
+      return c.json({ ok: false, error: { code, message }, published: published.published }, published.status)
+    }
 
     return c.json({
       ok: true,

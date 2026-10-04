@@ -13,6 +13,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { QueueItemCard } from './QueueItemCard'
+import { isQueueItemRetryable } from './queueRetry'
 import type { QueueItem } from './types'
 
 let host: HTMLDivElement
@@ -41,7 +42,7 @@ function render(status: string) {
     created_at: '2026-10-03T00:00:00Z',
   } as unknown as QueueItem
   act(() =>
-    root.render(createElement(MemoryRouter, null, createElement(QueueItemCard, { item, retrying: false, onRetry: () => {} }))),
+    root.render(createElement(MemoryRouter, null, createElement(QueueItemCard, { item, retrying: false, canRetry: isQueueItemRetryable(item, Date.now()), onRetry: () => {} }))),
   )
   return [...host.querySelectorAll('button')].map((b) => b.textContent)
 }

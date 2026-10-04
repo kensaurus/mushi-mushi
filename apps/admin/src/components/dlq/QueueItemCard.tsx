@@ -13,14 +13,14 @@ import { ContainedBlock, InlineProof, SignalChip } from '../report-detail/Report
 interface Props {
   item: QueueItem
   retrying: boolean
+  /** False hides Retry: completed and still-active jobs are not retried. */
+  canRetry: boolean
   onRetry: () => void
 }
 
 const WAITING_STATUSES = new Set(['pending', 'running'])
-/** Only a job that stopped can be retried (the server refuses the rest). */
-const RETRYABLE_STATUSES = new Set(['failed', 'dead_letter'])
 
-export function QueueItemCard({ item, retrying, onRetry }: Props) {
+export function QueueItemCard({ item, retrying, canRetry, onRetry }: Props) {
   const waitingMs =
     WAITING_STATUSES.has(item.status) && item.created_at
       ? Date.now() - new Date(item.created_at).getTime()
@@ -69,7 +69,7 @@ export function QueueItemCard({ item, retrying, onRetry }: Props) {
             )}
           </InlineProof>
         </div>
-        {RETRYABLE_STATUSES.has(item.status) ? (
+        {canRetry && (
           <Btn
             variant="ghost"
             size="sm"
@@ -77,10 +77,11 @@ export function QueueItemCard({ item, retrying, onRetry }: Props) {
             disabled={retrying}
             loading={retrying}
             className="ml-3 flex-shrink-0"
+            title="Run this job again from the start. This re-runs AI triage for the report."
           >
             Retry
           </Btn>
-        ) : null}
+        )}
       </div>
     </Card>
   )

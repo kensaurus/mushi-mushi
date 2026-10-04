@@ -4,10 +4,15 @@
  *          Overview | Drafts | Published | Draft.
  */
 
-import { useState, useCallback, useMemo, useEffect } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
+import { apiErrorText } from '../lib/apiErrorText'
+import { publishReleaseRequest } from '../lib/releasePublish'
+import { resolveModeAwareTab } from '../lib/modeAwareTab'
+import { useEntitlements } from '../lib/useEntitlements'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { useRealtimeReload } from '../lib/realtime'
@@ -103,12 +108,13 @@ const TABS: Array<{ id: ReleasesTabId; label: string; description: string }> = [
   { id: 'draft', label: 'Draft', description: 'Generate a new AI changelog from fixed reports in a time window.' },
 ]
 
-function resolveReleasesTab(value: string | null): ReleasesTabId {
+/** The tab named in the URL, or null so quickstart can pick one. */
+function explicitReleasesTab(value: string | null): ReleasesTabId | null {
   if (value === 'drafts' || value === 'published' || value === 'draft') return value
-  return 'overview'
+  return null
 }
 
-function DraftForm({ onCreated, projectName }: { onCreated: () => void; projectName: string | null }) {
+function DraftForm({ onCreated, projectName, canEdit }: { onCreated: () => void; projectName: string | null; canEdit: boolean }) {
   const [version, setVersion] = useState('')
   const [title, setTitle] = useState('')
   const [windowDays, setWindowDays] = useState(30)
@@ -132,14 +138,17 @@ function DraftForm({ onCreated, projectName }: { onCreated: () => void; projectN
           window_start: windowStart.toISOString(),
           window_end: windowEnd.toISOString(),
         }),
-      }) as { ok: boolean; error?: string }
-      if (!res.ok) throw new Error(res.error ?? 'Draft failed')
+      })
+      if (!res.ok) {
+        toast.error('Could not draft the release', apiErrorText(res.error, 'Try again in a minute.'))
+        return
+      }
       toast.success('Release draft created')
       setVersion('')
       setTitle('')
       onCreated()
-    } catch (err) {
-      toast.error((err as Error).message)
+    } catch {
+      toast.error('Could not draft the release', 'Check your connection and try again.')
     } finally {
       setLoading(false)
     }
@@ -166,6 +175,8 @@ function DraftForm({ onCreated, projectName }: { onCreated: () => void; projectN
             variant="primary"
             loading={loading}
             onClick={handleDraft}
+            disabled={!canEdit}
+            title={canEdit ? undefined : 'Viewers have read-only access and cannot draft releases.'}
             leadingIcon={<IconReleases className="h-3.5 w-3.5" aria-hidden="true" />}
           >
             Generate draft with AI
@@ -180,11 +191,24 @@ function DraftForm({ onCreated, projectName }: { onCreated: () => void; projectN
   )
 }
 
-function ReleaseDrawer({ release, onClose, onPublished }: { release: Release; onClose: () => void; onPublished: () => void }) {
+function ReleaseDrawer({
+  release,
+  onClose,
+  onPublished,
+  canEdit,
+}: {
+  release: Release
+  onClose: () => void
+  onPublished: () => void
+  canEdit: boolean
+}) {
   const [body, setBody] = useState(release.body_md)
   const [fulfilledTicketIds, setFulfilledTicketIds] = useState<string[]>(release.fulfilled_ticket_ids ?? [])
   const [saving, setSaving] = useState(false)
   const [publishing, setPublishing] = useState(false)
+  const [confirmPublish, setConfirmPublish] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const toast = useToast()
 
   const { data: detailData } = usePageData<Release>(`/v1/admin/releases/${release.id}`)
@@ -192,53 +216,75 @@ function ReleaseDrawer({ release, onClose, onPublished }: { release: Release; on
   const detailRelease = detailData ?? release
   const ticketCount = fulfilledTicketIds.length
 
-  const persistDraft = useCallback(async (patch: { body_md?: string; fulfilled_ticket_ids?: string[] }) => {
-    const res = await apiFetch(`/v1/admin/releases/${release.id}`, {
-      method: 'PATCH',
-      body: JSON.stringify(patch),
-    }) as { ok: boolean; error?: string }
-    if (!res.ok) throw new Error(res.error ?? 'Save failed')
+  /** Returns null on success, or a plain-English reason. */
+  const persistDraft = useCallback(async (patch: { body_md?: string; fulfilled_ticket_ids?: string[] }): Promise<string | null> => {
+    try {
+      const res = await apiFetch(`/v1/admin/releases/${release.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(patch),
+      })
+      return res.ok ? null : apiErrorText(res.error, 'The draft could not be saved. Try again in a moment.')
+    } catch {
+      return 'Could not reach the server. Check your connection and try again.'
+    }
   }, [release.id])
 
   const handleSave = useCallback(async () => {
     setSaving(true)
-    try {
-      await persistDraft({ body_md: body, fulfilled_ticket_ids: fulfilledTicketIds })
-      toast.success('Draft saved')
-    } catch (err) {
-      toast.error((err as Error).message)
-    } finally {
-      setSaving(false)
-    }
+    const problem = await persistDraft({ body_md: body, fulfilled_ticket_ids: fulfilledTicketIds })
+    setSaving(false)
+    if (problem) toast.error('Draft not saved', problem)
+    else toast.success('Draft saved')
   }, [body, fulfilledTicketIds, persistDraft, toast])
+
+  const handleDelete = useCallback(async () => {
+    setDeleting(true)
+    try {
+      const res = await apiFetch(`/v1/admin/releases/${release.id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        toast.error('Draft not deleted', apiErrorText(res.error, 'Try again in a moment.'))
+        return
+      }
+      toast.success('Draft deleted', 'Auto-release can draft the next build again.')
+      setConfirmDelete(false)
+      onPublished()
+      onClose()
+    } catch {
+      toast.error('Draft not deleted', 'Check your connection and try again.')
+    } finally {
+      setDeleting(false)
+    }
+  }, [release.id, onPublished, onClose, toast])
 
   const handlePublish = useCallback(async () => {
     setPublishing(true)
     try {
-      await persistDraft({ body_md: body, fulfilled_ticket_ids: fulfilledTicketIds })
-      const res = await apiFetch(`/v1/admin/releases/${release.id}/publish`, { method: 'POST' }) as {
-        ok: boolean
-        data?: Release
-        notified?: number
-        delivery?: { reporters_notified?: number; reporters_held?: number; reporters_failed?: number; reports_already_released?: number }
-        error?: string
+      const saveProblem = await persistDraft({ body_md: body, fulfilled_ticket_ids: fulfilledTicketIds })
+      if (saveProblem) {
+        toast.error('Not published', `The latest edits could not be saved first. ${saveProblem}`)
+        return
       }
-      if (!res.ok) throw new Error(res.error ?? 'Publish failed')
-      const told = res.delivery?.reporters_notified ?? 0
-      const held = res.delivery?.reporters_held ?? 0
-      const failed = res.delivery?.reporters_failed ?? 0
-      const alreadyShipped = res.delivery?.reports_already_released ?? 0
-      const ticketMsg = ticketCount > 0 ? ` · ${ticketCount} feedback ticket${ticketCount === 1 ? '' : 's'} marked shipped` : ''
-      const heldMsg = held > 0 ? ` · ${held} waiting in the Outbox` : ''
-      const shippedMsg = alreadyShipped > 0
-        ? ` · ${alreadyShipped} fix${alreadyShipped === 1 ? '' : 'es'} already shipped in an earlier release (not messaged again)`
-        : ''
-      toast.success(`Published! ${told} reporter${told === 1 ? '' : 's'} told it shipped${heldMsg}${shippedMsg}${ticketMsg}.`)
-      if (failed > 0) toast.error(`${failed} reporter message${failed === 1 ? '' : 's'} could not be delivered — see Notifications.`)
+      const outcome = await publishReleaseRequest(release.id)
+      if (outcome.kind === 'failed') {
+        toast.error('Not published', outcome.message)
+        return
+      }
+      setConfirmPublish(false)
+      if (outcome.kind === 'published-with-errors') {
+        // It is live: close and refresh so the list stops showing a draft.
+        toast.push({ tone: 'warning', title: 'Published, with problems', description: outcome.message })
+      } else {
+        const { told, held, failed, alreadyShipped } = outcome
+        const ticketMsg = ticketCount > 0 ? ` · ${ticketCount} feedback ticket${ticketCount === 1 ? '' : 's'} marked shipped` : ''
+        const heldMsg = held > 0 ? ` · ${held} waiting in the Outbox` : ''
+        const shippedMsg = alreadyShipped > 0
+          ? ` · ${alreadyShipped} fix${alreadyShipped === 1 ? '' : 'es'} already shipped in an earlier release (not messaged again)`
+          : ''
+        toast.success(`Published! ${told} reporter${told === 1 ? '' : 's'} told it shipped${heldMsg}${shippedMsg}${ticketMsg}.`)
+        if (failed > 0) toast.error(`${failed} reporter message${failed === 1 ? '' : 's'} could not be delivered`, 'See Notifications for the failed messages.')
+      }
       onPublished()
       onClose()
-    } catch (err) {
-      toast.error((err as Error).message)
     } finally {
       setPublishing(false)
     }
@@ -326,10 +372,56 @@ function ReleaseDrawer({ release, onClose, onPublished }: { release: Release; on
         )}
 
         {release.status === 'draft' && (
-          <div className="flex gap-2 pt-2">
-            <Btn loading={saving} variant="ghost" onClick={handleSave}>Save draft</Btn>
-            <Btn loading={publishing} variant="primary" onClick={handlePublish}>Publish + notify</Btn>
+          <div className="flex flex-wrap items-center gap-2 pt-2">
+            <Btn loading={saving} variant="ghost" onClick={handleSave} disabled={!canEdit || publishing}>Save draft</Btn>
+            <Btn
+              loading={publishing}
+              variant="primary"
+              onClick={() => setConfirmPublish(true)}
+              disabled={!canEdit || saving}
+              title={canEdit ? undefined : 'Viewers have read-only access and cannot publish.'}
+            >
+              Publish + notify
+            </Btn>
+            <Btn
+              variant="ghost"
+              className="ml-auto text-danger"
+              onClick={() => setConfirmDelete(true)}
+              disabled={!canEdit || saving || publishing}
+              title={canEdit ? 'Delete this draft. Nothing is sent to reporters.' : 'Viewers have read-only access and cannot delete drafts.'}
+            >
+              Delete draft
+            </Btn>
           </div>
+        )}
+
+        {confirmPublish && (
+          <ConfirmDialog
+            title={`Publish v${release.version}?`}
+            body={`This publishes the changelog, marks ${pluralizeWithCount(release.fixed_report_ids.length, 'fix', 'fixes')} as shipped${ticketCount > 0 ? ` and ${pluralizeWithCount(ticketCount, 'feedback ticket', 'feedback tickets')} as shipped` : ''}, and messages ${pluralizeWithCount(release.credited_reporter_ids.length, 'credited reporter', 'credited reporters')}. A published release cannot be unpublished.`}
+            confirmLabel="Publish + notify"
+            cancelLabel="Not yet"
+            loading={publishing}
+            onConfirm={() => void handlePublish()}
+            onCancel={() => {
+              if (!publishing) setConfirmPublish(false)
+            }}
+          />
+        )}
+
+        {confirmDelete && (
+          <ConfirmDialog
+            title={`Delete draft v${release.version}?`}
+            body="The draft and its changelog text are removed. No reporter is messaged, and auto-release can draft the next build again."
+            confirmLabel="Delete draft"
+            cancelLabel="Keep draft"
+            tone="danger"
+            loading={deleting}
+            onConfirm={() => void handleDelete()}
+            onCancel={() => {
+              if (!deleting) setConfirmDelete(false)
+            }}
+          />
         )}
       </div>
     </Drawer>
@@ -343,6 +435,7 @@ function ReleasesList({
   error,
   projectName,
   onReload,
+  canEdit,
 }: {
   status: 'draft' | 'published'
   releases: Release[]
@@ -350,6 +443,7 @@ function ReleasesList({
   error: string | null
   projectName: string | null
   onReload: () => void
+  canEdit: boolean
 }) {
   const [selected, setSelected] = useState<Release | null>(null)
 
@@ -442,7 +536,7 @@ function ReleasesList({
       </Card>
 
       {selected && (
-        <ReleaseDrawer release={selected} onClose={() => setSelected(null)} onPublished={onReload} />
+        <ReleaseDrawer release={selected} onClose={() => setSelected(null)} onPublished={onReload} canEdit={canEdit} />
       )}
     </>
   )
@@ -451,10 +545,8 @@ function ReleasesList({
 export function ReleasesPage() {
   const copy = usePageCopy('/releases')
   const ux = useReleasesUx()
+  const { canEditProject } = useEntitlements()
   const [searchParams, setSearchParams] = useSearchParams()
-  const activeTab = resolveReleasesTab(searchParams.get('tab'))
-  const activeTabMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
-
   const activeProjectId = useActiveProjectId()
   const setup = useSetupStatus(activeProjectId)
   const projectName = setup.activeProject?.project_name ?? null
@@ -469,6 +561,13 @@ export function ReleasesPage() {
   } = usePageData<ReleasesStats>('/v1/admin/releases/stats')
   usePublishPageHeroStats('/releases', statsData)
   const stats = { ...EMPTY_RELEASES_STATS, ...statsData }
+  const activeTab = resolveModeAwareTab<ReleasesTabId>({
+    explicit: explicitReleasesTab(searchParams.get('tab')),
+    isQuickstart: ux.isQuickstart,
+    quickTab: statsData ? resolveQuickReleasesTab(stats) : null,
+    fallback: 'overview',
+  })
+  const activeTabMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
 
   const listPath = activeProjectId && (activeTab === 'drafts' || activeTab === 'published')
     ? `/v1/admin/releases?limit=100`
@@ -503,12 +602,6 @@ export function ReleasesPage() {
     },
     [setSearchParams],
   )
-
-  useEffect(() => {
-    if (!ux.isQuickstart || statsLoading) return
-    const quickTab = resolveQuickReleasesTab(stats)
-    if (activeTab !== quickTab) setActiveTab(quickTab)
-  }, [ux.isQuickstart, statsLoading, stats, activeTab, setActiveTab])
 
   const reloadAll = useCallback(() => {
     reloadStats()
@@ -715,7 +808,7 @@ export function ReleasesPage() {
             emptyDescription="Releases are scoped to the active project. Pick one in the header to generate a draft."
           />
         ) : (
-          <DraftForm onCreated={reloadAll} projectName={projectName} />
+          <DraftForm onCreated={reloadAll} projectName={projectName} canEdit={canEditProject} />
         )
       )}
 
@@ -734,6 +827,7 @@ export function ReleasesPage() {
             error={listError}
             projectName={projectName}
             onReload={reloadAll}
+            canEdit={canEditProject}
           />
         )
       )}
