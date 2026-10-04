@@ -128,7 +128,7 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
 
   // DELETE a routing destination (Jira/Linear/GitHub Issues/PagerDuty) so the
   // CRUD editor on IntegrationsPage can fully unwire a target without leaving
-  // stale rows. Auditable; only the project owner can delete their own rows.
+  // stale rows. Auditable; owner/admin only, like the POST that created it.
   app.delete('/v1/admin/integrations/:type', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const integrationType = c.req.param('type')!;
@@ -136,6 +136,8 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
     const resolvedProject = await resolveOwnedProject(c, db, userId);
     if ('response' in resolvedProject) return resolvedProject.response;
     const project = resolvedProject.project;
+    const forbidden = requireProjectAdmin(c, project);
+    if (forbidden) return forbidden;
 
     const { error } = await db
       .from('project_integrations')
@@ -985,6 +987,8 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
     });
     if ('response' in resolvedProject) return resolvedProject.response;
     const project = resolvedProject.project;
+    const forbidden = requireProjectAdmin(c, project);
+    if (forbidden) return forbidden;
 
     const clientId = Deno.env.get('LINEAR_OAUTH_CLIENT_ID');
     if (!clientId) {
@@ -1032,6 +1036,8 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
     });
     if ('response' in resolvedProject) return resolvedProject.response;
     const project = resolvedProject.project;
+    const forbidden = requireProjectAdmin(c, project);
+    if (forbidden) return forbidden;
 
     const { error } = await db
       .from('project_settings')

@@ -4150,7 +4150,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       description: descOf('improve_qa_story', TDD_TOOL_CATALOG),
       annotations: annotationsFor('improve_qa_story', TDD_TOOL_CATALOG),
       inputSchema: z.object({
-        projectId: z.string().optional().describe('Project id (omit to run across all projects)'),
+        projectId: z.string().optional().describe('Project id (defaults to the configured project; one project per call)'),
       }),
     },
     async ({ projectId }) => {
