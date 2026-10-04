@@ -23,6 +23,7 @@
 // `supabaseUrl`), which breaks `deno check` when a npm-typed client is passed
 // to a function typed against the jsr build.
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
+import { mcpCallTool } from './mcp-http-session.ts'
 
 const SUPABASE_MCP_URL = 'https://mcp.supabase.com/mcp'
 const CACHE_TTL_MS = 60_000
@@ -73,37 +74,15 @@ async function callTool<T = unknown>(
   url.searchParams.set('project_ref', opts.projectRef)
   url.searchParams.set('read_only', 'true')
 
-  const body = {
-    jsonrpc: '2.0',
-    id: 1,
-    method: 'tools/call',
-    params: { name: toolName, arguments: toolArgs },
+  // Streamable HTTP with a session (initialize → Mcp-Session-Id → call).
+  const r = await mcpCallTool({ url: url.toString(), token: opts.pat, timeoutMs: 15_000 }, toolName, toolArgs)
+  if (r.status !== 200) {
+    throw new Error(`Supabase MCP error: HTTP ${r.status} — ${r.error ?? '?'}`)
   }
-
-  const res = await fetch(url.toString(), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      // Streamable HTTP requires both; a server may answer 406 without them
-      // (connectors/supabase.ts already sends this).
-      'Accept': 'application/json, text/event-stream',
-      'Authorization': `Bearer ${opts.pat}`,
-    },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(15_000),
-  })
-
-  if (!res.ok) {
-    throw new Error(`Supabase MCP error: HTTP ${res.status} — ${await res.text().catch(() => '?')}`)
-  }
-
-  const json = await res.json() as {
-    result?: { content?: Array<{ text?: string }> }
-    error?: { message?: string }
-  }
-
-  if (json.error) {
-    throw new Error(`Supabase MCP tool error: ${json.error.message ?? JSON.stringify(json.error)}`)
+  if (r.error) throw new Error(`Supabase MCP tool error: ${r.error}`)
+  const json = { result: r.result ?? undefined }
+  if (r.result?.isError) {
+    throw new Error(`Supabase MCP tool error: ${(r.result.content?.[0]?.text ?? 'tool error').slice(0, 200)}`)
   }
 
   // Extract the tool result from the MCP text content block.
@@ -136,8 +115,31 @@ export interface AdvisorResult {
 export async function getSupabaseAdvisors(
   opts: SupabaseMcpClientOptions,
 ): Promise<AdvisorResult[]> {
-  const result = await callTool<{ advisors?: AdvisorResult[] }>(opts, 'get_advisors', {})
-  return result.advisors ?? []
+  // get_advisors now requires a type; fetch both kinds.
+  const [security, performance] = await Promise.all([
+    callTool<unknown>(opts, 'get_advisors', { type: 'security' }),
+    callTool<unknown>(opts, 'get_advisors', { type: 'performance' }),
+  ])
+  return [...normalizeAdvisors(security), ...normalizeAdvisors(performance)]
+}
+
+/** `{ lints: [...] }` (current), `{ result: { lints } }` or `{ advisors }` → AdvisorResult[]. */
+export function normalizeAdvisors(raw: unknown): AdvisorResult[] {
+  const r = (raw ?? {}) as Record<string, unknown>
+  const inner = (r.result && typeof r.result === 'object' ? r.result : r) as Record<string, unknown>
+  const list = (Array.isArray(inner.lints) ? inner.lints : Array.isArray(inner.advisors) ? inner.advisors : []) as Array<Record<string, unknown>>
+  return list.map((l) => ({
+    name: String(l.name ?? ''),
+    title: typeof l.title === 'string' ? l.title : undefined,
+    description: String(l.description ?? l.detail ?? ''),
+    level: typeof l.level === 'string' ? l.level : undefined,
+    metadata: {
+      ...(typeof l.remediation === 'string' ? { remediation: l.remediation } : {}),
+      ...(typeof l.count === 'number' ? { count: l.count } : {}),
+      ...(Array.isArray(l.findings) ? { findings: l.findings } : {}),
+      ...(l.metadata && typeof l.metadata === 'object' ? (l.metadata as Record<string, unknown>) : {}),
+    },
+  }))
 }
 
 /**
@@ -174,6 +176,50 @@ export async function resolveSupabasePat(
 
 // ─── Extended helpers ────────────────────────────────────────────────────────
 
+/**
+ * `list_tables` output → TableInfo[]. Current shape: `{ tables: [{ name:
+ * "public.x", rls_enabled, columns: [{ name, data_type, options: ["nullable", …] }] }] }`;
+ * older servers returned a bare array with `schema` and `type`/`nullable`.
+ */
+export function normalizeMcpTables(raw: unknown): TableInfo[] {
+  const r = (raw ?? {}) as Record<string, unknown>
+  const list = (Array.isArray(raw) ? raw : Array.isArray(r.tables) ? r.tables : []) as Array<Record<string, unknown>>
+  return list.map((t) => {
+    const full = String(t.name ?? '')
+    const dot = full.indexOf('.')
+    const schema = typeof t.schema === 'string' ? t.schema : dot > 0 ? full.slice(0, dot) : 'public'
+    const name = typeof t.schema === 'string' || dot <= 0 ? full : full.slice(dot + 1)
+    const cols = (Array.isArray(t.columns) ? t.columns : []) as Array<Record<string, unknown>>
+    return {
+      name,
+      schema,
+      rls_enabled: Boolean(t.rls_enabled),
+      columns: cols.map((c) => ({
+        name: String(c.name ?? ''),
+        type: String(c.type ?? c.data_type ?? ''),
+        nullable: typeof c.nullable === 'boolean' ? c.nullable : Array.isArray(c.options) && c.options.includes('nullable'),
+      })),
+      ...(typeof t.rows === 'number' ? { row_count_estimate: t.rows } : {}),
+    }
+  })
+}
+
+/**
+ * Query tools answer with text that wraps the JSON in
+ * `<untrusted-data-…>` delimiters; return the parsed JSON inside, or the
+ * input unchanged when it is not such a string.
+ */
+export function unwrapUntrusted(raw: unknown): unknown {
+  if (typeof raw !== 'string') return raw
+  const m = /<untrusted-data-[\w-]+>\s*([\s\S]*?)\s*<\/untrusted-data-[\w-]+>/.exec(raw)
+  if (!m) return raw
+  try {
+    return JSON.parse(m[1])
+  } catch {
+    return raw
+  }
+}
+
 export interface TableInfo {
   name: string
   schema: string
@@ -205,11 +251,9 @@ export async function listTables(
   opts: SupabaseMcpClientOptions,
   prefixFilter?: string,
 ): Promise<TableInfo[]> {
-  const result = await callTool<TableInfo[] | { tables?: TableInfo[] }>(opts, 'list_tables', {
-    schema: 'public',
-    include_columns: true,
-  })
-  const tables = Array.isArray(result) ? result : (result.tables ?? [])
+  // Current tool arguments: { schemas, verbose } (schema/include_columns are refused).
+  const result = await callTool<unknown>(opts, 'list_tables', { schemas: ['public'], verbose: true })
+  const tables = normalizeMcpTables(result)
   if (!prefixFilter) return tables
   return tables.filter((t) => t.name.startsWith(prefixFilter))
 }
@@ -224,12 +268,22 @@ export async function getLogs(
   service: 'api' | 'postgres',
   options: { limit?: number; minLevel?: 'info' | 'warn' | 'error' } = {},
 ): Promise<LogEntry[]> {
-  const result = await callTool<LogEntry[] | { logs?: LogEntry[] }>(opts, 'get_logs', {
-    service,
-    limit: options.limit ?? 100,
-    min_level: options.minLevel ?? 'error',
-  })
-  return Array.isArray(result) ? result : (result.logs ?? [])
+  // get_logs was replaced by query_logs (ClickHouse SQL over the unified
+  // log stream). The SQL is built from fixed templates: only a clamped number
+  // and enum-derived lists are interpolated.
+  const limit = Math.min(Math.max(Math.trunc(options.limit ?? 100), 1), 500)
+  const min = options.minLevel ?? 'error'
+  const sql = service === 'api'
+    ? `select timestamp, event_message, log_attributes['response.status_code'] as level from logs where source = 'edge_logs' and toInt32OrZero(log_attributes['response.status_code']) >= ${min === 'error' ? 500 : min === 'warn' ? 400 : 0} order by timestamp desc limit ${limit}`
+    : `select timestamp, event_message, log_attributes['parsed.error_severity'] as level from logs where source = 'postgres_logs'${min === 'info' ? '' : ` and log_attributes['parsed.error_severity'] in (${min === 'error' ? "'ERROR','FATAL','PANIC'" : "'WARNING','ERROR','FATAL','PANIC'"})`} order by timestamp desc limit ${limit}`
+  const result = unwrapUntrusted(await callTool<unknown>(opts, 'query_logs', { sql }))
+  const r = (result ?? {}) as Record<string, unknown>
+  const rows = (Array.isArray(result) ? result : Array.isArray(r.result) ? r.result : []) as Array<Record<string, unknown>>
+  return rows.map((row) => ({
+    timestamp: String(row.timestamp ?? ''),
+    level: String(row.level ?? ''),
+    message: String(row.event_message ?? ''),
+  }))
 }
 
 /**
