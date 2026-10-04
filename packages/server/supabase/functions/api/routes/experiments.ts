@@ -34,6 +34,8 @@ import { requireProjectAccess } from '../middleware/project.ts'
 import { apiKeyAuth } from '../../_shared/auth.ts'
 import { getServiceClient } from '../../_shared/db.ts'
 import { reporterKey } from '../../_shared/reporter-token.ts'
+import { experimentTransitionError, type ExperimentAction } from '../../_shared/experiment-lifecycle.ts'
+import { readWorkerResult } from '../../_shared/worker-result.ts'
 import { assertTargetProjectAccess, ownedProjectIds, resolveOwnedProject } from '../shared.ts'
 import { dbError } from '../shared.ts'
 import type { Variables } from '../types.ts'
@@ -54,6 +56,35 @@ async function experimentAccess(c: Context<{ Variables: Variables }>, experiment
   const access = await assertTargetProjectAccess(c, db(), c.get('userId') as string, data.project_id as string)
   return access.ok ? null : access.response
 }
+
+/**
+ * The experiment's status and variant count, or the 404 to send. Used to
+ * gate launch / stop / delete on experimentTransitionError.
+ */
+async function loadForTransition(
+  c: Context<{ Variables: Variables }>,
+  experimentId: string,
+  action: ExperimentAction,
+): Promise<Response | null> {
+  const { data, error } = await db()
+    .from('experiments')
+    .select('status, experiment_variants(id)')
+    .eq('id', experimentId)
+    .maybeSingle()
+  if (error) return dbError(c, error)
+  if (!data) return notFound(c)
+  const variants = (data as { experiment_variants?: unknown[] | null }).experiment_variants ?? []
+  const reason = experimentTransitionError(action, data.status as string, variants.length)
+  if (reason) return c.json({ ok: false, error: { code: 'INVALID_STATE', message: reason } }, 409)
+  return null
+}
+
+const variantCreateSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  description: z.string().max(5000).nullish(),
+  config: z.record(z.unknown()).nullish(),
+  traffic_weight: z.number().min(0).max(1).optional(),
+})
 
 const sdkAssignSchema = z.object({
   experiment_id: z.string().uuid(),
@@ -338,15 +369,25 @@ export function registerExperimentsRoutes(parent: Hono<{ Variables: Variables }>
   admin.delete('/:id', async (c) => {
     const denied = await experimentAccess(c, c.req.param('id')!)
     if (denied) return denied
-    await db().from('experiments').delete().eq('id', c.req.param('id')!).eq('status', 'draft')
+    const blocked = await loadForTransition(c, c.req.param('id')!, 'delete')
+    if (blocked) return blocked
+    const { error } = await db().from('experiments').delete().eq('id', c.req.param('id')!).eq('status', 'draft')
+    if (error) return dbError(c, error)
     return c.json({ ok: true })
   })
 
   admin.post('/:id/variants', async (c) => {
     const denied = await experimentAccess(c, c.req.param('id')!)
     if (denied) return denied
-    const body = await c.req.json()
-    const { name, description, config, traffic_weight } = body
+    const parsed = variantCreateSchema.safeParse(await c.req.json().catch(() => null))
+    if (!parsed.success) {
+      const first = parsed.error.issues[0]
+      return c.json({
+        ok: false,
+        error: { code: 'VALIDATION_ERROR', message: first ? `${first.path.join('.') || 'variant'}: ${first.message}` : 'Invalid variant' },
+      }, 400)
+    }
+    const { name, description, config, traffic_weight } = parsed.data
     const { data, error } = await db().from('experiment_variants').insert({ experiment_id: c.req.param('id')!, name, description, config, traffic_weight }).select().single()
     if (error) return dbError(c, error)
     return c.json({ ok: true, data }, 201)
@@ -385,22 +426,45 @@ export function registerExperimentsRoutes(parent: Hono<{ Variables: Variables }>
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${serviceKey}` },
       body: JSON.stringify({ experiment_id: c.req.param('id')! }),
     })
-    const json = await res.json()
-    return c.json(json, res.status as 200)
+    const result = await readWorkerResult(res, 'The analysis could not finish. Try again in a moment.')
+    if (!result.ok) {
+      return c.json({ ok: false, error: { code: 'WORKER_FAILED', message: result.message } }, result.status as 502)
+    }
+    return c.json({ ...result.body, ok: true })
   })
 
   admin.post('/:id/launch', async (c) => {
     const denied = await experimentAccess(c, c.req.param('id')!)
     if (denied) return denied
-    await db().from('experiments').update({ status: 'running', start_at: new Date().toISOString() }).eq('id', c.req.param('id')!)
-    return c.json({ ok: true })
+    const blocked = await loadForTransition(c, c.req.param('id')!, 'launch')
+    if (blocked) return blocked
+    const { data, error } = await db()
+      .from('experiments')
+      .update({ status: 'running', start_at: new Date().toISOString() })
+      .eq('id', c.req.param('id')!)
+      .eq('status', 'draft')
+      .select('*, experiment_variants(*)')
+      .maybeSingle()
+    if (error) return dbError(c, error)
+    if (!data) return c.json({ ok: false, error: { code: 'INVALID_STATE', message: 'This experiment changed while you were looking at it. Refresh and try again.' } }, 409)
+    return c.json({ ok: true, data })
   })
 
   admin.post('/:id/stop', async (c) => {
     const denied = await experimentAccess(c, c.req.param('id')!)
     if (denied) return denied
-    await db().from('experiments').update({ status: 'stopped', end_at: new Date().toISOString() }).eq('id', c.req.param('id')!)
-    return c.json({ ok: true })
+    const blocked = await loadForTransition(c, c.req.param('id')!, 'stop')
+    if (blocked) return blocked
+    const { data, error } = await db()
+      .from('experiments')
+      .update({ status: 'stopped', end_at: new Date().toISOString() })
+      .eq('id', c.req.param('id')!)
+      .eq('status', 'running')
+      .select('*, experiment_variants(*)')
+      .maybeSingle()
+    if (error) return dbError(c, error)
+    if (!data) return c.json({ ok: false, error: { code: 'INVALID_STATE', message: 'This experiment changed while you were looking at it. Refresh and try again.' } }, 409)
+    return c.json({ ok: true, data })
   })
 
   parent.route('/v1/admin/experiments', admin)
