@@ -8,6 +8,7 @@
 import { useState, useEffect } from 'react'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
+import { describeApiFailure } from '../../lib/humanizeApiError'
 import { Btn, Toggle } from '../ui/forms'
 import { Card } from '../ui'
 
@@ -110,7 +111,12 @@ export function NotificationPrefsMatrix({ projectId }: Props) {
   // Now: reset per project, guard against stale responses, and surface the
   // failure instead of fabricating state.
   //
-  // A successful load with `notificationPrefs: null` is NOT a failure: the
+  // GET /v1/admin/settings returns the raw project_settings row, so the key
+  // is snake_case `notification_prefs` (only /settings/stats camelCases it).
+  // Reading `notificationPrefs` here always got undefined: the matrix showed
+  // defaults and the next Save wrote them over the saved suppressions.
+  //
+  // A successful load with `notification_prefs: null` is NOT a failure: the
   // project has never saved prefs, and the server then delivers every event
   // (toggles are `!== false`) with a 'low' severity floor — exactly
   // DEFAULT_PREFS (classify-report, fast-filter, _shared/plugins.ts). Only a
@@ -119,11 +125,11 @@ export function NotificationPrefsMatrix({ projectId }: Props) {
     let cancelled = false
     setLoading(true)
     setError(false)
-    apiFetch<{ notificationPrefs?: Partial<NotifPrefs> | null }>('/v1/admin/settings')
+    apiFetch<{ notification_prefs?: Partial<NotifPrefs> | null }>('/v1/admin/settings')
       .then((res) => {
         if (cancelled) return
         if (res.ok) {
-          setPrefs({ ...DEFAULT_PREFS, ...(res.data?.notificationPrefs ?? {}) })
+          setPrefs({ ...DEFAULT_PREFS, ...(res.data?.notification_prefs ?? {}) })
         } else {
           setError(true)
         }
@@ -155,7 +161,10 @@ export function NotificationPrefsMatrix({ projectId }: Props) {
         body: JSON.stringify({ notification_prefs: prefs }),
       })
       if (res.ok) toast.success('Notification preferences saved.')
-      else toast.error('Could not save preferences.')
+      else {
+        const t = describeApiFailure(res.error, 'Could not save notification preferences')
+        toast.error(t.title, t.description)
+      }
     } finally {
       setSaving(false)
     }

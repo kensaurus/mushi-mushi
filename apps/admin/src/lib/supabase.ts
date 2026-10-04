@@ -388,7 +388,18 @@ async function doFetch<T>(
         }
       }
       try {
-        const coerced = coerceApiResult<T>(JSON.parse(body))
+        const parsedBody = JSON.parse(body) as unknown
+        const coerced = coerceApiResult<T>(parsedBody)
+        // Some routes answer a 4xx with `{ error: { code, message } }` and no
+        // `ok` (settings PATCH validation). Read that envelope instead of
+        // showing the raw JSON body as the message. 5xx keeps the HTTP_ERROR
+        // "<status>: …" shape that retry logic (useRecipeChange) keys on.
+        if (coerced.ok && res.status < 500) {
+          const errObj = (parsedBody as { error?: unknown } | null)?.error
+          if (errObj && typeof errObj === 'object' && 'code' in errObj) {
+            return attachRequestId(coerceApiResult<T>({ ok: false, error: errObj }))
+          }
+        }
         // A non-2xx body without an explicit error envelope (e.g. a proxy's
         // `{ "message": "..." }`) must never coerce into a success.
         if (coerced.ok) {
