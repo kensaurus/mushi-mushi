@@ -200,6 +200,15 @@ export const OPEN_REPORT_STATUSES = [
 ] as const;
 
 /**
+ * Report statuses that still wait for triage — the `new` bucket. The reports
+ * list's `status=new` filter, the dashboard's triage backlog KPI and the
+ * inbox Plan flag all use it, so each count equals the list its link opens
+ * (before 2026-10-04 the KPI counted new|queued older than 1h in a 14-day
+ * window while its link listed every new|queued|pending|submitted report).
+ */
+export const TRIAGE_BACKLOG_STATUSES = ['new', 'queued', 'pending', 'submitted'] as const;
+
+/**
  * Full accessible project set for enumeration endpoints (project list,
  * setup/switcher, org-wide stats).
  *
