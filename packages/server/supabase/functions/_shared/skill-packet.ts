@@ -22,6 +22,7 @@
  */
 
 import { getServiceClient } from './db.ts'
+import { findActiveSkillBySlug } from './skill-catalog.ts'
 
 export interface ReportContext {
   id: string
@@ -182,12 +183,12 @@ export async function resolveChain(rootSlug: string, maxDepth = 5): Promise<stri
     if (depth >= maxDepth || visited.has(slug)) return
     visited.add(slug)
 
-    const { data } = await db
-      .from('agent_skills')
-      .select('slug, chain_slugs')
-      .eq('slug', slug)
-      .eq('is_active', true)
-      .maybeSingle()
+    // Several sources can carry the same slug; one row per slug (skill-catalog.ts).
+    const { skill: data } = await findActiveSkillBySlug<{ slug: string; chain_slugs?: string[] | null }>(
+      db,
+      slug,
+      'slug, chain_slugs',
+    )
 
     if (!data) return
 
