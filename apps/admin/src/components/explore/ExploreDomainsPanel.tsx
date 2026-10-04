@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { apiFetch } from '../../lib/supabase'
+import { apiErrorMessage } from '../../lib/humanizeApiError'
 import { CHIP_TONE } from '../../lib/chipTone'
 import { Btn, Card, Badge } from '../ui'
 import { ExploreUnderstandEmpty } from './ExploreUnderstandEmpty'
@@ -42,6 +43,12 @@ export function ExploreDomainsPanel({ projectId, onFileClick }: Props) {
     return <ExploreUnderstandEmpty error={error} onRetry={() => void load()} />
   }
 
+  // Any other failure is an error, not "no domains": say what happened.
+  const errorText = error ? apiErrorMessage(error, 'Domains could not be extracted. Try again in a moment.') : null
+  if (error && domains.length === 0) {
+    return <ExploreUnderstandEmpty error={{ code: error.code, message: errorText! }} onRetry={() => void load()} />
+  }
+
   if (loading && domains.length === 0) {
     return (
       <Card className="p-4 animate-pulse" aria-hidden>
@@ -64,6 +71,11 @@ export function ExploreDomainsPanel({ projectId, onFileClick }: Props) {
 
   return (
     <div className="space-y-3">
+      {errorText ? (
+        <p className="text-2xs text-danger" role="alert">
+          Refresh failed: {errorText} The previous domains are shown below.
+        </p>
+      ) : null}
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <p className="text-xs text-fg-secondary">
           Business domains → user flows → implementation files (LLM-extracted from the index).

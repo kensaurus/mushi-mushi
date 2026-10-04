@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { apiFetch } from '../../lib/supabase'
+import { apiErrorMessage } from '../../lib/humanizeApiError'
 import { Btn, Card } from '../ui'
 import { ExploreUnderstandEmpty } from './ExploreUnderstandEmpty'
 import type { CodebaseUnderstandError, TourStop } from './exploreUnderstandTypes'
@@ -41,6 +42,12 @@ export function ExploreTourPanel({ projectId, activeStopOrder, onSelectStop, onS
     return <ExploreUnderstandEmpty error={error} onRetry={() => void load()} />
   }
 
+  // Any other failure is an error, not "nothing indexed": say what happened.
+  const errorText = error ? apiErrorMessage(error, 'The tour could not be built. Try again in a moment.') : null
+  if (error && stops.length === 0) {
+    return <ExploreUnderstandEmpty error={{ code: error.code, message: errorText! }} onRetry={() => void load()} />
+  }
+
   if (loading && stops.length === 0) {
     return (
       <Card className="p-4 animate-pulse" aria-hidden>
@@ -64,6 +71,11 @@ export function ExploreTourPanel({ projectId, activeStopOrder, onSelectStop, onS
 
   return (
     <div className="space-y-3">
+      {errorText ? (
+        <p className="text-2xs text-danger" role="alert">
+          Regenerate failed: {errorText} The previous tour is shown below.
+        </p>
+      ) : null}
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <p className="text-xs text-fg-secondary">
           Dependency-ordered walkthrough — click a stop to highlight files on the Graph tab.

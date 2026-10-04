@@ -270,7 +270,7 @@ describe('ExploreDiagramPublishCard', () => {
     expect([...container.querySelectorAll('button')].map((b) => b.textContent?.trim())).toEqual(['Unpublish'])
   })
 
-  it('offers unpublish once live', async () => {
+  it('offers unpublish once live, behind a confirm', async () => {
     apiFetchMutate.mockResolvedValue({ ok: true, data: { published: false } })
     const onChanged = vi.fn()
     act(() =>
@@ -284,6 +284,9 @@ describe('ExploreDiagramPublishCard', () => {
     )
     expect(container.textContent).toContain('Live at')
     await act(async () => button('Unpublish').click())
+    expect(apiFetchMutate).not.toHaveBeenCalled()
+    const confirm = [...document.body.querySelectorAll('button')].filter((b) => b.textContent === 'Unpublish').pop()!
+    await act(async () => confirm.click())
     await flush()
     expect(apiFetchMutate).toHaveBeenCalledWith('/v1/admin/projects/p1/codebase/diagram/publish', { method: 'DELETE' })
     expect(onChanged).toHaveBeenCalled()
