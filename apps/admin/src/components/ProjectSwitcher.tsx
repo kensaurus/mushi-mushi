@@ -21,7 +21,17 @@ import {
 } from '../lib/activeProject'
 import { useCreateProject } from '../lib/useCreateProject'
 import { ACTIVE_ORG_QUERY_PARAM, getActiveOrgIdSnapshot, setActiveOrgIdSnapshot, useActiveOrgSignal } from '../lib/activeOrg'
-import { findProjectTeam, lastTeamProject, rememberTeamProject } from '../lib/crossTeamProject'
+import {
+  PROJECT_DIRECTORY_PATH,
+  TEAM_AUTO_SWITCH_EVENT,
+  lastTeamProject,
+  rememberProjectTeams,
+  rememberTeamProject,
+  resolveTeamForProject,
+  type ProjectDirectory,
+  type TeamAutoSwitchDetail,
+} from '../lib/crossTeamProject'
+import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
 import { ProjectFavicon } from './ProjectFavicon'
 import { ErrorAlert } from './ui'
@@ -71,8 +81,38 @@ export function ProjectSwitcher() {
   const listIsCurrent = listOrg === activeOrg
 
   // A deep link to a project in another of the user's teams: find that team
-  // and switch to it, once per project id.
+  // and switch to it, once per project id. apiFetch usually did this before
+  // the first request (see waitForTenant); this is the safety net for a
+  // link opened inside the running app.
   const probedRef = useRef<string | null>(null)
+
+  // Every switch to another team made on the user's behalf (by apiFetch's
+  // deep-link gate or by the effect below) says so, and puts the team in
+  // the URL so the team switcher, which honours `?org=`, agrees.
+  useEffect(() => {
+    function onAutoSwitch(event: Event) {
+      const detail = (event as CustomEvent<TeamAutoSwitchDetail>).detail
+      if (!detail) return
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev)
+          next.set(ACTIVE_ORG_QUERY_PARAM, detail.teamId)
+          next.set(ACTIVE_PROJECT_QUERY_PARAM, detail.projectId)
+          return next
+        },
+        { replace: true },
+      )
+      toast.info(`Switched to team ${detail.teamName}`, 'The project in this link belongs to that team.')
+    }
+    window.addEventListener(TEAM_AUTO_SWITCH_EVENT, onAutoSwitch)
+    return () => window.removeEventListener(TEAM_AUTO_SWITCH_EVENT, onAutoSwitch)
+  }, [setSearchParams, toast])
+
+  // B23: the dropdown lists every project the user can reach, grouped by
+  // team. Read only while it is open, so closed pages pay nothing.
+  const directory = usePageData<ProjectDirectory>(open ? PROJECT_DIRECTORY_PATH : null, {
+    scope: 'none',
+  })
 
   // Hydrate the active project from URL > localStorage > first project. Once
   // we've picked one, mirror it into both stores so the rest of the app can
@@ -97,6 +137,9 @@ export function ProjectSwitcher() {
       (fromUrl && isValidProjectId(fromUrl) ? fromUrl : null) ?? fromStorage
     const known = projects.find((p) => p.project_id === candidate)
     const orgId = getActiveOrgIdSnapshot()
+    // This list is the active team's: remember which team owns each project
+    // so a reload of a link to any of them skips apiFetch's team check.
+    if (orgId) rememberProjectTeams(projects.map((p) => ({ id: p.project_id, organizationId: orgId })))
     if (known) {
       if (orgId) rememberTeamProject(orgId, known.project_id)
       if (fromStorage !== known.project_id) {
@@ -118,21 +161,9 @@ export function ProjectSwitcher() {
     if (fromUrl && isValidProjectId(fromUrl)) {
       if (probedRef.current === fromUrl) return
       probedRef.current = fromUrl
-      void findProjectTeam(fromUrl, orgId).then((team) => {
-        if (!team) return
-        // Still the same link? The user may have navigated on meanwhile.
-        if (new URLSearchParams(window.location.search).get(ACTIVE_PROJECT_QUERY_PARAM) !== fromUrl) return
-        setActiveOrgIdSnapshot(team.id)
-        setSearchParams(
-          (prev) => {
-            const next = new URLSearchParams(prev)
-            next.set(ACTIVE_ORG_QUERY_PARAM, team.id)
-            return next
-          },
-          { replace: true },
-        )
-        toast.info(`Switched to team ${team.name}`, 'The project in this link belongs to that team.')
-      })
+      // Switches team (org first, then project) and fires the auto-switch
+      // event handled above; does nothing when no team of the user owns it.
+      void resolveTeamForProject(fromUrl)
       return
     }
     // No valid candidate: the team's last-used project, else its first.
@@ -144,7 +175,7 @@ export function ProjectSwitcher() {
     const next = new URLSearchParams(searchParams)
     next.set(ACTIVE_PROJECT_QUERY_PARAM, fallbackId)
     setSearchParams(next, { replace: true })
-  }, [setup.loading, setup.data, searchParams, listIsCurrent, setSearchParams, toast])
+  }, [setup.loading, setup.data, searchParams, listIsCurrent, setSearchParams])
 
   // Close on outside click so the dropdown doesn't stay pinned open behind nav.
   useEffect(() => {
@@ -187,6 +218,29 @@ export function ProjectSwitcher() {
     getActiveProjectIdSnapshot() ??
     projects[0].project_id
   const active = projects.find((p) => p.project_id === activeId) ?? projects[0]
+
+  /** Pick a project in another team: switch team first, then project. */
+  function pickInTeam(projectId: string, orgId: string) {
+    setActiveOrgIdSnapshot(orgId)
+    rememberTeamProject(orgId, projectId)
+    setActiveProjectIdSnapshot(projectId)
+    const next = new URLSearchParams(searchParams)
+    next.set(ACTIVE_ORG_QUERY_PARAM, orgId)
+    next.set(ACTIVE_PROJECT_QUERY_PARAM, projectId)
+    setSearchParams(next, { replace: true })
+    setOpen(false)
+  }
+
+  const activeOrgId = getActiveOrgIdSnapshot()
+  const currentTeamName =
+    directory.data?.teams.find((t) => t.id === activeOrgId)?.name ?? null
+  const otherTeams = (directory.data?.teams ?? [])
+    .filter((t) => t.id !== activeOrgId)
+    .map((team) => ({
+      team,
+      projects: (directory.data?.projects ?? []).filter((p) => p.organizationId === team.id),
+    }))
+    .filter((g) => g.projects.length > 0)
 
   function pick(id: string) {
     const orgId = getActiveOrgIdSnapshot()
@@ -241,7 +295,13 @@ export function ProjectSwitcher() {
           // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
           className={`${headerDropdownPanelClass} w-80 max-w-[calc(100vw-2rem)]`}
         >
-          <ul role="listbox" className="max-h-80 overflow-y-auto divide-y divide-edge-subtle/60">
+          <div className="max-h-[min(28rem,70vh)] overflow-y-auto">
+          {otherTeams.length > 0 && (
+            <p className="px-2.5 pt-2 pb-1 text-3xs font-medium uppercase tracking-wide text-fg-faint">
+              {currentTeamName ? `${currentTeamName} (this team)` : 'This team'}
+            </p>
+          )}
+          <ul role="listbox" aria-label="Projects in this team" className="divide-y divide-edge-subtle/60">
             {projects.map((p) => {
               const isActive = p.project_id === active.project_id
               return (
@@ -293,6 +353,37 @@ export function ProjectSwitcher() {
               )
             })}
           </ul>
+          {otherTeams.map(({ team, projects: teamProjects }) => (
+            <div key={team.id} className="border-t border-edge-subtle">
+              <p className="px-2.5 pt-2 pb-1 text-3xs font-medium uppercase tracking-wide text-fg-faint">
+                {team.name}
+              </p>
+              <ul role="listbox" aria-label={`Projects in ${team.name}`} className="pb-1">
+                {teamProjects.map((p) => (
+                  <li key={p.id}>
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={false}
+                      onClick={() => pickInTeam(p.id, team.id)}
+                      title={`Switches to the ${team.name} team`}
+                      className="flex w-full min-h-9 items-center gap-2 px-2.5 py-1.5 text-left text-xs text-fg-secondary hover:bg-surface-overlay focus-visible:outline-none focus-visible:bg-surface-overlay motion-safe:transition-opacity"
+                    >
+                      <ProjectFavicon project_id={p.id} project_name={p.name} project_slug="" size={16} />
+                      <span className="min-w-0 flex-1 truncate font-medium">{p.name}</span>
+                      <span className="shrink-0 text-3xs text-fg-faint">switch team</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+          {directory.loading && !directory.data && (
+            <p className="border-t border-edge-subtle px-2.5 py-1.5 text-3xs text-fg-faint">
+              Checking your other teams…
+            </p>
+          )}
+          </div>
           <div className="border-t border-edge-subtle bg-surface-raised/60">
             {/* "View project page" — shortcut into the project list/settings
                 surface so users can manage the project they just selected
