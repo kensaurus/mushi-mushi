@@ -556,6 +556,7 @@
     "PUT /v1/admin/repo/repos/:repoId": {"allow": "jwt-only"},
     "PUT /v1/admin/reporter-updates-mode": {"allow": "jwt-only"},
     "PUT /v1/admin/residency/:projectId": {"allow": "jwt-only"},
+    "PUT /v1/admin/rewards/project-status": {"allow": "jwt-only"},
     "PUT /v1/admin/rewards/rules": {"allow": "jwt-only"},
     "PUT /v1/admin/rewards/tiers": {"allow": "jwt-only"},
     "PUT /v1/admin/settings/benchmarking": {"allow": "jwt-only"},
