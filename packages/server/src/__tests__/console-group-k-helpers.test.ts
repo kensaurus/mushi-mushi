@@ -15,8 +15,30 @@ import {
 } from '../../supabase/functions/_shared/anti-gaming-scope.ts'
 import {
   normalizeLegalName,
+  perAppLeaderboard,
   testerProfileUpdate,
 } from '../../supabase/functions/_shared/tester-profile.ts'
+
+describe('perAppLeaderboard (#218 privacy flags)', () => {
+  const points = new Map([['a', 300], ['b', 200], ['c', 100], ['d', 50]])
+  const testers = [
+    { id: 'a', public_handle: 'ada', public_leaderboard: true, public_handle_visible: true },
+    { id: 'b', public_handle: 'bob', public_leaderboard: false, public_handle_visible: true },
+    { id: 'c', public_handle: 'cy', public_leaderboard: true, public_handle_visible: false },
+  ]
+
+  it('leaves out testers who opted out and hides handles they asked to hide', () => {
+    expect(perAppLeaderboard(['a', 'b', 'c', 'd'], points, testers)).toEqual([
+      { handle: 'ada', points: 300 },
+      { handle: 'Anonymous tester', points: 100 },
+      { handle: 'Anonymous tester', points: 50 },
+    ])
+  })
+
+  it('caps the list size after filtering', () => {
+    expect(perAppLeaderboard(['a', 'c', 'd'], points, testers, 2)).toHaveLength(2)
+  })
+})
 
 describe('rewardsWriteDenial (#220)', () => {
   it('refuses viewers whatever the plan', () => {

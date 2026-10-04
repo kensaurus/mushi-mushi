@@ -194,8 +194,8 @@ describe('tester marketplace route contracts', () => {
     const approve = routeBody(MARKETPLACE, "app.post('/v1/admin/tester-redemptions/:id/approve'", 2400)
     expect(approve).toContain('withheldWriteFailed(c, \'approve\'')
     const deny = routeBody(MARKETPLACE, "app.post('/v1/admin/tester-redemptions/:id/deny'", 2000)
-    expect(deny.indexOf("rpc('award_tester_points'")).toBeLessThan(deny.indexOf("failure_reason: 'denied_by_reviewer'"))
-    expect(deny).toContain('if (refundErr)')
+    expect(deny.indexOf('awardPointsChecked(supabase')).toBeLessThan(deny.indexOf("failure_reason: 'denied_by_reviewer'"))
+    expect(deny).toContain('if (!refund.ok && !refund.idempotentSkip)')
   })
 
   it('tester delete reports a refused erasure instead of ok (#214)', () => {
