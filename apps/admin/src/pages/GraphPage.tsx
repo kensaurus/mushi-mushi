@@ -10,6 +10,8 @@ import '@xyflow/react/dist/style.css'
 
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
+import { graphCanvasProof } from '../lib/graphCanvasCounts'
+import { PageLoadError } from '../components/PageLoadError'
 import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { useToast } from '../lib/toast'
 import { usePageCopy } from '../lib/copy'
@@ -17,7 +19,6 @@ import { usePublishPageContext } from '../lib/pageContext'
 import { useRealtimeReload } from '../lib/realtime'
 import { SnapshotSectionHint,
   SegmentedControl,
-  ErrorAlert,
   Section,
   StatCard,
   FreshnessPill,
@@ -165,8 +166,8 @@ export function GraphPage() {
     if (activeTab !== quickTab) setActiveTab(quickTab)
   }, [ux.isQuickstart, statsLoading, stats, activeTab, setActiveTab])
 
-  const nodesQuery = usePageData<{ nodes: GraphNode[] }>('/v1/admin/graph/nodes')
-  const edgesQuery = usePageData<{ edges: GraphEdge[] }>('/v1/admin/graph/edges')
+  const nodesQuery = usePageData<{ nodes: GraphNode[]; total?: number }>('/v1/admin/graph/nodes')
+  const edgesQuery = usePageData<{ edges: GraphEdge[]; total?: number }>('/v1/admin/graph/edges')
 
   const rawNodes = nodesQuery.data?.nodes ?? []
   const rawEdges = edgesQuery.data?.edges ?? []
@@ -492,13 +493,13 @@ export function GraphPage() {
     )
   }
   if (statsError) {
-    return <ErrorAlert message={`Failed to load graph stats: ${statsError}`} onRetry={reloadGraph} />
+    return <PageLoadError error={statsError} onRetry={reloadGraph} resource="graph stats" endpoint="/v1/admin/graph/stats" />
   }
 
   const explorePanel = loading ? (
     <GraphSkeleton />
   ) : error ? (
-    <ErrorAlert message={`Failed to load knowledge graph: ${error}`} onRetry={reloadGraph} />
+    <PageLoadError error={error} onRetry={reloadGraph} resource="the knowledge graph" />
   ) : (
     <>
       <div className="flex flex-wrap items-center gap-2">
@@ -508,7 +509,8 @@ export function GraphPage() {
           </SignalChip>
         )}
         <InlineProof className="font-mono tabular-nums border-0 bg-transparent px-0 py-0">
-          {filteredNodes.length}/{rawNodes.length} nodes · {filteredEdges.length}/{rawEdges.length} edges
+          {graphCanvasProof('nodes', filteredNodes.length, rawNodes.length, nodesQuery.data?.total)} ·{' '}
+          {graphCanvasProof('edges', filteredEdges.length, rawEdges.length, edgesQuery.data?.total)}
         </InlineProof>
         <SegmentedControl<ViewMode>
           size="sm"
