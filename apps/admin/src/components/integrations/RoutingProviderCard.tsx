@@ -5,17 +5,16 @@
  *          Test button that probes the provider's credentials live.
  */
 
-import { Card, Btn, Badge, Input, RelativeTime, ResultChip, Tooltip } from '../ui'
-import { HealthPill } from '../charts'
+import { Card, Btn, Input, RelativeTime, Tooltip } from '../ui'
 import { ConfigHelp } from '../ConfigHelp'
 import { resolveValidator } from '../../lib/validators'
-import { isStale } from '../../lib/staleness'
 import { HealthSparkline } from './HealthSparkline'
-import { IconPause, IconPlay, IconPencil, IconClose, IconExternalLink, IconAlertTriangle } from '../icons'
+import { IconPause, IconPlay, IconPencil, IconClose, IconExternalLink } from '../icons'
 import { ServiceFavicon } from './ServiceFavicon'
 import { InlineProof } from '../report-detail/ReportSurface'
-import { PLATFORM_STATUS_MAP, type HealthRow, type RoutingIntegration, type RoutingProviderDef } from './types'
-import { CHIP_TONE } from '../../lib/chipTone'
+import type { HealthRow, RoutingIntegration, RoutingProviderDef } from './types'
+import { ConnectionStatus } from '../ui/ConnectionStatus'
+import { connectionFromProbe } from '../../lib/integrationConnection'
 
 /** Maps probe status to a left-border color class on the card. */
 function statusBorderClass(status: HealthRow['status'], isConnected: boolean): string {
@@ -63,11 +62,28 @@ export function RoutingProviderCard({
   onTogglePause,
   onDisconnect,
 }: Props) {
-  // Status comes from the probe history when available; otherwise fall back to
-  // is_active for a coarse connected/not-connected signal.
-  const probeStatus: HealthRow['status'] = latestProbe?.status ?? (existing?.is_active ? 'ok' : 'unknown')
-  const isDown = existing && latestProbe?.status === 'down'
-  const isDegraded = existing && latestProbe?.status === 'degraded'
+  // Status comes only from the probe history. A saved, active row used to read
+  // as "ok" with no check at all; that is "not checked yet".
+  const probeStatus: HealthRow['status'] = latestProbe?.status ?? 'unknown'
+  const probed = connectionFromProbe({ configured: Boolean(existing), probe: latestProbe })
+  const paused = Boolean(existing && !existing.is_active)
+  const connection = paused
+    ? { state: 'attention' as const, detail: 'Paused — new reports are not forwarded here.' }
+    : probed
+  const probeFailing = latestProbe?.status === 'down' || latestProbe?.status === 'degraded'
+  const connectionAction = isEditing
+    ? undefined
+    : connection.state === 'not_connected'
+      ? { label: 'Connect', onClick: onStartEdit }
+      : paused
+        ? { label: 'Resume', onClick: onTogglePause }
+        : connection.state === 'checking'
+          ? { label: 'Test now', onClick: onTest }
+          : connection.state === 'attention'
+            ? probeFailing
+              ? { label: 'Edit credentials', onClick: onStartEdit }
+              : { label: 'Test again', onClick: onTest }
+            : undefined
 
   return (
     <Card className={`p-0 overflow-hidden ${statusBorderClass(probeStatus, !!existing)}`}>
@@ -84,24 +100,16 @@ export function RoutingProviderCard({
                 colorClass={provider.color}
               />
               <h3 className="text-sm font-semibold text-fg">{provider.label}</h3>
-              <HealthPill status={existing ? PLATFORM_STATUS_MAP[probeStatus] : undefined} />
-              {existing && !existing.is_active && (
-                <Badge tone="warnSubtle">Paused</Badge>
-              )}
-              {existing && latestProbe?.checked_at && isStale(latestProbe.checked_at) && (
-                <Tooltip content="Auto-probe runs every 15 min. Click Test to refresh now.">
-                  <Badge tone="warnSubtle">Stale</Badge>
-                </Tooltip>
-              )}
             </div>
 
-            {/* Down/degraded error banner */}
-            {(isDown || isDegraded) && latestProbe?.message && (
-              <div className={`mt-1.5 flex items-start gap-1.5 rounded-sm px-2 py-1 text-2xs ${isDown ? CHIP_TONE.dangerSubtle : CHIP_TONE.warnSubtle}`}>
-                <IconAlertTriangle size={11} className="mt-0.5 shrink-0" />
-                <span className="leading-snug font-mono truncate">{latestProbe.message}</span>
-              </div>
-            )}
+            <div className="mt-1.5" title={probed.raw && probed.raw !== connection.detail ? probed.raw : undefined}>
+              <ConnectionStatus
+                state={testing ? 'checking' : connection.state}
+                label={testing ? 'Testing…' : undefined}
+                detail={testing ? undefined : connection.detail}
+                action={testing ? undefined : connectionAction}
+              />
+            </div>
 
             <p className="text-2xs text-fg-secondary mt-1.5 pl-2 border-l border-brand/20 leading-snug">{provider.whyItMatters}</p>
             {!existing && provider.capabilitiesOnceConnected.length > 0 && (
@@ -125,21 +133,6 @@ export function RoutingProviderCard({
           <div className="flex items-center gap-1.5">
             {existing && (
               <>
-                {testing && (
-                  <ResultChip tone="running">Testing…</ResultChip>
-                )}
-                {existing && !testing && latestProbe && (
-                  <ResultChip
-                    tone={latestProbe.status === 'ok' ? 'success' : latestProbe.status === 'degraded' ? 'info' : 'error'}
-                    at={latestProbe.checked_at}
-                  >
-                    {latestProbe.status === 'ok'
-                      ? 'Connection OK'
-                      : latestProbe.status === 'degraded'
-                        ? 'Degraded'
-                        : latestProbe.message ?? 'Failed'}
-                  </ResultChip>
-                )}
                 <Tooltip content={testing ? 'Testing…' : 'Test connection'}>
                   <Btn
                     variant="ghost"

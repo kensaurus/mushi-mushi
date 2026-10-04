@@ -26,6 +26,9 @@ import { useState, useEffect } from 'react'
 import { Btn, Input } from '../ui'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
+import type { HealthRow } from './types'
+import { ConnectionStatus } from '../ui/ConnectionStatus'
+import { connectionFromProbe, newestProbe, probeFromTestSend, type ProbeLike } from '../../lib/integrationConnection'
 
 // ─── Teams brand SVG ──────────────────────────────────────────────────────────
 // mushi-mushi-allowlist: Microsoft Teams trademark SVG uses exact brand purple hex.
@@ -85,11 +88,13 @@ function translateTeamsTestError(raw: string): string {
 interface Props {
   projectId: string | null
   teamsConfigured: boolean
+  /** Latest health row for kind `teams` (test sends are recorded there). */
+  latestProbe?: HealthRow
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function TeamsIntegrationCard({ projectId, teamsConfigured }: Props) {
+export function TeamsIntegrationCard({ projectId, teamsConfigured, latestProbe }: Props) {
   const toast = useToast()
 
   const [connected, setConnected] = useState(teamsConfigured)
@@ -98,6 +103,7 @@ export function TeamsIntegrationCard({ projectId, teamsConfigured }: Props) {
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
   const [clearing, setClearing] = useState(false)
+  const [localProbe, setLocalProbe] = useState<ProbeLike | undefined>(undefined)
   const [showGuide, setShowGuide] = useState(false)
 
   // Sync if parent re-fetches and the prop changes
@@ -148,8 +154,10 @@ export function TeamsIntegrationCard({ projectId, teamsConfigured }: Props) {
         { method: 'POST' },
       )
       if (res.ok) {
+        setLocalProbe(probeFromTestSend(true, null))
         toast.success('Test message sent to Microsoft Teams!')
       } else {
+        setLocalProbe(probeFromTestSend(false, translateTeamsTestError(res.error?.message ?? '')))
         toast.error(translateTeamsTestError(res.error?.message ?? ''))
       }
     } catch {
@@ -182,8 +190,22 @@ export function TeamsIntegrationCard({ projectId, teamsConfigured }: Props) {
 
   // ── Render ────────────────────────────────────────────────────────────────
 
+  // Webhook channels are only verified by a test send: a check holds 30 days.
+  const probe = newestProbe(latestProbe, localProbe)
+  const probed = connectionFromProbe({ configured: connected, probe, staleAfterMs: 30 * 24 * 60 * 60 * 1000 })
+  const connection =
+    probed.state === 'checking' ? { ...probed, detail: 'Webhook saved, but no test message sent yet.' } : probed
+  const connectionAction =
+    connection.state === 'not_connected'
+      ? { label: 'Add webhook URL', onClick: () => document.getElementById('teams-webhook-url')?.focus() }
+      : connection.state === 'working'
+        ? undefined
+        : probe?.status === 'down' || probe?.status === 'degraded'
+          ? { label: 'Replace webhook URL', onClick: () => document.getElementById('teams-webhook-url')?.focus() }
+          : { label: 'Send test', onClick: () => void handleTest() }
+
   return (
-    <div className="rounded-xl border border-edge-subtle bg-surface p-5 space-y-4">
+    <div id="integrations-teams" className="rounded-xl border border-edge-subtle bg-surface p-5 space-y-4 scroll-mt-chrome">
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-center gap-3 min-w-0">
@@ -193,18 +215,11 @@ export function TeamsIntegrationCard({ projectId, teamsConfigured }: Props) {
           </div>
           <div className="min-w-0">
             <h3 className="text-sm font-semibold text-fg">Microsoft Teams</h3>
-            {connected ? (
-              <p className="text-xs text-ok truncate">Webhook connected — receiving report alerts</p>
-            ) : (
-              <p className="text-xs text-fg-muted truncate">
-                Not connected — paste an incoming webhook URL to enable alerts
-              </p>
-            )}
           </div>
         </div>
 
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-          {connected && (
+          {connected && connectionAction?.label !== 'Send test' && (
             <Btn
               type="button"
               variant="ghost"
@@ -219,13 +234,19 @@ export function TeamsIntegrationCard({ projectId, teamsConfigured }: Props) {
         </div>
       </div>
 
-      {/* Connected state — show clear control */}
+      <div title={probed.raw && probed.raw !== connection.detail ? probed.raw : undefined}>
+        <ConnectionStatus
+          state={testing ? 'checking' : connection.state}
+          label={testing ? 'Sending a test…' : undefined}
+          detail={testing ? undefined : connection.detail}
+          action={testing ? undefined : connectionAction}
+        />
+      </div>
+
+      {/* Saved webhook — remove control */}
       {connected && (
-        <div className="flex items-center justify-between gap-3 rounded-lg border border-ok/30 bg-ok-muted/50 px-3 py-2">
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="shrink-0 text-ok-foreground text-sm" aria-hidden>✓</span>
-            <p className="text-xs font-medium text-ok-foreground">Teams webhook active</p>
-          </div>
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-edge-subtle px-3 py-2">
+          <p className="text-xs text-fg-secondary min-w-0">An incoming webhook URL is saved.</p>
           <Btn
             type="button"
             variant="danger"

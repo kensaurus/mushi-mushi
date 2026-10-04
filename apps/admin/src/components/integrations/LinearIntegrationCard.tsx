@@ -15,10 +15,11 @@
 import { useState } from 'react'
 import { Btn, Input } from '../ui'
 import { apiFetch } from '../../lib/supabase'
+import { ConnectionStatus } from '../ui/ConnectionStatus'
+import { connectionFromProbe } from '../../lib/integrationConnection'
 import { useToast } from '../../lib/toast'
 import { HealthSparkline } from './HealthSparkline'
 import type { HealthRow } from './types'
-import { CHIP_TONE } from '../../lib/chipTone'
 
 // ── Linear wordmark SVG (brand color, see allowlist below) ───────────────────
 function LinearLogo({ size = 20 }: { size?: number }) {
@@ -52,6 +53,9 @@ interface Props {
   latestProbe?: HealthRow
   sparkline?: HealthRow[]
   onReload?: () => void
+  /** Runs the live Linear probe (records a health row). */
+  onTest?: () => void
+  testing?: boolean
 }
 
 export function LinearIntegrationCard({
@@ -62,6 +66,8 @@ export function LinearIntegrationCard({
   latestProbe,
   sparkline = [],
   onReload,
+  onTest,
+  testing = false,
 }: Props) {
   const toast = useToast()
 
@@ -140,8 +146,19 @@ export function LinearIntegrationCard({
     }
   }
 
+  const connection = connectionFromProbe({ configured: linearConnected, probe: latestProbe })
+  const probeFailing = latestProbe?.status === 'down' || latestProbe?.status === 'degraded'
+  const connectionAction =
+    connection.state === 'not_connected'
+      ? { label: 'Connect workspace', onClick: () => void handleOAuthConnect() }
+      : connection.state === 'attention' && probeFailing
+        ? { label: 'Reconnect', onClick: () => void handleOAuthConnect() }
+        : connection.state !== 'working' && onTest
+          ? { label: connection.state === 'checking' ? 'Test now' : 'Test again', onClick: onTest }
+          : undefined
+
   return (
-    <div className="rounded-xl border border-edge-subtle bg-surface p-5 space-y-4">
+    <div id="integrations-linear" className="rounded-xl border border-edge-subtle bg-surface p-5 space-y-4 scroll-mt-chrome">
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-center gap-3 min-w-0">
@@ -150,15 +167,9 @@ export function LinearIntegrationCard({
           </div>
           <div className="min-w-0">
             <h3 className="font-semibold text-sm text-fg truncate">Linear</h3>
-            {linearConnected ? (
-              <p className="text-xs text-ok truncate">
-                {workspaceName ? `Connected to ${workspaceName}` : 'Connected'}
-              </p>
-            ) : (
-              <p className="text-xs text-fg-secondary truncate">
-                Not connected — link your workspace to create issues and sync status
-              </p>
-            )}
+            {linearConnected && workspaceName ? (
+              <p className="text-xs text-fg-secondary truncate">Workspace: {workspaceName}</p>
+            ) : null}
           </div>
         </div>
 
@@ -206,24 +217,36 @@ export function LinearIntegrationCard({
             </div>
           )}
 
+          {/* Not repeated when the status line already offers it. */}
+          {linearConnected && connectionAction?.label !== 'Reconnect' && (
           <Btn
             type="button"
-            variant={linearConnected ? 'ghost' : 'accent'}
+            variant="ghost"
             size="sm"
             onClick={() => void handleOAuthConnect()}
             disabled={!projectId || connecting}
             loading={connecting}
-            title={linearConnected ? 'Reconnect to refresh permissions' : 'Connect your Linear workspace via OAuth'}
+            title="Reconnect to refresh permissions"
           >
-            {connecting ? 'Connecting…' : linearConnected ? 'Reconnect' : 'Connect workspace'}
+            {connecting ? 'Connecting…' : 'Reconnect'}
           </Btn>
+          )}
         </div>
+      </div>
+
+      <div title={connection.raw && connection.raw !== connection.detail ? connection.raw : undefined}>
+        <ConnectionStatus
+          state={testing || connecting ? 'checking' : connection.state}
+          label={connecting ? 'Connecting…' : testing ? 'Testing…' : undefined}
+          detail={testing || connecting ? undefined : connection.detail}
+          action={testing || connecting ? undefined : connectionAction}
+        />
       </div>
 
       {/* Connected features summary */}
       {linearConnected && (
-        <div className={`rounded-lg px-3 py-2 text-xs space-y-1 ${CHIP_TONE.okSubtle}`}>
-          <p className="font-medium">Active features</p>
+        <div className="rounded-lg border border-edge-subtle px-3 py-2 text-xs space-y-1">
+          <p className="font-medium text-fg">What Linear does for this project</p>
           <ul className="text-fg-secondary leading-relaxed space-y-0.5 ml-2">
             <li>✓ Auto-create issues for triaged bugs</li>
             <li>✓ Two-way status sync (issue resolved → report resolved)</li>
