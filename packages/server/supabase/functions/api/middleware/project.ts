@@ -10,6 +10,11 @@ import { getServiceClient } from '../../_shared/db.ts'
 import { accessibleProjectIds } from '../../_shared/project-access.ts'
 import type { Variables } from '../types.ts'
 
+// `ok: false` matters: the console's envelope reader treats a body without it
+// as a success and showed the raw JSON (`403: {"error":...} (HTTP_ERROR)`).
+const FORBIDDEN_MESSAGE =
+  'You do not have access to this project. Pick another project in the header switcher, or ask a team admin to add you.'
+
 export async function requireProjectAccess(
   c: Context<{ Variables: Variables }>,
   next: Next,
@@ -29,20 +34,20 @@ export async function requireProjectAccess(
   if (authMethod === 'apiKey') {
     const bound = c.get('projectId') as string | undefined
     if (!bound || projectId !== bound) {
-      return c.json({ error: { code: 'FORBIDDEN', message: 'Access to this project is not allowed' } }, 403)
+      return c.json({ ok: false, error: { code: 'FORBIDDEN', message: FORBIDDEN_MESSAGE } }, 403)
     }
     return next()
   }
 
   const userId = c.get('userId')
   if (!userId) {
-    return c.json({ error: { code: 'UNAUTHENTICATED', message: 'Authentication required' } }, 401)
+    return c.json({ ok: false, error: { code: 'UNAUTHENTICATED', message: 'Sign in again to continue.' } }, 401)
   }
 
   const db = getServiceClient()
   const allowed = await accessibleProjectIds(db, userId)
   if (!allowed.includes(projectId)) {
-    return c.json({ error: { code: 'FORBIDDEN', message: 'Access to this project is not allowed' } }, 403)
+    return c.json({ ok: false, error: { code: 'FORBIDDEN', message: FORBIDDEN_MESSAGE } }, 403)
   }
 
   return next()

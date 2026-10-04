@@ -3,7 +3,9 @@ import type { Variables } from '../types.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { jwtAuth } from '../../_shared/auth.ts';
 import { logAudit } from '../../_shared/audit.ts';
-import { dbError, callerProjectIds } from '../shared.ts';
+import { dbError, callerProjectIds, userCanAccessProject } from '../shared.ts';
+import { queueRetryDenial } from '../../_shared/queue-retry-policy.ts';
+import { denyViewerWrite } from '../viewer-gate.ts';
 import { ingestReport, triggerClassification } from '../helpers.ts';
 
 export function registerQueueRoutes(app: Hono<{ Variables: Variables }>): void {
@@ -258,6 +260,17 @@ export function registerQueueRoutes(app: Hono<{ Variables: Variables }>): void {
         { ok: false, error: { code: 'NOT_FOUND', message: 'Queue item not found' } },
         404,
       );
+
+    const access = await userCanAccessProject(db, userId, item.project_id);
+    const viewerDenied = denyViewerWrite(c, access.role, 'retry pipeline jobs');
+    if (viewerDenied) return viewerDenied;
+
+    // Retrying re-runs classification (LLM spend, may overwrite triage), so
+    // completed and still-active jobs are refused. See queue-retry-policy.ts.
+    const denial = queueRetryDenial(item, Date.now());
+    if (denial) {
+      return c.json({ ok: false, error: { code: 'NOT_RETRYABLE', message: denial } }, 409);
+    }
 
     await db
       .from('processing_queue')
