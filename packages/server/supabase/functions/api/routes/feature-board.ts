@@ -19,6 +19,7 @@ import { requireAuth } from '../middleware/auth.ts'
 import { requireProjectAccess } from '../middleware/project.ts'
 import { adminOrApiKey } from '../../_shared/auth.ts'
 import { getServiceClient } from '../../_shared/db.ts'
+import { callerCanAccessProject } from '../shared.ts'
 import { log } from '../../_shared/logger.ts'
 import type { Variables } from '../types.ts'
 
@@ -383,6 +384,12 @@ function featureBoardRoutes() {
     const projectId = projectIdFromRequest(c)
     const requestId = c.req.param('id')
     if (!projectId) return jsonErr(c, 'MISSING_PROJECT', 'project_id is required', 400)
+    // Shipping closes the request and notifies the person who asked for it.
+    const access = await callerCanAccessProject(c, db(), c.get('userId') as string, projectId)
+    if (!access.allowed) return jsonErr(c, 'FORBIDDEN', 'Access to this project is not allowed', 403)
+    if (access.role !== 'owner' && access.role !== 'admin') {
+      return jsonErr(c, 'FORBIDDEN', 'Only organization owners and admins can mark requests shipped.', 403)
+    }
 
     const body = await c.req.json().catch(() => null)
     const releaseId: string | null = body?.release_id ?? null

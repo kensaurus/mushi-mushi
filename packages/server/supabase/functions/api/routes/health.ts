@@ -3,7 +3,7 @@ import type { Variables } from '../types.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { jwtAuth, adminOrApiKey } from '../../_shared/auth.ts';
 import { estimateCallCostUsd } from '../../_shared/pricing.ts';
-import { dbError, callerProjectIds, resolveOwnedProject } from '../shared.ts';
+import { dbError, callerProjectIds, requireProjectAdmin, resolveOwnedProject } from '../shared.ts';
 
 export function registerHealthRoutes(app: Hono<{ Variables: Variables }>): void {
   // ============================================================
@@ -671,6 +671,9 @@ export function registerHealthRoutes(app: Hono<{ Variables: Variables }>): void 
     const resolvedProject = await resolveOwnedProject(c, db, userId);
     if ('response' in resolvedProject) return resolvedProject.response;
     const project = resolvedProject.project;
+    // These jobs spend LLM budget, so running one by hand is owner/admin work.
+    const forbidden = requireProjectAdmin(c, project, 'Only organization owners and admins can run jobs by hand.');
+    if (forbidden) return forbidden;
 
     const res = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/${job}`, {
       method: 'POST',

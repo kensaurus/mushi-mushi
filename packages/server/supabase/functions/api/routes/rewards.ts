@@ -313,6 +313,31 @@ async function requireRewardsOrg(
   return { ok: true, orgId: resolved.organizationId }
 }
 
+/**
+ * {@link requireRewardsOrg} for writes: rules, tiers, webhooks, quests,
+ * identity providers, point awards, tier overrides and dispute decisions
+ * change the program for every reporter, so they need an org owner or admin.
+ * A project-bound API key resolves as 'owner' (it was minted by one).
+ */
+async function requireRewardsOrgAdmin(
+  c: Context,
+  userId: string,
+): Promise<{ ok: true; orgId: string } | { ok: false; response: Response }> {
+  const db = getServiceClient()
+  const resolved = await resolveAccessibleOrg(c, db, userId)
+  if (!resolved.ok) return { ok: false, response: resolved.response }
+  if (resolved.role !== 'owner' && resolved.role !== 'admin') {
+    return {
+      ok: false,
+      response: c.json(
+        { ok: false, error: { code: 'FORBIDDEN', message: 'Only organization owners and admins can change rewards.' } },
+        403,
+      ),
+    }
+  }
+  return { ok: true, orgId: resolved.organizationId }
+}
+
 /** Admin JWT supplies validated org; MCP API keys resolve org via bound project_id. */
 async function resolveRewardsOrgId(
   c: Context,
@@ -1121,7 +1146,7 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
 
   app.put('/v1/admin/rewards/rules', jwtAuth, async (c) => {
     const userId = c.get('userId') as string
-    const orgGate = await requireRewardsOrg(c, userId)
+    const orgGate = await requireRewardsOrgAdmin(c, userId)
     if (!orgGate.ok) return orgGate.response
     const orgId = orgGate.orgId
 
@@ -1175,7 +1200,7 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
 
   app.put('/v1/admin/rewards/tiers', jwtAuth, async (c) => {
     const userId = c.get('userId') as string
-    const orgGate = await requireRewardsOrg(c, userId)
+    const orgGate = await requireRewardsOrgAdmin(c, userId)
     if (!orgGate.ok) return orgGate.response
     const orgId = orgGate.orgId
 
@@ -1210,7 +1235,7 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   // ===========================================================
   app.post('/v1/admin/rewards/presets/apply', jwtAuth, async (c) => {
     const userId = c.get('userId') as string
-    const orgGate = await requireRewardsOrg(c, userId)
+    const orgGate = await requireRewardsOrgAdmin(c, userId)
     if (!orgGate.ok) return orgGate.response
     const orgId = orgGate.orgId
     const db = getServiceClient()
@@ -1506,7 +1531,7 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   // ===========================================================
   app.post('/v1/admin/rewards/webhooks', jwtAuth, async (c) => {
     const userId = c.get('userId') as string
-    const orgGate = await requireRewardsOrg(c, userId)
+    const orgGate = await requireRewardsOrgAdmin(c, userId)
     if (!orgGate.ok) return orgGate.response
     const orgId = orgGate.orgId
 
@@ -1576,7 +1601,7 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   // ===========================================================
   app.delete('/v1/admin/rewards/webhooks/:id', jwtAuth, async (c) => {
     const userId = c.get('userId') as string
-    const orgGate = await requireRewardsOrg(c, userId)
+    const orgGate = await requireRewardsOrgAdmin(c, userId)
     if (!orgGate.ok) return orgGate.response
     const orgId = orgGate.orgId
 
@@ -1598,7 +1623,7 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   // ===========================================================
   app.post('/v1/admin/rewards/webhooks/test', jwtAuth, async (c) => {
     const userId = c.get('userId') as string
-    const orgGate = await requireRewardsOrg(c, userId)
+    const orgGate = await requireRewardsOrgAdmin(c, userId)
     if (!orgGate.ok) return orgGate.response
     const orgId = orgGate.orgId
 
@@ -1658,7 +1683,7 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
 
   app.post('/v1/admin/rewards/quests', jwtAuth, async (c) => {
     const userId = c.get('userId') as string
-    const orgGate = await requireRewardsOrg(c, userId)
+    const orgGate = await requireRewardsOrgAdmin(c, userId)
     if (!orgGate.ok) return orgGate.response
     const orgId = orgGate.orgId
 
@@ -1700,7 +1725,7 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   // ===========================================================
   app.delete('/v1/admin/rewards/quests/:id', jwtAuth, async (c) => {
     const userId = c.get('userId') as string
-    const orgGate = await requireRewardsOrg(c, userId)
+    const orgGate = await requireRewardsOrgAdmin(c, userId)
     if (!orgGate.ok) return orgGate.response
     const orgId = orgGate.orgId
 
@@ -1779,7 +1804,7 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
 
   app.post('/v1/admin/rewards/identity-providers', jwtAuth, async (c) => {
     const userId = c.get('userId') as string
-    const orgGate = await requireRewardsOrg(c, userId)
+    const orgGate = await requireRewardsOrgAdmin(c, userId)
     if (!orgGate.ok) return orgGate.response
     const orgId = orgGate.orgId
 
@@ -1827,7 +1852,7 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   // ===========================================================
   app.patch('/v1/admin/rewards/identity-providers/:id', jwtAuth, async (c) => {
     const userId = c.get('userId') as string
-    const orgGate = await requireRewardsOrg(c, userId)
+    const orgGate = await requireRewardsOrgAdmin(c, userId)
     if (!orgGate.ok) return orgGate.response
     const orgId = orgGate.orgId
 
@@ -1882,7 +1907,7 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   // Award ad-hoc bonus points to a contributor (MCP write surface).
   // ===========================================================
   app.post('/v1/admin/rewards/bonus-points', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {
-    const orgResolved = await resolveRewardsOrgId(c)
+    const orgResolved = await requireRewardsOrgAdmin(c, (c.get('userId') as string | undefined) ?? '')
     if (!orgResolved.ok) return orgResolved.response
     const orgId = orgResolved.orgId
 
@@ -1947,7 +1972,7 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   // Manually override a contributor's tier (MCP write surface).
   // ===========================================================
   app.post('/v1/admin/rewards/set-tier', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {
-    const orgResolved = await resolveRewardsOrgId(c)
+    const orgResolved = await requireRewardsOrgAdmin(c, (c.get('userId') as string | undefined) ?? '')
     if (!orgResolved.ok) return orgResolved.response
     const orgId = orgResolved.orgId
 
@@ -2177,7 +2202,7 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   // ===========================================================
   app.post('/v1/admin/rewards/disputes/:id/resolve', jwtAuth, async (c) => {
     const userId = c.get('userId') as string
-    const orgGate = await requireRewardsOrg(c, userId)
+    const orgGate = await requireRewardsOrgAdmin(c, userId)
     if (!orgGate.ok) return orgGate.response
     const orgId = orgGate.orgId
 
@@ -2232,7 +2257,7 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   // ===========================================================
   app.delete('/v1/admin/rewards/identity-providers/:id', jwtAuth, async (c) => {
     const userId = c.get('userId') as string
-    const orgGate = await requireRewardsOrg(c, userId)
+    const orgGate = await requireRewardsOrgAdmin(c, userId)
     if (!orgGate.ok) return orgGate.response
     const orgId = orgGate.orgId
 

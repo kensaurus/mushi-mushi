@@ -402,20 +402,33 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
         },
         400,
       );
+    // Merging deletes the source group: viewers are read-only.
+    const access = await callerCanAccessProject(c, db, userId, sourceGroup.project_id as string);
+    if (!access.allowed || access.role === 'viewer') {
+      return c.json(
+        { ok: false, error: { code: 'FORBIDDEN', message: 'Viewers cannot merge groups. Ask a member or admin.' } },
+        403,
+      );
+    }
 
-    await db
+    const moved = await db
       .from('reports')
       .update({ report_group_id: targetGroupId })
-      .eq('report_group_id', groupId);
-    const { count } = await db
+      .eq('report_group_id', groupId)
+      .eq('project_id', sourceGroup.project_id as string);
+    if (moved.error) return dbError(c, moved.error);
+    const { count, error: countError } = await db
       .from('reports')
       .select('id', { count: 'exact', head: true })
       .eq('report_group_id', targetGroupId);
-    await db
+    if (countError) return dbError(c, countError);
+    const recount = await db
       .from('report_groups')
       .update({ report_count: count ?? 0 })
       .eq('id', targetGroupId);
-    await db.from('report_groups').delete().eq('id', groupId);
+    if (recount.error) return dbError(c, recount.error);
+    const removed = await db.from('report_groups').delete().eq('id', groupId);
+    if (removed.error) return dbError(c, removed.error);
 
     return c.json({ ok: true });
   });

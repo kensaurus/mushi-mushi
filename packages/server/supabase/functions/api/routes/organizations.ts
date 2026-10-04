@@ -648,6 +648,14 @@ export function registerOrganizationRoutes(app: Hono<{ Variables: Variables }>):
     if (body.role === 'owner' && actorRole !== 'owner') {
       return c.json({ ok: false, error: { code: 'OWNER_REQUIRED' } }, 403);
     }
+    // Only an owner may change another owner's role.
+    const targetRole = await loadMembership(db, orgId, targetUserId);
+    if (targetRole === 'owner' && actorRole !== 'owner') {
+      return c.json(
+        { ok: false, error: { code: 'OWNER_REQUIRED', message: "Only an owner can change another owner's role." } },
+        403,
+      );
+    }
     const { error } = await db
       .from('organization_members')
       .update({ role: body.role })
@@ -676,6 +684,16 @@ export function registerOrganizationRoutes(app: Hono<{ Variables: Variables }>):
     if (!actorRole) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
     if (actorId !== targetUserId && actorRole !== 'owner' && actorRole !== 'admin') {
       return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
+    }
+    // Only an owner may remove another owner (anyone may leave themselves).
+    if (actorId !== targetUserId && actorRole !== 'owner') {
+      const targetRole = await loadMembership(db, orgId, targetUserId);
+      if (targetRole === 'owner') {
+        return c.json(
+          { ok: false, error: { code: 'OWNER_REQUIRED', message: 'Only an owner can remove another owner.' } },
+          403,
+        );
+      }
     }
     const { error } = await db
       .from('organization_members')

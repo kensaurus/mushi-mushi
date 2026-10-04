@@ -634,14 +634,20 @@ export async function scopedOwnedProjectIds(
 export const resolveAccessibleProject = resolveOwnedProject;
 
 /**
- * Credential writes (integration tokens, storage keys, bot tokens) are for org
- * owners and admins; members and viewers keep read access and ordinary
- * settings. API keys resolve as 'owner' in {@link resolveOwnedProject}.
+ * Credential writes (integration tokens, storage keys, bot tokens) and other
+ * owner-level actions are for org owners and admins; members and viewers keep
+ * read access and ordinary settings. API keys resolve as 'owner' in
+ * {@link resolveOwnedProject}. Pass `message` when the action is not a
+ * credential change, so the refusal names what was refused.
  */
-export function requireProjectAdmin(c: Context, project: OwnedProjectRef): Response | null {
+export function requireProjectAdmin(
+  c: Context,
+  project: Pick<OwnedProjectRef, 'organization_role'>,
+  message = 'Only organization owners and admins can change credentials.',
+): Response | null {
   const role = project.organization_role;
   if (role === 'owner' || role === 'admin') return null;
-  return jsonForbidden(c, 'Only organization owners and admins can change credentials.');
+  return jsonForbidden(c, message);
 }
 
 export type OrgRole = 'owner' | 'admin' | 'member' | 'viewer';
