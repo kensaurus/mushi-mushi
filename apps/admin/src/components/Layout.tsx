@@ -544,7 +544,7 @@ export function Layout({ children }: { children: ReactNode }) {
   const [activityOpen, setActivityOpen] = useState(false)
   const [activityUnread, setActivityUnread] = useState(0)
   const whatsNew = useWhatsNew()
-  const navCounts = useNavCounts()
+  const navCounts = useNavCounts({ live: true })
   const pageHeroSnapshot = usePageHeroSnapshot()
   const postureHasStatusBanner = usePostureHasStatusBanner()
   const projectSnapshots = useProjectSnapshots()

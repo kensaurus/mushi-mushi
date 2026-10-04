@@ -3,18 +3,18 @@
  * PURPOSE: Lightweight cross-page counters that power the coloured dots on
  *          sidebar nav items (Reports / Fixes / Repo / Inventory / Inbox /
  *          Notifications / Queue / Health).
- *          Fetches summaries plus `/v1/admin/dashboard` for the Action Inbox
- *          open-count and integration health, and subscribes to realtime so
- *          the dots reflect server truth shortly after something changes — no
- *          page reload needed.
+ *          ONE request per context: GET /v1/admin/workspace/nav-meta with
+ *          include=counts returns every slice and per-item counter. The
+ *          snapshot is shared by every caller, and Layout's `live` instance
+ *          subscribes to realtime so the dots follow server truth shortly
+ *          after something changes — no page reload needed.
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useSyncExternalStore } from 'react'
 import { apiFetch } from './supabase'
 import { useRealtimeReload } from './realtime'
 import { getActiveProjectIdSnapshot, useActiveProjectSignal } from './activeProject'
 import { getActiveOrgIdSnapshot, useActiveOrgSignal } from './activeOrg'
-import type { DashboardData } from '../components/dashboard/types'
 import type { ProjectsStats } from '../components/projects/types'
 import type { MembersStats } from '../components/members/types'
 import { projectsNeedingAttentionCount } from './workspaceNavMeta'
@@ -109,247 +109,252 @@ const INITIAL: NavCounts = {
   ready: false,
 }
 
-interface FixSummaryResp {
-  inProgress?: number
-  failed?: number
-  prsOpen?: number
+/** Tables whose writes can move a sidebar badge. */
+const NAV_COUNT_TABLES = [
+  'reports',
+  'fix_attempts',
+  'fix_events',
+  'graph_nodes',
+  'status_history',
+  'inventories',
+  'reporter_notifications',
+  'processing_queue',
+  'reporter_devices',
+  'support_tickets',
+  'classification_evaluations',
+  'projects',
+  'project_api_keys',
+  'organization_members',
+  'invitations',
+  'qa_stories',
+  'qa_story_runs',
+  'pdca_runs',
+  'gate_findings',
+  'gate_runs',
+  'content_quality_issues',
+  'experiments',
+  'intelligence_reports',
+  'intelligence_generation_jobs',
+  'releases',
+  'project_codebase_files',
+  'end_user_activity',
+  'audit_logs',
+  'usage_events',
+  'billing_subscriptions',
+  'skill_pipeline_runs',
+  'skill_pipeline_step_runs',
+  'feature_request_votes',
+  'project_plugins',
+  'enterprise_sso_configs',
+  'project_storage_settings',
+  'nl_query_history',
+]
+
+/**
+ * Builds the single sidebar request. `include=counts` asks nav-meta for the
+ * per-item counters it used to take ten separate requests to read;
+ * `fresh=1` skips the server's short per-user cache (sent after a realtime
+ * change, when the cached copy is known to be stale).
+ */
+export function navMetaPath(opts: {
+  inventoryEnabled: boolean
+  isSuperAdmin: boolean
+  fresh: boolean
+}): string {
+  const include = ['counts']
+  if (opts.inventoryEnabled) include.push('inventory')
+  if (opts.isSuperAdmin) include.push('superadmin')
+  const params = new URLSearchParams({ include: include.join(',') })
+  if (opts.fresh) params.set('fresh', '1')
+  return `/v1/admin/workspace/nav-meta?${params.toString()}`
 }
 
-interface ReportsListResp {
-  total?: number
+/** A 404 means this API build predates nav-meta; anything else is an outage. */
+function isRouteMissing(error: { code: string; message: string } | undefined): boolean {
+  if (!error) return false
+  return error.code === 'NOT_FOUND' || /^404\b/.test(error.message)
 }
 
-interface InventorySummary {
-  regressed?: number
+function countOrZero(value: number | null | undefined): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0
 }
 
-interface NotificationCountResp {
-  unread_count?: number
+/** Pure mapping from one nav-meta answer to the sidebar's counters. */
+export function navCountsFromNavMeta(data: WorkspaceNavMetaResponse): NavCounts {
+  const slices = normalizeNavSlices(data.slices)
+  const counts = data.counts ?? null
+  const neverIngestedCount = data.projects?.neverIngestedCount ?? 0
+  const staleKeyCount = data.projects?.staleKeyCount ?? 0
+  return {
+    untriagedBacklog: countOrZero(counts?.untriagedBacklog),
+    fixesInFlight: countOrZero(counts?.fixesInFlight),
+    fixesFailed: countOrZero(counts?.fixesFailed),
+    prsOpen: countOrZero(counts?.prsOpen),
+    regressedActions: countOrZero(counts?.regressedActions),
+    inboxOpenActions: countOrZero(counts?.inboxOpenActions),
+    notificationsUnread: countOrZero(counts?.notificationsUnread),
+    queueFailed: countOrZero(counts?.queueFailed),
+    // Same definition the full /v1/admin/dashboard payload used here before:
+    // integrations whose latest health check is not `ok`.
+    healthIssues: countOrZero(slices.dashboard?.integrationIssues),
+    flaggedDevices: countOrZero(counts?.flaggedDevices),
+    feedbackWithReply: countOrZero(counts?.feedbackWithReply),
+    judgeDisagreements: countOrZero(counts?.judgeDisagreements),
+    projectCount: data.projects?.projectCount ?? 0,
+    projectsNeedingAttention: projectsNeedingAttentionCount({ neverIngestedCount, staleKeyCount }),
+    neverIngestedCount,
+    staleKeyCount,
+    memberCount: data.members?.memberCount ?? null,
+    pendingInvites: data.members?.pendingInvites ?? 0,
+    membersInactiveCount: data.members?.inactiveCount ?? 0,
+    membersAtSeatCap: data.members?.atSeatCap ?? false,
+    membersExpiringInvites: data.members?.expiringSoonInvites ?? 0,
+    superAdminSignups7d: counts?.superAdminSignups7d ?? null,
+    superAdminChurn30d: counts?.superAdminChurn30d ?? null,
+    slices,
+    ready: true,
+  }
 }
 
-interface QueueSummaryResp {
-  byStatus?: Record<string, number>
+// ── Shared store ────────────────────────────────────────────────────────────
+// Layout and PipelineStatusRibbon both read these counters. As two hook
+// instances they each fired the whole request set; now every instance reads
+// one module-level snapshot and loads are deduplicated by context key.
+
+interface LoadContext {
+  key: string
+  inventoryEnabled: boolean
+  isSuperAdmin: boolean
 }
 
-interface DeviceCountResp {
-  count?: number
+let snapshot: NavCounts = INITIAL
+const listeners = new Set<() => void>()
+let loadedKey: string | null = null
+let inflightKey: string | null = null
+let loadSeq = 0
+let rerun: { ctx: LoadContext; fresh: boolean } | null = null
+
+function publish(next: NavCounts): void {
+  snapshot = next
+  for (const l of listeners) l()
 }
 
-interface FeedbackSummaryResp {
-  with_reply?: number
+function subscribe(listener: () => void): () => void {
+  listeners.add(listener)
+  return () => {
+    listeners.delete(listener)
+  }
 }
 
-interface JudgeStatsResp {
-  disagreementCount?: number
-}
-
-interface SuperAdminMetricsResp {
-  signups_last_7d?: number
-  churn_last_30d?: number
-}
-
-interface InboxStatsResp {
-  openActions?: number
-}
-
-function countHealthIssues(dashboard: DashboardData | undefined): number {
-  const integrations = dashboard?.integrations
-  if (!Array.isArray(integrations)) return 0
-  return integrations.reduce((acc, row) => {
-    const status = (row?.lastStatus ?? '').toLowerCase()
-    if (status === 'ok' || status === 'green' || status === 'healthy') return acc
-    return acc + 1
-  }, 0)
-}
-
-export function useNavCounts(): NavCounts {
-  const [counts, setCounts] = useState<NavCounts>(INITIAL)
-  const { isSuperAdmin, has: hasFeature } = useEntitlements()
-  const inventoryEnabled = hasFeature('inventory_v2')
-  const activeProjectSignal = useActiveProjectSignal()
-  const activeOrgSignal = useActiveOrgSignal()
-
-  const load = useCallback(async () => {
-    const projectId = getActiveProjectIdSnapshot()
-    const orgId = getActiveOrgIdSnapshot()
-    const [
-      summaryRes,
-      reportsRes,
-      invRes,
-      dashRes,
-      notifRes,
-      queueRes,
-      flaggedRes,
-      feedbackRes,
-      judgeRes,
-      inboxStatsRes,
-      navMetaRes,
-      superAdminMetricsRes,
-    ] = await Promise.all([
-      apiFetch<FixSummaryResp>('/v1/admin/fixes/summary'),
-      apiFetch<ReportsListResp>('/v1/admin/reports?status=new&limit=1'),
-      projectId && inventoryEnabled
-        ? apiFetch<{ summary: InventorySummary | null }>(`/v1/admin/inventory/${projectId}`)
-        : Promise.resolve({ ok: false as const, error: { code: 'SKIP', message: '' } }),
-      apiFetch<DashboardData>('/v1/admin/dashboard'),
-      apiFetch<NotificationCountResp>('/v1/admin/notifications?unread=1&count_only=1'),
-      apiFetch<QueueSummaryResp>('/v1/admin/queue/summary'),
-      apiFetch<DeviceCountResp>('/v1/admin/anti-gaming/devices?flagged=true&count_only=1'),
-      apiFetch<FeedbackSummaryResp>('/v1/admin/support/tickets/summary'),
-      apiFetch<JudgeStatsResp>('/v1/admin/judge/stats'),
-      apiFetch<InboxStatsResp>('/v1/admin/inbox/stats'),
-      apiFetch<WorkspaceNavMetaResponse>('/v1/admin/workspace/nav-meta'),
-      isSuperAdmin
-        ? apiFetch<SuperAdminMetricsResp>('/v1/super-admin/metrics')
-        : Promise.resolve({ ok: false as const, error: { code: 'SKIP', message: '' } }),
-    ])
-
-    const summary = summaryRes.ok ? summaryRes.data : null
-    const reports = reportsRes.ok ? reportsRes.data : null
-    let regressed = 0
-    if (invRes.ok && invRes.data?.summary && typeof invRes.data.summary.regressed === 'number') {
-      regressed = invRes.data.summary.regressed
-    }
-    const dashboard = dashRes.ok ? dashRes.data : undefined
-    const notifUnread = notifRes.ok ? (notifRes.data?.unread_count ?? 0) : 0
-    const queueByStatus = queueRes.ok ? (queueRes.data?.byStatus ?? {}) : {}
-    const queueFailed = (queueByStatus.dead_letter ?? 0) + (queueByStatus.failed ?? 0)
-    const flaggedDevices = flaggedRes.ok ? (flaggedRes.data?.count ?? 0) : 0
-    const feedbackWithReply = feedbackRes.ok ? (feedbackRes.data?.with_reply ?? 0) : 0
-    const judgeDisagreements = judgeRes.ok ? (judgeRes.data?.disagreementCount ?? 0) : 0
-    const inboxOpenActions = inboxStatsRes.ok
-      ? (inboxStatsRes.data?.openActions ?? 0)
-      : 0
-    const superAdminSignups7d = superAdminMetricsRes.ok
-      ? (superAdminMetricsRes.data?.signups_last_7d ?? null)
-      : null
-    const superAdminChurn30d = superAdminMetricsRes.ok
-      ? (superAdminMetricsRes.data?.churn_last_30d ?? null)
-      : null
-
-    let slices: NavStatSlices = EMPTY_NAV_STAT_SLICES
-    let projectCount = 0
-    let neverIngestedCount = 0
-    let staleKeyCount = 0
-    let memberCount: number | null = null
-    let pendingInvites = 0
-    let membersInactiveCount = 0
-    let membersAtSeatCap = false
-    let membersExpiringInvites = 0
-
-    if (navMetaRes.ok && navMetaRes.data) {
-      slices = normalizeNavSlices(navMetaRes.data.slices)
-      if (navMetaRes.data.projects) {
-        projectCount = navMetaRes.data.projects.projectCount
-        neverIngestedCount = navMetaRes.data.projects.neverIngestedCount
-        staleKeyCount = navMetaRes.data.projects.staleKeyCount
-      }
-      if (navMetaRes.data.members) {
-        memberCount = navMetaRes.data.members.memberCount
-        pendingInvites = navMetaRes.data.members.pendingInvites
-        membersInactiveCount = navMetaRes.data.members.inactiveCount ?? 0
-        membersAtSeatCap = navMetaRes.data.members.atSeatCap ?? false
-        membersExpiringInvites = navMetaRes.data.members.expiringSoonInvites ?? 0
-      }
-    } else {
+async function runLoad(ctx: LoadContext, fresh: boolean): Promise<void> {
+  const seq = ++loadSeq
+  inflightKey = ctx.key
+  try {
+    const res = await apiFetch<WorkspaceNavMetaResponse>(
+      navMetaPath({ inventoryEnabled: ctx.inventoryEnabled, isSuperAdmin: ctx.isSuperAdmin, fresh }),
+      fresh ? { cache: 'no-store' } : undefined,
+    )
+    if (seq !== loadSeq) return
+    if (res.ok && res.data) {
+      publish(navCountsFromNavMeta(res.data))
+    } else if (isRouteMissing(res.error)) {
+      // Only an API build without nav-meta takes the per-slice fallback; on
+      // a 5xx that fan-out would multiply the load on a struggling API.
+      const projectId = getActiveProjectIdSnapshot()
+      const orgId = getActiveOrgIdSnapshot()
       const [fallbackSlices, projectsStatsRes, membersStatsRes] = await Promise.all([
         fetchNavSlicesFallback(projectId),
         apiFetch<ProjectsStats>('/v1/admin/projects/stats'),
         orgId
           ? apiFetch<MembersStats>(`/v1/org/${orgId}/members/stats`)
-          : Promise.resolve({ ok: false as const, error: { code: 'SKIP', message: '' } }),
+          : Promise.resolve({ ok: false as const, data: undefined }),
       ])
-      slices = fallbackSlices
-      const projectsStats = projectsStatsRes.ok ? projectsStatsRes.data : null
-      const membersStats = membersStatsRes.ok ? membersStatsRes.data : null
-      projectCount = projectsStats?.projectCount ?? 0
-      neverIngestedCount = projectsStats?.neverIngestedCount ?? 0
-      staleKeyCount = projectsStats?.staleKeyCount ?? 0
-      memberCount = membersStats?.memberCount ?? null
-      pendingInvites = membersStats?.pendingInvites ?? 0
-      membersInactiveCount = membersStats?.inactiveCount ?? 0
-      membersAtSeatCap = membersStats?.atSeatCap ?? false
-      membersExpiringInvites = membersStats?.expiringSoonInvites ?? 0
+      if (seq !== loadSeq) return
+      const projectsStats = projectsStatsRes.ok ? projectsStatsRes.data : undefined
+      const membersStats = membersStatsRes.ok ? membersStatsRes.data : undefined
+      publish(
+        navCountsFromNavMeta({
+          generatedAt: new Date().toISOString(),
+          slices: fallbackSlices,
+          counts: null,
+          projects: projectsStats
+            ? {
+                projectCount: projectsStats.projectCount ?? 0,
+                neverIngestedCount: projectsStats.neverIngestedCount ?? 0,
+                staleKeyCount: projectsStats.staleKeyCount ?? 0,
+              }
+            : null,
+          members: membersStats
+            ? {
+                memberCount: membersStats.memberCount ?? null,
+                pendingInvites: membersStats.pendingInvites ?? 0,
+                inactiveCount: membersStats.inactiveCount ?? 0,
+                atSeatCap: membersStats.atSeatCap ?? false,
+                expiringSoonInvites: membersStats.expiringSoonInvites ?? 0,
+              }
+            : null,
+        }),
+      )
+    } else {
+      // Outage: keep whatever was shown, but mark the hook loaded so
+      // consumers stop waiting. Absent badges read as "not checked", never 0.
+      publish({ ...snapshot, ready: true })
     }
+    loadedKey = ctx.key
+  } finally {
+    if (seq === loadSeq) inflightKey = null
+    const queued = rerun
+    if (queued && seq === loadSeq) {
+      rerun = null
+      void runLoad(queued.ctx, queued.fresh)
+    }
+  }
+}
 
-    setCounts({
-      untriagedBacklog: reports?.total ?? 0,
-      fixesInFlight: summary?.inProgress ?? 0,
-      fixesFailed: summary?.failed ?? 0,
-      prsOpen: summary?.prsOpen ?? 0,
-      regressedActions: regressed,
-      inboxOpenActions,
-      notificationsUnread: notifUnread,
-      queueFailed,
-      healthIssues: countHealthIssues(dashboard),
-      flaggedDevices,
-      feedbackWithReply,
-      judgeDisagreements,
-      projectCount,
-      projectsNeedingAttention: projectsNeedingAttentionCount({
-        neverIngestedCount,
-        staleKeyCount,
-      }),
-      neverIngestedCount,
-      staleKeyCount,
-      memberCount,
-      pendingInvites,
-      membersInactiveCount,
-      membersAtSeatCap,
-      membersExpiringInvites,
-      superAdminSignups7d,
-      superAdminChurn30d,
-      slices,
-      ready: true,
-    })
-  }, [activeProjectSignal, activeOrgSignal, inventoryEnabled, isSuperAdmin])
+/** Load for `ctx` unless that exact context is already loaded or loading. */
+function requestLoad(ctx: LoadContext, fresh: boolean): void {
+  if (!fresh && (loadedKey === ctx.key || inflightKey === ctx.key)) return
+  if (fresh && inflightKey === ctx.key) {
+    // A load for this context is running; refresh once it lands.
+    rerun = { ctx, fresh: true }
+    return
+  }
+  void runLoad(ctx, fresh)
+}
+
+/** Test hook: drop the shared snapshot. */
+export function resetNavCountsStore(): void {
+  snapshot = INITIAL
+  loadedKey = null
+  inflightKey = null
+  rerun = null
+  loadSeq++
+  for (const l of listeners) l()
+}
+
+/**
+ * Sidebar counters, shared across every caller. `live` subscribes to
+ * realtime and should be set by exactly one long-lived owner (Layout); other
+ * readers just share the snapshot.
+ */
+export function useNavCounts(opts: { live?: boolean } = {}): NavCounts {
+  const counts = useSyncExternalStore(subscribe, () => snapshot, () => INITIAL)
+  const { isSuperAdmin, has: hasFeature } = useEntitlements()
+  const inventoryEnabled = hasFeature('inventory_v2')
+  const activeProjectSignal = useActiveProjectSignal()
+  const activeOrgSignal = useActiveOrgSignal()
+  const key = `${activeOrgSignal}|${activeProjectSignal}|${inventoryEnabled ? 1 : 0}|${isSuperAdmin ? 1 : 0}`
 
   useEffect(() => {
-    void load()
-  }, [load])
+    requestLoad({ key, inventoryEnabled, isSuperAdmin }, false)
+  }, [key, inventoryEnabled, isSuperAdmin])
 
   useRealtimeReload(
-    [
-      'reports',
-      'fix_attempts',
-      'fix_events',
-      'graph_nodes',
-      'status_history',
-      'inventories',
-      'reporter_notifications',
-      'processing_queue',
-      'reporter_devices',
-      'support_tickets',
-      'classification_evaluations',
-      'projects',
-      'project_api_keys',
-      'organization_members',
-      'invitations',
-      'qa_stories',
-      'qa_story_runs',
-      'pdca_runs',
-      'gate_findings',
-      'gate_runs',
-      'content_quality_issues',
-      'experiments',
-      'intelligence_reports',
-      'intelligence_generation_jobs',
-      'releases',
-      'project_codebase_files',
-      'end_user_activity',
-      'audit_logs',
-      'usage_events',
-      'billing_subscriptions',
-      'skill_pipeline_runs',
-      'skill_pipeline_step_runs',
-      'feature_request_votes',
-      'project_plugins',
-      'enterprise_sso_configs',
-      'project_storage_settings',
-      'nl_query_history',
-    ],
-    () => { void load() },
-    { debounceMs: 1500 },
+    NAV_COUNT_TABLES,
+    () => {
+      requestLoad({ key, inventoryEnabled, isSuperAdmin }, true)
+    },
+    { debounceMs: 1500, enabled: opts.live === true },
   )
 
   return counts
