@@ -10,7 +10,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
   IconMenu, IconClose,
-  IconSignOut, IconHealth, IconBell, IconEye, IconChevronRight,
+  IconSignOut, IconBell, IconEye, IconChevronRight,
 } from './icons'
 import { useNavCounts, toneForBacklog } from '../lib/useNavCounts'
 import { renderNavBadge, resolveNavBadge } from '../lib/navBadges'
@@ -26,7 +26,7 @@ import { ProjectSwitcher, useActiveProjectId } from './ProjectSwitcher'
 import { OrgSwitcher } from './OrgSwitcher'
 import { stageForPath, type PdcaStageId } from '../lib/pdca'
 import { buildOperatorNav, CHECK_SUB_GROUPS, type BuiltNavItem, type BuiltNavSection } from '../lib/buildNav'
-import { CHECK_HUB_PATH, QUICK_SUB_GROUPS } from '../lib/navRegistry'
+import { QUICK_PRE_SETUP_PATHS, SIMPLE_NAV_GROUPS } from '../lib/navRegistry'
 import { useAdminMode } from '../lib/mode'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { Tooltip, Btn } from './ui'
@@ -69,34 +69,35 @@ import { AnimatedDisclosure } from './motion/AnimatedDisclosure'
 import { NavSectionStagger } from './motion/NavSectionStagger'
 import { CHIP_TONE } from '../lib/chipTone'
 
-interface NavItem extends BuiltNavItem {}
+interface NavItem extends BuiltNavItem {
+  /** Quick/Beginner cluster this item renders under (SIMPLE_NAV_GROUPS id). */
+  simpleGroupId?: string
+}
 
 /**
- * Quick mode's flat 10-item list is why users called the console hard to
- * navigate — cluster it under plain labels (Set up / Daily loop / More
- * tools). Items whose path isn't in any group render in a trailing cluster
- * so new quickstart routes never silently disappear.
+ * Quick and Beginner sidebars: one always-open list clustered under plain
+ * task names (Find & fix bugs / Your apps / Connect your tools / Account)
+ * from SIMPLE_NAV_GROUPS. Each item carries its group id; items without one
+ * render in a trailing cluster so a page never silently disappears.
  */
-function renderQuickSubGroups(
+function renderSimpleGroups(
   items: NavItem[],
   renderItem: (item: NavItem) => ReactNode,
 ): ReactNode {
-  const basePath = (p: string) => p.split('?')[0] ?? p
-  const grouped = new Set<NavItem>()
-  const clusters = QUICK_SUB_GROUPS.map((group) => {
-    const subItems = group.paths
-      .map((p) => items.find((i) => basePath(i.path) === p))
-      .filter((i): i is NavItem => i != null)
-    subItems.forEach((i) => grouped.add(i))
-    return { ...group, subItems }
-  }).filter((g) => g.subItems.length > 0)
-  const leftovers = items.filter((i) => !grouped.has(i))
+  const clusters = SIMPLE_NAV_GROUPS.map((group) => ({
+    ...group,
+    subItems: items.filter((i) => i.simpleGroupId === group.id),
+  })).filter((g) => g.subItems.length > 0)
+  const leftovers = items.filter((i) => !i.simpleGroupId)
 
   return (
     <>
       {clusters.map((group) => (
-        <div key={group.id} className="space-y-0.5">
-          <p className="px-2 pt-1.5 pb-0.5 text-3xs font-medium uppercase tracking-wide text-fg-faint">
+        <div key={group.id} role="group" aria-labelledby={`${group.id}-label`} className="space-y-0.5">
+          <p
+            id={`${group.id}-label`}
+            className="px-2 pt-2 pb-0.5 text-3xs font-semibold uppercase tracking-wide text-fg-muted"
+          >
             {group.title}
           </p>
           {group.subItems.map(renderItem)}
@@ -716,11 +717,9 @@ export function Layout({ children }: { children: ReactNode }) {
   const activeStage = stageForPath(pathname)
 
   // Filter NAV items based on the active mode.
-  //  • Quickstart: 3 verb-led routes flattened into one section ("Quick").
-  //    PDCA stage badges + section titles are stripped — quickstart users
-  //    don't need the loop vocabulary, just the next button.
-  //  • Beginner: 9-page curated loop, PDCA section structure preserved.
-  //  • Advanced: full 23-page console.
+  //  • Quick: about 10 core pages under task names (SIMPLE_NAV_GROUPS).
+  //  • Beginner: the same groups with a few next steps added.
+  //  • Advanced: every page, under plain section names.
   // Sections collapse to an empty shell if all their items are filtered
   // out; we drop them entirely so the sidebar stays tight.
   // Always strip operator-only routes for non-super-admins, regardless
@@ -744,52 +743,30 @@ export function Layout({ children }: { children: ReactNode }) {
     (!i.requiresAdvancedMode || isAdvanced || isSuperAdmin)
 
   const visibleNav = useMemo((): NavSection[] => {
-    if (isQuickstart) {
+    if (isQuickstart || isBeginner) {
+      // Task-shaped list instead of PDCA sections (B16): what a solo builder
+      // does — find and fix bugs, look after apps, connect tools, account.
+      // Before the first bug arrives Quick shows only the pages that help
+      // get there.
       const activationDone = setupStatus.selectors.done
-      const allowedPaths = new Set([
-        '/onboarding',
-        '/connect',
-        '/inbox',
-        '/feedback',
-        '/reports',
-        '/fixes',
-        '/mcp',
-      ])
-      const quickItems: NavItem[] = NAV.flatMap((s) =>
-        s.items
+      const byPath = new Map(NAV.flatMap((s) => s.items).map((i) => [i.path, i]))
+      const items: NavItem[] = SIMPLE_NAV_GROUPS.flatMap((group) =>
+        (isQuickstart ? group.quick : group.beginner)
+          .filter((path) => !isQuickstart || activationDone || QUICK_PRE_SETUP_PATHS.has(path))
+          .map((path) => byPath.get(path))
+          .filter((i): i is NavItem => i != null)
           .filter(visibleByRole)
           .filter(visibleByFeature)
-          .filter(i => i.quickstartLabel !== undefined)
-          .filter(i => activationDone || allowedPaths.has(i.path))
-          .map(i => ({ ...i, label: i.quickstartLabel ?? i.label })),
+          .map((i) => ({ ...i, simpleGroupId: group.id })),
       )
       return [
         {
           id: 'quick',
-          title: 'Quickstart',
-          hint: 'Bugs, fixes, skill catalog, and setup. Switch to Beginner or Advanced for the full PDCA sidebar.',
-          items: quickItems,
+          title: isQuickstart ? 'Quick' : 'Beginner',
+          hint: 'Find and fix bugs, look after your apps, connect your tools. Advanced mode lists every page.',
+          items,
         },
       ]
-    }
-    if (isBeginner) {
-      // Beginner mode keeps Start expanded by default — first-run users
-      // need the Dashboard / Get started pair in view, not hidden behind
-      // a chevron like in advanced mode.
-      return NAV
-        .map(s => ({
-          ...s,
-          defaultCollapsed: s.id === 'start' ? false : s.defaultCollapsed,
-          items: s.items
-            .filter(visibleByRole)
-            .filter(visibleByFeature)
-            .filter(i => {
-              if (s.id === 'check') return i.checkBeginnerCore === true
-              if (s.id === 'plan') return i.beginner === true && !i.requiresAdvancedMode
-              return i.beginner === true
-            }),
-        }))
-        .filter(s => s.items.length > 0)
     }
     // Advanced mode: render every item including gated ones, so the
     // sidebar's upsell pill replaces the "hidden until you pay" UX.
@@ -935,7 +912,7 @@ export function Layout({ children }: { children: ReactNode }) {
         {visibleNav.map((section, sectionIdx) => {
           const stageId = SECTION_TO_STAGE[section.id]
           const isActiveStage = stageId !== undefined && stageId === activeStage
-          const isExpanded = expandedSectionId === section.id
+          const isExpanded = section.id === 'quick' || expandedSectionId === section.id
           // Per-stage staleness — surfaced on the collapsed section header
           // so advanced users can still see at a glance which PDCA stage
           // needs their attention without expanding.
@@ -946,7 +923,7 @@ export function Layout({ children }: { children: ReactNode }) {
               id={`nav-section-${section.id}`}
               className={compact ? 'nav-rail-group' : sectionIdx > 0 ? 'border-t border-edge/20 pt-1.5 mt-0.5' : ''}
             >
-              {compact ? (
+              {section.id === 'quick' && !compact ? null : compact ? (
                 <SectionRailHeader
                   section={section}
                   expanded={isExpanded}
@@ -969,7 +946,7 @@ export function Layout({ children }: { children: ReactNode }) {
                   className={compact ? 'flex flex-col gap-1' : 'space-y-0.5'}
                 >
                   {section.id === 'quick' && !compact
-                    ? renderQuickSubGroups(section.items, (item) => renderNavLink(item, compact))
+                    ? renderSimpleGroups(section.items, (item) => renderNavLink(item, compact))
                     : section.id === 'check' && isAdvanced && !compact
                     ? CHECK_SUB_GROUP_ORDER.map((subId) => {
                         const subItems = section.items.filter((i) => i.checkSubGroup === subId)
@@ -988,15 +965,17 @@ export function Layout({ children }: { children: ReactNode }) {
                         )
                       })
                     : section.items.map((item) => renderNavLink(item, compact))}
-                  {section.id === 'check' && isBeginner && !compact ? (
-                    <Link
-                      to={CHECK_HUB_PATH}
-                      onClick={() => setMobileOpen(false)}
-                      className="nav-link text-fg-muted hover:text-fg-secondary"
+                  {section.id === 'quick' && !compact ? (
+                    <Btn
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setMode('advanced')}
+                      className="nav-link w-full justify-start text-fg-muted hover:text-fg-secondary"
                     >
-                      <IconHealth className="nav-link-icon opacity-70" />
-                      <span>More verification tools →</span>
-                    </Link>
+                      <IconChevronRight className="nav-link-icon opacity-70" />
+                      <span>All pages (Advanced mode)</span>
+                    </Btn>
                   ) : null}
                 </NavSectionStagger>
               </AnimatedDisclosure>
