@@ -28,6 +28,7 @@ import { log } from '../_shared/logger.ts'
 import { MISTAKE_EFFORT, MISTAKE_MODEL, OPENAI_PRIMARY } from '../_shared/models.ts'
 import { claudeGenerateObject } from '../_shared/claude-messages.ts'
 import { recordLlmUsage } from '../_shared/llm-usage.ts'
+import { projectLlmKey } from '../_shared/project-llm-key.ts'
 
 // Cosine distance threshold for cluster assignment (≤ = assign, > = new cluster)
 const ASSIGN_DISTANCE = 0.18
@@ -234,19 +235,19 @@ Rate the semantic coherence of this cluster and suggest how to name and summaris
 
         try {
           let result: z.infer<typeof coherenceSchema>
-          // Platform keys only (ANTHROPIC_API_KEY / OPENAI_API_KEY): key_source 'env'.
+          // The project's own key first, the platform key otherwise.
+          const anthropicResolved = await projectLlmKey(db, projectId, 'anthropic')
+          const anthropicKey = anthropicResolved?.key
           const usageCtx = {
             functionName: 'mistake-clusterer',
             stage: 'cluster-coherence',
             projectId,
             primaryModel: MISTAKE_MODEL,
-            keySource: 'env',
-          } as const
+          }
 
-          const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY')
           const claudeStart = Date.now()
           try {
-            if (!anthropicKey) throw new Error('ANTHROPIC_API_KEY is not set')
+            if (!anthropicKey) throw new Error('No Anthropic key for this project')
             const generation = await claudeGenerateObject({
               apiKey: anthropicKey,
               model: MISTAKE_MODEL,
@@ -254,20 +255,26 @@ Rate the semantic coherence of this cluster and suggest how to name and summaris
               schema: coherenceSchema,
               prompt,
             })
-            void recordLlmUsage(db, { ...usageCtx, model: MISTAKE_MODEL, startedAt: claudeStart }, { result: generation })
+            void recordLlmUsage(db, { ...usageCtx, keySource: anthropicResolved?.source, model: MISTAKE_MODEL, startedAt: claudeStart }, { result: generation })
             result = generation.object
           } catch (claudeErr) {
             // No key means no paid call, so no row.
             if (anthropicKey) {
-              void recordLlmUsage(db, { ...usageCtx, model: MISTAKE_MODEL, startedAt: claudeStart }, { error: claudeErr })
+              void recordLlmUsage(db, { ...usageCtx, keySource: anthropicResolved?.source, model: MISTAKE_MODEL, startedAt: claudeStart }, { error: claudeErr })
             }
+            const openaiResolved = await projectLlmKey(db, projectId, 'openai')
+            if (!openaiResolved) throw claudeErr
             const openaiUsage = {
               ...usageCtx,
+              keySource: openaiResolved.source,
               model: OPENAI_PRIMARY,
               startedAt: Date.now(),
               fallbackReason: anthropicKey ? 'anthropic_failed' : 'no_anthropic_key',
             }
-            const openai = createOpenAI({ apiKey: Deno.env.get('OPENAI_API_KEY') })
+            const openai = createOpenAI({
+              apiKey: openaiResolved.key,
+              ...(openaiResolved.baseUrl ? { baseURL: openaiResolved.baseUrl } : {}),
+            })
             const generation = await generateObject({
               model: openai(OPENAI_PRIMARY),
               schema: coherenceSchema,

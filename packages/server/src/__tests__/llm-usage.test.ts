@@ -330,13 +330,49 @@ describe('hosted billing stays where it was before recording', () => {
     expect(buildLlmUsageRecord({ ...base, billHosted: true, skipHostedBilling: true }, { result: {} }).skipHostedBilling).toBe(true)
   })
 
-  it('only the two paths billed before 2026-10-04 opt in', () => {
-    const optedIn = ['inventory-propose/index.ts', 'story-mapper/index.ts']
+  // Policy (2026-10-04): bill only what a user asked for, never background
+  // maintenance. A new entry here is a pricing decision, not a refactor.
+  it('only user-requested paths opt into hosted billing', () => {
+    const optedIn = [
+      '_shared/nl-query.ts',
+      'inventory-propose/index.ts',
+      'story-mapper/index.ts',
+      'test-gen-from-report/index.ts',
+      'test-gen-from-story/index.ts',
+    ]
     const all = readdirSync(resolve(FUNCTIONS_ROOT, '.'), { recursive: true, withFileTypes: false }) as string[]
     const users = all
       .filter((f) => f.endsWith('.ts') && !f.includes('node_modules'))
       .filter((f) => /billHosted:\s*true/.test(readFileSync(resolve(FUNCTIONS_ROOT, f), 'utf8')))
       .map((f) => f.split('\\').join('/'))
     expect(users.sort()).toEqual(optedIn)
+  })
+})
+
+describe('every opted-in path checks the wallet before calling the provider', () => {
+  it('goes through withAnthropicOrOpenAi / withLlmFailover or calls hostedLlmPreflight', () => {
+    for (const f of ['_shared/nl-query.ts', 'inventory-propose/index.ts', 'story-mapper/index.ts', 'test-gen-from-report/index.ts', 'test-gen-from-story/index.ts']) {
+      const src = readFileSync(resolve(FUNCTIONS_ROOT, f), 'utf8')
+      expect(/withAnthropicOrOpenAi|withLlmFailover|hostedLlmPreflight/.test(src), f).toBe(true)
+    }
+  })
+})
+
+describe('background jobs use the project key first', () => {
+  it('no job reads the platform key straight from the environment', () => {
+    for (const f of ['generate-synthetic/index.ts', 'mistake-clusterer/index.ts', 'mistake-summarizer/index.ts', 'release-builder/index.ts']) {
+      const src = readFileSync(resolve(FUNCTIONS_ROOT, f), 'utf8')
+      expect(src, f).not.toMatch(/Deno\.env\.get\('(ANTHROPIC|OPENAI)_API_KEY'\)/)
+      expect(src, f).toMatch(/projectLlmKey|resolveLlmKey/)
+      expect(src, f).not.toMatch(/keySource: 'env'/)
+    }
+  })
+
+  it('sdk-assistant and intelligence-report record the key source; the report is never billed', () => {
+    const assistant = readFileSync(resolve(FUNCTIONS_ROOT, 'api/routes/sdk-assistant.ts'), 'utf8')
+    expect(assistant.match(/^\s*keySource,\s*$/gm)?.length).toBe(2)
+    const intel = readFileSync(resolve(FUNCTIONS_ROOT, 'intelligence-report/index.ts'), 'utf8')
+    expect(intel.match(/^\s*keySource,\s*$/gm)?.length).toBe(2)
+    expect(intel.match(/skipHostedBilling: true/g)?.length).toBe(2)
   })
 })

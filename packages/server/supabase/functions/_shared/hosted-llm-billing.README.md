@@ -55,38 +55,32 @@ that charges the same call twice.
 This is a first cut. It bills the paths that were already instrumented, not
 every path that can burn a platform key.
 
-**Debited** — a call that runs on the platform key, writes an
-`llm_invocations` row with `keySource: 'env'`, and whose path opts in.
-Recording a call's cost does not bill it: `_shared/llm-usage.ts` writes rows
-with `skipHostedBilling` unless the site passes `billHosted: true`. Since
-2026-10-04 only `inventory-propose` and `story-mapper` opt in (they were
-billed before through the `meter`), plus the paths that call
-`logLlmInvocation` directly as before (classify-report, fast-filter,
-fix-worker, ask-mushi, codebase-understand, repo-diagram, voice).
+**Policy (owner, 2026-10-04): bill what a user asked for, never background
+maintenance.** Customers do not expect to pay for processes they did not start
+(Sentry moved Seer from per-scan billing to a flat per-contributor price). A
+platform-key call is debited only when its row has `keySource: 'env'` and its
+path opts in; `_shared/llm-usage.ts` writes rows with `skipHostedBilling`
+unless the site passes `billHosted: true`. A test pins the opt-in list, and
+every opted-in path checks the wallet before calling the provider.
 
-**Recorded, not debited (owner decision to bill):** `judge-batch`,
+**Debited (user-requested):** triage and fixes (classify-report, fast-filter,
+fix-worker), ask-mushi, codebase-understand, repo-diagram, voice, the in-widget
+assistant (`sdk-assistant`, a feature the customer turns on), `nl-query`
+(console questions; preflight added 2026-10-04), `test-gen-from-report`,
+`test-gen-from-story`, `inventory-propose` and `story-mapper`.
+
+**Recorded, never debited (background):** `judge-batch`,
 `generate-synthetic`, `mistake-clusterer`, `mistake-summarizer`,
-`release-builder`, `pdca-runner`, `test-gen-from-report`,
-`test-gen-from-story`, `library-modernizer`, `prompt-auto-tune`,
-`nl-query`, the `classify-report` vision call, and embeddings. Their cost
-shows on Costs and counts toward the monthly budget. To bill one, pass
-`billHosted: true` at the site; a test pins the opt-in list.
+`release-builder`, `pdca-runner`, `library-modernizer`,
+`prompt-auto-tune`, `intelligence-report`, the `classify-report` vision
+call, and embeddings. They show on Costs and count toward the monthly budget.
 
-**Not debited:**
+**Keys:** every one of these uses the project's own key first
+(`resolveLlmKey`, or `_shared/project-llm-key.ts` for batch jobs, which skips
+a project over its budget) and the platform key otherwise, and records which.
+Until 2026-10-04 generate-synthetic, mistake-* and release-builder read the
+platform key straight from the environment.
 
-- Writes an `llm_invocations` row but never sets `keySource`, so the gate never
-  fires: `sdk-assistant`, `intelligence-report`. The cheapest to fix — one
-  field at the existing telemetry call.
-- Embeddings. Every embedding call writes a row (stage `embedding`) so its
-  cost shows on Costs and counts toward the budget, but the row carries
-  `skipHostedBilling`: embeddings were never wallet-billed and the wallet
-  price table is not known to price them. Turning that on is an owner
-  decision — confirm `kensaurus_model_prices` has `text-embedding-3-small`,
-  then drop the flag in `_shared/embeddings.ts`.
-- `generate-synthetic`, `mistake-*` and `release-builder` read
-  `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` straight from the environment and
-  never honour a customer's BYOK key — a separate bug. Their rows are
-  `key_source = 'env'`; they are recorded, not debited.
 - `fine-tune-vendor` predictions (an `ft:` model has no price row) and the
   `integration-probes` key checks write no row.
 
@@ -99,9 +93,9 @@ are correctly excluded.
 The `on`-mode preflight lives in `withLlmFailover`, so it covers every
 `withAnthropicOrOpenAi` caller. Paths that call the provider directly
 (`judge-batch`, `generate-synthetic`, `mistake-*`, `release-builder`,
-`library-modernizer`, `prompt-auto-tune`, `nl-query`, the vision call) are
-neither gated nor debited. If one is opted into billing, give it the same
-preflight first, or an empty wallet will not refuse it.
+`library-modernizer`, `prompt-auto-tune`, the vision call) are
+neither gated nor debited. `nl-query` calls `hostedLlmPreflight` itself. If
+another one is opted into billing, give it the same preflight first.
 
 One softness worth knowing: `keySource` is what the caller *inferred*, not what
 `resolveLlmKey` returned. `classify-report` does
