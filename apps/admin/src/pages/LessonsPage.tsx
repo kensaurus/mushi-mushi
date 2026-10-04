@@ -9,7 +9,7 @@
  *     Query Sim    — paste a diff, see what rules would be injected (lessons.query)
  */
 
-import { useState, useCallback, useMemo, useEffect } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
@@ -23,6 +23,7 @@ import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageCopy } from '../lib/copy'
 import { useLessonsUx, resolveQuickLessonsTab } from '../lib/lessonsModeUx'
+import { resolveModeAwareTab } from '../lib/modeAwareTab'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import {
@@ -127,9 +128,10 @@ const TABS: Array<{ id: LessonsTabId; label: string; description: string }> = [
   { id: 'query',    label: 'Query Sim', description: 'Paste a diff and preview which rules would be injected by lessons.query.' },
 ]
 
-function resolveLessonsTab(value: string | null): LessonsTabId {
+/** The tab named in the URL, or null so quickstart can pick one. */
+function explicitLessonsTab(value: string | null): LessonsTabId | null {
   if (value === 'lessons' || value === 'clusters' || value === 'query') return value
-  return 'overview'
+  return null
 }
 
 // ─── Lessons tab ─────────────────────────────────────────────
@@ -575,8 +577,6 @@ export function LessonsPage() {
   const projectName = setup.activeProject?.project_name ?? null
   const [searchParams, setSearchParams] = useSearchParams()
   const tabParam = searchParams.get('tab')
-  const activeTab = resolveLessonsTab(tabParam)
-  const activeTabMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
 
   const {
     data: statsData,
@@ -588,6 +588,13 @@ export function LessonsPage() {
   } = usePageData<LessonsStats>('/v1/admin/lessons/stats')
   usePublishPageHeroStats('/lessons', statsData)
   const stats = { ...EMPTY_LESSONS_STATS, ...statsData }
+  const activeTab = resolveModeAwareTab<LessonsTabId>({
+    explicit: explicitLessonsTab(tabParam),
+    isQuickstart: ux.isQuickstart,
+    quickTab: statsData ? resolveQuickLessonsTab(stats) : null,
+    fallback: 'overview',
+  })
+  const activeTabMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
 
   const setActiveTab = useCallback(
     (tab: LessonsTabId) => {
@@ -600,12 +607,6 @@ export function LessonsPage() {
     },
     [setSearchParams],
   )
-
-  useEffect(() => {
-    if (!ux.isQuickstart || statsLoading) return
-    const quickTab = resolveQuickLessonsTab(stats)
-    if (activeTab !== quickTab) setActiveTab(quickTab)
-  }, [ux.isQuickstart, statsLoading, stats, activeTab, setActiveTab])
 
   const tabOptions = useMemo(
     () =>
