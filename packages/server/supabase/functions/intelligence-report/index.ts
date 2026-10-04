@@ -102,11 +102,14 @@ Cross-customer benchmarks available: ${benchmarks.optedIn ? 'yes' : 'no (project
         let usage: { promptTokens?: number; completionTokens?: number } | undefined;
         let usedModel = INTELLIGENCE_MODEL;
         let fallbackUsed = false;
+        // Source of the key behind the last attempt (the one that answered).
+        let keySource: 'byok' | 'env' | null = null;
         try {
           const generation = await withAnthropicOrOpenAi(
             db,
             project.id,
             async (resolved) => {
+              keySource = resolved.source;
               const { text, usage } = await claudeGenerateText({
                 apiKey: resolved.key,
                 model: INTELLIGENCE_MODEL,
@@ -125,6 +128,7 @@ Cross-customer benchmarks available: ${benchmarks.optedIn ? 'yes' : 'no (project
               return { text, usage };
             },
             async (resolved) => {
+              keySource = resolved.source;
               const openai = createOpenAI({
                 apiKey: resolved.key,
                 ...(resolved.baseUrl ? { baseURL: resolved.baseUrl } : {}),
@@ -185,6 +189,9 @@ Cross-customer benchmarks available: ${benchmarks.optedIn ? 'yes' : 'no (project
             latencyMs: Date.now() - digestStart,
             errorMessage: diagnostic,
             langfuseTraceId: trace.id,
+            keySource,
+            // A weekly report nobody asked for this time: recorded, never billed.
+            skipHostedBilling: true,
           }).catch((telemetryError) => {
             intelLog.warn('Failed to record intelligence LLM error telemetry', {
               projectId: project.id,
@@ -213,6 +220,9 @@ Cross-customer benchmarks available: ${benchmarks.optedIn ? 'yes' : 'no (project
           inputTokens: usage?.promptTokens ?? null,
           outputTokens: usage?.completionTokens ?? null,
           langfuseTraceId: trace.id,
+          keySource,
+          // A weekly report nobody asked for this time: recorded, never billed.
+          skipHostedBilling: true,
         });
 
         const renderedHtml = renderIntelligenceHtml({

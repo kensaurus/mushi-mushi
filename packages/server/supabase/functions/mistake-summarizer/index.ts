@@ -25,6 +25,7 @@ import { ANTHROPIC_HAIKU, MISTAKE_EFFORT, MISTAKE_MODEL, OPENAI_MINI, THINKING_H
 import { claudeGenerateText } from '../_shared/claude-messages.ts'
 import { UsageByModel } from '../_shared/pricing.ts'
 import { recordLlmUsage } from '../_shared/llm-usage.ts'
+import { projectLlmKey } from '../_shared/project-llm-key.ts'
 
 Deno.serve(
   withSentry(async (req: Request) => {
@@ -71,15 +72,21 @@ Severity: ${lesson.severity}
 Sample reports:
 ${reportContext || '(none available)'}`
 
-    const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY')
+    // The project's own keys first, the platform keys otherwise.
+    const anthropicResolved = await projectLlmKey(db, lesson.project_id as string, 'anthropic')
+    const openaiResolved = await projectLlmKey(db, lesson.project_id as string, 'openai')
+    const anthropicKey = anthropicResolved?.key
     // Haiku 4.5 still takes the AI SDK v4 call shape; Sonnet goes through
     // claude-messages.ts (Sonnet 5.5 rejects temperature and forced tools).
     const anthropicFast = createAnthropic({ apiKey: anthropicKey })
-    const openaiMini = createOpenAI({ apiKey: Deno.env.get('OPENAI_API_KEY') })
+    const openaiMini = createOpenAI({
+      apiKey: openaiResolved?.key,
+      ...(openaiResolved?.baseUrl ? { baseURL: openaiResolved.baseUrl } : {}),
+    })
 
     const updates: Record<string, string> = {}
     // Per-model totals for the response; the spend itself is one
-    // llm_invocations row per call (platform keys only, so key_source 'env').
+    // llm_invocations row per call, with the source of the key it used.
     const ledger = new UsageByModel()
     const usageWrites: Array<Promise<{ error: string | null }>> = []
     const record = (
@@ -88,6 +95,7 @@ ${reportContext || '(none available)'}`
       startedAt: number,
       outcome: { result?: { usage: { promptTokens: number; completionTokens: number } }; error?: unknown },
       primaryModel: string = model,
+      keySource: 'byok' | 'env' | null = null,
     ) => {
       if (outcome.result) ledger.record(model, outcome.result.usage.promptTokens, outcome.result.usage.completionTokens)
       usageWrites.push(recordLlmUsage(db, {
@@ -96,7 +104,7 @@ ${reportContext || '(none available)'}`
         projectId: lesson.project_id as string,
         model,
         primaryModel,
-        keySource: 'env',
+        keySource,
         startedAt,
       }, outcome))
     }
@@ -105,7 +113,7 @@ ${reportContext || '(none available)'}`
       if (model === 'fast') {
         return generateText({ model: anthropicFast(ANTHROPIC_HAIKU), prompt, maxTokens: 200 })
       }
-      if (!anthropicKey) throw new Error('ANTHROPIC_API_KEY is not set')
+      if (!anthropicKey) throw new Error('No Anthropic key for this project')
       return claudeGenerateText({
         apiKey: anthropicKey,
         model: MISTAKE_MODEL,
@@ -122,11 +130,12 @@ ${reportContext || '(none available)'}`
       const claudeStart = Date.now()
       try {
         const result = await callClaude(model, prompt)
-        record(claudeModel, stage, claudeStart, { result })
+        record(claudeModel, stage, claudeStart, { result }, claudeModel, anthropicResolved?.source ?? null)
         return result.text.trim()
       } catch (claudeErr) {
         // No key means no paid call, so no row.
-        if (anthropicKey) record(claudeModel, stage, claudeStart, { error: claudeErr })
+        if (anthropicKey) record(claudeModel, stage, claudeStart, { error: claudeErr }, claudeModel, anthropicResolved?.source ?? null)
+        if (!openaiResolved) throw claudeErr
         const openaiStart = Date.now()
         try {
           const result = await generateText({
@@ -134,10 +143,10 @@ ${reportContext || '(none available)'}`
             prompt,
             maxTokens: model === 'fast' ? 200 : 1200,
           })
-          record(OPENAI_MINI, stage, openaiStart, { result }, claudeModel)
+          record(OPENAI_MINI, stage, openaiStart, { result }, claudeModel, openaiResolved.source)
           return result.text.trim()
         } catch (openaiErr) {
-          record(OPENAI_MINI, stage, openaiStart, { error: openaiErr }, claudeModel)
+          record(OPENAI_MINI, stage, openaiStart, { error: openaiErr }, claudeModel, openaiResolved.source)
           throw openaiErr
         }
       }

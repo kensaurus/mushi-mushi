@@ -219,6 +219,9 @@ export function registerSdkAssistantRoutes(app: Hono<{ Variables: Variables }>):
 
     let usedModel = ASSIST_MODEL
     let fallbackUsed = false
+    // The source of the key that made the last attempt, which is the one that
+    // answered. logLlmInvocation bills a platform-key turn only when it is set.
+    let keySource: 'byok' | 'env' | null = null
 
     const trace = createTrace('sdk-assistant', { projectId, threadId, route })
     tagLangfuseTrace(trace.id)
@@ -229,6 +232,7 @@ export function registerSdkAssistantRoutes(app: Hono<{ Variables: Variables }>):
         db,
         projectId,
         (key) => {
+          keySource = key.source
           return claudeGenerateObject({
             apiKey: key.key,
             model: ASSIST_MODEL,
@@ -240,6 +244,7 @@ export function registerSdkAssistantRoutes(app: Hono<{ Variables: Variables }>):
           })
         },
         (key) => {
+          keySource = key.source
           usedModel = ASSIST_FALLBACK
           fallbackUsed = true
           const openai = createOpenAI({ apiKey: key.key, baseURL: key.baseUrl })
@@ -280,6 +285,7 @@ export function registerSdkAssistantRoutes(app: Hono<{ Variables: Variables }>):
         inputTokens,
         outputTokens,
         langfuseTraceId: trace.id,
+        keySource,
       })
 
       const assistantContent = reply.kind === 'answer' ? String(reply.text ?? '') : String(reply.question ?? '')
@@ -318,6 +324,7 @@ export function registerSdkAssistantRoutes(app: Hono<{ Variables: Variables }>):
         errorMessage: msg,
         latencyMs,
         langfuseTraceId: trace.id,
+        keySource,
       })
       log.error('sdk_assistant_llm_error', { projectId, error: msg })
       return c.json({ ok: false, error: { code: 'ASSISTANT_ERROR', message: 'The assistant is temporarily unavailable.' } }, 502)
