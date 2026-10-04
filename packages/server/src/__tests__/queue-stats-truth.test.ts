@@ -24,11 +24,12 @@ vi.mock('../../supabase/functions/api/helpers.ts', () => ({
 vi.mock('../../supabase/functions/api/shared.ts', () => ({
   dbError: vi.fn((c: Ctx, err: { message: string }) => c.json({ ok: false, error: { code: 'DB_ERROR', message: err.message } }, 500)),
   callerProjectIds: async () => ['p1'],
-  userCanAccessProject: async () => ({ allowed: true, role: 'owner' }),
+  userCanAccessProject: async () => ({ allowed: true, role: currentRole }),
 }))
 
 interface Result { data?: unknown; count?: number; error?: { message: string } | null }
 let currentDb: unknown = null
+let currentRole: 'owner' | 'viewer' = 'owner'
 let tables: Record<string, Result> = {}
 const tablesRead: string[] = []
 
@@ -62,6 +63,7 @@ beforeAll(async () => {
 })
 
 beforeEach(() => {
+  currentRole = 'owner'
   tables = {}
   tablesRead.length = 0
   currentDb = fakeDb()
@@ -151,6 +153,21 @@ describe('POST /v1/admin/queue/:id/retry', () => {
   it('still retries a dead-letter job', async () => {
     tables = { 'processing_queue:single': { data: { id: 'q1', status: 'dead_letter', report_id: 'r1', project_id: 'p1' }, error: null } }
     const res = await call('post', '/v1/admin/queue/:id/retry', { id: 'q1' })
+    expect(res.body.ok).toBe(true)
+  })
+})
+
+describe('POST /v1/admin/queue/flush-queued', () => {
+  it('refuses a caller who only views the project', async () => {
+    currentRole = 'viewer'
+    const res = await call('post', '/v1/admin/queue/flush-queued', {})
+    expect(res.status).toBe(403)
+    expect(res.body.error).toMatchObject({ code: 'FORBIDDEN' })
+    expect(tablesRead).not.toContain('reports')
+  })
+
+  it('flushes for a project owner', async () => {
+    const res = await call('post', '/v1/admin/queue/flush-queued', {})
     expect(res.body.ok).toBe(true)
   })
 })

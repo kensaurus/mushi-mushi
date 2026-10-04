@@ -50,7 +50,8 @@ import {
   type RateLimiter,
   type RateLimitVerdict,
 } from '../../_shared/inventory-guards.ts'
-import { ownedProjectIds, callerProjectIds, resolveOwnedProject } from '../shared.ts'
+import { ownedProjectIds, callerProjectIds, resolveOwnedProject, userCanAccessProject } from '../shared.ts'
+import { denyViewerWrite } from '../viewer-gate.ts'
 
 interface IngestBody {
   yaml?: string
@@ -1783,6 +1784,12 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
       const db = getServiceClient()
       const scope = await assertProjectScope(c, projectId, db)
       if (!scope.ok) return scope.response
+      // Approving turns the story on (scheduled runs spend crawl credits).
+      if (scope.authMethod === 'jwt') {
+        const access = await userCanAccessProject(db, scope.userId, projectId)
+        const denied = denyViewerWrite(c, access.role, 'approve or reject generated tests')
+        if (denied) return denied
+      }
 
       const body = await c.req.json().catch(() => ({})) as { status: 'approved' | 'rejected' }
       if (!['approved', 'rejected'].includes(body.status)) {

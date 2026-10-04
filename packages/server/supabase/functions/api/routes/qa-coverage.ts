@@ -27,7 +27,8 @@ import type { Variables } from '../types.ts';
 import { z } from 'npm:zod@3';
 import { jwtAuth, apiKeyAuth, requireApiKeyScope } from '../../_shared/auth.ts';
 import { getServiceClient } from '../../_shared/db.ts';
-import { dbError, ownedProjectIds, jsonError } from '../shared.ts';
+import { dbError, ownedProjectIds, jsonError, userCanAccessProject } from '../shared.ts';
+import { denyViewerWrite } from '../viewer-gate.ts';
 
 const CRON_FIELD = /^(\*(\/\d+)?|\d+(-\d+)?(,\d+(-\d+)?)*)(\/\d+)?$/;
 
@@ -153,6 +154,15 @@ export function registerQaCoverageRoutes(app: Hono<{ Variables: Variables }>): v
     const ids = await ownedProjectIds(db, userId);
     if (!ids.includes(projectId)) return null;
     return projectId;
+  }
+
+  // Viewers read QA coverage. Creating, editing, deleting or running a story
+  // changes the project (a run also spends crawl credits). A project-bound API
+  // key has no userId and was already scoped by the middleware.
+  async function qaViewerDenied(c: Context, db: ReturnType<typeof getServiceClient>, userId: string, projectId: string, action: string) {
+    if (!userId) return null;
+    const access = await userCanAccessProject(db, userId, projectId);
+    return denyViewerWrite(c, access.role, action);
   }
 
   // GET /v1/admin/projects/:pid/qa-coverage/stats — posture banner + QA SNAPSHOT.
@@ -434,6 +444,8 @@ export function registerQaCoverageRoutes(app: Hono<{ Variables: Variables }>): v
     const pid = c.req.param('pid')!;
     const db = getServiceClient();
     if (!(await resolveProject(db, userId, pid))) return c.json({ error: 'Not found' }, 404);
+    const qaDenied = await qaViewerDenied(c, db, userId, pid, 'add QA stories');
+    if (qaDenied) return qaDenied;
 
     let raw: unknown;
     try {
@@ -460,6 +472,8 @@ export function registerQaCoverageRoutes(app: Hono<{ Variables: Variables }>): v
     const sid = c.req.param('sid')!;
     const db = getServiceClient();
     if (!(await resolveProject(db, userId, pid))) return c.json({ error: 'Not found' }, 404);
+    const qaDenied = await qaViewerDenied(c, db, userId, pid, 'change QA stories');
+    if (qaDenied) return qaDenied;
 
     let raw: unknown;
     try {
@@ -491,6 +505,8 @@ export function registerQaCoverageRoutes(app: Hono<{ Variables: Variables }>): v
     const sid = c.req.param('sid')!;
     const db = getServiceClient();
     if (!(await resolveProject(db, userId, pid))) return c.json({ error: 'Not found' }, 404);
+    const qaDenied = await qaViewerDenied(c, db, userId, pid, 'delete QA stories');
+    if (qaDenied) return qaDenied;
 
     const { error } = await db
       .from('qa_stories')
@@ -581,6 +597,8 @@ export function registerQaCoverageRoutes(app: Hono<{ Variables: Variables }>): v
     const contextPid = c.get('projectId' as keyof Variables) as string | undefined;
     const db = getServiceClient();
     if (!(await resolveProject(db, userId, pid, contextPid))) return c.json({ error: 'Not found' }, 404);
+    const qaDenied = await qaViewerDenied(c, db, userId, pid, 'run QA stories');
+    if (qaDenied) return qaDenied;
 
     // Verify story exists, belongs to project, and is enabled
     const { data: story, error: storyErr } = await db

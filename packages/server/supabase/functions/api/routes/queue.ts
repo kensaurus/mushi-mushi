@@ -1,4 +1,4 @@
-import type { Hono } from 'npm:hono@4';
+import type { Context, Hono } from 'npm:hono@4';
 import type { Variables } from '../types.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { jwtAuth } from '../../_shared/auth.ts';
@@ -8,7 +8,21 @@ import { queueRetryDenial } from '../../_shared/queue-retry-policy.ts';
 import { denyViewerWrite } from '../viewer-gate.ts';
 import { ingestReport, triggerClassification } from '../helpers.ts';
 
-/** Queue job statuses a person can retry: the job stopped without finishing. */
+/**
+ * Bulk flush/recover re-run triage (LLM spend) across the caller's projects.
+ * Viewers are read-only, so those projects are left out. `readable` is the
+ * full set, so a caller who only views projects gets a 403, not "0 flushed".
+ */
+async function writableProjectIds(
+  c: Context,
+  db: ReturnType<typeof getServiceClient>,
+  userId: string,
+): Promise<{ readable: string[]; writable: string[] }> {
+  const readable = await callerProjectIds(c, db, userId);
+  if (!userId) return { readable, writable: readable };
+  const access = await Promise.all(readable.map((id) => userCanAccessProject(db, userId, id)));
+  return { readable, writable: readable.filter((_, i) => access[i]!.allowed && access[i]!.role !== 'viewer') };
+}
 
 export function registerQueueRoutes(app: Hono<{ Variables: Variables }>): void {
   // DLQ admin endpoints
@@ -327,7 +341,10 @@ export function registerQueueRoutes(app: Hono<{ Variables: Variables }>): void {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
 
-    const projectIds = await callerProjectIds(c, db, userId);
+    const { readable, writable: projectIds } = await writableProjectIds(c, db, userId);
+    if (readable.length > 0 && projectIds.length === 0) {
+      return denyViewerWrite(c, 'viewer', 'flush queued reports')!;
+    }
     if (projectIds.length === 0) {
       return c.json({ ok: true, data: { flushed: 0, scanned: 0 } });
     }
@@ -369,7 +386,10 @@ export function registerQueueRoutes(app: Hono<{ Variables: Variables }>): void {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
 
-    const projectIds = await callerProjectIds(c, db, userId);
+    const { readable, writable: projectIds } = await writableProjectIds(c, db, userId);
+    if (readable.length > 0 && projectIds.length === 0) {
+      return denyViewerWrite(c, 'viewer', 'recover the pipeline')!;
+    }
     if (projectIds.length === 0) {
       return c.json({ ok: true, data: { reports: 0, queue: 0, reconciled: 0 } });
     }
