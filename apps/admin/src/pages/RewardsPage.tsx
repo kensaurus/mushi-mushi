@@ -4,7 +4,6 @@
  *          chrome budget, snapshot strip, and mode-aware navigation.
  */
 
-import { useEffect } from 'react'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { Link, Navigate, useSearchParams } from 'react-router-dom'
 import { PublishingTab } from '../components/rewards/PublishingTab'
@@ -23,6 +22,7 @@ import { ProjectRewardsSwitch, useProjectRewardsToggle } from '../components/rew
 import { EMPTY_REWARDS_STATS, type RewardsStats, type RewardsTabId } from '../components/rewards/types'
 import { rewardsTabMeta, resolveRewardsTabParam } from '../components/rewards/rewardsTabs'
 import { useRewardsUx, resolveQuickRewardsTab } from '../lib/rewardsModeUx'
+import { useQuickstartLandingTab } from '../lib/useQuickstartTab'
 import { Badge, Card } from '../components/ui'
 import { runStatusChipTone } from '../lib/chipTone'
 import { IconRewards } from '../components/icons'
@@ -66,14 +66,16 @@ export function RewardsPage() {
     setSearchParams(next, { replace: true, preventScrollReset: true })
   }
 
-  useEffect(() => {
-    if (!ux.isQuickstart) return
-    const resolved = resolveQuickRewardsTab(rewardsStats)
-    const currentParam = searchParams.get('tab')
-    const current: RewardsTabId = resolveRewardsTabParam(currentParam)
-    if (resolved !== current) setActive(resolved)
-    // Intentionally narrow deps: the quickstart tab follows posture only.
-  }, [ux.isQuickstart, rewardsStats.topPriority, rewardsStats.organizationId])
+  // Quick mode opens the posture tab once, after the stats load; a deep link
+  // or a click wins from then on.
+  useQuickstartLandingTab({
+    enabled: ux.isQuickstart,
+    ready: rewardsStatsData != null,
+    tabParam: param,
+    activeTab: active,
+    quickTab: resolveQuickRewardsTab(rewardsStats),
+    setActiveTab: setActive,
+  })
 
   usePublishPageContext({
     route: '/rewards',

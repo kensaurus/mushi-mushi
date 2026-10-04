@@ -96,6 +96,7 @@ function statusBadge(visibility: PublishedApp['visibility']) {
 export function PublishingTab() {
   const projectId = getActiveProjectIdSnapshot()
   const toast = useToast()
+  const navigate = useNavigate()
 
   const { data, loading, error, reload } = usePageData<PublishedApp>(
     projectId ? `/v1/admin/published-apps/${projectId}` : null,
@@ -147,7 +148,6 @@ export function PublishingTab() {
 
   const [monthlyBudget, setMonthlyBudget] = useState('')
   const [maxTesters, setMaxTesters] = useState('')
-  const navigate = useNavigate()
 
   // Each form copies its server snapshot when a NEW snapshot arrives (first
   // load, or the reload after a save) — never while the user types. Every

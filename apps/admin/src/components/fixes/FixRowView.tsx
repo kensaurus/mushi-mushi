@@ -17,6 +17,7 @@ import { ciBadge, type FixAttempt } from './types'
 import { credentialAdvice, failureHeadline, fixReportLabel, isSuperseded, needsAttention, supersededLabel } from '../../lib/fixReportTruth'
 import { IconChevronDown, IconChevronUp } from '../icons'
 import { FIXES_TABLE_COL, TABLE_CELL } from './fixesTableLayout'
+import { fixRowDomId } from '../../lib/fixDeepLink'
 
 const AGENT_LABEL: Record<string, string> = {
   cursor_cloud: 'Cursor',
@@ -97,6 +98,7 @@ function FixRowViewInner({
   return (
     <>
       <tr
+        id={fixRowDomId(fix.id)}
         className={`group border-t border-edge-subtle hover:bg-surface-overlay/50 motion-safe:transition-opacity cursor-pointer motion-safe:animate-mushi-fade-in ${flash.className}`}
         style={{ ...stagger(index), ...flash.style }}
         onAnimationEnd={flash.onAnimationEnd}

@@ -5,7 +5,7 @@
  * Graph/Layers/Search reuse the ReactFlow canvas, Sankey lane, and semantic search.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { type Edge, type Node } from '@xyflow/react'
@@ -15,6 +15,7 @@ import { usePageData } from '../lib/usePageData'
 import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { usePageCopy } from '../lib/copy'
 import { useExploreUx, resolveBeginnerExploreTab, resolveQuickExploreTab } from '../lib/exploreModeUx'
+import { useQuickstartLandingTab } from '../lib/useQuickstartTab'
 import {
   resolveExploreTab,
   primaryTabOf,
@@ -257,19 +258,17 @@ export function ExplorePage() {
     [setActiveTab],
   )
 
-  useEffect(() => {
-    if (statsLoading) return
-    if (tabParam != null) return
-    if (ux.isQuickstart) {
-      const quickTab = resolveQuickExploreTab(stats)
-      if (activeTab !== quickTab) setActiveTab(quickTab)
-      return
-    }
-    if (ux.isBeginner) {
-      const beginnerTab = resolveBeginnerExploreTab(stats)
-      if (activeTab !== beginnerTab) setActiveTab(beginnerTab)
-    }
-  }, [ux.isQuickstart, ux.isBeginner, statsLoading, stats, activeTab, tabParam, setActiveTab])
+  // Quick and Beginner modes open a posture tab once. The default tab (graph)
+  // has no `?tab`, so re-checking on every render bounced every "show in
+  // graph" action straight back to Ask/Summary/Search.
+  useQuickstartLandingTab({
+    enabled: ux.isQuickstart || ux.isBeginner,
+    ready: !statsLoading,
+    tabParam,
+    activeTab,
+    quickTab: ux.isQuickstart ? resolveQuickExploreTab(stats) : resolveBeginnerExploreTab(stats),
+    setActiveTab,
+  })
 
   const allNodes: ExploreNode[] = payload?.nodes ?? []
   const allEdges: ExploreEdge[] = payload?.edges ?? []

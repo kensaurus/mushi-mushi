@@ -10,6 +10,7 @@
  *          for the user, not just emit a green status pill.
  */
 
+import { Link } from 'react-router-dom'
 import { PDCA_ORDER, PDCA_STAGES, type PdcaStageId } from '../../lib/pdca'
 import { isFixMerged } from '../../lib/mergeFix'
 import { STAMP_VISUAL, type StageStamp } from '../../lib/pdcaStamp'
@@ -56,14 +57,25 @@ export function PdcaReceipt({ fix, timeline, className = '' }: PdcaReceiptProps)
             </div>
             <p className={`mt-1 text-2xs leading-snug line-clamp-2 ${r.stamp === 'idle' ? 'text-fg-faint' : 'text-fg-secondary'}`}>{r.proof}</p>
             {r.link && (
-              <a
-                href={r.link.href}
-                target={r.link.href.startsWith('http') ? '_blank' : undefined}
-                rel={r.link.href.startsWith('http') ? 'noopener noreferrer' : undefined}
-                className="mt-1 inline-block text-2xs text-accent hover:text-accent-hover underline-offset-2 hover:underline"
-              >
-                {r.link.label}
-              </a>
+              r.link.href.startsWith('http') ? (
+                <a
+                  href={r.link.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-1 inline-block text-2xs text-accent hover:text-accent-hover underline-offset-2 hover:underline"
+                >
+                  {r.link.label}
+                </a>
+              ) : (
+                // In-app paths go through the router so they keep the
+                // console's base path (/mushi-mushi/admin/ in production).
+                <Link
+                  to={r.link.href}
+                  className="mt-1 inline-block text-2xs text-accent hover:text-accent-hover underline-offset-2 hover:underline"
+                >
+                  {r.link.label}
+                </Link>
+              )
             )}
           </li>
         )

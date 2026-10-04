@@ -48,6 +48,7 @@ import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageCopy } from '../lib/copy'
 import { useHealthUx, resolveQuickHealthTab } from '../lib/healthModeUx'
+import { useQuickstartLandingTab } from '../lib/useQuickstartTab'
 import {
   errorRateDetail,
   errorRateTooltip,
@@ -213,11 +214,15 @@ function HealthPageContent() {
     [setSearchParams],
   )
 
-  useEffect(() => {
-    if (!ux.isQuickstart || statsLoading) return
-    const quickTab = resolveQuickHealthTab(stats)
-    if (activeTab !== quickTab) setActiveTab(quickTab)
-  }, [ux.isQuickstart, statsLoading, stats, activeTab, setActiveTab])
+  // Quick mode opens the posture tab once; links and clicks then win.
+  useQuickstartLandingTab({
+    enabled: ux.isQuickstart,
+    ready: !statsLoading,
+    tabParam: tabParam,
+    activeTab: activeTab,
+    quickTab: resolveQuickHealthTab(stats),
+    setActiveTab: setActiveTab,
+  })
 
   const llmQuery = usePageData<LlmHealth>(`/v1/admin/health/llm?window=${window}`, { deps: [window] })
   const cronQuery = usePageData<CronHealth>('/v1/admin/health/cron')

@@ -43,6 +43,7 @@ import { shouldHideGuideWhenBannerActive, COMMON_HEALTHY_PRIORITIES } from '../l
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { Drawer } from '../components/Drawer'
 import { useSkillsUx, resolveQuickSkillsTab } from '../lib/skillsModeUx'
+import { useQuickstartLandingTab } from '../lib/useQuickstartTab'
 import { useRealtime } from '../lib/realtime'
 import { SkillStepNode } from '../components/skill-pipeline/SkillStepNode'
 import { PdcaGradientEdge } from '../components/pdca-flow/PdcaGradientEdge'
@@ -163,11 +164,15 @@ export function SkillPipelinesPage() {
   usePublishPageHeroStats('/skills', skillsStatsData)
   const skillsStats = skillsStatsData ?? EMPTY_SKILLS_STATS
 
-  useEffect(() => {
-    if (!ux.isQuickstart || !projectId || statsValidating) return
-    const quickTab = resolveQuickSkillsTab(skillsStats)
-    if (tab !== quickTab) setTab(quickTab)
-  }, [ux.isQuickstart, projectId, statsValidating, skillsStats, tab, setTab])
+  // Quick mode opens the posture tab once; links and clicks then win.
+  useQuickstartLandingTab({
+    enabled: ux.isQuickstart && Boolean(projectId),
+    ready: !statsValidating,
+    tabParam: searchParams.get('tab'),
+    activeTab: tab,
+    quickTab: resolveQuickSkillsTab(skillsStats),
+    setActiveTab: setTab,
+  })
 
   usePublishPageContext({
     route: '/skills',

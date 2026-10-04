@@ -9,7 +9,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { useRealtimeReload } from '../lib/realtime'
 import { usePublishPageContext } from '../lib/pageContext'
@@ -44,6 +44,8 @@ import { FixesFailedSummary } from '../components/fixes/FixesFailedSummary'
 import { EMPTY_FIXES_STATS, type FixesStats, type FixesTabId } from '../components/fixes/FixesStatsTypes'
 import { usePageCopy } from '../lib/copy'
 import { useFixesUx, resolveQuickFixesTab } from '../lib/fixesModeUx'
+import { useQuickstartLandingTab } from '../lib/useQuickstartTab'
+import { fixRowDomId, readFixDeepLinkId } from '../lib/fixDeepLink'
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { trackSelf } from '../lib/track'
@@ -147,11 +149,15 @@ export function FixesPage() {
     [searchParams, setSearchParams],
   )
 
-  useEffect(() => {
-    if (!ux.isQuickstart || !activeProjectId || statsLoading) return
-    const quickTab = resolveQuickFixesTab(fixesStats)
-    if (activeTab !== quickTab) setActiveTab(quickTab)
-  }, [ux.isQuickstart, activeProjectId, statsLoading, fixesStats, activeTab, setActiveTab])
+  // Quick mode opens the posture tab once; links and clicks then win.
+  useQuickstartLandingTab({
+    enabled: ux.isQuickstart && Boolean(activeProjectId),
+    ready: !statsLoading,
+    tabParam: tabParam,
+    activeTab: activeTab,
+    quickTab: resolveQuickFixesTab(fixesStats),
+    setActiveTab: setActiveTab,
+  })
   const [fixes, setFixes] = useState<FixAttempt[]>([])
   const [codebaseStats, setCodebaseStats] = useState<CodebaseStats | null>(null)
   const [dispatches, setDispatches] = useState<DispatchJob[]>([])
@@ -338,6 +344,36 @@ export function FixesPage() {
     if (statusBucket === 'all') return fixes
     return fixes.filter((f) => bucketize(f) === statusBucket)
   }, [fixes, statusBucket])
+
+  // A link to one fix (command palette, Activity drawer, Ask Mushi, Slack):
+  // open Attempts, make sure the fix is in the visible filter, expand it and
+  // scroll to it. Once per id, so the user can collapse it afterwards.
+  const location = useLocation()
+  const deepLinkFixId = readFixDeepLinkId(searchParams, location.hash)
+  const handledDeepLinkRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!deepLinkFixId || loading || error) return
+    if (handledDeepLinkRef.current === deepLinkFixId) return
+    handledDeepLinkRef.current = deepLinkFixId
+    const target = fixes.find((f) => f.id === deepLinkFixId)
+    if (!target) {
+      toast.info(
+        "That fix is not in this project's recent fixes.",
+        'It may belong to another project. Switch project in the top bar, or open it from its report.',
+      )
+      return
+    }
+    if (activeTab !== 'attempts') setActiveTab('attempts')
+    if (statusBucket !== 'all' && bucketize(target) !== statusBucket) setStatusBucket('all')
+    setExpanded(target.id)
+    let tries = 0
+    const scroll = () => {
+      const row = document.getElementById(fixRowDomId(target.id))
+      if (row) row.scrollIntoView?.({ behavior: 'smooth', block: 'center' })
+      else if (++tries < 10) window.setTimeout(scroll, 50)
+    }
+    window.setTimeout(scroll, 0)
+  }, [deepLinkFixId, loading, error, fixes, activeTab, setActiveTab, statusBucket, toast])
 
   // (Page context publish moved below retryAllFailed so the action
   // closures bind to the live function reference without TDZ issues.)

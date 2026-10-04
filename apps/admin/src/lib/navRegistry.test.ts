@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from 'vitest'
 import { NAV_REGISTRY, SIMPLE_NAV_GROUPS } from './navRegistry'
-import { rankPaletteRoutes } from './searchIndex'
+import { paletteRoutesFor, rankPaletteRoutes } from './searchIndex'
 
 const sidebar = NAV_REGISTRY.filter((e) => e.inSidebar !== false)
 
@@ -92,5 +92,32 @@ describe('palette ranking', () => {
 
   it('returns nothing for text that is not a page (reports search takes over)', () => {
     expect(rankPaletteRoutes('checkout crash')).toEqual([])
+  })
+})
+
+describe('Advanced sidebar Check section (QA #63)', () => {
+  // Advanced mode renders the Check section by sub-group only, so an entry
+  // without one (Activity and Users & funnels once) silently vanished.
+  it('gives every Check sidebar entry a sub-group', () => {
+    for (const e of sidebar.filter((x) => x.sectionId === 'check')) {
+      expect(e.checkSubGroup, e.path).toBeDefined()
+    }
+  })
+})
+
+describe('palette role gating (QA #72)', () => {
+  const paths = (viewer: { isSuperAdmin: boolean; isOperator: boolean }) =>
+    paletteRoutesFor(viewer).map((r) => r.path)
+
+  it('leaves operator and super-admin pages out for a normal user', () => {
+    const visible = paths({ isSuperAdmin: false, isOperator: false })
+    expect(visible).not.toContain('/growth')
+    expect(visible).not.toContain('/users')
+    expect(visible).toContain('/settings')
+  })
+
+  it('keeps each page for the role that can open it', () => {
+    expect(paths({ isSuperAdmin: false, isOperator: true })).toContain('/growth')
+    expect(paths({ isSuperAdmin: true, isOperator: false })).toContain('/users')
   })
 })

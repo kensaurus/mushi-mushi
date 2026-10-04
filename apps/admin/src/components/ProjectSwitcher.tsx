@@ -43,6 +43,8 @@ import { useProjectSnapshots } from '../lib/useProjectSnapshots'
 import { buildProjectSetupTooltip } from '../lib/projectMetaTooltips'
 import { headerDropdownPanelClass } from '../lib/appChrome'
 import { MetricTooltipContent, Tooltip } from './ui'
+import { offerProjectCreate } from '../lib/orgPermissions'
+import type { OrganizationSummary } from './OrgSwitcher'
 import { HeaderContextChip, HeaderContextChipLink, HeaderContextChipSkeleton } from './ui/chrome'
 
 export function ProjectSwitcher() {
@@ -113,6 +115,16 @@ export function ProjectSwitcher() {
   const directory = usePageData<ProjectDirectory>(open ? PROJECT_DIRECTORY_PATH : null, {
     scope: 'none',
   })
+
+  // Only team owners and admins may create projects (the server 403s anyone
+  // else), so members and viewers get an explanation instead of a form that
+  // fails after they type a name. Unknown role (still loading) keeps the
+  // button; the server stays the authority.
+  const teams = usePageData<{ organizations: OrganizationSummary[] }>(open ? '/v1/org' : null, {
+    scope: 'none',
+  })
+  const activeTeamRole = teams.data?.organizations?.find((o) => o.id === activeOrg)?.role ?? null
+  const mayCreateProject = offerProjectCreate(activeTeamRole)
 
   // Hydrate the active project from URL > localStorage > first project. Once
   // we've picked one, mirror it into both stores so the rest of the app can
@@ -397,7 +409,11 @@ export function ProjectSwitcher() {
               <span>View project page</span>
               <span aria-hidden className="text-fg-faint">→</span>
             </Link>
-            {creating ? (
+            {!mayCreateProject ? (
+              <p className="px-2.5 py-1.5 text-2xs text-fg-muted">
+                Only team owners and admins can create projects. Ask one of them, or switch team.
+              </p>
+            ) : creating ? (
               <form
                 onSubmit={(e) => {
                   e.preventDefault()

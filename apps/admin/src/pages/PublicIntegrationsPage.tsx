@@ -13,6 +13,17 @@ import { Link, Navigate, type LinkProps } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { Btn } from '../components/ui'
 import {
+  CATEGORIES,
+  INTEGRATIONS,
+  PLUGIN_SDK_DOCS_URL,
+  PLUGIN_SDK_REPO_URL,
+  PUBLIC_DOCS_BASE,
+  PUBLIC_REPO_BASE,
+  integrationDocsHref,
+  type Category,
+  type Integration,
+} from '../lib/publicIntegrations'
+import {
   IconAlertTriangle,
   IconCheck,
   IconCopy,
@@ -28,8 +39,8 @@ import {
   type MarketingTheme,
 } from '@mushi-mushi/marketing-ui'
 
-const DOCS_BASE = 'https://kensaur.us/mushi-mushi/docs'
-const REPO_BASE = 'https://github.com/kensaurus/mushi-mushi'
+const DOCS_BASE = PUBLIC_DOCS_BASE
+const REPO_BASE = PUBLIC_REPO_BASE
 const CONTACT_EMAIL = 'kensaurus@gmail.com'
 
 // ─── Link adapter ─────────────────────────────────────────────────────────
@@ -57,243 +68,6 @@ const ReactRouterLinkAdapter: MarketingLink = ({
     </Link>
   )
 }
-
-// ─── Integration data ──────────────────────────────────────────────────────
-
-type Category =
-  | 'All'
-  | 'Error Monitoring'
-  | 'APM & Telemetry'
-  | 'Analytics'
-  | 'Chat & Notifications'
-  | 'Project Management'
-  | 'Mobile'
-
-interface Integration {
-  name: string
-  /**
-   * Simple Icons slug for the brand mark, bundled at
-   * `public/brand/platforms/<mark>.svg`. Omit for first-party entries
-   * (Plugin SDK) and for brands with no CC0 mark (Honeycomb) — those render
-   * the Mushi mark rather than a letter block.
-   *
-   * Bundled rather than fetched: the admin CSP allows `https://www.google.com`
-   * but the favicon endpoint 301s to `t{0..3}.gstatic.com`, which CSP
-   * re-checks and blocks — so the CDN approach silently rendered nothing but
-   * fallbacks in production. Local assets also keep visitor IPs off a third
-   * party on a public, unauthenticated marketing page.
-   */
-  mark?: string
-  pkg: string
-  direction: 'inbound' | 'outbound' | 'sdk'
-  category: Exclude<Category, 'All'>
-  description: string
-}
-
-const INTEGRATIONS: Integration[] = [
-  // ── Inbound adapters ──────────────────────────────────────────────────
-  {
-    name: 'Datadog',
-    mark: 'datadog',
-    pkg: '@mushi-mushi/adapters',
-    direction: 'inbound',
-    category: 'APM & Telemetry',
-    description: 'Forward APM alerts and metric spikes as Mushi reports.',
-  },
-  {
-    name: 'New Relic',
-    mark: 'newrelic',
-    pkg: '@mushi-mushi/adapters',
-    direction: 'inbound',
-    category: 'APM & Telemetry',
-    description: 'Route New Relic incident alerts to the Mushi report feed.',
-  },
-  {
-    name: 'Honeycomb',
-    pkg: '@mushi-mushi/adapters',
-    direction: 'inbound',
-    category: 'APM & Telemetry',
-    description: 'Pipe Honeycomb query triggers in for user-felt correlation.',
-  },
-  {
-    name: 'Grafana Loki',
-    mark: 'grafana',
-    pkg: '@mushi-mushi/adapters',
-    direction: 'inbound',
-    category: 'APM & Telemetry',
-    description: 'Forward Loki log alerts as enriched Mushi reports.',
-  },
-  {
-    name: 'CloudWatch',
-    mark: 'amazonwebservices',
-    pkg: '@mushi-mushi/adapters',
-    direction: 'inbound',
-    category: 'APM & Telemetry',
-    description: 'Import AWS CloudWatch alarms directly into Mushi.',
-  },
-  {
-    name: 'Sentry',
-    mark: 'sentry',
-    pkg: '@mushi-mushi/adapters',
-    direction: 'inbound',
-    category: 'Error Monitoring',
-    description: 'Import Sentry issue webhooks with stack traces intact.',
-  },
-  {
-    name: 'Bugsnag',
-    mark: 'bugsnag',
-    pkg: '@mushi-mushi/adapters',
-    direction: 'inbound',
-    category: 'Error Monitoring',
-    description: 'Receive Bugsnag error alerts and map them to user reports.',
-  },
-  {
-    name: 'Rollbar',
-    mark: 'rollbar',
-    pkg: '@mushi-mushi/adapters',
-    direction: 'inbound',
-    category: 'Error Monitoring',
-    description: 'Send Rollbar occurrences into your Mushi reports inbox.',
-  },
-  {
-    name: 'Crashlytics',
-    mark: 'firebase',
-    pkg: '@mushi-mushi/adapters',
-    direction: 'inbound',
-    category: 'Mobile',
-    description: 'Pull Firebase Crashlytics crashes into the report feed.',
-  },
-  {
-    name: 'Firebase Analytics',
-    mark: 'firebase',
-    pkg: '@mushi-mushi/adapters',
-    direction: 'inbound',
-    category: 'Analytics',
-    description: 'Correlate funnel-drop events with user-felt friction.',
-  },
-  {
-    name: 'OpsGenie',
-    mark: 'opsgenie',
-    pkg: '@mushi-mushi/adapters',
-    direction: 'inbound',
-    category: 'Project Management',
-    description: 'Convert OpsGenie alerts into triaged Mushi reports.',
-  },
-  // ── Outbound plugins ──────────────────────────────────────────────────
-  {
-    name: 'Sentry',
-    mark: 'sentry',
-    pkg: '@mushi-mushi/plugin-sentry',
-    direction: 'outbound',
-    category: 'Error Monitoring',
-    description: 'Resolve Sentry issues when Mushi fixes land in production.',
-  },
-  {
-    name: 'Bugsnag',
-    mark: 'bugsnag',
-    pkg: '@mushi-mushi/plugin-bugsnag',
-    direction: 'outbound',
-    category: 'Error Monitoring',
-    description: 'Close Bugsnag errors when Mushi confirms the fix is live.',
-  },
-  {
-    name: 'Rollbar',
-    mark: 'rollbar',
-    pkg: '@mushi-mushi/plugin-rollbar',
-    direction: 'outbound',
-    category: 'Error Monitoring',
-    description: 'Mark Rollbar items resolved when Mushi deploys a fix.',
-  },
-  {
-    name: 'Crashlytics',
-    mark: 'firebase',
-    pkg: '@mushi-mushi/plugin-crashlytics',
-    direction: 'outbound',
-    category: 'Mobile',
-    description: 'Sync crash resolution status back to Firebase Crashlytics.',
-  },
-  {
-    name: 'Slack',
-    mark: 'slack',
-    pkg: '@mushi-mushi/plugin-slack-app',
-    direction: 'outbound',
-    category: 'Chat & Notifications',
-    description: 'Post report digests and plain-English read summaries to Slack.',
-  },
-  {
-    name: 'Discord',
-    mark: 'discord',
-    pkg: '@mushi-mushi/plugin-discord',
-    direction: 'outbound',
-    category: 'Chat & Notifications',
-    description: 'Deliver report alerts and fix summaries to Discord channels.',
-  },
-  {
-    name: 'MS Teams',
-    mark: 'microsoftteams',
-    pkg: '@mushi-mushi/plugin-msteams',
-    direction: 'outbound',
-    category: 'Chat & Notifications',
-    description: 'Route Mushi alerts to Microsoft Teams channels.',
-  },
-  {
-    name: 'Jira',
-    mark: 'jira',
-    pkg: '@mushi-mushi/plugin-jira',
-    direction: 'outbound',
-    category: 'Project Management',
-    description: 'Create Jira tickets automatically from triaged reports.',
-  },
-  {
-    name: 'Linear',
-    mark: 'linear',
-    pkg: '@mushi-mushi/plugin-linear',
-    direction: 'outbound',
-    category: 'Project Management',
-    description: 'Push triaged bugs and fix tasks to Linear cycles.',
-  },
-  {
-    name: 'PagerDuty',
-    mark: 'pagerduty',
-    pkg: '@mushi-mushi/plugin-pagerduty',
-    direction: 'outbound',
-    category: 'Project Management',
-    description: 'Trigger PagerDuty incidents for critical user-reported issues.',
-  },
-  {
-    name: 'GitHub Issues',
-    mark: 'github',
-    pkg: '@mushi-mushi/plugin-github-issues',
-    direction: 'outbound',
-    category: 'Project Management',
-    description: 'Open GitHub Issues for triaged bugs with full AI context.',
-  },
-  {
-    name: 'Zapier',
-    mark: 'zapier',
-    pkg: '@mushi-mushi/plugin-zapier',
-    direction: 'outbound',
-    category: 'Project Management',
-    description: 'Connect Mushi to 6 000+ apps via Zapier webhooks.',
-  },
-  {
-    name: 'Plugin SDK',
-    pkg: '@mushi-mushi/plugin-sdk',
-    direction: 'sdk',
-    category: 'APM & Telemetry',
-    description: 'Build custom inbound or outbound integrations with the Mushi plugin SDK.',
-  },
-]
-
-const CATEGORIES: Category[] = [
-  'All',
-  'Error Monitoring',
-  'APM & Telemetry',
-  'Analytics',
-  'Chat & Notifications',
-  'Project Management',
-  'Mobile',
-]
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
@@ -436,7 +210,7 @@ function IntegrationTile({ integration }: { integration: Integration }) {
   const isInbound = integration.direction === 'inbound'
   const isSdk = integration.direction === 'sdk'
   const installCmd = `npm install ${integration.pkg}`
-  const docsHref = `${DOCS_BASE}/integrations/${integration.name.toLowerCase().replace(/\s+/g, '-')}`
+  const docsHref = integrationDocsHref(integration)
 
   return (
     <article className="group flex flex-col gap-3 rounded-xl border border-editorial-rule bg-editorial-paper p-4 transition hover:border-editorial-ink/25 hover:shadow-[0_4px_20px_-8px_rgba(14,13,11,0.12)]">
@@ -781,7 +555,7 @@ export function PublicIntegrationsPage() {
             </p>
             <div className="mt-5 flex flex-wrap gap-3">
               <a
-                href={`${DOCS_BASE}/integrations/plugin-sdk`}
+                href={PLUGIN_SDK_DOCS_URL}
                 target="_blank"
                 rel="noreferrer"
                 className="inline-flex items-center gap-2 rounded-full bg-editorial-ink px-4 py-2 font-mono text-2xs font-medium uppercase tracking-[0.18em] text-editorial-paper shadow-[inset_0_-2px_0_rgba(255,255,255,0.18)] transition hover:bg-[color-mix(in_oklch,var(--color-editorial-ink)_82%,var(--color-editorial-vermillion))] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-editorial-vermillion"
@@ -790,7 +564,7 @@ export function PublicIntegrationsPage() {
                 Read the SDK docs
               </a>
               <a
-                href={`${REPO_BASE}/blob/main/packages/plugin-sdk`}
+                href={PLUGIN_SDK_REPO_URL}
                 target="_blank"
                 rel="noreferrer"
                 className="inline-flex items-center gap-2 rounded-full border border-editorial-rule bg-editorial-paper px-4 py-2 font-mono text-2xs uppercase tracking-[0.18em] text-editorial-ink-muted transition hover:border-editorial-ink/30 hover:text-editorial-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-editorial-vermillion"

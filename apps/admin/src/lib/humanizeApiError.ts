@@ -171,6 +171,7 @@ export function humanizeApiError(
       }
     case 'MISSING_AUTH':
     case 'INVALID_TOKEN':
+    case 'UNAUTHENTICATED':
       return {
         title: 'Your session expired.',
         hint: 'Sign in again to continue. Your work is saved on the server.',
@@ -358,6 +359,33 @@ export function humanizeApiError(
         title: 'That item could not be found.',
         hint: 'It may have been deleted or moved to another project. Refresh the page.',
         severity: 'hard',
+        action: { label: 'Retry', target: { kind: 'retry' } },
+        code,
+        raw,
+      }
+    // Team invitations (POST /v1/invitations/accept). The server passes the
+    // raw Postgres error text as the message, so never show it.
+    case 'EMAIL_MISMATCH':
+      return {
+        title: 'This invite was sent to a different email.',
+        hint: 'Sign out, then sign in with the email address the invite was sent to.',
+        severity: 'hard',
+        code,
+        raw,
+      }
+    case 'EXPIRED_OR_REVOKED':
+      return {
+        title: 'This invite has expired or was withdrawn.',
+        hint: 'Ask the person who invited you to send a new invite.',
+        severity: 'hard',
+        code,
+        raw,
+      }
+    case 'INVITE_ACCEPT_FAILED':
+      return {
+        title: 'We could not accept this invite.',
+        hint: 'Try again in a moment. If it keeps failing, ask the person who invited you to send a new invite.',
+        severity: 'soft',
         action: { label: 'Retry', target: { kind: 'retry' } },
         code,
         raw,

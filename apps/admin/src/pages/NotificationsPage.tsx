@@ -3,7 +3,7 @@
  * PURPOSE: Reporter notification inbox — outbound messages the SDK widget polls.
  */
 
-import { useCallback, useMemo, useState, useEffect } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useRealtimeReload } from '../lib/realtime'
@@ -16,6 +16,7 @@ import { apiFetch } from '../lib/supabase'
 import { useToast } from '../lib/toast'
 import { usePageCopy } from '../lib/copy'
 import { useNotificationsUx, resolveQuickNotificationsTab } from '../lib/notificationsModeUx'
+import { useQuickstartLandingTab } from '../lib/useQuickstartTab'
 import {
   Section,
   Card,
@@ -159,11 +160,15 @@ export function NotificationsPage() {
     [searchParams, setSearchParams],
   )
 
-  useEffect(() => {
-    if (!ux.isQuickstart || !activeProjectId) return
-    const quickTab = resolveQuickNotificationsTab(stats)
-    if (activeTab !== quickTab) setTab(quickTab)
-  }, [ux.isQuickstart, activeProjectId, stats, activeTab, setTab])
+  // Quick mode opens the posture tab once; links and clicks then win.
+  useQuickstartLandingTab({
+    enabled: ux.isQuickstart && Boolean(activeProjectId),
+    ready: statsData != null,
+    tabParam: tabParam,
+    activeTab: activeTab,
+    quickTab: resolveQuickNotificationsTab(stats),
+    setActiveTab: setTab,
+  })
 
   const updateParam = (key: string, value: string) => {
     const next = new URLSearchParams(searchParams)

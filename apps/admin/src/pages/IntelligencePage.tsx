@@ -15,6 +15,7 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { usePageCopy } from '../lib/copy'
 import { useIntelligenceUx, resolveQuickIntelligenceTab } from '../lib/intelligenceModeUx'
+import { useQuickstartLandingTab } from '../lib/useQuickstartTab'
 import { SetupNudge } from '../components/SetupNudge'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
@@ -193,11 +194,15 @@ export function IntelligencePage() {
     [setSearchParams],
   )
 
-  useEffect(() => {
-    if (!ux.isQuickstart || statsLoading) return
-    const quickTab = resolveQuickIntelligenceTab(stats)
-    if (activeTab !== quickTab) setActiveTab(quickTab)
-  }, [ux.isQuickstart, statsLoading, stats, activeTab, setActiveTab])
+  // Quick mode opens the posture tab once; links and clicks then win.
+  useQuickstartLandingTab({
+    enabled: ux.isQuickstart,
+    ready: !statsLoading,
+    tabParam: searchParams.get('tab'),
+    activeTab: activeTab,
+    quickTab: resolveQuickIntelligenceTab(stats),
+    setActiveTab: setActiveTab,
+  })
 
   useEffect(() => {
     if (!activeJob) return

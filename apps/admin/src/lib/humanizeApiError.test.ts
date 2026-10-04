@@ -181,3 +181,22 @@ describe('humanizeApiError action errors (group B, 2026-10-04)', () => {
     expect(humanizeApiError('Something odd (WEIRD_CODE)')?.title).toBe('Could not load this page.')
   })
 })
+
+describe('humanizeApiError: invitation accept (QA #68)', () => {
+  it('never shows the raw RPC text as the headline', () => {
+    for (const [message, code] of [
+      ['invitation_email_mismatch', 'EMAIL_MISMATCH'],
+      ['invitation_invalid_or_expired', 'EXPIRED_OR_REVOKED'],
+      ['some postgres error', 'INVITE_ACCEPT_FAILED'],
+    ] as const) {
+      const h = humanizeApiError(message, code)
+      expect(h?.title).not.toContain(message)
+      expect(h?.hint).not.toContain(message)
+    }
+  })
+
+  it('tells an invitee with the wrong account what to do', () => {
+    expect(humanizeApiError('invitation_email_mismatch', 'EMAIL_MISMATCH')?.hint).toMatch(/sign in with the email/i)
+    expect(humanizeApiError('invitation_invalid_or_expired', 'EXPIRED_OR_REVOKED')?.hint).toMatch(/new invite/i)
+  })
+})
