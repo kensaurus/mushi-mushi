@@ -6,7 +6,16 @@ import { jwtAuth, adminOrApiKey } from '../../_shared/auth.ts';
 import { getBlastRadius } from '../../_shared/knowledge-graph.ts';
 import { getAvailableTags } from '../../_shared/ontology.ts';
 import { executeNaturalLanguageQuery, sanitizeSql } from '../../_shared/nl-query.ts';
-import { callerProjectIds, resolveOwnedProject } from '../shared.ts';
+import { callerProjectIds, dbError, resolveOwnedProject } from '../shared.ts';
+
+/** Canvas fetch caps. The console says "showing N of total" when a cap bites. */
+export const GRAPH_CANVAS_NODE_LIMIT = 200;
+export const GRAPH_CANVAS_EDGE_LIMIT = 500;
+
+/** Exact count from a `{ count: 'exact' }` select, never below what was returned. */
+export function graphTotal(count: number | null | undefined, returned: number): number {
+  return typeof count === 'number' ? Math.max(count, returned) : returned;
+}
 
 export function registerGraphQueryRoutes(app: Hono<{ Variables: Variables }>): void {
   // ============================================================
@@ -86,12 +95,12 @@ export function registerGraphQueryRoutes(app: Hono<{ Variables: Variables }>): v
       db.from('reports').select('id', { count: 'exact', head: true }).eq('project_id', pid),
       db
         .from('graph_nodes')
-        .select('id, node_type, created_at')
+        .select('id, node_type, created_at', { count: 'exact' })
         .eq('project_id', pid)
         .limit(500),
       db
         .from('graph_edges')
-        .select('id, edge_type, source_node_id, target_node_id')
+        .select('id, edge_type, source_node_id, target_node_id', { count: 'exact' })
         .eq('project_id', pid)
         .limit(1000),
       db.from('project_settings').select('graph_backend').eq('project_id', pid).maybeSingle(),
@@ -117,8 +126,11 @@ export function registerGraphQueryRoutes(app: Hono<{ Variables: Variables }>): v
 
     const nodes = nodesRes.data ?? [];
     const edges = edgesRes.data ?? [];
-    const nodeCount = nodes.length;
-    const edgeCount = edges.length;
+    // The selects above are capped samples (they feed the breakdowns below);
+    // the headline counts are the exact totals, so a 2,000-node project
+    // reads 2,000, not a saturated 500.
+    const nodeCount = graphTotal(nodesRes.count, nodes.length);
+    const edgeCount = graphTotal(edgesRes.count, edges.length);
     const hasIngest = (reportCountRes.count ?? 0) > 0;
     const reportNodes = nodes.filter((n) => n.node_type === 'report_group').length;
     const inventoryNodes = nodes.filter((n) => INVENTORY_NODE_TYPES.includes(String(n.node_type))).length;
@@ -210,13 +222,13 @@ export function registerGraphQueryRoutes(app: Hono<{ Variables: Variables }>): v
     const nodeType = c.req.query('type');
     let query = db
       .from('graph_nodes')
-      .select('id, project_id, node_type, label, metadata, last_traversed_at, created_at')
+      .select('id, project_id, node_type, label, metadata, last_traversed_at, created_at', { count: 'exact' })
       .in('project_id', projectIds)
-      .limit(200);
+      .limit(GRAPH_CANVAS_NODE_LIMIT);
     if (nodeType) query = query.eq('node_type', nodeType);
 
-    const { data: nodes } = await query.order('created_at', { ascending: false });
-    if (!nodes || nodes.length === 0) return c.json({ ok: true, data: { nodes: [] } });
+    const { data: nodes, count: nodeTotal } = await query.order('created_at', { ascending: false });
+    if (!nodes || nodes.length === 0) return c.json({ ok: true, data: { nodes: [], total: nodeTotal ?? 0 } });
 
     // Compute occurrence_count for component / page nodes by joining against
     // reports. Done in JS to avoid an N+1 — single SELECT, in-memory bucketing.
@@ -254,7 +266,7 @@ export function registerGraphQueryRoutes(app: Hono<{ Variables: Variables }>): v
       return { ...n, metadata: meta };
     });
 
-    return c.json({ ok: true, data: { nodes: enriched } });
+    return c.json({ ok: true, data: { nodes: enriched, total: graphTotal(nodeTotal, enriched.length) } });
   });
 
   app.get('/v1/admin/graph/edges', jwtAuth, async (c) => {
@@ -265,13 +277,14 @@ export function registerGraphQueryRoutes(app: Hono<{ Variables: Variables }>): v
     const edgeType = c.req.query('type');
     let query = db
       .from('graph_edges')
-      .select('id, project_id, source_node_id, target_node_id, edge_type, weight, created_at')
+      .select('id, project_id, source_node_id, target_node_id, edge_type, weight, created_at', { count: 'exact' })
       .in('project_id', projectIds)
-      .limit(500);
+      .limit(GRAPH_CANVAS_EDGE_LIMIT);
     if (edgeType) query = query.eq('edge_type', edgeType);
 
-    const { data } = await query;
-    return c.json({ ok: true, data: { edges: data ?? [] } });
+    // Newest first, like the nodes, so the capped sets overlap.
+    const { data, count } = await query.order('created_at', { ascending: false });
+    return c.json({ ok: true, data: { edges: data ?? [], total: graphTotal(count, (data ?? []).length) } });
   });
 
   /**
@@ -411,8 +424,13 @@ export function registerGraphQueryRoutes(app: Hono<{ Variables: Variables }>): v
       description: body.description ?? null,
     });
 
-    if (error)
-      return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 400);
+    if (error) {
+      // Never hand Postgres text to the console (it named constraints).
+      if (error.code === '23505') {
+        return c.json({ ok: false, error: { code: 'DUPLICATE_TAG', message: 'That tag is already in the ontology.' } }, 409);
+      }
+      return dbError(c, error);
+    }
     return c.json({ ok: true });
   });
 
