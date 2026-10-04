@@ -23,6 +23,7 @@
 // `supabaseUrl`), which breaks `deno check` when a npm-typed client is passed
 // to a function typed against the jsr build.
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
+import { mcpCallTool } from './mcp-http-session.ts'
 
 const SUPABASE_MCP_URL = 'https://mcp.supabase.com/mcp'
 const CACHE_TTL_MS = 60_000
@@ -73,37 +74,15 @@ async function callTool<T = unknown>(
   url.searchParams.set('project_ref', opts.projectRef)
   url.searchParams.set('read_only', 'true')
 
-  const body = {
-    jsonrpc: '2.0',
-    id: 1,
-    method: 'tools/call',
-    params: { name: toolName, arguments: toolArgs },
+  // Streamable HTTP with a session (initialize → Mcp-Session-Id → call).
+  const r = await mcpCallTool({ url: url.toString(), token: opts.pat, timeoutMs: 15_000 }, toolName, toolArgs)
+  if (r.status !== 200) {
+    throw new Error(`Supabase MCP error: HTTP ${r.status} — ${r.error ?? '?'}`)
   }
-
-  const res = await fetch(url.toString(), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      // Streamable HTTP requires both; a server may answer 406 without them
-      // (connectors/supabase.ts already sends this).
-      'Accept': 'application/json, text/event-stream',
-      'Authorization': `Bearer ${opts.pat}`,
-    },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(15_000),
-  })
-
-  if (!res.ok) {
-    throw new Error(`Supabase MCP error: HTTP ${res.status} — ${await res.text().catch(() => '?')}`)
-  }
-
-  const json = await res.json() as {
-    result?: { content?: Array<{ text?: string }> }
-    error?: { message?: string }
-  }
-
-  if (json.error) {
-    throw new Error(`Supabase MCP tool error: ${json.error.message ?? JSON.stringify(json.error)}`)
+  if (r.error) throw new Error(`Supabase MCP tool error: ${r.error}`)
+  const json = { result: r.result ?? undefined }
+  if (r.result?.isError) {
+    throw new Error(`Supabase MCP tool error: ${(r.result.content?.[0]?.text ?? 'tool error').slice(0, 200)}`)
   }
 
   // Extract the tool result from the MCP text content block.

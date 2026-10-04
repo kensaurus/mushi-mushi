@@ -31,6 +31,7 @@ import {
 import { failureOfStatus, statusReason } from './http-util.ts'
 import { SUPABASE_PROJECT_REF_RE as REF_RE } from '../supabase-project-ref.ts'
 import { ConnectorError, notConnected, type ConnectorContext, type DriftFinding, type RecipeConnector } from './types.ts'
+import { mcpCallTool } from '../mcp-http-session.ts'
 
 const MCP_URL = 'https://mcp.supabase.com/mcp'
 
@@ -63,24 +64,18 @@ export function parseMcpSqlText(text: string): unknown[] | null {
 async function tool(ctx: ConnectorContext, name: string, args: Record<string, unknown> = {}): Promise<{ status: number; text: string | null; error: string | null }> {
   const ref = String(ctx.config.projectRef)
   const url = `${MCP_URL}?project_ref=${encodeURIComponent(ref)}&read_only=true`
-  const ac = new AbortController()
-  const timer = setTimeout(() => ac.abort(), 20_000)
-  try {
-    const res = await ctx.fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream', Authorization: `Bearer ${ctx.readCredential}` },
-      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }),
-      signal: ac.signal,
-    })
-    if (res.status !== 200) return { status: res.status, text: null, error: statusReason('Supabase', res.status) }
-    const body = await res.json().catch(() => null) as { result?: { content?: Array<{ text?: string }>; isError?: boolean }; error?: { message?: string } } | null
-    if (!body || body.error) return { status: 200, text: null, error: body?.error?.message ?? 'Supabase MCP returned no result' }
-    const text = body.result?.content?.[0]?.text ?? null
-    if (body.result?.isError) return { status: 200, text: null, error: (text ?? 'tool error').slice(0, 200) }
-    return { status: 200, text, error: null }
-  } finally {
-    clearTimeout(timer)
-  }
+  // Streamable HTTP with a session: a bare tools/call is now refused with 400
+  // "Mcp-Session-Id header is required" (mcp-http-session.ts).
+  const r = await mcpCallTool(
+    { url, token: String(ctx.readCredential), fetchImpl: (u, init) => ctx.fetch(u, init), timeoutMs: 20_000 },
+    name,
+    args,
+  )
+  if (r.status !== 200) return { status: r.status, text: null, error: statusReason('Supabase', r.status) }
+  if (r.error || !r.result) return { status: 200, text: null, error: r.error ?? 'Supabase MCP returned no result' }
+  const text = r.result.content?.[0]?.text ?? null
+  if (r.result.isError) return { status: 200, text: null, error: (text ?? 'tool error').slice(0, 200) }
+  return { status: 200, text, error: null }
 }
 
 async function sql<T>(ctx: ConnectorContext, query: string): Promise<T[] | null> {
