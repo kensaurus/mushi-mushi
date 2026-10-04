@@ -3,7 +3,7 @@
 > Auto-generated from [`apps/admin/src/lib/configDocs.ts`](../apps/admin/src/lib/configDocs.ts).
 > Do not edit by hand — run `pnpm gen:config-docs` instead.
 
-_113 configuration knobs across 19 sections · last regenerated 2026-10-04._
+_110 configuration knobs across 19 sections · last regenerated 2026-10-04._
 
 Every knob in the admin console has an in-app `i` icon next to it that opens a longer-form explanation. The same content is mirrored here so you can search, link, and review configuration choices outside the app.
 
@@ -14,7 +14,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 - [Settings → Firecrawl (web research)](#settings-firecrawl-web-research-) (3)
 - [Settings → Dev tools](#settings-dev-tools) (1)
 - [Projects](#projects) (8)
-- [Integrations](#integrations) (28)
+- [Integrations](#integrations) (25)
 - [Storage (BYO)](#storage-byo-) (9)
 - [Compliance](#compliance) (7)
 - [SSO](#sso) (4)
@@ -571,13 +571,13 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Summary** — The repo’s default branch as saved on the GitHub card.
 
-**How it works** — Shown on the GitHub card and copied by "Apply to projects". The fix-worker does not read it: it takes the PR base from the primary connected repo (`project_repos.default_branch`), or `main` when that is empty.
+**How it works** — The branch fix PRs are opened against when the connected repo has none of its own. The fix-worker takes the PR base from the primary connected repo (`project_repos.default_branch`) first, then this branch, then `main`. "Apply to projects" copies it to your other projects.
 
 **Default** — `unset`
 
-**Where it lives** — table `project_settings.github_default_branch` · endpoint `PUT /v1/admin/integrations/platform/github` · read by `api edge function (GET /v1/admin/integrations/platform, POST …/platform/github/apply)`
+**Where it lives** — table `project_settings.github_default_branch` · endpoint `PUT /v1/admin/integrations/platform/github` · read by `fix-worker edge function (when project_repos.default_branch is empty)`, `api edge function (GET /v1/admin/integrations/platform, POST …/platform/github/apply)`
 
-**When to change** — Keep it matching your repo's default branch. To change the branch fixes are opened against, change the connected repo's default branch instead.
+**When to change** — Keep it matching your repo's default branch, for example `master` for an older repo. A branch set on the connected repo wins over this one.
 
 ### GitHub installation token
 
@@ -659,22 +659,6 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **When to change** — Turn it off if you want to review a skill-pipeline step’s branch before any PR exists.
 
-### Cursor max iterations
-
-<a id="integrations-cursor-cloud-max-iterations"></a>
-
-`integrations.cursor_cloud.max_iterations`
-
-**Summary** — Intended cap on agent iterations per Cursor run. Saved, but not sent to Cursor yet.
-
-**How it works** — The skill-pipeline dispatcher reads it along with the other Cursor settings, but no Cursor request includes it today, so runs use Cursor’s own limit. The server does not range-check it; the card suggests 1–10.
-
-**Default** — `1`
-
-**Where it lives** — table `project_settings.cursor_max_iterations` · endpoint `PUT /v1/admin/integrations/platform/cursor_cloud` · read by `api edge function (read by _shared/plugins.ts, not sent to Cursor)`
-
-**When to change** — Leave it at 1 for now: changing it has no effect on runs yet.
-
 ### Claude Code agent: Anthropic API key
 
 <a id="integrations-claude-code-agent-api-key"></a>
@@ -691,22 +675,6 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **When to change** — Rotate it together with the `ANTHROPIC_API_KEY` secret in your repo, so the health check tests the key the workflow uses.
 
-### Claude Code agent: default model
-
-<a id="integrations-claude-code-agent-default-model"></a>
-
-`integrations.claude_code_agent.default_model`
-
-**Summary** — Model slug saved for the Claude Code fix workflow.
-
-**How it works** — Validated and stored only. No Mushi code sends it anywhere yet: the server has no dispatch path for the Claude Code workflow today, so the workflow in your repo picks its own model.
-
-**Default** — `claude-opus-4-1 (database default)`
-
-**Where it lives** — table `project_settings.claude_default_model` · endpoint `PUT /v1/admin/integrations/platform/claude_code_agent`
-
-**When to change** — No need to change it yet; it has no effect until Mushi dispatches the workflow.
-
 ### Claude Code agent: workflow event
 
 <a id="integrations-claude-code-agent-workflow-event"></a>
@@ -722,22 +690,6 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 **Where it lives** — table `project_settings.claude_workflow_event` · endpoint `PUT /v1/admin/integrations/platform/claude_code_agent` · read by `api edge function (GET /v1/admin/integrations/claude-code-agent/setup)`
 
 **When to change** — Change it only if the default event name clashes with another workflow, then copy the regenerated YAML into your repo.
-
-### Claude Code agent: base branch
-
-<a id="integrations-claude-code-agent-default-branch"></a>
-
-`integrations.claude_code_agent.default_branch`
-
-**Summary** — Branch saved as the base for Claude Code fix runs.
-
-**How it works** — Validated and stored only. No Mushi code reads it yet: the server has no dispatch path for the Claude Code workflow today, so the workflow checks out whatever its YAML says.
-
-**Default** — `main (database default)`
-
-**Where it lives** — table `project_settings.claude_default_branch` · endpoint `PUT /v1/admin/integrations/platform/claude_code_agent`
-
-**When to change** — No need to change it yet; set the branch in the workflow YAML instead.
 
 ### Jira base URL
 
@@ -1123,15 +1075,15 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 `compliance.retention.events_days`
 
-**Summary** — The retention window recorded for LLM call traces. No sweep enforces it yet.
+**Summary** — How long LLM call records are kept. The nightly sweep deletes older ones, never fewer than 35 days.
 
-**How it works** — Saved with the project’s retention policy and shown here, but neither nightly sweep reads it: LLM call records are not deleted by age today. Set it to the window your policy promises, so it is in place once a sweep enforces it.
+**How it works** — The nightly retention-sweep deletes this project’s LLM call records (llm_invocations) older than this many days, once a retention policy is saved for the project. Projects with no saved policy keep their records. At least 35 days are always kept, because the AI budget, the auto-fix spend limit and billing read the last 30 days of these records. A legal hold stops the deletes.
 
 **Default** — `90`
 
-**Where it lives** — table `project_retention_policies.llm_traces_retention_days` · endpoint `PUT /v1/admin/compliance/retention/{projectId}`
+**Where it lives** — table `project_retention_policies.llm_traces_retention_days` · endpoint `PUT /v1/admin/compliance/retention/{projectId}` · read by `retention-sweep edge function`
 
-**When to change** — Match what your privacy policy says about AI processing logs. Changing it does not delete anything yet.
+**When to change** — Match what your privacy policy says about AI processing logs. Lowering it deletes older records at the next nightly sweep (03:00 UTC), and they cannot be restored.
 
 ### Legal hold
 

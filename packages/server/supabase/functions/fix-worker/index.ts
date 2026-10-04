@@ -399,7 +399,7 @@ Deno.serve(
           .from('project_settings')
           .select(
             'project_id, autofix_agent, autofix_max_lines, sandbox_provider, ' +
-              'github_repo_url, codebase_repo_url, fix_branch_template, ' +
+              'github_repo_url, github_default_branch, codebase_repo_url, fix_branch_template, ' +
               'autofix_max_spend_usd, autofix_max_dispatches_per_day, autofix_approval_cost_threshold_usd, ' +
               'cursor_default_model',
           )
@@ -2252,10 +2252,20 @@ async function resolveRepo(
   return {
     owner: parsed.owner,
     repo: parsed.repo,
-    defaultBranch: primaryRepo?.default_branch ?? 'main',
+    // The connected repo's branch, then the branch saved on the GitHub card,
+    // then main. The card's branch used to be saved but never read.
+    defaultBranch: primaryRepo?.default_branch || savedBranch(settings) || 'main',
     scopeDirectory,
     pathGlobs: globs && globs.length > 0 ? globs.filter((g) => typeof g === 'string') : null,
   };
+}
+
+/** project_settings.github_default_branch when it is a plausible ref name. */
+export function savedBranch(settings: Record<string, unknown> | null): string | null {
+  const b = settings?.github_default_branch
+  if (typeof b !== 'string') return null
+  const t = b.trim()
+  return t && /^[A-Za-z0-9._/-]{1,200}$/.test(t) && !t.includes('..') ? t : null
 }
 
 function parseGithubUrl(url: string): { owner: string; repo: string } | null {
