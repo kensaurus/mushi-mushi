@@ -12,6 +12,7 @@ import { debugLog, debugWarn, debugError } from './debug'
 import { RESOLVED_SUPABASE_URL, RESOLVED_SUPABASE_ANON_KEY, RESOLVED_API_URL } from './env'
 import {
   getActiveProjectIdForApi,
+  getActiveProjectIdFromUrl,
   isValidProjectId,
 } from './activeProject'
 import { getActiveOrgIdSnapshot, isValidOrgId } from './activeOrg'
@@ -100,11 +101,32 @@ export type { ApiResult } from './apiEnvelope'
 //     can't grow the map without bound.
 const COALESCE_TTL_MS = 200
 const MAX_CACHE_ENTRIES = 64
+/**
+ * Shell reads that the header, switchers and the page all ask for. A lazily
+ * loaded page mounts 250-500 ms after the shell, past the 200 ms window, so
+ * each was fetched twice on most pages. They change only through this
+ * console's own writes (which clear the cache, below) or a team/project
+ * switch (which changes the key), so holding them a few seconds is safe.
+ * `reload()` paths still bypass with `cache: 'no-store'`.
+ */
+const SHELL_READ_TTL_MS = 5_000
+const SHELL_READ_PATHS = new Set([
+  '/v1/admin/setup',
+  '/v1/admin/projects',
+  '/v1/admin/entitlements',
+  '/v1/org',
+])
 const inFlight = new Map<string, Promise<ApiResult<unknown>>>()
 const recent = new Map<string, { value: ApiResult<unknown>; expiresAt: number }>()
 
-function rememberRecent(key: string, value: ApiResult<unknown>): void {
-  recent.set(key, { value, expiresAt: Date.now() + COALESCE_TTL_MS })
+function ttlForPath(path: string): number {
+  return SHELL_READ_PATHS.has(path.split('?')[0] ?? path) ? SHELL_READ_TTL_MS : COALESCE_TTL_MS
+}
+
+function rememberRecent(key: string, path: string, value: ApiResult<unknown>): void {
+  // Never hold on to a failure: the next caller should retry, not inherit it.
+  if (!value.ok) return
+  recent.set(key, { value, expiresAt: Date.now() + ttlForPath(path) })
   if (recent.size > MAX_CACHE_ENTRIES) {
     // Map iteration order is insertion order, so the first key is the oldest.
     const oldest = recent.keys().next().value
@@ -112,14 +134,76 @@ function rememberRecent(key: string, value: ApiResult<unknown>): void {
   }
 }
 
+/**
+ * The key must name every header that changes the answer. `scope` decides
+ * which tenant headers are sent, so a `scope: 'none'` read (all teams) must
+ * never be served to a `scope: 'project'` caller of the same path, or vice
+ * versa — the key carries exactly the ids that will be sent.
+ */
 function coalesceKey(
   method: string,
   path: string,
   body: BodyInit | null | undefined,
+  scope: 'enumeration' | 'project' | 'none' = 'project',
 ): string | null {
   if (method !== 'GET' && method !== 'HEAD') return null
   if (body != null) return null
-  return `${method}:${getActiveOrgIdSnapshot() ?? 'no-org'}:${getActiveProjectIdForApi() ?? 'no-project'}:${path}`
+  const org = scope === 'none' ? 'no-org' : getActiveOrgIdSnapshot() ?? 'no-org'
+  const project = scope === 'project' ? getActiveProjectIdForApi() ?? 'no-project' : 'no-project'
+  return `${method}:${scope}:${org}:${project}:${path}`
+}
+
+// ─── Team gate for deep links (A4) ─────────────────────────────────────────
+//
+// A Slack or email link can name `?project=` in a team other than the stored
+// active team. Sending the first requests with the stored team's
+// X-Mushi-Org-Id 404s every panel (PROJECT_NOT_FOUND) until something
+// notices. So before the first team-scoped request, when the URL's project is
+// not known to be in the active team, resolve its team (one read of the
+// cross-team directory) and switch to it. Requests wait for that, up to
+// TENANT_GATE_TIMEOUT_MS, then go out regardless (fail open).
+const TENANT_GATE_TIMEOUT_MS = 3_000
+let tenantGate: { projectId: string; promise: Promise<void> } | null = null
+type CrossTeamModule = typeof import('./crossTeamProject')
+let crossTeamModule: CrossTeamModule | null = null
+
+async function loadCrossTeam(): Promise<CrossTeamModule> {
+  // Dynamic: crossTeamProject imports apiFetch from this module.
+  crossTeamModule ??= await import('./crossTeamProject')
+  return crossTeamModule
+}
+
+function settleWithin(promise: Promise<void>): Promise<void> {
+  return Promise.race([
+    promise,
+    new Promise<void>((resolve) => setTimeout(resolve, TENANT_GATE_TIMEOUT_MS)),
+  ])
+}
+
+/** Wait until the URL's project and the active team agree (or give up). */
+async function waitForTenant(scope: 'enumeration' | 'project' | 'none'): Promise<void> {
+  if (scope === 'none') return
+  const projectId = getActiveProjectIdFromUrl()
+  if (!projectId) return
+  if (tenantGate?.projectId === projectId) return settleWithin(tenantGate.promise)
+  const crossTeam = await loadCrossTeam()
+  if (tenantGate?.projectId === projectId) return settleWithin(tenantGate.promise)
+  if (!crossTeam.urlProjectNeedsTeamCheck(projectId, getActiveOrgIdSnapshot())) return
+  // Signed out: nothing to resolve yet. Leave the gate unset so the check
+  // runs again after sign-in instead of being spent on a 401.
+  if (!(await getAccessToken())) return
+  if (tenantGate?.projectId === projectId) return settleWithin(tenantGate.promise)
+  const gate = {
+    projectId,
+    promise: crossTeam.resolveTeamForProject(projectId).then(
+      (outcome) => {
+        if (outcome === 'retry' && tenantGate === gate) tenantGate = null
+      },
+      () => {},
+    ),
+  }
+  tenantGate = gate
+  return settleWithin(gate.promise)
 }
 
 export function invalidateApiCache(pathPrefix?: string): void {
@@ -160,7 +244,14 @@ export async function apiFetch<T>(
   options?: ApiFetchOptions<T>,
 ): Promise<ApiResult<T>> {
   const method = (options?.method ?? 'GET').toUpperCase()
-  const cacheKey = options?.cache === 'no-store' ? null : coalesceKey(method, path, options?.body)
+  const scope = options?.scope ?? 'project'
+  // Before the cache key and headers are read: both depend on the team.
+  await waitForTenant(scope)
+  const cacheKey =
+    options?.cache === 'no-store' ? null : coalesceKey(method, path, options?.body, scope)
+  // A write may change any cached read (a new project, a saved setting), so
+  // drop the held answers before it goes out.
+  if (method !== 'GET' && method !== 'HEAD') recent.clear()
 
   if (cacheKey) {
     const cached = recent.get(cacheKey)
@@ -181,7 +272,7 @@ export async function apiFetch<T>(
     inFlight.set(cacheKey, promise as Promise<ApiResult<unknown>>)
     promise
       .then((value) => {
-        rememberRecent(cacheKey, value as ApiResult<unknown>)
+        rememberRecent(cacheKey, path, value as ApiResult<unknown>)
       })
       .catch(() => {})
       .finally(() => {

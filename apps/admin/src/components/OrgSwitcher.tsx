@@ -16,7 +16,9 @@ import {
 import {
   ACTIVE_PROJECT_QUERY_PARAM,
   ACTIVE_PROJECT_STORAGE_KEY,
+  getActiveProjectIdFromUrl,
 } from '../lib/activeProject'
+import { knownProjectTeam } from '../lib/crossTeamProject'
 import { useCreateOrganization } from '../lib/useCreateOrganization'
 import { headerDropdownPanelClass } from '../lib/appChrome'
 import { HeaderContextChip, HeaderContextChipSkeleton } from './ui/chrome'
@@ -85,10 +87,23 @@ export function OrgSwitcher() {
       // through with the stale `fromUrl` (same shape as ProjectSwitcher).
       return
     }
-    const candidate = (fromUrl && isValidOrgId(fromUrl) ? fromUrl : null) ?? fromStorage
+    // A `?project=` known to live in one of the user's teams decides the
+    // team: a link that carries both an old `?org=` and another team's
+    // project would otherwise pull the team back and 404 every panel.
+    const urlProject = getActiveProjectIdFromUrl()
+    const projectTeam = urlProject ? knownProjectTeam(urlProject) : null
+    const projectTeamKnown =
+      projectTeam && data.organizations.some((o) => o.id === projectTeam) ? projectTeam : null
+    const candidate =
+      projectTeamKnown ?? (fromUrl && isValidOrgId(fromUrl) ? fromUrl : null) ?? fromStorage
     const known = data.organizations.find((o) => o.id === candidate)
     if (known) {
       if (fromStorage !== known.id) setActiveOrgIdSnapshot(known.id)
+      if (fromUrl && fromUrl !== known.id) {
+        const next = new URLSearchParams(searchParams)
+        next.set(ACTIVE_ORG_QUERY_PARAM, known.id)
+        setSearchParams(next, { replace: true })
+      }
       return
     }
     setActiveOrgIdSnapshot(data.organizations[0].id)
