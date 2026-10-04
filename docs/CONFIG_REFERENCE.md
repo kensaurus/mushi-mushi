@@ -3,7 +3,7 @@
 > Auto-generated from [`apps/admin/src/lib/configDocs.ts`](../apps/admin/src/lib/configDocs.ts).
 > Do not edit by hand — run `pnpm gen:config-docs` instead.
 
-_105 configuration knobs across 19 sections · last regenerated 2026-10-03._
+_105 configuration knobs across 19 sections · last regenerated 2026-10-04._
 
 Every knob in the admin console has an in-app `i` icon next to it that opens a longer-form explanation. The same content is mirrored here so you can search, link, and review configuration choices outside the app.
 
@@ -173,13 +173,13 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Summary** — Branch name pattern when Mushi opens a draft fix PR on GitHub.
 
-**How it works** — When auto-fix opens a PR, it derives the branch name from this template. Supported tokens are substituted per report: `{date}` → `YYYY-MM-DD` (UTC), `{category}` → the report category slug, `{shortId}` → the first 8 characters of the report UUID. Leave empty to fall back to the legacy scheme `mushi/fix-<shortId>-<timestamp36>`.
+**How it works** — When auto-fix opens a PR, it names the branch from this pattern. Every name must look like `<type>/MUSHI-<reportId>-<words>`: a type (`bugfix/`, `feature/`, `hotfix/`, `refactor/`, `chore/`, `docs/`, `test/` or `ci/`), then `MUSHI-{reportId}-`, then lowercase words. After that you can use `{category}` (the report category), `{date}` (`YYYY-MM-DD`, UTC) and `{shortId}` (the first 8 characters of the report id). Leave it empty to use `bugfix/MUSHI-<reportId>-<summary words>`.
 
-**Default** — `mushi/fix/{date}-{category}-{shortId}`
+**Default** — `bugfix/MUSHI-{reportId}-{category}`
 
 **Where it lives** — table `project_settings.fix_branch_template` · endpoint `PATCH /v1/admin/settings` · read by `fix-worker edge function`
 
-**When to change** — Change it to match your team’s branch convention (e.g. `fixes/{date}-{shortId}`) so Mushi PRs sort alongside your existing branches. Keep `{shortId}` in the template to guarantee uniqueness and avoid branch collisions across reports.
+**When to change** — Change the type or the words after `MUSHI-{reportId}-` to match your team’s convention (e.g. `hotfix/MUSHI-{reportId}-{date}`). The `MUSHI-{reportId}-` part is required: it keeps each branch unique and links the PR back to its report.
 
 ### Supabase project ref
 

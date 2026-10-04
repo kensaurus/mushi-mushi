@@ -59,7 +59,12 @@ export function NotificationsStatusBanner({
         title={plainBanner ? 'Reporter updates are turned off' : 'Reporter notifications disabled'}
         subtitle={label}
         action={
-          <Btn to="/settings" size="sm" variant="primary">{actions.settings ?? 'Open Settings'}</Btn>
+          // The switch is on the Setup tab; Settings has no such control.
+          onTab ? (
+            <Btn size="sm" variant="primary" onClick={() => onTab('setup')}>Turn on reporter updates</Btn>
+          ) : (
+            <Btn to="/notifications?tab=setup" size="sm" variant="primary">Turn on reporter updates</Btn>
+          )
         }
       />
     )

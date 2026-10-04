@@ -3,31 +3,14 @@
  * per-project capabilities that decide which controls the console shows.
  */
 import { describe, expect, it } from 'vitest'
-import {
-  mayRevokePriorCiKeys,
-  rotatedKeyLabel,
-  rotationScopes,
-} from '../../supabase/functions/_shared/api-key-rotation'
+import { mayRevokePriorCiKeys, parseRotateTarget } from '../../supabase/functions/_shared/api-key-rotation'
 import { projectCapabilities } from '../../supabase/functions/_shared/project-capabilities'
 
-describe('rotation keeps the rotated key what it was (QA #31)', () => {
-  it('carries the old scopes, so an MCP key stays an MCP key', () => {
-    expect(rotationScopes(['mcp:read', 'mcp:write'])).toEqual(['mcp:read', 'mcp:write'])
-    expect(rotationScopes(['voice:write'])).toEqual(['voice:write'])
-  })
-
-  it('falls back to the column default only for a scope-less legacy row', () => {
-    expect(rotationScopes(null)).toEqual(['report:write'])
-    expect(rotationScopes([])).toEqual(['report:write'])
-  })
-
-  it('keeps the label and marks it rotated once', () => {
-    expect(rotatedKeyLabel('MCP · Cursor · 2026-10-04 · read+write')).toBe(
-      'MCP · Cursor · 2026-10-04 · read+write · rotated',
-    )
-    expect(rotatedKeyLabel('sdk · rotated')).toBe('sdk · rotated')
-    expect(rotatedKeyLabel(null)).toBe('rotated')
-    expect(rotatedKeyLabel('x'.repeat(80)).length).toBeLessThanOrEqual(64)
+describe('rotation names one key (QA #31)', () => {
+  it("accepts the console's keyId as well as the API's key_id", () => {
+    const id = '22222222-2222-4222-8222-222222222222'
+    expect(parseRotateTarget({ keyId: id })).toEqual({ keyId: id })
+    expect(parseRotateTarget({ key_id: id })).toEqual({ keyId: id })
   })
 })
 

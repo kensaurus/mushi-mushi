@@ -2,8 +2,10 @@
  * Route-level checks for the two key-safety bugs (console group E):
  *
  *  - QA bug 31: POST /v1/admin/projects/:id/keys/rotate revoked EVERY active
- *    key on the project and minted one report:write key. It now needs a
- *    keyId, keeps that key's scopes, and revokes only that row.
+ *    key on the project and minted one report:write key. A named key
+ *    (`keyId` / `key_id` / `key_prefix`) now keeps its scopes and label and
+ *    only that row is revoked, after the replacement exists. An empty body
+ *    keeps the legacy rotate-everything call the auth manifest advertises.
  *  - QA bug 30: POST /v1/admin/projects/:id/sync-ci-secrets revoked the live
  *    ci-auto key before writing GitHub. Now a failed GitHub write leaves it
  *    active, and only a successful write of the key secret revokes it.
@@ -93,7 +95,7 @@ const db = { from: (t: string) => builder(t) }
 // ── fake app harness ─────────────────────────────────────────────────────────
 type Handler = (c: Ctx, next?: () => Promise<void>) => Promise<unknown> | unknown
 interface Ctx {
-  req: { param: (k: string) => string | undefined; json: () => Promise<unknown>; header: () => undefined; query: () => undefined; url: string; path: string }
+  req: { param: (k: string) => string | undefined; json: () => Promise<unknown>; text: () => Promise<string>; header: () => undefined; query: () => undefined; url: string; path: string }
   get: (k: string) => unknown
   set: (k: string, v: unknown) => void
   json: (body: Record<string, unknown>, status?: number) => { body: Record<string, unknown>; status: number }
@@ -109,7 +111,7 @@ async function call(register: (app: never) => void, path: string, projectId: str
   if (!handlers) throw new Error(`route ${path} not registered`)
   const hs = handlers as Handler[]
   const c: Ctx = {
-    req: { param: (k) => (k === 'id' ? projectId : undefined), json: async () => body, header: () => undefined, query: () => undefined, url: 'https://x/', path },
+    req: { param: (k) => (k === 'id' ? projectId : undefined), json: async () => body, text: async () => (body === undefined ? '' : typeof body === 'string' ? body : JSON.stringify(body)), header: () => undefined, query: () => undefined, url: 'https://x/', path },
     get: (k) => (k === 'userId' ? 'user-a' : undefined),
     set: () => {},
     json: (b, status = 200) => ({ body: b, status }),
@@ -146,27 +148,53 @@ beforeEach(() => {
 describe('POST /keys/rotate (QA bug 31)', () => {
   const rotate = (body: unknown) => call(keys.registerProjectKeysRoutes, '/v1/admin/projects/:id/keys/rotate', PID, body)
 
-  it('refuses without a keyId and touches nothing', async () => {
-    const res = await rotate({})
-    expect(res.status).toBe(400)
-    expect(res.body.error?.code).toBe('KEY_ID_REQUIRED')
-    expect(ops.filter((o) => o.op !== 'select')).toEqual([])
+  const keyWrites = () => ops.filter((o) => o.table === 'project_api_keys' && o.op !== 'select')
+  beforeEach(() => {
+    selectResults.projects = { id: PID, name: 'glot' }
   })
 
-  it('mints first with the old scopes, then revokes only the named key', async () => {
-    selectResults.project_api_keys = { id: KEY_ID, key_prefix: 'mushi_mcp001', label: 'MCP · Cursor', scopes: ['mcp:read', 'mcp:write'] }
+  it('a body that is not JSON revokes nothing', async () => {
+    const res = await rotate('mushi_aaa111')
+    expect(res.status).toBe(400)
+    expect(res.body.error?.code).toBe('INVALID_KEY')
+    expect(keyWrites()).toEqual([])
+  })
+
+  it('mints first with the old scopes and label, then revokes only the named key', async () => {
+    selectResults.project_api_keys = [
+      { id: KEY_ID, key_prefix: 'mushi_mcp001', label: 'MCP · Cursor', scopes: ['mcp:read', 'mcp:write'] },
+      { id: 'other-key', key_prefix: 'mushi_sdk001', label: 'sdk', scopes: ['report:write'] },
+    ]
     const res = await rotate({ keyId: KEY_ID })
     expect(res.status).toBe(201)
-    const writes = ops.filter((o) => o.table === 'project_api_keys' && o.op !== 'select')
-    expect(writes.map((o) => o.op)).toEqual(['insert', 'update'])
-    expect(writes[0].payload).toMatchObject({ scopes: ['mcp:read', 'mcp:write'], rotated_from: KEY_ID, is_active: true })
-    // The revoke is pinned to this key's id, never the whole project.
-    expect(writes[1].filters).toContainEqual(['eq', 'id', KEY_ID])
-    expect(res.body.data).toMatchObject({ revoked: 1, revoked_prefix: 'mushi_mcp001', old_key_still_active: false })
+    const writes = keyWrites()
+    expect(writes[0].op).toBe('insert')
+    expect(writes[0].payload).toMatchObject({ scopes: ['mcp:read', 'mcp:write'], label: 'MCP · Cursor', is_active: true })
+    // The revoke is pinned to this key's id, never the whole project, and
+    // never the key just minted.
+    const revoke = writes.find((o) => o.op === 'update' && o.payload?.is_active === false)!
+    expect(revoke.filters).toContainEqual(['eq', 'id', KEY_ID])
+    expect(revoke.filters).toContainEqual(['neq', 'id', 'new-project_api_keys'])
+    expect(res.body.data).toMatchObject({ revoked: 1, revoked_prefixes: ['mushi_mcp001'] })
+  })
+
+  it('an empty body keeps the legacy call: every other key is revoked, after the new one exists', async () => {
+    selectResults.project_api_keys = [
+      { id: KEY_ID, key_prefix: 'mushi_mcp001', label: 'MCP · Cursor', scopes: ['mcp:read'] },
+      { id: 'other-key', key_prefix: 'mushi_sdk001', label: 'sdk', scopes: ['report:write'] },
+    ]
+    const res = await rotate(undefined)
+    expect(res.status).toBe(201)
+    const writes = keyWrites()
+    expect(writes[0].op).toBe('insert')
+    const revoke = writes.find((o) => o.op === 'update' && o.payload?.is_active === false)!
+    expect(revoke.filters).toContainEqual(['neq', 'id', 'new-project_api_keys'])
+    expect(revoke.filters.some(([op, k]) => op === 'eq' && k === 'id')).toBe(false)
+    expect(res.body.data).toMatchObject({ revoked: 2 })
   })
 
   it('a key that is gone or already revoked is a 404, with no new key minted', async () => {
-    selectResults.project_api_keys = null
+    selectResults.project_api_keys = []
     const res = await rotate({ keyId: KEY_ID })
     expect(res.status).toBe(404)
     expect(ops.some((o) => o.op === 'insert')).toBe(false)

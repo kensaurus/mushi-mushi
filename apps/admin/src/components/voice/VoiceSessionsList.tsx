@@ -10,7 +10,14 @@ import { Link } from 'react-router-dom'
 import { Badge, Btn, EmptyState, RelativeTime, Section } from '../ui'
 import { ActionPill, ActionPillRow } from '../report-detail/ReportSurface'
 import { IconExternalLink, IconMic } from '../icons'
-import { voiceActionLabel, voiceStatusLabel, voiceStatusTone, type VoiceSession } from '../../lib/voiceIntake'
+import {
+  canConfirmVoiceSession,
+  effectiveVoiceStatus,
+  voiceActionLabel,
+  voiceStatusLabel,
+  voiceStatusTone,
+  type VoiceSession,
+} from '../../lib/voiceIntake'
 
 interface VoiceSessionsListProps {
   sessions: VoiceSession[]
@@ -48,12 +55,13 @@ export function VoiceSessionsList({ sessions, onConfirm, onCancel, pendingId, on
       ) : (
         <ul className="divide-y divide-edge-subtle" data-testid="voice-sessions">
           {sessions.map((s) => {
-            const awaiting = s.status === 'awaiting_confirm' && Boolean(s.confirm_token)
+            const status = effectiveVoiceStatus(s)
+            const awaiting = canConfirmVoiceSession(s)
             const busy = pendingId === s.id
             return (
               <li key={s.id} className="py-2.5 first:pt-0 last:pb-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge tone={voiceStatusTone(s.status)}>{voiceStatusLabel(s.status)}</Badge>
+                  <Badge tone={voiceStatusTone(status)}>{voiceStatusLabel(status)}</Badge>
                   {s.source && <Badge tone="neutral">{s.source}</Badge>}
                   <span className="text-2xs text-fg-muted">{voiceActionLabel(s.action)}</span>
                   {s.created_at && (
@@ -69,6 +77,16 @@ export function VoiceSessionsList({ sessions, onConfirm, onCancel, pendingId, on
                   </p>
                 )}
                 {s.message && !s.summary && <p className="mt-1 text-2xs text-fg-secondary">{s.message}</p>}
+                {status === 'expired' && s.status === 'awaiting_confirm' && (
+                  <p className="mt-1 text-xs text-fg-secondary">
+                    The 10 minutes to confirm have passed and nothing was sent to an agent. Send the request again.
+                  </p>
+                )}
+                {status === 'awaiting_confirm' && !awaiting && (
+                  <p className="mt-1 text-xs text-fg-secondary">
+                    You can&rsquo;t confirm this request from here. Ask someone with edit access to this project, or send it again.
+                  </p>
+                )}
                 <ActionPillRow className="mt-1.5">
                   {awaiting && (
                     <>

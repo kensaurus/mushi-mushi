@@ -30,6 +30,7 @@ import { useSetupStatus } from '../lib/useSetupStatus'
 import { usePageCopy } from '../lib/copy'
 import { useBillingUx, resolveQuickBillingTab } from '../lib/billingModeUx'
 import { useQuickstartLandingTab } from '../lib/useQuickstartTab'
+import { describeBillingError } from '../lib/billingErrors'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useRealtimeReload } from '../lib/realtime'
 import { BillingStatusBanner } from '../components/billing/BillingStatusBanner'
@@ -194,14 +195,7 @@ export function BillingPage() {
     })
     setActioning(null)
     if (!res.ok || !res.data?.url) {
-      const code = res.error?.code
-      if (code === 'STRIPE_NOT_CONFIGURED') {
-        toast.error('Stripe not configured', 'Set STRIPE_SECRET_KEY on the API function.')
-      } else if (code === 'PLAN_NOT_CONFIGURED') {
-        toast.error('Plan not configured', res.error?.message ?? 'Run scripts/stripe-bootstrap.mjs.')
-      } else {
-        toast.error('Checkout failed', res.error?.message)
-      }
+      toast.error('Checkout did not open', describeBillingError(res.error))
       return
     }
     window.location.href = res.data.url
@@ -215,7 +209,7 @@ export function BillingPage() {
     })
     setActioning(null)
     if (!res.ok || !res.data?.url) {
-      toast.error('Could not open billing portal', res.error?.message)
+      toast.error('Could not open billing portal', describeBillingError(res.error))
       return
     }
     window.open(res.data.url, '_blank', 'noopener,noreferrer')
@@ -456,6 +450,14 @@ export function BillingPage() {
           <PlanComparisonTable
             plans={billing!.plans!}
             currentPlanId={activeTierId}
+            // Same checkout as the Overview card's plan picker. Complimentary
+            // accounts have no Stripe checkout, so no buttons there.
+            onSelectPlan={
+              activeProject && activeProject.billing_mode !== 'complimentary'
+                ? (planId) => void startCheckout(activeProject.project_id, planId)
+                : undefined
+            }
+            busy={actioning === `checkout:${activeProject?.project_id ?? ''}`}
             currentUsage={
               activeProject
                 ? {

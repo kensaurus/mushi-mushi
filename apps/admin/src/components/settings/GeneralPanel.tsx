@@ -20,7 +20,14 @@ import { BrandIcon } from '../ui/BrandIcon'
 import { IconGit, IconGauge, IconJudge, IconCost, IconChat } from '../icons'
 import { PanelSkeleton } from '../skeletons/PanelSkeleton'
 import { ConfigHelp } from '../ConfigHelp'
-import { slackWebhookUrl, sentryDsn, supabaseProjectRef, token } from '../../lib/validators'
+import {
+  fixBranchExample,
+  fixBranchTemplate,
+  slackWebhookUrl,
+  sentryDsn,
+  supabaseProjectRef,
+  token,
+} from '../../lib/validators'
 import { LINK_ACCENT } from '../../lib/chipTone'
 import { usePersistentState } from '../../lib/usePersistentState'
 import { getActiveProjectIdSnapshot } from '../../lib/activeProject'
@@ -67,7 +74,7 @@ interface ProjectSettings {
   crawl_max_pages_per_day?: number
   crawl_max_runs_per_day?: number
   tdd_max_gens_per_day?: number
-  /** Branch name template for fix-worker PRs. Tokens: {date}, {category}, {shortId}. */
+  /** Branch name template for fix-worker PRs: <type>/MUSHI-{reportId}-… plus {category}, {date}, {shortId}. */
   fix_branch_template?: string
   /** "Bug reports by Mushi" mark on the feedback widget. `null`/absent =
    *  plan default (on for Free Cloud, off for paid and self-host). */
@@ -174,10 +181,9 @@ export function GeneralPanel() {
     ? { state: 'not_connected', detail: 'Save your project ref below, then add a read-only token under Your AI keys.' }
     : supabaseKeyView
 
-  const branchExample = (settings.fix_branch_template ?? DEFAULT_BRANCH_TEMPLATE)
-    .replace('{date}', new Date().toISOString().slice(0, 10))
-    .replace('{category}', 'bug')
-    .replace('{shortId}', 'abc12345')
+  const branchExample = fixBranchExample(settings.fix_branch_template ?? DEFAULT_BRANCH_TEMPLATE)
+  // The server refuses a pattern that breaks the rule; say so before Save.
+  const branchProblem = fixBranchTemplate()(settings.fix_branch_template ?? DEFAULT_BRANCH_TEMPLATE)
 
   return (
     <>
@@ -240,10 +246,9 @@ export function GeneralPanel() {
         >
           {showLegacyWebhook ? (
             <>
-              <Input
+              <SecretInput
                 label="Webhook URL"
                 helpId="settings.general.slack_webhook_url"
-                type="url"
                 value={settings.slack_webhook_url ?? ''}
                 onChange={(e) => update({ slack_webhook_url: e.target.value })}
                 placeholder={
@@ -418,9 +423,10 @@ export function GeneralPanel() {
           title="Fix branch names"
           purpose={
             <>
-              The name of each branch Mushi opens for a fix. You can use{' '}
-              <code className="font-mono">{'{date}'}</code>, <code className="font-mono">{'{category}'}</code> and{' '}
-              <code className="font-mono">{'{shortId}'}</code>.
+              The name of each branch Mushi opens for a fix. It must start with a type and{' '}
+              <code className="font-mono">{'MUSHI-{reportId}-'}</code>; after that you can use{' '}
+              <code className="font-mono">{'{category}'}</code>, <code className="font-mono">{'{date}'}</code>,{' '}
+              <code className="font-mono">{'{shortId}'}</code> and lowercase words.
             </>
           }
         >
@@ -431,6 +437,7 @@ export function GeneralPanel() {
             value={settings.fix_branch_template ?? DEFAULT_BRANCH_TEMPLATE}
             onChange={(e) => update({ fix_branch_template: e.target.value })}
             placeholder={DEFAULT_BRANCH_TEMPLATE}
+            validate={fixBranchTemplate()}
           />
           <p className="text-xs text-fg-muted">
             Example: <code className="font-mono">{branchExample}</code>
@@ -512,6 +519,7 @@ export function GeneralPanel() {
         changeCount={changeCount}
         onSave={() => void save()}
         onDiscard={() => setDraft(null)}
+        blockedReason={branchProblem ? `Fix the branch name pattern first. ${branchProblem.message}` : null}
       />
 
       {/* Account-scoped; saves on toggle, independent of the project form above. */}

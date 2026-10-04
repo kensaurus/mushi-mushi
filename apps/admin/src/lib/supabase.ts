@@ -493,7 +493,8 @@ async function doFetch<T>(
         // still carries an `error` object (a route returning zod's
         // `{ error: flatten() }`), keep its readable text instead of raw JSON.
         if (coerced.ok) {
-          const bodyError = errorFromBody(parsedBody)
+          // 5xx keeps the `HTTP_ERROR "5xx:"` form that retry logic reads.
+          const bodyError = res.status < 500 ? errorFromBody(parsedBody) : null
           return attachRequestId({
             ok: false,
             error: bodyError ?? { code: 'HTTP_ERROR', message: `${res.status}: ${body.slice(0, 200)}` },
