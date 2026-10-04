@@ -65,6 +65,16 @@ describe('ReporterNotificationsToggle', () => {
     expect(container.textContent).toContain('Not saved')
   })
 
+  it('says it could not confirm when the read-back fails, not "not saved"', async () => {
+    mocks.apiFetch.mockImplementation(async (_path: string, init?: RequestInit) =>
+      init?.method === 'PATCH' ? { ok: true } : { ok: false, error: { code: 'HTTP_ERROR', message: '503: down' } },
+    )
+    await act(async () => toggle().click())
+    await flush()
+    expect(container.textContent).toContain("Saved, but Mushi couldn't confirm it")
+    expect(container.textContent).not.toContain('Not saved')
+  })
+
   it("shows the server's refusal for a non-admin", async () => {
     mocks.apiFetch.mockResolvedValue({
       ok: false,

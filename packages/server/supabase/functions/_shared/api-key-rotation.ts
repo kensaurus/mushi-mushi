@@ -52,6 +52,25 @@ export function parseRotateTarget(body: unknown): RotateTarget | null | { error:
   return keyId ? { keyId } : { keyPrefix }
 }
 
+/**
+ * The raw request body. Empty = no key named (the legacy path). Anything
+ * that is not JSON is an error: a garbled request must never fall through to
+ * revoking every key.
+ */
+export function parseRotateBody(text: string): RotateTarget | null | { error: string } {
+  if (text.trim() === '') return null
+  let body: unknown
+  try {
+    body = JSON.parse(text)
+  } catch {
+    return { error: 'Mushi could not read which key to rotate. Nothing was revoked; refresh and try again.' }
+  }
+  if (body === null || typeof body !== 'object' || Array.isArray(body)) {
+    return { error: 'Mushi could not read which key to rotate. Nothing was revoked; refresh and try again.' }
+  }
+  return parseRotateTarget(body)
+}
+
 export type RotationPick =
   | { ok: true; row: RotatableKeyRow }
   | { ok: false; code: 'NOT_FOUND' | 'AMBIGUOUS'; message: string; status: 404 | 409 }
