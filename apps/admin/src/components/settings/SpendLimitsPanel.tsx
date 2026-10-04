@@ -13,9 +13,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
-import { ErrorAlert, Input, Section } from '../ui'
+import { ErrorAlert, Input } from '../ui'
+import { IconCost } from '../icons'
 import { SettingsFormFooter } from './SettingsFormFooter'
-import { SettingsCard } from './SettingsPanelLayout'
+import { SettingsList, SettingsRow } from './SettingsRow'
 import {
   buildLimitsPatch,
   formatLimit,
@@ -78,17 +79,17 @@ export function SpendLimitsPanel() {
   if (!saved) return null
 
   return (
-    <div id="spend-limits" className="space-y-3">
-      <Section title="Spend limits" className="space-y-3">
-        <p className="text-2xs text-fg-muted">
-          Caps on what this project spends. Mushi stops when a limit is reached and says why on the report or fix.
-        </p>
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+    <div className="space-y-3">
+      <SettingsList
+        id="spend-limits"
+        title="Spend limits"
+        description="Caps on what this project spends. Mushi stops when a limit is reached and says why on the report or fix."
+      >
           {SPEND_LIMITS.map((m) => (
-            <SettingsCard key={m.field}>
+            <SettingsRow key={m.field} icon={<IconCost size={16} />} title={m.label} purpose={m.help}>
               <Input
                 id={`spend-limit-${m.field}`}
-                label={m.label}
+                label={m.unit === 'usd' ? 'Amount in US dollars' : 'Number of fixes'}
                 inputMode={m.unit === 'usd' ? 'decimal' : 'numeric'}
                 placeholder={m.placeholder}
                 value={valueOf(m.field)}
@@ -99,11 +100,9 @@ export function SpendLimitsPanel() {
                   setErrors((er) => ({ ...er, [m.field]: undefined }))
                 }}
               />
-              <p className="text-2xs text-fg-muted">{m.help}</p>
-            </SettingsCard>
+            </SettingsRow>
           ))}
-        </div>
-      </Section>
+      </SettingsList>
       <SettingsFormFooter
         dirty={dirty}
         saving={saving}

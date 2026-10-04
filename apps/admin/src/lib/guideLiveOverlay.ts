@@ -587,29 +587,3 @@ export function reportsSeverityOverlay(
   return { posture: 'clear' }
 }
 
-/** Settings tab overlay from local probe flags. */
-export function settingsTabOverlay(
-  tabId: string,
-  flags: {
-    hasByokKey?: boolean
-    slackConfigured?: boolean
-    githubConfigured?: boolean
-  },
-): WorkflowStageOverlay {
-  if (tabId === 'byok') {
-    return flags.hasByokKey
-      ? { posture: 'clear', metric: 'Key saved' }
-      : { posture: 'open', metric: 'No BYOK key' }
-  }
-  if (tabId === 'slack') {
-    return flags.slackConfigured
-      ? { posture: 'clear', metric: 'Connected' }
-      : { posture: 'info', metric: 'Optional' }
-  }
-  if (tabId === 'github') {
-    return flags.githubConfigured
-      ? { posture: 'clear', metric: 'Connected' }
-      : { posture: 'open', metric: 'Not linked' }
-  }
-  return { posture: 'clear', metric: 'Ready' }
-}

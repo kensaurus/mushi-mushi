@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { useEffect, useMemo, useState } from 'react'
 import { Card } from '../../components/ui'
 import { RevealedKeyCard } from '../RevealedKeyCard'
@@ -31,6 +32,7 @@ export function SdkInstallKeyPanel({
   keyPrefixes,
   onRotatedKeyChange,
   onError,
+  flat = false,
 }: {
   projectId: string
   projectSlug?: string | null
@@ -38,7 +40,10 @@ export function SdkInstallKeyPanel({
   keyPrefixes?: string[]
   onRotatedKeyChange: (key: string | null) => void
   onError: (message: string) => void
+  /** Inside a card already: draw rows, not nested cards. */
+  flat?: boolean
 }) {
+  const Box = flat ? FlatBox : Card
   const [fetchedKeys, setFetchedKeys] = useState<SdkHealthApiKey[]>([])
   const [rotating, setRotating] = useState(false)
   const [minting, setMinting] = useState(false)
@@ -149,7 +154,7 @@ export function SdkInstallKeyPanel({
   return (
     <>
       {!apiKey && activeKeys.length > 0 && (
-        <Card  className="px-3 py-2.5 space-y-2">
+        <Box className={flat ? 'space-y-2' : 'px-3 py-2.5 space-y-2'}>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-2xs font-medium text-fg-secondary">
               Active API key{activeKeys.length > 1 ? 's' : ''}
@@ -221,18 +226,18 @@ export function SdkInstallKeyPanel({
             Full secret shown once at mint or rotate. “Never used” keys were minted but no app has
             authenticated with them yet.
           </p>
-        </Card>
+        </Box>
       )}
 
       {!apiKey && activeKeys.length === 0 && (
-        <Card  className="px-3 py-2.5 flex flex-wrap items-center justify-between gap-2">
+        <Box className={flat ? 'flex flex-wrap items-center justify-between gap-2' : 'px-3 py-2.5 flex flex-wrap items-center justify-between gap-2'}>
           <span className="text-2xs text-fg-secondary">
             No API key yet — mint one and it drops straight into the snippet below.
           </span>
           <Btn size="sm" variant="primary" disabled={minting} onClick={() => void mintSdkKey()}>
             {minting ? 'Minting…' : 'Mint SDK key'}
           </Btn>
-        </Card>
+        </Box>
       )}
 
       {rotatedKey && (
@@ -247,4 +252,9 @@ export function SdkInstallKeyPanel({
       )}
     </>
   )
+}
+
+/** A plain block for `flat` mode, same props as Card. */
+function FlatBox({ className, children }: { className?: string; children: ReactNode }) {
+  return <div className={className}>{children}</div>
 }

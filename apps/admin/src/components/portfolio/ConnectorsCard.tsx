@@ -14,6 +14,7 @@ import { useState } from 'react'
 import { Badge, Btn, Callout, DisclosurePanel, ErrorAlert, Input, Loading, Section, SelectField, Textarea, type BadgeTone } from '../ui'
 import { usePageData } from '../../lib/usePageData'
 import { ActionsCard } from './ActionsCard'
+import { BrandIcon } from '../ui/BrandIcon'
 import { apiFetchMutate } from '../../lib/supabase'
 
 interface Instance {
@@ -26,6 +27,14 @@ interface Instance {
   enabled_capabilities: string[]
   last_probe_at: string | null
   bindings: Array<{ projectId: string; externalId: string; role: string }>
+}
+
+/** The logo to show: the provider for an AI-usage connector, else the connector kind. */
+function connectorBrand(i: Pick<Instance, 'kind' | 'display_name'>): string {
+  if (i.kind !== 'llm_usage') return i.kind
+  if (/anthropic|claude/i.test(i.display_name)) return 'anthropic'
+  if (/openai/i.test(i.display_name)) return 'openai'
+  return i.kind
 }
 
 interface Available {
@@ -128,8 +137,9 @@ export function ConnectorsCard({ orgId, projects }: { orgId: string; projects: A
                 return (
                   <li key={i.id} className="flex flex-col gap-1 py-2 sm:flex-row sm:items-center sm:justify-between">
                     <div className="min-w-0">
-                      <p className="text-sm font-medium text-fg">
-                        {i.display_name} <Badge tone={st.tone} className="ml-1">{st.label}</Badge>
+                      <p className="flex items-center gap-2 text-sm font-medium text-fg">
+                        <BrandIcon brand={connectorBrand(i)} size={16} decorative />
+                        {i.display_name} <Badge tone={st.tone}>{st.label}</Badge>
                       </p>
                       {i.status_reason && <p className="text-xs text-fg-muted">{i.status_reason}</p>}
                       {i.bindings.length > 0 && <p className="text-2xs text-fg-faint">{i.bindings.map((b) => `${nameOf(b.projectId)} → ${b.externalId}`).join(' · ')}</p>}

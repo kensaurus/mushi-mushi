@@ -21,6 +21,7 @@ import { getServiceClient } from '../../_shared/db.ts'
 import { log } from '../../_shared/logger.ts'
 import { accessibleProjectIdsInOrganization } from '../../_shared/project-access.ts'
 import {
+  cardProblems,
   groupRepeatedFindings,
   inferKind,
   integrationHoles,
@@ -557,10 +558,10 @@ export async function buildPortfolio(db: Db, deps: PortfolioRouteDeps, orgId: st
       const { response } = await deps.composeRecipe(db, deps.compose, p.id)
       const elements: Partial<Record<RecipeElementKey, ElementState>> = {}
       for (const k of RECIPE_ELEMENT_KEYS) elements[k] = response.elements[k].state
-      return { ...base, worst: response.worst, elements, error: null }
+      return { ...base, worst: response.worst, elements, error: null, needsLook: cardProblems(response.elements, RECIPE_ELEMENT_KEYS) }
     } catch (err) {
       plog.warn('portfolio card failed', { projectId: p.id, err: (err as Error)?.message ?? String(err) })
-      return { ...base, worst: 'error', elements: {}, error: 'The recipe for this project could not be composed. Open its Recipe page for detail.' }
+      return { ...base, worst: 'error', elements: {}, error: 'The recipe for this project could not be composed. Open its Recipe page for detail.', needsLook: [] }
     }
   })
 

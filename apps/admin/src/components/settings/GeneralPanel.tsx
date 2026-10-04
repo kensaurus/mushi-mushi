@@ -1,30 +1,39 @@
 /**
  * FILE: apps/admin/src/components/settings/GeneralPanel.tsx
- * PURPOSE: General project knobs — Slack notifications, Sentry forwarding,
- *          the Supabase project link, LLM pipeline model + thresholds, and
- *          dedup similarity.
- *          Loads + persists `/v1/admin/settings` with optimistic save toasts.
+ * PURPOSE: Settings → General. Lists, one card each:
+ *            Bug alerts       Slack bot channel, older Slack webhook
+ *            Error tracking   Sentry
+ *            Your database    Supabase project link (read-only)
+ *            Bug sorting      triage model, confidence, grouping, fix branches
+ *            Daily limits     crawl pages / runs, test generations
+ *            Feedback widget  "Bug reports by Mushi" line
+ *          Loads + saves `/v1/admin/settings`; secrets come back masked with
+ *          a `<column>_set` flag and are never sent back.
  */
 
 import { useMemo, useState } from 'react'
-import { Card } from '../../components/ui'
 import { apiFetch } from '../../lib/supabase'
 import { usePageData } from '../../lib/usePageData'
 import { useToast } from '../../lib/toast'
-import { Section, Input, SecretInput, SelectField, ErrorAlert, Checkbox } from '../ui'
+import { Btn, Input, SecretInput, SelectField, ErrorAlert, Checkbox, ResultChip } from '../ui'
+import { BrandIcon } from '../ui/BrandIcon'
+import { IconGit, IconGauge, IconJudge, IconCost, IconChat } from '../icons'
 import { PanelSkeleton } from '../skeletons/PanelSkeleton'
 import { ConfigHelp } from '../ConfigHelp'
 import { slackWebhookUrl, sentryDsn, supabaseProjectRef, token } from '../../lib/validators'
-import { CHIP_TONE } from '../../lib/chipTone'
+import { LINK_ACCENT } from '../../lib/chipTone'
+import { usePersistentState } from '../../lib/usePersistentState'
+import { getActiveProjectIdSnapshot } from '../../lib/activeProject'
+import { useEntitlements } from '../../lib/useEntitlements'
 import { SettingsChangeHint } from './SettingsChangeHint'
 import { StoredSecretStatus } from './StoredSecretStatus'
 import { SettingsFormFooter } from './SettingsFormFooter'
-import { SettingsPanelLayout } from './SettingsPanelLayout'
-import { SettingEffectCallout } from '../FeatureExplainPanel'
 import { changedSettings, countChangedFields, settingsFormBase } from './settingsDiff'
-import { ContainedBlock } from '../report-detail/ReportSurface'
 import { ConsoleHelpPanel } from '../ConsoleHelpPanel'
 import { LifecycleEmailsToggle } from './LifecycleEmailsToggle'
+import { useByokPool } from './ByokPoolContext'
+import { providerStatusView } from './keyStatus'
+import { SettingsList, SettingsRow, type RowStatusValue } from './SettingsRow'
 
 /** Tri-state select values for `widget_brand_footer` (null = plan default). */
 type BrandFooterChoice = 'default' | 'on' | 'off'
@@ -61,43 +70,46 @@ interface ProjectSettings {
   /** Branch name template for fix-worker PRs. Tokens: {date}, {category}, {shortId}. */
   fix_branch_template?: string
   /** "Bug reports by Mushi" mark on the feedback widget. `null`/absent =
-   *  plan default (on for Free Cloud, off for paid and self-host). The
-   *  server column ships with the GTM loop (docs/plan-gtm.md, C §5). */
+   *  plan default (on for Free Cloud, off for paid and self-host). */
   widget_brand_footer?: boolean | null
-  /** Linked Supabase project (20-char ref). The token is a BYOK key. */
+  /** Linked Supabase project (20-char ref). The token is a key under Your AI keys. */
   supabase_project_ref?: string | null
 }
 
 /** Where a scoped Supabase access token is created. */
 const SUPABASE_TOKENS_URL = 'https://supabase.com/dashboard/account/tokens'
+const DEFAULT_BRANCH_TEMPLATE = 'bugfix/MUSHI-{reportId}-{category}'
 
 export function GeneralPanel() {
   const toast = useToast()
+  const entitlements = useEntitlements()
   const { data, loading, error, reload } = usePageData<ProjectSettings>('/v1/admin/settings')
+  const pool = useByokPool(!entitlements.loading && entitlements.has('byok'))
   const [draft, setDraft] = useState<ProjectSettings | null>(null)
   const [saving, setSaving] = useState(false)
+  const [showLegacyWebhook, setShowLegacyWebhook] = usePersistentState(
+    'settings:general:slack-webhook-open',
+    false,
+    { projectId: getActiveProjectIdSnapshot(), validate: (v): v is boolean => typeof v === 'boolean' },
+  )
 
   // Masked secrets start empty in the form; their `_set` flags say whether one is stored.
   const saved: ProjectSettings = useMemo(() => settingsFormBase(data), [data])
   const settings: ProjectSettings = draft ?? saved
 
-  const update = (patch: Partial<ProjectSettings>) =>
-    setDraft({ ...settings, ...patch })
+  const update = (patch: Partial<ProjectSettings>) => setDraft({ ...settings, ...patch })
 
   const dirty = draft != null
   const [testingSlack, setTestingSlack] = useState(false)
-  const [slackTestResult, setSlackTestResult] = useState<'ok' | 'err' | null>(null)
+  const [slackTest, setSlackTest] = useState<{ ok: boolean; at: string } | null>(null)
 
   async function testSlack() {
     setTestingSlack(true)
-    setSlackTestResult(null)
     const res = await apiFetch('/v1/admin/settings/test-slack', { method: 'POST' })
     setTestingSlack(false)
-    setSlackTestResult(res.ok ? 'ok' : 'err')
-    setTimeout(() => setSlackTestResult(null), 4000)
+    setSlackTest({ ok: res.ok, at: new Date().toISOString() })
   }
 
-  const DEFAULT_BRANCH_TEMPLATE = 'bugfix/MUSHI-{reportId}-{category}'
   const changeCount = dirty
     ? countChangedFields([
         { current: settings.slack_webhook_url ?? '', saved: saved.slack_webhook_url ?? '' },
@@ -113,6 +125,7 @@ export function GeneralPanel() {
         { current: settings.tdd_max_gens_per_day ?? 20, saved: saved.tdd_max_gens_per_day ?? 20 },
         { current: settings.fix_branch_template ?? DEFAULT_BRANCH_TEMPLATE, saved: saved.fix_branch_template ?? DEFAULT_BRANCH_TEMPLATE },
         { current: settings.supabase_project_ref ?? '', saved: saved.supabase_project_ref ?? '' },
+        { current: brandFooterToChoice(settings.widget_brand_footer), saved: brandFooterToChoice(saved.widget_brand_footer) },
       ])
     : 0
 
@@ -128,91 +141,105 @@ export function GeneralPanel() {
       setDraft(null)
       reload()
     } else {
-      toast.error('Failed to save settings', res.error?.message)
+      toast.error('Your settings were not saved', res.error?.message)
     }
   }
 
   if (loading) return <PanelSkeleton rows={4} label="Loading settings" inCard={false} />
-  if (error) return <ErrorAlert message={`Failed to load settings: ${error}`} onRetry={reload} />
+  if (error) return <ErrorAlert message={`Couldn't load your settings: ${error}`} onRetry={reload} />
+
+  // ── Statuses: what is saved, and what Mushi has actually confirmed ──────────
+  const slackSaved = Boolean(saved.slack_channel_id) || saved.slack_webhook_url_set === true
+  const slackStatus: RowStatusValue = !slackSaved
+    ? { state: 'not_connected', detail: 'Add a channel ID below to get bug alerts in Slack.' }
+    : slackTest?.ok
+      ? { state: 'working', detail: 'Test message sent just now.' }
+      : slackTest
+        ? { state: 'attention', detail: "The test message didn't arrive. Check the channel ID and that the Mushi bot is in the channel." }
+        : { state: 'checking', detail: 'Saved. Send a test message to check it.' }
+
+  const sentryDsnSaved = Boolean(saved.sentry_dsn)
+  const sentryStatus: RowStatusValue = !sentryDsnSaved
+    ? { state: 'not_connected', detail: 'Add your Sentry DSN to turn production errors into reports.' }
+    : saved.sentry_webhook_secret_set !== true
+      ? { state: 'attention', detail: "Add the webhook secret below, or Mushi can't accept Sentry's deliveries." }
+      : { state: 'checking', detail: 'Saved. The Integrations page shows when Sentry sends its first error.' }
+
+  const supabaseRefSaved = Boolean(saved.supabase_project_ref)
+  const supabaseKeyView = providerStatusView('supabase', pool.data?.keys ?? [], pool.data?.legacyKeys ?? [], {
+    providerName: 'Supabase',
+    emptyDetail: 'Add a read-only token under Your AI keys → Supabase.',
+  })
+  const supabaseStatus: RowStatusValue = !supabaseRefSaved
+    ? { state: 'not_connected', detail: 'Save your project ref below, then add a read-only token under Your AI keys.' }
+    : supabaseKeyView
+
+  const branchExample = (settings.fix_branch_template ?? DEFAULT_BRANCH_TEMPLATE)
+    .replace('{date}', new Date().toISOString().slice(0, 10))
+    .replace('{category}', 'bug')
+    .replace('{shortId}', 'abc12345')
 
   return (
     <>
-    <SettingsPanelLayout
-      fullWidth={
-        <SettingEffectCallout label="Overview">
-          Controls where bug alerts go (Slack), whether Sentry errors become reports, and how the AI
-          triages and groups similar bugs. Save applies changes to this project only.
-        </SettingEffectCallout>
-      }
-      footer={
-        <SettingsFormFooter
-          dirty={dirty}
-          saving={saving}
-          changeCount={changeCount}
-          onSave={() => void save()}
-          onDiscard={() => setDraft(null)}
-        />
-      }
-    >
-      <div id="slack" className="scroll-mt-6">
-        <Section title="Bug alerts in Slack" className="space-y-4">
-          <SettingEffectCallout>
-            When someone submits a bug, Mushi can post to a Slack channel with Triage and Dispatch fix
-            buttons. Fix progress replies appear in the same thread when you use the bot (recommended).
-          </SettingEffectCallout>
-          {/* Bot channel config (preferred — supports threading) */}
-          <Card  className="p-3 space-y-3">
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <p className="text-xs font-semibold text-fg">Bot notifications</p>
-                <p className="text-2xs text-fg-muted mt-0.5">
-                  Post to a channel via the Mushi Slack bot. Reports will include <em>Triage →</em> and <em>Dispatch fix</em> buttons, and fix-dispatched status is posted as a threaded reply.
-                </p>
-              </div>
-              {(settings.slack_channel_id || settings.slack_webhook_url) && (
-                <button
-                  type="button"
-                  onClick={() => void testSlack()}
-                  disabled={testingSlack}
-                  className={`shrink-0 px-2.5 py-1 rounded-sm text-2xs font-medium border transition-opacity ${
-                    slackTestResult === 'ok'
-                      ? `border-ok ${CHIP_TONE.okSubtle}`
-                      : slackTestResult === 'err'
-                        ? `border-danger ${CHIP_TONE.dangerSubtle}`
-                        : 'border-edge-subtle text-fg-muted hover:text-fg'
-                  }`}
-                >
-                  {testingSlack ? 'Sending…' : slackTestResult === 'ok' ? '✓ Sent' : slackTestResult === 'err' ? '✗ Failed' : 'Send test'}
-                </button>
-              )}
-            </div>
-            <div>
-              <Input
-                label="Channel ID"
-                helpId="settings.general.slack_channel_id"
-                type="text"
-                value={settings.slack_channel_id ?? ''}
-                onChange={(e) => update({ slack_channel_id: e.target.value.trim() })}
-                placeholder="C0B82A322RW"
-              />
-              <p className="text-fg-faint text-3xs mt-0.5">
-                Right-click the channel in Slack → View channel details → Copy channel ID.
-                The bot token is set as a Supabase project secret (SLACK_BOT_TOKEN) — not stored here.
-              </p>
-              <SettingsChangeHint
-                current={settings.slack_channel_id ?? ''}
-                saved={saved.slack_channel_id ?? ''}
-                kind="text"
-              />
-            </div>
-          </Card>
-          {/* Legacy webhook fallback */}
-          <details className="rounded-md border border-edge-subtle">
-            <summary className="cursor-pointer select-none list-none flex items-center justify-between gap-2 px-3 py-2 text-xs text-fg-muted hover:text-fg hover:bg-surface-overlay rounded-md">
-              <span>Incoming Webhook URL <span className="text-3xs text-fg-faint ml-1">(legacy — no threading)</span></span>
-              <span aria-hidden className="text-2xs text-fg-faint">›</span>
-            </summary>
-            <div className="px-3 pb-3 pt-1">
+      <SettingsList
+        id="slack"
+        title="Bug alerts"
+        description="Where Mushi tells you about new bugs."
+      >
+        <SettingsRow
+          icon={<BrandIcon brand="slack" size={18} decorative />}
+          title="Slack channel"
+          purpose="Posts each new bug with Triage and Fix buttons. Fix progress replies in the same thread."
+          status={slackStatus}
+          action={
+            slackSaved ? (
+              <Btn size="sm" variant="ghost" loading={testingSlack} onClick={() => void testSlack()}>
+                Send test message
+              </Btn>
+            ) : null
+          }
+        >
+          <Input
+            label="Channel ID"
+            helpId="settings.general.slack_channel_id"
+            type="text"
+            value={settings.slack_channel_id ?? ''}
+            onChange={(e) => update({ slack_channel_id: e.target.value.trim() })}
+            placeholder="C0B82A322RW"
+          />
+          <p className="text-xs text-fg-muted">
+            In Slack, open the channel's details and copy the channel ID at the bottom. Then invite the Mushi bot to the channel.
+          </p>
+          <SettingsChangeHint current={settings.slack_channel_id ?? ''} saved={saved.slack_channel_id ?? ''} kind="text" />
+          {slackTest && (
+            <ResultChip tone={slackTest.ok ? 'success' : 'error'} at={slackTest.at}>
+              {slackTest.ok ? 'Test message sent' : 'Test message failed'}
+            </ResultChip>
+          )}
+        </SettingsRow>
+
+        <SettingsRow
+          icon={<IconChat size={16} />}
+          title="Older Slack webhook"
+          purpose="A simpler way to post alerts, without threads or buttons. Use the channel above if you can."
+          status={
+            saved.slack_webhook_url_set
+              ? { state: 'checking', detail: 'Saved.' }
+              : { state: 'not_connected', detail: 'Not used.' }
+          }
+          action={
+            <Btn
+              size="sm"
+              variant="ghost"
+              aria-expanded={showLegacyWebhook}
+              onClick={() => setShowLegacyWebhook(!showLegacyWebhook)}
+            >
+              {showLegacyWebhook ? 'Hide' : saved.slack_webhook_url_set ? 'Change' : 'Set up'}
+            </Btn>
+          }
+        >
+          {showLegacyWebhook ? (
+            <>
               <Input
                 label="Webhook URL"
                 helpId="settings.general.slack_webhook_url"
@@ -226,29 +253,26 @@ export function GeneralPanel() {
                 }
                 validate={slackWebhookUrl()}
               />
-              <SettingsChangeHint
-                current={settings.slack_webhook_url ?? ''}
-                saved={saved.slack_webhook_url ?? ''}
-                kind="url"
-              />
+              <SettingsChangeHint current={settings.slack_webhook_url ?? ''} saved={saved.slack_webhook_url ?? ''} kind="url" />
               <StoredSecretStatus
                 column="slack_webhook_url"
                 label="Slack webhook URL"
                 isSet={saved.slack_webhook_url_set === true}
-                consequence="Bug alerts stop posting through this webhook. The Slack bot channel above is not affected."
+                consequence="Bug alerts stop posting through this webhook. The Slack channel above is not affected."
                 onRemoved={reload}
               />
-            </div>
-          </details>
-        </Section>
-      </div>
+            </>
+          ) : null}
+        </SettingsRow>
+      </SettingsList>
 
-      <Section title="Sentry error tracking" className="space-y-3">
-        <SettingEffectCallout>
-          Connect your Sentry project so production crashes and optional user-feedback widgets become
-          Mushi reports — same bug queue as in-app bug reports.
-        </SettingEffectCallout>
-        <div>
+      <SettingsList title="Error tracking" description="Bring errors your monitoring already catches into the same bug list.">
+        <SettingsRow
+          icon={<BrandIcon brand="sentry" size={18} decorative />}
+          title="Sentry"
+          purpose="Turns production errors and Sentry user feedback into Mushi reports."
+          status={sentryStatus}
+        >
           <Input
             label="Sentry DSN"
             helpId="settings.general.sentry_dsn"
@@ -258,30 +282,20 @@ export function GeneralPanel() {
             placeholder="https://abc@o0.ingest.sentry.io/4511023875"
             validate={sentryDsn()}
           />
-          <SettingsChangeHint
-            current={settings.sentry_dsn ?? ''}
-            saved={saved.sentry_dsn ?? ''}
-            kind="url"
-          />
-        </div>
-        <div>
+          <SettingsChangeHint current={settings.sentry_dsn ?? ''} saved={saved.sentry_dsn ?? ''} kind="url" />
           <SecretInput
-            label="Webhook Secret"
+            label="Webhook secret"
             helpId="settings.general.sentry_webhook_secret"
             value={settings.sentry_webhook_secret ?? ''}
             onChange={(e) => update({ sentry_webhook_secret: e.target.value })}
             placeholder={
               saved.sentry_webhook_secret_set
-                ? 'Saved in Vault. Paste a new secret to replace it.'
-                : 'Paste from Sentry → Settings → Integrations → Webhook → Client Secret'
+                ? 'Saved. Paste a new secret to replace it.'
+                : 'From Sentry → Settings → Integrations → your integration → Client Secret'
             }
             validate={token({ minLength: 16 })}
           />
-          <SettingsChangeHint
-            current={settings.sentry_webhook_secret ?? ''}
-            saved={saved.sentry_webhook_secret ?? ''}
-            kind="secret"
-          />
+          <SettingsChangeHint current={settings.sentry_webhook_secret ?? ''} saved={saved.sentry_webhook_secret ?? ''} kind="secret" />
           <StoredSecretStatus
             column="sentry_webhook_secret"
             label="Sentry webhook secret"
@@ -289,10 +303,8 @@ export function GeneralPanel() {
             consequence="Mushi rejects Sentry deliveries until you paste a new secret."
             onRemoved={reload}
           />
-        </div>
-        <div>
           <Checkbox
-            label="Consume Sentry User Feedback as Mushi reports"
+            label="Also turn Sentry user feedback into reports"
             helpId="settings.general.sentry_consume_user_feedback"
             checked={settings.sentry_consume_user_feedback ?? true}
             onChange={(v) => update({ sentry_consume_user_feedback: v })}
@@ -302,63 +314,51 @@ export function GeneralPanel() {
             saved={saved.sentry_consume_user_feedback ?? true}
             kind="bool"
           />
-        </div>
-      </Section>
+        </SettingsRow>
+      </SettingsList>
 
-      <div id="supabase" className="scroll-mt-6">
-        <Section title="Supabase project" className="space-y-3">
-          <SettingEffectCallout>
-            Link your app&apos;s Supabase project so diagnoses can read its schema, advisors, edge
-            functions and logs. Mushi only reads, through Supabase&apos;s read-only mode.
-          </SettingEffectCallout>
-          <div>
-            <Input
-              label="Supabase project ref"
-              helpId="settings.general.supabase_project_ref"
-              type="text"
-              value={settings.supabase_project_ref ?? ''}
-              onChange={(e) => update({ supabase_project_ref: e.target.value.trim() })}
-              placeholder="abcdefghijklmnopqrst"
-              autoComplete="off"
-              spellCheck={false}
-              validate={supabaseProjectRef()}
-            />
-            <p className="text-fg-faint text-3xs mt-0.5">
-              The 20 characters in https://&lt;ref&gt;.supabase.co. Save the ref first, then add the
-              token under AI keys → Supabase.
-            </p>
-            <SettingsChangeHint
-              current={settings.supabase_project_ref ?? ''}
-              saved={saved.supabase_project_ref ?? ''}
-              kind="text"
-            />
-          </div>
-          <ContainedBlock tone="muted">
-            <p className="text-2xs leading-relaxed text-fg-muted">
-              Create a <strong className="text-fg-secondary">scoped</strong> access token at{' '}
-              <a
-                href={SUPABASE_TOKENS_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-accent hover:text-accent-hover underline-offset-2 hover:underline"
-              >
-                supabase.com/dashboard/account/tokens
-              </a>
-              : this one project only; Database, Edge Functions, Advisors and Logs set to Read and
-              nothing else; and an expiry.
-            </p>
-          </ContainedBlock>
-        </Section>
-      </div>
+      <SettingsList id="supabase" title="Your database" description="Optional. Lets diagnoses see your app's database, read-only.">
+        <SettingsRow
+          icon={<BrandIcon brand="supabase" size={18} decorative />}
+          title="Supabase project"
+          purpose="Diagnoses can read its schema, advisors, edge functions and logs. Mushi never writes to it."
+          status={supabaseStatus}
+          action={
+            <Btn size="sm" variant="ghost" to="/settings?tab=byok#key-supabase">
+              {supabaseKeyView.state === 'not_connected' ? 'Add token' : 'Manage token'}
+            </Btn>
+          }
+        >
+          <Input
+            label="Supabase project ref"
+            helpId="settings.general.supabase_project_ref"
+            type="text"
+            value={settings.supabase_project_ref ?? ''}
+            onChange={(e) => update({ supabase_project_ref: e.target.value.trim() })}
+            placeholder="abcdefghijklmnopqrst"
+            autoComplete="off"
+            spellCheck={false}
+            validate={supabaseProjectRef()}
+          />
+          <p className="text-xs text-fg-muted">
+            The 20 characters in https://&lt;ref&gt;.supabase.co. Then create a scoped token at{' '}
+            <a href={SUPABASE_TOKENS_URL} target="_blank" rel="noopener noreferrer" className={LINK_ACCENT}>
+              supabase.com/dashboard/account/tokens
+            </a>
+            : this project only, Read access to Database, Edge Functions, Advisors and Logs, and an expiry date.
+          </p>
+          <SettingsChangeHint current={settings.supabase_project_ref ?? ''} saved={saved.supabase_project_ref ?? ''} kind="text" />
+        </SettingsRow>
+      </SettingsList>
 
-      <Section title="Triage AI" className="space-y-3">
-        <SettingEffectCallout>
-          Chooses which AI model scores severity and category when a bug arrives, and how confident
-          the fast first pass must be before calling the bigger model.
-        </SettingEffectCallout>
-        <div>
+      <SettingsList title="Bug sorting" description="How the AI scores, groups and fixes incoming bugs.">
+        <SettingsRow
+          icon={<IconJudge size={16} />}
+          title="Triage model"
+          purpose="The AI model that decides each bug's severity and category."
+        >
           <SelectField
-            label="Stage 2 Model"
+            label="Model"
             helpId="settings.general.stage2_model"
             value={settings.stage2_model ?? 'claude-sonnet-5-5'}
             onChange={(e) => update({ stage2_model: e.target.value })}
@@ -382,10 +382,14 @@ export function GeneralPanel() {
             current={settings.stage2_model ?? 'claude-sonnet-5-5'}
             saved={saved.stage2_model ?? 'claude-sonnet-5-5'}
           />
-        </div>
-        <div>
+        </SettingsRow>
+        <SettingsRow
+          icon={<IconGauge size={16} />}
+          title="Quick check confidence"
+          purpose="A fast first pass sorts the easy bugs. Below this confidence, the triage model above takes a second look."
+        >
           <Slider
-            label="Stage 1 Confidence Threshold"
+            label="Confidence needed"
             helpId="settings.general.stage1_confidence_threshold"
             value={settings.stage1_confidence_threshold ?? 0.85}
             onChange={(v) => update({ stage1_confidence_threshold: v })}
@@ -395,158 +399,97 @@ export function GeneralPanel() {
             saved={saved.stage1_confidence_threshold ?? 0.85}
             kind="number"
           />
-        </div>
-      </Section>
-
-      <Section title="Grouping similar bugs" className="space-y-3">
-        <SettingEffectCallout>
-          Higher = only very similar reports merge into one cluster. Lower = more aggressive grouping
-          (fewer duplicate tickets, but unrelated bugs may lump together).
-        </SettingEffectCallout>
-        <div>
+        </SettingsRow>
+        <SettingsRow
+          icon={<IconGauge size={16} />}
+          title="Grouping similar bugs"
+          purpose="Higher: only near-identical reports merge. Lower: fewer duplicates, but unrelated bugs may end up together."
+        >
           <Slider
-            label="Similarity Threshold"
+            label="Similarity needed"
             helpId="settings.general.dedup_threshold"
             value={settings.dedup_threshold ?? 0.82}
             onChange={(v) => update({ dedup_threshold: v })}
           />
-          <SettingsChangeHint
-            current={settings.dedup_threshold ?? 0.82}
-            saved={saved.dedup_threshold ?? 0.82}
-            kind="number"
-          />
-        </div>
-      </Section>
-
-      <Section title="Auto-fix branch names" className="space-y-3">
-        <ContainedBlock tone="muted">
-          <p className="text-2xs leading-relaxed text-fg-muted">
-            Template for branches opened by the fix-worker. Available tokens:{' '}
-            <code className="font-mono text-fg-secondary">{'{'}</code>
-            <code className="font-mono text-fg-secondary">date</code>
-            <code className="font-mono text-fg-secondary">{'}'}</code>{' '}
-            (YYYY-MM-DD),{' '}
-            <code className="font-mono text-fg-secondary">{'{'}</code>
-            <code className="font-mono text-fg-secondary">category</code>
-            <code className="font-mono text-fg-secondary">{'}'}</code>{' '}
-            (bug / slow / visual / …),{' '}
-            <code className="font-mono text-fg-secondary">{'{'}</code>
-            <code className="font-mono text-fg-secondary">shortId</code>
-            <code className="font-mono text-fg-secondary">{'}'}</code>{' '}
-            (first 8 chars of report UUID).
-          </p>
-        </ContainedBlock>
-        <div>
+          <SettingsChangeHint current={settings.dedup_threshold ?? 0.82} saved={saved.dedup_threshold ?? 0.82} kind="number" />
+        </SettingsRow>
+        <SettingsRow
+          icon={<IconGit size={16} />}
+          title="Fix branch names"
+          purpose={
+            <>
+              The name of each branch Mushi opens for a fix. You can use{' '}
+              <code className="font-mono">{'{date}'}</code>, <code className="font-mono">{'{category}'}</code> and{' '}
+              <code className="font-mono">{'{shortId}'}</code>.
+            </>
+          }
+        >
           <Input
-            label="Branch template"
+            label="Branch name pattern"
             helpId="settings.general.fix_branch_template"
             type="text"
             value={settings.fix_branch_template ?? DEFAULT_BRANCH_TEMPLATE}
             onChange={(e) => update({ fix_branch_template: e.target.value })}
             placeholder={DEFAULT_BRANCH_TEMPLATE}
           />
-          <p className="text-fg-faint text-3xs mt-0.5">
-            Example result: <code className="font-mono">{
-              (settings.fix_branch_template ?? DEFAULT_BRANCH_TEMPLATE)
-                .replace('{date}', new Date().toISOString().slice(0, 10))
-                .replace('{category}', 'bug')
-                .replace('{shortId}', 'abc12345')
-            }</code>
+          <p className="text-xs text-fg-muted">
+            Example: <code className="font-mono">{branchExample}</code>
           </p>
           <SettingsChangeHint
             current={settings.fix_branch_template ?? DEFAULT_BRANCH_TEMPLATE}
             saved={saved.fix_branch_template ?? DEFAULT_BRANCH_TEMPLATE}
             kind="text"
           />
-        </div>
-      </Section>
+        </SettingsRow>
+      </SettingsList>
 
-      <Section title="Daily spend limits" className="space-y-3">
-        <SettingEffectCallout>
-          Safety caps on automated web crawls and test generation per day. When a limit is hit, new
-          runs wait until midnight UTC instead of silently running up a bill.
-        </SettingEffectCallout>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <label className="block">
-            <ContainedBlock tone="muted" className="mb-1">
-              <span className="text-2xs text-fg-muted">
-                Crawl pages / day:{' '}
-                <span className="font-mono text-fg-secondary">{settings.crawl_max_pages_per_day ?? 150}</span>
-              </span>
-            </ContainedBlock>
-            <input
-              type="range"
-              min="10"
-              max="500"
-              step="10"
-              className="w-full accent-brand"
-              value={settings.crawl_max_pages_per_day ?? 150}
-              onChange={(e) => update({ crawl_max_pages_per_day: parseInt(e.target.value, 10) })}
-            />
-            <SettingsChangeHint
-              current={settings.crawl_max_pages_per_day ?? 150}
-              saved={saved.crawl_max_pages_per_day ?? 150}
-              kind="number"
-            />
-          </label>
+      <SettingsList
+        title="Daily limits"
+        description="Caps on automatic work each day. When one is reached, new runs wait until midnight UTC instead of running up a bill."
+      >
+        <SettingsRow icon={<IconCost size={16} />} title="Web pages read per day" purpose="Pages Firecrawl may read across all crawls.">
+          <RangeField
+            label="Pages per day"
+            min={10}
+            max={500}
+            step={10}
+            value={settings.crawl_max_pages_per_day ?? 150}
+            onChange={(v) => update({ crawl_max_pages_per_day: v })}
+          />
+          <SettingsChangeHint current={settings.crawl_max_pages_per_day ?? 150} saved={saved.crawl_max_pages_per_day ?? 150} kind="number" />
+        </SettingsRow>
+        <SettingsRow icon={<IconCost size={16} />} title="Crawls per day" purpose="How many separate crawls of your app may start.">
+          <RangeField
+            label="Crawls per day"
+            min={1}
+            max={50}
+            step={1}
+            value={settings.crawl_max_runs_per_day ?? 8}
+            onChange={(v) => update({ crawl_max_runs_per_day: v })}
+          />
+          <SettingsChangeHint current={settings.crawl_max_runs_per_day ?? 8} saved={saved.crawl_max_runs_per_day ?? 8} kind="number" />
+        </SettingsRow>
+        <SettingsRow icon={<IconCost size={16} />} title="Tests written per day" purpose="How many browser tests Mushi may write from your user stories.">
+          <RangeField
+            label="Tests per day"
+            min={1}
+            max={100}
+            step={1}
+            value={settings.tdd_max_gens_per_day ?? 20}
+            onChange={(v) => update({ tdd_max_gens_per_day: v })}
+          />
+          <SettingsChangeHint current={settings.tdd_max_gens_per_day ?? 20} saved={saved.tdd_max_gens_per_day ?? 20} kind="number" />
+        </SettingsRow>
+      </SettingsList>
 
-          <label className="block">
-            <ContainedBlock tone="muted" className="mb-1">
-              <span className="text-2xs text-fg-muted">
-                Crawl runs / day:{' '}
-                <span className="font-mono text-fg-secondary">{settings.crawl_max_runs_per_day ?? 8}</span>
-              </span>
-            </ContainedBlock>
-            <input
-              type="range"
-              min="1"
-              max="50"
-              step="1"
-              className="w-full accent-brand"
-              value={settings.crawl_max_runs_per_day ?? 8}
-              onChange={(e) => update({ crawl_max_runs_per_day: parseInt(e.target.value, 10) })}
-            />
-            <SettingsChangeHint
-              current={settings.crawl_max_runs_per_day ?? 8}
-              saved={saved.crawl_max_runs_per_day ?? 8}
-              kind="number"
-            />
-          </label>
-
-          <label className="block">
-            <ContainedBlock tone="muted" className="mb-1">
-              <span className="text-2xs text-fg-muted">
-                TDD generations / day:{' '}
-                <span className="font-mono text-fg-secondary">{settings.tdd_max_gens_per_day ?? 20}</span>
-              </span>
-            </ContainedBlock>
-            <input
-              type="range"
-              min="1"
-              max="100"
-              step="1"
-              className="w-full accent-brand"
-              value={settings.tdd_max_gens_per_day ?? 20}
-              onChange={(e) => update({ tdd_max_gens_per_day: parseInt(e.target.value, 10) })}
-            />
-            <SettingsChangeHint
-              current={settings.tdd_max_gens_per_day ?? 20}
-              saved={saved.tdd_max_gens_per_day ?? 20}
-              kind="number"
-            />
-          </label>
-        </div>
-      </Section>
-
-      <div id="widget" className="scroll-mt-6">
-        <Section title="Feedback widget" className="space-y-3">
-          <SettingEffectCallout>
-            A small "Bug reports by Mushi" line at the foot of the in-app feedback widget. It links to
-            Mushi and is how other builders find us. Default is on for Free Cloud projects and off for
-            paid and self-hosted projects; override it here either way.
-          </SettingEffectCallout>
+      <SettingsList id="widget" title="Feedback widget" description="The bug-report button inside your app.">
+        <SettingsRow
+          icon={<IconChat size={16} />}
+          title="“Bug reports by Mushi” line"
+          purpose="A small line at the foot of the widget that links to Mushi. On by default for Free Cloud, off for paid and self-hosted."
+        >
           <SelectField
-            label="Show “Bug reports by Mushi” on the feedback widget"
+            label="Show the line"
             id="widget-brand-footer"
             value={brandFooterToChoice(settings.widget_brand_footer)}
             onChange={(e) => update({ widget_brand_footer: choiceToBrandFooter(e.target.value as BrandFooterChoice) })}
@@ -560,13 +503,20 @@ export function GeneralPanel() {
             saved={brandFooterToChoice(saved.widget_brand_footer)}
             kind="text"
           />
-        </Section>
-      </div>
-    </SettingsPanelLayout>
+        </SettingsRow>
+      </SettingsList>
 
-    {/* Account-scoped; saves on toggle, independent of the project form above. */}
-    <LifecycleEmailsToggle />
-    <ConsoleHelpPanel />
+      <SettingsFormFooter
+        dirty={dirty}
+        saving={saving}
+        changeCount={changeCount}
+        onSave={() => void save()}
+        onDiscard={() => setDraft(null)}
+      />
+
+      {/* Account-scoped; saves on toggle, independent of the project form above. */}
+      <LifecycleEmailsToggle />
+      <ConsoleHelpPanel />
     </>
   )
 }
@@ -579,17 +529,14 @@ interface SliderProps {
   helpId?: string
 }
 
+/** 0.50–0.99 threshold slider, shown as a percentage. */
 function Slider({ label, value, onChange, helpId }: SliderProps) {
   return (
-    <label className="block">
-      <ContainedBlock tone="muted" className="mb-1">
-        <span className="text-xs text-fg-muted flex items-center gap-1">
-          <span>
-            {label}: <span className="font-mono text-fg-secondary">{value.toFixed(2)}</span>
-          </span>
-          {helpId && <ConfigHelp helpId={helpId} />}
-        </span>
-      </ContainedBlock>
+    <label className="block space-y-1">
+      <span className="flex items-center gap-1 text-sm text-fg-secondary">
+        {label}: <span className="font-mono text-fg">{Math.round(value * 100)}%</span>
+        {helpId && <ConfigHelp helpId={helpId} />}
+      </span>
       <input
         type="range"
         min="0.5"
@@ -598,6 +545,39 @@ function Slider({ label, value, onChange, helpId }: SliderProps) {
         className="w-full accent-brand"
         value={value}
         onChange={(e) => onChange(parseFloat(e.target.value))}
+      />
+    </label>
+  )
+}
+
+function RangeField({
+  label,
+  value,
+  min,
+  max,
+  step,
+  onChange,
+}: {
+  label: string
+  value: number
+  min: number
+  max: number
+  step: number
+  onChange: (v: number) => void
+}) {
+  return (
+    <label className="block space-y-1">
+      <span className="text-sm text-fg-secondary">
+        {label}: <span className="font-mono text-fg">{value}</span>
+      </span>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        className="w-full accent-brand"
+        value={value}
+        onChange={(e) => onChange(parseInt(e.target.value, 10))}
       />
     </label>
   )

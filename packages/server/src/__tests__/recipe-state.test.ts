@@ -7,6 +7,8 @@ import { describe, expect, it } from 'vitest'
 import {
   cadenceDays,
   deriveElementState,
+  gateLabel,
+  guardNeverChecked,
   isStale,
   worstState,
   type ElementInput,
@@ -67,6 +69,12 @@ describe('design', () => {
     openFindings: 0,
     score: 4,
   }
+  it('tokens read but no design check yet never starts "Not checked yet" (the card has a check time: the token read)', () => {
+    const r = deriveElementState({ ...base, runAt: null, runStatus: null }, NOW)
+    expect(r.state).toBe('unknown')
+    expect(r.reason).not.toMatch(/^Not checked/)
+    expect(r.reason).toMatch(/design check has not run yet/)
+  })
   it('no repo / no token is not_connected', () => {
     expect(state({ ...base, repoConnected: false })).toBe('not_connected')
     expect(state({ ...base, tokenAvailable: false })).toBe('not_connected')
@@ -125,6 +133,18 @@ describe('gates', () => {
     expect(state({ key: 'gates', runs: [run({ completedAt: null })], cadenceDays: 7 })).toBe('unknown')
   })
   it('fresh and clean is ok', () => expect(state({ key: 'gates', runs: [run()], cadenceDays: 7 })).toBe('ok'))
+  it('drift names each check with open problems in plain words, never a raw gate id', () => {
+    const r = deriveElementState({ key: 'gates', runs: [run({ gate: 'radar', openFindings: 1 }), run({ gate: 'code_health', openFindings: 9 }), run({ gate: 'crawl' })], cadenceDays: 7 }, NOW)
+    expect(r.state).toBe('drift')
+    expect(r.reason).toBe('10 problems to fix: Mushi setup check (1), Code health (9). Mushi setup checks and their fixes are under Risk checks on the Recipe page; the rest are in Full-stack audit.')
+    // Only Mushi's setup check open (every live app on 2026-10-04): point at where its one-click fix is.
+    const setupOnly = deriveElementState({ key: 'gates', runs: [run({ gate: 'radar', openFindings: 1 })], cadenceDays: 7 }, NOW)
+    expect(setupOnly.reason).toBe('1 problem to fix: Mushi setup check (1). They and their fixes are under Risk checks on the Recipe page.')
+  })
+  it('gateLabel reads the gate catalog and falls back to the id', () => {
+    expect(gateLabel('radar')).toBe('Mushi setup check')
+    expect(gateLabel('constructor')).toBe('constructor')
+  })
 })
 
 describe('ci', () => {
@@ -150,7 +170,7 @@ describe('deploy', () => {
   it('no releases and no versions is not_connected', () => expect(state({ key: 'deploy', releaseCount: 0, appVersions: [] })).toBe('not_connected'))
   it('without a deploy probe it is always unknown, even with releases (all 50 deploy_status rows are unknown today)', () => {
     expect(state({ key: 'deploy', releaseCount: 3, appVersions: ['web 1.42'] })).toBe('unknown')
-    expect(deriveElementState({ key: 'deploy', releaseCount: 3, appVersions: [] }, NOW).reason).toMatch(/No deploy signal/)
+    expect(deriveElementState({ key: 'deploy', releaseCount: 3, appVersions: [] }, NOW).reason).toMatch(/No deploy target is declared/)
   })
 })
 
@@ -174,11 +194,29 @@ describe('integrations', () => {
     expect(state({ key: 'integrations', configured: [{ kind: 'sentry', health: null, checkedAt: null }] })).toBe('unknown')
     expect(state({ key: 'integrations', configured: [{ kind: 'sentry', health: 'unknown', checkedAt: HOUR_AGO }] })).toBe('unknown')
   })
+  it('"never checked" names only what has no check; a checked-but-inconclusive one says so instead', () => {
+    const never = deriveElementState({ key: 'integrations', configured: [{ kind: 'sentry', health: 'ok', checkedAt: HOUR_AGO }, { kind: 'slack', health: null, checkedAt: null }] }, NOW)
+    expect(never).toEqual({ state: 'unknown', reason: 'Not checked yet: slack. Run a check from Integrations.' })
+    const unclear = deriveElementState({ key: 'integrations', configured: [{ kind: 'sentry', health: 'unknown', checkedAt: HOUR_AGO }] }, NOW)
+    expect(unclear.reason).toMatch(/^The last check of sentry could not tell/)
+    expect(unclear.reason).not.toMatch(/never/i)
+  })
   it('down or degraded is drift', () => {
     expect(state({ key: 'integrations', configured: [{ kind: 'slack', health: 'down', checkedAt: HOUR_AGO }] })).toBe('drift')
     expect(state({ key: 'integrations', configured: [{ kind: 'slack', health: 'degraded', checkedAt: HOUR_AGO }] })).toBe('drift')
   })
   it('healthy is ok', () => expect(state({ key: 'integrations', configured: [{ kind: 'slack', health: 'ok', checkedAt: HOUR_AGO }] })).toBe('ok'))
+})
+
+describe('guardNeverChecked', () => {
+  it('an ok with no check time is "Not checked yet", never a pass', () => {
+    expect(guardNeverChecked({ state: 'ok', reason: 'fine' }, null)).toEqual({ state: 'unknown', reason: 'Not checked yet, so this is not a pass.' })
+  })
+  it('leaves a checked ok and every other state alone', () => {
+    expect(guardNeverChecked({ state: 'ok', reason: 'fine' }, HOUR_AGO)).toEqual({ state: 'ok', reason: 'fine' })
+    expect(guardNeverChecked({ state: 'drift', reason: 'x' }, null)).toEqual({ state: 'drift', reason: 'x' })
+    expect(guardNeverChecked({ state: 'not_connected', reason: 'x' }, null)).toEqual({ state: 'not_connected', reason: 'x' })
+  })
 })
 
 describe('Phase 2 inputs (deploy probes, ci_drift, env_drift)', () => {

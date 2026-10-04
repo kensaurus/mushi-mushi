@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-10-04T01:25:03.271Z",
+  "generatedAt": "2026-10-04T02:20:16.186Z",
   "docs": [
     {
       "doc_path": "recipes/connect-github-and-sdk.md",
@@ -456,10 +456,10 @@
       "doc_path": "pages/settings.md",
       "section": "main",
       "title": "Settings",
-      "body": "# Settings\n\nApp settings, AI keys (Anthropic, OpenAI), Firecrawl, GitHub and appearance.\n\nRoute: /settings\nSection: Workspace\n\nKeywords: settings, config, api key, api keys, ai keys, byok, anthropic, openai, keys, preferences, firecrawl, theme, branding\n\nUse this page when the user asks about: settings, config, api key, api keys, ai keys, byok",
+      "body": "# Settings\n\nProject settings: your AI keys, alerts, web research, voice and health check.\n\nRoute: /settings\nSection: Workspace\n\nKeywords: settings, config, api key, api keys, ai keys, your ai keys, byok, bring your own key, anthropic, openai, keys, preferences, firecrawl, web research, browserbase, cloud browser, voice, health check, theme, branding\n\nUse this page when the user asks about: settings, config, api key, api keys, ai keys, your ai keys",
       "route_path": "/settings",
       "kind": "page",
-      "content_hash": "04e4686fd33bdd3c5c815134391ee09689c17d76a3bc75b2d653cce06f34d19f"
+      "content_hash": "b16e65439766ff1294177c3f428e6ada972d3c7aeef20a4eea699ccdccc074e5"
     },
     {
       "doc_path": "pages/billing.md",

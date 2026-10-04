@@ -6,7 +6,7 @@
  * FILE: apps/admin/src/components/recipe/RecipeElementList.test.tsx
  * PURPOSE: The list fallback (narrow screens, reduced motion, screen readers)
  *          shows all 8 recipe cards in lane order, and a state value the
- *          console does not know renders as Unknown — never OK.
+ *          console does not know renders as "Not checked yet" — never OK.
  */
 
 import { act, createElement } from 'react'
@@ -75,7 +75,7 @@ describe('RecipeElementList', () => {
     }
   })
 
-  it('shows an unrecognised state as Unknown, never OK', () => {
+  it('shows an unrecognised state as "Not checked yet", never OK', () => {
     render(
       orderedRecipeElements({
         schema: summary('schema', 'totally_fine'),
@@ -83,14 +83,54 @@ describe('RecipeElementList', () => {
     )
     const schema = container.querySelector<HTMLButtonElement>('button[data-element="schema"]')
     expect(schema?.dataset.state).toBe('unknown')
-    expect(schema?.textContent).toContain('Unknown')
+    expect(schema?.textContent).toContain('Not checked yet')
     expect(schema?.textContent).not.toContain('OK')
   })
 
-  it('says "Never checked" when lastCheckedAt is null', () => {
+  it('says "Not checked yet" when lastCheckedAt is null', () => {
     render(orderedRecipeElements({ ci: summary('ci', 'unknown') }))
     const ci = container.querySelector('button[data-element="ci"]')
-    expect(ci?.textContent).toContain('Never checked')
+    expect(ci?.textContent).toContain('Not checked yet')
+  })
+
+  it('a card never shows OK next to "Not checked yet": an unchecked OK renders as not checked', () => {
+    render(orderedRecipeElements({ env: summary('env', 'ok') }))
+    const env = container.querySelector<HTMLButtonElement>('button[data-element="env"]')
+    expect(env?.dataset.state).toBe('unknown')
+    expect(env?.textContent).not.toContain('OK')
+    expect(env?.textContent).toContain('Not checked yet')
+  })
+
+  it('a failed or problem card with no check time never says "Not checked yet" next to its chip', () => {
+    render(orderedRecipeElements({ env: summary('env', 'error'), routes: summary('routes', 'drift') }))
+    const env = container.querySelector<HTMLButtonElement>('button[data-element="env"]')
+    expect(env?.textContent).toContain('Check failed')
+    expect(env?.textContent).toContain('Last check did not finish')
+    expect(env?.textContent).not.toContain('Not checked yet')
+    const routes = container.querySelector<HTMLButtonElement>('button[data-element="routes"]')
+    expect(routes?.textContent).toContain('Needs attention')
+    expect(routes?.textContent).not.toContain('Not checked yet')
+  })
+
+  it('no rendered card ever pairs "Not checked yet" with a "Checked ..." time', () => {
+    const at = new Date(Date.now() - 60_000).toISOString()
+    const states = ['ok', 'drift', 'unknown', 'not_connected', 'error']
+    render(orderedRecipeElements(Object.fromEntries(
+      RECIPE_ELEMENT_KEYS.map((k, i) => [k, summary(k, states[i % 5], { lastCheckedAt: i % 2 ? at : null })]),
+    )))
+    for (const card of container.querySelectorAll<HTMLButtonElement>('button[data-element]')) {
+      const t = card.textContent ?? ''
+      expect(t.includes('Not checked yet') && /Checked \S/.test(t)).toBe(false)
+      expect(t.includes('Check failed') && t.includes('Not checked yet')).toBe(false)
+    }
+  })
+
+  it('a checked-but-unconfirmed card says "Not confirmed" beside its check time, never "Not checked yet"', () => {
+    render(orderedRecipeElements({ integrations: summary('integrations', 'unknown', { lastCheckedAt: new Date(Date.now() - 13 * 60_000).toISOString() }) }))
+    const card = container.querySelector<HTMLButtonElement>('button[data-element="integrations"]')
+    expect(card?.textContent).toContain('Not confirmed')
+    expect(card?.textContent).toContain('Checked')
+    expect(card?.textContent).not.toContain('Not checked yet')
   })
 
   it('selects a card on click', () => {

@@ -6,7 +6,7 @@
  */
 
 import { useState, useCallback } from 'react'
-import { Btn, Card } from './ui'
+import { Btn } from './ui'
 import {
   isCloudMode,
   RESOLVED_SUPABASE_URL as SUPABASE_URL,
@@ -121,14 +121,14 @@ export function ConnectionStatus({ compact, className = '' }: ConnectionStatusPr
     return (
       <div className={`flex items-center gap-2 ${className}`}>
         <span className={`inline-block w-2 h-2 rounded-full ${allPassed ? 'bg-ok' : anyFailed ? 'bg-danger' : anyPending ? 'bg-fg-faint' : 'bg-warn'}`} />
-        <span className="text-2xs text-fg-muted">
-          {anyPending ? 'Not checked' : allPassed ? 'All systems healthy' : 'Issues detected'}
+        <span className="text-sm text-fg-secondary">
+          {anyPending ? 'Not checked yet' : allPassed ? 'Working: every service answered' : 'Needs attention: a service did not answer'}
         </span>
         <button
           type="button"
           onClick={runChecks}
           disabled={running}
-          className="text-2xs text-accent-foreground hover:text-accent disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-1 focus-visible:ring-offset-surface rounded-sm motion-safe:transition-opacity motion-safe:active:scale-[0.97]"
+          className="text-sm text-accent-foreground hover:text-accent disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-1 focus-visible:ring-offset-surface rounded-sm motion-safe:transition-opacity motion-safe:active:scale-[0.97]"
         >
           {running ? 'Checking…' : anyPending ? 'Run check' : 'Re-check'}
         </button>
@@ -143,27 +143,27 @@ export function ConnectionStatus({ compact, className = '' }: ConnectionStatusPr
           {cloud ? 'Mushi Mushi Cloud' : 'Connection Health'}
         </h3>
         <Btn variant="ghost" size="sm" onClick={runChecks} disabled={running} loading={running}>
-          {anyPending ? 'Run diagnostics' : 'Re-check'}
+          {anyPending ? 'Run the checks' : 'Check again'}
         </Btn>
       </div>
 
-      <div className="space-y-2">
+      <div className="divide-y divide-edge-subtle">
         {checks.map((check) => (
-          <Card key={check.id}  className="flex items-start gap-2.5 px-3 py-2">
+          <div key={check.id} className="flex items-start gap-2.5 py-2">
             <span className="mt-0.5 text-sm leading-none">{statusIcon(check.status)}</span>
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-fg">{check.label}</span>
+                <span className="text-sm font-medium text-fg">{check.label}</span>
                 {check.latencyMs !== undefined && check.status === 'pass' && (
                   <span className="text-2xs font-mono text-fg-faint">{check.latencyMs}ms</span>
                 )}
               </div>
-              <p className="text-2xs text-fg-faint">{check.description}</p>
+              <p className="text-xs text-fg-muted">{check.description}</p>
               {check.detail && check.status === 'fail' && (
-                <p className="text-2xs text-danger mt-1 wrap-break-word">{check.detail}</p>
+                <p className="text-xs text-danger mt-1 wrap-break-word">{check.detail}</p>
               )}
             </div>
-          </Card>
+          </div>
         ))}
       </div>
 

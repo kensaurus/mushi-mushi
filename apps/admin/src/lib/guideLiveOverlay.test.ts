@@ -16,7 +16,6 @@ import {
   promptLabStageOverlay,
   qaProviderOverlay,
   reportsSeverityOverlay,
-  settingsTabOverlay,
   skillsModeOverlay,
 } from './guideLiveOverlay'
 
@@ -247,11 +246,5 @@ describe('guideLiveOverlay', () => {
     })
     expect(overlay.posture).toBe('danger')
     expect(overlay.metric).toBe('3 (14d)')
-  })
-
-  it('settingsTabOverlay shows missing BYOK key', () => {
-    const overlay = settingsTabOverlay('byok', { hasByokKey: false })
-    expect(overlay.posture).toBe('open')
-    expect(overlay.metric).toBe('No BYOK key')
   })
 })

@@ -65,14 +65,14 @@ function TableShell({ children, label }: { children: ReactNode; label: string })
 
 function SchemaPanel({ view }: { view: SchemaView }) {
   if (!view.source) {
-    return <p className="text-xs text-fg-secondary">No schema snapshot yet. Link the Supabase project; the daily drift scan reads the table list.</p>
+    return <p className="text-xs text-fg-secondary">Not checked yet. Link your Supabase project in Settings; the daily schema scan then reads your tables.</p>
   }
   const { diff } = view
   return (
     <div className="space-y-3">
       <p className="text-xs text-fg-secondary">
         <span className="font-medium text-fg tabular-nums">{view.totalTables.toLocaleString()}</span> table{view.totalTables === 1 ? '' : 's'}, read{' '}
-        {when(view.capturedAt)} by the {view.source === 'drift_scanner' ? 'schema drift scan' : 'Supabase connection'}.
+        {when(view.capturedAt)} by the {view.source === 'drift_scanner' ? 'daily schema scan' : 'Supabase connection'}.
       </p>
       {diff ? (
         <div className="space-y-1">
@@ -110,7 +110,7 @@ function SchemaPanel({ view }: { view: SchemaView }) {
           )}
         </div>
       ) : (
-        <p className="text-2xs text-fg-muted">Only one snapshot so far, so there is nothing to compare yet.</p>
+        <p className="text-xs text-fg-muted">Only one scan so far, so there is nothing to compare yet.</p>
       )}
       <TableShell label="Tables">
         <thead>
@@ -154,7 +154,7 @@ function conclusionTone(c: string | null, status: string | null): BadgeTone {
 
 function CiPanel({ view }: { view: CiView }) {
   if (view.runs.length === 0) {
-    return <p className="text-xs text-fg-secondary">No workflow runs recorded yet. They appear after the GitHub connection's first daily read.</p>
+    return <p className="text-xs text-fg-secondary">Not checked yet. CI builds appear after Mushi's first daily read of your GitHub repo.</p>
   }
   return (
     <div className="space-y-2">
@@ -224,8 +224,8 @@ function DeployPanel({ view }: { view: DeployView }) {
   if (view.targets.length === 0) {
     return (
       <p className="text-xs text-fg-secondary">
-        No deploy targets are declared. Add <span className="font-mono">deploy.targets</span> to mushi.recipe.json with a version probe to see what each
-        target runs.
+        Not set up. To see what each place runs, add <span className="font-mono">deploy.targets</span> (with a version URL) to the{' '}
+        <span className="font-mono">mushi.recipe.json</span> file at your repo root.
       </p>
     )
   }
@@ -249,7 +249,7 @@ function DeployPanel({ view }: { view: DeployView }) {
                 <span className="font-mono text-xs text-fg wrap-break-word">{t.id}</span>
                 <Badge tone={meta.tone}>{meta.label}</Badge>
                 {(t.kind || t.environment) && (
-                  <span className="text-2xs text-fg-muted">{[t.kind, t.environment].filter(Boolean).join(' · ')}</span>
+                  <span className="text-xs text-fg-muted">{[t.kind, t.environment].filter(Boolean).join(' · ')}</span>
                 )}
               </div>
               <dl className="grid grid-cols-2 gap-x-2 text-2xs">
@@ -260,7 +260,7 @@ function DeployPanel({ view }: { view: DeployView }) {
                   {t.observed ? `${short(t.observed.commit)}${t.observed.version ? ` · ${t.observed.version}` : ''}` : '—'}
                 </dd>
               </dl>
-              <p className="text-2xs text-fg-muted wrap-break-word">
+              <p className="text-xs text-fg-muted wrap-break-word">
                 {t.reason}
                 {t.observed ? ` Checked ${when(t.observed.at)}.` : ''}
               </p>
@@ -289,7 +289,7 @@ const ENV_CELL: Record<EnvCell, { label: string; tone: BadgeTone | null }> = {
 
 function EnvPanel({ view }: { view: EnvView }) {
   if (view.rows.length === 0) {
-    return <p className="text-xs text-fg-secondary">No env names are declared or found. Declare them in the Change tab.</p>
+    return <p className="text-xs text-fg-secondary">Not set up. No environment variables are declared or found yet. Add them in the Change tab.</p>
   }
   const unchecked = view.columns.filter((c) => !c.checked && c.key !== 'runtime')
   return (
@@ -324,8 +324,8 @@ function EnvPanel({ view }: { view: EnvView }) {
         </tbody>
       </TableShell>
       {unchecked.length > 0 && (
-        <p className="text-2xs text-fg-muted">
-          {unchecked.map((c) => c.label).join(', ')}: GitHub did not list these names (the token may lack the secrets permission), so they are not checked.
+        <p className="text-xs text-fg-muted">
+          {unchecked.map((c) => c.label).join(', ')}: not checked. GitHub did not list these names, so Mushi probably lacks the secrets permission. Reconnect GitHub with secrets read access in Settings.
         </p>
       )}
       {view.truncated && <p className="text-2xs text-fg-muted">More undeclared names exist than are shown.</p>}
