@@ -1380,7 +1380,7 @@ export const COPY: CopyRegistry = {
         calls: 'AI calls',
         errors: 'Error rate',
         fallbacks: 'Fallback rate',
-        latency: 'Speed p50 / p95',
+        latency: 'Speed avg / p95',
         cron: 'Jobs OK',
         lastCall: 'Last call',
       },
@@ -1403,7 +1403,7 @@ export const COPY: CopyRegistry = {
         whatIsIt:
           'Real-time vitals for every LLM call Mushi makes — how fast it responds, how often it fails, and how much each call costs you.',
         useCases: [
-          'Catch a slow-down before users notice (p50 / p95 latency trend)',
+          'Catch a slow-down before users notice (average / p95 latency trend)',
           'Spot a model outage early (error rate spike)',
           'Watch your daily LLM spend so you don\u2019t blow your budget',
         ],

@@ -18,6 +18,7 @@ interface Props {
   onEditUrl: InstalledPluginRowProps['onEditUrl']
   onRotateSecret: InstalledPluginRowProps['onRotateSecret']
   onUninstall: InstalledPluginRowProps['onUninstall']
+  canManage?: boolean
 }
 
 export function InstalledList({
@@ -29,6 +30,7 @@ export function InstalledList({
   onEditUrl,
   onRotateSecret,
   onUninstall,
+  canManage = true,
 }: Props) {
   if (installed.length === 0) {
     return (
@@ -54,6 +56,7 @@ export function InstalledList({
           onEditUrl={onEditUrl}
           onRotateSecret={onRotateSecret}
           onUninstall={onUninstall}
+          canManage={canManage}
         />
       ))}
     </div>

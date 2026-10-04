@@ -16,7 +16,9 @@ import {
   IconCheck,
   IconClose,
 } from '../icons'
-import { STATUS_CHIP, type InstalledPlugin } from './types'
+import { STATUS_CHIP, pluginWebhookUrlError, type InstalledPlugin } from './types'
+import { ConfirmDialog } from '../ConfirmDialog'
+import { ADMIN_ONLY_HINT } from '../../lib/orgPermissions'
 
 export interface InstalledPluginRowProps {
   plugin: InstalledPlugin
@@ -26,6 +28,8 @@ export interface InstalledPluginRowProps {
   onEditUrl: (slug: string, newUrl: string) => Promise<void>
   onRotateSecret: (slug: string) => Promise<string>
   onUninstall: (slug: string, name: string) => void
+  /** False for members and viewers: every write here is owner/admin only. */
+  canManage?: boolean
 }
 
 type ViewState = 'idle' | 'editing-url' | 'rotated'
@@ -38,6 +42,7 @@ export function InstalledPluginRow({
   onEditUrl,
   onRotateSecret,
   onUninstall,
+  canManage = true,
 }: InstalledPluginRowProps) {
   const slug = plugin.plugin_slug ?? plugin.plugin_name
   const [view, setView] = useState<ViewState>('idle')
@@ -47,12 +52,23 @@ export function InstalledPluginRow({
   const [newSecret, setNewSecret] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
 
+  const [urlError, setUrlError] = useState<string | null>(null)
+  const [confirmRotate, setConfirmRotate] = useState(false)
+
+  // A non-https URL used to make Save do nothing at all. Say why instead.
   const handleSaveUrl = async () => {
-    if (!editUrl.startsWith('https://')) return
+    const problem = pluginWebhookUrlError(editUrl)
+    if (problem) {
+      setUrlError(problem)
+      return
+    }
+    setUrlError(null)
     setSavingUrl(true)
     try {
-      await onEditUrl(slug, editUrl)
+      await onEditUrl(slug, editUrl.trim())
       setView('idle')
+    } catch {
+      // The page already toasted why; keep the editor open to fix it.
     } finally {
       setSavingUrl(false)
     }
@@ -64,8 +80,11 @@ export function InstalledPluginRow({
       const secret = await onRotateSecret(slug)
       setNewSecret(secret)
       setView('rotated')
+    } catch {
+      // The page already toasted why; the old secret is still in place.
     } finally {
       setRotatingSecret(false)
+      setConfirmRotate(false)
     }
   }
 
@@ -123,12 +142,19 @@ export function InstalledPluginRow({
       {/* Edit URL panel */}
       {view === 'editing-url' && (
         <div className="flex items-center gap-2">
-          <Input
-            placeholder="https://…"
-            value={editUrl}
-            onChange={(e) => setEditUrl(e.target.value)}
-            className="flex-1 text-xs"
-          />
+          <div className="flex-1 min-w-0">
+            <Input
+              placeholder="https://…"
+              value={editUrl}
+              onChange={(e) => {
+                setEditUrl(e.target.value)
+                if (urlError) setUrlError(null)
+              }}
+              error={urlError ?? undefined}
+              className="text-xs"
+              aria-label="Webhook URL"
+            />
+          </div>
           <Btn size="sm" variant="ghost" disabled={savingUrl} onClick={handleSaveUrl}>
             {savingUrl ? 'Saving…' : 'Save'}
           </Btn>
@@ -167,8 +193,8 @@ export function InstalledPluginRow({
           <Btn
             size="sm"
             variant="ghost"
-            title="Send test event"
-            disabled={busy || !plugin.webhook_url}
+            title={canManage ? 'Send test event' : ADMIN_ONLY_HINT}
+            disabled={busy || !plugin.webhook_url || !canManage}
             leadingIcon={<IconPlay size={12} />}
             onClick={() => void onTest(slug)}
           >
@@ -178,8 +204,8 @@ export function InstalledPluginRow({
           <Btn
             size="sm"
             variant="ghost"
-            title={plugin.is_active ? 'Pause deliveries' : 'Resume deliveries'}
-            disabled={busy}
+            title={!canManage ? ADMIN_ONLY_HINT : plugin.is_active ? 'Pause deliveries' : 'Resume deliveries'}
+            disabled={busy || !canManage}
             leadingIcon={
               plugin.is_active ? <IconPause size={12} /> : <IconPlay size={12} />
             }
@@ -191,8 +217,8 @@ export function InstalledPluginRow({
           <Btn
             size="sm"
             variant="ghost"
-            title="Edit webhook URL"
-            disabled={busy}
+            title={canManage ? 'Edit webhook URL' : ADMIN_ONLY_HINT}
+            disabled={busy || !canManage}
             leadingIcon={<IconPencil size={12} />}
             onClick={() => {
               setEditUrl(plugin.webhook_url ?? '')
@@ -205,10 +231,10 @@ export function InstalledPluginRow({
           <Btn
             size="sm"
             variant="ghost"
-            title="Rotate signing secret"
-            disabled={busy || rotatingSecret}
+            title={canManage ? 'Rotate signing secret' : ADMIN_ONLY_HINT}
+            disabled={busy || rotatingSecret || !canManage}
             leadingIcon={<IconKey size={12} />}
-            onClick={handleRotate}
+            onClick={() => setConfirmRotate(true)}
           >
             {rotatingSecret ? 'Rotating…' : 'Rotate secret'}
           </Btn>
@@ -216,14 +242,29 @@ export function InstalledPluginRow({
           <Btn
             size="sm"
             variant="danger"
-            title="Uninstall plugin"
-            disabled={busy}
+            title={canManage ? 'Uninstall plugin' : ADMIN_ONLY_HINT}
+            disabled={busy || !canManage}
             leadingIcon={<IconTrash size={12} />}
             onClick={() => onUninstall(slug, plugin.plugin_name)}
           >
             Uninstall
           </Btn>
         </div>
+      )}
+
+      {confirmRotate && (
+        <ConfirmDialog
+          title={`Rotate the signing secret for ${plugin.plugin_name}?`}
+          body="Your receiver rejects deliveries signed with the new secret until you update it there. The new secret is shown only once."
+          confirmLabel="Rotate secret"
+          cancelLabel="Keep current secret"
+          tone="danger"
+          loading={rotatingSecret}
+          onConfirm={() => void handleRotate()}
+          onCancel={() => {
+            if (!rotatingSecret) setConfirmRotate(false)
+          }}
+        />
       )}
     </Card>
   )
