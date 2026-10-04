@@ -413,6 +413,7 @@ export function DashboardPage() {
             reportsByDay={reportsByDay}
             llmByDay={llmByDay}
             chartEvents={chartEvents}
+            sampled={data.chartsSampled === true}
           />
 
           <TriageAndFixRow triageQueue={data.triageQueue ?? []} fixSummary={fixSummary} />
