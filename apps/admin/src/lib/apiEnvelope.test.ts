@@ -98,4 +98,10 @@ describe('coerceApiResult', () => {
     expect(res.ok).toBe(true)
     expect(res.data).toEqual({ id: 'a' })
   })
+
+  it('keeps validator issues on the error (inventory YAML)', () => {
+    const issues = [{ path: '$.schema_version', message: 'Required' }]
+    const res = coerceApiResult({ ok: false, error: { code: 'VALIDATION_FAILED', message: 'bad', issues } })
+    expect(res.error?.issues).toEqual(issues)
+  })
 })
