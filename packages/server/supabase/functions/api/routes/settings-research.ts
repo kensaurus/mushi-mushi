@@ -33,6 +33,7 @@ import { validateFixBranchTemplate } from '../../_shared/github-pr.ts';
 import { parseSupabaseProjectRefSetting } from '../../_shared/supabase-project-ref.ts';
 import { parseSentryDsnSetting, sentrySelfHostedHosts } from '../../_shared/sentry-dsn.ts';
 import { prepareByokSecret } from '../../_shared/byok-key-rules.ts';
+import { parseByokExpiry } from '../../_shared/byok-expiry.ts';
 import {
   isLegacyByokProvider,
   LEGACY_BYOK_PROVIDERS,
@@ -2872,6 +2873,23 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     if (poolResult.error) return dbError(c, poolResult.error);
     if (legacyResult.error) return dbError(c, legacyResult.error);
 
+    // expires_at arrives with migration 20261004150000. Read it on its own so
+    // a database without the column still lists keys (with no known expiry).
+    const expiryById = new Map<string, string | null>();
+    const expiryResult = await db
+      .from('byok_keys')
+      .select('id, expires_at')
+      .eq('project_id', project.id);
+    if (!expiryResult.error) {
+      for (const row of (expiryResult.data ?? []) as Array<{ id: string; expires_at?: string | null }>) {
+        expiryById.set(row.id, row.expires_at ?? null);
+      }
+    }
+    const poolKeys = ((poolResult.data ?? []) as Array<Record<string, unknown>>).map((key) => ({
+      ...key,
+      expires_at: expiryById.get(String(key.id)) ?? null,
+    }));
+
     const legacyRow = (legacyResult.data as Record<string, unknown> | null) ?? {};
     const legacyKeys = LEGACY_BYOK_PROVIDERS.flatMap(
       (provider) => {
@@ -2909,7 +2927,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
 
     return c.json({
       ok: true,
-      data: { projectId: project.id, keys: poolResult.data ?? [], legacyKeys },
+      data: { projectId: project.id, keys: poolKeys, legacyKeys },
     });
   });
 
@@ -2956,6 +2974,10 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
           );
         }
         apiKey = prepared.value;
+      }
+      const expiry = parseByokExpiry(raw.expiresAt ?? raw.expires_at);
+      if (!expiry.ok) {
+        return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: expiry.message } }, 400);
       }
       const parsed = createByokKeySchema.safeParse({
         projectId: project.id,
@@ -3061,7 +3083,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
 
       if (insertErr) {
         try {
-          await db.rpc('vault_delete_secret', { secret_id: secretData });
+          await db.rpc('vault_delete_secret_by_id', { secret_id: secretData });
         } catch {
           /* best-effort orphan cleanup */
         }
@@ -3096,6 +3118,24 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         )
         .single();
       if (validationUpdateError) return dbError(c, validationUpdateError);
+
+      // Separate write so a database without the column (migration
+      // 20261004150000 not applied yet) still saves the key, and says so.
+      let expiresAt: string | null = null;
+      let expiryWarning: string | null = null;
+      if (expiry.value) {
+        const { error: expiryError } = await db
+          .from('byok_keys')
+          .update({ expires_at: expiry.value })
+          .eq('id', row.id)
+          .eq('project_id', project.id);
+        if (expiryError) {
+          log.warn('byok key saved but its expiry date was not', { provider, code: expiryError.code });
+          expiryWarning = 'The key was saved, but not its expiry date. Add the date again from the key row.';
+        } else {
+          expiresAt = expiry.value;
+        }
+      }
 
       try {
         await db.from('byok_audit_log').insert([
@@ -3157,6 +3197,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         ok: true,
         data: {
           ...validatedRow,
+          expires_at: expiresAt,
           validation: {
             status: probe.status,
             detail: probe.detail,
@@ -3165,8 +3206,59 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
           },
           legacyRetired,
           legacySuperseded,
+          ...(expiryWarning ? { expiryWarning } : {}),
         },
       });
+    },
+  );
+
+  /**
+   * PUT /v1/admin/byok/keys/:keyId/expiry
+   * Set or clear the date a key stops working. Body: { expiresAt: "YYYY-MM-DD" | null }.
+   * No provider lets Mushi read this back, so the owner types it.
+   */
+  app.put(
+    '/v1/admin/byok/keys/:keyId/expiry',
+    adminOrApiKey({ scope: 'mcp:write' }),
+    requireFeature('byok'),
+    async (c) => {
+      const userId = c.get('userId') as string;
+      const keyId = c.req.param('keyId')!;
+      if (!byokKeyIdSchema.safeParse(keyId).success) {
+        return c.json(
+          { ok: false, error: { code: 'INVALID_KEY_ID', message: 'keyId must be a UUID.' } },
+          400,
+        );
+      }
+
+      const db = getServiceClient();
+      const apiKeyProjectId =
+        c.get('authMethod') === 'apiKey' ? (c.get('projectId') as string | undefined) : undefined;
+      const resolvedProject = await resolveOwnedProject(
+        c,
+        db,
+        userId,
+        apiKeyProjectId ? { overrideProjectId: apiKeyProjectId } : {},
+      );
+      if ('response' in resolvedProject) return resolvedProject.response;
+      const project = resolvedProject.project;
+
+      const raw = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+      const expiry = parseByokExpiry(raw.expiresAt ?? raw.expires_at ?? null);
+      if (!expiry.ok) {
+        return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: expiry.message } }, 400);
+      }
+
+      const { data, error } = await db
+        .from('byok_keys')
+        .update({ expires_at: expiry.value })
+        .eq('id', keyId)
+        .eq('project_id', project.id)
+        .select('id, expires_at')
+        .maybeSingle();
+      if (error) return dbError(c, error);
+      if (!data) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
+      return c.json({ ok: true, data });
     },
   );
 
@@ -3453,7 +3545,8 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         .eq('project_id', project.id);
       if (error) return dbError(c, error);
 
-      const { error: vaultDeleteError } = await db.rpc('vault_delete_secret', {
+      // vault_delete_secret matches by name; pool rows keep the secret's id.
+      const { error: vaultDeleteError } = await db.rpc('vault_delete_secret_by_id', {
         secret_id: keyRow.vault_secret_id,
       });
       if (vaultDeleteError) {
