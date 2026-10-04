@@ -24,7 +24,12 @@ export function TimelineCard({ report }: { report: ReportDetail }) {
   const baseTs = entries[0]?.ts ?? 0
 
   return (
-    <ol className="relative ml-1 max-h-64 overflow-y-auto border-l border-edge-subtle pl-3 pr-1 space-y-1">
+    // Scrollable, so it takes keyboard focus (axe scrollable-region-focusable).
+    <ol
+      tabIndex={0}
+      aria-label="Repro timeline"
+      className="relative ml-1 max-h-64 overflow-y-auto border-l border-edge-subtle pl-3 pr-1 space-y-1 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40"
+    >
       {entries.map((entry, index) => (
         <TimelineRow key={`${entry.ts}-${entry.kind}-${index}`} entry={entry} baseTs={baseTs} index={index} />
       ))}

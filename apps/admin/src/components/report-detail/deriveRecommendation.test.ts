@@ -371,3 +371,44 @@ describe('deriveRecommendation', () => {
     })
   })
 })
+
+// REPORT A2 (2026-10-04): the "Send test report" row has status 'classified'
+// and a Stage-2 diagnosis but no Stage-1 object. The card said
+// "Classification pending… Refresh" next to the 72% diagnosis.
+describe('classification state agrees with the rest of the page', () => {
+  const noop = vi.fn()
+  it('a classified report with a stage-2 diagnosis and no stage-1 object is not pending', () => {
+    const rec = deriveRecommendation(
+      makeReport({
+        status: 'classified',
+        stage1_classification: null,
+        stage2_analysis: { rootCause: 'Safari drops the cookie', suggestedFix: 'Set SameSite=None' },
+      }),
+      makeDispatchState(),
+      0,
+      noop,
+    )
+    expect(rec.title).not.toMatch(/pending/i)
+    expect(rec.title).toBe('Triage this report')
+  })
+
+  it('a new report with nothing classified yet is still pending', () => {
+    const rec = deriveRecommendation(
+      makeReport({ status: 'new', stage1_classification: null, stage2_analysis: null, processing_error: null }),
+      makeDispatchState(),
+      0,
+      noop,
+    )
+    expect(rec.title).toBe('Classification pending')
+  })
+
+  it('an auto-fix block stamp on a classified report is not "Classification failed"', () => {
+    const rec = deriveRecommendation(
+      makeReport({ status: 'classified', stage1_classification: { category: 'bug' }, processing_error: 'autofix_blocked: feature request' }),
+      makeDispatchState(),
+      0,
+      noop,
+    )
+    expect(rec.title).not.toMatch(/Classification failed/)
+  })
+})

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { ConfirmDialog } from '../ConfirmDialog'
 import { Section, RelativeTime, InfoHint, Tooltip, Btn } from '../ui'
 import { IconChat } from '../icons'
-import { useReportComments, type FeedbackSignal } from '../../lib/reportComments'
+import type { FeedbackSignal, ReportCommentsThread } from '../../lib/reportComments'
 import { useToast } from '../../lib/toast'
 import { CHIP_TONE } from '../../lib/chipTone'
 
@@ -47,9 +47,14 @@ function feedbackSignalToneClass(signal: FeedbackSignal): string {
   }
 }
 
-export function ReportComments({ reportId, projectId }: { reportId: string; projectId: string }) {
+/**
+ * The triage thread. The page owns the `useReportComments` subscription and
+ * passes it in, so the thread and the recommendation's comment count share one
+ * fetch and one realtime channel (REPORT C: report_comments was fetched 4x).
+ */
+export function ReportComments({ thread }: { thread: ReportCommentsThread }) {
   const toast = useToast()
-  const { comments, loading, postComment, deleteComment } = useReportComments({ reportId, projectId })
+  const { comments, loading, postComment, deleteComment } = thread
   const [body, setBody] = useState('')
   const [visibleToReporter, setVisibleToReporter] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -87,7 +92,14 @@ export function ReportComments({ reportId, projectId }: { reportId: string; proj
 
   return (
     <Section title={`Triage thread (${comments.length})`} icon={<IconChat />}>
-      <div className="space-y-2 mb-3 max-h-72 overflow-y-auto">
+      {/* Scrolls once the thread grows; focusable so keyboard users can
+          scroll it too (axe scrollable-region-focusable, REPORT A14). */}
+      <div
+        role="region"
+        aria-label="Triage thread messages"
+        tabIndex={0}
+        className="space-y-2 mb-3 max-h-72 overflow-y-auto rounded-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40"
+      >
         {loading && <div className="text-xs text-fg-muted">Loading…</div>}
         {!loading && comments.length === 0 && (
           <div className="text-xs text-fg-muted italic">No comments yet. Add the first triage note below.</div>
@@ -147,7 +159,11 @@ export function ReportComments({ reportId, projectId }: { reportId: string; proj
             <span className="text-2xs text-accent">Reply will be visible in their inbox</span>
           )}
         </div>
+        <label htmlFor="report-triage-note" className="sr-only">
+          {visibleToReporter ? 'Reply to the reporter' : 'Triage note'}
+        </label>
         <textarea
+          id="report-triage-note"
           value={body}
           onChange={(e) => setBody(e.currentTarget.value)}
           placeholder="Add a triage note…"

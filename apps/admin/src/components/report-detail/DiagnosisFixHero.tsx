@@ -2,16 +2,16 @@
  * FILE: apps/admin/src/components/report-detail/DiagnosisFixHero.tsx
  * PURPOSE: The consolidated "why it broke -> here's the fix" hero that
  *          delivers the brand sub-promise ("Plain-English diagnosis + a
- *          paste-ready fix, right inside Cursor") as ONE surface at the top
+ *          paste-ready fix, in your editor") as ONE surface at the top
  *          of the report.
  *
  *          The ingredients already existed but were scattered: the Stage-2
  *          `summary` (LLM diagnosis) sat buried in the classification card,
- *          and the paste-ready prompt lived in `CursorAgentLaunch` far down
+ *          and the paste-ready prompt lived in a Cursor-only card far down
  *          the page. This block lifts the answer to the top:
  *            1. "Here's why it broke" — a 1-3 sentence plain-English
  *               diagnosis with a confidence chip.
- *            2. "Here's the fix" — the existing CursorAgentLaunch prompt.
+ *            2. "Here's the fix" — FixWithAgentPanel's editor-neutral prompt.
  *
  *          Accuracy is existential for this audience (a confident-but-wrong
  *          diagnosis is worse than none). So when the classifier's
@@ -30,7 +30,7 @@ import {
   confidenceBadgeClass,
 } from '../../lib/tokens'
 import { reportDiagnosisView, type Stage2Diagnosis } from '../../lib/reportDiagnosis'
-import { CursorAgentLaunch } from './CursorAgentLaunch'
+import { FixWithAgentPanel } from './FixWithAgentPanel'
 import type { ReportDetail } from './types'
 
 /** Below this, we hedge instead of asserting a root cause. */
@@ -135,8 +135,8 @@ export function DiagnosisFixHero({
       </Card>
       </div>
 
-      {/* Part 2 — Fix: the paste-ready prompt (already its own card). */}
-      <CursorAgentLaunch report={report} cursorWorkspace={cursorWorkspace} />
+      {/* Part 2 — Fix: the editor-neutral, paste-ready prompt. */}
+      <FixWithAgentPanel report={report} cursorWorkspace={cursorWorkspace} />
     </>
   )
 }

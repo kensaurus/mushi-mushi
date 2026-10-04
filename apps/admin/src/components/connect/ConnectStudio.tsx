@@ -173,6 +173,7 @@ export function ConnectStudio({ projectId, projectName }: ConnectStudioProps) {
             mcpHttpUrl={RESOLVED_MCP_HTTP_URL}
             variant="primary"
             size="md"
+            accessChoice
           />
         ) : (
           <div className="rounded-md border border-edge-subtle bg-surface-hover/30 px-3 py-2 text-xs text-fg-muted">
