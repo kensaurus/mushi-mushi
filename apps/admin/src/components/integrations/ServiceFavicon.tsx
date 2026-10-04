@@ -1,20 +1,25 @@
 /**
  * FILE: apps/admin/src/components/integrations/ServiceFavicon.tsx
- * PURPOSE: Renders a service's actual brand favicon using Google's favicon CDN.
- *          Displays in a white rounded chip so dark-background pages show
- *          any brand color (even black/dark logos) against a neutral surface.
- *          Falls back to a geometric SVG icon if the favicon fails to load.
+ * PURPOSE: A service's logo chip on integration cards.
+ *
+ *          It used to load Google's favicon CDN, but that endpoint redirects
+ *          to gstatic.com, which the admin CSP blocks, so production only
+ *          ever showed the fallback glyph (and each load told Google which
+ *          integrations the operator uses). It now draws the vendored mark
+ *          from BrandIcon, matched by the service name first (so "Claude
+ *          Code" gets the Claude mark, not its parent company's) and then the
+ *          domain. Services with no vendored mark keep their geometric glyph.
  */
 
-import { useState } from 'react'
 import type { ComponentType } from 'react'
+import { BrandIcon, resolveBrand } from '../ui/BrandIcon'
 
 interface ServiceFaviconProps {
-  /** Service domain for Google favicon API, e.g. "sentry.io" */
+  /** Service domain, e.g. "sentry.io" */
   domain: string
-  /** Accessible label for the image */
+  /** Service name, e.g. "Sentry" */
   label: string
-  /** SVG fallback icon rendered when favicon fails or network is unavailable */
+  /** Glyph for services without a vendored brand mark */
   FallbackIcon: ComponentType<{ size?: number; className?: string }>
   /** Tailwind text-color class applied to the fallback icon, e.g. "text-accent" */
   colorClass?: string
@@ -22,15 +27,6 @@ interface ServiceFaviconProps {
   iconSize?: number
 }
 
-/**
- * Renders a service's actual brand favicon via Google's favicon CDN at 2× for
- * sharpness on high-DPI displays.
- *
- * Uses a white 22 × 22 rounded chip so dark-themed pages keep all brand colors
- * visible — this mirrors the "app icon in a white badge" pattern used by Slack,
- * Linear, and Notion. The fallback (offline / unknown domain) shows the
- * geometric SVG icon in a subtle surface chip.
- */
 export function ServiceFavicon({
   domain,
   label,
@@ -38,35 +34,16 @@ export function ServiceFavicon({
   colorClass = 'text-fg-muted',
   iconSize = 14,
 }: ServiceFaviconProps) {
-  const [failed, setFailed] = useState(false)
-  const chipSize = iconSize + 8   // 14 → 22 px, 16 → 24 px
-
-  if (failed) {
-    return (
-      <span
-        aria-hidden="true"
-        className={`shrink-0 inline-flex items-center justify-center rounded-md bg-surface-raised border border-edge-subtle ${colorClass}`}
-        style={{ width: chipSize, height: chipSize }}
-      >
-        <FallbackIcon size={iconSize} />
-      </span>
-    )
-  }
+  const chipSize = iconSize + 8 // 14 → 22 px, 16 → 24 px
+  const brand = resolveBrand(label) ?? resolveBrand(domain)
 
   return (
     <span
       aria-hidden="true"
-      className="shrink-0 inline-flex items-center justify-center rounded-md overflow-hidden bg-surface-raised"
+      className={`shrink-0 inline-flex items-center justify-center rounded-md bg-surface-raised border border-edge-subtle ${brand ? 'text-fg' : colorClass}`}
       style={{ width: chipSize, height: chipSize }}
     >
-      <img
-        src={`https://www.google.com/s2/favicons?domain=${domain}&sz=32`}
-        width={iconSize}
-        height={iconSize}
-        alt={label}
-        draggable={false}
-        onError={() => setFailed(true)}
-      />
+      {brand ? <BrandIcon brand={brand} size={iconSize} decorative /> : <FallbackIcon size={iconSize} />}
     </span>
   )
 }

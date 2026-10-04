@@ -21,6 +21,7 @@ import {
 } from '@mushi-mushi/marketing-ui'
 import { ClientConnectButton } from '../ClientConnectButton'
 import { CopyButton, Panel } from '../ui'
+import { BrandIcon, resolveBrand } from '../ui/BrandIcon'
 import { LINK_ACCENT } from '../../lib/chipTone'
 import { IconTerminal } from '../icons'
 import { RESOLVED_EXTERNAL_API_URL, RESOLVED_MCP_HTTP_URL } from '../../lib/env'
@@ -206,7 +207,13 @@ export function ConnectStudio({ projectId, projectName }: ConnectStudioProps) {
             activeLane={activeLane}
             onLaneChange={setActiveLane}
             renderLane={renderLane}
-            renderClientIcon={(id) => renderConnectClientIcon(id, 16)}
+            renderClientIcon={(id) =>
+              resolveBrand(id) ? (
+                <BrandIcon brand={id} size={16} decorative />
+              ) : (
+                renderConnectClientIcon(id, 16)
+              )
+            }
           />
         </div>
       </Panel>
