@@ -24,7 +24,8 @@ import { SettingsFormFooter } from './SettingsFormFooter'
 import { countChangedFields } from './settingsDiff'
 import { PushNotifyCard } from '../voice/PushNotifyCard'
 import { describeByokError } from '../../lib/byokErrors'
-import { SettingsList, SettingsRow, type RowStatusValue } from './SettingsRow'
+import { SettingsList, SettingsRow } from './SettingsRow'
+import { telegramRowStatus } from './telegramStatus'
 
 interface VoiceSettings {
   voice_intake_enabled?: boolean
@@ -43,6 +44,9 @@ interface TelegramBinding {
 
 interface TelegramStatus {
   configured: boolean
+  /** True once "Connect webhook" registered it with Telegram. */
+  webhook_registered?: boolean
+  /** Where the webhook would point. Always present, so it says nothing about whether it is connected. */
   webhook_url?: string | null
   bindings: TelegramBinding[]
 }
@@ -167,17 +171,9 @@ export function VoiceIntakePanel() {
   const telegramConfigured = Boolean(saved.telegram_bot_token_ref) || telegram.data?.configured === true
   const githubConfigured = Boolean(saved.github_user_token_ref)
   const bindings = telegram.data?.bindings ?? []
+  const webhookConnected = telegram.data?.webhook_registered === true
 
-  const telegramStatus: RowStatusValue = !telegramConfigured
-    ? { state: 'not_connected', detail: 'Save a bot token from @BotFather below.' }
-    : !telegram.data?.webhook_url
-      ? { state: 'attention', detail: 'Connect the webhook so Telegram can deliver voice notes to Mushi.' }
-      : bindings.length === 0
-        ? { state: 'attention', detail: 'No chat linked yet. Make a link code and send it to the bot.' }
-        : {
-            state: 'working',
-            detail: `Webhook connected · ${bindings.length} chat${bindings.length === 1 ? '' : 's'} linked.`,
-          }
+  const telegramStatus = telegramRowStatus(telegramConfigured, telegram.data)
 
   return (
     <>
@@ -258,16 +254,16 @@ export function VoiceIntakePanel() {
             telegramConfigured ? (
               <>
                 <Btn
-                  variant={telegram.data?.webhook_url ? 'ghost' : 'primary'}
+                  variant={webhookConnected ? 'ghost' : 'primary'}
                   size="sm"
                   onClick={() => void connectWebhook()}
                   loading={tgBusy === 'webhook'}
                   disabled={tgBusy !== null}
                 >
-                  {telegram.data?.webhook_url ? 'Reconnect webhook' : 'Connect webhook'}
+                  {webhookConnected ? 'Reconnect webhook' : 'Connect webhook'}
                 </Btn>
                 <Btn
-                  variant={telegram.data?.webhook_url && bindings.length === 0 ? 'primary' : 'ghost'}
+                  variant={webhookConnected && bindings.length === 0 ? 'primary' : 'ghost'}
                   size="sm"
                   onClick={() => void generateBindCode()}
                   loading={tgBusy === 'code'}

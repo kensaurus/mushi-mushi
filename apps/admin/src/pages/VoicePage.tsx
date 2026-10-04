@@ -20,8 +20,11 @@ import { useToast } from '../lib/toast'
 import { takeSharedAudio } from '../lib/pwa'
 import {
   VOICE_SESSIONS_PATH,
+  canConfirmVoiceSession,
   cancelVoiceSession,
   confirmVoiceSession,
+  effectiveVoiceStatus,
+  isVoiceIntakeEnabled,
   submitVoiceTranscript,
   uploadAndSubmitVoice,
   voiceActionLabel,
@@ -79,7 +82,9 @@ export function VoicePage() {
   }) // error-handled-by-parent
   useRealtimeReload(['voice_intake_sessions'], reload, { enabled: Boolean(activeProjectId) })
 
-  const intakeEnabled = settings?.voice_intake_enabled !== false
+  // Off unless the project turned it on: the column defaults to false and a
+  // project with no settings row gets `{}`, which the intake refuses too.
+  const intakeEnabled = isVoiceIntakeEnabled(settings)
   const settingsKnown = settings != null
 
   const [current, setCurrent] = useState<VoiceSession | null>(null)
@@ -89,7 +94,7 @@ export function VoicePage() {
   const sharedHandled = useRef(false)
 
   const sessions = useMemo(() => sessionsData?.sessions ?? [], [sessionsData])
-  const awaitingCount = sessions.filter((s) => s.status === 'awaiting_confirm').length
+  const awaitingCount = sessions.filter((s) => effectiveVoiceStatus(s) === 'awaiting_confirm').length
 
   usePublishPageContext({
     route: '/voice',
@@ -253,10 +258,11 @@ export function VoicePage() {
 }
 
 function VoiceSessionResult({ session, pending, onConfirm, onCancel }: { session: VoiceSession; pending: boolean; onConfirm: () => void; onCancel: () => void }) {
-  const awaiting = session.status === 'awaiting_confirm' && Boolean(session.confirm_token)
+  const awaiting = canConfirmVoiceSession(session)
+  const status = effectiveVoiceStatus(session)
   const refused = session.status === 'refused'
   return (
-    <Section title="What Mushi heard" action={<Badge tone={voiceStatusTone(session.status)}>{voiceStatusLabel(session.status)}</Badge>}>
+    <Section title="What Mushi heard" action={<Badge tone={voiceStatusTone(status)}>{voiceStatusLabel(status)}</Badge>}>
       <div className="space-y-3" data-testid="voice-session-result">
         <Card variant="flat" className="p-3">
           <p className="mb-1 text-2xs font-semibold uppercase tracking-wide text-fg-muted">Transcript (verbatim)</p>
