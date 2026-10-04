@@ -10,7 +10,7 @@ import {
   OPEN_REPORT_STATUSES,
 } from '../shared.ts';
 import { summarizeFixTruths } from '../../_shared/fix-report-truth.ts';
-import { failedFixPreviews, loadReportFixTruths } from '../../_shared/fix-report-truth-load.ts';
+import { failedFixPreviews, loadRecentFixTruths } from '../../_shared/fix-report-truth-load.ts';
 import { JUDGE_ELIGIBLE_STATUSES, isJudgeStale } from '../../_shared/judge-eligibility.ts';
 
 /** Activity-feed line for one fix attempt, read against its report's current state. */
@@ -248,10 +248,8 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
 
     // Per REPORT from its current state: earlier failed attempts on a report
     // a merged PR fixed are history, not work (fix-report-truth.ts).
-    const { truths: inboxTruths } = await loadReportFixTruths(
-      db as unknown as Parameters<typeof loadReportFixTruths>[0],
-      recentFixes.map((f) => f.report_id as string),
-    );
+    // Same 30-day report window as every other fix count (fix-report-truth-load.ts).
+    const { truths: inboxTruths } = await loadRecentFixTruths(db as unknown as Parameters<typeof loadRecentFixTruths>[0], projectIds);
     const failedFixes14d = summarizeFixTruths(inboxTruths.values()).failed;
 
     const healthByKind = new Map<string, string>();
@@ -544,10 +542,7 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
     // Per REPORT from its current state (fix-report-truth.ts): glot.it read
     // "8 auto-fixes failed / 7 open PRs" over 4 reports already fixed by
     // merged PRs and 0 open PRs (2026-10-04).
-    const fixTruths = await loadReportFixTruths(
-      db as unknown as Parameters<typeof loadReportFixTruths>[0],
-      recentFixes.map((f) => f.report_id as string),
-    );
+    const fixTruths = await loadRecentFixTruths(db as unknown as Parameters<typeof loadRecentFixTruths>[0], projectIds);
     const fixTruth = summarizeFixTruths(fixTruths.truths.values());
     const fixesInProgress = fixTruth.inFlight;
     const fixesFailed = fixTruth.failed;
@@ -863,11 +858,8 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
 
     // Auto-fix pipeline summary — per REPORT from its current state, the
     // same rule as /dashboard/stats and /fixes (fix-report-truth.ts).
-    // `total` is the number of reports with an attempt in the window.
-    const dashTruths = await loadReportFixTruths(
-      db as unknown as Parameters<typeof loadReportFixTruths>[0],
-      (recentFixes ?? []).map((f) => f.report_id as string),
-    );
+    // `total` is the number of reports with an attempt in the shared 30-day window.
+    const dashTruths = await loadRecentFixTruths(db as unknown as Parameters<typeof loadRecentFixTruths>[0], projectIds);
     const dashTruth = summarizeFixTruths(dashTruths.truths.values());
     const fixSummary = {
       total: dashTruth.reports,

@@ -16,7 +16,7 @@ import { apiKeyAuth, jwtAuth } from '../../_shared/auth.ts';
 import { logAudit } from '../../_shared/audit.ts';
 import { emitProductEvent } from '../../_shared/product-events.ts';
 import { dbError, enumerateAccessibleProjectIds } from '../shared.ts';
-import { failedFixPreviews, loadReportFixTruths } from '../../_shared/fix-report-truth-load.ts';
+import { failedFixPreviews, loadRecentFixTruths } from '../../_shared/fix-report-truth-load.ts';
 
 export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>): void {
   // Lenient UUID matcher (any 8-4-4-4-12 hex). The strict v1–v5 form in
@@ -114,7 +114,6 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
       stampedSdkReports,
       sdkObservations,
       planBacklogs,
-      doFlights,
       checkPending,
       repos,
       codebaseFileRows,
@@ -151,13 +150,6 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
           .in('project_id', projectIds)
           .eq('status', 'new')
           .lt('created_at', oneHourAgo),
-        db
-          .from('fix_attempts')
-          .select('report_id')
-          .in('project_id', projectIds)
-          .or('status.in.(pending,queued,running,failed),status.like.skipped*')
-          .order('created_at', { ascending: false })
-          .limit(1000),
         db
           .from('classification_evaluations')
           .select('report_id, project_id, classification_agreed, created_at')
@@ -310,12 +302,8 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
 
     // Per REPORT from its current state (fix-report-truth.ts): a report a
     // merged PR fixed never counts as failed, however many earlier attempts
-    // failed. The query above only picks candidate reports; the loader reads
-    // every attempt on them.
-    const projectFixTruths = await loadReportFixTruths(
-      db as unknown as Parameters<typeof loadReportFixTruths>[0],
-      (doFlights.data ?? []).map((f) => (f as { report_id: string }).report_id),
-    );
+    // failed. Same 30-day report window as the dashboard and /fixes.
+    const projectFixTruths = await loadRecentFixTruths(db as unknown as Parameters<typeof loadRecentFixTruths>[0], projectIds);
     const fixInflightMap: Record<string, number> = {};
     const fixFailedMap: Record<string, number> = {};
     for (const t of projectFixTruths.truths.values()) {

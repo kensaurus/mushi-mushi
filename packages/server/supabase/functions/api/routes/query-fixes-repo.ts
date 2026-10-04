@@ -46,7 +46,7 @@ import {
 } from '../../_shared/fix-timeline.ts';
 import { isFixCountedFailed } from '../../_shared/fix-loop-status.ts';
 import { summarizeFixTruths } from '../../_shared/fix-report-truth.ts';
-import { loadReportFixTruths, reportTitle } from '../../_shared/fix-report-truth-load.ts';
+import { loadRecentFixTruths, loadReportFixTruths, reportTitle } from '../../_shared/fix-report-truth-load.ts';
 import { resolveUserDisplays } from '../../_shared/user-display.ts';
 import {
   installationIdForAttempt,
@@ -491,10 +491,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     // Counts are per REPORT and from its current state (fix-report-truth.ts):
     // a report fixed by a merged PR never counts as failed or open, however
     // many earlier attempts failed (glot.it 2026-10-04).
-    const { truths } = await loadReportFixTruths(
-      db as unknown as Parameters<typeof loadReportFixTruths>[0],
-      attempts.map((a) => a.report_id as string),
-    )
+    const { truths } = await loadRecentFixTruths(db as unknown as Parameters<typeof loadRecentFixTruths>[0], [pid])
     const truth = summarizeFixTruths(truths.values())
     const failed = truth.failed
     const retryable = truth.retryable
@@ -726,10 +723,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     // Headline counts are per REPORT from its current state, the same rule
     // as /fixes/stats (fix-report-truth.ts). The per-day series below stays
     // per attempt: it is the history of runs, not the current state.
-    const { truths } = await loadReportFixTruths(
-      db as unknown as Parameters<typeof loadReportFixTruths>[0],
-      list.map((r) => r.report_id as string),
-    );
+    const { truths } = await loadRecentFixTruths(db as unknown as Parameters<typeof loadRecentFixTruths>[0], projectIds);
     const truth = summarizeFixTruths(truths.values());
     const completed = truth.fixed;
     const failed = truth.failed;
