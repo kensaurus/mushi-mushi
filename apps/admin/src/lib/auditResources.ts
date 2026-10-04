@@ -3,6 +3,7 @@
  */
 
 import { CHIP_TONE } from './chipTone'
+import { fixDeepLinkPath } from './fixDeepLink'
 
 export interface AuditResourceInfo {
   label: string
@@ -80,6 +81,6 @@ export function auditResourcePath(resourceType: string, resourceId: string | nul
   const info = resolveAuditResource(resourceType)
   if (!resourceId) return info.listPath
   if (resourceType === 'report') return `/reports/${resourceId}`
-  if (resourceType === 'fix') return `/fixes?highlight=${resourceId}`
+  if (resourceType === 'fix') return fixDeepLinkPath(resourceId)
   return info.listPath
 }

@@ -80,6 +80,7 @@ import {
   type GraphTabId,
 } from '../components/graph/GraphStatsTypes'
 import { useGraphUx, resolveQuickGraphTab } from '../lib/graphModeUx'
+import { useQuickstartLandingTab } from '../lib/useQuickstartTab'
 import {
   edgesDetail,
   edgesTooltip,
@@ -160,11 +161,15 @@ export function GraphPage() {
     [searchParams, setSearchParams],
   )
 
-  useEffect(() => {
-    if (!ux.isQuickstart || statsLoading) return
-    const quickTab = resolveQuickGraphTab(stats)
-    if (activeTab !== quickTab) setActiveTab(quickTab)
-  }, [ux.isQuickstart, statsLoading, stats, activeTab, setActiveTab])
+  // Quick mode opens the posture tab once; links and clicks then win.
+  useQuickstartLandingTab({
+    enabled: ux.isQuickstart,
+    ready: !statsLoading,
+    tabParam: tabParam,
+    activeTab: activeTab,
+    quickTab: resolveQuickGraphTab(stats),
+    setActiveTab: setActiveTab,
+  })
 
   const nodesQuery = usePageData<{ nodes: GraphNode[]; total?: number }>('/v1/admin/graph/nodes')
   const edgesQuery = usePageData<{ edges: GraphEdge[]; total?: number }>('/v1/admin/graph/edges')

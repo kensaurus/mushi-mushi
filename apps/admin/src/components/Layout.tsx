@@ -43,7 +43,7 @@ import { HotkeysModal } from './HotkeysModal'
 import { ActivityDrawer } from './ActivityDrawer'
 import { SidebarBrandToggles } from './SidebarBrandToggles'
 import { SidebarFooterControls } from './SidebarFooterControls'
-import { SidebarUserCard } from './SidebarUserCard'
+import { SidebarUserCard, SignOutAllDialog } from './SidebarUserCard'
 import { PrivacyPostureBadge } from './PrivacyPostureBadge'
 import { WhatsNewModal, useWhatsNew } from './WhatsNew'
 import { VersionBadge } from './VersionBadge'
@@ -536,6 +536,7 @@ export function Layout({ children }: { children: ReactNode }) {
   const { pathname } = useLocation()
   const navigate = useNavigate()
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [railSignOutOpen, setRailSignOutOpen] = useState(false)
   /** Which sidebar category is expanded — single accordion in rail + full sidebar. */
   const [expandedSectionId, setExpandedSectionId] = useState<string | null>(null)
   const { mode, setMode, isQuickstart, isBeginner, isAdvanced } = useAdminMode()
@@ -1059,7 +1060,7 @@ export function Layout({ children }: { children: ReactNode }) {
               type="button"
               variant="ghost"
               size="sm"
-              onClick={signOut}
+              onClick={() => setRailSignOutOpen(true)}
               // Colour comes from `.nav-rail-item--danger`; the utility form
               // (`text-rose hover:*`) sits in @layer utilities and loses to
               // unlayered `.nav-rail-item`, so it was dead code.
@@ -1069,6 +1070,9 @@ export function Layout({ children }: { children: ReactNode }) {
               <IconSignOut className="nav-rail-icon" />
             </Btn>
           </Tooltip>
+        )}
+        {railSignOutOpen && (
+          <SignOutAllDialog signOut={signOut} onClose={() => setRailSignOutOpen(false)} />
         )}
       </div>
     </>

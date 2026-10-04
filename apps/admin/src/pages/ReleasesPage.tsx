@@ -595,8 +595,9 @@ export function ReleasesPage() {
     (tab: ReleasesTabId) => {
       setSearchParams((prev) => {
         const next = new URLSearchParams(prev)
-        if (tab === 'overview') next.delete('tab')
-        else next.set('tab', tab)
+        // Always explicit: with no ?tab= quick mode shows the posture tab,
+        // so clearing it for Overview made Overview unreachable.
+        next.set('tab', tab)
         return next
       })
     },

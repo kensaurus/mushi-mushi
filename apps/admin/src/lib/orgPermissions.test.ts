@@ -10,6 +10,7 @@ import {
   canManageOrg,
   mayManageActiveOrg,
   resolveActiveOrgRole,
+  offerProjectCreate,
   viewerRoleHint,
 } from './orgPermissions'
 
@@ -52,5 +53,18 @@ describe('resolveActiveOrgRole', () => {
     expect(mayManageActiveOrg(null)).toBe(true)
     expect(mayManageActiveOrg('admin')).toBe(true)
     expect(mayManageActiveOrg('member')).toBe(false)
+  })
+})
+
+describe('offerProjectCreate (header project switcher, QA #71)', () => {
+  it('hides "New project" from members and viewers, who get a 403', () => {
+    expect(offerProjectCreate('member')).toBe(false)
+    expect(offerProjectCreate('viewer')).toBe(false)
+  })
+
+  it('offers it to owners and admins, and while the role is still loading', () => {
+    expect(offerProjectCreate('owner')).toBe(true)
+    expect(offerProjectCreate('admin')).toBe(true)
+    expect(offerProjectCreate(null)).toBe(true)
   })
 })

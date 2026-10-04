@@ -8,10 +8,10 @@ import { signInWithPasskey as signInWithPasskeyApi } from './passkeys'
 import { upsertAccount } from './accountSessions'
 import {
   completeSignupAttribution,
-  compactSignupMeta,
   stashSignupMeta,
   type SignupMeta,
 } from './signupAttribution'
+import { emailLinkOptions, passwordSignUpOptions, type SignupIntent } from './authRequestOptions'
 
 // Attach the Supabase user id (UUID — not PII) to every Sentry event so we can
 // answer "which user hit this?" without scanning replays. Email is intentionally
@@ -31,7 +31,9 @@ interface AuthContextValue {
   isPasswordRecovery: boolean
   clearPasswordRecovery: () => void
   signIn: (email: string, password: string) => Promise<{ error?: string }>
-  signInWithMagicLink: (email: string) => Promise<{ error?: string }>
+  /** Console email link. Never creates an account. `opts.next` is the in-app
+   *  path the link returns to (default `/dashboard`). */
+  signInWithMagicLink: (email: string, opts?: OAuthOptions) => Promise<{ error?: string }>
   /** OAuth sign-in. `signupMeta` (source / campaign / loop ref) is stashed in
    *  sessionStorage and replayed onto a *newly created* user after redirect.
    *  `opts.next` is the in-app path to land on after the provider round-trip
@@ -41,11 +43,19 @@ interface AuthContextValue {
   signInWithGitHub: (signupMeta?: SignupMeta, opts?: OAuthOptions) => Promise<{ error?: string }>
   signInWithGoogle: (signupMeta?: SignupMeta, opts?: OAuthOptions) => Promise<{ error?: string }>
   /** Sign in as a Mushi Bounties tester via magic-link. Sets signup_intent='tester'
-   *  so the DB trigger auto-provisions a mushi_testers row on first login. */
-  signInAsTester: (email: string) => Promise<{ error?: string }>
+   *  so the DB trigger auto-provisions a mushi_testers row on first login.
+   *  `opts.next` is the tester page to return to (default `/tester`). */
+  signInAsTester: (email: string, opts?: OAuthOptions) => Promise<{ error?: string }>
   signInWithPasskey: () => Promise<{ error?: string }>
-  /** Email/password signup. `signupMeta` lands in `auth.users.raw_user_meta_data`. */
-  signUp: (email: string, password: string, signupMeta?: SignupMeta) => Promise<{ error?: string; needsConfirmation?: boolean }>
+  /** Email/password signup. `signupMeta` lands in `auth.users.raw_user_meta_data`.
+   *  `opts.intent: 'tester'` provisions a tester profile; `opts.next` is where
+   *  the confirmation link returns. */
+  signUp: (
+    email: string,
+    password: string,
+    signupMeta?: SignupMeta,
+    opts?: OAuthOptions & { intent?: SignupIntent },
+  ) => Promise<{ error?: string; needsConfirmation?: boolean }>
   signOut: () => Promise<void>
   resetPassword: (email: string) => Promise<{ error?: string }>
   updatePassword: (newPassword: string) => Promise<{ error?: string }>
@@ -55,10 +65,6 @@ export interface OAuthOptions {
   /** In-app path to return to after the provider redirect. Default `/dashboard`. */
   next?: string
 }
-
-/** Post-signup lands on the wizard so the first action is "send a test
- *  report", not a dashboard of zeros (docs/plan-gtm.md, Workstream B §2a). */
-const SIGNUP_LANDING_PATH = '/onboarding'
 
 function getRedirectUrl(path: string = '/dashboard'): string {
   return authRedirectUrl(path)
@@ -167,13 +173,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: error?.message }
   }
 
-  const signInWithMagicLink = async (email: string) => {
+  const signInWithMagicLink = async (email: string, opts?: OAuthOptions) => {
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: {
-        emailRedirectTo: getRedirectUrl(),
-        shouldCreateUser: false,
-      },
+      options: emailLinkOptions({ next: opts?.next }),
     })
     return { error: error?.message }
   }
@@ -204,31 +207,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: error?.message }
   }
 
-  const signInAsTester = async (email: string) => {
+  const signInAsTester = async (email: string, opts?: OAuthOptions) => {
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: {
-        emailRedirectTo: authRedirectUrl('/tester'),
-        shouldCreateUser: true,
-        data: { signup_intent: 'tester' },
-      },
+      options: emailLinkOptions({ next: opts?.next, intent: 'tester' }),
     })
     return { error: error?.message }
   }
 
   const signInWithPasskey = async () => signInWithPasskeyApi()
 
-  const signUp = async (email: string, password: string, signupMeta?: SignupMeta) => {
-    const meta = signupMeta ? compactSignupMeta(signupMeta) : {}
+  const signUp = async (
+    email: string,
+    password: string,
+    signupMeta?: SignupMeta,
+    opts?: OAuthOptions & { intent?: SignupIntent },
+  ) => {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: {
-        // The confirmation link drops the new user on the wizard.
-        emailRedirectTo: getRedirectUrl(SIGNUP_LANDING_PATH),
-        // Persisted to auth.users.raw_user_meta_data → growth funnel by source.
-        ...(Object.keys(meta).length > 0 ? { data: meta } : {}),
-      },
+      options: passwordSignUpOptions(signupMeta, { next: opts?.next, intent: opts?.intent }),
     })
     if (error) return { error: error.message }
     const needsConfirmation = !data.session && !!data.user

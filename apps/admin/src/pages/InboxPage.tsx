@@ -4,7 +4,7 @@
  *          with stats banner, KPI strip, and PDCA action cards from dashboard data.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
@@ -37,6 +37,7 @@ import { EMPTY_INBOX_STATS, type InboxStats, type InboxTabId } from '../componen
 import type { ActivityItem, DashboardData } from '../components/dashboard/types'
 import { buildInboxCards, type InboxCardGroup } from '../lib/actionInboxFromDashboard'
 import { useInboxUx, resolveQuickInboxTab } from '../lib/inboxModeUx'
+import { useQuickstartLandingTab } from '../lib/useQuickstartTab'
 import {
   ActionPill,
   ActionPillRow,
@@ -137,11 +138,15 @@ export function InboxPage() {
     [searchParams, setSearchParams],
   )
 
-  useEffect(() => {
-    if (!ux.isQuickstart || statsLoading) return
-    const quickTab = resolveQuickInboxTab(stats, activeTab)
-    if (activeTab !== quickTab) setActiveTab(quickTab)
-  }, [ux.isQuickstart, statsLoading, stats.openActions, activeTab, setActiveTab, stats])
+  // Quick mode opens the posture tab once; links and clicks then win.
+  useQuickstartLandingTab({
+    enabled: ux.isQuickstart,
+    ready: !statsLoading,
+    tabParam: tabParam,
+    activeTab: activeTab,
+    quickTab: resolveQuickInboxTab(stats, activeTab),
+    setActiveTab: setActiveTab,
+  })
 
   const openCards = cards.filter((c) => c.action !== null)
   const clearCards = cards.filter((c) => c.action === null)

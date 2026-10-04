@@ -13,6 +13,15 @@ export function canCreateProject(role: OrgRole | string | null | undefined): boo
   return canManageOrg(role)
 }
 
+/**
+ * Whether to offer "New project" before the role is known. Unknown (still
+ * loading) offers it and lets the server decide; a known member or viewer
+ * gets an explanation instead of a form that 403s.
+ */
+export function offerProjectCreate(role: OrgRole | string | null): boolean {
+  return role === null || canCreateProject(role)
+}
+
 export function canDeleteProject(role: OrgRole | string | null | undefined): boolean {
   return canManageOrg(role)
 }

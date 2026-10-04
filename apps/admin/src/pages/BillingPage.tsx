@@ -17,7 +17,7 @@
  *          Stripe-hosted URLs we redirect to.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
@@ -29,6 +29,7 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { usePageCopy } from '../lib/copy'
 import { useBillingUx, resolveQuickBillingTab } from '../lib/billingModeUx'
+import { useQuickstartLandingTab } from '../lib/useQuickstartTab'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useRealtimeReload } from '../lib/realtime'
 import { BillingStatusBanner } from '../components/billing/BillingStatusBanner'
@@ -138,11 +139,15 @@ export function BillingPage() {
     [searchParams, setSearchParams],
   )
 
-  useEffect(() => {
-    if (!ux.isQuickstart || statsQuery.loading) return
-    const quickTab = resolveQuickBillingTab(stats)
-    if (activeTab !== quickTab) setActiveTab(quickTab)
-  }, [ux.isQuickstart, statsQuery.loading, stats, activeTab, setActiveTab])
+  // Quick mode opens the posture tab once; links and clicks then win.
+  useQuickstartLandingTab({
+    enabled: ux.isQuickstart,
+    ready: !statsQuery.loading,
+    tabParam: param,
+    activeTab: activeTab,
+    quickTab: resolveQuickBillingTab(stats),
+    setActiveTab: setActiveTab,
+  })
 
   const criticalCount =
     (stats.projectCount === 0 ? 1 : 0) +
