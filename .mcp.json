@@ -3,7 +3,7 @@
   "mcpServers": {
     "mushi": {
       "type": "http",
-      "url": "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/mcp?features=triage,fixes,inventory,setup,docs"
+      "url": "https://kensaur.us/mushi-mushi/hosted-mcp/?features=triage,fixes,inventory,setup,docs"
     },
     "mushi-stdio": {
       "type": "stdio",

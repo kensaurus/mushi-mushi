@@ -130,8 +130,9 @@ if (!mushiBehavior) {
 const CACHING_DISABLED = '4135ea2d-6df8-44a3-9df3-4b5a84be39ad'
 /** Forwards query strings + headers except Host (OAuth authorize needs querystring at origin). */
 const ALL_VIEWER_EXCEPT_HOST_ORP = '216adef6-5c54-4fe5-8490-502b675d6a07'
-/** Legacy: User-Agent only — query strings not forwarded (authorize handled in CF Function). */
-const USER_AGENT_REFERER_ORP = 'acba4595-bd28-49b8-b9fe-13317c0390fa'
+// The hosted-MCP route used the User-Agent/Referer policy until 2026-10-04. It
+// forwards no query string, so ?features= and ?read_only=1 were dropped and a
+// read-only connection got write tools.
 
 /** Clone a behavior without legacy TTL fields (distribution uses cache policies). */
 function cloneBehavior(source) {
@@ -173,15 +174,15 @@ for (const pattern of [WELLKNOWN_PATTERN, AS_WELLKNOWN_PATTERN]) {
 
 if (!existing.has(HOSTED_MCP_PATTERN)) {
   toAdd.push(
-    hostedMcpBehavior(mushiBehavior, HOSTED_MCP_PATTERN, SUPABASE_ORIGIN_ID, routerArn, USER_AGENT_REFERER_ORP),
+    hostedMcpBehavior(mushiBehavior, HOSTED_MCP_PATTERN, SUPABASE_ORIGIN_ID, routerArn, ALL_VIEWER_EXCEPT_HOST_ORP),
   )
 } else {
   const row = config.CacheBehaviors.Items.find((cb) => cb.PathPattern === HOSTED_MCP_PATTERN)
-  if (row?.OriginRequestPolicyId !== USER_AGENT_REFERER_ORP) {
-    row.OriginRequestPolicyId = USER_AGENT_REFERER_ORP
+  if (row?.OriginRequestPolicyId !== ALL_VIEWER_EXCEPT_HOST_ORP) {
+    row.OriginRequestPolicyId = ALL_VIEWER_EXCEPT_HOST_ORP
     row.CachePolicyId = CACHING_DISABLED
     needsUpdate = true
-    console.log(`Patching ${HOSTED_MCP_PATTERN} → UserAgentReferer origin request policy`)
+    console.log(`Patching ${HOSTED_MCP_PATTERN} → AllViewerExceptHostHeader origin request policy (forwards query strings)`)
   }
 }
 
