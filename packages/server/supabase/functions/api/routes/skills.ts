@@ -20,7 +20,7 @@
 import { Hono } from 'npm:hono@4'
 import type { Context } from 'npm:hono@4'
 import { requireAuthOrApiKey } from '../middleware/auth.ts'
-import { requireProjectAccess } from '../middleware/project.ts'
+import { checkProjectAccessIfNamed } from '../middleware/project.ts'
 import { getServiceClient } from '../../_shared/db.ts'
 import { accessibleProjectIds } from '../../_shared/project-access.ts'
 import { assertCallerProjectScope, assertTargetProjectAccess } from '../shared.ts'
@@ -35,6 +35,8 @@ const app = new Hono<{ Variables: Variables }>()
 function db() {
   return getServiceClient()
 }
+
+const REPORT_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 function projectIdFromRequest(c: Context<{ Variables: Variables }>): string | null {
   return (
@@ -86,7 +88,7 @@ export function registerSkillsRoutes(parent: Hono<{ Variables: Variables }>) {
 
 function skillsRoutes() {
   const r = new Hono<{ Variables: Variables }>()
-  r.use('*', requireAuthOrApiKey, requireProjectAccess)
+  r.use('*', requireAuthOrApiKey, checkProjectAccessIfNamed)
 
   // ── Catalog ─────────────────────────────────────────────────────────────
 
@@ -419,6 +421,33 @@ function skillsRoutes() {
     const access = await assertTargetProjectAccess(c, db(), userId, projectId)
     if (!access.ok) return access.response
 
+    // The report must belong to this project. Read it before the rate limit
+    // so a wrong id costs no quota; a report elsewhere is a plain 404.
+    let report: {
+      id: unknown
+      summary: unknown
+      severity: unknown
+      category: unknown
+      component: unknown
+      stage2_analysis: unknown
+      screenshot_url: unknown
+    } | null = null
+    if (report_id != null && report_id !== '') {
+      if (typeof report_id !== 'string' || !REPORT_ID_RE.test(report_id)) {
+        return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Report not found in this project' } }, 404)
+      }
+      const { data } = await db()
+        .from('reports')
+        .select('id, summary, severity, category, component, stage2_analysis, screenshot_url')
+        .eq('id', report_id)
+        .eq('project_id', projectId)
+        .maybeSingle()
+      if (!data) {
+        return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Report not found in this project' } }, 404)
+      }
+      report = data
+    }
+
     logTenantContext(tenantContextFromHono(c))
 
     const rate = await claimTenantRateLimit(db(), `project:${projectId}:skill_pipeline_start`, 10, 3600)
@@ -509,41 +538,33 @@ function skillsRoutes() {
       ragFiles: [],
     }
 
-    if (report_id) {
-      const { data: report } = await db()
-        .from('reports')
-        .select('id, summary, severity, category, component, stage2_analysis, screenshot_url')
-        .eq('id', report_id)
-        .maybeSingle()
+    if (report) {
+      const s2 = (report.stage2_analysis as Record<string, unknown> | null) ?? {}
+      reportContext = {
+        id: report.id as string,
+        summary: report.summary as string | null,
+        severity: report.severity as string | null,
+        category: report.category as string | null,
+        component: report.component as string | null,
+        rootCause: (s2.rootCause as string | null) ?? null,
+        reproductionSteps: (s2.reproductionSteps as string[] | null) ?? null,
+        suggestedFix: (s2.suggestedFix as string | null) ?? null,
+        screenshotUrl: report.screenshot_url as string | null,
+        ragFiles: [],
+      }
 
-      if (report) {
-        const s2 = (report.stage2_analysis as Record<string, unknown> | null) ?? {}
-        reportContext = {
-          id: report.id as string,
-          summary: report.summary as string | null,
-          severity: report.severity as string | null,
-          category: report.category as string | null,
-          component: report.component as string | null,
-          rootCause: (s2.rootCause as string | null) ?? null,
-          reproductionSteps: (s2.reproductionSteps as string[] | null) ?? null,
-          suggestedFix: (s2.suggestedFix as string | null) ?? null,
-          screenshotUrl: report.screenshot_url as string | null,
-          ragFiles: [],
-        }
-
-        // Fetch RAG code context using the summary as query
-        if (report.summary) {
-          try {
-            const ragFiles = await getRelevantCode(db(), projectId, {
-              symptom: report.summary as string,
-            })
-            reportContext.ragFiles = ragFiles.slice(0, 5).map((f) => ({
-              path: f.filePath,
-              snippet: f.preview?.slice(0, 600) ?? '',
-            }))
-          } catch {
-            // RAG is best-effort — don't fail pipeline creation
-          }
+      // Fetch RAG code context using the summary as query
+      if (report.summary) {
+        try {
+          const ragFiles = await getRelevantCode(db(), projectId, {
+            symptom: report.summary as string,
+          })
+          reportContext.ragFiles = ragFiles.slice(0, 5).map((f) => ({
+            path: f.filePath,
+            snippet: f.preview?.slice(0, 600) ?? '',
+          }))
+        } catch {
+          // RAG is best-effort — don't fail pipeline creation
         }
       }
     }

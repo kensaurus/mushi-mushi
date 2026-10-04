@@ -12,14 +12,14 @@
 
 import { Hono } from 'npm:hono@4'
 import { requireAuth } from '../middleware/auth.ts'
-import { requireProjectAccess } from '../middleware/project.ts'
+import { checkProjectAccessIfNamed } from '../middleware/project.ts'
 import { getServiceClient } from '../../_shared/db.ts'
 import { ownedProjectIds, resolveOwnedProject } from '../shared.ts'
 import type { Variables } from '../types.ts'
 
 function db() { return getServiceClient() }
 
-// requireProjectAccess only sees a project_id in the query string or header.
+// checkProjectAccessIfNamed only sees a project_id in the query string or header.
 // Routes that take it from the body, or act on a row by id, check the row's
 // project here — they used to reach any tenant's scans, snapshots and findings.
 async function callerCanAccess(userId: string, projectId: unknown): Promise<boolean> {
@@ -192,7 +192,7 @@ export function registerDriftRoutes(parent: Hono<{ Variables: Variables }>) {
   })
 
   const r = new Hono<{ Variables: Variables }>()
-  r.use('*', requireAuth, requireProjectAccess)
+  r.use('*', requireAuth, checkProjectAccessIfNamed)
 
   // List findings
   r.get('/', async (c) => {

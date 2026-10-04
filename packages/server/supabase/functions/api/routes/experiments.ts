@@ -17,7 +17,7 @@
 //   POST /v1/sdk/experiment/assign  — assign a reporter token to a variant
 //   POST /v1/sdk/experiment/convert — record a conversion event
 //
-// Access: requireProjectAccess only checks a project_id it is handed, and the
+// Access: checkProjectAccessIfNamed only checks a project_id it is handed, and the
 // :id routes carry none, so every :id handler resolves the experiment's
 // project and runs the same fail-closed check (experimentAccess). The SDK
 // routes are bound to the key's project. Until 2026-09-22 any signed-in
@@ -30,7 +30,7 @@
 import { Hono, type Context } from 'npm:hono@4'
 import { z } from 'npm:zod@3'
 import { requireAuth } from '../middleware/auth.ts'
-import { requireProjectAccess } from '../middleware/project.ts'
+import { checkProjectAccessIfNamed } from '../middleware/project.ts'
 import { apiKeyAuth } from '../../_shared/auth.ts'
 import { getServiceClient } from '../../_shared/db.ts'
 import { reporterKey } from '../../_shared/reporter-token.ts'
@@ -265,7 +265,7 @@ export function registerExperimentsRoutes(parent: Hono<{ Variables: Variables }>
 
   // Admin routes
   const admin = new Hono<{ Variables: Variables }>()
-  admin.use('*', requireAuth, requireProjectAccess)
+  admin.use('*', requireAuth, checkProjectAccessIfNamed)
 
   admin.get('/', async (c) => {
     const projectId = c.req.query('project_id')
