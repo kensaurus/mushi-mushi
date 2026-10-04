@@ -200,6 +200,16 @@ export async function executeNaturalLanguageQuery(
     : null
   const apiKey = resolved?.key ?? Deno.env.get('ANTHROPIC_API_KEY')
   if (!apiKey) throw new Error('No Anthropic key available (BYOK or env)')
+  // On the platform key the query is billed, so check the wallet first, as
+  // withLlmFailover does for every other billed path.
+  const onPlatformKey = !resolved?.key
+  if (onPlatformKey && projectIds.length > 0) {
+    // Imported lazily: the billing module reads Deno env at load, which the
+    // permission-less Deno unit tests that import this file cannot do.
+    const { hostedLlmPreflight, WalletDeniedError } = await import('./hosted-llm-billing.ts')
+    const preflight = await hostedLlmPreflight({ db, projectId: projectIds[0] })
+    if (!preflight.allowed) throw new WalletDeniedError(preflight.reason ?? 'insufficient', preflight.balanceMicro)
+  }
   // The Sonnet planner goes through claude-messages.ts (Sonnet 5.5 rejects the
   // AI SDK v4 call shape); the Haiku summariser stays on the AI SDK.
   const anthropic = createAnthropic({ apiKey })
@@ -222,6 +232,8 @@ export async function executeNaturalLanguageQuery(
     projectId: projectIds[0] ?? null,
     keySource: resolved?.key ? resolved.source : 'env',
     langfuseTraceId: trace.id,
+    // A question the user asked in the console: billed on the platform key.
+    billHosted: true,
   } as const
   const { object: queryPlan, usage: planUsage } = await withLlmUsage(
     db,

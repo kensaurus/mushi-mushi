@@ -10,6 +10,8 @@ import { SYNTHETIC_EFFORT, SYNTHETIC_MODEL, ANTHROPIC_HAIKU } from '../_shared/m
 import { claudeGenerateObject } from '../_shared/claude-messages.ts';
 import { getPromptForStage } from '../_shared/prompt-ab.ts';
 import { recordLlmUsage } from '../_shared/llm-usage.ts';
+import { resolveLlmKey } from '../_shared/byok.ts';
+import { LlmBudgetExceededError } from '../_shared/llm-budget.ts';
 
 // Wave T (2026-04-23): fallback template used when `prompt_versions` has no
 // `synthetic` row for this project (migration 20260422110000 seeded a global
@@ -90,10 +92,21 @@ Deno.serve(
       return new Response(JSON.stringify({ error: 'projectId required' }), { status: 400 });
     }
 
-    const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY');
-    if (!anthropicKey) {
-      return new Response(JSON.stringify({ error: 'ANTHROPIC_API_KEY is not set' }), { status: 503 });
+    // The project's own Anthropic key first, the platform key otherwise.
+    let resolvedKey: Awaited<ReturnType<typeof resolveLlmKey>>;
+    try {
+      resolvedKey = await resolveLlmKey(db, projectId, 'anthropic');
+    } catch (err) {
+      if (err instanceof LlmBudgetExceededError) {
+        return new Response(JSON.stringify({ error: 'Monthly AI budget reached for this project' }), { status: 402 });
+      }
+      throw err;
     }
+    if (!resolvedKey) {
+      return new Response(JSON.stringify({ error: 'No Anthropic key: add one under Settings → AI keys' }), { status: 503 });
+    }
+    const anthropicKey = resolvedKey.key;
+    const keySource = resolvedKey.source;
     // The Sonnet generator goes through claude-messages.ts; the Haiku eval
     // pass stays on the AI SDK (Haiku 4.5 still accepts its call shape).
     const anthropic = createAnthropic({ apiKey: anthropicKey });
@@ -128,13 +141,12 @@ Deno.serve(
       const results = await Promise.allSettled(
         batchItems.map(async (i) => {
           const span = trace.span(`generate.${i}`);
-          // Platform key only (ANTHROPIC_API_KEY), so key_source is 'env'.
           const generateUsage = {
             functionName: 'generate-synthetic',
             stage: 'generate',
             projectId,
             model: SYNTHETIC_MODEL,
-            keySource: 'env',
+            keySource,
             startedAt: Date.now(),
             promptVersion,
             langfuseTraceId: trace.id,
@@ -214,7 +226,7 @@ Deno.serve(
                 stage: 'eval',
                 projectId,
                 model: ANTHROPIC_HAIKU,
-                keySource: 'env',
+                keySource,
                 startedAt: Date.now(),
                 // No promptVersion: this eval is not production stage2 traffic,
                 // and Prompt Lab sums cost and calls per prompt_version.
