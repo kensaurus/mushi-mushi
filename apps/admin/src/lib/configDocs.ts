@@ -240,14 +240,14 @@ const SETTINGS_GENERAL: ConfigDoc[] = [
     summary:
       'Cosine similarity above which two reports are merged as duplicates instead of stored separately.',
     howItWorks:
-      "After a report is embedded, a pgvector lookup finds the nearest existing report by embedding distance. If similarity ≥ the threshold, the new report is attached to the existing cluster (its `dup_of` points at the canonical id and the cluster's occurrence count ticks up). Below it, the report stays separate. Today the grouping step (fast-filter → `suggestGrouping`) always uses the built-in 0.82: the value saved here is stored but not read yet.",
+      "After a report is embedded, a pgvector lookup finds the nearest existing report by embedding distance. If similarity ≥ the threshold, the new report is attached to the existing cluster (its `dup_of` points at the canonical id and the cluster's occurrence count ticks up). Below it, the report stays separate. The grouping step (fast-filter → `suggestGrouping`) reads this value for every new report; an unset or out-of-range value falls back to 0.82.",
     default: { value: '0.82', range: '0.50 – 0.99' },
     backend: {
       table: 'project_settings',
       column: 'dedup_threshold',
       endpoint: 'PATCH /v1/admin/settings',
       // No reader yet: _shared/embeddings.ts falls back to DEFAULT_DEDUP_THRESHOLD.
-      readBy: [],
+      readBy: ['fast-filter edge function (suggestGrouping)'],
     },
     whenToChange:
       "Changing it has no effect yet (see above). Once grouping reads it: raise to 0.88+ if you're seeing false merges (different bugs being lumped together), lower to ~0.75 if the same regression keeps appearing as separate reports.",
@@ -394,8 +394,8 @@ const SETTINGS_FIRECRAWL: ConfigDoc[] = [
     summary:
       'Hard cap on results a single Firecrawl search can return — prevents one bad request from draining your quota.',
     howItWorks:
-      'Every search through `firecrawlSearch` asks Firecrawl for at most this many results, whatever the calling code requests. The server clamps the value to 1–50 (the database enforces the same range); the console input stops at 20. Caps stack: this is the per-call ceiling, on top of any per-day quota set by Firecrawl.',
-    default: { value: '5', range: '1 – 50 (console input: 1 – 20)' },
+      'Every search through `firecrawlSearch` asks Firecrawl for at most this many results, whatever the calling code requests. The console, the server and the database all allow 1–50. Caps stack: this is the per-call ceiling, on top of any per-day quota set by Firecrawl.',
+    default: { value: '5', range: '1 – 50' },
     backend: {
       table: 'project_settings',
       column: 'firecrawl_max_pages_per_call',
