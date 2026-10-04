@@ -21,10 +21,15 @@
  *   If it doesn't (403 from GitHub), returns a guided fallback with the
  *   `gh secret set` commands the developer can run locally.
  *
- * IDEMPOTENCY
- * ───────────
- *   - sync-ci-secrets deactivates any prior `ci-auto:*` labelled key before
- *     minting a fresh one, so repeated calls don't accumulate stale keys.
+ * KEY ORDER (QA #30)
+ * ──────────────────
+ *   - sync-ci-secrets mints the new `ci-auto:*` key first and leaves every
+ *     older one alone. Only after GitHub accepts the secret that carries the
+ *     NEW key does it revoke the older `ci-auto:*` keys. A store build that
+ *     baked in the old key keeps reporting whenever the GitHub write fails
+ *     (403, no repo, no token). The console confirms before calling this.
+ *   - If that revoke fails, the response says so (`priorKeysRevoked: null`,
+ *     `revokeError`) instead of reporting a clean sync.
  *   - GitHub PUT /actions/secrets/{name} is already idempotent (upsert).
  *
  * SECURITY
@@ -53,6 +58,7 @@ import {
   type KeyHeartbeat,
   type SdkDiagnosticsResult,
 } from '../../_shared/sdk-diagnostics.ts'
+import { mayRevokePriorCiKeys } from '../../_shared/api-key-rotation.ts'
 
 // ---------------------------------------------------------------------------
 // GitHub secrets / variables REST helpers
@@ -173,22 +179,16 @@ async function putRepoVariable(
 }
 
 // ---------------------------------------------------------------------------
-// Mint a project-scoped report:write API key (deactivates prior ci-auto keys)
+// Mint a project-scoped report:write API key. Older ci-auto keys stay active
+// here; revokePriorCiKeys runs only after GitHub accepted the new one.
 // ---------------------------------------------------------------------------
 
 async function mintCiApiKey(
   db: ReturnType<typeof getServiceClient>,
   projectId: string,
   repoSlug: string,
-): Promise<{ rawKey: string; prefix: string }> {
+): Promise<{ rawKey: string; prefix: string; id: string }> {
   const ciLabel = `ci-auto:${repoSlug}`
-
-  // Deactivate prior ci-auto keys for this project (idempotent across retries).
-  await db
-    .from('project_api_keys')
-    .update({ is_active: false })
-    .eq('project_id', projectId)
-    .like('label', 'ci-auto:%')
 
   const rawKey = `mushi_${crypto.randomUUID().replace(/-/g, '')}`
   const prefix = rawKey.slice(0, 12)
@@ -199,18 +199,44 @@ async function mintCiApiKey(
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('')
 
-  const { error } = await db.from('project_api_keys').insert({
-    project_id: projectId,
-    key_hash: keyHash,
-    key_prefix: prefix,
-    label: ciLabel,
-    scopes: ['report:write'],
-    is_active: true,
-  })
+  const { data, error } = await db
+    .from('project_api_keys')
+    .insert({
+      project_id: projectId,
+      key_hash: keyHash,
+      key_prefix: prefix,
+      label: ciLabel,
+      scopes: ['report:write'],
+      is_active: true,
+    })
+    .select('id')
+    .single()
 
-  if (error) throw new Error(`Failed to mint CI API key: ${error.message}`)
+  if (error || !data) throw new Error(`Failed to mint CI API key: ${error?.message ?? 'no row returned'}`)
 
-  return { rawKey, prefix }
+  return { rawKey, prefix, id: (data as { id: string }).id }
+}
+
+/**
+ * Revoke every older `ci-auto:*` key except the one just written to GitHub.
+ * Returns the revoked prefixes, or the error so the caller can say the old
+ * key is still live.
+ */
+async function revokePriorCiKeys(
+  db: ReturnType<typeof getServiceClient>,
+  projectId: string,
+  keepKeyId: string,
+): Promise<{ prefixes: string[]; error: string | null }> {
+  const { data, error } = await db
+    .from('project_api_keys')
+    .update({ is_active: false, revoked_at: new Date().toISOString() })
+    .eq('project_id', projectId)
+    .eq('is_active', true)
+    .like('label', 'ci-auto:%')
+    .neq('id', keepKeyId)
+    .select('key_prefix')
+  if (error) return { prefixes: [], error: error.message }
+  return { prefixes: (data ?? []).map((r: { key_prefix: string }) => r.key_prefix), error: null }
 }
 
 // ---------------------------------------------------------------------------
@@ -375,9 +401,10 @@ export function registerProjectCiSecretsRoutes(app: Hono<{ Variables: Variables 
     const installationId = (repoRow as { github_app_installation_id?: number | null } | null)
       ?.github_app_installation_id ?? null
 
-    // 3. Mint a project-scoped report:write key (deactivates prior ci-auto keys).
+    // 3. Mint a project-scoped report:write key. Older ci-auto keys stay
+    //    active until GitHub accepts this one (step 8).
     const repoSlug = repoRef ? `${repoRef.owner}/${repoRef.repo}` : (slug ?? projectId)
-    const { rawKey, prefix } = await mintCiApiKey(db, projectId, repoSlug)
+    const { rawKey, prefix, id: newKeyId } = await mintCiApiKey(db, projectId, repoSlug)
 
     // 4. Build the vars list.
     const ciVars = buildCiVars({
@@ -456,7 +483,18 @@ export function registerProjectCiSecretsRoutes(app: Hono<{ Variables: Variables 
       }
     }
 
-    // 8. Log audit (never log the raw key value — only prefix).
+    // 8. Revoke the older CI keys only now, and only if GitHub took the
+    //    secret that carries the new key (QA #30).
+    const apiKeyVar = ciVars.find((v) => v.ghKind === 'secret')?.name ?? ''
+    let priorKeysRevoked: string[] | null = []
+    let revokeError: string | null = null
+    if (mayRevokePriorCiKeys(written, apiKeyVar)) {
+      const revoked = await revokePriorCiKeys(db, projectId, newKeyId)
+      priorKeysRevoked = revoked.error ? null : revoked.prefixes
+      revokeError = revoked.error
+    }
+
+    // 9. Log audit (never log the raw key value — only prefix).
     await logAudit(
       db,
       projectId,
@@ -464,10 +502,16 @@ export function registerProjectCiSecretsRoutes(app: Hono<{ Variables: Variables 
       'settings.updated',
       'ci_secrets',
       projectId,
-      { written, failed: failed.map((f) => f.name), keyPrefix: prefix },
+      {
+        written,
+        failed: failed.map((f) => f.name),
+        keyPrefix: prefix,
+        revokedPrefixes: priorKeysRevoked ?? [],
+        revokeError,
+      },
     ).catch(() => {})
 
-    // 9. Build guided fallback (always included so the UI can show the raw key
+    // 10. Build guided fallback (always included so the UI can show the raw key
     //    to the user regardless of write success — the user needs it for manual setup).
     const fallback = buildGuidedFallback({
       owner: repoRef.owner,
@@ -489,7 +533,7 @@ export function registerProjectCiSecretsRoutes(app: Hono<{ Variables: Variables 
             'or store a fine-grained PAT with those permissions in project settings. ' +
             'Use the guided fallback commands below to set secrets manually.',
         },
-        data: { minted: { prefix, rawKey }, written, failed, fallback },
+        data: { minted: { prefix, rawKey }, written, failed, fallback, priorKeysRevoked: [] },
       }, 200) // 200 so the UI can render the key + copy commands
     }
 
@@ -500,6 +544,8 @@ export function registerProjectCiSecretsRoutes(app: Hono<{ Variables: Variables 
         written,
         failed,
         fallback,
+        priorKeysRevoked,
+        revokeError,
       },
     })
   })
