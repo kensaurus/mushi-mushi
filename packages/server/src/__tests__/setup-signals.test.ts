@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  classifyPlatformConnection,
   deriveIntegrationSignals,
   freshestHeartbeat,
   type IntegrationSignalInput,
@@ -134,5 +135,43 @@ describe('freshestHeartbeat', () => {
 
   it('returns null when no key has checked in', () => {
     expect(freshestHeartbeat([{ last_seen_at: null }])).toBeNull()
+  })
+})
+
+describe('classifyPlatformConnection (finding B25)', () => {
+  const NOW = Date.parse('2026-10-04T01:00:00Z')
+  const recent = '2026-10-04T00:49:06Z'
+
+  it('a passing Sentry API probe with no inbound event is not "healthy"', () => {
+    // glot.it and mushi-mushi on 2026-10-04: sentry probe ok, zero rows in
+    // webhook_audit_log for sentry. The card said "Healthy".
+    expect(
+      classifyPlatformConnection({
+        probeStatus: 'ok',
+        probeCheckedAt: recent,
+        needsInbound: true,
+        inboundAccepted: false,
+        now: NOW,
+      }),
+    ).toBe('attention')
+    expect(
+      classifyPlatformConnection({
+        probeStatus: 'ok',
+        probeCheckedAt: recent,
+        needsInbound: true,
+        inboundAccepted: true,
+        now: NOW,
+      }),
+    ).toBe('working')
+  })
+
+  it('failing probes are down; missing or week-old probes need a re-check', () => {
+    expect(classifyPlatformConnection({ probeStatus: 'down', probeCheckedAt: recent, now: NOW })).toBe('down')
+    expect(classifyPlatformConnection({ probeStatus: 'degraded', probeCheckedAt: recent, now: NOW })).toBe('down')
+    expect(classifyPlatformConnection({ probeStatus: undefined, probeCheckedAt: undefined, now: NOW })).toBe('attention')
+    expect(
+      classifyPlatformConnection({ probeStatus: 'ok', probeCheckedAt: '2026-09-20T00:00:00Z', now: NOW }),
+    ).toBe('attention')
+    expect(classifyPlatformConnection({ probeStatus: 'ok', probeCheckedAt: recent, now: NOW })).toBe('working')
   })
 })

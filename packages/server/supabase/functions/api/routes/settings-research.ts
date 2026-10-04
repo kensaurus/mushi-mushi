@@ -32,6 +32,7 @@ import {
 import { validateFixBranchTemplate } from '../../_shared/github-pr.ts';
 import { parseSupabaseProjectRefSetting } from '../../_shared/supabase-project-ref.ts';
 import { isOperatorProject } from '../../_shared/operator-gate.ts';
+import { loadIntegrationSignals } from '../../_shared/setup-signals.ts';
 import {
   byokKeyIdSchema,
   type ByokProvider as PooledByokProvider,
@@ -89,6 +90,31 @@ async function resolveProjectSlackBot(
     return { token: envToken, source: 'operator' };
   }
   return null;
+}
+
+/**
+ * Store a notification-channel test send as a health row, the same table the
+ * cron probes write. Without it a successful "Send test" left no evidence,
+ * so the card could never say the channel works. A failed insert is logged,
+ * never thrown: the test result itself still reaches the user.
+ */
+async function recordChannelTest(
+  db: ReturnType<typeof getServiceClient>,
+  projectId: string,
+  kind: 'slack' | 'discord' | 'teams',
+  ok: boolean,
+  message: string | null,
+  startedAt: number,
+): Promise<void> {
+  const { error } = await db.from('integration_health_history').insert({
+    project_id: projectId,
+    kind,
+    status: ok ? 'ok' : 'down',
+    latency_ms: Math.max(0, Date.now() - startedAt),
+    message: ok ? 'Test message delivered' : (message ?? 'Test message failed').slice(0, 300),
+    source: 'manual',
+  });
+  if (error) log.error('channel test result not stored', { projectId, kind, err: error.message });
 }
 
 // ── Slack OAuth state signing ────────────────────────────────────────────────
@@ -283,7 +309,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     if ('response' in resolvedProject) return resolvedProject.response;
     const project = resolvedProject.project;
 
-    const [{ data, error }, { data: poolKeys, error: poolError }] = await Promise.all([
+    const [{ data, error }, { data: poolKeys, error: poolError }, integrationSignals] = await Promise.all([
       db
         .from('project_settings')
         .select(
@@ -303,6 +329,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         .select('provider_slug, test_status, status')
         .eq('project_id', project.id)
         .neq('status', 'disabled'),
+      loadIntegrationSignals(db, [project.id]),
     ]);
 
     if (error) return dbError(c, error);
@@ -382,6 +409,10 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
           Boolean(row.slack_bot_token_ref),
         slackTeamName: (row.slack_team_name as string | null) ?? null,
         slackChannelId: (row.slack_channel_id as string | null) ?? null,
+        // Whether something can actually post: a webhook, or a channel plus a
+        // bot token. slackConfigured stays "any Slack setting exists" so the
+        // card still shows the channel picker after Add to Slack.
+        slackCanPost: integrationSignals.get(project.id)?.hasSlack ?? false,
         discordConfigured: Boolean(row.discord_webhook_url),
         teamsConfigured: Boolean(row.teams_webhook_url),
         notificationPrefs: (row.notification_prefs as Record<string, unknown> | null) ?? null,
@@ -721,6 +752,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       );
     }
 
+    const startedAt = Date.now();
     if (botToken && targetChannel) {
       const res = await fetch('https://slack.com/api/chat.postMessage', {
         method: 'POST',
@@ -734,6 +766,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         }),
       });
       const json = (await res.json()) as { ok: boolean; error?: string };
+      await recordChannelTest(db, project.id, 'slack', json.ok, json.error ?? null, startedAt);
       if (!json.ok)
         return c.json(
           { ok: false, error: { code: 'SLACK_API_ERROR', message: json.error ?? 'slack error' } },
@@ -750,6 +783,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
           text: `🐛 Mushi Mushi test — Slack integration working for *${project.name}*.`,
         }),
       });
+      await recordChannelTest(db, project.id, 'slack', res.ok, `Webhook returned HTTP ${res.status}`, startedAt);
       if (!res.ok)
         return c.json(
           { ok: false, error: { code: 'WEBHOOK_ERROR', message: `HTTP ${res.status}` } },
@@ -1235,10 +1269,12 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         );
 
       const { sendDiscordNotification } = await import('../../_shared/slack.ts');
+      const startedAt = Date.now();
       const discordResult = await sendDiscordNotification(
         webhookUrl,
         `🐛 Mushi test — Discord is wired up for **${displayName}**.`,
       );
+      await recordChannelTest(db, projectId, 'discord', discordResult.ok, discordResult.error ?? null, startedAt);
       if (!discordResult.ok)
         return c.json({ ok: false, error: discordResult.error ?? 'Discord test failed' }, 502);
       return c.json({ ok: true });
@@ -1290,7 +1326,9 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         );
 
       const { sendTeamsTestMessage } = await import('../../_shared/teams.ts');
+      const startedAt = Date.now();
       const result = await sendTeamsTestMessage(webhookUrl, displayName);
+      await recordChannelTest(db, projectId, 'teams', result.ok, result.error ?? null, startedAt);
       if (!result.ok) return c.json({ ok: false, error: result.error ?? 'Teams test failed' }, 502);
       return c.json({ ok: true });
     },
