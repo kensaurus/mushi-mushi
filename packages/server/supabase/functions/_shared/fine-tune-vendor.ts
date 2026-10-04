@@ -308,12 +308,13 @@ async function bedrockFetch(
   // SigV4 signing (minimal implementation for Deno edge functions).
   const encoder = new TextEncoder()
   const hash = async (data: string | Uint8Array) => {
-    const buf = await crypto.subtle.digest('SHA-256', typeof data === 'string' ? encoder.encode(data) : data)
+    // BufferSource casts: Deno 2.9's lib types a plain Uint8Array as ArrayBufferLike-backed.
+    const buf = await crypto.subtle.digest('SHA-256', (typeof data === 'string' ? encoder.encode(data) : data) as BufferSource)
     return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('')
   }
   const hmac = async (key: Uint8Array | string, data: string) => {
     const k = typeof key === 'string' ? encoder.encode(key) : key
-    const cryptoKey = await crypto.subtle.importKey('raw', k, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+    const cryptoKey = await crypto.subtle.importKey('raw', k as BufferSource, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
     const sig = await crypto.subtle.sign('HMAC', cryptoKey, encoder.encode(data))
     return new Uint8Array(sig)
   }
