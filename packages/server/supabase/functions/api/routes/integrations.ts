@@ -5,7 +5,7 @@ import { FIX_AGENT_KINDS, PLATFORM_KINDS, TICKET_INTEGRATION_KINDS } from '../..
 import { getServiceClient } from '../../_shared/db.ts';
 import { jwtAuth, adminOrApiKey } from '../../_shared/auth.ts';
 import { logAudit } from '../../_shared/audit.ts';
-import { createExternalIssue } from '../../_shared/integrations.ts';
+import { createExternalIssue, listSyncDestinations } from '../../_shared/integrations.ts';
 import { callerProjectIds, requireProjectAdmin, resolveOwnedProject, resolveAccessibleOrg } from '../shared.ts';
 import {
   parseSentryExtraProjectSlugs,
@@ -69,7 +69,11 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
       ...row,
       config: maskRoutingConfig(row.config as Record<string, unknown> | null),
     }));
-    return c.json({ ok: true, data: { integrations } });
+    // Where POST /v1/admin/integrations/sync/:reportId would push a report:
+    // the active rows above plus Linear connected from the console, which has
+    // no project_integrations row (same loader as the sync).
+    const syncDestinations = await listSyncDestinations(db, project.id as string);
+    return c.json({ ok: true, data: { integrations, syncDestinations } });
   });
 
   app.post('/v1/admin/integrations', jwtAuth, async (c) => {
