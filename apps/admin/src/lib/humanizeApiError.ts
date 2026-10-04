@@ -246,9 +246,9 @@ export function humanizeApiError(
     case 'AUTOFIX_DISABLED':
       return {
         title: 'Auto-fix is off for this project.',
-        hint: 'Turn on Auto-fix in Settings, then dispatch again.',
+        hint: 'Turn on Auto-fix in the Codebase card on the Integrations page, then dispatch again.',
         severity: 'hard',
-        action: { label: 'Turn on Auto-fix', target: { kind: 'route', to: '/settings?tab=autofix' } },
+        action: { label: 'Turn on Auto-fix', target: { kind: 'route', to: '/integrations/config', hash: 'integrations-codebase' } },
         code,
         raw,
       }

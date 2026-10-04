@@ -26,7 +26,7 @@ const STEP_NEXT_LINKS: Record<string, string> = {
   sentry_connected: '/integrations/config#platform-card-sentry',
   byok_anthropic: '/settings?tab=byok',
   codebase_indexed: '/integrations/config#integrations-codebase',
-  autofix_enabled: '/settings?tab=autofix',
+  autofix_enabled: '/integrations/config#integrations-codebase',
   first_fix_dispatched: '/reports',
   slack_connected: '/integrations/config#integrations-slack',
   first_qa_story_passing: '/qa-coverage',
