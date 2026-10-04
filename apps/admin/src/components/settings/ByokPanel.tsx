@@ -174,6 +174,7 @@ export function ByokPanel() {
   const [formError, setFormError] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [removeTarget, setRemoveTarget] = useState<ManagedKey | null>(null);
+  const [disableTarget, setDisableTarget] = useState<PoolKey | null>(null);
   const [removing, setRemoving] = useState(false);
   const [togglePending, setTogglePending] = useState<string | null>(null);
   const [testPending, setTestPending] = useState<string | null>(null);
@@ -488,7 +489,11 @@ export function ByokPanel() {
                   ? 'Test the key first; only a key the provider accepts can be turned on.'
                   : undefined
               }
-              onClick={() => void toggleKey(poolKey)}
+              onClick={() =>
+                // Turning a working key off changes which key the pipeline
+                // uses, so it is confirmed; turning one on is not.
+                poolKey.status === 'active' ? setDisableTarget(poolKey) : void toggleKey(poolKey)
+              }
             >
               {poolKey.status === 'active' ? 'Turn off' : canEnable ? 'Turn on' : 'Test first'}
             </Btn>
@@ -670,6 +675,24 @@ export function ByokPanel() {
           );
         })}
       </SettingsList>
+
+      {disableTarget && (
+        <ConfirmDialog
+          title={`Turn off this ${PROVIDER_META[disableTarget.provider_slug]?.name ?? disableTarget.provider_slug} key?`}
+          body={`Mushi stops using the key ending in ${disableTarget.key_hint ?? '****'} and switches to your next key for this service, or its shared key where there is one. To turn it back on later, press Test and then Turn on.`}
+          confirmLabel="Turn off key"
+          cancelLabel="Keep it on"
+          tone="danger"
+          loading={togglePending === disableTarget.id}
+          onConfirm={async () => {
+            await toggleKey(disableTarget)
+            setDisableTarget(null)
+          }}
+          onCancel={() => {
+            if (togglePending !== disableTarget.id) setDisableTarget(null)
+          }}
+        />
+      )}
 
       {removeTarget && (
         <ConfirmDialog

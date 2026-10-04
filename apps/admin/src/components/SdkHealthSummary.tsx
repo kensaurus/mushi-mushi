@@ -69,6 +69,8 @@ export interface SdkHealthApiKey {
   id: string
   key_prefix: string
   label?: string | null
+  /** What the key may do; unknown when the row was built from a bare prefix. */
+  scopes?: string[] | null
   is_active: boolean
   created_at: string
   last_seen_at?: string | null
