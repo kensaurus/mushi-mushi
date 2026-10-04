@@ -1185,31 +1185,27 @@ export function Layout({ children }: { children: ReactNode }) {
 
       <div className="flex-1 flex min-h-0 flex-col overflow-hidden">
         {/* Mobile header */}
-        {/* Phone header wraps to two rows: menu, wordmark and search, then
-            the team and project switchers. On one row at 390px the
-            switchers ran 75px off-screen and the wordmark sat on the search
-            icon. */}
-        <header className={`md:hidden flex flex-wrap items-center gap-x-2 gap-y-1.5 px-4 py-2.5 border-b border-edge/60 ${appChromeHeaderClass}`}>
+        {/* Phone header is ONE row (B26): menu, team, project, search. The
+            two-row version with the wordmark took a third of a 390px screen
+            once the page banners stacked under it; the wordmark lives in the
+            menu drawer. The switchers truncate instead of overflowing. */}
+        <header className={`md:hidden flex items-center gap-1.5 px-3 py-1.5 border-b border-edge/60 ${appChromeHeaderClass}`}>
           <Btn
             type="button"
             variant="ghost"
             size="sm"
             onClick={() => setMobileOpen(true)}
             aria-label="Open navigation menu"
-            className="shrink-0 p-1.5 h-auto"
+            className="shrink-0 h-8 w-8 p-0"
           >
             <IconMenu size={18} />
           </Btn>
-          <span className="shrink-0 text-sm font-bold tracking-tight">
-            <span className="text-brand">mushi</span>
-            <span className="text-fg-secondary">mushi</span>
-          </span>
-          <div className="min-w-0 flex-1">
-            <SearchButton />
-          </div>
-          <div className="flex w-full min-w-0 items-center gap-2 [&>*]:min-w-0">
+          <div className="flex min-w-0 flex-1 items-center gap-1.5 [&>*]:min-w-0">
             <OrgSwitcher />
             <ProjectSwitcher />
+          </div>
+          <div className="shrink-0">
+            <SearchButton />
           </div>
         </header>
 
