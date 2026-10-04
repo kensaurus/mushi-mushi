@@ -31,6 +31,9 @@ interface Props {
   onToggle: () => void
   onRetry: () => void
   compactTable?: boolean
+  /** Bulk selection (console QA 92): shown when the page passes a handler. */
+  selected?: boolean
+  onSelectChange?: (selected: boolean) => void
   actionLabels?: {
     openPr?: string
     retry?: string
@@ -47,6 +50,8 @@ function FixRowViewInner({
   onToggle,
   onRetry,
   compactTable = false,
+  selected = false,
+  onSelectChange,
   actionLabels,
 }: Props) {
   const ci = ciBadge(fix)
@@ -97,6 +102,7 @@ function FixRowViewInner({
   return (
     <>
       <tr
+        id={`fix-${fix.id}`}
         className={`group border-t border-edge-subtle hover:bg-surface-overlay/50 motion-safe:transition-opacity cursor-pointer motion-safe:animate-mushi-fade-in ${flash.className}`}
         style={{ ...stagger(index), ...flash.style }}
         onAnimationEnd={flash.onAnimationEnd}
@@ -110,6 +116,21 @@ function FixRowViewInner({
         </td>
         <td className={`${FIXES_TABLE_COL.status} ${TABLE_CELL.pxMeta} py-2 align-middle whitespace-nowrap`}>
           <div className="flex flex-col gap-0.5 min-w-0">
+            {onSelectChange ? (
+              <label
+                className="inline-flex items-center gap-1 text-3xs text-fg-faint cursor-pointer w-fit"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <input
+                  type="checkbox"
+                  checked={selected}
+                  onChange={(e) => onSelectChange(e.target.checked)}
+                  aria-label={`Select the fix for ${fixReportLabel(fix)}`}
+                  className="h-3.5 w-3.5 rounded-sm border-edge accent-brand"
+                />
+                <span className="sr-only">Select</span>
+              </label>
+            ) : null}
             {superseded ? (
               <Badge className="w-fit max-w-full min-w-0 truncate text-2xs bg-surface-overlay text-fg-muted">
                 Superseded

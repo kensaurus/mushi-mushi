@@ -24,6 +24,8 @@ interface ConfirmDialogProps {
   loading?: boolean
   onConfirm: () => void | Promise<void>
   onCancel: () => void
+  /** Extra controls between the body and the buttons (e.g. a choice to confirm with). */
+  children?: React.ReactNode
 }
 
 export function ConfirmDialog({
@@ -35,12 +37,14 @@ export function ConfirmDialog({
   loading = false,
   onCancel,
   onConfirm,
+  children,
 }: ConfirmDialogProps) {
   const wrapperRef = useRef<HTMLDivElement | null>(null)
 
   return (
     <DialogShell title={title} onCancel={onCancel} dismissible={!loading}>
       {body && <p className="text-2xs text-fg-secondary leading-snug">{body}</p>}
+      {children}
       <div ref={wrapperRef} className="flex justify-end gap-1.5 pt-1">
         <Btn variant="cancel" onClick={onCancel} disabled={loading}>
           {cancelLabel}

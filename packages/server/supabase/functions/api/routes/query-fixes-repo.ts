@@ -634,22 +634,28 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     // pipeline. The previous project_members-only filter showed "0 fixes"
     // to invited org members.
     const projectIds = await callerProjectIds(c, db, userId);
-    if (projectIds.length === 0) return c.json({ ok: true, data: { fixes: [] } });
+    if (projectIds.length === 0) return c.json({ ok: true, data: { fixes: [], total: 0 } });
 
     // Optional `q` substring search — the admin command palette needs fast
     // alias-matching against summary/rationale/branch, otherwise live search
     // never surfaces in-flight or completed fixes by their change text.
     const search = c.req.query('q')?.trim();
     const queryLimit = Math.min(Number(c.req.query('limit')) || 50, 200);
+    // `offset` + the exact `total` let /fixes load older attempts instead of
+    // stopping at the first page (console QA #91).
+    const queryOffset = Math.max(Math.floor(Number(c.req.query('offset')) || 0), 0);
 
     let query = db
       .from('fix_attempts')
       .select(
-        'id, report_id, project_id, agent, branch, pr_url, pr_number, commit_sha, status, files_changed, lines_changed, summary, rationale, review_passed, started_at, completed_at, created_at, langfuse_trace_id, llm_model, llm_input_tokens, llm_output_tokens, check_run_status, check_run_conclusion, pr_state, merged_at, error, spec_validation_warnings, inventory_action_node_id, failure_category',
+        // cursor_* / claude_workflow_run_url / check_run_updated_at feed the
+        // agent badges, links, artifacts gallery and "CI synced" (QA #89).
+        'id, report_id, project_id, agent, branch, pr_url, pr_number, commit_sha, status, files_changed, lines_changed, summary, rationale, review_passed, started_at, completed_at, created_at, langfuse_trace_id, llm_model, llm_input_tokens, llm_output_tokens, check_run_status, check_run_conclusion, check_run_updated_at, pr_state, merged_at, error, spec_validation_warnings, inventory_action_node_id, failure_category, cursor_agent_id, cursor_artifacts, claude_workflow_run_url',
+        { count: 'exact' },
       )
       .in('project_id', projectIds)
       .order('started_at', { ascending: false })
-      .limit(queryLimit);
+      .range(queryOffset, queryOffset + queryLimit - 1);
 
     if (search) {
       const escaped = search.replace(/[%,]/g, '');
@@ -658,7 +664,8 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       );
     }
 
-    const { data } = await query;
+    const { data, error: listErr, count } = await query;
+    if (listErr) return dbError(c, listErr);
     const fixes = data ?? [];
 
     // Every row carries its report's CURRENT fix state, so the console can
@@ -683,7 +690,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       };
     });
 
-    return c.json({ ok: true, data: { fixes: enriched } });
+    return c.json({ ok: true, data: { fixes: enriched, total: count ?? enriched.length, offset: queryOffset } });
   });
 
   app.post('/v1/admin/fixes', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {
