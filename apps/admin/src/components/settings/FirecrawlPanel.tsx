@@ -337,7 +337,7 @@ export function FirecrawlPanel() {
           <input
             type="range"
             min="1"
-            max="20"
+            max="50"
             step="1"
             aria-label="Pages per lookup"
             className="w-full accent-brand"
