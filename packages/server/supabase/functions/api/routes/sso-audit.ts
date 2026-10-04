@@ -8,6 +8,7 @@ import { logAudit } from '../../_shared/audit.ts';
 import { requireEeLicense } from '../../_shared/ee-gate.ts';
 import { callerProjectIds, resolveOwnedProject } from '../shared.ts';
 import { resolveUserDisplays } from '../../_shared/user-display.ts';
+import { oidcRecordFields } from '../../_shared/sso-oidc-record.ts';
 
 export function registerSsoAuditRoutes(app: Hono<{ Variables: Variables }>): void {
   // ============================================================
@@ -195,6 +196,10 @@ export function registerSsoAuditRoutes(app: Hono<{ Variables: Variables }>): voi
       entityId?: string;
       acsUrl?: string;
       domains?: string[];
+      /** OIDC only; stored in metadata_url / entity_id (see sso-oidc-record.ts). */
+      issuerUrl?: string;
+      clientId?: string;
+      clientSecret?: string;
     };
     const db = getServiceClient();
     const resolvedProject = await resolveOwnedProject(c, db, userId);
@@ -217,6 +222,16 @@ export function registerSsoAuditRoutes(app: Hono<{ Variables: Variables }>): voi
       );
     }
 
+    // OIDC keeps the issuer and client ID the admin typed (never the secret).
+    let oidc: { metadata_url: string; entity_id: string } | null = null;
+    if (body.providerType === 'oidc') {
+      const record = oidcRecordFields(body);
+      if (!record.ok) {
+        return c.json({ ok: false, error: { code: record.code, message: record.message } }, 400);
+      }
+      oidc = { metadata_url: record.metadata_url, entity_id: record.entity_id };
+    }
+
     // First persist a row in 'pending' so the UI sees state immediately even if
     // the GoTrue call fails. We update the row to 'registered' on success.
     const { data: configRow, error: insertErr } = await db
@@ -225,8 +240,8 @@ export function registerSsoAuditRoutes(app: Hono<{ Variables: Variables }>): voi
         project_id: project.id,
         provider_type: body.providerType,
         provider_name: body.providerName,
-        metadata_url: body.metadataUrl ?? null,
-        entity_id: body.entityId ?? null,
+        metadata_url: oidc ? oidc.metadata_url : body.metadataUrl ?? null,
+        entity_id: oidc ? oidc.entity_id : body.entityId ?? null,
         acs_url: body.acsUrl ?? null,
         domains: body.domains ?? [],
         registration_status: 'pending',
