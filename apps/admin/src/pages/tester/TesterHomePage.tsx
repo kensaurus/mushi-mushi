@@ -112,7 +112,7 @@ function RecommendedAppCard({ app }: { app: TesterApp }) {
 }
 
 export function TesterHomePage() {
-  const { data: status, loading: statusLoading, error: statusError } = useTesterStatus()
+  const { data: status, loading: statusLoading, error: statusError, reload: reloadStatus } = useTesterStatus()
   const { data: appsRaw, error: appsError, reload: reloadApps } = usePageData<{ data?: TesterApp[] } | TesterApp[]>('/v1/tester/apps', TESTER_API_OPTS)
   const { data: walletRaw, error: walletError, reload: reloadWallet } = usePageData<{ data?: WalletData } | WalletData>('/v1/tester/wallet', TESTER_API_OPTS)
   const { data: subsRaw, error: subsError, reload: reloadSubs } = usePageData<{ items: Submission[]; total: number }>('/v1/tester/submissions', TESTER_API_OPTS)
@@ -161,6 +161,7 @@ export function TesterHomePage() {
         <Btn
           variant="primary"
           onClick={() => {
+            reloadStatus()
             void reloadApps()
             void reloadWallet()
             void reloadSubs()

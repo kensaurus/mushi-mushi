@@ -6,7 +6,9 @@
 import { useState } from 'react'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
+import { plainApiError } from '../../lib/humanizeApiError'
 import { Btn } from '../ui'
+import { ConfirmDialog } from '../ConfirmDialog'
 import { ContainedBlock, SignalChip, InlineProof } from './ReportSurface'
 
 interface TesterSub {
@@ -47,13 +49,26 @@ const REVIEW_SUCCESS_LABEL: Record<ReviewAction, string> = {
   spam: 'marked as spam',
 }
 
+/**
+ * Pending submissions get every grade. A submission marked spam can still be
+ * overridden (reports held by the old velocity cap were stored as spam with
+ * no way to review them), so it offers every grade except spam again.
+ */
+function reviewActionsFor(status: TesterSub['status']): ReviewAction[] {
+  if (status === 'pending') return ACTIONS.map((a) => a.action)
+  if (status === 'spam') return ACTIONS.map((a) => a.action).filter((a) => a !== 'spam')
+  return []
+}
+
 export function TesterSubmissionCard({ submission, onReviewed }: Props) {
   const toast = useToast()
   const [reviewing, setReviewing] = useState<ReviewAction | null>(null)
   const [note, setNote] = useState(submission.reviewer_note ?? '')
   const [showNoteInput, setShowNoteInput] = useState(false)
+  const [confirmSpam, setConfirmSpam] = useState(false)
   const config = STATUS_CONFIG[submission.status]
-  const isPending = submission.status === 'pending'
+  const available = reviewActionsFor(submission.status)
+  const canReview = available.length > 0
 
   const handleReview = async (action: ReviewAction) => {
     setReviewing(action)
@@ -64,11 +79,10 @@ export function TesterSubmissionCard({ submission, onReviewed }: Props) {
         body: JSON.stringify({ note: note || undefined }),
       })
       if (!res.ok) {
-        const msg = res.error?.message ?? 'Review action failed'
         if (res.error?.code === 'forbidden') {
           toast.error('You do not have permission to review this submission.')
         } else {
-          toast.error(msg)
+          toast.error(plainApiError(res.error, 'Could not save this grade. Try again.'))
         }
         return
       }
@@ -119,10 +133,12 @@ export function TesterSubmissionCard({ submission, onReviewed }: Props) {
         )}
       </ContainedBlock>
 
-      {isPending && (
+      {canReview && (
         <div className="space-y-2">
           <p className="text-2xs text-fg-muted">
-            Grade this submission. Points and reputation are credited immediately.
+            {submission.status === 'spam'
+              ? 'Marked as spam. If that was wrong, grade it again — points and reputation are credited immediately.'
+              : 'Grade this submission. Points and reputation are credited immediately.'}
           </p>
 
           {showNoteInput && (
@@ -136,13 +152,14 @@ export function TesterSubmissionCard({ submission, onReviewed }: Props) {
           )}
 
           <div className="flex flex-wrap gap-2">
-            {ACTIONS.map(({ action, label, variant, description }) => (
+            {ACTIONS.filter(({ action }) => available.includes(action)).map(({ action, label, variant, description }) => (
               <Btn
                 key={action}
                 size="sm"
                 variant={variant}
                 disabled={!!reviewing}
-                onClick={() => handleReview(action)}
+                // Spam takes 10 reputation from the tester: confirm first.
+                onClick={() => (action === 'spam' ? setConfirmSpam(true) : handleReview(action))}
                 title={description}
               >
                 {reviewing === action ? '…' : label}
@@ -161,6 +178,21 @@ export function TesterSubmissionCard({ submission, onReviewed }: Props) {
             Accept = full bounty + 7 rep · Informative = 50% + 0 rep · Duplicate = 0 + 2 rep · Spam = 0 − 10 rep
           </p>
         </div>
+      )}
+
+      {confirmSpam && (
+        <ConfirmDialog
+          title="Mark this submission as spam?"
+          body={`${submission.tester_handle ?? 'The tester'} gets no points and loses 10 reputation. Use Duplicate or Informative if the report was made in good faith.`}
+          confirmLabel="Mark as spam"
+          tone="danger"
+          loading={reviewing === 'spam'}
+          onCancel={() => setConfirmSpam(false)}
+          onConfirm={async () => {
+            await handleReview('spam')
+            setConfirmSpam(false)
+          }}
+        />
       )}
     </section>
   )

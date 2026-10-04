@@ -6,6 +6,8 @@
  *          failed GET tells the user what happened and what to do next.
  */
 
+import { describeErrorDetail } from './apiEnvelope'
+
 export interface HumanizedApiError {
   /** ≤ 70 chars, sentence case. */
   title: string
@@ -22,6 +24,95 @@ export interface HumanizedApiError {
   }
   code?: string
   raw: string
+}
+
+const GENERIC_LOAD_TITLE = 'Could not load this page.'
+const GENERIC_SERVER_TITLE = 'The server returned an error.'
+
+/**
+ * Plain-English copy for slugs that action routes (rewards, tester portal,
+ * anti-gaming) return as the whole error — often `{ error: 'region_not_supported' }`,
+ * which coerces to `code: 'ERROR'` with the slug as the message. Keys are
+ * lower case; lookups are case-insensitive.
+ */
+const ACTION_ERROR_COPY: Record<string, string> = {
+  region_not_supported: "Mushi Bounties isn't available in your country yet, so this can't go ahead.",
+  reputation_too_low: 'Your tester reputation is below what this app asks for. Get a few reports accepted on other apps first.',
+  kyc_unavailable: 'Tax details can’t be submitted right now. Nothing was saved — try again later.',
+  kyc_required: 'Verify your tax details in Settings before redeeming gift cards.',
+  withheld_redemption_not_found: 'That redemption was already handled, so nothing changed. Refresh to see where it stands.',
+  invalid_webhook: 'Check the webhook: the URL must start with https:// and a custom secret must be at least 16 characters.',
+  invalid_quest: 'Check the quest: it needs a name and at least one step with an action and a label.',
+  not_a_tester: 'Activate your tester profile first.',
+  app_not_found: 'That app is no longer listed. Refresh the list.',
+  slug_taken: 'That listing name is already used by another app. Pick a different one.',
+  handle_taken: 'That handle is taken. Pick a different one.',
+  budget_exceeded: 'This app has used its monthly payout budget. Try again next month or pick Pro credit.',
+  forbidden: 'You don’t have access to this.',
+  submission_not_found: 'That submission no longer exists. Refresh the list.',
+}
+
+const OPAQUE_CODES = new Set(['DB_ERROR', 'RPC_ERROR', 'INTERNAL', 'INTERNAL_ERROR', 'NETWORK_ERROR'])
+
+function looksLikeSlug(value: string): boolean {
+  return /^[A-Za-z][A-Za-z0-9_]{2,63}$/.test(value) && value.includes('_')
+}
+
+/**
+ * One sentence for a toast after a failed action (save, join, approve…).
+ * Takes the `{ code, message }` an `apiFetch` result carries, maps known
+ * slugs to plain English, keeps a readable server sentence, and never
+ * returns a raw code, raw JSON or "[object Object]".
+ */
+export function plainApiError(
+  error: { code?: string | null; message?: string | null } | null | undefined,
+  fallback: string,
+): string {
+  const code = error?.code?.trim() ?? ''
+  const message = error?.message?.trim() ?? ''
+
+  // Raw database / runtime text is not for users; these codes have copy.
+  if (OPAQUE_CODES.has(code.toUpperCase())) {
+    const h = humanizeApiError(message || code, code)
+    if (h) return `${h.title} ${h.hint}`
+  }
+
+  // A sentence the server wrote for people wins over generic copy.
+  const http = message.match(/^\d{3}:\s*([\s\S]*)$/)
+  const sentence =
+    !http &&
+    /\s/.test(message) &&
+    !message.includes('[object Object]') &&
+    !/^[{[]/.test(message)
+  if (sentence) return message
+
+  const slug = code && code !== 'ERROR' && code !== 'HTTP_ERROR' ? code : ''
+  const mapped =
+    (slug ? ACTION_ERROR_COPY[slug.toLowerCase()] : undefined) ??
+    (looksLikeSlug(message) ? ACTION_ERROR_COPY[message.toLowerCase()] : undefined) ??
+    (message && !/\s/.test(message) ? ACTION_ERROR_COPY[message.toLowerCase()] : undefined)
+  if (mapped) return mapped
+
+  // "400: {json}" from a non-envelope response — read the JSON if we can.
+  if (http) {
+    try {
+      const parsed = JSON.parse(http[1]!) as { error?: unknown; message?: unknown }
+      const inner = describeErrorDetail(parsed.error) ?? describeErrorDetail(parsed.message)
+      if (inner) {
+        const innerMapped = ACTION_ERROR_COPY[inner.toLowerCase()]
+        if (innerMapped) return innerMapped
+        if (!looksLikeSlug(inner)) return inner
+      }
+    } catch {
+      // Truncated or non-JSON body — fall through to the code-based copy.
+    }
+  }
+
+  const known = humanizeApiError(message || code || 'error', code || null)
+  if (known && known.title !== GENERIC_LOAD_TITLE && known.title !== GENERIC_SERVER_TITLE) {
+    return `${known.title} ${known.hint}`
+  }
+  return fallback
 }
 
 /**
@@ -156,7 +247,7 @@ export function humanizeApiError(
   // HTTP status patterns embedded in message (fallback when code missing)
   if (/^5\d\d:/.test(message) || /HTTP_ERROR/.test(code)) {
     return {
-      title: 'The server returned an error.',
+      title: GENERIC_SERVER_TITLE,
       hint: 'Retry in a moment. If it keeps failing, quote the code (or status) in a bug report.',
       severity: 'soft',
       action: { label: 'Retry', target: { kind: 'retry' } },
@@ -166,7 +257,7 @@ export function humanizeApiError(
   }
 
   return {
-    title: 'Could not load this page.',
+    title: GENERIC_LOAD_TITLE,
     hint: message || 'Retry in a moment. If it keeps failing, quote the error code when you report a bug.',
     severity: 'soft',
     action: { label: 'Retry', target: { kind: 'retry' } },

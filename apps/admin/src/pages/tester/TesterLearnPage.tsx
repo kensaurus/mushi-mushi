@@ -128,7 +128,7 @@ const GUIDE: GuideItem[] = [
 
 function LearnEnrollStrip() {
   const toast = useToast()
-  const { enroll, reload } = useTesterStatus()
+  const { enroll } = useTesterStatus()
   const [termsAccepted, setTermsAccepted] = useState(false)
   const [busy, setBusy] = useState(false)
 
@@ -142,7 +142,6 @@ function LearnEnrollStrip() {
       const ok = await enroll({ acceptedTerms: true })
       if (ok) {
         toast.success('Profile activated — head to Apps to join your first program.')
-        reload()
       } else {
         toast.error('We could not activate your profile — check your connection and try again, or sign out and back in.')
       }

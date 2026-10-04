@@ -33,6 +33,7 @@ import { assertSafeOutboundUrl } from '../../_shared/inventory-guards.ts';
 import { requireSuperAdmin } from '../../_shared/super-admin.ts';
 import { resolveActiveEntitlement } from '../../_shared/entitlements.ts';
 import { resolveProjectRetention } from '../../_shared/retention-policy.ts';
+import { antiGamingListScope, requestedOwnedProject } from '../../_shared/anti-gaming-scope.ts';
 
 const SUPPORT_CATEGORIES = ['billing', 'bug', 'feature', 'other'] as const;
 type SupportCategory = (typeof SUPPORT_CATEGORIES)[number];
@@ -76,14 +77,22 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
     const projectIds = await ownedProjectIds(db, userId)
     if (projectIds.length === 0) return c.json({ ok: true, data: empty })
 
-    // Use the first owned project as the active context.
-    const projectRes = await db
-      .from('projects')
-      .select('id, name')
-      .in('id', projectIds)
-      .order('created_at', { ascending: true })
-      .limit(1)
-      .maybeSingle()
+    // Describe the project the console has active. Falling back to the oldest
+    // owned project only when none was sent (or it is not the caller's) — it
+    // used to be the oldest always, so tiles disagreed with the device list.
+    const requestedPid = requestedOwnedProject(
+      projectIds,
+      c.req.query('project_id'),
+      c.req.header('x-mushi-project-id'),
+    )
+    const projectQuery = db.from('projects').select('id, name')
+    const projectRes = requestedPid
+      ? await projectQuery.eq('id', requestedPid).maybeSingle()
+      : await projectQuery
+          .in('id', projectIds)
+          .order('created_at', { ascending: true })
+          .limit(1)
+          .maybeSingle()
     const pid = projectRes.data?.id ?? projectIds[0]
     const projectName = projectRes.data?.name ?? null
 
@@ -196,10 +205,11 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
       return c.json({ ok: true, data: { count: count ?? 0 } });
     }
 
+    // The page sends the active project so the list matches the KPI tiles.
     let q = db
       .from('reporter_devices')
       .select('*')
-      .in('project_id', projectIds)
+      .in('project_id', antiGamingListScope(projectIds, c.req.query('project_id')))
       .order('updated_at', { ascending: false })
       .limit(200);
     if (flagged) q = q.eq('flagged_as_suspicious', true);
@@ -220,7 +230,7 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
     let query = db
       .from('anti_gaming_events')
       .select('*')
-      .in('project_id', projectIds)
+      .in('project_id', antiGamingListScope(projectIds, c.req.query('project_id')))
       .order('created_at', { ascending: false })
       .limit(limit);
     if (eventType) query = query.eq('event_type', eventType);

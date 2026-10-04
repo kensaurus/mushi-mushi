@@ -12,6 +12,9 @@ interface Props {
   onTab?: (tab: RewardsTabId) => void
   onRefresh?: () => void
   refreshing?: boolean
+  /** Turns rewards on for stats.projectId. Absent → the banner links to Settings. */
+  onEnableRewards?: () => void
+  enabling?: boolean
 }
 
 function tabFromPath(path: string | null): RewardsTabId | null {
@@ -32,7 +35,7 @@ function tabFromPath(path: string | null): RewardsTabId | null {
   return null
 }
 
-export function RewardsStatusBanner({ stats, rewardsEntitlement, onTab, onRefresh, refreshing }: Props) {
+export function RewardsStatusBanner({ stats, rewardsEntitlement, onTab, onRefresh, refreshing, onEnableRewards, enabling }: Props) {
   const orgLabel = stats.organizationName ?? 'this organization'
   const projectLabel = stats.projectName ?? 'active project'
 
@@ -67,10 +70,17 @@ export function RewardsStatusBanner({ stats, rewardsEntitlement, onTab, onRefres
     return (
       <StatusBannerShell
         tone="warn"
-        title={`Rewards disabled for ${projectLabel}`}
-        subtitle={label ?? 'Turn on rewards_enabled in project settings.'}
+        title={`Rewards are off for ${projectLabel}`}
+        subtitle={label ?? 'Activity from your app earns no points until rewards are turned on.'}
         action={
-          <Btn to="/settings?tab=dev" size="sm" variant="primary">Open Settings</Btn>
+          // The old "Open Settings" link went to a tab with no rewards toggle.
+          onEnableRewards ? (
+            <Btn size="sm" variant="primary" loading={enabling} onClick={onEnableRewards}>Turn on rewards</Btn>
+          ) : onTab ? (
+            <Btn size="sm" variant="primary" onClick={() => onTab('settings')}>Open rewards settings</Btn>
+          ) : (
+            <Btn to="/rewards?tab=settings" size="sm" variant="primary">Open rewards settings</Btn>
+          )
         }
       />
     )
