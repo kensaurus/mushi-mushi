@@ -2,7 +2,8 @@
  * FILE: apps/admin/src/components/onboarding/types.ts
  */
 
-export type OnboardingTabId = 'overview' | 'steps' | 'verify' | 'sdk'
+export const ONBOARDING_TAB_IDS = ['overview', 'steps', 'verify', 'sdk'] as const
+export type OnboardingTabId = (typeof ONBOARDING_TAB_IDS)[number]
 
 export interface OnboardingStats {
   hasAnyProject: boolean

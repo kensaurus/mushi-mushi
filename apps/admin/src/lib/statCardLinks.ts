@@ -126,11 +126,13 @@ export const settingsLinks = {
   classifier: '/settings?tab=general',
 } as const
 
+// Every target below must be a real route / tab / element id:
+// statCardLinks.test.ts checks them (QA bugs 130, 131).
 export const onboardingLinks = {
-  required: '/onboarding?tab=setup',
-  sdk: '/sdk',
+  required: '/onboarding?tab=steps',
+  sdk: '/onboarding?tab=sdk',
   reports: '/reports',
-  optional: '/onboarding?tab=setup',
+  optional: '/onboarding?tab=steps',
 } as const
 
 export const billingLinks = {
@@ -145,17 +147,17 @@ export const mcpLinks = {
   mcpRead: '/mcp?tab=setup',
   connected: '/mcp?tab=setup',
   sdkOnly: '/mcp?tab=setup',
-  tools: '/mcp?tab=tools',
+  tools: '/mcp?tab=catalog',
   endpoint: '/mcp?tab=setup',
 } as const
 
 export const connectLinks = {
   github: '/integrations/config',
-  sdk: '/connect#sdk-install',
+  sdk: '/connect#connect-sdk',
   sdkVersion: '/connect',
   mcpConnected: '/mcp?tab=setup',
   mcpUnused: '/mcp?tab=setup',
-  tools: '/mcp?tab=tools',
+  tools: '/mcp?tab=catalog',
 } as const
 
 export const rewardsLinks = {

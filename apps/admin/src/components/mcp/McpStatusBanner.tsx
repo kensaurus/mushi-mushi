@@ -8,6 +8,13 @@ import { usePageCopy } from '../../lib/copy'
 import { StatusBannerShell } from '../StatusBannerShell'
 import type { McpStats, McpTabId } from './types'
 
+/**
+ * Lands on Your projects with the MCP read + write preset chosen. A bare
+ * /projects opened Overview with "SDK ingest" preselected, so following the
+ * banner minted another SDK-only key and the banner stayed (QA bug 132).
+ */
+export const MINT_MCP_KEY_HREF = '/projects?tab=list&keyScope=mcp-write'
+
 interface Props {
   stats: McpStats
   onTab?: (tab: McpTabId) => void
@@ -66,10 +73,10 @@ export function McpStatusBanner({ stats, onTab, onRefresh, refreshing, plainBann
         title={`${stats.reportOnlyKeyCount} SDK key${stats.reportOnlyKeyCount === 1 ? '' : 's'} — no MCP scope`}
         subtitle={
           label ??
-          `report:write keys capture bugs but cannot list tools — mint mcp:read on /projects for ${projectLabel}.`
+          `report:write keys capture bugs but cannot list tools — mint an MCP key for ${projectLabel}.`
         }
         action={
-          <Btn to="/projects" size="sm" variant="primary">{actions.mint ?? 'Mint MCP key'}</Btn>
+          <Btn to={MINT_MCP_KEY_HREF} size="sm" variant="primary">{actions.mint ?? 'Mint MCP key'}</Btn>
         }
       />
     )
@@ -82,7 +89,7 @@ export function McpStatusBanner({ stats, onTab, onRefresh, refreshing, plainBann
         title={plainBanner ? 'No MCP keys yet' : `No MCP keys for ${projectLabel}`}
         subtitle={label}
         action={
-          <Btn to="/projects" size="sm" variant="primary">{actions.generate ?? 'Generate key'}</Btn>
+          <Btn to={MINT_MCP_KEY_HREF} size="sm" variant="primary">{actions.generate ?? 'Generate key'}</Btn>
         }
       />
     )

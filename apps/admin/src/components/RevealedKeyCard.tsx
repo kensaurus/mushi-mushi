@@ -22,12 +22,23 @@ import { mushiEnvVarsForProjectSlug, isExpoReporterProject, expoReporterGithubRe
 import { CHIP_TONE } from '../lib/chipTone'
 import { MCP_PIN_SPEC } from '@mushi-mushi/mcp/clients'
 
-type Mode = 'raw' | 'env' | 'cursor' | 'admin' | 'expo' | 'github'
+type Mode = 'raw' | 'env' | 'cursor' | 'admin' | 'expo' | 'github' | 'sdk'
 
-function defaultModeForSlug(slug: string | null | undefined): Mode {
+/** MCP paste targets only make sense for a key that can call MCP tools. */
+export function isMcpCapableKey(scopes: readonly string[]): boolean {
+  return scopes.includes('mcp:read') || scopes.includes('mcp:write')
+}
+
+/**
+ * First tab shown for a fresh key. A report:write SDK key used to default to
+ * ".env.local (MCP)", an MCP config that cannot list a single tool
+ * (QA bug 138); it now defaults to the app's SDK env block.
+ * @internal exported for tests
+ */
+export function defaultModeFor(slug: string | null | undefined, scopes: readonly string[]): Mode {
   if (isExpoReporterProject(slug)) return 'expo'
   if (mushiEnvVarsForProjectSlug(slug).apiKeyVar.startsWith('VITE_MUSHI_SELF_')) return 'admin'
-  return 'env'
+  return isMcpCapableKey(scopes) ? 'env' : 'sdk'
 }
 
 interface Props {
@@ -77,6 +88,17 @@ function buildEnvLocal(projectId: string, apiKey: string): string {
     `MUSHI_PROJECT_ID=${projectId}`,
     '',
   ].join('\n')
+}
+
+function buildSdkEnv(projectId: string, apiKey: string, env: ProjectMushiEnvVars): string {
+  const lines = [
+    `# Mushi bug-capture SDK — paste into ${env.envFileHint ?? '.env.local'} (gitignored).`,
+    `${env.projectIdVar}=${projectId}`,
+    `${env.apiKeyVar}=${apiKey}`,
+  ]
+  if (env.endpointVar) lines.push(`${env.endpointVar}=${RESOLVED_EXTERNAL_API_URL}`)
+  lines.push('')
+  return lines.join('\n')
 }
 
 function buildAdminDogfoodEnv(projectId: string, apiKey: string, slug: string | null | undefined): string {
@@ -159,7 +181,8 @@ export function RevealedKeyCard({
   testIdPrefix,
 }: Props) {
   const env = mushiEnvVarsForProjectSlug(projectSlug)
-  const [mode, setMode] = useState<Mode>(() => defaultModeForSlug(projectSlug))
+  const [mode, setMode] = useState<Mode>(() => defaultModeFor(projectSlug, scopes))
+  const mcpCapable = isMcpCapableKey(scopes)
   const toast = useToast()
 
   const envSnippet = buildEnvLocal(projectId, apiKey)
@@ -167,6 +190,7 @@ export function RevealedKeyCard({
   const adminSnippet = buildAdminDogfoodEnv(projectId, apiKey, projectSlug)
   const expoSnippet = buildExpoEnvLocal(projectId, apiKey, env)
   const githubSnippet = buildGithubCiEnv(projectId, apiKey, env, projectSlug)
+  const sdkSnippet = buildSdkEnv(projectId, apiKey, env)
   const showAdminTab = env.apiKeyVar.startsWith('VITE_MUSHI_SELF_')
   const showExpoTab = isExpoReporterProject(projectSlug)
   const showGithubTab = Boolean(env.ciVars)
@@ -181,7 +205,9 @@ export function RevealedKeyCard({
             ? expoSnippet
             : mode === 'github'
               ? githubSnippet
-              : cursorSnippet
+              : mode === 'sdk'
+                ? sdkSnippet
+                : cursorSnippet
 
   async function copy() {
     try {
@@ -197,7 +223,9 @@ export function RevealedKeyCard({
                 ? 'Expo .env.local block copied — paste into apps/mobile/.env.local.'
                 : mode === 'github'
                   ? 'GitHub Actions checklist copied — run gh variable/secret set, then rebuild store apps.'
-                  : '.cursor/mcp.json block copied — paste into your IDE\'s MCP config.',
+                  : mode === 'sdk'
+                    ? 'SDK env block copied — paste into your app\'s .env.local and restart the dev server.'
+                    : '.cursor/mcp.json block copied — paste into your IDE\'s MCP config.',
       )
     } catch {
       toast.error('Clipboard blocked — select the text and copy manually.')
@@ -223,7 +251,18 @@ export function RevealedKeyCard({
           },
         ]
       : []),
-    { id: 'env', label: '.env.local (MCP)', hint: 'For the MCP binary, CI, or any tool that reads MUSHI_* env vars.' },
+    ...(mcpCapable
+      ? []
+      : [
+          {
+            id: 'sdk' as const,
+            label: 'SDK env',
+            hint: `The ${env.stackLabel} env vars your app reads for bug capture.`,
+          },
+        ]),
+    ...(mcpCapable
+      ? [{ id: 'env' as const, label: '.env.local (MCP)', hint: 'For the MCP binary, CI, or any tool that reads MUSHI_* env vars.' }]
+      : []),
     ...(showAdminTab
       ? [
           {
@@ -233,7 +272,9 @@ export function RevealedKeyCard({
           },
         ]
       : []),
-    { id: 'cursor', label: '.cursor/mcp.json', hint: 'For Cursor / Claude Desktop / Windsurf.' },
+    ...(mcpCapable
+      ? [{ id: 'cursor' as const, label: '.cursor/mcp.json', hint: 'For Cursor / Claude Desktop / Windsurf.' }]
+      : []),
     { id: 'raw', label: 'Raw key', hint: 'Just the key string.' },
   ]
 
@@ -283,11 +324,11 @@ export function RevealedKeyCard({
           I've stored it — hide
         </Btn>
         <Link
-          to="/mcp"
+          to={mcpCapable ? '/mcp' : '/connect'}
           className="text-2xs text-accent hover:underline ml-auto"
           data-testid="revealed-key-learn-more"
         >
-          What can I do with this key? →
+          {mcpCapable ? 'What can I do with this key? →' : 'Where does this key go? →'}
         </Link>
       </div>
     </div>
