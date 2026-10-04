@@ -231,8 +231,6 @@ export function pipelineStatusLabel(s: string | null | undefined): string {
 
 export const FILTER_OPTIONS = {
   categories: ['', 'bug', 'slow', 'visual', 'confusing', 'other'],
-  // `open` = every status still waiting on a decision (server OPEN_REPORT_STATUSES).
-  statuses:   ['', 'open', 'new', 'queued', 'classified', 'fixing', 'fixed', 'dismissed'],
   severities: ['', 'critical', 'high', 'medium', 'low'],
 } as const
 

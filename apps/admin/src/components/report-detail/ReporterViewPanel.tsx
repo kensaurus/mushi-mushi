@@ -17,7 +17,9 @@ import { reporterStatus, type ReporterTimelineKind } from '@mushi-mushi/core/rep
 import { usePageData } from '../../lib/usePageData'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
-import { Badge, Btn, Card, ErrorAlert, RelativeTime } from '../ui'
+import { Badge, Btn, Card, RelativeTime } from '../ui'
+import { PageLoadError } from '../PageLoadError'
+import { humanizeApiError } from '../../lib/humanizeApiError'
 
 interface ReporterViewTimelineItem {
   kind: ReporterTimelineKind
@@ -52,11 +54,18 @@ const KIND_LABEL: Partial<Record<ReporterTimelineKind, string>> = {
 
 const QUESTION_MAX = 2000
 
-export function ReporterViewPanel({ reportId }: { reportId: string }) {
+export function ReporterViewPanel({
+  reportId,
+  version = 0,
+}: {
+  reportId: string
+  /** Bumped by the page when a reply reaches the reporter, to refetch. */
+  version?: number
+}) {
   const toast = useToast()
   const { data, loading, error, reload } = usePageData<ReporterView>(
     `/v1/admin/reports/${reportId}/reporter-view`,
-    { deps: [reportId] },
+    { deps: [reportId, version] },
   )
   const [question, setQuestion] = useState('')
   const [asking, setAsking] = useState(false)
@@ -70,7 +79,7 @@ export function ReporterViewPanel({ reportId }: { reportId: string }) {
         method: 'POST',
         body: JSON.stringify({ question: text }),
       })
-      if (!res.ok) throw new Error(res.error?.message ?? 'Could not send the question')
+      if (!res.ok) throw new Error(humanizeApiError(res.error?.message ?? 'Request failed', res.error?.code)?.title ?? 'Could not send the question')
       setQuestion('')
       toast.success('Question sent — the report now shows “Waiting on you” to the reporter.')
       reload()
@@ -92,7 +101,7 @@ export function ReporterViewPanel({ reportId }: { reportId: string }) {
     )
   }
   if (error) {
-    return <ErrorAlert title="Reporter view unavailable" message={error} onRetry={reload} />
+    return <PageLoadError error={error} resource="the reporter view" onRetry={reload} />
   }
   if (!data) return null
 

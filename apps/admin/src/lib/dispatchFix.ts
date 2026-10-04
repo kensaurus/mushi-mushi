@@ -11,6 +11,7 @@ import { RESOLVED_API_URL } from './env'
 import { openSseStream } from './sseClient'
 import { withAguiHandler } from './agui'
 import { trackSelf } from './track'
+import { dispatchErrorText } from './dispatchConfirm'
 
 export type DispatchStatus =
   | 'idle'
@@ -232,9 +233,9 @@ export function useDispatchFix(reportId: string, projectId: string) {
       },
     )
     if (!res.ok || !res.data) {
-      const code = (res as { error?: { code?: string; message?: string } }).error?.code ?? 'DISPATCH_FAILED'
-      const message = (res as { error?: { code?: string; message?: string } }).error?.message ?? 'Could not dispatch fix'
-      setState({ status: 'failed', error: `${code}: ${message}` })
+      // Plain English for the chip; the code used to lead it
+      // ("AUTOFIX_DISABLED: Enable Autofix in project settings first").
+      setState({ status: 'failed', error: dispatchErrorText((res as { error?: { code?: string; message?: string } }).error) })
       return
     }
     const { dispatchId } = res.data

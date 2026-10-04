@@ -13,7 +13,6 @@ import {
   IdField,
   RecommendedAction,
   EmptyState,
-  ErrorAlert,
   Btn,
   Badge,
   Callout,
@@ -87,6 +86,9 @@ import { useProjectSnapshots } from '../lib/useProjectSnapshots'
 import type { SdkStatus } from '../components/SdkVersionBadge'
 import { CHIP_TONE } from '../lib/chipTone'
 import { shortReporterKey } from '../lib/reporterKey'
+import { PageLoadError } from '../components/PageLoadError'
+import { humanizeApiError } from '../lib/humanizeApiError'
+import { useConfirmedDispatch } from '../components/report-detail/useConfirmedDispatch'
 
 export function ReportDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -220,10 +222,9 @@ export function ReportDetailPage() {
       if (summary) toast.success('Triage saved', summary)
     } else {
       setReport(previous)
-      toast.error(
-        'Could not save triage update',
-        res.error?.message ?? 'The server rejected the change. Try again or check your connection.',
-      )
+      // Plain English, never `message (CODE)`.
+      const humanized = humanizeApiError(res.error?.message ?? 'Request failed', res.error?.code)
+      toast.error('Could not save triage update', humanized?.title ?? 'Try again in a moment.')
     }
     setSaving(false)
   }
@@ -266,14 +267,16 @@ export function ReportDetailPage() {
           }
           primary={{ href: '/reports', label: 'Back to reports' }}
           secondary={{
-            href: 'https://kensaur.us/mushi-mushi/docs/concepts/judge-loop',
-            label: 'Open docs',
+            // The Reports docs explain projects and report links; the old
+            // target (judge-loop) had nothing to do with a missing report.
+            href: 'https://kensaur.us/mushi-mushi/docs/admin/reports',
+            label: 'Reports docs',
             external: true,
           }}
         />
       )
     }
-    return <ErrorAlert message={`Could not load report: ${error}`} onRetry={reload} />
+    return <PageLoadError error={error} resource="this report" onRetry={reload} />
   }
 
   if (!report) return <DetailSkeleton label="Loading report" />
@@ -430,12 +433,27 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
     report.status === 'fixing'
   const nowMs = useNow(1000, isInFlight)
 
+  const preflight = useDispatchPreflight(report.project_id)
+  const isDispatchBusy = dispatchState.status === 'queueing' || dispatchState.status === 'queued' || dispatchState.status === 'running'
+  // Every dispatch control on this page (triage bar, recommendation CTA and
+  // its retries) goes through this one gate + confirm.
+  const confirmed = useConfirmedDispatch({
+    report,
+    preflight,
+    repoChoice,
+    busy: isDispatchBusy,
+    dispatch,
+  })
+  const { request: requestDispatch, block: dispatchBlockState } = confirmed
+
   const recommendation = useMemo(
-    () => deriveRecommendation(report, dispatchState, commentCount, dispatch, nowMs),
-    [report, dispatchState, commentCount, dispatch, nowMs],
+    () => deriveRecommendation(report, dispatchState, commentCount, requestDispatch, nowMs, dispatchBlockState),
+    [report, dispatchState, commentCount, requestDispatch, nowMs, dispatchBlockState],
   )
 
-  const preflight = useDispatchPreflight(report.project_id)
+  // Bumped when a reply reaches the reporter so the Reporter view refetches
+  // ("What the reporter sees" went stale until a page reload).
+  const [reporterViewVersion, setReporterViewVersion] = useState(0)
 
   // Show the preflight banner on reports that could be dispatched: not already
   // in a terminal state, and not currently being fixed.
@@ -448,7 +466,6 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
     dispatchState.status !== 'running' &&
     dispatchState.status !== 'completed'
 
-  const isDispatchBusy = dispatchState.status === 'queueing' || dispatchState.status === 'queued' || dispatchState.status === 'running'
   const reporterShort = report.reporter_token_hash ? shortReporterKey(report.reporter_token_hash) : 'unknown'
   const mergeTarget = latestFix && canMergeFix(latestFix) ? latestFix : null
 
@@ -574,11 +591,12 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
         saving={saving}
         savedAt={savedAt}
         dispatchState={dispatchState}
-        onDispatch={dispatch}
+        onRequestDispatch={requestDispatch}
+        dispatchBlock={dispatchBlockState}
         isDispatchBusy={isDispatchBusy}
-        preflight={preflight}
         repoChoice={repoChoice}
       />
+      {confirmed.dialog}
 
       {report.tester_submission && (
         <Section title="Mushi Bounties" className="mb-3">
@@ -729,11 +747,16 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
       </div>
 
       <div className="mt-3">
-        <ReportComments thread={commentThread} />
+        <ReportComments
+          thread={commentThread}
+          onPosted={(visibleToReporter) => {
+            if (visibleToReporter) setReporterViewVersion((v) => v + 1)
+          }}
+        />
       </div>
 
       <div className="mt-3">
-        <ReporterViewPanel reportId={report.id} />
+        <ReporterViewPanel reportId={report.id} version={reporterViewVersion} />
       </div>
 
       {/* Identifiers live at the bottom: UUIDs are reference material for

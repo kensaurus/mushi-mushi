@@ -12,6 +12,7 @@ import {
 import { summarizeFixTruths } from '../../_shared/fix-report-truth.ts';
 import { failedFixPreviews, loadRecentFixTruths } from '../../_shared/fix-report-truth-load.ts';
 import { JUDGE_ELIGIBLE_STATUSES, isJudgeStale } from '../../_shared/judge-eligibility.ts';
+import { reportWindowStartIso } from '../../_shared/report-list-filters.ts';
 
 /** Activity-feed line for one fix attempt, read against its report's current state. */
 function fixActivityLabel(
@@ -148,10 +149,7 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
     if ('response' in resolvedProject) return resolvedProject.response;
     const activeProject = resolvedProject.project;
 
-    const since = new Date();
-    since.setUTCDate(since.getUTCDate() - 13);
-    since.setUTCHours(0, 0, 0, 0);
-    const sinceIso = since.toISOString();
+    const sinceIso = reportWindowStartIso(14);
     const now = Date.now();
 
     const [
@@ -234,10 +232,18 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
     const recentReports = reportsRes.data ?? [];
     const recentFixes = fixesRes.data ?? [];
 
+    // Critical reports from the last 14 days that still need a decision.
+    // Fixed and dismissed ones used to count too, so the Plan card stayed
+    // open for 14 days after every critical was closed and inbox zero was
+    // unreachable. Same predicate as the card's link
+    // (status=open&severity=critical&days=14).
     let criticalReports14d = 0;
     for (const r of recentReports) {
       const sev = String(r.severity ?? '').toLowerCase();
-      if (sev === 'critical') criticalReports14d += 1;
+      const status = String(r.status ?? '');
+      if (sev === 'critical' && (OPEN_REPORT_STATUSES as readonly string[]).includes(status)) {
+        criticalReports14d += 1;
+      }
     }
 
     const openBacklog = recentReports.filter((r) => {
@@ -287,9 +293,9 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
       openPlan
         ? {
             stage: 'plan',
-            title: `${criticalReports14d} critical report${criticalReports14d === 1 ? '' : 's'} need triage`,
+            title: `${criticalReports14d} critical report${criticalReports14d === 1 ? ' needs' : 's need'} a decision`,
             hint: 'Confirm severity on the worst bugs first — auto-fix waits for triage.',
-            to: scoped('/reports?severity=critical&status=new'),
+            to: scoped('/reports?status=open&severity=critical&days=14'),
           }
         : null,
       openDo
@@ -467,10 +473,7 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
     if ('response' in resolvedProject) return resolvedProject.response;
     const activeProject = resolvedProject.project;
 
-    const since = new Date();
-    since.setUTCDate(since.getUTCDate() - 13);
-    since.setUTCHours(0, 0, 0, 0);
-    const sinceIso = since.toISOString();
+    const sinceIso = reportWindowStartIso(14);
     const now = Date.now();
 
     const [
@@ -843,6 +846,14 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
       if (status !== 'new' && status !== 'queued') return false;
       return now - new Date(String(r.created_at)).getTime() > 60 * 60 * 1000;
     }).length;
+    // The inbox "critical" card: critical reports from this window that
+    // still need a decision (status=open&severity=critical&days=14).
+    // reportsByDay keeps counting every status: it is the intake chart.
+    const openCritical14d = (recentReports ?? []).filter(
+      (r) =>
+        String(r.severity ?? '').toLowerCase() === 'critical' &&
+        (OPEN_REPORT_STATUSES as readonly string[]).includes(String(r.status ?? '')),
+    ).length;
 
     // Top components by report count
     const componentCounts = new Map<string, number>();
@@ -1096,6 +1107,7 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
         counts: {
           reports14d: (recentReports ?? []).length,
           openBacklog,
+          openCritical14d,
           fixesTotal: fixSummary.total,
           openPrs: fixSummary.openPrs,
           llmCalls14d: totalLlmCalls,
