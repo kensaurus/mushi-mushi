@@ -101,3 +101,39 @@ export function describeByokError(
       return { message: own ?? fallback, where: 'form' };
   }
 }
+
+/**
+ * A key test's outcome as one sentence. The probe's `status` is a code
+ * (`error_auth`, …) and its `detail` is written for logs ("Provider
+ * validation endpoint returned HTTP 503"), so neither is shown on its own.
+ * The detail is appended only when the status is not one we can explain,
+ * because then it is the only clue (e.g. "set the project ref first").
+ */
+export function describeByokTestResult(
+  result: { status?: string | null; detail?: string | null; latencyMs?: number | null },
+  providerName: string,
+): { ok: boolean; message: string } {
+  switch (result.status) {
+    case 'ok':
+      return {
+        ok: true,
+        message: `${providerName} accepted the key${result.latencyMs != null ? ` (${result.latencyMs} ms)` : ''}.`,
+      };
+    case 'error_auth':
+      return { ok: false, message: `${providerName} rejected the key. Replace it with a new one.` };
+    case 'error_quota':
+      return {
+        ok: false,
+        message: `${providerName} says this key is out of quota. Add another key or wait for it to reset.`,
+      };
+    case 'error_network':
+      return { ok: false, message: `Mushi couldn't reach ${providerName}. Test again in a minute.` };
+    default: {
+      const detail = result.detail?.trim();
+      return {
+        ok: false,
+        message: `${providerName} didn't accept the key.${detail && !/^[A-Z_]+$/.test(detail) ? ` ${detail}` : ''}`,
+      };
+    }
+  }
+}

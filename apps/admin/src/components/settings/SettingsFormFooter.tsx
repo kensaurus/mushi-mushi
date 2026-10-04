@@ -35,7 +35,7 @@ export function SettingsFormFooter({
       aria-label="Unsaved settings actions"
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-2xs text-fg-muted">
+        <p className="text-xs text-fg-muted">
           <span className="inline-block h-1.5 w-1.5 rounded-full bg-warn mr-1.5 align-middle" aria-hidden />
           {countLabel}
         </p>

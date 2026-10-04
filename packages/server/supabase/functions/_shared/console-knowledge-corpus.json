@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-10-02T11:41:20.282Z",
+  "generatedAt": "2026-10-04T01:43:07.421Z",
   "docs": [
     {
       "doc_path": "recipes/connect-github-and-sdk.md",
@@ -456,10 +456,10 @@
       "doc_path": "pages/settings.md",
       "section": "main",
       "title": "Settings",
-      "body": "# Settings\n\nProject configuration, API keys, Firecrawl, theming.\n\nRoute: /settings\nSection: Workspace\n\nKeywords: config, api key, preferences, firecrawl, theme, branding\n\nUse this page when the user asks about: config, api key, preferences, firecrawl, theme, branding",
+      "body": "# Settings\n\nProject configuration, your AI keys, alerts, voice, health check.\n\nRoute: /settings\nSection: Workspace\n\nKeywords: config, api key, your ai keys, ai keys, byok, bring your own key, preferences, firecrawl, browserbase, theme, branding\n\nUse this page when the user asks about: config, api key, your ai keys, ai keys, byok, bring your own key",
       "route_path": "/settings",
       "kind": "page",
-      "content_hash": "e4f8220fd933421fd62a747c2f3a277645d73852681030db9bedae118959a2b1"
+      "content_hash": "99a22799929b72b80b7bbbb1ff86daeac3eba6506d6add3c02f0237705c8ee7d"
     },
     {
       "doc_path": "pages/rewards.md",

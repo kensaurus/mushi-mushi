@@ -57,7 +57,7 @@ export const CONSOLE_ROUTES: ConsoleRouteEntry[] = [
   { path: "/notifications", label: "Alert routing", description: "Route events to Slack, email, or Discord with per-stage rules.", group: "Act", keywords: ["alerts","email","slack","discord","routing","rules","digest","alert routing"] },
   { path: "/projects", label: "Projects", description: "Create, archive, and manage projects and members.", group: "Workspace", keywords: ["team","members","create project","organisation","workspace"] },
   { path: "/organization/members", label: "Members", description: "Invite teammates and manage organization roles.", group: "Workspace", keywords: ["members","invite","team","organization"] },
-  { path: "/settings", label: "Settings", description: "Project configuration, API keys, Firecrawl, theming.", group: "Workspace", keywords: ["config","api key","preferences","firecrawl","theme","branding"] },
+  { path: "/settings", label: "Settings", description: "Project configuration, your AI keys, alerts, voice, health check.", group: "Workspace", keywords: ["config","api key","your ai keys","ai keys","byok","bring your own key","preferences","firecrawl","browserbase","theme","branding"] },
   { path: "/rewards", label: "Rewards", description: "Tester rewards and redemption catalog.", group: "Workspace", keywords: ["rewards","tester","bounty","wallet"] },
   { path: "/cost", label: "LLM Cost", description: "Token usage and LLM spend by stage.", group: "Workspace", keywords: ["cost","llm","tokens","billing","usage"] },
   { path: "/billing", label: "Billing", description: "Plan, seats, invoices, and usage-based charges.", group: "Workspace", keywords: ["stripe","plan","invoice","seats","usage","subscription","upgrade"] },

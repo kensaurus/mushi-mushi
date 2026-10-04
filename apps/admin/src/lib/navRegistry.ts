@@ -745,8 +745,8 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     sectionId: 'workspace',
     iconKey: 'settings',
     beginner: true,
-    paletteDescription: 'Project configuration, API keys, Firecrawl, theming.',
-    paletteKeywords: ['config', 'api key', 'preferences', 'firecrawl', 'theme', 'branding'],
+    paletteDescription: 'Project configuration, your AI keys, alerts, voice, health check.',
+    paletteKeywords: ['config', 'api key', 'your ai keys', 'ai keys', 'byok', 'bring your own key', 'preferences', 'firecrawl', 'browserbase', 'theme', 'branding'],
     paletteGroup: 'Workspace',
   },
   {
