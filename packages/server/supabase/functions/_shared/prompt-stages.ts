@@ -23,7 +23,7 @@ export const CUSTOMIZABLE_PROMPT_STAGES = [
   'sentinel', // sentinel-audit
 ] as const
 
-export type CustomizablePromptStage = (typeof CUSTOMIZABLE_PROMPT_STAGES)[number]
+type CustomizablePromptStage = (typeof CUSTOMIZABLE_PROMPT_STAGES)[number]
 
 export function isCustomizablePromptStage(stage: unknown): stage is CustomizablePromptStage {
   return typeof stage === 'string' && (CUSTOMIZABLE_PROMPT_STAGES as readonly string[]).includes(stage)

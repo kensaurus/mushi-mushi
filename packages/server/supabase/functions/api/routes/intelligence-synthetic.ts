@@ -47,7 +47,13 @@ export function registerIntelligenceSyntheticRoutes(app: Hono<{ Variables: Varia
       'Synthetic reports could not be generated. Check that the project has an LLM key under Settings → AI keys.',
     );
     if (!result.ok) {
-      return c.json({ ok: false, error: { code: 'WORKER_FAILED', message: result.message } }, result.status as 502);
+      // 503 = the generator found no LLM key; say where to add one rather
+      // than passing through an env-var name.
+      const message =
+        result.status === 503
+          ? 'This project has no LLM key for synthetic reports. Add an Anthropic key under Settings → AI keys, then try again.'
+          : result.message;
+      return c.json({ ok: false, error: { code: 'WORKER_FAILED', message } }, result.status as 502);
     }
     const data = (result.body.data ?? {}) as { generated?: unknown; evaluated?: unknown };
     const generated = typeof data.generated === 'number' ? data.generated : 0;

@@ -6,11 +6,11 @@
  *          "Experiment launched" for a draft with one variant or a DB error.
  */
 
-export type ExperimentStatus = 'draft' | 'running' | 'stopped' | 'completed'
+type ExperimentStatus = 'draft' | 'running' | 'stopped' | 'completed'
 export type ExperimentAction = 'launch' | 'stop' | 'delete'
 
 /** Fewest variants an A/B test needs: a control and one treatment. */
-export const MIN_VARIANTS_TO_LAUNCH = 2
+const MIN_VARIANTS_TO_LAUNCH = 2
 
 /**
  * null when `action` may run on an experiment in `status` with

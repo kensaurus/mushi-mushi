@@ -7,7 +7,7 @@
  *          to the console as the error message, so users saw a JSON blob.
  */
 
-export type WorkerResult =
+type WorkerResult =
   | { ok: true; body: Record<string, unknown> }
   | { ok: false; status: number; message: string }
 
