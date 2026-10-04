@@ -112,12 +112,25 @@ export interface LlmInvocationRecord {
    * import `otlpSpan` + `setGenAiAttributes` individually.
    */
   otlpTraceparent?: string | null
+  /**
+   * Write the cost row but never debit the hosted wallet for it. Set for
+   * embeddings: they were never billed to the wallet, and the wallet price
+   * table is not known to carry an embedding row (an unpriceable hosted call
+   * is dead-lettered and paged). Turning embedding billing on is an owner
+   * decision, not a side effect of recording the spend.
+   */
+  skipHostedBilling?: boolean
 }
 
+/**
+ * Resolves `{ error }` (null on success) and never rejects. Most callers
+ * ignore the result; a caller whose run must fail when its spend cannot be
+ * recorded (mistake-summarizer) awaits it.
+ */
 export function logLlmInvocation(
   db: SupabaseClient,
   rec: LlmInvocationRecord,
-): Promise<void> {
+): Promise<{ error: string | null }> {
   // LLM-4 (audit 2026-04-21): Langfuse trace coverage measured 65% —
   // digest / modernizer / auto-tune stages weren't passing langfuseTraceId
   // through. Emit a single warn when Langfuse is configured in this isolate
@@ -149,7 +162,7 @@ export function logLlmInvocation(
   // because most callers invoke this as `void logLlmInvocation(...)`.
   // Disabled entirely unless MUSHI_HOSTED_LLM_BILLING is set — see
   // `_shared/hosted-llm-billing.README.md`.
-  if (rec.status === 'success' && rec.keySource === 'env' && rec.projectId) {
+  if (rec.status === 'success' && rec.keySource === 'env' && rec.projectId && !rec.skipHostedBilling) {
     // Imported lazily: the billing chain reaches Deno-only globals, and
     // Node-side vitest suites import this module transitively (via
     // status-reconciler). A static import breaks their collection with
@@ -249,7 +262,11 @@ export function logLlmInvocation(
     cache_read_input_tokens: rec.cacheReadInputTokens ?? null,
   }).then(
     ({ error }) => {
-      if (error) log.warn('llm_invocations insert failed', { error: error.message })
+      if (error) {
+        log.warn('llm_invocations insert failed', { error: error.message })
+        return { error: error.message }
+      }
+      return { error: null }
     },
     // Network / JSON-parse / abort failures rejecting the insert PromiseLike
     // itself (distinct from a PostgREST `{ error }` payload). Callers commonly
@@ -259,9 +276,9 @@ export function logLlmInvocation(
     // NOTE: use two-arg .then() instead of .catch() because the Supabase query
     // builder returns PromiseLike which lacks .catch() in Deno's strict types.
     (err: unknown) => {
-      log.warn('llm_invocations insert threw', {
-        error: err instanceof Error ? err.message : String(err),
-      })
+      const message = err instanceof Error ? err.message : String(err)
+      log.warn('llm_invocations insert threw', { error: message })
+      return { error: message }
     },
   ))
 }

@@ -379,7 +379,7 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
 
     // Generate embedding, dedup, regression detection, graph building (fire-and-forget)
     const embeddingText = `${classification.symptom} ${classification.action} ${classification.actual} ${scrubbedReport.description}`
-    generateAndStoreEmbedding(reportId, embeddingText, { projectId })
+    generateAndStoreEmbedding(reportId, embeddingText, { projectId, functionName: 'fast-filter' })
       .then(() => suggestGrouping(reportId, projectId))
       .then(async (group) => {
         if (group.similarCount > 0) {

@@ -510,7 +510,7 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
     for (const ch of chunks) {
       try {
         const text = `${filePath}::${ch.symbolName ?? 'whole'}\n${ch.body}`
-        const embedding = await createEmbedding(text, { projectId })
+        const embedding = await createEmbedding(text, { projectId, functionName: 'codebase-sync' })
         const contentHash = await sha256Hex(ch.body)
         const { error } = await db.from('project_codebase_files').upsert(
           {

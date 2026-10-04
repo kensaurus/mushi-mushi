@@ -8,6 +8,7 @@ import { LlmBudgetExceededError } from './llm-budget.ts'
 import { detectGraphQuery, executeGraphQuery } from './graph-nl.ts'
 import { NL_QUERY_PLANNER_EFFORT, NL_QUERY_PLANNER_MODEL, NL_QUERY_SUMMARY_MODEL } from './models.ts'
 import { claudeGenerateObject } from './claude-messages.ts'
+import { withLlmUsage } from './llm-usage.ts'
 import { getPromptForStage } from './prompt-ab.ts'
 
 // These text checks are defence in depth, not the tenant boundary. The boundary
@@ -215,14 +216,25 @@ export async function executeNaturalLanguageQuery(
   const nlPlanBasePrompt = nlPlanSelection.promptTemplate
     ?? `You are a SQL query generator. Generate a single SELECT query that answers the user's question about their bug reports.`
   // claudeGenerateObject validates the reply against sqlSchema before returning.
-  const { object: queryPlan, usage: planUsage } = await claudeGenerateObject({
-    apiKey,
-    model: NL_QUERY_PLANNER_MODEL,
-    effort: NL_QUERY_PLANNER_EFFORT,
-    schema: sqlSchema,
-    system: `${nlPlanBasePrompt}\n\n${SCHEMA_CONTEXT}`,
-    prompt: question,
-  })
+  // One key for both calls: the project's BYOK key, else the platform key.
+  const usageCtx = {
+    functionName: 'nl-query',
+    projectId: projectIds[0] ?? null,
+    keySource: resolved?.key ? resolved.source : 'env',
+    langfuseTraceId: trace.id,
+  } as const
+  const { object: queryPlan, usage: planUsage } = await withLlmUsage(
+    db,
+    { ...usageCtx, stage: 'plan', model: NL_QUERY_PLANNER_MODEL, promptVersion: nlPlanSelection.promptVersion ?? null },
+    () => claudeGenerateObject({
+      apiKey,
+      model: NL_QUERY_PLANNER_MODEL,
+      effort: NL_QUERY_PLANNER_EFFORT,
+      schema: sqlSchema,
+      system: `${nlPlanBasePrompt}\n\n${SCHEMA_CONTEXT}`,
+      prompt: question,
+    }),
+  )
   planSpan.end({ model: NL_QUERY_PLANNER_MODEL, inputTokens: planUsage?.promptTokens, outputTokens: planUsage?.completionTokens })
 
   const cleanedSql = sanitizeSql(queryPlan.sql, { requireProjectIdParam: true })
@@ -248,11 +260,15 @@ export async function executeNaturalLanguageQuery(
     : { promptTemplate: null, promptVersion: null, isCandidate: false }
   const summarySystem = nlSummarySelection.promptTemplate
     ?? 'Summarize these query results in 2-3 sentences for a developer. Never invent numbers not in the input.'
-  const { text: summary, usage: summaryUsage } = await generateText({
-    model: anthropic(NL_QUERY_SUMMARY_MODEL),
-    system: summarySystem,
-    prompt: `Question: ${question}\nResults (${results.length} rows): ${JSON.stringify(results.slice(0, 20))}`,
-  })
+  const { text: summary, usage: summaryUsage } = await withLlmUsage(
+    db,
+    { ...usageCtx, stage: 'summary', model: NL_QUERY_SUMMARY_MODEL, promptVersion: nlSummarySelection.promptVersion ?? null },
+    () => generateText({
+      model: anthropic(NL_QUERY_SUMMARY_MODEL),
+      system: summarySystem,
+      prompt: `Question: ${question}\nResults (${results.length} rows): ${JSON.stringify(results.slice(0, 20))}`,
+    }),
+  )
   summarySpan.end({ model: NL_QUERY_SUMMARY_MODEL, inputTokens: summaryUsage?.promptTokens, outputTokens: summaryUsage?.completionTokens })
   await trace.end()
 

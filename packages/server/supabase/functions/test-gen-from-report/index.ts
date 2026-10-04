@@ -17,6 +17,7 @@ import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { withAnthropicOrOpenAi, LlmFailoverError } from '../_shared/llm-failover.ts'
 import { STAGE2_FALLBACK, STAGE2_MODEL, TEST_GEN_EFFORT } from '../_shared/models.ts'
 import { claudeGenerateObject } from '../_shared/claude-messages.ts'
+import { withLlmUsage } from '../_shared/llm-usage.ts'
 import { resolveClaudeModel } from '../_shared/claude-request.ts'
 import { logAudit } from '../_shared/audit.ts'
 import { createTrace } from '../_shared/observability.ts'
@@ -393,19 +394,27 @@ async function handler(req: Request): Promise<Response> {
   const trace = createTrace('test-gen-from-report', { projectId, reportId })
   tagLangfuseTrace(trace.id)
   const llmSpan = trace.span('generate-test')
+  const usageCtx = {
+    functionName: 'test-gen-from-report',
+    stage: 'generate-test',
+    projectId,
+    reportId,
+    primaryModel: modelId,
+    langfuseTraceId: trace.id,
+  }
   try {
     const { result } = await withAnthropicOrOpenAi(
       db,
       projectId,
       async (anthropicResolved) => {
-        const { object } = await claudeGenerateObject({
+        const { object } = await withLlmUsage(db, { ...usageCtx, model: modelId, keySource: anthropicResolved.source }, () => claudeGenerateObject({
           apiKey: anthropicResolved.key,
           model: modelId,
           schema: testGenSchema,
           effort: TEST_GEN_EFFORT,
           system: SYSTEM_PROMPT,
           prompt: buildUserPrompt(report as unknown as Record<string, unknown>, repo),
-        })
+        }))
         return object
       },
       async (openaiResolved) => {
@@ -413,13 +422,13 @@ async function handler(req: Request): Promise<Response> {
           apiKey: openaiResolved.key,
           ...(openaiResolved.baseUrl ? { baseURL: openaiResolved.baseUrl } : {}),
         })
-        const { object } = await generateObject({
+        const { object } = await withLlmUsage(db, { ...usageCtx, model: STAGE2_FALLBACK, keySource: openaiResolved.source }, () => generateObject({
           model: openai(STAGE2_FALLBACK),
           schema: testGenSchema,
           system: SYSTEM_PROMPT,
           prompt: buildUserPrompt(report as unknown as Record<string, unknown>, repo),
           maxRetries: 1,
-        })
+        }))
         return object
       },
     )

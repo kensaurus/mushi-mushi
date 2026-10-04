@@ -7,6 +7,7 @@ import { sendSlackNotification } from '../_shared/slack.ts'
 import { log as rootLog } from '../_shared/logger.ts'
 import { recordPromptResult, checkPromotionEligibility, promoteCandidate, getPromptForStage, resolveJudgeWeights } from '../_shared/prompt-ab.ts'
 import { startCronRun } from '../_shared/telemetry.ts'
+import { recordLlmUsage } from '../_shared/llm-usage.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { resolveLlmKey } from '../_shared/byok.ts'
 import { dispatchPluginEventDetached } from '../_shared/plugins.ts'
@@ -250,7 +251,24 @@ Score each dimension 0-1. Be critical of vague components, miscalibrated severit
           const tryAnthropic = !!(anthropicResolved?.key ?? Deno.env.get('ANTHROPIC_API_KEY'))
           let primaryErr: unknown = tryAnthropic ? null : new Error('No Anthropic key — skipping primary path')
 
+          const judgeUsageCtx = {
+            functionName: 'judge-batch',
+            stage: 'judge',
+            projectId: project.id,
+            reportId: report.id,
+            primaryModel: modelId,
+            promptVersion: judgePromptSelection.promptVersion ?? null,
+            langfuseTraceId: trace.id,
+          }
+
           if (tryAnthropic) {
+            const anthropicStart = Date.now()
+            const anthropicUsage = {
+              ...judgeUsageCtx,
+              model: modelId,
+              keySource: anthropicResolved?.source ?? 'env',
+              startedAt: anthropicStart,
+            } as const
             try {
               // Sentry MUSHI-MUSHI-SERVER-9 (2026-04-23/24): AI SDK v4 sends
               // `temperature` and forces `tool_choice` for JSON; Opus 4.7+ and
@@ -275,7 +293,9 @@ Score each dimension 0-1. Be critical of vague components, miscalibrated severit
               })
               evaluation = result.object
               usage = result.usage
+              void recordLlmUsage(db, anthropicUsage, { result })
             } catch (err) {
+              void recordLlmUsage(db, anthropicUsage, { error: err })
               // Preserve diagnostic fidelity on the first failure — the
               // Anthropic SDK puts the HTTP status on `status` (AI SDK used
               // `statusCode`), which a plain message log would hide. Without this log the audit
@@ -321,12 +341,24 @@ Score each dimension 0-1. Be critical of vague components, miscalibrated severit
               apiKey: openaiKey,
               ...(openaiResolved?.baseUrl ? { baseURL: openaiResolved.baseUrl } : {}),
             })
+            const openaiUsage = {
+              ...judgeUsageCtx,
+              model: normalizedModel,
+              keySource: openaiResolved?.key ? openaiResolved.source : 'env',
+              startedAt: Date.now(),
+              fallbackUsed: tryAnthropic,
+              fallbackReason: tryAnthropic ? 'anthropic_failed' : 'no_anthropic_key',
+            } as const
             const result = await generateObject({
               model: openai(normalizedModel),
               schema: judgeSchema,
               system: SYSTEM_PROMPT,
               prompt: USER_PROMPT,
+            }).catch((err: unknown) => {
+              void recordLlmUsage(db, openaiUsage, { error: err })
+              throw err
             })
+            void recordLlmUsage(db, openaiUsage, { result })
             evaluation = result.object
             usage = result.usage
             usedJudgeModel = normalizedModel

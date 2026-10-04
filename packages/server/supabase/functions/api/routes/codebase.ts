@@ -107,7 +107,7 @@ export function registerCodebaseRoutes(app: Hono<{ Variables: Variables }>): voi
     for (const ch of chunks) {
       try {
         const text = `${body.filePath}::${ch.symbolName ?? 'whole'}\n${ch.body}`;
-        const embedding = await createEmbedding(text, { projectId });
+        const embedding = await createEmbedding(text, { projectId, functionName: 'codebase-index' });
         const contentHash = await sha256Hex(ch.body);
         await db.from('project_codebase_files').upsert(
           {

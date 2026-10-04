@@ -706,6 +706,8 @@ Deno.serve(
           const { createEmbedding } = await import('../_shared/embeddings.ts');
           const queryEmbedding = await createEmbedding(queryText, {
             projectId: dispatch.project_id,
+            functionName: 'fix-worker',
+            reportId: dispatch.report_id,
           });
           const { data: pastFixes } = await db.rpc('match_fix_corpus', {
             query_embedding: queryEmbedding,

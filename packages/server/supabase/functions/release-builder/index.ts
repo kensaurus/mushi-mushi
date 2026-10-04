@@ -29,7 +29,7 @@ import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { RELEASE_NOTES_EFFORT, RELEASE_NOTES_FALLBACK, RELEASE_NOTES_MODEL, THINKING_HEADROOM_TOKENS } from '../_shared/models.ts'
 import { claudeGenerateText } from '../_shared/claude-messages.ts'
-import { estimateCallCostUsd } from '../_shared/pricing.ts'
+import { recordLlmUsage } from '../_shared/llm-usage.ts'
 
 const bodySchema = z.object({
   project_id: z.string().uuid(),
@@ -205,10 +205,19 @@ async function llmReleaseBody(input: {
   projectId: string
 }): Promise<string> {
   const { version, reportSummaries, reports, db, projectId } = input
+  // Platform keys only (ANTHROPIC_API_KEY / OPENAI_API_KEY): key_source 'env'.
+  const usageCtx = {
+    functionName: 'release-builder',
+    stage: 'release-notes',
+    projectId,
+    primaryModel: RELEASE_NOTES_MODEL,
+    keySource: 'env',
+  } as const
+  const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY')
+  const claudeStart = Date.now()
   try {
-    const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY')
     if (!anthropicKey) throw new Error('ANTHROPIC_API_KEY is not set')
-    const { text, usage } = await claudeGenerateText({
+    const result = await claudeGenerateText({
       apiKey: anthropicKey,
       model: RELEASE_NOTES_MODEL,
       effort: RELEASE_NOTES_EFFORT,
@@ -228,25 +237,25 @@ Keep it warm, human, and specific. Avoid developer jargon. Max 400 words.`,
       maxTokens: 600 + THINKING_HEADROOM_TOKENS,
     })
 
-    await db.from('llm_cost_usd').insert({
-      project_id: projectId,
-      operation: 'release-builder',
-      model: RELEASE_NOTES_MODEL,
-      input_tokens: usage.promptTokens,
-      output_tokens: usage.completionTokens,
-      cost_usd: estimateCallCostUsd(RELEASE_NOTES_MODEL, usage.promptTokens, usage.completionTokens),
-    })
-    return text.trim()
-  } catch {
+    void recordLlmUsage(db, { ...usageCtx, model: RELEASE_NOTES_MODEL, startedAt: claudeStart }, { result })
+    return result.text.trim()
+  } catch (claudeErr) {
+    // No key means no paid call, so no row.
+    if (anthropicKey) {
+      void recordLlmUsage(db, { ...usageCtx, model: RELEASE_NOTES_MODEL, startedAt: claudeStart }, { error: claudeErr })
+    }
+    const openaiUsage = { ...usageCtx, model: RELEASE_NOTES_FALLBACK, startedAt: Date.now() }
     try {
       const openai = createOpenAI({ apiKey: Deno.env.get('OPENAI_API_KEY') })
-      const { text } = await generateText({
+      const result = await generateText({
         model: openai(RELEASE_NOTES_FALLBACK),
         prompt: `Write a markdown changelog for version ${version} with these fixed reports:\n${reportSummaries || '(none)'}`,
         maxTokens: 600,
       })
-      return text.trim()
-    } catch {
+      void recordLlmUsage(db, openaiUsage, { result })
+      return result.text.trim()
+    } catch (openaiErr) {
+      void recordLlmUsage(db, openaiUsage, { error: openaiErr })
       return deterministicReleaseBody(reports)
     }
   }
