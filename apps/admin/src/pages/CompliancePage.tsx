@@ -11,7 +11,6 @@ import { PageHeaderBar } from '../components/PageHeaderBar'
 import {
   Card,
   Btn,
-  ErrorAlert,
   EmptyState,
   Input,
   SelectField,
@@ -25,7 +24,15 @@ import { ConfigHelp } from '../components/ConfigHelp'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
 import { ResponsiveTable, TableDensityToggle } from '../components/ResponsiveTable'
 import { Modal } from '../components/Modal'
-import { PromptDialog } from '../components/ConfirmDialog'
+import { ConfirmDialog, PromptDialog } from '../components/ConfirmDialog'
+import { PageLoadError } from '../components/PageLoadError'
+import { describeApiError } from '../lib/humanizeApiError'
+import {
+  describeNewPolicy,
+  describeRetentionChange,
+  RETENTION_FIELD_LABELS,
+  type RetentionField,
+} from '../components/compliance/retentionChange'
 import { IconEye } from '../components/icons'
 import { useToast } from '../lib/toast'
 import { useSetupStatus } from '../lib/useSetupStatus'
@@ -52,6 +59,8 @@ interface RetentionPolicy {
   legal_hold: boolean
   legal_hold_reason: string | null
   updated_at: string
+  /** Owner/admin of the project's team (server-computed); others may only read. */
+  can_manage?: boolean
 }
 
 interface Dsar {
@@ -74,7 +83,11 @@ interface ResidencyProject {
   slug: string
   data_residency_region: 'us' | 'eu' | 'jp' | 'self' | null
   created_at: string
+  /** Owner/admin of the project's team (server-computed); others may only read. */
+  can_manage?: boolean
 }
+
+const OWNER_ADMIN_ONLY = 'Only team owners and admins can change this. Ask one of them to make the change.'
 
 interface Evidence {
   id: string
@@ -184,6 +197,7 @@ export function CompliancePage() {
     data: statsData,
     loading: statsLoading,
     error: statsError,
+    errorCode: statsErrorCode,
     reload: reloadStats,
     lastFetchedAt,
     isValidating,
@@ -196,12 +210,24 @@ export function CompliancePage() {
   const residencyQuery = usePageData<{ projects: ResidencyProject[]; currentRegion: string }>(
     '/v1/admin/residency',
   )
+  // Effective report window per project (plan or override) — the same
+  // resolver the nightly sweep uses. Lets a project with no policy row start
+  // one without silently changing how long its reports are kept.
+  const retentionStatusQuery = usePageData<{
+    projects: Array<{ project_id: string; retention_days: number; source: string }>
+  }>('/v1/admin/retention-status')
 
   const policies = useMemo(() => policiesQuery.data?.policies ?? [], [policiesQuery.data])
   const dsars = useMemo(() => dsarsQuery.data?.requests ?? [], [dsarsQuery.data])
   const evidence = useMemo(() => evidenceQuery.data?.evidence ?? [], [evidenceQuery.data])
   const residency = useMemo(() => residencyQuery.data?.projects ?? [], [residencyQuery.data])
   const currentRegion = residencyQuery.data?.currentRegion ?? 'us'
+
+  const effectiveWindowById = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const p of retentionStatusQuery.data?.projects ?? []) map.set(p.project_id, p.retention_days)
+    return map
+  }, [retentionStatusQuery.data])
 
   const merged = useMergedErrors([
     { ...policiesQuery, label: 'retention policies' },
@@ -217,7 +243,8 @@ export function CompliancePage() {
     dsarsQuery.reload()
     evidenceQuery.reload()
     residencyQuery.reload()
-  }, [reloadStats, policiesQuery, dsarsQuery, evidenceQuery, residencyQuery])
+    retentionStatusQuery.reload()
+  }, [reloadStats, policiesQuery, dsarsQuery, evidenceQuery, residencyQuery, retentionStatusQuery])
 
   useRealtimeReload(
     ['soc2_evidence', 'data_subject_requests', 'project_retention_policies'],
@@ -272,6 +299,25 @@ export function CompliancePage() {
   const [payloadModalEvidence, setPayloadModalEvidence] = useState<Evidence | null>(null)
   const [rejectingDsar, setRejectingDsar] = useState<Dsar | null>(null)
   const [rejectingBusy, setRejectingBusy] = useState(false)
+  // Destructive compliance writes go through a confirm first: pinning a
+  // region is irreversible, and shortening a window or lifting a legal hold
+  // lets the nightly sweep delete data.
+  const [pinTarget, setPinTarget] = useState<{
+    project: ResidencyProject
+    region: Exclude<ResidencyProject['data_residency_region'], null>
+  } | null>(null)
+  const [pinBusy, setPinBusy] = useState(false)
+  const [retentionConfirm, setRetentionConfirm] = useState<{
+    policy: RetentionPolicy
+    field: RetentionField
+    next: number
+  } | null>(null)
+  const [liftHoldTarget, setLiftHoldTarget] = useState<RetentionPolicy | null>(null)
+  const [newPolicyTarget, setNewPolicyTarget] = useState<ResidencyProject | null>(null)
+  const [policyBusy, setPolicyBusy] = useState(false)
+  // Bumped when a retention edit is cancelled or fails, so the input reverts
+  // to the saved value instead of keeping the rejected draft.
+  const [retentionRevision, setRetentionRevision] = useState(0)
   const [dsarForm, setDsarForm] = useState<{
     requestType: Dsar['request_type']
     subjectEmail: string
@@ -286,12 +332,16 @@ export function CompliancePage() {
 
   const setProjectRegion = async (projectId: string, region: ResidencyProject['data_residency_region']) => {
     if (!region) return
+    setPinBusy(true)
     const res = await apiFetch<{ ok: boolean }>(`/v1/admin/residency/${projectId}`, {
       method: 'PUT',
       body: JSON.stringify({ region }),
     })
+    setPinBusy(false)
+    setPinTarget(null)
     if (!res.ok) {
-      toast.error('Failed to update region', res.error?.message)
+      const e = describeApiError(res.error, 'Could not pin the region')
+      toast.error(e.title, e.hint)
       return
     }
     toast.success(`Region pinned to ${region.toUpperCase()}`)
@@ -323,7 +373,8 @@ export function CompliancePage() {
     try {
       const res = await apiFetch('/v1/admin/compliance/evidence/refresh', { method: 'POST' })
       if (!res.ok) {
-        toast.error('Could not refresh evidence', res.error?.message)
+        const e = describeApiError(res.error, 'Could not refresh evidence')
+        toast.error(e.title, e.hint)
         return
       }
       toast.success('Evidence snapshot generated')
@@ -333,17 +384,36 @@ export function CompliancePage() {
     }
   }
 
-  const updatePolicy = async (projectId: string, patch: Partial<RetentionPolicy>) => {
+  const updatePolicy = async (
+    projectId: string,
+    patch: Partial<RetentionPolicy>,
+    successMessage = 'Retention policy updated',
+  ): Promise<boolean> => {
+    setPolicyBusy(true)
     const res = await apiFetch(`/v1/admin/compliance/retention/${projectId}`, {
       method: 'PUT',
       body: JSON.stringify(patch),
     })
+    setPolicyBusy(false)
     if (!res.ok) {
-      toast.error('Could not update retention policy', res.error?.message)
+      const e = describeApiError(res.error, 'Could not update the retention policy')
+      toast.error(e.title, e.hint)
+      setRetentionRevision((n) => n + 1)
+      return false
+    }
+    toast.success(successMessage)
+    reloadAll()
+    return true
+  }
+
+  // Raising a window can never delete anything, so it saves straight away;
+  // lowering one asks first because the next sweep acts on it.
+  const requestRetentionChange = (policy: RetentionPolicy, field: RetentionField, next: number) => {
+    if (next < policy[field]) {
+      setRetentionConfirm({ policy, field, next })
       return
     }
-    toast.success('Retention policy updated')
-    reloadAll()
+    void updatePolicy(policy.project_id, { [field]: next })
   }
 
   const setDsarStatus = async (
@@ -356,11 +426,15 @@ export function CompliancePage() {
       body: JSON.stringify({ status, ...extra }),
     })
     if (!res.ok) {
-      toast.error('Could not update DSAR', res.error?.message)
+      const e = describeApiError(res.error, 'Could not update the DSAR')
+      toast.error(e.title, e.hint)
       return false
     }
     toast.success(`DSAR marked ${status.replace('_', ' ')}`)
+    // The banner, snapshot and tab badge read /compliance/stats, so refetch
+    // it with the queue or they keep counting the request as open.
     dsarsQuery.reload()
+    reloadStats()
     return true
   }
 
@@ -398,12 +472,14 @@ export function CompliancePage() {
     })
     setFiling(false)
     if (!res.ok) {
-      toast.error('Could not file DSAR', res.error?.message)
+      const e = describeApiError(res.error, 'Could not file the DSAR')
+      toast.error(e.title, e.hint)
       return
     }
     toast.success('DSAR filed', 'Auditor evidence row was created')
     setDsarForm({ requestType: 'access', subjectEmail: '', subjectId: '', notes: '' })
     dsarsQuery.reload()
+    reloadStats()
   }
 
   // ── Derivations used by the hero, the chip rail, and the cards ──────────
@@ -453,6 +529,28 @@ export function CompliancePage() {
     if (effectiveFilter === 'legal_hold') return []
     return dsars
   }, [effectiveFilter, dsars, openDsars, overdueDsars])
+
+  // Accessible projects with no policy row yet: they follow their plan's
+  // window, and need a way to start a policy or go on legal hold.
+  const projectsWithoutPolicy = useMemo(() => {
+    const withPolicy = new Set(policies.map((p) => p.project_id))
+    return effectiveFilter === 'all' ? residency.filter((p) => !withPolicy.has(p.id)) : []
+  }, [policies, residency, effectiveFilter])
+
+  const startPolicy = (project: ResidencyProject, legalHold: boolean) => {
+    const planWindow = effectiveWindowById.get(project.id)
+    if (planWindow == null) {
+      toast.error('Could not read the current window', 'Refresh the page, then try again.')
+      return
+    }
+    // Seed the reports window with the one in force today, so creating the
+    // row changes nothing until the user edits it.
+    void updatePolicy(
+      project.id,
+      { reports_retention_days: planWindow, ...(legalHold ? { legal_hold: true } : {}) },
+      legalHold ? `${project.name} is on legal hold` : `Policy created for ${project.name}`,
+    )
+  }
 
   const visiblePolicies = useMemo(() => {
     if (effectiveFilter === 'legal_hold') return legalHoldPolicies
@@ -557,7 +655,7 @@ export function CompliancePage() {
     return <PanelSkeleton rows={6} label="Loading compliance" />
   }
   if (statsError) {
-    return <ErrorAlert message={`Failed to load compliance stats: ${statsError}`} onRetry={reloadAll} />
+    return <PageLoadError error={statsError} code={statsErrorCode} onRetry={reloadAll} />
   }
 
   return (
@@ -663,7 +761,12 @@ export function CompliancePage() {
       )}
 
       {loading ? <PanelSkeleton rows={5} label="Loading compliance data" /> : error ? (
-        <ErrorAlert message={`Failed to load ${merged.failedLabel ?? 'compliance data'}: ${error}`} onRetry={merged.retry} />
+        <PageLoadError
+          error={error}
+          code={merged.errorCode}
+          resource={merged.failedLabel ?? 'compliance data'}
+          onRetry={merged.retry}
+        />
       ) : (
         <>
           {/* Filter-wide empty state — shown when every section the filter
@@ -838,11 +941,15 @@ export function CompliancePage() {
                                 Locked
                               </SignalChip>
                             </>
+                          ) : p.can_manage === false ? (
+                            <span title={OWNER_ADMIN_ONLY} className="text-2xs text-fg-muted">
+                              Not pinned. An owner or admin can pin it.
+                            </span>
                           ) : (
                             (['us', 'eu', 'jp', 'self'] as const).map((r) => (
                               <ActionPill
                                 key={r}
-                                onClick={() => setProjectRegion(p.id, r)}
+                                onClick={() => setPinTarget({ project: p, region: r })}
                                 className="uppercase font-mono text-3xs"
                               >
                                 {r}
@@ -868,7 +975,7 @@ export function CompliancePage() {
                   <SignalChip tone="info">showing legal-hold projects only</SignalChip>
                 )}
               </div>
-              {visiblePolicies.length === 0 ? (
+              {visiblePolicies.length === 0 && projectsWithoutPolicy.length === 0 ? (
                 <EmptyState
                   title={
                     filter === 'legal_hold'
@@ -878,7 +985,7 @@ export function CompliancePage() {
                   description={
                     filter === 'legal_hold'
                       ? undefined
-                      : 'Defaults of 365d (reports) / 730d (audit) apply until you save a policy.'
+                      : "Each project keeps reports for its plan's window until you save a policy."
                   }
                 />
               ) : (
@@ -903,7 +1010,13 @@ export function CompliancePage() {
                           <Btn
                             size="sm"
                             variant={p.legal_hold ? 'danger' : 'ghost'}
-                            onClick={() => updatePolicy(p.project_id, { legal_hold: !p.legal_hold })}
+                            disabled={policyBusy || p.can_manage === false}
+                            title={p.can_manage === false ? OWNER_ADMIN_ONLY : undefined}
+                            onClick={() =>
+                              p.legal_hold
+                                ? setLiftHoldTarget(p)
+                                : void updatePolicy(p.project_id, { legal_hold: true })
+                            }
                           >
                             {p.legal_hold ? 'Lift legal hold' : 'Place on legal hold'}
                           </Btn>
@@ -915,29 +1028,76 @@ export function CompliancePage() {
                           label="Reports"
                           helpId="compliance.retention.reports_days"
                           value={p.reports_retention_days}
-                          onChange={(v) => updatePolicy(p.project_id, { reports_retention_days: v })}
+                          revision={retentionRevision}
+                          readOnly={p.can_manage === false}
+                          onChange={(v) => requestRetentionChange(p, 'reports_retention_days', v)}
                         />
                         <RetentionInput
                           label="Audit"
                           helpId="compliance.retention.audit_days"
                           value={p.audit_retention_days}
-                          onChange={(v) => updatePolicy(p.project_id, { audit_retention_days: v })}
+                          revision={retentionRevision}
+                          readOnly={p.can_manage === false}
+                          onChange={(v) => requestRetentionChange(p, 'audit_retention_days', v)}
                         />
                         <RetentionInput
                           label="LLM traces"
                           helpId="compliance.retention.events_days"
                           value={p.llm_traces_retention_days}
-                          onChange={(v) => updatePolicy(p.project_id, { llm_traces_retention_days: v })}
+                          revision={retentionRevision}
+                          readOnly={p.can_manage === false}
+                          onChange={(v) => requestRetentionChange(p, 'llm_traces_retention_days', v)}
                         />
                         <RetentionInput
                           label="BYOK audit"
                           helpId="compliance.retention.attachments_days"
                           value={p.byok_audit_retention_days}
-                          onChange={(v) => updatePolicy(p.project_id, { byok_audit_retention_days: v })}
+                          revision={retentionRevision}
+                          readOnly={p.can_manage === false}
+                          onChange={(v) => requestRetentionChange(p, 'byok_audit_retention_days', v)}
                         />
                       </div>
                     </div>
                   ))}
+                  {projectsWithoutPolicy.map((project) => {
+                    const planWindow = effectiveWindowById.get(project.id)
+                    const locked = project.can_manage === false
+                    return (
+                      <div
+                        key={project.id}
+                        className="flex flex-wrap items-center justify-between gap-2 rounded border border-dashed border-edge-subtle p-2"
+                      >
+                        <div className="min-w-0">
+                          <div className="text-xs font-medium truncate">{project.name}</div>
+                          <p className="text-2xs text-fg-muted">
+                            {planWindow != null
+                              ? `No policy yet. Reports are kept ${planWindow} days (the plan window).`
+                              : 'No policy yet. Reports follow the plan window.'}
+                          </p>
+                        </div>
+                        <div className="inline-flex items-center gap-1">
+                          <Btn
+                            size="sm"
+                            variant="ghost"
+                            disabled={policyBusy || planWindow == null || locked}
+                            title={locked ? OWNER_ADMIN_ONLY : undefined}
+                            onClick={() => setNewPolicyTarget(project)}
+                          >
+                            Set a custom policy
+                          </Btn>
+                          <Btn
+                            size="sm"
+                            variant="ghost"
+                            disabled={policyBusy || planWindow == null || locked}
+                            title={locked ? OWNER_ADMIN_ONLY : undefined}
+                            onClick={() => startPolicy(project, true)}
+                          >
+                            Place on legal hold
+                          </Btn>
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               )}
             </Card>
@@ -1176,6 +1336,74 @@ export function CompliancePage() {
           required at the UI layer because SOC 2 CC8.1 expects every closed
           DSAR to have a documented disposition — leaving it null silently
           would later trip the auditor's WARN heuristic. */}
+      {pinTarget && (
+        <ConfirmDialog
+          title={`Pin ${pinTarget.project.name} to ${pinTarget.region.toUpperCase()}?`}
+          body={`This cannot be undone from the console. Once pinned, the project's data stays in ${pinTarget.region.toUpperCase()}; moving it later needs an export and restore by support. Only team owners and admins can pin a region.`}
+          confirmLabel={`Pin to ${pinTarget.region.toUpperCase()}`}
+          tone="danger"
+          loading={pinBusy}
+          onConfirm={() => setProjectRegion(pinTarget.project.id, pinTarget.region)}
+          onCancel={() => (pinBusy ? undefined : setPinTarget(null))}
+        />
+      )}
+
+      {retentionConfirm && (
+        <ConfirmDialog
+          title={`Shorten ${RETENTION_FIELD_LABELS[retentionConfirm.field].toLowerCase()} retention?`}
+          body={describeRetentionChange(
+            retentionConfirm.field,
+            retentionConfirm.policy[retentionConfirm.field],
+            retentionConfirm.next,
+            projectNameById.get(retentionConfirm.policy.project_id) ?? 'this project',
+            retentionConfirm.policy.legal_hold,
+          )}
+          confirmLabel={`Keep ${retentionConfirm.next} days`}
+          tone="danger"
+          loading={policyBusy}
+          onConfirm={async () => {
+            const { policy, field, next } = retentionConfirm
+            await updatePolicy(policy.project_id, { [field]: next })
+            setRetentionConfirm(null)
+          }}
+          onCancel={() => {
+            if (policyBusy) return
+            setRetentionConfirm(null)
+            setRetentionRevision((n) => n + 1)
+          }}
+        />
+      )}
+
+      {newPolicyTarget && (
+        <ConfirmDialog
+          title={`Create a retention policy for ${newPolicyTarget.name}?`}
+          body={describeNewPolicy(newPolicyTarget.name, effectiveWindowById.get(newPolicyTarget.id) ?? 0)}
+          confirmLabel="Create policy"
+          tone="danger"
+          loading={policyBusy}
+          onConfirm={() => {
+            startPolicy(newPolicyTarget, false)
+            setNewPolicyTarget(null)
+          }}
+          onCancel={() => (policyBusy ? undefined : setNewPolicyTarget(null))}
+        />
+      )}
+
+      {liftHoldTarget && (
+        <ConfirmDialog
+          title={`Lift the legal hold on ${projectNameById.get(liftHoldTarget.project_id) ?? 'this project'}?`}
+          body={`Deletion resumes at the next nightly sweep: reports older than ${liftHoldTarget.reports_retention_days} days and audit log entries older than ${liftHoldTarget.audit_retention_days} days will be permanently deleted. Only lift the hold once the matter it protects is closed.`}
+          confirmLabel="Lift legal hold"
+          tone="danger"
+          loading={policyBusy}
+          onConfirm={async () => {
+            await updatePolicy(liftHoldTarget.project_id, { legal_hold: false }, 'Legal hold lifted')
+            setLiftHoldTarget(null)
+          }}
+          onCancel={() => (policyBusy ? undefined : setLiftHoldTarget(null))}
+        />
+      )}
+
       {rejectingDsar && (
         <PromptDialog
           title="Reject DSAR"
@@ -1193,7 +1421,22 @@ export function CompliancePage() {
   )
 }
 
-function RetentionInput({ label, value, onChange, helpId }: { label: string; value: number; onChange: (v: number) => void; helpId?: string }) {
+function RetentionInput({
+  label,
+  value,
+  onChange,
+  helpId,
+  revision = 0,
+  readOnly = false,
+}: {
+  label: string
+  value: number
+  onChange: (v: number) => void
+  helpId?: string
+  /** Changes when the parent rejects or cancels an edit, to restore `value`. */
+  revision?: number
+  readOnly?: boolean
+}) {
   const [draft, setDraft] = useState(String(value))
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -1203,7 +1446,7 @@ function RetentionInput({ label, value, onChange, helpId }: { label: string; val
   useEffect(() => {
     if (document.activeElement === inputRef.current) return
     setDraft(String(value))
-  }, [value])
+  }, [value, revision])
 
   return (
     <label className="flex flex-col gap-1 text-2xs">
@@ -1215,9 +1458,12 @@ function RetentionInput({ label, value, onChange, helpId }: { label: string; val
         ref={inputRef}
         type="number"
         min={1}
+        readOnly={readOnly}
+        title={readOnly ? OWNER_ADMIN_ONLY : undefined}
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={() => {
+          if (readOnly) return
           const n = parseInt(draft, 10)
           if (Number.isFinite(n) && n > 0 && n !== value) onChange(n)
           else setDraft(String(value))

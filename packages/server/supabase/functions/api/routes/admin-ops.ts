@@ -1,4 +1,4 @@
-import type { Hono } from 'npm:hono@4';
+import type { Context, Hono } from 'npm:hono@4';
 import type { Variables } from '../types.ts'
 
 import { getServiceClient } from '../../_shared/db.ts';
@@ -21,12 +21,19 @@ import { getPlan } from '../../_shared/plans.ts';
 import { withIdempotency } from '../../_shared/idempotency.ts';
 import { notifyOperator } from '../../_shared/operator-notify.ts';
 import { SUPPORT_EMAIL, SUPPORT_URL } from '../../_shared/support.ts';
-import { dbError, ownedProjectIds, requireProjectAdmin, resolveOwnedProject } from '../shared.ts';
+import {
+  callerCanAccessProject,
+  dbError,
+  ownedProjectIds,
+  requireProjectAdmin,
+  resolveOwnedProject,
+} from '../shared.ts';
 import { isProjectStorageSecretRef, storageSecretPrefix } from '../../_shared/vault-ref.ts';
 import { assertSafeOutboundUrl } from '../../_shared/inventory-guards.ts';
 import { requireSuperAdmin } from '../../_shared/super-admin.ts';
 import { resolveActiveEntitlement } from '../../_shared/entitlements.ts';
 import { resolveProjectRetention } from '../../_shared/retention-policy.ts';
+import { canManageDataGovernance, manageableProjectIds } from '../../_shared/data-governance-role.ts';
 
 const SUPPORT_CATEGORIES = ['billing', 'bug', 'feature', 'other'] as const;
 type SupportCategory = (typeof SUPPORT_CATEGORIES)[number];
@@ -39,6 +46,36 @@ interface ContactBody {
 }
 
 const RATE_LIMIT_PER_HOUR = 5;
+
+/**
+ * Retention windows, legal hold and residency pins decide what the nightly
+ * sweep deletes and where data lives, so only org owners and admins (or a
+ * project's direct owner) may change them. Members and viewers keep read
+ * access. Returns the 403 to send, or null when the caller may write.
+ */
+async function requireDataGovernanceRole(
+  c: Context,
+  db: ReturnType<typeof getServiceClient>,
+  userId: string,
+  projectId: string,
+  what: string,
+): Promise<Response | null> {
+  const access = await callerCanAccessProject(c, db, userId, projectId);
+  if (!access.allowed) {
+    return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Not your project' } }, 403);
+  }
+  if (canManageDataGovernance(access.role)) return null;
+  return c.json(
+    {
+      ok: false,
+      error: {
+        code: 'FORBIDDEN',
+        message: `Only team owners and admins can change ${what}. Ask one of them to make this change.`,
+      },
+    },
+    403,
+  );
+}
 
 export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): void {
   // GET /v1/admin/anti-gaming/stats — AntiGamingStatusBanner posture data.
@@ -677,22 +714,24 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
     const projectIds = await ownedProjectIds(db, userId);
     if (projectIds.length === 0) return c.json({ ok: true, data: { policies: [] } });
 
-    const { data, error } = await db
-      .from('project_retention_policies')
-      .select('*')
-      .in('project_id', projectIds);
+    const [{ data, error }, manageable] = await Promise.all([
+      db.from('project_retention_policies').select('*').in('project_id', projectIds),
+      manageableProjectIds(db, userId, projectIds),
+    ]);
     if (error) return dbError(c, error);
-    return c.json({ ok: true, data: { policies: data ?? [] } });
+    const policies = (data ?? []).map((row) => ({
+      ...row,
+      can_manage: manageable.has(row.project_id as string),
+    }));
+    return c.json({ ok: true, data: { policies } });
   });
 
   app.put('/v1/admin/compliance/retention/:projectId', jwtAuth, requireEeLicense('retention'), async (c) => {
     const userId = c.get('userId') as string;
     const projectId = c.req.param('projectId')!;
     const db = getServiceClient();
-    const projectIds = await ownedProjectIds(db, userId);
-    if (!projectIds.includes(projectId)) {
-      return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Not your project' } }, 403);
-    }
+    const denied = await requireDataGovernanceRole(c, db, userId, projectId, 'retention or legal hold');
+    if (denied) return denied;
 
     const body = await c.req.json().catch(() => ({}));
     const updates: Record<string, unknown> = { project_id: projectId };
@@ -1009,17 +1048,21 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
       });
     }
 
-    const { data, error } = await db
-      .from('projects')
-      .select('id, name, slug, data_residency_region, created_at')
-      .in('id', projectIds);
+    const [{ data, error }, manageable] = await Promise.all([
+      db
+        .from('projects')
+        .select('id, name, slug, data_residency_region, created_at')
+        .in('id', projectIds),
+      manageableProjectIds(db, userId, projectIds),
+    ]);
 
     if (error) return dbError(c, error);
+    const projects = (data ?? []).map((row) => ({ ...row, can_manage: manageable.has(row.id as string) }));
     return c.json({
       ok: true,
-      projects: data ?? [],
+      projects,
       currentRegion: currentRegion(),
-      data: { projects: data ?? [], currentRegion: currentRegion() },
+      data: { projects, currentRegion: currentRegion() },
     });
   });
 
@@ -1030,10 +1073,8 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
     const userId = c.get('userId') as string;
     const projectId = c.req.param('projectId')!;
     const db = getServiceClient();
-    const projectIds = await ownedProjectIds(db, userId);
-    if (!projectIds.includes(projectId)) {
-      return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
-    }
+    const denied = await requireDataGovernanceRole(c, db, userId, projectId, 'data residency');
+    if (denied) return denied;
     const body = await c.req.json().catch(() => ({}));
     const region = body.region as string | undefined;
     if (!region || !['us', 'eu', 'jp', 'self'].includes(region)) {

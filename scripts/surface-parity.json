@@ -270,6 +270,7 @@
     "GET /v1/admin/research/sessions/:id": {"allow": "jwt-only"},
     "GET /v1/admin/research/stats": {"allow": "jwt-only"},
     "GET /v1/admin/residency": {"allow": "jwt-only"},
+    "GET /v1/admin/retention-status": {"allow": "jwt-only"},
     "GET /v1/admin/rewards/activity": {"allow": "jwt-only"},
     "GET /v1/admin/rewards/contributors/:id": {"allow": "jwt-only"},
     "GET /v1/admin/rewards/disputes": {"allow": "jwt-only"},
