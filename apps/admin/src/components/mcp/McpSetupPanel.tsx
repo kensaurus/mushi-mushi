@@ -184,12 +184,15 @@ export function McpSetupPanel({
           <div className="flex flex-wrap items-center gap-2">
             {activeProjectId ? (
               <>
+                {/* Explicit read-only: the button next to it mints the write key.
+                    ClientConnectButton now defaults to read + write. */}
                 <ClientConnectButton
                   client={CURSOR_CLIENT}
                   projectId={activeProjectId}
                   projectName={displayName}
                   endpoint={RESOLVED_EXTERNAL_API_URL}
                   mcpHttpUrl={RESOLVED_MCP_HTTP_URL}
+                  scopes={['mcp:read']}
                   variant="primary"
                   size="sm"
                 />
