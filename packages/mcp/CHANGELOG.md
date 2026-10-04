@@ -1,5 +1,12 @@
 # @mushi-mushi/mcp
 
+## 0.24.3
+
+### Patch Changes
+
+- 7690263: `McpBuildInput` takes an optional `pinSpec` so a host can write the published `@mushi-mushi/mcp` version into stdio configs instead of the version it was built with. Only an exact `@mushi-mushi/mcp@<semver>` is used; anything else falls back to `MCP_PIN_SPEC`.
+- 7690263: `improve_qa_story` works on one project per call. Leave `projectId` out to use the configured project.
+
 ## 0.24.2
 
 ### Patch Changes
