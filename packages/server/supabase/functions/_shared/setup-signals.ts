@@ -51,7 +51,7 @@ export interface IntegrationSignalInput {
   /** byok_keys rows for provider `anthropic`. */
   anthropicPoolKeys: ReadonlyArray<{ status?: string | null; test_status?: string | null }>
   /** Host env credentials. Each is only a fallback, never the primary truth. */
-  env: { githubToken: boolean; slackBotToken: boolean; slackChannelId: boolean }
+  env: { githubToken: boolean; slackBotToken: boolean }
   /** The operator's env Slack bot may only serve projects the operator owns. */
   operatorProject: boolean
 }
@@ -101,7 +101,10 @@ export function deriveIntegrationSignals(i: IntegrationSignalInput): Integration
     present(s.slack_bot_token_ref) ||
     present(o.slack_bot_token_ref) ||
     (i.env.slackBotToken && i.operatorProject)
-  const hasChannel = present(s.slack_channel_id) || (i.env.slackChannelId && i.operatorProject && !present(s.slack_bot_token_ref))
+  // The project must have chosen a channel: the operator's env default
+  // channel is not this project's choice, and the Slack card would still
+  // (rightly) say "Not connected", so the checklist must not count it.
+  const hasChannel = present(s.slack_channel_id)
   const hasSlack = present(s.slack_webhook_url) || (hasBot && hasChannel)
 
   return { hasGithub, hasSentry, hasByok, hasSlack }
@@ -119,7 +122,6 @@ function envFlags(): IntegrationSignalInput['env'] {
   return {
     githubToken: get('GITHUB_TOKEN'),
     slackBotToken: get('SLACK_BOT_TOKEN'),
-    slackChannelId: get('SLACK_CHANNEL_ID'),
   }
 }
 

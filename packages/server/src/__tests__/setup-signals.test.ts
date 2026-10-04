@@ -6,7 +6,7 @@ import {
   type IntegrationSignalInput,
 } from '../../supabase/functions/_shared/setup-signals.ts'
 
-const NO_ENV = { githubToken: false, slackBotToken: false, slackChannelId: false }
+const NO_ENV = { githubToken: false, slackBotToken: false }
 
 function input(over: Partial<IntegrationSignalInput> = {}): IntegrationSignalInput {
   return {
@@ -116,10 +116,15 @@ describe('deriveIntegrationSignals — Slack', () => {
   })
 
   it('the operator env bot only backs operator-owned projects', () => {
-    const env = { githubToken: false, slackBotToken: true, slackChannelId: false }
+    const env = { githubToken: false, slackBotToken: true }
     const settings = { slack_channel_id: 'C1' }
     expect(deriveIntegrationSignals(input({ settings, env, operatorProject: true })).hasSlack).toBe(true)
     expect(deriveIntegrationSignals(input({ settings, env, operatorProject: false })).hasSlack).toBe(false)
+  })
+
+  it("the operator's env default channel is not the project's channel", () => {
+    const env = { githubToken: false, slackBotToken: true }
+    expect(deriveIntegrationSignals(input({ env, operatorProject: true })).hasSlack).toBe(false)
   })
 })
 
