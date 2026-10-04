@@ -119,7 +119,7 @@ describe('recipe element views', () => {
     show({ envView: env })
     const rows = [...container.querySelectorAll('tbody tr')].map((r) => r.textContent)
     expect(rows).toEqual(['API_URLSetNot checked', 'SENTRY_DSNMissing—', 'STRIPE_KEYnot declaredSet, not declared—'])
-    expect(container.textContent).toMatch(/GitHub env: staging: GitHub did not list these names/)
+    expect(container.textContent).toMatch(/GitHub env: staging: not checked. GitHub did not list these names/)
   })
 
   it('pickElementView ignores details without a view, and detailWithoutView drops only the view key', () => {
