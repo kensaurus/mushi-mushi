@@ -9,7 +9,7 @@
  *          scroll-lock, and Esc-close behaviour.
  */
 
-import { useRef, useState } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { Btn } from './ui'
 import { Modal } from './Modal'
 
@@ -18,6 +18,8 @@ type ConfirmTone = 'default' | 'danger'
 interface ConfirmDialogProps {
   title: string
   body?: string
+  /** Exactly what the action touches (keys, repos, PRs), rendered under the body. */
+  details?: ReactNode
   confirmLabel?: string
   cancelLabel?: string
   tone?: ConfirmTone
@@ -29,6 +31,7 @@ interface ConfirmDialogProps {
 export function ConfirmDialog({
   title,
   body,
+  details,
   confirmLabel = 'Confirm',
   cancelLabel = 'Cancel',
   tone = 'default',
@@ -41,6 +44,7 @@ export function ConfirmDialog({
   return (
     <DialogShell title={title} onCancel={onCancel} dismissible={!loading}>
       {body && <p className="text-2xs text-fg-secondary leading-snug">{body}</p>}
+      {details && <div className="text-2xs text-fg-secondary">{details}</div>}
       <div ref={wrapperRef} className="flex justify-end gap-1.5 pt-1">
         <Btn variant="cancel" onClick={onCancel} disabled={loading}>
           {cancelLabel}

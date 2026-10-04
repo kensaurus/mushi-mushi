@@ -31,7 +31,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiFetch } from '../lib/supabase'
 import { useToast } from '../lib/toast'
+import { describeActionError } from '../lib/actionError'
 import { Btn, Callout, CodeValue } from './ui'
+import { ConfirmDialog } from './ConfirmDialog'
 
 interface SecretStatus {
   configured: boolean
@@ -85,15 +87,22 @@ export function IdentitySecretCard({
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  // Rotate and Disable both break every live identity token at once: confirm
+  // with the themed dialog (QA bug 33; Disable used window.confirm, QA bug 260).
+  const [confirming, setConfirming] = useState<'rotate' | 'disable' | null>(null)
+  // A failed GET is not "Not configured" (QA bug 128): say what happened.
+  const [loadError, setLoadError] = useState<string | null>(null)
   // Raw secret is only held in memory and cleared on unmount / page reload.
   const [revealedSecret, setRevealedSecret] = useState<string | null>(null)
   const revealedRef = useRef<string | null>(null)
 
   const load = useCallback(() => {
     setLoading(true)
+    setLoadError(null)
     void apiFetch<SecretStatus>(`/v1/admin/projects/${projectId}/identity-secret`)
       .then((res) => {
         if (res.ok && res.data) setStatus(res.data)
+        else setLoadError(describeActionError(res.error, 'Could not check the signed-identity secret.'))
       })
       .finally(() => setLoading(false))
   }, [projectId])
@@ -121,12 +130,11 @@ export function IdentitySecretCard({
       setStatus({ configured: true, createdAt: res.data.createdAt })
       toast.success('Identity secret generated — copy it now, it won\'t be shown again.')
     } else {
-      toast.error('Failed to generate identity secret')
+      toast.error('Could not generate the identity secret', describeActionError(res.error, 'Try again in a moment.'))
     }
   }, [projectId, toast])
 
   const remove = useCallback(async () => {
-    if (!confirm('Disable signed identity? All existing tokens will stop verifying immediately.')) return
     setDeleting(true)
     const res = await apiFetch<{ configured: boolean }>(
       `/v1/admin/projects/${projectId}/identity-secret`,
@@ -139,12 +147,26 @@ export function IdentitySecretCard({
       revealedRef.current = null
       toast.success('Identity secret disabled')
     } else {
-      toast.error('Failed to disable identity secret')
+      toast.error('Could not disable signed identity', describeActionError(res.error, 'Try again in a moment.'))
     }
   }, [projectId, toast])
 
   if (loading) {
     return <div className="text-2xs text-fg-faint px-1 py-2">Loading identity secret…</div>
+  }
+
+  if (loadError) {
+    return (
+      <div className="space-y-2">
+        <div className="text-xs font-medium text-fg">Signed identity</div>
+        <Callout tone="warn" label="Could not check this setting">
+          {loadError}
+        </Callout>
+        <Btn size="sm" variant="ghost" onClick={load}>
+          Retry
+        </Btn>
+      </div>
+    )
   }
 
   const envBlock = revealedSecret
@@ -177,17 +199,48 @@ export function IdentitySecretCard({
             size="sm"
             variant={isConfigured ? 'ghost' : 'primary'}
             loading={generating}
-            onClick={generate}
+            // Rotating replaces a live secret: confirm first. A first secret breaks nothing.
+            onClick={isConfigured ? () => setConfirming('rotate') : generate}
           >
             {isConfigured ? 'Rotate secret' : 'Generate secret'}
           </Btn>
           {isConfigured && (
-            <Btn size="sm" variant="danger" loading={deleting} onClick={remove}>
+            <Btn size="sm" variant="danger" loading={deleting} onClick={() => setConfirming('disable')}>
               Disable
             </Btn>
           )}
         </div>
       </div>
+
+      {confirming === 'rotate' && (
+        <ConfirmDialog
+          title="Rotate the signed-identity secret?"
+          body={
+            'The current secret stops verifying immediately. Every end-user token your app already minted fails, ' +
+            'so reports arrive without a verified account until you set the new secret on your host function and redeploy.'
+          }
+          confirmLabel="Rotate secret"
+          tone="danger"
+          onCancel={() => setConfirming(null)}
+          onConfirm={() => {
+            setConfirming(null)
+            void generate()
+          }}
+        />
+      )}
+      {confirming === 'disable' && (
+        <ConfirmDialog
+          title="Disable signed identity?"
+          body="All existing tokens stop verifying immediately and new reports arrive anonymous. You can generate a new secret later."
+          confirmLabel="Disable"
+          tone="danger"
+          onCancel={() => setConfirming(null)}
+          onConfirm={() => {
+            setConfirming(null)
+            void remove()
+          }}
+        />
+      )}
 
       {revealedSecret && (
         <div className="space-y-2 rounded-md border border-warn/40 bg-warn/5 p-3">
