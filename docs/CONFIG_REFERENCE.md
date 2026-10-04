@@ -93,7 +93,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset (inbound disabled)`
 
-**Where it lives** — table `project_settings.sentry_webhook_secret` · endpoint `PATCH /v1/admin/settings` · read by `POST /v1/webhooks/sentry (api route)`, `POST /v1/webhooks/sentry/seer (api route)`
+**Where it lives** — table `project_settings.sentry_webhook_secret (Vault)` · endpoint `PATCH /v1/admin/settings` · read by `POST /v1/webhooks/sentry (api route)`, `POST /v1/webhooks/sentry/seer (api route)`
 
 **When to change** — Set this once when wiring inbound Sentry user feedback. Rotate it together with the Sentry-side value — never one without the other or every payload starts failing signature verification.
 
@@ -213,7 +213,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset (uses platform default)`
 
-**Where it lives** — table `project_settings.byok_anthropic_key_ref (vault://…)` · endpoint `PUT /v1/admin/byok/anthropic` · read by `fast-filter`, `classify-report`, `fix-worker edge functions`
+**Where it lives** — table `project_settings.byok_anthropic_key_ref (Vault)` · endpoint `PUT /v1/admin/byok/anthropic` · read by `fast-filter`, `classify-report`, `fix-worker edge functions`
 
 **When to change** — Set on day 1 if your plan is BYOK-only. Rotate when an engineer with key access leaves, or when Anthropic's usage console shows unfamiliar traffic.
 
@@ -231,7 +231,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset (failover disabled)`
 
-**Where it lives** — table `project_settings.byok_openai_key_ref (vault://…)` · endpoint `PUT /v1/admin/byok/openai` · read by `fast-filter`, `classify-report`, `judge-batch edge function`
+**Where it lives** — table `project_settings.byok_openai_key_ref (Vault)` · endpoint `PUT /v1/admin/byok/openai` · read by `fast-filter`, `classify-report`, `judge-batch edge function`
 
 **When to change** — Add this once Anthropic outages start showing up in your error budget — the failover silently kicks in only when this is configured.
 
@@ -267,7 +267,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset (web research disabled)`
 
-**Where it lives** — table `project_settings.firecrawl_api_key_ref (vault://…)` · endpoint `PUT /v1/admin/byok/firecrawl` · read by `settings-research API routes`, `fix-worker edge function`, `library-modernizer edge function`
+**Where it lives** — table `project_settings.byok_firecrawl_key_ref (Vault)` · endpoint `PUT /v1/admin/byok/firecrawl` · read by `settings-research API routes`, `fix-worker edge function`, `library-modernizer edge function`
 
 **When to change** — Add this once you start seeing autofix attempts hit a wall on "library X changed its API". Skip it for offline-first projects or fully air-gapped deployments.
 
@@ -381,7 +381,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `SDK send-only (report:write only)`
 
-**Where it lives** — table `project_api_keys.scopes (jsonb)` · endpoint `POST /v1/admin/projects/{id}/keys` · read by `POST /v1/reports (api route)`, `mcp server (@mushi-mushi/mcp)`
+**Where it lives** — table `project_api_keys.scopes (text[])` · endpoint `POST /v1/admin/projects/{id}/keys` · read by `POST /v1/reports (api route)`, `mcp server (@mushi-mushi/mcp)`
 
 **When to change** — Pick `SDK send-only` for keys you ship inside a browser bundle. Pick `MCP read-only` for safely letting an agent browse reports. Only pick `MCP read + write` for trusted local clients with an audit trail.
 
@@ -397,7 +397,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `enabled by default for new keys`
 
-**Where it lives** — table `project_api_keys.scopes (jsonb)` · endpoint `POST /v1/admin/projects/{id}/keys` · read by `POST /v1/reports (api route)`
+**Where it lives** — table `project_api_keys.scopes (text[])` · endpoint `POST /v1/admin/projects/{id}/keys` · read by `POST /v1/reports (api route)`
 
 **When to change** — Always grant this for keys used by the SDK. Drop it for back-office keys that only need to read state (admin dashboards, MCP read-only).
 
@@ -413,7 +413,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `disabled by default — opt-in via the mint dialog`
 
-**Where it lives** — table `project_api_keys.scopes (jsonb)` · endpoint `POST /v1/admin/projects/{id}/keys` · read by `mcp server (@mushi-mushi/mcp)`
+**Where it lives** — table `project_api_keys.scopes (text[])` · endpoint `POST /v1/admin/projects/{id}/keys` · read by `mcp server (@mushi-mushi/mcp)`
 
 **When to change** — Grant on keys you paste into Claude Desktop / Cursor / Cline so the LLM can read your reports inbox. Pair with `mcp:write` only if you want the LLM to mutate state.
 
@@ -429,7 +429,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `disabled by default`
 
-**Where it lives** — table `project_api_keys.scopes (jsonb)` · endpoint `POST /v1/admin/projects/{id}/keys` · read by `mcp server (@mushi-mushi/mcp)`
+**Where it lives** — table `project_api_keys.scopes (text[])` · endpoint `POST /v1/admin/projects/{id}/keys` · read by `mcp server (@mushi-mushi/mcp)`
 
 **When to change** — Only when you've scoped the key to a single trusted client (e.g. one developer's Cursor) and have an audit trail in place. Revoke + re-mint on personnel changes.
 
@@ -441,11 +441,9 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Summary** — Picks which project's data the entire admin operates on for this session.
 
-**How it works** — Every admin API call carries the active project id as a header. Switching here re-issues all queries — there's no manual "reload everything" step. Persisted per-user in your auth profile, so each operator can have their own default.
+**How it works** — Every admin API call carries the active project id in the `X-Mushi-Project-Id` header. Switching here re-issues all queries — there's no manual "reload everything" step. The choice is kept in this browser (localStorage `mushi:active_project_id`, or `?project=` in the URL), not on the server, so each browser keeps its own default.
 
 **Default** — `first project the user has access to`
-
-**Where it lives** — table `auth.users / user_profile.active_project_id` · endpoint `PATCH /v1/admin/me/active-project` · read by `every admin API endpoint`
 
 **When to change** — Switch when reviewing bugs across multiple apps. For SSO orgs, ask the workspace owner to scope your invite so the picker only shows projects you should see.
 
@@ -465,7 +463,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset`
 
-**Where it lives** — table `platform_integrations.config.sentry_org_slug` · endpoint `PUT /v1/admin/integrations/sentry` · read by `sentry-seer-poll edge function`, `integration-health-probe edge function`
+**Where it lives** — table `project_settings.sentry_org_slug` · endpoint `PUT /v1/admin/integrations/platform/sentry` · read by `sentry-seer-poll edge function`, `integration-health-probe edge function`
 
 **When to change** — Set once at install. Update only if Sentry renames your org (rare).
 
@@ -481,7 +479,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset (org-wide search)`
 
-**Where it lives** — table `platform_integrations.config.sentry_project_slug` · endpoint `PUT /v1/admin/integrations/sentry` · read by `sentry-seer-poll edge function`, `integration-health-probe edge function`
+**Where it lives** — table `project_settings.sentry_project_slug` · endpoint `PUT /v1/admin/integrations/platform/sentry` · read by `sentry-seer-poll edge function`, `integration-health-probe edge function`
 
 **When to change** — Set this whenever you have more than one Sentry project — the speed-up on enrichment is significant.
 
@@ -497,7 +495,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset (enrichment disabled)`
 
-**Where it lives** — table `platform_integrations.config.sentry_auth_token_ref` · endpoint `PUT /v1/admin/integrations/sentry` · read by `sentry-seer-poll edge function`, `integration-health-probe edge function`, `POST /v1/admin/projects/:id/sentry/import (api route)`, `finalizeFixMerge (_shared/fix-merge.ts)`
+**Where it lives** — table `project_settings.sentry_auth_token_ref (Vault)` · endpoint `PUT /v1/admin/integrations/platform/sentry` · read by `sentry-seer-poll edge function`, `integration-health-probe edge function`, `POST /v1/admin/projects/:id/sentry/import (api route)`, `finalizeFixMerge (_shared/fix-merge.ts)`
 
 **When to change** — Rotate quarterly, or whenever the issuing user leaves the org.
 
@@ -513,7 +511,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset (tracing disabled)`
 
-**Where it lives** — table `platform_integrations.config.langfuse_host` · endpoint `PUT /v1/admin/integrations/langfuse` · read by `fast-filter`, `classify-report`, `fix-worker`, `judge-batch`
+**Where it lives** — table `project_settings.langfuse_host` · endpoint `PUT /v1/admin/integrations/platform/langfuse` · read by `fast-filter`, `classify-report`, `fix-worker`, `judge-batch`
 
 **When to change** — Set on day 1 — tracing is the only way to see what the LLM actually saw when it misclassifies.
 
@@ -529,7 +527,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset`
 
-**Where it lives** — table `platform_integrations.config.langfuse_public_key_ref` · endpoint `PUT /v1/admin/integrations/langfuse` · read by `LLM observability layer`
+**Where it lives** — table `project_settings.langfuse_public_key_ref (Vault)` · endpoint `PUT /v1/admin/integrations/platform/langfuse` · read by `LLM observability layer`
 
 **When to change** — Rotate together with the secret key whenever you suspect either is leaked.
 
@@ -545,7 +543,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset`
 
-**Where it lives** — table `platform_integrations.config.langfuse_secret_key_ref` · endpoint `PUT /v1/admin/integrations/langfuse` · read by `LLM observability layer`
+**Where it lives** — table `project_settings.langfuse_secret_key_ref (Vault)` · endpoint `PUT /v1/admin/integrations/platform/langfuse` · read by `LLM observability layer`
 
 **When to change** — Rotate quarterly, or immediately on any suspicion of leak.
 
@@ -561,7 +559,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset (autofix disabled)`
 
-**Where it lives** — table `platform_integrations.config.github_repo_url` · endpoint `PUT /v1/admin/integrations/github` · read by `fix-worker edge function`
+**Where it lives** — table `project_settings.github_repo_url` · endpoint `PUT /v1/admin/integrations/platform/github` · read by `fix-worker edge function`
 
 **When to change** — Set when you graduate from "review only" to "Mushi opens PRs". Typically the production repo, not a sandbox.
 
@@ -577,7 +575,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `main`
 
-**Where it lives** — table `platform_integrations.config.github_default_branch` · endpoint `PUT /v1/admin/integrations/github` · read by `fix-worker edge function`
+**Where it lives** — table `project_settings.github_default_branch` · endpoint `PUT /v1/admin/integrations/platform/github` · read by `fix-worker edge function`
 
 **When to change** — Change only if your repo's default isn't `main` — otherwise leaving it blank is the right answer.
 
@@ -593,7 +591,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset`
 
-**Where it lives** — table `platform_integrations.config.github_installation_token_ref` · endpoint `PUT /v1/admin/integrations/github` · read by `fix-worker edge function`
+**Where it lives** — table `project_settings.github_installation_token_ref (Vault)` · endpoint `PUT /v1/admin/integrations/platform/github` · read by `fix-worker edge function`
 
 **When to change** — Re-issue when the GitHub App is uninstalled/reinstalled, or when a PAT hits its expiry.
 
@@ -609,7 +607,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset (CI sync disabled)`
 
-**Where it lives** — table `platform_integrations.config.github_webhook_secret` · endpoint `PUT /v1/admin/integrations/github` · read by `github-webhook edge function`
+**Where it lives** — table `project_settings.github_webhook_secret (Vault)` · endpoint `PUT /v1/admin/integrations/platform/github` · read by `github-webhook edge function`
 
 **When to change** — Set this once you want PR check-run conclusions (CI passing/failing) reflected in the Auto-Fix Pipeline UI.
 
@@ -625,7 +623,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset`
 
-**Where it lives** — table `routing_destinations.config.baseUrl` · endpoint `POST /v1/admin/routing` · read by `route-to-jira edge function`
+**Where it lives** — table `project_integrations.config.baseUrl (integration_type = jira)` · endpoint `POST /v1/admin/integrations` · read by `route-to-jira edge function`
 
 **When to change** — Update if Atlassian migrates your tenant or you self-host Jira behind a new domain.
 
@@ -641,7 +639,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset`
 
-**Where it lives** — table `routing_destinations.config.email` · endpoint `POST /v1/admin/routing` · read by `route-to-jira edge function`
+**Where it lives** — table `project_integrations.config.email (integration_type = jira)` · endpoint `POST /v1/admin/integrations` · read by `route-to-jira edge function`
 
 **When to change** — Set this to a service account, not a real human — service accounts survive offboarding.
 
@@ -653,11 +651,11 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Summary** — Atlassian API token paired with the email above for basic auth.
 
-**How it works** — Stored as vault reference. Create at id.atlassian.com → Security → API tokens.
+**How it works** — Saved in the Jira routing row’s config as entered (not in Vault); the console only ever shows its last 4 characters. Create at id.atlassian.com → Security → API tokens.
 
 **Default** — `unset`
 
-**Where it lives** — table `routing_destinations.config.apiToken` · endpoint `POST /v1/admin/routing` · read by `route-to-jira edge function`
+**Where it lives** — table `project_integrations.config.apiToken (integration_type = jira)` · endpoint `POST /v1/admin/integrations` · read by `route-to-jira edge function`
 
 **When to change** — Rotate quarterly. Re-issue immediately if the owning email changes.
 
@@ -673,7 +671,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset`
 
-**Where it lives** — table `routing_destinations.config.projectKey` · endpoint `POST /v1/admin/routing` · read by `route-to-jira edge function`
+**Where it lives** — table `project_integrations.config.projectKey (integration_type = jira)` · endpoint `POST /v1/admin/integrations` · read by `route-to-jira edge function`
 
 **When to change** — Change to route to a different Jira project — typically when the support team owns a new tracker.
 
@@ -685,11 +683,11 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Summary** — Personal API key used to mirror reports as Linear issues.
 
-**How it works** — Sent as the `Authorization` header on every Linear GraphQL call. Stored as vault reference. Generate at Linear → Settings → API → Personal API keys.
+**How it works** — Sent as the `Authorization` header on every Linear GraphQL call. Saved in the Linear routing row’s config as entered (not in Vault); the console only ever shows its last 4 characters. Generate at Linear → Settings → API → Personal API keys.
 
 **Default** — `unset`
 
-**Where it lives** — table `routing_destinations.config.apiKey` · endpoint `POST /v1/admin/routing` · read by `route-to-linear edge function`
+**Where it lives** — table `project_integrations.config.apiKey (integration_type = linear)` · endpoint `POST /v1/admin/integrations` · read by `route-to-linear edge function`
 
 **When to change** — Rotate when the issuing user changes role. Linear keys don't auto-expire, so quarterly review is wise.
 
@@ -705,7 +703,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset`
 
-**Where it lives** — table `routing_destinations.config.teamId` · endpoint `POST /v1/admin/routing` · read by `route-to-linear edge function`
+**Where it lives** — table `project_integrations.config.teamId (integration_type = linear)` · endpoint `POST /v1/admin/integrations` · read by `route-to-linear edge function`
 
 **When to change** — Update when re-routing to a different team — e.g. moving from Triage to Engineering once the team grows.
 
@@ -717,11 +715,11 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Summary** — Fine-grained PAT with `Issues:write` on the public-tracker repo.
 
-**How it works** — Distinct from the auto-fix repo PAT — this one targets the tracker repo (often public), not the code repo. Stored as vault reference.
+**How it works** — Distinct from the auto-fix repo PAT — this one targets the tracker repo (often public), not the code repo. Saved in the GitHub routing row’s config as entered (not in Vault); the console only ever shows its last 4 characters.
 
 **Default** — `unset`
 
-**Where it lives** — table `routing_destinations.config.token` · endpoint `POST /v1/admin/routing` · read by `route-to-github-issues edge function`
+**Where it lives** — table `project_integrations.config.token (integration_type = github)` · endpoint `POST /v1/admin/integrations` · read by `route-to-github-issues edge function`
 
 **When to change** — Use when you want a public-facing changelog of reviewed bugs without exposing your code repo.
 
@@ -737,7 +735,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset`
 
-**Where it lives** — table `routing_destinations.config.owner` · endpoint `POST /v1/admin/routing` · read by `route-to-github-issues edge function`
+**Where it lives** — table `project_integrations.config.owner (integration_type = github)` · endpoint `POST /v1/admin/integrations` · read by `route-to-github-issues edge function`
 
 **When to change** — Change when the tracker repo moves under a new org — typically during company rebranding.
 
@@ -753,7 +751,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset`
 
-**Where it lives** — table `routing_destinations.config.repo` · endpoint `POST /v1/admin/routing` · read by `route-to-github-issues edge function`
+**Where it lives** — table `project_integrations.config.repo (integration_type = github)` · endpoint `POST /v1/admin/integrations` · read by `route-to-github-issues edge function`
 
 **When to change** — Update when archiving and replacing the tracker — Mushi follows the new repo as soon as you save.
 
@@ -769,7 +767,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset`
 
-**Where it lives** — table `routing_destinations.config.routingKey` · endpoint `POST /v1/admin/routing` · read by `route-to-pagerduty edge function`
+**Where it lives** — table `project_integrations.config.routingKey (integration_type = pagerduty)` · endpoint `POST /v1/admin/integrations` · read by `route-to-pagerduty edge function`
 
 **When to change** — Set this once you have a real on-call rotation. Don't use a personal key — use a service-level integration key.
 
@@ -789,7 +787,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `supabase`
 
-**Where it lives** — table `storage_configs.provider` · endpoint `PUT /v1/admin/storage` · read by `storage adapter (every artifact upload/download)`
+**Where it lives** — table `project_storage_settings.provider` · endpoint `PUT /v1/admin/storage/:projectId` · read by `storage adapter (every artifact upload/download)`
 
 **When to change** — Switch to your own bucket once you cross the Supabase Storage egress free tier, or when compliance asks you to keep artifacts inside your own VPC.
 
@@ -805,7 +803,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset`
 
-**Where it lives** — table `storage_configs.bucket` · endpoint `PUT /v1/admin/storage` · read by `storage adapter`
+**Where it lives** — table `project_storage_settings.bucket` · endpoint `PUT /v1/admin/storage/:projectId` · read by `storage adapter`
 
 **When to change** — Set once when wiring BYO storage. Migrate to a new bucket only with a backfill plan — old links keep pointing at the old one.
 
@@ -821,7 +819,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset`
 
-**Where it lives** — table `storage_configs.region` · endpoint `PUT /v1/admin/storage` · read by `storage adapter`, `compliance check`
+**Where it lives** — table `project_storage_settings.region` · endpoint `PUT /v1/admin/storage/:projectId` · read by `storage adapter`, `compliance check`
 
 **When to change** — Set the region your bucket actually lives in. Don't guess — write failures from a wrong region are silent until the user can't open their screenshot.
 
@@ -837,7 +835,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `empty (provider default)`
 
-**Where it lives** — table `storage_configs.endpoint` · endpoint `PUT /v1/admin/storage` · read by `storage adapter`
+**Where it lives** — table `project_storage_settings.endpoint` · endpoint `PUT /v1/admin/storage/:projectId` · read by `storage adapter`
 
 **When to change** — Set once when pointing at a non-AWS S3 host. Update if your provider migrates accounts to a new endpoint shape.
 
@@ -853,7 +851,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `empty (writes to bucket root)`
 
-**Where it lives** — table `storage_configs.path_prefix` · endpoint `PUT /v1/admin/storage` · read by `storage adapter`
+**Where it lives** — table `project_storage_settings.path_prefix` · endpoint `PUT /v1/admin/storage/:projectId` · read by `storage adapter`
 
 **When to change** — Set when sharing a bucket. Don't change after writes have started — old keys stay where they were.
 
@@ -869,7 +867,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `3600 (1 hour)` · range `60 – 604800 (7 days)`
 
-**Where it lives** — table `storage_configs.signed_url_ttl_secs` · endpoint `PUT /v1/admin/storage` · read by `storage adapter (every signed URL it mints)`
+**Where it lives** — table `project_storage_settings.signed_url_ttl_secs` · endpoint `PUT /v1/admin/storage/:projectId` · read by `storage adapter (every signed URL it mints)`
 
 **When to change** — Drop to 5–15 minutes for high-sensitivity data. Bump up to a day if your team works asynchronously and copies links into long-running threads.
 
@@ -885,7 +883,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset`
 
-**Where it lives** — table `project_storage_settings.access_key_vault_ref` · endpoint `PUT /v1/admin/storage/:projectId` · read by `storage adapter`
+**Where it lives** — table `project_storage_settings.access_key_vault_ref (Vault)` · endpoint `PUT /v1/admin/storage/:projectId` · read by `storage adapter`
 
 **When to change** — Rotate quarterly, or immediately if the key may have leaked.
 
@@ -901,7 +899,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset`
 
-**Where it lives** — table `project_storage_settings.secret_key_vault_ref` · endpoint `PUT /v1/admin/storage/:projectId` · read by `storage adapter`
+**Where it lives** — table `project_storage_settings.secret_key_vault_ref (Vault)` · endpoint `PUT /v1/admin/storage/:projectId` · read by `storage adapter`
 
 **When to change** — Rotate alongside the access key. Never paste the raw value into an email or ticket.
 
@@ -917,7 +915,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `empty (provider default encryption)`
 
-**Where it lives** — table `storage_configs.kms_key_id` · endpoint `PUT /v1/admin/storage` · read by `storage adapter`
+**Where it lives** — table `project_storage_settings.kms_key_id` · endpoint `PUT /v1/admin/storage/:projectId` · read by `storage adapter`
 
 **When to change** — Set when compliance demands customer-managed encryption keys. Verify the IAM principal has `kms:Encrypt`/`kms:Decrypt` on the key ARN.
 
@@ -987,7 +985,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `180 (6 months)`
 
-**Where it lives** — table `project_retention_policies.attachments_retention_days` · endpoint `PUT /v1/admin/compliance/retention/{projectId}` · read by `attachment-sweep cron`
+**Where it lives** — table `project_retention_policies.byok_audit_retention_days` · endpoint `PUT /v1/admin/compliance/retention/{projectId}` · read by `attachment-sweep cron`
 
 **When to change** — Lower aggressively if storage cost dominates. Raise only when artifacts are evidentiary (regulated reproduction steps).
 
@@ -1003,7 +1001,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `90`
 
-**Where it lives** — table `project_retention_policies.events_retention_days` · endpoint `PUT /v1/admin/compliance/retention/{projectId}` · read by `events-sweep cron`, `health-rollups cron`
+**Where it lives** — table `project_retention_policies.llm_traces_retention_days` · endpoint `PUT /v1/admin/compliance/retention/{projectId}` · read by `events-sweep cron`, `health-rollups cron`
 
 **When to change** — Lower to 30 if the events table is your top storage line item. Raise to 365 if you do longitudinal pipeline analysis.
 
@@ -1035,7 +1033,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset`
 
-**Where it lives** — table `dsar_requests.subject_email` · endpoint `POST /v1/admin/compliance/dsar` · read by `dsar-runner edge function`
+**Where it lives** — table `data_subject_requests.subject_email` · endpoint `POST /v1/admin/compliance/dsars` · read by `dsar-runner edge function`
 
 **When to change** — Fill in only when processing a real DSAR. Each submission creates an auditable request — don't test on real customer emails.
 
@@ -1055,7 +1053,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `saml`
 
-**Where it lives** — table `sso_providers.provider_type` · endpoint `PUT /v1/admin/sso` · read by `sso-callback edge function`
+**Where it lives** — table `enterprise_sso_configs.provider_type` · endpoint `POST /v1/admin/sso` · read by `sso-callback edge function`
 
 **When to change** — Pick what your IdP actually serves. Don't pick OIDC yet — the gate exists for safety, not capacity.
 
@@ -1071,7 +1069,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset`
 
-**Where it lives** — table `sso_providers.metadata_url` · endpoint `PUT /v1/admin/sso` · read by `sso-callback edge function`
+**Where it lives** — table `enterprise_sso_configs.metadata_url` · endpoint `POST /v1/admin/sso` · read by `sso-callback edge function`
 
 **When to change** — Update when migrating IdPs (Okta → Entra, etc.). Verify the new metadata URL is reachable from your Mushi region before flipping.
 
@@ -1087,7 +1085,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset`
 
-**Where it lives** — table `sso_providers.entity_id` · endpoint `PUT /v1/admin/sso` · read by `sso-callback edge function`
+**Where it lives** — table `enterprise_sso_configs.entity_id` · endpoint `POST /v1/admin/sso` · read by `sso-callback edge function`
 
 **When to change** — Set once during provisioning. Match exactly what the IdP's app config has for "Audience URI".
 
@@ -1103,7 +1101,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset (no SSO routing)`
 
-**Where it lives** — table `sso_providers.allowed_domains (text[])` · endpoint `PUT /v1/admin/sso` · read by `login-resolver edge function`
+**Where it lives** — table `enterprise_sso_configs.domains (text[])` · endpoint `POST /v1/admin/sso` · read by `login-resolver edge function`
 
 **When to change** — Add a domain the day before that company's users start onboarding. Remove a domain immediately on contract end so old emails can't still SSO in.
 
@@ -1123,7 +1121,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `classifier (most-used)`
 
-**Where it lives** — table `prompt_versions.stage` · endpoint `GET /v1/admin/prompt-lab/prompts` · read by `_shared/prompt-ab helper`
+**Where it lives** — table `prompt_versions.stage` · endpoint `POST /v1/admin/prompt-lab/prompts` · read by `_shared/prompt-ab helper`
 
 **When to change** — Pick the stage you're iterating on. Most teams start with classifier — it has the largest impact per token.
 
@@ -1157,7 +1155,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `shipped baseline (varies by stage)`
 
-**Where it lives** — table `prompt_versions.body` · endpoint `POST /v1/admin/prompt-lab/prompts` · read by `fast-filter`, `classify-report`, `fix-worker, judge-batch`
+**Where it lives** — table `prompt_versions.prompt_template` · endpoint `POST /v1/admin/prompt-lab/prompts` · read by `fast-filter`, `classify-report`, `fix-worker, judge-batch`
 
 **When to change** — When eval scores plateau or a new model rewards different prompting style. Tag every change with what you tried, so the changelog is honest.
 
@@ -1173,7 +1171,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `25` · range `5 – 200`
 
-**Where it lives** — table `prompt_versions.(driven by generator job, not stored)` · endpoint `POST /v1/admin/prompt-lab/synthesize` · read by `eval-runner cron`
+**Where it lives** — endpoint `POST /v1/admin/synthetic` · read by `generate-synthetic edge function`
 
 **When to change** — Bump to 100 when a regression is suspected and you need confidence; drop to 10 for quick smoke tests during iteration.
 
@@ -1193,7 +1191,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset (plugin disabled)`
 
-**Where it lives** — table `marketplace_plugins.webhook_url` · endpoint `POST /v1/admin/plugins` · read by `marketplace-dispatcher edge function`
+**Where it lives** — table `project_plugins.webhook_url` · endpoint `POST /v1/admin/plugins` · read by `marketplace-dispatcher edge function`
 
 **When to change** — Set when wiring a plugin. Update when your plugin host migrates — the dispatcher honours the new URL on the next event.
 
@@ -1209,7 +1207,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `auto-generated on plugin create`
 
-**Where it lives** — table `marketplace_plugins.signing_secret_ref` · endpoint `POST /v1/admin/plugins` · read by `marketplace-dispatcher edge function`
+**Where it lives** — table `project_plugins.webhook_secret_vault_ref (Vault)` · endpoint `POST /v1/admin/plugins` · read by `marketplace-dispatcher edge function`
 
 **When to change** — Rotate when the plugin owner changes hands. Always update both ends in lockstep — no overlap window.
 
@@ -1225,7 +1223,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `empty (plugin receives nothing)`
 
-**Where it lives** — table `marketplace_plugins.subscribed_events (text[])` · endpoint `POST /v1/admin/plugins` · read by `marketplace-dispatcher edge function`
+**Where it lives** — table `project_plugins.subscribed_events (text[])` · endpoint `POST /v1/admin/plugins` · read by `marketplace-dispatcher edge function`
 
 **When to change** — Subscribe only to events your plugin actually reacts to. Adding/removing is instant — no plugin restart required.
 
@@ -1269,11 +1267,11 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Summary** — Free-text note attached to a flag — explains *why* this report tripped the human reviewer.
 
-**How it works** — Persisted on the report and surfaced in the audit log. The next reviewer (or the LLM, if you wire it through Prompt Lab) can read this when deciding whether the flag still applies.
+**How it works** — Persisted on the flagged reporter device (the fingerprint row, not the report) and logged as a `manual_flag` event in `anti_gaming_events`. The next reviewer (or the LLM, if you wire it through Prompt Lab) can read this when deciding whether the flag still applies.
 
 **Default** — `empty`
 
-**Where it lives** — table `reports.flag_reason` · endpoint `PATCH /v1/admin/reports/{id}/flag` · read by `anti-gaming dashboard`, `audit log`
+**Where it lives** — table `reporter_devices.flag_reason` · endpoint `POST /v1/admin/anti-gaming/devices/:id/flag` · read by `anti-gaming dashboard`, `audit log`
 
 **When to change** — Always fill it in — "flagged with no reason" is the ticket the next person on rotation can't review.
 
@@ -1345,7 +1343,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `free`
 
-**Where it lives** — table `subscriptions.plan_id` · endpoint `(via Stripe webhook → /v1/billing/webhook)` · read by `feature-gate middleware`, `usage caps`
+**Where it lives** — table `billing_subscriptions.plan_id` · endpoint `(Stripe webhook → stripe-webhooks edge function)` · read by `feature-gate middleware`, `usage caps`
 
 **When to change** — Upgrade when you're consistently hitting the cap on the dashboard. Downgrade only after one full month under the next-tier-down's cap.
 
@@ -1393,7 +1391,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `empty`
 
-**Where it lives** — table `support_requests.subject` · endpoint `POST /v1/support/contact` · read by `billing-support edge function`
+**Where it lives** — table `support_tickets.subject` · endpoint `POST /v1/support/contact` · read by `billing-support edge function`
 
 **When to change** — Always fill before submitting. The edge function rejects empty subjects with a 400.
 
@@ -1409,7 +1407,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `billing`
 
-**Where it lives** — table `support_requests.category` · endpoint `POST /v1/support/contact` · read by `billing-support edge function`
+**Where it lives** — table `support_tickets.category` · endpoint `POST /v1/support/contact` · read by `billing-support edge function`
 
 **When to change** — Always pick the closest match. Use `other` only when nothing else fits.
 
@@ -1425,7 +1423,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `empty`
 
-**Where it lives** — table `support_requests.body` · endpoint `POST /v1/support/contact` · read by `billing-support edge function`
+**Where it lives** — table `support_tickets.body` · endpoint `POST /v1/support/contact` · read by `billing-support edge function`
 
 **When to change** — Include the invoice id and the dollar amount you're asking about — billing tickets without specifics get bounced.
 
