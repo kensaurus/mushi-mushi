@@ -514,7 +514,9 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
         .eq('end_user_id', eu.id)
         .single(),
       db.from('reward_tiers')
-        .select('slug, display_name, points_threshold, perks, multiplier')
+        // reward_tiers has no multiplier column; selecting one made every call
+        // error and the widget showed no tier at all.
+        .select('slug, display_name, points_threshold, perks')
         .eq('organization_id', organizationId)
         .order('points_threshold', { ascending: true }),
       db.from('reward_rules')
@@ -525,6 +527,7 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
         .single(),
     ])
 
+    if (tiersRes.error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: 'Could not read reward tiers' } }, 500)
     const totalPoints = ptsRes.data?.total_points ?? 0
     const sortedTiers = tiersRes.data ?? []
     const currentTier = [...sortedTiers].reverse().find(t => t.points_threshold <= totalPoints) ?? null

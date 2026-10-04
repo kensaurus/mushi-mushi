@@ -117,9 +117,13 @@ describe('Supabase as a BYOK provider', () => {
 })
 
 describe('Supabase MCP requests', () => {
-  it('every caller accepts JSON and SSE, as Streamable HTTP requires', () => {
+  it('every caller goes through the Streamable HTTP session client', () => {
     for (const file of ['_shared/supabase-mcp-client.ts', '_shared/connectors/supabase.ts']) {
-      expect(read(file), file).toContain('application/json, text/event-stream')
+      expect(read(file), file).toContain('mcpCallTool(')
     }
+    // The shared client accepts JSON and SSE and sends the session id.
+    const session = read('_shared/mcp-http-session.ts')
+    expect(session).toContain('application/json, text/event-stream')
+    expect(session).toContain("headers['Mcp-Session-Id'] = session.id")
   })
 })
