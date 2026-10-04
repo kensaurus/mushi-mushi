@@ -849,7 +849,7 @@ export function OnboardingPage() {
                   )}
                 </p>
                 <div className="mt-2 flex flex-wrap items-center gap-3">
-                  <Btn size="sm" variant="primary" onClick={() => navigate('/integrations')}>
+                  <Btn size="sm" variant="primary" onClick={() => navigate('/integrations/config')}>
                     Connect fix agents →
                   </Btn>
                   <Btn size="sm" variant="ghost" onClick={() => navigate('/dashboard')}>Open dashboard</Btn>

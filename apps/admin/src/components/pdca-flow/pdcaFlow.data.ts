@@ -87,7 +87,7 @@ const STAGE_HREF: Record<PdcaStageId, string> = {
   plan: '/reports',
   do: '/fixes',
   check: '/judge',
-  act: '/integrations',
+  act: '/integrations/config',
 }
 
 const LIVE_CTA_LABEL: Record<PdcaStageId, string> = {
