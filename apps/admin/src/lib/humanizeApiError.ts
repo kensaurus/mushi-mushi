@@ -310,8 +310,11 @@ export function humanizeApiError(
         code,
         raw,
       }
-    default:
+    default: {
+      const extra = EXTRA_CODE_COPY[code]
+      if (extra) return { ...extra, code, raw }
       break
+    }
   }
 
   // HTTP status patterns embedded in message (fallback when code missing)
@@ -374,4 +377,108 @@ export function apiErrorMessage(
   }
   if (!message || looksInternal(message)) return fallback
   return message
+}
+
+/* ── Extra codes + mutation toasts (console group I, 2026-10-04) ──────────
+ * Kept in one block so other tracks can add codes without touching the
+ * switch above. `humanizeApiError` consults EXTRA_CODE_COPY in its default
+ * branch; `describeApiError` is the toast-sized counterpart for writes. */
+
+type CodeCopy = Pick<HumanizedApiError, 'title' | 'hint' | 'severity' | 'action'>
+
+const EXTRA_CODE_COPY: Record<string, CodeCopy> = {
+  REGION_LOCKED: {
+    title: 'This project is already pinned to a region.',
+    hint: 'Moving data between regions needs an export and restore. Contact support to migrate it.',
+    severity: 'hard',
+  },
+  INVALID_STATE: {
+    title: 'This item changed since the page loaded.',
+    hint: 'Refresh the page to see its current state, then try the next step again.',
+    severity: 'soft',
+    action: { label: 'Retry', target: { kind: 'retry' } },
+  },
+  UPSTREAM_ERROR: {
+    title: 'The background job could not finish.',
+    hint: 'Retry in a moment. If it keeps failing, check that the project has an LLM key under Settings → AI keys.',
+    severity: 'soft',
+    action: { label: 'Retry', target: { kind: 'retry' } },
+  },
+  WORKER_FAILED: {
+    title: 'The background job could not finish.',
+    hint: 'Retry in a moment. If it keeps failing, check that the project has an LLM key under Settings → AI keys.',
+    severity: 'soft',
+    action: { label: 'Retry', target: { kind: 'retry' } },
+  },
+}
+
+/** Codes whose server message is internal (SQL text, stack hints) and must never reach a toast. */
+const ALWAYS_HUMANIZE = new Set([
+  'DB_ERROR',
+  'RPC_ERROR',
+  'INTERNAL',
+  'INTERNAL_ERROR',
+  'NETWORK_ERROR',
+  'MISSING_AUTH',
+  'INVALID_TOKEN',
+  'RATE_LIMITED',
+  'QUOTA_EXCEEDED',
+  'FEATURE_NOT_IN_PLAN',
+  'PLAN_UPGRADE_REQUIRED',
+  'INVALID_RESPONSE',
+])
+
+/**
+ * Some proxies still pass a worker's JSON reply as the message
+ * (`{"error":"No metric data"}`). Pull the readable sentence out of it.
+ */
+function sentenceFromJsonBlob(message: string): string | null {
+  const m = message.trim()
+  if (!m.startsWith('{')) return null
+  try {
+    const body = JSON.parse(m) as Record<string, unknown>
+    const err = body.error
+    if (typeof err === 'string') return err
+    if (err && typeof err === 'object' && typeof (err as Record<string, unknown>).message === 'string') {
+      return (err as Record<string, string>).message
+    }
+    if (typeof body.message === 'string') return body.message
+  } catch {
+    // not JSON after all
+  }
+  return null
+}
+
+function looksLikePlainSentence(message: string, code: string): boolean {
+  const m = message.trim()
+  if (!m) return false
+  if (m.toUpperCase() === code) return false
+  if (/^[A-Z][A-Z0-9_]{1,64}$/.test(m)) return false // a bare code
+  if (/^[[{]/.test(m)) return false // JSON blob
+  if (/^\d{3}:/.test(m)) return false // "500: …" status dump
+  return true
+}
+
+/**
+ * Toast-sized, plain-English description of a failed write. `title` is the
+ * caller's "Could not …" line; `hint` says why and what to do. Raw codes and
+ * JSON never come through: a readable server sentence is kept, anything else
+ * is mapped from its code.
+ */
+export function describeApiError(
+  error: { code?: string | null; message?: string | null } | null | undefined,
+  title: string,
+): { title: string; hint: string } {
+  const code = (error?.code ?? '').toUpperCase()
+  const parsed = parsePageDataError(error?.message ?? null)
+  const rawMessage = parsed?.message ?? ''
+  const message = sentenceFromJsonBlob(rawMessage) ?? rawMessage
+  const effectiveCode = code || parsed?.code || ''
+  if (!ALWAYS_HUMANIZE.has(effectiveCode) && looksLikePlainSentence(message, effectiveCode)) {
+    return { title, hint: message }
+  }
+  const h = humanizeApiError(message || effectiveCode || 'Request failed', effectiveCode || null)
+  const known = effectiveCode !== '' && h != null && h.title !== 'Could not load this page.'
+  if (known) return { title, hint: `${h.title} ${h.hint}` }
+  return { title, hint: 'Something went wrong. Try again in a moment.' }
 }

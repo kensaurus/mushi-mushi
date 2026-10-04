@@ -30,3 +30,24 @@ export function viewerRoleHint(role: OrgRole | string | null | undefined): strin
   if (role === 'member') return 'Some actions require owner or admin access in this team.'
   return null
 }
+
+/**
+ * Role in the active team, or null when it is not known yet (orgs still
+ * loading, or no team picked while the user belongs to several). Callers
+ * treat null as "may be allowed" and let the server decide, so an owner
+ * never loses a control while the org list is in flight.
+ */
+export function resolveActiveOrgRole(
+  orgs: ReadonlyArray<{ id: string; role: string }> | null | undefined,
+  activeOrgId: string | null,
+): string | null {
+  if (!orgs || orgs.length === 0) return null
+  const match = activeOrgId ? orgs.find((o) => o.id === activeOrgId) : undefined
+  if (match) return match.role
+  return orgs.length === 1 ? orgs[0]!.role : null
+}
+
+/** True unless the active-team role is known and below owner/admin. */
+export function mayManageActiveOrg(role: string | null): boolean {
+  return role == null || canManageOrg(role)
+}

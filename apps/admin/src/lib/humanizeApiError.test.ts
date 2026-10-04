@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { apiErrorMessage, humanizeApiError, parsePageDataError, plainApiError } from './humanizeApiError'
+import { apiErrorMessage, describeApiError, humanizeApiError, parsePageDataError, plainApiError } from './humanizeApiError'
 
 // Group K entries 215 and 216: action toasts printed raw slugs, codes and JSON.
 describe('plainApiError', () => {
@@ -111,5 +111,50 @@ describe('apiErrorMessage', () => {
   it('handles missing errors and plain strings', () => {
     expect(apiErrorMessage(null, 'fallback')).toBe('fallback')
     expect(apiErrorMessage('Story is disabled', 'fallback')).toBe('Story is disabled')
+  })
+})
+
+describe('humanizeApiError extra codes', () => {
+  it('maps REGION_LOCKED and NOT_FOUND to plain sentences', () => {
+    expect(humanizeApiError('x', 'REGION_LOCKED')?.title).toMatch(/pinned to a region/)
+    expect(humanizeApiError('NOT_FOUND', 'NOT_FOUND')?.title).toMatch(/could not be found/)
+  })
+
+  it('maps a lowercase explicit code', () => {
+    expect(humanizeApiError('Upgrade required', 'feature_not_in_plan')?.title).toMatch(/plan/)
+  })
+})
+
+describe('describeApiError', () => {
+  it('keeps a readable server sentence', () => {
+    expect(describeApiError({ code: 'FORBIDDEN', message: 'Not your project' }, 'Could not save')).toEqual({
+      title: 'Could not save',
+      hint: 'Not your project',
+    })
+  })
+
+  it('never shows a bare code', () => {
+    const d = describeApiError({ code: 'FORBIDDEN', message: 'FORBIDDEN' }, 'Could not cancel')
+    expect(d.hint).not.toMatch(/FORBIDDEN/)
+    expect(d.hint).toMatch(/access/i)
+  })
+
+  it('reads the sentence out of a worker JSON reply', () => {
+    expect(
+      describeApiError({ code: 'UPSTREAM_ERROR', message: '{"error":"No metric data for this project"}' }, 'Detection failed').hint,
+    ).toBe('No metric data for this project')
+  })
+
+  it('never shows a JSON blob or SQL text', () => {
+    expect(describeApiError({ code: 'SCAN_FAILED', message: '{"detail":["x"]}' }, 'Scan failed').hint).not.toMatch(/[{}]/)
+    expect(describeApiError({ code: 'DB_ERROR', message: 'relation "x" does not exist' }, 'Save failed').hint).not.toMatch(/relation/)
+  })
+
+  it('strips a trailing (CODE) suffix', () => {
+    expect(describeApiError({ message: 'Project is pinned (REGION_LOCKED)' }, 'Could not pin').hint).toBe('Project is pinned')
+  })
+
+  it('falls back when there is no error at all', () => {
+    expect(describeApiError(undefined, 'Could not save').hint).toMatch(/Try again/)
   })
 })

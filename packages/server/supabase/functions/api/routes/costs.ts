@@ -30,6 +30,10 @@ interface CostRow {
   cost_usd: number
   occurred_at: string
   source: CostSource
+  /** llm_invocations.status ('success' | 'error'); null for ledger rows. */
+  status: string | null
+  /** Provider error for a failed call, trimmed for display. */
+  error_message: string | null
 }
 
 const SORT_COLUMNS: Record<string, string> = {
@@ -52,8 +56,12 @@ function invocationToRow(row: {
   output_tokens: number | null
   cost_usd: number | null
   created_at: string
+  status?: string | null
+  error_message?: string | null
 }): CostRow {
   return {
+    status: row.status ?? null,
+    error_message: row.error_message ? String(row.error_message).slice(0, 300) : null,
     id: row.id,
     project_id: row.project_id,
     operation: row.stage ? `${row.function_name}:${row.stage}` : row.function_name,
@@ -77,6 +85,8 @@ function ledgerToRow(row: {
   occurred_at: string
 }): CostRow {
   return {
+    status: null,
+    error_message: null,
     id: row.id,
     project_id: row.project_id,
     operation: row.operation,
@@ -415,36 +425,46 @@ export function registerCostsRoutes(parent: Hono<{ Variables: Variables }>) {
     const q = (c.req.query('q') ?? '').trim()
     const sortCol = SORT_COLUMNS[sortParam] ?? 'created_at'
     const ascending = order === 'asc'
+    // `status=failed` lists the calls the stats banner counts as failed
+    // (status present and not 'success'); `since` bounds the window, so
+    // "N failed calls in 24h → View failures" opens exactly those N rows.
+    const failedOnly = c.req.query('status') === 'failed'
+    const sinceRaw = c.req.query('since')
+    const since = sinceRaw && !Number.isNaN(Date.parse(sinceRaw)) ? new Date(sinceRaw).toISOString() : null
 
     const fetchLimit = q ? 5000 : limit
     const rangeFrom = q ? 0 : (page - 1) * limit
     const rangeTo = q ? fetchLimit - 1 : page * limit - 1
 
+    let invQuery = db()
+      .from('llm_invocations')
+      .select(
+        'id, project_id, function_name, stage, used_model, input_tokens, output_tokens, cost_usd, created_at, status, error_message',
+        { count: 'exact' },
+      )
+      .eq('project_id', projectId)
+    if (failedOnly) invQuery = invQuery.neq('status', 'success')
+    if (since) invQuery = invQuery.gte('created_at', since)
+    let invCountQuery = db()
+      .from('llm_invocations')
+      .select('id', { count: 'exact', head: true })
+      .eq('project_id', projectId)
+    if (failedOnly) invCountQuery = invCountQuery.neq('status', 'success')
+    if (since) invCountQuery = invCountQuery.gte('created_at', since)
+
     const [invRes, invCountRes] = await Promise.all([
-      db()
-        .from('llm_invocations')
-        .select(
-          'id, project_id, function_name, stage, used_model, input_tokens, output_tokens, cost_usd, created_at',
-          { count: 'exact' },
-        )
-        .eq('project_id', projectId)
-        .order(sortCol, { ascending, nullsFirst: false })
-        .range(rangeFrom, rangeTo),
-      q
-        ? db()
-          .from('llm_invocations')
-          .select('id', { count: 'exact', head: true })
-          .eq('project_id', projectId)
-        : Promise.resolve({ count: null as number | null }),
+      invQuery.order(sortCol, { ascending, nullsFirst: false }).range(rangeFrom, rangeTo),
+      q ? invCountQuery : Promise.resolve({ count: null as number | null }),
     ])
 
-    const ledgerRes = q
-      ? await db()
-        .from('llm_cost_usd')
-        .select('id, project_id, operation, model, input_tokens, output_tokens, cost_usd, occurred_at')
-        .eq('project_id', projectId)
-        .order('occurred_at', { ascending: false })
-        .limit(500)
+    // Ledger rows carry no status, so they never match the failed filter.
+    let ledgerQuery = db()
+      .from('llm_cost_usd')
+      .select('id, project_id, operation, model, input_tokens, output_tokens, cost_usd, occurred_at')
+      .eq('project_id', projectId)
+    if (since) ledgerQuery = ledgerQuery.gte('occurred_at', since)
+    const ledgerRes = q && !failedOnly
+      ? await ledgerQuery.order('occurred_at', { ascending: false }).limit(500)
       : { data: [] as never[], error: null }
 
     if (invRes.error) {

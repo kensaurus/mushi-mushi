@@ -17,6 +17,9 @@ import { usePageCopy } from '../lib/copy'
 import { shouldHideGuideWhenBannerActive, COMMON_HEALTHY_PRIORITIES } from '../lib/pagePostureHelpers'
 import { useDriftUx, resolveQuickDriftTab } from '../lib/driftModeUx'
 import { useToast } from '../lib/toast'
+import { describeApiError } from '../lib/humanizeApiError'
+import { parseBoundedInt } from '../lib/format'
+import { PageLoadError } from '../components/PageLoadError'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import {
@@ -24,7 +27,6 @@ import {
   Badge,
   Btn,
   EmptyState,
-  ErrorAlert,
   RelativeTime,
   SegmentedControl,
   FreshnessPill,
@@ -133,6 +135,7 @@ export function DriftPage() {
     data: statsData,
     loading: statsLoading,
     error: statsError,
+    errorCode: statsErrorCode,
     reload: reloadStats,
     lastFetchedAt: statsFetchedAt,
     isValidating: statsValidating,
@@ -144,6 +147,7 @@ export function DriftPage() {
     data: findingsData,
     loading: findingsLoading,
     error: findingsError,
+    errorCode: findingsErrorCode,
     reload: reloadFindings,
     isValidating: findingsValidating,
   } = usePageData<{ data: DriftFinding[]; total: number }>(
@@ -154,6 +158,8 @@ export function DriftPage() {
   const {
     data: snapshotsData,
     loading: snapshotsLoading,
+    error: snapshotsError,
+    errorCode: snapshotsErrorCode,
     reload: reloadSnapshots,
     isValidating: snapshotsValidating,
   } = usePageData<{ data: ContractSnapshot[] }>(
@@ -222,15 +228,30 @@ export function DriftPage() {
       method: 'PATCH',
       body: JSON.stringify({ status: 'dismissed' }),
     })
-    if (!res.ok) { toast.error(res.error?.message ?? 'Failed'); return }
+    if (!res.ok) {
+      const e = describeApiError(res.error, 'Could not dismiss the finding')
+      toast.error(e.title, e.hint)
+      return
+    }
     reloadAll()
     toast.success('Finding dismissed')
   }, [reloadAll, toast])
 
+  // Findings promoted this session: the button turns into a receipt so a
+  // second click cannot look like it made another lesson (the server also
+  // returns the existing lesson instead of inserting a copy).
+  const [promotedIds, setPromotedIds] = useState<ReadonlySet<string>>(() => new Set())
   const createLesson = useCallback(async (id: string) => {
-    const res = await apiFetch(`/v1/admin/drift/${id}/create-lesson`, { method: 'POST' })
-    if (res.ok) { toast.success('Candidate lesson created'); reloadAll() }
-    else toast.error(res.error?.message ?? 'Failed to create lesson')
+    const res = await apiFetch<{ lesson_id: string; existing?: boolean }>(`/v1/admin/drift/${id}/create-lesson`, { method: 'POST' })
+    if (!res.ok) {
+      const e = describeApiError(res.error, 'Could not create the lesson')
+      toast.error(e.title, e.hint)
+      return
+    }
+    setPromotedIds((prev) => new Set(prev).add(id))
+    if (res.data?.existing) toast.info('Already a lesson', 'This drift message is already a candidate lesson. Review it under Lessons.')
+    else toast.success('Candidate lesson created', 'Review it under Lessons.')
+    reloadAll()
   }, [reloadAll, toast])
 
   const onScanDone = useCallback(() => {
@@ -287,7 +308,7 @@ export function DriftPage() {
   }
 
   if (statsError) {
-    return <ErrorAlert message={`Failed to load drift stats: ${statsError}`} onRetry={reloadStats} />
+    return <PageLoadError error={statsError} code={statsErrorCode} onRetry={reloadStats} />
   }
 
   return (
@@ -501,6 +522,9 @@ export function DriftPage() {
           findings={findings}
           loading={findingsLoading}
           error={findingsError}
+          errorCode={findingsErrorCode}
+          onRetry={reloadFindings}
+          promotedIds={promotedIds}
           onDismiss={dismiss}
           onCreateLesson={createLesson}
           onOpen={(f) => { setSelectedFinding(f); setDrawerOpen(true) }}
@@ -514,6 +538,9 @@ export function DriftPage() {
         <SnapshotsTab
           snapshots={snapshots}
           loading={snapshotsLoading}
+          error={snapshotsError}
+          errorCode={snapshotsErrorCode}
+          onRetry={reloadSnapshots}
           projectId={projectId ?? ''}
           onRunScan={() => setActiveTab('scanner')}
         />
@@ -530,6 +557,7 @@ export function DriftPage() {
           onClose={() => { setDrawerOpen(false); setSelectedFinding(null) }}
           onDismiss={dismiss}
           onCreateLesson={createLesson}
+          promoted={promotedIds.has(selectedFinding.id)}
         />
       )}
     </div>
@@ -539,11 +567,14 @@ export function DriftPage() {
 // ─── Findings tab ────────────────────────────────────────────────────────────
 
 function FindingsTab({
-  findings, loading, error, onDismiss, onCreateLesson, onOpen, projectId, neverScanned, onRunScan,
+  findings, loading, error, errorCode, onRetry, onDismiss, onCreateLesson, promotedIds, onOpen, projectId, neverScanned, onRunScan,
 }: {
   findings: DriftFinding[]
   loading: boolean
   error: string | null
+  errorCode: string | null
+  onRetry: () => void
+  promotedIds: ReadonlySet<string>
   onDismiss: (id: string) => void
   onCreateLesson: (id: string) => void
   onOpen: (f: DriftFinding) => void
@@ -553,7 +584,7 @@ function FindingsTab({
 }) {
   if (!projectId) return <EmptyState title="Select a project" description="Pick a project from the switcher to see drift findings." />
   if (loading) return <TableSkeleton rows={5} />
-  if (error) return <ErrorAlert message={error} />
+  if (error) return <PageLoadError error={error} code={errorCode} resource="drift findings" onRetry={onRetry} />
   if (!findings.length) return (
     <EmptyState
       title={neverScanned ? 'No scan yet' : 'No open findings'}
@@ -623,7 +654,11 @@ function FindingsTab({
                         not a repeated per-row action and the wording carries
                         the "promote this into a lesson" idea a glyph would not. */}
                     {f.severity === 'critical' && (
-                      <Btn size="sm" variant="ghost" onClick={() => onCreateLesson(f.id)}>→ Lesson</Btn>
+                      promotedIds.has(f.id) ? (
+                        <SignalChip tone="ok">Lesson created</SignalChip>
+                      ) : (
+                        <Btn size="sm" variant="ghost" onClick={() => onCreateLesson(f.id)}>→ Lesson</Btn>
+                      )
                     )}
                     <Tooltip content="Dismiss finding">
                       <Btn
@@ -650,15 +685,20 @@ function FindingsTab({
 // ─── Snapshots tab ────────────────────────────────────────────────────────────
 
 function SnapshotsTab({
-  snapshots, loading, projectId, onRunScan,
+  snapshots, loading, error, errorCode, onRetry, projectId, onRunScan,
 }: {
   snapshots: ContractSnapshot[]
   loading: boolean
+  error: string | null
+  errorCode: string | null
+  onRetry: () => void
   projectId: string
   onRunScan: () => void
 }) {
   if (!projectId) return <EmptyState title="Select a project" />
   if (loading) return <TableSkeleton rows={5} />
+  // A failed load must not read as "no snapshots — run a scan".
+  if (error) return <PageLoadError error={error} code={errorCode} resource="snapshots" onRetry={onRetry} />
   if (!snapshots.length) {
     return (
       <EmptyState
@@ -699,23 +739,32 @@ function ScannerTab({ projectId, onDone }: { projectId: string; onDone: () => vo
   const toast = useToast()
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<{ findings_inserted: number; findings_found: number; snapshot_id: string } | null>(null)
-  const [maxPaths, setMaxPaths] = useState(200)
+  // Kept as typed text and validated on Run, so a cleared field never goes
+  // out as NaN (serialised to null).
+  const [maxPaths, setMaxPaths] = useState('200')
+  const parsedMaxPaths = parseBoundedInt(maxPaths, 10, 1000)
 
   const run = async () => {
     if (!projectId) { toast.error('Select a project first'); return }
+    if (parsedMaxPaths == null) {
+      toast.error('Check "Max paths to walk"', 'Enter a whole number from 10 to 1000.')
+      return
+    }
     setLoading(true)
     setResult(null)
     try {
       const res = await apiFetch<{ findings_inserted: number; findings_found: number; snapshot_id: string }>(
         '/v1/admin/drift/scan',
-        { method: 'POST', body: JSON.stringify({ project_id: projectId, max_paths: maxPaths }) },
+        { method: 'POST', body: JSON.stringify({ project_id: projectId, max_paths: parsedMaxPaths }) },
       )
-      if (!res.ok) throw new Error(res.error?.message ?? 'Scan failed')
+      if (!res.ok) {
+        const e = describeApiError(res.error, 'The drift scan failed')
+        toast.error(e.title, e.hint)
+        return
+      }
       setResult(res.data ?? { findings_inserted: 0, findings_found: 0, snapshot_id: '' })
       toast.success(`Scan complete — ${res.data?.findings_inserted ?? 0} new findings`)
       onDone()
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : 'Scan failed')
     } finally {
       setLoading(false)
     }
@@ -744,10 +793,12 @@ function ScannerTab({ projectId, onDone }: { projectId: string; onDone: () => vo
           min={10}
           max={1000}
           value={maxPaths}
-          onChange={(e) => setMaxPaths(parseInt(e.target.value, 10))}
+          aria-invalid={parsedMaxPaths == null}
+          onChange={(e) => setMaxPaths(e.target.value)}
           className="block w-32 rounded-md border border-edge-subtle bg-surface px-3 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
         />
       </label>
+      {parsedMaxPaths == null && <p className="text-xs text-danger">Enter a whole number from 10 to 1000.</p>}
       <Btn variant="primary" onClick={run} loading={loading} disabled={!projectId} className="w-full sm:w-auto">
         {loading ? 'Scanning…' : 'Run scan'}
       </Btn>
@@ -771,13 +822,14 @@ function ScannerTab({ projectId, onDone }: { projectId: string; onDone: () => vo
 // ─── Finding detail drawer ────────────────────────────────────────────────────
 
 function FindingDetailDrawer({
-  finding, open, onClose, onDismiss, onCreateLesson,
+  finding, open, onClose, onDismiss, onCreateLesson, promoted,
 }: {
   finding: DriftFinding
   open: boolean
   onClose: () => void
   onDismiss: (id: string) => void
   onCreateLesson: (id: string) => void
+  promoted: boolean
 }) {
   return (
     <Drawer open={open} onClose={onClose} title={`${finding.finding_type} — ${finding.path ?? 'N/A'}`}>
@@ -811,11 +863,12 @@ function FindingDetailDrawer({
         </Card>
 
         <div className="flex gap-2 pt-2">
-          {finding.severity === 'critical' && (
+          {finding.severity === 'critical' && !promoted && (
             <Btn variant="primary" size="sm" onClick={() => { onCreateLesson(finding.id); onClose() }}>
               Promote to lesson
             </Btn>
           )}
+          {finding.severity === 'critical' && promoted && <SignalChip tone="ok">Lesson created</SignalChip>}
           <Btn variant="cancel" size="sm" onClick={() => { onDismiss(finding.id); onClose() }}>
             Dismiss
           </Btn>

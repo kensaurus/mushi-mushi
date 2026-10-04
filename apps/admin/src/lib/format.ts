@@ -49,3 +49,25 @@ export function formatLlmCost(usd: number | null | undefined): string {
   if (usd < 1) return `$${usd.toFixed(3)}`
   return `$${usd.toFixed(2)}`
 }
+
+/**
+ * A whole number typed into a form field, within [min, max], or null.
+ * Numeric inputs used to store `parseInt(value)` directly, so a cleared
+ * field became NaN and was sent as `null`.
+ */
+export function parseBoundedInt(raw: string, min: number, max: number): number | null {
+  if (!/^\s*-?\d+\s*$/.test(raw)) return null
+  const n = Number(raw)
+  return Number.isSafeInteger(n) && n >= min && n <= max ? n : null
+}
+
+/**
+ * ISO timestamp for a `datetime-local` value the user entered as UTC
+ * (`YYYY-MM-DDTHH:mm`, optional seconds), or null when it is not one.
+ * `new Date(value)` would parse it as local time.
+ */
+export function utcInputToIso(value: string): string | null {
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(value)) return null
+  const d = new Date(`${value}${value.length === 16 ? ':00' : ''}Z`)
+  return Number.isNaN(d.getTime()) ? null : d.toISOString()
+}

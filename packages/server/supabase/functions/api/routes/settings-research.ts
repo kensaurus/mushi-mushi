@@ -2645,6 +2645,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       { data: lastSessionRow },
       { data: settingsRow },
       { data: pooledFirecrawlRows },
+      { data: latestUnattachedRow },
     ] = await Promise.all([
       db
         .from('research_sessions')
@@ -2680,9 +2681,20 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         .eq('provider_slug', 'firecrawl')
         .order('priority', { ascending: true })
         .order('created_at', { ascending: true }),
+      // The session holding the newest unattached snippet: "Attach evidence"
+      // opens it, instead of an empty Search tab.
+      db
+        .from('research_snippets')
+        .select('session_id')
+        .eq('project_id', pid)
+        .is('attached_to_report_id', null)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
     ]);
 
     const sessions = sessionCount ?? 0;
+    const latestUnattachedSessionId = (latestUnattachedRow?.session_id as string | null) ?? null;
     const snippets = snippetCount ?? 0;
     const attached = attachedCount ?? 0;
     const unattachedSnippets = Math.max(0, snippets - attached);
@@ -2745,8 +2757,10 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       topPriorityTo = '/research?tab=search';
     } else if (unattachedSnippets > 0) {
       topPriority = 'unattached_snippets';
-      topPriorityLabel = `${unattachedSnippets} snippet${unattachedSnippets === 1 ? '' : 's'} not attached to reports — paste report UUIDs on Search tab.`;
-      topPriorityTo = '/research?tab=search';
+      topPriorityLabel = `${unattachedSnippets} snippet${unattachedSnippets === 1 ? '' : 's'} not attached to reports — open the search and attach each to its report.`;
+      topPriorityTo = latestUnattachedSessionId
+        ? `/research?tab=search&session=${encodeURIComponent(latestUnattachedSessionId)}`
+        : '/research?tab=history';
     } else {
       topPriority = 'healthy';
       topPriorityLabel = `${sessions} session${sessions === 1 ? '' : 's'} · ${attached} attached · last search ${daysSinceLastSearch ?? 0}d ago.`;
@@ -2764,6 +2778,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         snippets,
         attached,
         unattachedSnippets,
+        latestUnattachedSessionId,
         lastSessionAt,
         daysSinceLastSearch,
         firecrawlConfigured,

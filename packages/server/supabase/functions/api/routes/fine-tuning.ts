@@ -4,7 +4,10 @@ import type { ExportSampleRow } from '../../_shared/fine-tune.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { jwtAuth } from '../../_shared/auth.ts';
 import { logAudit } from '../../_shared/audit.ts';
-import { ANTHROPIC_SONNET } from '../../_shared/models.ts';
+import { fineTuneBaseModelError } from '../../_shared/fine-tune-base-model.ts';
+
+/** Self-service vendor the console offers first (the old Claude default could never train). */
+const DEFAULT_FINE_TUNE_BASE_MODEL = 'openai:gpt-4o-mini';
 import { dbError, callerProjectIds, resolveOwnedProject, callerCanAccessProject } from '../shared.ts';
 
 export function registerFineTuningRoutes(app: Hono<{ Variables: Variables }>): void {
@@ -32,11 +35,23 @@ export function registerFineTuningRoutes(app: Hono<{ Variables: Variables }>): v
     if ('response' in resolvedProject) return resolvedProject.response;
     const project = resolvedProject.project;
 
+    const baseModel = body.baseModel ?? DEFAULT_FINE_TUNE_BASE_MODEL;
+    const baseModelError = fineTuneBaseModelError(baseModel);
+    if (baseModelError) {
+      return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: baseModelError } }, 400);
+    }
+    if (body.promoteToStage != null && body.promoteToStage !== 'stage1' && body.promoteToStage !== 'stage2') {
+      return c.json(
+        { ok: false, error: { code: 'VALIDATION_ERROR', message: 'A fine-tuned model can only be promoted to stage1 or stage2.' } },
+        400,
+      );
+    }
+
     const { data: job, error } = await db
       .from('fine_tuning_jobs')
       .insert({
         project_id: project.id,
-        base_model: body.baseModel ?? ANTHROPIC_SONNET,
+        base_model: baseModel,
         status: 'pending',
         promote_to_stage: body.promoteToStage ?? null,
         sample_window_days: body.sampleWindowDays ?? 30,
@@ -93,7 +108,7 @@ export function registerFineTuningRoutes(app: Hono<{ Variables: Variables }>): v
       .eq('id', jobId);
     try {
       const { gatherTrainingSamples, renderJsonl, uploadAndRecordExport } =
-        await import('../_shared/fine-tune.ts');
+        await import('../../_shared/fine-tune.ts');
       const samples = await gatherTrainingSamples(db, job);
       const jsonl = renderJsonl(samples, job.export_format);
       const result = await uploadAndRecordExport(db, job, jsonl, samples.length);
@@ -153,7 +168,7 @@ export function registerFineTuningRoutes(app: Hono<{ Variables: Variables }>): v
     }
 
     try {
-      const { resolveVendor, getAdapter } = await import('../_shared/fine-tune-vendor.ts');
+      const { resolveVendor, getAdapter } = await import('../../_shared/fine-tune-vendor.ts');
       const vendor = resolveVendor(job.base_model);
       const adapter = getAdapter(vendor);
       const result = await adapter.submit(db, job);
@@ -211,7 +226,7 @@ export function registerFineTuningRoutes(app: Hono<{ Variables: Variables }>): v
     }
 
     try {
-      const { resolveVendor, getAdapter } = await import('../_shared/fine-tune-vendor.ts');
+      const { resolveVendor, getAdapter } = await import('../../_shared/fine-tune-vendor.ts');
       const vendor = resolveVendor(job.base_model);
       const adapter = getAdapter(vendor);
       const result = await adapter.poll(db, job);
@@ -347,8 +362,8 @@ export function registerFineTuningRoutes(app: Hono<{ Variables: Variables }>): v
 
     await db.from('fine_tuning_jobs').update({ status: 'validating' }).eq('id', jobId);
     try {
-      const { validateTrainedModel } = await import('../_shared/fine-tune.ts');
-      const { resolveVendor, getAdapter } = await import('../_shared/fine-tune-vendor.ts');
+      const { validateTrainedModel } = await import('../../_shared/fine-tune.ts');
+      const { resolveVendor, getAdapter } = await import('../../_shared/fine-tune-vendor.ts');
       // Wave S5: use the real vendor adapter so a broken fine-tune is caught
       // here instead of being silently promoted. `stub:` base models keep the
       // old mirror-truth behaviour for deterministic tests.
@@ -413,7 +428,7 @@ export function registerFineTuningRoutes(app: Hono<{ Variables: Variables }>): v
       job.promote_to_stage = promoteToStage;
     }
 
-    const { promoteFineTunedModel } = await import('../_shared/fine-tune.ts');
+    const { promoteFineTunedModel } = await import('../../_shared/fine-tune.ts');
     const result = await promoteFineTunedModel(db, job);
     if (!result.ok) {
       return c.json({ ok: false, error: { code: 'PROMOTE_FAILED', message: result.reason } }, 409);
