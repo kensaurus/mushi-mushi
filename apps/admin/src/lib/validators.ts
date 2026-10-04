@@ -425,7 +425,7 @@ function fillBranchTemplate(
     .replace('{reportId}', values.reportId)
 }
 
-export const FIX_BRANCH_TEMPLATE_RULE =
+const FIX_BRANCH_TEMPLATE_RULE =
   'Start with a type (bugfix/, feature/, hotfix/, refactor/, chore/, docs/, test/ or ci/), then MUSHI-{reportId}-, then lowercase words, {category}, {date} or {shortId}.'
 
 export function fixBranchTemplate(opts?: ValidatorOptions): Validator {

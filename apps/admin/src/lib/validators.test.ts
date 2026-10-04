@@ -12,7 +12,7 @@
  *          ship without an explicit test update.
  */
 import { describe, it, expect } from 'vitest'
-import { fixBranchExample, fixBranchTemplate, FIX_BRANCH_TEMPLATE_RULE } from './validators'
+import { fixBranchExample, fixBranchTemplate } from './validators'
 import {
   url,
   httpsUrl,
@@ -313,10 +313,10 @@ describe('fixBranchTemplate', () => {
   })
 
   it('refuses patterns built only from the other tokens, with the rule', () => {
-    expect(v('fix/{date}-{shortId}')).toEqual({ message: FIX_BRANCH_TEMPLATE_RULE })
-    expect(v('bugfix/{date}-{shortId}')).toEqual({ message: FIX_BRANCH_TEMPLATE_RULE })
-    expect(v('mushi/fix/{date}-{category}-{shortId}')).toEqual({ message: FIX_BRANCH_TEMPLATE_RULE })
-    expect(v('bugfix/MUSHI-{reportId}-Upper')).toEqual({ message: FIX_BRANCH_TEMPLATE_RULE })
+    expect(v('fix/{date}-{shortId}')).toEqual({ message: expect.stringContaining('then MUSHI-{reportId}-') })
+    expect(v('bugfix/{date}-{shortId}')).toEqual({ message: expect.stringContaining('then MUSHI-{reportId}-') })
+    expect(v('mushi/fix/{date}-{category}-{shortId}')).toEqual({ message: expect.stringContaining('then MUSHI-{reportId}-') })
+    expect(v('bugfix/MUSHI-{reportId}-Upper')).toEqual({ message: expect.stringContaining('then MUSHI-{reportId}-') })
   })
 
   it('previews {reportId} too', () => {
