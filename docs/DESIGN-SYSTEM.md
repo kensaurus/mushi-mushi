@@ -111,6 +111,94 @@ raw-hex-in-widget, card-elevated allowlist, raw-semantic-on-muted, raw-css-var-t
 redundant-border-on-chip-tone, legacy-page-header-in-pages, page-root-padding,
 arbitrary-length-value, allowlist-jsx-textnode. Admin-only / warn-graduating: `prefer-card-primitive`.
 
+## Console pages (admin)
+
+The bar for every console page: someone who isn't an expert can tell, in a few
+seconds, what each thing is, whether it works, and what to do next. Settings
+(`apps/admin/src/pages/SettingsPage.tsx`) is the reference build.
+
+### One level of card
+
+- A topic is **one card**, and its contents are **rows separated by a hairline**:
+  `SettingsList` (title, one-sentence description) holding `SettingsRow`s, both in
+  `components/settings/SettingsRow.tsx`.
+- No card inside a card. Don't wrap text in `ContainedBlock`, callout boxes or
+  `SettingsCard`-style frames to "group" it. Use a row, a divider or white space.
+- Selectable option tiles (radio cards) and pop-over dialogs are controls, not
+  wrappers, so they may sit inside a row.
+- Endpoints, ids, raw counts and other developer-only values go in the collapsed
+  `DeveloperDetails` disclosure at the bottom of the page.
+
+### A row has five parts
+
+| Part | What it is |
+| --- | --- |
+| Icon | `BrandIcon` for a third-party service, a console icon for a Mushi setting |
+| Name | `text-sm font-medium`, the noun the user knows ("Slack channel", not "slack_channel_id") |
+| Purpose | One plain-English line: what this does for you |
+| Status | `RowStatus` — the shared `ConnectionStatus` chip plus the reason in `text-sm` |
+| Action | The one obvious button. A problem's fix sits next to the problem |
+
+Fields and lists that belong to the row go in its body, under the text.
+
+### One status language
+
+Use `ConnectionStatus` (`components/ui/ConnectionStatus.tsx`) and its five words.
+Don't invent "healthy", "active", "validation needed" or other synonyms.
+
+| State | Says | Use when |
+| --- | --- | --- |
+| `working` | Working · "Verified 2h ago" | It was checked and passed. Never without evidence |
+| `attention` | Needs attention · the reason | It failed, expired, ran out, or should be removed. Always offer the fix |
+| `expiring` | Expires in N days | A known expiry date is close (keys warn 7 days ahead) |
+| `not_connected` | Not connected | Nothing is set up; the action connects it |
+| `checking` | Not checked yet | Saved, but Mushi has no proof it works. Never shown as working |
+
+- Work statuses out in a pure function with tests (`keyStatus.ts`, or
+  `connectionStateFrom`), and have every place that counts them (banner, tab
+  badge, row) read that same function on the same data, so two places can't
+  disagree.
+- If data is missing, say "Not checked yet". Never fake "healthy" or "0".
+
+### Real service icons
+
+- `BrandIcon` (`components/ui/BrandIcon.tsx`) takes an id, a name or a domain
+  (`"anthropic"`, `"Microsoft Teams"`, `"linear.app"`).
+- Its marks are vendored in `brandMarks.ts` (Simple Icons, CC0; Firecrawl and
+  Browserbase from their own sites). Nothing is fetched at runtime, because the
+  admin CSP blocks favicon CDNs and fetching would leak which tools you use.
+- Pass `decorative` when the name is printed beside the icon, so screen readers
+  don't read it twice. Pass `mono` for a single-colour mark.
+- Near-black marks draw in the text colour automatically, so they show on the dark theme.
+- To add a service, add its Simple Icons path to `brandMarks.ts` with an
+  allowlist comment on the brand colour, and add an alias in `BrandIcon.tsx`.
+
+### Plain language
+
+- Name things by what they do for the user: "Your AI keys", not "BYOK";
+  "Web research", not "Firecrawl BYOK". Keep the old term as a command-palette
+  keyword (`paletteKeywords` in `navRegistry.ts`) so search still finds it.
+- Never show raw error codes, probe statuses (`error_auth`) or UUIDs. Route key
+  and provider errors through `lib/byokErrors.ts` (`describeByokError`,
+  `describeByokTestResult`). Ids may appear only in small monospace or a tooltip.
+- Important text (status reasons, problems, next steps) is `text-sm`, or `text-xs`
+  at the smallest. `text-2xs` and `text-3xs` are for metadata only.
+- Diagrams render labels at 12 px or more at their default zoom.
+
+### Remembered UI state
+
+- Use `usePersistentState(key, default, { projectId, version, validate })` from
+  `lib/usePersistentState.ts` for anything a user would expect the console to
+  remember: the last tab, open disclosures, list filters, the sidebar mode.
+- Keys are `mushi:ui:<projectId>:<key>`, or `mushi:ui:<key>` for console-wide
+  state. Values are versioned (`{ v, value }`). Bump `version` when the shape
+  changes, and pass `validate` so a removed option falls back to the default.
+- Every storage access fails safe: a private window or blocked storage just
+  means the default.
+- A `?tab=` (or other URL) value always wins over the remembered one.
+- This is for per-browser convenience only. State that must be shared or
+  reliable belongs in the database.
+
 ## Related
 
 - Motion rules: [`docs/MOTION.md`](./MOTION.md) (`pnpm check:motion`)
