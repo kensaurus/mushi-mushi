@@ -307,6 +307,7 @@
     "GET /v1/admin/tester-redemptions/withheld": {"allow": "jwt-only"},
     "GET /v1/admin/tester-submissions": {"allow": "jwt-only"},
     "GET /v1/admin/workspace/nav-meta": {"allow": "jwt-only"},
+    "GET /v1/admin/workspace/projects": {"allow": "jwt-only"},
     "GET /v1/cli/auth/device/status": {"allow": "jwt-only"},
     "GET /v1/design-assets/:projectId": {"allow": "public"},
     "GET /v1/intake/voice/sessions": {"allow": "voice-inbox"},

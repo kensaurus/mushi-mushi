@@ -17,6 +17,7 @@ import {
 } from './activeProject'
 import { getActiveOrgIdSnapshot, isValidOrgId } from './activeOrg'
 import { coerceApiResult, type ApiResult } from './apiEnvelope'
+import type * as CrossTeamProject from './crossTeamProject'
 
 const authOptions = {
   // Web defaults are true today, but making them explicit documents the
@@ -164,7 +165,7 @@ function coalesceKey(
 // TENANT_GATE_TIMEOUT_MS, then go out regardless (fail open).
 const TENANT_GATE_TIMEOUT_MS = 3_000
 let tenantGate: { projectId: string; promise: Promise<void> } | null = null
-type CrossTeamModule = typeof import('./crossTeamProject')
+type CrossTeamModule = typeof CrossTeamProject
 let crossTeamModule: CrossTeamModule | null = null
 
 async function loadCrossTeam(): Promise<CrossTeamModule> {

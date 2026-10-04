@@ -295,7 +295,7 @@ export function ProjectSwitcher() {
           // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
           className={`${headerDropdownPanelClass} w-80 max-w-[calc(100vw-2rem)]`}
         >
-          <div className="max-h-[min(28rem,70vh)] overflow-y-auto">
+          <div className="max-h-96 overflow-y-auto">
           {otherTeams.length > 0 && (
             <p className="px-2.5 pt-2 pb-1 text-3xs font-medium uppercase tracking-wide text-fg-faint">
               {currentTeamName ? `${currentTeamName} (this team)` : 'This team'}
