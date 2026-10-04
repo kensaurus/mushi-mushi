@@ -940,6 +940,9 @@ export interface StaticRouteFromRegistry {
   description: string
   group: PaletteGroup
   keywords: string[]
+  /** Same role gates the sidebar applies (see Layout `visibleByRole`). */
+  superAdmin?: boolean
+  operatorOnly?: boolean
 }
 
 export function buildStaticRoutes(): StaticRouteFromRegistry[] {
@@ -950,6 +953,8 @@ export function buildStaticRoutes(): StaticRouteFromRegistry[] {
     description: entry.paletteDescription,
     group: entry.paletteGroup ?? paletteGroupForSection(entry.sectionId),
     keywords: entry.paletteKeywords,
+    ...(entry.superAdmin ? { superAdmin: true } : {}),
+    ...(entry.operatorOnly ? { operatorOnly: true } : {}),
   }))
 }
 

@@ -19,6 +19,20 @@ export type StaticRoute = StaticRouteFromRegistry
 
 export const STATIC_ROUTES: StaticRoute[] = buildStaticRoutes()
 
+/**
+ * The pages this viewer may open. Super-admin and operator pages 403 for
+ * everyone else, and the sidebar already hides them, so the palette must too.
+ * Plan-gated pages stay listed: they show their own upgrade prompt.
+ */
+export function paletteRoutesFor(
+  viewer: { isSuperAdmin: boolean; isOperator: boolean },
+  routes: readonly StaticRoute[] = STATIC_ROUTES,
+): StaticRoute[] {
+  return routes.filter(
+    (r) => (!r.superAdmin || viewer.isSuperAdmin) && (!r.operatorOnly || viewer.isOperator),
+  )
+}
+
 function normalize(text: string): string {
   return text
     .toLowerCase()

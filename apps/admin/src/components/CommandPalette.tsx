@@ -17,9 +17,9 @@ import { useCommandPalette } from '../lib/useCommandPalette'
 import { useAdminMode, type AdminMode } from '../lib/mode'
 import { apiFetch } from '../lib/supabase'
 import {
-  STATIC_ROUTES,
   STRONG_PAGE_MATCH,
   paletteMatchScore,
+  paletteRoutesFor,
   rankPaletteRoutes,
   type PaletteGroup,
   type StaticRoute,
@@ -42,6 +42,7 @@ import {
 import type { NavStep, NavTarget } from '../lib/askMushiTypes'
 import { PaletteAssistView } from './PaletteAssistView'
 import { fixDeepLinkPath } from '../lib/fixDeepLink'
+import { useEntitlements } from '../lib/useEntitlements'
 
 interface LiveReport {
   id: string
@@ -277,14 +278,21 @@ export function CommandPalette() {
     }
   }, [query])
 
-  const routesByGroup = useMemo(() => groupRoutes(STATIC_ROUTES), [])
-  const routeIds = useMemo(() => new Set(STATIC_ROUTES.map((r) => r.id)), [])
+  // Only pages this viewer may open; operator and super-admin pages 403 for
+  // everyone else (the sidebar hides them the same way).
+  const { isSuperAdmin, isOperator } = useEntitlements()
+  const visibleRoutes = useMemo(
+    () => paletteRoutesFor({ isSuperAdmin, isOperator }),
+    [isSuperAdmin, isOperator],
+  )
+  const routesByGroup = useMemo(() => groupRoutes(visibleRoutes), [visibleRoutes])
+  const routeIds = useMemo(() => new Set(visibleRoutes.map((r) => r.id)), [visibleRoutes])
 
   const recentRoutes = useMemo(() => {
     if (query.trim()) return []
-    const byId = new Map(STATIC_ROUTES.map((r) => [r.id, r]))
+    const byId = new Map(visibleRoutes.map((r) => [r.id, r]))
     return recents.map((id) => byId.get(id)).filter((r): r is StaticRoute => Boolean(r))
-  }, [recents, query])
+  }, [recents, query, visibleRoutes])
 
   const activeToken = useMemo(
     () => detectComposerToken(query, query.length),
@@ -301,8 +309,8 @@ export function CommandPalette() {
   const trimmedQuery = query.trim()
   const searching = trimmedQuery.length > 0
   const rankedPages = useMemo(
-    () => (searching ? rankPaletteRoutes(trimmedQuery) : []),
-    [searching, trimmedQuery],
+    () => (searching ? rankPaletteRoutes(trimmedQuery, visibleRoutes) : []),
+    [searching, trimmedQuery, visibleRoutes],
   )
   const strongPages = rankedPages
     .filter((r) => r.score >= STRONG_PAGE_MATCH)
