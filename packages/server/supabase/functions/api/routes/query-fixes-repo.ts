@@ -596,6 +596,13 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     // never surfaces in-flight or completed fixes by their change text.
     const search = c.req.query('q')?.trim();
     const queryLimit = Math.min(Number(c.req.query('limit')) || 50, 200);
+    // One report's attempts (the report page's progress panel). Without it
+    // the panel searched the 50 newest fixes client-side and showed nothing
+    // for a report whose fix was older.
+    const reportIdParam = c.req.query('report_id')?.trim();
+    if (reportIdParam && !/^[0-9a-f-]{36}$/i.test(reportIdParam)) {
+      return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: 'report_id must be a report id' } }, 400);
+    }
 
     let query = db
       .from('fix_attempts')
@@ -606,6 +613,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       .order('started_at', { ascending: false })
       .limit(queryLimit);
 
+    if (reportIdParam) query = query.eq('report_id', reportIdParam);
     if (search) {
       const escaped = search.replace(/[%,]/g, '');
       query = query.or(

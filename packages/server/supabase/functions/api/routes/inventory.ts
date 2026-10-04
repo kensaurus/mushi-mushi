@@ -1437,8 +1437,29 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
           triggered_by: scope.userId,
         }),
       })
-      const json = await resp.json().catch(() => ({}))
-      return c.json({ ok: resp.ok, data: json })
+      // test-gen-from-report answers with its own { ok, data | error }
+      // envelope. Pass it through flat: on success the caller reads
+      // { prUrl, prNumber, branch, path } directly, on failure it gets the
+      // worker's error and status. Wrapping it (data: { ok, data }) at 200 hid
+      // the PR link and turned every failure into "Request failed".
+      const json = (await resp.json().catch(() => null)) as
+        | { ok?: boolean; data?: unknown; error?: string | { code?: string; message?: string } }
+        | null
+      if (resp.ok && json?.ok !== false) {
+        return c.json({ ok: true, data: json?.data ?? null })
+      }
+      const workerError = typeof json?.error === 'string' ? { message: json.error } : json?.error
+      const status = (resp.status >= 400 && resp.status <= 599 ? resp.status : 502) as 400 | 404 | 422 | 500 | 502
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: (workerError as { code?: string } | undefined)?.code ?? 'TEST_GEN_FAILED',
+            message: workerError?.message ?? 'Test generation failed. Try again in a moment.',
+          },
+        },
+        status,
+      )
     },
   )
 
