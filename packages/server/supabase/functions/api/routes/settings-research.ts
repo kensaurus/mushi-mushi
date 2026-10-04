@@ -196,6 +196,29 @@ const WEBHOOK_HOST_SUFFIXES: Record<string, string[]> = {
   teams_webhook_url: ['office.com', 'logic.azure.com', 'powerplatform.com'],
 };
 
+/** Names the console shows for settings columns, so errors never print a column name. */
+const SETTING_LABELS: Record<string, string> = {
+  slack_webhook_url: 'Slack webhook URL',
+  discord_webhook_url: 'Discord webhook URL',
+  teams_webhook_url: 'Teams webhook URL',
+  telegram_bot_token_ref: 'Telegram bot token',
+  github_user_token_ref: 'GitHub token',
+  sentry_webhook_secret: 'Sentry webhook secret',
+};
+
+function settingLabel(key: string): string {
+  return SETTING_LABELS[key] ?? key.replace(/_/g, ' ');
+}
+
+/**
+ * Why a branch-name pattern was refused, in the words the Settings form uses.
+ * The rule itself is `validateFixBranchTemplate` (_shared/github-pr.ts).
+ */
+const FIX_BRANCH_TEMPLATE_HELP =
+  'Branch names must start with a type and the report: for example bugfix/MUSHI-{reportId}-{category}. ' +
+  'Use bugfix/, feature/, hotfix/, refactor/, chore/, docs/, test/ or ci/, then MUSHI-{reportId}-, then lowercase words, ' +
+  '{category}, {date} or {shortId}.';
+
 function isAllowedWebhookHost(hostname: string, suffixes: string[]): boolean {
   const host = hostname.toLowerCase();
   return suffixes.some((s) => host === s || host.endsWith(`.${s}`));
@@ -499,6 +522,9 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       // Opt-in auto-release (migration 20261003130000): publishing messages
       // reporters, so project admins only. Validated below.
       'auto_release_enabled',
+      // Reporter updates in the SDK widget (Notifications → Setup). It
+      // messages end users, so project admins only. Validated below.
+      'reporter_notifications_enabled',
       // Supabase link (ADR 0016): the project ref the read-only Supabase
       // features read. The token itself is a BYOK key (slug `supabase`),
       // never a settings column. Validated below.
@@ -548,7 +574,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       if (key === 'widget_brand_footer') {
         if (value !== null && typeof value !== 'boolean') {
           return c.json(
-            { error: { code: 'VALIDATION_ERROR', message: 'widget_brand_footer must be a boolean or null' } },
+            { ok: false, error: { code: 'VALIDATION_ERROR', message: 'widget_brand_footer must be a boolean or null' } },
             400,
           );
         }
@@ -561,9 +587,25 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         if (forbidden) return forbidden;
         const verdict = validateSpendLimit(key, value);
         if (!verdict.ok) {
-          return c.json({ error: { code: 'VALIDATION_ERROR', message: verdict.message } }, 400);
+          return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: verdict.message } }, 400);
         }
         updates[key] = verdict.value;
+        continue;
+      }
+      if (key === 'reporter_notifications_enabled') {
+        const forbidden = requireProjectAdmin(
+          c,
+          project,
+          'Only organization owners and admins can turn reporter updates on or off.',
+        );
+        if (forbidden) return forbidden;
+        if (typeof value !== 'boolean') {
+          return c.json(
+            { ok: false, error: { code: 'VALIDATION_ERROR', message: 'Reporter updates can only be turned on or off.' } },
+            400,
+          );
+        }
+        updates[key] = value;
         continue;
       }
       if (key === 'auto_release_enabled') {
@@ -571,7 +613,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         if (forbidden) return forbidden;
         if (typeof value !== 'boolean') {
           return c.json(
-            { error: { code: 'VALIDATION_ERROR', message: 'auto_release_enabled must be a boolean' } },
+            { ok: false, error: { code: 'VALIDATION_ERROR', message: 'auto_release_enabled must be a boolean' } },
             400,
           );
         }
@@ -584,7 +626,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         if (forbidden) return forbidden;
         const verdict = parseSupabaseProjectRefSetting(value);
         if (!verdict.ok) {
-          return c.json({ error: { code: 'VALIDATION_ERROR', message: verdict.message } }, 400);
+          return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: verdict.message } }, 400);
         }
         updates[key] = verdict.value;
         continue;
@@ -592,7 +634,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       if (key === 'sentry_dsn') {
         const verdict = parseSentryDsnSetting(value, sentrySelfHostedHosts());
         if (!verdict.ok) {
-          return c.json({ error: { code: 'VALIDATION_ERROR', message: verdict.message } }, 400);
+          return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: verdict.message } }, 400);
         }
         updates[key] = verdict.value;
         continue;
@@ -600,7 +642,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       if (key === 'voice_intake_enabled') {
         if (typeof value !== 'boolean') {
           return c.json(
-            { error: { code: 'VALIDATION_ERROR', message: 'voice_intake_enabled must be a boolean' } },
+            { ok: false, error: { code: 'VALIDATION_ERROR', message: 'voice_intake_enabled must be a boolean' } },
             400,
           );
         }
@@ -611,7 +653,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         const days = typeof value === 'number' ? value : Number(value);
         if (!Number.isInteger(days) || days < 0 || days > 365) {
           return c.json(
-            { error: { code: 'VALIDATION_ERROR', message: 'voice_audio_retention_days must be an integer between 0 and 365' } },
+            { ok: false, error: { code: 'VALIDATION_ERROR', message: 'voice_audio_retention_days must be an integer between 0 and 365' } },
             400,
           );
         }
@@ -621,14 +663,14 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       if (key === 'voice_languages') {
         if (!Array.isArray(value) || value.length === 0 || value.length > 4) {
           return c.json(
-            { error: { code: 'VALIDATION_ERROR', message: 'voice_languages must list 1–4 BCP-47 tags (e.g. ["ja","en"])' } },
+            { ok: false, error: { code: 'VALIDATION_ERROR', message: 'voice_languages must list 1–4 BCP-47 tags (e.g. ["ja","en"])' } },
             400,
           );
         }
         const tags = Array.from(new Set(value.map((v) => String(v).trim().toLowerCase())));
         if (tags.some((t) => !VOICE_LANGUAGE_RE.test(t))) {
           return c.json(
-            { error: { code: 'VALIDATION_ERROR', message: 'voice_languages entries must look like "en" or "ja-JP"' } },
+            { ok: false, error: { code: 'VALIDATION_ERROR', message: 'voice_languages entries must look like "en" or "ja-JP"' } },
             400,
           );
         }
@@ -647,7 +689,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         // stored `vault://<name>` is resolved by name with the service role.
         if (plan.action === 'reject') {
           return c.json(
-            { error: { code: 'VAULT_REF_NOT_ALLOWED', message: `${key}: paste the secret itself. Mushi stores it in Vault.` } },
+            { ok: false, error: { code: 'VAULT_REF_NOT_ALLOWED', message: `${settingLabel(key)}: paste the secret itself. Mushi stores it in Vault.` } },
             400,
           );
         }
@@ -663,7 +705,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
             err: err instanceof Error ? err.message : String(err),
           });
           return c.json(
-            { error: { code: 'DB_ERROR', message: `Could not store ${key} in Vault. Retry in a moment.` } },
+            { ok: false, error: { code: 'DB_ERROR', message: `Could not store the ${settingLabel(key)} safely. Nothing was saved; retry in a moment.` } },
             500,
           );
         }
@@ -676,12 +718,13 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
           if (key === 'fix_branch_template' && trimmed) {
             try {
               validateFixBranchTemplate(trimmed);
-            } catch (err) {
+            } catch {
               return c.json(
                 {
+                  ok: false,
                   error: {
                     code: 'INVALID_BRANCH_TEMPLATE',
-                    message: err instanceof Error ? err.message : String(err),
+                    message: FIX_BRANCH_TEMPLATE_HELP,
                   },
                 },
                 400,
@@ -710,7 +753,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         const verdict = validateWebhookUrl(key, trimmed);
         if (!verdict.ok) {
           return c.json(
-            { error: { code: 'INVALID_WEBHOOK_URL', message: `${key}: ${verdict.reason}` } },
+            { ok: false, error: { code: 'INVALID_WEBHOOK_URL', message: `${settingLabel(key)}: ${verdict.reason}` } },
             400,
           );
         }

@@ -12,7 +12,7 @@
  *          so the banner can never say "all good" while a row says otherwise.
  */
 
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout';
 import { PageScopeHint, SegmentedControl, StatCard, ErrorAlert } from '../components/ui';
@@ -148,12 +148,31 @@ function SettingsPageBody({ byokEnabled }: { byokEnabled: boolean }) {
   );
 
   // Quick mode picks a starting tab when no link says which one to show.
+  // It waits for the saved-keys list too, so it picks from the same counts
+  // the banner shows.
+  // It picks once per visit: after that, a tab the user opens stays open.
+  const poolPending = byokEnabled && pool.loading && !pool.data;
+  const quickPicked = useRef(false);
   useEffect(() => {
-    if (!ux.isQuickstart || !activeProjectId || statsLoading) return;
+    if (!ux.isQuickstart || !activeProjectId || statsLoading || poolPending || quickPicked.current) return;
+    quickPicked.current = true;
     if (!shouldResolveQuickSettingsTab(param) || rememberedTab !== null) return;
-    const quickTab = resolveQuickSettingsTab(stats);
+    const quickTab = resolveQuickSettingsTab(stats, keySummary, hasAnthropicKey, byokEnabled);
     if (active !== quickTab) setActive(quickTab);
-  }, [ux.isQuickstart, activeProjectId, statsLoading, stats, active, param, rememberedTab, setActive]);
+  }, [
+    ux.isQuickstart,
+    activeProjectId,
+    statsLoading,
+    poolPending,
+    stats,
+    keySummary,
+    hasAnthropicKey,
+    byokEnabled,
+    active,
+    param,
+    rememberedTab,
+    setActive,
+  ]);
 
   const keyProblems = keySummary ? keySummary.attention + keySummary.expiring + keySummary.checking : 0;
   const criticalCount =

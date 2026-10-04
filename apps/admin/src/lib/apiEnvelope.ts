@@ -13,6 +13,23 @@ export type ApiResult<T> = {
   requestId?: string
 }
 
+/**
+ * A 4xx body shaped `{ error: { code, message } }` without `ok: false` (some
+ * older admin routes answer validation errors that way). Read it as the error
+ * it is, so the user sees the server's sentence instead of `400: {"error":…}`.
+ * Returns null for anything else; 5xx keeps the `HTTP_ERROR "5xx: …"` shape
+ * that retry logic reads.
+ */
+export function errorFromBareEnvelope(raw: unknown): { code: string; message: string } | null {
+  if (!raw || typeof raw !== 'object') return null
+  const err = (raw as Record<string, unknown>).error
+  if (!err || typeof err !== 'object') return null
+  const e = err as Record<string, unknown>
+  const message = typeof e.message === 'string' && e.message.trim() ? e.message.trim() : null
+  if (!message) return null
+  return { code: typeof e.code === 'string' && e.code ? e.code : 'ERROR', message }
+}
+
 export function coerceApiResult<T>(raw: unknown): ApiResult<T> {
   if (!raw || typeof raw !== 'object') {
     return { ok: false, error: { code: 'INVALID_RESPONSE', message: 'Invalid API response' } }

@@ -5,6 +5,8 @@
 
 import { useAdminMode } from './mode';
 import type { SettingsStats, SettingsTabId } from '../components/settings/types';
+import type { KeySummary } from '../components/settings/keyStatus';
+import { settingsBannerPriority } from '../components/settings/SettingsStatusBanner';
 
 export interface SettingsUxFlags {
   isQuickstart: boolean;
@@ -28,19 +30,34 @@ export function useSettingsUx(): SettingsUxFlags {
 }
 
 
-/** Quick mode: land on the tab that matches settings posture. */
-export function resolveQuickSettingsTab(stats: SettingsStats): SettingsTabId {
-  if (
-    stats.topPriority === 'byok_failing' ||
-    stats.topPriority === 'no_anthropic' ||
-    stats.topPriority === 'untested'
-  ) {
-    return 'byok';
+/**
+ * Quick mode: land on the tab the status banner's button opens, decided by
+ * the same priority function, so the landing tab and the banner never
+ * disagree. (It used to read `stats.topPriority`, which /settings/stats never
+ * returns, so Quick mode always opened General.) Without the BYOK plan the
+ * optional "add your own Claude key" step is skipped: that tab would only
+ * show an upgrade prompt.
+ */
+export function resolveQuickSettingsTab(
+  stats: SettingsStats,
+  keySummary: KeySummary | null,
+  hasAnthropicKey: boolean,
+  byokEnabled: boolean,
+): SettingsTabId {
+  let priority = settingsBannerPriority(stats, keySummary, hasAnthropicKey);
+  if (priority === 'no_anthropic' && !byokEnabled) priority = settingsBannerPriority(stats, keySummary, true);
+  switch (priority) {
+    case 'keys_attention':
+    case 'keys_expiring':
+    case 'no_anthropic':
+    case 'keys_unchecked':
+      return 'byok';
+    case 'sdk_off':
+    case 'healthy':
+      return 'health';
+    default:
+      return 'general';
   }
-  if (stats.topPriority === 'sdk_off' || stats.topPriority === 'healthy') {
-    return 'health';
-  }
-  return 'general';
 }
 
 /** Quick mode may choose an initial tab, but an explicit deep link always wins. */
