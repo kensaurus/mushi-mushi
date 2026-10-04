@@ -88,9 +88,10 @@ describe('feature board', () => {
   const src = read('routes/feature-board.ts')
   const ship = routeSlice(src, "r.post('/:id/ship'")
 
-  it('refuses viewers before changing the ticket (bug 200)', () => {
-    expect(ship.indexOf('denyViewerWrite(')).toBeGreaterThan(0)
-    expect(ship.indexOf('denyViewerWrite(')).toBeLessThan(ship.indexOf(".update({"))
+  it('refuses viewers and members before changing the ticket (bug 200)', () => {
+    const gate = ship.indexOf("access.role !== 'owner' && access.role !== 'admin'")
+    expect(gate).toBeGreaterThan(0)
+    expect(gate).toBeLessThan(ship.indexOf(".update({"))
   })
 
   it('refuses cancelled requests (bug 312)', () => {

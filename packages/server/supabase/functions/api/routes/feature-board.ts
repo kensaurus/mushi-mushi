@@ -23,7 +23,6 @@ import { callerCanAccessProject } from '../shared.ts'
 import { log } from '../../_shared/logger.ts'
 import type { Variables } from '../types.ts'
 import { userCanAccessProject } from '../shared.ts'
-import { denyViewerWrite } from '../viewer-gate.ts'
 
 declare const Deno: { env: { get(name: string): string | undefined } }
 
@@ -196,10 +195,10 @@ function featureBoardRoutes() {
       return jsonErr(c, 'DB_ERROR', error.message, 500)
     }
 
-    // Lets the console hide "Mark shipped" from viewers (the ship route
-    // refuses them too).
+    // Lets the console hide "Mark shipped" from callers the ship route
+    // refuses (it needs an org owner or admin).
     const access = await userCanAccessProject(db(), userId, projectId)
-    const canShip = access.allowed && access.role !== 'viewer'
+    const canShip = access.allowed && (access.role === 'owner' || access.role === 'admin')
 
     const { data: myVotes } = await db()
       .from('feature_request_votes')
@@ -398,12 +397,6 @@ function featureBoardRoutes() {
     if (access.role !== 'owner' && access.role !== 'admin') {
       return jsonErr(c, 'FORBIDDEN', 'Only organization owners and admins can mark requests shipped.', 403)
     }
-
-    // requireProjectAccess only checks membership; closing a customer's
-    // request and firing the shipped webhook is a write, so viewers stop here.
-    const access = await userCanAccessProject(db(), c.get('userId') as string, projectId)
-    const viewerDenied = denyViewerWrite(c, access.role, 'mark requests shipped')
-    if (viewerDenied) return viewerDenied
 
     const body = await c.req.json().catch(() => null)
     const releaseId: string | null = body?.release_id ?? null

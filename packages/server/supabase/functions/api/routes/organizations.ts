@@ -706,14 +706,6 @@ export function registerOrganizationRoutes(app: Hono<{ Variables: Variables }>):
     if (denial) {
       return c.json({ ok: false, error: { code: denial.code, message: denial.message } }, denial.status);
     }
-    // Only an owner may change another owner's role.
-    const targetRole = await loadMembership(db, orgId, targetUserId);
-    if (targetRole === 'owner' && actorRole !== 'owner') {
-      return c.json(
-        { ok: false, error: { code: 'OWNER_REQUIRED', message: "Only an owner can change another owner's role." } },
-        403,
-      );
-    }
     const { error } = await db
       .from('organization_members')
       .update({ role: body.role })
@@ -755,16 +747,6 @@ export function registerOrganizationRoutes(app: Hono<{ Variables: Variables }>):
     });
     if (denial) {
       return c.json({ ok: false, error: { code: denial.code, message: denial.message } }, denial.status);
-    }
-    // Only an owner may remove another owner (anyone may leave themselves).
-    if (actorId !== targetUserId && actorRole !== 'owner') {
-      const targetRole = await loadMembership(db, orgId, targetUserId);
-      if (targetRole === 'owner') {
-        return c.json(
-          { ok: false, error: { code: 'OWNER_REQUIRED', message: 'Only an owner can remove another owner.' } },
-          403,
-        );
-      }
     }
     const { error } = await db
       .from('organization_members')
