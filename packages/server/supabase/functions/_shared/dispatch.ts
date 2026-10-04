@@ -134,8 +134,7 @@ export async function dispatchFixForReport(input: DispatchInput): Promise<Dispat
       .from('fix_attempts')
       .select('id, report_id, pr_number, pr_state, merged_at, created_at')
       .eq('report_id', input.reportId)
-      .or('merged_at.not.is.null,pr_state.eq.merged')
-      .limit(5)
+      .limit(50)
     const resolvedBlock = fixDispatchResolvedBlock(
       { id: input.reportId, status: (report as { status?: string | null }).status },
       mergedAttempts ?? [],

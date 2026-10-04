@@ -382,8 +382,7 @@ export function registerA2ATaskRoutes(app: Hono<{ Variables: Variables }>): void
           .from('fix_attempts')
           .select('id, report_id, pr_number, pr_state, merged_at, created_at')
           .eq('report_id', reportId)
-          .or('merged_at.not.is.null,pr_state.eq.merged')
-          .limit(5),
+          .limit(50),
       ]);
       const resolvedBlock = reportRow ? fixDispatchResolvedBlock(reportRow, mergedAttempts ?? []) : null;
       if (resolvedBlock) {
