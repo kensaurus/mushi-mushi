@@ -61,7 +61,7 @@ export function DashboardLoopReadout({
       tone: fixesInProgress > 0 ? 'info' : 'muted',
     },
     {
-      label: 'Failed fixes',
+      label: 'Auto-fix stopped',
       value: String(fixesFailed),
       tone: fixesFailed > 0 ? 'danger' : 'muted',
     },

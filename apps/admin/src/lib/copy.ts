@@ -1189,7 +1189,7 @@ export const COPY: CopyRegistry = {
       actionLabels: {
         setup: 'Continue setup',
         triage: 'Review bugs',
-        failed: 'View failed fixes',
+        failed: 'See why it stopped',
         health: 'View health',
         verify: 'Send test report',
         healthy: 'View loop',
