@@ -84,7 +84,7 @@ export function VoiceSessionsList({ sessions, onConfirm, onCancel, pendingId, on
                 )}
                 {status === 'awaiting_confirm' && !awaiting && (
                   <p className="mt-1 text-xs text-fg-secondary">
-                    Confirm it where you sent it (Telegram or Slack), or ask someone with edit access to this project.
+                    You can&rsquo;t confirm this request from here. Ask someone with edit access to this project, or send it again.
                   </p>
                 )}
                 <ActionPillRow className="mt-1.5">

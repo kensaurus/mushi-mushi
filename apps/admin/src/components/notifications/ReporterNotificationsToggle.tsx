@@ -39,7 +39,16 @@ export function ReporterNotificationsToggle({ enabled, onChanged }: Props) {
     }
     const check = await apiFetch<{ reporter_notifications_enabled?: boolean | null }>('/v1/admin/settings')
     setSaving(false)
-    const stored = check.ok ? check.data?.reporter_notifications_enabled === true : null
+    if (!check.ok) {
+      setOutcome({
+        ok: true,
+        text: "Saved, but Mushi couldn't confirm it. Reload the page to check.",
+        at: new Date().toISOString(),
+      })
+      onChanged()
+      return
+    }
+    const stored = check.data?.reporter_notifications_enabled === true
     if (stored !== next) {
       setOutcome({
         ok: false,

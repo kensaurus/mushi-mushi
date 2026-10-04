@@ -7,7 +7,7 @@ import { logAudit } from '../../_shared/audit.ts';
 import { emitProductEvent } from '../../_shared/product-events.ts';
 import { withIdempotency } from '../../_shared/idempotency.ts';
 import { dbError, callerCanAccessProject } from '../shared.ts';
-import { parseRotateTarget, pickRotationTarget, type RotatableKeyRow } from '../../_shared/api-key-rotation.ts';
+import { parseRotateBody, pickRotationTarget, type RotatableKeyRow } from '../../_shared/api-key-rotation.ts';
 
 export function registerProjectKeysRoutes(app: Hono<{ Variables: Variables }>): void {
   // Scopes vocabulary is enforced at the DB level (CHECK constraint from
@@ -301,7 +301,9 @@ export function registerProjectKeysRoutes(app: Hono<{ Variables: Variables }>): 
 
     // `{ key_id }` or `{ key_prefix }` rotates that one key and keeps its
     // label and scopes. No key named = the legacy rotate-everything path.
-    const target = parseRotateTarget(await c.req.json().catch(() => null));
+    // An empty body is the legacy rotate-everything call; a body that is not
+    // JSON is refused, never read as "no key named".
+    const target = parseRotateBody(await c.req.text().catch(() => ''));
     if (target && 'error' in target) {
       return c.json({ ok: false, error: { code: 'INVALID_KEY', message: target.error } }, 400);
     }
@@ -362,12 +364,20 @@ export function registerProjectKeysRoutes(app: Hono<{ Variables: Variables }>): 
         label: successor.label,
         // Omitted = the column default ('report:write'), as before.
         ...(successor.scopes ? { scopes: successor.scopes } : {}),
-        ...(successor.rotatedFrom ? { rotated_from: successor.rotatedFrom } : {}),
         is_active: true,
       })
       .select('id, scopes')
       .single();
     if (insertError) return dbError(c, insertError);
+    // Lineage breadcrumb, best effort (as in cli-auth's rotate): a database
+    // without the column must not fail a rotation that already happened.
+    if (successor.rotatedFrom && newRow?.id) {
+      const { error: lineageError } = await db
+        .from('project_api_keys')
+        .update({ rotated_from: successor.rotatedFrom })
+        .eq('id', newRow.id);
+      if (lineageError) log.warn('rotated_from not recorded', { projectId, err: lineageError.message });
+    }
     const newScopes = ((newRow as { scopes?: string[] | null } | null)?.scopes ?? successor.scopes ?? [
       'report:write',
     ]) as string[];

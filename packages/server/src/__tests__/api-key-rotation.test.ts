@@ -8,6 +8,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
+  parseRotateBody,
   parseRotateTarget,
   pickRotationTarget,
   type RotatableKeyRow,
@@ -39,6 +40,25 @@ describe('parseRotateTarget', () => {
   })
 })
 
+describe('parseRotateBody', () => {
+  it('reads an empty body as the legacy rotate-everything call', () => {
+    expect(parseRotateBody('')).toBeNull()
+    expect(parseRotateBody('   ')).toBeNull()
+    expect(parseRotateBody('{}')).toBeNull()
+  })
+
+  it('refuses a body that is not a JSON object instead of rotating everything', () => {
+    expect(parseRotateBody('{"key_prefix": "mushi_a')).toHaveProperty('error')
+    expect(parseRotateBody('mushi_aaa111')).toHaveProperty('error')
+    expect(parseRotateBody('null')).toHaveProperty('error')
+    expect(parseRotateBody('["mushi_aaa111"]')).toHaveProperty('error')
+  })
+
+  it('passes a named key through', () => {
+    expect(parseRotateBody('{"key_prefix":"mushi_aaa111"}')).toEqual({ keyPrefix: 'mushi_aaa111' })
+  })
+})
+
 describe('pickRotationTarget', () => {
   it('picks exactly the named key', () => {
     expect(pickRotationTarget([SDK, MCP], { keyId: MCP.id })).toEqual({ ok: true, row: MCP })
@@ -62,14 +82,15 @@ describe('POST /v1/admin/projects/:id/keys/rotate wiring', () => {
   const body = src.slice(start, src.indexOf("app.delete('/v1/admin/projects/:id/keys/:keyId'"))
 
   it('narrows the revoke to the picked key when one was named', () => {
-    expect(body).toContain('parseRotateTarget(await c.req.json()')
+    expect(body).toContain("parseRotateBody(await c.req.text().catch(() => ''))")
     expect(body).toContain("if (target) revoke = revoke.eq('id', existing[0]!.id)")
   })
 
   it('keeps the label and scopes and records the lineage', () => {
     expect(body).toContain('label: successor.label')
     expect(body).toContain('scopes: successor.scopes')
-    expect(body).toContain('rotated_from: successor.rotatedFrom')
+    // Best effort, after the insert, so a missing column never fails a rotation.
+    expect(body).toContain('.update({ rotated_from: successor.rotatedFrom })')
   })
 
   it('returns the new key scopes and the revoked prefixes', () => {
