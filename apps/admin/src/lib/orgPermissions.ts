@@ -60,3 +60,10 @@ export function resolveActiveOrgRole(
 export function mayManageActiveOrg(role: string | null): boolean {
   return role == null || canManageOrg(role)
 }
+
+/**
+ * Tooltip / caption for a control the server refuses to members and viewers
+ * (requireProjectAdmin). Pages disable the control and show this instead of
+ * letting the click end in a 403.
+ */
+export const ADMIN_ONLY_HINT = 'Owners and admins only. Ask one of them to make this change.'

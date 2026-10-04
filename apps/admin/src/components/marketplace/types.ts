@@ -117,4 +117,25 @@ export const CATEGORY_LABEL: Record<string, string> = {
   analytics: 'Analytics',
 }
 
+/**
+ * Minimum signing-secret length for a webhook plugin. One number for the
+ * install form's field check and the submit guard (they used to say 32 and
+ * 16). The generated secret is 64 hex characters.
+ */
+export const PLUGIN_SECRET_MIN_LENGTH = 32
+
+/** True for a URL the plugin PATCH / install will accept (public https). */
+export function pluginWebhookUrlError(raw: string): string | null {
+  const v = raw.trim()
+  if (!v) return 'Paste the HTTPS URL of your webhook receiver.'
+  let url: URL
+  try {
+    url = new URL(v)
+  } catch {
+    return 'That is not a valid URL. Paste the full https:// address of your receiver.'
+  }
+  if (url.protocol !== 'https:') return 'Webhook URLs must start with https:// so deliveries are encrypted.'
+  return null
+}
+
 export const STATUS_FILTER_OPTIONS = ['', 'ok', 'error', 'timeout', 'skipped', 'pending']

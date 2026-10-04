@@ -13,6 +13,8 @@ import { useState, useEffect } from 'react'
 import { Btn, Input, SelectField } from '../ui'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
+import { describeApiFailure } from '../../lib/humanizeApiError'
+import { isNotificationWebhookHost } from '../../lib/notificationWebhookHosts'
 import { HealthSparkline } from './HealthSparkline'
 import type { HealthRow } from './types'
 import { CHIP_TONE } from '../../lib/chipTone'
@@ -32,6 +34,12 @@ interface Props {
   channelId?: string | null
   /** A webhook, or a channel plus a bot token: something can actually post. */
   canPost?: boolean
+  /**
+   * Re-read the settings stats after a save. The card's status line comes
+   * from those props, so without this a saved channel or webhook kept showing
+   * the old state until a full page reload.
+   */
+  onChanged?: () => void
 }
 
 interface SlackChannel {
@@ -60,6 +68,7 @@ export function SlackIntegrationCard({
   sparkline = [],
   channelId: savedChannelId,
   canPost = false,
+  onChanged,
 }: Props) {
   const toast = useToast()
   const [channels, setChannels] = useState<SlackChannel[]>([])
@@ -73,6 +82,7 @@ export function SlackIntegrationCard({
   const [manualChannelId, setManualChannelId] = useState('')
   const [savingManual, setSavingManual] = useState(false)
   const [webhookUrl, setWebhookUrl] = useState('')
+  const [savingWebhook, setSavingWebhook] = useState(false)
   // The channel just saved here, so the card reflects it before the page reloads.
   const [justSavedChannelId, setJustSavedChannelId] = useState<string | null>(null)
   const [localProbe, setLocalProbe] = useState<ProbeLike | undefined>(undefined)
@@ -126,7 +136,8 @@ export function SlackIntegrationCard({
       if (res.ok && res.data?.url) {
         window.location.href = res.data.url
       } else {
-        toast.error('Could not start Slack connection', res.error?.message)
+        const t = describeApiFailure(res.error, 'Could not start the Slack connection')
+        toast.error(t.title, t.description)
         setConnectingSlack(false)
       }
     } catch {
@@ -146,8 +157,10 @@ export function SlackIntegrationCard({
       if (res.ok) {
         setJustSavedChannelId(selectedChannel)
         toast.success('Channel saved — Slack notifications will go here.')
+        onChanged?.()
       } else {
-        toast.error('Could not save channel.')
+        const t = describeApiFailure(res.error, 'Could not save the Slack channel')
+        toast.error(t.title, t.description)
       }
     } finally {
       setSavingChannel(false)
@@ -167,8 +180,10 @@ export function SlackIntegrationCard({
         setJustSavedChannelId(id)
         toast.success('Channel ID saved — Slack notifications will go here.')
         setManualChannelId('')
+        onChanged?.()
       } else {
-        toast.error('Could not save channel ID.')
+        const t = describeApiFailure(res.error, 'Could not save the Slack channel ID')
+        toast.error(t.title, t.description)
       }
     } finally {
       setSavingManual(false)
@@ -181,7 +196,10 @@ export function SlackIntegrationCard({
       const res = await apiFetch('/v1/admin/settings/test-slack', { method: 'POST' })
       setLocalProbe(probeFromTestSend(res.ok, res.ok ? null : res.error?.message ?? 'Slack test failed.'))
       if (res.ok) toast.success('Test message sent to Slack!')
-      else toast.error(res.error?.message ?? 'Slack test failed.')
+      else {
+        const t = describeApiFailure(res.error, 'Slack test failed')
+        toast.error(t.title, t.description)
+      }
     } catch {
       toast.error('Could not reach Slack.')
     } finally {
@@ -189,14 +207,42 @@ export function SlackIntegrationCard({
     }
   }
 
+  // Same host rule the settings PATCH enforces, checked before saving.
+  const webhookError = (() => {
+    const v = webhookUrl.trim()
+    if (!v) return null
+    try {
+      const u = new URL(v)
+      if (u.protocol !== 'https:') return 'Slack webhook URLs start with https://'
+      if (!isNotificationWebhookHost('slack_webhook_url', u.hostname)) {
+        return 'That is not a Slack webhook URL. It starts with https://hooks.slack.com/services/'
+      }
+      return null
+    } catch {
+      return 'Paste the whole webhook URL, starting with https://'
+    }
+  })()
+
   const handleSaveWebhook = async () => {
-    if (!webhookUrl) return
-    const res = await apiFetch('/v1/admin/settings', {
-      method: 'PATCH',
-      body: JSON.stringify({ slack_webhook_url: webhookUrl }),
-    })
-    if (res.ok) toast.success('Webhook URL saved.')
-    else toast.error('Could not save webhook URL.')
+    const value = webhookUrl.trim()
+    if (!value || webhookError) return
+    setSavingWebhook(true)
+    try {
+      const res = await apiFetch('/v1/admin/settings', {
+        method: 'PATCH',
+        body: JSON.stringify({ slack_webhook_url: value }),
+      })
+      if (res.ok) {
+        toast.success('Webhook URL saved.')
+        setWebhookUrl('')
+        onChanged?.()
+      } else {
+        const t = describeApiFailure(res.error, 'Could not save the Slack webhook URL')
+        toast.error(t.title, t.description)
+      }
+    } finally {
+      setSavingWebhook(false)
+    }
   }
 
   const probed = connectionFromProbe({
@@ -429,14 +475,16 @@ export function SlackIntegrationCard({
               className="font-mono text-xs"
               value={webhookUrl}
               onChange={(e) => setWebhookUrl(e.target.value)}
+              error={webhookError ?? undefined}
             />
           </div>
           <Btn
             type="button"
             variant="ghost"
             size="sm"
-            disabled={!webhookUrl}
-            onClick={handleSaveWebhook}
+            disabled={!webhookUrl.trim() || Boolean(webhookError)}
+            loading={savingWebhook}
+            onClick={() => void handleSaveWebhook()}
             className="shrink-0"
           >
             Save

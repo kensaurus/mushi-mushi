@@ -122,3 +122,30 @@ describe('apiFetch scope headers', () => {
     expect(headers['X-Mushi-Org-Id']).toBeUndefined()
   })
 })
+
+describe('apiFetch error envelopes', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.resetModules()
+    vi.clearAllMocks()
+  })
+
+  it('reads a 400 `{ error: { code, message } }` body without `ok` as that error', async () => {
+    vi.resetModules()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({ error: { code: 'INVALID_WEBHOOK_URL', message: 'That is not a Microsoft Teams webhook URL.' } }),
+            { status: 400 },
+          ),
+      ),
+    )
+    const { apiFetch } = await import('./supabase')
+    const res = await apiFetch('/v1/admin/settings', { method: 'PATCH', body: '{}' })
+    expect(res.ok).toBe(false)
+    expect(res.error?.code).toBe('INVALID_WEBHOOK_URL')
+    expect(res.error?.message).toBe('That is not a Microsoft Teams webhook URL.')
+  })
+})

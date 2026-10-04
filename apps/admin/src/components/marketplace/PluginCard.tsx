@@ -7,6 +7,7 @@
 
 import { Btn, Card } from '../ui'
 import { CHIP_TONE } from '../../lib/chipTone'
+import { ADMIN_ONLY_HINT } from '../../lib/orgPermissions'
 import {
   CATEGORY_LABEL,
   type InstalledPlugin,
@@ -21,9 +22,27 @@ interface Props {
   busy: boolean
   onInstall: () => void
   onUninstall: () => void
+  /** False for members and viewers: plugin writes are owner/admin only. */
+  canManage?: boolean
+  /** False when the plan has no `plugins` entitlement: Install would only end in a 402. */
+  pluginsUnlocked?: boolean
 }
 
-export function PluginCard({ plugin: p, installed: inst, stats, busy, onInstall, onUninstall }: Props) {
+export function PluginCard({
+  plugin: p,
+  installed: inst,
+  stats,
+  busy,
+  onInstall,
+  onUninstall,
+  canManage = true,
+  pluginsUnlocked = true,
+}: Props) {
+  const blockedReason = !canManage
+    ? ADMIN_ONLY_HINT
+    : !pluginsUnlocked
+      ? 'Your plan does not include plugins. Upgrade to install one.'
+      : undefined
   return (
     <Card className="p-3 flex flex-col gap-2">
       <div className="flex items-start justify-between gap-2">
@@ -108,11 +127,18 @@ export function PluginCard({ plugin: p, installed: inst, stats, busy, onInstall,
           <span />
         )}
         {inst ? (
-          <Btn variant="danger" size="sm" onClick={onUninstall} disabled={busy} loading={busy}>
+          <Btn
+            variant="danger"
+            size="sm"
+            onClick={onUninstall}
+            disabled={busy || !canManage}
+            loading={busy}
+            title={canManage ? undefined : ADMIN_ONLY_HINT}
+          >
             Uninstall
           </Btn>
         ) : (
-          <Btn size="sm" onClick={onInstall} disabled={busy}>
+          <Btn size="sm" onClick={onInstall} disabled={busy || Boolean(blockedReason)} title={blockedReason}>
             Install
           </Btn>
         )}

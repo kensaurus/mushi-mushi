@@ -1,3 +1,4 @@
+import { storeStorageSecrets } from '../../_shared/storage-secrets.ts';
 import type { Context, Hono } from 'npm:hono@4';
 import type { Variables } from '../types.ts'
 
@@ -1349,7 +1350,7 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
           ok: false,
           error: {
             code: 'VAULT_REF_NOT_ALLOWED',
-            message: `${k} must name a Vault secret under ${storageSecretPrefix(projectId)}`,
+            message: `Paste the key itself, not a Vault name: Mushi stores it in Vault under ${storageSecretPrefix(projectId)}.`,
           },
         }, 400);
       }
@@ -1381,6 +1382,13 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
     ];
     const patch: Record<string, unknown> = { project_id: projectId };
     for (const k of allowed) if (k in body) patch[k] = body[k];
+    // Raw keys (access_key / secret_key / service_account_json) are stored in
+    // Vault here; only the minted names reach the settings row.
+    const stored = await storeStorageSecrets(db, projectId, body);
+    if (!stored.ok) {
+      return c.json({ ok: false, error: { code: stored.code, message: stored.message } }, stored.status);
+    }
+    Object.assign(patch, stored.refs);
 
     const { error } = await db
       .from('project_storage_settings')

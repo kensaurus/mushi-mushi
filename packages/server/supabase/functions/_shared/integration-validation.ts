@@ -29,9 +29,33 @@ function unsafeUrlError(field: string, reason: string): BodyError {
  * Shapes a settings body must never carry: a `vault://` reference (the server
  * mints those, see vault-ref.ts) or an outbound URL that is not public https.
  */
+/**
+ * Claude Code Agent settings that end up in the workflow YAML the console
+ * hands out (`repository_dispatch.types`) or in a dispatch payload. Plain
+ * identifiers only, so a saved value can never break or inject into the YAML.
+ */
+const CLAUDE_AGENT_FIELD_RULES: Record<string, { re: RegExp; message: string }> = {
+  claude_workflow_event: {
+    re: /^[A-Za-z0-9_.-]{1,100}$/,
+    message: 'Workflow event can use letters, digits, ".", "-" and "_" only (up to 100), e.g. mushi_claude_fix.',
+  },
+  claude_default_branch: {
+    re: /^(?!.*\.\.)[A-Za-z0-9._/-]{1,200}$/,
+    message: 'Base branch must be a plain branch name such as main or release/2026.',
+  },
+  claude_default_model: {
+    re: /^[A-Za-z0-9._:-]{1,100}$/,
+    message: 'Default model must be a model id such as claude-opus-4-1.',
+  },
+}
+
 export function validatePlatformBody(body: Record<string, unknown>): BodyError | null {
   for (const [k, v] of Object.entries(body)) {
     if (isVaultRef(v)) return vaultRefError(k)
+    const rule = CLAUDE_AGENT_FIELD_RULES[k]
+    if (rule && typeof v === 'string' && v.trim() !== '' && !rule.re.test(v.trim())) {
+      return { code: 'VALIDATION_ERROR', message: rule.message }
+    }
     if (PLATFORM_URL_FIELDS.has(k) && typeof v === 'string' && v.trim() !== '') {
       const safe = assertSafeOutboundUrl(v.trim())
       if (!safe.ok) return unsafeUrlError(k, safe.reason)

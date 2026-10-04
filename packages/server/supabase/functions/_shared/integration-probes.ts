@@ -39,6 +39,7 @@ export type IntegrationKind =
   | 'claude_code_agent'
   | 'cursor_cloud'
   | 'slack'
+  | 'vercel'
 
 export const PLATFORM_KINDS: IntegrationKind[] = ['sentry', 'langfuse', 'github', 'anthropic', 'openai']
 /** Fix-agent integrations stored in project_settings (Integrations → Cursor Cloud / Claude Code). */
@@ -46,10 +47,19 @@ export const FIX_AGENT_KINDS: IntegrationKind[] = ['cursor_cloud', 'claude_code_
 /** Ticket/project-management integrations with vault-backed credentials in project_settings. */
 export const TICKET_INTEGRATION_KINDS: IntegrationKind[] = ['linear']
 export const ROUTING_KINDS: IntegrationKind[] = ['jira', 'github_issues', 'pagerduty', 'reward_webhook']
+/** Deploy-preview integrations stored as project_integrations rows (Vercel). */
+export const DEPLOY_KINDS: IntegrationKind[] = ['vercel']
+/**
+ * Every kind POST /v1/admin/health/integration/:kind can probe. Linear and
+ * Vercel were missing, so their cards' Test button always got a bare
+ * BAD_KIND and no health row was ever written for them.
+ */
 export const ALL_INTEGRATION_KINDS: IntegrationKind[] = [
   ...PLATFORM_KINDS,
   ...FIX_AGENT_KINDS,
+  ...TICKET_INTEGRATION_KINDS,
   ...ROUTING_KINDS,
+  ...DEPLOY_KINDS,
 ]
 
 export interface ProbeResult {
@@ -425,6 +435,28 @@ export async function probeIntegration(
         // PD resolve returns 202 for any accepted routing key; 400 = bad key.
         status = res.status === 202 ? 'ok' : res.status === 400 ? 'down' : 'degraded'
         if (status !== 'ok') detail = `HTTP ${res.status}`
+      }
+
+    } else if (kind === 'vercel') {
+      // The token is optional on the card (it only powers this check), so a
+      // card without one is "not checked", not failing.
+      const token = String(routingConfig.access_token ?? '')
+      const projectSlug = String(routingConfig.project_slug ?? '')
+      const teamSlug = String(routingConfig.team_slug ?? '')
+      if (!projectSlug) {
+        detail = 'Add the Vercel project slug to enable health checks.'
+      } else if (!token) {
+        detail = 'Add a Vercel access token to test this connection.'
+      } else {
+        const qs = teamSlug ? `?slug=${encodeURIComponent(teamSlug)}` : ''
+        const res = await fetch(`https://api.vercel.com/v9/projects/${encodeURIComponent(projectSlug)}${qs}`, {
+          headers: { Authorization: `Bearer ${token}` },
+          signal: AbortSignal.timeout(8_000),
+        })
+        httpStatus = res.status
+        status = res.ok ? 'ok' : res.status === 401 || res.status === 403 ? 'down' : 'degraded'
+        if (res.status === 404) detail = `Vercel has no project "${projectSlug}" for this token. Check the project and team slugs.`
+        else if (!res.ok) detail = `HTTP ${res.status}`
       }
     }
   } catch (err) {

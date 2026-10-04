@@ -32,7 +32,10 @@ describe('PATCH /v1/admin/settings refusals', () => {
   })
 
   it('names settings by label in webhook and secret refusals', () => {
-    expect(route).toContain('${settingLabel(key)}: ${verdict.reason}')
+    // Webhook refusals come from _shared/notification-webhook-url.ts, whose
+    // messages name the provider ("Slack webhook URLs start with https://").
+    expect(route).toContain('message: verdict.message')
+    expect(route).toContain('${settingLabel(key)}: paste the secret itself')
     expect(route).not.toMatch(/message: `\$\{key\}/)
   })
 })
