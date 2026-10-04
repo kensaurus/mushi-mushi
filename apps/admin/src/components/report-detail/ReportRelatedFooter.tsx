@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { IconLink, IconExternalLink, IconArrowRight } from '../icons'
 import type { DispatchState } from '../../lib/dispatchFix'
 import type { ReportDetail } from './types'
+import { reporterReportsHref } from '../../lib/reportsListFilters'
 
 interface RelatedLink {
   to: string
@@ -21,11 +22,16 @@ export function ReportRelatedFooter({ report, dispatchState }: { report: ReportD
     })
   }
 
-  links.push({
-    to: `/reports?reporter=${encodeURIComponent(report.reporter_token_hash)}`,
-    label: 'This reporter\u2019s history',
-    description: 'See every other report from the same reporter.',
-  })
+  // Same target as the header's Reporter chip; none for reports with no
+  // reporter (was /reports?reporter=null, an empty list).
+  const reporterHref = reporterReportsHref(report)
+  if (reporterHref) {
+    links.push({
+      to: reporterHref,
+      label: 'This reporter\u2019s history',
+      description: 'See every other report from the same reporter.',
+    })
+  }
 
   links.push({
     to: '/graph',

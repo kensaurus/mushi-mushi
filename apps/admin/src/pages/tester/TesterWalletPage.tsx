@@ -7,12 +7,14 @@
  * - Lifetime stats sub-section
  */
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { TesterPageIntro, TesterPrimaryCta, TesterStatGrid, TesterHelpBanner } from '../../components/tester/tester-ui'
 import { usePageData } from '../../lib/usePageData'
 import { TESTER_API_OPTS } from '../../lib/tester-page-data'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
+import { refreshTesterStatus } from '../../lib/useTesterStatus'
+import { plainApiError } from '../../lib/humanizeApiError'
 import { Btn, Badge, Card } from '../../components/ui'
 import { TableSkeleton } from '../../components/skeletons/TableSkeleton'
 import { CHIP_TONE } from '../../lib/chipTone'
@@ -150,8 +152,12 @@ function PendingRedemptionCard({ r }: { r: PendingRedemption }) {
   )
 }
 
+/** In-app route to the KYC form (router-relative, so the base path is kept). */
+const KYC_SETTINGS = { pathname: '/tester/settings', hash: '#kyc' } as const
+
 export function TesterWalletPage() {
   const toast = useToast()
+  const navigate = useNavigate()
   const { data: raw, loading, error, reload } = usePageData<WalletResponse | WalletData>(
     '/v1/tester/wallet',
     TESTER_API_OPTS,
@@ -170,7 +176,10 @@ export function TesterWalletPage() {
       return
     }
     if (item.category === 'giftcard' && wallet.kycRequired && !wallet.kycCleared) {
-      window.location.href = '/tester/settings#kyc'
+      // window.location skipped the router basename and left the console in
+      // production (/mushi-mushi/admin/ → /tester/settings, a 404).
+      toast.info('Add your tax details first — gift cards over the yearly limit need them.')
+      navigate(KYC_SETTINGS)
       return
     }
     setRedeeming(item.id)
@@ -186,18 +195,20 @@ export function TesterWalletPage() {
       if ((res as { ok?: boolean }).ok) {
         toast.success(`Redemption submitted! ${item.category === 'pro' ? 'Credit applied to your subscription.' : 'Gift card will arrive via email.'}`)
         reload()
+        // The header balance pill has its own status instance.
+        refreshTesterStatus()
       } else {
         const code = (res as { error?: { code?: string; message?: string } }).error?.code
         const msg  = (res as { error?: { code?: string; message?: string } }).error?.message ?? 'Redemption failed.'
         if (code === 'kyc_required') {
-          toast.error('Identity verification required. Redirecting to Settings…')
-          window.location.href = '/tester/settings#kyc'
+          toast.error('Identity verification required. Opening Settings…')
+          navigate(KYC_SETTINGS)
         } else if (code === 'region_not_supported') {
           toast.error('Gift cards are not available in your region.')
         } else if (code === 'budget_exceeded') {
           toast.error('This app has reached its monthly payout budget. Try again next month or choose Pro credit.')
         } else {
-          toast.error(`${msg} Check your balance and try Pro credit if gift cards are blocked in your region.`)
+          toast.error(`${plainApiError({ code, message: msg }, 'Redemption failed.')} Check your balance and try Pro credit if gift cards are blocked in your region.`)
         }
       }
     } finally {

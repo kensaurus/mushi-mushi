@@ -5,6 +5,8 @@ import { jwtAuth } from '../../_shared/auth.ts';
 import { callerProjectIds, enumerateAccessibleProjectIds, resolveOwnedProject } from '../shared.ts';
 import { resolveNextStepTo } from '../../_shared/activation-status.ts';
 import { isOperatorUser } from '../../_shared/operator-gate.ts';
+import { isNonRealReport } from '../../_shared/first-report.ts';
+import { loadProjectSetupSignals } from '../../_shared/setup-signals.ts';
 
 export function registerOnboardingSetupRoutes(app: Hono<{ Variables: Variables }>): void {
   // =================================================================================
@@ -58,74 +60,20 @@ export function registerOnboardingSetupRoutes(app: Hono<{ Variables: Variables }
     const project = resolvedProject.project;
     const pid = project.id;
 
-    const [keysRes, settingsRes, reportsRes, fixesRes, reposRes, qaRes] = await Promise.all([
-      db
-        .from('project_api_keys')
-        .select(
-          'project_id, is_active, last_seen_at, last_seen_origin, last_seen_user_agent, last_seen_endpoint_host',
-        )
-        .eq('project_id', pid)
-        .eq('is_active', true),
-      db
-        .from('project_settings')
-        .select('project_id, github_repo_url, sentry_org_slug, byok_anthropic_key_ref')
-        .eq('project_id', pid)
-        .maybeSingle(),
-      db
-        .from('reports')
-        .select('id, environment, created_at')
-        .eq('project_id', pid)
-        .order('created_at', { ascending: false })
-        .limit(100),
-      db.from('fix_attempts').select('id, merged_at').eq('project_id', pid).limit(200),
-      db.from('project_repos').select('project_id').eq('project_id', pid).limit(1),
-      db
-        .from('qa_stories')
-        .select('id, last_run_status')
-        .eq('project_id', pid)
-        .eq('last_run_status', 'passed')
-        .limit(1),
-    ]);
-
-    const hasKey = (keysRes.data ?? []).length > 0;
-    let heartbeat: {
-      last_seen_at: string;
-      last_seen_endpoint_host: string | null;
-    } | null = null;
-    for (const k of keysRes.data ?? []) {
-      const seenAt = (k as { last_seen_at?: string | null }).last_seen_at ?? null;
-      if (!seenAt) continue;
-      if (heartbeat && heartbeat.last_seen_at >= seenAt) continue;
-      heartbeat = {
-        last_seen_at: seenAt,
-        last_seen_endpoint_host:
-          (k as { last_seen_endpoint_host?: string | null }).last_seen_endpoint_host ?? null,
-      };
-    }
-
-    let sdkReportSignal = false;
-    const reports = reportsRes.data ?? [];
-    for (const r of reports) {
-      const env = (r.environment ?? {}) as Record<string, unknown>;
-      const platform = typeof env.platform === 'string' ? env.platform : '';
-      if (platform && platform !== 'mushi-admin') sdkReportSignal = true;
-    }
-
-    const hasSdk = Boolean(heartbeat) || sdkReportSignal;
-    const sdkEndpointHost = heartbeat?.last_seen_endpoint_host ?? null;
+    const sig = (await loadProjectSetupSignals(db, [pid])).get(pid);
+    const hasKey = sig?.hasKey ?? false;
+    const hasSdk = sig?.hasSdk ?? false;
+    const sdkEndpointHost = sig?.heartbeat?.last_seen_endpoint_host ?? null;
     const sdkHostMismatch = Boolean(
       adminHost && sdkEndpointHost && sdkEndpointHost !== adminHost && hasSdk,
     );
-
-    const settings = settingsRes.data;
-    const hasGithub = Boolean(settings?.github_repo_url) || (reposRes.data ?? []).length > 0;
-    const hasSentry = Boolean(settings?.sentry_org_slug);
-    const hasByok = Boolean(settings?.byok_anthropic_key_ref);
-    const hasQaPassing = (qaRes.data ?? []).length > 0;
-    const reportCount = reports.length;
-    const fixes = fixesRes.data ?? [];
-    const fixCount = fixes.length;
-    const mergedFixCount = fixes.filter((f) => f.merged_at).length;
+    const hasGithub = sig?.hasGithub ?? false;
+    const hasSentry = sig?.hasSentry ?? false;
+    const hasByok = sig?.hasByok ?? false;
+    const hasQaPassing = sig?.hasQaPassing ?? false;
+    const reportCount = sig?.reportCount ?? 0;
+    const fixCount = sig?.fixCount ?? 0;
+    const mergedFixCount = sig?.mergedFixCount ?? 0;
 
     type StepDef = { id: string; label: string; complete: boolean; required: boolean };
     const steps: StepDef[] = [
@@ -219,6 +167,8 @@ export function registerOnboardingSetupRoutes(app: Hono<{ Variables: Variables }
   // honest, stable proxy for "first diagnosis available". Derived server-side so
   // the Onboarding Verify tab can show one number.
   // =================================================================================
+  /** Oldest classified reports read to find the first real one past test reports. */
+  const FIRST_DIAGNOSIS_SCAN = 25;
   app.get('/v1/admin/onboarding/time-to-first-diagnosis', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
@@ -238,18 +188,25 @@ export function registerOnboardingSetupRoutes(app: Hono<{ Variables: Variables }
         .order('created_at', { ascending: true })
         .limit(1)
         .maybeSingle(),
+      // The console's "Send test report" and the marketing seed are not the
+      // user's first diagnosis. The test report carries a Stage-1 object
+      // since 2026-10-04 (REPORT A2), so they are skipped here by source,
+      // with the same predicate as first_report_received.
       db
         .from('reports')
-        .select('created_at')
+        .select('created_at, custom_metadata')
         .eq('project_id', pid)
         .not('stage1_classification', 'is', null)
         .order('created_at', { ascending: true })
-        .limit(1)
-        .maybeSingle(),
+        .limit(FIRST_DIAGNOSIS_SCAN),
     ]);
 
     const keyMintedAt = (firstKeyRes.data?.created_at as string | null) ?? null;
-    const firstDiagnosisAt = (firstDiagnosisRes.data?.created_at as string | null) ?? null;
+    const firstReal = ((firstDiagnosisRes.data ?? []) as Array<{
+      created_at: string;
+      custom_metadata: Record<string, unknown> | null;
+    }>).find((row) => !isNonRealReport(row.custom_metadata));
+    const firstDiagnosisAt = firstReal?.created_at ?? null;
 
     let ms: number | null = null;
     if (keyMintedAt && firstDiagnosisAt) {
@@ -304,127 +261,12 @@ export function registerOnboardingSetupRoutes(app: Hono<{ Variables: Variables }
 
     const projectIds = projects.map((p) => p.id);
 
-    // Pull every signal in parallel; we project narrow column lists to keep this
-    // cheap even when the user owns dozens of projects. We also pull each key's
-    // SDK heartbeat (`last_seen_*`) so the dashboard can prove the SDK has
-    // reached THIS backend without waiting for a real user-triggered report —
-    // see migration 20260505000000_project_api_keys_last_seen.sql for rationale.
-    const [keysRes, settingsRes, reportsRes, fixesRes, reposRes, codebaseFilesRes, qaRes] = await Promise.all([
-      db
-        .from('project_api_keys')
-        .select(
-          'project_id, is_active, last_seen_at, last_seen_origin, last_seen_user_agent, last_seen_endpoint_host',
-        )
-        .in('project_id', projectIds)
-        .eq('is_active', true),
-      db
-        .from('project_settings')
-        .select('project_id, github_repo_url, sentry_org_slug, byok_anthropic_key_ref, slack_channel_id, slack_webhook_url')
-        .in('project_id', projectIds),
-      db
-        .from('reports')
-        .select('project_id, environment, created_at')
-        .in('project_id', projectIds)
-        .order('created_at', { ascending: false })
-        .limit(500),
-      db
-        .from('fix_attempts')
-        .select('project_id, merged_at')
-        .in('project_id', projectIds)
-        .limit(1000),
-      db.from('project_repos').select('project_id').in('project_id', projectIds),
-      // Pull only project_id so we can count indexed files per project without
-      // transferring payload. Used by ExplorePage to determine the "not indexed
-      // yet" empty state.
-      db.from('project_codebase_files').select('project_id').in('project_id', projectIds),
-      db
-        .from('qa_stories')
-        .select('project_id')
-        .in('project_id', projectIds)
-        .eq('last_run_status', 'passed')
-        .limit(500),
-    ]);
-
-    const keyByProject = new Set<string>();
-    interface SdkHeartbeat {
-      last_seen_at: string;
-      last_seen_origin: string | null;
-      last_seen_user_agent: string | null;
-      last_seen_endpoint_host: string | null;
-    }
-    const heartbeatByProject = new Map<string, SdkHeartbeat>();
-    for (const k of keysRes.data ?? []) {
-      keyByProject.add(k.project_id);
-      const seenAt = (k as { last_seen_at?: string | null }).last_seen_at ?? null;
-      if (!seenAt) continue;
-      const existing = heartbeatByProject.get(k.project_id);
-      // Multiple keys per project are common (rotation, scoped keys); keep the
-      // freshest heartbeat so the UI shows the most recent SDK activity.
-      if (existing && existing.last_seen_at >= seenAt) continue;
-      heartbeatByProject.set(k.project_id, {
-        last_seen_at: seenAt,
-        last_seen_origin: (k as { last_seen_origin?: string | null }).last_seen_origin ?? null,
-        last_seen_user_agent: (k as { last_seen_user_agent?: string | null }).last_seen_user_agent ?? null,
-        last_seen_endpoint_host:
-          (k as { last_seen_endpoint_host?: string | null }).last_seen_endpoint_host ?? null,
-      });
-    }
-
-    const settingsByProject = new Map<
-      string,
-      {
-        github_repo_url: string | null;
-        sentry_org_slug: string | null;
-        byok_anthropic_key_ref: string | null;
-        slack_channel_id: string | null;
-        slack_webhook_url: string | null;
-      }
-    >();
-    for (const s of settingsRes.data ?? []) settingsByProject.set(s.project_id, s as never);
-
-    const reposByProject = new Set<string>();
-    for (const r of reposRes.data ?? []) reposByProject.add(r.project_id);
-
-    const indexedFileCountByProject = new Map<string, number>();
-    for (const f of codebaseFilesRes.data ?? []) {
-      indexedFileCountByProject.set(f.project_id, (indexedFileCountByProject.get(f.project_id) ?? 0) + 1);
-    }
-
-    // Legacy fallback signal: at least one report whose `environment.platform`
-    // is a real platform (not the admin-only `mushi-admin` synthetic the
-    // "send test report" button emits). This used to be the SOLE check, but
-    // it falsely flagged correctly-installed SDKs as missing whenever no real
-    // user had triggered a bug yet, AND it gave operators no diagnostic when
-    // the SDK was talking to a different backend than the admin. The
-    // heartbeat above is now the primary signal; we keep this as a fallback
-    // so projects whose SDKs predate the heartbeat migration stay green.
-    const sdkReportSignalByProject = new Set<string>();
-    const reportsByProject = new Map<string, { count: number; firstAt: string | null }>();
-    for (const r of reportsRes.data ?? []) {
-      const cur = reportsByProject.get(r.project_id) ?? { count: 0, firstAt: null };
-      cur.count += 1;
-      cur.firstAt = r.created_at;
-      reportsByProject.set(r.project_id, cur);
-      const env = (r.environment ?? {}) as Record<string, unknown>;
-      const platform = typeof env.platform === 'string' ? env.platform : '';
-      if (platform && platform !== 'mushi-admin') sdkReportSignalByProject.add(r.project_id);
-    }
-
-    // Track BOTH "any fix dispatched" (drives the Check stage transition into
-    // 'active') and "fix merged" (drives Check → 'done'). Without the merged
-    // count the dashboard's PDCA loop card flips straight from 'next' to
-    // 'done' and falsely claims "Loop closed" the moment a draft PR opens.
-    const fixesByProject = new Map<string, number>();
-    const mergedFixesByProject = new Map<string, number>();
-    for (const f of fixesRes.data ?? []) {
-      fixesByProject.set(f.project_id, (fixesByProject.get(f.project_id) ?? 0) + 1);
-      if (f.merged_at) {
-        mergedFixesByProject.set(f.project_id, (mergedFixesByProject.get(f.project_id) ?? 0) + 1);
-      }
-    }
-
-    const qaPassingByProject = new Set<string>();
-    for (const q of qaRes.data ?? []) qaPassingByProject.add(q.project_id);
+    // One shared loader (with the activation builder) so this checklist and the
+    // onboarding lanes can never disagree. It includes each key's SDK heartbeat
+    // (`last_seen_*`) so the dashboard can prove the SDK has reached THIS
+    // backend without waiting for a real user-triggered report — see migration
+    // 20260505000000_project_api_keys_last_seen.sql for rationale.
+    const signalsByProject = await loadProjectSetupSignals(db, projectIds);
 
     type StepId =
       | 'project_created'
@@ -475,22 +317,21 @@ export function registerOnboardingSetupRoutes(app: Hono<{ Variables: Variables }
     })();
 
     const enriched = projects.map((p) => {
-      const hasKey = keyByProject.has(p.id);
-      const settings = settingsByProject.get(p.id);
-      const heartbeat = heartbeatByProject.get(p.id) ?? null;
-      // Heartbeat (SDK reached this backend) is the canonical signal.
-      // Legacy report-based fallback covers projects whose SDKs predate the
-      // heartbeat columns or where keys were rotated and only old reports
-      // remain — keeps already-green checklists green after the migration.
-      const hasSdk = Boolean(heartbeat) || sdkReportSignalByProject.has(p.id);
-      const reportInfo = reportsByProject.get(p.id) ?? { count: 0, firstAt: null };
-      const hasGithub = Boolean(settings?.github_repo_url) || reposByProject.has(p.id);
-      const hasSentry = Boolean(settings?.sentry_org_slug);
-      const hasByok = Boolean(settings?.byok_anthropic_key_ref);
-      const hasSlack = Boolean(settings?.slack_channel_id) || Boolean(settings?.slack_webhook_url);
-      const hasQaPassing = qaPassingByProject.has(p.id);
-      const fixCount = fixesByProject.get(p.id) ?? 0;
-      const mergedFixCount = mergedFixesByProject.get(p.id) ?? 0;
+      const sig = signalsByProject.get(p.id);
+      const hasKey = sig?.hasKey ?? false;
+      const heartbeat = sig?.heartbeat ?? null;
+      // Heartbeat (SDK reached this backend) is the canonical signal; the
+      // curated SDK observation and the report-platform signal cover SDKs
+      // that predate the heartbeat columns or keys that were rotated.
+      const hasSdk = sig?.hasSdk ?? false;
+      const reportCount = sig?.reportCount ?? 0;
+      const hasGithub = sig?.hasGithub ?? false;
+      const hasSentry = sig?.hasSentry ?? false;
+      const hasByok = sig?.hasByok ?? false;
+      const hasSlack = sig?.hasSlack ?? false;
+      const hasQaPassing = sig?.hasQaPassing ?? false;
+      const fixCount = sig?.fixCount ?? 0;
+      const mergedFixCount = sig?.mergedFixCount ?? 0;
 
       const steps: Step[] = [
         {
@@ -530,7 +371,7 @@ export function registerOnboardingSetupRoutes(app: Hono<{ Variables: Variables }
           id: 'first_report_received',
           label: 'Receive your first bug report',
           description: 'Send a test report or wait for a real user submission.',
-          complete: reportInfo.count > 0,
+          complete: reportCount > 0,
           required: true,
           cta_to: '/onboarding?tab=verify',
           cta_label: 'Send test report',
@@ -541,7 +382,7 @@ export function registerOnboardingSetupRoutes(app: Hono<{ Variables: Variables }
           description: 'Required for auto-fix PRs and code grounding.',
           complete: hasGithub,
           required: false,
-          cta_to: '/integrations',
+          cta_to: '/integrations/config#platform-card-github',
           cta_label: 'Connect GitHub',
         },
         {
@@ -550,7 +391,7 @@ export function registerOnboardingSetupRoutes(app: Hono<{ Variables: Variables }
           description: 'Pull Sentry issues + Seer root-cause into Mushi reports.',
           complete: hasSentry,
           required: false,
-          cta_to: '/integrations',
+          cta_to: '/integrations/config#platform-card-sentry',
           cta_label: 'Connect Sentry',
         },
         {
@@ -559,7 +400,7 @@ export function registerOnboardingSetupRoutes(app: Hono<{ Variables: Variables }
           description: 'BYOK avoids platform quotas and sends usage to your own bill.',
           complete: hasByok,
           required: false,
-          cta_to: '/settings',
+          cta_to: '/settings?tab=byok',
           cta_label: 'Add API key',
         },
         {
@@ -577,7 +418,7 @@ export function registerOnboardingSetupRoutes(app: Hono<{ Variables: Variables }
           description: 'Get instant Slack alerts when a QA story fails or a new report is classified.',
           complete: hasSlack,
           required: false,
-          cta_to: '/integrations',
+          cta_to: '/integrations/config#integrations-slack',
           cta_label: 'Add to Slack',
         },
         {
@@ -606,10 +447,10 @@ export function registerOnboardingSetupRoutes(app: Hono<{ Variables: Variables }
         total: steps.length,
         complete: completeAll,
         done: completeRequired === requiredSteps.length,
-        report_count: reportInfo.count,
+        report_count: reportCount,
         fix_count: fixCount,
         merged_fix_count: mergedFixCount,
-        indexed_file_count: indexedFileCountByProject.get(p.id) ?? 0,
+        indexed_file_count: sig?.indexedFileCount ?? 0,
       };
     });
 

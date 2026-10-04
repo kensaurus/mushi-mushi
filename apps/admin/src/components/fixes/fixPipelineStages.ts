@@ -40,6 +40,8 @@ export function buildFixPipelineStages(fix: FixAttempt): Array<{ label: string; 
 /** Left stripe tone for at-a-glance row scan (Linear / GitHub PR list pattern). */
 export function fixStatusStripeClass(fix: FixAttempt): string {
   if (isFixMerged(fix)) return 'bg-ok'
+  // An earlier attempt on a report a later PR fixed is history, not a failure.
+  if (fix.report_fix_state === 'resolved') return 'bg-edge-subtle'
   const status = fix.status?.toLowerCase()
   if (status === 'failed') return 'bg-danger'
   if (status === 'queued' || status === 'running') return 'bg-info motion-safe:animate-pulse'

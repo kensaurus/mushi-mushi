@@ -4,9 +4,9 @@
  * from /v1/me/tester-status. Cached in usePageData with a 30-second
  * revalidation window so the nav pill stays fresh without hammering the API.
  */
-import { useCallback } from 'react'
+import { useCallback, useSyncExternalStore } from 'react'
 import { usePageData } from './usePageData'
-import { apiFetch } from './supabase'
+import { apiFetch, invalidateApiCache } from './supabase'
 import { TESTER_API_OPTS } from './tester-page-data'
 
 export interface TesterStatus {
@@ -66,9 +66,41 @@ function normalizeTesterStatus(raw: unknown): TesterStatus | null {
   return null
 }
 
+const TESTER_STATUS_PATH = '/v1/me/tester-status'
+
+// Every useTesterStatus() call owns its own usePageData state (the portal
+// gate, the header balance pill, Home and Learn each mount one), so
+// reloading one instance left the others stale: enrolling kept the
+// activation form on screen, redeeming kept the old balance in the header.
+// A shared version counter makes one refresh reach every instance.
+let statusVersion = 0
+const statusListeners = new Set<() => void>()
+
+function subscribeStatus(listener: () => void): () => void {
+  statusListeners.add(listener)
+  return () => {
+    statusListeners.delete(listener)
+  }
+}
+
+function statusVersionSnapshot(): number {
+  return statusVersion
+}
+
+/**
+ * Refetch tester status in every mounted useTesterStatus() — call after
+ * anything that changes enrolment, balance or reputation (enroll, redeem).
+ */
+export function refreshTesterStatus(): void {
+  invalidateApiCache(TESTER_STATUS_PATH)
+  statusVersion += 1
+  for (const listener of statusListeners) listener()
+}
+
 export function useTesterStatus() {
-  const result = usePageData<{ data: TesterStatus } | TesterStatus>('/v1/me/tester-status', {
-    deps: [],
+  const version = useSyncExternalStore(subscribeStatus, statusVersionSnapshot, statusVersionSnapshot)
+  const result = usePageData<{ data: TesterStatus } | TesterStatus>(TESTER_STATUS_PATH, {
+    deps: [version],
     ...TESTER_API_OPTS,
   })
   // Normalise: the endpoint now wraps in { ok, data } but old deploys returned flat JSON.
@@ -84,8 +116,9 @@ export function useTesterStatus() {
         acceptedTerms: opts?.acceptedTerms === true,
       }),
     })
+    if (res.ok) refreshTesterStatus()
     return res.ok
   }, [])
 
-  return { ...result, data, enroll }
+  return { ...result, reload: refreshTesterStatus, data, enroll }
 }

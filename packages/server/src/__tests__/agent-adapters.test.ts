@@ -62,6 +62,7 @@ import {
   parseCloudAgentBranchRef,
   pollResultToOutcome,
   resolveCursorApiKey,
+  stopCursorAgentLatestRun,
   validateAgentOverride,
 } from '../../supabase/functions/_shared/agent-adapters.ts'
 import { deterministicCursorAgentId } from '../../supabase/functions/_shared/cursor-cloud.ts'
@@ -688,6 +689,44 @@ describe('resolveCursorApiKey', () => {
 
     const { db: db3 } = createFakeDb(() => ({ data: null }))
     expect(await resolveCursorApiKey(db3, PROJECT)).toBe('crsr_env')
+  })
+})
+
+describe('stopCursorAgentLatestRun (skill pipeline Cancel, console QA #24)', () => {
+  it('cancels the agent’s latest run', async () => {
+    mocks.resolveLlmKey.mockResolvedValue({ key: 'crsr_pool', source: 'byok', hint: 'pool' })
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        expect(url).toBe('https://api.cursor.com/v1/agents/bc-1/runs/run_7/cancel')
+        return new Response(JSON.stringify({ id: 'run_7' }), { status: 200 })
+      }
+      return new Response(JSON.stringify({ id: 'bc-1', latestRunId: 'run_7' }), { status: 200 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const { db } = createFakeDb(() => ({ data: null }))
+    expect(await stopCursorAgentLatestRun(db, PROJECT, 'bc-1')).toBe('stopped')
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('reads a 409 as already finished, and says when there is no key', async () => {
+    mocks.resolveLlmKey.mockResolvedValue({ key: 'crsr_pool', source: 'byok', hint: 'pool' })
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init?: RequestInit) =>
+      init?.method === 'POST'
+        ? new Response(JSON.stringify({ error: { code: 'run_not_cancellable', message: 'done' } }), { status: 409 })
+        : new Response(JSON.stringify({ id: 'bc-1', latestRunId: 'run_7' }), { status: 200 }),
+    ))
+    const { db } = createFakeDb(() => ({ data: null }))
+    expect(await stopCursorAgentLatestRun(db, PROJECT, 'bc-1')).toBe('already_finished')
+
+    mocks.resolveLlmKey.mockResolvedValue(null)
+    expect(await stopCursorAgentLatestRun(db, PROJECT, 'bc-1')).toBe('no_key')
+  })
+
+  it('reports a failure it could not explain', async () => {
+    mocks.resolveLlmKey.mockResolvedValue({ key: 'crsr_pool', source: 'byok', hint: 'pool' })
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 500 })))
+    const { db } = createFakeDb(() => ({ data: null }))
+    expect(await stopCursorAgentLatestRun(db, PROJECT, 'bc-1')).toBe('failed')
   })
 })
 

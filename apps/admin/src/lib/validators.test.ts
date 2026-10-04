@@ -12,6 +12,7 @@
  *          ship without an explicit test update.
  */
 import { describe, it, expect } from 'vitest'
+import { fixBranchExample, fixBranchTemplate } from './validators'
 import {
   url,
   httpsUrl,
@@ -296,5 +297,31 @@ describe('resolveValidator', () => {
         ).toBeDefined()
       }
     }
+  })
+})
+
+// The help text advertised tokens the server refused on their own
+// (suspected-bugs entry 252); the validator now mirrors the server rule.
+describe('fixBranchTemplate', () => {
+  const v = fixBranchTemplate()
+
+  it('accepts the default and patterns the server accepts', () => {
+    expect(v('bugfix/MUSHI-{reportId}-{category}')).toBeNull()
+    expect(v('hotfix/MUSHI-{reportId}-{date}')).toBeNull()
+    expect(v('feature/MUSHI-{reportId}-{shortId}-cleanup')).toBeNull()
+    expect(v('')).toBeNull()
+  })
+
+  it('refuses patterns built only from the other tokens, with the rule', () => {
+    expect(v('fix/{date}-{shortId}')).toEqual({ message: expect.stringContaining('then MUSHI-{reportId}-') })
+    expect(v('bugfix/{date}-{shortId}')).toEqual({ message: expect.stringContaining('then MUSHI-{reportId}-') })
+    expect(v('mushi/fix/{date}-{category}-{shortId}')).toEqual({ message: expect.stringContaining('then MUSHI-{reportId}-') })
+    expect(v('bugfix/MUSHI-{reportId}-Upper')).toEqual({ message: expect.stringContaining('then MUSHI-{reportId}-') })
+  })
+
+  it('previews {reportId} too', () => {
+    const example = fixBranchExample('bugfix/MUSHI-{reportId}-{category}', new Date('2026-10-04T00:00:00Z'))
+    expect(example).toBe('bugfix/MUSHI-3f2a9c1e-7b4d-4e8a-9c21-5d6e7f8a9b0c-bug')
+    expect(example).not.toContain('{')
   })
 })

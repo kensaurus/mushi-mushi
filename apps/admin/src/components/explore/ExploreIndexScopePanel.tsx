@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { apiFetch } from '../../lib/supabase'
+import { apiErrorMessage } from '../../lib/humanizeApiError'
 import { Btn, Card } from '../ui'
 
 interface ScopeSettings {
@@ -17,9 +18,14 @@ interface AnalyzeJob {
 
 interface Props {
   projectId: string
+  /** The saved scope after each load and save, so the readout above agrees. */
+  onScopeChange?: (scopePaths: string[]) => void
 }
 
-export function ExploreIndexScopePanel({ projectId }: Props) {
+/** 30 polls x 2 s: after this the job is still running, not "done". */
+const ANALYZE_POLLS = 30
+
+export function ExploreIndexScopePanel({ projectId, onScopeChange }: Props) {
   const [scopePaths, setScopePaths] = useState('')
   const [excludeGlobs, setExcludeGlobs] = useState('')
   const [outputLanguage, setOutputLanguage] = useState('en')
@@ -27,15 +33,20 @@ export function ExploreIndexScopePanel({ projectId }: Props) {
   const [analyzing, setAnalyzing] = useState(false)
   const [job, setJob] = useState<AnalyzeJob | null>(null)
   const [saved, setSaved] = useState(false)
+  const [notice, setNotice] = useState<{ tone: 'danger' | 'muted'; text: string } | null>(null)
 
   const loadSettings = useCallback(async () => {
     if (!projectId) return
     const res = await apiFetch<ScopeSettings>(`/v1/admin/projects/${projectId}/codebase/settings`)
-    if (!res.ok || !res.data) return
+    if (!res.ok || !res.data) {
+      setNotice({ tone: 'danger', text: apiErrorMessage(res.error, 'Could not load the index scope. Reload the page.') })
+      return
+    }
+    onScopeChange?.(res.data.scope_paths ?? [])
     setScopePaths((res.data.scope_paths ?? []).join('\n'))
     setExcludeGlobs((res.data.exclude_globs ?? []).join('\n'))
     setOutputLanguage(res.data.output_language ?? 'en')
-  }, [projectId])
+  }, [projectId, onScopeChange])
 
   useEffect(() => {
     void loadSettings()
@@ -45,6 +56,7 @@ export function ExploreIndexScopePanel({ projectId }: Props) {
     if (!projectId) return
     setSaving(true)
     setSaved(false)
+    setNotice(null)
     const scopeArr = scopePaths
       .split(/[\n,]/)
       .map((p) => p.trim())
@@ -62,33 +74,50 @@ export function ExploreIndexScopePanel({ projectId }: Props) {
       }),
     })
     setSaving(false)
-    if (res.ok) setSaved(true)
-  }, [projectId, scopePaths, excludeGlobs, outputLanguage])
+    if (res.ok) {
+      setSaved(true)
+      onScopeChange?.(res.data?.scope_paths ?? scopeArr)
+    } else {
+      setNotice({ tone: 'danger', text: apiErrorMessage(res.error, 'Could not save the scope. Try again.') })
+    }
+  }, [projectId, scopePaths, excludeGlobs, outputLanguage, onScopeChange])
 
   const reanalyze = useCallback(async () => {
     if (!projectId) return
     setAnalyzing(true)
     setJob(null)
+    setNotice(null)
     const res = await apiFetch<{ job_id: string; status: string }>(
       `/v1/admin/projects/${projectId}/codebase/analyze`,
       { method: 'POST', body: JSON.stringify({}) },
     )
     if (!res.ok || !res.data?.job_id) {
       setAnalyzing(false)
+      setNotice({ tone: 'danger', text: apiErrorMessage(res.error, 'Could not start the analysis. Try again.') })
       return
     }
     const jobId = res.data.job_id
-    for (let i = 0; i < 30; i++) {
+    let finished = false
+    for (let i = 0; i < ANALYZE_POLLS; i++) {
       await new Promise((r) => setTimeout(r, 2000))
       const poll = await apiFetch<AnalyzeJob>(
         `/v1/admin/projects/${projectId}/codebase/analyze/${jobId}`,
       )
       if (poll.ok && poll.data) {
         setJob(poll.data)
-        if (poll.data.status === 'completed' || poll.data.status === 'failed') break
+        if (poll.data.status === 'completed' || poll.data.status === 'failed') {
+          finished = true
+          break
+        }
       }
     }
     setAnalyzing(false)
+    if (!finished) {
+      setNotice({
+        tone: 'muted',
+        text: 'Still running after a minute. It keeps going in the background; check back with Re-fetch stats.',
+      })
+    }
   }, [projectId])
 
   return (
@@ -135,6 +164,11 @@ export function ExploreIndexScopePanel({ projectId }: Props) {
         </Btn>
         {saved && <span className="text-2xs text-ok self-center">Saved</span>}
       </div>
+      {notice && (
+        <p className={`text-2xs ${notice.tone === 'danger' ? 'text-danger' : 'text-fg-muted'}`} role="status">
+          {notice.text}
+        </p>
+      )}
       {job && (
         <p className="text-2xs text-fg-muted">
           Job {job.status}

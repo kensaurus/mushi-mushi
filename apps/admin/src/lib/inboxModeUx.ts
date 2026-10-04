@@ -36,8 +36,13 @@ export function useInboxUx(): InboxUxFlags {
   }
 }
 
-/** Quick mode: jump to Actions when work is waiting, else Overview. */
-export function resolveQuickInboxTab(stats: InboxStats): InboxTabId {
+/**
+ * Quick mode: jump to Actions when work is waiting, else Overview. Only
+ * those two tabs are auto-managed: Activity, opened on purpose from
+ * inbox-zero's "View activity", stays open (it used to snap straight back).
+ */
+export function resolveQuickInboxTab(stats: InboxStats, current?: InboxTabId): InboxTabId {
+  if (current === 'activity') return 'activity'
   if (stats.openActions > 0) return 'actions'
   return 'overview'
 }

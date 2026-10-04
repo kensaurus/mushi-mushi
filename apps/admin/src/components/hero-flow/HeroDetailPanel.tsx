@@ -155,7 +155,7 @@ function MissingConfigCallout({ configId }: { configId: string }) {
   if (!doc) return null
   // Derive a best-guess anchor path for "Configure" link
   const route = configId.startsWith('settings.') ? '/settings'
-    : configId.startsWith('integrations.') ? '/integrations'
+    : configId.startsWith('integrations.') ? '/integrations/config'
     : configId.startsWith('compliance.') ? '/compliance'
     : configId.startsWith('storage.') ? '/storage'
     : configId.startsWith('anti-gaming.') ? '/anti-gaming'
@@ -221,15 +221,16 @@ function DetailCta({
 }) {
   if (cta.kind === 'link') {
     return (
-      <Link to={cta.to} data-dav-action="follow-cta">
-        <Btn
-          size="sm"
-          variant={variant === 'primary' ? 'primary' : 'ghost'}
-        >
-          {cta.label}
-          {variant === 'primary' ? <span aria-hidden> →</span> : null}
-        </Btn>
-      </Link>
+      // One focusable link styled as a button, not a <button> inside an <a>.
+      <Btn
+        to={cta.to}
+        data-dav-action="follow-cta"
+        size="sm"
+        variant={variant === 'primary' ? 'primary' : 'ghost'}
+      >
+        {cta.label}
+        {variant === 'primary' ? <span aria-hidden> →</span> : null}
+      </Btn>
     )
   }
   return (
@@ -560,22 +561,13 @@ export function HeroDetailPanel({
           </Section>
         )}
 
-        {/* Unmigrated-page notice — shown when the consumer page has not yet
-            supplied structured evidence for this tile. Provides a degraded but
-            still-meaningful experience while migration happens at the page's
-            own pace. Hidden in production-like environments (no dev flag needed;
-            the absence of evidence is the signal). */}
-        {!evidence && tile !== 'act' && (
+        {/* Developer note: the page has not supplied structured evidence for
+            this tile yet. It is about the console's own code, so it is shown
+            only in development builds (its old link pointed at a repo and
+            section that do not exist). */}
+        {import.meta.env.DEV && !evidence && tile !== 'act' && (
           <p className="text-3xs text-fg-faint border-t border-edge-subtle/40 pt-2 mt-1">
-            Connect live data for richer insights —{' '}
-            <a
-              href="https://github.com/kensa-dev/mushi-mushi#enriching-dav-tiles"
-              target="_blank"
-              rel="noreferrer"
-              className="underline underline-offset-2 hover:text-fg-muted motion-safe:transition-opacity"
-            >
-              see how to wire evidence →
-            </a>
+            Dev: this page passes no evidence for this tile (see components/hero-flow).
           </p>
         )}
 

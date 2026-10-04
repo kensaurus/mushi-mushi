@@ -7,6 +7,7 @@
  *          buttons, so they're compact and secondary.
  */
 
+import { actionErrorText } from '../../lib/actionErrorText'
 import { useCallback, useState } from 'react'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
@@ -35,7 +36,7 @@ export function PipelineActionPanel({
         if (outcome.kind === 'nothing') toast.info(outcome.title, outcome.description)
         else toast.success(outcome.title, 'Scores will refresh in a moment.')
       } else {
-        toast.error('Judge run failed', res.error?.message ?? 'Please try again.')
+        toast.error('Judge run failed', actionErrorText(res.error, 'Please try again in a minute.'))
       }
     } finally {
       setJudgeBusy(false)

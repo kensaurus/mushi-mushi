@@ -397,7 +397,7 @@ export function computeNextBestAction(input: Input): PageAction | null {
           tone: 'do',
           title: `${input.disconnectedCount} ${input.disconnectedCount === 1 ? 'integration is' : 'integrations are'} disconnected`,
           reason: 'Reconnect the OAuth link so notifications and fix dispatch keep flowing.',
-          primary: { kind: 'link', to: '/integrations?status=disconnected', label: 'Reconnect' },
+          primary: { kind: 'link', to: '/integrations/config', label: 'Reconnect' },
         }
       }
       if (input.expiringCount > 0) {
@@ -405,7 +405,7 @@ export function computeNextBestAction(input: Input): PageAction | null {
           tone: 'check',
           title: `${input.expiringCount} integration ${input.expiringCount === 1 ? 'token expires' : 'tokens expire'} soon`,
           reason: 'Rotate before expiry or the integration will silently stop delivering.',
-          primary: { kind: 'link', to: '/integrations?status=expiring', label: 'Rotate tokens' },
+          primary: { kind: 'link', to: '/integrations/config', label: 'Rotate tokens' },
         }
       }
       return null

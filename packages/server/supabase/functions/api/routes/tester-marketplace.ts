@@ -38,6 +38,7 @@ import { jwtAuth } from '../../_shared/auth.ts'
 import { log } from '../../_shared/logger.ts'
 import { requireSuperAdmin } from '../../_shared/super-admin.ts'
 import { accessibleProjectIds } from '../../_shared/project-access.ts'
+import { normalizeLegalName, perAppLeaderboard, testerProfileUpdate } from '../../_shared/tester-profile.ts'
 import {
   REDEMPTION_CATALOG,
   resolveCatalogItem,
@@ -65,6 +66,7 @@ const rlog = log.child('tester-marketplace-routes')
 import { checkSanctions } from '../../_shared/sanctions.ts'
 import { hashTesterTin, normalizeTin } from '../../_shared/tin-hash.ts'
 import { reporterKey } from '../../_shared/reporter-token.ts'
+import { parseSentryDsn, sentrySelfHostedHosts } from '../../_shared/sentry-dsn.ts'
 
 // ─── Helper: forward submission event to developer's Sentry DSN ──────────────
 // Parses the DSN to extract the store endpoint and sends a minimal Sentry
@@ -82,12 +84,19 @@ async function forwardToSentryDsn(
     appId: string
   },
 ): Promise<void> {
-  // DSN format: https://<key>@<host>/<project_id>
-  const dsnMatch = dsn.match(/^https?:\/\/([^@]+)@([^/]+)\/(\d+)$/)
-  if (!dsnMatch) return
+  // Re-validate at send time: a DSN stored before save-time validation
+  // existed must not turn into a request to an arbitrary or internal host.
+  const parsed = parseSentryDsn(dsn, sentrySelfHostedHosts())
+  if (!parsed.ok) {
+    rlog.warn('Skipping Sentry forward: stored DSN failed validation', {
+      appId: payload.appId,
+      reason: parsed.message,
+    })
+    return
+  }
 
-  const [, key, host, projectId] = dsnMatch
-  const storeUrl = `https://${host}/api/${projectId}/store/?sentry_version=7&sentry_key=${key}`
+  const { publicKey: key, host, projectId, pathPrefix } = parsed.value
+  const storeUrl = `https://${host}${pathPrefix}/api/${projectId}/store/?sentry_version=7&sentry_key=${encodeURIComponent(key)}`
 
   const sentryEvent = {
     event_id: payload.submissionId.replace(/-/g, ''),
@@ -114,6 +123,8 @@ async function forwardToSentryDsn(
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Sentry-Auth': `Sentry sentry_version=7,sentry_key=${key}` },
     body: JSON.stringify(sentryEvent),
+    // A validated host must not bounce the request somewhere else.
+    redirect: 'error',
   })
 }
 
@@ -181,6 +192,31 @@ async function provisionTesterAccount(
   )
 
   return { id: row.id, created: true }
+}
+
+// ─── Withheld redemption review responses ─────────────────────
+
+function withheldNotFound(c: Context): Response {
+  return c.json({
+    ok: false,
+    error: {
+      code: 'withheld_redemption_not_found',
+      message: 'That redemption was already handled, so nothing changed. Refresh to see where it stands.',
+    },
+  }, 404)
+}
+
+function withheldWriteFailed(c: Context, action: 'approve' | 'deny', id: string, detail: string): Response {
+  rlog.error('Withheld redemption write failed', { redemptionId: id, action, error: detail })
+  return c.json({
+    ok: false,
+    error: {
+      code: 'DB_ERROR',
+      message: action === 'approve'
+        ? 'The redemption could not be released. It is still withheld — try again.'
+        : 'The points could not be refunded, so the redemption is still withheld. Try again.',
+    },
+  }, 500)
 }
 
 // ─── Route registration ───────────────────────────────────────
@@ -443,7 +479,7 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
     const [{ data: testerRow }, { data: profile }, { data: kyc }] = await Promise.all([
       supabase
         .from('mushi_testers')
-        .select('public_handle, display_name, country_code, public_leaderboard')
+        .select('public_handle, display_name, country_code, public_leaderboard, public_handle_visible')
         .eq('id', tester.id)
         .single(),
       supabase
@@ -465,7 +501,7 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
       country: testerRow?.country_code ?? null,
       kycStatus: kyc?.withholding_status ?? 'none',
       kycClearedAt: kyc?.tax_form_collected_at ?? null,
-      privacyPublicHandle: testerRow?.public_leaderboard ?? true,
+      privacyPublicHandle: testerRow?.public_handle_visible ?? true,
       privacyPublicLeaderboard: testerRow?.public_leaderboard ?? true,
     } })
   })
@@ -477,27 +513,37 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
     const tester = await resolveTester(supabase, authUserId)
     if (!tester) return c.json({ error: 'not_a_tester' }, 403)
 
-    const body = await c.req.json() as Record<string, unknown>
-
-    const testerUpdates: Record<string, unknown> = {}
-    const profileUpdates: Record<string, unknown> = {}
-
-    // handle → public_handle column
-    if (typeof body.handle === 'string') testerUpdates.public_handle = body.handle.replace(/\s+/g, '-').toLowerCase().slice(0, 32)
-    if (typeof body.country === 'string') testerUpdates.country_code = body.country.toUpperCase().slice(0, 2)
-    if (typeof body.privacyPublicLeaderboard === 'boolean') testerUpdates.public_leaderboard = body.privacyPublicLeaderboard
-    if (typeof body.privacyPublicHandle === 'boolean') {
-      testerUpdates.public_leaderboard = body.privacyPublicHandle
+    const body = (await c.req.json().catch(() => null)) as Record<string, unknown> | null
+    if (!body || typeof body !== 'object') {
+      return c.json({ ok: false, error: { code: 'INVALID_JSON', message: 'The request body was not valid JSON.' } }, 400)
     }
 
-    if (typeof body.bio === 'string') profileUpdates.bio = body.bio.slice(0, 500)
-    if (Array.isArray(body.expertiseTags)) profileUpdates.expertise_tags = body.expertiseTags.slice(0, 10)
+    const update = testerProfileUpdate(body)
+    if (!update.ok) {
+      return c.json({ ok: false, error: { code: update.code, message: update.message } }, 400)
+    }
+    const { testerUpdates, profileUpdates } = update
 
+    // Report failures: a rejected handle or a CHECK violation used to answer
+    // { ok: true } and the form silently reverted on the next load.
     if (Object.keys(testerUpdates).length > 0) {
-      await supabase.from('mushi_testers').update(testerUpdates).eq('id', tester.id)
+      const { error } = await supabase.from('mushi_testers').update(testerUpdates).eq('id', tester.id)
+      if (error) {
+        if (error.code === '23505') {
+          return c.json({ ok: false, error: { code: 'handle_taken', message: 'That handle is taken. Pick a different one.' } }, 409)
+        }
+        rlog.error('Tester profile update failed', { testerId: tester.id, error: error.message })
+        return c.json({ ok: false, error: { code: 'DB_ERROR', message: 'Your profile could not be saved. Nothing was changed — try again.' } }, 500)
+      }
     }
     if (Object.keys(profileUpdates).length > 0) {
-      await supabase.from('mushi_tester_profiles').upsert({ tester_id: tester.id, ...profileUpdates }, { onConflict: 'tester_id' })
+      const { error } = await supabase
+        .from('mushi_tester_profiles')
+        .upsert({ tester_id: tester.id, ...profileUpdates }, { onConflict: 'tester_id' })
+      if (error) {
+        rlog.error('Tester profile details update failed', { testerId: tester.id, error: error.message })
+        return c.json({ ok: false, error: { code: 'DB_ERROR', message: 'Your bio and skills could not be saved. Try again.' } }, 500)
+      }
     }
     return c.json({ ok: true })
   })
@@ -607,7 +653,7 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
     const tester = await resolveTester(supabase, authUserId)
     if (!tester) return c.json({ error: 'not_a_tester' }, 403)
 
-    const body = await c.req.json()
+    const body = await c.req.json().catch(() => ({}))
     const { jurisdiction, taxFormKind, legalName, tin } = body as {
       jurisdiction?: string
       taxFormKind?: string
@@ -615,14 +661,24 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
       tin?: string
     }
 
-    if (!jurisdiction || !taxFormKind || !tin?.trim()) {
-      return c.json({ error: 'jurisdiction, taxFormKind, and tin are required' }, 400)
+    const name = normalizeLegalName(legalName)
+    if (!jurisdiction || !taxFormKind || !tin?.trim() || !name) {
+      return c.json({
+        ok: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Fill in your legal name, country and tax ID number, then submit again.',
+        },
+      }, 400)
     }
 
     const pepper = Deno.env.get('TESTER_TIN_PEPPER')
     if (!pepper || pepper.length < 32) {
       rlog.error('TESTER_TIN_PEPPER not configured or too short')
-      return c.json({ error: 'kyc_unavailable' }, 503)
+      return c.json({
+        ok: false,
+        error: { code: 'kyc_unavailable', message: 'Tax details can’t be submitted right now. Nothing was saved — try again later.' },
+      }, 503)
     }
 
     const tinProvidedHash = await hashTesterTin(normalizeTin(tin), pepper)
@@ -635,6 +691,8 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
           tester_id: tester.id,
           jurisdiction,
           tax_form_kind: taxFormKind,
+          // The W-9 / W-8BEN legal name was required by the form but dropped here.
+          legal_name: name,
           tin_provided_hash: tinProvidedHash,
           withholding_status: 'pending',
           tax_form_collected_at: new Date().toISOString(),
@@ -643,7 +701,13 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
         { onConflict: 'tester_id' },
       )
 
-    if (error) return c.json({ error: error.message }, 500)
+    if (error) {
+      rlog.error('Tester KYC upsert failed', { testerId: tester.id, error: error.message })
+      return c.json({
+        ok: false,
+        error: { code: 'DB_ERROR', message: 'Your tax details could not be saved. Nothing was stored — try again.' },
+      }, 500)
+    }
 
     rlog.info('Tester KYC submitted', { testerId: tester.id, taxFormKind, jurisdiction })
     return c.json({ ok: true, status: 'pending_review' })
@@ -656,7 +720,12 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
     const tester = await resolveTester(supabase, authUserId)
     if (!tester) return c.json({ error: 'not_a_tester' }, 403)
 
-    const { data: exportData } = await supabase.rpc('export_tester_data', { p_tester_id: tester.id })
+    const { data: exportData, error } = await supabase.rpc('export_tester_data', { p_tester_id: tester.id })
+    const refused = (exportData as { error?: string } | null)?.error
+    if (error || refused) {
+      rlog.error('Tester export failed', { testerId: tester.id, error: error?.message ?? refused })
+      return c.json({ ok: false, error: { code: 'EXPORT_FAILED', message: 'Your data export could not be prepared. Try again in a moment.' } }, 500)
+    }
     return c.json({ ok: true, data: exportData ?? {} })
   })
 
@@ -667,7 +736,14 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
     const tester = await resolveTester(supabase, authUserId)
     if (!tester) return c.json({ error: 'not_a_tester' }, 403)
 
-    await supabase.rpc('delete_tester_data', { p_tester_id: tester.id })
+    // The RPC answers { error } instead of raising when it refuses; treating
+    // that as success told testers their data was gone when nothing was deleted.
+    const { data: deleted, error } = await supabase.rpc('delete_tester_data', { p_tester_id: tester.id })
+    const refused = (deleted as { error?: string } | null)?.error
+    if (error || refused) {
+      rlog.error('Tester delete failed', { testerId: tester.id, error: error?.message ?? refused })
+      return c.json({ ok: false, error: { code: 'DELETE_FAILED', message: 'Your tester data could not be deleted. Nothing was removed — try again, or contact support.' } }, 500)
+    }
     return c.json({ ok: true })
   })
 
@@ -769,20 +845,17 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
     for (const l of leaders ?? []) {
       leaderMap.set(l.tester_id, (leaderMap.get(l.tester_id) ?? 0) + l.points_awarded)
     }
-    const topTesterIds = [...leaderMap.entries()]
+    const rankedIds = [...leaderMap.entries()]
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 10)
       .map(([id]) => id)
 
     const { data: handles } = await supabase
       .from('mushi_testers')
-      .select('id, public_handle, display_name')
-      .in('id', topTesterIds)
+      .select('id, public_handle, public_leaderboard, public_handle_visible')
+      .in('id', rankedIds.slice(0, 50))
 
-    const leaderboard = topTesterIds.map((id) => ({
-      handle: handles?.find((h) => h.id === id)?.public_handle ?? '???',
-      points: leaderMap.get(id) ?? 0,
-    }))
+    // Honour each tester's privacy choices from /tester/settings.
+    const leaderboard = perAppLeaderboard(rankedIds, leaderMap, handles ?? [])
 
     return c.json({ ok: true, data: { app, subscription: sub, leaderboard } })
   })
@@ -798,7 +871,11 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
     // OFAC check (Wave 9 sanctions geofence).
     const sanctionsResult = checkSanctions(tester.country_code)
     if (sanctionsResult.blocked) {
-      return c.json({ error: 'region_not_supported', reason: sanctionsResult.reason }, 403)
+      return c.json({
+        ok: false,
+        error: { code: 'region_not_supported', message: 'Mushi Bounties isn’t available in your country yet, so you can’t join this app.' },
+        reason: sanctionsResult.reason,
+      }, 403)
     }
 
     // Accept either UUID or slug.
@@ -820,7 +897,14 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
         .eq('tester_id', tester.id)
         .single()
       if ((rep?.score ?? 0) < repMin) {
-        return c.json({ error: 'reputation_too_low', required: repMin }, 403)
+        return c.json({
+          ok: false,
+          error: {
+            code: 'reputation_too_low',
+            message: `This app asks for a tester reputation of ${repMin} or more; yours is ${rep?.score ?? 0}. Get a few reports accepted on other apps first.`,
+          },
+          required: repMin,
+        }, 403)
       }
     }
 
@@ -968,7 +1052,10 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
         title,
         screenshot_url: screenshotUrl ?? null,
         points_awarded: expectedPoints,
-        status: withheldByVelocity ? 'spam' : 'pending', // 'spam' withholds auto-award; reviewer can override
+        // A velocity-capped report stays 'pending' with 0 points stamped: the
+        // tester sees "Pending review", not "Spam", and the reviewer's Accept
+        // awards the bounty (handleReview falls back to the schedule when 0).
+        status: 'pending',
       })
       .select()
       .single()
@@ -1262,7 +1349,8 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
     const userId = c.get('userId') as string
     const projectId = c.req.query('projectId')
     const status = c.req.query('status') ?? 'pending'
-    const page = Number(c.req.query('page') ?? '1')
+    const pageRaw = Number.parseInt(c.req.query('page') ?? '1', 10)
+    const page = Number.isFinite(pageRaw) && pageRaw > 0 ? pageRaw : 1
     const limit = 20
 
     if (!projectId) {
@@ -1281,7 +1369,7 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
       .eq('project_id', projectId)
       .maybeSingle()
 
-    if (!app) return c.json({ ok: true, data: { items: [], total: 0 } })
+    if (!app) return c.json({ ok: true, data: { items: [], total: 0, page, limit } })
 
     let query = supabase
       .from('tester_submissions')
@@ -1318,7 +1406,7 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
       }
     })
 
-    return c.json({ ok: true, data: { items, total: count ?? 0 } })
+    return c.json({ ok: true, data: { items, total: count ?? 0, page, limit } })
   })
 
   // deno-lint-ignore no-explicit-any
@@ -1454,26 +1542,32 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
       .eq('status', 'withheld')
       .single()
 
-    if (!redemption) return c.json({ error: 'withheld_redemption_not_found' }, 404)
+    if (!redemption) return withheldNotFound(c)
 
-    await supabase
+    // Each write is checked: a silent failure here used to toast "approved"
+    // while the redemption stayed withheld (or the gift card never re-queued).
+    const { error: reopenErr } = await supabase
       .from('tester_redemptions')
       .update({ status: 'pending' })
       .eq('id', id)
+      .eq('status', 'withheld')
+    if (reopenErr) return withheldWriteFailed(c, 'approve', id, reopenErr.message)
 
     // If gift_card, make sure a tremendous_orders row exists (it may have been
     // created already but with status='withheld' — re-open it).
     if (redemption.kind === 'gift_card') {
-      await supabase
+      const { error: orderErr } = await supabase
         .from('tremendous_orders')
         .update({ status: 'pending', external_id: null })
         .eq('redemption_id', id)
+      if (orderErr) return withheldWriteFailed(c, 'approve', id, orderErr.message)
     } else {
       // Non-gift-card (mushi_pro_credit, app_slot, api_quota): complete immediately.
-      await supabase
+      const { error: completeErr } = await supabase
         .from('tester_redemptions')
         .update({ status: 'complete', processed_at: new Date().toISOString() })
         .eq('id', id)
+      if (completeErr) return withheldWriteFailed(c, 'approve', id, completeErr.message)
     }
 
     rlog.info('Withheld redemption approved by admin', { redemptionId: id })
@@ -1492,21 +1586,28 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
       .eq('status', 'withheld')
       .single()
 
-    if (!redemption) return c.json({ error: 'withheld_redemption_not_found' }, 404)
+    if (!redemption) return withheldNotFound(c)
 
-    // Mark as failed.
-    await supabase
+    // Refund first, then close: if the refund fails the redemption stays
+    // withheld and the reviewer can retry (the idempotency key makes a retry
+    // safe). The old order closed it as failed and ignored a failed refund.
+    // awardPointsChecked also catches the RPC's in-band { error } result and
+    // treats a replayed key as success (idempotentSkip).
+    const refund = await awardPointsChecked(supabase, {
+      testerId: redemption.tester_id,
+      deltaPoints: redemption.points_spent,
+      reason: 'reversal',
+      idempotencyKey: `refund:withheld:${id}`,
+    })
+    if (!refund.ok && !refund.idempotentSkip) {
+      return withheldWriteFailed(c, 'deny', id, refund.error ?? 'refund failed')
+    }
+
+    const { error: closeErr } = await supabase
       .from('tester_redemptions')
       .update({ status: 'failed', failure_reason: 'denied_by_reviewer' })
       .eq('id', id)
-
-    // Refund the points.
-    await supabase.rpc('award_tester_points', {
-      p_tester_id: redemption.tester_id,
-      p_delta_points: redemption.points_spent,
-      p_reason: 'reversal',
-      p_idempotency_key: `refund:withheld:${id}`,
-    })
+    if (closeErr) return withheldWriteFailed(c, 'deny', id, closeErr.message)
 
     rlog.info('Withheld redemption denied + refunded by admin', { redemptionId: id })
     return c.json({ ok: true })

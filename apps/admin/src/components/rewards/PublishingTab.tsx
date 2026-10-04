@@ -10,7 +10,8 @@
  */
 
 import { useState, useCallback, useEffect, useMemo } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
+import { plainApiError } from '../../lib/humanizeApiError'
 import { usePageData } from '../../lib/usePageData'
 import { apiFetch } from '../../lib/supabase'
 import { getActiveProjectIdSnapshot } from '../../lib/activeProject'
@@ -95,6 +96,7 @@ function statusBadge(visibility: PublishedApp['visibility']) {
 export function PublishingTab() {
   const projectId = getActiveProjectIdSnapshot()
   const toast = useToast()
+  const navigate = useNavigate()
 
   const { data, loading, error, reload } = usePageData<PublishedApp>(
     projectId ? `/v1/admin/published-apps/${projectId}` : null,
@@ -124,7 +126,6 @@ export function PublishingTab() {
   const [sentryDsn, setSentryDsn] = useState('')
   const [saving, setSaving]       = useState(false)
   const [publishing, setPublishing] = useState(false)
-  const [formReady, setFormReady] = useState(false)
   const [savingBounties, setSavingBounties] = useState(false)
   const [savingTargeting, setSavingTargeting] = useState(false)
   const [savingBudget, setSavingBudget] = useState(false)
@@ -144,25 +145,25 @@ export function PublishingTab() {
   const [expertiseTags, setExpertiseTags] = useState('')
   const [reputationMin, setReputationMin] = useState('0')
   const [minAge, setMinAge] = useState('')
-  const [targetingReady, setTargetingReady] = useState(false)
 
   const [monthlyBudget, setMonthlyBudget] = useState('')
   const [maxTesters, setMaxTesters] = useState('')
-  const [budgetReady, setBudgetReady] = useState(false)
 
-  // Populate form once data arrives
+  // Each form copies its server snapshot when a NEW snapshot arrives (first
+  // load, or the reload after a save) — never while the user types. Every
+  // onChange used to clear a "ready" flag that re-copied the server values on
+  // the next render, so each keystroke was reverted.
   const populateForm = useCallback((app: PublishedApp) => {
     setName(app.name)
     setTagline(app.tagline ?? '')
     setDesc(app.description ?? '')
     setPlatforms(app.platforms.length ? app.platforms : ['web'])
     setSentryDsn(app.sentry_dsn ?? '')
-    setFormReady(true)
   }, [])
 
-  if (!formReady && data) {
-    populateForm(data)
-  }
+  useEffect(() => {
+    if (data) populateForm(data)
+  }, [data, populateForm])
 
   useEffect(() => {
     const rows = BOUNTY_ACTIONS.map(({ action, label, pts, color }) => {
@@ -183,23 +184,19 @@ export function PublishingTab() {
   }, [bounties])
 
   useEffect(() => {
-    if (targetingReady || tLoading) return
-    if (targeting === undefined) return
+    if (tLoading || targeting === undefined) return
     setCountryCodes((targeting?.country_codes ?? []).join(', '))
     setLanguages((targeting?.languages ?? []).join(', '))
     setExpertiseTags((targeting?.expertise_tags ?? []).join(', '))
     setReputationMin(String(targeting?.reputation_min ?? 0))
     setMinAge(targeting?.min_age != null ? String(targeting.min_age) : '')
-    setTargetingReady(true)
-  }, [targeting, tLoading, targetingReady])
+  }, [targeting, tLoading])
 
   useEffect(() => {
-    if (budgetReady || mLoading) return
-    if (!marketplaceSettings) return
+    if (mLoading || !marketplaceSettings) return
     setMonthlyBudget(String(marketplaceSettings.marketplace_monthly_budget_usd ?? 0))
     setMaxTesters(String(marketplaceSettings.marketplace_max_testers ?? 0))
-    setBudgetReady(true)
-  }, [marketplaceSettings, mLoading, budgetReady])
+  }, [marketplaceSettings, mLoading])
 
   const parseCsv = (raw: string) =>
     raw.split(/[,;\s]+/).map(s => s.trim()).filter(Boolean)
@@ -224,10 +221,9 @@ export function PublishingTab() {
       })
       if (res.ok) {
         toast.success('Listing saved.')
-        setFormReady(false) // allow re-population from refreshed data
         reload()
       } else {
-        toast.error(res.error?.message ?? 'Save failed.')
+        toast.error(plainApiError(res.error, 'Could not save the listing. Try again.'))
       }
     } finally {
       setSaving(false)
@@ -244,10 +240,9 @@ export function PublishingTab() {
       )
       if (res.ok) {
         toast.success('App is now live on the marketplace!')
-        setFormReady(false)
         reload()
       } else {
-        toast.error(res.error?.message ?? 'Publish failed.')
+        toast.error(plainApiError(res.error, 'Could not publish the listing. Try again.'))
       }
     } finally {
       setPublishing(false)
@@ -264,10 +259,9 @@ export function PublishingTab() {
       )
       if (res.ok) {
         toast.success('Listing paused — hidden from the marketplace.')
-        setFormReady(false)
         reload()
       } else {
-        toast.error(res.error?.message ?? 'Pause failed.')
+        toast.error(plainApiError(res.error, 'Could not pause the listing. Try again.'))
       }
     } finally {
       setPublishing(false)
@@ -298,7 +292,7 @@ export function PublishingTab() {
         reloadBounties()
         reloadStats()
       } else {
-        toast.error(res.error?.message ?? 'Could not save bounties.')
+        toast.error(plainApiError(res.error, 'Could not save the bounty schedule. Check the numbers and try again.'))
       }
     } finally {
       setSavingBounties(false)
@@ -321,10 +315,9 @@ export function PublishingTab() {
       })
       if (res.ok) {
         toast.success('Targeting rules saved.')
-        setTargetingReady(false)
         reloadTargeting()
       } else {
-        toast.error(res.error?.message ?? 'Could not save targeting.')
+        toast.error(plainApiError(res.error, 'Could not save targeting. Country codes must be two letters, such as US or GB.'))
       }
     } finally {
       setSavingTargeting(false)
@@ -344,11 +337,10 @@ export function PublishingTab() {
       })
       if (res.ok) {
         toast.success('Budget settings saved.')
-        setBudgetReady(false)
         reloadSettings()
         reloadStats()
       } else {
-        toast.error(res.error?.message ?? 'Could not save budget.')
+        toast.error(plainApiError(res.error, 'Could not save the budget. Use whole numbers of 0 or more.'))
       }
     } finally {
       setSavingBudget(false)
@@ -359,7 +351,6 @@ export function PublishingTab() {
     setPlatforms(prev =>
       prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p],
     )
-    setFormReady(false)
   }
 
   // ── Render ─────────────────────────────────────────────────
@@ -382,7 +373,7 @@ export function PublishingTab() {
         <EmptyState
           title="Marketplace publishing requires a Pro plan"
           description="Upgrade your workspace to publish apps to the Mushi Bounties marketplace and start rewarding testers."
-          action={<Btn variant="primary" onClick={() => window.location.href = '/billing'}>Upgrade to Pro</Btn>}
+          action={<Btn variant="primary" onClick={() => navigate('/billing')}>Upgrade to Pro</Btn>}
         />
       )
     }
@@ -473,7 +464,7 @@ export function PublishingTab() {
               <label className="block text-xs font-medium text-fg-muted mb-1">App name *</label>
               <Input
                 value={name}
-                onChange={e => { setName(e.target.value); setFormReady(false) }}
+                onChange={e => { setName(e.target.value) }}
                 placeholder="e.g. Mushi Mushi"
                 maxLength={80}
               />
@@ -482,7 +473,7 @@ export function PublishingTab() {
               <label className="block text-xs font-medium text-fg-muted mb-1">Tagline</label>
               <Input
                 value={tagline}
-                onChange={e => { setTagline(e.target.value); setFormReady(false) }}
+                onChange={e => { setTagline(e.target.value) }}
                 placeholder="One-line description shown on app cards (max 140 chars)"
                 maxLength={140}
               />
@@ -495,7 +486,7 @@ export function PublishingTab() {
                            placeholder:text-fg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/60
                            min-h-[100px] resize-y"
                 value={description}
-                onChange={e => { setDesc(e.target.value); setFormReady(false) }}
+                onChange={e => { setDesc(e.target.value) }}
                 placeholder="Tell testers what the app does and what kind of bugs to look for."
                 maxLength={4000}
               />
@@ -526,7 +517,7 @@ export function PublishingTab() {
               </label>
               <Input
                 value={sentryDsn}
-                onChange={e => { setSentryDsn(e.target.value); setFormReady(false) }}
+                onChange={e => { setSentryDsn(e.target.value) }}
                 placeholder="https://xxx@oXXX.ingest.sentry.io/XXX"
               />
             </div>
@@ -556,7 +547,7 @@ export function PublishingTab() {
                   type="number"
                   min={0}
                   value={monthlyBudget}
-                  onChange={e => { setMonthlyBudget(e.target.value); setBudgetReady(false) }}
+                  onChange={e => { setMonthlyBudget(e.target.value) }}
                   placeholder="0 = no cap"
                 />
                 <p className="mt-1 text-2xs text-fg-faint">
@@ -571,7 +562,7 @@ export function PublishingTab() {
                   type="number"
                   min={0}
                   value={maxTesters}
-                  onChange={e => { setMaxTesters(e.target.value); setBudgetReady(false) }}
+                  onChange={e => { setMaxTesters(e.target.value) }}
                   placeholder="0 = unlimited"
                 />
               </div>
@@ -679,7 +670,7 @@ export function PublishingTab() {
                 </label>
                 <Input
                   value={countryCodes}
-                  onChange={e => { setCountryCodes(e.target.value); setTargetingReady(false) }}
+                  onChange={e => { setCountryCodes(e.target.value) }}
                   placeholder="US, CA, GB — empty = all countries"
                 />
               </div>
@@ -689,7 +680,7 @@ export function PublishingTab() {
                 </label>
                 <Input
                   value={languages}
-                  onChange={e => { setLanguages(e.target.value); setTargetingReady(false) }}
+                  onChange={e => { setLanguages(e.target.value) }}
                   placeholder="en, ja — empty = all languages"
                 />
               </div>
@@ -699,7 +690,7 @@ export function PublishingTab() {
                 </label>
                 <Input
                   value={expertiseTags}
-                  onChange={e => { setExpertiseTags(e.target.value); setTargetingReady(false) }}
+                  onChange={e => { setExpertiseTags(e.target.value) }}
                   placeholder="mobile, accessibility — empty = open to all"
                 />
               </div>
@@ -712,7 +703,7 @@ export function PublishingTab() {
                     type="number"
                     min={0}
                     value={reputationMin}
-                    onChange={e => { setReputationMin(e.target.value); setTargetingReady(false) }}
+                    onChange={e => { setReputationMin(e.target.value) }}
                   />
                 </div>
                 <div>
@@ -724,7 +715,7 @@ export function PublishingTab() {
                     min={13}
                     max={100}
                     value={minAge}
-                    onChange={e => { setMinAge(e.target.value); setTargetingReady(false) }}
+                    onChange={e => { setMinAge(e.target.value) }}
                     placeholder="13+"
                   />
                 </div>

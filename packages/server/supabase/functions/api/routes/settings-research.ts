@@ -1,6 +1,8 @@
+import { isNotificationWebhookField, validateNotificationWebhookUrl } from '../../_shared/notification-webhook-url.ts';
 import type { Hono } from 'npm:hono@4';
 import { isSpendLimitField, SPEND_LIMIT_FIELDS, validateSpendLimit } from '../../_shared/autofix-budget.ts';
 import type { Variables } from '../types.ts';
+import { denyViewerWrite } from '../viewer-gate.ts';
 
 import { getServiceClient } from '../../_shared/db.ts';
 import { log } from '../../_shared/logger.ts';
@@ -24,15 +26,31 @@ import {
   storeSettingsSecret,
 } from '../../_shared/settings-secrets.ts';
 import {
-  canManageProjectSdkConfig,
+  projectConfigDenied,
   coerceSdkConfigUpdate,
   normalizeSdkConfig,
   type SdkConfigRow,
 } from '../helpers.ts';
+import { SDK_CONFIG_CONSOLE_SELECT } from '../../_shared/sdk-config.ts';
 import { validateFixBranchTemplate } from '../../_shared/github-pr.ts';
 import { parseSupabaseProjectRefSetting } from '../../_shared/supabase-project-ref.ts';
-import { isOperatorProject } from '../../_shared/operator-gate.ts';
+import { parseSentryDsnSetting, sentrySelfHostedHosts } from '../../_shared/sentry-dsn.ts';
+import { prepareByokSecret } from '../../_shared/byok-key-rules.ts';
+import { parseByokExpiry } from '../../_shared/byok-expiry.ts';
 import {
+  countByokKeyHealth,
+  legacyKeyStatus,
+  type ByokKeyHealthInput,
+} from '../../_shared/byok-key-health.ts';
+import {
+  isLegacyByokProvider,
+  LEGACY_BYOK_PROVIDERS,
+  type LegacyByokProvider,
+} from '../../_shared/byok.ts';
+import { isOperatorProject } from '../../_shared/operator-gate.ts';
+import { loadIntegrationSignals } from '../../_shared/setup-signals.ts';
+import {
+  BYOK_PROVIDERS as POOLED_BYOK_PROVIDERS,
   byokKeyIdSchema,
   type ByokProvider as PooledByokProvider,
   createByokKeySchema,
@@ -91,6 +109,31 @@ async function resolveProjectSlackBot(
   return null;
 }
 
+/**
+ * Store a notification-channel test send as a health row, the same table the
+ * cron probes write. Without it a successful "Send test" left no evidence,
+ * so the card could never say the channel works. A failed insert is logged,
+ * never thrown: the test result itself still reaches the user.
+ */
+async function recordChannelTest(
+  db: ReturnType<typeof getServiceClient>,
+  projectId: string,
+  kind: 'slack' | 'discord' | 'teams',
+  ok: boolean,
+  message: string | null,
+  startedAt: number,
+): Promise<void> {
+  const { error } = await db.from('integration_health_history').insert({
+    project_id: projectId,
+    kind,
+    status: ok ? 'ok' : 'down',
+    latency_ms: Math.max(0, Date.now() - startedAt),
+    message: ok ? 'Test message delivered' : (message ?? 'Test message failed').slice(0, 300),
+    source: 'manual',
+  });
+  if (error) log.error('channel test result not stored', { projectId, kind, err: error.message });
+}
+
 // ── Slack OAuth state signing ────────────────────────────────────────────────
 // The OAuth `state` parameter is round-tripped through the user's browser and
 // Slack, so it MUST be tamper-proof: without a signature an attacker could craft
@@ -138,46 +181,40 @@ function slackRedirectUri(): string {
   return `${base}/functions/v1/api/v1/webhooks/slack/oauth-callback`;
 }
 
-// ── Webhook URL validation (SSRF guard) ──────────────────────────────────────
-// Slack / Discord / Teams webhook URLs are persisted via the settings PATCH
-// route and later fetched server-side with the service role (inside the
-// provider network) by the notification helpers and by classify-report /
-// fast-filter. Without a write-time scheme + host allowlist an authenticated
-// project owner could point a webhook at an internal address (cloud metadata
-// endpoint, localhost, an internal service) and turn the notification fetch
-// into a blind SSRF probe. Validate at this single write path so every
-// downstream reader can trust the stored value.
-const WEBHOOK_HOST_SUFFIXES: Record<string, string[]> = {
-  slack_webhook_url: ['hooks.slack.com'],
-  discord_webhook_url: ['discord.com', 'discordapp.com'],
-  // Teams: legacy O365 connectors (*.webhook.office.com / outlook.office.com)
-  // and Power Automate "When a Teams webhook request is received" triggers
-  // (*.logic.azure.com / *.powerplatform.com).
-  teams_webhook_url: ['office.com', 'logic.azure.com', 'powerplatform.com'],
+// Webhook URL validation (SSRF guard) lives in _shared/notification-webhook-url.ts.
+
+/** Settings that decide where alerts and inbound events go: owners and admins only. */
+const ALERT_DESTINATION_KEYS: ReadonlySet<string> = new Set([
+  'slack_webhook_url',
+  'slack_channel_id',
+  'slack_team_id',
+  'discord_webhook_url',
+  'teams_webhook_url',
+  'sentry_webhook_secret',
+]);
+
+/** Names the console shows for settings columns, so errors never print a column name. */
+const SETTING_LABELS: Record<string, string> = {
+  slack_webhook_url: 'Slack webhook URL',
+  discord_webhook_url: 'Discord webhook URL',
+  teams_webhook_url: 'Teams webhook URL',
+  telegram_bot_token_ref: 'Telegram bot token',
+  github_user_token_ref: 'GitHub token',
+  sentry_webhook_secret: 'Sentry webhook secret',
 };
 
-function isAllowedWebhookHost(hostname: string, suffixes: string[]): boolean {
-  const host = hostname.toLowerCase();
-  return suffixes.some((s) => host === s || host.endsWith(`.${s}`));
+function settingLabel(key: string): string {
+  return SETTING_LABELS[key] ?? key.replace(/_/g, ' ');
 }
 
-function validateWebhookUrl(
-  field: string,
-  raw: string,
-): { ok: true } | { ok: false; reason: string } {
-  let url: URL;
-  try {
-    url = new URL(raw);
-  } catch {
-    return { ok: false, reason: 'must be a valid URL' };
-  }
-  if (url.protocol !== 'https:') return { ok: false, reason: 'must use https://' };
-  const suffixes = WEBHOOK_HOST_SUFFIXES[field];
-  if (suffixes && !isAllowedWebhookHost(url.hostname, suffixes)) {
-    return { ok: false, reason: 'host is not an allowed webhook provider' };
-  }
-  return { ok: true };
-}
+/**
+ * Why a branch-name pattern was refused, in the words the Settings form uses.
+ * The rule itself is `validateFixBranchTemplate` (_shared/github-pr.ts).
+ */
+const FIX_BRANCH_TEMPLATE_HELP =
+  'Branch names must start with a type and the report: for example bugfix/MUSHI-{reportId}-{category}. ' +
+  'Use bugfix/, feature/, hotfix/, refactor/, chore/, docs/, test/ or ci/, then MUSHI-{reportId}-, then lowercase words, ' +
+  '{category}, {date} or {shortId}.';
 
 async function hmacSign(payload: string, secret: string): Promise<Uint8Array> {
   const key = await crypto.subtle.importKey(
@@ -273,6 +310,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       byokKeysPassing: 0,
       byokKeysFailing: 0,
       byokKeysUntested: 0,
+      byokKeysExpiring: 0,
       githubRepoConfigured: false,
       autofixEnabled: false,
     };
@@ -283,7 +321,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     if ('response' in resolvedProject) return resolvedProject.response;
     const project = resolvedProject.project;
 
-    const [{ data, error }, { data: poolKeys, error: poolError }] = await Promise.all([
+    const [{ data, error }, { data: poolKeys, error: poolError }, integrationSignals] = await Promise.all([
       db
         .from('project_settings')
         .select(
@@ -293,16 +331,17 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
             'byok_anthropic_key_ref, byok_anthropic_test_status, ' +
             'byok_openai_key_ref, byok_openai_test_status, ' +
             'byok_firecrawl_key_ref, byok_firecrawl_test_status, ' +
+            'byok_browserbase_key_ref, byok_browserbase_test_status, ' +
             'github_repo_url, autofix_enabled, ' +
             'crawl_max_pages_per_day, crawl_max_runs_per_day, tdd_max_gens_per_day',
         )
         .eq('project_id', project.id)
         .maybeSingle(),
-      db
-        .from('byok_keys')
-        .select('provider_slug, test_status, status')
-        .eq('project_id', project.id)
-        .neq('status', 'disabled'),
+      // select('*') so expires_at (migration 20261004150000) is read when it
+      // exists without failing when it doesn't, in this one round trip. This
+      // route returns counts only, never the rows.
+      db.from('byok_keys').select('*').eq('project_id', project.id),
+      loadIntegrationSignals(db, [project.id]),
     ]);
 
     if (error) return dbError(c, error);
@@ -320,55 +359,48 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
 
     const row = (data as Record<string, unknown> | null) ?? {};
 
-    // Derive BYOK counts from the byok_keys pool table (source of truth).
-    // Fall back to legacy key_ref presence so existing single-key setups
-    // continue to show as "configured" until they migrate to the pool.
-    const activePoolKeys = (poolKeys ?? []) as Array<{
+    // Count every saved key with the same rules the console's key rows use
+    // (_shared/byok-key-health.ts ⇄ admin keyStatus.ts, parity-tested), so
+    // the sidebar badge, this page's hero and each row tell one story.
+    // A turned-off key counts as neither configured nor failing.
+    const poolRows = (poolKeys ?? []) as Array<{
       provider_slug: string;
       test_status: string | null;
       status: string;
+      cooldown_until: string | null;
+      expires_at?: string | null;
     }>;
-    let byokKeysConfigured = activePoolKeys.length;
-    let byokKeysPassing = 0;
-    let byokKeysFailing = 0;
-    let byokKeysUntested = 0;
-    for (const k of activePoolKeys) {
-      if (k.test_status === 'ok') byokKeysPassing += 1;
-      else if (k.test_status && k.test_status.startsWith('error')) byokKeysFailing += 1;
-      else byokKeysUntested += 1;
+    const healthInputs: ByokKeyHealthInput[] = poolRows.map((k) => ({
+      provider_slug: k.provider_slug,
+      status: k.status,
+      test_status: k.test_status,
+      cooldown_until: k.cooldown_until,
+      expires_at: k.expires_at ?? null,
+    }));
+    for (const provider of ['anthropic', 'openai', 'firecrawl', 'browserbase'] as const) {
+      if (!row[`byok_${provider}_key_ref`]) continue;
+      const testStatus = (row[`byok_${provider}_test_status`] as string | null) ?? null;
+      healthInputs.push({
+        provider_slug: provider,
+        status: legacyKeyStatus(testStatus),
+        test_status: testStatus,
+        legacy: true,
+      });
     }
+    const health = countByokKeyHealth(healthInputs);
+    const byokKeysPassing = health.working;
+    const byokKeysFailing = health.attention;
+    const byokKeysUntested = health.checking;
+    const byokKeysExpiring = health.expiring;
+    const byokKeysConfigured = health.working + health.attention + health.checking + health.expiring;
 
-    // Per-provider configured flag: pool has at least one active key OR legacy ref exists
-    const poolProviders = new Set(activePoolKeys.map((k) => k.provider_slug));
-    const byokAnthropicConfigured =
-      poolProviders.has('anthropic') || Boolean(row.byok_anthropic_key_ref);
-    const byokOpenaiConfigured = poolProviders.has('openai') || Boolean(row.byok_openai_key_ref);
-    const byokFirecrawlConfigured =
-      poolProviders.has('firecrawl') || Boolean(row.byok_firecrawl_key_ref);
-
-    // Fold in legacy single-key refs whose provider has no pool row yet, so a
-    // project that hasn't migrated to the pool still reports its keys as
-    // "configured" instead of 0. Each legacy key MUST also land in exactly one
-    // of passing/failing/untested using its own test-status column — otherwise
-    // the invariant `passing + failing + untested === configured` breaks, the
-    // tooltip reads "0 passing, 0 failing, 0 untested of N configured", and the
-    // SettingsStatusBanner's "untested keys" warning never fires for legacy-
-    // only projects.
-    const classifyByokStatus = (testStatus: string | null | undefined) => {
-      if (testStatus === 'ok') byokKeysPassing += 1;
-      else if (testStatus && testStatus.startsWith('error')) byokKeysFailing += 1;
-      else byokKeysUntested += 1;
-      byokKeysConfigured += 1;
-    };
-    if (!poolProviders.has('anthropic') && Boolean(row.byok_anthropic_key_ref)) {
-      classifyByokStatus(row.byok_anthropic_test_status as string | null);
-    }
-    if (!poolProviders.has('openai') && Boolean(row.byok_openai_key_ref)) {
-      classifyByokStatus(row.byok_openai_test_status as string | null);
-    }
-    if (!poolProviders.has('firecrawl') && Boolean(row.byok_firecrawl_key_ref)) {
-      classifyByokStatus(row.byok_firecrawl_test_status as string | null);
-    }
+    // Per-provider configured flag: a key that is not turned off, pooled or legacy.
+    const savedProviders = new Set(
+      healthInputs.filter((k) => k.status !== 'disabled').map((k) => k.provider_slug),
+    );
+    const byokAnthropicConfigured = savedProviders.has('anthropic');
+    const byokOpenaiConfigured = savedProviders.has('openai');
+    const byokFirecrawlConfigured = savedProviders.has('firecrawl');
 
     return c.json({
       ok: true,
@@ -382,6 +414,10 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
           Boolean(row.slack_bot_token_ref),
         slackTeamName: (row.slack_team_name as string | null) ?? null,
         slackChannelId: (row.slack_channel_id as string | null) ?? null,
+        // Whether something can actually post: a webhook, or a channel plus a
+        // bot token. slackConfigured stays "any Slack setting exists" so the
+        // card still shows the channel picker after Add to Slack.
+        slackCanPost: integrationSignals.get(project.id)?.hasSlack ?? false,
         discordConfigured: Boolean(row.discord_webhook_url),
         teamsConfigured: Boolean(row.teams_webhook_url),
         notificationPrefs: (row.notification_prefs as Record<string, unknown> | null) ?? null,
@@ -397,6 +433,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         byokKeysPassing,
         byokKeysFailing,
         byokKeysUntested,
+        byokKeysExpiring,
         githubRepoConfigured: Boolean(row.github_repo_url),
         autofixEnabled: Boolean(row.autofix_enabled),
         crawlMaxPagesPerDay: (row.crawl_max_pages_per_day as number | null) ?? 150,
@@ -414,6 +451,9 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     const resolvedProject = await resolveOwnedProject(c, db, userId);
     if ('response' in resolvedProject) return resolvedProject.response;
     const project = resolvedProject.project;
+    // Viewers read settings; every key below changes the project.
+    const viewerDenied = denyViewerWrite(c, project.organization_role, 'change project settings');
+    if (viewerDenied) return viewerDenied;
 
     const allowed = [
       'slack_webhook_url',
@@ -459,6 +499,9 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       // Opt-in auto-release (migration 20261003130000): publishing messages
       // reporters, so project admins only. Validated below.
       'auto_release_enabled',
+      // Reporter updates in the SDK widget (Notifications → Setup). It
+      // messages end users, so project admins only. Validated below.
+      'reporter_notifications_enabled',
       // Supabase link (ADR 0016): the project ref the read-only Supabase
       // features read. The token itself is a BYOK key (slug `supabase`),
       // never a settings column. Validated below.
@@ -505,10 +548,16 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       // The GET above returns SECRET_MASK for set secrets; a form that sends
       // the whole row back has not changed them.
       if (value === SECRET_MASK && isSecretSettingsColumn(key)) continue;
+      if (ALERT_DESTINATION_KEYS.has(key)) {
+        // Where alerts go: a member pointing them at their own webhook would
+        // silently take the team's alerts. Same rule as the integration cards.
+        const forbidden = requireProjectAdmin(c, project, 'Only team owners and admins can change where alerts are sent.');
+        if (forbidden) return forbidden;
+      }
       if (key === 'widget_brand_footer') {
         if (value !== null && typeof value !== 'boolean') {
           return c.json(
-            { error: { code: 'VALIDATION_ERROR', message: 'widget_brand_footer must be a boolean or null' } },
+            { ok: false, error: { code: 'VALIDATION_ERROR', message: 'widget_brand_footer must be a boolean or null' } },
             400,
           );
         }
@@ -521,9 +570,25 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         if (forbidden) return forbidden;
         const verdict = validateSpendLimit(key, value);
         if (!verdict.ok) {
-          return c.json({ error: { code: 'VALIDATION_ERROR', message: verdict.message } }, 400);
+          return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: verdict.message } }, 400);
         }
         updates[key] = verdict.value;
+        continue;
+      }
+      if (key === 'reporter_notifications_enabled') {
+        const forbidden = requireProjectAdmin(
+          c,
+          project,
+          'Only organization owners and admins can turn reporter updates on or off.',
+        );
+        if (forbidden) return forbidden;
+        if (typeof value !== 'boolean') {
+          return c.json(
+            { ok: false, error: { code: 'VALIDATION_ERROR', message: 'Reporter updates can only be turned on or off.' } },
+            400,
+          );
+        }
+        updates[key] = value;
         continue;
       }
       if (key === 'auto_release_enabled') {
@@ -531,7 +596,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         if (forbidden) return forbidden;
         if (typeof value !== 'boolean') {
           return c.json(
-            { error: { code: 'VALIDATION_ERROR', message: 'auto_release_enabled must be a boolean' } },
+            { ok: false, error: { code: 'VALIDATION_ERROR', message: 'auto_release_enabled must be a boolean' } },
             400,
           );
         }
@@ -544,7 +609,15 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         if (forbidden) return forbidden;
         const verdict = parseSupabaseProjectRefSetting(value);
         if (!verdict.ok) {
-          return c.json({ error: { code: 'VALIDATION_ERROR', message: verdict.message } }, 400);
+          return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: verdict.message } }, 400);
+        }
+        updates[key] = verdict.value;
+        continue;
+      }
+      if (key === 'sentry_dsn') {
+        const verdict = parseSentryDsnSetting(value, sentrySelfHostedHosts());
+        if (!verdict.ok) {
+          return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: verdict.message } }, 400);
         }
         updates[key] = verdict.value;
         continue;
@@ -552,7 +625,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       if (key === 'voice_intake_enabled') {
         if (typeof value !== 'boolean') {
           return c.json(
-            { error: { code: 'VALIDATION_ERROR', message: 'voice_intake_enabled must be a boolean' } },
+            { ok: false, error: { code: 'VALIDATION_ERROR', message: 'voice_intake_enabled must be a boolean' } },
             400,
           );
         }
@@ -563,7 +636,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         const days = typeof value === 'number' ? value : Number(value);
         if (!Number.isInteger(days) || days < 0 || days > 365) {
           return c.json(
-            { error: { code: 'VALIDATION_ERROR', message: 'voice_audio_retention_days must be an integer between 0 and 365' } },
+            { ok: false, error: { code: 'VALIDATION_ERROR', message: 'voice_audio_retention_days must be an integer between 0 and 365' } },
             400,
           );
         }
@@ -573,14 +646,14 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       if (key === 'voice_languages') {
         if (!Array.isArray(value) || value.length === 0 || value.length > 4) {
           return c.json(
-            { error: { code: 'VALIDATION_ERROR', message: 'voice_languages must list 1–4 BCP-47 tags (e.g. ["ja","en"])' } },
+            { ok: false, error: { code: 'VALIDATION_ERROR', message: 'voice_languages must list 1–4 BCP-47 tags (e.g. ["ja","en"])' } },
             400,
           );
         }
         const tags = Array.from(new Set(value.map((v) => String(v).trim().toLowerCase())));
         if (tags.some((t) => !VOICE_LANGUAGE_RE.test(t))) {
           return c.json(
-            { error: { code: 'VALIDATION_ERROR', message: 'voice_languages entries must look like "en" or "ja-JP"' } },
+            { ok: false, error: { code: 'VALIDATION_ERROR', message: 'voice_languages entries must look like "en" or "ja-JP"' } },
             400,
           );
         }
@@ -599,7 +672,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         // stored `vault://<name>` is resolved by name with the service role.
         if (plan.action === 'reject') {
           return c.json(
-            { error: { code: 'VAULT_REF_NOT_ALLOWED', message: `${key}: paste the secret itself. Mushi stores it in Vault.` } },
+            { ok: false, error: { code: 'VAULT_REF_NOT_ALLOWED', message: `${settingLabel(key)}: paste the secret itself. Mushi stores it in Vault.` } },
             400,
           );
         }
@@ -615,7 +688,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
             err: err instanceof Error ? err.message : String(err),
           });
           return c.json(
-            { error: { code: 'DB_ERROR', message: `Could not store ${key} in Vault. Retry in a moment.` } },
+            { ok: false, error: { code: 'DB_ERROR', message: `Could not store the ${settingLabel(key)} safely. Nothing was saved; retry in a moment.` } },
             500,
           );
         }
@@ -628,12 +701,13 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
           if (key === 'fix_branch_template' && trimmed) {
             try {
               validateFixBranchTemplate(trimmed);
-            } catch (err) {
+            } catch {
               return c.json(
                 {
+                  ok: false,
                   error: {
                     code: 'INVALID_BRANCH_TEMPLATE',
-                    message: err instanceof Error ? err.message : String(err),
+                    message: FIX_BRANCH_TEMPLATE_HELP,
                   },
                 },
                 400,
@@ -647,7 +721,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         // Non-string, non-null values for text fields are dropped.
         continue;
       }
-      if (key in WEBHOOK_HOST_SUFFIXES) {
+      if (isNotificationWebhookField(key)) {
         // Clearing the webhook is always allowed.
         if (value === null || value === '') {
           updates[key] = null;
@@ -659,10 +733,10 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
           updates[key] = null;
           continue;
         }
-        const verdict = validateWebhookUrl(key, trimmed);
+        const verdict = validateNotificationWebhookUrl(key, trimmed);
         if (!verdict.ok) {
           return c.json(
-            { error: { code: 'INVALID_WEBHOOK_URL', message: `${key}: ${verdict.reason}` } },
+            { ok: false, error: { code: 'INVALID_WEBHOOK_URL', message: verdict.message, field: key } },
             400,
           );
         }
@@ -721,6 +795,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       );
     }
 
+    const startedAt = Date.now();
     if (botToken && targetChannel) {
       const res = await fetch('https://slack.com/api/chat.postMessage', {
         method: 'POST',
@@ -734,6 +809,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         }),
       });
       const json = (await res.json()) as { ok: boolean; error?: string };
+      await recordChannelTest(db, project.id, 'slack', json.ok, json.error ?? null, startedAt);
       if (!json.ok)
         return c.json(
           { ok: false, error: { code: 'SLACK_API_ERROR', message: json.error ?? 'slack error' } },
@@ -750,6 +826,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
           text: `🐛 Mushi Mushi test — Slack integration working for *${project.name}*.`,
         }),
       });
+      await recordChannelTest(db, project.id, 'slack', res.ok, `Webhook returned HTTP ${res.status}`, startedAt);
       if (!res.ok)
         return c.json(
           { ok: false, error: { code: 'WEBHOOK_ERROR', message: `HTTP ${res.status}` } },
@@ -878,22 +955,35 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
 
     // Vault the bot token and write project_settings
     const db = getServiceClient();
-    const { data: secretRow } = await db.rpc('vault_store_secret', {
-      secret: tokens.botToken,
-      name: `slack_bot_${projectId}`,
-      description: `Slack bot token for project ${projectId}`,
+    // vault_store_secret(secret_name, secret_value[, p_project_id]) returns the
+    // secret's uuid. This call used to pass `{ secret, name, description }`,
+    // which matches no signature: the RPC failed, the error was ignored, and
+    // the upsert stored the team name with no bot token. The console then
+    // said "connected" while nothing could post (prod 2026-10-04: 2 projects
+    // with slack_team_name, 0 with slack_bot_token_ref).
+    const { data: secretRow, error: vaultErr } = await db.rpc('vault_store_secret', {
+      secret_name: `slack_bot_${projectId}`,
+      secret_value: tokens.botToken,
     });
-    const vaultId = secretRow as string | null;
+    const vaultId = typeof secretRow === 'string' && secretRow ? secretRow : null;
+    if (vaultErr || !vaultId) {
+      log.error('slack oauth: vault_store_secret failed', { projectId, err: vaultErr?.message ?? 'no id returned' });
+      return c.redirect(`${failRedirect}token_not_saved`, 302);
+    }
 
-    await db.from('project_settings').upsert(
+    const { error: upsertErr } = await db.from('project_settings').upsert(
       {
         project_id: projectId,
-        slack_bot_token_ref: vaultId ?? undefined,
+        slack_bot_token_ref: vaultId,
         slack_team_id: tokens.teamId,
         slack_team_name: tokens.teamName,
       } as Record<string, unknown>,
       { onConflict: 'project_id' },
     );
+    if (upsertErr) {
+      log.error('slack oauth: project_settings upsert failed', { projectId, err: upsertErr.message });
+      return c.redirect(`${failRedirect}token_not_saved`, 302);
+    }
 
     return c.redirect(`${adminBase}/integrations/config?slack_connected=1`, 302);
   });
@@ -1229,16 +1319,21 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         return c.json(
           {
             ok: false,
-            error: 'No Discord webhook URL configured. Set one in Integrations → Discord.',
+            error: {
+              code: 'NO_WEBHOOK_CONFIGURED',
+              message: 'No Discord webhook URL is saved for this project. Paste one and click Save, then send a test.',
+            },
           },
           400,
         );
 
       const { sendDiscordNotification } = await import('../../_shared/slack.ts');
+      const startedAt = Date.now();
       const discordResult = await sendDiscordNotification(
         webhookUrl,
         `🐛 Mushi test — Discord is wired up for **${displayName}**.`,
       );
+      await recordChannelTest(db, projectId, 'discord', discordResult.ok, discordResult.error ?? null, startedAt);
       if (!discordResult.ok)
         return c.json({ ok: false, error: discordResult.error ?? 'Discord test failed' }, 502);
       return c.json({ ok: true });
@@ -1284,13 +1379,18 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         return c.json(
           {
             ok: false,
-            error: 'No Teams webhook URL configured. Set one in Integrations → Microsoft Teams.',
+            error: {
+              code: 'NO_WEBHOOK_CONFIGURED',
+              message: 'No Microsoft Teams webhook URL is saved for this project. Paste one and click Save, then send a test.',
+            },
           },
           400,
         );
 
       const { sendTeamsTestMessage } = await import('../../_shared/teams.ts');
+      const startedAt = Date.now();
       const result = await sendTeamsTestMessage(webhookUrl, displayName);
+      await recordChannelTest(db, projectId, 'teams', result.ok, result.error ?? null, startedAt);
       if (!result.ok) return c.json({ ok: false, error: result.error ?? 'Teams test failed' }, 502);
       return c.json({ ok: true });
     },
@@ -1301,18 +1401,12 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     const userId = c.get('userId') as string;
     const db = getServiceClient();
 
-    if (!(await canManageProjectSdkConfig(db, projectId, userId))) {
-      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404);
-    }
+    const denied = await projectConfigDenied(c, db, projectId, userId, 'view SDK settings');
+    if (denied) return denied;
 
     const { data, error } = await db
       .from('project_settings')
-      .select(
-        'project_id, sdk_config_enabled, sdk_widget_position, sdk_widget_theme, sdk_widget_trigger_text, ' +
-          'sdk_widget_launcher, sdk_banner_variant, sdk_banner_position, sdk_banner_bug_cta, sdk_banner_feature_cta, sdk_banner_message, sdk_banner_label, ' +
-          'sdk_capture_console, sdk_capture_network, sdk_capture_performance, sdk_capture_screenshot, ' +
-          'sdk_capture_element_selector, sdk_native_trigger_mode, sdk_min_description_length, sdk_config_updated_at, widget_brand_footer',
-      )
+      .select(SDK_CONFIG_CONSOLE_SELECT)
       .eq('project_id', projectId)
       .maybeSingle();
     if (error) return dbError(c, error);
@@ -1332,20 +1426,14 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
     const db = getServiceClient();
 
-    if (!(await canManageProjectSdkConfig(db, projectId, userId))) {
-      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404);
-    }
+    const denied = await projectConfigDenied(c, db, projectId, userId, 'change SDK settings');
+    if (denied) return denied;
 
     const updates = coerceSdkConfigUpdate(body);
     const { data, error } = await db
       .from('project_settings')
       .upsert({ project_id: projectId, ...updates }, { onConflict: 'project_id' })
-      .select(
-        'project_id, sdk_config_enabled, sdk_widget_position, sdk_widget_theme, sdk_widget_trigger_text, ' +
-          'sdk_widget_launcher, sdk_banner_variant, sdk_banner_position, sdk_banner_bug_cta, sdk_banner_feature_cta, sdk_banner_message, sdk_banner_label, ' +
-          'sdk_capture_console, sdk_capture_network, sdk_capture_performance, sdk_capture_screenshot, ' +
-          'sdk_capture_element_selector, sdk_native_trigger_mode, sdk_min_description_length, sdk_config_updated_at, widget_brand_footer',
-      )
+      .select(SDK_CONFIG_CONSOLE_SELECT)
       .single();
 
     if (error) return dbError(c, error);
@@ -1374,8 +1462,166 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
   // classify-report, judge-batch) then dereferences via `resolveLlmKey`.
   // ============================================================
 
-  const BYOK_PROVIDERS = ['anthropic', 'openai'] as const;
-  type ByokProvider = (typeof BYOK_PROVIDERS)[number];
+  // Single-key slots in project_settings. The list comes from _shared/byok.ts
+  // so these routes accept exactly the providers the console can show a
+  // legacy row for (it offers Delete and Test on every one of them).
+  type ByokProvider = LegacyByokProvider;
+
+  /** Every `byok_<provider>_*` column a legacy slot owns. */
+  function legacyByokColumns(provider: ByokProvider): string[] {
+    return [
+      `byok_${provider}_key_ref`,
+      `byok_${provider}_key_hint`,
+      `byok_${provider}_key_added_at`,
+      `byok_${provider}_key_last_used_at`,
+      `byok_${provider}_test_status`,
+      `byok_${provider}_tested_at`,
+    ];
+  }
+
+  function badLegacyProviderBody(provider: string) {
+    return {
+      ok: false,
+      error: {
+        code: 'BAD_PROVIDER',
+        message: `Mushi has no single-key slot for "${provider.slice(0, 40)}". Only ${LEGACY_BYOK_PROVIDERS.join(', ')} have one; manage other providers' keys in the key pool.`,
+      },
+    };
+  }
+
+  /**
+   * Retire a provider's legacy credential: delete its Vault secret (by the
+   * name in the stored `vault://` ref) and clear every legacy column. Used by
+   * DELETE /v1/admin/byok/:provider and when a pooled key supersedes an
+   * identical legacy key.
+   */
+  async function clearLegacyByokCredential(
+    db: ReturnType<typeof getServiceClient>,
+    projectId: string,
+    provider: ByokProvider,
+  ): Promise<{ error: { message: string; code?: string } | null }> {
+    const { data: current } = await db
+      .from('project_settings')
+      .select(`byok_${provider}_key_ref`)
+      .eq('project_id', projectId)
+      .maybeSingle();
+    const ref = (current as Record<string, unknown> | null)?.[`byok_${provider}_key_ref`];
+    const secretName =
+      typeof ref === 'string' && ref.startsWith('vault://')
+        ? ref.slice('vault://'.length)
+        : byokSecretName(projectId, provider);
+    try {
+      const { error: vaultError } = await db.rpc('vault_delete_secret', { secret_name: secretName });
+      if (vaultError) {
+        log.warn('vault_delete_secret failed for legacy BYOK key (non-fatal)', {
+          provider,
+          code: vaultError.code,
+        });
+      }
+    } catch (err) {
+      log.warn('vault_delete_secret failed for legacy BYOK key (non-fatal)', {
+        provider,
+        error: String(err),
+      });
+    }
+
+    const cleared: Record<string, null> = {};
+    for (const column of legacyByokColumns(provider)) cleared[column] = null;
+    if (provider === 'openai') cleared.byok_openai_base_url = null;
+    const { error } = await db
+      .from('project_settings')
+      .upsert({ project_id: projectId, ...cleared }, { onConflict: 'project_id' });
+    return { error };
+  }
+
+  /**
+   * Whether a stored secret is the same credential as `candidate` (already
+   * normalized). Stored values are normalized the same way, so a legacy key
+   * saved before normalization existed (`OPENAI_API_KEY=sk-…`) still matches.
+   * Comparison only: the stored value is never logged or returned.
+   */
+  function storedSecretMatches(
+    provider: string,
+    candidate: string,
+    stored: string | null,
+    baseUrl: string | null,
+  ): boolean {
+    if (!stored) return false;
+    if (stored.trim() === candidate) return true;
+    const cleaned = prepareByokSecret(provider, stored, { baseUrl });
+    return cleaned.ok && cleaned.value === candidate;
+  }
+
+  async function readVaultSecretForCompare(
+    db: ReturnType<typeof getServiceClient>,
+    secretId: string,
+  ): Promise<string | null> {
+    const { data, error } = await db.rpc('vault_get_secret', { secret_id: secretId });
+    if (error) {
+      log.warn('vault_get_secret failed during BYOK duplicate check', { code: error.code });
+      return null;
+    }
+    return typeof data === 'string' ? data : null;
+  }
+
+  /** The `vault://` name of a provider's legacy credential, when one is stored. */
+  async function legacyByokRef(
+    db: ReturnType<typeof getServiceClient>,
+    projectId: string,
+    provider: string,
+  ): Promise<string | null> {
+    if (!isLegacyByokProvider(provider)) return null;
+    const { data } = await db
+      .from('project_settings')
+      .select(`byok_${provider}_key_ref`)
+      .eq('project_id', projectId)
+      .maybeSingle();
+    const ref = (data as Record<string, unknown> | null)?.[`byok_${provider}_key_ref`];
+    return typeof ref === 'string' && ref ? ref : null;
+  }
+
+  /**
+   * Is `candidate` already saved for this project and provider? Checks every
+   * pooled key (any status) and the legacy credential.
+   */
+  async function findDuplicateByokKey(
+    db: ReturnType<typeof getServiceClient>,
+    projectId: string,
+    provider: string,
+    candidate: string,
+    baseUrl: string | null,
+  ): Promise<
+    | { error: { message: string; code?: string } }
+    | { pool: { key_hint: string | null; label: string | null } | null; legacy: boolean }
+  > {
+    const { data: rows, error } = await db
+      .from('byok_keys')
+      .select('id, vault_secret_id, key_hint, label')
+      .eq('project_id', projectId)
+      .eq('provider_slug', provider);
+    if (error) return { error };
+    for (const row of (rows ?? []) as Array<{
+      vault_secret_id: string | null;
+      key_hint: string | null;
+      label: string | null;
+    }>) {
+      if (!row.vault_secret_id) continue;
+      const stored = await readVaultSecretForCompare(db, row.vault_secret_id);
+      if (storedSecretMatches(provider, candidate, stored, baseUrl)) {
+        return { pool: { key_hint: row.key_hint, label: row.label }, legacy: false };
+      }
+    }
+    const ref = await legacyByokRef(db, projectId, provider);
+    if (!ref?.startsWith('vault://')) return { pool: null, legacy: false };
+    const stored = await readVaultSecretForCompare(db, ref.slice('vault://'.length));
+    return { pool: null, legacy: storedSecretMatches(provider, candidate, stored, baseUrl) };
+  }
+
+  function duplicateKeyMessage(existing: { key_hint: string | null; label: string | null }): string {
+    const hint = existing.key_hint ?? existing.label;
+    if (!hint) return 'This key is already saved.';
+    return `This key is already saved (${hint.includes('…') ? hint : `…${hint}`}).`;
+  }
 
   function byokSecretName(projectId: string, provider: ByokProvider): string {
     return `mushi/byok/${projectId}/${provider}`;
@@ -1401,15 +1647,12 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
 
     const { data } = await db
       .from('project_settings')
-      .select(
-        'byok_anthropic_key_ref, byok_anthropic_key_hint, byok_anthropic_key_added_at, byok_anthropic_key_last_used_at, byok_anthropic_test_status, byok_anthropic_tested_at, ' +
-          'byok_openai_key_ref, byok_openai_key_hint, byok_openai_key_added_at, byok_openai_key_last_used_at, byok_openai_base_url, byok_openai_test_status, byok_openai_tested_at',
-      )
+      .select([...LEGACY_BYOK_PROVIDERS.flatMap(legacyByokColumns), 'byok_openai_base_url'].join(', '))
       .eq('project_id', project.id)
       .single();
 
     const row = (data as Record<string, unknown> | null) ?? {};
-    const keys = BYOK_PROVIDERS.map((provider) => ({
+    const keys = LEGACY_BYOK_PROVIDERS.map((provider) => ({
       provider,
       configured: Boolean(row[`byok_${provider}_key_ref`]),
       addedAt: (row[`byok_${provider}_key_added_at`] as string | null) ?? null,
@@ -1421,324 +1664,6 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     }));
 
     return c.json({ ok: true, data: { projectId: project.id, keys } });
-  });
-
-  app.put('/v1/admin/byok/:provider', jwtAuth, requireFeature('byok'), async (c) => {
-    const userId = c.get('userId') as string;
-    const provider = c.req.param('provider')! as ByokProvider;
-    if (!BYOK_PROVIDERS.includes(provider)) {
-      return c.json(
-        { ok: false, error: { code: 'BAD_PROVIDER', message: `Unknown provider: ${provider}` } },
-        400,
-      );
-    }
-    const body = (await c.req.json().catch(() => ({}))) as {
-      key?: string;
-      baseUrl?: string | null;
-    };
-    const key = typeof body?.key === 'string' ? body.key.trim() : '';
-    if (key.length < 8) {
-      return c.json(
-        {
-          ok: false,
-          error: { code: 'KEY_TOO_SHORT', message: 'Provide the full provider API key.' },
-        },
-        400,
-      );
-    }
-
-    // baseUrl is OpenAI-only — schema constraint, also a defence against any
-    // request smuggling a surprise field for `anthropic`.
-    const rawBaseUrl =
-      provider === 'openai' && typeof body?.baseUrl === 'string' ? body.baseUrl.trim() : '';
-    let baseUrl: string | null = null;
-    if (provider === 'openai') {
-      const validation = validateOpenAiBaseUrl(
-        rawBaseUrl || undefined,
-        openAiCompatibleHostAllowlist(),
-      );
-      if (!validation.ok) {
-        return c.json(
-          { ok: false, error: { code: 'INVALID_BASE_URL', message: validation.message } },
-          400,
-        );
-      }
-      baseUrl = validation.value;
-    }
-
-    const db = getServiceClient();
-    const resolvedProject = await resolveOwnedProject(c, db, userId);
-    if ('response' in resolvedProject) return resolvedProject.response;
-    const project = resolvedProject.project;
-
-    const secretName = byokSecretName(project.id, provider);
-    const { error: vaultErr } = await db.rpc('vault_store_secret', {
-      secret_name: secretName,
-      secret_value: key,
-    });
-    if (vaultErr) {
-      log.error('vault_store_secret failed', { provider, code: vaultErr.code });
-      return c.json(
-        {
-          ok: false,
-          error: {
-            code: 'VAULT_WRITE_FAILED',
-            message: 'The credential could not be stored securely.',
-          },
-        },
-        500,
-      );
-    }
-
-    const now = new Date().toISOString();
-    const hint = byokKeyHint(key);
-    const probe = await probeByokKey(provider, key, baseUrl ?? undefined);
-    const update: Record<string, string | null> = {
-      [`byok_${provider}_key_ref`]: `vault://${secretName}`,
-      [`byok_${provider}_key_hint`]: hint,
-      [`byok_${provider}_key_added_at`]: now,
-      [`byok_${provider}_key_last_used_at`]: null,
-      [`byok_${provider}_test_status`]: probe.status,
-      [`byok_${provider}_tested_at`]: now,
-    };
-    if (provider === 'openai') {
-      update.byok_openai_base_url = baseUrl;
-    }
-    const { error: upsertErr } = await db
-      .from('project_settings')
-      .upsert({ project_id: project.id, ...update }, { onConflict: 'project_id' });
-    if (upsertErr) {
-      return dbError(c, upsertErr);
-    }
-
-    // 'rotated' covers the upsert path (replacing a prior key); 'added' for first-time.
-    // We don't have a cheap pre-read of the existing ref here, so log as 'rotated'
-    // — both are auditable mutations and the meta.added_at preserves first-seen.
-    //
-    // NOTE: PostgrestBuilder is a thenable (`.then` only) — it does NOT expose
-    // `.catch()`. Chaining `.catch(() => {})` on `.insert(...)` throws
-    // `TypeError: .catch is not a function`, which bubbles to the Hono onError
-    // handler and erases the successful upsert above. Use try/await instead.
-    try {
-      await db.from('byok_audit_log').insert([
-        {
-          project_id: project.id,
-          provider,
-          action: 'rotated',
-          actor_user_id: userId,
-          meta: { added_at: now },
-        },
-        {
-          project_id: project.id,
-          provider,
-          action: 'tested',
-          actor_user_id: userId,
-          meta: { status: probe.status, http_status: probe.httpStatus },
-        },
-      ]);
-    } catch {
-      /* audit log is best-effort */
-    }
-    await logAudit(db, project.id, userId, 'settings.updated', 'byok', provider, {
-      provider,
-    }).catch(() => {});
-
-    return c.json({
-      ok: true,
-      data: {
-        provider,
-        configured: true,
-        addedAt: now,
-        hint,
-        keyHint: hint,
-        validation: {
-          status: probe.status,
-          detail: probe.detail,
-          httpStatus: probe.httpStatus,
-          latencyMs: probe.latencyMs,
-        },
-      },
-    });
-  });
-
-  app.delete('/v1/admin/byok/:provider', jwtAuth, requireFeature('byok'), async (c) => {
-    const userId = c.get('userId') as string;
-    const provider = c.req.param('provider')! as ByokProvider;
-    if (!BYOK_PROVIDERS.includes(provider)) {
-      return c.json({ ok: false, error: { code: 'BAD_PROVIDER' } }, 400);
-    }
-    const db = getServiceClient();
-    const resolvedProject = await resolveOwnedProject(c, db, userId);
-    if ('response' in resolvedProject) return resolvedProject.response;
-    const project = resolvedProject.project;
-
-    const secretName = byokSecretName(project.id, provider);
-    try {
-      await db.rpc('vault_delete_secret', { secret_name: secretName });
-    } catch (err) {
-      log.warn('vault_delete_secret failed (non-fatal)', { provider, error: String(err) });
-    }
-
-    const { error } = await db.from('project_settings').upsert(
-      {
-        project_id: project.id,
-        [`byok_${provider}_key_ref`]: null,
-        [`byok_${provider}_key_hint`]: null,
-        [`byok_${provider}_key_added_at`]: null,
-        [`byok_${provider}_key_last_used_at`]: null,
-        [`byok_${provider}_test_status`]: null,
-        [`byok_${provider}_tested_at`]: null,
-        ...(provider === 'openai' ? { byok_openai_base_url: null } : {}),
-      },
-      { onConflict: 'project_id' },
-    );
-
-    if (error) return dbError(c, error);
-
-    try {
-      await db
-        .from('byok_audit_log')
-        .insert({ project_id: project.id, provider, action: 'removed', actor_user_id: userId });
-    } catch {
-      /* audit log is best-effort */
-    }
-    await logAudit(db, project.id, userId, 'settings.updated', 'byok', provider, {
-      provider,
-      cleared: true,
-    }).catch(() => {});
-
-    return c.json({ ok: true });
-  });
-
-  /**
-   * POST /v1/admin/byok/:provider/test
-   *
-   * Probe the BYOK key with the cheapest possible call to confirm:
-   *   1. The key authenticates (not 401/403).
-   *   2. The endpoint is reachable (no DNS/CORS/baseUrl typo).
-   *   3. There's quota left (not 429).
-   *
-   * Persists the outcome (ok / error_auth / error_network / error_quota) to
-   * project_settings so the chip stays accurate across reloads. Never logs the
-   * key, only the last 4 chars (the BYOK resolver hint).
-   *
-   * Cost: ~ $0.0001 — uses Anthropic /v1/models or OpenAI /v1/models, both of
-   * which are free metadata calls.
-   */
-  app.post('/v1/admin/byok/:provider/test', jwtAuth, requireFeature('byok'), async (c) => {
-    const userId = c.get('userId') as string;
-    const provider = c.req.param('provider')! as ByokProvider;
-    if (!BYOK_PROVIDERS.includes(provider)) {
-      return c.json({ ok: false, error: { code: 'BAD_PROVIDER' } }, 400);
-    }
-
-    const db = getServiceClient();
-    const resolvedProject = await resolveOwnedProject(c, db, userId);
-    if ('response' in resolvedProject) return resolvedProject.response;
-    const project = resolvedProject.project;
-
-    const { data: settings, error: settingsError } = await db
-      .from('project_settings')
-      .select(
-        provider === 'openai'
-          ? 'byok_openai_key_ref, byok_openai_base_url'
-          : 'byok_anthropic_key_ref',
-      )
-      .eq('project_id', project.id)
-      .maybeSingle();
-    if (settingsError) return dbError(c, settingsError);
-    const settingsRow = settings as unknown as Record<string, string | null> | null;
-    const ref =
-      provider === 'openai'
-        ? settingsRow?.byok_openai_key_ref
-        : settingsRow?.byok_anthropic_key_ref;
-    if (!ref) {
-      return c.json(
-        {
-          ok: false,
-          error: { code: 'NO_KEY', message: 'No BYOK key is configured.' },
-        },
-        400,
-      );
-    }
-    const secretRef = String(ref).replace(/^vault:\/\//, '');
-    const { data: key, error: keyError } = await db.rpc('vault_get_secret', {
-      secret_id: secretRef,
-    });
-    if (keyError || typeof key !== 'string') {
-      return c.json(
-        {
-          ok: false,
-          error: {
-            code: 'VAULT_READ_FAILED',
-            message: 'The provider key could not be read from Vault.',
-          },
-        },
-        500,
-      );
-    }
-    let baseUrl: string | undefined;
-    if (provider === 'openai') {
-      const baseUrlValidation = validateOpenAiBaseUrl(
-        settingsRow?.byok_openai_base_url ?? undefined,
-        openAiCompatibleHostAllowlist(),
-      );
-      if (!baseUrlValidation.ok) {
-        return c.json(
-          { ok: false, error: { code: 'INVALID_BASE_URL', message: baseUrlValidation.message } },
-          400,
-        );
-      }
-      baseUrl = baseUrlValidation.value;
-    }
-    const probe = await probeByokKey(provider, key, baseUrl);
-    const now = new Date().toISOString();
-    await db.from('project_settings').upsert(
-      {
-        project_id: project.id,
-        [`byok_${provider}_test_status`]: probe.status,
-        [`byok_${provider}_tested_at`]: now,
-      },
-      { onConflict: 'project_id' },
-    );
-
-    // Mirror to integration_health_history so the IntegrationsPage sparkline
-    // shows BYOK key probes alongside Sentry/Langfuse/GitHub.
-    await db.from('integration_health_history').insert({
-      project_id: project.id,
-      kind: provider,
-      status: probe.status === 'ok' ? 'ok' : probe.status === 'error_quota' ? 'degraded' : 'down',
-      latency_ms: probe.latencyMs,
-      message: probe.detail,
-      source: 'manual',
-    });
-
-    try {
-      await db.from('byok_audit_log').insert({
-        project_id: project.id,
-        provider,
-        action: 'tested',
-        actor_user_id: userId,
-        meta: { status: probe.status, http_status: probe.httpStatus },
-      });
-    } catch {
-      /* best-effort */
-    }
-
-    return c.json({
-      ok: true,
-      data: {
-        provider,
-        status: probe.status,
-        hint: byokKeyHint(key),
-        source: 'byok',
-        baseUrl: baseUrl ?? null,
-        httpStatus: probe.httpStatus,
-        latencyMs: probe.latencyMs,
-        detail: probe.detail,
-        testedAt: now,
-      },
-    });
   });
 
   // ============================================================
@@ -1803,16 +1728,11 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     let validation: Awaited<ReturnType<typeof probeByokKey>> | null = null;
 
     if (typeof body.key === 'string' && body.key.trim().length > 0) {
-      const key = body.key.trim();
-      if (key.length < 8) {
-        return c.json(
-          {
-            ok: false,
-            error: { code: 'KEY_TOO_SHORT', message: 'Provide the full Firecrawl API key.' },
-          },
-          400,
-        );
+      const prepared = prepareByokSecret('firecrawl', body.key);
+      if (!prepared.ok) {
+        return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: prepared.message } }, 400);
       }
+      const key = prepared.value;
       const secretName = firecrawlSecretName(project.id);
       const { error: vaultErr } = await db.rpc('vault_store_secret', {
         secret_name: secretName,
@@ -2075,16 +1995,11 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
   app.put('/v1/admin/byok/browserbase', jwtAuth, requireFeature('byok'), async (c) => {
     const userId = c.get('userId') as string;
     const raw = (await c.req.json().catch(() => ({}))) as { key?: unknown };
-    const key = typeof raw.key === 'string' ? raw.key.trim() : '';
-    if (key.length < 8 || key.length > 4096) {
-      return c.json(
-        {
-          ok: false,
-          error: { code: 'INVALID_KEY', message: 'Provide the full Browserbase API key.' },
-        },
-        400,
-      );
+    const prepared = prepareByokSecret('browserbase', raw.key);
+    if (!prepared.ok) {
+      return c.json({ ok: false, error: { code: 'INVALID_KEY', message: prepared.message } }, 400);
     }
+    const key = prepared.value;
 
     const db = getServiceClient();
     const resolvedProject = await resolveOwnedProject(c, db, userId);
@@ -2269,6 +2184,303 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         detail: probe.detail,
         httpStatus: probe.httpStatus,
         latencyMs: probe.latencyMs,
+        testedAt: now,
+      },
+    });
+  });
+
+  // ============================================================
+  // Generic legacy single-key routes: /v1/admin/byok/:provider
+  //
+  // Registered AFTER the dedicated Firecrawl and Browserbase handlers above on
+  // purpose. Hono runs the first matching handler in registration order, so
+  // when these came first they answered PUT/DELETE/test for firecrawl and
+  // browserbase with BAD_PROVIDER, and the dedicated handlers (domain
+  // settings, the panels' legacy fallback) were unreachable. They still
+  // accept every legacy provider, so the console's legacy rows work through
+  // either path.
+  // ============================================================
+
+  app.put('/v1/admin/byok/:provider', jwtAuth, requireFeature('byok'), async (c) => {
+    const userId = c.get('userId') as string;
+    const provider = c.req.param('provider')!;
+    if (!isLegacyByokProvider(provider)) return c.json(badLegacyProviderBody(provider), 400);
+    const body = (await c.req.json().catch(() => ({}))) as {
+      key?: string;
+      baseUrl?: string | null;
+    };
+    // Same normalization and format rules as the pool route and the console
+    // form, so `OPENAI_API_KEY=sk-…` or a quoted paste is stored clean.
+    const prepared = prepareByokSecret(provider, body?.key, {
+      baseUrl: typeof body?.baseUrl === 'string' ? body.baseUrl : null,
+    });
+    if (!prepared.ok) {
+      return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: prepared.message } }, 400);
+    }
+    const key = prepared.value;
+
+    // baseUrl is OpenAI-only — schema constraint, also a defence against any
+    // request smuggling a surprise field for `anthropic`.
+    const rawBaseUrl =
+      provider === 'openai' && typeof body?.baseUrl === 'string' ? body.baseUrl.trim() : '';
+    let baseUrl: string | null = null;
+    if (provider === 'openai') {
+      const validation = validateOpenAiBaseUrl(
+        rawBaseUrl || undefined,
+        openAiCompatibleHostAllowlist(),
+      );
+      if (!validation.ok) {
+        return c.json(
+          { ok: false, error: { code: 'INVALID_BASE_URL', message: validation.message } },
+          400,
+        );
+      }
+      baseUrl = validation.value;
+    }
+
+    const db = getServiceClient();
+    const resolvedProject = await resolveOwnedProject(c, db, userId);
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
+
+    const secretName = byokSecretName(project.id, provider);
+    const { error: vaultErr } = await db.rpc('vault_store_secret', {
+      secret_name: secretName,
+      secret_value: key,
+    });
+    if (vaultErr) {
+      log.error('vault_store_secret failed', { provider, code: vaultErr.code });
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'VAULT_WRITE_FAILED',
+            message: 'The credential could not be stored securely.',
+          },
+        },
+        500,
+      );
+    }
+
+    const now = new Date().toISOString();
+    const hint = byokKeyHint(key);
+    const probe = await probeByokKey(provider, key, baseUrl ?? undefined);
+    const update: Record<string, string | null> = {
+      [`byok_${provider}_key_ref`]: `vault://${secretName}`,
+      [`byok_${provider}_key_hint`]: hint,
+      [`byok_${provider}_key_added_at`]: now,
+      [`byok_${provider}_key_last_used_at`]: null,
+      [`byok_${provider}_test_status`]: probe.status,
+      [`byok_${provider}_tested_at`]: now,
+    };
+    if (provider === 'openai') {
+      update.byok_openai_base_url = baseUrl;
+    }
+    const { error: upsertErr } = await db
+      .from('project_settings')
+      .upsert({ project_id: project.id, ...update }, { onConflict: 'project_id' });
+    if (upsertErr) {
+      return dbError(c, upsertErr);
+    }
+
+    // 'rotated' covers the upsert path (replacing a prior key); 'added' for first-time.
+    // We don't have a cheap pre-read of the existing ref here, so log as 'rotated'
+    // — both are auditable mutations and the meta.added_at preserves first-seen.
+    //
+    // NOTE: PostgrestBuilder is a thenable (`.then` only) — it does NOT expose
+    // `.catch()`. Chaining `.catch(() => {})` on `.insert(...)` throws
+    // `TypeError: .catch is not a function`, which bubbles to the Hono onError
+    // handler and erases the successful upsert above. Use try/await instead.
+    try {
+      await db.from('byok_audit_log').insert([
+        {
+          project_id: project.id,
+          provider,
+          action: 'rotated',
+          actor_user_id: userId,
+          meta: { added_at: now },
+        },
+        {
+          project_id: project.id,
+          provider,
+          action: 'tested',
+          actor_user_id: userId,
+          meta: { status: probe.status, http_status: probe.httpStatus },
+        },
+      ]);
+    } catch {
+      /* audit log is best-effort */
+    }
+    await logAudit(db, project.id, userId, 'settings.updated', 'byok', provider, {
+      provider,
+    }).catch(() => {});
+
+    return c.json({
+      ok: true,
+      data: {
+        provider,
+        configured: true,
+        addedAt: now,
+        hint,
+        keyHint: hint,
+        validation: {
+          status: probe.status,
+          detail: probe.detail,
+          httpStatus: probe.httpStatus,
+          latencyMs: probe.latencyMs,
+        },
+      },
+    });
+  });
+
+  app.delete('/v1/admin/byok/:provider', jwtAuth, requireFeature('byok'), async (c) => {
+    const userId = c.get('userId') as string;
+    const provider = c.req.param('provider')!;
+    if (!isLegacyByokProvider(provider)) return c.json(badLegacyProviderBody(provider), 400);
+    const db = getServiceClient();
+    const resolvedProject = await resolveOwnedProject(c, db, userId);
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
+
+    const { error } = await clearLegacyByokCredential(db, project.id, provider);
+    if (error) return dbError(c, error);
+
+    try {
+      await db
+        .from('byok_audit_log')
+        .insert({ project_id: project.id, provider, action: 'removed', actor_user_id: userId });
+    } catch {
+      /* audit log is best-effort */
+    }
+    await logAudit(db, project.id, userId, 'settings.updated', 'byok', provider, {
+      provider,
+      cleared: true,
+    }).catch(() => {});
+
+    return c.json({ ok: true });
+  });
+
+  /**
+   * POST /v1/admin/byok/:provider/test
+   *
+   * Probe the BYOK key with the cheapest possible call to confirm:
+   *   1. The key authenticates (not 401/403).
+   *   2. The endpoint is reachable (no DNS/CORS/baseUrl typo).
+   *   3. There's quota left (not 429).
+   *
+   * Persists the outcome (ok / error_auth / error_network / error_quota) to
+   * project_settings so the chip stays accurate across reloads. Never logs the
+   * key, only the last 4 chars (the BYOK resolver hint).
+   *
+   * Cost: ~ $0.0001 — uses Anthropic /v1/models or OpenAI /v1/models, both of
+   * which are free metadata calls.
+   */
+  app.post('/v1/admin/byok/:provider/test', jwtAuth, requireFeature('byok'), async (c) => {
+    const userId = c.get('userId') as string;
+    const provider = c.req.param('provider')!;
+    if (!isLegacyByokProvider(provider)) return c.json(badLegacyProviderBody(provider), 400);
+
+    const db = getServiceClient();
+    const resolvedProject = await resolveOwnedProject(c, db, userId);
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
+
+    const { data: settings, error: settingsError } = await db
+      .from('project_settings')
+      .select(
+        provider === 'openai'
+          ? 'byok_openai_key_ref, byok_openai_base_url'
+          : `byok_${provider}_key_ref`,
+      )
+      .eq('project_id', project.id)
+      .maybeSingle();
+    if (settingsError) return dbError(c, settingsError);
+    const settingsRow = settings as unknown as Record<string, string | null> | null;
+    const ref = settingsRow?.[`byok_${provider}_key_ref`];
+    if (!ref) {
+      return c.json(
+        {
+          ok: false,
+          error: { code: 'NO_KEY', message: 'No BYOK key is configured.' },
+        },
+        400,
+      );
+    }
+    const secretRef = String(ref).replace(/^vault:\/\//, '');
+    const { data: key, error: keyError } = await db.rpc('vault_get_secret', {
+      secret_id: secretRef,
+    });
+    if (keyError || typeof key !== 'string') {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'VAULT_READ_FAILED',
+            message: 'The provider key could not be read from Vault.',
+          },
+        },
+        500,
+      );
+    }
+    let baseUrl: string | undefined;
+    if (provider === 'openai') {
+      const baseUrlValidation = validateOpenAiBaseUrl(
+        settingsRow?.byok_openai_base_url ?? undefined,
+        openAiCompatibleHostAllowlist(),
+      );
+      if (!baseUrlValidation.ok) {
+        return c.json(
+          { ok: false, error: { code: 'INVALID_BASE_URL', message: baseUrlValidation.message } },
+          400,
+        );
+      }
+      baseUrl = baseUrlValidation.value;
+    }
+    const probe = await probeByokKey(provider, key, baseUrl);
+    const now = new Date().toISOString();
+    await db.from('project_settings').upsert(
+      {
+        project_id: project.id,
+        [`byok_${provider}_test_status`]: probe.status,
+        [`byok_${provider}_tested_at`]: now,
+      },
+      { onConflict: 'project_id' },
+    );
+
+    // Mirror to integration_health_history so the IntegrationsPage sparkline
+    // shows BYOK key probes alongside Sentry/Langfuse/GitHub.
+    await db.from('integration_health_history').insert({
+      project_id: project.id,
+      kind: provider,
+      status: probe.status === 'ok' ? 'ok' : probe.status === 'error_quota' ? 'degraded' : 'down',
+      latency_ms: probe.latencyMs,
+      message: probe.detail,
+      source: 'manual',
+    });
+
+    try {
+      await db.from('byok_audit_log').insert({
+        project_id: project.id,
+        provider,
+        action: 'tested',
+        actor_user_id: userId,
+        meta: { status: probe.status, http_status: probe.httpStatus },
+      });
+    } catch {
+      /* best-effort */
+    }
+
+    return c.json({
+      ok: true,
+      data: {
+        provider,
+        status: probe.status,
+        hint: byokKeyHint(key),
+        source: 'byok',
+        baseUrl: baseUrl ?? null,
+        httpStatus: probe.httpStatus,
+        latencyMs: probe.latencyMs,
+        detail: probe.detail,
         testedAt: now,
       },
     });
@@ -2466,6 +2678,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       { data: lastSessionRow },
       { data: settingsRow },
       { data: pooledFirecrawlRows },
+      { data: latestUnattachedRow },
     ] = await Promise.all([
       db
         .from('research_sessions')
@@ -2501,9 +2714,20 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         .eq('provider_slug', 'firecrawl')
         .order('priority', { ascending: true })
         .order('created_at', { ascending: true }),
+      // The session holding the newest unattached snippet: "Attach evidence"
+      // opens it, instead of an empty Search tab.
+      db
+        .from('research_snippets')
+        .select('session_id')
+        .eq('project_id', pid)
+        .is('attached_to_report_id', null)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
     ]);
 
     const sessions = sessionCount ?? 0;
+    const latestUnattachedSessionId = (latestUnattachedRow?.session_id as string | null) ?? null;
     const snippets = snippetCount ?? 0;
     const attached = attachedCount ?? 0;
     const unattachedSnippets = Math.max(0, snippets - attached);
@@ -2566,8 +2790,10 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       topPriorityTo = '/research?tab=search';
     } else if (unattachedSnippets > 0) {
       topPriority = 'unattached_snippets';
-      topPriorityLabel = `${unattachedSnippets} snippet${unattachedSnippets === 1 ? '' : 's'} not attached to reports — paste report UUIDs on Search tab.`;
-      topPriorityTo = '/research?tab=search';
+      topPriorityLabel = `${unattachedSnippets} snippet${unattachedSnippets === 1 ? '' : 's'} not attached to reports — open the search and attach each to its report.`;
+      topPriorityTo = latestUnattachedSessionId
+        ? `/research?tab=search&session=${encodeURIComponent(latestUnattachedSessionId)}`
+        : '/research?tab=history';
     } else {
       topPriority = 'healthy';
       topPriorityLabel = `${sessions} session${sessions === 1 ? '' : 's'} · ${attached} attached · last search ${daysSinceLastSearch ?? 0}d ago.`;
@@ -2585,6 +2811,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         snippets,
         attached,
         unattachedSnippets,
+        latestUnattachedSessionId,
         lastSessionAt,
         daysSinceLastSearch,
         firecrawlConfigured,
@@ -2724,12 +2951,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         .order('priority', { ascending: true }),
       db
         .from('project_settings')
-        .select(
-          'byok_anthropic_key_ref, byok_anthropic_key_hint, byok_anthropic_key_added_at, byok_anthropic_key_last_used_at, byok_anthropic_test_status, byok_anthropic_tested_at, ' +
-            'byok_openai_key_ref, byok_openai_key_hint, byok_openai_key_added_at, byok_openai_key_last_used_at, byok_openai_base_url, byok_openai_test_status, byok_openai_tested_at, ' +
-            'byok_firecrawl_key_ref, byok_firecrawl_key_hint, byok_firecrawl_key_added_at, byok_firecrawl_key_last_used_at, byok_firecrawl_test_status, byok_firecrawl_tested_at, ' +
-            'byok_browserbase_key_ref, byok_browserbase_key_hint, byok_browserbase_key_added_at, byok_browserbase_key_last_used_at, byok_browserbase_test_status, byok_browserbase_tested_at',
-        )
+        .select([...LEGACY_BYOK_PROVIDERS.flatMap(legacyByokColumns), 'byok_openai_base_url'].join(', '))
         .eq('project_id', project.id)
         .maybeSingle(),
     ]);
@@ -2737,19 +2959,29 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     if (poolResult.error) return dbError(c, poolResult.error);
     if (legacyResult.error) return dbError(c, legacyResult.error);
 
+    // expires_at arrives with migration 20261004150000. Read it on its own so
+    // a database without the column still lists keys (with no known expiry).
+    const expiryById = new Map<string, string | null>();
+    const expiryResult = await db
+      .from('byok_keys')
+      .select('id, expires_at')
+      .eq('project_id', project.id);
+    if (!expiryResult.error) {
+      for (const row of (expiryResult.data ?? []) as Array<{ id: string; expires_at?: string | null }>) {
+        expiryById.set(row.id, row.expires_at ?? null);
+      }
+    }
+    const poolKeys = ((poolResult.data ?? []) as Array<Record<string, unknown>>).map((key) => ({
+      ...key,
+      expires_at: expiryById.get(String(key.id)) ?? null,
+    }));
+
     const legacyRow = (legacyResult.data as Record<string, unknown> | null) ?? {};
-    const legacyKeys = (['anthropic', 'openai', 'firecrawl', 'browserbase'] as const).flatMap(
+    const legacyKeys = LEGACY_BYOK_PROVIDERS.flatMap(
       (provider) => {
         if (!legacyRow[`byok_${provider}_key_ref`]) return [];
         const testStatus = (legacyRow[`byok_${provider}_test_status`] as string | null) ?? null;
-        const status =
-          testStatus === 'ok'
-            ? 'active'
-            : testStatus === 'error_quota'
-              ? 'quota_exhausted'
-              : testStatus === 'error_auth'
-                ? 'auth_failed'
-                : 'pending_validation';
+        const status = legacyKeyStatus(testStatus);
         return [
           {
             id: `legacy:${provider}`,
@@ -2774,7 +3006,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
 
     return c.json({
       ok: true,
-      data: { projectId: project.id, keys: poolResult.data ?? [], legacyKeys },
+      data: { projectId: project.id, keys: poolKeys, legacyKeys },
     });
   });
 
@@ -2801,13 +3033,38 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       const project = resolvedProject.project;
 
       const raw = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+      const rawProvider = raw.provider ?? raw.provider_slug;
+      const rawBaseUrl = raw.baseUrl ?? raw.base_url;
+      let apiKey = raw.apiKey ?? raw.key;
+      // Normalize the paste and check it against the provider's key format
+      // before anything else, with the same rules (and wording) as the
+      // console form. An unknown provider is left to the schema below.
+      if (
+        typeof rawProvider === 'string' &&
+        (POOLED_BYOK_PROVIDERS as readonly string[]).includes(rawProvider)
+      ) {
+        const prepared = prepareByokSecret(rawProvider, apiKey, {
+          baseUrl: typeof rawBaseUrl === 'string' ? rawBaseUrl : null,
+        });
+        if (!prepared.ok) {
+          return c.json(
+            { ok: false, error: { code: 'VALIDATION_ERROR', message: prepared.message } },
+            400,
+          );
+        }
+        apiKey = prepared.value;
+      }
+      const expiry = parseByokExpiry(raw.expiresAt ?? raw.expires_at);
+      if (!expiry.ok) {
+        return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: expiry.message } }, 400);
+      }
       const parsed = createByokKeySchema.safeParse({
         projectId: project.id,
-        provider: raw.provider ?? raw.provider_slug,
-        apiKey: raw.apiKey ?? raw.key,
+        provider: rawProvider,
+        apiKey,
         label: raw.label,
         priority: raw.priority,
-        baseUrl: raw.baseUrl ?? raw.base_url,
+        baseUrl: rawBaseUrl,
       });
       if (!parsed.success) {
         return c.json(
@@ -2843,6 +3100,21 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
             error: { code: 'INVALID_BASE_URL', message: 'baseUrl is supported only for OpenAI.' },
           },
           400,
+        );
+      }
+
+      // Refuse a key that is already pooled; remember whether it is the legacy
+      // credential, which a validated pooled copy retires below. Runs before
+      // the Vault write so a 409 leaves no orphaned secret.
+      const duplicate = await findDuplicateByokKey(db, project.id, provider, keyVal, baseUrl ?? null);
+      if ('error' in duplicate) return dbError(c, duplicate.error);
+      if (duplicate.pool) {
+        return c.json(
+          {
+            ok: false,
+            error: { code: 'DUPLICATE_KEY', message: duplicateKeyMessage(duplicate.pool) },
+          },
+          409,
         );
       }
 
@@ -2890,7 +3162,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
 
       if (insertErr) {
         try {
-          await db.rpc('vault_delete_secret', { secret_id: secretData });
+          await db.rpc('vault_delete_secret_by_id', { secret_id: secretData });
         } catch {
           /* best-effort orphan cleanup */
         }
@@ -2926,6 +3198,24 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         .single();
       if (validationUpdateError) return dbError(c, validationUpdateError);
 
+      // Separate write so a database without the column (migration
+      // 20261004150000 not applied yet) still saves the key, and says so.
+      let expiresAt: string | null = null;
+      let expiryWarning: string | null = null;
+      if (expiry.value) {
+        const { error: expiryError } = await db
+          .from('byok_keys')
+          .update({ expires_at: expiry.value })
+          .eq('id', row.id)
+          .eq('project_id', project.id);
+        if (expiryError) {
+          log.warn('byok key saved but its expiry date was not', { provider, code: expiryError.code });
+          expiryWarning = 'The key was saved, but not its expiry date. Add the date again from the key row.';
+        } else {
+          expiresAt = expiry.value;
+        }
+      }
+
       try {
         await db.from('byok_audit_log').insert([
           { project_id: project.id, provider, action: 'added', actor_user_id: userId },
@@ -2950,18 +3240,104 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         /* best-effort */
       }
 
+      // The pooled copy of the legacy credential works, and pooled keys take
+      // precedence, so the legacy slot is now dead weight: retire it.
+      let legacyRetired = false;
+      if (duplicate.legacy && probe.status === 'ok' && isLegacyByokProvider(provider)) {
+        const { error: retireError } = await clearLegacyByokCredential(db, project.id, provider);
+        if (retireError) {
+          log.warn('Pooled key validated but retiring the identical legacy key failed', {
+            provider,
+            code: retireError.code,
+          });
+        } else {
+          legacyRetired = true;
+          try {
+            await db.from('byok_audit_log').insert({
+              project_id: project.id,
+              provider,
+              action: 'removed',
+              actor_user_id: userId,
+              meta: { superseded_by_key_id: row.id },
+            });
+          } catch {
+            /* best-effort */
+          }
+        }
+      }
+      // A different legacy key still sits beside a working pooled key: the
+      // console offers to remove it, but never deletes it on its own.
+      const legacySuperseded =
+        !legacyRetired &&
+        probe.status === 'ok' &&
+        (await legacyByokRef(db, project.id, provider)) !== null;
+
       return c.json({
         ok: true,
         data: {
           ...validatedRow,
+          expires_at: expiresAt,
           validation: {
             status: probe.status,
             detail: probe.detail,
             httpStatus: probe.httpStatus,
             latencyMs: probe.latencyMs,
           },
+          legacyRetired,
+          legacySuperseded,
+          ...(expiryWarning ? { expiryWarning } : {}),
         },
       });
+    },
+  );
+
+  /**
+   * PUT /v1/admin/byok/keys/:keyId/expiry
+   * Set or clear the date a key stops working. Body: { expiresAt: "YYYY-MM-DD" | null }.
+   * No provider lets Mushi read this back, so the owner types it.
+   */
+  app.put(
+    '/v1/admin/byok/keys/:keyId/expiry',
+    adminOrApiKey({ scope: 'mcp:write' }),
+    requireFeature('byok'),
+    async (c) => {
+      const userId = c.get('userId') as string;
+      const keyId = c.req.param('keyId')!;
+      if (!byokKeyIdSchema.safeParse(keyId).success) {
+        return c.json(
+          { ok: false, error: { code: 'INVALID_KEY_ID', message: 'keyId must be a UUID.' } },
+          400,
+        );
+      }
+
+      const db = getServiceClient();
+      const apiKeyProjectId =
+        c.get('authMethod') === 'apiKey' ? (c.get('projectId') as string | undefined) : undefined;
+      const resolvedProject = await resolveOwnedProject(
+        c,
+        db,
+        userId,
+        apiKeyProjectId ? { overrideProjectId: apiKeyProjectId } : {},
+      );
+      if ('response' in resolvedProject) return resolvedProject.response;
+      const project = resolvedProject.project;
+
+      const raw = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+      const expiry = parseByokExpiry(raw.expiresAt ?? raw.expires_at ?? null);
+      if (!expiry.ok) {
+        return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: expiry.message } }, 400);
+      }
+
+      const { data, error } = await db
+        .from('byok_keys')
+        .update({ expires_at: expiry.value })
+        .eq('id', keyId)
+        .eq('project_id', project.id)
+        .select('id, expires_at')
+        .maybeSingle();
+      if (error) return dbError(c, error);
+      if (!data) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
+      return c.json({ ok: true, data });
     },
   );
 
@@ -3182,6 +3558,10 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         /* best-effort */
       }
 
+      const legacySuperseded =
+        probe.status === 'ok' &&
+        (await legacyByokRef(db, project.id, keyRow.provider_slug as string)) !== null;
+
       return c.json({
         ok: true,
         data: {
@@ -3192,6 +3572,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
             httpStatus: probe.httpStatus,
             latencyMs: probe.latencyMs,
           },
+          legacySuperseded,
         },
       });
     },
@@ -3243,7 +3624,8 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         .eq('project_id', project.id);
       if (error) return dbError(c, error);
 
-      const { error: vaultDeleteError } = await db.rpc('vault_delete_secret', {
+      // vault_delete_secret matches by name; pool rows keep the secret's id.
+      const { error: vaultDeleteError } = await db.rpc('vault_delete_secret_by_id', {
         secret_id: keyRow.vault_secret_id,
       });
       if (vaultDeleteError) {

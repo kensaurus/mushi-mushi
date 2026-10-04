@@ -218,7 +218,7 @@ describe('composeRecipe never composes from a failed read', () => {
       gate_findings: [{ id: 'f1', gate_run_id: 'old-fail', severity: 'error', allowlisted: false }],
     }, { maxRows: 1_000 })
     const { response } = await compose.composeRecipe(db as never, deps as never, P)
-    expect(response.elements.gates).toMatchObject({ state: 'drift', reason: '1 open finding across the latest gate runs.' })
+    expect(response.elements.gates).toMatchObject({ state: 'drift', reason: '1 problem to fix: API contract (1). Open Full-stack audit for each one and its fix.' })
   })
 
   it('reads the newest finished run per gate; for design_drift only a deviance scan counts (not a refresh, an old-CLI push or a run with no phase)', async () => {

@@ -13,12 +13,14 @@ import { ContainedBlock, InlineProof, SignalChip } from '../report-detail/Report
 interface Props {
   item: QueueItem
   retrying: boolean
+  /** False hides Retry: completed and still-active jobs are not retried. */
+  canRetry: boolean
   onRetry: () => void
 }
 
 const WAITING_STATUSES = new Set(['pending', 'running'])
 
-export function QueueItemCard({ item, retrying, onRetry }: Props) {
+export function QueueItemCard({ item, retrying, canRetry, onRetry }: Props) {
   const waitingMs =
     WAITING_STATUSES.has(item.status) && item.created_at
       ? Date.now() - new Date(item.created_at).getTime()
@@ -67,16 +69,19 @@ export function QueueItemCard({ item, retrying, onRetry }: Props) {
             )}
           </InlineProof>
         </div>
-        <Btn
-          variant="ghost"
-          size="sm"
-          onClick={onRetry}
-          disabled={retrying}
-          loading={retrying}
-          className="ml-3 flex-shrink-0"
-        >
-          Retry
-        </Btn>
+        {canRetry && (
+          <Btn
+            variant="ghost"
+            size="sm"
+            onClick={onRetry}
+            disabled={retrying}
+            loading={retrying}
+            className="ml-3 flex-shrink-0"
+            title="Run this job again from the start. Mushi diagnoses the report again."
+          >
+            Retry
+          </Btn>
+        )}
       </div>
     </Card>
   )

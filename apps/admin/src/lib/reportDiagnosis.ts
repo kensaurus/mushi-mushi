@@ -92,3 +92,27 @@ export function reportDiagnosisView(report: DiagnosisSource): ReportDiagnosisVie
   if (report.stage1_classification != null) return { kind: 'stage1_only' }
   return { kind: 'pending' }
 }
+
+/** Statuses a report only reaches after the pipeline (or a person) classified it. */
+const CLASSIFIED_STATUSES = new Set(['classified', 'triaged', 'grouped', 'fixing', 'fixed', 'verified', 'resolved'])
+
+/**
+ * The one answer to "is this report classified?" for every surface on the
+ * report page (story, recommendation, classification card).
+ *
+ * REGRESSION (2026-10-04, REPORT A2): the "Send test report" row had status
+ * 'classified' and a full Stage-2 diagnosis but no Stage-1 object, and each
+ * surface keyed on `stage1_classification` alone, so the page said
+ * "Classified" and "Classification pending" at once. A status past
+ * classification, a Stage-1 object, a classified_at stamp or a Stage-2
+ * diagnosis with content each count. A severity set by hand does not:
+ * `hasDiagnosis` would read a hand-triaged `new` report as classified.
+ */
+export function isReportClassified(
+  report: DiagnosisSource & { status?: string | null; classified_at?: string | null },
+): boolean {
+  if (report.status && CLASSIFIED_STATUSES.has(report.status.toLowerCase())) return true
+  if (report.stage1_classification != null) return true
+  if (report.classified_at) return true
+  return reportDiagnosisView(report).kind === 'full'
+}

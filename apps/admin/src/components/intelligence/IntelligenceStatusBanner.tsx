@@ -96,7 +96,7 @@ export function IntelligenceStatusBanner({
                 {actions.retry ?? 'Retry generation'}
               </Btn>
             ) : null}
-            <Btn to="/settings" size="sm" variant="ghost">{actions.settings ?? 'Check LLM keys'}</Btn>
+            <Btn to="/settings?tab=byok" size="sm" variant="ghost">{actions.settings ?? 'Check LLM keys'}</Btn>
           </div>
         }
       />

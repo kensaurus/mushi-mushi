@@ -12,6 +12,7 @@ import { KpiTile, type KpiDelta } from '../charts'
 import { MetricStrip } from '../MetricStrip'
 import type { Tone } from '../charts'
 import { useAdminMode } from '../../lib/mode'
+import { PageLoadError } from '../PageLoadError'
 
 type SeverityKey = 'critical' | 'high' | 'medium' | 'low'
 
@@ -50,8 +51,9 @@ function severityDelta(values: number[]): KpiDelta | null {
 interface Props {
   /** Currently active severity filter (so we can highlight the matching tile). */
   activeSeverity?: string
-  /** Click handler — page will mutate the URL state to apply the filter. */
-  onFilter: (severity: 'critical' | 'high' | 'medium' | 'low' | '') => void
+  /** Click handler — the page applies the severity plus this tile's window
+   *  and status (`days`, `status=active`) so the list matches the count. */
+  onFilter: (severity: 'critical' | 'high' | 'medium' | 'low' | '', windowDays: number) => void
   windowDays?: number
 }
 
@@ -114,19 +116,10 @@ export function ReportsKpiStrip({ activeSeverity, onFilter, windowDays = 14 }: P
   // audit found this row claiming "0 critical · 0 high" when the endpoint
   // 500'd, which is actively misleading. .
   if (error) {
+    // Plain-English cause and fix, never the raw `message (CODE)` string.
     return (
-      <div className="mb-3 flex items-center justify-between gap-3 rounded-md border border-danger/30 bg-danger/5 px-3 py-2">
-        <div className="min-w-0">
-          <p className="text-xs font-medium text-danger">Couldn’t load severity stats</p>
-          <p className="mt-0.5 truncate text-3xs text-fg-muted">{error}</p>
-        </div>
-        <button
-          type="button"
-          onClick={reload}
-          className="shrink-0 rounded-sm px-2 py-1 text-2xs font-medium hover:bg-danger-muted/40 bg-danger-muted/50 text-danger-foreground border border-danger/25 motion-safe:transition-opacity"
-        >
-          Retry
-        </button>
+      <div className="mb-3">
+        <PageLoadError error={error} resource="severity counts" onRetry={reload} />
       </div>
     )
   }
@@ -145,7 +138,7 @@ export function ReportsKpiStrip({ activeSeverity, onFilter, windowDays = 14 }: P
           <button
             key={tile.key}
             type="button"
-            onClick={() => onFilter(isActive ? '' : tile.key)}
+            onClick={() => onFilter(isActive ? '' : tile.key, windowDays)}
             aria-pressed={isActive}
             aria-label={
               isActive

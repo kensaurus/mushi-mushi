@@ -325,7 +325,13 @@ export function ConsoleLogs({ logs }: { logs: ReportDetail['console_logs'] }) {
     )
   }
   return (
-    <div className="max-h-64 overflow-y-auto rounded-sm border border-edge-subtle bg-surface-overlay/40">
+    // Scrollable, so it takes keyboard focus (axe scrollable-region-focusable).
+    <div
+      role="region"
+      aria-label="Console logs"
+      tabIndex={0}
+      className="max-h-64 overflow-y-auto rounded-sm border border-edge-subtle bg-surface-overlay/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40"
+    >
       {logs.map((log, i) => {
         const entry = log as typeof log & { correlationId?: string }
         const baseLevel = normaliseLevel(log.level)
@@ -497,7 +503,12 @@ export function NetworkLogs({
     )
   }
   return (
-    <div className="max-h-72 overflow-y-auto rounded-sm border border-edge-subtle bg-surface-overlay/40">
+    <div
+      role="region"
+      aria-label="Network requests"
+      tabIndex={0}
+      className="max-h-72 overflow-y-auto rounded-sm border border-edge-subtle bg-surface-overlay/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40"
+    >
       {logs.map((req, i) => {
         const methodCls = httpMethodPillClass(req.method)
         const slow = req.duration >= 1000

@@ -22,7 +22,9 @@ export function useMarketplaceUx(): MarketplaceUxFlags {
     isQuickstart,
     isBeginner,
     isAdvanced,
-    hideTabs: isQuickstart,
+    // Quickstart still lands on the posture tab (useQuickstartLandingTab), but the
+    // tab bar stays: hiding it left every other tab unreachable.
+    hideTabs: false,
     plainBanner: !isAdvanced,
     hideOverviewChrome: !isAdvanced,
     hideMarketplaceSnapshot: isQuickstart,

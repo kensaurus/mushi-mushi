@@ -40,6 +40,7 @@ import {
   VOICE_TRANSCRIPT_MAX_CHARS,
   type VoiceIngestResult,
 } from '../../_shared/voice-intake.ts'
+import { callerMayConfirmFromList, confirmTokenForListing, type VoiceGateRow } from '../../_shared/voice-confirm-listing.ts'
 import { classifyIngestRateLimitError } from './ingest-rate-limit.ts'
 import { resolveOwnedProject, jsonError, dbError } from '../shared.ts'
 
@@ -310,7 +311,33 @@ export function registerIntakeVoiceRoutes(app: Hono<{ Variables: Variables }>): 
       .order('created_at', { ascending: false })
       .limit(limit)
     if (error) return dbError(c, error)
-    return c.json({ ok: true, data: { sessions: data ?? [] } })
+    const sessions = (data ?? []) as unknown as Array<Record<string, unknown> & { id: string; status: string }>
+
+    // A request still waiting for its confirm carries a token the console can
+    // use after a reload, or when it came in from Telegram, Slack or a
+    // Shortcut. Signed-in editors only; API keys and viewers never get one.
+    const awaitingIds = sessions.filter((s) => s.status === 'awaiting_confirm').map((s) => s.id)
+    if (
+      awaitingIds.length > 0 &&
+      callerMayConfirmFromList({ authMethod: c.get('authMethod') as string | undefined, role: resolved.project.organization_role })
+    ) {
+      const { data: gateRows, error: gateErr } = await db
+        .from('voice_intake_sessions')
+        .select('id, status, action, transcript_sha256, confirm_token_hash, expires_at')
+        .eq('project_id', resolved.project.id)
+        .in('id', awaitingIds)
+      if (gateErr) return dbError(c, gateErr)
+      const tokens = new Map<string, string>()
+      for (const row of (gateRows ?? []) as VoiceGateRow[]) {
+        const token = await confirmTokenForListing(row)
+        if (token) tokens.set(row.id, token)
+      }
+      for (const s of sessions) {
+        const token = tokens.get(s.id)
+        if (token) s.confirm_token = token
+      }
+    }
+    return c.json({ ok: true, data: { sessions } })
   })
 
   // ── GET /v1/intake/voice/:id ───────────────────────────────────────────

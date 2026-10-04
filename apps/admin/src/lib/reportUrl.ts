@@ -24,6 +24,7 @@
 
 import { isValidProjectId } from './activeProject'
 import { scopedHref } from './humanPageHints'
+import { appUrl } from './appPath'
 
 /** In-app router path for a report detail view, preserving project scope. */
 export function reportDetailPath(reportId: string, projectId?: string | null): string {
@@ -37,9 +38,7 @@ export function reportDetailPath(reportId: string, projectId?: string | null): s
  * Safe to copy-to-clipboard or embed in Slack / Discord notifications.
  */
 export function reportPermalink(reportId: string, projectId?: string | null): string {
-  const base = (import.meta.env.BASE_URL ?? '/').replace(/\/$/, '')
-  const path = reportDetailPath(reportId, projectId)
-  return `${window.location.origin}${base}${path.startsWith('/') ? path : `/${path}`}`
+  return appUrl(reportDetailPath(reportId, projectId))
 }
 
 /**

@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { useEffect, useMemo, useState } from 'react'
 import { Card } from '../../components/ui'
 import { RevealedKeyCard } from '../RevealedKeyCard'
@@ -6,6 +7,9 @@ import { CodeInline } from '../CodePanel'
 import { apiFetch, invalidateApiCache } from '../../lib/supabase'
 import { diagnoseKey, type SdkHealthApiKey } from '../SdkHealthSummary'
 import { CHIP_TONE } from '../../lib/chipTone'
+import { RotateKeyDialog } from '../RotateKeyDialog'
+import { canRotateKey } from '../../lib/projectKeys'
+import { describeActionError } from '../../lib/actionError'
 
 /**
  * How many keys to show before collapsing behind "Show all". Long-lived
@@ -31,6 +35,7 @@ export function SdkInstallKeyPanel({
   keyPrefixes,
   onRotatedKeyChange,
   onError,
+  flat = false,
 }: {
   projectId: string
   projectSlug?: string | null
@@ -38,11 +43,16 @@ export function SdkInstallKeyPanel({
   keyPrefixes?: string[]
   onRotatedKeyChange: (key: string | null) => void
   onError: (message: string) => void
+  /** Inside a card already: draw rows, not nested cards. */
+  flat?: boolean
 }) {
+  const Box = flat ? FlatBox : Card
   const [fetchedKeys, setFetchedKeys] = useState<SdkHealthApiKey[]>([])
-  const [rotating, setRotating] = useState(false)
   const [minting, setMinting] = useState(false)
   const [rotatedKey, setRotatedKey] = useState<string | null>(null)
+  const [rotatedScopes, setRotatedScopes] = useState<string[]>(['report:write'])
+  // The one key the user asked to rotate; the confirm lists exactly this key.
+  const [pendingRotate, setPendingRotate] = useState<SdkHealthApiKey | null>(null)
   const [showAll, setShowAll] = useState(false)
 
   useEffect(() => {
@@ -101,18 +111,25 @@ export function SdkInstallKeyPanel({
    */
   async function mintSdkKey() {
     setMinting(true)
-    const res = await apiFetch<{ key: string; prefix: string }>(`/v1/admin/projects/${projectId}/keys`, {
-      method: 'POST',
-      body: JSON.stringify({ scopes: ['report:write'] }),
-    })
+    const res = await apiFetch<{ id?: string | null; key: string; prefix: string; label?: string }>(
+      `/v1/admin/projects/${projectId}/keys`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ scopes: ['report:write'] }),
+        idempotencyKey: crypto.randomUUID(),
+      },
+    )
     setMinting(false)
     if (res.ok && res.data?.key) {
       setRotatedKey(res.data.key)
+      setRotatedScopes(['report:write'])
       setFetchedKeys((prev) => [
         {
-          id: res.data!.prefix,
+          // The real row id (when the API sends it) lets this key be rotated later.
+          id: res.data!.id ?? res.data!.prefix,
           key_prefix: res.data!.prefix,
-          label: 'sdk-ingest',
+          label: res.data!.label ?? 'sdk-ingest',
+          scopes: ['report:write'],
           is_active: true,
           created_at: new Date().toISOString(),
         },
@@ -120,36 +137,14 @@ export function SdkInstallKeyPanel({
       ])
       invalidateApiCache('/v1/admin/projects')
     } else {
-      onError(res.error?.message ?? 'Key mint failed')
-    }
-  }
-
-  async function rotateKey() {
-    setRotating(true)
-    const res = await apiFetch<{ key: string; prefix: string }>(`/v1/admin/projects/${projectId}/keys/rotate`, {
-      method: 'POST',
-    })
-    setRotating(false)
-    if (res.ok && res.data?.key) {
-      setRotatedKey(res.data.key)
-      setFetchedKeys([
-        {
-          id: res.data.prefix,
-          key_prefix: res.data.prefix,
-          is_active: true,
-          created_at: new Date().toISOString(),
-        },
-      ])
-      invalidateApiCache('/v1/admin/projects')
-    } else {
-      onError(res.error?.message ?? 'Key rotation failed')
+      onError(describeActionError(res.error, 'Could not mint an SDK key. Try again in a moment.'))
     }
   }
 
   return (
     <>
       {!apiKey && activeKeys.length > 0 && (
-        <Card  className="px-3 py-2.5 space-y-2">
+        <Box className={flat ? 'space-y-2' : 'px-3 py-2.5 space-y-2'}>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-2xs font-medium text-fg-secondary">
               Active API key{activeKeys.length > 1 ? 's' : ''}
@@ -161,11 +156,6 @@ export function SdkInstallKeyPanel({
               >
                 <Btn size="sm" variant="primary" disabled={minting} onClick={() => void mintSdkKey()}>
                   {minting ? 'Minting…' : 'Mint SDK key'}
-                </Btn>
-              </Tooltip>
-              <Tooltip content="Revokes existing keys and replaces them with one new secret." side="top">
-                <Btn size="sm" variant="ghost" disabled={rotating} onClick={() => void rotateKey()}>
-                  {rotating ? 'Rotating…' : 'Rotate key'}
                 </Btn>
               </Tooltip>
             </div>
@@ -201,6 +191,21 @@ export function SdkInstallKeyPanel({
                         </span>
                       </Tooltip>
                     )}
+                    {canRotateKey(k) && (
+                      <Tooltip
+                        content="Replace this one key. You confirm first; your other keys keep working."
+                        side="top"
+                      >
+                        <Btn
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setPendingRotate(k)}
+                          aria-label={`Rotate key ${k.key_prefix}`}
+                        >
+                          Rotate
+                        </Btn>
+                      </Tooltip>
+                    )}
                     <CopyButton value={k.key_prefix} label="Copy prefix" copiedLabel="Copied" size="sm" />
                   </div>
                 </li>
@@ -221,18 +226,53 @@ export function SdkInstallKeyPanel({
             Full secret shown once at mint or rotate. “Never used” keys were minted but no app has
             authenticated with them yet.
           </p>
-        </Card>
+        </Box>
       )}
 
       {!apiKey && activeKeys.length === 0 && (
-        <Card  className="px-3 py-2.5 flex flex-wrap items-center justify-between gap-2">
+        <Box className={flat ? 'flex flex-wrap items-center justify-between gap-2' : 'px-3 py-2.5 flex flex-wrap items-center justify-between gap-2'}>
           <span className="text-2xs text-fg-secondary">
             No API key yet — mint one and it drops straight into the snippet below.
           </span>
           <Btn size="sm" variant="primary" disabled={minting} onClick={() => void mintSdkKey()}>
             {minting ? 'Minting…' : 'Mint SDK key'}
           </Btn>
-        </Card>
+        </Box>
+      )}
+
+      {pendingRotate && (
+        <RotateKeyDialog
+          projectId={projectId}
+          apiKey={pendingRotate}
+          onCancel={() => setPendingRotate(null)}
+          onError={(message) => {
+            setPendingRotate(null)
+            onError(message)
+          }}
+          onRotated={(rotated) => {
+            const old = pendingRotate
+            setPendingRotate(null)
+            setRotatedKey(rotated.key)
+            setRotatedScopes(rotated.scopes)
+            setFetchedKeys((prev) => [
+              {
+                id: rotated.id ?? rotated.prefix,
+                key_prefix: rotated.prefix,
+                label: rotated.label,
+                scopes: rotated.scopes,
+                is_active: true,
+                created_at: new Date().toISOString(),
+              },
+              ...(rotated.oldKeyStillActive ? prev : prev.filter((k) => k.id !== old.id)),
+            ])
+            invalidateApiCache('/v1/admin/projects')
+            if (rotated.oldKeyStillActive) {
+              onError(
+                `New key created, but ${old.key_prefix}… is still active. Revoke it under Projects → Your projects → Keys.`,
+              )
+            }
+          }}
+        />
       )}
 
       {rotatedKey && (
@@ -241,10 +281,15 @@ export function SdkInstallKeyPanel({
           projectName={projectSlug ?? 'project'}
           projectSlug={projectSlug}
           apiKey={rotatedKey}
-          scopes={['report:write']}
+          scopes={rotatedScopes}
           onDismiss={() => setRotatedKey(null)}
         />
       )}
     </>
   )
+}
+
+/** A plain block for `flat` mode, same props as Card. */
+function FlatBox({ className, children }: { className?: string; children: ReactNode }) {
+  return <div className={className}>{children}</div>
 }

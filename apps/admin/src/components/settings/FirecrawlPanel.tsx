@@ -1,31 +1,36 @@
 /**
  * FILE: apps/admin/src/components/settings/FirecrawlPanel.tsx
- * PURPOSE: BYOK config for Firecrawl — the optional web-research provider used
- *          by the Research page, fix-augmentation, and the library modernizer.
- *          Manages key, allowed domains, per-call page cap, and live test.
+ * PURPOSE: Settings → Web crawl. Firecrawl reads public web pages (library
+ *          docs, your live app) for Research, fix context and the library
+ *          modernizer. Three rows: the key, which websites may be read, and
+ *          how many pages one lookup may read.
+ *
+ *          The key's status comes from the same saved-keys list and rules as
+ *          the AI keys tab (keyStatus.ts), so the two tabs always agree.
+ *          Keys are added to the pool ('/v1/admin/byok/keys'); a key saved
+ *          before pools existed (legacy BYOK) is tested and removed through
+ *          the single-key routes.
  */
 
 import { useState } from 'react';
 import { apiFetch } from '../../lib/supabase';
 import { usePageData } from '../../lib/usePageData';
-import { Section, Btn, ErrorAlert, ResultChip } from '../ui';
+import { Btn, ErrorAlert, ResultChip, SecretInput } from '../ui';
+import { BrandIcon } from '../ui/BrandIcon';
+import { IconGlobe, IconGauge } from '../icons';
 import { PanelSkeleton } from '../skeletons/PanelSkeleton';
 import { ConfigHelp } from '../ConfigHelp';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { SettingsChangeHint } from './SettingsChangeHint';
 import { SettingsFormFooter } from './SettingsFormFooter';
-import { SettingsCard, SettingsPanelLayout } from './SettingsPanelLayout';
 import { countChangedFields, valuesEqual } from './settingsDiff';
-import { ConfiguredSecretField } from './ConfiguredSecretField';
-import { ContainedBlock, InlineProof, SignalChip } from '../report-detail/ReportSurface';
 import { useEntitlements } from '../../lib/useEntitlements';
 import { UpgradePrompt } from '../billing/UpgradePrompt';
-import {
-  providerPoolKeys,
-  selectPrimaryProviderKey,
-  type PoolKey,
-  type PoolTestStatus,
-} from './byokPool';
+import { describeByokError, describeByokTestResult } from '../../lib/byokErrors';
+import { providerPoolKeys, selectPrimaryProviderKey, type PoolTestStatus } from './byokPool';
+import { useByokPool } from './ByokPoolContext';
+import { providerStatusView } from './keyStatus';
+import { SettingsList, SettingsRow } from './SettingsRow';
 
 interface FirecrawlConfig {
   configured: boolean;
@@ -38,15 +43,7 @@ interface FirecrawlConfig {
   maxPagesPerCall: number;
 }
 
-const TEST_STATUS_LABEL: Record<
-  NonNullable<FirecrawlConfig['testStatus']>,
-  { label: string; tone: 'ok' | 'warn' | 'danger' }
-> = {
-  ok: { label: 'Connection OK', tone: 'ok' },
-  error_auth: { label: 'Auth failed', tone: 'danger' },
-  error_network: { label: 'Network/endpoint error', tone: 'danger' },
-  error_quota: { label: 'Quota / rate limit', tone: 'warn' },
-};
+const NAME = 'Firecrawl';
 
 export function FirecrawlPanel() {
   const entitlements = useEntitlements();
@@ -57,15 +54,13 @@ export function FirecrawlPanel() {
     error,
     reload: reloadConfig,
   } = usePageData<FirecrawlConfig>('/v1/admin/byok/firecrawl');
-  const {
-    data: poolData,
-    loading: poolLoading,
-    error: poolError,
-    reload: reloadPool,
-  } = usePageData<{ keys: PoolKey[] }>(byokLocked ? null : '/v1/admin/byok/keys');
+  const pool = useByokPool(!byokLocked);
   const cfg = data ?? null;
-  const poolKeys = providerPoolKeys(poolData?.keys ?? [], 'firecrawl');
+  const allKeys = pool.data?.keys ?? [];
+  const legacyKeys = pool.data?.legacyKeys ?? [];
+  const poolKeys = providerPoolKeys(allKeys, 'firecrawl');
   const poolKey = selectPrimaryProviderKey(poolKeys, 'firecrawl');
+  const legacyKey = legacyKeys.find((k) => k.provider_slug === 'firecrawl') ?? null;
 
   const [pending, setPending] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -95,7 +90,7 @@ export function FirecrawlPanel() {
 
   function reload() {
     reloadConfig();
-    reloadPool();
+    pool.reload();
   }
 
   function resetDraft() {
@@ -120,11 +115,14 @@ export function FirecrawlPanel() {
     });
     if (!configRes.ok) {
       setPending(false);
-      setFeedback({ ok: false, message: configRes.error?.message ?? 'Failed to save.' });
+      setFeedback({
+        ok: false,
+        message: describeByokError(configRes.error, 'Your changes were not saved. Retry in a moment.').message,
+      });
       return;
     }
 
-    let validation: { status?: PoolTestStatus; latencyMs?: number } | undefined;
+    let validation: { status?: PoolTestStatus; latencyMs?: number; detail?: string } | undefined;
     if (keyDirty) {
       const keyRes = await apiFetch('/v1/admin/byok/keys', {
         method: 'POST',
@@ -138,7 +136,9 @@ export function FirecrawlPanel() {
         setPending(false);
         setFeedback({
           ok: false,
-          message: `Provider settings saved, but the key was not added: ${keyRes.error?.message ?? 'validation failed.'}`,
+          message: `Websites and page limit saved, but the key was not added. ${
+            describeByokError(keyRes.error, 'Retry in a moment.').message
+          }`,
         });
         reload();
         return;
@@ -148,14 +148,17 @@ export function FirecrawlPanel() {
 
     setPending(false);
     setKeyDraft('');
-    setFeedback({
-      ok: !keyDirty || validation?.status === 'ok',
-      message: !keyDirty
-        ? 'Settings saved.'
-        : validation?.status === 'ok'
-          ? `Saved and validated${validation.latencyMs != null ? ` (${validation.latencyMs} ms)` : ''}.`
-          : 'Saved but the provider did not validate this key. It remains quarantined until a test passes.',
-    });
+    if (!keyDirty) {
+      setFeedback({ ok: true, message: 'Saved.' });
+    } else {
+      const result = describeByokTestResult(validation ?? {}, NAME);
+      setFeedback({
+        ok: result.ok,
+        message: result.ok
+          ? `Saved. ${result.message}`
+          : `Saved, but Mushi won't use the key until a test passes. ${result.message}`,
+      });
+    }
     reload();
   }
 
@@ -171,13 +174,14 @@ export function FirecrawlPanel() {
       setKeyDraft('');
       setFeedback({
         ok: true,
-        message: poolKey
-          ? 'Selected pooled key removed. Any remaining validated key will take over automatically.'
-          : 'Legacy key cleared.',
+        message: 'Key removed. Any other working Firecrawl key takes over automatically.',
       });
       reload();
     } else {
-      setFeedback({ ok: false, message: res.error?.message ?? 'Failed to clear key.' });
+      setFeedback({
+        ok: false,
+        message: describeByokError(res.error, 'The key was not removed. Retry in a moment.').message,
+      });
     }
   }
 
@@ -190,17 +194,13 @@ export function FirecrawlPanel() {
       }>(`/v1/admin/byok/keys/${poolKey.id}/test`, { method: 'POST' });
       setTesting(false);
       if (res.ok && res.data) {
-        const validation = res.data.validation;
-        setFeedback({
-          ok: validation.status === 'ok',
-          message:
-            validation.status === 'ok'
-              ? `Connection OK (${validation.latencyMs} ms)`
-              : `Test failed: ${validation.status} — ${validation.detail}`,
-        });
+        setFeedback(describeByokTestResult(res.data.validation, NAME));
         reload();
       } else {
-        setFeedback({ ok: false, message: res.error?.message ?? 'Test failed.' });
+        setFeedback({
+          ok: false,
+          message: describeByokError(res.error, 'The test did not run. Retry in a moment.').message,
+        });
       }
       return;
     }
@@ -211,211 +211,170 @@ export function FirecrawlPanel() {
     );
     setTesting(false);
     if (res.ok && res.data) {
-      const okMsg =
-        res.data.status === 'ok'
-          ? `Connection OK (${res.data.latencyMs} ms)`
-          : `Test failed: ${res.data.status} — ${res.data.detail}`;
-      setFeedback({ ok: res.data.status === 'ok', message: okMsg });
+      setFeedback(describeByokTestResult(res.data, NAME));
       reload();
     } else {
-      setFeedback({ ok: false, message: res.error?.message ?? 'Test failed.' });
+      setFeedback({
+        ok: false,
+        message: describeByokError(res.error, 'The test did not run. Retry in a moment.').message,
+      });
     }
   }
 
   if (byokLocked) {
     return (
-      <SettingsPanelLayout>
-        <Section title="Firecrawl (BYOK — Web Research)" className="lg:col-span-2 space-y-3">
+      <SettingsList title="Web research (Firecrawl)">
+        <div className="py-3">
           <UpgradePrompt flag="byok" currentPlan={entitlements.planName} />
-        </Section>
-      </SettingsPanelLayout>
+        </div>
+      </SettingsList>
     );
   }
 
-  if (entitlements.loading || loading || poolLoading) {
+  if (entitlements.loading || loading || pool.loading) {
     return <PanelSkeleton rows={3} label="Loading Firecrawl status" inCard={false} />;
   }
-  if (error || poolError) {
+  if (error || pool.error) {
     return (
       <ErrorAlert
-        message={`Failed to load Firecrawl status: ${error ?? poolError}`}
+        message={`Couldn't load the Firecrawl settings: ${error ?? pool.error}`}
         onRetry={reload}
       />
     );
   }
 
-  const configured = Boolean(poolKey || cfg?.configured);
-  const effectiveTestStatus = poolKey?.test_status ?? cfg?.testStatus ?? null;
-  const keyHint = poolKey?.key_hint ?? cfg?.keyHint ?? null;
-  const addedAt = poolKey?.created_at ?? cfg?.addedAt ?? null;
-  const lastUsedAt = poolKey?.last_used_at ?? cfg?.lastUsedAt ?? null;
-  const testedAt = poolKey?.last_tested_at ?? cfg?.testedAt ?? null;
-  const statusMeta = effectiveTestStatus ? TEST_STATUS_LABEL[effectiveTestStatus] : null;
+  const configured = Boolean(poolKey || legacyKey || cfg?.configured);
+  const status = providerStatusView('firecrawl', allKeys, legacyKeys, {
+    providerName: NAME,
+    emptyDetail: "No key of your own. Web research uses Mushi's shared key when the server has one.",
+  });
+  const keyHint = poolKey?.key_hint ?? legacyKey?.key_hint ?? cfg?.keyHint ?? null;
 
   return (
-    <SettingsPanelLayout
-      fullWidth={
-        <ContainedBlock tone="muted">
-          <p className="text-2xs leading-relaxed text-fg-muted">
-            <strong className="text-fg-secondary">Optional integration.</strong> Brings{' '}
-            <span className="font-mono">firecrawl.dev</span> under your own key for Research search,
-            fix-worker web augmentation, and the library modernizer cron. Keys live in Supabase
-            Vault; calls are cached 24h and bounded by the per-call page cap.
-          </p>
-        </ContainedBlock>
-      }
-      footer={
-        <SettingsFormFooter
-          dirty={dirty}
-          saving={pending}
-          changeCount={changeCount}
-          onSave={() => void save()}
-          onDiscard={resetDraft}
-          saveLabel={keyDirty ? 'Save & validate' : 'Save changes'}
-        />
-      }
-    >
-      <Section title="Firecrawl (BYOK — Web Research)" className="lg:col-span-2 space-y-3">
-        {cfg && (
-          <SettingsCard>
-            <div className="flex items-center gap-2 flex-wrap">
-              <SignalChip tone="brand">Firecrawl</SignalChip>
-              <SignalChip tone={configured ? 'ok' : 'neutral'}>
-                {configured ? (poolKey ? 'pooled BYOK' : 'legacy BYOK') : 'not configured'}
-              </SignalChip>
-              {poolKeys.length > 1 && (
-                <SignalChip tone="neutral">{poolKeys.length} pooled keys</SignalChip>
-              )}
-              {statusMeta && (
-                <SignalChip
-                  tone={
-                    statusMeta.tone === 'ok' ? 'ok' : statusMeta.tone === 'warn' ? 'warn' : 'danger'
-                  }
+    <>
+      <SettingsList
+        title="Web research (Firecrawl)"
+        description="Optional. Lets Mushi read public web pages, such as library docs, when it researches a bug or suggests a library update. Results are cached for a day."
+      >
+        <SettingsRow
+          icon={<BrandIcon brand="firecrawl" size={18} decorative />}
+          title="Firecrawl key"
+          purpose={
+            keyHint
+              ? <>Your key <span className="font-mono">{keyHint}</span>{poolKeys.length > 1 ? `, plus ${poolKeys.length - 1} backup${poolKeys.length > 2 ? 's' : ''}` : ''}.</>
+              : 'Use your own Firecrawl account instead of the shared one.'
+          }
+          status={status}
+          action={
+            configured ? (
+              <>
+                <Btn size="sm" variant="ghost" onClick={testKey} loading={testing}>
+                  Test
+                </Btn>
+                <Btn
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setConfirmingClear(true)}
+                  disabled={pending}
                 >
-                  {statusMeta.label}
-                </SignalChip>
-              )}
-            </div>
-
-            {configured && (
-              <InlineProof>
-                Added {addedAt ? new Date(addedAt).toLocaleString() : 'unknown'}
-                {lastUsedAt && <> · last used {new Date(lastUsedAt).toLocaleString()}</>}
-                {testedAt && <> · tested {new Date(testedAt).toLocaleString()}</>}
-              </InlineProof>
-            )}
-
-            <ConfiguredSecretField
-              label="Firecrawl API key"
-              helpId="settings.firecrawl.api_key"
-              configured={configured}
-              keyHint={keyHint}
-              fallbackPrefix="fc-"
-              value={keyDraft}
-              onChange={setKeyDraft}
-              placeholder="fc-…"
-            />
-            {keyDirty && configured && (
-              <SettingsChangeHint
-                current={keyDraft}
-                saved={keyHint ?? '(configured)'}
-                kind="text"
-                prefix="Replacing"
-              />
-            )}
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
-              <label className="block">
-                <ContainedBlock tone="muted" className="mb-1">
-                  <span className="text-2xs text-fg-muted flex items-center gap-1">
-                    <span>
-                      Allowed domains{' '}
-                      <span className="text-fg-faint">(one per line — empty = unrestricted)</span>
-                    </span>
-                    <ConfigHelp helpId="settings.firecrawl.allowed_domains" />
-                  </span>
-                </ContainedBlock>
-                <textarea
-                  // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
-                  className="w-full text-2xs font-mono px-2 py-1.5 rounded-sm bg-surface-raised border border-edge focus:border-accent outline-none min-h-[64px]"
-                  value={domains}
-                  onChange={(e) => setDomainsDraft(e.target.value)}
-                  placeholder={'github.com\nstackoverflow.com\nreact.dev'}
-                />
-                <SettingsChangeHint current={domains} saved={savedDomains} />
-              </label>
-
-              <label className="block">
-                <ContainedBlock tone="muted" className="mb-1">
-                  <span className="text-2xs text-fg-muted flex items-center gap-1">
-                    <span>
-                      Max pages per call:{' '}
-                      <span className="font-mono text-fg-secondary">{pages}</span>
-                    </span>
-                    <ConfigHelp helpId="settings.firecrawl.max_pages_per_call" />
-                  </span>
-                </ContainedBlock>
-                <input
-                  type="range"
-                  min="1"
-                  max="20"
-                  step="1"
-                  className="w-full accent-brand"
-                  value={pages}
-                  onChange={(e) => setPagesDraft(parseInt(e.target.value, 10))}
-                />
-                <SettingsChangeHint current={pages} saved={savedPages} kind="number" />
-              </label>
-            </div>
-
-            <div className="flex items-center gap-2 flex-wrap">
-              {configured && (
-                <>
-                  <Btn size="sm" variant="ghost" onClick={testKey} loading={testing}>
-                    Test connection
-                  </Btn>
-                  <Btn
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => setConfirmingClear(true)}
-                    disabled={pending}
-                  >
-                    Clear
-                  </Btn>
-                </>
-              )}
-              {testing && !feedback ? (
-                <ResultChip tone="running">Testing…</ResultChip>
-              ) : feedback ? (
-                <ResultChip tone={feedback.ok ? 'success' : 'error'}>{feedback.message}</ResultChip>
-              ) : null}
-            </div>
-          </SettingsCard>
-        )}
-
-        {confirmingClear && (
-          <ConfirmDialog
-            title={
-              poolKey
-                ? 'Remove the selected Firecrawl pool key?'
-                : 'Clear the legacy Firecrawl API key?'
-            }
-            body={
-              poolKey
-                ? 'This removes the selected key and its Vault secret. Another validated pooled or legacy key can take over automatically.'
-                : 'Research, fix-augmentation, and the library modernizer will stop until a validated pooled or legacy key is added.'
-            }
-            confirmLabel={poolKey ? 'Remove key' : 'Clear key'}
-            cancelLabel="Keep key"
-            tone="danger"
-            loading={pending}
-            onConfirm={() => void confirmClearKey()}
-            onCancel={() => {
-              if (!pending) setConfirmingClear(false);
-            }}
+                  Remove
+                </Btn>
+              </>
+            ) : (
+              <a
+                href="https://www.firecrawl.dev/app/api-keys"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-accent-foreground underline underline-offset-2"
+              >
+                Get a key ↗
+              </a>
+            )
+          }
+        >
+          <SecretInput
+            label={configured ? 'Replace the key' : 'Paste your Firecrawl key'}
+            value={keyDraft}
+            onChange={(e) => setKeyDraft(e.target.value)}
+            placeholder="fc-…"
           />
-        )}
-      </Section>
-    </SettingsPanelLayout>
+          {testing && !feedback ? (
+            <ResultChip tone="running">Testing…</ResultChip>
+          ) : feedback ? (
+            <ResultChip tone={feedback.ok ? 'success' : 'error'}>{feedback.message}</ResultChip>
+          ) : null}
+        </SettingsRow>
+
+        <SettingsRow
+          icon={<IconGlobe size={16} />}
+          title="Allowed websites"
+          purpose="Only these websites are read, one per line. Leave empty to allow any public website."
+        >
+          <label className="block">
+            <span className="sr-only">Allowed websites, one per line</span>
+            <textarea
+              // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
+              className="w-full min-h-[88px] rounded-sm border border-edge bg-surface-raised px-2 py-1.5 font-mono text-sm outline-none focus:border-accent"
+              value={domains}
+              onChange={(e) => setDomainsDraft(e.target.value)}
+              placeholder={'github.com\nstackoverflow.com\nreact.dev'}
+            />
+          </label>
+          <SettingsChangeHint current={domains} saved={savedDomains} />
+        </SettingsRow>
+
+        <SettingsRow
+          icon={<IconGauge size={16} />}
+          title="Pages per lookup"
+          purpose="The most pages one lookup may read. Lower keeps costs down; higher finds more."
+          status={
+            <span className="flex items-center gap-1 text-sm text-fg-secondary">
+              <span className="font-mono">{pages}</span> {pages === 1 ? 'page' : 'pages'}
+              <ConfigHelp helpId="settings.firecrawl.max_pages_per_call" />
+            </span>
+          }
+        >
+          <input
+            type="range"
+            min="1"
+            max="50"
+            step="1"
+            aria-label="Pages per lookup"
+            className="w-full accent-brand"
+            value={pages}
+            onChange={(e) => setPagesDraft(parseInt(e.target.value, 10))}
+          />
+          <SettingsChangeHint current={pages} saved={savedPages} kind="number" />
+        </SettingsRow>
+      </SettingsList>
+
+      <SettingsFormFooter
+        dirty={dirty}
+        saving={pending}
+        changeCount={changeCount}
+        onSave={() => void save()}
+        onDiscard={resetDraft}
+        saveLabel={keyDirty ? 'Save & validate' : 'Save changes'}
+      />
+
+      {confirmingClear && (
+        <ConfirmDialog
+          title={poolKey ? 'Remove this Firecrawl key?' : 'Remove your old Firecrawl key?'}
+          body={
+            poolKey
+              ? 'The key is deleted for good. Another working Firecrawl key you saved takes over automatically.'
+              : 'Research, fix context and library updates switch to another working Firecrawl key. With none, they stop until you add one.'
+          }
+          confirmLabel="Remove key"
+          cancelLabel="Keep key"
+          tone="danger"
+          loading={pending}
+          onConfirm={() => void confirmClearKey()}
+          onCancel={() => {
+            if (!pending) setConfirmingClear(false);
+          }}
+        />
+      )}
+    </>
   );
 }

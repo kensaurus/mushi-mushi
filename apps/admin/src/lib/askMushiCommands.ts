@@ -19,8 +19,6 @@ export type SlashEffect =
   | { kind: 'prepend'; text: string; intent?: AskMushiIntent }
   /** Locally clear the conversation (start a new thread). */
   | { kind: 'local'; action: 'clear' | 'help' }
-  /** Override the model used for the next turn. */
-  | { kind: 'model-override'; model: 'sonnet' | 'haiku' | 'gpt' }
 
 export interface SlashCommand {
   /** Token typed by the user, including the leading slash. */
@@ -84,27 +82,6 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
     hint: 'Ask the model to cite report ids.',
     aliases: ['sources'],
     effect: { kind: 'prepend', text: 'Cite specific report or fix ids for every claim:', intent: 'cite' },
-  },
-  {
-    command: '/model:sonnet',
-    label: 'Use Sonnet',
-    hint: 'Force Anthropic Sonnet for the next turn.',
-    aliases: ['claude'],
-    effect: { kind: 'model-override', model: 'sonnet' },
-  },
-  {
-    command: '/model:haiku',
-    label: 'Use Haiku',
-    hint: 'Force Anthropic Haiku — cheaper, faster, less accurate.',
-    aliases: ['fast'],
-    effect: { kind: 'model-override', model: 'haiku' },
-  },
-  {
-    command: '/model:gpt',
-    label: 'Use GPT',
-    hint: 'Force the OpenAI fallback model.',
-    aliases: ['openai'],
-    effect: { kind: 'model-override', model: 'gpt' },
   },
   {
     command: '/howto',

@@ -25,6 +25,7 @@
     "@ai-sdk/ui-utils": "1.2.11",
     "@mushi-mushi/tsconfig": "workspace:*",
     "@supabase/supabase-js": "^2.108.2",
+    "hono": "^4.13.7",
     "supabase": "^2.108.0",
     "typescript": "^6.0.3",
     "vitest": "^4.1.9",

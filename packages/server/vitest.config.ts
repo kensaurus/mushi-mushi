@@ -26,6 +26,7 @@ const npmStubResolver = {
     if (!id.startsWith('npm:')) return null
     if (id === 'npm:zod@3') return null // handled by alias below
     if (id === 'npm:yaml@2') return null // handled by alias below
+    if (id === 'npm:hono@4') return null // handled by alias below
     return STUB
   },
 }
@@ -53,6 +54,11 @@ export default defineConfig({
       // inventory.yaml. The Node-side test runs against the actually
       // installed `yaml` package so the parser behaves identically.
       'npm:yaml@2': 'yaml',
+      // Route modules build sub-routers with `new Hono()`. Route tests mount
+      // them on a real app and send requests, so the bare specifier maps to
+      // the installed `hono` (a dev dependency); sub-paths such as
+      // `npm:hono@4/cors` resolve inside the same package.
+      'npm:hono@4': 'hono',
     },
   },
 })

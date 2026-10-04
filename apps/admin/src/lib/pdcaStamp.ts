@@ -3,9 +3,8 @@
  * PURPOSE: Single source of truth for the visual language of a PDCA stage
  *          status stamp ("Done", "In flight", "Blocked", "Failed", "Not yet").
  *
- *          Three surfaces consume these tokens — PdcaReceipt (fix row strip),
- *          PdcaReceiptStrip (report-detail compact grid), and ReportPdcaStory
- *          (storytelling vertical timeline). Keeping the palette + icon map
+ *          Two surfaces consume these tokens — PdcaReceipt (fix row strip)
+ *          and ReportPdcaStory (the report page's vertical timeline). Keeping the palette + icon map
  *          in one file means "done" always reads the same green-glow across
  *          every page, and adding a new stamp (e.g. 'skipped') is a
  *          single-line change.

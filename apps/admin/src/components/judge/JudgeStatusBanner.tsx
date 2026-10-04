@@ -85,7 +85,7 @@ export function JudgeStatusBanner({
           ) : (
             <StatusBannerAction
               label={actions.reports ?? 'Open Reports'}
-              to={scopedHref('/reports?tab=queue', pid)}
+              to={scopedHref('/reports?status=new', pid)}
               tone="brand"
             />
           )

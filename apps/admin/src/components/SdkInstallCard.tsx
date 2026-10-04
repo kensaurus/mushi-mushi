@@ -214,7 +214,13 @@ export function SdkInstallCard({
       {showConnectionStatus && (
         <div className="flex flex-wrap items-center gap-2">
           <ConnectionStatus compact />
-          <span className="text-2xs text-fg-muted">Shows ✓ when the SDK heartbeat or first report lands.</span>
+          {/* This only checks that the console reaches the Mushi backend; it
+              said it tracked the SDK heartbeat, so "All systems healthy"
+              showed before any SDK was installed (QA bug 140). */}
+          <span className="text-2xs text-fg-muted">
+            Checks that Mushi&apos;s backend is reachable. Whether your app&apos;s SDK has checked in shows on each key
+            below (&ldquo;Never used&rdquo; until its first heartbeat).
+          </span>
         </div>
       )}
 
@@ -225,6 +231,7 @@ export function SdkInstallCard({
         keyPrefixes={keyPrefixes}
         onRotatedKeyChange={handleRotatedKeyChange}
         onError={handleKeyError}
+        flat={embedded}
       />
 
       {!compact && (
@@ -245,7 +252,7 @@ export function SdkInstallCard({
         {/* ─── LEFT COLUMN: live preview + configurator ─── */}
         {/* Hidden for server frameworks — the widget only runs in browsers. */}
         {isServerFramework(framework) ? (
-          <Card  className="px-4 py-3 text-2xs text-fg-secondary leading-relaxed">
+          <SdkInstallShell embedded={embedded} className={`${embedded ? '' : 'px-4 py-3 '}text-xs text-fg-secondary leading-relaxed`}>
             <p className="font-medium text-fg mb-1">Server-side capture</p>
             <p>
               <code className="px-1 py-0.5 rounded-sm bg-surface-overlay font-mono">@mushi-mushi/node</code>{' '}
@@ -258,7 +265,7 @@ export function SdkInstallCard({
               <code className="px-1 py-0.5 rounded-sm bg-surface-overlay font-mono">MUSHI_API_KEY</code> to your
               deployment env. Copy the snippet on the right into your instrumentation file.
             </p>
-          </Card>
+          </SdkInstallShell>
         ) : (
         <div className="space-y-3">
           <div>

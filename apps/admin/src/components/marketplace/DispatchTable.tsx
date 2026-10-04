@@ -70,7 +70,7 @@ export function DispatchTable({
                 return (
                   <Fragment key={d.id}>
                     <tr
-                      className="border-t border-edge-subtle hover:bg-surface-overlay/30 cursor-pointer"
+                      className={`border-t border-edge-subtle hover:bg-surface-overlay/30${hasResponse ? ' cursor-pointer' : ''}`}
                       onClick={() =>
                         hasResponse && setExpandedDelivery(isExpanded ? null : d.id)
                       }
@@ -93,15 +93,28 @@ export function DispatchTable({
                       </td>
                       {/* mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas) */}
                       <td className="px-2 py-1.5 max-w-[28ch] truncate">
-                        {hasResponse
-                          ? isExpanded
-                            ? '▾ collapse'
-                            : `▸ ${d.response_excerpt?.slice(0, 32)}…`
-                          : '—'}
+                        {hasResponse ? (
+                          // A real button so the excerpt is reachable by keyboard;
+                          // the row click stays as a mouse shortcut.
+                          <button
+                            type="button"
+                            aria-expanded={isExpanded}
+                            aria-controls={`delivery-response-${d.id}`}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setExpandedDelivery(isExpanded ? null : d.id)
+                            }}
+                            className="max-w-full truncate text-left underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 rounded-sm"
+                          >
+                            {isExpanded ? '▾ collapse' : `▸ ${d.response_excerpt?.slice(0, 32)}…`}
+                          </button>
+                        ) : (
+                          '—'
+                        )}
                       </td>
                     </tr>
                     {isExpanded && hasResponse && (
-                      <tr className="bg-surface-overlay/30 border-t border-edge-subtle">
+                      <tr id={`delivery-response-${d.id}`} className="bg-surface-overlay/30 border-t border-edge-subtle">
                         <td colSpan={7} className="px-3 py-2">
                           <div className="text-3xs text-fg-muted uppercase tracking-wider mb-1">
                             Full response · delivery {d.delivery_id.slice(0, 8)}…

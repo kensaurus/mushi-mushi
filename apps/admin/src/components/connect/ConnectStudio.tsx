@@ -21,6 +21,7 @@ import {
 } from '@mushi-mushi/marketing-ui'
 import { ClientConnectButton } from '../ClientConnectButton'
 import { CopyButton, Panel } from '../ui'
+import { BrandIcon, resolveBrand } from '../ui/BrandIcon'
 import { LINK_ACCENT } from '../../lib/chipTone'
 import { IconTerminal } from '../icons'
 import { RESOLVED_EXTERNAL_API_URL, RESOLVED_MCP_HTTP_URL } from '../../lib/env'
@@ -109,10 +110,13 @@ function SkillsLane({ client }: { client: McpClientDef }) {
           <CopyButton value={skillsCmd} label="Copy" copiedLabel="Copied" size="sm" />
         </div>
         <p className="text-2xs text-fg-muted">
-          Adds <code className="font-mono text-2xs">mushi-health</code>,{' '}
-          <code className="font-mono text-2xs">mushi-integration</code>,{' '}
-          <code className="font-mono text-2xs">workflow-fix-and-ship</code> and more to{' '}
-          {client.label}.
+          {/* The repo's skills/ folder ships these five; workflow-fix-and-ship
+              is not one of them (QA bug 267). */}
+          Adds <code className="font-mono text-2xs">mushi-setup</code>,{' '}
+          <code className="font-mono text-2xs">mushi-health</code>,{' '}
+          <code className="font-mono text-2xs">mushi-debug</code>,{' '}
+          <code className="font-mono text-2xs">mushi-integration</code> and{' '}
+          <code className="font-mono text-2xs">mushi-mushi</code> to {client.label}.
         </p>
       </div>
       <div className="rounded-md border border-edge-subtle bg-surface-hover/30 p-3 text-xs text-fg-muted space-y-1">
@@ -173,6 +177,7 @@ export function ConnectStudio({ projectId, projectName }: ConnectStudioProps) {
             mcpHttpUrl={RESOLVED_MCP_HTTP_URL}
             variant="primary"
             size="md"
+            accessChoice
           />
         ) : (
           <div className="rounded-md border border-edge-subtle bg-surface-hover/30 px-3 py-2 text-xs text-fg-muted">
@@ -206,7 +211,13 @@ export function ConnectStudio({ projectId, projectName }: ConnectStudioProps) {
             activeLane={activeLane}
             onLaneChange={setActiveLane}
             renderLane={renderLane}
-            renderClientIcon={(id) => renderConnectClientIcon(id, 16)}
+            renderClientIcon={(id) =>
+              resolveBrand(id) ? (
+                <BrandIcon brand={id} size={16} decorative />
+              ) : (
+                renderConnectClientIcon(id, 16)
+              )
+            }
           />
         </div>
       </Panel>

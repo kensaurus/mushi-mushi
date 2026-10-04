@@ -24,6 +24,8 @@ function navCounts(overrides: Partial<NavCounts> & { slices?: Partial<NavStatSli
     fixesInFlight: 0,
     fixesFailed: 0,
     prsOpen: 0,
+    fixesRetryable: 0,
+    urgentOpenReports: 0,
     regressedActions: 0,
     inboxOpenActions: 0,
     notificationsUnread: 0,

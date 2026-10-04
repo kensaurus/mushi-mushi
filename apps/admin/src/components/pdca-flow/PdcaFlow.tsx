@@ -60,7 +60,7 @@ import { EdgeInspector } from './EdgeInspector'
 import { NodeContextMenu } from './NodeContextMenu'
 import { useFlowKeyboardNav } from '../flow-primitives/useFlowKeyboardNav'
 import { FlowCanvasBackground } from '../flow-primitives/FlowCanvasBackground'
-import type { ActivityItem } from '../dashboard/types'
+import type { ActivityItem, IntegrationStatus } from '../dashboard/types'
 
 const NODE_TYPES = { pdcaStep: PdcaStepNode }
 const EDGE_TYPES = { pdcaGradient: PdcaGradientEdge }
@@ -94,6 +94,8 @@ interface PdcaFlowProps {
   runningStage?: PdcaStageId | null
   /** Recent activity items for the bottom panel (live variant only). */
   activity?: ActivityItem[]
+  /** Integration health for the Act drawer (live variant only). */
+  integrations?: IntegrationStatus[]
   /** When true, allow pan + zoom and render the controls panel. */
   interactive?: boolean
   /** When true, render the top-right action panel (Run judge, Pause…). */
@@ -200,6 +202,7 @@ export function PdcaFlow(props: PdcaFlowProps) {
               stageId={openStage}
               stage={openStageData}
               onClose={() => onOpenStage(null)}
+              integrations={props.integrations}
             />
           )}
         </StageDrawer>

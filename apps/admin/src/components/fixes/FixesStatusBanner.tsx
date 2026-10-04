@@ -6,7 +6,7 @@
 import { usePageCopy } from '../../lib/copy'
 import { StatusBannerShell } from '../StatusBannerShell'
 import { StatusBannerAction } from '../StatusBannerAction'
-import { fixesFailedAction, fixesFailedHint, scopedHref } from '../../lib/humanPageHints'
+import { fixesFailedAction, fixesFailedHint, fixesFailedTitle, scopedHref } from '../../lib/humanPageHints'
 import type { FixesStats, FixesTabId } from './FixesStatsTypes'
 
 interface Props {
@@ -84,7 +84,7 @@ export function FixesStatusBanner({
     return (
       <StatusBannerShell
         tone="danger"
-        title={`${stats.failed} auto-fix${stats.failed === 1 ? '' : 'es'} failed`}
+        title={fixesFailedTitle(stats.failed)}
         subtitle={stats.topPriorityLabel ?? fixesFailedHint(stats.failed)}
         action={
           <StatusBannerAction
@@ -113,7 +113,7 @@ export function FixesStatusBanner({
           ) : (
             <StatusBannerAction
               label={actions.pipeline ?? 'Open pipeline'}
-              to={stats.topPriorityTo ?? scopedHref('/fixes?status=running', pid)}
+              to={stats.topPriorityTo ?? scopedHref('/fixes?tab=pipeline', pid)}
               tone="info"
             />
           )

@@ -22,7 +22,7 @@
  * the "no events yet" empty state.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { usePageData } from '../lib/usePageData'
 import { usePageCopy } from '../lib/copy'
@@ -63,6 +63,7 @@ import {
   saveFunnel,
   type FunnelDefinition,
 } from '../lib/funnelBuilder'
+import { distinctEventsLabel, eventCatalogue, mergePeoplePage } from '../lib/analyticsLists'
 
 // ─── Types (server contract) ─────────────────────────────────────────────────
 
@@ -74,6 +75,10 @@ interface EventsSummary {
   anonymous: number
   events_per_day: Array<{ day: string; count: number }>
   top_events: Array<{ name: string; count: number; persons: number }>
+  /** Every distinct event name in the window (migration 20261004163000). */
+  distinct_events?: number | null
+  /** Every event name, most used first, up to 500. */
+  event_names?: string[] | null
 }
 
 interface FunnelResult {
@@ -150,7 +155,7 @@ export function AnalyticsPage() {
   )
 
   const summary = usePageData<EventsSummary>(`/v1/admin/events/summary?window=${SUMMARY_WINDOW}`)
-  const topEventNames = useMemo(() => (summary.data?.top_events ?? []).map((e) => e.name), [summary.data])
+  const topEventNames = useMemo(() => eventCatalogue(summary.data), [summary.data])
   const noEvents = Boolean(summary.data) && (summary.data?.events_total ?? 0) === 0
 
   return (
@@ -210,7 +215,7 @@ export function AnalyticsPage() {
                 />
                 <StatCard
                   label="Distinct events"
-                  value={String(summary.data.top_events.length)}
+                  value={distinctEventsLabel(summary.data)}
                   detail="event names seen"
                 />
               </StatGrid>
@@ -465,10 +470,16 @@ function PeopleTab() {
   const path = `/v1/admin/events/people?limit=${PEOPLE_PAGE}${before ? `&before=${encodeURIComponent(before)}` : ''}`
   const people = usePageData<PeopleResult>(path)
 
-  // Append pages as the cursor advances; a fresh first page replaces.
+  // Append pages as the cursor advances; a fresh first page replaces. Runs on
+  // a NEW payload only: when Load more moves the cursor, usePageData still
+  // holds page 1 for a render, and appending it then showed page 1 twice
+  // (QA 176). mergePeoplePage also drops any row already shown.
+  const merged = useRef<PeopleResult | null>(null)
   useEffect(() => {
-    if (!people.data) return
-    setPages((prev) => (before ? [...prev, ...people.data!.people] : people.data!.people))
+    if (!people.data || merged.current === people.data) return
+    merged.current = people.data
+    const page = people.data.people
+    setPages((prev) => (before ? mergePeoplePage(prev, page) : page))
   }, [people.data, before])
 
   const rows = before ? pages : (people.data?.people ?? [])

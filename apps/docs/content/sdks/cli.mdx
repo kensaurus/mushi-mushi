@@ -15,7 +15,7 @@ npm install -g @mushi-mushi/cli
 
 mushi login
 mushi connect --project-id <uuid> --endpoint <url> --wait
-mushi doctor --server --qa-stories
+mushi doctor --qa-stories
 mushi reports list --status new
 mushi fix <reportId> --agent cursor_cloud --wait
 mushi fixes merge <fixId>          # squash-merge the PR + mark report Fixed
@@ -67,11 +67,11 @@ Console URL resolution: `MUSHI_CONSOLE_URL` → saved config → localhost `:646
 ### `mushi doctor`
 
 ```bash
-mushi doctor                  # local: config, endpoint, SDK install
-mushi doctor --server         # + 4 dispatch checks (GitHub, codebase, Anthropic, autofix)
-mushi doctor --ingest         # + SDK heartbeat / first-report ingest steps
+mushi doctor                  # config, endpoint, SDK install, ingest and dispatch readiness
+mushi doctor --no-server      # skip the 4 dispatch checks (GitHub, codebase, Anthropic, autofix)
+mushi doctor --no-ingest      # skip the SDK heartbeat / first-report checks
 mushi doctor --host-app       # + host wiring: env vars, MCP config, hash-router capture
-mushi doctor --qa-stories     # + QA story setup warnings (needs --server credentials)
+mushi doctor --qa-stories     # + QA story setup warnings (needs a signed-in CLI)
 mushi doctor --full           # run every check category in one pass
 mushi doctor --json           # machine-readable; exits 1 if any check fails
 ```

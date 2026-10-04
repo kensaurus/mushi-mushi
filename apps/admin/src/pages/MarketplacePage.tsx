@@ -4,7 +4,7 @@
  *          signed deliveries for the active project.
  */
 
-import { useCallback, useMemo, useState, useEffect } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
@@ -18,6 +18,8 @@ import { SetupNudge } from '../components/SetupNudge'
 import { useToast } from '../lib/toast'
 import { usePageCopy } from '../lib/copy'
 import { useMarketplaceUx, resolveQuickMarketplaceTab } from '../lib/marketplaceModeUx'
+import { useQuickstartLandingTab } from '../lib/useQuickstartTab'
+import { describeApiFailure } from '../lib/humanizeApiError'
 import { useEntitlements } from '../lib/useEntitlements'
 import { UpgradePrompt } from '../components/billing/UpgradePrompt'
 import {
@@ -52,6 +54,8 @@ import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import {
   EMPTY_MARKETPLACE_STATS,
+  PLUGIN_SECRET_MIN_LENGTH,
+  pluginWebhookUrlError,
   type DispatchEntry,
   type InstalledPlugin,
   type MarketplacePlugin,
@@ -112,7 +116,7 @@ export function MarketplacePage() {
   const statsPath = activeProjectId ? '/v1/admin/marketplace/stats' : null
   const dispatchPath = activeProjectId ? '/v1/admin/plugins/dispatch-log' : null
 
-  const installedQuery = usePageData<{ plugins: InstalledPlugin[] }>(installedPath, {
+  const installedQuery = usePageData<{ plugins: InstalledPlugin[]; canManage?: boolean }>(installedPath, {
     deps: [activeProjectId],
   })
   const statsQuery = usePageData<MarketplaceStats>(statsPath, { deps: [activeProjectId] })
@@ -156,11 +160,19 @@ export function MarketplacePage() {
     [searchParams, setSearchParams],
   )
 
-  useEffect(() => {
-    if (!ux.isQuickstart || !activeProjectId || loading) return
-    const quickTab = resolveQuickMarketplaceTab(stats)
-    if (activeTab !== quickTab) setTab(quickTab)
-  }, [ux.isQuickstart, activeProjectId, loading, stats, activeTab, setTab])
+  // Quick mode opens the posture tab once; links and clicks then win.
+  useQuickstartLandingTab({
+    enabled: ux.isQuickstart && Boolean(activeProjectId),
+    ready: !loading,
+    // `?filter=disabled` also picks a tab (Installed), so it counts as a deep link.
+    tabParam: param ?? urlFilter,
+    activeTab: activeTab,
+    quickTab: resolveQuickMarketplaceTab(stats),
+    setActiveTab: setTab,
+  })
+  // Plugin writes are owner/admin only on the server; older APIs without the
+  // flag keep the controls enabled and the server still refuses.
+  const canManage = installedQuery.data?.canManage !== false
 
   const [installing, setInstalling] = useState<string | null>(null)
   const [installTarget, setInstallTarget] = useState<MarketplacePlugin | null>(null)
@@ -286,12 +298,16 @@ export function MarketplacePage() {
 
   const submitInstall = useCallback(async () => {
     if (!installTarget) return
-    if (!draftWebhookUrl.startsWith('https://')) {
-      toast.error('Invalid webhook URL', 'Webhook URL must start with https://')
+    const urlProblem = pluginWebhookUrlError(draftWebhookUrl)
+    if (urlProblem) {
+      toast.error('Check the webhook URL', urlProblem)
       return
     }
-    if (draftWebhookSecret.length < 16) {
-      toast.error('Signing secret too short', 'The signing secret must be at least 16 characters.')
+    if (draftWebhookSecret.trim().length < PLUGIN_SECRET_MIN_LENGTH) {
+      toast.error(
+        'Signing secret too short',
+        `Use at least ${PLUGIN_SECRET_MIN_LENGTH} characters, or keep the one Mushi generated.`,
+      )
       return
     }
     setInstalling(installTarget.slug)
@@ -312,13 +328,17 @@ export function MarketplacePage() {
           isActive: true,
         }),
       })
-      if (!res.ok) throw new Error(res.error?.message ?? 'Install failed')
+      if (!res.ok) {
+        const t = describeApiFailure(res.error, `Could not install ${installTarget.name}`)
+        toast.error(t.title, t.description)
+        return
+      }
       toast.success(`Installed ${installTarget.name}`)
       cancelInstall()
       reloadAll()
       setTab('installed')
-    } catch (err) {
-      toast.error('Install failed', err instanceof Error ? err.message : String(err))
+    } catch {
+      toast.error(`Could not install ${installTarget.name}`, 'Could not reach Mushi. Check your connection and retry.')
     } finally {
       setInstalling(null)
     }
@@ -332,12 +352,16 @@ export function MarketplacePage() {
     setInstalling(slug)
     try {
       const res = await apiFetch(`/v1/admin/plugins/${encodeURIComponent(slug)}`, { method: 'DELETE' })
-      if (!res.ok) throw new Error(res.error?.message ?? 'Uninstall failed')
+      if (!res.ok) {
+        const t = describeApiFailure(res.error, `Could not remove ${name}`)
+        toast.error(t.title, t.description)
+        return
+      }
       toast.success(`Removed ${name}`)
       reloadAll()
       setUninstallTarget(null)
-    } catch (err) {
-      toast.error('Uninstall failed', err instanceof Error ? err.message : String(err))
+    } catch {
+      toast.error(`Could not remove ${name}`, 'Could not reach Mushi. Check your connection and retry.')
     } finally {
       setInstalling(null)
     }
@@ -358,7 +382,11 @@ export function MarketplacePage() {
           durationMs: number
           excerpt: string | null
         }>(`/v1/admin/plugins/${encodeURIComponent(slug)}/test-event`, { method: 'POST' })
-        if (!res.ok) throw new Error(res.error?.message ?? 'Test failed')
+        if (!res.ok) {
+          const t = describeApiFailure(res.error, 'Could not send the test event')
+          toast.error(t.title, t.description)
+          return
+        }
         if (res.data?.delivered) {
           toast.success(`Test delivered (${res.data.httpStatus ?? '—'})`, `${res.data.durationMs}ms`)
         } else {
@@ -368,8 +396,8 @@ export function MarketplacePage() {
           )
         }
         reloadAll()
-      } catch (err) {
-        toast.error('Test failed', err instanceof Error ? err.message : String(err))
+      } catch {
+        toast.error('Could not send the test event', 'Could not reach Mushi. Check your connection and retry.')
       } finally {
         setInstalling(null)
       }
@@ -385,11 +413,15 @@ export function MarketplacePage() {
           method: 'PATCH',
           body: JSON.stringify({ isActive: !currentlyActive }),
         })
-        if (!res.ok) throw new Error(res.error?.message ?? 'Update failed')
+        if (!res.ok) {
+          const t = describeApiFailure(res.error, currentlyActive ? 'Could not pause the plugin' : 'Could not resume the plugin')
+          toast.error(t.title, t.description)
+          return
+        }
         toast.success(currentlyActive ? 'Plugin paused' : 'Plugin resumed')
         reloadAll()
-      } catch (err) {
-        toast.error('Update failed', err instanceof Error ? err.message : String(err))
+      } catch {
+        toast.error('Could not update the plugin', 'Could not reach Mushi. Check your connection and retry.')
       } finally {
         setInstalling(null)
       }
@@ -405,12 +437,13 @@ export function MarketplacePage() {
           method: 'PATCH',
           body: JSON.stringify({ webhookUrl: newUrl }),
         })
-        if (!res.ok) throw new Error(res.error?.message ?? 'Update failed')
+        if (!res.ok) {
+          const t = describeApiFailure(res.error, 'Could not update the webhook URL')
+          toast.error(t.title, t.description)
+          throw new Error(t.description)
+        }
         toast.success('Webhook URL updated')
         reloadAll()
-      } catch (err) {
-        toast.error('Update failed', err instanceof Error ? err.message : String(err))
-        throw err
       } finally {
         setInstalling(null)
       }
@@ -427,13 +460,12 @@ export function MarketplacePage() {
           { method: 'POST' },
         )
         if (!res.ok || !res.data?.secret) {
-          throw new Error(res.error?.message ?? 'Rotation failed')
+          const t = describeApiFailure(res.error, 'Could not rotate the signing secret')
+          toast.error(t.title, t.description)
+          throw new Error(t.description)
         }
         toast.success('Secret rotated', 'Copy it now — it will not be shown again.')
         return res.data.secret
-      } catch (err) {
-        toast.error('Rotation failed', err instanceof Error ? err.message : String(err))
-        throw err
       } finally {
         setInstalling(null)
       }
@@ -741,6 +773,8 @@ export function MarketplacePage() {
                       busy={installing === p.slug}
                       onInstall={() => beginInstall(p)}
                       onUninstall={() => uninstall(p.slug, p.name)}
+                      canManage={canManage}
+                      pluginsUnlocked={pluginsUnlocked || entitlements.loading}
                     />
                   ))}
                 </div>
@@ -771,6 +805,7 @@ export function MarketplacePage() {
                 onEditUrl={editPluginUrl}
                 onRotateSecret={rotatePluginSecret}
                 onUninstall={uninstall}
+                canManage={canManage}
               />
             </div>
           )}

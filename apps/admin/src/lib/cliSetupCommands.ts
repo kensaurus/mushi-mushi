@@ -5,24 +5,28 @@
  * NOTES:
  * - `mushi connect` writes .env.local + Cursor MCP by default; `--write-env`
  *   and `--wire-ide` are explicit aliases for copy-paste clarity.
- * - Pass the cloud API URL from `RESOLVED_EXTERNAL_API_URL` in UI callers.
+ * - The endpoint is required: callers pass `RESOLVED_EXTERNAL_API_URL`, the API
+ *   this console talks to. A Mushi Cloud default sent self-hosted operators'
+ *   apps to the cloud (QA bug 142).
  */
-
-/** Default Mushi Cloud API — matches `@mushi-mushi/cli` CLOUD_API_ENDPOINT. */
-export const DEFAULT_MUSHI_API_ENDPOINT =
-  'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api'
 
 export function buildMushiInitCommand(projectId: string, apiKey?: string | null): string {
   if (apiKey) return `mushi init --project-id ${projectId} --api-key ${apiKey}`
   return `mushi init --project-id ${projectId}`
 }
 
-export function buildMushiConnectCommand(
-  projectId: string,
-  endpoint = DEFAULT_MUSHI_API_ENDPOINT,
-): string {
+export function buildMushiConnectCommand(projectId: string, endpoint: string): string {
   return (
     `MUSHI_API_KEY=mushi_xxx mushi connect --project-id ${projectId} ` +
     `--endpoint ${endpoint} --write-env --wire-ide --wait`
   )
 }
+
+/**
+ * `mushi doctor` runs both tracks; each command below skips the other one.
+ * The CLI declares only `--no-server` / `--no-ingest` (commander), so the
+ * `--ingest` / `--server` forms the console used to copy exit with
+ * "unknown option" (QA bug 122).
+ */
+export const DOCTOR_INGEST_ONLY = 'mushi doctor --no-server'
+export const DOCTOR_DISPATCH_ONLY = 'mushi doctor --no-ingest'

@@ -10,7 +10,7 @@ import type { InboxStats } from '../components/inbox/types'
 /* ── Dashboard ─────────────────────────────────────────────────────────── */
 
 export const dashboardLinks = {
-  backlog: '/reports?tab=queue',
+  backlog: '/reports?status=new&sort=created_at&dir=asc',
   reports14d: '/reports',
   fixes: '/fixes',
   focus: (stats: DashboardStats) => stats.topPriorityTo ?? '/dashboard?tab=loop',
@@ -19,21 +19,23 @@ export const dashboardLinks = {
 /* ── Reports ───────────────────────────────────────────────────────────── */
 
 export const reportsLinks = {
-  total14d: '/reports?tab=queue',
-  untriaged: '/reports?tab=queue',
-  critical14d: '/reports?tab=severity',
-  dismissed14d: '/reports?tab=queue',
+  // /reports reads filters, not a `tab` param: every link carries the
+  // filters that reproduce the count it sits next to.
+  total14d: '/reports?days=14',
+  untriaged: '/reports?status=new',
+  critical14d: '/reports?severity=critical&days=14',
+  dismissed14d: '/reports?status=dismissed&days=14',
 } as const
 
 /* ── Fixes ─────────────────────────────────────────────────────────────── */
 
 export const fixesLinks = {
   totalAttempts: '/fixes?tab=attempts',
-  completed: '/fixes?tab=attempts',
-  failed: '/fixes?tab=attempts',
+  completed: '/fixes?tab=attempts&status=merged',
+  failed: '/fixes?tab=attempts&status=failed',
   inProgress: '/fixes?tab=pipeline',
-  prsOpen: '/fixes?tab=attempts',
-  prsCiPassing: '/fixes?tab=attempts',
+  prsOpen: '/fixes?tab=attempts&status=pr_open',
+  prsCiPassing: '/fixes?tab=attempts&status=pr_open',
 } as const
 
 /* ── Health ────────────────────────────────────────────────────────────── */
@@ -83,29 +85,32 @@ export const releasesLinks = {
 
 export const repoLinks = {
   branches: '/repo?tab=branches',
-  prOpen: '/repo?tab=branches',
-  ciPassing: '/repo?tab=branches',
-  ciFailed: '/repo?tab=branches',
-  merged: '/repo?tab=activity',
-  stuck: '/fixes?tab=attempts',
+  prOpen: '/repo?tab=branches&status=open',
+  ciPassing: '/repo?tab=branches&status=ci_passing',
+  ciFailed: '/repo?tab=branches&status=ci_failed',
+  merged: '/repo?tab=branches&status=merged',
+  stuck: '/fixes?tab=attempts&status=failed',
 } as const
 
 /* ── Inbox ───────────────────────────────────────────────────────────── */
 
 export const inboxLinks = {
-  open: (stats: InboxStats) => stats.topPriorityTo ?? '/inbox?tab=inbox',
+  // No top priority means nothing is open: the Actions tab says so.
+  open: (stats: InboxStats) => stats.topPriorityTo ?? '/inbox?tab=actions',
   clear: '/dashboard',
-  backlog: '/reports?tab=queue',
-  critical: '/reports?tab=severity',
+  // Backlog = New reports waiting over an hour: oldest first.
+  backlog: '/reports?status=new&sort=created_at&dir=asc',
+  // Same predicate as criticalReports14d (dashboard.ts inbox stats).
+  critical: '/reports?status=open&severity=critical&days=14',
 } as const
 
 /* ── Judge ─────────────────────────────────────────────────────────────── */
 
 export const judgeLinks = {
-  week: '/judge?tab=scores',
-  total: '/judge?tab=scores',
-  disagree: '/judge?tab=disagreements',
-  drift: '/judge?tab=scores',
+  week: '/judge?tab=trend',
+  total: '/judge?tab=evaluations',
+  disagree: '/judge?tab=evaluations&filter=disagreement',
+  drift: '/judge?tab=trend',
   classified: '/reports',
   prompts: '/judge?tab=prompts',
 } as const
@@ -113,24 +118,27 @@ export const judgeLinks = {
 /* ── Integrations / Settings / Onboarding / Billing / MCP ────────────── */
 
 export const integrationsLinks = {
-  platform: '/integrations?tab=platform',
-  healthy: '/integrations?tab=platform',
-  routing: '/integrations?tab=routing',
-  failing: '/integrations?tab=platform',
+  platform: '/integrations/config#integrations-required',
+  healthy: '/integrations/config#integrations-required',
+  routing: '/integrations/config#integrations-routing',
+  failing: '/integrations/config#integrations-required',
 } as const
 
 export const settingsLinks = {
   byok: '/settings?tab=byok',
-  sdk: '/settings?tab=sdk',
-  routing: '/integrations?tab=routing',
+  // The bug-widget controls live on the Health tab (SdkInstallCard); there is no `sdk` tab.
+  sdk: '/settings?tab=health',
+  routing: '/integrations/config#integrations-routing',
   classifier: '/settings?tab=general',
 } as const
 
+// Every target below must be a real route / tab / element id:
+// statCardLinks.test.ts checks them (QA bugs 130, 131).
 export const onboardingLinks = {
-  required: '/onboarding?tab=setup',
-  sdk: '/sdk',
+  required: '/onboarding?tab=steps',
+  sdk: '/onboarding?tab=sdk',
   reports: '/reports',
-  optional: '/onboarding?tab=setup',
+  optional: '/onboarding?tab=steps',
 } as const
 
 export const billingLinks = {
@@ -145,17 +153,17 @@ export const mcpLinks = {
   mcpRead: '/mcp?tab=setup',
   connected: '/mcp?tab=setup',
   sdkOnly: '/mcp?tab=setup',
-  tools: '/mcp?tab=tools',
+  tools: '/mcp?tab=catalog',
   endpoint: '/mcp?tab=setup',
 } as const
 
 export const connectLinks = {
   github: '/integrations/config',
-  sdk: '/connect#sdk-install',
+  sdk: '/connect#connect-sdk',
   sdkVersion: '/connect',
   mcpConnected: '/mcp?tab=setup',
   mcpUnused: '/mcp?tab=setup',
-  tools: '/mcp?tab=tools',
+  tools: '/mcp?tab=catalog',
 } as const
 
 export const rewardsLinks = {
@@ -190,7 +198,7 @@ export const driftLinks = {
 export const experimentsLinks = {
   total: '/experiments?tab=experiments',
   running: '/experiments?tab=experiments',
-  readyToLaunch: '/experiments?tab=new',
+  readyToLaunch: '/experiments?tab=experiments',
   winners: '/experiments?tab=experiments',
   assignments: '/experiments?tab=experiments',
   conversion: '/experiments?tab=experiments',
@@ -212,11 +220,11 @@ export const feedbackLinks = {
 
 export const qaCoverageLinks = {
   stories: '/qa-coverage?tab=stories',
-  passing: '/qa-coverage?tab=stories',
+  passing: '/qa-coverage?tab=passing',
   failing: '/qa-coverage?tab=failing',
   avgPassRate: '/qa-coverage?tab=stories',
   runs24h: '/qa-coverage?tab=stories',
-  noData: '/qa-coverage?tab=stories',
+  noData: '/qa-coverage?tab=no_data',
 } as const
 
 export const queryLinks = {
@@ -243,9 +251,10 @@ export const storageLinks = {
 } as const
 
 export const ssoLinks = {
-  registered: '/sso?tab=providers',
-  pendingFailed: '/sso?tab=providers',
-  emailDomains: '/sso?tab=providers',
+  // /sso has no tabs: the cards scroll to the providers list (Layout's ScrollToHashAnchor).
+  registered: '/sso#sso-providers',
+  pendingFailed: '/sso#sso-providers',
+  emailDomains: '/sso#sso-providers',
   planGate: '/billing?tab=plans',
 } as const
 
@@ -260,7 +269,7 @@ export const usersLinks = {
 
 export const auditLinks = {
   events24h: '/audit?tab=log',
-  failures: '/audit?tab=log',
+  failures: '/audit?tab=log&outcome=failure&since=24h',
   actorMix: '/audit?tab=breakdown',
   allTime: '/audit?tab=log',
   // These three cards are rendered ON the breakdown tab, so pointing them

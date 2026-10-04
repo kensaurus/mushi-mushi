@@ -35,6 +35,25 @@ Deno.test('the test report ships a precomputed diagnosis in the columns classify
   assertEquals(analysis.precomputed, true)
 })
 
+// REPORT A2 (2026-10-04): status 'classified' with no Stage-1 object made the
+// console say "Classified" and "Classification pending" on the same page.
+Deno.test('the test report is classified at Stage 1 too, so no surface reads it as pending', () => {
+  const fixture = getDemoReportFixture()
+  const row = precomputedClassification(fixture)
+  assert(row)
+  assertEquals(row.stage1_model, 'precomputed')
+  const stage1 = row.stage1_classification as Record<string, unknown>
+  assert(stage1 && typeof stage1 === 'object', 'stage1_classification must be set')
+  for (const key of ['symptom', 'action', 'expected', 'actual', 'emotion', 'category', 'severity', 'confidence']) {
+    assert(key in stage1, `stage1_classification.${key} must be present (fast-filter's stage1Schema)`)
+  }
+  assertEquals(stage1.category, fixture.category)
+  assertEquals(stage1.severity, row.severity)
+  assertEquals(stage1.confidence, row.confidence)
+  // reports has no classified_at column; writing it would fail the whole update.
+  assert(!('classified_at' in row), 'classified_at is not a reports column')
+})
+
 Deno.test('fixtures without a diagnosis are left to the real classifier', () => {
   const plain = DEMO_REPORT_FIXTURES.find((f) => !f.diagnosis)
   assert(plain, 'the marketing seed needs fixtures that exercise the classifier')

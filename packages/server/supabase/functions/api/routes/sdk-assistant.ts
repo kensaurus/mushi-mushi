@@ -43,7 +43,7 @@ import { tagLangfuseTrace } from '../../_shared/sentry.ts'
 import { withAnthropicOrOpenAi } from '../../_shared/llm-failover.ts'
 import { generateValidatedObject } from '../../_shared/structured-output.ts'
 import { verifyEndUserToken, MUSHI_USER_TOKEN_HEADER } from '../../_shared/end-user-identity.ts'
-import { canManageProjectSdkConfig } from '../helpers.ts'
+import { projectConfigDenied } from '../helpers.ts'
 import { logAudit } from '../../_shared/audit.ts'
 import { scanForSecrets } from '../../_shared/secret-scan.ts'
 
@@ -332,9 +332,8 @@ export function registerSdkAssistantRoutes(app: Hono<{ Variables: Variables }>):
     const projectId = c.req.param('id')!
     const userId = c.get('userId') as string
     const db = getServiceClient()
-    if (!(await canManageProjectSdkConfig(db, projectId, userId))) {
-      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404)
-    }
+    const denied = await projectConfigDenied(c, db, projectId, userId, 'view the assistant settings')
+    if (denied) return denied
     const { data, error } = await db
       .from('project_settings')
       .select('assistant_enabled, assistant_label, assistant_greeting, assistant_suggestions, assistant_knowledge')
@@ -365,9 +364,8 @@ export function registerSdkAssistantRoutes(app: Hono<{ Variables: Variables }>):
     const projectId = c.req.param('id')!
     const userId = c.get('userId') as string
     const db = getServiceClient()
-    if (!(await canManageProjectSdkConfig(db, projectId, userId))) {
-      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404)
-    }
+    const denied = await projectConfigDenied(c, db, projectId, userId, 'change the assistant settings')
+    if (denied) return denied
     const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
     const updates: Record<string, unknown> = {}
 
@@ -421,9 +419,8 @@ export function registerSdkAssistantRoutes(app: Hono<{ Variables: Variables }>):
     const projectId = c.req.param('id')!
     const userId = c.get('userId') as string
     const db = getServiceClient()
-    if (!(await canManageProjectSdkConfig(db, projectId, userId))) {
-      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404)
-    }
+    const denied = await projectConfigDenied(c, db, projectId, userId, 'view assistant logs')
+    if (denied) return denied
     const limit = Math.min(Math.max(Number(c.req.query('limit') ?? 50), 1), 200)
     const { data, error } = await db
       .from('sdk_assistant_messages')

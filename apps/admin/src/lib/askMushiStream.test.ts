@@ -15,6 +15,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('./supabase', () => ({
+  activeTenantHeaders: () => ({ 'X-Mushi-Project-Id': 'project-b', 'X-Mushi-Org-Id': 'team-1' }),
   supabase: {
     auth: {
       getSession: () =>
@@ -173,5 +174,22 @@ describe('openAskMushiStream', () => {
 
     expect(h.doneCount()).toBe(0)
     expect(h.errorCount()).toBe(1)
+  })
+
+  // Streaming is the default transport. Without the tenant headers the server
+  // fell back to the caller's oldest project, so answers named the wrong app.
+  it('sends the selected project and team headers', async () => {
+    const fetchMock = fakeFetchOnce(sseStream(['event: done\ndata: {"done":true}\n\n']))
+    await openAskMushiStream(
+      { messages: [] } as unknown as Parameters<typeof openAskMushiStream>[0],
+      makeHandlers(),
+    )
+    await flush()
+
+    const init = (fetchMock.mock.calls as unknown as Array<[string, RequestInit]>)[0]?.[1]
+    expect(init?.headers).toMatchObject({
+      'X-Mushi-Project-Id': 'project-b',
+      'X-Mushi-Org-Id': 'team-1',
+    })
   })
 })

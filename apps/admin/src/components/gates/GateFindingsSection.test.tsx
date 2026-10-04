@@ -228,4 +228,37 @@ describe('GateFindingsSection', () => {
     expect(toast.error).toHaveBeenCalledWith('Could not apply the suggested caps', 'Only project admins can change settings')
     expect(button('Apply suggested caps')).toBeDefined()
   })
+
+  it('explains a 403 without mentioning credentials', async () => {
+    serve([unset])
+    apiFetchMutate.mockResolvedValue({
+      ok: false,
+      error: { code: 'FORBIDDEN', message: 'Only organization owners and admins can change credentials.' },
+    })
+    render()
+    await flush()
+    await act(async () => {
+      button('Apply suggested caps')!.click()
+    })
+    await flush()
+    await act(async () => {
+      button('Apply caps')!.click()
+    })
+    await flush()
+    expect(toast.error).toHaveBeenCalledWith(
+      'Could not apply the suggested caps',
+      'Only team owners and admins can change spend caps. Ask one of them to apply these.',
+    )
+  })
+
+  it('shows members and viewers the next step instead of the button', async () => {
+    apiFetch.mockImplementation(async (path: string) => {
+      if (path === '/v1/org') return { ok: true, data: { organizations: [{ id: 'o1', role: 'viewer' }] } }
+      return { ok: true, data: payload }
+    })
+    render()
+    await flush()
+    expect(button('Apply suggested caps')).toBeUndefined()
+    expect(container.textContent).toContain('Only team owners and admins can set spend caps')
+  })
 })

@@ -16,9 +16,12 @@
  */
 
 import { useState } from 'react'
-import { Badge, Btn, Callout, DisclosurePanel, ErrorAlert, Input, Loading, Section, SelectField } from '../ui'
+import { Badge, Btn, Callout, DisclosurePanel, Input, Loading, Section, SelectField } from '../ui'
 import { usePageData } from '../../lib/usePageData'
 import { apiFetchMutate, apiFetchRaw } from '../../lib/supabase'
+import { actionErrorText } from '../../lib/actionErrorText'
+import { ConfirmDialog } from '../ConfirmDialog'
+import { PageLoadError } from '../PageLoadError'
 import {
   ACCOUNT_PROVIDERS,
   EMPTY_FORM,
@@ -44,12 +47,15 @@ export function AccountsRegisterCard({ orgId }: { orgId: string }) {
   const [editing, setEditing] = useState<string | null>(null)
   const [formOpen, setFormOpen] = useState(false)
 
+  // Removing an account drops its 2FA, owner and recovery notes: ask first (QA 44).
+  const [confirmRemove, setConfirmRemove] = useState<{ id: string; name: string } | null>(null)
+
   const run = async (fn: () => Promise<{ ok: boolean; error?: { message?: string } | null }>, okText: string): Promise<boolean> => {
     setBusy(true)
     setNotice(null)
     try {
       const res = await fn()
-      setNotice(res.ok ? { tone: 'info', text: okText } : { tone: 'danger', text: res.error?.message ?? 'That did not work.' })
+      setNotice(res.ok ? { tone: 'info', text: okText } : { tone: 'danger', text: actionErrorText(res.error, 'That did not work. Try again in a minute.') })
       return res.ok
     } finally {
       setBusy(false)
@@ -121,7 +127,7 @@ export function AccountsRegisterCard({ orgId }: { orgId: string }) {
         Every account your apps depend on, who owns it, and who else can get in if that person cannot. Names and contacts only: never
         passwords, keys or recovery codes. Everything here is what you declare; Mushi cannot see a provider's own settings.
       </p>
-      {error && <ErrorAlert message={error} endpoint={path} onRetry={reload} />}
+      {error && <PageLoadError error={error} resource="accounts and resilience" endpoint={path} onRetry={reload} />}
       {loading && !data && <Loading text="Reading the register…" />}
       {notice && (
         <Callout tone={notice.tone}>
@@ -165,7 +171,7 @@ export function AccountsRegisterCard({ orgId }: { orgId: string }) {
                     {data.canEdit && (
                       <div className="flex shrink-0 gap-2">
                         <Btn size="sm" variant="ghost" disabled={busy} onClick={() => startEdit(a)}>Edit</Btn>
-                        <Btn size="sm" variant="ghost" disabled={busy} onClick={() => run(() => apiFetchMutate(`${path}/${a.id}`, { method: 'DELETE' }), 'Removed from the register.')}>Remove</Btn>
+                        <Btn size="sm" variant="ghost" disabled={busy} onClick={() => setConfirmRemove({ id: a.id, name: a.name })}>Remove</Btn>
                       </div>
                     )}
                   </li>
@@ -253,6 +259,20 @@ export function AccountsRegisterCard({ orgId }: { orgId: string }) {
             <p className="text-2xs text-fg-faint">Only team owners and admins can change the register.</p>
           )}
         </div>
+      )}
+      {confirmRemove && (
+        <ConfirmDialog
+          title={`Remove ${confirmRemove.name} from the register?`}
+          body="Its owner, 2FA, recovery and admin notes are deleted from Mushi. The account itself is not touched. To undo, add it again."
+          confirmLabel="Remove"
+          tone="danger"
+          loading={busy}
+          onCancel={() => setConfirmRemove(null)}
+          onConfirm={async () => {
+            await run(() => apiFetchMutate(`${path}/${confirmRemove.id}`, { method: 'DELETE' }), 'Removed from the register.')
+            setConfirmRemove(null)
+          }}
+        />
       )}
     </Section>
   )

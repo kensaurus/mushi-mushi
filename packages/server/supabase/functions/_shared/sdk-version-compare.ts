@@ -22,6 +22,18 @@ function parseCore(version: string): [number, number, number] {
   ]
 }
 
+/**
+ * The catalogue row with the highest semver. `released_at` can lie when a
+ * migration backfills older rows, so it is never the ordering key.
+ */
+export function pickHighestVersion<T extends { version: string }>(rows: readonly T[]): T | null {
+  let best: T | null = null
+  for (const row of rows) {
+    if (!best || compareSemver(row.version, best.version) > 0) best = row
+  }
+  return best
+}
+
 /** Negative = a older than b, 0 = equal, positive = a newer than b. */
 export function compareSemver(a: string, b: string): number {
   const [aa, ab, ac] = parseCore(a)

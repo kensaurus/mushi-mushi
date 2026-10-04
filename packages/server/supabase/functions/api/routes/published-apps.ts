@@ -21,6 +21,7 @@ import { getServiceClient } from '../../_shared/db.ts'
 import { jwtAuth } from '../../_shared/auth.ts'
 import { log } from '../../_shared/logger.ts'
 import { accessibleProjectIds } from '../../_shared/project-access.ts'
+import { parseSentryDsnSetting, sentrySelfHostedHosts } from '../../_shared/sentry-dsn.ts'
 
 declare const Deno: { env: { get(name: string): string | undefined } }
 
@@ -177,6 +178,17 @@ export function registerPublishedAppsRoutes(app: Hono<{ Variables: Variables }>)
     const body = await c.req.json()
     const parsed = AppUpsertSchema.safeParse(body)
     if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400)
+
+    // The DSN decides where tester-marketplace POSTs events, so it must be a
+    // real Sentry host (or an operator-listed self-hosted one), never an
+    // arbitrary or internal address.
+    if (parsed.data.sentry_dsn !== undefined) {
+      const dsn = parseSentryDsnSetting(parsed.data.sentry_dsn, sentrySelfHostedHosts())
+      if (!dsn.ok) {
+        return c.json({ error: { code: 'VALIDATION_ERROR', message: dsn.message } }, 400)
+      }
+      parsed.data.sentry_dsn = dsn.value
+    }
 
     // Ensure slug uniqueness if provided.
     if (parsed.data.slug) {

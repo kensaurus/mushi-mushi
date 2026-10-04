@@ -15,6 +15,7 @@ import {
   Badge,
   Btn,
   Input,
+  SecretInput,
   EmptyState,
   ErrorAlert,
   SelectField,
@@ -55,6 +56,11 @@ import {
 } from '../../../lib/statTooltips/rewards'
 import { CHIP_TONE } from '../../../lib/chipTone'
 import { httpsUrl, numberInRange, token } from '../../../lib/validators'
+import { plainApiError } from '../../../lib/humanizeApiError'
+import { WebhookSecretReveal, revealedSecretFromMeta, type RevealedWebhookSecret } from '../WebhookSecretReveal'
+import { useConfirmAction } from '../useConfirmAction'
+import { describeWebhookTest, type WebhookTestSummary } from '../webhookTestOutcome'
+import { paginationWindow } from '../paginationWindow'
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -667,11 +673,14 @@ export function ContributorDrawer({
   displayName,
   onClose,
   onDataChange,
+  canEdit = false,
 }: {
   endUserId: string
   displayName: string | null
   onClose: () => void
   onDataChange?: () => void
+  /** Award / Set tier are writes: hidden on read-only (Hobby) plans. */
+  canEdit?: boolean
 }) {
   const toast = useToast()
   const { data: tiers } = usePageData<RewardTier[]>('/v1/admin/rewards/tiers')
@@ -706,7 +715,7 @@ export function ContributorDrawer({
       reloadDetail()
       onDataChange?.()
     } else {
-      toast.error('Failed to award bonus')
+      toast.error(plainApiError(res.error, 'Could not award the bonus points. Try again.'))
     }
   }, [bonusPoints, bonusReason, endUserId, reloadDetail, onDataChange, toast])
 
@@ -726,7 +735,7 @@ export function ContributorDrawer({
       reloadDetail()
       onDataChange?.()
     } else {
-      toast.error('Failed to update tier')
+      toast.error(plainApiError(res.error, 'Could not change the tier. Try again.'))
     }
   }, [overrideTier, tierReason, endUserId, reloadDetail, onDataChange, toast])
 
@@ -780,6 +789,7 @@ export function ContributorDrawer({
         </div>
       }
       headerAction={
+        !canEdit ? undefined :
         <button
           onClick={() => setShowActions((v) => !v)}
           className={`text-2xs font-medium px-2 py-0.5 rounded transition-opacity ${showActions ? 'bg-brand text-brand-fg' : 'text-fg-muted hover:text-fg hover:bg-surface-overlay'}`}
@@ -795,7 +805,7 @@ export function ContributorDrawer({
         <div className="p-4 space-y-5 overflow-y-auto">
 
           {/* ── Admin action panel ─── */}
-          {showActions && (
+          {canEdit && showActions && (
             <div className="rounded-xl border border-brand/20 bg-brand/5 p-3 space-y-3">
               <div className="text-2xs font-semibold text-fg uppercase tracking-wider">Admin actions</div>
 
@@ -985,7 +995,7 @@ interface LeaderboardPage { data: Contributor[]; meta: LeaderboardMeta }
 
 const PAGE_SIZE = 25
 
-export function ContributorsTab() {
+export function ContributorsTab({ canEdit = false }: { canEdit?: boolean } = {}) {
   const { data: tiers } = usePageData<RewardTier[]>('/v1/admin/rewards/tiers')
 
   const [range,   setRange]   = useState<ContributorRange>('30d')
@@ -1235,9 +1245,7 @@ export function ContributorsTab() {
                   <Btn variant="ghost" size="sm" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
                     ← Prev
                   </Btn>
-                  {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
-                    const p = totalPages <= 7 ? i : i === 0 ? 0 : i === 6 ? totalPages - 1 : page - 2 + i
-                    if (p < 0 || p >= totalPages) return null
+                  {paginationWindow(page, totalPages).map((p) => {
                     return (
                       <button
                         key={p}
@@ -1275,6 +1283,7 @@ export function ContributorsTab() {
           displayName={selectedName}
           onClose={() => { setSelectedId(null); setSelectedName(null) }}
           onDataChange={reload}
+          canEdit={canEdit}
         />
       )}
     </>
@@ -1293,7 +1302,10 @@ const PROVIDER_DEFAULTS: Record<string, { jwks_url: string; issuer: string; labe
 export function IdentityProvidersSection({ canEdit }: { canEdit: boolean }) {
   const toast = useToast()
   const { data: providers, loading, error, reload: reloadProviders } = usePageData<IdentityProvider[]>('/v1/admin/rewards/identity-providers')
-  const { data: projects } = usePageData<ProjectOption[]>('/v1/admin/projects')
+  // GET /v1/admin/projects answers { projects, admin_host, … }, not an array:
+  // mapping the object threw and the error boundary replaced the whole tab.
+  const { data: projectsPayload } = usePageData<{ projects?: ProjectOption[] }>('/v1/admin/projects')
+  const projects = projectsPayload?.projects ?? []
 
   const [showForm, setShowForm] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -1320,7 +1332,7 @@ export function IdentityProvidersSection({ canEdit }: { canEdit: boolean }) {
     })
     setSaving(false)
     if (res.ok) { toast.success('Identity provider saved'); setShowForm(false); reloadProviders() }
-    else toast.error('Failed to save identity provider')
+    else toast.error(plainApiError(res.error, 'Could not save the identity provider. Check the JWKS URL and try again.'))
   }, [form, reloadProviders, toast])
 
   const toggleProvider = useCallback(async (id: string, enabled: boolean) => {
@@ -1330,14 +1342,15 @@ export function IdentityProvidersSection({ canEdit }: { canEdit: boolean }) {
       body: JSON.stringify({ enabled }),
     })
     if (res.ok) reloadProviders()
-    else toast.error('Failed to update provider')
+    else toast.error(plainApiError(res.error, 'Could not update the provider. Try again.'))
   }, [reloadProviders, toast])
 
   const deleteProvider = useCallback(async (id: string) => {
     const res = await apiFetch(`/v1/admin/rewards/identity-providers/${id}`, { method: 'DELETE' })
     if (res.ok) { toast.success('Provider removed'); reloadProviders() }
-    else toast.error('Failed to remove provider')
+    else toast.error(plainApiError(res.error, 'Could not remove the provider. Try again.'))
   }, [reloadProviders, toast])
+  const confirmProvider = useConfirmAction()
 
   if (loading) return <TableSkeleton rows={2} />
   if (error) return <ErrorAlert message={error} />
@@ -1367,7 +1380,7 @@ export function IdentityProvidersSection({ canEdit }: { canEdit: boolean }) {
             onChange={(ev) => setForm((p) => ({ ...p, project_id: ev.target.value }))}
           >
             <option value="">— select project —</option>
-            {(projects ?? []).map((proj) => (
+            {projects.map((proj) => (
               <option key={proj.id} value={proj.id}>{proj.name}</option>
             ))}
           </SelectField>
@@ -1436,7 +1449,12 @@ export function IdentityProvidersSection({ canEdit }: { canEdit: boolean }) {
                   size="sm"
                   className="px-2"
                   aria-label={`Remove ${p.provider} provider`}
-                  onClick={() => deleteProvider(p.id)}
+                  onClick={() => confirmProvider.ask({
+                    title: `Remove the ${p.provider} identity provider?`,
+                    body: 'Monetary payouts need a verified sign-in. Without a provider, payouts for this project stop until you add one again.',
+                    confirmLabel: 'Remove provider',
+                    run: () => deleteProvider(p.id),
+                  })}
                 >
                   <IconTrash />
                 </Btn>
@@ -1445,6 +1463,7 @@ export function IdentityProvidersSection({ canEdit }: { canEdit: boolean }) {
           )}
         </div>
       ))}
+      {confirmProvider.dialog}
     </Section>
   )
 }
@@ -1471,8 +1490,9 @@ const DISPUTE_BADGE: Record<string, string> = {
   withdrawn:    'bg-surface-overlay text-fg-muted',
 }
 
-export function DisputesSection() {
+export function DisputesSection({ canEdit = false }: { canEdit?: boolean } = {}) {
   const toast = useToast()
+  const confirmDeny = useConfirmAction()
   const { data: disputes, loading, error, reload } = usePageData<DisputeRow[]>('/v1/admin/rewards/disputes')
   const [resolving, setResolving] = useState<string | null>(null)
 
@@ -1485,7 +1505,7 @@ export function DisputesSection() {
     })
     setResolving(null)
     if (res.ok) { toast.success(`Dispute ${decision}`); reload() }
-    else toast.error('Failed to resolve dispute')
+    else toast.error(plainApiError(res.error, 'Could not resolve the dispute. Try again.'))
   }, [reload, toast])
 
   if (loading) return <TableSkeleton rows={2} />
@@ -1526,7 +1546,7 @@ export function DisputesSection() {
                   {d.resolved_at && <> · Resolved <RelativeTime value={d.resolved_at} /></>}
                 </p>
               </div>
-              {(d.status === 'open' || d.status === 'under_review') && (
+              {canEdit && (d.status === 'open' || d.status === 'under_review') && (
                 <div className="flex gap-1.5 shrink-0">
                   {/* Icon is suppressed while loading — Btn renders its spinner
                       in the leading slot and would otherwise show both. */}
@@ -1549,7 +1569,13 @@ export function DisputesSection() {
                       className="px-2"
                       aria-label="Deny dispute"
                       loading={resolving === d.id}
-                      onClick={() => resolve(d.id, 'denied')}
+                      // Deny cancels the linked pending payout: confirm first.
+                      onClick={() => confirmDeny.ask({
+                        title: 'Deny this dispute?',
+                        body: 'Any pending payout linked to it is cancelled. The entry stays on the ledger.',
+                        confirmLabel: 'Deny dispute',
+                        run: () => resolve(d.id, 'denied'),
+                      })}
                     >
                       {resolving === d.id ? null : <IconClose />}
                     </Btn>
@@ -1560,6 +1586,7 @@ export function DisputesSection() {
           </div>
         ))}
       </div>
+      {confirmDeny.dialog}
     </Section>
   )
 }
@@ -1643,6 +1670,10 @@ export function SettingsTab({ canEdit }: { canEdit: boolean }) {
   const [webhookSecret, setWebhookSecret] = useState('')
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
+  // One-time signing secret from the create response (meta.secret). State
+  // only: never logged or stored, gone on dismiss or unmount.
+  const [revealedSecret, setRevealedSecret] = useState<RevealedWebhookSecret | null>(null)
+  const confirmWebhook = useConfirmAction()
 
   const createWebhook = useCallback(async () => {
     const urlErr = httpsUrl({ optional: false })(webhookUrl.trim())
@@ -1662,22 +1693,33 @@ export function SettingsTab({ canEdit }: { canEdit: boolean }) {
       }),
     })
     setSaving(false)
-    if (res.ok) { toast.success('Webhook created'); setShowNewWebhook(false); setWebhookUrl(''); setWebhookSecret(''); reload() }
-    else toast.error(res.error?.message ?? 'Failed to create webhook')
+    if (res.ok) {
+      // A blank secret is minted server-side and returned only here.
+      const minted = webhookSecret.trim() ? null : revealedSecretFromMeta(webhookUrl.trim(), res.meta)
+      setRevealedSecret(minted)
+      toast.success(minted ? 'Webhook created — copy its signing secret below' : 'Webhook created')
+      setShowNewWebhook(false); setWebhookUrl(''); setWebhookSecret(''); reload()
+    }
+    else toast.error(plainApiError(res.error, 'Could not create the webhook. Try again.'))
   }, [webhookUrl, webhookSecret, reload, toast])
 
   const deleteWebhook = useCallback(async (id: string) => {
     const res = await apiFetch(`/v1/admin/rewards/webhooks/${id}`, { method: 'DELETE' })
     if (res.ok) { toast.success('Webhook deleted'); reload() }
+    else toast.error(plainApiError(res.error, 'Could not delete the webhook. Try again.'))
   }, [reload, toast])
 
   const testWebhooks = useCallback(async () => {
     setTesting(true)
-    const res = await apiFetch('/v1/admin/rewards/webhooks/test', { method: 'POST' })
+    const res = await apiFetch<WebhookTestSummary>('/v1/admin/rewards/webhooks/test', { method: 'POST' })
     setTesting(false)
-    if (res.ok) toast.success('Test webhook delivered')
-    else toast.error('Test webhook failed')
-  }, [toast])
+    // Refresh the per-row "Last: …" status, then report each endpoint's answer.
+    reload()
+    if (!res.ok) { toast.error(plainApiError(res.error, 'Could not send the test event. Try again.')); return }
+    const outcome = describeWebhookTest(res.data)
+    if (outcome.ok) toast.success(outcome.title)
+    else toast.error(outcome.title, outcome.detail)
+  }, [reload, toast])
 
   if (loading) return <TableSkeleton rows={3} />
   if (error) return <ErrorAlert message={error} />
@@ -1699,6 +1741,10 @@ export function SettingsTab({ canEdit }: { canEdit: boolean }) {
           Receive a signed POST when a user's tier changes. Use this to apply credits, badges, or Pro access in your app.
         </p>
 
+        {revealedSecret && (
+          <WebhookSecretReveal revealed={revealedSecret} onDismiss={() => setRevealedSecret(null)} />
+        )}
+
         {showNewWebhook && (
           <Card className="p-3 mb-3 space-y-2.5">
             <Input
@@ -1708,9 +1754,8 @@ export function SettingsTab({ canEdit }: { canEdit: boolean }) {
               onChange={(ev) => setWebhookUrl(ev.target.value)}
               validate={httpsUrl({ optional: false })}
             />
-            <Input
+            <SecretInput
               label="Signing secret (≥ 16 chars, optional)"
-              type="password"
               placeholder="Leave blank to auto-generate — shown once after save"
               value={webhookSecret}
               onChange={(ev) => setWebhookSecret(ev.target.value)}
@@ -1751,7 +1796,12 @@ export function SettingsTab({ canEdit }: { canEdit: boolean }) {
                   size="sm"
                   className="px-2"
                   aria-label={`Remove webhook ${w.url}`}
-                  onClick={() => deleteWebhook(w.id)}
+                  onClick={() => confirmWebhook.ask({
+                    title: 'Remove this webhook?',
+                    body: `${w.url} stops receiving tier-change events, and its signing secret is gone for good.`,
+                    confirmLabel: 'Remove webhook',
+                    run: () => deleteWebhook(w.id),
+                  })}
                 >
                   <IconTrash />
                 </Btn>
@@ -1760,7 +1810,7 @@ export function SettingsTab({ canEdit }: { canEdit: boolean }) {
           </div>
         ))}
 
-        {(webhooks ?? []).length > 0 && (
+        {canEdit && (webhooks ?? []).length > 0 && (
           <div className="flex justify-end pt-2">
             <Btn variant="ghost" size="sm" loading={testing} onClick={testWebhooks}>
               Send test event
@@ -1769,9 +1819,10 @@ export function SettingsTab({ canEdit }: { canEdit: boolean }) {
         )}
       </Section>
 
+      {confirmWebhook.dialog}
       <IdentityProvidersSection canEdit={canEdit} />
       <PayoutLiabilitySection />
-      <DisputesSection />
+      <DisputesSection canEdit={canEdit} />
     </div>
   )
 }
@@ -1828,14 +1879,15 @@ export function QuestsTab({ canEdit }: { canEdit: boolean }) {
       toast.success('Quest saved'); setShowForm(false)
       setForm({ name: '', description: '', completion_points: 50, expires_after_days: '', repeatable: false, steps: [{ action: '', label: '' }] })
       reload()
-    } else toast.error(res.error?.message ?? 'Failed to save quest')
+    } else toast.error(plainApiError(res.error, 'Could not save the quest. Try again.'))
   }, [form, reload, toast])
 
   const deleteQuest = useCallback(async (id: string) => {
     const res = await apiFetch(`/v1/admin/rewards/quests/${id}`, { method: 'DELETE' })
     if (res.ok) { toast.success('Quest deleted'); reload() }
-    else toast.error('Failed to delete quest')
+    else toast.error(plainApiError(res.error, 'Could not delete the quest. Try again.'))
   }, [reload, toast])
+  const confirmQuest = useConfirmAction()
 
   const toggleQuest = useCallback(async (quest: QuestRow) => {
     const res = await apiFetch('/v1/admin/rewards/quests', {
@@ -1954,7 +2006,12 @@ export function QuestsTab({ canEdit }: { canEdit: boolean }) {
                         size="sm"
                         className="px-2"
                         aria-label={`Delete quest ${q.name}`}
-                        onClick={() => deleteQuest(q.id)}
+                        onClick={() => confirmQuest.ask({
+                          title: `Delete the quest "${q.name}"?`,
+                          body: 'Contributors lose their progress on it. Disable it instead if you may bring it back.',
+                          confirmLabel: 'Delete quest',
+                          run: () => deleteQuest(q.id),
+                        })}
                       >
                         <IconTrash />
                       </Btn>
