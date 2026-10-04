@@ -3,7 +3,7 @@
 > Auto-generated from [`apps/admin/src/lib/configDocs.ts`](../apps/admin/src/lib/configDocs.ts).
 > Do not edit by hand — run `pnpm gen:config-docs` instead.
 
-_105 configuration knobs across 19 sections · last regenerated 2026-10-04._
+_113 configuration knobs across 19 sections · last regenerated 2026-10-04._
 
 Every knob in the admin console has an in-app `i` icon next to it that opens a longer-form explanation. The same content is mirrored here so you can search, link, and review configuration choices outside the app.
 
@@ -14,7 +14,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 - [Settings → Firecrawl (web research)](#settings-firecrawl-web-research-) (3)
 - [Settings → Dev tools](#settings-dev-tools) (1)
 - [Projects](#projects) (8)
-- [Integrations](#integrations) (20)
+- [Integrations](#integrations) (28)
 - [Storage (BYO)](#storage-byo-) (9)
 - [Compliance](#compliance) (7)
 - [SSO](#sso) (4)
@@ -71,15 +71,15 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 `settings.general.sentry_dsn`
 
-**Summary** — Project DSN used to forward Mushi reports back into Sentry as events.
+**Summary** — Your app’s Sentry DSN, saved so Mushi knows this project reports crashes to Sentry.
 
-**How it works** — Optional outbound integration. When set, classified reports get sent to Sentry as `captureException`-style events with the report id and severity attached, so the Sentry → Mushi loop can be closed without leaving either tool.
+**How it works** — Validated on save (a sentry.io host, or a self-hosted host the operator allows). Mushi does not send events to this DSN: it only reads it as a sign that Sentry is connected, on the Settings page, the portfolio view and the app recipe. Issue import, enrichment and resolve-on-merge use the org slug and auth token on the Sentry card instead.
 
-**Default** — `unset (no forwarding)`
+**Default** — `unset`
 
-**Where it lives** — table `project_settings.sentry_dsn` · endpoint `PATCH /v1/admin/settings` · read by `tester-marketplace API route (forwardToSentryDsn)`, `published-apps API route`
+**Where it lives** — table `project_settings.sentry_dsn` · endpoint `PATCH /v1/admin/settings` · read by `api edge function (GET /v1/admin/settings, portfolio and app recipe: "Sentry connected")`, `_shared/recipe-phase2.ts (crash-reporting check)`
 
-**When to change** — Add this if you want Mushi reports visible in Sentry dashboards alongside crash data. Skip it if Sentry is purely the source — the Integrations page handles inbound webhooks separately.
+**When to change** — Set it when your app sends crashes to Sentry, so the portfolio and app recipe show Sentry as connected. Leave it empty if you don’t use Sentry; inbound Sentry webhooks need the webhook secret, not this.
 
 ### Sentry Webhook Secret
 
@@ -157,13 +157,13 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Summary** — Cosine similarity above which two reports are merged as duplicates instead of stored separately.
 
-**How it works** — After Stage 2, a pgvector lookup finds the nearest existing report by embedding distance. If similarity ≥ this value, the new report is attached to the existing cluster (its `dup_of` points at the canonical id and the cluster's occurrence count ticks up). Below it, the report stays separate.
+**How it works** — After a report is embedded, a pgvector lookup finds the nearest existing report by embedding distance. If similarity ≥ the threshold, the new report is attached to the existing cluster (its `dup_of` points at the canonical id and the cluster's occurrence count ticks up). Below it, the report stays separate. Today the grouping step (fast-filter → `suggestGrouping`) always uses the built-in 0.82: the value saved here is stored but not read yet.
 
 **Default** — `0.82` · range `0.50 – 0.99`
 
-**Where it lives** — table `project_settings.dedup_threshold` · endpoint `PATCH /v1/admin/settings` · read by `classify-report edge function`
+**Where it lives** — table `project_settings.dedup_threshold` · endpoint `PATCH /v1/admin/settings`
 
-**When to change** — Raise to 0.88+ if you're seeing false merges (different bugs being lumped together). Lower to ~0.75 if duplicate clusters look thin and the same regression keeps appearing as separate reports.
+**When to change** — Changing it has no effect yet (see above). Once grouping reads it: raise to 0.88+ if you're seeing false merges (different bugs being lumped together), lower to ~0.75 if the same regression keeps appearing as separate reports.
 
 ### Fix Branch Template
 
@@ -267,7 +267,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset (web research disabled)`
 
-**Where it lives** — table `project_settings.byok_firecrawl_key_ref (Vault)` · endpoint `PUT /v1/admin/byok/firecrawl` · read by `settings-research API routes`, `fix-worker edge function`, `library-modernizer edge function`
+**Where it lives** — table `project_settings.byok_firecrawl_key_ref (Vault)` · endpoint `PUT /v1/admin/byok/firecrawl` · read by `api edge function (POST /v1/admin/research/search, via _shared/firecrawl.ts)`, `fix-worker edge function`, `library-modernizer edge function`
 
 **When to change** — Add this once you start seeing autofix attempts hit a wall on "library X changed its API". Skip it for offline-first projects or fully air-gapped deployments.
 
@@ -279,11 +279,11 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Summary** — Domain allowlist that bounds which hosts Firecrawl can scrape on your behalf.
 
-**How it works** — One host per line. The shared crawler helper rejects any URL whose host doesn't match an entry — exact match, no wildcards, no subdomain implied. An empty list means unrestricted (the crawler accepts any reachable host).
+**How it works** — One host per line (up to 50). Searches add a `site:` filter for every entry. Page scrapes (the release-notes check) only fetch a URL whose host is an entry or a subdomain of one. An empty list leaves searches unrestricted, but in production it blocks every scrape.
 
-**Default** — `empty (unrestricted)`
+**Default** — `empty (searches unrestricted; scrapes blocked in production)`
 
-**Where it lives** — table `project_settings.firecrawl_allowed_domains` · endpoint `PUT /v1/admin/byok/firecrawl` · read by `_shared/firecrawl helper (settings-research, fix-worker, library-modernizer)`
+**Where it lives** — table `project_settings.firecrawl_allowed_domains` · endpoint `PUT /v1/admin/byok/firecrawl` · read by `_shared/firecrawl.ts (api Research search, fix-worker, library-modernizer)`, `fix-worker edge function`, `library-modernizer edge function`
 
 **When to change** — Lock this down to your stack's docs (`react.dev`, `nextjs.org`, `developer.mozilla.org`, etc.) when compliance demands provenance for any external content the LLM sees. Leave empty for open exploration during early adoption.
 
@@ -293,13 +293,13 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 `settings.firecrawl.max_pages_per_call`
 
-**Summary** — Hard cap on pages a single Firecrawl crawl can fetch — prevents one bad request from draining your quota.
+**Summary** — Hard cap on results a single Firecrawl search can return — prevents one bad request from draining your quota.
 
-**How it works** — The crawler helper caps each `crawlAndScrape` invocation at this number, regardless of what the calling code asks for. Caps stack: this is the per-call ceiling, on top of any per-day quota set by Firecrawl.
+**How it works** — Every search through `firecrawlSearch` asks Firecrawl for at most this many results, whatever the calling code requests. The server clamps the value to 1–50 (the database enforces the same range); the console input stops at 20. Caps stack: this is the per-call ceiling, on top of any per-day quota set by Firecrawl.
 
-**Default** — `5` · range `1 – 20`
+**Default** — `5` · range `1 – 50 (console input: 1 – 20)`
 
-**Where it lives** — table `project_settings.firecrawl_max_pages_per_call` · endpoint `PUT /v1/admin/byok/firecrawl` · read by `_shared/firecrawl helper`
+**Where it lives** — table `project_settings.firecrawl_max_pages_per_call` · endpoint `PUT /v1/admin/byok/firecrawl` · read by `_shared/firecrawl.ts firecrawlSearch (api Research search, fix-worker)`, `fix-worker edge function`
 
 **When to change** — Raise to 10–15 when fix-augmentation is consistently hitting the cap and the judge isn't getting enough context. Lower to 2–3 once your Firecrawl bill becomes the noisy line item.
 
@@ -337,7 +337,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset (you must pick a name)`
 
-**Where it lives** — table `projects.name` · endpoint `POST /v1/admin/projects` · read by `ProjectSwitcher`, `every admin endpoint that scopes by project`
+**Where it lives** — table `projects.name` · endpoint `POST /v1/admin/projects` · read by `api edge function (GET /v1/admin/projects)`, `console ProjectSwitcher`
 
 **When to change** — Set when adding a new app, environment, or customer. Rename later via the API if your team rebrands — slugs persist, names don't affect routing.
 
@@ -479,7 +479,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset (org-wide search)`
 
-**Where it lives** — table `project_settings.sentry_project_slug` · endpoint `PUT /v1/admin/integrations/platform/sentry` · read by `sentry-seer-poll edge function`, `integration-health-probe edge function`
+**Where it lives** — table `project_settings.sentry_project_slug` · endpoint `PUT /v1/admin/integrations/platform/sentry` · read by `sentry-seer-poll edge function`, `api edge function (POST /v1/admin/projects/:id/sentry/import)`
 
 **When to change** — Set this whenever you have more than one Sentry project — the speed-up on enrichment is significant.
 
@@ -507,13 +507,13 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Summary** — Base URL of your Langfuse instance — cloud or self-hosted.
 
-**How it works** — Every LLM call (Stage 1, Stage 2, fix-worker, judge) emits a trace to this host. Stripped of trailing slashes server-side, so paste either form.
+**How it works** — Saved per project and checked by the integration health probe, which calls this host with the key pair. Mushi’s own LLM traces (Stage 1, Stage 2, fix-worker, judge) do not use it: they go to the deployment’s `LANGFUSE_*` environment settings.
 
-**Default** — `unset (tracing disabled)`
+**Default** — `unset (falls back to the deployment’s LANGFUSE_BASE_URL on the card)`
 
-**Where it lives** — table `project_settings.langfuse_host` · endpoint `PUT /v1/admin/integrations/platform/langfuse` · read by `fast-filter`, `classify-report`, `fix-worker`, `judge-batch`
+**Where it lives** — table `project_settings.langfuse_host` · endpoint `PUT /v1/admin/integrations/platform/langfuse` · read by `integration-health-probe edge function (credential probe)`, `api edge function (GET /v1/admin/integrations/platform)`
 
-**When to change** — Set on day 1 — tracing is the only way to see what the LLM actually saw when it misclassifies.
+**When to change** — Set it when you want the Integrations page to check your own Langfuse project. It does not redirect Mushi’s LLM traces.
 
 ### Langfuse public key
 
@@ -523,11 +523,11 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Summary** — Pairs with the secret key for HTTP Basic auth against the Langfuse ingest endpoint.
 
-**How it works** — Sent as the username portion of every trace POST. Safe to commit — the secret key is what gates writes.
+**How it works** — Stored in Vault. The integration health probe sends it as the username of HTTP Basic auth when it checks your Langfuse host. Mushi’s own LLM traces use the deployment’s `LANGFUSE_PUBLIC_KEY`, not this.
 
 **Default** — `unset`
 
-**Where it lives** — table `project_settings.langfuse_public_key_ref (Vault)` · endpoint `PUT /v1/admin/integrations/platform/langfuse` · read by `LLM observability layer`
+**Where it lives** — table `project_settings.langfuse_public_key_ref (Vault)` · endpoint `PUT /v1/admin/integrations/platform/langfuse` · read by `integration-health-probe edge function (credential probe)`
 
 **When to change** — Rotate together with the secret key whenever you suspect either is leaked.
 
@@ -537,13 +537,13 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 `integrations.langfuse.secret_key`
 
-**Summary** — Pairs with the public key — gates trace writes from Mushi to Langfuse.
+**Summary** — Secret half of the Langfuse key pair the Integrations page checks your Langfuse project with.
 
-**How it works** — Stored as a vault reference. Sent as the password portion of HTTP Basic auth on every trace POST.
+**How it works** — Stored in Vault. The integration health probe sends it as the password of HTTP Basic auth when it checks your Langfuse host. Mushi’s own LLM traces use the deployment’s `LANGFUSE_SECRET_KEY`, not this.
 
 **Default** — `unset`
 
-**Where it lives** — table `project_settings.langfuse_secret_key_ref (Vault)` · endpoint `PUT /v1/admin/integrations/platform/langfuse` · read by `LLM observability layer`
+**Where it lives** — table `project_settings.langfuse_secret_key_ref (Vault)` · endpoint `PUT /v1/admin/integrations/platform/langfuse` · read by `integration-health-probe edge function (credential probe)`
 
 **When to change** — Rotate quarterly, or immediately on any suspicion of leak.
 
@@ -569,15 +569,15 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 `integrations.github.default_branch`
 
-**Summary** — Branch the fix-worker checks out before applying the LLM-generated patch.
+**Summary** — The repo’s default branch as saved on the GitHub card.
 
-**How it works** — Defaults to `main` when blank. Override for repos that branch from `master`, `develop`, or a release line. The branch name is also used as the PR base.
+**How it works** — Shown on the GitHub card and copied by "Apply to projects". The fix-worker does not read it: it takes the PR base from the primary connected repo (`project_repos.default_branch`), or `main` when that is empty.
 
-**Default** — `main`
+**Default** — `unset`
 
-**Where it lives** — table `project_settings.github_default_branch` · endpoint `PUT /v1/admin/integrations/platform/github` · read by `fix-worker edge function`
+**Where it lives** — table `project_settings.github_default_branch` · endpoint `PUT /v1/admin/integrations/platform/github` · read by `api edge function (GET /v1/admin/integrations/platform, POST …/platform/github/apply)`
 
-**When to change** — Change only if your repo's default isn't `main` — otherwise leaving it blank is the right answer.
+**When to change** — Keep it matching your repo's default branch. To change the branch fixes are opened against, change the connected repo's default branch instead.
 
 ### GitHub installation token
 
@@ -601,15 +601,143 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 `integrations.github.webhook_secret`
 
-**Summary** — HMAC secret that authenticates inbound check-run / check-suite webhooks from GitHub.
+**Summary** — HMAC secret that authenticates inbound check-run, check-suite and push webhooks from GitHub.
 
-**How it works** — Mushi's webhook handler verifies the `X-Hub-Signature-256` header against this secret. Without a match → 401, the event is dropped. The same value must be set in the GitHub repo Settings → Webhooks.
+**How it works** — Mushi's webhook route (`POST /v1/webhooks/github`) verifies the `X-Hub-Signature-256` header against this secret. Without a match → 401, the event is dropped. The same value must be set in the GitHub repo Settings → Webhooks.
 
 **Default** — `unset (CI sync disabled)`
 
-**Where it lives** — table `project_settings.github_webhook_secret (Vault)` · endpoint `PUT /v1/admin/integrations/platform/github` · read by `github-webhook edge function`
+**Where it lives** — table `project_settings.github_webhook_secret (Vault)` · endpoint `PUT /v1/admin/integrations/platform/github` · read by `api edge function (POST /v1/webhooks/github)`
 
 **When to change** — Set this once you want PR check-run conclusions (CI passing/failing) reflected in the Auto-Fix Pipeline UI.
+
+### Cursor API key
+
+<a id="integrations-cursor-cloud-api-key"></a>
+
+`integrations.cursor_cloud.api_key`
+
+**Summary** — Cursor API key Mushi uses to start Cursor Cloud Agent runs that draft a fix PR.
+
+**How it works** — Stored in Vault. When a fix is dispatched to the `cursor_cloud` agent, the fix-worker starts a Cursor Cloud Agent run with this key against the repo from the GitHub card, and the status poller uses it to follow the run. Skill-pipeline steps in cloud mode use it too. Connect GitHub first: Cursor needs the repo URL and token.
+
+**Default** — `unset (Cursor dispatch unavailable)`
+
+**Where it lives** — table `project_settings.cursor_api_key_ref (Vault)` · endpoint `PUT /v1/admin/integrations/platform/cursor_cloud` · read by `fix-worker edge function (via _shared/agent-adapters.ts)`, `agent-status-poll edge function`, `api edge function (skill pipeline steps, via _shared/plugins.ts)`, `integration-health-probe edge function`
+
+**When to change** — Set it when you want "Send to Cursor" on reports. Rotate it in the Cursor dashboard whenever someone with access to it leaves.
+
+### Cursor default model
+
+<a id="integrations-cursor-cloud-default-model"></a>
+
+`integrations.cursor_cloud.default_model`
+
+**Summary** — Cursor model slug for agent runs Mushi starts.
+
+**How it works** — Passed as the model on each Cursor Cloud Agent run. When empty, fix dispatches let Cursor use your account default, skill-pipeline steps use `composer-2.5`, and the story mapper sends `default`.
+
+**Default** — `composer-2.5 (database default)`
+
+**Where it lives** — table `project_settings.cursor_default_model` · endpoint `PUT /v1/admin/integrations/platform/cursor_cloud` · read by `fix-worker edge function`, `story-mapper edge function`, `api edge function (skill pipeline steps, via _shared/plugins.ts)`
+
+**When to change** — Change it when Cursor ships a model that fixes your codebase better, or to cut cost per run.
+
+### Cursor auto-create PRs
+
+<a id="integrations-cursor-cloud-auto-create-pr"></a>
+
+`integrations.cursor_cloud.auto_create_pr`
+
+**Summary** — Whether a Cursor agent run opens a draft PR by itself when it finishes.
+
+**How it works** — Only skill-pipeline steps sent to Cursor read this setting. Fix dispatches from a report always ask Cursor to open the PR, because Mushi tracks the fix through that PR.
+
+**Default** — `true`
+
+**Where it lives** — table `project_settings.cursor_auto_create_pr` · endpoint `PUT /v1/admin/integrations/platform/cursor_cloud` · read by `api edge function (skill pipeline steps, via _shared/plugins.ts)`
+
+**When to change** — Turn it off if you want to review a skill-pipeline step’s branch before any PR exists.
+
+### Cursor max iterations
+
+<a id="integrations-cursor-cloud-max-iterations"></a>
+
+`integrations.cursor_cloud.max_iterations`
+
+**Summary** — Intended cap on agent iterations per Cursor run. Saved, but not sent to Cursor yet.
+
+**How it works** — The skill-pipeline dispatcher reads it along with the other Cursor settings, but no Cursor request includes it today, so runs use Cursor’s own limit. The server does not range-check it; the card suggests 1–10.
+
+**Default** — `1`
+
+**Where it lives** — table `project_settings.cursor_max_iterations` · endpoint `PUT /v1/admin/integrations/platform/cursor_cloud` · read by `api edge function (read by _shared/plugins.ts, not sent to Cursor)`
+
+**When to change** — Leave it at 1 for now: changing it has no effect on runs yet.
+
+### Claude Code agent: Anthropic API key
+
+<a id="integrations-claude-code-agent-api-key"></a>
+
+`integrations.claude_code_agent.api_key`
+
+**Summary** — Anthropic key Mushi uses only to check that the Claude Code agent integration is healthy.
+
+**How it works** — Stored in Vault. The integration health probe calls the Anthropic models list with it (no tokens used). The fix itself runs in your repo’s GitHub Actions workflow with the `ANTHROPIC_API_KEY` secret you add there; Mushi never sends this key to GitHub.
+
+**Default** — `unset`
+
+**Where it lives** — table `project_settings.claude_api_key_ref (Vault)` · endpoint `PUT /v1/admin/integrations/platform/claude_code_agent` · read by `integration-health-probe edge function`
+
+**When to change** — Rotate it together with the `ANTHROPIC_API_KEY` secret in your repo, so the health check tests the key the workflow uses.
+
+### Claude Code agent: default model
+
+<a id="integrations-claude-code-agent-default-model"></a>
+
+`integrations.claude_code_agent.default_model`
+
+**Summary** — Model slug saved for the Claude Code fix workflow.
+
+**How it works** — Validated and stored only. No Mushi code sends it anywhere yet: the server has no dispatch path for the Claude Code workflow today, so the workflow in your repo picks its own model.
+
+**Default** — `claude-opus-4-1 (database default)`
+
+**Where it lives** — table `project_settings.claude_default_model` · endpoint `PUT /v1/admin/integrations/platform/claude_code_agent`
+
+**When to change** — No need to change it yet; it has no effect until Mushi dispatches the workflow.
+
+### Claude Code agent: workflow event
+
+<a id="integrations-claude-code-agent-workflow-event"></a>
+
+`integrations.claude_code_agent.workflow_event`
+
+**Summary** — The `repository_dispatch` event type your mushi-claude-fix workflow listens for.
+
+**How it works** — The setup checklist on the card writes this value into the workflow YAML it hands you (`on.repository_dispatch.types`). Anything that is not a plain identifier falls back to `mushi_claude_fix`.
+
+**Default** — `mushi_claude_fix`
+
+**Where it lives** — table `project_settings.claude_workflow_event` · endpoint `PUT /v1/admin/integrations/platform/claude_code_agent` · read by `api edge function (GET /v1/admin/integrations/claude-code-agent/setup)`
+
+**When to change** — Change it only if the default event name clashes with another workflow, then copy the regenerated YAML into your repo.
+
+### Claude Code agent: base branch
+
+<a id="integrations-claude-code-agent-default-branch"></a>
+
+`integrations.claude_code_agent.default_branch`
+
+**Summary** — Branch saved as the base for Claude Code fix runs.
+
+**How it works** — Validated and stored only. No Mushi code reads it yet: the server has no dispatch path for the Claude Code workflow today, so the workflow checks out whatever its YAML says.
+
+**Default** — `main (database default)`
+
+**Where it lives** — table `project_settings.claude_default_branch` · endpoint `PUT /v1/admin/integrations/platform/claude_code_agent`
+
+**When to change** — No need to change it yet; set the branch in the workflow YAML instead.
 
 ### Jira base URL
 
@@ -623,7 +751,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset`
 
-**Where it lives** — table `project_integrations.config.baseUrl (integration_type = jira)` · endpoint `POST /v1/admin/integrations` · read by `route-to-jira edge function`
+**Where it lives** — table `project_integrations.config.baseUrl (integration_type = jira)` · endpoint `POST /v1/admin/integrations` · read by `classify-report edge function (files the issue)`, `api edge function (POST /v1/admin/integrations/sync/:reportId; closes the issue when the report resolves)`, `integration-health-probe edge function`
 
 **When to change** — Update if Atlassian migrates your tenant or you self-host Jira behind a new domain.
 
@@ -639,7 +767,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset`
 
-**Where it lives** — table `project_integrations.config.email (integration_type = jira)` · endpoint `POST /v1/admin/integrations` · read by `route-to-jira edge function`
+**Where it lives** — table `project_integrations.config.email (integration_type = jira)` · endpoint `POST /v1/admin/integrations` · read by `classify-report edge function (files the issue)`, `api edge function (POST /v1/admin/integrations/sync/:reportId; closes the issue when the report resolves)`, `integration-health-probe edge function`
 
 **When to change** — Set this to a service account, not a real human — service accounts survive offboarding.
 
@@ -655,7 +783,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset`
 
-**Where it lives** — table `project_integrations.config.apiToken (integration_type = jira, Vault)` · endpoint `POST /v1/admin/integrations` · read by `route-to-jira edge function`
+**Where it lives** — table `project_integrations.config.apiToken (integration_type = jira, Vault)` · endpoint `POST /v1/admin/integrations` · read by `classify-report edge function (files the issue)`, `api edge function (POST /v1/admin/integrations/sync/:reportId; closes the issue when the report resolves)`, `integration-health-probe edge function`
 
 **When to change** — Rotate quarterly. Re-issue immediately if the owning email changes.
 
@@ -671,7 +799,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset`
 
-**Where it lives** — table `project_integrations.config.projectKey (integration_type = jira)` · endpoint `POST /v1/admin/integrations` · read by `route-to-jira edge function`
+**Where it lives** — table `project_integrations.config.projectKey (integration_type = jira)` · endpoint `POST /v1/admin/integrations` · read by `classify-report edge function (files the issue)`, `api edge function (POST /v1/admin/integrations/sync/:reportId; closes the issue when the report resolves)`
 
 **When to change** — Change to route to a different Jira project — typically when the support team owns a new tracker.
 
@@ -687,7 +815,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset`
 
-**Where it lives** — table `project_integrations.config.apiKey (integration_type = linear, Vault)` · endpoint `POST /v1/admin/integrations` · read by `route-to-linear edge function`
+**Where it lives** — table `project_integrations.config.apiKey (integration_type = linear, Vault)` · endpoint `POST /v1/admin/integrations` · read by `classify-report edge function (files the issue)`, `api edge function (POST /v1/admin/integrations/sync/:reportId; closes the issue when the report resolves)`
 
 **When to change** — Rotate when the issuing user changes role. Linear keys don't auto-expire, so quarterly review is wise.
 
@@ -703,7 +831,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset`
 
-**Where it lives** — table `project_integrations.config.teamId (integration_type = linear)` · endpoint `POST /v1/admin/integrations` · read by `route-to-linear edge function`
+**Where it lives** — table `project_integrations.config.teamId (integration_type = linear)` · endpoint `POST /v1/admin/integrations` · read by `classify-report edge function (files the issue)`, `api edge function (POST /v1/admin/integrations/sync/:reportId; closes the issue when the report resolves)`
 
 **When to change** — Update when re-routing to a different team — e.g. moving from Triage to Engineering once the team grows.
 
@@ -719,7 +847,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset`
 
-**Where it lives** — table `project_integrations.config.token (integration_type = github, Vault)` · endpoint `POST /v1/admin/integrations` · read by `route-to-github-issues edge function`
+**Where it lives** — table `project_integrations.config.token (integration_type = github, Vault)` · endpoint `POST /v1/admin/integrations` · read by `classify-report edge function (files the issue)`, `api edge function (POST /v1/admin/integrations/sync/:reportId; closes the issue when the report resolves)`, `integration-health-probe edge function`
 
 **When to change** — Use when you want a public-facing changelog of reviewed bugs without exposing your code repo.
 
@@ -735,7 +863,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset`
 
-**Where it lives** — table `project_integrations.config.owner (integration_type = github)` · endpoint `POST /v1/admin/integrations` · read by `route-to-github-issues edge function`
+**Where it lives** — table `project_integrations.config.owner (integration_type = github)` · endpoint `POST /v1/admin/integrations` · read by `classify-report edge function (files the issue)`, `api edge function (POST /v1/admin/integrations/sync/:reportId; closes the issue when the report resolves)`, `integration-health-probe edge function`
 
 **When to change** — Change when the tracker repo moves under a new org — typically during company rebranding.
 
@@ -751,7 +879,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset`
 
-**Where it lives** — table `project_integrations.config.repo (integration_type = github)` · endpoint `POST /v1/admin/integrations` · read by `route-to-github-issues edge function`
+**Where it lives** — table `project_integrations.config.repo (integration_type = github)` · endpoint `POST /v1/admin/integrations` · read by `classify-report edge function (files the issue)`, `api edge function (POST /v1/admin/integrations/sync/:reportId; closes the issue when the report resolves)`, `integration-health-probe edge function`
 
 **When to change** — Update when archiving and replacing the tracker — Mushi follows the new repo as soon as you save.
 
@@ -767,7 +895,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset`
 
-**Where it lives** — table `project_integrations.config.routingKey (integration_type = pagerduty, Vault)` · endpoint `POST /v1/admin/integrations` · read by `route-to-pagerduty edge function`
+**Where it lives** — table `project_integrations.config.routingKey (integration_type = pagerduty, Vault)` · endpoint `POST /v1/admin/integrations` · read by `classify-report edge function (files the issue)`, `api edge function (POST /v1/admin/integrations/sync/:reportId; closes the issue when the report resolves)`, `integration-health-probe edge function`
 
 **When to change** — Set this once you have a real on-call rotation. Don't use a personal key — use a service-level integration key.
 
@@ -787,7 +915,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `supabase`
 
-**Where it lives** — table `project_storage_settings.provider` · endpoint `PUT /v1/admin/storage/:projectId` · read by `storage adapter (every artifact upload/download)`
+**Where it lives** — table `project_storage_settings.provider` · endpoint `PUT /v1/admin/storage/:projectId` · read by `_shared/storage.ts adapter (api edge function: every upload and download)`
 
 **When to change** — Switch to your own bucket once you cross the Supabase Storage egress free tier, or when compliance asks you to keep artifacts inside your own VPC.
 
@@ -803,7 +931,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset`
 
-**Where it lives** — table `project_storage_settings.bucket` · endpoint `PUT /v1/admin/storage/:projectId` · read by `storage adapter`
+**Where it lives** — table `project_storage_settings.bucket` · endpoint `PUT /v1/admin/storage/:projectId` · read by `_shared/storage.ts adapter (api edge function)`
 
 **When to change** — Set once when wiring BYO storage. Migrate to a new bucket only with a backfill plan — old links keep pointing at the old one.
 
@@ -813,13 +941,13 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 `storage.region`
 
-**Summary** — Geographic region of the bucket — used to build the endpoint and for residency enforcement.
+**Summary** — Geographic region of the bucket — used to sign requests and to build the default S3 endpoint.
 
-**How it works** — For S3, the region is part of the URL signing process; mismatch → SignatureDoesNotMatch. For Compliance: storage region is checked against `data_residency_region` and a mismatch triggers a hard refusal at write time.
+**How it works** — For S3, the region is part of the URL signing process; mismatch → SignatureDoesNotMatch. With no endpoint set, the adapter builds `https://s3.<region>.amazonaws.com` (us-east-1 when empty). It is not compared with the project’s data residency region.
 
 **Default** — `unset`
 
-**Where it lives** — table `project_storage_settings.region` · endpoint `PUT /v1/admin/storage/:projectId` · read by `storage adapter`, `compliance check`
+**Where it lives** — table `project_storage_settings.region` · endpoint `PUT /v1/admin/storage/:projectId` · read by `_shared/storage.ts adapter (api edge function)`
 
 **When to change** — Set the region your bucket actually lives in. Don't guess — write failures from a wrong region are silent until the user can't open their screenshot.
 
@@ -835,7 +963,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `empty (provider default)`
 
-**Where it lives** — table `project_storage_settings.endpoint` · endpoint `PUT /v1/admin/storage/:projectId` · read by `storage adapter`
+**Where it lives** — table `project_storage_settings.endpoint` · endpoint `PUT /v1/admin/storage/:projectId` · read by `_shared/storage.ts adapter (api edge function)`
 
 **When to change** — Set once when pointing at a non-AWS S3 host. Update if your provider migrates accounts to a new endpoint shape.
 
@@ -851,7 +979,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `empty (writes to bucket root)`
 
-**Where it lives** — table `project_storage_settings.path_prefix` · endpoint `PUT /v1/admin/storage/:projectId` · read by `storage adapter`
+**Where it lives** — table `project_storage_settings.path_prefix` · endpoint `PUT /v1/admin/storage/:projectId` · read by `_shared/storage.ts adapter (api edge function)`
 
 **When to change** — Set when sharing a bucket. Don't change after writes have started — old keys stay where they were.
 
@@ -867,7 +995,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `3600 (1 hour)` · range `60 – 604800 (7 days)`
 
-**Where it lives** — table `project_storage_settings.signed_url_ttl_secs` · endpoint `PUT /v1/admin/storage/:projectId` · read by `storage adapter (every signed URL it mints)`
+**Where it lives** — table `project_storage_settings.signed_url_ttl_secs` · endpoint `PUT /v1/admin/storage/:projectId` · read by `_shared/storage.ts adapter (every signed URL it mints)`
 
 **When to change** — Drop to 5–15 minutes for high-sensitivity data. Bump up to a day if your team works asynchronously and copies links into long-running threads.
 
@@ -883,7 +1011,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset`
 
-**Where it lives** — table `project_storage_settings.access_key_vault_ref (Vault)` · endpoint `PUT /v1/admin/storage/:projectId` · read by `storage adapter`
+**Where it lives** — table `project_storage_settings.access_key_vault_ref (Vault)` · endpoint `PUT /v1/admin/storage/:projectId` · read by `_shared/storage.ts adapter (api edge function)`
 
 **When to change** — Rotate quarterly, or immediately if the key may have leaked.
 
@@ -899,7 +1027,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset`
 
-**Where it lives** — table `project_storage_settings.secret_key_vault_ref (Vault)` · endpoint `PUT /v1/admin/storage/:projectId` · read by `storage adapter`
+**Where it lives** — table `project_storage_settings.secret_key_vault_ref (Vault)` · endpoint `PUT /v1/admin/storage/:projectId` · read by `_shared/storage.ts adapter (api edge function)`
 
 **When to change** — Rotate alongside the access key. Never paste the raw value into an email or ticket.
 
@@ -915,7 +1043,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `empty (provider default encryption)`
 
-**Where it lives** — table `project_storage_settings.kms_key_id` · endpoint `PUT /v1/admin/storage/:projectId` · read by `storage adapter`
+**Where it lives** — table `project_storage_settings.kms_key_id` · endpoint `PUT /v1/admin/storage/:projectId` · read by `_shared/storage.ts adapter (api edge function)`
 
 **When to change** — Set when compliance demands customer-managed encryption keys. Verify the IAM principal has `kms:Encrypt`/`kms:Decrypt` on the key ARN.
 
@@ -931,11 +1059,11 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Summary** — Pins your project's data to a specific geographic region — `us`, `eu`, `jp`, or `self` (BYO storage).
 
-**How it works** — On first set, Mushi pins the project to this region and validates that storage + DB + edge functions all run there. Once pinned, the value is REGION_LOCKED — subsequent change attempts return 409 with `code: REGION_LOCKED`. To migrate, open a support ticket so the data move can be audited.
+**How it works** — On first set, Mushi pins the project to this region: a trigger copies it into `region_routing`, and the API’s region router sends that project’s requests to the matching regional deployment. It does not check where your storage bucket lives. Once pinned, change attempts return 409 with `code: REGION_LOCKED`. To migrate, open a support ticket so the data move can be audited.
 
-**Default** — `unpinned (first traffic locks it)`
+**Default** — `unpinned`
 
-**Where it lives** — table `projects.data_residency_region` · endpoint `PUT /v1/admin/residency/{projectId}` · read by `every storage write`, `compliance check`
+**Where it lives** — table `projects.data_residency_region` · endpoint `PUT /v1/admin/residency/{projectId}` · read by `projects_sync_region_routing trigger → region_routing`, `api edge function (regionRouter in _shared/region.ts)`
 
 **When to change** — Set on day 1 if compliance demands it (HIPAA, GDPR, J-SOX). Don't set speculatively — the lock-out is real and reversal is manual.
 
@@ -949,11 +1077,11 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Summary** — How long classified reports stay in the database before the retention sweeper deletes them.
 
-**How it works** — A nightly cron deletes any report whose `created_at + reports_retention_days` is in the past, UNLESS `legal_hold` is true (in which case nothing is deleted regardless of age). Soft-delete first (90-day tombstone), then hard-delete.
+**How it works** — Two nightly sweeps (the retention-sweep function at 03:00 UTC and the `mushi_apply_retention()` cron at 03:30 UTC) delete any report whose `created_at + reports_retention_days` is in the past, UNLESS `legal_hold` is true (in which case nothing is deleted regardless of age). Deletes are permanent; there is no soft-delete step.
 
 **Default** — `365 (1 year)`
 
-**Where it lives** — table `project_retention_policies.reports_retention_days` · endpoint `PUT /v1/admin/compliance/retention/{projectId}` · read by `retention-sweep cron`, `soc2-evidence edge function`
+**Where it lives** — table `project_retention_policies.reports_retention_days` · endpoint `PUT /v1/admin/compliance/retention/{projectId}` · read by `retention-sweep edge function`, `mushi-soc2-retention-sweep cron (mushi_apply_retention)`, `soc2-evidence edge function`
 
 **When to change** — Lower to 90 for GDPR-tight projects. Raise to 730+ for regulated industries that need multi-year audit history.
 
@@ -965,45 +1093,45 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Summary** — How long admin-action audit logs (who saw / changed / deleted what) are retained.
 
-**How it works** — Independent of the reports retention. Audit logs are append-only and rarely need to be the same age as the underlying data — most regulators want 1–7 years of audit even on 90-day data.
+**How it works** — Independent of the reports retention. The nightly `mushi_apply_retention()` cron deletes `audit_logs` rows older than this window unless the project is on legal hold. Most regulators want 1–7 years of audit even on 90-day data.
 
 **Default** — `730 (2 years)`
 
-**Where it lives** — table `project_retention_policies.audit_retention_days` · endpoint `PUT /v1/admin/compliance/retention/{projectId}` · read by `audit-sweep cron`, `soc2-evidence edge function`
+**Where it lives** — table `project_retention_policies.audit_retention_days` · endpoint `PUT /v1/admin/compliance/retention/{projectId}` · read by `mushi-soc2-retention-sweep cron (mushi_apply_retention)`, `soc2-evidence edge function`
 
 **When to change** — Match your strictest regulatory ask (SOC 2 typically asks for 1y; HIPAA 6y; J-SOX 7y).
 
-### Attachments retention (days)
+### BYOK audit retention (days)
 
 <a id="compliance-retention-attachments-days"></a>
 
 `compliance.retention.attachments_days`
 
-**Summary** — How long screenshots, recordings, and other binary attachments are retained.
+**Summary** — How long the log of AI-key changes (keys added, rotated, tested, removed) is kept.
 
-**How it works** — Object-storage entries are deleted via the configured storage adapter. If a report is older than its retention window but its attachments aren't, the attachments are orphaned but kept until their own clock expires.
+**How it works** — The nightly `mushi_apply_retention()` cron deletes `byok_audit_log` rows older than this window unless the project is on legal hold. The keys themselves live in Vault and are not affected.
 
-**Default** — `180 (6 months)`
+**Default** — `365 (1 year)`
 
-**Where it lives** — table `project_retention_policies.byok_audit_retention_days` · endpoint `PUT /v1/admin/compliance/retention/{projectId}` · read by `attachment-sweep cron`
+**Where it lives** — table `project_retention_policies.byok_audit_retention_days` · endpoint `PUT /v1/admin/compliance/retention/{projectId}` · read by `mushi-soc2-retention-sweep cron (mushi_apply_retention)`
 
-**When to change** — Lower aggressively if storage cost dominates. Raise only when artifacts are evidentiary (regulated reproduction steps).
+**When to change** — Keep it at least as long as your audit log retention, so you can still show who changed an AI key during an audit window.
 
-### Events retention (days)
+### LLM traces retention (days)
 
 <a id="compliance-retention-events-days"></a>
 
 `compliance.retention.events_days`
 
-**Summary** — How long AI step events (LLM calls, report spans, fix attempts) are retained for analytics.
+**Summary** — The retention window recorded for LLM call traces. No sweep enforces it yet.
 
-**How it works** — Drives the rollup tables that power the Health page. Events older than this window are dropped; aggregated rollups (hourly/daily) survive longer because they're much smaller.
+**How it works** — Saved with the project’s retention policy and shown here, but neither nightly sweep reads it: LLM call records are not deleted by age today. Set it to the window your policy promises, so it is in place once a sweep enforces it.
 
 **Default** — `90`
 
-**Where it lives** — table `project_retention_policies.llm_traces_retention_days` · endpoint `PUT /v1/admin/compliance/retention/{projectId}` · read by `events-sweep cron`, `health-rollups cron`
+**Where it lives** — table `project_retention_policies.llm_traces_retention_days` · endpoint `PUT /v1/admin/compliance/retention/{projectId}`
 
-**When to change** — Lower to 30 if the events table is your top storage line item. Raise to 365 if you do longitudinal pipeline analysis.
+**When to change** — Match what your privacy policy says about AI processing logs. Changing it does not delete anything yet.
 
 ### Legal hold
 
@@ -1013,11 +1141,11 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Summary** — Master switch that suspends ALL retention deletes — for litigation holds and regulatory inquiries.
 
-**How it works** — When on, every retention sweeper short-circuits and deletes nothing. The toggle is itself audit-logged (who flipped it, when, why) so a compliance team can prove the hold was active during the incident window.
+**How it works** — When on, both retention sweeps skip the project and delete nothing. The toggle is itself audit-logged (who flipped it, when, and the reason if one is given) so a compliance team can prove the hold was active during the incident window.
 
 **Default** — `off`
 
-**Where it lives** — table `project_retention_policies.legal_hold` · endpoint `PUT /v1/admin/compliance/retention/{projectId}` · read by `every retention sweeper`
+**Where it lives** — table `project_retention_policies.legal_hold` · endpoint `PUT /v1/admin/compliance/retention/{projectId}` · read by `retention-sweep edge function`, `mushi-soc2-retention-sweep cron (mushi_apply_retention)`, `soc2-evidence edge function`
 
 **When to change** — Flip ON the moment counsel hands you a hold notice. Flip OFF only after counsel confirms the hold is released — leaving it on indefinitely defeats GDPR/CCPA right-to-be-forgotten.
 
@@ -1027,15 +1155,15 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 `compliance.dsar.subject_email`
 
-**Summary** — Email address of the data subject whose data you want exported or deleted.
+**Summary** — Email address of the data subject who asked for access, export, deletion or correction of their data.
 
-**How it works** — The DSAR (Data Subject Access Request) endpoint searches every report, attachment, and event whose `reporter_email` or session metadata matches this address, and produces either an export bundle or a delete plan.
+**How it works** — Submitting records a DSAR (Data Subject Access Request) with this email and the request type (access, export, deletion or rectification), status `pending`, and writes an audit log entry. Mushi does not search, export or delete anything for you: your team fulfils the request, then marks it in progress, completed (with an evidence link) or rejected. The SOC 2 evidence check fails while any request stays pending for more than 30 days.
 
 **Default** — `unset`
 
-**Where it lives** — table `data_subject_requests.subject_email` · endpoint `POST /v1/admin/compliance/dsars` · read by `dsar-runner edge function`
+**Where it lives** — table `data_subject_requests.subject_email` · endpoint `POST /v1/admin/compliance/dsars` · read by `api edge function (GET /v1/admin/compliance/dsars, PATCH …/dsars/:id)`, `soc2-evidence edge function (DSAR fulfilment lag control: reads the request status, not the email)`
 
-**When to change** — Fill in only when processing a real DSAR. Each submission creates an auditable request — don't test on real customer emails.
+**When to change** — Fill in only when recording a real DSAR. Each submission creates an auditable request — don't test on real customer emails.
 
 ## SSO
 
@@ -1049,11 +1177,11 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Summary** — Which federation protocol the IdP speaks — `saml` (self-service) or `oidc` (audit-only — manual setup required).
 
-**How it works** — Determines which authn flow Mushi expects on the callback. SAML is fully self-service: Mushi calls the GoTrue Admin API to register the provider and returns the canonical ACS URL + Entity ID. OIDC is stored for audit but Mushi cannot auto-register it (GoTrue's Admin API does not yet expose an OIDC endpoint); selecting it returns HTTP 202 with `status: 'manual_required'` so you can quote the config id in a Supabase support ticket.
+**How it works** — Decides how the config is registered. SAML is fully self-service: Mushi calls the Supabase Auth (GoTrue) Admin API to register the provider and stores the ACS URL + Entity ID it returns. Supabase Auth then handles the SAML sign-in itself; Mushi has no SSO callback of its own. OIDC is stored for audit but Mushi cannot auto-register it (GoTrue's Admin API does not yet expose an OIDC endpoint); selecting it returns HTTP 202 with `status: 'manual_required'` so you can quote the config id in a Supabase support ticket.
 
 **Default** — `saml`
 
-**Where it lives** — table `enterprise_sso_configs.provider_type` · endpoint `POST /v1/admin/sso` · read by `sso-callback edge function`
+**Where it lives** — table `enterprise_sso_configs.provider_type` · endpoint `POST /v1/admin/sso` · read by `api edge function (POST /v1/admin/sso → Supabase Auth Admin API)`, `api edge function (GET /v1/admin/sso)`
 
 **When to change** — Pick what your IdP actually serves. Don't pick OIDC yet — the gate exists for safety, not capacity.
 
@@ -1063,13 +1191,13 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 `sso.metadata_url`
 
-**Summary** — URL Mushi fetches to learn the IdP's certificates, endpoints, and assertion shape.
+**Summary** — URL of the IdP's SAML metadata (certificates, endpoints, assertion shape).
 
-**How it works** — Refetched daily so cert rotations propagate without a manual sync. If the URL goes 4xx, the previous cached metadata is used until it does.
+**How it works** — Mushi passes it to the Supabase Auth Admin API when it registers the SAML provider; Supabase Auth fetches and parses the metadata. Mushi keeps the URL on the config row for display and audit. SAML needs either this URL or pasted metadata XML.
 
 **Default** — `unset`
 
-**Where it lives** — table `enterprise_sso_configs.metadata_url` · endpoint `POST /v1/admin/sso` · read by `sso-callback edge function`
+**Where it lives** — table `enterprise_sso_configs.metadata_url` · endpoint `POST /v1/admin/sso` · read by `api edge function (POST /v1/admin/sso → Supabase Auth Admin API)`, `api edge function (GET /v1/admin/sso)`
 
 **When to change** — Update when migrating IdPs (Okta → Entra, etc.). Verify the new metadata URL is reachable from your Mushi region before flipping.
 
@@ -1081,11 +1209,11 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Summary** — Unique identifier for this Mushi project as seen by the IdP — also called the audience.
 
-**How it works** — Sent in the SAML AuthnRequest as `Issuer` and asserted by the IdP in the response. Mismatch → assertion rejected.
+**How it works** — For SAML, Mushi replaces what you type with the Entity ID Supabase Auth reports after registering the provider; that is the value to enter as the audience in your IdP. For OIDC the column holds the client ID. Mushi only displays it; Supabase Auth checks assertions.
 
 **Default** — `unset`
 
-**Where it lives** — table `enterprise_sso_configs.entity_id` · endpoint `POST /v1/admin/sso` · read by `sso-callback edge function`
+**Where it lives** — table `enterprise_sso_configs.entity_id` · endpoint `POST /v1/admin/sso` · read by `api edge function (GET /v1/admin/sso)`
 
 **When to change** — Set once during provisioning. Match exactly what the IdP's app config has for "Audience URI".
 
@@ -1097,11 +1225,11 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Summary** — Comma-separated email domains routed to this SSO provider (`acme.com, acme.co.jp`).
 
-**How it works** — On the login page, the email a user types is matched against this list — domain hit → redirect to SSO. Domain miss → fall back to password (or block, depending on the org's "SSO required" toggle).
+**How it works** — Sent to the Supabase Auth Admin API with the SAML provider, so Supabase Auth can pick this provider when an SSO sign-in starts from one of these email domains. The Mushi console sign-in page does not offer SSO sign-in by domain yet, and there is no "SSO required" switch.
 
-**Default** — `unset (no SSO routing)`
+**Default** — `unset`
 
-**Where it lives** — table `enterprise_sso_configs.domains (text[])` · endpoint `POST /v1/admin/sso` · read by `login-resolver edge function`
+**Where it lives** — table `enterprise_sso_configs.domains (text[])` · endpoint `POST /v1/admin/sso` · read by `api edge function (POST /v1/admin/sso → Supabase Auth Admin API)`, `api edge function (GET /v1/admin/sso)`
 
 **When to change** — Add a domain the day before that company's users start onboarding. Remove a domain immediately on contract end so old emails can't still SSO in.
 
@@ -1121,7 +1249,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `classifier (most-used)`
 
-**Where it lives** — table `prompt_versions.stage` · endpoint `POST /v1/admin/prompt-lab/prompts` · read by `_shared/prompt-ab helper`
+**Where it lives** — table `prompt_versions.stage` · endpoint `POST /v1/admin/prompt-lab/prompts` · read by `_shared/prompt-ab.ts (fast-filter, classify-report, fix-worker, judge-batch and other LLM stages)`
 
 **When to change** — Pick the stage you're iterating on. Most teams start with classifier — it has the largest impact per token.
 
@@ -1137,7 +1265,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `0% on new versions`
 
-**Where it lives** — table `prompt_versions.traffic_percentage` · endpoint `POST /v1/admin/prompt-lab/prompts` · read by `_shared/prompt-ab helper`
+**Where it lives** — table `prompt_versions.traffic_percentage` · endpoint `POST /v1/admin/prompt-lab/prompts` · read by `_shared/prompt-ab.ts (fast-filter, classify-report, fix-worker, judge-batch and other LLM stages)`
 
 **When to change** — Start a new version at 5%, watch the eval scores for 24h, then ramp 25→50→100. Don't flip 0→100 — you lose the ability to A/B against the previous champion.
 
@@ -1155,7 +1283,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `shipped baseline (varies by stage)`
 
-**Where it lives** — table `prompt_versions.prompt_template` · endpoint `POST /v1/admin/prompt-lab/prompts` · read by `fast-filter`, `classify-report`, `fix-worker, judge-batch`
+**Where it lives** — table `prompt_versions.prompt_template` · endpoint `POST /v1/admin/prompt-lab/prompts` · read by `fast-filter edge function`, `classify-report edge function`, `fix-worker edge function`, `judge-batch edge function`
 
 **When to change** — When eval scores plateau or a new model rewards different prompting style. Tag every change with what you tried, so the changelog is honest.
 
@@ -1187,11 +1315,11 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Summary** — Where Mushi POSTs subscribed plugin events — your endpoint receives them.
 
-**How it works** — Every subscribed event fires a JSON POST against this URL. Failed posts retry with exponential backoff up to 24 hours; persistently-failing webhooks are quarantined and surfaced as an alert.
+**How it works** — Every subscribed event fires a signed JSON POST against this URL (public https only). A failed delivery is retried by a per-minute cron, up to 5 attempts in all, with exponential backoff starting at 30 seconds; after the last one the plugin’s last delivery status turns to `error` and the operator is alerted.
 
 **Default** — `unset (plugin disabled)`
 
-**Where it lives** — table `project_plugins.webhook_url` · endpoint `POST /v1/admin/plugins` · read by `marketplace-dispatcher edge function`
+**Where it lives** — table `project_plugins.webhook_url` · endpoint `POST /v1/admin/plugins` · read by `_shared/plugins.ts dispatchPluginEvent (api, classify-report, fix-worker, judge-batch, qa-story-runner, status-reconciler, webhooks-linear)`, `plugin-dispatch-retry edge function`
 
 **When to change** — Set when wiring a plugin. Update when your plugin host migrates — the dispatcher honours the new URL on the next event.
 
@@ -1203,13 +1331,13 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Summary** — HMAC secret your plugin verifies on every inbound event so it can trust the payload.
 
-**How it works** — Mushi signs every event with `X-Mushi-Signature: t=<ts>,v1=<hmac>`. Your plugin recomputes the HMAC against the raw body using this secret; mismatch = drop the event.
+**How it works** — The API requires a secret whenever a webhook URL is set and stores it in Vault; the console pre-fills the field with a random 64-character hex value you can copy or replace. Mushi signs every event with `X-Mushi-Signature: t=<ms>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">` and also sends Standard Webhooks headers (`webhook-id`, `webhook-timestamp`, `webhook-signature`). Your plugin recomputes the HMAC with this secret; mismatch = drop the event.
 
-**Default** — `auto-generated on plugin create`
+**Default** — `random value pre-filled by the console (the API requires one; it never generates it)`
 
-**Where it lives** — table `project_plugins.webhook_secret_vault_ref (Vault)` · endpoint `POST /v1/admin/plugins` · read by `marketplace-dispatcher edge function`
+**Where it lives** — table `project_plugins.webhook_secret_vault_ref (Vault)` · endpoint `POST /v1/admin/plugins` · read by `_shared/plugins.ts dispatchPluginEvent (api, classify-report, fix-worker, judge-batch, qa-story-runner, status-reconciler, webhooks-linear)`, `plugin-dispatch-retry edge function`
 
-**When to change** — Rotate when the plugin owner changes hands. Always update both ends in lockstep — no overlap window.
+**When to change** — Rotate when the plugin owner changes hands by installing the plugin again with a new secret (editing the plugin never changes it). Always update both ends in lockstep — no overlap window.
 
 ### Subscribed events
 
@@ -1219,11 +1347,11 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Summary** — List of event types your plugin wants to receive (`report.created`, `report.classified`, `fix.opened`, etc.).
 
-**How it works** — The dispatcher emits to your URL only for events on this list — every other event is no-op for your plugin. Keep the list minimal; each event is a billable webhook delivery.
+**How it works** — The dispatcher emits to your URL only for events on this list (or every event when the list contains `*`). An empty list also means every event. Keep the list minimal; each event is a webhook delivery your endpoint has to handle.
 
-**Default** — `empty (plugin receives nothing)`
+**Default** — `empty (plugin receives every event)`
 
-**Where it lives** — table `project_plugins.subscribed_events (text[])` · endpoint `POST /v1/admin/plugins` · read by `marketplace-dispatcher edge function`
+**Where it lives** — table `project_plugins.subscribed_events (text[])` · endpoint `POST /v1/admin/plugins` · read by `_shared/plugins.ts dispatchPluginEvent (api, classify-report, fix-worker, judge-batch, qa-story-runner, status-reconciler, webhooks-linear)`
 
 **When to change** — Subscribe only to events your plugin actually reacts to. Adding/removing is instant — no plugin restart required.
 
@@ -1271,7 +1399,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `empty`
 
-**Where it lives** — table `reporter_devices.flag_reason` · endpoint `POST /v1/admin/anti-gaming/devices/:id/flag` · read by `anti-gaming dashboard`, `audit log`
+**Where it lives** — table `reporter_devices.flag_reason` · endpoint `POST /v1/admin/anti-gaming/devices/:id/flag` · read by `api edge function (GET /v1/admin/anti-gaming/devices)`, `_shared/anti-gaming.ts (report ingest keeps the reason when it updates the device)`
 
 **When to change** — Always fill it in — "flagged with no reason" is the ticket the next person on rotation can't review.
 
@@ -1323,7 +1451,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `off`
 
-**Where it lives** — table `project_settings.benchmarking_optin` · endpoint `PUT /v1/admin/settings/benchmarking` · read by `_shared/intelligence helper`
+**Where it lives** — table `project_settings.benchmarking_optin` · endpoint `PUT /v1/admin/settings/benchmarking` · read by `intelligence-report edge function (via _shared/intelligence.ts)`
 
 **When to change** — Turn on if you want "you vs the median customer" comparisons. Keep off for projects under strict NDAs — even anonymised aggregates leak shape information.
 
@@ -1343,7 +1471,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `free`
 
-**Where it lives** — table `billing_subscriptions.plan_id` · endpoint `(Stripe webhook → stripe-webhooks edge function)` · read by `feature-gate middleware`, `usage caps`
+**Where it lives** — table `billing_subscriptions.plan_id` · endpoint `(Stripe webhook → stripe-webhooks edge function)` · read by `_shared/entitlements.ts requireFeature (api feature gates)`, `_shared/quota.ts (api report ingest, classify-report quota gate)`
 
 **When to change** — Upgrade when you're consistently hitting the cap on the dashboard. Downgrade only after one full month under the next-tier-down's cap.
 
@@ -1385,15 +1513,15 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 `billing.support_subject`
 
-**Summary** — One-line summary of your support request — appears as the email subject line.
+**Summary** — One-line summary of your support request — the title of the ticket the Mushi team sees.
 
-**How it works** — Submitted to the billing-support edge function which files a Zendesk-style ticket. Keep it specific (`"Refund for May overage — invoice 1234"`) so support doesn't bounce it back asking for clarification.
+**How it works** — The contact route (`POST /v1/support/contact` on the api edge function) saves a row in `support_tickets` and posts the subject and the start of the body to the Mushi operators’ Slack or Discord alert channel. You can send at most 5 tickets an hour. Keep it specific (`"Refund for May overage — invoice 1234"`) so support doesn't bounce it back asking for clarification.
 
-**Default** — `empty`
+**Default** — `empty` · range `3 – 200 characters`
 
-**Where it lives** — table `support_tickets.subject` · endpoint `POST /v1/support/contact` · read by `billing-support edge function`
+**Where it lives** — table `support_tickets.subject` · endpoint `POST /v1/support/contact` · read by `api edge function (POST /v1/support/contact → operator Slack/Discord alert)`
 
-**When to change** — Always fill before submitting. The edge function rejects empty subjects with a 400.
+**When to change** — Always fill before submitting. The route rejects a subject shorter than 3 or longer than 200 characters with a 400.
 
 ### Support category
 
@@ -1401,13 +1529,13 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 `billing.support_category`
 
-**Summary** — Category that routes your support ticket to the right team — billing, plan change, refund, technical, or other.
+**Summary** — What your support ticket is about — billing, bug, feature request, or other.
 
-**How it works** — The category is appended to the ticket body and used by the support inbox's automation to assign the right responder. Wrong category just means a slower first response, not a lost ticket.
+**How it works** — Saved on the ticket and shown in the operator alert (and in the audit log when you pick a project), so the right person picks it up. Any value other than billing, bug, feature or other is saved as `other`. Wrong category just means a slower first response, not a lost ticket.
 
 **Default** — `billing`
 
-**Where it lives** — table `support_tickets.category` · endpoint `POST /v1/support/contact` · read by `billing-support edge function`
+**Where it lives** — table `support_tickets.category` · endpoint `POST /v1/support/contact` · read by `api edge function (POST /v1/support/contact → operator Slack/Discord alert)`
 
 **When to change** — Always pick the closest match. Use `other` only when nothing else fits.
 
@@ -1419,11 +1547,11 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Summary** — The full text of your support request — paste invoice numbers, screenshots, anything that helps the responder.
 
-**How it works** — Posted as the ticket body. Markdown is preserved on the support side, so feel free to use lists and code blocks. Maximum 10k chars.
+**How it works** — Saved as the ticket body, exactly as typed; the operator alert shows the first 800 characters. The route rejects a body shorter than 10 or longer than 5,000 characters with a 400.
 
-**Default** — `empty`
+**Default** — `empty` · range `10 – 5,000 characters`
 
-**Where it lives** — table `support_tickets.body` · endpoint `POST /v1/support/contact` · read by `billing-support edge function`
+**Where it lives** — table `support_tickets.body` · endpoint `POST /v1/support/contact` · read by `api edge function (POST /v1/support/contact → operator Slack/Discord alert)`
 
 **When to change** — Include the invoice id and the dollar amount you're asking about — billing tickets without specifics get bounced.
 
@@ -1437,13 +1565,13 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 `onboarding.project_name`
 
-**Summary** — Display name for your first project — visible in the active-project switcher and in routing-destination payloads.
+**Summary** — Display name for your first project — visible in the active-project switcher and across the console.
 
 **How it works** — Used for display only. The internal `project_id` is generated and immutable; you can rename freely without breaking SDK keys or webhook subscriptions.
 
 **Default** — `unset`
 
-**Where it lives** — table `projects.name` · endpoint `POST /v1/admin/projects` · read by `admin UI`, `routing payloads`
+**Where it lives** — table `projects.name` · endpoint `POST /v1/admin/projects` · read by `api edge function (GET /v1/admin/projects)`, `console ProjectSwitcher`
 
 **When to change** — Set during onboarding. Rename later as your product naming firms up — no migration needed.
 
@@ -1455,11 +1583,11 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Summary** — Human-readable label for the first API key — helps you find and revoke it later.
 
-**How it works** — Saved on the `project_api_keys` row alongside the hash and scopes. Pure metadata — the value isn't sent to the SDK, doesn't affect ingest behaviour.
+**How it works** — Saved on the `project_api_keys` row alongside the hash and scopes (trimmed, up to 64 characters). Pure metadata — the value isn't sent to the SDK, doesn't affect ingest behaviour.
 
-**Default** — `"Default" if blank`
+**Default** — ``default` if blank (`mcp-readonly` / `mcp-readwrite` for MCP keys)`
 
-**Where it lives** — table `project_api_keys.label` · endpoint `POST /v1/admin/projects/{id}/keys` · read by `admin UI`, `audit log`
+**Where it lives** — table `project_api_keys.label` · endpoint `POST /v1/admin/projects/{id}/keys` · read by `api edge function (GET /v1/admin/projects, key list)`, `console Projects page key list`
 
 **When to change** — Use a name that tells future-you what app or env this key belongs to — `"web-prod"`, `"native-staging"`, `"cursor-mcp-kenji"`.
 
@@ -1527,7 +1655,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `variant: brand · position: top · featureCta: true`
 
-**Where it lives** — table `project_settings.sdk_banner_variant / sdk_banner_position / sdk_banner_message / sdk_banner_label / sdk_banner_bug_cta / sdk_banner_feature_cta` · endpoint `PATCH /v1/admin/settings` · read by `SDK runtime config pull (GET /v1/sdk/config)`
+**Where it lives** — table `project_settings.sdk_banner_variant / sdk_banner_position / sdk_banner_message / sdk_banner_label / sdk_banner_bug_cta / sdk_banner_feature_cta` · endpoint `PATCH /v1/admin/settings` · read by `api edge function (GET /v1/sdk/config)`
 
 **When to change** — Use `subtle` when the banner must blend into a polished production UI. Use `neon` for internal beta tools where high visibility matters. Switch `position` to `bottom` when your app has a sticky top header that would collide with the banner.
 
@@ -1657,7 +1785,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `on (default caption)`
 
-**Where it lives** — table `project_settings.sdk_screenshot_sensitive_hint` · endpoint `PUT /v1/admin/projects/:id/sdk-config` · read by `public route (GET /v1/sdk/config)`, `@mushi-mushi/web widget`, `@mushi-mushi/react-native widget`
+**Where it lives** — table `project_settings.sdk_screenshot_sensitive_hint` · endpoint `PUT /v1/admin/projects/:id/sdk-config` · read by `api edge function (GET /v1/sdk/config)`, `@mushi-mushi/web widget`, `@mushi-mushi/react-native widget`
 
 **When to change** — Keep on for any app that captures screenshots — it is the reporter's chance to catch PII. Customize the copy to match your tone or compliance wording. Turn off only when screenshots are disabled or never contain user data.
 
@@ -1693,7 +1821,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `false (off)`
 
-**Where it lives** — table `project_settings.assistant_enabled` · endpoint `PUT /v1/admin/projects/:id/assistant` · read by `sdk-assistant route (POST /v1/sdk/assistant)`, `public route (GET /v1/sdk/config)`
+**Where it lives** — table `project_settings.assistant_enabled` · endpoint `PUT /v1/admin/projects/:id/assistant` · read by `api edge function (POST /v1/sdk/assistant)`, `api edge function (GET /v1/sdk/config)`
 
 **When to change** — Turn on once you have written a knowledge corpus (Advanced). Leave off if you only want bug reporting — the widget works fully without it.
 
@@ -1711,7 +1839,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `Ask`
 
-**Where it lives** — table `project_settings.assistant_label` · endpoint `PUT /v1/admin/projects/:id/assistant` · read by `public route (GET /v1/sdk/config)`
+**Where it lives** — table `project_settings.assistant_label` · endpoint `PUT /v1/admin/projects/:id/assistant` · read by `api edge function (GET /v1/sdk/config)`
 
 **When to change** — Rename to match your product voice ("Help", "Guide", "Concierge").
 
@@ -1727,7 +1855,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `Hi! Ask me anything about this page.`
 
-**Where it lives** — table `project_settings.assistant_greeting` · endpoint `PUT /v1/admin/projects/:id/assistant` · read by `public route (GET /v1/sdk/config)`
+**Where it lives** — table `project_settings.assistant_greeting` · endpoint `PUT /v1/admin/projects/:id/assistant` · read by `api edge function (GET /v1/sdk/config)`
 
 **When to change** — Set expectations — tell users what the assistant can and cannot help with.
 
@@ -1743,7 +1871,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset (no chips)`
 
-**Where it lives** — table `project_settings.assistant_suggestions` · endpoint `PUT /v1/admin/projects/:id/assistant` · read by `public route (GET /v1/sdk/config)`
+**Where it lives** — table `project_settings.assistant_suggestions` · endpoint `PUT /v1/admin/projects/:id/assistant` · read by `api edge function (GET /v1/sdk/config)`
 
 **When to change** — Seed with your top 3-6 FAQs so first-time users see what to ask.
 
@@ -1759,7 +1887,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset` · range `max 40,000 chars`
 
-**Where it lives** — table `project_settings.assistant_knowledge` · endpoint `PUT /v1/admin/projects/:id/assistant` · read by `sdk-assistant route (POST /v1/sdk/assistant)`
+**Where it lives** — table `project_settings.assistant_knowledge` · endpoint `PUT /v1/admin/projects/:id/assistant` · read by `api edge function (POST /v1/sdk/assistant)`
 
 **When to change** — Expand it whenever users ask something the assistant could not answer. Review recent turns in Advanced → logs to find gaps. Never paste keys, tokens, or source.
 
