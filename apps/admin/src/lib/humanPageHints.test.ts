@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   fixesFailedAction,
   fixesFailedHint,
+  fixesFailedTitle,
   scopedHref,
   triageBacklogHint,
   driftCriticalHint,
@@ -15,8 +16,10 @@ describe('humanPageHints', () => {
   })
 
   it('fixes failed copy', () => {
-    expect(fixesFailedAction(2)).toBe('Review 2 failed fixes')
+    expect(fixesFailedAction(2)).toBe('See why (2)')
     expect(fixesFailedHint(1)).toMatch(/retry/i)
+    expect(fixesFailedTitle(1)).toBe('Auto-fix stopped on 1 report')
+    expect(fixesFailedTitle(3)).toBe('Auto-fix stopped on 3 reports')
   })
 
   it('triage backlog hint', () => {

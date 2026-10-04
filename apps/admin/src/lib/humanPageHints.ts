@@ -21,14 +21,19 @@ export function scopedHref(base: string, projectId: string | null | undefined): 
   return merged ? `${path}?${merged}` : path
 }
 
+/** Headline for reports still unfixed after their last auto-fix attempt (counted per report). */
+export function fixesFailedTitle(count: number): string {
+  return `Auto-fix stopped on ${count} report${count === 1 ? '' : 's'}`
+}
+
 export function fixesFailedHint(count: number): string {
   return count === 1
-    ? 'The fix agent could not finish this run. Open it to read the error, then retry or hand off to Cursor.'
-    : 'The fix agent could not finish these runs. Open each failure to read the error, then retry or hand off to Cursor.'
+    ? 'The last fix attempt on this report stopped before a PR merged. Open it to read why, then retry or fix it in your editor.'
+    : 'The last fix attempt on these reports stopped before a PR merged. Open each one to read why, then retry or fix it in your editor.'
 }
 
 export function fixesFailedAction(count: number): string {
-  return count === 1 ? 'Review failed fix' : `Review ${count} failed fixes`
+  return count === 1 ? 'See why it stopped' : `See why (${count})`
 }
 
 export function triageBacklogHint(count: number): string {

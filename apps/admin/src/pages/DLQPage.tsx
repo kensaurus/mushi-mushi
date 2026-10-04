@@ -72,6 +72,8 @@ export function DLQPage() {
     isValidating: statsValidating,
   } = usePageData<QueueStats>('/v1/admin/queue/stats')
   const stats = queueStats ?? EMPTY_QUEUE_STATS
+  // Only jobs that stopped can be retried; a completed job never offers Retry.
+  const retryableItems = items.filter((item) => item.status === 'failed' || item.status === 'dead_letter')
 
   const loadAll = useCallback(async () => {
     setError(false)
@@ -181,9 +183,9 @@ export function DLQPage() {
   }
 
   async function retryAll() {
-    if (items.length === 0) return
+    if (retryableItems.length === 0) return
     const results = await Promise.allSettled(
-      items.map((item) =>
+      retryableItems.map((item) =>
         apiFetch(`/v1/admin/queue/${item.id}/retry`, { method: 'POST' }),
       ),
     )
@@ -232,9 +234,9 @@ export function DLQPage() {
             onChange={(e) => setStage(e.currentTarget.value)}
           />
         )}
-        {items.length > 0 && (
+        {retryableItems.length > 0 && (
           <Btn size="sm" variant="success" onClick={retryAll}>
-            Retry page ({items.length})
+            Retry page ({retryableItems.length})
           </Btn>
         )}
         <Btn
@@ -247,6 +249,7 @@ export function DLQPage() {
         >
           Flush queued
         </Btn>
+        {stats.recoverable > 0 ? (
         <Btn
           size="sm"
           variant="primary"
@@ -257,8 +260,9 @@ export function DLQPage() {
           title="Re-fires fast-filter for any report stuck older than 5 minutes plus pending queue items past their SLA."
           data-dav-anchor="dlq:act"
         >
-          Recover stranded
+          Recover stranded ({stats.recoverable})
         </Btn>
+        ) : null}
       </PageHeaderBar>
 
       <PagePosture
@@ -270,7 +274,7 @@ export function DLQPage() {
                 stats={stats}
                 onRefresh={() => void loadAll()}
                 refreshing={loading}
-                onRecover={recoverStranded}
+                onRecover={stats.recoverable > 0 ? recoverStranded : undefined}
                 onFlush={flushCircuitBreakerQueue}
                 recovering={flushing}
                 flushing={flushingQueued}
@@ -323,9 +327,11 @@ export function DLQPage() {
             >
               Open {deadLetter > 0 ? 'dead-letter' : 'failed'} lane →
             </ActionPill>
-            <ActionPill onClick={() => void recoverStranded()} tone="neutral">
-              Recover stranded
-            </ActionPill>
+            {stats.recoverable > 0 ? (
+              <ActionPill onClick={() => void recoverStranded()} tone="neutral">
+                Recover stranded ({stats.recoverable})
+              </ActionPill>
+            ) : null}
           </ActionPillRow>
         </Card>
       )}
@@ -351,7 +357,7 @@ export function DLQPage() {
             </p>
           </ContainedBlock>
           <div data-dav-anchor="dlq:decide">
-            <QueueKpiRow summary={summary} throughput={throughput} />
+            <QueueKpiRow stats={stats} throughput={throughput} />
           </div>
         </div>
       )}
@@ -381,7 +387,7 @@ export function DLQPage() {
                   : `${total} ${total === 1 ? 'job is' : 'jobs are'} retrying — investigate before they exhaust`
               }
               description={`Inspect the last error to understand the root cause, fix it, then retry in bulk.${stageHint}`}
-              cta={{ label: `Retry page (${items.length})`, onClick: retryAll }}
+              cta={retryableItems.length > 0 ? { label: `Retry page (${retryableItems.length})`, onClick: retryAll } : undefined}
             />
           )
         })()}

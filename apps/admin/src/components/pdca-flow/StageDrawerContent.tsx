@@ -21,6 +21,7 @@ import { PDCA_STAGES } from '../../lib/pdca'
 import type { PdcaStageId } from '../../lib/pdca'
 import type { PdcaStage } from '../dashboard/types'
 import type { FixAttempt, DispatchJob } from '../fixes/types'
+import { credentialAdvice, failureHeadline, fixReportLabel, needsAttention } from '../../lib/fixReportTruth'
 import { Btn, RelativeTime, Loading } from '../ui'
 import { useFlowUndo } from '../flow-primitives/useFlowUndo'
 import { CHIP_TONE } from '../../lib/chipTone'
@@ -244,18 +245,18 @@ function DoDrawer({ stage, onClose }: { stage?: PdcaStage | null; onClose: () =>
     () => fixes.filter((f) => f.status === 'running' || f.status === 'queued').slice(0, 6),
     [fixes],
   )
-  const failed = useMemo(
-    () => fixes.filter((f) => f.status === 'failed').slice(0, 3),
-    [fixes],
-  )
+  // Still-unfixed reports whose last attempt stopped — never an earlier
+  // attempt on a report a later PR fixed (lib/fixReportTruth.ts).
+  const failed = useMemo(() => fixes.filter(needsAttention).slice(0, 3), [fixes])
 
   const retry = useCallback(
-    async (reportId: string, fixId: string) => {
+    async (reportId: string, fixId: string, projectId: string | undefined) => {
       setBusyId(fixId)
       try {
+        // The route requires projectId; without it every retry here was a 400.
         const res = await apiFetch('/v1/admin/fixes/dispatch', {
           method: 'POST',
-          body: JSON.stringify({ reportId }),
+          body: JSON.stringify({ reportId, projectId }),
         })
         if (res.ok) {
           toast.success('Fix re-dispatched')
@@ -360,9 +361,9 @@ function DoDrawer({ stage, onClose }: { stage?: PdcaStage | null; onClose: () =>
           </section>
 
           {failed.length > 0 && (
-            <section className="mt-3" aria-label="Recently failed fixes">
+            <section className="mt-3" aria-label="Reports where auto-fix stopped">
               <h4 className="text-3xs font-semibold uppercase tracking-wider text-fg-muted mb-1.5">
-                Recently failed
+                Auto-fix stopped
               </h4>
               <ul className="space-y-1.5">
                 {failed.map((f) => (
@@ -370,18 +371,21 @@ function DoDrawer({ stage, onClose }: { stage?: PdcaStage | null; onClose: () =>
                     key={f.id}
                     className="rounded-md border border-danger/30 bg-danger-muted/10 p-2 text-2xs"
                   >
-                    <p className="text-danger font-mono leading-snug line-clamp-2">
-                      {f.error ?? 'Unknown failure'}
+                    <p className="text-fg-secondary font-medium leading-snug line-clamp-1">{fixReportLabel(f)}</p>
+                    <p className="text-danger leading-snug line-clamp-2">
+                      {credentialAdvice(f)?.message ?? failureHeadline(f)?.title ?? 'The last attempt stopped without an error message.'}
                     </p>
                     <div className="mt-1 flex gap-1">
-                      <Btn
-                        size="sm"
-                        variant="ghost"
-                        loading={busyId === f.id}
-                        onClick={() => void retry(f.report_id, f.id)}
-                      >
-                        Retry
-                      </Btn>
+                      {f.retryable === true ? (
+                        <Btn
+                          size="sm"
+                          variant="ghost"
+                          loading={busyId === f.id}
+                          onClick={() => void retry(f.report_id, f.id, f.project_id)}
+                        >
+                          Retry
+                        </Btn>
+                      ) : null}
                       <Link
                         to={`/reports/${f.report_id}`}
                         onClick={onClose}

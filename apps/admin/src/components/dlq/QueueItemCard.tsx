@@ -17,6 +17,8 @@ interface Props {
 }
 
 const WAITING_STATUSES = new Set(['pending', 'running'])
+/** Only a job that stopped can be retried (the server refuses the rest). */
+const RETRYABLE_STATUSES = new Set(['failed', 'dead_letter'])
 
 export function QueueItemCard({ item, retrying, onRetry }: Props) {
   const waitingMs =
@@ -67,16 +69,18 @@ export function QueueItemCard({ item, retrying, onRetry }: Props) {
             )}
           </InlineProof>
         </div>
-        <Btn
-          variant="ghost"
-          size="sm"
-          onClick={onRetry}
-          disabled={retrying}
-          loading={retrying}
-          className="ml-3 flex-shrink-0"
-        >
-          Retry
-        </Btn>
+        {RETRYABLE_STATUSES.has(item.status) ? (
+          <Btn
+            variant="ghost"
+            size="sm"
+            onClick={onRetry}
+            disabled={retrying}
+            loading={retrying}
+            className="ml-3 flex-shrink-0"
+          >
+            Retry
+          </Btn>
+        ) : null}
       </div>
     </Card>
   )

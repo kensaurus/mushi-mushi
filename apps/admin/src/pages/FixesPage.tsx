@@ -35,6 +35,7 @@ import { FixesTable } from '../components/fixes/FixesTable'
 import { FixBulkActionBar } from '../components/fixes/FixBulkActionBar'
 import { canMergeFix, isFixMerged, mergeFixAttempt } from '../lib/mergeFix'
 import { isFixCountedFailed } from '../lib/pdcaAct'
+import { fixReportLabel, needsAttention, retryCandidates } from '../lib/fixReportTruth'
 import type { FixAttempt, DispatchJob, FixSummary } from '../components/fixes/types'
 import { FixesStatusBanner } from '../components/fixes/FixesStatusBanner'
 import { FixesPipelineGuide } from '../components/fixes/FixesPipelineGuide'
@@ -95,16 +96,15 @@ function resolveFixesTab(value: string | null): FixesTabId {
 function bucketize(fix: FixAttempt): StatusBucket {
   const status = fix.status?.toLowerCase()
   if (status === 'queued' || status === 'running') return 'inflight'
-  // skipped_* (unsupported agent, sandbox policy, no context, awaiting
-  // approval) needs the same "look at me" treatment as failed — the old
-  // bucketing dropped them into 'all' where they were invisible
-  // (2026-08-16 audit P1-4).
-  // A PR that went red on CI or closed unmerged counts as failed too, so the
-  // filter and the header agree with the card's Check = Failed (2026-10-02).
-  if (isFixCountedFailed(fix)) return 'failed'
+  // "Failed / skipped" holds the latest attempt of each report that is
+  // still unfixed after it failed, was skipped (2026-08-16 audit P1-4), or
+  // its PR went red / closed unmerged (2026-10-02). Earlier attempts on a
+  // report a later PR fixed are history, not failures (glot.it 2026-10-04),
+  // so the filter count equals the banner's per-report count.
+  if (needsAttention(fix)) return 'failed'
   if (isFixMerged(fix)) return 'merged'
   // Open PRs (including CI-green) stay in pr_open — "Shipped" is merged-only.
-  if (fix.pr_url) return 'pr_open'
+  if (fix.report_fix_state === 'pr_open' && fix.pr_url && !isFixCountedFailed(fix)) return 'pr_open'
   return 'all'
 }
 
@@ -317,7 +317,9 @@ export function FixesPage() {
     return summary.completed / finished
   }, [summary])
 
-  const failedFixes = useMemo(() => fixes.filter((f) => f.status === 'failed'), [fixes])
+  // One entry per still-unfixed report a retry can clear now — never an
+  // attempt on a report a merged PR already fixed (server-derived flag).
+  const failedFixes = useMemo(() => retryCandidates(fixes), [fixes])
 
   // Pre-bucket every fix once so the segmented filter and the per-bucket
   // counts in the segmented control stay in sync without re-scanning the
@@ -430,7 +432,7 @@ export function FixesPage() {
     const ok = results.filter((r) => r.status === 'fulfilled' && (r.value as { ok: boolean }).ok).length
     const failed = results.length - ok
     if (failed === 0) {
-      toast.push({ tone: 'success', message: `Re-dispatched ${ok} failed ${pluralize(ok, 'fix', 'fixes')}` })
+      toast.push({ tone: 'success', message: `Re-dispatched ${ok} ${pluralize(ok, 'fix', 'fixes')}` })
     } else {
       toast.push({ tone: 'warning', message: `Re-dispatched ${ok} \u00b7 ${failed} failed` })
     }
@@ -498,10 +500,7 @@ export function FixesPage() {
     () => selectedFixes.filter((f) => canMergeFix(f) && f.pr_url),
     [selectedFixes],
   )
-  const selectedFailed = useMemo(
-    () => selectedFixes.filter((f) => f.status === 'failed'),
-    [selectedFixes],
-  )
+  const selectedFailed = useMemo(() => retryCandidates(selectedFixes), [selectedFixes])
   const selectedMerged = useMemo(
     () => selectedFixes.filter((f) => isFixMerged(f)),
     [selectedFixes],
@@ -586,7 +585,7 @@ export function FixesPage() {
       bucket: statusBucket,
     },
     selection: expanded
-      ? { kind: 'fix', id: expanded, label: fixes.find((f) => f.id === expanded)?.report_id ?? expanded.slice(0, 8) }
+      ? { kind: 'fix', id: expanded, label: (() => { const f = fixes.find((x) => x.id === expanded); return f ? fixReportLabel(f) : 'Fix' })() }
       : undefined,
     questions: [
       bucketCounts.failed > 0
@@ -598,13 +597,13 @@ export function FixesPage() {
       'Which fixes are waiting on a human review?',
     ],
     actions: [
-      // Retry re-dispatches status=failed attempts only (failedFixes), so the
-      // label counts those, not the wider "Failed / skipped" bucket.
+      // Retry re-dispatches retry candidates only (one per still-unfixed
+      // report), so the label counts those, not the wider "Failed / skipped" bucket.
       ...(failedFixes.length > 0
         ? [{
             id: 'retry-all-failed',
-            label: `Retry all ${pluralizeWithCount(failedFixes.length, 'failed fix', 'failed fixes')}`,
-            hint: 'Re-dispatches every failed fix in the current view',
+            label: `Retry ${pluralizeWithCount(failedFixes.length, 'unfixed report', 'unfixed reports')}`,
+            hint: 'Re-dispatches each still-unfixed report whose last attempt failed',
             run: () => { void retryAllFailed() },
           }]
         : []),
@@ -626,7 +625,7 @@ export function FixesPage() {
     mentionables: fixes.slice(0, 10).map((f) => ({
       kind: 'fix' as const,
       id: f.id,
-      label: f.report_id ? `Fix on report ${f.report_id.slice(0, 8)}` : `Fix ${f.id.slice(0, 8)}`,
+      label: `Fix on ${fixReportLabel(f)}`,
       sublabel: `status: ${f.status ?? 'unknown'}`,
     })),
   })
@@ -708,9 +707,9 @@ export function FixesPage() {
             size="sm"
             onClick={() => setRetryAllConfirm(true)}
             loading={retryingAll}
-            title={`Re-dispatch every fix attempt currently in failed state (${pluralizeWithCount(failedFixes.length, 'job')}).`}
+            title={`Re-dispatch ${pluralizeWithCount(failedFixes.length, 'report')} still unfixed after a failed attempt. Reports fixed by a later PR are never retried.`}
           >
-            {retryingAll ? 'Retrying\u2026' : `Retry ${failedFixes.length} failed`}
+            {retryingAll ? 'Retrying\u2026' : `Retry ${failedFixes.length} unfixed`}
           </Btn>
         )}
       </PageHeaderBar>
@@ -890,7 +889,7 @@ export function FixesPage() {
 
       {retryAllConfirm && failedFixes.length > 0 ? (
         <ConfirmDialog
-          title={`Retry ${failedFixes.length} failed ${pluralize(failedFixes.length, 'fix', 'fixes')}?`}
+          title={`Retry ${pluralizeWithCount(failedFixes.length, 'unfixed report')}?`}
           body="Each retry runs the auto-fix agent again and spends LLM tokens. Failed attempts stay in history — you can review them on this page."
           confirmLabel="Retry all"
           cancelLabel="Cancel"

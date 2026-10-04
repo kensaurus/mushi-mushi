@@ -49,8 +49,8 @@ export function bottleneckHumanHeadline(ctx: BottleneckContext): string {
   const count = ctx.count ?? parseCountFromLabel(ctx.label) ?? 1
   switch (ctx.stage) {
     case 'do':
-      if (ctx.label?.includes('retry')) {
-        return `${count} auto-fix${count === 1 ? '' : 'es'} failed`
+      if (isStoppedFixLabel(ctx.label)) {
+        return `Auto-fix stopped on ${count} report${count === 1 ? '' : 's'}`
       }
       if (ctx.label?.includes('in flight')) {
         return `${count} fix${count === 1 ? '' : 'es'} running now`
@@ -67,12 +67,21 @@ export function bottleneckHumanHeadline(ctx: BottleneckContext): string {
   }
 }
 
+/**
+ * The server's Do-stage bottleneck label for reports whose last auto-fix
+ * stopped: "N reports still unfixed after an auto-fix attempt" (per report
+ * since 2026-10-04) or the older "N fixes need retry".
+ */
+function isStoppedFixLabel(label: string | null | undefined): boolean {
+  return Boolean(label && (label.includes('retry') || label.includes('unfixed')))
+}
+
 /** One sentence explaining what the operator should understand. */
 export function bottleneckHumanHint(ctx: BottleneckContext): string {
   switch (ctx.stage) {
     case 'do':
-      if (ctx.label?.includes('retry')) {
-        return 'The fix agent could not finish these runs. Open each failure to read the error, then retry or hand off to Cursor.'
+      if (isStoppedFixLabel(ctx.label)) {
+        return 'The last auto-fix attempt on these reports stopped. Open each one to read why, then retry or fix it in your editor.'
       }
       if (ctx.label?.includes('in flight')) {
         return 'Agents are drafting PRs for these reports. Check back here or open Fixes to watch progress.'
@@ -94,8 +103,8 @@ export function bottleneckChipLabel(ctx: BottleneckContext): string {
   const count = ctx.count ?? parseCountFromLabel(ctx.label) ?? 1
   switch (ctx.stage) {
     case 'do':
-      if (ctx.label?.includes('retry')) {
-        return count === 1 ? '1 fix failed' : `${count} fixes failed`
+      if (isStoppedFixLabel(ctx.label)) {
+        return count === 1 ? '1 fix stopped' : `${count} fixes stopped`
       }
       if (ctx.label?.includes('in flight')) {
         return count === 1 ? '1 fixing' : `${count} fixing`
@@ -117,8 +126,8 @@ export function bottleneckActionLabel(ctx: BottleneckContext): string {
   const count = ctx.count ?? parseCountFromLabel(ctx.label)
   switch (ctx.stage) {
     case 'do':
-      if (ctx.label?.includes('retry')) {
-        return count && count > 1 ? `Review ${count} failed fixes` : 'Review failed fix'
+      if (isStoppedFixLabel(ctx.label)) {
+        return count && count > 1 ? `See why (${count})` : 'See why it stopped'
       }
       return 'Open fix queue'
     case 'plan':
@@ -140,7 +149,7 @@ export function bottleneckDeepLink(stage: PdcaStageId, projectId: string, label?
   const base = PDCA_BOTTLENECK_DEEP_LINK[stage]
   const params = new URLSearchParams()
   params.set('project', projectId)
-  if (stage === 'do' && label?.includes('retry')) {
+  if (stage === 'do' && isStoppedFixLabel(label)) {
     params.set('status', 'failed')
   }
   const merged = new URLSearchParams(base.includes('?') ? base.split('?')[1] : '')

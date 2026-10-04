@@ -19,6 +19,7 @@ import { getServiceClient } from './db.ts'
 import { log } from './logger.ts'
 import { notifyTeamFixEvent } from './team-notify.ts'
 import { featureRequestDispatchBlock } from './report-category.ts'
+import { fixDispatchResolvedBlock } from './fix-report-truth.ts'
 import type { DispatchTrigger } from './autofix-budget.ts'
 
 export interface DispatchResult {
@@ -26,7 +27,14 @@ export interface DispatchResult {
   dispatchId?: string
   status?: string
   createdAt?: string
-  code?: 'AUTOFIX_DISABLED' | 'ALREADY_DISPATCHED' | 'DISPATCH_FAILED' | 'FORBIDDEN' | 'FEATURE_REQUEST'
+  code?:
+    | 'AUTOFIX_DISABLED'
+    | 'ALREADY_DISPATCHED'
+    | 'DISPATCH_FAILED'
+    | 'FORBIDDEN'
+    | 'FEATURE_REQUEST'
+    | 'ALREADY_FIXED'
+    | 'REPORT_DISMISSED'
   message?: string
 }
 
@@ -110,13 +118,28 @@ export async function dispatchFixForReport(input: DispatchInput): Promise<Dispat
   // re-categorizes it (Slack card, Linear agent, modernizer all land here).
   const { data: report } = await db
     .from('reports')
-    .select('user_category, user_intent, category, stage1_classification, stage2_analysis')
+    .select('status, user_category, user_intent, category, stage1_classification, stage2_analysis')
     .eq('id', input.reportId)
     .eq('project_id', input.projectId)
     .maybeSingle()
   const featureBlock = report ? featureRequestDispatchBlock(report) : null
   if (featureBlock) {
     return { ok: false, code: 'FEATURE_REQUEST', message: featureBlock }
+  }
+
+  // Same guard as POST /v1/admin/fixes/dispatch: a report a merged PR fixed,
+  // or a human dismissed, is not dispatched again until it is reopened.
+  if (report) {
+    const { data: mergedAttempts } = await db
+      .from('fix_attempts')
+      .select('id, report_id, pr_number, pr_state, merged_at, created_at')
+      .eq('report_id', input.reportId)
+      .limit(50)
+    const resolvedBlock = fixDispatchResolvedBlock(
+      { id: input.reportId, status: (report as { status?: string | null }).status },
+      mergedAttempts ?? [],
+    )
+    if (resolvedBlock) return { ok: false, ...resolvedBlock }
   }
 
   const { data: existing } = await db

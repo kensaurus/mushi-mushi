@@ -9,8 +9,26 @@ import {
   rpcError,
   OPEN_REPORT_STATUSES,
 } from '../shared.ts';
-import { attachReportTitles, bucketFailedFixPreviews } from '../../_shared/failed-fix-preview.ts';
+import { summarizeFixTruths } from '../../_shared/fix-report-truth.ts';
+import { failedFixPreviews, loadRecentFixTruths } from '../../_shared/fix-report-truth-load.ts';
 import { JUDGE_ELIGIBLE_STATUSES, isJudgeStale } from '../../_shared/judge-eligibility.ts';
+
+/** Activity-feed line for one fix attempt, read against its report's current state. */
+function fixActivityLabel(
+  f: { status?: string | null; pr_number?: number | null; pr_state?: string | null; merged_at?: string | null },
+  reportMergedPr: number | null,
+): string {
+  const status = String(f.status ?? '').toLowerCase();
+  if (f.merged_at || f.pr_state === 'merged') {
+    return f.pr_number != null ? `Fix merged — PR #${f.pr_number}` : 'Fix merged';
+  }
+  if (reportMergedPr != null) return `Earlier attempt — superseded by PR #${reportMergedPr}`;
+  if (status === 'queued' || status === 'running' || status === 'pending') return 'Auto-fix running';
+  if (status === 'failed' || status.startsWith('skipped')) return 'Auto-fix attempt stopped';
+  if (f.pr_state === 'closed') return f.pr_number != null ? `Fix PR #${f.pr_number} closed without merge` : 'Fix PR closed';
+  if (f.pr_number != null) return `Fix PR #${f.pr_number} opened`;
+  return `Auto-fix ${status || 'recorded'}`;
+}
 
 export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): void {
   app.get('/v1/admin/stats', adminOrApiKey(), async (c) => {
@@ -95,6 +113,7 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
       criticalReports14d: 0,
       openBacklog: 0,
       failedFixes14d: 0,
+      urgentOpenReports: 0,
       integrationRed: 0,
       integrationAmber: 0,
       judgeStale: false,
@@ -144,6 +163,7 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
       heartbeatRes,
       reportCountRes,
       ungradedRes,
+      urgentRes,
     ] = await Promise.all([
       db
         .from('reports')
@@ -154,7 +174,7 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
         .limit(500),
       db
         .from('fix_attempts')
-        .select('id, status, created_at')
+        .select('id, report_id, status, created_at')
         .in('project_id', projectIds)
         .gte('created_at', sinceIso)
         .order('created_at', { ascending: false })
@@ -200,6 +220,15 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
         .in('project_id', projectIds)
         .in('status', [...JUDGE_ELIGIBLE_STATUSES])
         .is('judge_evaluated_at', null),
+      // Critical/high reports still waiting on a decision, any age. Not
+      // `criticalReports14d`, which counts by created_at and includes fixed
+      // reports; the "next best action" strip needs current, unfixed work.
+      db
+        .from('reports')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', activeProject.id)
+        .in('severity', ['critical', 'high'])
+        .in('status', [...OPEN_REPORT_STATUSES]),
     ]);
 
     const recentReports = reportsRes.data ?? [];
@@ -217,7 +246,11 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
       return now - new Date(String(r.created_at)).getTime() > 60 * 60 * 1000;
     }).length;
 
-    const failedFixes14d = recentFixes.filter((f) => f.status === 'failed').length;
+    // Per REPORT from its current state: earlier failed attempts on a report
+    // a merged PR fixed are history, not work (fix-report-truth.ts).
+    // Same 30-day report window as every other fix count (fix-report-truth-load.ts).
+    const { truths: inboxTruths } = await loadRecentFixTruths(db as unknown as Parameters<typeof loadRecentFixTruths>[0], projectIds);
+    const failedFixes14d = summarizeFixTruths(inboxTruths.values()).failed;
 
     const healthByKind = new Map<string, string>();
     for (const row of healthRes.data ?? []) {
@@ -262,8 +295,8 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
       openDo
         ? {
             stage: 'do',
-            title: `${failedFixes14d} fix attempt${failedFixes14d === 1 ? '' : 's'} failed in 14d`,
-            hint: 'Open each failure, read the error, then retry or hand off to Cursor.',
+            title: `${failedFixes14d} report${failedFixes14d === 1 ? '' : 's'} still unfixed after an auto-fix attempt`,
+            hint: 'Open each one to read why the last attempt stopped, then retry or hand off to your editor.',
             to: scoped('/fixes?status=failed'),
           }
         : null,
@@ -368,6 +401,7 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
         criticalReports14d,
         openBacklog,
         failedFixes14d,
+        urgentOpenReports: urgentRes.count ?? 0,
         integrationRed,
         integrationAmber,
         judgeStale,
@@ -447,7 +481,6 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
       keysRes,
       heartbeatRes,
       reportCountRes,
-      failedFixesRes,
     ] = await Promise.all([
       db
         .from('reports')
@@ -458,7 +491,7 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
         .limit(500),
       db
         .from('fix_attempts')
-        .select('id, status, created_at, pr_number')
+        .select('id, report_id, status, created_at, pr_number')
         .in('project_id', projectIds)
         .gte('created_at', sinceIso)
         .order('created_at', { ascending: false })
@@ -495,49 +528,26 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
         .from('reports')
         .select('id', { count: 'exact', head: true })
         .eq('project_id', activeProject.id),
-      db
-        .from('fix_attempts')
-        .select('id, project_id, report_id, error, finished_at, created_at')
-        .eq('project_id', activeProject.id)
-        .eq('status', 'failed')
-        .order('finished_at', { ascending: false })
-        .limit(10),
     ]);
 
     const recentReports = reportsRes.data ?? [];
     const recentFixes = fixesRes.data ?? [];
     const recentLlm = llmRes.data ?? [];
-    const failedPreviewRaw = bucketFailedFixPreviews(
-      (failedFixesRes.data ?? []) as Array<{
-        id: string
-        project_id: string
-        report_id: string
-        error?: string | null
-        finished_at?: string | null
-        created_at?: string | null
-      }>,
-    )[activeProject.id] ?? [];
-    // deno-ts-ignore is not needed; cast breaks the deep Supabase generic
-    // instantiation that causes TS2589 when the full SupabaseClient type is
-    // traversed to verify the narrow structural parameter type.
-    const failedFixesPreview = await attachReportTitles(
-      db as unknown as Parameters<typeof attachReportTitles>[0],
-      failedPreviewRaw.slice(0, 3),
-    );
-
     const openBacklog = recentReports.filter((r) => {
       const status = String(r.status ?? '');
       if (status !== 'new' && status !== 'queued') return false;
       return now - new Date(String(r.created_at)).getTime() > 60 * 60 * 1000;
     }).length;
 
-    const fixesInProgress = recentFixes.filter(
-      (f) => f.status === 'queued' || f.status === 'running',
-    ).length;
-    const fixesFailed = recentFixes.filter((f) => f.status === 'failed').length;
-    const openPrs = recentFixes.filter(
-      (f) => f.pr_number != null && f.status === 'completed',
-    ).length;
+    // Per REPORT from its current state (fix-report-truth.ts): glot.it read
+    // "8 auto-fixes failed / 7 open PRs" over 4 reports already fixed by
+    // merged PRs and 0 open PRs (2026-10-04).
+    const fixTruths = await loadRecentFixTruths(db as unknown as Parameters<typeof loadRecentFixTruths>[0], projectIds);
+    const fixTruth = summarizeFixTruths(fixTruths.truths.values());
+    const fixesInProgress = fixTruth.inFlight;
+    const fixesFailed = fixTruth.failed;
+    const openPrs = fixTruth.prOpen;
+    const failedFixesPreview = failedFixPreviews(fixTruths, { projectId: activeProject.id, limit: 3 });
 
     let llmCalls14d = 0;
     let llmFailures14d = 0;
@@ -575,7 +585,7 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
     } else if (fixesFailed > 0) {
       focusStage = 'do';
       focusLabel = 'Do';
-      bottleneck = `${fixesFailed} failed fix${fixesFailed === 1 ? '' : 'es'} need retry`;
+      bottleneck = `${fixesFailed} report${fixesFailed === 1 ? '' : 's'} still unfixed after an auto-fix attempt`;
     } else if (integrationIssues > 0) {
       focusStage = 'act';
       focusLabel = 'Act';
@@ -629,7 +639,7 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
     } else if (fixesFailed > 0) {
       topPriority = 'fixes_failed';
       topPriorityLabel =
-        'The fix agent could not finish these runs — open each failure, read the error, then retry.';
+        'The last auto-fix attempt on these reports stopped — open each one to read why, then retry or fix it in your editor.';
       topPriorityTo = `/fixes?status=failed&project=${encodeURIComponent(pid)}`;
     } else if (integrationIssues > 0) {
       topPriority = 'integrations';
@@ -728,7 +738,7 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
     const { data: recentFixes } = await db
       .from('fix_attempts')
       .select(
-        'id, report_id, project_id, status, agent, pr_url, pr_number, llm_model, llm_input_tokens, llm_output_tokens, started_at, completed_at, created_at',
+        'id, report_id, project_id, status, agent, pr_url, pr_number, pr_state, merged_at, llm_model, llm_input_tokens, llm_output_tokens, started_at, completed_at, created_at',
       )
       .in('project_id', projectIds)
       .gte('created_at', sinceIso)
@@ -846,15 +856,18 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
       .slice(0, 6)
       .map(([component, count]) => ({ component, count }));
 
-    // Auto-fix pipeline summary
+    // Auto-fix pipeline summary — per REPORT from its current state, the
+    // same rule as /dashboard/stats and /fixes (fix-report-truth.ts).
+    // `total` is the number of reports with an attempt in the shared 30-day window.
+    const dashTruths = await loadRecentFixTruths(db as unknown as Parameters<typeof loadRecentFixTruths>[0], projectIds);
+    const dashTruth = summarizeFixTruths(dashTruths.truths.values());
     const fixSummary = {
-      total: (recentFixes ?? []).length,
-      completed: (recentFixes ?? []).filter((f) => f.status === 'completed').length,
-      failed: (recentFixes ?? []).filter((f) => f.status === 'failed').length,
-      inProgress: (recentFixes ?? []).filter((f) => f.status === 'queued' || f.status === 'running')
-        .length,
-      openPrs: (recentFixes ?? []).filter((f) => f.pr_number != null && f.status === 'completed')
-        .length,
+      total: dashTruth.reports,
+      completed: dashTruth.fixed,
+      failed: dashTruth.failed,
+      retryable: dashTruth.retryable,
+      inProgress: dashTruth.inFlight,
+      openPrs: dashTruth.prOpen,
     };
 
     // Triage queue — top 5 open reports needing attention, ANY age (the
@@ -886,7 +899,7 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
         // Use the fix attempt's own ID, not report_id — multiple attempts can
         // share the same report_id and would produce duplicate React keys.
         id: f.id,
-        label: `Auto-fix ${f.status}`,
+        label: fixActivityLabel(f, dashTruths.truths.get(String(f.report_id))?.mergedPrNumber ?? null),
         meta: f.llm_model ?? f.agent ?? null,
         at: f.created_at,
       })),
