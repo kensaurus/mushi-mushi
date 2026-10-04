@@ -32,7 +32,7 @@ export function normalizeOrigin(raw: string | null | undefined): string | null {
   }
 }
 
-export function isLocalHostname(hostname: string): boolean {
+function isLocalHostname(hostname: string): boolean {
   return LOCAL_HOSTNAMES.has(hostname.toLowerCase())
 }
 
