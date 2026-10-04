@@ -24,6 +24,7 @@ import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { ANTHROPIC_HAIKU, MISTAKE_EFFORT, MISTAKE_MODEL, OPENAI_MINI, THINKING_HEADROOM_TOKENS } from '../_shared/models.ts'
 import { claudeGenerateText } from '../_shared/claude-messages.ts'
 import { UsageByModel } from '../_shared/pricing.ts'
+import { recordLlmUsage } from '../_shared/llm-usage.ts'
 
 Deno.serve(
   withSentry(async (req: Request) => {
@@ -77,9 +78,28 @@ ${reportContext || '(none available)'}`
     const openaiMini = createOpenAI({ apiKey: Deno.env.get('OPENAI_API_KEY') })
 
     const updates: Record<string, string> = {}
+    // Per-model totals for the response; the spend itself is one
+    // llm_invocations row per call (platform keys only, so key_source 'env').
     const ledger = new UsageByModel()
-    const record = (model: string, u: { promptTokens: number; completionTokens: number }) =>
-      ledger.record(model, u.promptTokens, u.completionTokens)
+    const usageWrites: Array<Promise<{ error: string | null }>> = []
+    const record = (
+      model: string,
+      stage: string,
+      startedAt: number,
+      outcome: { result?: { usage: { promptTokens: number; completionTokens: number } }; error?: unknown },
+      primaryModel: string = model,
+    ) => {
+      if (outcome.result) ledger.record(model, outcome.result.usage.promptTokens, outcome.result.usage.completionTokens)
+      usageWrites.push(recordLlmUsage(db, {
+        functionName: 'mistake-summarizer',
+        stage,
+        projectId: lesson.project_id as string,
+        model,
+        primaryModel,
+        keySource: 'env',
+        startedAt,
+      }, outcome))
+    }
 
     async function callClaude(model: 'fast' | 'sonnet', prompt: string) {
       if (model === 'fast') {
@@ -97,18 +117,29 @@ ${reportContext || '(none available)'}`
     }
 
     async function callLlm(model: 'fast' | 'sonnet', prompt: string): Promise<string> {
+      const claudeModel = model === 'fast' ? ANTHROPIC_HAIKU : MISTAKE_MODEL
+      const stage = model === 'fast' ? 'lesson-summarise' : 'lesson-essay'
+      const claudeStart = Date.now()
       try {
-        const { text, usage } = await callClaude(model, prompt)
-        record(model === 'fast' ? ANTHROPIC_HAIKU : MISTAKE_MODEL, usage)
-        return text.trim()
-      } catch {
-        const { text, usage } = await generateText({
-          model: openaiMini(OPENAI_MINI),
-          prompt,
-          maxTokens: model === 'fast' ? 200 : 1200,
-        })
-        record(OPENAI_MINI, usage)
-        return text.trim()
+        const result = await callClaude(model, prompt)
+        record(claudeModel, stage, claudeStart, { result })
+        return result.text.trim()
+      } catch (claudeErr) {
+        // No key means no paid call, so no row.
+        if (anthropicKey) record(claudeModel, stage, claudeStart, { error: claudeErr })
+        const openaiStart = Date.now()
+        try {
+          const result = await generateText({
+            model: openaiMini(OPENAI_MINI),
+            prompt,
+            maxTokens: model === 'fast' ? 200 : 1200,
+          })
+          record(OPENAI_MINI, stage, openaiStart, { result }, claudeModel)
+          return result.text.trim()
+        } catch (openaiErr) {
+          record(OPENAI_MINI, stage, openaiStart, { error: openaiErr }, claudeModel)
+          throw openaiErr
+        }
       }
     }
 
@@ -164,23 +195,14 @@ Use clear headings. Be opinionated and specific.`,
         return new Response(JSON.stringify({ error: `Could not save the lesson views: ${updateErr.message}` }), { status: 500 })
       }
 
-      // One row per model: a fallback run spends on two models, and each
-      // must land in its own per-model cost bucket.
-      const { error: costErr } = await db.from('llm_cost_usd').insert(
-        ledger.rows().map((r) => ({
-          project_id: lesson.project_id,
-          operation: 'lesson-summarise',
-          model: r.model,
-          input_tokens: r.inputTokens,
-          output_tokens: r.outputTokens,
-          cost_usd: r.costUsd,
-        })),
-      )
+      // One llm_invocations row per call (so a fallback run lands in each
+      // model's own cost bucket). These rows feed the per-project LLM budget.
+      const costErr = (await Promise.all(usageWrites)).find((w) => w.error)?.error ?? null
       if (costErr) {
         // The spend ledger feeds the per-project LLM budget; an unrecorded
         // spend is a failure, not a success with a missing row.
         return new Response(
-          JSON.stringify({ error: `Saved the lesson views but could not record their LLM cost: ${costErr.message}`, lessonId, updated: Object.keys(updates) }),
+          JSON.stringify({ error: `Saved the lesson views but could not record their LLM cost: ${costErr}`, lessonId, updated: Object.keys(updates) }),
           { status: 500 },
         )
       }

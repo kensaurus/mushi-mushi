@@ -74,7 +74,7 @@ export async function retrieveConsoleHelp(
 
   let embedding: number[];
   try {
-    embedding = await createEmbedding(trimmed);
+    embedding = await createEmbedding(trimmed, { functionName: 'console-knowledge' });
   } catch {
     return { chunks: [], citations: [] };
   }

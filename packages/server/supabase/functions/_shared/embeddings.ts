@@ -2,6 +2,7 @@ import { getServiceClient } from './db.ts'
 import { createTrace } from './observability.ts'
 import { log } from './logger.ts'
 import { markKeyStatus, resolveLlmKey } from './byok.ts'
+import { extractLlmUsage, recordLlmUsage } from './llm-usage.ts'
 
 const embLog = log.child('embeddings')
 
@@ -18,6 +19,10 @@ export interface EmbeddingOptions {
    * configured. Omitting projectId preserves the legacy env-only behaviour.
    */
   projectId?: string
+  /** The edge function or route making the call; names the llm_invocations row. */
+  functionName?: string
+  /** Report the embedding is for, when there is one. */
+  reportId?: string
 }
 
 interface ResolvedOpenAi {
@@ -111,8 +116,10 @@ async function resolveOpenAi(projectId?: string): Promise<ResolvedOpenAi | null>
   if (projectId) {
     try {
       const db = getServiceClient()
-      // Embeddings are not counted in llm_invocations, so the LLM budget
-      // neither counts nor blocks them (_shared/llm-budget.ts).
+      // Every embedding call writes an llm_invocations row (see
+      // recordEmbeddingCall), so its cost counts toward the LLM budget, but
+      // `purpose: 'embedding'` keeps the budget from blocking it: an over-budget
+      // project still gets RAG lookups and code indexing (_shared/llm-budget.ts).
       const r = await resolveLlmKey(db, projectId, 'openai', { purpose: 'embedding' })
       if (r) {
         return {
@@ -237,6 +244,51 @@ function computeRetryDelay(response: Response, attempt: number): number {
   return Math.min(Math.max(base + jitter, 250), 30_000)
 }
 
+/** What one embedding call sent and got back, for its llm_invocations row. */
+interface EmbeddingCallState {
+  /** The credential of the last request actually sent; null = nothing was sent. */
+  resolved: ResolvedOpenAi | null
+  /** The parsed 200 body (carries `usage.prompt_tokens`), when there was one. */
+  body: unknown
+}
+
+function newCallState(): EmbeddingCallState {
+  return { resolved: null, body: null }
+}
+
+/**
+ * One llm_invocations row per embedding call: written once on the paid
+ * response or once on the final failure, never per 429 retry (a rate-limit
+ * storm during a repo sweep would otherwise flood the table with free rows).
+ * `skipHostedBilling`: embeddings record their cost but are not debited from
+ * the hosted wallet (see LlmInvocationRecord.skipHostedBilling).
+ */
+function recordEmbeddingCall(
+  opts: EmbeddingOptions,
+  model: string,
+  state: EmbeddingCallState,
+  startedAt: number,
+  error?: unknown,
+): void {
+  if (!state.resolved) return
+  try {
+    void recordLlmUsage(getServiceClient(), {
+      functionName: opts.functionName ?? 'embeddings',
+      stage: 'embedding',
+      projectId: opts.projectId ?? null,
+      reportId: opts.reportId ?? null,
+      model,
+      keySource: state.resolved.source,
+      startedAt,
+      skipHostedBilling: true,
+    }, error === undefined
+      ? { result: state.body, usage: { outputTokens: 0 } }
+      : { error, usage: { ...extractLlmUsage(state.body), outputTokens: 0 } })
+  } catch (err) {
+    embLog.warn('Embedding usage row not written', { err: String(err).slice(0, 120) })
+  }
+}
+
 /**
  * Single embedding HTTP call. Returned separately from the retry wrapper so
  * the loop logic stays compact and the call shape is identical to
@@ -280,6 +332,24 @@ export async function createEmbedding(
     ? { model: modelOrOpts, ...(legacyOpts ?? {}) }
     : { ...(modelOrOpts ?? {}) }
   const embeddingModel = opts.model ?? DEFAULT_MODEL
+  const state = newCallState()
+  const startedAt = Date.now()
+  try {
+    const embedding = await createEmbeddingUnrecorded(text, opts, embeddingModel, state)
+    recordEmbeddingCall(opts, embeddingModel, state, startedAt)
+    return embedding
+  } catch (err) {
+    recordEmbeddingCall(opts, embeddingModel, state, startedAt, err)
+    throw err
+  }
+}
+
+async function createEmbeddingUnrecorded(
+  text: string,
+  opts: EmbeddingOptions,
+  embeddingModel: string,
+  state: EmbeddingCallState,
+): Promise<number[]> {
   let resolved = await resolveOpenAi(opts.projectId)
   if (!resolved) throw new Error('OPENAI_API_KEY not set (and no BYOK key configured)')
   let failedOver = false
@@ -292,10 +362,12 @@ export async function createEmbedding(
   // "No embedding returned from openrouter.ai … HTTP 429" in `last_index_error`.
   let lastError = ''
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    state.resolved = resolved
     const response = await fetchEmbedding(resolved, embeddingModel, text)
 
     if (response.ok) {
       const result = await response.json()
+      state.body = result
       const embedding = result.data?.[0]?.embedding
       if (!embedding) {
         // 200 OK with no embedding is the OpenRouter / Together / Groq "soft
@@ -391,18 +463,38 @@ export async function createEmbeddingBatch(
     ? { model: modelOrOpts, ...(legacyOpts ?? {}) }
     : { ...(modelOrOpts ?? {}) }
   const embeddingModel = opts.model ?? DEFAULT_MODEL
+  const state = newCallState()
+  const startedAt = Date.now()
+  try {
+    const embeddings = await createEmbeddingBatchUnrecorded(inputs, opts, embeddingModel, state)
+    recordEmbeddingCall(opts, embeddingModel, state, startedAt)
+    return embeddings
+  } catch (err) {
+    recordEmbeddingCall(opts, embeddingModel, state, startedAt, err)
+    throw err
+  }
+}
+
+async function createEmbeddingBatchUnrecorded(
+  inputs: string[],
+  opts: EmbeddingOptions,
+  embeddingModel: string,
+  state: EmbeddingCallState,
+): Promise<number[][]> {
   let resolved = await resolveOpenAi(opts.projectId)
   if (!resolved) throw new Error('OPENAI_API_KEY not set (and no BYOK key configured)')
   let failedOver = false
 
   let lastError = ''
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    state.resolved = resolved
     const response = await fetchEmbedding(resolved, embeddingModel, inputs)
 
     if (response.ok) {
       const result = await response.json() as {
         data?: Array<{ embedding: number[]; index?: number }>
       }
+      state.body = result
       const rows = result.data ?? []
       if (rows.length !== inputs.length) {
         throw new Error(
@@ -489,6 +581,9 @@ export async function generateAndStoreEmbedding(
     keySource: resolved.source,
   })
   const span = trace.span('openai.embed')
+  const usageOpts: EmbeddingOptions = { ...opts, reportId: opts.reportId ?? reportId }
+  const state: EmbeddingCallState = { resolved, body: null }
+  const startedAt = Date.now()
 
   try {
     // Mirror the retry policy from `createEmbedding`. Report-similarity is
@@ -516,6 +611,7 @@ export async function generateAndStoreEmbedding(
     }
 
     if (!response || !response.ok) {
+      recordEmbeddingCall(usageOpts, embeddingModel, state, startedAt, new Error(`Embedding API error: ${response?.status ?? 'no-response'}`))
       span.end({ model: embeddingModel, error: `${response?.status ?? 'no-response'}: ${lastErrBody.slice(0, 200)}` })
       embLog.error('Embedding API error', {
         reportId,
@@ -528,8 +624,11 @@ export async function generateAndStoreEmbedding(
     }
 
     const result = await response.json()
+    state.body = result
     const embedding = result.data?.[0]?.embedding
     const tokenUsage = result.usage?.total_tokens
+    // A 200 is a paid call even when a gateway returned no vector.
+    recordEmbeddingCall(usageOpts, embeddingModel, state, startedAt)
     span.end({ model: embeddingModel, inputTokens: tokenUsage })
     if (!embedding) {
       // 200 OK without an embedding array. `generateAndStoreEmbedding` is
@@ -561,6 +660,7 @@ export async function generateAndStoreEmbedding(
       embLog.error('Failed to store embedding', { reportId, error: error.message })
     }
   } catch (err) {
+    if (!state.body) recordEmbeddingCall(usageOpts, embeddingModel, state, startedAt, err)
     span.end({ model: embeddingModel, error: String(err) })
     embLog.error('Embedding generation error', { reportId, err: String(err) })
   }

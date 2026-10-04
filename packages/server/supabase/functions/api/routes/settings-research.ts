@@ -48,6 +48,8 @@ import {
   type LegacyByokProvider,
 } from '../../_shared/byok.ts';
 import { isOperatorProject } from '../../_shared/operator-gate.ts';
+import { fetchProviderCredits, isOpenRouterBaseUrl } from '../../_shared/provider-credits.ts';
+import { providerFromModel } from '../../_shared/hosted-llm-billing.ts';
 import { loadIntegrationSignals } from '../../_shared/setup-signals.ts';
 import {
   BYOK_PROVIDERS as POOLED_BYOK_PROVIDERS,
@@ -2925,6 +2927,75 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
    * GET /v1/admin/byok/keys
    * List all BYOK keys for the project, ordered by provider + priority.
    */
+  /**
+   * GET /v1/admin/byok/credits
+   * Remaining credits per key, read from the provider where it publishes a
+   * balance (Firecrawl, OpenRouter), plus the last 30 days of AI spend Mushi
+   * recorded for each provider. Free reads; nothing is charged.
+   */
+  app.get('/v1/admin/byok/credits', adminOrApiKey(), async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+    const apiKeyProjectId =
+      c.get('authMethod') === 'apiKey' ? (c.get('projectId') as string | undefined) : undefined;
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () => c.json({ ok: true, data: { keys: [], spend30d: [] } }),
+      ...(apiKeyProjectId ? { overrideProjectId: apiKeyProjectId } : {}),
+    });
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
+
+    const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const [keysRes, spendRes] = await Promise.all([
+      db
+        .from('byok_keys')
+        .select('id, provider_slug, key_hint, label, base_url, vault_secret_id, status')
+        .eq('project_id', project.id)
+        .in('status', ['active', 'quota_exhausted']),
+      db
+        .from('llm_invocations')
+        .select('used_model, cost_usd, input_tokens, output_tokens, key_source')
+        .eq('project_id', project.id)
+        .gte('created_at', since)
+        .limit(20000),
+    ]);
+    if (keysRes.error) return dbError(c, keysRes.error);
+    if (spendRes.error) return dbError(c, spendRes.error);
+
+    const keys = await Promise.all(
+      (keysRes.data ?? []).map(async (k) => {
+        const { data: secret } = await db.rpc('vault_get_secret', { secret_id: k.vault_secret_id });
+        const credits =
+          typeof secret === 'string'
+            ? await fetchProviderCredits(k.provider_slug as string, secret, k.base_url as string | null)
+            : ({ kind: 'error', message: 'The key could not be read from Vault.' } as const);
+        return {
+          id: k.id,
+          provider: k.provider_slug,
+          hint: k.key_hint,
+          label: k.label,
+          openRouter: isOpenRouterBaseUrl(k.base_url as string | null),
+          credits,
+        };
+      }),
+    );
+
+    const byProvider = new Map<string, { provider: string; calls: number; costUsd: number; inputTokens: number; outputTokens: number; byokCalls: number }>();
+    for (const row of spendRes.data ?? []) {
+      const provider = providerFromModel(row.used_model as string | null);
+      const cur = byProvider.get(provider) ?? { provider, calls: 0, costUsd: 0, inputTokens: 0, outputTokens: 0, byokCalls: 0 };
+      cur.calls++;
+      cur.costUsd += Number(row.cost_usd ?? 0);
+      cur.inputTokens += Number(row.input_tokens ?? 0);
+      cur.outputTokens += Number(row.output_tokens ?? 0);
+      if (row.key_source === 'byok') cur.byokCalls++;
+      byProvider.set(provider, cur);
+    }
+    const spend30d = [...byProvider.values()].map((v) => ({ ...v, costUsd: Math.round(v.costUsd * 10000) / 10000 }));
+
+    return c.json({ ok: true, data: { projectId: project.id, keys, spend30d, since } });
+  });
+
   app.get('/v1/admin/byok/keys', adminOrApiKey(), async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();

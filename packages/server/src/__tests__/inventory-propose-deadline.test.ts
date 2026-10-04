@@ -33,9 +33,11 @@ const INVENTORY = {
   pages: [{ slug: 'page-0', path: '/page-0', elements: [] }],
 }
 
-const { generateTextCalls, inserted, attemptMs } = vi.hoisted(() => ({
+const { generateTextCalls, inserted, usageRows, attemptMs } = vi.hoisted(() => ({
   generateTextCalls: [] as Array<Record<string, unknown>>,
   inserted: [] as Array<Record<string, unknown>>,
+  /** llm_invocations rows, kept apart from the proposal rows under test. */
+  usageRows: [] as Array<Record<string, unknown>>,
   /** null = use the real budget maths; a number forces that attempt length. */
   attemptMs: { value: null as number | null },
 }))
@@ -104,8 +106,17 @@ vi.mock('../../supabase/functions/_shared/claude-messages.ts', () => ({
 }))
 vi.mock('../../supabase/functions/_shared/llm-failover.ts', () => ({
   // Run the proposer with a fake resolved key, like the real helper does.
-  withLlmFailover: async (_db: unknown, _p: string, _v: string, run: (r: { key: string }) => Promise<unknown>) =>
-    run({ key: 'test-key' }),
+  withLlmFailover: async (
+    _db: unknown,
+    _p: string,
+    _v: string,
+    run: (r: { key: string; source: 'byok' }) => Promise<unknown>,
+    meter?: unknown,
+  ) => {
+    // The proposer writes its own llm_invocations row; a meter as well would bill twice.
+    if (meter !== undefined) throw new Error('inventory-propose must not pass meter')
+    return run({ key: 'test-key', source: 'byok' })
+  },
   WalletDeniedError: class WalletDeniedError extends Error {},
 }))
 
@@ -136,6 +147,10 @@ function fakeDb(currentInventories: Array<Record<string, unknown>> = []) {
       single: async () => ({ data: { id: 'proposal-1' }, error: null }),
       then: (res: (v: unknown) => unknown) => Promise.resolve(rowFor()).then(res),
       insert: (row: Record<string, unknown>) => {
+        if (name === 'llm_invocations') {
+          usageRows.push(row)
+          return Promise.resolve({ error: null })
+        }
         inserted.push(row)
         return { select: () => ({ single: async () => ({ data: { id: 'proposal-1' }, error: null }) }) }
       },
@@ -152,6 +167,7 @@ let handleDriftWatch: typeof import('../../supabase/functions/inventory-propose/
 beforeEach(async () => {
   generateTextCalls.length = 0
   inserted.length = 0
+  usageRows.length = 0
   vi.resetModules()
   // The module ends in `Deno.serve(...)` behind a typeof guard; give it a
   // no-op so importing it does not start a server.
@@ -173,6 +189,20 @@ describe('proposeAndPersist writes the values the schema allows', () => {
     // source has a CHECK: passive_discovery | live_crawl | manual.
     expect(row.source).toBe('passive_discovery')
     expect((row.rationale_by_story as Record<string, unknown>).__triggered_by).toBe('cron:drift-watch')
+  })
+
+  it('records the model call in llm_invocations with its tokens and key source', async () => {
+    await proposeAndPersist(fakeDb() as never, 'p1', null)
+    expect(usageRows).toHaveLength(1)
+    expect(usageRows[0]).toMatchObject({
+      project_id: 'p1',
+      function_name: 'inventory-propose',
+      stage: 'propose',
+      status: 'success',
+      input_tokens: 10,
+      output_tokens: 20,
+      key_source: 'byok',
+    })
   })
 
   it('keeps a real user id in created_by', async () => {

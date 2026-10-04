@@ -36,6 +36,7 @@ import { resolveLlmKey } from '../_shared/byok.ts'
 import { firecrawlScrape } from '../_shared/firecrawl.ts'
 import { MODERNIZER_EFFORT, MODERNIZER_MODEL, THINKING_HEADROOM_TOKENS } from '../_shared/models.ts'
 import { claudeGenerateObject } from '../_shared/claude-messages.ts'
+import { withLlmUsage } from '../_shared/llm-usage.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import {
   bindFindingsToRegistry,
@@ -283,7 +284,13 @@ async function processRepo(
   let plan: z.infer<typeof findingSchema>
   try {
     // claudeGenerateObject validates the reply against findingSchema.
-    const result = await claudeGenerateObject({
+    const result = await withLlmUsage(db, {
+      functionName: 'library-modernizer',
+      stage: 'dependency-audit',
+      projectId: row.project_id,
+      model: MODERNIZER_MODEL,
+      keySource: anthropic.source,
+    }, () => claudeGenerateObject({
       apiKey: anthropic.key,
       model: MODERNIZER_MODEL,
       effort: MODERNIZER_EFFORT,
@@ -292,7 +299,7 @@ async function processRepo(
       prompt: `Manifest: ${manifestPath} (${manifestKind})\n\nDependencies (installed range → npm latest stable):\n${candidates.map((c) => `- ${c.name}: ${c.installed} → ${c.latest}`).join('\n')}\n\nRelease-notes excerpts (best-effort web scrape, may be empty):\n${releaseNotes.map((n) => `### ${n.name}\n${n.notes}`).join('\n\n') || '(no excerpts available — base your judgement on the version strings only)'}`,
       // Up to 8 findings of ~400 chars, plus room for adaptive thinking.
       maxTokens: 2_000 + THINKING_HEADROOM_TOKENS,
-    })
+    }))
     plan = result.object
   } catch (err) {
     log.warn('LLM call failed for modernizer', { repo: row.repo_url, error: String(err).slice(0, 200) })

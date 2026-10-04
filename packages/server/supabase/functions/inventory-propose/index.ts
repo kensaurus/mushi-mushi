@@ -61,6 +61,7 @@ import { parseBody, InventoryProposeBodySchema } from '../_shared/validate.ts'
 import { withLlmFailover, WalletDeniedError } from '../_shared/llm-failover.ts'
 import { INVENTORY_PROPOSE_EFFORT, INVENTORY_PROPOSE_MODEL, THINKING_HEADROOM_TOKENS } from '../_shared/models.ts'
 import { claudeGenerateText } from '../_shared/claude-messages.ts'
+import { withLlmUsage, type LlmUsageContext } from '../_shared/llm-usage.ts'
 import { resolveClaudeModel } from '../_shared/claude-request.ts'
 import { getPromptForStage } from '../_shared/prompt-ab.ts'
 import {
@@ -259,6 +260,9 @@ Produce a complete inventory.yaml object as JSON. Wrap the inventory under \`inv
  */
 async function runProposer(args: {
   apiKey: string
+  /** Writes the llm_invocations row for the provider call (and so its hosted-key debit). */
+  db: SupabaseClient
+  usage: LlmUsageContext
   modelId: string
   prompt: string
   previousIssues?: string
@@ -278,7 +282,9 @@ async function runProposer(args: {
 
   // Plain text + manual JSON parse, then validateInventoryObject. See
   // `extractFencedJson` for why this is not a structured-output call.
-  const result = await claudeGenerateText({
+  // Recorded at the provider call, so a reply that later fails JSON parsing
+  // or validation still counts: its tokens were spent.
+  const result = await withLlmUsage(args.db, args.usage, () => claudeGenerateText({
     apiKey: args.apiKey,
     model: args.modelId,
     effort: INVENTORY_PROPOSE_EFFORT,
@@ -288,7 +294,7 @@ async function runProposer(args: {
     // Without this the call can outlive the edge runtime itself.
     abortSignal: AbortSignal.timeout(args.timeoutMs),
     timeoutMs: args.timeoutMs,
-  })
+  }))
 
   let out: ModelOutput
   try {
@@ -387,6 +393,16 @@ async function proposeAndPersist(
         async (resolved) => {
           return runProposer({
             apiKey: resolved.key,
+            db,
+            usage: {
+              functionName: 'inventory-propose',
+              stage: 'propose',
+              projectId,
+              model: modelId,
+              keySource: resolved.source,
+              // Billed before (withLlmFailover meter); keeps that debit.
+              billHosted: true,
+            },
             modelId,
             prompt,
             previousIssues,
@@ -394,13 +410,9 @@ async function proposeAndPersist(
             timeoutMs,
           })
         },
-        // This path writes no llm_invocations row, so the hosted-key debit is
-        // taken here rather than in logLlmInvocation.
-        {
-          feature: 'inventory-propose',
-          model: modelId,
-          extractUsage: (r) => ({ inputTokens: r.tokens.in, outputTokens: r.tokens.out }),
-        },
+        // No `meter`: runProposer writes an llm_invocations row, and
+        // logLlmInvocation takes the hosted-key debit. Passing both would
+        // charge the call twice.
       )
       break
     } catch (err) {

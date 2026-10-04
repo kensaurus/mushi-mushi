@@ -4,6 +4,7 @@
  * loading the route module.
  */
 import { isVaultRef } from './vault-ref.ts'
+import { parseCursorModelSpec } from './cursor-cloud.ts'
 import { assertSafeOutboundUrl } from './inventory-guards.ts'
 import { parseSentryDsnSetting, sentrySelfHostedHosts } from './sentry-dsn.ts'
 
@@ -52,6 +53,12 @@ const CLAUDE_AGENT_FIELD_RULES: Record<string, { re: RegExp; message: string }> 
 export function validatePlatformBody(body: Record<string, unknown>): BodyError | null {
   for (const [k, v] of Object.entries(body)) {
     if (isVaultRef(v)) return vaultRefError(k)
+    if (k === 'cursor_default_model' && typeof v === 'string' && v.trim() !== '' && !parseCursorModelSpec(v)) {
+      return {
+        code: 'VALIDATION_ERROR',
+        message: 'Cursor model must be a model id, optionally with params, e.g. grok-4.7 or grok-4.7?reasoning_effort=xhigh&context=500k.',
+      }
+    }
     const rule = CLAUDE_AGENT_FIELD_RULES[k]
     if (rule && typeof v === 'string' && v.trim() !== '' && !rule.re.test(v.trim())) {
       return { code: 'VALIDATION_ERROR', message: rule.message }

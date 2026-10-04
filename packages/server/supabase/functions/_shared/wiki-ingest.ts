@@ -250,7 +250,7 @@ export function defaultWikiIngestDeps(db: SupabaseClient): WikiIngestDeps {
       const text = await res.text()
       return text.length > 0 && text.length <= MAX_FILE_CHARS ? text : null
     },
-    embed: (inputs, projectId) => createEmbeddingBatch(inputs, { projectId }),
+    embed: (inputs, projectId) => createEmbeddingBatch(inputs, { projectId, functionName: 'wiki-ingest' }),
   }
 }
 

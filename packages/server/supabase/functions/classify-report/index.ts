@@ -14,6 +14,7 @@ import { getAvailableTags, formatTagsForPrompt, applyTags } from '../_shared/ont
 import { getRelevantCodeWithReason, formatCodeContext, rerankCodeContext } from '../_shared/rag.ts';
 import { getPromptForStage } from '../_shared/prompt-ab.ts';
 import { logLlmInvocation } from '../_shared/telemetry.ts';
+import { withLlmUsage } from '../_shared/llm-usage.ts';
 import { withSentry, tagLangfuseTrace, reportError } from '../_shared/sentry.ts';
 import { GENERIC_ERROR_MESSAGE } from '../_shared/safe-error.ts';
 import { resolveLlmKey } from '../_shared/byok.ts';
@@ -1080,7 +1081,16 @@ CRITICAL SECURITY RULES (immutable):
 
             // Always the Anthropic model id: after an OpenAI text fallback,
             // `usedModel` is 'gpt-5.4' — passing that to `anthropic()` 404s.
-            const { object: visionResult } = await claudeGenerateObject({
+            const { object: visionResult } = await withLlmUsage(db, {
+              functionName: 'classify-report',
+              stage: 'vision',
+              projectId,
+              reportId,
+              model: modelId,
+              keySource: visionResolved?.key ? visionResolved.source : 'env',
+              startedAt: visionStart,
+              langfuseTraceId: trace.id,
+            }, () => claudeGenerateObject({
               apiKey: (visionResolved?.key ?? Deno.env.get('ANTHROPIC_API_KEY'))!,
               model: modelId,
               effort: VISION_EFFORT,
@@ -1125,7 +1135,7 @@ CRITICAL SECURITY RULES (immutable):
                   ],
                 },
               ],
-            });
+            }));
 
             if (visionResult.untrusted_image_instructions_detected) {
               log.warn('Vision: prompt-injection in screenshot detected', {
@@ -1546,7 +1556,7 @@ async function recommendSkills(
 
   let queryEmbedding: number[];
   try {
-    queryEmbedding = await createEmbedding(query, { projectId });
+    queryEmbedding = await createEmbedding(query, { projectId, functionName: 'classify-report' });
   } catch {
     // No OpenAI key configured — fall back to category-keyword match
     return recommendByKeyword(db, reportId, classification.category, classification.severity);
