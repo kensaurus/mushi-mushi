@@ -9,6 +9,25 @@ import { sanitizeRenderedHtml } from '../../_shared/html-sanitize.ts';
 import { log } from '../../_shared/logger.ts';
 import { isJobFailureSuperseded } from './intelligence-priority.ts';
 
+/**
+ * Graph rows not yet mirrored into AGE. A head:true count query returns the
+ * number on `count` and null `data`; reading `data.count` made both values
+ * null forever. Null still means "could not count", never 0.
+ */
+export async function countUnsyncedGraphRows(
+  db: ReturnType<typeof getServiceClient>,
+  projectId: string,
+): Promise<{ nodes: number | null; edges: number | null }> {
+  const [nodes, edges] = await Promise.all([
+    db.from('graph_nodes').select('id', { count: 'exact', head: true }).eq('project_id', projectId).is('age_synced_at', null),
+    db.from('graph_edges').select('id', { count: 'exact', head: true }).eq('project_id', projectId).is('age_synced_at', null),
+  ]);
+  return {
+    nodes: nodes.error ? null : nodes.count ?? null,
+    edges: edges.error ? null : edges.count ?? null,
+  };
+}
+
 const syntheticTriggerSchema = z.object({
   count: z.number().int().min(1).max(50).optional(),
 });
@@ -503,17 +522,7 @@ export function registerIntelligenceSyntheticRoutes(app: Hono<{ Variables: Varia
       .limit(1)
       .maybeSingle();
 
-    const { data: nodesUnsynced } = await db
-      .from('graph_nodes')
-      .select('id', { count: 'exact', head: true })
-      .eq('project_id', project.id)
-      .is('age_synced_at', null);
-
-    const { data: edgesUnsynced } = await db
-      .from('graph_edges')
-      .select('id', { count: 'exact', head: true })
-      .eq('project_id', project.id)
-      .is('age_synced_at', null);
+    const unsynced = await countUnsyncedGraphRows(db, project.id);
 
     return c.json({
       ok: true,
@@ -521,10 +530,7 @@ export function registerIntelligenceSyntheticRoutes(app: Hono<{ Variables: Varia
         backend: settings?.graph_backend ?? 'sql_only',
         ageAvailable: ageAvail === true,
         latestAudit,
-        unsynced: {
-          nodes: (nodesUnsynced as unknown as { count?: number } | null)?.count ?? null,
-          edges: (edgesUnsynced as unknown as { count?: number } | null)?.count ?? null,
-        },
+        unsynced,
       },
     });
   });

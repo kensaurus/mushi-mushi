@@ -31,6 +31,39 @@ export function resolveExploreTab(value: string | null): ExploreTabId {
   return 'graph'
 }
 
+/**
+ * The URL for switching to `tab`. Always writes `tab` explicitly, Graph
+ * included: a bare `/explore` lets Beginner and Quickstart modes pick a
+ * starting tab, so deleting the param for Graph made every "show in graph"
+ * action (Map tab, citations, tour stops, domain files) bounce straight back.
+ */
+export function exploreTabSearchParams(prev: URLSearchParams, tab: ExploreTabId): URLSearchParams {
+  const next = new URLSearchParams(prev)
+  next.set('tab', tab)
+  return next
+}
+
+const TAB_ACTION_LABELS: Partial<Record<ExploreTabId, string>> = {
+  index: 'Open Index',
+  ask: 'Open Ask',
+  graph: 'Open Graph',
+  overview: 'Open Summary',
+  search: 'Open Search',
+}
+
+/**
+ * Button text for a banner link, named after where it goes. The stale and
+ * ready banners said "Open Graph" while linking to the Index or Ask tab.
+ */
+export function exploreActionLabelFor(to: string | null | undefined): string {
+  if (!to) return 'Open Graph'
+  if (to.startsWith('/connect')) return 'Open Connect'
+  if (!to.startsWith('/explore')) return 'Open'
+  const query = to.includes('?') ? to.slice(to.indexOf('?') + 1) : ''
+  const tab = resolveExploreTab(new URLSearchParams(query).get('tab'))
+  return TAB_ACTION_LABELS[tab] ?? 'Open'
+}
+
 export function primaryTabOf(tab: ExploreTabId): ExplorePrimaryTabId {
   if (tab === 'overview') return 'overview'
   if (UNDERSTAND_VIEWS.includes(tab as ExploreUnderstandView)) return 'understand'

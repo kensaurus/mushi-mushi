@@ -54,6 +54,7 @@ import {
   resolveProjectGithubToken,
 } from '../../_shared/github.ts';
 import { resolveBranchForConnect } from '../../_shared/github-branch.ts';
+import { canMergeReportGroups, mergeReportGroups } from '../../_shared/report-groups.ts';
 import { dbError, ownedProjectIds, callerProjectIds, resolveOwnedProject, scopedOwnedProjectIds, callerCanAccessProject } from '../shared.ts';
 import {
   canManageProjectSdkConfig,
@@ -348,7 +349,11 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
 
   app.post('/v1/admin/groups/:id/merge', jwtAuth, async (c) => {
     const groupId = c.req.param('id')!;
-    const { targetGroupId } = await c.req.json();
+    const body = (await c.req.json().catch(() => null)) as { targetGroupId?: unknown } | null;
+    const targetGroupId = typeof body?.targetGroupId === 'string' ? body.targetGroupId : '';
+    if (!targetGroupId || targetGroupId === groupId) {
+      return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: 'Pick a different group to merge into.' } }, 400);
+    }
     const userId = c.get('userId') as string;
     const db = getServiceClient();
     const projectIds = await callerProjectIds(c, db, userId);
@@ -377,33 +382,23 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       );
     // Merging deletes the source group: viewers are read-only.
     const access = await callerCanAccessProject(c, db, userId, sourceGroup.project_id as string);
-    if (!access.allowed || access.role === 'viewer') {
+    if (!access.allowed || !canMergeReportGroups(access.role)) {
       return c.json(
         { ok: false, error: { code: 'FORBIDDEN', message: 'Viewers cannot merge groups. Ask a member or admin.' } },
         403,
       );
     }
 
-    const moved = await db
-      .from('reports')
-      .update({ report_group_id: targetGroupId })
-      .eq('report_group_id', groupId)
-      .eq('project_id', sourceGroup.project_id as string);
-    if (moved.error) return dbError(c, moved.error);
-    const { count, error: countError } = await db
-      .from('reports')
-      .select('id', { count: 'exact', head: true })
-      .eq('report_group_id', targetGroupId);
-    if (countError) return dbError(c, countError);
-    const recount = await db
-      .from('report_groups')
-      .update({ report_count: count ?? 0 })
-      .eq('id', targetGroupId);
-    if (recount.error) return dbError(c, recount.error);
-    const removed = await db.from('report_groups').delete().eq('id', groupId);
-    if (removed.error) return dbError(c, removed.error);
+    const result = await mergeReportGroups(db, groupId, targetGroupId, sourceGroup.project_id as string);
+    if (!result.ok) {
+      log.error('report group merge failed', { groupId, targetGroupId, step: result.step, error: result.message });
+      return c.json(
+        { ok: false, error: { code: 'MERGE_FAILED', message: 'The merge stopped part way. No group was deleted; retry the merge.' } },
+        500,
+      );
+    }
 
-    return c.json({ ok: true });
+    return c.json({ ok: true, data: { moved: result.moved, report_count: result.reportCount } });
   });
 
   // ============================================================

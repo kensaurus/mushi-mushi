@@ -48,6 +48,56 @@ const qaStoryCreateSchema = z.object({
   byok_provider: z.string().max(64).nullable().optional(),
 });
 
+/**
+ * PATCH body: every create field is optional, plus `enabled`. Validated like
+ * the create body so a bad cron or a non-URL target is a 400, not a silent
+ * write the runner later chokes on.
+ */
+export const qaStoryPatchSchema = qaStoryCreateSchema.partial().extend({
+  enabled: z.boolean().optional(),
+});
+
+/** Row written by POST …/qa-stories. `target_url` is what the runner navigates to. */
+export function buildQaStoryInsert(projectId: string, body: z.infer<typeof qaStoryCreateSchema>) {
+  return {
+    project_id: projectId,
+    name: body.name,
+    prompt: body.prompt ?? null,
+    script: body.script ?? null,
+    target_url: body.target_url ?? null,
+    script_lang: 'playwright-js',
+    browser_provider: body.browser_provider ?? 'firecrawl_actions',
+    schedule_cron: body.schedule_cron ?? '0 * * * *',
+    byok_provider: body.byok_provider ?? null,
+    enabled: true,
+  };
+}
+
+/**
+ * Column patch for PATCH …/qa-stories/:sid. Turning a story on also approves
+ * it: the runner only checks `enabled`, so leaving a rejected or pending
+ * story's approval_status behind would contradict what the console shows.
+ */
+export function buildQaStoryPatch(body: z.infer<typeof qaStoryPatchSchema>): Record<string, unknown> {
+  const patch: Record<string, unknown> = {};
+  for (const key of ['name', 'prompt', 'script', 'target_url', 'schedule_cron', 'browser_provider', 'byok_provider', 'enabled'] as const) {
+    if (body[key] !== undefined) patch[key] = body[key];
+  }
+  if (body.enabled === true) patch.approval_status = 'approved';
+  return patch;
+}
+
+function validationError(c: Context, issues: z.ZodIssue[], fallback: string) {
+  const first = issues[0];
+  return jsonError(
+    c,
+    'VALIDATION_ERROR',
+    first ? `${first.path.join('.')}: ${first.message}` : fallback,
+    400,
+    { fieldErrors: Object.fromEntries(issues.map((i) => [i.path.join('.') || '_', i.message])) },
+  );
+}
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function assertUuid(c: Context, value: string, name: string) {
   if (!UUID_RE.test(value)) {
@@ -222,8 +272,8 @@ export function registerQaCoverageRoutes(app: Hono<{ Variables: Variables }>): v
       // Check disabled_all BEFORE no_runs: if all stories are disabled, "Run now"
       // is impossible — surfacing no_runs would give an unactionable instruction.
       topPriority = 'disabled_all';
-      topPriorityLabel = 'All tests are turned off — re-enable at least one story to resume scheduled checks.';
-      topPriorityTo = scoped('/qa-coverage?tab=stories');
+      topPriorityLabel = 'All tests are turned off — open a story and turn it on to resume scheduled checks.';
+      topPriorityTo = scoped('/qa-coverage?tab=disabled');
     } else if (totalRuns24h === 0) {
       topPriority = 'no_runs';
       topPriorityLabel = `${stories.length} ${stories.length === 1 ? 'story' : 'stories'} configured but nothing ran in 24h — click Run now on a story.`;
@@ -392,35 +442,11 @@ export function registerQaCoverageRoutes(app: Hono<{ Variables: Variables }>): v
       return jsonError(c, 'BAD_JSON', 'Invalid JSON body', 400);
     }
     const parsed = qaStoryCreateSchema.safeParse(raw);
-    if (!parsed.success) {
-      const first = parsed.error.issues[0];
-      return jsonError(
-        c,
-        'VALIDATION_ERROR',
-        first ? `${first.path.join('.')}: ${first.message}` : 'Invalid story payload',
-        400,
-        {
-          fieldErrors: Object.fromEntries(
-            parsed.error.issues.map((i) => [i.path.join('.') || '_', i.message]),
-          ),
-        },
-      );
-    }
-    const body = parsed.data;
+    if (!parsed.success) return validationError(c, parsed.error.issues, 'Invalid story payload');
 
     const { data, error } = await db
       .from('qa_stories')
-      .insert({
-        project_id: pid,
-        name: body.name,
-        prompt: body.prompt ?? null,
-        script: body.script ?? null,
-        script_lang: 'playwright-js',
-        browser_provider: body.browser_provider ?? 'firecrawl_actions',
-        schedule_cron: body.schedule_cron ?? '0 * * * *',
-        byok_provider: body.byok_provider ?? null,
-        enabled: true,
-      })
+      .insert(buildQaStoryInsert(pid, parsed.data))
       .select()
       .single();
     if (error) return dbError(c, error);
@@ -435,31 +461,17 @@ export function registerQaCoverageRoutes(app: Hono<{ Variables: Variables }>): v
     const db = getServiceClient();
     if (!(await resolveProject(db, userId, pid))) return c.json({ error: 'Not found' }, 404);
 
-    let body: {
-      name?: string;
-      prompt?: string;
-      script?: string;
-      schedule_cron?: string;
-      enabled?: boolean;
-      browser_provider?: string;
-      byok_provider?: string;
-    };
+    let raw: unknown;
     try {
-      body = await c.req.json();
+      raw = await c.req.json();
     } catch {
-      return c.json({ ok: false, error: 'invalid_json_body' }, 400);
+      return jsonError(c, 'BAD_JSON', 'Invalid JSON body', 400);
     }
+    const parsed = qaStoryPatchSchema.safeParse(raw);
+    if (!parsed.success) return validationError(c, parsed.error.issues, 'Invalid story update');
+    const patch = buildQaStoryPatch(parsed.data);
 
-    const patch: Record<string, unknown> = {};
-    if (body.name !== undefined) patch.name = body.name;
-    if (body.prompt !== undefined) patch.prompt = body.prompt;
-    if (body.script !== undefined) patch.script = body.script;
-    if (body.schedule_cron !== undefined) patch.schedule_cron = body.schedule_cron;
-    if (body.enabled !== undefined) patch.enabled = body.enabled;
-    if (body.browser_provider !== undefined) patch.browser_provider = body.browser_provider;
-    if (body.byok_provider !== undefined) patch.byok_provider = body.byok_provider;
-
-    if (Object.keys(patch).length === 0) return c.json({ error: 'Nothing to update' }, 400);
+    if (Object.keys(patch).length === 0) return jsonError(c, 'VALIDATION_ERROR', 'Nothing to update', 400);
 
     const { data, error } = await db
       .from('qa_stories')
@@ -486,7 +498,8 @@ export function registerQaCoverageRoutes(app: Hono<{ Variables: Variables }>): v
       .eq('id', sid)
       .eq('project_id', pid);
     if (error) return dbError(c, error);
-    return c.body(null, 204);
+    // JSON, not 204: the console's apiFetch parses every 2xx body.
+    return c.json({ ok: true, data: { deleted: true } });
   });
 
   // ── List runs for a story ─────────────────────────────────────────────────

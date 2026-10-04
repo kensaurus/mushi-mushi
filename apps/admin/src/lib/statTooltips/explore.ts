@@ -72,13 +72,13 @@ export function backendLayerDetail(): string {
 export function embeddingsTooltip(stats: ExploreStats): MetricTooltipData {
   const takeaway =
     stats.withEmbeddings > 0
-      ? `${stats.withEmbeddings.toLocaleString()} files have embedding vectors — semantic search is ready on Search tab.`
+      ? `${stats.withEmbeddings.toLocaleString()} search chunks (whole files and symbols) have vectors — semantic search is ready on the Search tab. One file can split into several chunks, so this can exceed Files.`
       : stats.indexedFiles > 0
         ? 'Files indexed but embeddings missing — re-run indexing with embeddings enabled.'
         : 'No embeddings yet — index files first, then generate vectors for semantic search.'
 
   return metricTip(
-    'Indexed files that have a vector embedding for semantic codebase search.',
+    'Search chunks (whole files and individual symbols) that have a vector for semantic codebase search.',
     'Counts project_codebase_files rows where embedding column is non-null (match_codebase_files RPC input).',
     takeaway,
     stats.withEmbeddings === 0 && stats.indexedFiles > 0

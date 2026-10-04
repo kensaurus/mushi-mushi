@@ -8,7 +8,13 @@
 export type ApiResult<T> = {
   ok: boolean
   data?: T
-  error?: { code: string; message: string; requestId?: string }
+  error?: {
+    code: string
+    message: string
+    requestId?: string
+    /** Validator detail (e.g. inventory YAML `{ path, message }[]`) when the route sends it. */
+    issues?: unknown[]
+  }
   /** Correlation id from the X-Request-Id response header when present. */
   requestId?: string
   /**
@@ -118,6 +124,7 @@ export function coerceApiResult<T>(raw: unknown): ApiResult<T> {
           code: String(e.code ?? 'ERROR'),
           message: describeErrorDetail(e.message) ?? String(e.code ?? 'Request failed'),
           ...(requestId ? { requestId } : {}),
+          ...(Array.isArray(e.issues) ? { issues: e.issues as unknown[] } : {}),
         },
       }
     }

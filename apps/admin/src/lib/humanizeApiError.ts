@@ -232,6 +232,42 @@ export function humanizeApiError(
         code: code || undefined,
         raw,
       }
+    case 'NO_LLM_KEY':
+      return {
+        title: 'Add an AI key to use this.',
+        hint: 'This feature calls an AI model. Add an Anthropic or OpenAI key under Settings → API keys, then retry.',
+        severity: 'hard',
+        action: { label: 'Open API keys', target: { kind: 'route', to: '/settings?tab=byok' } },
+        code,
+        raw,
+      }
+    case 'LLM_ERROR':
+      return {
+        title: 'The AI model did not answer.',
+        hint: 'The model call failed or timed out. Retry in a moment; if it keeps failing, check the key under Settings → API keys.',
+        severity: 'soft',
+        action: { label: 'Retry', target: { kind: 'retry' } },
+        code,
+        raw,
+      }
+    case 'INDEX_DISABLED':
+      return {
+        title: 'The codebase is not indexed yet.',
+        hint: 'Connect the GitHub repo and turn on indexing, then retry.',
+        severity: 'hard',
+        action: { label: 'Open Connect', target: { kind: 'route', to: '/connect' } },
+        code,
+        raw,
+      }
+    case 'NOT_FOUND':
+      return {
+        title: 'That item could not be found.',
+        hint: 'It may have been deleted or moved to another project. Refresh the page.',
+        severity: 'hard',
+        action: { label: 'Retry', target: { kind: 'retry' } },
+        code,
+        raw,
+      }
     case 'SECRET_DETECTED':
       return {
         title: 'That text looks like it contains a secret.',
@@ -264,4 +300,44 @@ export function humanizeApiError(
     code: code || undefined,
     raw,
   }
+}
+
+/** Codes whose `message` is written for people and can be shown as is. */
+const READABLE_MESSAGE_CODES = new Set(['VALIDATION_ERROR', 'VALIDATION_FAILED', 'BAD_REQUEST', 'UNSUPPORTED_KIND', 'CONFLICT', 'ERROR'])
+
+/** Text that leaked from Postgres / PostgREST / a proxy rather than written for a user. */
+function looksInternal(message: string): boolean {
+  return (
+    /^[A-Z][A-Z0-9_]{2,64}$/.test(message) ||
+    /duplicate key|violates|constraint|relation "|column "|syntax error|PGRST\d|SQLSTATE|^\d{3}:/i.test(message)
+  )
+}
+
+/**
+ * One plain-English sentence for a failed action (a button, a save, a
+ * stream). The page-load counterpart is `humanizeApiError`; this is for
+ * toasts and inline errors, where a raw code, `[object Object]` or a
+ * Postgres message used to leak through.
+ *
+ * Known codes use the shared wording. A server message written for people
+ * (validation, conflicts) is kept. Anything else falls back to `fallback`.
+ */
+export function apiErrorMessage(
+  error: { code?: string | null; message?: string | null } | string | null | undefined,
+  fallback: string,
+): string {
+  if (!error) return fallback
+  const code = (typeof error === 'string' ? '' : error.code ?? '').toUpperCase()
+  const message = (typeof error === 'string' ? error : error.message ?? '').trim()
+  // A refusal names the rule that applies ("Viewers cannot merge report
+  // groups."); the generic team-switch hint would point at the wrong fix.
+  if (code === 'FORBIDDEN' && message && message.toUpperCase() !== code && !looksInternal(message)) {
+    return message
+  }
+  if (code && !READABLE_MESSAGE_CODES.has(code)) {
+    const known = humanizeApiError(message || code, code)
+    if (known && known.title !== 'Could not load this page.') return `${known.title} ${known.hint}`
+  }
+  if (!message || looksInternal(message)) return fallback
+  return message
 }
