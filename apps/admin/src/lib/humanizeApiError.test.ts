@@ -63,6 +63,13 @@ describe('apiErrorMessage', () => {
     expect(apiErrorMessage({ code: 'VALIDATION_ERROR', message: 'target_url: Invalid url' }, 'x')).toBe('target_url: Invalid url')
   })
 
+  it('keeps the server reason when an action is refused', () => {
+    expect(apiErrorMessage({ code: 'FORBIDDEN', message: 'Viewers cannot merge report groups.' }, 'x')).toBe(
+      'Viewers cannot merge report groups.',
+    )
+    expect(apiErrorMessage({ code: 'FORBIDDEN', message: 'FORBIDDEN' }, 'x')).toMatch(/access/)
+  })
+
   it('handles missing errors and plain strings', () => {
     expect(apiErrorMessage(null, 'fallback')).toBe('fallback')
     expect(apiErrorMessage('Story is disabled', 'fallback')).toBe('Story is disabled')
