@@ -33,6 +33,7 @@ import {
   dedupeSkillsBySlug,
   findActiveSkillBySlug,
   projectSkillSourceIds,
+  readAllPages,
 } from '../../_shared/skill-catalog.ts'
 import { unwrapUpstreamError } from '../../_shared/upstream-error.ts'
 import { stopCursorAgentLatestRun, type CursorStopOutcome } from '../../_shared/agent-adapters.ts'
@@ -120,14 +121,20 @@ function skillsRoutes() {
       .eq('id', projectId)
       .maybeSingle()
 
-    const [{ data: slugRows }, { data: runs }] = await Promise.all([
+    const [{ rows: slugRows }, { data: runs }] = await Promise.all([
       // Distinct slugs: the same repo added by two projects stores each skill
       // once per source, and the catalog shows it once (skill-catalog.ts).
-      db()
-        .from('agent_skills')
-        .select('slug')
-        .eq('is_active', true)
-        .limit(CATALOG_SCAN_CAP),
+      // Paged: one request stops at PostgREST's 1,000-row ceiling.
+      readAllPages<{ slug: string }>(
+        (from, to) =>
+          db()
+            .from('agent_skills')
+            .select('slug')
+            .eq('is_active', true)
+            .order('id', { ascending: true })
+            .range(from, to),
+        CATALOG_SCAN_CAP,
+      ),
       db()
         .from('skill_pipeline_runs')
         .select('id, status')
@@ -217,28 +224,28 @@ function skillsRoutes() {
     const page = Math.max(parseInt(c.req.query('page') ?? '1', 10) || 1, 1)
     const limit = Math.min(Math.max(parseInt(c.req.query('limit') ?? '200', 10) || 200, 1), 200)
 
-    let q = db()
-      .from('agent_skills')
-      .select('id, slug, source_id, category, title, description, chain_slugs, license, created_at, updated_at')
-      .eq('is_active', true)
-      .order('category', { ascending: true })
-      .order('slug', { ascending: true })
-      .limit(CATALOG_SCAN_CAP)
-
-    if (category) q = q.eq('category', category)
-    if (search) {
-      // Simple substring search — embeddings-based search handled by MCP tools.
-      // Strip characters that have meaning in PostgREST's .or() filter grammar
-      // (comma = OR separator, parens = grouping, * / % = wildcards, \ = escape)
-      // to prevent a crafted `q` from injecting extra filter conditions.
-      const safe = search.replace(/[,()*%\\]/g, ' ').trim()
-      if (safe) {
-        q = q.or(`slug.ilike.%${safe}%,title.ilike.%${safe}%,description.ilike.%${safe}%`)
-      }
+    // Simple substring search — embeddings-based search handled by MCP tools.
+    // Strip characters that have meaning in PostgREST's .or() filter grammar
+    // (comma = OR separator, parens = grouping, * / % = wildcards, \ = escape)
+    // to prevent a crafted `q` from injecting extra filter conditions.
+    const safe = search ? search.replace(/[,()*%\\]/g, ' ').trim() : ''
+    const pageQuery = (from: number, to: number) => {
+      let q = db()
+        .from('agent_skills')
+        .select('id, slug, source_id, category, title, description, chain_slugs, license, created_at, updated_at')
+        .eq('is_active', true)
+        .order('category', { ascending: true })
+        .order('slug', { ascending: true })
+        .order('id', { ascending: true })
+      if (category) q = q.eq('category', category)
+      if (safe) q = q.or(`slug.ilike.%${safe}%,title.ilike.%${safe}%,description.ilike.%${safe}%`)
+      return q.range(from, to)
     }
 
-    const { data, error } = await q
-    if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+    // Paged: one request stops at PostgREST's 1,000-row ceiling, and the
+    // catalog holds one copy of each skill per source.
+    const { rows: data, error } = await readAllPages<Record<string, unknown>>(pageQuery, CATALOG_SCAN_CAP)
+    if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error } }, 500)
 
     const preferred = await projectSkillSourceIds(db(), projectIdFromRequest(c))
     const unique = dedupeSkillsBySlug(
@@ -573,11 +580,12 @@ function skillsRoutes() {
     }
 
     // Validate the skill exists (one row per slug, even when several sources carry it)
+    const ownSourceIds = await projectSkillSourceIds(db(), projectId)
     const { skill } = await findActiveSkillBySlug(
       db(),
       String(root_skill_slug),
       'slug, title, description, body_md, chain_slugs',
-      await projectSkillSourceIds(db(), projectId),
+      ownSourceIds,
     )
 
     if (!skill) {
@@ -640,6 +648,7 @@ function skillsRoutes() {
       rootSkillSlug: root_skill_slug,
       chainSlugs,
       reportContext,
+      preferredSourceIds: ownSourceIds,
     })
 
     // Insert the pipeline run

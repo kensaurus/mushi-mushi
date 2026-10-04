@@ -77,22 +77,28 @@ function repoRoleMessage(role: unknown): string {
 }
 
 /**
- * Unset the current primary repo before another one takes the flag. The
- * unique partial index allows one primary per project, so setting a second
- * without this always failed (console QA #20).
+ * Make `repoId` the project's primary repo. The unique partial index allows
+ * one primary per project, so setting a second one without unsetting the
+ * first always failed (console QA #20). Callers run this only AFTER their own
+ * write succeeded, so a failed save never leaves the project without one.
  */
-async function clearPrimaryRepo(
+async function movePrimaryRepo(
   db: ReturnType<typeof getServiceClient>,
   projectId: string,
-  keepRepoId: string | null,
+  repoId: string,
 ): Promise<{ message: string; code?: string } | null> {
-  let q = db
+  const { error: clearErr } = await db
     .from('project_repos')
     .update({ is_primary: false })
     .eq('project_id', projectId)
-    .eq('is_primary', true);
-  if (keepRepoId) q = q.neq('id', keepRepoId);
-  const { error } = await q;
+    .eq('is_primary', true)
+    .neq('id', repoId);
+  if (clearErr) return clearErr;
+  const { error } = await db
+    .from('project_repos')
+    .update({ is_primary: true })
+    .eq('id', repoId)
+    .eq('project_id', projectId);
   return error ?? null;
 }
 
@@ -1770,12 +1776,8 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
           requested: body.defaultBranch,
         })
       : { branch: body.defaultBranch?.trim() || 'main' };
-    // Only one primary repo per project (idx_project_repos_one_primary):
-    // moving "primary" here first clears it elsewhere (console QA #20).
-    if (body.isPrimary) {
-      const cleared = await clearPrimaryRepo(db, body.projectId, null);
-      if (cleared) return dbError(c, cleared);
-    }
+    // Insert as non-primary, then move "primary" only once the row exists, so
+    // a duplicate URL never costs the project its current primary (QA #20).
     const { data, error } = await db
       .from('project_repos')
       .insert({
@@ -1784,7 +1786,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
         role,
         path_globs: body.pathGlobs ?? null,
         default_branch: defaultBranch,
-        is_primary: body.isPrimary ?? false,
+        is_primary: false,
         indexing_enabled: true,
       })
       .select('id, repo_url, role, path_globs, default_branch, is_primary, created_at')
@@ -1797,6 +1799,11 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
         );
       }
       return dbError(c, error);
+    }
+    if (body.isPrimary && data) {
+      const moved = await movePrimaryRepo(db, body.projectId, data.id as string);
+      if (moved) return dbError(c, moved);
+      return c.json({ ok: true, data: { ...data, is_primary: true } });
     }
     return c.json({ ok: true, data });
   });
@@ -1829,12 +1836,9 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     if (body.role !== undefined) updates.role = body.role;
     if (body.pathGlobs !== undefined) updates.path_globs = body.pathGlobs;
     if (body.defaultBranch !== undefined) updates.default_branch = body.defaultBranch;
-    if (body.isPrimary !== undefined) updates.is_primary = body.isPrimary;
+    // Turning "primary" ON is applied after the update succeeds (movePrimaryRepo).
+    if (body.isPrimary === false) updates.is_primary = false;
     if (body.indexingEnabled !== undefined) updates.indexing_enabled = body.indexingEnabled;
-    if (body.isPrimary === true) {
-      const cleared = await clearPrimaryRepo(db, body.projectId, repoId);
-      if (cleared) return dbError(c, cleared);
-    }
     const { data, error } = await db
       .from('project_repos')
       .update(updates)
@@ -1843,6 +1847,14 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       .select('id, repo_url, role, path_globs, default_branch, is_primary, indexing_enabled, updated_at')
       .single();
     if (error) return dbError(c, error);
+    if (!data) {
+      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'That repo is no longer linked to this project.' } }, 404);
+    }
+    if (body.isPrimary === true && !data.is_primary) {
+      const moved = await movePrimaryRepo(db, body.projectId, repoId);
+      if (moved) return dbError(c, moved);
+      return c.json({ ok: true, data: { ...data, is_primary: true } });
+    }
     return c.json({ ok: true, data });
   });
 

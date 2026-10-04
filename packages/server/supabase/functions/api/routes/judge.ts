@@ -298,30 +298,22 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
     const fromIso = isoOrNull(c.req.query('from'));
     const toIso = isoOrNull(c.req.query('to'));
 
-    let stageReportIds: string[] | null = null;
-    if (promptVersion && (promptStage === 'stage1' || promptStage === 'stage2')) {
-      const column = promptStage === 'stage1' ? 'stage1_prompt_version' : 'stage2_prompt_version';
-      const { data: stageReports, error: stageErr } = await db
-        .from('reports')
-        .select('id')
-        .in('project_id', projectIds)
-        .eq(column, promptVersion)
-        .limit(1000);
-      if (stageErr) return dbError(c, stageErr);
-      stageReportIds = (stageReports ?? []).map((r) => r.id as string);
-      if (stageReportIds.length === 0) {
-        return c.json({ ok: true, data: { evaluations: [], total: 0, page, limit } });
-      }
-    }
+    // Stage drill-down: an inner join on the report's own stage version, so
+    // the filter covers every matching evaluation in one query.
+    const stageColumn =
+      promptVersion && promptStage === 'stage1'
+        ? 'stage1_prompt_version'
+        : promptVersion && promptStage === 'stage2'
+          ? 'stage2_prompt_version'
+          : null;
 
+    const evalColumns =
+      'id, report_id, project_id, judge_model, judge_score, accuracy_score, severity_score, component_score, repro_score, classification_agreed, judge_reasoning, prompt_version, created_at, judge_fallback_used';
     let q = db
       .from('classification_evaluations')
-      .select(
-        'id, report_id, project_id, judge_model, judge_score, accuracy_score, severity_score, component_score, repro_score, classification_agreed, judge_reasoning, prompt_version, created_at, judge_fallback_used',
-        { count: 'exact' },
-      )
+      .select(stageColumn ? `${evalColumns}, reports!inner(${stageColumn})` : evalColumns, { count: 'exact' })
       .in('project_id', projectIds);
-    if (stageReportIds) q = q.in('report_id', stageReportIds);
+    if (stageColumn) q = q.eq(`reports.${stageColumn}`, promptVersion);
     else if (promptVersion) q = q.eq('prompt_version', promptVersion);
     if (disagreementOnly) q = q.eq('classification_agreed', false);
     if (fromIso) q = q.gte('created_at', fromIso);
@@ -330,13 +322,16 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
       .order(sort.col, { ascending: sort.asc })
       .range((page - 1) * limit, page * limit - 1);
     if (error) return dbError(c, error);
+    // The select string is computed (stage join), so the typed parser cannot
+    // read it: name the row shape here.
+    const evalRows = (data ?? []) as unknown as Array<Record<string, unknown> & { reports?: unknown }>;
 
     // Hydrate each row with the underlying report's human summary so the
     // Judge table can display "Submit button on /checkout has wrong size"
     // instead of "f9b3c2…" — the original UX audit called the hash-only
     // column literally unreadable for triage decisions.
     const reportIds = Array.from(
-      new Set((data ?? []).map((r) => r.report_id as string).filter(Boolean)),
+      new Set(evalRows.map((r) => r.report_id as string).filter(Boolean)),
     );
     const summaryMap = new Map<
       string,
@@ -361,7 +356,9 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
         });
       }
     }
-    const enriched = (data ?? []).map((row) => {
+    const enriched = evalRows.map((joined) => {
+      // Drop the join column; the row keeps its own fields only.
+      const { reports: _join, ...row } = joined;
       const meta = summaryMap.get(row.report_id as string);
       return {
         ...row,

@@ -67,6 +67,34 @@ export function pickSkillRow<T extends SkillRowLike>(
   return dedupeSkillsBySlug(rows, preferredSourceIds)[0] ?? null
 }
 
+/** Rows per request: PostgREST `max_rows` on Supabase is 1,000. */
+export const CATALOG_PAGE_ROWS = 1000
+
+/**
+ * Read every row a query matches, `CATALOG_PAGE_ROWS` at a time, up to `cap`.
+ * One request stops at PostgREST's 1,000-row ceiling whatever `limit` says,
+ * and the catalog grows by one copy of each skill per source.
+ */
+export async function readAllPages<T>(
+  page: (from: number, to: number) => PromiseLike<{ data: unknown; error: { message: string } | null }>,
+  cap: number,
+): Promise<{ rows: T[]; error: string | null }> {
+  const rows: T[] = []
+  // Advance by what came back, not by what was asked for: the server may cap
+  // a page lower than CATALOG_PAGE_ROWS. An empty page ends the read.
+  let from = 0
+  while (from < cap) {
+    const to = Math.min(from + CATALOG_PAGE_ROWS, cap) - 1
+    const { data, error } = await page(from, to)
+    if (error) return { rows, error: error.message }
+    const chunk = (data ?? []) as T[]
+    if (chunk.length === 0) break
+    rows.push(...chunk)
+    from += chunk.length
+  }
+  return { rows, error: null }
+}
+
 /** Minimal query surface so callers pass a supabase client without a type import. */
 interface SkillQuery {
   select(cols: string): SkillQuery

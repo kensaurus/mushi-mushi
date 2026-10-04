@@ -202,6 +202,32 @@ describe('#23 duplicate slugs across sources', () => {
   })
 })
 
+describe('#23 catalog reads past the PostgREST row ceiling', () => {
+  it('lists and counts every skill when one request returns only a few rows', async () => {
+    const many = Array.from({ length: 7 }, (_, i) => [
+      skill(SRC_MINE, `skill-${i}`, '2026-10-01T00:00:00Z', { id: `m${i}` }),
+      skill(SRC_OTHER, `skill-${i}`, '2026-10-02T00:00:00Z', { id: `o${i}` }),
+    ]).flat()
+    db = makeFakeDb(
+      {
+        skill_sources: [
+          { id: SRC_MINE, project_id: P, repo_slug: 'kensaurus/skills', enabled: true },
+          { id: SRC_OTHER, project_id: OTHER, repo_slug: 'kensaurus/skills', enabled: true },
+        ],
+        agent_skills: many,
+        skill_pipeline_runs: [],
+      },
+      // Stand-in for Supabase's 1,000-row max_rows.
+      { maxRows: 3 },
+    )
+    const list = await call('GET', '/v1/admin/skills?limit=200')
+    expect(list.json.total).toBe(7)
+    expect(list.json.data).toHaveLength(7)
+    const stats = await call('GET', `/v1/admin/skills/stats?project_id=${P}`)
+    expect(stats.json.data.catalogTotal).toBe(7)
+  })
+})
+
 describe('#24 cancel stops the cloud agent', () => {
   function seedRun(mode: 'cloud' | 'handoff') {
     seed({
