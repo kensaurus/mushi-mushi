@@ -114,7 +114,11 @@ describe('StageDrawerContent — Plan drawer dispatch', () => {
       await flush()
     })
     expect(dispatchCalls()).toHaveLength(1)
-    expect(JSON.parse((dispatchCalls()[0]![1] as { body: string }).body)).toEqual({ reportId: 'report-1' })
+    // QA 43: the route requires projectId; without it every dispatch here was a 400.
+    expect(JSON.parse((dispatchCalls()[0]![1] as { body: string }).body)).toEqual({
+      reportId: 'report-1',
+      projectId: 'project-1',
+    })
   })
 
   it('cannot dispatch while a prerequisite fails', async () => {
@@ -142,5 +146,122 @@ describe('StageDrawerContent — Plan drawer dispatch', () => {
       await flush()
     })
     expect(dispatchCalls()).toHaveLength(0)
+  })
+})
+
+describe('StageDrawerContent: Do, Check and Act drawers', () => {
+  let container: HTMLDivElement
+  let root: Root
+
+  beforeEach(() => {
+    api.apiFetch.mockReset()
+    preflightHook.useDispatchPreflight.mockReturnValue(preflightState())
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+  })
+
+  afterEach(() => {
+    act(() => root.unmount())
+    container.remove()
+  })
+
+  async function renderStage(stageId: 'do' | 'check' | 'act', extra: Record<string, unknown> = {}): Promise<void> {
+    await act(async () => {
+      root.render(
+        createElement(
+          MemoryRouter,
+          null,
+          createElement(StageDrawerContent, { stageId, stage: null, onClose: vi.fn(), ...extra }),
+        ),
+      )
+      await flush()
+    })
+  }
+
+  it('asks before Retry re-dispatches, then sends the project id (QA 43)', async () => {
+    api.apiFetch.mockImplementation(async (path: string) => {
+      if (path === '/v1/admin/fixes')
+        return {
+          ok: true,
+          data: {
+            fixes: [
+              {
+                id: 'fix-1',
+                report_id: 'report-9',
+                project_id: 'project-7',
+                status: 'failed',
+                report_fix_state: 'failed',
+                is_latest_attempt: true,
+                retryable: true,
+                report_title: 'Login loops forever',
+              },
+            ],
+          },
+        }
+      if (path === '/v1/admin/fixes/dispatches') return { ok: true, data: { dispatches: [] } }
+      if (path === '/v1/admin/fixes/dispatch') return { ok: true, data: {} }
+      return { ok: false, error: { code: 'UNEXPECTED' } }
+    })
+    await renderStage('do')
+
+    await act(async () => {
+      buttonByText('Retry')?.click()
+      await flush()
+    })
+    expect(dispatchCalls()).toHaveLength(0)
+    expect(document.body.textContent).toContain('Retry the auto-fix?')
+
+    await act(async () => {
+      buttonByText('Retry fix')?.click()
+      await flush()
+    })
+    expect(dispatchCalls()).toHaveLength(1)
+    expect(JSON.parse((dispatchCalls()[0]![1] as { body: string }).body)).toEqual({
+      reportId: 'report-9',
+      projectId: 'project-7',
+    })
+  })
+
+  it('reads judge_score and classification_agreed and names the report (QA 170)', async () => {
+    api.apiFetch.mockImplementation(async (path: string) => {
+      if (path.startsWith('/v1/admin/judge/evaluations'))
+        return {
+          ok: true,
+          data: {
+            evaluations: [
+              {
+                id: 'ev-1',
+                report_id: 'report-1',
+                judge_score: 0.84,
+                classification_agreed: false,
+                report_summary: 'Checkout button does nothing',
+                created_at: '2026-10-01T00:00:00Z',
+              },
+            ],
+          },
+        }
+      return { ok: false, error: { code: 'UNEXPECTED' } }
+    })
+    await renderStage('check')
+    const text = document.body.textContent ?? ''
+    expect(text).toContain('84%')
+    expect(text).toContain('Checkout button does nothing')
+    expect(text).not.toContain('report-1')
+  })
+
+  it('lists the dashboard integrations it is given (QA 171)', async () => {
+    await renderStage('act', {
+      integrations: [
+        { kind: 'github', lastStatus: 'ok', lastAt: null, uptime: 1, severity: 'ok' },
+        { kind: 'claude_code_agent', lastStatus: 'down', lastAt: null, uptime: 0, severity: 'red' },
+      ],
+    })
+    const text = document.body.textContent ?? ''
+    expect(text).not.toContain('No health checks')
+    expect(text).toContain('github')
+    expect(text).toContain('claude code agent')
+    expect(text).toContain('Failing')
+    expect(api.apiFetch).not.toHaveBeenCalledWith('/v1/admin/integrations/platform')
   })
 })

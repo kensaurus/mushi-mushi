@@ -7,7 +7,7 @@
 //
 //   GET /v1/admin/projects/:id/evolution-history
 //     → EvolutionData: 8-week judge score sparkline, convergence badge
-//     Used by EvolutionHistoryWidget on the Dashboard and the MCP evolution://history resource.
+//     Used by the MCP evolution://history resource (the dashboard widget was removed, unmounted).
 //
 // Auth: both routes accept JWT auth (dashboard) and API-key auth (MCP / CLI via adminOrApiKey).
 // MCP clients send the project ID in X-Mushi-Project; the dashboard uses X-Mushi-Project-Id.

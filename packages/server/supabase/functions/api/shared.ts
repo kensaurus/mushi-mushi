@@ -14,6 +14,7 @@ import {
 } from '../_shared/project-access.ts';
 import { isUuid } from './ids.ts';
 import { fanoutMemo } from '../_shared/request-memo.ts';
+import { NEW_BUCKET_STATUSES } from '../_shared/report-list-filters.ts';
 import { boundKeyTargetsOtherProject } from '../_shared/bound-key.ts';
 import {
   type ApiErrorCode,
@@ -198,6 +199,16 @@ export const OPEN_REPORT_STATUSES = [
   'grouped',
   'reopened',
 ] as const;
+
+/**
+ * Report statuses that still wait for triage — the `new` bucket. The reports
+ * list's `status=new` filter, the dashboard's triage backlog KPI and the
+ * inbox Plan flag all use it, so each count equals the list its link opens
+ * (before 2026-10-04 the KPI counted new|queued older than 1h in a 14-day
+ * window while its link listed every new|queued|pending|submitted report).
+ */
+// One list: the reports filter's `status=new` bucket (report-list-filters.ts).
+export const TRIAGE_BACKLOG_STATUSES = NEW_BUCKET_STATUSES;
 
 /**
  * Full accessible project set for enumeration endpoints (project list,

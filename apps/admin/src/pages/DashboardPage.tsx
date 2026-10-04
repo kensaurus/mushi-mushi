@@ -19,7 +19,8 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useToast } from '../lib/toast'
 import { useMilestoneCelebration } from '../lib/useMilestoneCelebration'
 import { Confetti } from '../components/Confetti'
-import { Btn, ErrorAlert, FreshnessPill, RefreshIconButton, Card } from '../components/ui'
+import { Btn, FreshnessPill, RefreshIconButton, Card } from '../components/ui'
+import { PageLoadError } from '../components/PageLoadError'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
@@ -45,7 +46,7 @@ import type { DashboardData } from '../components/dashboard/types'
 import type { PdcaStageId } from '../lib/pdca'
 import { usePageCopy } from '../lib/copy'
 import { useDashboardUx } from '../lib/dashboardModeUx'
-import { deriveDashboardInsight } from '../lib/dashboardExplainer'
+import { deriveDashboardInsight, shouldShowPdcaFlow } from '../lib/dashboardExplainer'
 import { PLATFORM_DEFS } from '../components/integrations/types'
 import { semanticBannerTone } from '../lib/tokens'
 import { IconDashboard } from '../components/icons'
@@ -180,7 +181,7 @@ export function DashboardPage() {
   // redirected prematurely.
   if (!setup.loading && !setup.hasAnyProject) return <Navigate to="/onboarding" replace />
   if (loading || setup.loading) return <DashboardSkeleton />
-  if (error) return <ErrorAlert message={error} onRetry={reload} />
+  if (error) return <PageLoadError error={error} onRetry={reload} resource="the dashboard" endpoint="/v1/admin/dashboard" />
   if (!data || data.empty) return <GettingStartedEmpty />
 
   const counts = data.counts!
@@ -214,8 +215,9 @@ export function DashboardPage() {
         })
       : null
 
-  const showPdcaFlow =
-    isAdvanced && renderFullDashboard && hasPdcaStages && !showFirstReportHero && !dashboardInsight
+  // The one-line insight banner sits above the canvas and must not hide it
+  // (QA 169: the explainer always returns a verdict, so the canvas never rendered).
+  const showPdcaFlow = shouldShowPdcaFlow({ isAdvanced, renderFullDashboard, hasPdcaStages, showFirstReportHero })
   const showHeroIntro =
     !hideOverviewChrome && !showFirstReportHero && hasPdcaStages && !showPdcaFlow
 
@@ -228,6 +230,7 @@ export function DashboardPage() {
           focusStage={data.focusStage}
           runningStage={inferRunningStage(data)}
           activity={activity}
+          integrations={data.integrations ?? []}
           interactive
           showActionPanel
           ariaLabel="Live PDCA loop — live counts per stage with the current bottleneck highlighted. Click a stage to inspect it."
@@ -411,6 +414,7 @@ export function DashboardPage() {
             reportsByDay={reportsByDay}
             llmByDay={llmByDay}
             chartEvents={chartEvents}
+            sampled={data.chartsSampled === true}
           />
 
           <TriageAndFixRow triageQueue={data.triageQueue ?? []} fixSummary={fixSummary} />

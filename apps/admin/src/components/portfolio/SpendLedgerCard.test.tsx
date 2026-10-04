@@ -52,12 +52,18 @@ const DIGEST: DigestPreviewResponse = {
   preview: { title: 'Mushi daily digest for A', lines: ['This week, glot.it: 40 did signed_up, 9 reached activated (22.5%).'], text: '', hasContent: true },
 }
 
-const mocks = vi.hoisted(() => ({ apiFetch: vi.fn(), reload: vi.fn() }))
+const mocks = vi.hoisted(() => ({ apiFetch: vi.fn(), reload: vi.fn(), role: { value: 'owner' } }))
 
 vi.mock('../../lib/supabase', () => ({ apiFetch: mocks.apiFetch, apiFetchMutate: mocks.apiFetch }))
 vi.mock('../../lib/usePageData', () => ({
   usePageData: (path: string | null) => ({
-    data: path?.endsWith('/spend') ? LEDGER : path?.endsWith('/digest') ? DIGEST : null,
+    data: path?.endsWith('/spend')
+      ? LEDGER
+      : path?.endsWith('/digest')
+        ? DIGEST
+        : path === '/v1/org'
+          ? { organizations: [{ id: ORG, slug: 'a', name: 'A', plan_id: 'free', role: mocks.role.value }] }
+          : null,
     loading: false,
     error: null,
     reload: mocks.reload,
@@ -75,6 +81,23 @@ function calls(method: string): Array<{ path: string; body: Record<string, unkno
   return mocks.apiFetch.mock.calls
     .filter(([, init]) => (init as RequestInit | undefined)?.method === method)
     .map(([path, init]) => ({ path: String(path), body: (init as RequestInit).body ? JSON.parse(String((init as RequestInit).body)) : null }))
+}
+
+function bodyButton(text: string): HTMLButtonElement | undefined {
+  return Array.from(document.body.querySelectorAll('button')).find((b) => b.textContent?.trim() === text)
+}
+
+/** Remove asks first (QA 44): click Remove, then confirm in the dialog. */
+async function removeAndConfirm(): Promise<void> {
+  await act(async () => {
+    bodyButton('Remove')!.click()
+    await flush()
+  })
+  expect(calls('DELETE')).toEqual([])
+  await act(async () => {
+    bodyButton('Remove bill')!.click()
+    await flush()
+  })
 }
 
 describe('SpendLedgerCard', () => {
@@ -136,10 +159,7 @@ describe('SpendLedgerCard', () => {
   it('removes an import and says which rows went back to an earlier import', async () => {
     mocks.apiFetch.mockResolvedValue({ ok: true, data: { importId: 'imp1', rowsRemoved: 1, rowsRestored: 2, restoredFrom: 1 } })
     await render(createElement(SpendLedgerCard, { orgId: ORG, projects: [{ projectId: P1, name: 'glot.it' }] }))
-    await act(async () => {
-      Array.from(container.querySelectorAll('button')).find((b) => b.textContent?.trim() === 'Remove')!.click()
-      await flush()
-    })
+    await removeAndConfirm()
     expect(calls('DELETE')).toEqual([{ path: `/v1/admin/orgs/${ORG}/spend/imports/imp1`, body: null }])
     expect(container.textContent).toContain('Import removed. 1 row left the ledger. 2 rows went back to the earlier import that had them.')
   })
@@ -147,10 +167,7 @@ describe('SpendLedgerCard', () => {
   it('says when removing an import changed nothing in the ledger', async () => {
     mocks.apiFetch.mockResolvedValue({ ok: true, data: { importId: 'imp1', rowsRemoved: 0, rowsRestored: 0, restoredFrom: 0 } })
     await render(createElement(SpendLedgerCard, { orgId: ORG, projects: [{ projectId: P1, name: 'glot.it' }] }))
-    await act(async () => {
-      Array.from(container.querySelectorAll('button')).find((b) => b.textContent?.trim() === 'Remove')!.click()
-      await flush()
-    })
+    await removeAndConfirm()
     expect(container.textContent).toContain('a later import had already replaced all of its rows')
   })
 
@@ -174,5 +191,45 @@ describe('SpendLedgerCard', () => {
       await flush()
     })
     expect(calls('PUT')[1].body).toMatchObject({ gtmWeekday: null })
+  })
+})
+
+describe('portfolio cards for a member (QA 177)', () => {
+  let container: HTMLDivElement
+  let root: Root
+
+  beforeEach(() => {
+    mocks.apiFetch.mockReset()
+    mocks.role.value = 'member'
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+  })
+
+  afterEach(() => {
+    act(() => root.unmount())
+    container.remove()
+    mocks.role.value = 'owner'
+  })
+
+  async function render(el: ReturnType<typeof createElement>): Promise<void> {
+    await act(async () => {
+      root.render(createElement(MemoryRouter, null, el))
+      await flush()
+    })
+  }
+
+  it('hides bill import and removal and says who can do it', async () => {
+    await render(createElement(SpendLedgerCard, { orgId: ORG, projects: [{ projectId: P1, name: 'glot.it' }] }))
+    const labels = Array.from(container.querySelectorAll('button')).map((b) => b.textContent?.trim())
+    expect(labels).not.toContain('Import')
+    expect(labels).not.toContain('Remove')
+    expect(container.textContent).toContain('Only team owners and admins can change this.')
+  })
+
+  it('shows the digest read-only with no Send now', async () => {
+    await render(createElement(DigestCard, { orgId: ORG, projects: [{ projectId: P1, name: 'glot.it' }] }))
+    expect(container.querySelector('fieldset')?.disabled).toBe(true)
+    expect(Array.from(container.querySelectorAll('button')).map((b) => b.textContent?.trim())).not.toContain('Send now')
   })
 })
