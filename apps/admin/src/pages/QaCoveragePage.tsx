@@ -179,7 +179,8 @@ function StoryCard({
 }: {
   coverage: QaStoryCoverage
   isQueued: boolean
-  onRunNow: (id: string) => void
+  /** Absent for viewers: the API refuses their runs. */
+  onRunNow?: (id: string) => void
   onSelect: (id: string) => void
   highlighted: boolean
 }) {
@@ -216,6 +217,7 @@ function StoryCard({
           </span>
         </div>
 
+        {onRunNow ? (
         <Btn
           size="sm"
           variant="ghost"
@@ -227,6 +229,7 @@ function StoryCard({
         >
           {!isQueued && <IconPlay className="h-3 w-3" />}
         </Btn>
+        ) : null}
       </div>
 
       {/* Pass rate bar + stats */}
@@ -514,6 +517,8 @@ function StoryDrawer({
   onStoryChanged: () => void
 }) {
   const { success: toastSuccess, error: toastError } = useToast()
+  // Viewers read runs; the API refuses their run, edit and delete.
+  const { canEditProject } = useEntitlements()
   const { data: story, reload: reloadStory } = usePageData<QaStoryFull>(
     `/v1/admin/projects/${projectId}/qa-stories/${storyId}`,
     { deps: [storyId] },
@@ -627,7 +632,7 @@ function StoryDrawer({
     onClose()
   }, [projectId, storyId, toastError, toastSuccess, onStoryChanged, onClose])
 
-  const drawerHeaderAction = story ? (
+  const drawerHeaderAction = story && canEditProject ? (
     <Btn
       size="sm"
       variant="ghost"
@@ -651,7 +656,7 @@ function StoryDrawer({
       width="lg"
     >
       <div className="px-5 py-4 space-y-5">
-          {story && (
+          {story && canEditProject && (
             <div className="space-y-3 rounded-sm border border-edge-subtle p-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-2xs text-fg-secondary">
@@ -845,7 +850,7 @@ interface PendingReviewStory {
 
 export function QaCoveragePage() {
   const projectId = useActiveProjectId()
-  const { has, loading: entLoading, planName } = useEntitlements()
+  const { has, loading: entLoading, planName, canEditProject } = useEntitlements()
   const inventoryEnabled = has('inventory_v2')
   const qaUx = useQaCoverageUx()
   const activationEnabled = isActivationCockpitV2Enabled()
@@ -1003,7 +1008,7 @@ export function QaCoveragePage() {
         ]}
         helpHowToUse="Click + New story to add a test. Click a story card to open the run history drawer. Click Run now to trigger an immediate run."
       >
-        <Btn size="sm" onClick={() => setShowCreate(true)}>
+        <Btn size="sm" disabled={!canEditProject} title={canEditProject ? undefined : 'Viewers have read-only access. Ask a team owner or admin.'} onClick={() => setShowCreate(true)}>
           + New story
         </Btn>
       </PageHeaderBar>
@@ -1089,6 +1094,8 @@ export function QaCoveragePage() {
                   size="sm"
                   variant="ghost"
                   loading={approvingIds.has(story.id)}
+                  disabled={!canEditProject}
+                  title={canEditProject ? undefined : 'Viewers have read-only access. Ask a team owner or admin.'}
                   onClick={() => void handleApproval(story.id, 'approved')}
                 >
                   ✓ Approve
@@ -1097,6 +1104,8 @@ export function QaCoveragePage() {
                   size="sm"
                   variant="ghost"
                   loading={approvingIds.has(story.id)}
+                  disabled={!canEditProject}
+                  title={canEditProject ? undefined : 'Viewers have read-only access. Ask a team owner or admin.'}
                   onClick={() => setConfirmReject(story)}
                 >
                   ✕ Reject
@@ -1118,7 +1127,7 @@ export function QaCoveragePage() {
           title="No QA stories yet"
           description="Create your first automated user-story test. Start with a Firecrawl story — no setup needed."
           action={
-            <Btn size="sm" onClick={() => setShowCreate(true)}>
+            <Btn size="sm" disabled={!canEditProject} title={canEditProject ? undefined : 'Viewers have read-only access. Ask a team owner or admin.'} onClick={() => setShowCreate(true)}>
               + New story
             </Btn>
           }
@@ -1161,7 +1170,7 @@ export function QaCoveragePage() {
               <StoryCard
                 coverage={c}
                 isQueued={queuedIds.has(c.story_id)}
-                onRunNow={handleRunNow}
+                onRunNow={canEditProject ? handleRunNow : undefined}
                 onSelect={setSelectedStoryId}
                 highlighted={c.story_id === highlightId}
               />

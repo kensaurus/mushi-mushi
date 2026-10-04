@@ -275,6 +275,7 @@ export function DLQPage() {
             Retry page ({retryableItems.length})
           </Btn>
         )}
+        {canEditProject ? (
         <Btn
           size="sm"
           variant="ghost"
@@ -285,7 +286,8 @@ export function DLQPage() {
         >
           Flush queued
         </Btn>
-        {stats.recoverable > 0 ? (
+        ) : null}
+        {stats.recoverable > 0 && canEditProject ? (
         <Btn
           size="sm"
           variant="primary"
@@ -310,8 +312,8 @@ export function DLQPage() {
                 stats={stats}
                 onRefresh={() => void loadAll()}
                 refreshing={loading}
-                onRecover={stats.recoverable > 0 ? recoverStranded : undefined}
-                onFlush={flushCircuitBreakerQueue}
+                onRecover={stats.recoverable > 0 && canEditProject ? recoverStranded : undefined}
+                onFlush={canEditProject ? flushCircuitBreakerQueue : undefined}
                 recovering={flushing}
                 flushing={flushingQueued}
               />
@@ -363,7 +365,7 @@ export function DLQPage() {
             >
               Open {deadLetter > 0 ? 'dead-letter' : 'failed'} lane →
             </ActionPill>
-            {stats.recoverable > 0 ? (
+            {stats.recoverable > 0 && canEditProject ? (
               <ActionPill onClick={() => void recoverStranded()} tone="neutral">
                 Recover stranded ({stats.recoverable})
               </ActionPill>
