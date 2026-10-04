@@ -3073,7 +3073,7 @@
         "type": "object",
         "properties": {
           "projectId": {
-            "description": "Project id (omit to run across all projects) (`project_id` is accepted too.)",
+            "description": "Project id (defaults to the configured project; one project per call) (`project_id` is accepted too.)",
             "type": "string"
           }
         }
