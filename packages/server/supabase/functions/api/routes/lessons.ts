@@ -23,10 +23,10 @@ import type { Variables } from '../types.ts'
 import { z } from 'npm:zod@3'
 import { getServiceClient } from '../../_shared/db.ts'
 import { log } from '../../_shared/logger.ts'
+import { denyViewerWrite } from '../viewer-gate.ts'
 import { jwtAuth, apiKeyAuth, adminOrApiKey, requireApiKeyScope } from '../../_shared/auth.ts'
 import {
   assertTargetProjectAccess,
-  callerCanAccessProject,
   callerProjectIds,
   dbError,
   intersectOrgAndProjectScope,
@@ -45,7 +45,7 @@ async function assertLessonRowAccess(
   if (!lesson?.project_id) return { ok: false as const, response: jsonNotFound(c, 'Lesson not found') }
   const access = await assertTargetProjectAccess(c, db, userId, lesson.project_id as string)
   if (!access.ok) return { ok: false as const, response: access.response }
-  return { ok: true as const, projectId: lesson.project_id as string }
+  return { ok: true as const, projectId: lesson.project_id as string, role: access.role }
 }
 
 async function assertClusterRowAccess(
@@ -62,26 +62,7 @@ async function assertClusterRowAccess(
   if (!cluster?.project_id) return { ok: false as const, response: jsonNotFound(c, 'Cluster not found') }
   const access = await assertTargetProjectAccess(c, db, userId, cluster.project_id as string)
   if (!access.ok) return { ok: false as const, response: access.response }
-  return { ok: true as const, projectId: cluster.project_id as string }
-}
-
-/**
- * Viewers keep read access; promoting clusters and retiring lessons are
- * writes. Same inline rule as sentry-import.ts. API keys reach this file only
- * on the read-only query route, so a JWT role is always present here.
- */
-async function denyViewerWrite(
-  c: Parameters<typeof assertTargetProjectAccess>[0],
-  db: ReturnType<typeof getServiceClient>,
-  userId: string,
-  projectId: string,
-): Promise<Response | null> {
-  const access = await callerCanAccessProject(c, db, userId, projectId)
-  if (access.role !== 'viewer') return null
-  return c.json(
-    { ok: false, error: { code: 'FORBIDDEN', message: 'Viewers can read lessons but cannot change them. Ask a team admin for member access.' } },
-    403,
-  )
+  return { ok: true as const, projectId: cluster.project_id as string, role: access.role }
 }
 
 export function registerLessonsRoutes(app: Hono<{ Variables: Variables }>) {
@@ -298,7 +279,7 @@ export function registerLessonsRoutes(app: Hono<{ Variables: Variables }>) {
     if (!idParsed.ok) return idParsed.error
     const rowAccess = await assertLessonRowAccess(c, db, userId, idParsed.value)
     if (!rowAccess.ok) return rowAccess.response
-    const viewerDenied = await denyViewerWrite(c, db, userId, rowAccess.projectId)
+    const viewerDenied = denyViewerWrite(c, rowAccess.role, 'retire or edit lessons')
     if (viewerDenied) return viewerDenied
 
     const body = patchLessonSchema.safeParse(await c.req.json().catch(() => null))
@@ -410,7 +391,7 @@ export function registerLessonsRoutes(app: Hono<{ Variables: Variables }>) {
     if (!idParsed.ok) return idParsed.error
     const rowAccess = await assertClusterRowAccess(c, db, userId, idParsed.value)
     if (!rowAccess.ok) return rowAccess.response
-    const viewerDenied = await denyViewerWrite(c, db, userId, rowAccess.projectId)
+    const viewerDenied = denyViewerWrite(c, rowAccess.role, 'promote clusters to lessons')
     if (viewerDenied) return viewerDenied
 
     const body = await c.req.json().catch(() => ({}))

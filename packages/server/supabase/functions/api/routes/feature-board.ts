@@ -21,6 +21,8 @@ import { adminOrApiKey } from '../../_shared/auth.ts'
 import { getServiceClient } from '../../_shared/db.ts'
 import { log } from '../../_shared/logger.ts'
 import type { Variables } from '../types.ts'
+import { userCanAccessProject } from '../shared.ts'
+import { denyViewerWrite } from '../viewer-gate.ts'
 
 declare const Deno: { env: { get(name: string): string | undefined } }
 
@@ -193,6 +195,11 @@ function featureBoardRoutes() {
       return jsonErr(c, 'DB_ERROR', error.message, 500)
     }
 
+    // Lets the console hide "Mark shipped" from viewers (the ship route
+    // refuses them too).
+    const access = await userCanAccessProject(db(), userId, projectId)
+    const canShip = access.allowed && access.role !== 'viewer'
+
     const { data: myVotes } = await db()
       .from('feature_request_votes')
       .select('request_id')
@@ -206,6 +213,7 @@ function featureBoardRoutes() {
         ...t,
         my_vote: myVotedIds.has(t.id),
       })),
+      can_ship: canShip,
     })
   })
 
@@ -384,6 +392,12 @@ function featureBoardRoutes() {
     const requestId = c.req.param('id')
     if (!projectId) return jsonErr(c, 'MISSING_PROJECT', 'project_id is required', 400)
 
+    // requireProjectAccess only checks membership; closing a customer's
+    // request and firing the shipped webhook is a write, so viewers stop here.
+    const access = await userCanAccessProject(db(), c.get('userId') as string, projectId)
+    const viewerDenied = denyViewerWrite(c, access.role, 'mark requests shipped')
+    if (viewerDenied) return viewerDenied
+
     const body = await c.req.json().catch(() => null)
     const releaseId: string | null = body?.release_id ?? null
     const note: string | null = body?.note ?? null
@@ -391,15 +405,18 @@ function featureBoardRoutes() {
 
     const { data: ticket, error: fetchErr } = await db()
       .from('support_tickets')
-      .select('id, project_id, user_id, user_email, subject, body, category, shipped_in_release_id')
+      .select('id, project_id, user_id, user_email, subject, body, category, status, shipped_in_release_id')
       .eq('id', requestId)
       .eq('project_id', projectId)
       .maybeSingle()
 
-    if (fetchErr) return jsonErr(c, 'DB_ERROR', fetchErr.message, 500)
+    if (fetchErr) return jsonErr(c, 'DB_ERROR', 'The request could not be loaded. Try again in a moment.', 500)
     if (!ticket) return jsonErr(c, 'NOT_FOUND', 'Feature request not found', 404)
     if (ticket.category !== 'feature') {
       return jsonErr(c, 'INVALID_CATEGORY', 'Only feature tickets can be shipped', 400)
+    }
+    if (ticket.status === 'cancelled') {
+      return jsonErr(c, 'CANCELLED', 'The requester cancelled this request, so it cannot be marked shipped.', 409)
     }
 
     const { error: updateErr } = await db()
@@ -421,12 +438,10 @@ function featureBoardRoutes() {
         .rpc('vault_lookup', { secret_name: `feature-board/push/${projectId}` })
       pushUrl = typeof vaultUrl === 'string' ? vaultUrl : null
     }
-    if (!pushUrl) {
-      pushUrl =
-        Deno.env.get('OPERATOR_SLACK_WEBHOOK_URL') ??
-        Deno.env.get('OPERATOR_DISCORD_WEBHOOK_URL') ??
-        null
-    }
+    // No fallback to OPERATOR_SLACK/DISCORD_WEBHOOK_URL: that sent one
+    // tenant's requester email to the platform operator's chat, in a
+    // Standard-Webhooks envelope Slack and Discord reject anyway. With no
+    // project push URL the requester still sees the shipped note in-app.
 
     const { data: vaultSecret } = await db()
       .rpc('vault_lookup', { secret_name: `a2a/push/${projectId}` })

@@ -2139,18 +2139,25 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
   app.get('/v1/admin/support/tickets', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const limit = Math.min(50, Math.max(1, Number(c.req.query('limit') ?? '20')));
+    const limit = Math.min(50, Math.max(1, Number(c.req.query('limit') ?? '20') || 20));
+    // Paged so a user with more than one page of tickets can reach them all;
+    // the tab badges count up to 200 rows (feedback/stats).
+    const page = Math.max(0, Math.floor(Number(c.req.query('page') ?? '0') || 0));
     const category = (c.req.query('category') ?? '').trim();
     const shippedOnly = c.req.query('shipped') === '1';
+    // `active` = open or in progress, filtered here rather than on one page
+    // in the browser, which hid older open tickets.
+    const activeOnly = c.req.query('status') === 'active';
 
     let query = db
       .from('support_tickets')
       .select(
         'id, project_id, subject, body, category, status, plan_id, admin_response, admin_responded_at, created_at, updated_at, resolved_at, cancelled_at, shipped_in_release_id, shipped_at, shipped_note, release:releases!support_tickets_shipped_in_release_id_fkey(id, version, title, status, published_at)',
+        { count: 'exact' },
       )
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
-      .limit(limit);
+      .range(page * limit, page * limit + limit - 1);
 
     if (SUPPORT_CATEGORIES.includes(category as SupportCategory)) {
       query = query.eq('category', category);
@@ -2158,13 +2165,16 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
     if (shippedOnly) {
       query = query.not('shipped_in_release_id', 'is', null);
     }
+    if (activeOnly) {
+      query = query.in('status', ['open', 'in_progress']);
+    }
 
-    const { data, error } = await query;
+    const { data, error, count } = await query;
 
     if (error) {
       return dbError(c, error);
     }
-    return c.json({ ok: true, data: { tickets: data ?? [] } });
+    return c.json({ ok: true, data: { tickets: data ?? [], total: count ?? (data ?? []).length, page, limit } });
   });
 
   // Detail fetch — used as a defensive fallback if a ticket id is opened
