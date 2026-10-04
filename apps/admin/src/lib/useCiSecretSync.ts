@@ -24,6 +24,8 @@ export interface CiSecretSyncState {
   written?: string[]
   failed?: Array<{ name: string; reason: string }>
   fallback?: SyncCiSecretsResult['fallback']
+  /** See SyncCiSecretsResult.priorKeysRevoked. */
+  priorKeysRevoked?: string[] | null
   errorCode?: string
   errorMessage?: string
 }
@@ -65,6 +67,7 @@ export function useCiSecretSync(projectId: string) {
         written: data?.written ?? [],
         failed,
         fallback: data?.fallback,
+        priorKeysRevoked: data?.priorKeysRevoked === undefined ? [] : data.priorKeysRevoked,
       })
       return
     }

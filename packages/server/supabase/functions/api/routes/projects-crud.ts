@@ -999,6 +999,7 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
     // The raw key is returned exactly once and never stored in plain text.
     let autoKey: string | null = null;
     let autoKeyPrefix: string | null = null;
+    let autoKeyId: string | null = null;
     try {
       const rawKey = `mushi_${crypto.randomUUID().replace(/-/g, '')}`;
       const prefix = rawKey.slice(0, 12);
@@ -1020,6 +1021,7 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
       if (!keyInsertErr) {
         autoKey = rawKey;
         autoKeyPrefix = prefix;
+        autoKeyId = keyId;
         void emitProductEvent(db, {
           userId,
           eventName: 'key_minted',
@@ -1042,7 +1044,11 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
       // Non-fatal: key mint failure should not block project creation.
     }
 
-    return c.json({ ok: true, data: { id: data.id, slug, apiKey: autoKey, keyPrefix: autoKeyPrefix } }, 201);
+    // apiKeyId lets the success panel rotate exactly this key (QA #31).
+    return c.json(
+      { ok: true, data: { id: data.id, slug, apiKey: autoKey, keyPrefix: autoKeyPrefix, apiKeyId: autoKeyId } },
+      201,
+    );
   });
 
   // Rename a project. Owner and admin in the project's org can change the
