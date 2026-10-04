@@ -121,7 +121,8 @@ export const integrationsLinks = {
 
 export const settingsLinks = {
   byok: '/settings?tab=byok',
-  sdk: '/settings?tab=sdk',
+  // The bug-widget controls live on the Health tab (SdkInstallCard); there is no `sdk` tab.
+  sdk: '/settings?tab=health',
   routing: '/integrations/config#integrations-routing',
   classifier: '/settings?tab=general',
 } as const
@@ -243,9 +244,10 @@ export const storageLinks = {
 } as const
 
 export const ssoLinks = {
-  registered: '/sso?tab=providers',
-  pendingFailed: '/sso?tab=providers',
-  emailDomains: '/sso?tab=providers',
+  // /sso has no tabs: the cards scroll to the providers list (Layout's ScrollToHashAnchor).
+  registered: '/sso#sso-providers',
+  pendingFailed: '/sso#sso-providers',
+  emailDomains: '/sso#sso-providers',
   planGate: '/billing?tab=plans',
 } as const
 

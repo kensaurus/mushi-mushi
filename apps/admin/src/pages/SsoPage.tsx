@@ -11,7 +11,6 @@ import {
   Badge,
   Btn,
   Input,
-  SecretInput,
   SelectField,
   ErrorAlert,
   EmptyState,
@@ -79,7 +78,6 @@ export function SsoPage() {
     entityId: '',
     domains: '',
     clientId: '',
-    clientSecret: '',
     issuerUrl: '',
   });
   const [submitting, setSubmitting] = useState(false);
@@ -99,8 +97,8 @@ export function SsoPage() {
       toast.error('Missing fields', 'SAML registration requires a metadata URL.');
       return;
     }
-    if (form.providerType === 'oidc' && !form.issuerUrl.trim()) {
-      toast.error('Missing fields', 'OIDC requires an Issuer URL.');
+    if (form.providerType === 'oidc' && !/^https:\/\/\S+$/i.test(form.issuerUrl.trim())) {
+      toast.error('Missing fields', 'OpenID Connect needs the issuer URL, starting with https://.');
       return;
     }
     if (form.providerType === 'oidc' && !form.clientId.trim()) {
@@ -120,9 +118,8 @@ export function SsoPage() {
         metadataUrl: form.metadataUrl || undefined,
         entityId: form.entityId || undefined,
         domains,
-        clientId: form.clientId || undefined,
-        clientSecret: form.clientSecret || undefined,
-        issuerUrl: form.issuerUrl || undefined,
+        clientId: form.clientId.trim() || undefined,
+        issuerUrl: form.issuerUrl.trim() || undefined,
       }),
     });
     setSubmitting(false);
@@ -141,7 +138,6 @@ export function SsoPage() {
         entityId: '',
         domains: '',
         clientId: '',
-        clientSecret: '',
         issuerUrl: '',
       });
       reload();
@@ -294,13 +290,10 @@ export function SsoPage() {
                     value={form.clientId}
                     onChange={(e) => setForm({ ...form, clientId: e.target.value })}
                   />
-                  <SecretInput
-                    label="Client Secret"
-                    placeholder="your-client-secret"
-                    value={form.clientSecret}
-                    onChange={(e) => setForm({ ...form, clientSecret: e.target.value })}
-                    className="col-span-2"
-                  />
+                  <p className="col-span-2 text-xs text-fg-secondary">
+                    Mushi saves the issuer and client ID for your support ticket. Don&rsquo;t paste the client
+                    secret here: give it to Supabase support directly when they ask for it.
+                  </p>
                 </>
               )}
               <Input
@@ -318,7 +311,7 @@ export function SsoPage() {
             <p className="text-2xs text-fg-faint">
               {form.providerType === 'saml'
                 ? 'On submit, Mushi calls the Supabase Auth Admin API to register the SAML provider. We surface the resulting ACS URL + Entity ID below for you to paste into your IdP.'
-                : 'OIDC providers are stored for audit but Mushi cannot auto-register them — Supabase\u2019s GoTrue Admin API does not yet expose an OIDC endpoint. Submitting will save the config (status: manual_required) so you can reference it in a Supabase support ticket. For a fully self-service flow today, use SAML 2.0.'}
+                : 'OIDC providers are stored for audit but Mushi cannot auto-register them — Supabase\u2019s GoTrue Admin API does not yet expose an OIDC endpoint. Submitting saves the issuer and client ID so you can quote them in a Supabase support ticket. For a fully self-service flow today, use SAML 2.0.'}
             </p>
           </Card>
 
@@ -360,6 +353,7 @@ export function SsoPage() {
             </Card>
           )}
 
+          <div id="sso-providers" className="scroll-mt-16">
           {loading ? (
             <TableSkeleton rows={4} columns={4} showFilters={false} label="Loading SSO providers" />
           ) : error ? (
@@ -387,6 +381,13 @@ export function SsoPage() {
                     <tr key={c.id} className="border-b border-edge-subtle align-top">
                       <td className="py-1.5 px-3 text-fg-secondary">
                         <div>{c.provider_name}</div>
+                        {c.provider_type === 'oidc' && (c.metadata_url || c.entity_id) && (
+                          // OIDC rows keep the issuer in metadata_url and the client ID in entity_id.
+                          <div className="mt-0.5 text-2xs text-fg-muted break-words max-w-xs">
+                            {c.metadata_url && <div>Issuer: {c.metadata_url}</div>}
+                            {c.entity_id && <div>Client ID: {c.entity_id}</div>}
+                          </div>
+                        )}
                         {c.registration_error && (
                           <div
                             className="text-2xs text-danger mt-0.5 break-words max-w-xs"
@@ -429,6 +430,7 @@ export function SsoPage() {
               </table>
             </Card>
           )}
+          </div>
         </>
       )}
 
