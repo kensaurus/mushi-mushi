@@ -12,6 +12,7 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Hono } from 'hono'
 import { makeFakeDb, type FakeDb, type Row } from './__stubs__/fake-supabase.ts'
+import { createFakeDb as createRecorder, eqValue } from './__stubs__/fake-query-recorder.ts'
 
 const P = '1000000e-0000-4000-8000-000000000000'
 const USER = '2000000e-0000-4000-8000-000000000000'
@@ -96,9 +97,22 @@ describe('#247 evaluations filters run over every evaluation', () => {
     expect(first.json.data.total).toBe(63)
   })
 
-  it('a stage-1 prompt filter matches reports that ran that version at stage 1 only', async () => {
+  it('a stage-1 prompt filter joins on the report’s stage-1 version, in one query', async () => {
+    // The in-memory fake cannot run PostgREST embedded filters, so this
+    // asserts the query the route sends.
+    const recorder = createRecorder((q) =>
+      q.table === 'classification_evaluations'
+        ? { data: [{ ...evaluation(1), reports: { stage1_prompt_version: 'v3' } }] }
+        : { data: [] },
+    )
+    db = recorder.db as unknown as FakeDb
     const res = await get('/v1/admin/judge/evaluations?prompt_version=v3&prompt_stage=stage1')
-    expect(res.json.data.evaluations.map((e: Row) => e.report_id).sort()).toEqual(['r1', 'r10'])
+    const evalQuery = recorder.queries.find((q) => q.table === 'classification_evaluations')!
+    expect(evalQuery.columns).toContain('reports!inner(stage1_prompt_version)')
+    expect(eqValue(evalQuery, 'reports.stage1_prompt_version')).toBe('v3')
+    expect(eqValue(evalQuery, 'prompt_version')).toBeUndefined()
+    // The join column is not part of the row the console reads.
+    expect(res.json.data.evaluations[0]).not.toHaveProperty('reports')
   })
 
   it('filters by the trend brush range and ignores a malformed one', async () => {

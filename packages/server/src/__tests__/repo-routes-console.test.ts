@@ -85,11 +85,28 @@ describe('#20 moving the primary repo', () => {
   beforeEach(() => {
     db = makeFakeDb(
       { project_repos: [repo(R1, 'https://github.com/o/web', true), repo(R2, 'https://github.com/o/api', false)] },
-      // idx_project_repos_one_primary, approximated: (project_id, is_primary)
-      // must be unique among primary rows; the fake checks inserts only, so
-      // the update test asserts the end state directly.
-      { autoId: true },
+      // UNIQUE (project_id, repo_url). The one-primary index is checked by
+      // asserting the end state: exactly one primary row.
+      { autoId: true, uniques: { project_repos: ['project_id', 'repo_url'] } },
     )
+  })
+
+  it('a failed add never costs the project its current primary', async () => {
+    const res = await call('POST', '/v1/admin/repo/repos', {
+      projectId: P,
+      repoUrl: 'https://github.com/o/web',
+      role: 'frontend',
+      isPrimary: true,
+    })
+    expect(res.status).toBe(409)
+    expect(res.json.error.message).toBe('That repo is already linked to this project.')
+    expect(db.tables.project_repos.filter((r) => r.is_primary).map((r) => r.id)).toEqual([R1])
+  })
+
+  it('a failed edit never costs the project its current primary', async () => {
+    const res = await call('PUT', '/v1/admin/repo/repos/3000000f-0000-4000-8000-0000000000ff', { projectId: P, isPrimary: true })
+    expect(res.status).not.toBe(200)
+    expect(db.tables.project_repos.filter((r) => r.is_primary).map((r) => r.id)).toEqual([R1])
   })
 
   it('edit: marking the second repo primary unsets the first', async () => {
