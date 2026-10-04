@@ -11,9 +11,13 @@
  */
 
 import { useRef, useState } from 'react'
-import { Badge, Btn, Callout, ErrorAlert, Loading, Section } from '../ui'
+import { Badge, Btn, Callout, Loading, Section } from '../ui'
 import { usePageData } from '../../lib/usePageData'
 import { apiFetchMutate } from '../../lib/supabase'
+import { actionErrorText } from '../../lib/actionErrorText'
+import { ORG_ADMIN_ONLY_HINT, useOrgCanManage } from '../../lib/useOrgCanManage'
+import { ConfirmDialog } from '../ConfirmDialog'
+import { PageLoadError } from '../PageLoadError'
 import type { BillImportResult, BillRemovalResult, BillVendor, LedgerSource, SpendLedgerResponse } from '../../lib/portfolioTypes'
 import { formatUsd } from './portfolioView'
 import { billsBreakdown, importSummary, ledgerCell, ledgerTotal, removalSummary, supabaseUsage, vendorLabel } from './spendView'
@@ -35,6 +39,10 @@ export function SpendLedgerCard({ orgId, projects }: { orgId: string; projects: 
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<{ tone: 'info' | 'danger'; text: string } | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+  // Importing and removing bills is for owners and admins (QA 177); a
+  // removal asks first, since it drops an imported bill (QA 44).
+  const { canManage } = useOrgCanManage(orgId)
+  const [confirmRemove, setConfirmRemove] = useState<{ id: string; label: string } | null>(null)
 
   const upload = async () => {
     const file = fileRef.current?.files?.[0]
@@ -50,7 +58,7 @@ export function SpendLedgerCard({ orgId, projects }: { orgId: string; projects: 
         method: 'POST',
         body: JSON.stringify({ vendor, projectId: target || null, filename: file.name.slice(0, 200), csv }),
       })
-      if (!res.ok || !res.data) setNotice({ tone: 'danger', text: res.error?.message ?? 'The bill could not be imported.' })
+      if (!res.ok || !res.data) setNotice({ tone: 'danger', text: actionErrorText(res.error, 'The bill could not be imported.') })
       else {
         setNotice({ tone: 'info', text: importSummary(res.data) })
         if (fileRef.current) fileRef.current.value = ''
@@ -68,7 +76,7 @@ export function SpendLedgerCard({ orgId, projects }: { orgId: string; projects: 
       const res = await apiFetchMutate<BillRemovalResult>(`${path}/imports/${importId}`, { method: 'DELETE' })
       setNotice(res.ok && res.data
         ? { tone: 'info', text: removalSummary(res.data) }
-        : { tone: 'danger', text: res.error?.message ?? 'The import could not be removed.' })
+        : { tone: 'danger', text: actionErrorText(res.error, 'The import could not be removed.') })
     } finally {
       setBusy(false)
       reload()
@@ -82,7 +90,7 @@ export function SpendLedgerCard({ orgId, projects }: { orgId: string; projects: 
       <p className="mb-3 text-xs text-fg-muted">
         What each app costs: Mushi's own AI, your AI provider bill, CI minutes and the cloud bills you import. CI is estimated from job times at ${data?.ciUsdPerLinuxMinute ?? 0.006} per Linux minute, macOS counted 10×.
       </p>
-      {error && <ErrorAlert message={error} endpoint={path} onRetry={reload} />}
+      {error && <PageLoadError error={error} resource="spend per app" endpoint={path} onRetry={reload} />}
       {loading && !data && <Loading text="Adding up what each app costs…" />}
       {notice && (
         <Callout tone={notice.tone}>
@@ -150,7 +158,10 @@ export function SpendLedgerCard({ orgId, projects }: { orgId: string; projects: 
             </p>
           )}
 
-          <fieldset className="flex flex-col gap-2 rounded-md border border-edge-subtle p-3 text-xs" disabled={busy}>
+          {canManage === false ? (
+            <p className="text-xs text-fg-muted">Importing a bill: {ORG_ADMIN_ONLY_HINT}</p>
+          ) : (
+          <fieldset className="flex flex-col gap-2 rounded-md border border-edge-subtle p-3 text-xs" disabled={busy || canManage !== true}>
             <legend className="px-1 text-xs font-medium text-fg">Import a bill</legend>
             <p className="text-fg-muted">
               A FOCUS export from Vercel or AWS, an AWS Cost and Usage Report, or any CSV with date, service and cost columns. Importing the same bill again replaces those days. Owners and admins only.
@@ -170,9 +181,10 @@ export function SpendLedgerCard({ orgId, projects }: { orgId: string; projects: 
                 </select>
               </label>
               <input ref={fileRef} type="file" accept=".csv,text/csv" aria-label="Bill CSV file" className="text-xs" />
-              <Btn size="sm" variant="ghost" onClick={upload} loading={busy} disabled={busy}>Import</Btn>
+              <Btn size="sm" variant="ghost" onClick={upload} loading={busy} disabled={busy || canManage !== true}>Import</Btn>
             </div>
           </fieldset>
+          )}
 
           {data.imports.length > 0 && (
             <div className="flex flex-col gap-1">
@@ -189,13 +201,36 @@ export function SpendLedgerCard({ orgId, projects }: { orgId: string; projects: 
                       {i.filename ? ` · ${i.filename}` : ''}
                       {i.rowsSkipped > 0 ? ` · ${i.rowsSkipped} skipped` : ''}
                     </span>
-                    <Btn size="sm" variant="ghost" onClick={() => remove(i.id)} disabled={busy}>Remove</Btn>
+                    {canManage === true && (
+                      <Btn
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setConfirmRemove({ id: i.id, label: `${vendorLabel(i.vendor)} bill for ${name(i.projectId)}` })}
+                        disabled={busy}
+                      >
+                        Remove
+                      </Btn>
+                    )}
                   </li>
                 ))}
               </ul>
             </div>
           )}
         </div>
+      )}
+      {confirmRemove && (
+        <ConfirmDialog
+          title="Remove this imported bill?"
+          body={`The ${confirmRemove.label} leaves the spend table. Days that an older import also covers go back to that import's figures. To undo, import the file again.`}
+          confirmLabel="Remove bill"
+          tone="danger"
+          loading={busy}
+          onCancel={() => setConfirmRemove(null)}
+          onConfirm={async () => {
+            await remove(confirmRemove.id)
+            setConfirmRemove(null)
+          }}
+        />
       )}
     </Section>
   )

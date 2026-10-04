@@ -11,7 +11,8 @@
 
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Badge, Btn, Callout, ErrorAlert, Loading, Section } from '../ui'
+import { Badge, Btn, Callout, Loading, Section } from '../ui'
+import { PageLoadError } from '../PageLoadError'
 import { usePageData } from '../../lib/usePageData'
 import { apiFetchMutate } from '../../lib/supabase'
 import { pullSummary, ratingLabel, storeLabel, type StoreIntakeResult } from './storeReviewsView'
@@ -84,7 +85,7 @@ export function StoreReviewsPanel({ projectId }: { projectId: string }) {
           <span role="status">{notice.text}</span>
         </Callout>
       )}
-      {error && <ErrorAlert message={error} endpoint={path} onRetry={reload} />}
+      {error && <PageLoadError error={error} resource="store reviews" endpoint={path} onRetry={reload} />}
       {loading && !data && <Loading text="Reading the store review settings…" />}
       {data && s && (
         <div className="flex flex-col gap-3 text-sm">
