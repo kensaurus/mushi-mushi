@@ -19,6 +19,8 @@ import { vaultRoutingSecrets } from '../../_shared/routing-secrets.ts';
 import { resolveEffectivePlatformSettings } from '../../_shared/integration-settings.ts';
 import { classifyPlatformConnection } from '../../_shared/setup-signals.ts';
 import { getMushiClaudeFixWorkflowYaml, MUSHI_CLAUDE_GITHUB_SECRETS } from '../../_shared/mushi-claude-workflow.ts';
+import { resolveCursorApiKey } from '../../_shared/agent-adapters.ts';
+import { CursorApiError, listCursorModelsV1 } from '../../_shared/cursor-cloud.ts';
 
 export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>): void {
   // ============================================================
@@ -938,6 +940,32 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
     });
 
     return c.json({ ok: true, data: { applied, skipped, failed, projectNames: appliedNames.slice(0, 30) } });
+  });
+
+  // ── Cursor models for this project's key ──────────────────────────────────
+  // GET /v1/models on Cursor: the ids the key may pass as model.id, with the
+  // params (effort, context, fast) and variants each accepts. Read-only.
+  app.get('/v1/admin/integrations/cursor/models', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () =>
+        c.json({ ok: false, error: { code: 'NO_PROJECT', message: 'No project selected' } }, 400),
+    });
+    if ('response' in resolvedProject) return resolvedProject.response;
+
+    const apiKey = await resolveCursorApiKey(db, resolvedProject.project.id);
+    if (!apiKey) {
+      return c.json({ ok: false, error: { code: 'NO_CURSOR_KEY', message: 'Add a Cursor API key under Settings → AI keys first.' } }, 400);
+    }
+    try {
+      const models = await listCursorModelsV1({ apiKey });
+      return c.json({ ok: true, data: { models } });
+    } catch (err) {
+      const status = err instanceof CursorApiError ? err.status : 0;
+      const message = err instanceof Error ? err.message : String(err);
+      return c.json({ ok: false, error: { code: 'CURSOR_MODELS_FAILED', message: `Cursor did not return its models (${status || 'network'}): ${message.slice(0, 200)}` } }, 502);
+    }
   });
 
   // ── Claude Code Agent BYOK setup instructions ──────────────────────────────

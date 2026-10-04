@@ -53,15 +53,19 @@ describe('UsageByModel', () => {
 describe('mistake-summarizer writes its spend per model', () => {
   const src = readFileSync(resolve(__dirname, '../../supabase/functions/mistake-summarizer/index.ts'), 'utf8')
 
-  it('inserts one llm_cost_usd row per model used', () => {
+  // 2026-10-04: the spend moved from the legacy llm_cost_usd ledger to one
+  // llm_invocations row per call. Writing both would count it twice on Costs
+  // and against the budget, which sum the two tables.
+  it('writes one llm_invocations row per call, each under its own model', () => {
     expect(src).toMatch(/new UsageByModel\(\)/)
-    expect(src).toMatch(/from\('llm_cost_usd'\)\.insert\(\s*ledger\.rows\(\)\.map\(/)
+    expect(src).toMatch(/usageWrites\.push\(recordLlmUsage\(db, \{[\s\S]*?\bmodel,/)
+    expect(src).not.toContain("from('llm_cost_usd')")
     expect(src).not.toMatch(/\.join\('\+'\)/)
   })
 
   it('fails the run, never a silent 200, when the lesson or its cost cannot be written', () => {
     expect(src).toMatch(/const \{ error: updateErr \} = await db\.from\('lessons'\)\.update/)
-    expect(src).toMatch(/const \{ error: costErr \} = await db\.from\('llm_cost_usd'\)/)
+    expect(src).toMatch(/const costErr = \(await Promise\.all\(usageWrites\)\)\.find\(\(w\) => w\.error\)/)
     expect(src).toMatch(/if \(costErr\) \{[\s\S]*?status: 500/)
   })
 })

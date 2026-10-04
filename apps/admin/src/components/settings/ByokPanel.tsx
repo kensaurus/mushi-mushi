@@ -23,6 +23,8 @@ import { prepareByokSecret } from '../../lib/byokKeyRules';
 import { describeByokError } from '../../lib/byokErrors';
 import type { PoolKey, PoolTestStatus } from './byokPool';
 import { useByokPool } from './ByokPoolContext';
+import { usePageData } from '../../lib/usePageData';
+import { creditsLine, spendLine, type ByokCreditsResponse } from './byokCredits';
 import {
   isLegacyKey,
   keyStatusView,
@@ -159,6 +161,9 @@ export function ByokPanel() {
   const entitlements = useEntitlements();
   const byokLocked = !entitlements.loading && !entitlements.has('byok');
   const pool = useByokPool(!byokLocked);
+  // Free reads: the provider's own balance where it publishes one, and what
+  // Mushi recorded spending through each provider in the last 30 days.
+  const credits = usePageData<ByokCreditsResponse>(byokLocked ? null : '/v1/admin/byok/credits');
 
   const [addProvider, setAddProvider] = useState<string | null>(null);
   const [newKeyVal, setNewKeyVal] = useState('');
@@ -425,6 +430,14 @@ export function ByokPanel() {
             ) : null}
           </p>
           <RowStatus status={view} />
+          {(() => {
+            const kc = !legacy ? credits.data?.keys?.find((c) => c.id === k.id) : undefined;
+            if (!kc) return null;
+            const line = creditsLine(kc.credits);
+            const toneClass =
+              line.tone === 'low' ? 'text-warn' : line.tone === 'error' ? 'text-danger' : line.tone === 'ok' ? 'text-fg-secondary' : 'text-fg-muted';
+            return <p className={`text-xs ${toneClass}`}>{line.text}</p>;
+          })()}
           <p className="text-xs text-fg-muted">
             {k.created_at ? `Added ${formatDay(k.created_at)}` : 'Added before key history'}
             {expires ? ` · expires ${expires}` : ''}
@@ -589,6 +602,11 @@ export function ByokPanel() {
               }
             >
               {noticeHere(`provider:${provider}`)}
+              {Array.isArray(credits.data?.spend30d) && (provider === 'anthropic' || provider === 'openai') && (
+                <p className="text-xs text-fg-muted">
+                  {spendLine(credits.data?.spend30d?.find((s) => s.provider === provider))}
+                </p>
+              )}
               {keyCount > 0 && (
                 <ul className="divide-y divide-edge-subtle border-t border-edge-subtle">
                   {providerKeys.map(keyLine)}

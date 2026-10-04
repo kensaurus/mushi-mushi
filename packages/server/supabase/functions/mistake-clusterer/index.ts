@@ -15,7 +15,7 @@
  *       - LLM judge rates semantic coherence 0-1
  *       - if coherence ≥ 0.75 → promote to lessons (calls mistake-summarizer)
  *
- * Cost discipline: every LLM call logged to llm_cost_usd.
+ * Cost discipline: every LLM call writes an llm_invocations row (recordLlmUsage).
  */
 
 import { createOpenAI } from 'npm:@ai-sdk/openai@1'
@@ -27,7 +27,7 @@ import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { log } from '../_shared/logger.ts'
 import { MISTAKE_EFFORT, MISTAKE_MODEL, OPENAI_PRIMARY } from '../_shared/models.ts'
 import { claudeGenerateObject } from '../_shared/claude-messages.ts'
-import { estimateCallCostUsd } from '../_shared/pricing.ts'
+import { recordLlmUsage } from '../_shared/llm-usage.ts'
 
 // Cosine distance threshold for cluster assignment (≤ = assign, > = new cluster)
 const ASSIGN_DISTANCE = 0.18
@@ -57,25 +57,6 @@ const coherenceSchema = z.object({
     'Overall severity: info (cosmetic), warn (UX degradation), critical (blocker/data loss)',
   ),
 })
-
-async function logLlmCost(
-  db: ReturnType<typeof getServiceClient>,
-  projectId: string | null,
-  operation: string,
-  model: string,
-  inputTokens: number,
-  outputTokens: number,
-  costUsd: number,
-) {
-  await db.from('llm_cost_usd').insert({
-    project_id: projectId,
-    operation,
-    model,
-    input_tokens: inputTokens,
-    output_tokens: outputTokens,
-    cost_usd: costUsd,
-  })
-}
 
 /** Running centroid update: avg = avg + (new - avg) / n */
 function updateCentroid(currentCentroid: number[], newVector: number[], newSize: number): number[] {
@@ -253,36 +234,51 @@ Rate the semantic coherence of this cluster and suggest how to name and summaris
 
         try {
           let result: z.infer<typeof coherenceSchema>
-          let usageTokens = { promptTokens: 0, completionTokens: 0 }
-          let usedModel: string = MISTAKE_MODEL
+          // Platform keys only (ANTHROPIC_API_KEY / OPENAI_API_KEY): key_source 'env'.
+          const usageCtx = {
+            functionName: 'mistake-clusterer',
+            stage: 'cluster-coherence',
+            projectId,
+            primaryModel: MISTAKE_MODEL,
+            keySource: 'env',
+          } as const
 
+          const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY')
+          const claudeStart = Date.now()
           try {
-            const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY')
             if (!anthropicKey) throw new Error('ANTHROPIC_API_KEY is not set')
-            const { object, usage } = await claudeGenerateObject({
+            const generation = await claudeGenerateObject({
               apiKey: anthropicKey,
               model: MISTAKE_MODEL,
               effort: MISTAKE_EFFORT,
               schema: coherenceSchema,
               prompt,
             })
-            result = object
-            usageTokens = { promptTokens: usage.promptTokens, completionTokens: usage.completionTokens }
-          } catch {
-            usedModel = OPENAI_PRIMARY
+            void recordLlmUsage(db, { ...usageCtx, model: MISTAKE_MODEL, startedAt: claudeStart }, { result: generation })
+            result = generation.object
+          } catch (claudeErr) {
+            // No key means no paid call, so no row.
+            if (anthropicKey) {
+              void recordLlmUsage(db, { ...usageCtx, model: MISTAKE_MODEL, startedAt: claudeStart }, { error: claudeErr })
+            }
+            const openaiUsage = {
+              ...usageCtx,
+              model: OPENAI_PRIMARY,
+              startedAt: Date.now(),
+              fallbackReason: anthropicKey ? 'anthropic_failed' : 'no_anthropic_key',
+            }
             const openai = createOpenAI({ apiKey: Deno.env.get('OPENAI_API_KEY') })
-            const { object, usage } = await generateObject({
+            const generation = await generateObject({
               model: openai(OPENAI_PRIMARY),
               schema: coherenceSchema,
               prompt,
+            }).catch((err: unknown) => {
+              void recordLlmUsage(db, openaiUsage, { error: err })
+              throw err
             })
-            result = object
-            usageTokens = { promptTokens: usage.promptTokens, completionTokens: usage.completionTokens }
+            void recordLlmUsage(db, openaiUsage, { result: generation })
+            result = generation.object
           }
-
-          // Log cost
-          const costUsd = estimateCallCostUsd(usedModel, usageTokens.promptTokens, usageTokens.completionTokens)
-          await logLlmCost(db, projectId, 'cluster-coherence', usedModel, usageTokens.promptTokens, usageTokens.completionTokens, costUsd)
 
           // Update cluster with judge result
           const updatePayload: Record<string, unknown> = {

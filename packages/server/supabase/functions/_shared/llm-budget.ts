@@ -13,8 +13,9 @@
  *     platform key both count, because the budget is the owner's own cap on
  *     what their app's bugs cost them;
  *   - legacy `llm_cost_usd` ledger rows in the same window.
- * Embeddings (code indexing, search) write no llm_invocations rows and are
- * neither counted nor blocked.
+ * Embeddings (code indexing, search) write llm_invocations rows (stage
+ * 'embedding', since 2026-10-04), so they count toward the budget, but they
+ * resolve keys with `purpose: 'embedding'` and are never blocked by it.
  *
  * Where it is enforced: `withLlmFailover` / `withAnthropicOrOpenAi` and
  * `resolveLlmKey` for anthropic/openai — the shared path every generation

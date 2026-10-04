@@ -226,3 +226,33 @@ describe('v0 webhook contract', () => {
     ).toThrow(/32/)
   })
 })
+
+describe('parseCursorModelSpec + model params on POST /v1/agents', () => {
+  it('reads an id with query-style params', async () => {
+    const { parseCursorModelSpec } = await import('../../supabase/functions/_shared/cursor-cloud.ts')
+    expect(parseCursorModelSpec('grok-4.7?reasoning_effort=xhigh&context=500k')).toEqual({
+      id: 'grok-4.7',
+      params: [
+        { id: 'reasoning_effort', value: 'xhigh' },
+        { id: 'context', value: '500k' },
+      ],
+    })
+    expect(parseCursorModelSpec(' composer-2.5 ')).toEqual({ id: 'composer-2.5', params: [] })
+  })
+
+  it('refuses anything but a plain id and plain params', async () => {
+    const { parseCursorModelSpec } = await import('../../supabase/functions/_shared/cursor-cloud.ts')
+    for (const bad of ['', '?x=1', 'grok 4.7', 'grok-4.7?x', 'grok-4.7?x=1&x=2', 'grok-4.7?x=a b', 'grok-4.7?x=<y>']) {
+      expect(parseCursorModelSpec(bad), bad).toBeNull()
+    }
+  })
+
+  it('sends model.params when the setting carries them, and drops an invalid setting', () => {
+    const withParams = buildCreateAgentV1Body({ prompt: 'p', repoUrl: 'https://github.com/o/r', model: 'grok-4.7?reasoning_effort=xhigh&context=500k' })
+    expect(withParams.model).toEqual({ id: 'grok-4.7', params: [{ id: 'reasoning_effort', value: 'xhigh' }, { id: 'context', value: '500k' }] })
+    const plain = buildCreateAgentV1Body({ prompt: 'p', repoUrl: 'https://github.com/o/r', model: 'composer-2.5' })
+    expect(plain.model).toEqual({ id: 'composer-2.5' })
+    const bad = buildCreateAgentV1Body({ prompt: 'p', repoUrl: 'https://github.com/o/r', model: 'bad model' })
+    expect(bad.model).toBeUndefined()
+  })
+})
