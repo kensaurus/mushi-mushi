@@ -320,6 +320,7 @@
     "GET /v1/public/reporter/email/unsubscribe": {"allow": "public"},
     "GET /v1/public/reporter/email/verify": {"allow": "public"},
     "GET /v1/push/vapid-public-key": {"allow": "public"},
+    "GET /v1/sdk/latest-version": {"allow": "public", "note": "Anonymous npm catalog lookup. The console reads it to pin the published @mushi-mushi/mcp version into install configs; the CLI and MCP check versions with mushi upgrade / check_sdk_version."},
     "GET /v1/super-admin/metrics": {"allow": "jwt-only"},
     "GET /v1/super-admin/users": {"allow": "jwt-only"},
     "GET /v1/super-admin/users/:id": {"allow": "jwt-only"},
