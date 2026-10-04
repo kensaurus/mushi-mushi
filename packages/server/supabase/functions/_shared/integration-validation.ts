@@ -5,6 +5,7 @@
  */
 import { isVaultRef } from './vault-ref.ts'
 import { assertSafeOutboundUrl } from './inventory-guards.ts'
+import { parseSentryDsnSetting, sentrySelfHostedHosts } from './sentry-dsn.ts'
 
 export type BodyError = { code: string; message: string }
 
@@ -34,6 +35,12 @@ export function validatePlatformBody(body: Record<string, unknown>): BodyError |
     if (PLATFORM_URL_FIELDS.has(k) && typeof v === 'string' && v.trim() !== '') {
       const safe = assertSafeOutboundUrl(v.trim())
       if (!safe.ok) return unsafeUrlError(k, safe.reason)
+    }
+    // The server forwards events to this DSN, so it gets the same check as
+    // PATCH /v1/admin/settings: a Sentry host or an allowlisted self-hosted one.
+    if (k === 'sentry_dsn') {
+      const verdict = parseSentryDsnSetting(v, sentrySelfHostedHosts())
+      if (!verdict.ok) return { code: 'VALIDATION_ERROR', message: verdict.message }
     }
   }
   return null
