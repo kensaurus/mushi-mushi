@@ -15,6 +15,8 @@ import { ContainedBlock, SignalChip, ActionPill, ActionPillRow } from '../report
 import { IconGit, IconPencil, IconTrash } from '../icons'
 import { CHIP_TONE } from '../../lib/chipTone'
 import { RepoIndexStatus } from './RepoIndexStatus'
+import { ConfirmDialog } from '../ConfirmDialog'
+import { repoActionErrorMessage } from '../../lib/repoBranches'
 
 interface ProjectRepo {
   id: string
@@ -35,6 +37,7 @@ interface ProjectRepo {
   updated_at: string | null
 }
 
+/** The roles the project_repos CHECK and the API accept (repo-branch-counts.ts). */
 const ROLES = ['frontend', 'backend', 'monorepo', 'mobile', 'ai', 'infra', 'docs', 'other'] as const
 type RepoRole = (typeof ROLES)[number]
 
@@ -53,6 +56,11 @@ export function ProjectReposCard({ projectId }: Props) {
   const [repos, setRepos] = useState<ProjectRepo[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  // A failed save or remove is shown next to the form and keeps the draft;
+  // only a failed load replaces the card (console QA 20: "[object Object]").
+  const [actionError, setActionError] = useState<string | null>(null)
+  const [removeTarget, setRemoveTarget] = useState<ProjectRepo | null>(null)
+  const [removing, setRemoving] = useState(false)
   const [adding, setAdding] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -79,19 +87,21 @@ export function ProjectReposCard({ projectId }: Props) {
       setRepos(res.data)
       setError(null)
     } else {
-      setError(String(res.error?.message ?? 'Failed to load repos'))
+      setError(res.error?.message ?? "Couldn't load the linked repos.")
     }
   }, [projectId])
 
   useEffect(() => { void load() }, [load])
 
   const openAdd = () => {
+    setActionError(null)
     setDraft(blankDraft())
     setAdding(true)
     setEditingId(null)
   }
 
   const openEdit = (repo: ProjectRepo) => {
+    setActionError(null)
     setDraft({
       repoUrl: repo.repo_url,
       role: repo.role as RepoRole,
@@ -103,7 +113,7 @@ export function ProjectReposCard({ projectId }: Props) {
     setAdding(false)
   }
 
-  const cancelForm = () => { setAdding(false); setEditingId(null) }
+  const cancelForm = () => { setAdding(false); setEditingId(null); setActionError(null) }
 
   const buildPayload = () => ({
     projectId,
@@ -124,8 +134,8 @@ export function ProjectReposCard({ projectId }: Props) {
       body: JSON.stringify(buildPayload()),
     })
     setSaving(false)
-    if (res.ok) { setAdding(false); void load() }
-    else setError(String(res.error ?? 'Save failed'))
+    if (res.ok) { setAdding(false); setActionError(null); void load() }
+    else setActionError(repoActionErrorMessage('add', res.error))
   }
 
   const saveEdit = async () => {
@@ -137,18 +147,20 @@ export function ProjectReposCard({ projectId }: Props) {
       body: JSON.stringify(buildPayload()),
     })
     setSaving(false)
-    if (res.ok) { setEditingId(null); void load() }
-    else setError(String(res.error ?? 'Save failed'))
+    if (res.ok) { setEditingId(null); setActionError(null); void load() }
+    else setActionError(repoActionErrorMessage('save', res.error))
   }
 
   const removeRepo = async (repoId: string) => {
-    if (!window.confirm('Remove this repo? Fix PRs already opened on it will not be affected.')) return
+    setRemoving(true)
     const res = await apiFetch(
       `/v1/admin/repo/repos/${repoId}?project_id=${projectId}`,
       { method: 'DELETE' },
     )
-    if (res.ok) void load()
-    else setError(String(res.error ?? 'Delete failed'))
+    setRemoving(false)
+    setRemoveTarget(null)
+    if (res.ok) { setActionError(null); void load() }
+    else setActionError(repoActionErrorMessage('remove', res.error))
   }
 
   if (loading) {
@@ -218,7 +230,7 @@ export function ProjectReposCard({ projectId }: Props) {
                         variant="ghost"
                         className="px-2"
                         aria-label={`Remove ${repo.repo_url}`}
-                        onClick={() => void removeRepo(repo.id)}
+                        onClick={() => setRemoveTarget(repo)}
                       >
                         <IconTrash />
                       </Btn>
@@ -240,6 +252,8 @@ export function ProjectReposCard({ projectId }: Props) {
                 onCancel={cancelForm}
                 saving={saving}
                 isEdit
+                error={actionError}
+                currentPrimary={repos.find((r) => r.is_primary && r.id !== repo.id)?.repo_url ?? null}
               />
             )}
           </div>
@@ -254,9 +268,29 @@ export function ProjectReposCard({ projectId }: Props) {
             onSave={() => void saveAdd()}
             onCancel={cancelForm}
             saving={saving}
+            error={actionError}
+            currentPrimary={repos.find((r) => r.is_primary)?.repo_url ?? null}
           />
         </ContainedBlock>
       )}
+
+      {actionError && !showForm ? (
+        <p role="alert" className="text-2xs text-danger">{actionError}</p>
+      ) : null}
+
+      {removeTarget ? (
+        <ConfirmDialog
+          title="Remove this repo?"
+          body={`Mushi stops sending fixes to ${removeTarget.repo_url} and drops its index settings here. Pull requests already opened on it stay on GitHub.${removeTarget.is_primary ? ' It is the primary repo, so mark another one as primary afterwards.' : ''}`}
+          confirmLabel="Remove repo"
+          tone="danger"
+          loading={removing}
+          onConfirm={() => removeRepo(removeTarget.id)}
+          onCancel={() => {
+            if (!removing) setRemoveTarget(null)
+          }}
+        />
+      ) : null}
 
       {repos.length > 0 && !showForm && (
         <p className="text-2xs text-fg-faint leading-relaxed">
@@ -285,6 +319,8 @@ function RepoForm({
   onCancel,
   saving,
   isEdit = false,
+  error = null,
+  currentPrimary = null,
 }: {
   draft: FormDraft
   onChange: (d: FormDraft) => void
@@ -292,6 +328,10 @@ function RepoForm({
   onCancel: () => void
   saving: boolean
   isEdit?: boolean
+  /** Why the last save failed, shown here so the draft is not lost. */
+  error?: string | null
+  /** The repo that is primary now, if another one. */
+  currentPrimary?: string | null
 }) {
   const set = <K extends keyof FormDraft>(k: K, v: FormDraft[K]) => onChange({ ...draft, [k]: v })
 
@@ -351,6 +391,14 @@ function RepoForm({
         />
         <span className="text-2xs text-fg-secondary">Mark as primary repo (fix worker defaults here)</span>
       </label>
+      {draft.isPrimary && currentPrimary ? (
+        <p className="text-3xs text-fg-faint">
+          Saving moves “primary” from {currentPrimary} to this repo.
+        </p>
+      ) : null}
+      {error ? (
+        <p role="alert" className="text-2xs text-danger">{error}</p>
+      ) : null}
       <ActionPillRow>
         <Btn
           size="sm"

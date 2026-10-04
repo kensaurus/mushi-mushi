@@ -35,6 +35,9 @@ interface Props {
   onToggle: (fixId: string) => void
   onRetry: (reportId: string) => void
   onRefreshed?: () => void
+  /** Bulk selection by row (console QA 92). */
+  selectedIds?: ReadonlySet<string>
+  onSelectFix?: (fixId: string, selected: boolean) => void
   compactTable?: boolean
   hideTableChrome?: boolean
   actionLabels?: {
@@ -57,6 +60,8 @@ export function FixesTable({
   onToggle,
   onRetry,
   onRefreshed,
+  selectedIds,
+  onSelectFix,
   compactTable = false,
   hideTableChrome = false,
   actionLabels,
@@ -141,6 +146,8 @@ export function FixesTable({
                     isInFlight={inFlightReportIds.has(fix.report_id)}
                     onToggle={() => onToggle(fix.id)}
                     onRetry={() => onRetry(fix.report_id)}
+                    selected={selectedIds?.has(fix.id) ?? false}
+                    onSelectChange={onSelectFix ? (on) => onSelectFix(fix.id, on) : undefined}
                     compactTable={compactTable}
                     actionLabels={actionLabels}
                   />

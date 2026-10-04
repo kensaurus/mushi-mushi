@@ -25,7 +25,6 @@ import { Card,
   Section,
   Btn,
   Badge,
-  ErrorAlert,
   SegmentedControl,
   FreshnessPill,
   RecommendedAction,
@@ -43,6 +42,9 @@ import { IterateReadout } from '../components/iterate/IterateReadout'
 import { PdcaRunTable } from '../components/iterate/PdcaRunTable'
 import { NewRunForm } from '../components/iterate/NewRunForm'
 import { PdcaRunDrawer } from '../components/iterate/PdcaRunDrawer'
+import { ConfirmDialog } from '../components/ConfirmDialog'
+import { PageLoadError } from '../components/PageLoadError'
+import { ListPager } from '../components/ListPager'
 import type { PdcaRun } from '../components/iterate/types'
 import {
   EMPTY_ITERATE_STATS,
@@ -69,6 +71,9 @@ const TABS: Array<{ id: IterateTabId; label: string; description: string }> = [
   },
 ]
 
+/** Runs per page on the Runs tab (the list route allows up to 100). */
+const RUNS_PAGE_SIZE = 50
+
 function resolveIterateTab(value: string | null): IterateTabId {
   if (value === 'runs' || value === 'new') return value
   return 'overview'
@@ -88,6 +93,20 @@ export function IteratePage() {
 
   const [selectedRun, setSelectedRun] = useState<PdcaRun | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [runsPage, setRunsPage] = useState(1)
+  // Abort is irreversible: it goes through a confirm dialog (console QA 21).
+  const [abortTarget, setAbortTarget] = useState<PdcaRun | null>(null)
+  // Runs with a Trigger or Abort request in flight, so a second click cannot
+  // queue a second paid runner call.
+  const [busyRunIds, setBusyRunIds] = useState<ReadonlySet<string>>(new Set())
+  const markBusy = useCallback((id: string, busy: boolean) => {
+    setBusyRunIds((prev) => {
+      const next = new Set(prev)
+      if (busy) next.add(id)
+      else next.delete(id)
+      return next
+    })
+  }, [])
 
   const {
     data: statsData,
@@ -101,7 +120,9 @@ export function IteratePage() {
   const stats = { ...EMPTY_ITERATE_STATS, ...statsData }
 
   const listPath =
-    activeProjectId && activeTab === 'runs' ? `/v1/admin/pdca?project_id=${activeProjectId}&limit=50` : null
+    activeProjectId && activeTab === 'runs'
+      ? `/v1/admin/pdca?project_id=${activeProjectId}&limit=${RUNS_PAGE_SIZE}&page=${runsPage}`
+      : null
 
   const {
     data: runs,
@@ -116,7 +137,13 @@ export function IteratePage() {
   // `data.data`. Reading the hook value as an array threw
   // `runs.filter is not a function` on every Runs-tab visit and, via the
   // route boundary, blanked the whole console (2026-09-23).
-  const runList = pdcaRunsFromEnvelope(runs).runs
+  const runsEnvelope = pdcaRunsFromEnvelope(runs)
+  const runList = runsEnvelope.runs
+  const runsTotal = runsEnvelope.total ?? runList.length
+
+  useEffect(() => {
+    setRunsPage(1)
+  }, [activeProjectId])
   const activeRuns = runList.filter((r) => r.status === 'running' || r.status === 'queued')
 
   const reloadAll = useCallback(() => {
@@ -206,37 +233,65 @@ export function IteratePage() {
     [toast],
   )
 
+  // After Abort or Trigger the open drawer must show the new state, not the
+  // one it opened with (console QA 21: it kept "Running" and an enabled Abort).
+  const refetchRun = useCallback(async (runId: string) => {
+    const res = await apiFetch<PdcaRun>(`/v1/admin/pdca/${runId}`, { cache: 'no-store' })
+    if (res.ok && res.data) setSelectedRun((cur) => (cur?.id === runId ? res.data! : cur))
+  }, [])
+
+  const requestAbort = useCallback(
+    (runId: string) => {
+      const run = runList.find((r) => r.id === runId) ?? (selectedRun?.id === runId ? selectedRun : null)
+      if (run) setAbortTarget(run)
+    },
+    [runList, selectedRun],
+  )
+
   const abortRun = useCallback(
     async (runId: string) => {
-      const res = await apiFetch(`/v1/admin/pdca/${runId}`, { method: 'DELETE' })
-      if (!res.ok) {
-        toast.error(res.error?.message ?? 'Abort failed')
-        return
+      markBusy(runId, true)
+      try {
+        const res = await apiFetch(`/v1/admin/pdca/${runId}`, { method: 'DELETE' })
+        if (!res.ok) {
+          toast.error("Couldn't abort this run", res.error?.message ?? 'Try again in a moment.')
+          return
+        }
+        toast.success('Run aborted', 'No more iterations will start.')
+        reloadAll()
+        await refetchRun(runId)
+      } finally {
+        markBusy(runId, false)
+        setAbortTarget(null)
       }
-      reloadAll()
-      toast.success('Run aborted')
     },
-    [reloadAll, toast],
+    [markBusy, refetchRun, reloadAll, toast],
   )
 
   const triggerRun = useCallback(
     async (runId: string) => {
-      const res = await apiFetch(`/v1/admin/pdca/${runId}/trigger`, { method: 'POST' })
-      if (res.ok) {
-        toast.success('Runner triggered')
+      if (busyRunIds.has(runId)) return
+      markBusy(runId, true)
+      try {
+        const res = await apiFetch(`/v1/admin/pdca/${runId}/trigger`, { method: 'POST' })
+        if (res.ok) {
+          toast.success('Runner started', 'The first iteration is on its way.')
+        } else {
+          toast.error("Couldn't start this run", res.error?.message ?? 'Try again in a moment.')
+        }
         reloadAll()
-      } else {
-        toast.error(res.error?.message ?? 'Trigger failed')
+        await refetchRun(runId)
+      } finally {
+        markBusy(runId, false)
       }
     },
-    [reloadAll, toast],
+    [busyRunIds, markBusy, refetchRun, reloadAll, toast],
   )
 
   const refreshSelectedRun = useCallback(async () => {
     if (!selectedRun) return
-    const res = await apiFetch<PdcaRun>(`/v1/admin/pdca/${selectedRun.id}`)
-    if (res.ok && res.data) setSelectedRun(res.data)
-  }, [selectedRun])
+    await refetchRun(selectedRun.id)
+  }, [refetchRun, selectedRun])
 
   if (statsLoading && !statsData) {
     return (
@@ -253,7 +308,7 @@ export function IteratePage() {
   }
 
   if (statsError) {
-    return <ErrorAlert message={`Failed to load PDCA stats: ${statsError}`} onRetry={reloadStats} />
+    return <PageLoadError error={statsError} resource="PDCA runs" onRetry={reloadStats} />
   }
 
   const bannerSeverity: 'ok' | 'warn' | 'danger' | 'brand' | 'info' | 'neutral' =
@@ -504,7 +559,7 @@ export function IteratePage() {
                 <TableSkeleton rows={5} showFilters={false} label="Loading PDCA runs" />
               )}
               {runsError && (
-                <ErrorAlert message={`Failed to load runs: ${runsError}`} onRetry={reloadRuns} />
+                <PageLoadError error={runsError} resource="the run list" onRetry={reloadRuns} />
               )}
               {!runsLoading && !runsError && (
                 <Section title="Run history" freshness={{ at: runsFetchedAt, isValidating: runsValidating }}>
@@ -512,8 +567,17 @@ export function IteratePage() {
                     runs={runList}
                     projectName={stats.projectName ?? projectName}
                     onOpen={(r) => void openDetail(r)}
-                    onAbort={(id) => void abortRun(id)}
+                    onAbort={requestAbort}
                     onTrigger={(id) => void triggerRun(id)}
+                    busyIds={busyRunIds}
+                  />
+                  <ListPager
+                    page={runsPage}
+                    pageSize={RUNS_PAGE_SIZE}
+                    total={runsTotal}
+                    noun="runs"
+                    onPage={setRunsPage}
+                    busy={runsValidating}
                   />
                 </Section>
               )}
@@ -543,9 +607,25 @@ export function IteratePage() {
             setDrawerOpen(false)
             setSelectedRun(null)
           }}
-          onAbort={(id) => void abortRun(id)}
+          onAbort={requestAbort}
           onTrigger={(id) => void triggerRun(id)}
           onRefresh={() => void refreshSelectedRun()}
+          busy={busyRunIds.has(selectedRun.id)}
+        />
+      )}
+
+      {abortTarget && (
+        <ConfirmDialog
+          title="Abort this PDCA run?"
+          body={`Mushi stops the run on ${abortTarget.target_url} after the current step. Iterations already scored stay in history. An aborted run cannot be resumed: queue a new one to try again.`}
+          confirmLabel="Abort run"
+          cancelLabel="Keep running"
+          tone="danger"
+          loading={busyRunIds.has(abortTarget.id)}
+          onConfirm={() => abortRun(abortTarget.id)}
+          onCancel={() => {
+            if (!busyRunIds.has(abortTarget.id)) setAbortTarget(null)
+          }}
         />
       )}
     </div>

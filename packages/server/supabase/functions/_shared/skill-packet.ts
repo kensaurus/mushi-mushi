@@ -22,6 +22,7 @@
  */
 
 import { getServiceClient } from './db.ts'
+import { dedupeSkillsBySlug, findActiveSkillBySlug } from './skill-catalog.ts'
 
 export interface ReportContext {
   id: string
@@ -62,8 +63,10 @@ export async function composeRunPacket(opts: {
   chainSlugs: string[]
   reportContext: ReportContext
   options?: PacketOptions
+  /** The project's own skill sources: their copy of a duplicated slug wins. */
+  preferredSourceIds?: string[]
 }): Promise<string> {
-  const { rootSkillSlug, chainSlugs, reportContext, options = {} } = opts
+  const { rootSkillSlug, chainSlugs, reportContext, options = {}, preferredSourceIds = [] } = opts
   const maxBody = options.maxBodyChars ?? DEFAULT_MAX_BODY
   const maxTotal = options.maxTotalChars ?? DEFAULT_MAX_TOTAL
 
@@ -73,11 +76,17 @@ export async function composeRunPacket(opts: {
   const allSlugs = [rootSkillSlug, ...chainSlugs.filter((s) => s !== rootSkillSlug)]
   const { data: skills } = await db
     .from('agent_skills')
-    .select('slug, title, description, body_md, chain_slugs')
+    .select('id, slug, source_id, updated_at, title, description, body_md, chain_slugs')
     .in('slug', allSlugs)
     .eq('is_active', true)
 
-  const skillMap = new Map((skills ?? []).map((s) => [s.slug as string, s]))
+  // One row per slug with the same rule as the skill detail (skill-catalog.ts),
+  // so the packet carries the SKILL.md the console showed.
+  const unique = dedupeSkillsBySlug(
+    (skills ?? []) as Array<{ slug: string; source_id: string | null; updated_at: string | null; id: string }>,
+    preferredSourceIds,
+  )
+  const skillMap = new Map(unique.map((s) => [s.slug as string, s as Record<string, unknown>]))
 
   const rootSkill = skillMap.get(rootSkillSlug)
 
@@ -182,12 +191,12 @@ export async function resolveChain(rootSlug: string, maxDepth = 5): Promise<stri
     if (depth >= maxDepth || visited.has(slug)) return
     visited.add(slug)
 
-    const { data } = await db
-      .from('agent_skills')
-      .select('slug, chain_slugs')
-      .eq('slug', slug)
-      .eq('is_active', true)
-      .maybeSingle()
+    // Several sources can carry the same slug; one row per slug (skill-catalog.ts).
+    const { skill: data } = await findActiveSkillBySlug<{ slug: string; chain_slugs?: string[] | null }>(
+      db,
+      slug,
+      'slug, chain_slugs',
+    )
 
     if (!data) return
 

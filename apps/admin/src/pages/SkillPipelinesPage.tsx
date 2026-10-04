@@ -66,6 +66,17 @@ import {
   EMPTY_SKILLS_STATS,
   type SkillsStats,
 } from '../components/skills/SkillsStatsTypes'
+import { ConfirmDialog } from '../components/ConfirmDialog'
+import { PageLoadError } from '../components/PageLoadError'
+import {
+  describePipelineCancel,
+  nextCheckinStep,
+  parseReportIdInput,
+  pipelineCancelBody,
+  resolveSkillsTab,
+  type PipelineCancelResult,
+  type SkillsTab,
+} from '../lib/skillPipelines'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -112,7 +123,7 @@ interface PipelineRun {
   steps?: PipelineStep[]
 }
 
-type Tab = 'catalog' | 'pipelines' | 'sources'
+type Tab = SkillsTab
 
 const TAB_META: Record<Tab, { label: string; Icon: typeof IconSkills }> = {
   catalog: { label: 'Skill Catalog', Icon: IconSkills },
@@ -132,7 +143,9 @@ const CATEGORY_ORDER = [
 
 export function SkillPipelinesPage() {
   const [searchParams, setSearchParams] = useSearchParams()
-  const tab = (searchParams.get('tab') as Tab | null) ?? 'catalog'
+  // Unknown `?tab=` values fall back to the catalog instead of indexing
+  // TAB_META with `undefined` and crashing the page.
+  const tab = resolveSkillsTab(searchParams.get('tab'))
   const projectId = useActiveProjectId()
   const ux = useSkillsUx()
   const { push } = useToast()
@@ -311,7 +324,7 @@ export function SkillPipelinesPage() {
               addToast={addToast}
               initialRunId={pipelineRunId}
               onOpenSkill={(slug) => setTab('catalog', { skill: slug })}
-              onGoToCatalog={() => setTab('catalog', { skill: 'audit-uiux-design-system' })}
+              onGoToCatalog={() => setTab('catalog', { skill: 'workflow-fix-and-ship' })}
             />
           )}
           {tab === 'sources' && (
@@ -359,6 +372,8 @@ function SkillDetailPanel({
   embedded?: boolean
 }) {
   const meta = getSkillCategoryMeta(selected.category)
+  const reportIdCheck = parseReportIdInput(reportId)
+  const reportIdHelpId = embedded ? 'skill-report-id-drawer-help' : 'skill-report-id-help'
   const body = (
     <>
       <div className="flex items-start gap-2.5">
@@ -420,11 +435,16 @@ function SkillDetailPanel({
           <input
             id={embedded ? 'skill-report-id-drawer' : 'skill-report-id'}
             type="text"
-            placeholder="Paste report ID from a report URL, e.g. abc123de"
+            placeholder="Paste the report link or its full ID"
             value={reportId}
             onChange={(e) => setReportId(e.target.value)}
+            aria-invalid={reportIdCheck.kind === 'invalid'}
+            aria-describedby={reportIdCheck.kind === 'invalid' ? reportIdHelpId : undefined}
             className="input text-xs"
           />
+          {reportIdCheck.kind === 'invalid' ? (
+            <p id={reportIdHelpId} className="text-2xs text-danger">{reportIdCheck.message}</p>
+          ) : null}
         </div>
         <div className="space-y-1">
           <label className="text-2xs text-fg-muted" htmlFor={embedded ? 'skill-mode-drawer' : 'skill-mode'}>Mode</label>
@@ -465,6 +485,7 @@ function SkillDetailPanel({
           disabled={
             startingSlug === selected.slug ||
             !projectId ||
+            reportIdCheck.kind === 'invalid' ||
             (mode === 'cloud' && !cloudReadiness?.cloudReady)
           }
         >
@@ -529,7 +550,7 @@ function CatalogTab({
     return `/v1/admin/skills?${qs}`
   })()
 
-  const { data, loading, error } = usePageData<{
+  const { data, loading, error, reload, isValidating } = usePageData<{
     data: AgentSkill[]
     grouped: Record<string, AgentSkill[]>
     total: number
@@ -579,11 +600,21 @@ function CatalogTab({
       return
     }
     if (startingSlug) return
+    const parsedReport = parseReportIdInput(reportId)
+    if (parsedReport.kind === 'invalid') {
+      addToast({ type: 'error', message: parsedReport.message })
+      return
+    }
     setStartingSlug(slug)
     try {
       const res = await apiFetch(`/v1/admin/skills/pipelines`, {
         method: 'POST',
-        body: JSON.stringify({ project_id: projectId, root_skill_slug: slug, report_id: reportId || null, mode }),
+        body: JSON.stringify({
+          project_id: projectId,
+          root_skill_slug: slug,
+          report_id: parsedReport.kind === 'ok' ? parsedReport.id : null,
+          mode,
+        }),
       })
       if (!res.ok) {
         addToast({ type: 'error', message: res.error?.message ?? "Couldn't start the pipeline — try again" })
@@ -610,36 +641,62 @@ function CatalogTab({
   }, [projectId, reportId, mode, addToast, startingSlug, onPipelineStarted])
 
   const searchPending = searchInput.trim() !== debouncedSearch
+  const searching = searchPending || isValidating
 
-  if (loading || searchPending) return <SkeletonRows count={8} />
-  if (error) return <ErrorState message={error} />
-  if (skills.length === 0) {
-    return debouncedSearch
-      ? <EmptySearchResults query={debouncedSearch} onClear={() => setSearchInput('')} />
-      : <EmptySkills onGoToSources={onGoToSources} />
-  }
+  // The search box stays mounted through every state below — a skeleton or
+  // empty state that replaced it dropped focus on each keystroke and left a
+  // no-match query with nothing to edit (console QA 22).
+  const searchBar = (
+    <div className="flex gap-2 items-center">
+      <input
+        type="search"
+        placeholder="Search by name, slug, or category…"
+        value={searchInput}
+        onChange={(e) => setSearchInput(e.target.value)}
+        className="input flex-1 max-w-sm"
+        aria-label="Search skills"
+      />
+      <span className="text-xs text-fg-muted" aria-live="polite">
+        {searching
+          ? 'Searching…'
+          : !data
+            ? null
+            : skills.length === catalogTotal
+            ? `${catalogTotal} skills`
+            : `${skills.length} of ${catalogTotal} skills`}
+      </span>
+    </div>
+  )
+
+  // A new query is a new URL, so usePageData drops the old rows while it
+  // loads: show the skeleton under the search box, never instead of it.
+  const listState: 'loading' | 'error' | 'empty' | 'no-match' | 'list' =
+    loading && !data
+      ? 'loading'
+      : error && !data
+        ? 'error'
+        : skills.length === 0
+          ? debouncedSearch
+            ? 'no-match'
+            : 'empty'
+          : 'list'
 
   return (
     <div className="flex flex-col lg:flex-row gap-4 min-w-0">
       {/* Skill list */}
       <div className="flex-1 flex flex-col gap-4 min-w-0">
-        <div className="flex gap-2 items-center">
-          <input
-            type="search"
-            placeholder="Search by name, slug, or category…"
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            className="input flex-1 max-w-sm"
-            aria-label="Search skills"
-          />
-          <span className="text-xs text-fg-muted">
-            {skills.length === catalogTotal
-              ? `${catalogTotal} skills`
-              : `${skills.length} of ${catalogTotal} skills`}
-          </span>
-        </div>
+        {searchBar}
 
-        {[...orderedCategories, ...otherCategories].map((cat) => {
+        {listState === 'loading' ? <SkeletonRows count={8} /> : null}
+        {listState === 'error' ? (
+          <PageLoadError error={error} resource="the skill catalog" onRetry={reload} />
+        ) : null}
+        {listState === 'empty' ? <EmptySkills onGoToSources={onGoToSources} /> : null}
+        {listState === 'no-match' ? (
+          <EmptySearchResults query={debouncedSearch} onClear={() => setSearchInput('')} />
+        ) : null}
+
+        {listState === 'list' && [...orderedCategories, ...otherCategories].map((cat) => {
           const meta = getSkillCategoryMeta(cat)
           const catSkills = grouped[cat] ?? []
           return (
@@ -806,23 +863,70 @@ function PipelinesTab({
     }
   }, [initialRunId, loading, runs, loadRunDetail])
 
+  const refetchSelected = useCallback(async (runId: string) => {
+    const res = await apiFetch<PipelineRun>(`/v1/admin/skills/pipelines/${runId}`)
+    if (res.ok && res.data) setSelectedRun((cur) => (cur?.id === runId ? res.data! : cur))
+  }, [])
+
+  // Cancel is irreversible and, for cloud runs, reaches out to Cursor Cloud,
+  // so it goes through a confirm dialog (console QA 24).
+  const [cancelTarget, setCancelTarget] = useState<PipelineRun | null>(null)
+
   const abortRun = useCallback(async (runId: string) => {
     setAbortingId(runId)
     try {
-      const res = await apiFetch(`/v1/admin/skills/pipelines/${runId}`, { method: 'DELETE' })
+      const res = await apiFetch<PipelineCancelResult>(`/v1/admin/skills/pipelines/${runId}`, { method: 'DELETE' })
       if (!res.ok) {
         addToast({ type: 'error', message: res.error?.message ?? "Couldn't cancel this pipeline — try again" })
         return
       }
-      addToast({ type: 'success', message: 'Pipeline cancelled' })
-      if (selectedRun?.id === runId) setSelectedRun(null)
+      const outcome = describePipelineCancel(res.data)
+      addToast({ type: outcome.tone, message: outcome.message })
       reload()
+      await refetchSelected(runId)
     } catch (err) {
       addToast({ type: 'error', message: String(err) })
     } finally {
       setAbortingId(null)
+      setCancelTarget(null)
     }
-  }, [addToast, selectedRun, reload])
+  }, [addToast, reload, refetchSelected])
+
+  const requestCancel = useCallback(
+    (runId: string) => {
+      const run = runs.find((r) => r.id === runId) ?? (selectedRun?.id === runId ? selectedRun : null)
+      if (run) setCancelTarget(run)
+    },
+    [runs, selectedRun],
+  )
+
+  // Manual check-in for the current step (console QA 105). Handoff runs
+  // have no agent to report back, so the console needs its own control.
+  const [checkingIn, setCheckingIn] = useState(false)
+  const checkinStep = useCallback(
+    async (runId: string, stepIndex: number, status: 'passed' | 'failed' | 'skipped') => {
+      setCheckingIn(true)
+      try {
+        const res = await apiFetch(`/v1/admin/skills/pipelines/${runId}/steps/${stepIndex}/checkin`, {
+          method: 'POST',
+          body: JSON.stringify({ status, notes: 'Checked in from the console.' }),
+        })
+        if (!res.ok) {
+          addToast({ type: 'error', message: res.error?.message ?? "Couldn't update this step — try again" })
+          return
+        }
+        addToast({
+          type: 'success',
+          message: `Step ${stepIndex + 1} marked ${status}.`,
+        })
+        reload()
+        await refetchSelected(runId)
+      } finally {
+        setCheckingIn(false)
+      }
+    },
+    [addToast, reload, refetchSelected],
+  )
 
   // Also realtime-reload the selected run detail
   useRealtime(
@@ -839,10 +943,24 @@ function PipelinesTab({
   )
 
   if (loading) return <SkeletonRows count={5} />
-  if (error) return <ErrorState message={error} />
+  if (error) return <PageLoadError error={error} resource="pipeline runs" onRetry={reload} />
 
   return (
     <div className="flex flex-col lg:flex-row gap-4 min-w-0">
+      {cancelTarget ? (
+        <ConfirmDialog
+          title={`Cancel the ${cancelTarget.root_skill_slug} pipeline?`}
+          body={pipelineCancelBody(cancelTarget.mode)}
+          confirmLabel="Cancel pipeline"
+          cancelLabel="Keep running"
+          tone="danger"
+          loading={abortingId === cancelTarget.id}
+          onConfirm={() => abortRun(cancelTarget.id)}
+          onCancel={() => {
+            if (abortingId !== cancelTarget.id) setCancelTarget(null)
+          }}
+        />
+      ) : null}
       {/* Run list */}
       <div className="flex-1 flex flex-col gap-2 min-w-0">
         {runs.length > 0 && (
@@ -911,7 +1029,7 @@ function PipelinesTab({
                     type="button"
                     variant="ghost"
                     size="sm"
-                    onClick={() => abortRun(run.id)}
+                    onClick={() => requestCancel(run.id)}
                     disabled={abortingId === run.id}
                     className="text-fg-muted hover:text-danger"
                     title="Cancel pipeline run"
@@ -932,8 +1050,10 @@ function PipelinesTab({
           skillTitleMap={skillTitleMap}
           onClose={() => setSelectedRun(null)}
           onOpenSkill={onOpenSkill}
-          onAbort={abortRun}
+          onAbort={requestCancel}
           aborting={abortingId === selectedRun.id}
+          onCheckin={checkinStep}
+          checkingIn={checkingIn}
           addToast={addToast}
         />
       ) : null}
@@ -953,8 +1073,10 @@ function PipelinesTab({
               skillTitleMap={skillTitleMap}
               onClose={() => setSelectedRun(null)}
               onOpenSkill={onOpenSkill}
-              onAbort={abortRun}
+              onAbort={requestCancel}
               aborting={abortingId === selectedRun.id}
+              onCheckin={checkinStep}
+              checkingIn={checkingIn}
               addToast={addToast}
               embedded
             />
@@ -972,6 +1094,8 @@ function RunDetail({
   onOpenSkill,
   onAbort,
   aborting,
+  onCheckin,
+  checkingIn,
   addToast,
   embedded = false,
 }: {
@@ -981,10 +1105,14 @@ function RunDetail({
   onOpenSkill: (slug: string) => void
   onAbort: (runId: string) => void
   aborting: boolean
+  onCheckin: (runId: string, stepIndex: number, status: 'passed' | 'failed' | 'skipped') => void
+  checkingIn: boolean
   addToast: (t: { type: string; message: string }) => void
   embedded?: boolean
 }) {
   const steps: PipelineStep[] = run.steps ?? run.skill_pipeline_step_runs ?? []
+  const runOpen = ['pending', 'running'].includes(run.status)
+  const checkinTarget = runOpen ? nextCheckinStep(steps) : null
 
   // Memoised so the title lookup is stable until the run or catalog changes;
   // included in the flow effect deps so nodes re-label once the catalog loads.
@@ -1125,6 +1253,50 @@ function RunDetail({
         ) : null}
       </div>
 
+      {checkinTarget ? (
+        <div className="border-t border-edge-subtle px-4 py-3 flex flex-col gap-2" data-testid="pipeline-step-checkin">
+          <p className="text-xs text-fg">
+            Step {checkinTarget.step_index + 1}:{' '}
+            <span className="font-semibold">
+              {skillTitleMap.get(checkinTarget.skill_slug) ?? checkinTarget.skill_slug}
+            </span>{' '}
+            {run.mode === 'cloud'
+              ? 'is with the Cursor Cloud agent. It checks in by itself; mark it here only if it is stuck.'
+              : 'is waiting for you. When your local agent finishes it, mark the result here.'}
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            <Btn
+              type="button"
+              size="sm"
+              variant="primary"
+              disabled={checkingIn}
+              onClick={() => onCheckin(run.id, checkinTarget.step_index, 'passed')}
+            >
+              Mark done
+            </Btn>
+            <Btn
+              type="button"
+              size="sm"
+              variant="ghost"
+              disabled={checkingIn}
+              onClick={() => onCheckin(run.id, checkinTarget.step_index, 'skipped')}
+            >
+              Skip step
+            </Btn>
+            <Btn
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="text-danger"
+              disabled={checkingIn}
+              onClick={() => onCheckin(run.id, checkinTarget.step_index, 'failed')}
+            >
+              Mark failed
+            </Btn>
+          </div>
+        </div>
+      ) : null}
+
       {/* CLI handoff hint */}
       {run.mode === 'handoff' ? (
         <div className="border-t border-edge-subtle px-4 py-2 bg-surface-overlay text-2xs text-fg-muted">
@@ -1174,6 +1346,8 @@ function SourcesTab({
   const [adding, setAdding] = useState(false)
   const [syncingId, setSyncingId] = useState<string | null>(null)
   const [forceSyncingId, setForceSyncingId] = useState<string | null>(null)
+  const [removeTarget, setRemoveTarget] = useState<SkillSource | null>(null)
+  const [removing, setRemoving] = useState(false)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const { data: sourcesRaw, loading, error, reload } = usePageData<SkillSource[]>(
@@ -1251,11 +1425,40 @@ function SourcesTab({
     }
   }
 
+  const removeSource = async (src: SkillSource) => {
+    setRemoving(true)
+    try {
+      const res = await apiFetch(`/v1/admin/skills/sources/${src.id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        addToast({ type: 'error', message: res.error?.message ?? "Couldn't remove that source — try again" })
+        return
+      }
+      addToast({ type: 'success', message: `Removed ${src.repo_slug}. Its skills left the catalog.` })
+      reload()
+    } finally {
+      setRemoving(false)
+      setRemoveTarget(null)
+    }
+  }
+
   if (loading) return <SkeletonRows count={3} />
-  if (error) return <ErrorState message={error} />
+  if (error) return <PageLoadError error={error} resource="skill sources" onRetry={reload} />
 
   return (
     <div className="flex flex-col gap-4 min-w-0">
+      {removeTarget ? (
+        <ConfirmDialog
+          title={`Remove ${removeTarget.repo_slug}?`}
+          body={`Mushi stops syncing this repo and takes its ${removeTarget.catalog_count ?? 0} skills out of the catalog. Pipeline runs that already used them keep their history. You can add the repo again later.`}
+          confirmLabel="Remove source"
+          tone="danger"
+          loading={removing}
+          onConfirm={() => removeSource(removeTarget)}
+          onCancel={() => {
+            if (!removing) setRemoveTarget(null)
+          }}
+        />
+      ) : null}
       {showEndpointReadout ? (
         <SkillsEndpointReadout
           stats={stats}
@@ -1332,6 +1535,17 @@ function SourcesTab({
               >
                 {forceSyncingId === src.id ? 'Re-syncing…' : 'Full re-sync'}
               </Btn>
+              <Btn
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setRemoveTarget(src)}
+                disabled={removing || syncingId === src.id || forceSyncingId === src.id}
+                className="text-fg-muted hover:text-danger"
+                title="Stop syncing this repo and take its skills out of the catalog"
+              >
+                Remove
+              </Btn>
             </div>
           </SurfacePanel>
         ))
@@ -1399,10 +1613,6 @@ function SkeletonRows({ count }: { count: number }) {
       ))}
     </div>
   )
-}
-
-function ErrorState({ message }: { message: string }) {
-  return <p className="text-sm text-danger py-4">{message}</p>
 }
 
 function EmptySearchResults({ query, onClear }: { query: string; onClear: () => void }) {
