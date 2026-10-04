@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { humanizeApiError, parsePageDataError } from './humanizeApiError'
+import { apiErrorMessage, humanizeApiError, parsePageDataError } from './humanizeApiError'
 
 describe('parsePageDataError', () => {
   it('extracts code from usePageData format', () => {
@@ -37,5 +37,34 @@ describe('humanizeApiError', () => {
     const h = humanizeApiError('Something odd (WEIRD_CODE)')
     expect(h?.title).toBeTruthy()
     expect(h?.hint.length).toBeGreaterThan(10)
+  })
+})
+
+describe('apiErrorMessage', () => {
+  it('never shows a raw Postgres message', () => {
+    const msg = apiErrorMessage(
+      { code: 'DB_ERROR', message: 'duplicate key value violates unique constraint "bug_ontology_pkey"' },
+      'Could not add the tag.',
+    )
+    expect(msg).not.toMatch(/duplicate key|constraint/)
+  })
+
+  it('falls back when the message is only a code', () => {
+    expect(apiErrorMessage({ code: 'ERROR', message: 'INTERNAL_ERROR' }, 'Try again.')).toBe('Try again.')
+  })
+
+  it('explains AI failures in plain English', () => {
+    expect(apiErrorMessage({ code: 'LLM_ERROR', message: 'upstream 529' }, 'x')).toMatch(/AI model/)
+    expect(apiErrorMessage({ code: 'NO_LLM_KEY', message: 'no key' }, 'x')).toMatch(/API keys/)
+    expect(apiErrorMessage({ code: 'RATE_LIMITED', message: 'rate' }, 'x')).toMatch(/Too many requests/)
+  })
+
+  it('keeps a validation message written for people', () => {
+    expect(apiErrorMessage({ code: 'VALIDATION_ERROR', message: 'target_url: Invalid url' }, 'x')).toBe('target_url: Invalid url')
+  })
+
+  it('handles missing errors and plain strings', () => {
+    expect(apiErrorMessage(null, 'fallback')).toBe('fallback')
+    expect(apiErrorMessage('Story is disabled', 'fallback')).toBe('Story is disabled')
   })
 })
