@@ -412,3 +412,50 @@ describe('classification state agrees with the rest of the page', () => {
     expect(rec.title).not.toMatch(/Classification failed/)
   })
 })
+
+// ── One dispatch path (group B #19) ──────────────────────────────────────────
+// The card's "Dispatch fix" and "Retry dispatch" used to call dispatch
+// directly. They now call the page's confirm-and-preflight request, and the
+// shared gate disables them with the reason shown.
+describe('dispatch controls go through the page request and gate', () => {
+  const classifiedNew = () =>
+    makeReport({ status: 'new', severity: 'critical', stage1_classification: { category: 'bug' } })
+
+  it('the CTA calls the request it was given, nothing else', () => {
+    const request = vi.fn()
+    const rec = deriveRecommendation(classifiedNew(), makeDispatchState(), 0, request)
+    expect(rec.cta?.label).toBe('Dispatch fix')
+    rec.cta?.onClick?.()
+    expect(request).toHaveBeenCalledTimes(1)
+    expect(rec.cta?.disabled).toBeFalsy()
+  })
+
+  it('a blocked gate disables the CTA and shows the reason', () => {
+    const request = vi.fn()
+    const rec = deriveRecommendation(classifiedNew(), makeDispatchState(), 0, request, Date.now(), {
+      blocked: true,
+      reason: 'Set up first: Autofix enabled.',
+    })
+    expect(rec.cta?.disabled).toBe(true)
+    expect(rec.meta).toContainEqual({ label: 'Cannot dispatch', value: 'Set up first: Autofix enabled.', tone: 'warn' })
+  })
+
+  it('a blocked gate disables "Retry dispatch" and leaves links alone', () => {
+    const request = vi.fn()
+    const report = makeReport({
+      fix_attempts: [makeFixAttempt({ status: 'failed', failure_category: 'llm_rate_limit' })],
+    } as Partial<ReportDetail>)
+    const rec = deriveRecommendation(report, makeDispatchState(), 0, request, Date.now(), { blocked: true, reason: 'x' })
+    const retry = rec.actions?.find((a) => a.label === 'Retry dispatch')
+    expect(retry?.disabled).toBe(true)
+    expect(rec.actions?.find((a) => a.href)?.disabled).toBeUndefined()
+  })
+
+  it('a gate with nothing to dispatch leaves the card unchanged', () => {
+    const rec = deriveRecommendation(makeReport({ status: 'fixed' }), makeDispatchState(), 0, vi.fn(), Date.now(), {
+      blocked: true,
+      reason: 'This report is fixed; reopen it to dispatch a fix.',
+    })
+    expect(rec.meta).toBeUndefined()
+  })
+})

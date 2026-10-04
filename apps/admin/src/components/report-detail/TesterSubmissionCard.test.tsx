@@ -6,7 +6,8 @@
  * FILE: apps/admin/src/components/report-detail/TesterSubmissionCard.test.tsx
  * PURPOSE: Group K entries 62, 217 and 315 — Spam (−10 reputation) asks first,
  *          a spam-marked submission can still be re-graded, and the card is
- *          the only place that toasts a grade.
+ *          the only place that toasts a grade. Group B item 234 — every status
+ *          the database allows renders (`triaged` and `withdrawn` crashed it).
  */
 
 import { act, createElement } from 'react'
@@ -118,5 +119,34 @@ describe('TesterSubmissionCard', () => {
     await render('pending')
     await act(async () => button(/Accept/).click())
     expect(mocks.error).toHaveBeenCalledWith(expect.not.stringContaining('submission_not_found'))
+  })
+})
+
+// tester_submissions CHECK (migration 20260523002000_tester_submissions_and_subscriptions.sql).
+const DB_STATUSES = ['pending', 'triaged', 'accepted', 'informative', 'duplicate', 'spam', 'withdrawn'] as const
+
+describe('every database status (group B 234)', () => {
+  it.each(DB_STATUSES)('renders a %s submission', async (status) => {
+    await act(async () => {
+      root.render(
+        createElement(TesterSubmissionCard, {
+          submission: { id: 's1', status, points_awarded: 0, tester_handle: 'ana', app_name: 'glot', reviewer_note: null },
+          onReviewed: vi.fn(),
+        }),
+      )
+    })
+    expect(container.textContent).toContain('Mushi Bounties Submission')
+  })
+
+  it('names the withdrawn state', async () => {
+    await act(async () => {
+      root.render(
+        createElement(TesterSubmissionCard, {
+          submission: { id: 's1', status: 'withdrawn', points_awarded: 0, tester_handle: null, app_name: null, reviewer_note: null },
+          onReviewed: vi.fn(),
+        }),
+      )
+    })
+    expect(container.textContent).toContain('Withdrawn')
   })
 })

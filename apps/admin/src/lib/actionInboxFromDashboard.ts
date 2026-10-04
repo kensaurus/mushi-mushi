@@ -52,8 +52,10 @@ export function buildInboxCards(
   data: DashboardData | undefined,
   ctx?: InboxCardBuildContext,
 ): InboxCard[] {
-  const reportsByDay = data?.reportsByDay ?? []
-  const critical14d = reportsByDay.reduce((n, d) => n + (d.critical ?? 0), 0)
+  // Critical reports from the last 14 days that still need a decision. The
+  // sum of reportsByDay counted fixed and dismissed ones too, so the card
+  // stayed open for 14 days after every critical was closed.
+  const critical14d = data?.counts?.openCritical14d ?? 0
   const openBacklog = data?.counts?.openBacklog ?? 0
   const fixSummary = data?.fixSummary
   const failedFixes = fixSummary?.failed ?? 0
@@ -72,9 +74,9 @@ export function buildInboxCards(
         critical14d > 0
           ? {
               tone: 'do',
-              title: `${critical14d} critical report${critical14d === 1 ? '' : 's'} in the last 14 days`,
-              reason: openBacklog > 0 ? `${openBacklog} still open.` : 'All resolved; double-check the rollup.',
-              primary: { kind: 'link', to: '/reports?severity=critical', label: 'Open critical queue' },
+              title: `${critical14d} critical report${critical14d === 1 ? ' needs' : 's need'} a decision`,
+              reason: 'From the last 14 days. Confirm severity on the worst bugs first; auto-fix waits for triage.',
+              primary: { kind: 'link', to: '/reports?status=open&severity=critical&days=14', label: 'Open critical queue' },
             }
           : openBacklog > 0
             ? {
@@ -85,7 +87,9 @@ export function buildInboxCards(
                 tone: 'plan',
                 title: `${openBacklog} report${openBacklog === 1 ? '' : 's'} waiting for triage`,
                 reason: 'No criticals, but the queue is not clear — review, dispatch, or dismiss to keep the loop moving.',
-                primary: { kind: 'link', to: '/reports?status=classified', label: 'Open triage queue' },
+                // openBacklog counts New reports waiting over an hour: open
+                // that bucket, oldest first (it used to open Classified).
+                primary: { kind: 'link', to: '/reports?status=new&sort=created_at&dir=asc', label: 'Open triage queue' },
               }
             : null,
     },

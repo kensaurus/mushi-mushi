@@ -18,7 +18,7 @@ import { Tooltip } from '../ui'
 import { closedRowAction } from './reportRowAction'
 import { useRowFlash } from '../../lib/useRowFlash'
 import { useStaggeredAppear } from '../../lib/useStaggeredAppear'
-import { reportDetailPath } from '../../lib/reportUrl'
+import { reportDetailPath, reportPermalink } from '../../lib/reportUrl'
 import { useActiveProjectId } from '../ProjectSwitcher'
 import { StatusStepper } from './StatusStepper'
 import { BreadcrumbPeek } from './BreadcrumbPeek'
@@ -93,6 +93,9 @@ function ReportRowViewInner({
   const activeProjectId = useActiveProjectId()
   const stagger = useStaggeredAppear({ stepMs: 18, max: 12 })
   const detailPath = reportDetailPath(row.id, activeProjectId)
+  // A plain <a target=_blank> skips the router, so it needs the deploy base
+  // path (/mushi-mushi/admin/ in production); detailPath alone 404'd there.
+  const newTabHref = reportPermalink(row.id, activeProjectId)
   // Friendly title (non-engineer headline) falls back to technical summary
   // then raw description so old rows still render.
   const displayTitle = row.title ?? row.summary ?? row.description
@@ -283,7 +286,7 @@ function ReportRowViewInner({
         <div className={`reports-action-stack ${REPORTS_ACTION_STACK_MAX} ml-auto w-full min-w-0`}>
           <div className="reports-action-top ml-auto w-full min-w-0">
             <span className="row-kebab-reveal pointer-events-none group-hover:pointer-events-auto group-focus-within:pointer-events-auto inline-flex shrink-0 items-center gap-0">
-              <RowKebab detailPath={detailPath} onCopyLink={onCopyLink} onDismiss={onDismiss} />
+              <RowKebab newTabHref={newTabHref} onCopyLink={onCopyLink} onDismiss={onDismiss} />
             </span>
             {canDispatch ? (
               <span
@@ -297,6 +300,7 @@ function ReportRowViewInner({
                   blastRadius={blastRadius}
                   confidence={row.confidence}
                   onConfirm={onDispatchFix}
+                  blockReason={row.dispatch_block ?? null}
                   onOpenDetail={onOpen}
                   preflight={preflight}
                   repoUrl={preflight?.repoUrl ?? null}
@@ -338,12 +342,13 @@ function ReportRowViewInner({
 }
 
 interface KebabProps {
-  detailPath: string
+  /** Absolute, base-path-aware URL for "Open in new tab". */
+  newTabHref: string
   onCopyLink: () => void
   onDismiss: () => void
 }
 
-function RowKebab({ detailPath, onCopyLink, onDismiss }: KebabProps) {
+function RowKebab({ newTabHref, onCopyLink, onDismiss }: KebabProps) {
   return (
     <>
       <Tooltip portal content="Copy share link">
@@ -361,7 +366,7 @@ function RowKebab({ detailPath, onCopyLink, onDismiss }: KebabProps) {
       </Tooltip>
       <Tooltip portal content="Open in new tab">
         <a
-          href={detailPath}
+          href={newTabHref}
           target="_blank"
           rel="noopener noreferrer"
           onClick={(e) => e.stopPropagation()}

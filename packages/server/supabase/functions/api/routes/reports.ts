@@ -22,6 +22,19 @@ import { inventoryAnchorOf } from './report-agent-context-helpers.ts';
 import { getStorageAdapter } from '../../_shared/storage.ts';
 import { runInBackground } from '../../_shared/background.ts';
 import { loadReportDeployLive, type MergedFixRow } from '../../_shared/report-deploy-live.ts';
+import { featureRequestDispatchBlock } from '../../_shared/report-category.ts';
+import {
+  NEW_BUCKET_STATUSES,
+  REPORT_LIST_PLATFORMS,
+  REPORT_LIST_SDK_PACKAGES,
+  REPORT_SORT_COLUMNS,
+  resolveSdkPackageFilter,
+  combineOrGroups,
+  parseSeverityUpdate,
+  parseWindowDays,
+  platformOrClause,
+  reportWindowStartIso,
+} from '../../_shared/report-list-filters.ts';
 
 /** `reports_closed_reason_check` values (migration 20261002120000). */
 const CLOSED_REASONS = new Set(['duplicate', 'not_reproducible', 'wont_fix', 'working_as_intended', 'spam']);
@@ -49,6 +62,7 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
       totalAllTime: 0,
       total14d: 0,
       critical14d: 0,
+      criticalUntriaged14d: 0,
       high14d: 0,
       newUntriaged: 0,
       openBacklog: 0,
@@ -74,10 +88,7 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
     if ('response' in resolvedProject) return resolvedProject.response;
     const activeProject = resolvedProject.project;
 
-    const since = new Date();
-    since.setUTCDate(since.getUTCDate() - 13);
-    since.setUTCHours(0, 0, 0, 0);
-    const sinceIso = since.toISOString();
+    const sinceIso = reportWindowStartIso(14);
     const now = Date.now();
 
     const [reportsRes, reportCountRes, keysRes, heartbeatRes] = await Promise.all([
@@ -112,6 +123,9 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
     const recentReports = reportsRes.data ?? [];
     let total14d = 0;
     let critical14d = 0;
+    // Critical AND still in the New bucket: exactly what the banner's
+    // "Review N critical" link (status=new&severity=critical&days=14) lists.
+    let criticalUntriaged14d = 0;
     let high14d = 0;
     let newUntriaged = 0;
     let openBacklog = 0;
@@ -124,6 +138,9 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
       if (sev === 'critical') critical14d += 1;
       else if (sev === 'high') high14d += 1;
       if (status === 'dismissed') dismissed14d += 1;
+      if (sev === 'critical' && (NEW_BUCKET_STATUSES as readonly string[]).includes(status)) {
+        criticalUntriaged14d += 1;
+      }
       if (status === 'new' || status === 'queued') {
         newUntriaged += 1;
         if (now - new Date(String(r.created_at)).getTime() > 60 * 60 * 1000) {
@@ -152,14 +169,14 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
       topPriorityLabel =
         'No bugs received yet — send a test report from Setup to confirm the widget works.';
       topPriorityTo = scoped('/onboarding?tab=verify');
-    } else if (critical14d > 0 && newUntriaged > 0) {
+    } else if (criticalUntriaged14d > 0) {
       topPriority = 'critical';
-      topPriorityLabel = `${critical14d} critical bug${critical14d === 1 ? '' : 's'} still untriaged — users may be blocked right now.`;
-      topPriorityTo = scoped('/reports?status=new&severity=critical');
+      topPriorityLabel = `${criticalUntriaged14d} critical bug${criticalUntriaged14d === 1 ? '' : 's'} still untriaged — users may be blocked right now.`;
+      topPriorityTo = scoped('/reports?status=new&severity=critical&days=14');
     } else if (openBacklog > 0) {
       topPriority = 'backlog';
       topPriorityLabel = `${openBacklog} report${openBacklog === 1 ? '' : 's'} waiting over an hour — confirm severity before auto-fix runs.`;
-      topPriorityTo = scoped('/reports?status=new');
+      topPriorityTo = scoped('/reports?status=new&sort=created_at&dir=asc');
     } else if (newUntriaged > 0) {
       topPriority = 'untriaged';
       topPriorityLabel = `${newUntriaged} new report${newUntriaged === 1 ? '' : 's'} — classifier scored severity; you confirm or dismiss.`;
@@ -182,6 +199,7 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
         totalAllTime,
         total14d,
         critical14d,
+        criticalUntriaged14d,
         high14d,
         newUntriaged,
         openBacklog,
@@ -197,8 +215,10 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
   app.get('/v1/admin/reports/severity-stats', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const days = Math.min(Math.max(Number(c.req.query('days')) || 14, 1), 90);
-    const sinceIso = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+    const days = parseWindowDays(c.req.query('days')) ?? 14;
+    // Same calendar window as the list's `days` filter, so a KPI tile and the
+    // list it opens (severity=X&days=N&status=active) count the same rows.
+    const sinceIso = reportWindowStartIso(days);
 
     const projectIds = await scopedOwnedProjectIds(c, db, userId);
     if (projectIds.length === 0) {
@@ -228,7 +248,7 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
       { critical: number; high: number; medium: number; low: number; total: number }
     >();
     for (let i = days - 1; i >= 0; i--) {
-      const d = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
+      const d = new Date(Date.parse(sinceIso) + (days - 1 - i) * 24 * 60 * 60 * 1000);
       const key = d.toISOString().slice(0, 10);
       dayBuckets.set(key, { critical: 0, high: 0, medium: 0, low: 0, total: 0 });
     }
@@ -288,14 +308,30 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
     const offset = Number(c.req.query('offset')) || 0;
     const sortField = c.req.query('sort') ?? 'created_at';
     const sortDir = c.req.query('dir') === 'asc' ? 'asc' : 'desc';
-    const allowedSorts: Record<string, string> = {
-      created_at: 'created_at',
-      severity: 'severity',
-      confidence: 'confidence',
-      status: 'status',
-      component: 'component',
-    };
-    const orderColumn = allowedSorts[sortField] ?? 'created_at';
+    const orderColumn = REPORT_SORT_COLUMNS[sortField] ?? 'created_at';
+    // Platform / SDK / window filters (the console sent platform + sdkPackage
+    // for months and nothing read them). Unknown values are a 400, not a
+    // silently unfiltered list.
+    const platformParam = c.req.query('platform')?.trim() ?? '';
+    const sdkPackageRaw = c.req.query('sdkPackage')?.trim() ?? '';
+    const sdkPackageParam = sdkPackageRaw ? resolveSdkPackageFilter(sdkPackageRaw) : '';
+    const daysRaw = c.req.query('days');
+    const windowDays = parseWindowDays(daysRaw);
+    if (platformParam && !REPORT_LIST_PLATFORMS.includes(platformParam)) {
+      return c.json(
+        { ok: false, error: { code: 'VALIDATION_ERROR', message: `platform must be one of: ${REPORT_LIST_PLATFORMS.join(', ')}` } },
+        400,
+      );
+    }
+    if (sdkPackageParam === null) {
+      return c.json(
+        { ok: false, error: { code: 'VALIDATION_ERROR', message: `sdkPackage must be one of: ${REPORT_LIST_SDK_PACKAGES.join(', ')}` } },
+        400,
+      );
+    }
+    if (daysRaw && windowDays == null) {
+      return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: 'days must be a whole number from 1 to 90' } }, 400);
+    }
 
     let query = db
       .from('reports')
@@ -312,7 +348,7 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
         // quota) and autofix_blocked stamps were invisible in every list
         // view — you had to open each report to learn the pipeline choked
         // (2026-08-16 audit P2-3). ~0.5 KB per affected row.
-        'id, project_id, description, category, severity, summary, title, area_tag, status, created_at, environment, screenshot_url, user_category, confidence, component, report_group_id, last_reporter_reply_at, last_admin_reply_at, admin_seen_at, awaiting_reporter_at, closed_reason, breadcrumbs, tags, sentry_trace_id, sentry_release, sentry_environment, sentry_event_id, sentry_replay_id, end_user_id, reporter_token_hash, session_id, processing_error',
+        'id, project_id, description, category, severity, summary, title, area_tag, status, created_at, environment, screenshot_url, user_category, confidence, component, report_group_id, last_reporter_reply_at, last_admin_reply_at, admin_seen_at, awaiting_reporter_at, closed_reason, breadcrumbs, tags, sentry_trace_id, sentry_release, sentry_environment, sentry_event_id, sentry_replay_id, end_user_id, reporter_token_hash, session_id, processing_error, user_intent, stage1_category:stage1_classification->>category, stage2_category:stage2_analysis->>category',
         { count: 'exact' },
       )
       .in('project_id', projectIds)
@@ -329,7 +365,9 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
       if (status === 'open') query = query.in('status', [...OPEN_REPORT_STATUSES]);
       else if (status === 'classified') query = query.in('status', [...legacyClassified]);
       else if (status === 'fixed') query = query.in('status', [...legacyFixed]);
-      else if (status === 'new') query = query.in('status', ['new', 'queued', 'pending', 'submitted']);
+      else if (status === 'new') query = query.in('status', [...NEW_BUCKET_STATUSES]);
+      // `active`: everything but dismissed — what the severity KPI tiles count.
+      else if (status === 'active') query = query.neq('status', 'dismissed');
       else query = query.eq('status', status);
     }
     if (category) query = query.eq('category', category);
@@ -339,11 +377,17 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
     if (reporter) query = query.eq('reporter_token_hash', reporter);
     const area = c.req.query('area')?.trim().slice(0, 60);
     if (area) query = query.eq('area_tag', area);
+    if (windowDays != null) query = query.gte('created_at', reportWindowStartIso(windowDays));
+    if (sdkPackageParam) query = query.eq('sdk_package', sdkPackageParam);
+    const orGroups: string[] = [];
     if (search) {
       // Bilateral OR — summary or description matches the search prefix.
-      const escaped = search.replace(/[%,]/g, '');
-      query = query.or(`summary.ilike.%${escaped}%,description.ilike.%${escaped}%`);
+      const escaped = search.replace(/[%,()"]/g, '');
+      orGroups.push(`summary.ilike.%${escaped}%,description.ilike.%${escaped}%`);
     }
+    if (platformParam) orGroups.push(platformOrClause(platformParam) ?? '');
+    const orFilter = combineOrGroups(orGroups);
+    if (orFilter) query = query.or(orFilter);
     if (tagParam) {
       // `tag=key:value` → reports where tags @> {"key": "value"}. We
       // split only on the *first* `:` so values that themselves contain
@@ -434,8 +478,18 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
       const stats = gid ? groupStatsMap.get(gid) : undefined;
       const endUserId = (r as { end_user_id: string | null }).end_user_id;
       const identity = endUserId ? endUsersMap.get(endUserId) : undefined;
+      // Why the row's "Fix →" must not queue (a reporter's feature request
+      // not yet re-categorized), from the same rule the dispatch route
+      // enforces, so the row disables Queue instead of meeting a 409.
+      const cats = r as { stage1_category?: string | null; stage2_category?: string | null };
+      const dispatch_block = featureRequestDispatchBlock({
+        ...(r as Record<string, unknown>),
+        stage1_classification: cats.stage1_category ? { category: cats.stage1_category } : null,
+        stage2_analysis: cats.stage2_category ? { category: cats.stage2_category } : null,
+      });
       return {
         ...r,
+        dispatch_block,
         dedup_count: stats?.reports ?? 1,
         unique_users: stats?.users ?? 0,
         unique_sessions: stats?.sessions ?? 0,
@@ -957,6 +1011,19 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
     const updates: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(body)) {
       if (allowedFields[key]) updates[key] = value;
+    }
+
+    // "Unset" clears severity (null). '' violates the DB CHECK and used to
+    // surface as a 500 "could not load this data" on every attempt.
+    if (updates.severity !== undefined) {
+      const sev = parseSeverityUpdate(updates.severity);
+      if (!sev.ok) {
+        return c.json(
+          { ok: false, error: { code: 'VALIDATION_ERROR', message: 'severity must be critical, high, medium, low, or empty to clear it' } },
+          400,
+        );
+      }
+      updates.severity = sev.value;
     }
 
     // Plan 018: why a dismissed report was closed (shown to the reporter) and

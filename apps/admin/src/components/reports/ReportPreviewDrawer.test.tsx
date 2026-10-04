@@ -56,25 +56,27 @@ async function renderDrawer(onSeen: (id: string) => void) {
 
 describe('ReportPreviewDrawer onSeen', () => {
   it('reports the id once the preview loaded', async () => {
+    // The server's real shape: the report is flat in `data` (reports.ts
+    // detail route). The old mock nested it under `report`, which hid that
+    // the drawer always opened blank.
     apiFetch.mockResolvedValue({
       ok: true,
       data: {
-        report: {
-          id: REPORT_ID,
-          project_id: 'p1',
-          summary: 'Checkout button does nothing',
-          description: 'Tapping Pay does nothing',
-          status: 'new',
-          severity: 'high',
-          category: 'bug',
-          component: null,
-          confidence: null,
-          created_at: '2026-10-02T10:00:00Z',
-        },
+        id: REPORT_ID,
+        project_id: 'p1',
+        summary: 'Checkout button does nothing',
+        description: 'Tapping Pay does nothing',
+        status: 'new',
+        severity: 'high',
+        category: 'bug',
+        component: null,
+        confidence: null,
+        created_at: '2026-10-02T10:00:00Z',
       },
     })
     const onSeen = vi.fn()
     await renderDrawer(onSeen)
+    expect(document.body.textContent).toContain('Checkout button does nothing')
     expect(apiFetch).toHaveBeenCalledWith(`/v1/admin/reports/${REPORT_ID}`, expect.objectContaining({ cache: 'no-store' }))
     expect(onSeen).toHaveBeenCalledTimes(1)
     expect(onSeen).toHaveBeenCalledWith(REPORT_ID)
