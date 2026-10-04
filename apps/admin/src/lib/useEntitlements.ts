@@ -48,6 +48,8 @@ interface EntitlementResponse {
   userEmail?: string | null
   /** Mushi operator (company staff) — unlocks /growth and other internal dashboards. */
   operator?: boolean
+  /** Caller's role on the active project; null when unknown. */
+  projectRole?: 'owner' | 'admin' | 'member' | 'viewer' | null
 }
 
 export interface UseEntitlementsResult {
@@ -57,6 +59,13 @@ export interface UseEntitlementsResult {
   /** True for Mushi operators (internal growth / company dashboards). Defaults false. */
   isOperator: boolean
   hasProject: boolean
+  /** Caller's role on the active project; null while loading or unknown. */
+  projectRole: 'owner' | 'admin' | 'member' | 'viewer' | null
+  /**
+   * False only for a known viewer. The API refuses viewer writes; an unknown
+   * role leaves controls on and lets the API decide.
+   */
+  canEditProject: boolean
   /** Returns true when the caller's plan grants this feature. */
   has: (flag: FeatureFlag) => boolean
   loading: boolean
@@ -78,6 +87,8 @@ export function useEntitlements(): UseEntitlementsResult {
         isSuperAdmin: false,
         isOperator: false,
         hasProject: false,
+        projectRole: null,
+        canEditProject: true,
         has: FALLBACK,
         loading,
         error,
@@ -90,6 +101,8 @@ export function useEntitlements(): UseEntitlementsResult {
       isSuperAdmin: Boolean(data.isSuperAdmin),
       isOperator: Boolean(data.operator),
       hasProject: Boolean(data.hasProject),
+      projectRole: data.projectRole ?? null,
+      canEditProject: data.projectRole !== 'viewer',
       has: (flag) => data.featureFlags?.[flag] === true,
       loading,
       error,
