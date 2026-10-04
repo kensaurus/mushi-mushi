@@ -740,8 +740,8 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     label: 'Settings',
     sectionId: 'workspace',
     iconKey: 'settings',
-    paletteDescription: 'App settings, AI keys (Anthropic, OpenAI), Firecrawl, GitHub and appearance.',
-    paletteKeywords: ['settings', 'config', 'api key', 'api keys', 'ai keys', 'byok', 'anthropic', 'openai', 'keys', 'preferences', 'firecrawl', 'theme', 'branding'],
+    paletteDescription: 'Project settings: your AI keys, alerts, web research, voice and health check.',
+    paletteKeywords: ['settings', 'config', 'api key', 'api keys', 'ai keys', 'your ai keys', 'byok', 'bring your own key', 'anthropic', 'openai', 'keys', 'preferences', 'firecrawl', 'web research', 'browserbase', 'cloud browser', 'voice', 'health check', 'theme', 'branding'],
     paletteGroup: 'Workspace',
   },
   {

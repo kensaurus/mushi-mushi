@@ -46,12 +46,12 @@ export function StoredSecretStatus({ column, label, isSet, consequence, onRemove
   }
 
   if (!isSet) {
-    return <p className="mt-1 text-2xs text-fg-faint">Not set</p>
+    return <p className="mt-1 text-xs text-fg-muted">Not saved yet</p>
   }
 
   return (
     <div className="mt-1 flex items-center gap-2">
-      <span className="text-2xs text-ok">Saved</span>
+      <span className="text-xs text-ok">Saved</span>
       <Btn variant="ghost" size="sm" onClick={() => setConfirming(true)} aria-label={`Remove ${label.toLowerCase()}`}>
         Remove
       </Btn>

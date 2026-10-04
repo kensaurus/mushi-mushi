@@ -5,6 +5,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import {
+  cardProblems,
   compareSemver,
   groupRepeatedFindings,
   inferKind,
@@ -64,6 +65,27 @@ describe('sdkSkew', () => {
   })
 })
 
+describe('cardProblems', () => {
+  const el = (key: string, state: string, reason = `${key} reason`) => ({ key, label: `${key} label`, lane: 'build', state, reason, lastCheckedAt: null, facts: {}, findingsCount: 0, links: [] })
+  const keys = ['schema', 'design', 'routes', 'gates', 'ci', 'deploy', 'env', 'integrations'] as const
+
+  it('names every element that makes the headline worse than ok, worst first, and skips "not set up"', () => {
+    const elements = {
+      schema: el('schema', 'not_connected'), design: el('design', 'ok'), routes: el('routes', 'unknown'),
+      gates: el('gates', 'drift', '1 problem to fix: Mushi setup check (1). Open each one for its fix.'),
+      ci: el('ci', 'error'), deploy: el('deploy', 'ok'), env: el('env', 'ok'), integrations: el('integrations', 'not_connected'),
+    }
+    const out = cardProblems(elements as never, keys)
+    expect(out.map((p) => [p.element, p.state])).toEqual([['ci', 'error'], ['gates', 'drift'], ['routes', 'unknown']])
+    expect(out[1]).toEqual({ element: 'gates', label: 'gates label', state: 'drift', reason: '1 problem to fix: Mushi setup check (1). Open each one for its fix.' })
+  })
+
+  it('is empty when nothing is wrong, so an ok card names no problem', () => {
+    const elements = Object.fromEntries(keys.map((k) => [k, el(k, 'ok')]))
+    expect(cardProblems(elements as never, keys)).toEqual([])
+  })
+})
+
 describe('groupRepeatedFindings', () => {
   it('groups a rule open in 2+ projects, keeps the highest severity, and leaves out info and single-project rules', () => {
     const groups = groupRepeatedFindings([
@@ -77,6 +99,19 @@ describe('groupRepeatedFindings', () => {
     expect(groups).toHaveLength(1)
     expect(groups[0]).toMatchObject({ ruleId: 'god_file', severity: 'error', projectIds: ['a', 'b'], findingCount: 3, sampleMessage: 'b huge' })
     expect(groups[0].suggestedFix).toContain('code_health')
+    // No catalog title for god_file: the console shows the message, never the raw id.
+    expect(groups[0]).toMatchObject({ title: null, gateLabel: 'Code health' })
+  })
+
+  it('carries the human title from the existing rule catalog and the gate in plain words', () => {
+    const groups = groupRepeatedFindings([
+      { project_id: 'a', gate: 'portfolio_radar', rule_id: 'key_unused_90d', severity: 'warn', message: 'k1' },
+      { project_id: 'b', gate: 'portfolio_radar', rule_id: 'key_unused_90d', severity: 'warn', message: 'k2' },
+      { project_id: 'a', gate: 'radar', rule_id: 'spend_cap_unset', severity: 'warn', message: 'No monthly AI budget is set.' },
+      { project_id: 'b', gate: 'radar', rule_id: 'spend_cap_unset', severity: 'warn', message: 'No monthly AI budget is set.' },
+    ])
+    expect(groups.find((g) => g.ruleId === 'key_unused_90d')).toMatchObject({ title: 'No keys left unused for 90 days', gateLabel: 'Hole check' })
+    expect(groups.find((g) => g.ruleId === 'spend_cap_unset')).toMatchObject({ title: null, gateLabel: 'Mushi setup check', sampleMessage: 'No monthly AI budget is set.' })
   })
 
   it('returns an empty list, not an error, when nothing repeats', () => {

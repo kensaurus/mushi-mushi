@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { describeByokError } from './byokErrors'
+import { describeByokError, describeByokTestResult } from './byokErrors'
 
 const FALLBACK = 'The key was not added. Retry in a moment.'
 
@@ -57,5 +57,33 @@ describe('describeByokError', () => {
     ).toBe('Mushi has no single-key slot for "cursor".')
     expect(describeByokError({ code: 'DB_ERROR', message: 'relation x' }, FALLBACK).message).toMatch(/on our side/)
     expect(describeByokError(undefined, FALLBACK)).toEqual({ message: FALLBACK, where: 'form' })
+  })
+})
+
+describe('describeByokTestResult', () => {
+  it('turns probe codes into sentences that name the provider', () => {
+    expect(describeByokTestResult({ status: 'ok', latencyMs: 120 }, 'Firecrawl')).toEqual({
+      ok: true,
+      message: 'Firecrawl accepted the key (120 ms).',
+    })
+    expect(describeByokTestResult({ status: 'error_auth', detail: 'Provider rejected the credential' }, 'Firecrawl'))
+      .toEqual({ ok: false, message: 'Firecrawl rejected the key. Replace it with a new one.' })
+    expect(describeByokTestResult({ status: 'error_quota' }, 'Browserbase').message).toMatch(/out of quota/)
+    expect(describeByokTestResult({ status: 'error_network' }, 'Browserbase').message).toBe(
+      "Mushi couldn't reach Browserbase. Test again in a minute.",
+    )
+  })
+
+  it('never shows the raw status code', () => {
+    for (const status of ['error_auth', 'error_quota', 'error_network', 'weird']) {
+      const { message } = describeByokTestResult({ status, detail: 'BAD_PROVIDER' }, 'Firecrawl')
+      expect(message).not.toMatch(/error_|BAD_PROVIDER/)
+    }
+  })
+
+  it('keeps an explanatory detail for an unknown outcome', () => {
+    expect(
+      describeByokTestResult({ status: null, detail: 'Set the project ref first.' }, 'Supabase').message,
+    ).toBe("Supabase didn't accept the key. Set the project ref first.")
   })
 })

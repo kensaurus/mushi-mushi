@@ -13,6 +13,7 @@
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { MemoryRouter } from 'react-router-dom'
 
 const MASK = '••••••••'
 const SETTINGS = {
@@ -90,7 +91,8 @@ describe('GeneralPanel stored secrets', () => {
 
   async function render(): Promise<void> {
     await act(async () => {
-      root.render(createElement(GeneralPanel))
+      // The Supabase row links to the AI keys tab, so it needs a router.
+      root.render(createElement(MemoryRouter, null, createElement(GeneralPanel)))
       await flush()
     })
   }

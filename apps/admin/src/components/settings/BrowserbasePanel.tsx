@@ -1,31 +1,31 @@
 /**
  * FILE: apps/admin/src/components/settings/BrowserbasePanel.tsx
- * PURPOSE: BYOK config for Browserbase — the cloud browser provider used by
- *          the QA Coverage story runner when provider = 'browserbase'. Without
- *          a project-scoped key the runner falls back to the platform global
- *          key (mushi_runtime_config), which means your QA traffic runs through
- *          Mushi's Browserbase account. Configure BYOK here to keep all
- *          browser session data in your own account.
+ * PURPOSE: Settings → Cloud browser. Browserbase runs scheduled QA story tests
+ *          in a cloud Chromium. With your own key the recordings, network
+ *          traces and screenshots stay in your Browserbase account; without
+ *          one, runs use Mushi's shared account when the server has one.
+ *
+ *          Status comes from the shared saved-keys list (keyStatus.ts), like
+ *          the AI keys tab. Keys go to the pool ('/v1/admin/byok/keys'); a key
+ *          saved before pools existed (legacy BYOK) is tested and removed
+ *          through the single-key routes.
  */
 
 import { useState } from 'react';
 import { apiFetch } from '../../lib/supabase';
 import { usePageData } from '../../lib/usePageData';
-import { Section, Btn, ErrorAlert, ResultChip } from '../ui';
+import { Btn, ErrorAlert, ResultChip, SecretInput } from '../ui';
+import { BrandIcon } from '../ui/BrandIcon';
 import { PanelSkeleton } from '../skeletons/PanelSkeleton';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { SettingsFormFooter } from './SettingsFormFooter';
-import { SettingsCard, SettingsPanelLayout } from './SettingsPanelLayout';
-import { ConfiguredSecretField } from './ConfiguredSecretField';
-import { ContainedBlock, InlineProof, SignalChip } from '../report-detail/ReportSurface';
 import { useEntitlements } from '../../lib/useEntitlements';
 import { UpgradePrompt } from '../billing/UpgradePrompt';
-import {
-  providerPoolKeys,
-  selectPrimaryProviderKey,
-  type PoolKey,
-  type PoolTestStatus,
-} from './byokPool';
+import { describeByokError, describeByokTestResult } from '../../lib/byokErrors';
+import { providerPoolKeys, selectPrimaryProviderKey, type PoolTestStatus } from './byokPool';
+import { useByokPool } from './ByokPoolContext';
+import { providerStatusView } from './keyStatus';
+import { SettingsList, SettingsRow } from './SettingsRow';
 
 interface BrowserbaseConfig {
   configured: boolean;
@@ -37,15 +37,7 @@ interface BrowserbaseConfig {
   sessionCount: number | null;
 }
 
-const TEST_STATUS_LABEL: Record<
-  NonNullable<BrowserbaseConfig['testStatus']>,
-  { label: string; tone: 'ok' | 'warn' | 'danger' }
-> = {
-  ok: { label: 'Connection OK', tone: 'ok' },
-  error_auth: { label: 'Auth failed — check your key', tone: 'danger' },
-  error_network: { label: 'Network/endpoint error', tone: 'danger' },
-  error_quota: { label: 'Quota / rate limit', tone: 'warn' },
-};
+const NAME = 'Browserbase';
 
 export function BrowserbasePanel() {
   const entitlements = useEntitlements();
@@ -56,15 +48,13 @@ export function BrowserbasePanel() {
     error,
     reload: reloadConfig,
   } = usePageData<BrowserbaseConfig>('/v1/admin/byok/browserbase');
-  const {
-    data: poolData,
-    loading: poolLoading,
-    error: poolError,
-    reload: reloadPool,
-  } = usePageData<{ keys: PoolKey[] }>(byokLocked ? null : '/v1/admin/byok/keys');
+  const pool = useByokPool(!byokLocked);
   const cfg = data ?? null;
-  const poolKeys = providerPoolKeys(poolData?.keys ?? [], 'browserbase');
+  const allKeys = pool.data?.keys ?? [];
+  const legacyKeys = pool.data?.legacyKeys ?? [];
+  const poolKeys = providerPoolKeys(allKeys, 'browserbase');
   const poolKey = selectPrimaryProviderKey(poolKeys, 'browserbase');
+  const legacyKey = legacyKeys.find((k) => k.provider_slug === 'browserbase') ?? null;
 
   const [pending, setPending] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -81,7 +71,7 @@ export function BrowserbasePanel() {
 
   function reload() {
     reloadConfig();
-    reloadPool();
+    pool.reload();
   }
 
   async function save() {
@@ -99,20 +89,22 @@ export function BrowserbasePanel() {
     setPending(false);
     if (res.ok) {
       const result = res.data as
-        | { validation?: { status?: PoolTestStatus; latencyMs?: number } }
+        | { validation?: { status?: PoolTestStatus; latencyMs?: number; detail?: string } }
         | undefined;
-      const status = result?.validation?.status;
+      const view = describeByokTestResult(result?.validation ?? {}, NAME);
       setKeyDraft('');
       setFeedback({
-        ok: status === 'ok',
-        message:
-          status === 'ok'
-            ? `Saved and validated${result?.validation?.latencyMs != null ? ` (${result.validation.latencyMs} ms)` : ''}.`
-            : 'Saved but the provider did not validate this key. It will not be used until a test passes.',
+        ok: view.ok,
+        message: view.ok
+          ? `Saved. ${view.message}`
+          : `Saved, but Mushi won't use the key until a test passes. ${view.message}`,
       });
       reload();
     } else {
-      setFeedback({ ok: false, message: res.error?.message ?? 'Failed to save.' });
+      setFeedback({
+        ok: false,
+        message: describeByokError(res.error, 'The key was not saved. Retry in a moment.').message,
+      });
     }
   }
 
@@ -128,13 +120,14 @@ export function BrowserbasePanel() {
       setKeyDraft('');
       setFeedback({
         ok: true,
-        message: poolKey
-          ? 'Selected pooled key removed. Any remaining validated key will take over automatically.'
-          : 'Legacy key cleared. QA stories will fall back to the platform key.',
+        message: 'Key removed. Any other working Browserbase key takes over automatically.',
       });
       reload();
     } else {
-      setFeedback({ ok: false, message: res.error?.message ?? 'Failed to clear key.' });
+      setFeedback({
+        ok: false,
+        message: describeByokError(res.error, 'The key was not removed. Retry in a moment.').message,
+      });
     }
   }
 
@@ -147,17 +140,13 @@ export function BrowserbasePanel() {
       }>(`/v1/admin/byok/keys/${poolKey.id}/test`, { method: 'POST' });
       setTesting(false);
       if (res.ok && res.data) {
-        const validation = res.data.validation;
-        setFeedback({
-          ok: validation.status === 'ok',
-          message:
-            validation.status === 'ok'
-              ? `Connection OK (${validation.latencyMs} ms)`
-              : `Test failed: ${validation.status} — ${validation.detail}`,
-        });
+        setFeedback(describeByokTestResult(res.data.validation, NAME));
         reload();
       } else {
-        setFeedback({ ok: false, message: res.error?.message ?? 'Test failed.' });
+        setFeedback({
+          ok: false,
+          message: describeByokError(res.error, 'The test did not run. Retry in a moment.').message,
+        });
       }
       return;
     }
@@ -168,177 +157,129 @@ export function BrowserbasePanel() {
     );
     setTesting(false);
     if (res.ok && res.data) {
-      const okMsg =
-        res.data.status === 'ok'
-          ? `Connection OK (${res.data.latencyMs} ms)`
-          : `Test failed: ${res.data.status} — ${res.data.detail}`;
-      setFeedback({ ok: res.data.status === 'ok', message: okMsg });
+      setFeedback(describeByokTestResult(res.data, NAME));
       reload();
     } else {
-      setFeedback({ ok: false, message: res.error?.message ?? 'Test failed.' });
+      setFeedback({
+        ok: false,
+        message: describeByokError(res.error, 'The test did not run. Retry in a moment.').message,
+      });
     }
   }
 
   if (byokLocked) {
     return (
-      <SettingsPanelLayout>
-        <Section
-          title="Browserbase (BYOK — Cloud Browser Sessions)"
-          className="lg:col-span-2 space-y-3"
-        >
+      <SettingsList title="Cloud browser (Browserbase)">
+        <div className="py-3">
           <UpgradePrompt flag="byok" currentPlan={entitlements.planName} />
-        </Section>
-      </SettingsPanelLayout>
+        </div>
+      </SettingsList>
     );
   }
 
-  if (entitlements.loading || loading || poolLoading) {
+  if (entitlements.loading || loading || pool.loading) {
     return <PanelSkeleton rows={2} label="Loading Browserbase status" inCard={false} />;
   }
-  if (error || poolError) {
+  if (error || pool.error) {
     return (
       <ErrorAlert
-        message={`Failed to load Browserbase status: ${error ?? poolError}`}
+        message={`Couldn't load the Browserbase settings: ${error ?? pool.error}`}
         onRetry={reload}
       />
     );
   }
 
-  const configured = Boolean(poolKey || cfg?.configured);
-  const effectiveTestStatus = poolKey?.test_status ?? cfg?.testStatus ?? null;
-  const keyHint = poolKey?.key_hint ?? cfg?.keyHint ?? null;
-  const addedAt = poolKey?.created_at ?? cfg?.addedAt ?? null;
-  const lastUsedAt = poolKey?.last_used_at ?? cfg?.lastUsedAt ?? null;
-  const testedAt = poolKey?.last_tested_at ?? cfg?.testedAt ?? null;
-  const statusMeta = effectiveTestStatus ? TEST_STATUS_LABEL[effectiveTestStatus] : null;
+  const configured = Boolean(poolKey || legacyKey || cfg?.configured);
+  const status = providerStatusView('browserbase', allKeys, legacyKeys, {
+    providerName: NAME,
+    emptyDetail: "No key of your own. Cloud browser tests use Mushi's shared account when the server has one.",
+  });
+  const keyHint = poolKey?.key_hint ?? legacyKey?.key_hint ?? cfg?.keyHint ?? null;
+  const sessions = cfg?.sessionCount ?? 0;
 
   return (
-    <SettingsPanelLayout
-      fullWidth={
-        <ContainedBlock tone="muted">
-          <p className="text-2xs leading-relaxed text-fg-muted">
-            <strong className="text-fg-secondary">Optional integration.</strong> Bring your own{' '}
-            <a
-              href="https://www.browserbase.com"
-              target="_blank"
-              rel="noreferrer"
-              className="underline"
-            >
-              Browserbase
-            </a>{' '}
-            key so QA Coverage story runs (provider: <span className="font-mono">browserbase</span>)
-            use your account's sessions — keeping all browser recordings, HAR traces, and
-            screenshots in your own Browserbase project. Without BYOK, runs share the platform pool
-            key and session data transits Mushi's Browserbase account.
-          </p>
-        </ContainedBlock>
-      }
-      footer={
-        <SettingsFormFooter
-          dirty={keyDirty}
-          saving={pending}
-          changeCount={keyDirty ? 1 : 0}
-          onSave={() => void save()}
-          onDiscard={resetDraft}
-          saveLabel="Save & validate"
-        />
-      }
-    >
-      <Section
-        title="Browserbase (BYOK — Cloud Browser Sessions)"
-        className="lg:col-span-2 space-y-3"
+    <>
+      <SettingsList
+        title="Cloud browser (Browserbase)"
+        description="Optional. Runs your scheduled browser tests in a cloud browser. With your own key, the recordings and screenshots stay in your Browserbase account."
       >
-        {cfg && (
-          <SettingsCard>
-            <div className="flex items-center gap-2 flex-wrap">
-              <SignalChip tone="brand">Browserbase</SignalChip>
-              <SignalChip tone={configured ? 'ok' : 'neutral'}>
-                {configured ? (poolKey ? 'pooled BYOK' : 'legacy BYOK') : 'platform key in use'}
-              </SignalChip>
-              {poolKeys.length > 1 && (
-                <SignalChip tone="neutral">{poolKeys.length} pooled keys</SignalChip>
-              )}
-              {statusMeta && (
-                <SignalChip
-                  tone={
-                    statusMeta.tone === 'ok' ? 'ok' : statusMeta.tone === 'warn' ? 'warn' : 'danger'
-                  }
-                >
-                  {statusMeta.label}
-                </SignalChip>
-              )}
-              {cfg.sessionCount != null && cfg.sessionCount > 0 && (
-                <SignalChip tone="neutral">{cfg.sessionCount} sessions run</SignalChip>
-              )}
-            </div>
-
-            {configured && (
-              <InlineProof>
-                Added {addedAt ? new Date(addedAt).toLocaleString() : 'unknown'}
-                {lastUsedAt && <> · last used {new Date(lastUsedAt).toLocaleString()}</>}
-                {testedAt && <> · tested {new Date(testedAt).toLocaleString()}</>}
-              </InlineProof>
-            )}
-
-            <ConfiguredSecretField
-              label="Browserbase API key"
-              helpId="settings.browserbase.api_key"
-              configured={configured}
-              keyHint={keyHint}
-              fallbackPrefix="bb-"
-              value={keyDraft}
-              onChange={setKeyDraft}
-              placeholder="bb-…"
-            />
-
-            <div className="flex items-center gap-2 flex-wrap">
-              {configured && (
-                <>
-                  <Btn size="sm" variant="ghost" onClick={testKey} loading={testing}>
-                    Test connection
-                  </Btn>
-                  <Btn
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => setConfirmingClear(true)}
-                    disabled={pending}
-                  >
-                    Clear
-                  </Btn>
-                </>
-              )}
-              {testing && !feedback ? (
-                <ResultChip tone="running">Testing…</ResultChip>
-              ) : feedback ? (
-                <ResultChip tone={feedback.ok ? 'success' : 'error'}>{feedback.message}</ResultChip>
-              ) : null}
-            </div>
-          </SettingsCard>
-        )}
-
-        {confirmingClear && (
-          <ConfirmDialog
-            title={
-              poolKey
-                ? 'Remove the selected Browserbase pool key?'
-                : 'Clear the legacy Browserbase API key?'
-            }
-            body={
-              poolKey
-                ? 'This removes the selected key and its Vault secret. Another validated pooled or legacy key can take over automatically.'
-                : 'QA Coverage stories will fall back to the platform key until a validated pooled or legacy key is added.'
-            }
-            confirmLabel={poolKey ? 'Remove key' : 'Clear key'}
-            cancelLabel="Keep key"
-            tone="danger"
-            loading={pending}
-            onConfirm={() => void confirmClearKey()}
-            onCancel={() => {
-              if (!pending) setConfirmingClear(false);
-            }}
+        <SettingsRow
+          icon={<BrandIcon brand="browserbase" size={18} decorative />}
+          title="Browserbase key"
+          purpose={
+            keyHint ? (
+              <>
+                Your key <span className="font-mono">{keyHint}</span>
+                {sessions > 0 ? ` has run ${sessions} test session${sessions === 1 ? '' : 's'}.` : '.'}
+              </>
+            ) : (
+              'Use your own Browserbase account for test runs.'
+            )
+          }
+          status={status}
+          action={
+            configured ? (
+              <>
+                <Btn size="sm" variant="ghost" onClick={testKey} loading={testing}>
+                  Test
+                </Btn>
+                <Btn size="sm" variant="ghost" onClick={() => setConfirmingClear(true)} disabled={pending}>
+                  Remove
+                </Btn>
+              </>
+            ) : (
+              <a
+                href="https://www.browserbase.com/settings"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-accent-foreground underline underline-offset-2"
+              >
+                Get a key ↗
+              </a>
+            )
+          }
+        >
+          <SecretInput
+            label={configured ? 'Replace the key' : 'Paste your Browserbase key'}
+            value={keyDraft}
+            onChange={(e) => setKeyDraft(e.target.value)}
+            placeholder="bb-…"
           />
-        )}
-      </Section>
-    </SettingsPanelLayout>
+          {testing && !feedback ? (
+            <ResultChip tone="running">Testing…</ResultChip>
+          ) : feedback ? (
+            <ResultChip tone={feedback.ok ? 'success' : 'error'}>{feedback.message}</ResultChip>
+          ) : null}
+        </SettingsRow>
+      </SettingsList>
+
+      <SettingsFormFooter
+        dirty={keyDirty}
+        saving={pending}
+        changeCount={keyDirty ? 1 : 0}
+        onSave={() => void save()}
+        onDiscard={resetDraft}
+        saveLabel="Save & validate"
+      />
+
+      {confirmingClear && (
+        <ConfirmDialog
+          title={poolKey ? 'Remove this Browserbase key?' : 'Remove your old Browserbase key?'}
+          body={
+            poolKey
+              ? 'The key is deleted for good. Another working Browserbase key you saved takes over automatically.'
+              : 'Browser tests switch to another working Browserbase key, or to the shared account when the server has one.'
+          }
+          confirmLabel="Remove key"
+          cancelLabel="Keep key"
+          tone="danger"
+          loading={pending}
+          onConfirm={() => void confirmClearKey()}
+          onCancel={() => {
+            if (!pending) setConfirmingClear(false);
+          }}
+        />
+      )}
+    </>
   );
 }
