@@ -557,11 +557,19 @@ export function OrganizationSettingsPage() {
     }
     setPendingRemove(null)
     if (isSelf) {
-      // You are no longer in this org: drop it from the header before the
-      // members request 404s, and land somewhere that loads.
+      // You are no longer in this org. Pick a team you are still in from a
+      // fresh list (the header's cached list still contains the old one and
+      // would fall back to it), then load the dashboard fresh so every view
+      // drops the old team. authRedirectUrl keeps the console base path.
       toast.success(`You left ${orgName || 'the team'}`)
-      clearActiveOrg()
-      navigate('/dashboard', { replace: true })
+      const remaining = await apiFetch<{ organizations: Array<{ id: string }> }>('/v1/org', {
+        scope: 'none',
+        cache: 'no-store',
+      })
+      const nextOrg = remaining.ok ? remaining.data?.organizations?.find((o) => o.id !== orgId) : undefined
+      if (nextOrg) setActiveOrgIdSnapshot(nextOrg.id)
+      else clearActiveOrg()
+      window.location.assign(authRedirectUrl('/dashboard'))
       return
     }
     toast.success('Member removed', `${label} no longer has access to this team.`)
