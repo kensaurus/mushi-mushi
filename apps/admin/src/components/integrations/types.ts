@@ -344,7 +344,6 @@ export const PLATFORM_DEFS: PlatformDef[] = [
       { name: 'cursor_api_key_ref', label: 'API Key', placeholder: 'crsr_…', type: 'password', help: 'Create at cursor.com/dashboard/integrations → API Keys.', required: true, helpId: 'integrations.cursor_cloud.api_key', validator: 'token' },
       { name: 'cursor_default_model', label: 'Default model', placeholder: 'composer-2.5', help: 'Optional Cursor model slug. Leave blank to use your account default.', helpId: 'integrations.cursor_cloud.default_model' },
       { name: 'cursor_auto_create_pr', label: 'Auto-create PRs', placeholder: 'true', help: 'When enabled (default), Cursor automatically opens a signed draft PR when the agent finishes. Disable to review the branch first.', helpId: 'integrations.cursor_cloud.auto_create_pr' },
-      { name: 'cursor_max_iterations', label: 'Max iterations', placeholder: '1', help: 'How many agent iterations Cursor runs per dispatch (1–10). Higher values cost more API credit but can recover from a first-pass miss.', helpId: 'integrations.cursor_cloud.max_iterations' },
     ],
   },
   {
@@ -363,15 +362,14 @@ export const PLATFORM_DEFS: PlatformDef[] = [
       'Save an Anthropic API key below (used for Mushi health probes only).',
       'Copy the mushi-claude-fix workflow into your repo via the checklist below.',
       'Add ANTHROPIC_API_KEY as a GitHub Actions secret in your repo.',
-      'Dispatch a fix from Reports → Send to Claude, or set autofix_agent = claude_code_agent.',
+      'Run the workflow yourself with a repository_dispatch event. Mushi does not send it yet: to have Mushi open fix PRs, use Cursor Cloud or the GitHub cloud agent.',
     ],
     whyItMatters:
-      'Dispatches a GitHub Actions workflow in your repo that runs Claude Code CLI, commits a fix branch, and opens a draft PR. Keys stay in your GitHub secrets (BYOK) — nothing is baked into your public repository.',
+      'A GitHub Actions workflow for your repo that runs the Claude Code CLI on a fix prompt, commits a fix branch and opens a draft PR. Keys stay in your GitHub secrets (BYOK). Mushi checks the key and hands you the workflow; it does not trigger the workflow yet.',
     capabilitiesOnceConnected: [
-      'Fire-and-forget fix runs via repository_dispatch',
-      'Draft PRs tagged with mushi-fix-id for status sync',
-      'Workflow run link on the Fix card while CI is pending',
-      'Use "Send to Claude" on any report for one-off dispatches',
+      'A health check on your Anthropic key',
+      'A ready-made workflow file that listens for your repository_dispatch event',
+      'Draft PRs the workflow opens are tagged with the Mushi fix id',
     ],
     fields: [
       {
@@ -386,25 +384,11 @@ export const PLATFORM_DEFS: PlatformDef[] = [
         validator: 'token',
       },
       {
-        name: 'claude_default_model',
-        label: 'Default model',
-        placeholder: 'claude-opus-4-1',
-        help: 'Model slug passed in the dispatch payload (your workflow may ignore this if Claude Code picks its own default).',
-        helpId: 'integrations.claude_code_agent.default_model',
-      },
-      {
         name: 'claude_workflow_event',
         label: 'Workflow event',
         placeholder: 'mushi_claude_fix',
         help: 'repository_dispatch event type. Must match `on.repository_dispatch.types` in your workflow YAML.',
         helpId: 'integrations.claude_code_agent.workflow_event',
-      },
-      {
-        name: 'claude_default_branch',
-        label: 'Base branch',
-        placeholder: 'main',
-        help: 'Branch checked out before Claude applies the fix.',
-        helpId: 'integrations.claude_code_agent.default_branch',
       },
     ],
   },

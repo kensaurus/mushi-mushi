@@ -27,7 +27,13 @@ vi.mock('../../supabase/functions/_shared/plans.ts', () => ({
   getPlan: async () => ({ id: 'hobby', retention_days: 7 }),
 }))
 
-import { deleteOldReportsBatch, keepsFirstReport } from '../../supabase/functions/retention-sweep/index.ts'
+import {
+  deleteOldReportsBatch,
+  keepsFirstReport,
+  MIN_TRACE_RETENTION_DAYS,
+  sweepLlmTraces,
+  traceRetentionDays,
+} from '../../supabase/functions/retention-sweep/index.ts'
 
 class QueryChain {
   calls: string[] = []
@@ -210,5 +216,58 @@ describe('keepsFirstReport', () => {
 
   it('treats a plan the catalog does not list as free', () => {
     expect(keepsFirstReport('fallback', 'free_cloud', [])).toBe(true)
+  })
+})
+
+describe('LLM trace retention', () => {
+  it('never keeps fewer than the spend-ledger floor', () => {
+    expect(MIN_TRACE_RETENTION_DAYS).toBe(35)
+    expect(traceRetentionDays(90)).toBe(90)
+    expect(traceRetentionDays(7)).toBe(35)
+    expect(traceRetentionDays(null)).toBe(35)
+    expect(traceRetentionDays(Number.NaN)).toBe(35)
+  })
+
+  it('sweeps only saved policies, skips legal holds, and deletes by id below the cutoff', async () => {
+    const cutoffs: Record<string, string> = {}
+    const deletedIds: string[][] = []
+    let current = ''
+    const db = {
+      from: (table: string) => {
+        if (table === 'project_retention_policies') {
+          return {
+            select: () => ({
+              returns: async () => ({
+                data: [
+                  { project_id: 'p-hold', llm_traces_retention_days: 30, legal_hold: true },
+                  { project_id: 'p-short', llm_traces_retention_days: 7, legal_hold: false },
+                ],
+                error: null,
+              }),
+            }),
+          }
+        }
+        // llm_invocations: one select (2 rows) then a delete per project.
+        const chain = {
+          select: () => chain,
+          eq: (_c: string, v: string) => ((current = v), chain),
+          lt: (_c: string, v: string) => ((cutoffs[current] = v), chain),
+          order: () => chain,
+          limit: () => chain,
+          returns: async () => ({ data: [{ id: 'a' }, { id: 'b' }], error: null }),
+          delete: () => ({ in: async (_c: string, ids: string[]) => (deletedIds.push(ids), { error: null }) }),
+        }
+        return chain
+      },
+    }
+
+    const before = Date.now()
+    const out = await sweepLlmTraces(db as never)
+    expect(out).toEqual({ projects: 1, deleted: 2, errors: 0 })
+    expect(Object.keys(cutoffs)).toEqual(['p-short'])
+    expect(deletedIds).toEqual([['a', 'b']])
+    // 7 days saved → the 35-day floor applies.
+    const ageDays = (before - Date.parse(cutoffs['p-short'])) / 86_400_000
+    expect(Math.round(ageDays)).toBe(35)
   })
 })
