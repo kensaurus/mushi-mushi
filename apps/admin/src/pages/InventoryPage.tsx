@@ -6,6 +6,9 @@ import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
 import { usePageCopy } from '../lib/copy'
 import { apiFetch } from '../lib/supabase'
+import { apiErrorMessage } from '../lib/humanizeApiError'
+import { PageLoadError } from '../components/PageLoadError'
+import { inventoryFindingsEnabled } from '../lib/inventoryReadout'
 import { useRealtimeReload } from '../lib/realtime'
 import { useAdminMode } from '../lib/mode'
 import {
@@ -195,7 +198,7 @@ export function InventoryPage() {
   // detail list. Loading them on `stories` lets the Stories cards advertise
   // "X open findings" without an extra round-trip when the user clicks over.
   const findingsQuery = usePageData<FindingsPayload>(
-    basePath && (tab === 'gates' || tab === 'stories') ? `${basePath}/findings` : null,
+    basePath && inventoryFindingsEnabled(tab) ? `${basePath}/findings` : null,
     { deps: [projectId ?? '', tab] },
   )
 
@@ -268,11 +271,12 @@ export function InventoryPage() {
       toast.success('Inventory ingested')
       reloadAll()
     } else {
-      toast.push({
-        tone: 'error',
-        message: 'Ingest failed',
-        description: res.error?.message ?? JSON.stringify(res.error),
-      })
+      const issues = (res.error?.issues ?? []) as Array<{ path?: string; message?: string }>
+      const detail = issues.length
+        ? issues.slice(0, 3).map((i) => `${i.path ?? '$'}: ${i.message ?? 'invalid'}`).join(' · ') +
+          (issues.length > 3 ? ` · and ${issues.length - 3} more` : '')
+        : apiErrorMessage(res.error, 'The file could not be ingested. Check that it is a valid inventory.yaml.')
+      toast.push({ tone: 'error', message: 'Ingest failed', description: detail })
     }
   }
 
@@ -381,7 +385,14 @@ export function InventoryPage() {
     return <Loading text="Loading inventory…" />
   }
   if (mainQuery.error) {
-    return <ErrorAlert message={mainQuery.error} onRetry={mainQuery.reload} />
+    return (
+      <PageLoadError
+        error={mainQuery.error}
+        onRetry={mainQuery.reload}
+        resource="the inventory"
+        endpoint={basePath}
+      />
+    )
   }
 
   const total = Number(summary.total ?? 0)
@@ -410,7 +421,7 @@ export function InventoryPage() {
             children: (
               <InventoryWorkspaceReadout
                 projectId={projectId!}
-                storyCount={total}
+                storyCount={storiesQuery.data ? storiesQuery.data.tree.length : null}
                 nodeCount={total}
               />
             ),
@@ -611,7 +622,7 @@ export function InventoryPage() {
         <div className="space-y-4">
           <CrawlerSettingsCard projectId={projectId} />
           <div className="space-y-3">
-            <InventoryYamlDropzone onParsed={(y) => setYamlDraft(y)} />
+            <InventoryYamlDropzone onParsed={(y) => setYamlDraft(y)} onCleared={() => setYamlDraft(null)} />
             <div className="flex gap-2">
               <Btn type="button" size="sm" onClick={() => yamlDraft && ingestYaml(yamlDraft)} disabled={!yamlDraft}>
                 Ingest selected file

@@ -99,6 +99,12 @@ describe('coerceApiResult', () => {
     expect(res.data).toEqual({ id: 'a' })
   })
 
+  it('keeps validator issues on the error (inventory YAML)', () => {
+    const issues = [{ path: '$.schema_version', message: 'Required' }]
+    const res = coerceApiResult({ ok: false, error: { code: 'VALIDATION_FAILED', message: 'bad', issues } })
+    expect(res.error?.issues).toEqual(issues)
+  })
+
   // Group K entry 8: POST /v1/admin/rewards/webhooks returns the one-time signing
   // secret only in `meta`, which coercion used to drop.
   it('keeps top-level meta beside data on success', () => {

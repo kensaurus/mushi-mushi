@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { apiFetch } from '../../lib/supabase'
+import { apiErrorMessage } from '../../lib/humanizeApiError'
 import { Btn } from '../ui'
 import type { CodebaseImpactResult } from './exploreUnderstandTypes'
 
@@ -22,6 +23,7 @@ export function ExploreImpactControl({ projectId, onImpact, onClear, active }: P
   const [lastResult, setLastResult] = useState<CodebaseImpactResult | null>(null)
   const [openFixId, setOpenFixId] = useState<string | null>(null)
   const [showAdvanced, setShowAdvanced] = useState(false)
+  const [impactError, setImpactError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!projectId) return
@@ -43,11 +45,15 @@ export function ExploreImpactControl({ projectId, onImpact, onClear, active }: P
     async (qs: string) => {
       if (!projectId) return
       setLoading(true)
+      setImpactError(null)
       const res = await apiFetch<CodebaseImpactResult>(
         `/v1/admin/projects/${projectId}/codebase/impact?${qs}`,
       )
       setLoading(false)
-      if (!res.ok || !res.data) return
+      if (!res.ok || !res.data) {
+        setImpactError(apiErrorMessage(res.error, 'Could not work out what this change affects. Try again.'))
+        return
+      }
       setLastResult(res.data)
       onImpact(new Set(res.data.affected_node_ids), res.data.affected_file_paths)
     },
@@ -122,6 +128,12 @@ export function ExploreImpactControl({ projectId, onImpact, onClear, active }: P
             Show dependents
           </Btn>
         </>
+      )}
+
+      {impactError && (
+        <p className="text-2xs text-danger" role="alert">
+          {impactError}
+        </p>
       )}
 
       {lastResult && (

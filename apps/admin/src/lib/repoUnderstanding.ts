@@ -130,9 +130,18 @@ export type DiagramPublication =
       outdated: boolean
     }
 
+interface DiagramPermissions {
+  /** Anyone but a viewer can draw or redraw. */
+  can_draw: boolean
+  /** Only a project owner or admin can publish or unpublish the public page. */
+  can_manage_page: boolean
+}
+
 export interface DiagramResponse {
   diagram: DiagramRow | null
   publication: DiagramPublication
+  /** Absent from older servers: treat as allowed and let the server decide. */
+  permissions?: DiagramPermissions
   reused?: boolean
 }
 

@@ -215,6 +215,18 @@ async function publicationView(pub: Awaited<ReturnType<typeof loadPublication>>,
   }
 }
 
+/**
+ * What the caller may do on the Diagram tab, so the console hides controls
+ * that would only end in a 403 (draw: anyone but a viewer; publish and
+ * unpublish: owner or admin, matching the checks below).
+ */
+export function diagramPermissions(role: string | null | undefined): { can_draw: boolean; can_manage_page: boolean } {
+  return {
+    can_draw: !!role && role !== 'viewer',
+    can_manage_page: role === 'owner' || role === 'admin',
+  }
+}
+
 export function registerRepoDiagramRoutes(app: Hono<{ Variables: Variables }>): void {
   const readAuth = adminOrApiKey({ scope: 'mcp:read' })
   const writeAuth = adminOrApiKey({ scope: 'mcp:write' })
@@ -235,7 +247,10 @@ export function registerRepoDiagramRoutes(app: Hono<{ Variables: Variables }>): 
     if (error) return dbError(c, error)
     const row = data as DiagramRow | null
     const pub = await loadPublication(db, projectId)
-    return c.json({ ok: true, data: { diagram: row, publication: await publicationView(pub, row) } })
+    return c.json({
+      ok: true,
+      data: { diagram: row, publication: await publicationView(pub, row), permissions: diagramPermissions(access.role) },
+    })
   })
 
   // Open bug reports and code findings on the parts of the latest diagram.
@@ -391,7 +406,7 @@ export function registerRepoDiagramRoutes(app: Hono<{ Variables: Variables }>): 
           .maybeSingle()
         if (existing) {
           const pub = await loadPublication(db, projectId)
-          return c.json({ ok: true, data: { diagram: existing, publication: await publicationView(pub, existing as DiagramRow), reused: true } })
+          return c.json({ ok: true, data: { diagram: existing, publication: await publicationView(pub, existing as DiagramRow), permissions: diagramPermissions(access.role), reused: true } })
         }
       }
       tree = await fetchTreeAtSha({ token, owner, repo, sha: pinned.sha })
@@ -531,7 +546,7 @@ export function registerRepoDiagramRoutes(app: Hono<{ Variables: Variables }>): 
     })
 
     const pub = await loadPublication(db, projectId)
-    return c.json({ ok: true, data: { diagram: saved, publication: await publicationView(pub, saved as DiagramRow), reused: false } })
+    return c.json({ ok: true, data: { diagram: saved, publication: await publicationView(pub, saved as DiagramRow), permissions: diagramPermissions(access.role), reused: false } })
   })
 
   // What the public page would show for the latest diagram, its hash (the

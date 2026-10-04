@@ -10,10 +10,8 @@ import { TableSkeleton } from '../skeletons/TableSkeleton'
 interface ReportGroup {
   id: string
   project_id: string
-  signature: string | null
-  representative_summary: string | null
-  representative_category: string | null
-  representative_severity: string | null
+  title: string | null
+  canonical_report_id: string | null
   report_count: number
   created_at: string
   updated_at: string
@@ -21,12 +19,15 @@ interface ReportGroup {
     id: string
     summary: string | null
     severity: string | null
+    category: string | null
     status: string
     created_at: string
   }>
 }
 
 import { SEVERITY_TRAFFIC_BADGE } from '../../lib/severityTraffic'
+import { reportGroupCategory, reportGroupLabel, reportGroupSeverity } from '../../lib/reportGroupDisplay'
+import { apiErrorMessage } from '../../lib/humanizeApiError'
 
 export function GroupsPanel() {
   const toast = useToast()
@@ -54,7 +55,7 @@ export function GroupsPanel() {
       setMergeTarget('')
       reload()
     } else {
-      toast.push({ tone: 'error', message: res.error?.message ?? 'Merge failed' })
+      toast.push({ tone: 'error', message: apiErrorMessage(res.error, 'The merge failed. Try again.') })
     }
   }
 
@@ -101,22 +102,24 @@ export function GroupsPanel() {
             </thead>
             <tbody>
               {groups.map((g) => {
-                const sevTone = g.representative_severity
-                  ? SEVERITY_TRAFFIC_BADGE[g.representative_severity] ?? SEVERITY_TRAFFIC_BADGE.low
+                const severity = reportGroupSeverity(g)
+                const category = reportGroupCategory(g)
+                const sevTone = severity
+                  ? SEVERITY_TRAFFIC_BADGE[severity] ?? SEVERITY_TRAFFIC_BADGE.low
                   : SEVERITY_TRAFFIC_BADGE.low
                 const firstReport = g.reports?.[0]
                 return (
                   <tr key={g.id} className="border-t border-edge-subtle align-top">
                     <td className="px-2 py-1.5 max-w-96">
                       <div className="text-fg-secondary line-clamp-2">
-                        {g.representative_summary ?? '(no summary)'}
+                        {reportGroupLabel(g)}
                       </div>
-                      <div className="text-2xs text-fg-faint font-mono mt-0.5">
-                        {g.representative_category ?? '—'}
-                      </div>
+                      {category ? (
+                        <div className="text-2xs text-fg-faint font-mono mt-0.5">{category}</div>
+                      ) : null}
                     </td>
                     <td className="px-2 py-1.5">
-                      <Badge className={sevTone}>{g.representative_severity ?? '—'}</Badge>
+                      <Badge className={sevTone}>{severity ?? 'Not set'}</Badge>
                     </td>
                     <td className="px-2 py-1.5 text-right font-mono tabular-nums">
                       {g.report_count}
@@ -164,8 +167,8 @@ export function GroupsPanel() {
           <div className="space-y-3">
             <p className="text-2xs text-fg-faint">
               All {mergeSource.report_count} reports from{' '}
-              <span className="font-mono text-fg-muted">{mergeSource.representative_summary?.slice(0, 60) ?? mergeSource.id.slice(0, 8)}</span>
-              {' '}will move into the destination group. The source group is then deleted.
+              <span className="font-medium text-fg-muted">{reportGroupLabel(mergeSource).slice(0, 80)}</span>
+              {' '}will move into the destination group. This group is then deleted, and a merge cannot be undone.
             </p>
             <div>
               <label className="text-2xs text-fg-muted block mb-1">Destination group</label>
@@ -177,7 +180,7 @@ export function GroupsPanel() {
                 <option value="">— select group —</option>
                 {mergeCandidates.map((c) => (
                   <option key={c.id} value={c.id}>
-                    {(c.representative_summary ?? c.id).slice(0, 80)} ({c.report_count} reports)
+                    {reportGroupLabel(c).slice(0, 80)} ({c.report_count} reports)
                   </option>
                 ))}
               </select>

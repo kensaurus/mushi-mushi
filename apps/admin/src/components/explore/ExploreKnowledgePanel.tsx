@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { apiFetch } from '../../lib/supabase'
 import { Btn, Card } from '../ui'
+import { apiErrorMessage } from '../../lib/humanizeApiError'
+import { CHIP_TONE } from '../../lib/chipTone'
 import { ExploreUnderstandEmpty } from './ExploreUnderstandEmpty'
 import type { CodebaseUnderstandError } from './exploreUnderstandTypes'
 
@@ -10,6 +12,25 @@ interface WikiSource {
   root_path: string
   label: string | null
   status: string
+  error?: string | null
+  updated_at?: string | null
+  config?: { last_ingest?: { files_read?: number; files_found?: number } } | null
+}
+
+/** Mirrors WIKI_STALE_MS on the server: older pending/indexing rows can be retried. */
+const STALE_MS = 10 * 60 * 1000
+
+function isStale(s: WikiSource, now: number): boolean {
+  if (s.status !== 'pending' && s.status !== 'indexing') return false
+  const at = s.updated_at ? Date.parse(s.updated_at) : NaN
+  return Number.isFinite(at) && now - at > STALE_MS
+}
+
+const STATUS_COPY: Record<string, { label: string; tone: string }> = {
+  pending: { label: 'Waiting to be read', tone: CHIP_TONE.neutral },
+  indexing: { label: 'Reading docs…', tone: CHIP_TONE.brandSubtle },
+  ready: { label: 'Ready', tone: CHIP_TONE.okSubtle },
+  failed: { label: 'Failed', tone: CHIP_TONE.dangerSubtle },
 }
 
 interface KnowledgeNode {
@@ -30,6 +51,8 @@ export function ExploreKnowledgePanel({ projectId }: Props) {
   const [label, setLabel] = useState('')
   const [loading, setLoading] = useState(false)
   const [fatalError, setFatalError] = useState<CodebaseUnderstandError | null>(null)
+  const [addError, setAddError] = useState<string | null>(null)
+  const [retryingId, setRetryingId] = useState<string | null>(null)
 
   const reload = useCallback(async () => {
     if (!projectId) return
@@ -39,8 +62,13 @@ export function ExploreKnowledgePanel({ projectId }: Props) {
         `/v1/admin/projects/${projectId}/codebase/knowledge/graph`,
       ),
     ])
+    if (!srcRes.ok && srcRes.error?.code === 'FORBIDDEN') {
+      setFatalError({ code: 'FORBIDDEN', message: srcRes.error.message })
+      return
+    }
     if (srcRes.ok && srcRes.data?.sources) setSources(srcRes.data.sources)
-    const graphNodes = graphRes.data?.graphs?.[0]?.graph?.nodes ?? []
+    // Every source's entities, not just the newest graph row.
+    const graphNodes = (graphRes.data?.graphs ?? []).flatMap((g) => g.graph?.nodes ?? [])
     setNodes(graphNodes.slice(0, 40))
   }, [projectId])
 
@@ -48,10 +76,32 @@ export function ExploreKnowledgePanel({ projectId }: Props) {
     void reload()
   }, [reload])
 
+  // Reading a docs folder takes seconds to a minute; keep the list live
+  // while any source is still waiting or being read.
+  const now = Date.now()
+  const busy = sources.some((s) => (s.status === 'pending' || s.status === 'indexing') && !isStale(s, now))
+  useEffect(() => {
+    if (!busy) return
+    const t = setInterval(() => void reload(), 4000)
+    return () => clearInterval(t)
+  }, [busy, reload])
+
+  const retrySource = useCallback(
+    async (id: string) => {
+      setRetryingId(id)
+      const res = await apiFetch(`/v1/admin/projects/${projectId}/codebase/wiki/sources/${id}/retry`, { method: 'POST' })
+      setRetryingId(null)
+      if (!res.ok) setAddError(apiErrorMessage(res.error, 'Could not restart reading this source. Try again.'))
+      void reload()
+    },
+    [projectId, reload],
+  )
+
   const addSource = useCallback(async () => {
     if (!rootPath.trim() || !projectId) return
     setLoading(true)
     setFatalError(null)
+    setAddError(null)
     const res = await apiFetch<{ source: WikiSource }>(
       `/v1/admin/projects/${projectId}/codebase/wiki/sources`,
       {
@@ -65,7 +115,11 @@ export function ExploreKnowledgePanel({ projectId }: Props) {
     )
     setLoading(false)
     if (!res.ok) {
-      setFatalError({ code: res.error?.code ?? 'ERROR', message: res.error?.message ?? 'Failed to add wiki source' })
+      if (res.error?.code === 'FORBIDDEN') {
+        setFatalError({ code: 'FORBIDDEN', message: res.error.message })
+      } else {
+        setAddError(apiErrorMessage(res.error, 'Could not add the source. Try again.'))
+      }
       return
     }
     setRootPath('docs/')
@@ -102,18 +156,57 @@ export function ExploreKnowledgePanel({ projectId }: Props) {
             Add source
           </Btn>
         </div>
+        <p className="text-2xs text-fg-faint">
+          Mushi reads the Markdown and text files in that folder of your connected GitHub repo. It needs GitHub access to that repo.
+        </p>
+        {addError ? <p className="text-2xs text-danger" role="alert">{addError}</p> : null}
       </Card>
 
       {sources.length > 0 && (
         <Card className="p-4 space-y-2">
           <p className="text-3xs uppercase tracking-wider text-fg-faint">Wiki sources</p>
-          <ul className="space-y-1">
-            {sources.map((s) => (
-              <li key={s.id} className="text-2xs font-mono text-fg-secondary flex justify-between gap-2">
-                <span>{s.root_path}</span>
-                <span className="text-fg-faint">{s.status}</span>
-              </li>
-            ))}
+          <ul className="space-y-2">
+            {sources.map((s) => {
+              const stale = isStale(s, now)
+              const status = stale
+                ? { label: 'Stuck', tone: CHIP_TONE.warnSubtle }
+                : STATUS_COPY[s.status] ?? { label: s.status, tone: CHIP_TONE.neutral }
+              const ingest = s.config?.last_ingest
+              const capped =
+                s.status === 'ready' && ingest?.files_found != null && ingest.files_read != null && ingest.files_found > ingest.files_read
+              return (
+                <li key={s.id} className="space-y-1">
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-2xs">
+                    <span className="font-mono text-fg-secondary">
+                      {s.label ? `${s.label} · ` : ''}
+                      {s.root_path}
+                    </span>
+                    <span className="flex items-center gap-2">
+                      <span className={`rounded-full px-1.5 py-0.5 text-3xs ${status.tone}`}>{status.label}</span>
+                      {s.status === 'failed' || s.status === 'ready' || stale ? (
+                        <Btn
+                          size="sm"
+                          variant="ghost"
+                          loading={retryingId === s.id}
+                          onClick={() => void retrySource(s.id)}
+                        >
+                          {s.status === 'ready' ? 'Re-read' : 'Retry'}
+                        </Btn>
+                      ) : null}
+                    </span>
+                  </div>
+                  {s.status === 'failed' && s.error ? <p className="text-2xs text-danger">{s.error}</p> : null}
+                  {stale ? (
+                    <p className="text-2xs text-warn">This source has not moved for over 10 minutes. Retry to read it again.</p>
+                  ) : null}
+                  {capped ? (
+                    <p className="text-2xs text-fg-muted">
+                      Read the first {ingest!.files_read} of {ingest!.files_found} files. Point a source at a smaller folder to cover the rest.
+                    </p>
+                  ) : null}
+                </li>
+              )
+            })}
           </ul>
         </Card>
       )}
@@ -132,7 +225,13 @@ export function ExploreKnowledgePanel({ projectId }: Props) {
           </ul>
         </Card>
       ) : (
-        <p className="text-2xs text-fg-muted">No wiki knowledge indexed yet. Add a source above or run Re-analyze on the Index tab.</p>
+        <p className="text-2xs text-fg-muted">
+          {busy
+            ? 'Reading your docs. Entities appear here when it finishes.'
+            : sources.length > 0
+              ? 'No knowledge entities yet. Check the source status above.'
+              : 'No docs added yet. Add a folder above, such as docs/.'}
+        </p>
       )}
     </div>
   )
