@@ -67,9 +67,16 @@ function totalTokens(a: FixAttempt | null): string | null {
 interface Props {
   reportId: string
   dispatchState: DispatchState
+  /**
+   * False when the report has no fix attempt on record. Then, until a dispatch
+   * starts, there is nothing to hydrate and the panel renders nothing, so the
+   * /v1/admin/fixes list read is skipped (REPORT C: one wasted call on every
+   * open of an unfixed report). Defaults to true for other callers.
+   */
+  hasFixHistory?: boolean
 }
 
-export function FixProgressStream({ reportId, dispatchState }: Props) {
+export function FixProgressStream({ reportId, dispatchState, hasFixHistory = true }: Props) {
   const [latest, setLatest] = useState<FixAttempt | null>(null)
   const [loading, setLoading] = useState(true)
   const platform = usePlatformIntegrations()
@@ -83,6 +90,11 @@ export function FixProgressStream({ reportId, dispatchState }: Props) {
   // every visitor to a report page even when nothing was happening.
   const dispatchStatus = dispatchState.status
   useEffect(() => {
+    if (!hasFixHistory && dispatchStatus === 'idle') {
+      setLatest(null)
+      setLoading(false)
+      return
+    }
     let cancelled = false
     const fetchLatest = async () => {
       const res = await apiFetch<{ fixes: FixAttempt[] }>('/v1/admin/fixes')
@@ -95,7 +107,7 @@ export function FixProgressStream({ reportId, dispatchState }: Props) {
     }
     void fetchLatest()
     return () => { cancelled = true }
-  }, [reportId, dispatchStatus])
+  }, [reportId, dispatchStatus, hasFixHistory])
 
   const stage = dispatchState.status
   // while we fetch the historic attempt, show a layout-shaped

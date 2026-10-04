@@ -1,13 +1,10 @@
 /**
  * FILE: apps/admin/src/components/report-detail/ReportPdcaStory.tsx
- * PURPOSE: Vertical PDCA story timeline rendered above <PdcaReceiptStrip>
- * on the report-detail page
+ * PURPOSE: The report page's one Plan → Do → Check → Act progress display.
  *
- *          PdcaReceiptStrip is a compact 4-up grid of "what state is each
- *          stage in" — useful for at-a-glance triage. This timeline is
- *          the storytelling cousin: it walks the user through what
- *          happened to *their* bug across Plan → Do → Check → Act, with
- *          per-stage timestamps, model identifiers, and judge scores.
+ *          It walks the user through what happened to *their* bug, with
+ *          per-stage timestamps, model identifiers, judge scores and the next
+ *          step in a sentence.
  *
  *          Visual:
  *
@@ -19,17 +16,21 @@
  *            ┃              [thumbnail of screenshot diff if present]
  *            ○      Act         Awaiting merge
  *
- *          Re-uses derivation logic shape from PdcaReceiptStrip — every
- *          stage stamp + proof is computed from the same `report` shape so
- *          the two surfaces never disagree on what state the loop is in.
+ *          The page used to show this progress three times before the triage
+ *          bar (a React Flow pipeline, a 4-up receipt strip and this story;
+ *          REPORT D, 2026-10-04). This story is the one kept, in every mode:
+ *          it says what happened and what to do next in plain sentences.
+ *          "Classified" comes from `isReportClassified` so it can never
+ *          disagree with the recommendation card or the classification card.
  */
 
 import { PDCA_ORDER, PDCA_STAGES, type PdcaStageId } from '../../lib/pdca'
 import { STAMP_VISUAL, type StageStamp } from '../../lib/pdcaStamp'
 import { ACT_BLOCKER_COPY, ACT_BLOCKER_LINK_LABEL, ACT_BLOCKER_STAMP, actBlocker } from '../../lib/pdcaAct'
-import { RelativeTime } from '../ui'
+import { Card, RelativeTime } from '../ui'
 import { ActionPill, InlineProof } from './ReportSurface'
 import type { DispatchState } from '../../lib/dispatchFix'
+import { isReportClassified } from '../../lib/reportDiagnosis'
 import type { ReportDetail, ReportFixAttempt } from './types'
 
 type StoryState = StageStamp
@@ -57,22 +58,23 @@ interface Props {
 export function ReportPdcaStory({ report, dispatchState }: Props) {
   const nodes = buildStoryNodes(report, dispatchState)
   return (
-    <ol
-      aria-label="PDCA story for this report"
-      className="relative mb-3 rounded-lg border border-edge-subtle bg-surface-raised/30 p-3 motion-safe:animate-mushi-fade-in"
-    >
-      <header className="mb-2 flex items-baseline justify-between">
+    // The heading sits outside the list: an <ol> may only hold <li>, and a
+    // <header> inside it broke the list for screen readers (REPORT A14).
+    <Card className="relative mb-3 p-3 motion-safe:animate-mushi-fade-in">
+      <div className="mb-2 flex items-baseline justify-between">
         <h3 className="text-2xs font-semibold text-fg-muted uppercase tracking-wider">
           The story so far
         </h3>
         <span className="text-3xs text-fg-faint">Plan → Do → Check → Act</span>
-      </header>
-      {PDCA_ORDER.map((id, idx) => {
-        const node = nodes[id]
-        const isLast = idx === PDCA_ORDER.length - 1
-        return <StoryRow key={id} node={node} isLast={isLast} />
-      })}
-    </ol>
+      </div>
+      <ol aria-label="Progress of this report">
+        {PDCA_ORDER.map((id, idx) => {
+          const node = nodes[id]
+          const isLast = idx === PDCA_ORDER.length - 1
+          return <StoryRow key={id} node={node} isLast={isLast} />
+        })}
+      </ol>
+    </Card>
   )
 }
 
@@ -173,7 +175,8 @@ function StoryRow({ node, isLast }: { node: StoryNode; isLast: boolean }) {
   )
 }
 
-function buildStoryNodes(
+/** @internal Exported for unit tests only. */
+export function buildStoryNodes(
   report: ReportDetail,
   dispatchState: DispatchState,
 ): Record<PdcaStageId, StoryNode> {
@@ -184,13 +187,16 @@ function buildStoryNodes(
   const ciConclusion = fix?.check_run_conclusion?.toLowerCase() ?? null
 
   // PLAN — classification metadata
-  const classified = Boolean(report.stage1_classification) || Boolean(report.classified_at)
-  const planState: StoryState = report.processing_error
+  const classified = isReportClassified(report)
+  // A processing_error on a classified row is about something later (an
+  // auto-fix block stamp, a heuristic fallback), not a failed classification.
+  const classifyFailed = Boolean(report.processing_error) && !classified
+  const planState: StoryState = classifyFailed
     ? 'failed'
     : classified
       ? 'done'
       : 'pending'
-  const planHeadline = report.processing_error
+  const planHeadline = classifyFailed
     ? `Classification failed — ${report.processing_error}`
     : classified
       ? report.summary || `Classified as ${report.category}`

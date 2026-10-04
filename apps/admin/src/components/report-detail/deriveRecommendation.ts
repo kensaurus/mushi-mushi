@@ -2,6 +2,7 @@ import { severityLabel } from '../../lib/tokens'
 import type { DispatchState } from '../../lib/dispatchFix'
 import type { ReportDetail, ReportFixAttempt } from './types'
 import { pickPrimaryFixAttempt } from '../../lib/mergeFix'
+import { isReportClassified } from '../../lib/reportDiagnosis'
 
 export interface RecommendationMeta {
   label: string
@@ -372,7 +373,12 @@ export function deriveRecommendation(
     }
   }
 
-  if (!report.stage1_classification && !report.processing_error) {
+  // One "classified?" answer for the whole page (lib/reportDiagnosis.ts): a
+  // report with status 'classified' and a Stage-2 diagnosis but no Stage-1
+  // object used to read "Classification pending" here (REPORT A2).
+  const classified = isReportClassified(report)
+
+  if (!classified && !report.processing_error) {
     return {
       title: 'Classification pending',
       description: 'The LLM pipeline is still processing this report. Refresh in a few seconds.',
@@ -380,7 +386,7 @@ export function deriveRecommendation(
     }
   }
 
-  if (report.processing_error) {
+  if (report.processing_error && !classified) {
     return {
       title: 'Classification failed — triage manually',
       description:

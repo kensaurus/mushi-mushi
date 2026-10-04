@@ -11,7 +11,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { MCP_CLIENTS, getMcpClient, projectServerName } from '../clients.js'
+import { MCP_CLIENTS, MCP_PIN_SPEC, getMcpClient, projectServerName } from '../clients.js'
 
 const SAMPLE_INPUT = {
   projectId: 'abc123-def456-ghi789',
@@ -254,5 +254,37 @@ describe('Any MCP client builder', () => {
     if (result.kind !== 'remote-url') throw new Error('expected remote-url')
     expect(result.headerSnippet).toContain('Authorization: Bearer')
     expect(result.headerSnippet).toContain(SAMPLE_INPUT.apiKey)
+  })
+})
+
+// REPORT A7 (2026-10-04): the console's Cursor deeplink pinned the version the
+// console was built with (0.24.1) while npm had 0.24.2. The console now passes
+// the catalog's published version; builders must use it, and only a well-formed
+// spec, since it becomes an `npx` argument.
+describe('pinSpec override', () => {
+  const argsOf = (pinSpec?: string) => {
+    const result = getMcpClient('cursor').build({ ...SAMPLE_INPUT, ...(pinSpec ? { pinSpec } : {}) })
+    if (result.kind !== 'deeplink') throw new Error('expected deeplink')
+    const encoded = new URL(result.url).searchParams.get('config') ?? ''
+    return (JSON.parse(atob(encoded)) as { args: string[] }).args
+  }
+
+  it('defaults to the build pin', () => {
+    expect(argsOf()).toEqual(['-y', MCP_PIN_SPEC])
+  })
+
+  it('uses a published pin the caller passes', () => {
+    expect(argsOf('@mushi-mushi/mcp@9.9.9')).toEqual(['-y', '@mushi-mushi/mcp@9.9.9'])
+  })
+
+  it('ignores anything that is not an exact @mushi-mushi/mcp@semver', () => {
+    for (const bad of ['@mushi-mushi/mcp@latest', 'evil-pkg@1.0.0', '@mushi-mushi/mcp@1.0.0 && rm -rf /']) {
+      expect(argsOf(bad)).toEqual(['-y', MCP_PIN_SPEC])
+    }
+  })
+
+  it('reaches the config-json stdio clients too', () => {
+    const result = getMcpClient('claude-desktop').build({ ...SAMPLE_INPUT, pinSpec: '@mushi-mushi/mcp@9.9.9' })
+    expect(result.kind === 'config' && result.json).toContain('@mushi-mushi/mcp@9.9.9')
   })
 })

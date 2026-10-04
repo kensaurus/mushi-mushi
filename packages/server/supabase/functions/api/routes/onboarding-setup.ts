@@ -5,6 +5,7 @@ import { jwtAuth } from '../../_shared/auth.ts';
 import { callerProjectIds, enumerateAccessibleProjectIds, resolveOwnedProject } from '../shared.ts';
 import { resolveNextStepTo } from '../../_shared/activation-status.ts';
 import { isOperatorUser } from '../../_shared/operator-gate.ts';
+import { isNonRealReport } from '../../_shared/first-report.ts';
 
 export function registerOnboardingSetupRoutes(app: Hono<{ Variables: Variables }>): void {
   // =================================================================================
@@ -219,6 +220,8 @@ export function registerOnboardingSetupRoutes(app: Hono<{ Variables: Variables }
   // honest, stable proxy for "first diagnosis available". Derived server-side so
   // the Onboarding Verify tab can show one number.
   // =================================================================================
+  /** Oldest classified reports read to find the first real one past test reports. */
+  const FIRST_DIAGNOSIS_SCAN = 25;
   app.get('/v1/admin/onboarding/time-to-first-diagnosis', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
@@ -238,18 +241,25 @@ export function registerOnboardingSetupRoutes(app: Hono<{ Variables: Variables }
         .order('created_at', { ascending: true })
         .limit(1)
         .maybeSingle(),
+      // The console's "Send test report" and the marketing seed are not the
+      // user's first diagnosis. The test report carries a Stage-1 object
+      // since 2026-10-04 (REPORT A2), so they are skipped here by source,
+      // with the same predicate as first_report_received.
       db
         .from('reports')
-        .select('created_at')
+        .select('created_at, custom_metadata')
         .eq('project_id', pid)
         .not('stage1_classification', 'is', null)
         .order('created_at', { ascending: true })
-        .limit(1)
-        .maybeSingle(),
+        .limit(FIRST_DIAGNOSIS_SCAN),
     ]);
 
     const keyMintedAt = (firstKeyRes.data?.created_at as string | null) ?? null;
-    const firstDiagnosisAt = (firstDiagnosisRes.data?.created_at as string | null) ?? null;
+    const firstReal = ((firstDiagnosisRes.data ?? []) as Array<{
+      created_at: string;
+      custom_metadata: Record<string, unknown> | null;
+    }>).find((row) => !isNonRealReport(row.custom_metadata));
+    const firstDiagnosisAt = firstReal?.created_at ?? null;
 
     let ms: number | null = null;
     if (keyMintedAt && firstDiagnosisAt) {
