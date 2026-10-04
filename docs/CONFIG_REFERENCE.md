@@ -10,9 +10,9 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 ## Contents
 
 - [Settings → General](#settings-general) (10)
-- [Settings → BYOK (LLM keys)](#settings-byok-llm-keys-) (4)
-- [Settings → Firecrawl (web research)](#settings-firecrawl-web-research-) (3)
-- [Settings → Dev tools](#settings-dev-tools) (1)
+- [Settings → AI keys (BYOK)](#settings-ai-keys-byok-) (4)
+- [Settings → Web tools (Firecrawl)](#settings-web-tools-firecrawl-) (3)
+- [Settings → SDK & connection (debug logging)](#settings-sdk-connection-debug-logging-) (1)
 - [Projects](#projects) (8)
 - [Integrations](#integrations) (25)
 - [Storage (BYO)](#storage-byo-) (9)
@@ -197,9 +197,9 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **When to change** — Set it once when your app runs on Supabase. Create a scoped access token for this one project only, with Database, Edge Functions, Advisors and Logs set to Read, and give it an expiry. Change the ref only if the app moves to another Supabase project.
 
-## Settings → BYOK (LLM keys)
+## Settings → AI keys (BYOK)
 
-<a id="settings-byok-llm-keys-"></a>
+<a id="settings-ai-keys-byok-"></a>
 
 ### Anthropic (Claude) API Key
 
@@ -267,9 +267,9 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **When to change** — Add one if you already pay for OpenRouter or want a backup on a different account from OpenAI.
 
-## Settings → Firecrawl (web research)
+## Settings → Web tools (Firecrawl)
 
-<a id="settings-firecrawl-web-research-"></a>
+<a id="settings-web-tools-firecrawl-"></a>
 
 ### Firecrawl API Key
 
@@ -319,9 +319,9 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **When to change** — Raise to 10–15 when fix-augmentation is consistently hitting the cap and the judge isn't getting enough context. Lower to 2–3 once your Firecrawl bill becomes the noisy line item.
 
-## Settings → Dev tools
+## Settings → SDK & connection (debug logging)
 
-<a id="settings-dev-tools"></a>
+<a id="settings-sdk-connection-debug-logging-"></a>
 
 ### Debug Mode
 

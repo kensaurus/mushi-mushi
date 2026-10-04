@@ -27,7 +27,7 @@ export function FirecrawlStatusBanner({ config, loading, projectName }: Props) {
             : 'Add a Firecrawl API key before running web research.'
         }
         action={
-          <Btn to="/settings?tab=firecrawl" size="sm" variant="primary">Configure Firecrawl</Btn>
+          <Btn to="/settings?tab=byok#key-firecrawl" size="sm" variant="primary">Configure Firecrawl</Btn>
         }
       />
     )
@@ -44,9 +44,9 @@ export function FirecrawlStatusBanner({ config, loading, projectName }: Props) {
       <StatusBannerShell
         tone="danger"
         title={label}
-        subtitle={`Key ${config.keyHint ?? 'configured'} — re-test in Settings → Firecrawl before searching.`}
+        subtitle={`Key ${config.keyHint ?? 'configured'} — re-test in Settings → AI keys before searching.`}
         action={
-          <Btn to="/settings?tab=firecrawl" size="sm" variant="ghost">Fix in Settings</Btn>
+          <Btn to="/settings?tab=byok#key-firecrawl" size="sm" variant="ghost">Fix in Settings</Btn>
         }
       />
     )
@@ -68,7 +68,7 @@ export function FirecrawlStatusBanner({ config, loading, projectName }: Props) {
         </>
       }
       action={
-        <Btn to="/settings?tab=firecrawl" size="sm" variant="ghost">Settings</Btn>
+        <Btn to="/settings?tab=tools#firecrawl" size="sm" variant="ghost">Settings</Btn>
       }
     />
   )

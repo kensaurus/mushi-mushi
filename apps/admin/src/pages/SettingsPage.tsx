@@ -6,6 +6,9 @@
  *
  *          Tab choice: the ?tab= link wins, then the tab you last used on this
  *          project (remembered in this browser), then Quick mode's pick.
+ *          Old tab ids (`firecrawl`, `health`, …) go through
+ *          lib/settingsTabs.ts: the URL is rewritten to the new tab, with the
+ *          section it pointed at as the #hash, and the page scrolls there.
  *
  *          The banner and the AI keys tab badge are worked out from the same
  *          saved-keys list the key rows use (ByokPoolProvider + keyStatus.ts),
@@ -13,7 +16,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout';
 import { PageScopeHint, SegmentedControl, StatCard, ErrorAlert } from '../components/ui';
 import { PageHeaderBar } from '../components/PageHeaderBar';
@@ -34,9 +37,17 @@ import { ByokPoolProvider, useByokPool } from '../components/settings/ByokPoolCo
 import { hasWorkingPoolKey, summarizeKeys, type KeySummary } from '../components/settings/keyStatus';
 import {
   EMPTY_SETTINGS_STATS,
+  SETTINGS_TAB_IDS,
   type SettingsStats,
   type SettingsTabId,
 } from '../components/settings/types';
+import {
+  SETTINGS_SECTION_IDS,
+  isStoredSettingsTab,
+  normalizeSettingsLocation,
+  resolveSettingsTab,
+} from '../lib/settingsTabs';
+import { useScrollToHash } from '../lib/useScrollToHash';
 import { SetupNudge } from '../components/SetupNudge';
 import { useActiveProjectId } from '../components/ProjectSwitcher';
 import { useSetupStatus } from '../lib/useSetupStatus';
@@ -66,28 +77,26 @@ import { useRealtimeReload } from '../lib/realtime';
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton';
 import { IconSettings } from '../components/icons';
 
-const TAB_IDS: SettingsTabId[] = ['general', 'byok', 'firecrawl', 'browserbase', 'voice', 'health', 'dev'];
-
-function isTabId(value: unknown): value is SettingsTabId {
-  return typeof value === 'string' && (TAB_IDS as string[]).includes(value);
-}
-
-function isStoredTab(value: unknown): value is SettingsTabId | null {
-  return value === null || isTabId(value);
-}
-
 export function SettingsPage() {
   const entitlements = useEntitlements();
   const byokEnabled = !entitlements.loading && entitlements.has('byok');
   return (
     <ByokPoolProvider enabled={byokEnabled}>
-      <SettingsPageBody byokEnabled={byokEnabled} />
+      <SettingsPageBody byokEnabled={byokEnabled} entitlementsLoading={entitlements.loading} />
     </ByokPoolProvider>
   );
 }
 
-function SettingsPageBody({ byokEnabled }: { byokEnabled: boolean }) {
+function SettingsPageBody({
+  byokEnabled,
+  entitlementsLoading,
+}: {
+  byokEnabled: boolean;
+  entitlementsLoading: boolean;
+}) {
   const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
+  const navigate = useNavigate();
   const copy = usePageCopy('/settings');
   const ux = useSettingsUx();
   const activeProjectId = useActiveProjectId();
@@ -95,15 +104,28 @@ function SettingsPageBody({ byokEnabled }: { byokEnabled: boolean }) {
   const projectName = setup.activeProject?.project_name ?? null;
   const projectSlug = setup.activeProject?.project_slug ?? null;
 
-  const [storedTab, setStoredTab] = usePersistentState<SettingsTabId | null>('settings:tab', null, {
+  // Stored as a string: a browser may still remember an old id ('health'),
+  // which resolveSettingsTab maps onto its new tab.
+  const [storedTab, setStoredTab] = usePersistentState<string | null>('settings:tab', null, {
     projectId: activeProjectId,
-    validate: isStoredTab,
+    validate: isStoredSettingsTab,
   });
   const param = searchParams.get('tab');
   // Quick mode hides the tab strip, so a remembered tab could strand you on
   // it; there the link or Quick mode's own pick decides.
-  const rememberedTab = ux.hideTabs ? null : storedTab;
-  const active: SettingsTabId = isTabId(param) ? param : (rememberedTab ?? 'general');
+  const rememberedTab = ux.hideTabs ? null : (resolveSettingsTab(storedTab)?.tab ?? null);
+  const active: SettingsTabId = resolveSettingsTab(param)?.tab ?? rememberedTab ?? 'general';
+
+  // An old id in the link (?tab=health) shows the right tab straight away;
+  // this then rewrites the URL to the new id and adds the section's #hash.
+  useEffect(() => {
+    const next = normalizeSettingsLocation(location.search, location.hash);
+    if (!next) return;
+    navigate(
+      { pathname: location.pathname, search: next.search, hash: next.hash },
+      { replace: true, preventScrollReset: true },
+    );
+  }, [location.pathname, location.search, location.hash, navigate]);
 
   const statsPath = activeProjectId ? '/v1/admin/settings/stats' : null;
   const {
@@ -152,6 +174,9 @@ function SettingsPageBody({ byokEnabled }: { byokEnabled: boolean }) {
   // the banner shows.
   // It picks once per visit: after that, a tab the user opens stays open.
   const poolPending = byokEnabled && pool.loading && !pool.data;
+  // Scroll to a #section (#firecrawl, #key-supabase, …) once the panels that
+  // hold those ids can render: the AI keys rows wait for the saved-keys list.
+  useScrollToHash(Boolean(statsData) && !entitlementsLoading && !poolPending);
   const quickPicked = useRef(false);
   useEffect(() => {
     if (!ux.isQuickstart || !activeProjectId || statsLoading || poolPending || quickPicked.current) return;
@@ -191,7 +216,7 @@ function SettingsPageBody({ byokEnabled }: { byokEnabled: boolean }) {
 
   const tabOptions = useMemo(
     () =>
-      TAB_IDS.map((id) => ({
+      SETTINGS_TAB_IDS.map((id) => ({
         id,
         label: SETTINGS_TAB_LABELS[id],
         count: id === 'byok' && keyProblems > 0 ? keyProblems : undefined,
@@ -289,17 +314,31 @@ function SettingsPageBody({ byokEnabled }: { byokEnabled: boolean }) {
           </>
         )}
         {active === 'byok' && <ByokPanel />}
-        {active === 'firecrawl' && <FirecrawlPanel />}
-        {active === 'browserbase' && <BrowserbasePanel />}
-        {active === 'voice' && <VoiceIntakePanel />}
-        {active === 'health' && (
-          <HealthPanel
-            projectId={activeProjectId}
-            projectName={projectName ?? stats.projectName}
-            projectSlug={projectSlug}
-          />
+        {active === 'tools' && (
+          <>
+            <div id={SETTINGS_SECTION_IDS.firecrawl} className="scroll-mt-6 space-y-4">
+              <FirecrawlPanel />
+            </div>
+            <div id={SETTINGS_SECTION_IDS.browserbase} className="scroll-mt-6 space-y-4">
+              <BrowserbasePanel />
+            </div>
+          </>
         )}
-        {active === 'dev' && <DevToolsPanel />}
+        {active === 'voice' && <VoiceIntakePanel />}
+        {active === 'sdk' && (
+          <>
+            <div id={SETTINGS_SECTION_IDS.connection} className="scroll-mt-6 space-y-4">
+              <HealthPanel
+                projectId={activeProjectId}
+                projectName={projectName ?? stats.projectName}
+                projectSlug={projectSlug}
+              />
+            </div>
+            <div id={SETTINGS_SECTION_IDS.debugLogging} className="scroll-mt-6 space-y-4">
+              <DevToolsPanel />
+            </div>
+          </>
+        )}
       </div>
 
       {stats.projectId ? (
