@@ -254,8 +254,12 @@ export function SentryContextPanel({
               </span>
             </div>
           </div>
-          {/* mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas) */}
-          <ol className="relative ml-1 border-l border-edge-subtle space-y-2 pl-3 max-h-[28rem] overflow-y-auto pr-1">
+          <ol
+            tabIndex={0}
+            aria-label="Breadcrumbs"
+            // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
+            className="relative ml-1 border-l border-edge-subtle space-y-2 pl-3 max-h-[28rem] overflow-y-auto pr-1 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40"
+          >
             {unified.map((c, i) => (
               <li key={i} className="relative">
                 <span

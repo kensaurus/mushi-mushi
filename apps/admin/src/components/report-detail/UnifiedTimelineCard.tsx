@@ -56,7 +56,12 @@ export function UnifiedTimelineCard({ reportId }: { reportId: string }) {
   }
 
   return (
-    <ol className="relative ml-1 max-h-72 overflow-y-auto border-l border-edge-subtle pl-3 pr-1 space-y-1.5">
+    // Scrollable, so it takes keyboard focus (axe scrollable-region-focusable).
+    <ol
+      tabIndex={0}
+      aria-label="Unified timeline"
+      className="relative ml-1 max-h-72 overflow-y-auto border-l border-edge-subtle pl-3 pr-1 space-y-1.5 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40"
+    >
       {timeline.map((entry) => (
         <li key={entry.id} className="relative py-0.5">
           <span
