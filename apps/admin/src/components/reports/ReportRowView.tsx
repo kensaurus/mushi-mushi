@@ -15,6 +15,7 @@
 import { memo, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { Tooltip } from '../ui'
+import { closedRowAction } from './reportRowAction'
 import { useRowFlash } from '../../lib/useRowFlash'
 import { useStaggeredAppear } from '../../lib/useStaggeredAppear'
 import { reportDetailPath } from '../../lib/reportUrl'
@@ -103,6 +104,7 @@ function ReportRowViewInner({
   const uniqueUsers = row.unique_users ?? 0
   const blastRadius = uniqueUsers > 0 ? uniqueUsers : dedupCount
   const canDispatch = DISPATCH_ELIGIBLE_STATUSES.has(row.status)
+  const closedAction = closedRowAction(row.status)
   const reporterReplied = hasUnseenReporterReply(row)
 
   // "Loud" rows = critical OR significant blast (>=3 distinct users felt it).
@@ -300,6 +302,17 @@ function ReportRowViewInner({
                   repoUrl={preflight?.repoUrl ?? null}
                 />
               </span>
+            ) : closedAction ? (
+              // A fixed or dismissed report has nothing left to triage: a red
+              // "Triage →" there read as an alarm on finished work.
+              <Link
+                to={detailPath}
+                onClick={(e) => e.stopPropagation()}
+                className={`inline-flex h-5 shrink-0 items-center justify-center truncate px-1.5 text-3xs font-medium leading-none rounded-sm ${closedAction.className}`}
+                data-testid="report-row-closed-action"
+              >
+                {closedAction.label}
+              </Link>
             ) : (
               <Link
                 to={detailPath}
