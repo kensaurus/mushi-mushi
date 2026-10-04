@@ -7,21 +7,24 @@ import { Badge, Btn, EmptyState, RelativeTime } from '../ui'
 import { IconChevronRight } from '../icons'
 import { ScoreBar } from './ScoreBar'
 import type { PdcaRun } from './types'
-import { STATUS_CLS, STATUS_LABEL } from './types'
+import { STATUS_CLS, STATUS_LABEL, personaLabel } from './types'
 
 interface Props {
   runs: PdcaRun[]
   projectName: string | null
   onOpen: (run: PdcaRun) => void
+  /** Asks for confirmation before aborting (the page owns the dialog). */
   onAbort: (id: string) => void
   onTrigger: (id: string) => void
+  /** Run ids with a Trigger or Abort request in flight. */
+  busyIds?: ReadonlySet<string>
 }
 
 function statusBadge(status: PdcaRun['status']) {
   return <Badge className={STATUS_CLS[status]}>{STATUS_LABEL[status]}</Badge>
 }
 
-export function PdcaRunTable({ runs, projectName, onOpen, onAbort, onTrigger }: Props) {
+export function PdcaRunTable({ runs, projectName, onOpen, onAbort, onTrigger, busyIds }: Props) {
   if (runs.length === 0) {
     return (
       <EmptyState
@@ -66,19 +69,19 @@ export function PdcaRunTable({ runs, projectName, onOpen, onAbort, onTrigger }: 
               <td className="px-3 py-2">
                 <ScoreBar score={run.final_score} />
               </td>
-              <td className="px-3 py-2 font-mono text-2xs text-fg-faint">{run.persona}</td>
+              <td className="px-3 py-2 text-2xs text-fg-faint" title={run.persona}>{personaLabel(run.persona)}</td>
               <td className="px-3 py-2 text-2xs text-fg-muted">
                 <RelativeTime value={run.created_at} />
               </td>
               <td className="px-3 py-2">
                 <div className="flex items-center justify-end gap-1">
                   {run.status === 'queued' && (
-                    <Btn size="sm" variant="ghost" onClick={() => onTrigger(run.id)}>
+                    <Btn size="sm" variant="ghost" onClick={() => onTrigger(run.id)} disabled={busyIds?.has(run.id)}>
                       Trigger
                     </Btn>
                   )}
                   {(run.status === 'queued' || run.status === 'running') && (
-                    <Btn size="sm" variant="danger" onClick={() => onAbort(run.id)}>
+                    <Btn size="sm" variant="danger" onClick={() => onAbort(run.id)} disabled={busyIds?.has(run.id)}>
                       Abort
                     </Btn>
                   )}

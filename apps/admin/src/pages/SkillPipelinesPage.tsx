@@ -640,7 +640,7 @@ function CatalogTab({
 
   // The search box stays mounted through every state below — a skeleton or
   // empty state that replaced it dropped focus on each keystroke and left a
-  // no-match query with nothing to edit (console QA QA 22).
+  // no-match query with nothing to edit (console QA 22).
   const searchBar = (
     <div className="flex gap-2 items-center">
       <input
@@ -864,7 +864,7 @@ function PipelinesTab({
   }, [])
 
   // Cancel is irreversible and, for cloud runs, reaches out to Cursor Cloud,
-  // so it goes through a confirm dialog (console QA QA 24).
+  // so it goes through a confirm dialog (console QA 24).
   const [cancelTarget, setCancelTarget] = useState<PipelineRun | null>(null)
 
   const abortRun = useCallback(async (runId: string) => {
@@ -895,7 +895,7 @@ function PipelinesTab({
     [runs, selectedRun],
   )
 
-  // Manual check-in for the current step (console QA QA 105). Handoff runs
+  // Manual check-in for the current step (console QA 105). Handoff runs
   // have no agent to report back, so the console needs its own control.
   const [checkingIn, setCheckingIn] = useState(false)
   const checkinStep = useCallback(
