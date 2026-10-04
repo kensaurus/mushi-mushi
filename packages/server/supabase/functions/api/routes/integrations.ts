@@ -251,6 +251,7 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
     let platformHealthy = 0;
     let platformDown = 0;
     const attentionKinds: string[] = [];
+    const downKinds: string[] = [];
 
     const latestProbeByKind = new Map<string, { status: string; checked_at: string }>();
     for (const p of probes ?? []) {
@@ -277,8 +278,34 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
         inboundAccepted: (sentryDelivered ?? []).length > 0,
       });
       if (verdict === 'working') platformHealthy += 1;
-      else if (verdict === 'down') platformDown += 1;
-      else attentionKinds.push(kind);
+      else if (verdict === 'down') {
+        platformDown += 1;
+        downKinds.push(kind);
+      } else attentionKinds.push(kind);
+    }
+
+    // Fix agents (Cursor Cloud, Claude Code) have cards on the same page, so a
+    // failing or unproven agent must show in the banner too. They count toward
+    // down/attention only: picking one agent is enough, so an unconfigured
+    // agent never reads as "missing credentials".
+    const fixAgentRequired: Record<string, string> = {
+      cursor_cloud: 'cursor_api_key_ref',
+      claude_code_agent: 'claude_api_key_ref',
+    };
+    for (const kind of FIX_AGENT_KINDS as string[]) {
+      const field = fixAgentRequired[kind];
+      if (!field) continue;
+      const configured = (row[field] != null && row[field] !== '') || envBackedFields.has(field);
+      if (!configured) continue;
+      const probe = latestProbeByKind.get(kind);
+      const verdict = classifyPlatformConnection({
+        probeStatus: probe?.status,
+        probeCheckedAt: probe?.checked_at,
+      });
+      if (verdict === 'down') {
+        platformDown += 1;
+        downKinds.push(kind);
+      } else if (verdict === 'attention') attentionKinds.push(kind);
     }
     const platformAttention = attentionKinds.length;
 
@@ -297,10 +324,18 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
     let topPriorityLabel: string | null = null;
     let topPriorityTo: string | null = null;
 
+    const KIND_NAMES: Record<string, string> = {
+      sentry: 'Sentry',
+      langfuse: 'Langfuse',
+      github: 'GitHub',
+      cursor_cloud: 'Cursor Cloud',
+      claude_code_agent: 'Claude Code',
+    };
+    const nameList = (kinds: string[]) => kinds.map((k) => KIND_NAMES[k] ?? k).join(', ');
     if (platformDown > 0) {
       topPriority = 'platform_down';
-      topPriorityLabel = `${platformDown} connection${platformDown === 1 ? '' : 's'} failing health checks — open the card below and click Test, or run a probe in Health.`;
-      topPriorityTo = scoped('/health?fn=integration-probe');
+      topPriorityLabel = `${nameList(downKinds)} ${platformDown === 1 ? 'is' : 'are'} failing — the card below says why and has the fix.`;
+      topPriorityTo = `${scoped('/integrations/config')}#platform-card-${downKinds[0]}`;
     } else if (platformConnected === 0 && routingActive === 0) {
       // Nothing configured at all — must precede the `incomplete` check below,
       // which would otherwise always swallow this case (0 < platformKinds.length).
@@ -314,9 +349,8 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
       topPriorityLabel = `${missing} of ${platformKinds.length} core tools still need credentials — GitHub is required before auto-fix PRs can ship.`;
       topPriorityTo = scoped('/integrations/config');
     } else if (platformAttention > 0) {
-      const names: Record<string, string> = { sentry: 'Sentry', langfuse: 'Langfuse', github: 'GitHub' };
       topPriority = 'attention';
-      topPriorityLabel = `${attentionKinds.map((k) => names[k] ?? k).join(', ')} ${platformAttention === 1 ? 'needs' : 'need'} attention — each card below says what and has the fix.`;
+      topPriorityLabel = `${nameList(attentionKinds)} ${platformAttention === 1 ? 'needs' : 'need'} attention — each card below says what and has the fix.`;
       topPriorityTo = `${scoped('/integrations/config')}#platform-card-${attentionKinds[0]}`;
     } else {
       topPriority = 'healthy';
