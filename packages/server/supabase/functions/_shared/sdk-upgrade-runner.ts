@@ -30,7 +30,7 @@ import {
   type BumpEntry,
 } from './sdk-upgrade-plan.ts'
 import { upsertProjectSdkObservationAsync } from './sdk-observation.ts'
-import { UPGRADE_BRANCH_PREFIX } from './sdk-upgrade-gates.ts'
+import { UPGRADE_BRANCH_PREFIX, completedJobCockpitFields } from './sdk-upgrade-gates.ts'
 import { SDK_UPGRADE_STALE_MS, shouldClaimSdkUpgradeJob } from './sdk-upgrade-reclaim.ts'
 
 const log = rootLog.child('sdk-upgrade-runner')
@@ -124,9 +124,10 @@ export async function runSdkUpgradeJob(jobId: string): Promise<SdkUpgradeRunResu
     } = {},
   ) => {
     const finishedAt = new Date().toISOString()
+    const cockpit = completedJobCockpitFields(status, extra.pr_url)
     await db
       .from('sdk_upgrade_jobs')
-      .update({ status, finished_at: finishedAt, ...extra })
+      .update({ status, finished_at: finishedAt, ...cockpit, ...extra })
       .eq('id', jobId)
 
     if (status === 'completed' && extra.plan?.length) {
