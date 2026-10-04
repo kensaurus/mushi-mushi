@@ -14,6 +14,7 @@ import {
   scopedOwnedProjectIds,
   parseUuidParam,
   OPEN_REPORT_STATUSES,
+  TRIAGE_BACKLOG_STATUSES,
 } from '../shared.ts';
 import { buildUnifiedReportTimeline } from '../../_shared/unified-timeline.ts';
 import { postReporterReply, computeTwoWayHealth } from '../../_shared/reporter-comms.ts';
@@ -329,7 +330,7 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
       if (status === 'open') query = query.in('status', [...OPEN_REPORT_STATUSES]);
       else if (status === 'classified') query = query.in('status', [...legacyClassified]);
       else if (status === 'fixed') query = query.in('status', [...legacyFixed]);
-      else if (status === 'new') query = query.in('status', ['new', 'queued', 'pending', 'submitted']);
+      else if (status === 'new') query = query.in('status', [...TRIAGE_BACKLOG_STATUSES]);
       else query = query.eq('status', status);
     }
     if (category) query = query.eq('category', category);

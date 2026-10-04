@@ -7,11 +7,19 @@ import {
   resolveOwnedProject,
   scopedOwnedProjectIds,
   rpcError,
+  dbError,
   OPEN_REPORT_STATUSES,
+  TRIAGE_BACKLOG_STATUSES,
 } from '../shared.ts';
 import { summarizeFixTruths } from '../../_shared/fix-report-truth.ts';
 import { failedFixPreviews, loadRecentFixTruths } from '../../_shared/fix-report-truth-load.ts';
 import { JUDGE_ELIGIBLE_STATUSES, isJudgeStale } from '../../_shared/judge-eligibility.ts';
+import {
+  IntegrationHealthReadError,
+  countHealthIssues,
+  loadIntegrationHealth,
+  summarizeHealthByKind,
+} from '../../_shared/integration-health-rollup.ts';
 
 /** Activity-feed line for one fix attempt, read against its report's current state. */
 function fixActivityLabel(
@@ -29,6 +37,109 @@ function fixActivityLabel(
   if (f.pr_number != null) return `Fix PR #${f.pr_number} opened`;
   return `Auto-fix ${status || 'recorded'}`;
 }
+
+type DashDb = ReturnType<typeof getServiceClient>;
+type ReadError = { message?: string; code?: string; details?: string | null; hint?: string | null };
+
+/** A dashboard read failed: answer with an error, never with a 0 that reads as "all clear". */
+class DashboardReadError extends Error {
+  constructor(
+    readonly what: string,
+    readonly readError: ReadError | null | undefined,
+  ) {
+    super(`${what}: ${readError?.message ?? 'read failed'}`);
+    this.name = 'DashboardReadError';
+  }
+}
+
+async function exactCount(
+  what: string,
+  query: PromiseLike<{ count: number | null; error: ReadError | null }>,
+): Promise<number> {
+  const { count, error } = await query;
+  if (error) throw new DashboardReadError(what, error);
+  return count ?? 0;
+}
+
+async function rowsOf<T>(
+  what: string,
+  query: PromiseLike<{ data: T[] | null; error: ReadError | null }>,
+): Promise<T[]> {
+  const { data, error } = await query;
+  if (error) throw new DashboardReadError(what, error);
+  return data ?? [];
+}
+
+/** First day (UTC midnight) of the 14-day dashboard window, today included. */
+function dashboardWindowStart(now: Date = new Date()): string {
+  const since = new Date(now);
+  since.setUTCDate(since.getUTCDate() - 13);
+  since.setUTCHours(0, 0, 0, 0);
+  return since.toISOString();
+}
+
+/**
+ * The triage backlog: every report still in the `new` bucket, any age —
+ * exactly what `/reports?status=new` lists. One definition for the
+ * dashboard KPI, the Plan stage, dashboard/stats and inbox/stats.
+ */
+function triageBacklogCount(db: DashDb, projectIds: string[]): Promise<number> {
+  return exactCount(
+    'triage backlog',
+    db
+      .from('reports')
+      .select('id', { count: 'exact', head: true })
+      .in('project_id', projectIds)
+      .in('status', [...TRIAGE_BACKLOG_STATUSES]),
+  );
+}
+
+/** Reports judge-batch would grade now — the Check stage and the inbox Check flag. */
+function ungradedReportCount(db: DashDb, projectIds: string[]): Promise<number> {
+  return exactCount(
+    'ungraded reports',
+    db
+      .from('reports')
+      .select('id', { count: 'exact', head: true })
+      .in('project_id', projectIds)
+      .in('status', [...JUDGE_ELIGIBLE_STATUSES])
+      .is('judge_evaluated_at', null),
+  );
+}
+
+async function newestCreatedAt(
+  what: string,
+  query: PromiseLike<{ data: Array<{ created_at: string | null }> | null; error: ReadError | null }>,
+): Promise<string | null> {
+  const rows = await rowsOf(what, query);
+  return rows[0]?.created_at ?? null;
+}
+
+function latestActivity(
+  lastReport: string | null,
+  lastFix: string | null,
+): { lastActivityAt: string | null; lastActivityKind: 'report' | 'fix' | null } {
+  if (lastReport && lastFix) {
+    return Date.parse(lastReport) >= Date.parse(lastFix)
+      ? { lastActivityAt: lastReport, lastActivityKind: 'report' }
+      : { lastActivityAt: lastFix, lastActivityKind: 'fix' };
+  }
+  if (lastReport) return { lastActivityAt: lastReport, lastActivityKind: 'report' };
+  if (lastFix) return { lastActivityAt: lastFix, lastActivityKind: 'fix' };
+  return { lastActivityAt: null, lastActivityKind: null };
+}
+
+function dashboardReadFailed(
+  c: Parameters<typeof dbError>[0],
+  err: unknown,
+): Response {
+  if (err instanceof DashboardReadError) return dbError(c, err.readError ?? { message: err.message });
+  if (err instanceof IntegrationHealthReadError) return dbError(c, { message: err.message, code: err.code });
+  throw err;
+}
+
+/** Rows kept for the 14-day charts; the headline counts are exact counts. */
+const CHART_ROW_CAP = 5000;
 
 export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): void {
   app.get('/v1/admin/stats', adminOrApiKey(), async (c) => {
@@ -111,6 +222,7 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
       clearStages: 0,
       totalSurfaces: 5,
       criticalReports14d: 0,
+      criticalUntriaged: 0,
       openBacklog: 0,
       failedFixes14d: 0,
       urgentOpenReports: 0,
@@ -148,132 +260,170 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
     if ('response' in resolvedProject) return resolvedProject.response;
     const activeProject = resolvedProject.project;
 
-    const since = new Date();
-    since.setUTCDate(since.getUTCDate() - 13);
-    since.setUTCHours(0, 0, 0, 0);
-    const sinceIso = since.toISOString();
+    const sinceIso = dashboardWindowStart();
     const now = Date.now();
 
-    const [
-      reportsRes,
-      fixesRes,
-      healthRes,
-      evalRes,
-      keysRes,
-      heartbeatRes,
-      reportCountRes,
-      ungradedRes,
-      urgentRes,
-    ] = await Promise.all([
-      db
-        .from('reports')
-        .select('id, status, severity, created_at')
-        .in('project_id', projectIds)
-        .gte('created_at', sinceIso)
-        .order('created_at', { ascending: false })
-        .limit(500),
-      db
-        .from('fix_attempts')
-        .select('id, report_id, status, created_at')
-        .in('project_id', projectIds)
-        .gte('created_at', sinceIso)
-        .order('created_at', { ascending: false })
-        .limit(200),
-      db
-        .from('integration_health_history')
-        .select('kind, status, checked_at')
-        .in('project_id', projectIds)
-        .gte('checked_at', sinceIso)
-        .order('checked_at', { ascending: false })
-        .limit(500),
-      db
-        .from('classification_evaluations')
-        .select('created_at')
-        .in('project_id', projectIds)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-      db
-        .from('project_api_keys')
-        .select('id')
-        .eq('project_id', activeProject.id)
-        .eq('is_active', true)
-        .limit(1),
-      db
-        .from('project_api_keys')
-        .select('last_seen_at')
-        .eq('project_id', activeProject.id)
-        .eq('is_active', true)
-        .not('last_seen_at', 'is', null)
-        .order('last_seen_at', { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-      db
-        .from('reports')
-        .select('id', { count: 'exact', head: true })
-        .eq('project_id', activeProject.id),
-      // What judge-batch would grade right now. Scoped like evalRes so the
-      // staleness verdict compares like with like.
-      db
-        .from('reports')
-        .select('id', { count: 'exact', head: true })
-        .in('project_id', projectIds)
-        .in('status', [...JUDGE_ELIGIBLE_STATUSES])
-        .is('judge_evaluated_at', null),
-      // Critical/high reports still waiting on a decision, any age. Not
-      // `criticalReports14d`, which counts by created_at and includes fixed
-      // reports; the "next best action" strip needs current, unfixed work.
-      db
-        .from('reports')
-        .select('id', { count: 'exact', head: true })
-        .eq('project_id', activeProject.id)
-        .in('severity', ['critical', 'high'])
-        .in('status', [...OPEN_REPORT_STATUSES]),
-    ]);
-
-    const recentReports = reportsRes.data ?? [];
-    const recentFixes = fixesRes.data ?? [];
-
-    let criticalReports14d = 0;
-    for (const r of recentReports) {
-      const sev = String(r.severity ?? '').toLowerCase();
-      if (sev === 'critical') criticalReports14d += 1;
+    let reads: {
+      criticalReports14d: number;
+      criticalUntriaged: number;
+      openBacklog: number;
+      urgentOpenReports: number;
+      ungradedReports: number;
+      lastEvalAt: string | null;
+      hasKey: boolean;
+      hasSdk: boolean;
+      reportCount: number;
+      lastReport: string | null;
+      lastFix: string | null;
+      integrationRed: number;
+      integrationAmber: number;
+      failedFixes14d: number;
+    };
+    try {
+      const [
+        criticalReports14d,
+        criticalUntriaged,
+        openBacklog,
+        urgentOpenReports,
+        ungradedReports,
+        lastEvalAt,
+        keyRows,
+        heartbeatRows,
+        reportCount,
+        lastReport,
+        lastFix,
+        health,
+        fixTruths,
+      ] = await Promise.all([
+        // Intake metric for the "Critical 14d" tile: critical reports received
+        // in the window, any status.
+        exactCount(
+          'critical reports 14d',
+          db
+            .from('reports')
+            .select('id', { count: 'exact', head: true })
+            .in('project_id', projectIds)
+            .eq('severity', 'critical')
+            .gte('created_at', sinceIso),
+        ),
+        // The Plan flag: critical reports still waiting for triage, any age —
+        // exactly what its link `/reports?severity=critical&status=new` lists.
+        exactCount(
+          'critical untriaged',
+          db
+            .from('reports')
+            .select('id', { count: 'exact', head: true })
+            .in('project_id', projectIds)
+            .eq('severity', 'critical')
+            .in('status', [...TRIAGE_BACKLOG_STATUSES]),
+        ),
+        triageBacklogCount(db, projectIds),
+        // Critical/high reports still waiting on a decision, any age — the
+        // "next best action" strip needs current, unfixed work.
+        exactCount(
+          'urgent open reports',
+          db
+            .from('reports')
+            .select('id', { count: 'exact', head: true })
+            .eq('project_id', activeProject.id)
+            .in('severity', ['critical', 'high'])
+            .in('status', [...OPEN_REPORT_STATUSES]),
+        ),
+        // What judge-batch would grade right now, scoped like the last-eval read.
+        ungradedReportCount(db, projectIds),
+        newestCreatedAt(
+          'last judge evaluation',
+          db
+            .from('classification_evaluations')
+            .select('created_at')
+            .in('project_id', projectIds)
+            .order('created_at', { ascending: false })
+            .limit(1),
+        ),
+        rowsOf(
+          'api keys',
+          db.from('project_api_keys').select('id').eq('project_id', activeProject.id).eq('is_active', true).limit(1),
+        ),
+        rowsOf(
+          'sdk heartbeat',
+          db
+            .from('project_api_keys')
+            .select('last_seen_at')
+            .eq('project_id', activeProject.id)
+            .eq('is_active', true)
+            .not('last_seen_at', 'is', null)
+            .limit(1),
+        ),
+        exactCount(
+          'report count',
+          db.from('reports').select('id', { count: 'exact', head: true }).eq('project_id', activeProject.id),
+        ),
+        newestCreatedAt(
+          'latest report',
+          db
+            .from('reports')
+            .select('created_at')
+            .in('project_id', projectIds)
+            .gte('created_at', sinceIso)
+            .order('created_at', { ascending: false })
+            .limit(1),
+        ),
+        newestCreatedAt(
+          'latest fix attempt',
+          db
+            .from('fix_attempts')
+            .select('created_at')
+            .in('project_id', projectIds)
+            .gte('created_at', sinceIso)
+            .order('created_at', { ascending: false })
+            .limit(1),
+        ),
+        loadIntegrationHealth(db as unknown as Parameters<typeof loadIntegrationHealth>[0], projectIds, sinceIso),
+        // Per REPORT from its current state: earlier failed attempts on a report
+        // a merged PR fixed are history, not work (fix-report-truth.ts). Same
+        // 30-day report window as every other fix count (fix-report-truth-load.ts).
+        loadRecentFixTruths(db as unknown as Parameters<typeof loadRecentFixTruths>[0], projectIds),
+      ]);
+      const healthCounts = countHealthIssues(summarizeHealthByKind(health.rows));
+      reads = {
+        criticalReports14d,
+        criticalUntriaged,
+        openBacklog,
+        urgentOpenReports,
+        ungradedReports,
+        lastEvalAt,
+        hasKey: keyRows.length > 0,
+        hasSdk: heartbeatRows.length > 0,
+        reportCount,
+        lastReport,
+        lastFix,
+        integrationRed: healthCounts.red,
+        integrationAmber: healthCounts.amber,
+        failedFixes14d: summarizeFixTruths(fixTruths.truths.values()).failed,
+      };
+    } catch (err) {
+      return dashboardReadFailed(c, err);
     }
+    const {
+      criticalReports14d,
+      criticalUntriaged,
+      openBacklog,
+      urgentOpenReports,
+      failedFixes14d,
+      integrationRed,
+      integrationAmber,
+      lastEvalAt,
+    } = reads;
 
-    const openBacklog = recentReports.filter((r) => {
-      const status = String(r.status ?? '');
-      if (status !== 'new' && status !== 'queued') return false;
-      return now - new Date(String(r.created_at)).getTime() > 60 * 60 * 1000;
-    }).length;
-
-    // Per REPORT from its current state: earlier failed attempts on a report
-    // a merged PR fixed are history, not work (fix-report-truth.ts).
-    // Same 30-day report window as every other fix count (fix-report-truth-load.ts).
-    const { truths: inboxTruths } = await loadRecentFixTruths(db as unknown as Parameters<typeof loadRecentFixTruths>[0], projectIds);
-    const failedFixes14d = summarizeFixTruths(inboxTruths.values()).failed;
-
-    const healthByKind = new Map<string, string>();
-    for (const row of healthRes.data ?? []) {
-      const kind = String(row.kind);
-      if (!healthByKind.has(kind)) healthByKind.set(kind, String(row.status));
-    }
-    let integrationRed = 0;
-    let integrationAmber = 0;
-    for (const status of healthByKind.values()) {
-      if (status === 'red' || status === 'fail') integrationRed += 1;
-      else if (status === 'amber' || status === 'degraded') integrationAmber += 1;
-    }
-
-    const lastEvalAt = evalRes.data?.created_at ?? null;
     let judgeStaleHours: number | null = null;
     if (lastEvalAt) {
       judgeStaleHours = (now - new Date(String(lastEvalAt)).getTime()) / (60 * 60 * 1000);
     }
     // Old scores alone are not actionable: with no ungraded report a re-run
     // evaluates nothing and the "Judge scores are Nh old" card never clears.
-    const judgeStale = isJudgeStale({ judgeStaleHours, ungradedReports: ungradedRes.count ?? 0 });
+    const judgeStale = isJudgeStale({ judgeStaleHours, ungradedReports: reads.ungradedReports });
 
-    const openPlan = criticalReports14d > 0;
+    const openPlan = criticalUntriaged > 0;
     const openDo = failedFixes14d > 0;
     const openCheck = judgeStale;
     const openOps = integrationRed > 0 || integrationAmber > 0;
@@ -287,7 +437,7 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
       openPlan
         ? {
             stage: 'plan',
-            title: `${criticalReports14d} critical report${criticalReports14d === 1 ? '' : 's'} need triage`,
+            title: `${criticalUntriaged} critical report${criticalUntriaged === 1 ? '' : 's'} need triage`,
             hint: 'Confirm severity on the worst bugs first — auto-fix waits for triage.',
             to: scoped('/reports?severity=critical&status=new'),
           }
@@ -340,32 +490,10 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
     const clearStages = 5 - openActions;
     const top = openFlags[0] ?? null;
 
-    const hasKey = (keysRes.data ?? []).length > 0;
-    const hasSdk = Boolean(heartbeatRes.data?.last_seen_at);
-    const reportCount = reportCountRes.count ?? 0;
     const requiredComplete =
-      1 + (hasKey ? 1 : 0) + (hasSdk ? 1 : 0) + (reportCount > 0 ? 1 : 0);
+      1 + (reads.hasKey ? 1 : 0) + (reads.hasSdk ? 1 : 0) + (reads.reportCount > 0 ? 1 : 0);
     const setupDone = requiredComplete >= 4;
-
-    const lastReport = recentReports[0]?.created_at ?? null;
-    const lastFix = recentFixes[0]?.created_at ?? null;
-    let lastActivityAt: string | null = null;
-    let lastActivityKind: string | null = null;
-    if (lastReport && lastFix) {
-      if (new Date(String(lastReport)).getTime() >= new Date(String(lastFix)).getTime()) {
-        lastActivityAt = String(lastReport);
-        lastActivityKind = 'report';
-      } else {
-        lastActivityAt = String(lastFix);
-        lastActivityKind = 'fix';
-      }
-    } else if (lastReport) {
-      lastActivityAt = String(lastReport);
-      lastActivityKind = 'report';
-    } else if (lastFix) {
-      lastActivityAt = String(lastFix);
-      lastActivityKind = 'fix';
-    }
+    const { lastActivityAt, lastActivityKind } = latestActivity(reads.lastReport, reads.lastFix);
 
     let topPriority: 'no_project' | 'setup' | 'actions' | 'clear' = 'clear';
     let topPriorityLabel: string | null = null;
@@ -399,9 +527,10 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
         clearStages,
         totalSurfaces: 5,
         criticalReports14d,
+        criticalUntriaged,
         openBacklog,
         failedFixes14d,
-        urgentOpenReports: urgentRes.count ?? 0,
+        urgentOpenReports,
         integrationRed,
         integrationAmber,
         judgeStale,
@@ -467,110 +596,135 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
     if ('response' in resolvedProject) return resolvedProject.response;
     const activeProject = resolvedProject.project;
 
-    const since = new Date();
-    since.setUTCDate(since.getUTCDate() - 13);
-    since.setUTCHours(0, 0, 0, 0);
-    const sinceIso = since.toISOString();
-    const now = Date.now();
+    const sinceIso = dashboardWindowStart();
 
-    const [
-      reportsRes,
-      fixesRes,
-      llmRes,
-      healthRes,
-      keysRes,
-      heartbeatRes,
-      reportCountRes,
-    ] = await Promise.all([
-      db
-        .from('reports')
-        .select('id, status, created_at')
-        .in('project_id', projectIds)
-        .gte('created_at', sinceIso)
-        .order('created_at', { ascending: false })
-        .limit(500),
-      db
-        .from('fix_attempts')
-        .select('id, report_id, status, created_at, pr_number')
-        .in('project_id', projectIds)
-        .gte('created_at', sinceIso)
-        .order('created_at', { ascending: false })
-        .limit(200),
-      db
-        .from('llm_invocations')
-        .select('id, status, created_at')
-        .in('project_id', projectIds)
-        .gte('created_at', sinceIso)
-        .limit(2000),
-      db
-        .from('integration_health_history')
-        .select('kind, status, checked_at')
-        .in('project_id', projectIds)
-        .gte('checked_at', sinceIso)
-        .order('checked_at', { ascending: false })
-        .limit(500),
-      db
-        .from('project_api_keys')
-        .select('id')
-        .eq('project_id', activeProject.id)
-        .eq('is_active', true)
-        .limit(1),
-      db
-        .from('project_api_keys')
-        .select('last_seen_at')
-        .eq('project_id', activeProject.id)
-        .eq('is_active', true)
-        .not('last_seen_at', 'is', null)
-        .order('last_seen_at', { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-      db
-        .from('reports')
-        .select('id', { count: 'exact', head: true })
-        .eq('project_id', activeProject.id),
-    ]);
+    // Count-only reads: this route runs on every page through the sidebar
+    // counters (nav-meta), so it must not pull rows it only counts.
+    let reads: {
+      reports14d: number;
+      openBacklog: number;
+      llmCalls14d: number;
+      llmOk14d: number;
+      hasKey: boolean;
+      hasSdk: boolean;
+      reportCount: number;
+      lastReport: string | null;
+      lastFix: string | null;
+      integrationIssues: number;
+      fixTruths: Awaited<ReturnType<typeof loadRecentFixTruths>>;
+    };
+    try {
+      const [
+        reports14d,
+        openBacklog,
+        llmCalls14d,
+        llmOk14d,
+        keyRows,
+        heartbeatRows,
+        reportCount,
+        lastReport,
+        lastFix,
+        health,
+        fixTruths,
+      ] = await Promise.all([
+        exactCount(
+          'reports 14d',
+          db
+            .from('reports')
+            .select('id', { count: 'exact', head: true })
+            .in('project_id', projectIds)
+            .gte('created_at', sinceIso),
+        ),
+        triageBacklogCount(db, projectIds),
+        exactCount(
+          'llm calls 14d',
+          db
+            .from('llm_invocations')
+            .select('id', { count: 'exact', head: true })
+            .in('project_id', projectIds)
+            .gte('created_at', sinceIso),
+        ),
+        exactCount(
+          'llm successes 14d',
+          db
+            .from('llm_invocations')
+            .select('id', { count: 'exact', head: true })
+            .in('project_id', projectIds)
+            .gte('created_at', sinceIso)
+            .eq('status', 'success'),
+        ),
+        rowsOf(
+          'api keys',
+          db.from('project_api_keys').select('id').eq('project_id', activeProject.id).eq('is_active', true).limit(1),
+        ),
+        rowsOf(
+          'sdk heartbeat',
+          db
+            .from('project_api_keys')
+            .select('last_seen_at')
+            .eq('project_id', activeProject.id)
+            .eq('is_active', true)
+            .not('last_seen_at', 'is', null)
+            .limit(1),
+        ),
+        exactCount(
+          'report count',
+          db.from('reports').select('id', { count: 'exact', head: true }).eq('project_id', activeProject.id),
+        ),
+        newestCreatedAt(
+          'latest report',
+          db
+            .from('reports')
+            .select('created_at')
+            .in('project_id', projectIds)
+            .gte('created_at', sinceIso)
+            .order('created_at', { ascending: false })
+            .limit(1),
+        ),
+        newestCreatedAt(
+          'latest fix attempt',
+          db
+            .from('fix_attempts')
+            .select('created_at')
+            .in('project_id', projectIds)
+            .gte('created_at', sinceIso)
+            .order('created_at', { ascending: false })
+            .limit(1),
+        ),
+        loadIntegrationHealth(db as unknown as Parameters<typeof loadIntegrationHealth>[0], projectIds, sinceIso),
+        // Per REPORT from its current state (fix-report-truth.ts): glot.it read
+        // "8 auto-fixes failed / 7 open PRs" over 4 reports already fixed by
+        // merged PRs and 0 open PRs (2026-10-04).
+        loadRecentFixTruths(db as unknown as Parameters<typeof loadRecentFixTruths>[0], projectIds),
+      ]);
+      reads = {
+        reports14d,
+        openBacklog,
+        llmCalls14d,
+        llmOk14d,
+        hasKey: keyRows.length > 0,
+        hasSdk: heartbeatRows.length > 0,
+        reportCount,
+        lastReport,
+        lastFix,
+        integrationIssues: countHealthIssues(summarizeHealthByKind(health.rows)).issues,
+        fixTruths,
+      };
+    } catch (err) {
+      return dashboardReadFailed(c, err);
+    }
+    const { reports14d, openBacklog, llmCalls14d, integrationIssues, hasSdk, reportCount } = reads;
+    const llmFailures14d = Math.max(0, llmCalls14d - reads.llmOk14d);
 
-    const recentReports = reportsRes.data ?? [];
-    const recentFixes = fixesRes.data ?? [];
-    const recentLlm = llmRes.data ?? [];
-    const openBacklog = recentReports.filter((r) => {
-      const status = String(r.status ?? '');
-      if (status !== 'new' && status !== 'queued') return false;
-      return now - new Date(String(r.created_at)).getTime() > 60 * 60 * 1000;
-    }).length;
-
-    // Per REPORT from its current state (fix-report-truth.ts): glot.it read
-    // "8 auto-fixes failed / 7 open PRs" over 4 reports already fixed by
-    // merged PRs and 0 open PRs (2026-10-04).
-    const fixTruths = await loadRecentFixTruths(db as unknown as Parameters<typeof loadRecentFixTruths>[0], projectIds);
-    const fixTruth = summarizeFixTruths(fixTruths.truths.values());
+    const fixTruth = summarizeFixTruths(reads.fixTruths.truths.values());
     const fixesInProgress = fixTruth.inFlight;
     const fixesFailed = fixTruth.failed;
     const openPrs = fixTruth.prOpen;
-    const failedFixesPreview = failedFixPreviews(fixTruths, { projectId: activeProject.id, limit: 3 });
+    const failedFixesPreview = failedFixPreviews(reads.fixTruths, { projectId: activeProject.id, limit: 3 });
 
-    let llmCalls14d = 0;
-    let llmFailures14d = 0;
-    for (const inv of recentLlm) {
-      llmCalls14d += 1;
-      if (inv.status !== 'success') llmFailures14d += 1;
-    }
-
-    const healthByKind = new Map<string, string>();
-    for (const row of healthRes.data ?? []) {
-      const kind = String(row.kind);
-      if (!healthByKind.has(kind)) healthByKind.set(kind, String(row.status));
-    }
-    const integrationIssues = [...healthByKind.values()].filter(
-      (s) => s && s !== 'ok',
-    ).length;
-
-    const hasKey = (keysRes.data ?? []).length > 0;
-    const hasSdk = Boolean(heartbeatRes.data?.last_seen_at);
-    const reportCount = reportCountRes.count ?? 0;
     const requiredComplete =
       1 +
-      (hasKey ? 1 : 0) +
+      (reads.hasKey ? 1 : 0) +
       (hasSdk ? 1 : 0) +
       (reportCount > 0 ? 1 : 0);
     const setupDone = requiredComplete >= 4;
@@ -581,7 +735,7 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
     if (openBacklog > 0) {
       focusStage = 'plan';
       focusLabel = 'Plan';
-      bottleneck = `${openBacklog} report${openBacklog === 1 ? '' : 's'} waiting > 1h to triage`;
+      bottleneck = `${openBacklog} report${openBacklog === 1 ? '' : 's'} waiting to triage`;
     } else if (fixesFailed > 0) {
       focusStage = 'do';
       focusLabel = 'Do';
@@ -596,25 +750,7 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
       bottleneck = `${llmFailures14d} LLM failure${llmFailures14d === 1 ? '' : 's'} in 14d`;
     }
 
-    const lastReport = recentReports[0]?.created_at ?? null;
-    const lastFix = recentFixes[0]?.created_at ?? null;
-    let lastActivityAt: string | null = null;
-    let lastActivityKind: string | null = null;
-    if (lastReport && lastFix) {
-      if (new Date(String(lastReport)).getTime() >= new Date(String(lastFix)).getTime()) {
-        lastActivityAt = String(lastReport);
-        lastActivityKind = 'report';
-      } else {
-        lastActivityAt = String(lastFix);
-        lastActivityKind = 'fix';
-      }
-    } else if (lastReport) {
-      lastActivityAt = String(lastReport);
-      lastActivityKind = 'report';
-    } else if (lastFix) {
-      lastActivityAt = String(lastFix);
-      lastActivityKind = 'fix';
-    }
+    const { lastActivityAt, lastActivityKind } = latestActivity(reads.lastReport, reads.lastFix);
 
     const pid = activeProject.id;
     let topPriority:
@@ -634,7 +770,7 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
       topPriorityTo = `/onboarding?tab=steps&project=${encodeURIComponent(pid)}`;
     } else if (openBacklog > 0) {
       topPriority = 'backlog';
-      topPriorityLabel = `${openBacklog} report${openBacklog === 1 ? '' : 's'} waiting over an hour — triage the oldest first.`;
+      topPriorityLabel = `${openBacklog} report${openBacklog === 1 ? '' : 's'} waiting to triage — start with the oldest.`;
       topPriorityTo = `/reports?tab=queue&status=new&project=${encodeURIComponent(pid)}`;
     } else if (fixesFailed > 0) {
       topPriority = 'fixes_failed';
@@ -661,12 +797,12 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
         projectId: activeProject.id,
         projectName: activeProject.name,
         projectCount: projectIds.length,
-        hasData: recentReports.length > 0 || recentFixes.length > 0,
+        hasData: reports14d > 0 || reads.lastFix != null,
         setupDone,
         requiredComplete,
         requiredTotal: 4,
         openBacklog,
-        reports14d: recentReports.length,
+        reports14d,
         fixesInProgress,
         fixesFailed,
         openPrs,
@@ -706,75 +842,216 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
       .select('id, name')
       .in('id', projectIds);
 
-    const since = new Date();
-    since.setUTCDate(since.getUTCDate() - 13);
-    since.setUTCHours(0, 0, 0, 0);
-    const sinceIso = since.toISOString();
+    const sinceIso = dashboardWindowStart();
+    const since = new Date(sinceIso);
+    const now = Date.now();
+    const sevenDaysAgoIso = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
 
-    // Reports — richer slice for triage backlog, top components, trend
-    const { data: recentReports } = await db
-      .from('reports')
-      .select(
-        'id, project_id, summary, description, status, severity, category, component, created_at, stage1_latency_ms, stage2_latency_ms',
-      )
-      .in('project_id', projectIds)
-      .gte('created_at', sinceIso)
-      .order('created_at', { ascending: false })
-      .limit(500);
+    type ChartReport = { created_at: string; severity: string | null; component: string | null };
+    type ChartLlm = {
+      created_at: string;
+      status: string | null;
+      latency_ms: number | null;
+      input_tokens: number | null;
+      output_tokens: number | null;
+    };
+    type RecentReport = {
+      id: string;
+      summary: string | null;
+      description: string | null;
+      severity: string | null;
+      category: string | null;
+      status: string | null;
+      created_at: string;
+    };
+    type RecentFix = {
+      id: string;
+      report_id: string;
+      status: string | null;
+      agent: string | null;
+      pr_number: number | null;
+      pr_state: string | null;
+      merged_at: string | null;
+      llm_model: string | null;
+      created_at: string;
+    };
 
-    // Triage-queue source: open reports REGARDLESS of age. The windowed
-    // recentReports slice silently dropped anything stuck open longer than
-    // the 14-day window, so the dashboard claimed "All caught up" over a
-    // stalled queue (2026-08-16 audit).
-    const { data: openReports } = await db
-      .from('reports')
-      .select('id, summary, description, status, severity, category, created_at, processing_error')
-      .in('project_id', projectIds)
-      .in('status', [...OPEN_REPORT_STATUSES])
-      .order('created_at', { ascending: false })
-      .limit(10);
-
-    // Fix attempts — for the auto-fix pipeline tile
-    const { data: recentFixes } = await db
-      .from('fix_attempts')
-      .select(
-        'id, report_id, project_id, status, agent, pr_url, pr_number, pr_state, merged_at, llm_model, llm_input_tokens, llm_output_tokens, started_at, completed_at, created_at',
-      )
-      .in('project_id', projectIds)
-      .gte('created_at', sinceIso)
-      .order('created_at', { ascending: false })
-      .limit(100);
-
-    // LLM invocations — for cost / latency trend
-    const { data: recentLlm } = await db
-      .from('llm_invocations')
-      .select(
-        'id, project_id, function_name, used_model, status, latency_ms, input_tokens, output_tokens, created_at, key_source',
-      )
-      .in('project_id', projectIds)
-      .gte('created_at', sinceIso)
-      .order('created_at', { ascending: false })
-      .limit(2000);
-
-    // Integration health — last 14 days, used to render a global "platform health" sparkline
-    const { data: healthRows } = await db
-      .from('integration_health_history')
-      .select('kind, status, latency_ms, checked_at')
-      .in('project_id', projectIds)
-      .gte('checked_at', sinceIso)
-      .order('checked_at', { ascending: true })
-      .limit(2000);
-
-    // Classification evals (judge) — last 14 days. Powers the Check stage of
-    // the PDCA cockpit: how often does the LLM classifier agree with the
-    // independent grader?
-    const { data: recentEvals } = await db
-      .from('classification_evaluations')
-      .select('id, report_id, judge_score, classification_agreed, created_at')
-      .in('project_id', projectIds)
-      .gte('created_at', sinceIso)
-      .order('created_at', { ascending: false })
-      .limit(500);
+    let loaded: {
+      reports14d: number;
+      openBacklog: number;
+      oldestTriageAt: string | null;
+      llmCalls14d: number;
+      llmOk14d: number;
+      pendingEvals: number;
+      disagreements: number;
+      chartReports: ChartReport[];
+      chartLlm: ChartLlm[];
+      latestReports: RecentReport[];
+      recentFixes: RecentFix[];
+      evalDays: Array<{ created_at: string }>;
+      openReports: Array<RecentReport & { processing_error: string | null }>;
+      healthRows: Awaited<ReturnType<typeof loadIntegrationHealth>>['rows'];
+      dashTruths: Awaited<ReturnType<typeof loadRecentFixTruths>>;
+    };
+    try {
+      const [
+        reports14d,
+        openBacklog,
+        oldestTriage,
+        llmCalls14d,
+        llmOk14d,
+        pendingEvals,
+        disagreements,
+        chartReports,
+        chartLlm,
+        latestReports,
+        recentFixes,
+        evalDays,
+        openReports,
+        health,
+        dashTruths,
+      ] = await Promise.all([
+        exactCount(
+          'reports 14d',
+          db
+            .from('reports')
+            .select('id', { count: 'exact', head: true })
+            .in('project_id', projectIds)
+            .gte('created_at', sinceIso),
+        ),
+        triageBacklogCount(db, projectIds),
+        // Oldest report still waiting for triage, any age — the Plan bottleneck.
+        rowsOf<{ created_at: string }>(
+          'oldest untriaged report',
+          db
+            .from('reports')
+            .select('created_at')
+            .in('project_id', projectIds)
+            .in('status', [...TRIAGE_BACKLOG_STATUSES])
+            .order('created_at', { ascending: true })
+            .limit(1),
+        ),
+        exactCount(
+          'llm calls 14d',
+          db
+            .from('llm_invocations')
+            .select('id', { count: 'exact', head: true })
+            .in('project_id', projectIds)
+            .gte('created_at', sinceIso),
+        ),
+        exactCount(
+          'llm successes 14d',
+          db
+            .from('llm_invocations')
+            .select('id', { count: 'exact', head: true })
+            .in('project_id', projectIds)
+            .gte('created_at', sinceIso)
+            .eq('status', 'success'),
+        ),
+        // Check: what judge-batch would grade now, the same count as the
+        // inbox Check flag (ungradedReportCount).
+        ungradedReportCount(db, projectIds),
+        exactCount(
+          'judge disagreements 14d',
+          db
+            .from('classification_evaluations')
+            .select('id', { count: 'exact', head: true })
+            .in('project_id', projectIds)
+            .gte('created_at', sinceIso)
+            .eq('classification_agreed', false),
+        ),
+        // Chart rows only (newest first). Headline numbers above are exact counts.
+        rowsOf<ChartReport>(
+          'report chart rows',
+          db
+            .from('reports')
+            .select('created_at, severity, component')
+            .in('project_id', projectIds)
+            .gte('created_at', sinceIso)
+            .order('created_at', { ascending: false })
+            .limit(CHART_ROW_CAP),
+        ),
+        rowsOf<ChartLlm>(
+          'llm chart rows',
+          db
+            .from('llm_invocations')
+            .select('created_at, status, latency_ms, input_tokens, output_tokens')
+            .in('project_id', projectIds)
+            .gte('created_at', sinceIso)
+            .order('created_at', { ascending: false })
+            .limit(CHART_ROW_CAP),
+        ),
+        rowsOf<RecentReport>(
+          'latest reports',
+          db
+            .from('reports')
+            .select('id, summary, description, severity, category, status, created_at')
+            .in('project_id', projectIds)
+            .gte('created_at', sinceIso)
+            .order('created_at', { ascending: false })
+            .limit(6),
+        ),
+        // Fix attempts of the last 7 days: the Do sparkline and the activity feed.
+        rowsOf<RecentFix>(
+          'recent fix attempts',
+          db
+            .from('fix_attempts')
+            .select('id, report_id, status, agent, pr_number, pr_state, merged_at, llm_model, created_at')
+            .in('project_id', projectIds)
+            .gte('created_at', sevenDaysAgoIso)
+            .order('created_at', { ascending: false })
+            .limit(CHART_ROW_CAP),
+        ),
+        rowsOf<{ created_at: string }>(
+          'judge evaluations 7d',
+          db
+            .from('classification_evaluations')
+            .select('created_at')
+            .in('project_id', projectIds)
+            .gte('created_at', sevenDaysAgoIso)
+            .order('created_at', { ascending: false })
+            .limit(CHART_ROW_CAP),
+        ),
+        // Triage-queue source: open reports REGARDLESS of age. A windowed
+        // slice silently dropped anything stuck open longer than the window,
+        // so the dashboard claimed "All caught up" over a stalled queue
+        // (2026-08-16 audit).
+        rowsOf<RecentReport & { processing_error: string | null }>(
+          'open reports',
+          db
+            .from('reports')
+            .select('id, summary, description, status, severity, category, created_at, processing_error')
+            .in('project_id', projectIds)
+            .in('status', [...OPEN_REPORT_STATUSES])
+            .order('created_at', { ascending: false })
+            .limit(10),
+        ),
+        loadIntegrationHealth(db as unknown as Parameters<typeof loadIntegrationHealth>[0], projectIds, sinceIso),
+        // Auto-fix pipeline summary, per REPORT from its current state: the
+        // same rule as /dashboard/stats and /fixes (fix-report-truth.ts).
+        loadRecentFixTruths(db as unknown as Parameters<typeof loadRecentFixTruths>[0], projectIds),
+      ]);
+      loaded = {
+        reports14d,
+        openBacklog,
+        oldestTriageAt: oldestTriage[0]?.created_at ?? null,
+        llmCalls14d,
+        llmOk14d,
+        pendingEvals,
+        disagreements,
+        chartReports,
+        chartLlm,
+        latestReports,
+        recentFixes,
+        evalDays,
+        openReports,
+        healthRows: health.rows,
+        dashTruths,
+      };
+    } catch (err) {
+      return dashboardReadFailed(c, err);
+    }
+    const { reports14d, openBacklog, pendingEvals, disagreements, recentFixes, dashTruths } = loaded;
 
     // Bucket helpers
     const dayKey = (iso: string) => iso.slice(0, 10);
@@ -799,7 +1076,7 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
     > = {};
     for (const d of days)
       reportsByDay[d] = { total: 0, critical: 0, high: 0, medium: 0, low: 0, unscored: 0 };
-    for (const r of recentReports ?? []) {
+    for (const r of loaded.chartReports) {
       const d = dayKey(String(r.created_at));
       if (!reportsByDay[d]) continue;
       const bucket = reportsByDay[d];
@@ -819,9 +1096,7 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
     > = {};
     for (const d of days) llmByDay[d] = { calls: 0, tokens: 0, latencyMs: 0, failures: 0 };
     let totalTokens = 0;
-    let totalLlmCalls = 0;
-    let totalLlmFailures = 0;
-    for (const inv of recentLlm ?? []) {
+    for (const inv of loaded.chartLlm) {
       const d = dayKey(String(inv.created_at));
       if (!llmByDay[d]) continue;
       llmByDay[d].calls++;
@@ -830,23 +1105,16 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
       llmByDay[d].latencyMs += inv.latency_ms ?? 0;
       if (inv.status !== 'success') llmByDay[d].failures++;
       totalTokens += tok;
-      totalLlmCalls++;
-      if (inv.status !== 'success') totalLlmFailures++;
     }
-
-    // Triage SLA — mean minutes from created_at -> first stage classification
-    // (proxied as stage2_latency_ms presence). For "open" backlog, count anything
-    // still status='new' or 'queued' beyond 1h.
-    const now = Date.now();
-    const openBacklog = (recentReports ?? []).filter((r) => {
-      const status = String(r.status ?? '');
-      if (status !== 'new' && status !== 'queued') return false;
-      return now - new Date(String(r.created_at)).getTime() > 60 * 60 * 1000;
-    }).length;
+    const totalLlmCalls = loaded.llmCalls14d;
+    const totalLlmFailures = Math.max(0, loaded.llmCalls14d - loaded.llmOk14d);
+    // True when a chart had more rows than CHART_ROW_CAP; the KPI counts stay exact.
+    const chartsSampled =
+      loaded.chartReports.length >= CHART_ROW_CAP || loaded.chartLlm.length >= CHART_ROW_CAP;
 
     // Top components by report count
     const componentCounts = new Map<string, number>();
-    for (const r of recentReports ?? []) {
+    for (const r of loaded.chartReports) {
       const comp = (r.component ?? '').trim();
       if (!comp) continue;
       componentCounts.set(comp, (componentCounts.get(comp) ?? 0) + 1);
@@ -856,10 +1124,7 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
       .slice(0, 6)
       .map(([component, count]) => ({ component, count }));
 
-    // Auto-fix pipeline summary — per REPORT from its current state, the
-    // same rule as /dashboard/stats and /fixes (fix-report-truth.ts).
     // `total` is the number of reports with an attempt in the shared 30-day window.
-    const dashTruths = await loadRecentFixTruths(db as unknown as Parameters<typeof loadRecentFixTruths>[0], projectIds);
     const dashTruth = summarizeFixTruths(dashTruths.truths.values());
     const fixSummary = {
       total: dashTruth.reports,
@@ -870,9 +1135,8 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
       openPrs: dashTruth.prOpen,
     };
 
-    // Triage queue — top 5 open reports needing attention, ANY age (the
-    // openReports query is unwindowed; see its comment above).
-    const triageQueue = (openReports ?? [])
+    // Triage queue: top 5 open reports needing attention, ANY age.
+    const triageQueue = loaded.openReports
       .slice(0, 5)
       .map((r) => ({
         id: r.id,
@@ -885,18 +1149,18 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
         processing_error: r.processing_error ?? null,
       }));
 
-    // Recent activity — last 8 events across reports + fixes
+    // Recent activity: last 8 events across reports + fixes
     const activity = [
-      ...(recentReports ?? []).slice(0, 6).map((r) => ({
+      ...loaded.latestReports.map((r) => ({
         kind: 'report' as const,
         id: r.id,
         label: r.summary ?? r.description?.slice(0, 100) ?? '(no summary)',
         meta: r.severity ?? r.category ?? r.status,
         at: r.created_at,
       })),
-      ...(recentFixes ?? []).slice(0, 4).map((f) => ({
+      ...recentFixes.slice(0, 4).map((f) => ({
         kind: 'fix' as const,
-        // Use the fix attempt's own ID, not report_id — multiple attempts can
+        // Use the fix attempt's own ID, not report_id: multiple attempts can
         // share the same report_id and would produce duplicate React keys.
         id: f.id,
         label: fixActivityLabel(f, dashTruths.truths.get(String(f.report_id))?.mergedPrNumber ?? null),
@@ -907,25 +1171,15 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
       .sort((a, b) => new Date(String(b.at)).getTime() - new Date(String(a.at)).getTime())
       .slice(0, 8);
 
-    // Integration health — group by kind, derive last status + uptime ratio
-    const healthByKind = new Map<
-      string,
-      { last: string | null; lastAt: string | null; ok: number; total: number }
-    >();
-    for (const row of healthRows ?? []) {
-      const k = String(row.kind);
-      if (!healthByKind.has(k)) healthByKind.set(k, { last: null, lastAt: null, ok: 0, total: 0 });
-      const entry = healthByKind.get(k)!;
-      entry.total++;
-      if (row.status === 'ok') entry.ok++;
-      entry.last = String(row.status);
-      entry.lastAt = String(row.checked_at);
-    }
-    const integrations = [...healthByKind.entries()].map(([kind, v]) => ({
-      kind,
-      lastStatus: v.last,
-      lastAt: v.lastAt,
-      uptime: v.total > 0 ? v.ok / v.total : null,
+    // Integration health: latest status per kind (worst across the projects
+    // in scope) and the ok/total uptime over the window. One definition with
+    // dashboard/stats and inbox/stats (_shared/integration-health-rollup.ts).
+    const integrations = summarizeHealthByKind(loaded.healthRows).map((h) => ({
+      kind: h.kind,
+      lastStatus: h.lastStatus,
+      lastAt: h.lastAt,
+      uptime: h.uptime,
+      severity: h.severity,
     }));
 
     // ---------------------------------------------------------------------------
@@ -951,8 +1205,7 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
       series?: number[];
     }
 
-    // 7-day series for each PDCA stage. Reused across the four stage builders
-    // so we only walk the recentReports / recentFixes / recentEvals arrays once.
+    // 7-day series for each PDCA stage, from the chart / 7-day rows loaded above.
     const last7Days: string[] = [];
     for (let i = 6; i >= 0; i--) {
       last7Days.push(new Date(now - i * 24 * 60 * 60 * 1000).toISOString().slice(0, 10));
@@ -961,33 +1214,22 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
     const planSeries7d = new Array(7).fill(0) as number[];
     const doSeries7d = new Array(7).fill(0) as number[];
     const checkSeries7d = new Array(7).fill(0) as number[];
-    for (const r of recentReports ?? []) {
+    for (const r of loaded.chartReports) {
       const i = last7Index.get(String(r.created_at).slice(0, 10));
       if (i !== undefined) planSeries7d[i] += 1;
     }
-    for (const f of recentFixes ?? []) {
+    for (const f of recentFixes) {
       const i = last7Index.get(String(f.created_at).slice(0, 10));
       if (i !== undefined) doSeries7d[i] += 1;
     }
-    for (const e of recentEvals ?? []) {
-      // recentEvals rows expose `created_at`; fall back to evaluated_at if the
-      // row pre-dates the schema change.
-      const ts = String(
-        (e as { created_at?: string; evaluated_at?: string }).created_at ??
-          (e as { evaluated_at?: string }).evaluated_at ??
-          '',
-      ).slice(0, 10);
-      const i = last7Index.get(ts);
+    for (const e of loaded.evalDays) {
+      const i = last7Index.get(String(e.created_at).slice(0, 10));
       if (i !== undefined) checkSeries7d[i] += 1;
     }
 
-    // Plan: open reports waiting > 1h (already computed as `openBacklog`).
-    const oldestNewMs = (recentReports ?? [])
-      .filter((r) => r.status === 'new' || r.status === 'queued')
-      .reduce<number>((min, r) => {
-        const t = new Date(String(r.created_at)).getTime();
-        return Math.min(min, t);
-      }, Number.POSITIVE_INFINITY);
+    // Plan: reports waiting for triage, any age (`openBacklog`), and how long
+    // the oldest of them has waited.
+    const oldestNewMs = loaded.oldestTriageAt ? Date.parse(loaded.oldestTriageAt) : Number.NaN;
     const oldestNewHours = Number.isFinite(oldestNewMs)
       ? Math.floor((now - oldestNewMs) / 3_600_000)
       : 0;
@@ -998,7 +1240,7 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
       icon: 'inbox',
       description: 'Capture & classify',
       count: openBacklog,
-      countLabel: openBacklog === 1 ? 'report waiting > 1h' : 'reports waiting > 1h',
+      countLabel: openBacklog === 1 ? 'report waiting to triage' : 'reports waiting to triage',
       bottleneck:
         openBacklog > 0 && oldestNewHours > 0
           ? `Oldest report has been waiting ${oldestNewHours}h to triage`
@@ -1018,26 +1260,18 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
       icon: 'wrench',
       description: 'Dispatch fixes',
       count: doCount,
-      countLabel: doCount === 1 ? 'fix in flight' : 'fixes in flight',
+      countLabel: doCount === 1 ? 'fix running or stopped' : 'fixes running or stopped',
       bottleneck:
         fixSummary.failed > 0
-          ? `${fixSummary.failed} failed ${fixSummary.failed === 1 ? 'fix needs' : 'fixes need'} retry`
+          ? `Auto-fix stopped on ${fixSummary.failed} ${fixSummary.failed === 1 ? 'report' : 'reports'}`
           : null,
       tone: doTone,
       cta: { to: '/fixes', label: 'Open Fixes' },
       series: doSeries7d,
     };
 
-    // Check: pending evals = classified reports without a judge_evaluated_at,
-    // capped to the 14-day window we already pulled.
-    const evaluatedReportIds = new Set((recentEvals ?? []).map((e) => e.report_id));
-    const pendingEvals = (recentReports ?? []).filter((r) => {
-      if (r.status !== 'classified' && r.status !== 'fixed') return false;
-      return !evaluatedReportIds.has(r.id);
-    }).length;
-    const disagreements = (recentEvals ?? []).filter(
-      (e) => e.classification_agreed === false,
-    ).length;
+    // Check: `pendingEvals` = reports the judge would grade now (counted above
+    // with the inbox's definition); `disagreements` = judge vs classifier in 14d.
     const checkTone: StageTone = disagreements > 3 ? 'urgent' : pendingEvals > 10 ? 'warn' : 'ok';
     const checkStage: PdcaStage = {
       id: 'check',
@@ -1056,10 +1290,8 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
     };
 
     // Act: integration destinations live + healthy.
-    const liveIntegrations = integrations.filter((i) => i.lastStatus === 'ok').length;
-    const failingIntegrations = integrations.filter(
-      (i) => i.lastStatus && i.lastStatus !== 'ok',
-    ).length;
+    const liveIntegrations = integrations.filter((i) => i.severity === 'ok').length;
+    const failingIntegrations = countHealthIssues(integrations).issues;
     const actTone: StageTone =
       failingIntegrations > 0 ? 'urgent' : liveIntegrations === 0 ? 'warn' : 'ok';
     const actStage: PdcaStage = {
@@ -1094,7 +1326,7 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
         projects: (projects ?? []).map((p) => ({ id: p.id, name: p.name })),
         window: { days, since: sinceIso },
         counts: {
-          reports14d: (recentReports ?? []).length,
+          reports14d,
           openBacklog,
           fixesTotal: fixSummary.total,
           openPrs: fixSummary.openPrs,
@@ -1111,6 +1343,7 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
         integrations,
         pdcaStages,
         focusStage,
+        chartsSampled,
       },
     });
   });
