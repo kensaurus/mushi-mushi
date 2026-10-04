@@ -131,11 +131,17 @@ export function sentryConnection(input: {
   latestDelivery: InboundDeliveryLike | null | undefined
   /** False while the deliveries request is in flight or failed. */
   deliveriesLoaded: boolean
+  /** True when the deliveries request failed (not just pending). */
+  deliveriesFailed?: boolean
   now?: number
 }): ConnectionView {
   const api = connectionFromProbe({ configured: input.configured, probe: input.probe, now: input.now })
   if (api.state !== 'working') return api
-  if (!input.deliveriesLoaded) return { state: 'checking', detail: 'Checking for Sentry events…' }
+  if (!input.deliveriesLoaded) {
+    return input.deliveriesFailed
+      ? { state: 'checking', detail: "Couldn't check whether Sentry events arrive — reload the page to try again." }
+      : { state: 'checking', detail: 'Checking for Sentry events…' }
+  }
   const d = input.latestDelivery
   if (!d) {
     return {
