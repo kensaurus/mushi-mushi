@@ -7,11 +7,12 @@
  *   GET    /v1/admin/skills/sources                  — list skill sources for project
  *   POST   /v1/admin/skills/sources                  — add a new skill source
  *   POST   /v1/admin/skills/sources/:id/sync         — trigger sync for a single source
+ *   DELETE /v1/admin/skills/sources/:id              — remove a source and retire its skills
  *
  *   GET    /v1/admin/skills/pipelines                — list pipeline runs for a project
  *   POST   /v1/admin/skills/pipelines                — start a new pipeline run
  *   GET    /v1/admin/skills/pipelines/:id            — run detail + step runs
- *   DELETE /v1/admin/skills/pipelines/:id            — abort a run
+ *   DELETE /v1/admin/skills/pipelines/:id            — abort a run (stops its Cursor agents)
  *   POST   /v1/admin/skills/pipelines/:runId/steps/:stepIndex/checkin — check in a step (CLI/agent)
  *
  * Phase 1 of Skill-Driven Triage Pipelines feature.
@@ -28,6 +29,13 @@ import { claimTenantRateLimit, logTenantContext, tenantContextFromHono } from '.
 import { getRelevantCode } from '../../_shared/rag.ts'
 import { composeRunPacket, resolveChain } from '../../_shared/skill-packet.ts'
 import { dispatchPluginEvent } from '../../_shared/plugins.ts'
+import {
+  dedupeSkillsBySlug,
+  findActiveSkillBySlug,
+  projectSkillSourceIds,
+} from '../../_shared/skill-catalog.ts'
+import { unwrapUpstreamError } from '../../_shared/upstream-error.ts'
+import { stopCursorAgentLatestRun, type CursorStopOutcome } from '../../_shared/agent-adapters.ts'
 import type { Variables } from '../types.ts'
 
 const app = new Hono<{ Variables: Variables }>()
@@ -37,6 +45,12 @@ function db() {
 }
 
 const REPORT_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/** Upper bound on catalog rows read before de-duplicating by slug. */
+const CATALOG_SCAN_CAP = 5000
+
+/** Run states a step check-in may still change. */
+const OPEN_RUN_STATUSES = ['pending', 'running']
 
 function projectIdFromRequest(c: Context<{ Variables: Variables }>): string | null {
   return (
@@ -106,11 +120,14 @@ function skillsRoutes() {
       .eq('id', projectId)
       .maybeSingle()
 
-    const [{ count: catalogTotal }, { data: runs }] = await Promise.all([
+    const [{ data: slugRows }, { data: runs }] = await Promise.all([
+      // Distinct slugs: the same repo added by two projects stores each skill
+      // once per source, and the catalog shows it once (skill-catalog.ts).
       db()
         .from('agent_skills')
-        .select('id', { count: 'exact', head: true })
-        .eq('is_active', true),
+        .select('slug')
+        .eq('is_active', true)
+        .limit(CATALOG_SCAN_CAP),
       db()
         .from('skill_pipeline_runs')
         .select('id, status')
@@ -131,6 +148,8 @@ function skillsRoutes() {
         failedRuns += 1
       }
     }
+
+    const catalogTotal = new Set((slugRows ?? []).map((r) => r.slug as string)).size
 
     let awaitingCheckin = 0
     if (activeRunIds.length > 0) {
@@ -189,20 +208,22 @@ function skillsRoutes() {
     })
   })
 
-  // List skills — paginated, filterable by category or free-text search
+  // List skills — paginated, filterable by category or free-text search.
+  // One row per slug (skill-catalog.ts): reads every matching row, keeps the
+  // caller project's own copy of a duplicated slug, then pages in memory.
   r.get('/', async (c) => {
     const category = c.req.query('category')
     const search = c.req.query('q')
-    const page = parseInt(c.req.query('page') ?? '1', 10)
-    const limit = Math.min(parseInt(c.req.query('limit') ?? '200', 10), 200)
+    const page = Math.max(parseInt(c.req.query('page') ?? '1', 10) || 1, 1)
+    const limit = Math.min(Math.max(parseInt(c.req.query('limit') ?? '200', 10) || 200, 1), 200)
 
     let q = db()
       .from('agent_skills')
-      .select('id, slug, category, title, description, chain_slugs, license, created_at, updated_at', { count: 'exact' })
+      .select('id, slug, source_id, category, title, description, chain_slugs, license, created_at, updated_at')
       .eq('is_active', true)
       .order('category', { ascending: true })
       .order('slug', { ascending: true })
-      .range((page - 1) * limit, page * limit - 1)
+      .limit(CATALOG_SCAN_CAP)
 
     if (category) q = q.eq('category', category)
     if (search) {
@@ -216,18 +237,25 @@ function skillsRoutes() {
       }
     }
 
-    const { data, error, count } = await q
+    const { data, error } = await q
     if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
 
+    const preferred = await projectSkillSourceIds(db(), projectIdFromRequest(c))
+    const unique = dedupeSkillsBySlug(
+      (data ?? []) as Array<{ slug: string; source_id: string | null; updated_at: string | null; id: string; category: string }>,
+      preferred,
+    )
+    const pageRows = unique.slice((page - 1) * limit, page * limit)
+
     // Group by category for the catalog browser
-    const grouped: Record<string, typeof data> = {}
-    for (const skill of data ?? []) {
+    const grouped: Record<string, typeof pageRows> = {}
+    for (const skill of pageRows) {
       const cat = skill.category as string
       if (!grouped[cat]) grouped[cat] = []
       grouped[cat].push(skill)
     }
 
-    return c.json({ ok: true, data: data ?? [], grouped, total: count, page, limit })
+    return c.json({ ok: true, data: pageRows, grouped, total: unique.length, page, limit })
   })
 
   // ── Sources ──────────────────────────────────────────────────────────────
@@ -364,14 +392,52 @@ function skillsRoutes() {
         },
         body: JSON.stringify({ source_id: sourceId, force: reqBody.force ?? false }),
       })
-      const json = await res.json()
-      if (!res.ok) return c.json({ ok: false, error: json }, res.status as 200)
+      const json = await res.json().catch(() => null)
+      if (!res.ok) {
+        // skill-sync answers `{ ok:false, error:'…' }` or `{ error:{code,message} }`;
+        // pass its own reason through so the console can say why.
+        const error = unwrapUpstreamError(json, {
+          code: 'SYNC_FAILED',
+          message: `The skill sync could not run (HTTP ${res.status}). Try again in a minute.`,
+        })
+        return c.json({ ok: false, error }, (res.status >= 400 ? res.status : 502) as 502)
+      }
       // Nest stats under `data` so every consumer (console, CLI) reads them
       // consistently via the standard `{ ok, data }` envelope.
       return c.json({ ok: true, data: json })
     } catch (err) {
-      return c.json({ ok: false, error: { code: 'ERROR', message: String(err) } }, 500)
+      return c.json({
+        ok: false,
+        error: { code: 'SYNC_UNREACHABLE', message: `Couldn't reach the skill sync worker: ${String(err)}` },
+      }, 502)
     }
+  })
+
+  // Remove a source. Its skills leave the catalog first (agent_skills.source_id
+  // is ON DELETE SET NULL, so they would otherwise stay listed forever).
+  r.delete('/sources/:id', async (c) => {
+    const sourceId = c.req.param('id')
+    const { data: source } = await db()
+      .from('skill_sources')
+      .select('id, project_id, repo_slug')
+      .eq('id', sourceId)
+      .maybeSingle()
+    if (!source) {
+      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'That skill source no longer exists.' } }, 404)
+    }
+    const access = await assertTargetProjectAccess(c, db(), c.get('userId') as string, source.project_id as string)
+    if (!access.ok) return access.response
+
+    const { error: retireErr } = await db()
+      .from('agent_skills')
+      .update({ is_active: false })
+      .eq('source_id', sourceId)
+    if (retireErr) {
+      return c.json({ ok: false, error: { code: 'DB_ERROR', message: retireErr.message } }, 500)
+    }
+    const { error } = await db().from('skill_sources').delete().eq('id', sourceId)
+    if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+    return c.json({ ok: true, data: { id: sourceId, repo_slug: source.repo_slug } })
   })
 
   // ── Pipelines ────────────────────────────────────────────────────────────
@@ -506,13 +572,13 @@ function skillsRoutes() {
       }, 409)
     }
 
-    // Validate the skill exists
-    const { data: skill } = await db()
-      .from('agent_skills')
-      .select('slug, title, description, body_md, chain_slugs')
-      .eq('slug', root_skill_slug)
-      .eq('is_active', true)
-      .maybeSingle()
+    // Validate the skill exists (one row per slug, even when several sources carry it)
+    const { skill } = await findActiveSkillBySlug(
+      db(),
+      String(root_skill_slug),
+      'slug, title, description, body_md, chain_slugs',
+      await projectSkillSourceIds(db(), projectId),
+    )
 
     if (!skill) {
       return c.json({
@@ -644,19 +710,66 @@ function skillsRoutes() {
     return c.json({ ok: true, data: { ...run, steps: steps ?? [] } })
   })
 
-  // Abort a pipeline run
+  // Abort a pipeline run. Open steps are closed as skipped. In cloud mode each
+  // step that already started a Cursor Cloud agent gets its run cancelled, and
+  // the answer says per agent whether that worked: an agent we could not stop
+  // may still push a branch or open a PR.
   r.delete('/pipelines/:id', async (c) => {
     const runId = c.req.param('id')
     const access = await assertRunAccess(c, runId)
     if (!access.ok) return access.response
 
-    await db()
+    const now = new Date().toISOString()
+    const { data: aborted, error: abortErr } = await db()
       .from('skill_pipeline_runs')
-      .update({ status: 'aborted', finished_at: new Date().toISOString() })
+      .update({ status: 'aborted', finished_at: now })
       .eq('id', runId)
+      .in('status', OPEN_RUN_STATUSES)
+      .select('id, mode')
+    if (abortErr) {
+      return c.json({ ok: false, error: { code: 'DB_ERROR', message: abortErr.message } }, 500)
+    }
+    const run = (aborted ?? [])[0] as { id: string; mode: string } | undefined
+    if (!run) {
+      return c.json({
+        ok: false,
+        error: { code: 'RUN_CLOSED', message: 'This pipeline already finished, so there is nothing to cancel.' },
+      }, 409)
+    }
+
+    const { data: openSteps } = await db()
+      .from('skill_pipeline_step_runs')
+      .select('step_index, status, agent_ref')
+      .eq('run_id', runId)
       .in('status', ['pending', 'running'])
 
-    return c.json({ ok: true })
+    const agents: Array<{ stepIndex: number; agentRef: string; outcome: CursorStopOutcome }> = []
+    if (run.mode === 'cloud') {
+      for (const step of (openSteps ?? []) as Array<{ step_index: number; agent_ref: string | null }>) {
+        if (!step.agent_ref) continue
+        const outcome = await stopCursorAgentLatestRun(db(), access.projectId, step.agent_ref)
+        agents.push({ stepIndex: step.step_index, agentRef: step.agent_ref, outcome })
+      }
+    }
+
+    if ((openSteps ?? []).length > 0) {
+      await db()
+        .from('skill_pipeline_step_runs')
+        .update({ status: 'skipped', finished_at: now, updated_at: now, notes: 'Cancelled from the console.' })
+        .eq('run_id', runId)
+        .in('status', ['pending', 'running'])
+    }
+
+    return c.json({
+      ok: true,
+      data: {
+        id: runId,
+        mode: run.mode,
+        agents,
+        stopped: agents.filter((a) => a.outcome === 'stopped' || a.outcome === 'already_finished').length,
+        stillRunning: agents.filter((a) => a.outcome === 'failed' || a.outcome === 'no_key').length,
+      },
+    })
   })
 
   // Check in a step (CLI agent updates status after completing a step)
@@ -669,6 +782,23 @@ function skillsRoutes() {
 
     const body = await c.req.json()
     const { status, notes, pr_url, agent_ref } = body
+
+    // A cancelled or finished run stays closed: a late agent check-in must not
+    // reopen it or dispatch the next cloud step.
+    const { data: runState } = await db()
+      .from('skill_pipeline_runs')
+      .select('status')
+      .eq('id', runId)
+      .maybeSingle()
+    if (!runState || !OPEN_RUN_STATUSES.includes(runState.status as string)) {
+      return c.json({
+        ok: false,
+        error: {
+          code: 'RUN_CLOSED',
+          message: `This pipeline is ${runState?.status ?? 'gone'}, so its steps can no longer be checked in.`,
+        },
+      }, 409)
+    }
 
     if (!status || !['running', 'passed', 'failed', 'skipped'].includes(status)) {
       return c.json({
@@ -770,12 +900,12 @@ function skillsRoutes() {
   // ── Catalog: single skill (must be last to avoid shadowing static sub-routes) ──
   r.get('/:slug', async (c) => {
     const slug = c.req.param('slug')
-    const { data, error } = await db()
-      .from('agent_skills')
-      .select('*')
-      .eq('slug', slug)
-      .eq('is_active', true)
-      .maybeSingle()
+    const { skill: data, error } = await findActiveSkillBySlug(
+      db(),
+      slug,
+      '*',
+      await projectSkillSourceIds(db(), projectIdFromRequest(c)),
+    )
 
     if (error || !data) {
       return c.json({ ok: false, error: { code: 'NOT_FOUND', message: `Skill "${slug}" not found` } }, 404)
