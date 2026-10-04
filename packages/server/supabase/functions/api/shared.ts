@@ -13,6 +13,7 @@ import {
   ownedProjectIds as _ownedProjectIds,
 } from '../_shared/project-access.ts';
 import { isUuid } from './ids.ts';
+import { fanoutMemo } from '../_shared/request-memo.ts';
 import { boundKeyTargetsOtherProject } from '../_shared/bound-key.ts';
 import {
   type ApiErrorCode,
@@ -479,10 +480,10 @@ export async function resolveOwnedProject(
     };
   }
 
-  const { data: memberships } = await db
-    .from('organization_members')
-    .select('organization_id, role')
-    .eq('user_id', userId);
+  // Shared across the slices of one nav-meta fan-out (see request-memo.ts).
+  const { data: memberships } = await fanoutMemo(userId, 'organizationMemberRoles', async () =>
+    await db.from('organization_members').select('organization_id, role').eq('user_id', userId),
+  );
   const rolesByOrg = new Map<string, string>();
   for (const m of memberships ?? []) rolesByOrg.set(m.organization_id, m.role);
   const orgIds = Array.from(rolesByOrg.keys());

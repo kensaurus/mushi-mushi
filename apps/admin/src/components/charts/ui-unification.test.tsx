@@ -203,3 +203,24 @@ describe('motion unification guard', () => {
     expect(violations).toEqual([])
   })
 })
+
+describe('ChartFrame with focusable content (A14 nested-interactive)', () => {
+  it('is a labelled group, not an image, when the plot holds a button', async () => {
+    const { createRoot } = await import('react-dom/client')
+    const { act } = await import('react')
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const root = createRoot(host)
+    await act(async () => {
+      root.render(
+        <ChartFrame height={80} yTickLabels={['0', '5']} accessibleCaption="Reports per day">
+          <button type="button">Deploy marker</button>
+        </ChartFrame>,
+      )
+    })
+    const labelled = host.querySelector('[aria-label="Reports per day"]')
+    expect(labelled?.getAttribute('role')).toBe('group')
+    await act(async () => root.unmount())
+    host.remove()
+  })
+})

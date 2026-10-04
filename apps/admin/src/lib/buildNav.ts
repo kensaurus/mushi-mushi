@@ -78,9 +78,6 @@ export interface BuiltNavItem {
    *  flyout shows it under the label so an icon-only rail still explains
    *  itself. Required on every registry entry, so never empty. */
   description: string
-  quickstartLabel?: string
-  beginner?: boolean
-  checkBeginnerCore?: boolean
   superAdmin?: boolean
   operatorOnly?: boolean
   requiresFeature?: FeatureFlag
@@ -161,9 +158,6 @@ function entryToNavItem(entry: NavRegistryEntry): BuiltNavItem {
     path: entry.path,
     icon: ICON_MAP[entry.iconKey],
     description: entry.paletteDescription,
-    quickstartLabel: entry.quickstartLabel,
-    beginner: entry.beginner,
-    checkBeginnerCore: entry.checkBeginnerCore,
     superAdmin: entry.superAdmin,
     operatorOnly: entry.operatorOnly,
     requiresFeature: entry.requiresFeature,

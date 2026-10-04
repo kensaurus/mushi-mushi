@@ -76,7 +76,7 @@ export function FilterChip({
   const sizeClasses =
     size === 'lg'
       ? 'min-h-[44px] rounded-lg px-3 py-2 text-xs'
-      : 'rounded-full px-2.5 py-1 text-2xs'
+      : 'min-h-6 pointer-coarse:min-h-8 rounded-full px-2.5 py-1 text-2xs'
   const ariaProps =
     selectionRole === 'radio'
       ? { role: 'radio' as const, 'aria-checked': active }
@@ -97,6 +97,7 @@ export function FilterChip({
           className={`inline-flex min-w-[1rem] justify-center rounded-full px-1 font-mono text-3xs font-semibold leading-tight ${
             active ? 'bg-fg/10' : 'bg-surface-raised/70'
           }`}
+          role="img"
           aria-label={`${count} results`}
         >
           {count > 999 ? '999+' : count}
