@@ -29,24 +29,30 @@ import { useActiveProjectId } from '../ProjectSwitcher'
 import { useDispatchPreflight } from '../../lib/useDispatchPreflight'
 import { DispatchFixPreflight } from '../reports/DispatchFixPreflight'
 import { describeJudgeRun, type JudgeRunResponse } from '../../lib/judgeRun'
+import { actionErrorText } from '../../lib/actionErrorText'
+import { ConfirmDialog } from '../ConfirmDialog'
+import type { IntegrationStatus } from '../dashboard/types'
 
 interface StageDrawerContentProps {
   stageId: PdcaStageId
   stage?: PdcaStage | null
   onClose: () => void
+  /** The dashboard's integration health (one definition with its KPI and banner). */
+  integrations?: IntegrationStatus[]
 }
 
-export function StageDrawerContent({ stageId, stage, onClose }: StageDrawerContentProps) {
+export function StageDrawerContent({ stageId, stage, onClose, integrations }: StageDrawerContentProps) {
   if (stageId === 'plan') return <PlanDrawer stage={stage} onClose={onClose} />
   if (stageId === 'do') return <DoDrawer stage={stage} onClose={onClose} />
   if (stageId === 'check') return <CheckDrawer stage={stage} onClose={onClose} />
-  return <ActDrawer stage={stage} onClose={onClose} />
+  return <ActDrawer stage={stage} onClose={onClose} integrations={integrations} />
 }
 
 /* ─────────────────────────── PLAN ──────────────────────────────────────── */
 
 interface ReportRow {
   id: string
+  project_id?: string | null
   summary?: string | null
   severity?: string | null
   category?: string | null
@@ -65,7 +71,8 @@ function PlanDrawer({ stage, onClose }: { stage?: PdcaStage | null; onClose: () 
   // that skipped both, so autofix-off or a missing repo surfaced only as an
   // error toast after the request, and a click queued an LLM run and a draft
   // PR with no chance to read what would happen.
-  const preflight = useDispatchPreflight(useActiveProjectId())
+  const activeProjectId = useActiveProjectId()
+  const preflight = useDispatchPreflight(activeProjectId)
   const [reports, setReports] = useState<ReportRow[]>([])
   const [loading, setLoading] = useState(true)
   const [busyId, setBusyId] = useState<string | null>(null)
@@ -95,24 +102,26 @@ function PlanDrawer({ stage, onClose }: { stage?: PdcaStage | null; onClose: () 
   }, [])
 
   const dispatchFix = useCallback(
-    async (reportId: string) => {
-      setBusyId(reportId)
+    async (report: ReportRow) => {
+      setBusyId(report.id)
       try {
+        // The route requires projectId: the report's own project, which can
+        // differ from the header's project when several are in scope.
         const res = await apiFetch('/v1/admin/fixes/dispatch', {
           method: 'POST',
-          body: JSON.stringify({ reportId }),
+          body: JSON.stringify({ reportId: report.id, projectId: report.project_id ?? activeProjectId }),
         })
         if (res.ok) {
           toast.success('Fix dispatched', 'Moved to the Do stage.')
-          setReports((prev) => prev.filter((r) => r.id !== reportId))
+          setReports((prev) => prev.filter((r) => r.id !== report.id))
         } else {
-          toast.error('Dispatch failed', res.error?.message)
+          toast.error('Dispatch failed', actionErrorText(res.error))
         }
       } finally {
         setBusyId(null)
       }
     },
-    [toast],
+    [toast, activeProjectId],
   )
 
   const dismissReport = useCallback(
@@ -182,7 +191,7 @@ function PlanDrawer({ stage, onClose }: { stage?: PdcaStage | null; onClose: () 
                     severity={r.severity ?? null}
                     blastRadius={(r.unique_users ?? 0) > 0 ? (r.unique_users ?? 0) : (r.dedup_count ?? 1)}
                     confidence={r.confidence ?? null}
-                    onConfirm={() => void dispatchFix(r.id)}
+                    onConfirm={() => void dispatchFix(r)}
                     onOpenDetail={() => {
                       onClose()
                       navigate(`/reports/${r.id}`)
@@ -221,6 +230,9 @@ function DoDrawer({ stage, onClose }: { stage?: PdcaStage | null; onClose: () =>
   const [dispatches, setDispatches] = useState<DispatchJob[]>([])
   const [loading, setLoading] = useState(true)
   const [busyId, setBusyId] = useState<string | null>(null)
+  // Retry queues a new fix run (AI spend + a draft PR), so it asks first,
+  // like every other dispatch entry point.
+  const [confirmRetry, setConfirmRetry] = useState<FixAttempt | null>(null)
   const meta = PDCA_STAGES.do
 
   useEffect(() => {
@@ -261,7 +273,7 @@ function DoDrawer({ stage, onClose }: { stage?: PdcaStage | null; onClose: () =>
         if (res.ok) {
           toast.success('Fix re-dispatched')
         } else {
-          toast.error('Re-dispatch failed', res.error?.message)
+          toast.error('Re-dispatch failed', actionErrorText(res.error))
         }
       } finally {
         setBusyId(null)
@@ -285,7 +297,7 @@ function DoDrawer({ stage, onClose }: { stage?: PdcaStage | null; onClose: () =>
             ),
           )
         } else {
-          toast.error('Cancel failed', res.error?.message)
+          toast.error('Cancel failed', actionErrorText(res.error))
         }
       } finally {
         setBusyId(null)
@@ -381,7 +393,7 @@ function DoDrawer({ stage, onClose }: { stage?: PdcaStage | null; onClose: () =>
                           size="sm"
                           variant="ghost"
                           loading={busyId === f.id}
-                          onClick={() => void retry(f.report_id, f.id, f.project_id)}
+                          onClick={() => setConfirmRetry(f)}
                         >
                           Retry
                         </Btn>
@@ -432,6 +444,20 @@ function DoDrawer({ stage, onClose }: { stage?: PdcaStage | null; onClose: () =>
         </>
       )}
 
+      {confirmRetry ? (
+        <ConfirmDialog
+          title="Retry the auto-fix?"
+          body={`This queues a new fix run for "${fixReportLabel(confirmRetry)}". It spends AI budget and opens a draft pull request for you to review.`}
+          confirmLabel="Retry fix"
+          loading={busyId === confirmRetry.id}
+          onCancel={() => setConfirmRetry(null)}
+          onConfirm={async () => {
+            await retry(confirmRetry.report_id, confirmRetry.id, confirmRetry.project_id)
+            setConfirmRetry(null)
+          }}
+        />
+      ) : null}
+
       <FooterCta label="Open Fixes pipeline" onClick={() => { onClose(); navigate('/fixes') }} />
     </>
   )
@@ -439,12 +465,20 @@ function DoDrawer({ stage, onClose }: { stage?: PdcaStage | null; onClose: () =>
 
 /* ─────────────────────────── CHECK ─────────────────────────────────────── */
 
+/** One row of GET /v1/admin/judge/evaluations (api/routes/judge.ts). */
 interface JudgeEval {
   id: string
-  score?: number | null
-  passed?: boolean | null
+  judge_score?: number | null
+  classification_agreed?: boolean | null
+  report_summary?: string | null
   created_at: string
   report_id?: string
+}
+
+/** 0-1 judge score as a whole percentage; a dash when the judge gave none. */
+function judgeScoreLabel(score: number | null | undefined): string {
+  if (score == null || !Number.isFinite(Number(score))) return '—'
+  return `${Math.round(Number(score) * 100)}%`
 }
 
 function CheckDrawer({ stage, onClose }: { stage?: PdcaStage | null; onClose: () => void }) {
@@ -481,7 +515,7 @@ function CheckDrawer({ stage, onClose }: { stage?: PdcaStage | null; onClose: ()
         if (outcome.kind === 'nothing') toast.info(outcome.title, outcome.description)
         else toast.success(outcome.title, outcome.description)
       } else {
-        toast.error('Judge run failed', res.error?.message)
+        toast.error('Judge run failed', actionErrorText(res.error))
       }
     } finally {
       setRunning(false)
@@ -515,19 +549,26 @@ function CheckDrawer({ stage, onClose }: { stage?: PdcaStage | null; onClose: ()
                 className="rounded-md border border-edge-subtle bg-surface-raised/50 p-2 text-2xs flex items-center gap-2"
               >
                 <span
-                  className={`inline-flex items-center justify-center w-9 rounded-sm py-0.5 font-mono font-semibold text-2xs ${
-                    e.passed === true
+                  className={`inline-flex items-center justify-center w-10 rounded-sm py-0.5 font-mono font-semibold text-2xs ${
+                    e.classification_agreed === true
                       ? CHIP_TONE.okSubtle
-                      : e.passed === false
+                      : e.classification_agreed === false
                         ? CHIP_TONE.dangerSubtle
                         : CHIP_TONE.warnSubtle
                   }`}
+                  title={
+                    e.classification_agreed === true
+                      ? 'The judge agreed with the classification'
+                      : e.classification_agreed === false
+                        ? 'The judge disagreed with the classification'
+                        : 'The judge did not say whether it agreed'
+                  }
                 >
-                  {e.score ?? '—'}
+                  {judgeScoreLabel(e.judge_score)}
                 </span>
                 <div className="flex-1 min-w-0">
-                  <span className="text-fg-muted font-mono truncate block">
-                    {e.report_id ? e.report_id.slice(0, 10) + '…' : e.id.slice(0, 10)}
+                  <span className="text-fg truncate block" title={e.report_id ?? undefined}>
+                    {e.report_summary?.trim() || 'Untitled report'}
                   </span>
                   <RelativeTime value={e.created_at} className="text-fg-faint tabular-nums" />
                 </div>
@@ -553,32 +594,22 @@ function CheckDrawer({ stage, onClose }: { stage?: PdcaStage | null; onClose: ()
 
 /* ─────────────────────────── ACT ───────────────────────────────────────── */
 
-interface IntegrationPlatformRow {
-  kind: string
-  connected?: boolean
-  lastStatus?: string | null
-  lastAt?: string | null
-}
-
-function ActDrawer({ stage, onClose }: { stage?: PdcaStage | null; onClose: () => void }) {
+function ActDrawer({
+  stage,
+  onClose,
+  integrations,
+}: {
+  stage?: PdcaStage | null
+  onClose: () => void
+  integrations?: IntegrationStatus[]
+}) {
   const navigate = useNavigate()
-  const [integrations, setIntegrations] = useState<IntegrationPlatformRow[]>([])
-  const [loading, setLoading] = useState(true)
   const meta = PDCA_STAGES.act
-
-  useEffect(() => {
-    let cancelled = false
-    setLoading(true)
-    apiFetch<{ integrations: IntegrationPlatformRow[] }>('/v1/admin/integrations/platform')
-      .then((res) => {
-        if (cancelled) return
-        if (res.ok && res.data) setIntegrations(res.data.integrations ?? [])
-      })
-      .finally(() => !cancelled && setLoading(false))
-    return () => {
-      cancelled = true
-    }
-  }, [])
+  // The dashboard's own health rollup (GET /v1/admin/dashboard `integrations`),
+  // so the drawer, the KPI and the banner can never disagree. It used to read
+  // `data.integrations` from /integrations/platform, which has no such field,
+  // and always said "No integrations connected yet."
+  const rows = integrations ?? []
 
   return (
     <>
@@ -588,34 +619,37 @@ function ActDrawer({ stage, onClose }: { stage?: PdcaStage | null; onClose: () =
         <h4 className="text-3xs font-semibold uppercase tracking-wider text-fg-muted mb-1.5">
           Integrations
         </h4>
-        {loading ? (
-          <Loading text="Fetching integrations…" />
-        ) : integrations.length === 0 ? (
-          <p className="text-2xs text-fg-muted">No integrations connected yet.</p>
+        {rows.length === 0 ? (
+          <p className="text-2xs text-fg-muted">
+            No health checks in the last 14 days. Connect an integration and its checks show here.
+          </p>
         ) : (
           <ul className="space-y-1.5">
-            {integrations.slice(0, 8).map((i) => (
-              <li
-                key={i.kind}
-                className="rounded-md border border-edge-subtle bg-surface-raised/50 p-2 text-2xs flex items-center gap-2"
-              >
-                <span
-                  className={`inline-block h-1.5 w-1.5 rounded-full shrink-0 ${
-                    i.connected ? 'bg-ok' : 'bg-fg-faint'
-                  }`}
-                  aria-hidden="true"
-                />
-                <span className="font-mono text-fg capitalize flex-1">{i.kind}</span>
-                <span className="text-fg-faint">
-                  {i.connected ? i.lastStatus ?? 'connected' : 'disconnected'}
-                </span>
-                {i.lastAt && (
-                  <span className="text-fg-faint tabular-nums">
-                    <RelativeTime value={i.lastAt} />
+            {rows.slice(0, 8).map((i) => {
+              const severity = i.severity ?? (i.lastStatus === 'ok' ? 'ok' : 'amber')
+              return (
+                <li
+                  key={i.kind}
+                  className="rounded-md border border-edge-subtle bg-surface-raised/50 p-2 text-2xs flex items-center gap-2"
+                >
+                  <span
+                    className={`inline-block h-1.5 w-1.5 rounded-full shrink-0 ${
+                      severity === 'ok' ? 'bg-ok' : severity === 'red' ? 'bg-danger' : 'bg-warn'
+                    }`}
+                    aria-hidden="true"
+                  />
+                  <span className="text-fg capitalize flex-1">{i.kind.replace(/_/g, ' ')}</span>
+                  <span className="text-fg-faint">
+                    {severity === 'ok' ? 'Healthy' : severity === 'red' ? 'Failing' : 'Degraded'}
                   </span>
-                )}
-              </li>
-            ))}
+                  {i.lastAt && (
+                    <span className="text-fg-faint tabular-nums">
+                      <RelativeTime value={i.lastAt} />
+                    </span>
+                  )}
+                </li>
+              )
+            })}
           </ul>
         )}
       </section>

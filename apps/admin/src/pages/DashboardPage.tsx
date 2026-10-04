@@ -45,7 +45,7 @@ import type { DashboardData } from '../components/dashboard/types'
 import type { PdcaStageId } from '../lib/pdca'
 import { usePageCopy } from '../lib/copy'
 import { useDashboardUx } from '../lib/dashboardModeUx'
-import { deriveDashboardInsight } from '../lib/dashboardExplainer'
+import { deriveDashboardInsight, shouldShowPdcaFlow } from '../lib/dashboardExplainer'
 import { PLATFORM_DEFS } from '../components/integrations/types'
 import { semanticBannerTone } from '../lib/tokens'
 import { IconDashboard } from '../components/icons'
@@ -214,8 +214,9 @@ export function DashboardPage() {
         })
       : null
 
-  const showPdcaFlow =
-    isAdvanced && renderFullDashboard && hasPdcaStages && !showFirstReportHero && !dashboardInsight
+  // The one-line insight banner sits above the canvas and must not hide it
+  // (QA 169: the explainer always returns a verdict, so the canvas never rendered).
+  const showPdcaFlow = shouldShowPdcaFlow({ isAdvanced, renderFullDashboard, hasPdcaStages, showFirstReportHero })
   const showHeroIntro =
     !hideOverviewChrome && !showFirstReportHero && hasPdcaStages && !showPdcaFlow
 
@@ -228,6 +229,7 @@ export function DashboardPage() {
           focusStage={data.focusStage}
           runningStage={inferRunningStage(data)}
           activity={activity}
+          integrations={data.integrations ?? []}
           interactive
           showActionPanel
           ariaLabel="Live PDCA loop — live counts per stage with the current bottleneck highlighted. Click a stage to inspect it."
