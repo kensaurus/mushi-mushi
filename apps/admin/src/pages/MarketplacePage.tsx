@@ -161,7 +161,8 @@ export function MarketplacePage() {
   useQuickstartLandingTab({
     enabled: ux.isQuickstart && Boolean(activeProjectId),
     ready: !loading,
-    tabParam: param,
+    // `?filter=disabled` also picks a tab (Installed), so it counts as a deep link.
+    tabParam: param ?? urlFilter,
     activeTab: activeTab,
     quickTab: resolveQuickMarketplaceTab(stats),
     setActiveTab: setTab,
