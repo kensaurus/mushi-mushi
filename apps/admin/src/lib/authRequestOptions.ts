@@ -20,11 +20,11 @@ import { compactSignupMeta, type SignupMeta } from './signupAttribution'
 export type SignupIntent = 'tester'
 
 /** Where a tester lands when no deep link says otherwise. */
-export const TESTER_LANDING_PATH = '/tester'
+const TESTER_LANDING_PATH = '/tester'
 
 /** Post-signup lands on the wizard so the first action is "send a test
  *  report", not a dashboard of zeros (docs/plan-gtm.md, Workstream B §2a). */
-export const SIGNUP_LANDING_PATH = '/onboarding'
+const SIGNUP_LANDING_PATH = '/onboarding'
 
 export interface EmailLinkOptions {
   emailRedirectTo: string
