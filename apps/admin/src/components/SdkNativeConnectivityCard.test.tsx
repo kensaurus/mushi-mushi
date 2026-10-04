@@ -16,7 +16,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const api = vi.hoisted(() => ({ apiFetch: vi.fn(), apiFetchMutate: vi.fn() }))
 vi.mock('../lib/supabase', () => api)
 vi.mock('../lib/env', async (orig) => ({
-  ...(await orig<typeof import('../lib/env')>()),
+  ...((await orig()) as Record<string, unknown>),
   RESOLVED_EXTERNAL_API_URL: 'https://self-hosted.example/functions/v1/api',
 }))
 
