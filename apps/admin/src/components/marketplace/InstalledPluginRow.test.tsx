@@ -16,7 +16,7 @@
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { InstalledPluginRow } from './InstalledPluginRow'
+import { InstalledPluginRow, type InstalledPluginRowProps } from './InstalledPluginRow'
 import { DispatchTable } from './DispatchTable'
 import type { DispatchEntry, InstalledPlugin } from './types'
 
@@ -70,7 +70,7 @@ describe('InstalledPluginRow', () => {
 
   async function render(canManage = true) {
     await act(async () => {
-      root.render(createElement(InstalledPluginRow, { plugin: PLUGIN, busy: false, canManage, ...handlers }))
+      root.render(createElement(InstalledPluginRow, { plugin: PLUGIN, busy: false, canManage, ...(handlers as unknown as Omit<InstalledPluginRowProps, 'plugin' | 'busy'>) }))
     })
   }
 
