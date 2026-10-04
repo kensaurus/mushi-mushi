@@ -27,7 +27,7 @@ interface Props {
 
 type TesterSubStatus = 'pending' | 'triaged' | 'accepted' | 'informative' | 'duplicate' | 'spam' | 'withdrawn'
 
-export const STATUS_CONFIG: Record<TesterSubStatus, { label: string; tone: 'neutral' | 'ok' | 'info' | 'danger' }> = {
+const STATUS_CONFIG: Record<TesterSubStatus, { label: string; tone: 'neutral' | 'ok' | 'info' | 'danger' }> = {
   pending:     { label: 'Pending review', tone: 'neutral' },
   triaged:     { label: 'Triaged',        tone: 'info' },
   accepted:    { label: '✓ Accepted',     tone: 'ok' },
@@ -38,7 +38,7 @@ export const STATUS_CONFIG: Record<TesterSubStatus, { label: string; tone: 'neut
 }
 
 /** A status the card does not know still renders, by name. */
-export function testerStatusConfig(status: string): { label: string; tone: 'neutral' | 'ok' | 'info' | 'danger' } {
+function testerStatusConfig(status: string): { label: string; tone: 'neutral' | 'ok' | 'info' | 'danger' } {
   return STATUS_CONFIG[status as TesterSubStatus] ?? { label: status, tone: 'neutral' }
 }
 
