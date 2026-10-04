@@ -14,7 +14,7 @@ import { plainApiError } from '../../lib/humanizeApiError'
 import { Btn, Card } from '../ui'
 
 /** PUT the project's rewards flag; resolves to an error sentence or null. */
-export async function setProjectRewardsEnabled(projectId: string, enabled: boolean): Promise<string | null> {
+async function setProjectRewardsEnabled(projectId: string, enabled: boolean): Promise<string | null> {
   const res = await apiFetch('/v1/admin/rewards/project-status', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },

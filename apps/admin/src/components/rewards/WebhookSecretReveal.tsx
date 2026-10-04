@@ -9,6 +9,8 @@
  *
  * SECURITY: the secret lives only in the parent's React state. It is never
  *   logged, never written to storage, and is dropped on dismiss or unmount.
+ *   The value sits under [data-auth-token], which the console's self-reporting
+ *   SDK blocks from screenshots.
  */
 
 import { Btn, Callout, CodeValue } from '../ui'
@@ -58,7 +60,11 @@ export function WebhookSecretReveal({
           <code className="font-mono">@mushi-mushi/node</code>. If you lose it, delete this webhook and add it again.
         </p>
       </Callout>
-      <CodeValue value={revealed.secret} copyable multiline />
+      {/* data-auth-token: the console's own Mushi SDK blocks this element from
+          bug-report screenshots (lib/mushi-self.ts privacy.blockSelectors). */}
+      <div data-auth-token="">
+        <CodeValue value={revealed.secret} copyable multiline />
+      </div>
       {!revealed.vaulted && revealed.message && (
         <Callout tone="danger" label="Extra step needed">
           <p className="text-2xs text-fg-secondary leading-snug wrap-anywhere">{revealed.message}</p>
