@@ -130,7 +130,7 @@ export type DiagramPublication =
       outdated: boolean
     }
 
-export interface DiagramPermissions {
+interface DiagramPermissions {
   /** Anyone but a viewer can draw or redraw. */
   can_draw: boolean
   /** Only a project owner or admin can publish or unpublish the public page. */
