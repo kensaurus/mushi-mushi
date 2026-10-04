@@ -66,13 +66,19 @@ import {
  * `maybeSingle()` (resolves to `result`). That covers both the `.maybeSingle()`
  * subscription/project lookups and the directly-awaited usage-count query.
  */
-function makeQuery(result: unknown) {
+function makeQuery(result: unknown, shadowResult?: unknown) {
   const q: Record<string, unknown> = {}
-  for (const m of ['select', 'eq', 'in', 'order', 'limit', 'not', 'gte', 'lt']) {
+  let shadow = false
+  for (const m of ['select', 'in', 'order', 'limit', 'not', 'gte', 'lt']) {
     q[m] = () => q
   }
+  // `.eq('metadata->>shadow', 'true')` selects the shadow-only count.
+  q.eq = (col: string, val: unknown) => {
+    if (col === 'metadata->>shadow' && val === 'true') shadow = true
+    return q
+  }
   q.maybeSingle = async () => result
-  q.then = (resolve: (v: unknown) => unknown) => resolve(result)
+  q.then = (resolve: (v: unknown) => unknown) => resolve(shadow && shadowResult !== undefined ? shadowResult : result)
   return q
 }
 
@@ -80,12 +86,13 @@ function makeDb(opts: {
   sub?: unknown
   project?: unknown
   count: { count: number | null; error: { message: string } | null }
+  shadow?: { count: number | null; error: { message: string } | null }
 }) {
   return {
     from: (table: string) => {
       if (table === 'billing_subscriptions') return makeQuery({ data: opts.sub ?? null })
       if (table === 'projects') return makeQuery({ data: opts.project ?? null })
-      if (table === 'usage_events') return makeQuery(opts.count)
+      if (table === 'usage_events') return makeQuery(opts.count, opts.shadow ?? { count: 0, error: null })
       return makeQuery({ data: null })
     },
   } as unknown as Parameters<typeof checkDiagnosisQuota>[0]
@@ -140,5 +147,26 @@ describe('checkDiagnosisQuota — fail closed on count error (spend safety)', ()
     const second = await checkDiagnosisQuota(healthyDb, projectId)
     expect(second.allowed).toBe(true)
     expect(second.used).toBe(3)
+  })
+})
+
+describe('checkDiagnosisQuota — what counts as a real diagnosis', () => {
+  it('counts rows with no shadow key and subtracts only shadow:true rows', async () => {
+    // Prod 2026-10-04: 116 diagnoses, none with a shadow key. The old
+    // `not.eq.true` filter counted 0 of them, so no quota or cap applied.
+    const db = makeDb({ sub: { status: 'active' }, count: { count: 116, error: null }, shadow: { count: 6, error: null } })
+    const v = await checkDiagnosisQuota(db, 'proj-count-shadow')
+    expect(v.used).toBe(110)
+  })
+
+  it('fails closed when only the shadow count errors', async () => {
+    const db = makeDb({
+      sub: { status: 'active' },
+      count: { count: 10, error: null },
+      shadow: { count: null, error: { message: 'timeout' } },
+    })
+    const v = await checkDiagnosisQuota(db, 'proj-count-shadow-error')
+    expect(v.allowed).toBe(false)
+    expect(v.reason).toBe('QUOTA_CHECK_UNAVAILABLE')
   })
 })
