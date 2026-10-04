@@ -8,13 +8,15 @@ import { useSearchParams } from 'react-router-dom'
 import type { ColumnDef, OnChangeFn, SortingState } from '@tanstack/react-table'
 import { usePageData } from '../../lib/usePageData'
 import {
+  Badge,
   Btn,
   EmptyState,
-  ErrorAlert,
   Input,
   RelativeTime,
   SelectField,
 } from '../ui'
+import { PageLoadError } from '../PageLoadError'
+import { CHIP_TONE } from '../../lib/chipTone'
 import { OperationChip } from '../OperationChip'
 import { ModelChip, TokenIn, TokenOut, UsdAmount } from './CostDisplayChips'
 import { DataTable } from '../DataTable'
@@ -30,6 +32,41 @@ export interface CostRow {
   cost_usd: number
   occurred_at: string
   source?: 'invocation' | 'ledger'
+  /** 'success' | 'error' for LLM calls; null for legacy ledger rows. */
+  status?: string | null
+  error_message?: string | null
+}
+
+/** `?log_since=` tokens the log understands (the banner links with 24h). */
+const SINCE_HOURS: Record<string, number> = { '24h': 24, '7d': 24 * 7 }
+
+/** API query for the raw log. Exported for tests. */
+export function costLogQuery(opts: {
+  projectId: string
+  page: number
+  limit: number
+  sort: string
+  order: string
+  q: string
+  failedOnly: boolean
+  since: string | null
+  now?: number
+}): string {
+  const p = new URLSearchParams()
+  p.set('project_id', opts.projectId)
+  p.set('page', String(opts.page))
+  p.set('limit', String(opts.limit))
+  p.set('sort', opts.sort)
+  p.set('order', opts.order)
+  if (opts.q) p.set('q', opts.q)
+  if (opts.failedOnly) p.set('status', 'failed')
+  const hours = opts.since ? SINCE_HOURS[opts.since] : undefined
+  if (hours) {
+    // Rounded to the minute so the query string (a fetch dep) is stable.
+    const now = Math.floor((opts.now ?? Date.now()) / 60_000) * 60_000
+    p.set('since', new Date(now - hours * 3_600_000).toISOString())
+  }
+  return p.toString()
 }
 
 interface CostListPayload {
@@ -62,6 +99,9 @@ export function CostRawLogTable({ projectId }: { projectId: string }) {
   const q = searchParams.get('log_q') ?? ''
   const sort = searchParams.get('log_sort') ?? 'occurred_at'
   const order = searchParams.get('log_order') === 'asc' ? 'asc' : 'desc'
+  const failedOnly = searchParams.get('log_status') === 'failed'
+  const sinceParam = searchParams.get('log_since')
+  const since = sinceParam && SINCE_HOURS[sinceParam] ? sinceParam : null
 
   const [searchDraft, setSearchDraft] = useState(q)
 
@@ -91,18 +131,12 @@ export function CostRawLogTable({ projectId }: { projectId: string }) {
     return () => clearTimeout(id)
   }, [searchDraft, q, updateParams])
 
-  const queryString = useMemo(() => {
-    const p = new URLSearchParams()
-    p.set('project_id', projectId)
-    p.set('page', String(page))
-    p.set('limit', String(limit))
-    p.set('sort', sort)
-    p.set('order', order)
-    if (q) p.set('q', q)
-    return p.toString()
-  }, [projectId, page, limit, sort, order, q])
+  const queryString = useMemo(
+    () => costLogQuery({ projectId, page, limit, sort, order, q, failedOnly, since }),
+    [projectId, page, limit, sort, order, q, failedOnly, since],
+  )
 
-  const { data, loading, error } = usePageData<CostListPayload>(
+  const { data, loading, error, errorCode, reload } = usePageData<CostListPayload>(
     `/v1/admin/costs?${queryString}`,
     { deps: [queryString] },
   )
@@ -173,6 +207,21 @@ export function CostRawLogTable({ projectId }: { projectId: string }) {
         ),
       },
       {
+        id: 'status',
+        header: 'Result',
+        enableSorting: false,
+        cell: ({ row }) => {
+          const status = row.original.status
+          if (!status) return <span className="text-fg-faint">—</span>
+          if (status === 'success') return <span className="text-2xs text-fg-muted">OK</span>
+          return (
+            <Badge className={CHIP_TONE.dangerSubtle} title={row.original.error_message ?? 'The call failed.'}>
+              Failed
+            </Badge>
+          )
+        },
+      },
+      {
         id: 'occurred_at',
         header: 'When',
         accessorKey: 'occurred_at',
@@ -213,6 +262,21 @@ export function CostRawLogTable({ projectId }: { projectId: string }) {
               : `Showing ${rangeStart}–${rangeEnd} of ${total.toLocaleString()}${capped ? '+' : ''}`}
             {q ? ` · filtered by “${q}”` : ''}
           </p>
+          {(failedOnly || since) && (
+            <div className="flex flex-wrap items-center gap-1.5 pt-1">
+              {failedOnly && (
+                <Badge className={CHIP_TONE.dangerSubtle}>Failed calls only</Badge>
+              )}
+              {since && <Badge className={CHIP_TONE.neutral}>Last {since}</Badge>}
+              <Btn
+                size="sm"
+                variant="ghost"
+                onClick={() => updateParams({ log_status: null, log_since: null, log_page: '1' })}
+              >
+                Show all calls
+              </Btn>
+            </div>
+          )}
         </div>
         <div className="flex flex-wrap items-end gap-2 sm:justify-end">
           <div className="min-w-48 flex-1 sm:flex-none sm:w-56">
@@ -228,6 +292,14 @@ export function CostRawLogTable({ projectId }: { projectId: string }) {
               }}
             />
           </div>
+          <label className="flex items-center gap-1.5 pb-1.5 text-2xs text-fg-muted">
+            <input
+              type="checkbox"
+              checked={failedOnly}
+              onChange={(e) => updateParams({ log_status: e.target.checked ? 'failed' : null, log_page: '1' })}
+            />
+            Failed only
+          </label>
           <SelectField
             label="Rows"
             value={String(limit)}
@@ -248,14 +320,16 @@ export function CostRawLogTable({ projectId }: { projectId: string }) {
       {loading ? (
         <TableSkeleton rows={10} />
       ) : error ? (
-        <ErrorAlert message={error} />
+        <PageLoadError error={error} code={errorCode} resource="the cost log" onRetry={reload} />
       ) : rows.length === 0 ? (
         <EmptyState
-          title={q ? 'No matching calls' : 'No cost records'}
+          title={failedOnly ? 'No failed calls' : q ? 'No matching calls' : 'No cost records'}
           description={
-            q
-              ? 'Try a different search term or clear filters.'
-              : 'LLM calls will appear here once edge functions run.'
+            failedOnly
+              ? `No LLM call failed${since ? ` in the last ${since}` : ''}.`
+              : q
+                ? 'Try a different search term or clear filters.'
+                : 'LLM calls will appear here once edge functions run.'
           }
         />
       ) : (
