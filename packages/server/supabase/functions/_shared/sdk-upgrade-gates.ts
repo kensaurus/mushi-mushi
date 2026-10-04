@@ -24,6 +24,35 @@ export const SDK_UPGRADE_SETTLED_STATUSES = [
   'awaiting_lockfile',
 ] as const
 
+/**
+ * Release-cockpit columns a finished job starts with. A job that ends with a
+ * PR enters the cockpit as an open PR; without this, release_status stayed
+ * NULL, sdk-release-sync (which polls pr_opened/ready_to_merge/…) never looked
+ * at the PR again, and the console could not tell an open upgrade PR from a
+ * merged one (glot.it#142, merged on GitHub, still NULL in the job row).
+ */
+export function completedJobCockpitFields(
+  status: string,
+  prUrl: string | null | undefined,
+): { release_status: 'pr_opened'; pr_state: 'open' } | Record<string, never> {
+  return status === 'completed' && prUrl ? { release_status: 'pr_opened', pr_state: 'open' } : {}
+}
+
+/**
+ * Whether a finished upgrade job is still worth showing on the Update center:
+ * its PR is open (or not yet synced) or merged. A PR closed without merging is
+ * history, and showing it would hide the "Upgrade" action behind a dead PR.
+ */
+export function isUpgradePrStillRelevant(job: {
+  status: string
+  pr_url?: string | null
+  pr_state?: string | null
+  merged_at?: string | null
+}): boolean {
+  if (job.status !== 'completed' || !job.pr_url) return false
+  return !(job.pr_state === 'closed' && !job.merged_at)
+}
+
 export interface SdkUpgradeProjectSettings {
   github_repo_url: string | null
   github_installation_token_ref: string | null

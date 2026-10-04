@@ -167,7 +167,6 @@ export function ConnectPage() {
   const copy = usePageCopy('/connect')
   const connectUx = useConnectUx()
   const showSectionDescriptions = connectUx.hideConnectSnapshot
-  const hideVersionInUpdate = !connectUx.hideConnectSnapshot
   usePublishPageContext({
     route: '/connect',
     title: 'Connect & Update',
@@ -415,7 +414,6 @@ export function ConnectPage() {
                 <UpdateCenter
                   project={project}
                   preflight={preflight}
-                  hideVersionBadge={hideVersionInUpdate}
                 />
               ) : (
                 <ProjectFallbackNote
