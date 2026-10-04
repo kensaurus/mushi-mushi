@@ -27,6 +27,23 @@ export const WIKI_MAX_FILES = 150
 const MAX_FILE_CHARS = 200_000
 const MAX_CHUNK_CHARS = 2_000
 const EMBED_BATCH = 64
+const FETCH_CONCURRENCY = 6
+
+/**
+ * A source still `pending` or `indexing` after this long was never picked up
+ * or its worker died (edge wall clock). The console offers Retry for it and
+ * the retry route accepts it.
+ */
+export const WIKI_STALE_MS = 10 * 60 * 1000
+
+export function isWikiSourceStale(
+  row: { status: string; updated_at?: string | null },
+  now = Date.now(),
+): boolean {
+  if (row.status !== 'pending' && row.status !== 'indexing') return false
+  const at = row.updated_at ? Date.parse(row.updated_at) : NaN
+  return Number.isFinite(at) && now - at > WIKI_STALE_MS
+}
 
 export interface WikiChunk {
   article_path: string
@@ -60,6 +77,11 @@ export function isWikiDocPath(path: string, root: string): boolean {
   if (prefix && !path.startsWith(prefix)) return false
   const lower = path.toLowerCase()
   return DOC_EXTENSIONS.some((ext) => lower.endsWith(ext))
+}
+
+/** Every doc file under `root` (before the cap), for the "read N of M" note. */
+export function countWikiFiles(tree: RepoTree, root: string): number {
+  return (tree.tree ?? []).filter((e) => e.type === 'blob' && isWikiDocPath(e.path, root) && (e.size ?? 0) <= MAX_FILE_CHARS).length
 }
 
 /** Doc files under `root` in a git tree, smallest-path-first, capped. */
@@ -248,7 +270,8 @@ export function wikiIngestFailureReason(err: unknown): string {
 }
 
 export interface WikiIngestResult {
-  status: 'ready' | 'failed'
+  /** skipped = another job already claimed this source. */
+  status: 'ready' | 'failed' | 'skipped'
   articles: number
   chunks: number
   error?: string
@@ -277,7 +300,17 @@ export async function ingestWikiSource(
     return fail('Only folders in the connected repo can be added as knowledge right now.')
   }
 
-  await setStatus(db, source.id, 'indexing', null)
+  // Claim the row: two quick adds start two jobs that read the same pending
+  // rows, and only one of them may ingest each source.
+  const { data: claimed, error: claimErr } = await db
+    .from('project_codebase_wiki_sources')
+    .update({ status: 'indexing', error: null, updated_at: new Date().toISOString() })
+    .eq('id', source.id)
+    .eq('status', 'pending')
+    .select('id')
+  if (claimErr) throw new Error(`wiki source claim failed: ${claimErr.message}`)
+  if (!claimed || claimed.length === 0) return { status: 'skipped', articles: 0, chunks: 0 }
+
   try {
     const repo = await deps.resolveRepo(source.project_id)
     if (!repo.ok) return await fail(repo.reason)
@@ -289,11 +322,19 @@ export async function ingestWikiSource(
       return await fail(`No Markdown or text files were found under ${where} on ${branch}. Check the folder name, then retry.`)
     }
 
-    const articles: Array<{ path: string; text: string }> = []
-    for (const path of paths) {
-      const text = await deps.fetchFile({ ...repo, branch, path })
-      if (text) articles.push({ path, text })
+    const found = countWikiFiles(tree, source.root_path)
+    const texts: Array<string | null> = new Array(paths.length).fill(null)
+    let next = 0
+    const worker = async () => {
+      while (next < paths.length) {
+        const i = next++
+        texts[i] = await deps.fetchFile({ ...repo, branch, path: paths[i]! })
+      }
     }
+    await Promise.all(Array.from({ length: Math.min(FETCH_CONCURRENCY, paths.length) }, worker))
+    const articles = paths
+      .map((path, i) => ({ path, text: texts[i] }))
+      .filter((a): a is { path: string; text: string } => !!a.text)
     if (articles.length === 0) {
       return await fail('The docs folder was found but none of its files could be read. Retry in a minute.')
     }
@@ -339,7 +380,17 @@ export async function ingestWikiSource(
     )
     if (graphErr) throw new Error(`knowledge graph write failed: ${graphErr.message}`)
 
-    await setStatus(db, source.id, 'ready', null)
+    // What was actually read, so "Ready" never overstates a capped folder.
+    const { error: readyErr } = await db
+      .from('project_codebase_wiki_sources')
+      .update({
+        status: 'ready',
+        error: null,
+        config: { last_ingest: { files_read: articles.length, files_found: found, chunks: rows.length, branch, at: now } },
+        updated_at: now,
+      })
+      .eq('id', source.id)
+    if (readyErr) throw new Error(`wiki source status write failed: ${readyErr.message}`)
     return { status: 'ready', articles: articles.length, chunks: rows.length }
   } catch (err) {
     wikiLog.error('wiki ingest failed', { sourceId: source.id, err: err instanceof Error ? err.message : String(err) })
@@ -369,7 +420,7 @@ export async function runWikiIngestForProject(
   for (const source of (data ?? []) as WikiSourceRow[]) {
     const result = await ingestWikiSource(db, source, deps)
     if (result.status === 'ready') ready++
-    else failed++
+    else if (result.status === 'failed') failed++
   }
   return { processed: ready + failed, ready, failed }
 }

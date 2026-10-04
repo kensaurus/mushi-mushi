@@ -63,6 +63,18 @@ function seed() {
   })
 }
 
+describe('isWikiSourceStale', () => {
+  const now = Date.parse('2026-10-04T12:00:00Z')
+  it('flags pending or indexing rows untouched for over 10 minutes', () => {
+    expect(wiki.isWikiSourceStale({ status: 'pending', updated_at: '2026-10-04T11:40:00Z' }, now)).toBe(true)
+    expect(wiki.isWikiSourceStale({ status: 'indexing', updated_at: '2026-10-04T11:40:00Z' }, now)).toBe(true)
+  })
+  it('leaves fresh and finished rows alone', () => {
+    expect(wiki.isWikiSourceStale({ status: 'indexing', updated_at: '2026-10-04T11:58:00Z' }, now)).toBe(false)
+    expect(wiki.isWikiSourceStale({ status: 'failed', updated_at: '2026-10-01T00:00:00Z' }, now)).toBe(false)
+  })
+})
+
 describe('pure helpers', () => {
   it('normalizes the folder the user typed', () => {
     expect(wiki.normalizeWikiRoot('docs')).toBe('docs/')
@@ -105,6 +117,19 @@ describe('runWikiIngestForProject', () => {
     expect(chunks.every((c) => Array.isArray(c.embedding))).toBe(true)
     const graph = db.table('project_codebase_knowledge_graph')[0]!.graph as { nodes: unknown[] }
     expect(graph.nodes).toHaveLength(2)
+    // Records what was read, so a capped folder never reads as complete.
+    expect(db.table('project_codebase_wiki_sources')[0]!.config).toMatchObject({
+      last_ingest: { files_read: 2, files_found: 2, branch: 'main' },
+    })
+  })
+
+  it('skips a source another job already claimed', async () => {
+    const db = seed()
+    db.table('project_codebase_wiki_sources')[0]!.status = 'indexing'
+    const source = { id: 's1', project_id: 'p1', kind: 'repo_subpath', root_path: 'docs/' }
+    const result = await wiki.ingestWikiSource(db as never, source, deps())
+    expect(result.status).toBe('skipped')
+    expect(db.table('project_codebase_knowledge_chunks')).toHaveLength(0)
   })
 
   it('re-ingest replaces old chunks instead of duplicating them', async () => {
