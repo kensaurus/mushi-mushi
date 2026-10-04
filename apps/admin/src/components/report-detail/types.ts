@@ -283,7 +283,8 @@ export interface ReportDetail {
   tester_submission_id?: string | null
   tester_submission?: {
     id: string
-    status: 'pending' | 'accepted' | 'informative' | 'duplicate' | 'spam'
+    /** tester_submissions CHECK: also 'triaged' and 'withdrawn'. */
+    status: 'pending' | 'triaged' | 'accepted' | 'informative' | 'duplicate' | 'spam' | 'withdrawn'
     points_awarded: number
     tester_handle: string | null
     app_name: string | null

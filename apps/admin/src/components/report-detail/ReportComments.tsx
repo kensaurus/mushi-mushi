@@ -52,9 +52,16 @@ function feedbackSignalToneClass(signal: FeedbackSignal): string {
  * passes it in, so the thread and the recommendation's comment count share one
  * fetch and one realtime channel (REPORT C: report_comments was fetched 4x).
  */
-export function ReportComments({ thread }: { thread: ReportCommentsThread }) {
+export function ReportComments({
+  thread,
+  onPosted,
+}: {
+  thread: ReportCommentsThread
+  /** Called after a successful post; `true` when the reporter can see it. */
+  onPosted?: (visibleToReporter: boolean) => void
+}) {
   const toast = useToast()
-  const { comments, loading, postComment, deleteComment } = thread
+  const { comments, loading, currentUserId, postComment, deleteComment } = thread
   const [body, setBody] = useState('')
   const [visibleToReporter, setVisibleToReporter] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -69,6 +76,7 @@ export function ReportComments({ thread }: { thread: ReportCommentsThread }) {
       await postComment(body, { visibleToReporter })
       setBody('')
       setVisibleToReporter(false)
+      onPosted?.(visibleToReporter)
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Try again in a moment.'
       toast.error('Couldn\u2019t post comment', msg)
@@ -135,14 +143,19 @@ export function ReportComments({ thread }: { thread: ReportCommentsThread }) {
               </div>
               <div className="text-fg-secondary whitespace-pre-wrap wrap-break-word text-pretty leading-relaxed">{c.body}</div>
             </div>
-            <button
-              type="button"
-              onClick={() => setDeleteTarget(c.id)}
-              className="text-2xs text-fg-faint hover:text-danger px-1"
-              aria-label="Delete comment"
-            >
-              ×
-            </button>
+            {/* Only your own comments: RLS refuses the rest (reporter
+                replies, other people's notes) and the delete looked like it
+                worked while the comment stayed. */}
+            {currentUserId != null && c.author_user_id === currentUserId ? (
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(c.id)}
+                className="text-2xs text-fg-faint hover:text-danger px-1"
+                aria-label="Delete comment"
+              >
+                ×
+              </button>
+            ) : null}
           </div>
         ))}
       </div>

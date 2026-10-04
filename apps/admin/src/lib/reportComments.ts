@@ -45,8 +45,28 @@ export interface UseReportCommentsOptions {
 export interface ReportCommentsThread {
   comments: ReportCommentRow[]
   loading: boolean
+  /** Signed-in user's id; only their own comments can be deleted (RLS
+   *  authors_delete_own_report_comments). Null until known. */
+  currentUserId: string | null
   postComment: (body: string, options?: { visibleToReporter?: boolean; parentId?: number }) => Promise<void>
   deleteComment: (id: number) => Promise<void>
+}
+
+/**
+ * Plain-English text for a failed comment write. Raw Postgres text ("new row
+ * violates row-level security policy for table …") used to reach the toast.
+ */
+export function commentWriteErrorText(error: { message?: string; code?: string }, action: 'post' | 'delete'): string {
+  const msg = (error.message ?? '').toLowerCase()
+  if (error.code === '42501' || msg.includes('row-level security') || msg.includes('permission denied')) {
+    return action === 'post'
+      ? 'You do not have permission to comment on this project. Ask an owner or admin to give you member access.'
+      : 'You can only delete comments you wrote.'
+  }
+  if (msg.includes('jwt') || msg.includes('not signed in') || msg.includes('session')) {
+    return 'Your session expired. Sign in again, then retry.'
+  }
+  return action === 'post' ? 'The comment was not saved. Try again in a moment.' : 'The comment was not deleted. Try again in a moment.'
 }
 
 /**
@@ -59,6 +79,17 @@ export function useReportComments(opts: UseReportCommentsOptions): ReportComment
   const { reportId, projectId } = opts
   const [comments, setComments] = useState<ReportCommentRow[]>([])
   const [loading, setLoading] = useState(false)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    void supabase.auth.getUser().then(({ data }) => {
+      if (!cancelled) setCurrentUserId(data.user?.id ?? null)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const refresh = useCallback(async () => {
     if (!reportId) return
@@ -115,17 +146,23 @@ export function useReportComments(opts: UseReportCommentsOptions): ReportComment
     })
     if (error) {
       debugWarn('comments', 'insert failed', { error: error.message })
-      throw new Error(error.message)
+      throw new Error(commentWriteErrorText(error, 'post'))
     }
   }, [reportId, projectId])
 
   const deleteComment = useCallback(async (id: number) => {
-    const { error } = await supabase.from('report_comments').delete().eq('id', id)
+    // RLS lets authors delete only their own comments; a blocked delete
+    // removes 0 rows and returns NO error, so count what was deleted.
+    const { data, error } = await supabase.from('report_comments').delete().eq('id', id).select('id')
     if (error) {
       debugWarn('comments', 'delete failed', { error: error.message })
-      throw new Error(error.message)
+      throw new Error(commentWriteErrorText(error, 'delete'))
     }
-  }, [])
+    if (!data || data.length === 0) {
+      throw new Error('You can only delete comments you wrote.')
+    }
+    await refresh()
+  }, [refresh])
 
-  return { comments, loading, postComment, deleteComment }
+  return { comments, loading, currentUserId, postComment, deleteComment }
 }

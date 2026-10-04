@@ -11,7 +11,9 @@ import { ContainedBlock, SignalChip, InlineProof } from './ReportSurface'
 
 interface TesterSub {
   id: string
-  status: 'pending' | 'accepted' | 'informative' | 'duplicate' | 'spam'
+  /** Every value the tester_submissions CHECK allows (migration
+   *  20260523002000); `triaged` and `withdrawn` crashed the card. */
+  status: TesterSubStatus
   points_awarded: number
   tester_handle: string | null
   app_name: string | null
@@ -23,12 +25,21 @@ interface Props {
   onReviewed: () => void
 }
 
-const STATUS_CONFIG = {
-  pending:     { label: 'Pending review', tone: 'neutral' as const },
-  accepted:    { label: '✓ Accepted',     tone: 'ok' as const },
-  informative: { label: 'Informative',   tone: 'info' as const },
-  duplicate:   { label: 'Duplicate',     tone: 'neutral' as const },
-  spam:        { label: '✗ Spam',         tone: 'danger' as const },
+type TesterSubStatus = 'pending' | 'triaged' | 'accepted' | 'informative' | 'duplicate' | 'spam' | 'withdrawn'
+
+export const STATUS_CONFIG: Record<TesterSubStatus, { label: string; tone: 'neutral' | 'ok' | 'info' | 'danger' }> = {
+  pending:     { label: 'Pending review', tone: 'neutral' },
+  triaged:     { label: 'Triaged',        tone: 'info' },
+  accepted:    { label: '✓ Accepted',     tone: 'ok' },
+  informative: { label: 'Informative',   tone: 'info' },
+  duplicate:   { label: 'Duplicate',     tone: 'neutral' },
+  spam:        { label: '✗ Spam',         tone: 'danger' },
+  withdrawn:   { label: 'Withdrawn',      tone: 'neutral' },
+}
+
+/** A status the card does not know still renders, by name. */
+export function testerStatusConfig(status: string): { label: string; tone: 'neutral' | 'ok' | 'info' | 'danger' } {
+  return STATUS_CONFIG[status as TesterSubStatus] ?? { label: status, tone: 'neutral' }
 }
 
 type ReviewAction = 'accept' | 'informative' | 'duplicate' | 'spam'
@@ -52,7 +63,7 @@ export function TesterSubmissionCard({ submission, onReviewed }: Props) {
   const [reviewing, setReviewing] = useState<ReviewAction | null>(null)
   const [note, setNote] = useState(submission.reviewer_note ?? '')
   const [showNoteInput, setShowNoteInput] = useState(false)
-  const config = STATUS_CONFIG[submission.status]
+  const config = testerStatusConfig(submission.status)
   const isPending = submission.status === 'pending'
 
   const handleReview = async (action: ReviewAction) => {
