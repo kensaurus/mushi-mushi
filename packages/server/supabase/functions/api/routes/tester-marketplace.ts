@@ -38,7 +38,7 @@ import { jwtAuth } from '../../_shared/auth.ts'
 import { log } from '../../_shared/logger.ts'
 import { requireSuperAdmin } from '../../_shared/super-admin.ts'
 import { accessibleProjectIds } from '../../_shared/project-access.ts'
-import { normalizeLegalName, testerProfileUpdate } from '../../_shared/tester-profile.ts'
+import { normalizeLegalName, perAppLeaderboard, testerProfileUpdate } from '../../_shared/tester-profile.ts'
 import {
   REDEMPTION_CATALOG,
   resolveCatalogItem,
@@ -835,20 +835,17 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
     for (const l of leaders ?? []) {
       leaderMap.set(l.tester_id, (leaderMap.get(l.tester_id) ?? 0) + l.points_awarded)
     }
-    const topTesterIds = [...leaderMap.entries()]
+    const rankedIds = [...leaderMap.entries()]
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 10)
       .map(([id]) => id)
 
     const { data: handles } = await supabase
       .from('mushi_testers')
-      .select('id, public_handle, display_name')
-      .in('id', topTesterIds)
+      .select('id, public_handle, public_leaderboard, public_handle_visible')
+      .in('id', rankedIds.slice(0, 50))
 
-    const leaderboard = topTesterIds.map((id) => ({
-      handle: handles?.find((h) => h.id === id)?.public_handle ?? '???',
-      points: leaderMap.get(id) ?? 0,
-    }))
+    // Honour each tester's privacy choices from /tester/settings.
+    const leaderboard = perAppLeaderboard(rankedIds, leaderMap, handles ?? [])
 
     return c.json({ ok: true, data: { app, subscription: sub, leaderboard } })
   })
@@ -1584,13 +1581,17 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
     // Refund first, then close: if the refund fails the redemption stays
     // withheld and the reviewer can retry (the idempotency key makes a retry
     // safe). The old order closed it as failed and ignored a failed refund.
-    const { error: refundErr } = await supabase.rpc('award_tester_points', {
-      p_tester_id: redemption.tester_id,
-      p_delta_points: redemption.points_spent,
-      p_reason: 'reversal',
-      p_idempotency_key: `refund:withheld:${id}`,
+    // awardPointsChecked also catches the RPC's in-band { error } result and
+    // treats a replayed key as success (idempotentSkip).
+    const refund = await awardPointsChecked(supabase, {
+      testerId: redemption.tester_id,
+      deltaPoints: redemption.points_spent,
+      reason: 'reversal',
+      idempotencyKey: `refund:withheld:${id}`,
     })
-    if (refundErr) return withheldWriteFailed(c, 'deny', id, refundErr.message)
+    if (!refund.ok && !refund.idempotentSkip) {
+      return withheldWriteFailed(c, 'deny', id, refund.error ?? 'refund failed')
+    }
 
     const { error: closeErr } = await supabase
       .from('tester_redemptions')
