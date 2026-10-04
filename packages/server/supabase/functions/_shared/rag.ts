@@ -63,7 +63,7 @@ export async function getRelevantCodeWithReason(
 
   let embedding: number[]
   try {
-    embedding = await createEmbedding(queryText, { projectId })
+    embedding = await createEmbedding(queryText, { projectId, functionName: 'rag' })
   } catch (err) {
     const detail = String(err).slice(0, 240)
     ragLog.error('RAG embedding call failed', { projectId, err: detail })

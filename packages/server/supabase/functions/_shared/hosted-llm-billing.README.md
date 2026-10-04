@@ -44,45 +44,43 @@ failure** — otherwise it retries against the bridge and stringifies `reason`
 and `balanceMicro` away, leaving the UI nothing to prompt a top-up with.
 `inventory-propose` and `story-mapper` both do this explicitly.
 
-`withLlmFailover` also takes an optional `meter` argument for callers that
-write no `llm_invocations` row (`inventory-propose`, `story-mapper`). **Do not
-pass `meter` from a path that also calls `logLlmInvocation`** — that charges
-the same call twice.
+`withLlmFailover` also takes an optional `meter` argument for a caller that
+writes no `llm_invocations` row. Since 2026-10-04 no caller passes it: every
+generation writes a row through `_shared/llm-usage.ts` (`recordLlmUsage` /
+`withLlmUsage`). **Do not pass `meter` from a path that also writes a row** —
+that charges the same call twice.
 
 ## Coverage — read this before quoting revenue
 
 This is a first cut. It bills the paths that were already instrumented, not
 every path that can burn a platform key.
 
-**Debited today** — verified by grepping for `keySource:` at each
-`logLlmInvocation` site, since a row that omits it stores `key_source = null`
-and silently misses the gate:
+**Debited** — every generation that runs on the platform key and writes an
+`llm_invocations` row with `keySource: 'env'`. Since 2026-10-04 that is every
+generation path except the two listed below: the earlier gaps (`judge-batch`, `generate-synthetic`,
+`mistake-clusterer`, `mistake-summarizer`, `release-builder`, `pdca-runner`,
+`test-gen-from-report`, `test-gen-from-story`, `library-modernizer`,
+`prompt-auto-tune`, `nl-query`, the `classify-report` vision call) now write
+their row through `_shared/llm-usage.ts`, and `inventory-propose` /
+`story-mapper` moved from `meter` to that row.
 
-| Function | Why it qualifies |
-| -------- | ---------------- |
-| `classify-report` (stage 2 + OpenAI fallback) | sets `keySource` |
-| `fast-filter` | sets `keySource` |
-| `sentinel-audit` | sets `keySource` |
-| `ask-mushi` | sets `keySource` |
-| `codebase-understand` | sets `keySource` from `key.source` |
-| `inventory-propose`, `story-mapper` | via the `meter` option |
-
-**Not debited yet:**
+**Not debited:**
 
 - Writes an `llm_invocations` row but never sets `keySource`, so the gate never
-  fires: `sdk-assistant`, `intelligence-report`. These are the cheapest to fix
-  — one field at the existing telemetry call.
-- Resolves a key but writes no telemetry row at all: `judge-batch`,
-  `fix-worker`, `library-modernizer`, `prompt-auto-tune`, `qa-story-runner`,
-  and the `classify-report` vision call.
-- Reads `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` straight from the environment,
-  bypassing BYOK resolution entirely: `generate-synthetic`,
-  `mistake-clusterer`, `mistake-summarizer`, `release-builder`. These never
-  honour a customer's BYOK key either, which is a separate bug.
-
-Closing the gap means giving those call sites a `logLlmInvocation` write with
-`keySource` (which they should have anyway for cost telemetry), not adding more
-billing seams.
+  fires: `sdk-assistant`, `intelligence-report`. The cheapest to fix — one
+  field at the existing telemetry call.
+- Embeddings. Every embedding call writes a row (stage `embedding`) so its
+  cost shows on Costs and counts toward the budget, but the row carries
+  `skipHostedBilling`: embeddings were never wallet-billed and the wallet
+  price table is not known to price them. Turning that on is an owner
+  decision — confirm `kensaurus_model_prices` has `text-embedding-3-small`,
+  then drop the flag in `_shared/embeddings.ts`.
+- `generate-synthetic`, `mistake-*` and `release-builder` read
+  `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` straight from the environment and
+  never honour a customer's BYOK key — a separate bug. Their rows are
+  `key_source = 'env'`, so they are debited.
+- `fine-tune-vendor` predictions (an `ft:` model has no price row) and the
+  `integration-probes` key checks write no row.
 
 `activation.ts` and `project-integrations.ts` call `resolveLlmKey` as key
 *validation probes*, not billable generations. They write no telemetry row and
@@ -90,16 +88,12 @@ are correctly excluded.
 
 ### Preflight is broader than the debit
 
-The `on`-mode preflight lives in `withLlmFailover`, so it also covers every
-`withAnthropicOrOpenAi` caller — including `fix-worker`, `pdca-runner`,
-`test-gen-from-report`, and `test-gen-from-story`, which are in the not-debited
-list above. Those calls are **gated but free**: an empty wallet refuses them,
-a funded wallet runs them without a ledger row.
-
-That asymmetry is deliberate. It errs toward never overcharging, and it keeps
-the paywall uniform across hosted LLM rather than leaving some paths open when
-the wallet is empty. It is still revenue leakage, and it closes the same way
-the rest of the gap does — by adding the missing telemetry writes.
+The `on`-mode preflight lives in `withLlmFailover`, so it covers every
+`withAnthropicOrOpenAi` caller. Paths that call the provider directly
+(`judge-batch`, `generate-synthetic`, `mistake-*`, `release-builder`,
+`library-modernizer`, `prompt-auto-tune`, `nl-query`, the vision call) are
+debited after the call but not gated before it: an empty wallet does not
+refuse them.
 
 One softness worth knowing: `keySource` is what the caller *inferred*, not what
 `resolveLlmKey` returned. `classify-report` does

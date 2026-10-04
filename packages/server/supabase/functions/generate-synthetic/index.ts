@@ -9,6 +9,7 @@ import { requireServiceRoleAuth } from '../_shared/auth.ts';
 import { SYNTHETIC_EFFORT, SYNTHETIC_MODEL, ANTHROPIC_HAIKU } from '../_shared/models.ts';
 import { claudeGenerateObject } from '../_shared/claude-messages.ts';
 import { getPromptForStage } from '../_shared/prompt-ab.ts';
+import { recordLlmUsage } from '../_shared/llm-usage.ts';
 
 // Wave T (2026-04-23): fallback template used when `prompt_versions` has no
 // `synthetic` row for this project (migration 20260422110000 seeded a global
@@ -127,14 +128,30 @@ Deno.serve(
       const results = await Promise.allSettled(
         batchItems.map(async (i) => {
           const span = trace.span(`generate.${i}`);
-          const { object, usage } = await claudeGenerateObject({
+          // Platform key only (ANTHROPIC_API_KEY), so key_source is 'env'.
+          const generateUsage = {
+            functionName: 'generate-synthetic',
+            stage: 'generate',
+            projectId,
+            model: SYNTHETIC_MODEL,
+            keySource: 'env',
+            startedAt: Date.now(),
+            promptVersion,
+            langfuseTraceId: trace.id,
+          } as const;
+          const generation = await claudeGenerateObject({
             apiKey: anthropicKey,
             model: SYNTHETIC_MODEL,
             effort: SYNTHETIC_EFFORT,
             schema: syntheticSchema,
             system: syntheticSystemPrompt,
             prompt: `Generate bug report #${i + 1} of ${count}. Make each unique in category and complexity.`,
+          }).catch((err: unknown) => {
+            void recordLlmUsage(db, generateUsage, { error: err });
+            throw err;
           });
+          void recordLlmUsage(db, generateUsage, { result: generation });
+          const { object, usage } = generation;
           span.end({
             model: SYNTHETIC_MODEL,
             inputTokens: usage?.promptTokens,
@@ -192,12 +209,27 @@ Deno.serve(
               // Sonnet but the eval doesn't need full context (no RAG, no
               // inventory lookup), and at 50 syntheticshs/run the cost
               // delta matters: Haiku is ~12x cheaper than Sonnet.
-              const { object: actual } = await generateObject({
+              const evalUsage = {
+                functionName: 'generate-synthetic',
+                stage: 'eval',
+                projectId,
+                model: ANTHROPIC_HAIKU,
+                keySource: 'env',
+                startedAt: Date.now(),
+                promptVersion: stage2Selection.promptVersion ?? null,
+                langfuseTraceId: trace.id,
+              } as const;
+              const evaluation = await generateObject({
                 model: anthropic(ANTHROPIC_HAIKU),
                 schema: evalSchema,
                 system: stage2Prompt,
                 prompt: evalUserPrompt,
+              }).catch((err: unknown) => {
+                void recordLlmUsage(db, evalUsage, { error: err });
+                throw err;
               });
+              void recordLlmUsage(db, evalUsage, { result: evaluation });
+              const actual = evaluation.object;
               const matchScore = computeMatchScore(
                 {
                   category: object.expected_classification.category,

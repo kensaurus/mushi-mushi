@@ -35,6 +35,7 @@ import { LlmBudgetExceededError } from '../_shared/llm-budget.ts'
 import { createTrace } from '../_shared/observability.ts'
 import { PROMPT_TUNE_EFFORT, PROMPT_TUNE_MODEL } from '../_shared/models.ts'
 import { claudeGenerateObject } from '../_shared/claude-messages.ts'
+import { withLlmUsage } from '../_shared/llm-usage.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 
 ensureSentry('prompt-auto-tune')
@@ -299,7 +300,15 @@ Judge's correction: ${JSON.stringify(f.suggestedCorrection ?? {}).slice(0, 200)}
   // claude-messages.ts uses native structured outputs instead and sends
   // `temperature` only to models that accept it, so no thinking workaround.
   try {
-    const { object, usage } = await claudeGenerateObject({
+    const { object, usage } = await withLlmUsage(db, {
+      functionName: 'prompt-auto-tune',
+      stage,
+      projectId,
+      model,
+      keySource: resolved?.key ? resolved.source : 'env',
+      promptVersion: active.version,
+      langfuseTraceId: trace.id,
+    }, () => claudeGenerateObject({
       apiKey,
       model,
       effort: PROMPT_TUNE_EFFORT,
@@ -327,7 +336,7 @@ Sample failures (${failures.length} of the worst-scoring):
 ${failuresPrompt}
 
 Propose a revised prompt that fixes the dominant failure modes.`,
-    })
+    }))
     span.end({ model, inputTokens: usage?.promptTokens, outputTokens: usage?.completionTokens })
     await trace.end()
 

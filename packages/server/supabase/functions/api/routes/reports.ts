@@ -543,7 +543,7 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
 
     try {
       const { createEmbedding } = await import('../../_shared/embeddings.ts');
-      const embedding = await createEmbedding(query, { projectId: projectIds[0] });
+      const embedding = await createEmbedding(query, { projectId: projectIds[0], functionName: 'reports-search' });
       const embeddingLiteral = `[${embedding.join(',')}]`;
 
       // Fan out match_report_embeddings per project concurrently; merge,

@@ -25,6 +25,7 @@ import { createTrace } from '../_shared/observability.ts'
 import { tagLangfuseTrace } from '../_shared/sentry.ts'
 import { claudeGenerateObject, claudeGenerateText } from '../_shared/claude-messages.ts'
 import { estimateCallCostUsd } from '../_shared/pricing.ts'
+import { withLlmUsage } from '../_shared/llm-usage.ts'
 import { OPENAI_PRIMARY } from '../_shared/models.ts'
 import { PDCA_DEFAULT_MODEL, resolvePdcaModel } from '../_shared/pdca-models.ts'
 
@@ -150,6 +151,13 @@ async function runQaStoryImprover(
       })
       tagLangfuseTrace(trace.id)
       const llmSpan = trace.span('improve-script')
+      const improveUsage = {
+        functionName: 'pdca-runner',
+        stage: 'qa-story-improve',
+        projectId: story.project_id as string,
+        primaryModel: IMPROVE_MODEL,
+        langfuseTraceId: trace.id,
+      }
 
       const { result } = await withAnthropicOrOpenAi(
         db,
@@ -158,23 +166,23 @@ async function runQaStoryImprover(
           // claude-messages, not AI SDK v4: Sonnet 5.5 rejects the
           // temperature + forced tool_choice that generateObject sends. The
           // default max_tokens leaves room for adaptive thinking.
-          const { object } = await claudeGenerateObject({
+          const { object } = await withLlmUsage(db, { ...improveUsage, model: IMPROVE_MODEL, keySource: anthropicKey.source }, () => claudeGenerateObject({
             apiKey: anthropicKey.key,
             model: IMPROVE_MODEL,
             system: IMPROVE_SYSTEM,
             schema: improveSchema,
             prompt: `ORIGINAL TEST:\n\`\`\`typescript\n${(story.script as string).slice(0, 4000)}\n\`\`\`\n\nRECENT FAILURES:\n${failureSummary}`,
-          })
+          }))
           return object
         },
         async (openaiKey) => {
-          const { object } = await generateObject({
+          const { object } = await withLlmUsage(db, { ...improveUsage, model: OPENAI_PRIMARY, keySource: openaiKey.source }, () => generateObject({
             model: createOpenAI({ apiKey: openaiKey.key })(OPENAI_PRIMARY, { structuredOutputs: false }),
             system: IMPROVE_SYSTEM,
             schema: improveSchema,
             prompt: `ORIGINAL TEST:\n\`\`\`typescript\n${(story.script as string).slice(0, 4000)}\n\`\`\`\n\nRECENT FAILURES:\n${failureSummary}`,
             maxTokens: 6000,
-          })
+          }))
           return object
         },
       )
@@ -324,24 +332,36 @@ Deno.serve(
           : ''
 
         let draft = ''
+        const producerUsage = {
+          functionName: 'pdca-runner',
+          stage: 'producer',
+          projectId: run.project_id as string,
+          primaryModel,
+        }
+        const criticUsage = {
+          functionName: 'pdca-runner',
+          stage: 'critic',
+          projectId: run.project_id as string,
+          primaryModel: judgeModel,
+        }
         const { result: producerResult } = await withAnthropicOrOpenAi(
           db,
           run.project_id as string,
           async (k) => {
-            const { text } = await claudeGenerateText({
+            const { text } = await withLlmUsage(db, { ...producerUsage, model: primaryModel, keySource: k.source }, () => claudeGenerateText({
               apiKey: k.key,
               model: primaryModel,
               prompt: `You are a senior UI engineer.\nGoal: ${goal}${historyCtx}\n\nCurrent page:\n${currentInput.slice(0, 6000)}\n\nReturn only improved markup.`,
-            })
+            }))
             return text.trim()
           },
           async (k) => {
             const openai = createOpenAI({ apiKey: k.key, ...(k.baseUrl ? { baseURL: k.baseUrl } : {}) })
-            const { text } = await generateText({
+            const { text } = await withLlmUsage(db, { ...producerUsage, model: OPENAI_PRIMARY, keySource: k.source }, () => generateText({
               model: openai(OPENAI_PRIMARY),
               prompt: `You are a senior UI engineer.\nGoal: ${goal}${historyCtx}\n\nCurrent page:\n${currentInput.slice(0, 6000)}\n\nReturn only improved markup.`,
               maxTokens: 3000,
-            })
+            }))
             return text.trim()
           },
         )
@@ -350,29 +370,26 @@ Deno.serve(
         // Critic — use multi-key failover
         let critiqueResult: z.infer<typeof rubricSchema>
         let costUsd = 0
-        let costModel = judgeModel
         const { result: criticResult } = await withAnthropicOrOpenAi(
           db,
           run.project_id as string,
           async (k) => {
-            const { object, usage } = await claudeGenerateObject({
+            const { object, usage } = await withLlmUsage(db, { ...criticUsage, model: judgeModel, keySource: k.source }, () => claudeGenerateObject({
               apiKey: k.key,
               model: judgeModel,
               schema: rubricSchema,
               prompt: `${personaPrompt}\n\nGoal: ${goal}\n\nPage:\n${draft.slice(0, 5000)}\n\nEvaluate critically.`,
-            })
-            costModel = judgeModel
+            }))
             costUsd = estimateCallCostUsd(judgeModel, usage.promptTokens, usage.completionTokens)
             return object
           },
           async (k) => {
             const openai = createOpenAI({ apiKey: k.key, ...(k.baseUrl ? { baseURL: k.baseUrl } : {}) })
-            const { object, usage } = await generateObject({
+            const { object, usage } = await withLlmUsage(db, { ...criticUsage, model: OPENAI_PRIMARY, keySource: k.source }, () => generateObject({
               model: openai(OPENAI_PRIMARY, { structuredOutputs: false }),
               schema: rubricSchema,
               prompt: `${personaPrompt}\n\nGoal: ${goal}\n\nPage:\n${draft.slice(0, 5000)}\n\nEvaluate critically.`,
-            })
-            costModel = OPENAI_PRIMARY
+            }))
             costUsd = estimateCallCostUsd(OPENAI_PRIMARY, usage.promptTokens, usage.completionTokens)
             return object
           },
@@ -393,15 +410,9 @@ Deno.serve(
         // Update run progress
         await db.from('pdca_runs').update({ current_iteration: i + 1 }).eq('id', runId)
 
-        // Log cost
-        await db.from('llm_cost_usd').insert({
-          project_id: run.project_id,
-          operation: 'pdca-iteration',
-          model: costModel,
-          input_tokens: 0,
-          output_tokens: 0,
-          cost_usd: costUsd,
-        })
+        // Spend is recorded per call in llm_invocations (withLlmUsage). The
+        // legacy llm_cost_usd row here would count the critic call twice on
+        // the Costs page and against the budget.
 
         iterations.push({ score: critiqueResult.overall_score, critique: critiqueResult.critique_text })
 

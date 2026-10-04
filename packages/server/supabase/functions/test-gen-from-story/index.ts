@@ -22,6 +22,7 @@ import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { withAnthropicOrOpenAi, LlmFailoverError } from '../_shared/llm-failover.ts'
 import { TEST_GEN_EFFORT, TEST_GEN_MODEL, STAGE2_FALLBACK, THINKING_HEADROOM_TOKENS } from '../_shared/models.ts'
 import { claudeGenerateObject } from '../_shared/claude-messages.ts'
+import { withLlmUsage } from '../_shared/llm-usage.ts'
 import { logAudit } from '../_shared/audit.ts'
 import { createTrace } from '../_shared/observability.ts'
 import { tagLangfuseTrace } from '../_shared/sentry.ts'
@@ -250,6 +251,13 @@ Write a comprehensive Playwright TDD test for this user story.`
     const trace = createTrace('test-gen-from-story', { project_id, storyId: story.id })
     tagLangfuseTrace(trace.id)
     const llmSpan = trace.span('generate-test')
+    const usageCtx = {
+      functionName: 'test-gen-from-story',
+      stage: 'generate-test',
+      projectId: project_id,
+      primaryModel: TEST_GEN_MODEL,
+      langfuseTraceId: trace.id,
+    }
     try {
       // withAnthropicOrOpenAi takes TWO separate callbacks (anthropicFn,
       // openAiFn) and returns { result, usedProvider }. Each callback receives
@@ -258,7 +266,7 @@ Write a comprehensive Playwright TDD test for this user story.`
         db,
         project_id,
         async (anthropicKey) => {
-          const { object } = await claudeGenerateObject({
+          const { object } = await withLlmUsage(db, { ...usageCtx, model: TEST_GEN_MODEL, keySource: anthropicKey.source }, () => claudeGenerateObject({
             apiKey: anthropicKey.key,
             model: TEST_GEN_MODEL,
             effort: TEST_GEN_EFFORT,
@@ -267,17 +275,17 @@ Write a comprehensive Playwright TDD test for this user story.`
             schema: testGenSchema,
             // An 8k Playwright spec plus room for adaptive thinking.
             maxTokens: 8000 + THINKING_HEADROOM_TOKENS,
-          })
+          }))
           return object
         },
         async (openaiKey) => {
-          const { object } = await generateObject({
+          const { object } = await withLlmUsage(db, { ...usageCtx, model: STAGE2_FALLBACK, keySource: openaiKey.source }, () => generateObject({
             model: createOpenAI({ apiKey: openaiKey.key })(STAGE2_FALLBACK, { structuredOutputs: false }),
             system: SYSTEM_PROMPT,
             prompt,
             schema: testGenSchema,
             maxTokens: 8000,
-          })
+          }))
           return object
         },
       )

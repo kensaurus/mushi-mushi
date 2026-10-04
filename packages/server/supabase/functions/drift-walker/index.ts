@@ -131,7 +131,7 @@ Deno.serve(
       // embedding every insert failed, and the old code swallowed it.
       let centroid: number[]
       try {
-        centroid = await createEmbedding(finding.message, { projectId })
+        centroid = await createEmbedding(finding.message, { projectId, functionName: 'drift-walker' })
       } catch (err) {
         promoteErrors.push(`embedding: ${String(err instanceof Error ? err.message : err).slice(0, 200)}`)
         continue

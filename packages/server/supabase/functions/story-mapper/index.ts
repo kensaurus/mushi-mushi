@@ -24,6 +24,7 @@ import { validateInventoryObject } from '../_shared/inventory.ts'
 import { assertSafeOutboundUrl } from '../_shared/inventory-guards.ts'
 import { STORY_MAP_EFFORT, STORY_MAP_MODEL, THINKING_HEADROOM_TOKENS } from '../_shared/models.ts'
 import { claudeGenerateText } from '../_shared/claude-messages.ts'
+import { withLlmUsage } from '../_shared/llm-usage.ts'
 import { createTrace } from '../_shared/observability.ts'
 import { tagLangfuseTrace } from '../_shared/sentry.ts'
 
@@ -268,28 +269,31 @@ Deno.serve(
             project_id,
             'anthropic',
             async (k) => {
-              const { text, usage } = await claudeGenerateText({
-                apiKey: k.key,
-                model: STORY_MAP_MODEL,
-                effort: STORY_MAP_EFFORT,
-                system: STORY_MAPPER_SYSTEM,
-                prompt: promptWithRetry,
-                // 8k of inventory JSON plus room for adaptive thinking.
-                maxTokens: 8000 + THINKING_HEADROOM_TOKENS,
-              })
+              const { text, usage } = await withLlmUsage(
+                db,
+                {
+                  functionName: 'story-mapper',
+                  stage: 'map-inventory',
+                  projectId: project_id,
+                  model: STORY_MAP_MODEL,
+                  keySource: k.source,
+                  langfuseTraceId: trace.id,
+                },
+                () => claudeGenerateText({
+                  apiKey: k.key,
+                  model: STORY_MAP_MODEL,
+                  effort: STORY_MAP_EFFORT,
+                  system: STORY_MAPPER_SYSTEM,
+                  prompt: promptWithRetry,
+                  // 8k of inventory JSON plus room for adaptive thinking.
+                  maxTokens: 8000 + THINKING_HEADROOM_TOKENS,
+                }),
+              )
               return { text, usage }
             },
-            // This path writes no llm_invocations row, so the hosted-key debit
-            // is taken here rather than in logLlmInvocation.
-            {
-              feature: 'story-mapper',
-              model: STORY_MAP_MODEL,
-              traceId: trace.id,
-              extractUsage: (r) => ({
-                inputTokens: r.usage?.promptTokens ?? 0,
-                outputTokens: r.usage?.completionTokens ?? 0,
-              }),
-            },
+            // No `meter`: withLlmUsage writes an llm_invocations row, and
+            // logLlmInvocation takes the hosted-key debit. Passing both would
+            // charge the call twice.
           )
 
           const parsed = extractFencedJson(completion.text) as ProposerOutput
