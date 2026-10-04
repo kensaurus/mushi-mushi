@@ -103,7 +103,10 @@ export function ActiveProjectStatusChip({ snapshot, className = '' }: ActiveProj
             // beside the project switcher on every page — so the healthy
             // state is a bare dot, not another text pill competing for
             // attention. Only trouble gets words.
+            // role="img": an aria-label on a role-less span is ignored by
+            // assistive tech and fails axe (aria-prohibited-attr) on every page.
             <span
+              role="img"
               className="inline-flex h-5 cursor-help items-center px-1"
               aria-label="SDK connected"
             >
@@ -171,7 +174,11 @@ export function ActiveProjectStatusChip({ snapshot, className = '' }: ActiveProj
           nowrap={false}
           portal
         >
-          <span className={`inline-flex h-5 cursor-help items-center rounded-sm ${CHIP_TONE.warnSubtle} px-1 text-2xs font-mono font-semibold`}>
+          <span
+            role="img"
+            aria-label="More reports this week than last week"
+            className={`inline-flex h-5 cursor-help items-center rounded-sm ${CHIP_TONE.warnSubtle} px-1 text-2xs font-mono font-semibold`}
+          >
             ↑
           </span>
         </Tooltip>

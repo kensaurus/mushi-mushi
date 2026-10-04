@@ -184,8 +184,12 @@ html[data-theme="light"] {
   --color-fg-muted:     oklch(0.44 0.005 285);
   --color-fg-faint:     oklch(0.50 0.004 285);
 
-  --color-brand:        var(--mushi-vermillion);
-  --color-brand-hover:  color-mix(in oklch, var(--mushi-vermillion) 82%, black);
+  /* A14 (2026-10-04): the editorial vermillion (#e03c2c) is 4.08:1 as text
+     on the light page and 3.44:1 on the active nav pill (brand/12), under
+     WCAG AA's 4.5:1, and white text on it was 4.33:1. Same hue, deeper:
+     5.7:1 on the page, 4.7:1 on the pill, 6.1:1 for white text on fills. */
+  --color-brand:        oklch(0.52 0.19 29.8);
+  --color-brand-hover:  oklch(0.46 0.18 29.8);
   --color-brand-fg:     oklch(0.985 0.01 80);
   --color-brand-subtle: oklch(0.95 0.05 80);
 
