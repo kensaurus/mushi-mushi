@@ -20,7 +20,8 @@ const { apiFetch, toast } = vi.hoisted(() => ({
 vi.mock('../../lib/supabase', () => ({ apiFetch }))
 vi.mock('../../lib/toast', () => ({ useToast: () => toast }))
 
-import { GenerateTestButton, testGenErrorText } from './GenerateTestButton'
+import { MemoryRouter } from 'react-router-dom'
+import { GenerateTestButton } from './GenerateTestButton'
 import type { ReportDetail } from './types'
 
 const REPORT = { id: 'r1', project_id: 'p1' } as ReportDetail
@@ -49,7 +50,7 @@ function button(text: string): HTMLButtonElement | undefined {
 
 async function clickThrough() {
   await act(async () => {
-    root.render(createElement(GenerateTestButton, { report: REPORT }))
+    root.render(createElement(MemoryRouter, null, createElement(GenerateTestButton, { report: REPORT })))
   })
   await act(async () => button('Generate test')?.click())
 }
@@ -79,8 +80,17 @@ describe('GenerateTestButton', () => {
     )
   })
 
-  it('explains a failure by its cause', () => {
-    expect(testGenErrorText({ code: 'NO_GITHUB_TOKEN', message: 'GitHub token not configured' })).toMatch(/Connect it in Integrations/)
-    expect(testGenErrorText(undefined)).toBe('The test could not be generated. Try again in a moment.')
+  it('explains a failure by its cause, with the fix', async () => {
+    apiFetch.mockResolvedValue({ ok: false, error: { code: 'NO_GITHUB_TOKEN', message: 'GitHub token not configured' } })
+    await clickThrough()
+    const confirm = Array.from(document.body.querySelectorAll('[role="dialog"] button, [role="alertdialog"] button')).find(
+      (b) => b.textContent?.trim() === 'Generate test',
+    ) as HTMLButtonElement | undefined
+    await act(async () => confirm?.click())
+    expect(toast.error).toHaveBeenCalledWith(
+      'GitHub is not connected for this project.',
+      'Connect GitHub and pick the repo, then try again.',
+      expect.objectContaining({ label: 'Connect GitHub' }),
+    )
   })
 })

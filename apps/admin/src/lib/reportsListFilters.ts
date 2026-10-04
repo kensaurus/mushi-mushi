@@ -93,6 +93,33 @@ export const SDK_FILTER_OPTIONS: ReadonlyArray<{ value: string; label: string }>
   { value: '@mushi-mushi/react-native', label: 'React Native' },
 ]
 
+const SDK_FILTER_ALIASES: Record<string, string> = {
+  '@mushi-mushi/react': '@mushi-mushi/web',
+  '@mushi-mushi/vue': '@mushi-mushi/web',
+  '@mushi-mushi/svelte': '@mushi-mushi/web',
+  '@mushi-mushi/angular': '@mushi-mushi/web',
+  '@mushi-mushi/capacitor': '@mushi-mushi/web',
+}
+
+/**
+ * URL filter values the list can apply. Old saved views and bookmarks carry
+ * SDK values the console no longer offers (React, Capacitor: both report as
+ * the web SDK) or values that never existed; an unknown one is dropped
+ * rather than sent, so a stale link still opens a list instead of an error.
+ */
+export function sanitizeListFilters(raw: { platform: string; sdkPackage: string; days: string }): {
+  platform: string
+  sdkPackage: string
+  days: string
+} {
+  const platform = PLATFORM_FILTER_OPTIONS.some((o) => o.value === raw.platform) ? raw.platform : ''
+  const sdk = SDK_FILTER_ALIASES[raw.sdkPackage] ?? raw.sdkPackage
+  const sdkPackage = SDK_FILTER_OPTIONS.some((o) => o.value === sdk) ? sdk : ''
+  const n = Number(raw.days)
+  const days = raw.days && Number.isInteger(n) && n >= 1 && n <= 90 ? String(n) : ''
+  return { platform, sdkPackage, days }
+}
+
 export function optionLabel(options: ReadonlyArray<{ value: string; label: string }>, value: string): string {
   return options.find((o) => o.value === value)?.label ?? value
 }

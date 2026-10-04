@@ -19,7 +19,8 @@ export interface ReportsStats {
   critical14d: number
   /** Critical reports from the last 14 days still in the New bucket — what
    *  the critical banner's link (status=new&severity=critical&days=14) lists. */
-  criticalUntriaged14d: number
+  /** Optional until every API deploy sends it. */
+  criticalUntriaged14d?: number
   high14d: number
   newUntriaged: number
   openBacklog: number

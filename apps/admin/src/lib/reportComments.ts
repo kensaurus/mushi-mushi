@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from './supabase'
 import { debugWarn } from './debug'
+import { humanizeApiError } from './humanizeApiError'
 
 /**
  * Reporter feedback chip — a structured 1-click signal the SDK widget can
@@ -66,7 +67,12 @@ export function commentWriteErrorText(error: { message?: string; code?: string }
   if (msg.includes('jwt') || msg.includes('not signed in') || msg.includes('session')) {
     return 'Your session expired. Sign in again, then retry.'
   }
-  return action === 'post' ? 'The comment was not saved. Try again in a moment.' : 'The comment was not deleted. Try again in a moment.'
+  // Anything else: the generic plain-English fallback, never the raw text.
+  return (
+    humanizeApiError(error.message || 'Request failed', null, {
+      action: action === 'post' ? 'post the comment' : 'delete the comment',
+    })?.hint ?? 'Try again in a moment.'
+  )
 }
 
 /**

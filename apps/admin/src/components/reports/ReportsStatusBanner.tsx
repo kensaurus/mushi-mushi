@@ -77,14 +77,20 @@ export function ReportsStatusBanner({
     return (
       <StatusBannerShell
         tone="danger"
-        title={`${stats.criticalUntriaged14d} critical bug${stats.criticalUntriaged14d === 1 ? '' : 's'} need review`}
+        // No count from an API that predates criticalUntriaged14d: the old
+        // critical14d also counted fixed and dismissed reports.
+        title={
+          stats.criticalUntriaged14d != null
+            ? `${stats.criticalUntriaged14d} critical bug${stats.criticalUntriaged14d === 1 ? '' : 's'} need review`
+            : 'Critical bugs need review'
+        }
         subtitle={
           stats.topPriorityLabel ??
           'Critical bugs block user workflows — confirm severity and dispatch fixes first.'
         }
         action={
           <StatusBannerAction
-            label={actions.triage ?? `Review ${stats.criticalUntriaged14d} critical`}
+            label={actions.triage ?? (stats.criticalUntriaged14d != null ? `Review ${stats.criticalUntriaged14d} critical` : 'Review critical')}
             to={stats.topPriorityTo ?? scopedHref('/reports?status=new&severity=critical&days=14', pid)}
             tone="danger"
           />

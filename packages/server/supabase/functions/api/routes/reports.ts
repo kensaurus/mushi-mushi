@@ -22,11 +22,13 @@ import { inventoryAnchorOf } from './report-agent-context-helpers.ts';
 import { getStorageAdapter } from '../../_shared/storage.ts';
 import { runInBackground } from '../../_shared/background.ts';
 import { loadReportDeployLive, type MergedFixRow } from '../../_shared/report-deploy-live.ts';
+import { featureRequestDispatchBlock } from '../../_shared/report-category.ts';
 import {
   NEW_BUCKET_STATUSES,
   REPORT_LIST_PLATFORMS,
   REPORT_LIST_SDK_PACKAGES,
   REPORT_SORT_COLUMNS,
+  resolveSdkPackageFilter,
   combineOrGroups,
   parseSeverityUpdate,
   parseWindowDays,
@@ -311,7 +313,8 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
     // for months and nothing read them). Unknown values are a 400, not a
     // silently unfiltered list.
     const platformParam = c.req.query('platform')?.trim() ?? '';
-    const sdkPackageParam = c.req.query('sdkPackage')?.trim() ?? '';
+    const sdkPackageRaw = c.req.query('sdkPackage')?.trim() ?? '';
+    const sdkPackageParam = sdkPackageRaw ? resolveSdkPackageFilter(sdkPackageRaw) : '';
     const daysRaw = c.req.query('days');
     const windowDays = parseWindowDays(daysRaw);
     if (platformParam && !REPORT_LIST_PLATFORMS.includes(platformParam)) {
@@ -320,7 +323,7 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
         400,
       );
     }
-    if (sdkPackageParam && !(REPORT_LIST_SDK_PACKAGES as readonly string[]).includes(sdkPackageParam)) {
+    if (sdkPackageParam === null) {
       return c.json(
         { ok: false, error: { code: 'VALIDATION_ERROR', message: `sdkPackage must be one of: ${REPORT_LIST_SDK_PACKAGES.join(', ')}` } },
         400,
@@ -345,7 +348,7 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
         // quota) and autofix_blocked stamps were invisible in every list
         // view — you had to open each report to learn the pipeline choked
         // (2026-08-16 audit P2-3). ~0.5 KB per affected row.
-        'id, project_id, description, category, severity, summary, title, area_tag, status, created_at, environment, screenshot_url, user_category, confidence, component, report_group_id, last_reporter_reply_at, last_admin_reply_at, admin_seen_at, awaiting_reporter_at, closed_reason, breadcrumbs, tags, sentry_trace_id, sentry_release, sentry_environment, sentry_event_id, sentry_replay_id, end_user_id, reporter_token_hash, session_id, processing_error',
+        'id, project_id, description, category, severity, summary, title, area_tag, status, created_at, environment, screenshot_url, user_category, confidence, component, report_group_id, last_reporter_reply_at, last_admin_reply_at, admin_seen_at, awaiting_reporter_at, closed_reason, breadcrumbs, tags, sentry_trace_id, sentry_release, sentry_environment, sentry_event_id, sentry_replay_id, end_user_id, reporter_token_hash, session_id, processing_error, user_intent, stage1_category:stage1_classification->>category, stage2_category:stage2_analysis->>category',
         { count: 'exact' },
       )
       .in('project_id', projectIds)
@@ -475,8 +478,18 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
       const stats = gid ? groupStatsMap.get(gid) : undefined;
       const endUserId = (r as { end_user_id: string | null }).end_user_id;
       const identity = endUserId ? endUsersMap.get(endUserId) : undefined;
+      // Why the row's "Fix →" must not queue (a reporter's feature request
+      // not yet re-categorized), from the same rule the dispatch route
+      // enforces, so the row disables Queue instead of meeting a 409.
+      const cats = r as { stage1_category?: string | null; stage2_category?: string | null };
+      const dispatch_block = featureRequestDispatchBlock({
+        ...(r as Record<string, unknown>),
+        stage1_classification: cats.stage1_category ? { category: cats.stage1_category } : null,
+        stage2_analysis: cats.stage2_category ? { category: cats.stage2_category } : null,
+      });
       return {
         ...r,
+        dispatch_block,
         dedup_count: stats?.reports ?? 1,
         unique_users: stats?.users ?? 0,
         unique_sessions: stats?.sessions ?? 0,
