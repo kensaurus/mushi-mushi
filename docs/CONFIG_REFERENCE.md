@@ -3,14 +3,14 @@
 > Auto-generated from [`apps/admin/src/lib/configDocs.ts`](../apps/admin/src/lib/configDocs.ts).
 > Do not edit by hand — run `pnpm gen:config-docs` instead.
 
-_110 configuration knobs across 19 sections · last regenerated 2026-10-04._
+_111 configuration knobs across 19 sections · last regenerated 2026-10-04._
 
 Every knob in the admin console has an in-app `i` icon next to it that opens a longer-form explanation. The same content is mirrored here so you can search, link, and review configuration choices outside the app.
 
 ## Contents
 
 - [Settings → General](#settings-general) (10)
-- [Settings → BYOK (LLM keys)](#settings-byok-llm-keys-) (3)
+- [Settings → BYOK (LLM keys)](#settings-byok-llm-keys-) (4)
 - [Settings → Firecrawl (web research)](#settings-firecrawl-web-research-) (3)
 - [Settings → Dev tools](#settings-dev-tools) (1)
 - [Projects](#projects) (8)
@@ -219,15 +219,15 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Learn more** — [Self-hosting & BYOK setup](https://kensaur.us/mushi-mushi/docs/self-hosting)
 
-### OpenAI / OpenRouter API Key
+### OpenAI API key
 
 <a id="settings-byok-openai-key"></a>
 
 `settings.byok.openai_key`
 
-**Summary** — Your OpenAI-compatible key — backup when Anthropic is down, and for judge scoring. Works with OpenRouter and other gateways via Base URL.
+**Summary** — Your OpenAI key: backup when Anthropic is down, search embeddings, judge scoring, and speech-to-text for voice reports.
 
-**How it works** — Used as automatic failover when Anthropic returns 5xx, and as the judge fallback in the autofix loop. Pair with the Base URL preset chips below to route the same key through any OpenAI-compatible gateway without code changes.
+**How it works** — Used as automatic failover when Anthropic fails, for the embeddings behind search and similar bugs, as the judge fallback, and for voice transcription. OpenRouter keys have their own row; a Base URL here is for other OpenAI-compatible hosts (Azure, Together, Fireworks).
 
 **Default** — `unset (failover disabled)`
 
@@ -241,7 +241,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 `settings.byok.openai_base_url`
 
-**Summary** — Override the OpenAI endpoint to route the same key through OpenRouter, Together, Fireworks, or any compatible gateway.
+**Summary** — Override the OpenAI endpoint to send the key to another OpenAI-compatible host such as Azure, Together or Fireworks. OpenRouter keys go in their own row.
 
 **How it works** — The OpenAI client honours this URL for every request. Leave blank to hit `api.openai.com`. The preset chips below populate common gateways so you don't have to remember the exact path.
 
@@ -249,7 +249,23 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Where it lives** — table `project_settings.byok_openai_base_url` · endpoint `PUT /v1/admin/byok/openai` · read by `classify-report edge function`
 
-**When to change** — Switch to OpenRouter when you want to A/B different models (Llama, Mixtral, Gemini) under one key. Switch back to blank when troubleshooting — eliminates the gateway as a variable.
+**When to change** — Set it only for a self-hosted or third-party OpenAI-compatible host. Leave it blank for OpenAI itself; add OpenRouter keys in the OpenRouter row.
+
+### OpenRouter API key
+
+<a id="settings-byok-openrouter-key"></a>
+
+`settings.byok.openrouter_key`
+
+**Summary** — One key for many models. Mushi uses it as a backup after your OpenAI keys, and shows its remaining credits.
+
+**How it works** — Chat and embedding calls that would go to OpenAI try your OpenAI keys first, then your OpenRouter keys, with OpenRouter model names (`openai/gpt-5.4`). Speech-to-text and fine-tuning stay on OpenAI, which OpenRouter does not serve. "Test" reads the key from OpenRouter for free; the credits line comes from OpenRouter’s /api/v1/key.
+
+**Default** — `unset`
+
+**Where it lives** — table `byok_keys.provider_slug = 'openrouter' (Vault)` · endpoint `POST /v1/admin/byok/keys` · read by `every OpenAI-compatible call through _shared/byok.ts (after OpenAI keys)`, `GET /v1/admin/byok/credits`
+
+**When to change** — Add one if you already pay for OpenRouter or want a backup on a different account from OpenAI.
 
 ## Settings → Firecrawl (web research)
 

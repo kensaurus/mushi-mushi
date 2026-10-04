@@ -1,4 +1,5 @@
 import { getServiceClient } from './db.ts'
+import { openAiCompatibleModelId } from './openai-compat.ts'
 import { createTrace } from './observability.ts'
 import { log } from './logger.ts'
 import { markKeyStatus, resolveLlmKey } from './byok.ts'
@@ -316,7 +317,8 @@ async function fetchEmbedding(
       'Authorization': `Bearer ${resolved.key}`,
     },
     body: JSON.stringify({
-      model: embeddingModel,
+      // OpenRouter wants `openai/text-embedding-3-small`; OpenAI wants the bare id.
+      model: openAiCompatibleModelId(embeddingModel, resolved.baseUrl),
       input: truncatedInput,
       dimensions: DEFAULT_DIMENSIONS,
     }),

@@ -289,9 +289,11 @@ export async function withLlmFailover<T>(
   provider: LlmProvider,
   fn: (key: ResolvedKey) => Promise<T>,
   meter?: LlmFailoverMeterOptions<T>,
+  /** `openAiOnly`: leave OpenRouter keys out (speech-to-text, fine-tuning). */
+  opts: { openAiOnly?: boolean } = {},
 ): Promise<T> {
   await enforceLlmBudget(db, projectId, provider);
-  const candidates = await resolveLlmKeys(db, projectId, provider);
+  const candidates = await resolveLlmKeys(db, projectId, provider, { openAiOnly: opts.openAiOnly });
 
   if (candidates.length === 0) {
     throw new LlmFailoverError({

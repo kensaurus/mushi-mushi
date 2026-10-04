@@ -56,11 +56,18 @@ const PROVIDER_META: Record<string, ProviderMeta> = {
     emptyDetail: "Using Mushi's shared key. Add yours to bill your own Anthropic account.",
   },
   openai: {
-    name: 'OpenAI or OpenRouter',
-    purpose: 'Backup when Anthropic is unavailable. With OpenRouter you can pick other models.',
-    placeholder: 'sk-… or sk-or-v1-…',
+    name: 'OpenAI',
+    purpose: 'Backup when Anthropic is unavailable, search embeddings, and speech-to-text for voice reports.',
+    placeholder: 'sk-proj-…',
     consoleUrl: 'https://platform.openai.com/api-keys',
     emptyDetail: "No backup key of your own. Mushi's shared backup is used when the server has one.",
+  },
+  openrouter: {
+    name: 'OpenRouter',
+    purpose: 'One key for many models. Used as a backup after your OpenAI keys (not for speech-to-text or fine-tuning).',
+    placeholder: 'sk-or-v1-…',
+    consoleUrl: 'https://openrouter.ai/settings/keys',
+    emptyDetail: 'Optional. Add a key to use OpenRouter as a backup and see its remaining credits here.',
   },
   cursor: {
     name: 'Cursor cloud agent',
@@ -96,7 +103,7 @@ const PROVIDER_META: Record<string, ProviderMeta> = {
 
 // Kept on one line: byok-lifecycle-contract.test.ts asserts the provider order.
 // prettier-ignore
-const DISPLAY_PROVIDERS = ['anthropic', 'openai', 'cursor', 'firecrawl', 'browserbase', 'supabase'] as const;
+const DISPLAY_PROVIDERS = ['anthropic', 'openai', 'openrouter', 'cursor', 'firecrawl', 'browserbase', 'supabase'] as const;
 
 type ValidationReply =
   | {
@@ -660,14 +667,14 @@ export function ByokPanel() {
                     {provider === 'openai' && (
                       <div className="space-y-1">
                         <Input
-                          label="Base URL (optional, for OpenRouter and other compatible services)"
+                          label="Base URL (optional, for other OpenAI-compatible services such as Azure or Together)"
                           type="url"
                           value={newBaseUrl}
                           onChange={(e) => {
                             setNewBaseUrl(e.target.value);
                             setBaseUrlError(null);
                           }}
-                          placeholder="https://openrouter.ai/api/v1"
+                          placeholder="https://your-host.example.com/v1"
                           autoComplete="url"
                           error={baseUrlError ?? undefined}
                         />

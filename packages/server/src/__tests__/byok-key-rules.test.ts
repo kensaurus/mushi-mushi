@@ -87,7 +87,7 @@ describe('per-provider prefixes and wrong-provider detection', () => {
     })
     expect(prepareByokSecret('anthropic', 'sk-proj-FAKE0016')).toEqual({
       ok: false,
-      message: 'This looks like an OpenAI key — paste it in the OpenAI / OpenRouter row.',
+      message: 'This looks like an OpenAI key — paste it in the OpenAI row.',
     })
     expect(prepareByokSecret('anthropic', 'fc-FAKE00000017')).toEqual({
       ok: false,
@@ -99,7 +99,7 @@ describe('per-provider prefixes and wrong-provider detection', () => {
     })
     expect(prepareByokSecret('anthropic', 'sk-or-v1-FAKE0019')).toEqual({
       ok: false,
-      message: 'This looks like an OpenRouter key — paste it in the OpenAI / OpenRouter row.',
+      message: 'This looks like an OpenRouter key — paste it in the OpenRouter row.',
     })
   })
 
@@ -114,14 +114,22 @@ describe('per-provider prefixes and wrong-provider detection', () => {
     })
   })
 
-  it('an OpenRouter key in the OpenAI row needs the base URL', () => {
-    expect(prepareByokSecret('openai', 'sk-or-v1-FAKE0022')).toMatchObject({
+  it('OpenRouter keys have their own row (2026-10-05)', () => {
+    for (const baseUrl of [null, 'https://openrouter.ai/api/v1']) {
+      expect(prepareByokSecret('openai', 'sk-or-v1-FAKE0022', { baseUrl })).toEqual({
+        ok: false,
+        message: 'This looks like an OpenRouter key — paste it in the OpenRouter row.',
+      })
+    }
+    expect(prepareByokSecret('openrouter', 'sk-or-v1-FAKE0022')).toMatchObject({ ok: true })
+    expect(prepareByokSecret('openrouter', 'sk-proj-FAKE0022')).toEqual({
       ok: false,
-      message: expect.stringMatching(/OpenRouter key\. Set the base URL/),
+      message: 'This looks like an OpenAI key — paste it in the OpenAI row.',
     })
-    expect(
-      prepareByokSecret('openai', 'sk-or-v1-FAKE0022', { baseUrl: 'https://openrouter.ai/api/v1' }),
-    ).toMatchObject({ ok: true })
+    expect(prepareByokSecret('openrouter', 'no_prefix_FAKE0022')).toEqual({
+      ok: false,
+      message: 'An OpenRouter key starts with "sk-or-". Create one at openrouter.ai/settings/keys.',
+    })
   })
 
   it('explains a Supabase secret key or project JWT pasted in the Supabase row', () => {
@@ -156,7 +164,7 @@ describe('console mirror parity', () => {
   })
 
   it('both copies answer every case the same way', () => {
-    const providers = ['anthropic', 'openai', 'firecrawl', 'supabase', 'cursor', 'browserbase']
+    const providers = ['anthropic', 'openai', 'openrouter', 'firecrawl', 'supabase', 'cursor', 'browserbase']
     const inputs = [
       'OPENAI_API_KEY=sk-proj-FAKE0001',
       'export X="sk-ant-FAKE0002"',

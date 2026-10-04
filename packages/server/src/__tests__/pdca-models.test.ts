@@ -65,7 +65,7 @@ describe('pdca-runner source', () => {
     expect(src).not.toContain("'gpt-5.4'")
     // Every OpenAI fallback (producer, critic and the QA-story improver) uses the shared id.
     expect(src).not.toContain("'gpt-4.1'")
-    expect(src).not.toMatch(/createOpenAI\([^)]*\)\('gpt-/)
+    expect(src).not.toMatch(/(?:createOpenAI|openAiProvider)\([^)]*\)\('gpt-/)
   })
 
   it('calls Claude through claude-messages and resolves stored models', () => {

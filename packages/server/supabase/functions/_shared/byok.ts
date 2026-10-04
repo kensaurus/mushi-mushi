@@ -24,7 +24,10 @@ import { assertLlmBudget, isBudgetedProvider, LlmBudgetUnavailableError } from '
 const log = rootLog.child('byok');
 
 /** All provider slugs supported by BYOK (Phase 0 adds 'cursor'). */
-export type LlmProvider = 'anthropic' | 'openai' | 'firecrawl' | 'browserbase' | 'cursor';
+export type LlmProvider = 'anthropic' | 'openai' | 'openrouter' | 'firecrawl' | 'browserbase' | 'cursor';
+
+/** OpenRouter's OpenAI-compatible API root. Model ids there carry a vendor prefix (`openai/gpt-5.4`). */
+export const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
 
 export type KeyStatus =
   | 'pending_validation'
@@ -41,10 +44,12 @@ export interface ResolvedKey {
   /** Last 4 chars of the key — safe to log. */
   hint: string;
   /**
-   * Optional base URL for OpenAI-compatible providers (OpenRouter, Together,
-   * Fireworks). Only set for `openai` when `byok_openai_base_url` is configured.
+   * Base URL for OpenAI-compatible calls: the key's own (Together, Azure, …),
+   * OpenRouter's for an `openrouter` key, or OpenAI's.
    */
   baseUrl?: string;
+  /** The provider the key belongs to when it differs from the one asked for (an OpenRouter key serving an OpenAI-compatible call). */
+  provider?: LlmProvider;
   /** Human label if set on the key row */
   label?: string;
 }
@@ -52,6 +57,7 @@ export interface ResolvedKey {
 const ENV_VAR: Record<LlmProvider, string> = {
   anthropic: 'ANTHROPIC_API_KEY',
   openai: 'OPENAI_API_KEY',
+  openrouter: 'OPENROUTER_API_KEY',
   firecrawl: 'FIRECRAWL_API_KEY',
   browserbase: 'BROWSERBASE_API_KEY',
   cursor: 'CURSOR_API_KEY',
@@ -111,12 +117,14 @@ export async function resolveLlmKey(
      * check or an embedding, which the budget does not cover.
      */
     purpose?: 'generation' | 'probe' | 'embedding';
+    /** See resolveLlmKeys: true for calls only OpenAI itself serves (speech-to-text, fine-tuning). */
+    openAiOnly?: boolean;
   } = {},
 ): Promise<ResolvedKey | null> {
   if ((opts.purpose ?? 'generation') === 'generation') {
     await enforceLlmBudget(db, projectId, provider);
   }
-  const candidates = await resolveLlmKeys(db, projectId, provider);
+  const candidates = await resolveLlmKeys(db, projectId, provider, { openAiOnly: opts.openAiOnly });
   return candidates[0] ?? null;
 }
 
@@ -148,8 +156,30 @@ export async function enforceLlmBudget(
  * Resolve ALL active candidate keys for a provider, ordered by priority ASC.
  * Used by withLlmFailover() to iterate through keys on quota/auth failure.
  * Skips keys that are cooled down or in non-active states.
+ *
+ * For 'openai', the project's OpenRouter keys follow its OpenAI keys: they
+ * serve the same OpenAI-compatible chat and embedding calls (callers qualify
+ * model ids through _shared/openai-compat.ts). Pass `openAiOnly` for calls
+ * OpenRouter cannot serve, such as speech-to-text and fine-tuning.
  */
 export async function resolveLlmKeys(
+  db: SupabaseClient,
+  projectId: string,
+  provider: LlmProvider,
+  opts: { openAiOnly?: boolean } = {},
+): Promise<ResolvedKey[]> {
+  const candidates = await byokPoolCandidates(db, projectId, provider);
+  if (provider === 'openai' && !opts.openAiOnly) {
+    for (const c of await byokPoolCandidates(db, projectId, 'openrouter')) {
+      candidates.push({ ...c, provider: 'openrouter' });
+    }
+  }
+  if (candidates.length > 0) return candidates;
+  return await legacyOrEnvCandidates(db, projectId, provider);
+}
+
+/** Step 1: the project's byok_keys rows for one provider, ordered by priority. */
+async function byokPoolCandidates(
   db: SupabaseClient,
   projectId: string,
   provider: LlmProvider,
@@ -206,6 +236,8 @@ export async function resolveLlmKeys(
           } else {
             baseUrl = validatedPlatformOpenAiBaseUrl(projectId);
           }
+        } else if (provider === 'openrouter') {
+          baseUrl = OPENROUTER_BASE_URL;
         }
         candidates.push({
           keyId: row.id,
@@ -219,8 +251,15 @@ export async function resolveLlmKeys(
     }
   }
 
-  if (candidates.length > 0) return candidates;
+  return candidates;
+}
 
+/** Steps 2 and 3: the legacy single-key column, then the platform key. */
+async function legacyOrEnvCandidates(
+  db: SupabaseClient,
+  projectId: string,
+  provider: LlmProvider,
+): Promise<ResolvedKey[]> {
   // Step 2: Legacy project_settings columns (back-compat).
   const refCol = isLegacyByokProvider(provider) ? LEGACY_REF_COL[provider] : undefined;
   if (refCol) {
@@ -289,7 +328,9 @@ export async function resolveLlmKeys(
       provider,
       hint: hint(env),
     });
-    const baseUrl = provider === 'openai' ? validatedPlatformOpenAiBaseUrl(projectId) : undefined;
+    const baseUrl = provider === 'openai'
+      ? validatedPlatformOpenAiBaseUrl(projectId)
+      : provider === 'openrouter' ? OPENROUTER_BASE_URL : undefined;
     return [{ key: env, source: 'env', hint: hint(env), baseUrl }];
   }
 

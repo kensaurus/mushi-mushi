@@ -312,11 +312,11 @@ const SETTINGS_BYOK: ConfigDoc[] = [
   },
   {
     id: 'settings.byok.openai_key',
-    label: 'OpenAI / OpenRouter API Key',
+    label: 'OpenAI API key',
     summary:
-      'Your OpenAI-compatible key — backup when Anthropic is down, and for judge scoring. Works with OpenRouter and other gateways via Base URL.',
+      'Your OpenAI key: backup when Anthropic is down, search embeddings, judge scoring, and speech-to-text for voice reports.',
     howItWorks:
-      'Used as automatic failover when Anthropic returns 5xx, and as the judge fallback in the autofix loop. Pair with the Base URL preset chips below to route the same key through any OpenAI-compatible gateway without code changes.',
+      'Used as automatic failover when Anthropic fails, for the embeddings behind search and similar bugs, as the judge fallback, and for voice transcription. OpenRouter keys have their own row; a Base URL here is for other OpenAI-compatible hosts (Azure, Together, Fireworks).',
     default: { value: 'unset (failover disabled)' },
     backend: {
       table: 'project_settings',
@@ -331,7 +331,7 @@ const SETTINGS_BYOK: ConfigDoc[] = [
     id: 'settings.byok.openai_base_url',
     label: 'OpenAI Base URL',
     summary:
-      'Override the OpenAI endpoint to route the same key through OpenRouter, Together, Fireworks, or any compatible gateway.',
+      'Override the OpenAI endpoint to send the key to another OpenAI-compatible host such as Azure, Together or Fireworks. OpenRouter keys go in their own row.',
     howItWorks:
       "The OpenAI client honours this URL for every request. Leave blank to hit `api.openai.com`. The preset chips below populate common gateways so you don't have to remember the exact path.",
     default: { value: 'empty (api.openai.com)' },
@@ -342,7 +342,24 @@ const SETTINGS_BYOK: ConfigDoc[] = [
       readBy: ['classify-report edge function'],
     },
     whenToChange:
-      'Switch to OpenRouter when you want to A/B different models (Llama, Mixtral, Gemini) under one key. Switch back to blank when troubleshooting — eliminates the gateway as a variable.',
+      'Set it only for a self-hosted or third-party OpenAI-compatible host. Leave it blank for OpenAI itself; add OpenRouter keys in the OpenRouter row.',
+  },
+  {
+    id: 'settings.byok.openrouter_key',
+    label: 'OpenRouter API key',
+    summary:
+      'One key for many models. Mushi uses it as a backup after your OpenAI keys, and shows its remaining credits.',
+    howItWorks:
+      'Chat and embedding calls that would go to OpenAI try your OpenAI keys first, then your OpenRouter keys, with OpenRouter model names (`openai/gpt-5.4`). Speech-to-text and fine-tuning stay on OpenAI, which OpenRouter does not serve. "Test" reads the key from OpenRouter for free; the credits line comes from OpenRouter’s /api/v1/key.',
+    default: { value: 'unset' },
+    backend: {
+      table: 'byok_keys',
+      column: "provider_slug = 'openrouter' (Vault)",
+      endpoint: 'POST /v1/admin/byok/keys',
+      readBy: ['every OpenAI-compatible call through _shared/byok.ts (after OpenAI keys)', 'GET /v1/admin/byok/credits'],
+    },
+    whenToChange:
+      'Add one if you already pay for OpenRouter or want a backup on a different account from OpenAI.',
   },
 ];
 

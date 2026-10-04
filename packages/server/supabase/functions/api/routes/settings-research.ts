@@ -2974,7 +2974,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
           provider: k.provider_slug,
           hint: k.key_hint,
           label: k.label,
-          openRouter: isOpenRouterBaseUrl(k.base_url as string | null),
+          openRouter: k.provider_slug === 'openrouter' || isOpenRouterBaseUrl(k.base_url as string | null),
           credits,
         };
       }),
@@ -3160,6 +3160,18 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         if (!validation.ok) {
           return c.json(
             { ok: false, error: { code: 'INVALID_BASE_URL', message: validation.message } },
+            400,
+          );
+        }
+        if (isOpenRouterBaseUrl(validation.value)) {
+          return c.json(
+            {
+              ok: false,
+              error: {
+                code: 'INVALID_BASE_URL',
+                message: 'OpenRouter keys have their own row now. Add this key under OpenRouter instead.',
+              },
+            },
             400,
           );
         }

@@ -251,7 +251,7 @@ export async function transcribeAudio(
       }
       usedModel = STT_FALLBACK_MODEL
       return fallback.json
-    })
+    }, undefined, { openAiOnly: true }) // OpenRouter has no transcription endpoint.
 
     const text = (json.text ?? '').trim()
     const durationSec =
