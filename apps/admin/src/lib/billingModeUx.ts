@@ -22,7 +22,9 @@ export function useBillingUx(): BillingUxFlags {
     isQuickstart,
     isBeginner,
     isAdvanced,
-    hideTabs: isQuickstart,
+    // Kept visible in Quick mode: nothing else on the page leads to Plans or
+    // Support, so hiding the tabs made them unreachable.
+    hideTabs: false,
     plainBanner: !isAdvanced,
     hideOverviewChrome: !isAdvanced,
     hideBillingSnapshot: isQuickstart,

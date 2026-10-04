@@ -990,7 +990,7 @@ export const COPY: CopyRegistry = {
           'Audit which reporter tokens were notified for a given report',
           'Debug stale unread rows when client polling stops',
         ],
-        howToUse: 'Filter by type or unread, expand payloads to inspect JSON, mark read when verified. Requires reporter_notifications_enabled in Settings.',
+        howToUse: 'Filter by type or unread, expand payloads to inspect JSON, mark read when verified. Reporter updates must be on (Setup tab).',
       },
     },
     '/billing': {
