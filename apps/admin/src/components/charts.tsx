@@ -204,6 +204,7 @@ export function KpiTile({
             valueFormat="count"
             showRangeSummary={showSparkAxes}
             seriesLabel={label}
+            maxXTicks={2}
             height={showSparkAxes ? (isPrimary ? 56 : 44) : 18}
           />
           <ChartAccessibleSummary
@@ -300,6 +301,7 @@ export function LineSparkline({
   showRangeSummary = false,
   seriesLabel: _seriesLabel,
   onRangeSelect,
+  maxXTicks,
 }: {
   values: number[]
   accent?: string
@@ -321,6 +323,8 @@ export function LineSparkline({
   /** Label for summary chips + aria (e.g. "Tokens"). */
   seriesLabel?: string
   onRangeSelect?: (range: { fromIso: string; toIso: string }) => void
+  /** Cap on X-axis labels (narrow KPI tiles pass 2). */
+  maxXTicks?: number
 }) {
   const brush = useBrushSelection({
     dataLength: values.length,
@@ -499,6 +503,7 @@ export function LineSparkline({
         height={plotHeight}
         yTickLabels={yTicks}
         xLabels={axisXIso.length > 0 ? axisXIso : undefined}
+        maxXTicks={maxXTicks}
         yAxisCaption={yAxisCaption}
         xAxisCaption={xAxisCaption}
       >

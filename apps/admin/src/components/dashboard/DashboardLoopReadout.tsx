@@ -36,15 +36,10 @@ export function DashboardLoopReadout({
 
   const rows: DetailRowItem[] = [
     {
+      // The name, never the id: the full UUID led this card on every
+      // dashboard (2026-10-04 audit). The id is in Developer details.
       label: 'Active project',
-      value: projectName ?? projectId,
-      wrap: true,
-    },
-    {
-      label: 'Project ref',
-      value: projectId,
-      mono: true,
-      copyable: true,
+      value: projectName ?? 'Unnamed project',
       wrap: true,
     },
     {
@@ -88,6 +83,12 @@ export function DashboardLoopReadout({
             <ReadoutSection title="Endpoints" icon={<IconGlobe size={14} aria-hidden />}>
               <EndpointCodeRow label="Ingest API" url={RESOLVED_EXTERNAL_API_URL} />
             </ReadoutSection>
+            <div className="mt-3">
+              <DetailRows
+                items={[{ label: 'Project id', value: projectId, mono: true, copyable: true, wrap: true }]}
+                dense
+              />
+            </div>
           </DisclosurePanel>
         </div>
       )}

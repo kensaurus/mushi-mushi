@@ -46,6 +46,7 @@ import type { PdcaStageId } from '../lib/pdca'
 import { usePageCopy } from '../lib/copy'
 import { useDashboardUx } from '../lib/dashboardModeUx'
 import { deriveDashboardInsight } from '../lib/dashboardExplainer'
+import { PLATFORM_DEFS } from '../components/integrations/types'
 import { semanticBannerTone } from '../lib/tokens'
 import { IconDashboard } from '../components/icons'
 
@@ -58,6 +59,13 @@ function inferRunningStage(data: DashboardData): PdcaStageId | null {
   if (recent.kind === 'report') return 'plan'
   if (recent.kind === 'fix') return 'do'
   return null
+}
+
+/** Plain name for an integration health kind ("sentry" → "Sentry"). */
+function integrationLabel(kind: string): string {
+  const def = PLATFORM_DEFS.find((d) => d.kind === kind)
+  if (def) return def.label
+  return kind.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase())
 }
 
 export function DashboardPage() {
@@ -118,15 +126,16 @@ export function DashboardPage() {
   const dashFix = data?.fixSummary
   const dashboardHeroStats = useMemo(() => {
     if (!dashCounts || !dashFix) return null
-    const integrationIssues = (data?.integrations ?? []).filter(
+    const failing = (data?.integrations ?? []).filter(
       (i) => i.lastStatus != null && i.lastStatus !== 'ok',
-    ).length
+    )
     return {
       openBacklog: dashCounts.openBacklog,
       fixesInProgress: dashFix.inProgress,
       fixesFailed: dashFix.failed,
       openPrs: dashFix.openPrs ?? dashCounts.openPrs,
-      integrationIssues,
+      integrationIssues: failing.length,
+      failingIntegrations: failing.map((i) => ({ kind: i.kind, label: integrationLabel(i.kind) })),
     }
   }, [dashCounts, dashFix, data?.integrations])
   usePublishPageHeroStats('/dashboard', dashboardHeroStats)
@@ -200,6 +209,7 @@ export function DashboardPage() {
           fixesInProgress: dashboardHeroStats.fixesInProgress,
           fixesFailed: dashboardHeroStats.fixesFailed,
           integrationIssues: dashboardHeroStats.integrationIssues,
+          failingIntegrations: dashboardHeroStats.failingIntegrations,
           reports14d: counts.reports14d ?? 0,
         })
       : null
@@ -293,6 +303,14 @@ export function DashboardPage() {
                         : 'OK: '}
                   </span>
                   {dashboardInsight.sentence}
+                  {dashboardInsight.action ? (
+                    <>
+                      {' '}
+                      <Link to={dashboardInsight.action.to} className="font-medium underline underline-offset-2 hover:no-underline">
+                        {dashboardInsight.action.label} →
+                      </Link>
+                    </>
+                  ) : null}
                 </span>
               </div>
             ) : null,
