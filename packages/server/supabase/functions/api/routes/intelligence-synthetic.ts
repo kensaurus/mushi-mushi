@@ -8,6 +8,7 @@ import { dbError, callerProjectIds, resolveOwnedProject, scopedOwnedProjectIds }
 import { sanitizeRenderedHtml } from '../../_shared/html-sanitize.ts';
 import { log } from '../../_shared/logger.ts';
 import { isJobFailureSuperseded } from './intelligence-priority.ts';
+import { readWorkerResult } from '../../_shared/worker-result.ts';
 
 /**
  * Graph rows not yet mirrored into AGE. A head:true count query returns the
@@ -57,8 +58,37 @@ export function registerIntelligenceSyntheticRoutes(app: Hono<{ Variables: Varia
       },
       body: JSON.stringify({ projectId: project.id, count }),
     });
-    const result = await res.json();
-    return c.json({ ok: true, data: result.data });
+    // The generator answers 503 without an LLM key and 200 with
+    // `generated: 0` when every call failed; both used to come back as
+    // ok:true, so the console announced reports that never existed.
+    const result = await readWorkerResult(
+      res,
+      'Synthetic reports could not be generated. Check that the project has an LLM key under Settings → AI keys.',
+    );
+    if (!result.ok) {
+      // 503 = the generator found no LLM key; say where to add one rather
+      // than passing through an env-var name.
+      const message =
+        result.status === 503
+          ? 'This project has no LLM key for synthetic reports. Add an Anthropic key under Settings → AI keys, then try again.'
+          : result.message;
+      return c.json({ ok: false, error: { code: 'WORKER_FAILED', message } }, result.status as 502);
+    }
+    const data = (result.body.data ?? {}) as { generated?: unknown; evaluated?: unknown };
+    const generated = typeof data.generated === 'number' ? data.generated : 0;
+    if (generated === 0) {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'WORKER_FAILED',
+            message: 'No synthetic reports were generated. Check that the project has a working LLM key under Settings → AI keys, then try again.',
+          },
+        },
+        502,
+      );
+    }
+    return c.json({ ok: true, data: { generated, evaluated: typeof data.evaluated === 'number' ? data.evaluated : 0, requested: count } });
   });
 
   app.get('/v1/admin/synthetic', jwtAuth, async (c) => {
@@ -416,14 +446,14 @@ export function registerIntelligenceSyntheticRoutes(app: Hono<{ Variables: Varia
       const id = c.req.param('id')!;
       const db = getServiceClient();
       const projectIds = await callerProjectIds(c, db, userId);
-      if (projectIds.length === 0) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
+      if (projectIds.length === 0) return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'You have no project in this team, so there is no job to cancel.' } }, 403);
       const { data: job } = await db
         .from('intelligence_generation_jobs')
         .select('id, project_id, status')
         .eq('id', id)
         .maybeSingle();
       if (!job || !projectIds.includes(job.project_id)) {
-        return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
+        return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'That job no longer exists or belongs to another project. Refresh the page.' } }, 404);
       }
       if (job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled') {
         return c.json(

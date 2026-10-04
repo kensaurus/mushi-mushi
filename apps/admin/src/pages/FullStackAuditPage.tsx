@@ -34,6 +34,7 @@ import {
 } from '../components/ui'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { apiFetch } from '../lib/supabase'
+import { describeApiError } from '../lib/humanizeApiError'
 import { usePageData } from '../lib/usePageData'
 import { FullStackAuditReadout } from '../components/fullstack-audit/FullStackAuditReadout'
 import {
@@ -276,10 +277,10 @@ export function FullStackAuditPage() {
       if (res.ok && res.data) {
         setResult(res.data)
       } else {
-        setError(res.error?.message ?? 'Audit failed. Please try again.')
+        setError(describeApiError(res.error, 'The audit failed').hint)
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+    } catch {
+      setError('The audit could not run. Check your connection and try again.')
     } finally {
       setLoading(false)
     }
@@ -334,7 +335,7 @@ export function FullStackAuditPage() {
         </Card>
       )}
 
-      {error && <ErrorAlert message={error} />}
+      {error && <ErrorAlert title="The audit failed" message={error} onRetry={projectId ? () => void runAudit() : undefined} />}
 
       {projectId && (
         <Section title="Open findings by check">

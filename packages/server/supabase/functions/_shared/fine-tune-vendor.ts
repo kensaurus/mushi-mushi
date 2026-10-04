@@ -27,10 +27,9 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import type { FineTuningJobRow, ExportSampleRow } from './fine-tune.ts'
 import { resolveLlmKey } from './byok.ts'
 import { LlmBudgetExceededError } from './llm-budget.ts'
+import { resolveVendor, type VendorName } from './fine-tune-base-model.ts'
 
-/** Production vendors. `stub` is test-only; getAdapter() refuses it unless
- *  MUSHI_ALLOW_STUB_FINE_TUNE=1 is set.  */
-export type VendorName = 'openai' | 'anthropic' | 'bedrock' | 'stub'
+export { resolveVendor } from './fine-tune-base-model.ts'
 
 export interface VendorSubmitResult {
   vendor: VendorName
@@ -57,22 +56,6 @@ export interface VendorAdapter {
   }>
 }
 
-export function resolveVendor(baseModel: string): VendorName {
-  const lc = baseModel.toLowerCase()
-  if (lc.startsWith('gpt-') || lc.startsWith('openai:') || lc.includes('ft:gpt-')) return 'openai'
-  if (lc.startsWith('claude-') || lc.startsWith('anthropic:')) return 'anthropic'
-  if (lc.startsWith('bedrock:')) return 'bedrock'
-  // Test-only escape hatch: base_model='stub:...' maps to the stub adapter,
-  // but getAdapter() will still throw unless MUSHI_ALLOW_STUB_FINE_TUNE=1.
-  if (lc.startsWith('stub:') || lc === 'stub') return 'stub'
-  // Unknown base_model — throw early with an actionable error.
-  throw new Error(
-    `[fine-tune] Cannot resolve vendor for base_model="${baseModel}". ` +
-    'Use a known prefix: openai:gpt-4o-mini, openai:gpt-3.5-turbo-0125, ' +
-    'bedrock:<model-id>, claude-<model-id>, etc. ' +
-    'Mushi never falls back to stub in production.',
-  )
-}
 
 export function getAdapter(vendor: VendorName): VendorAdapter {
   switch (vendor) {
@@ -325,12 +308,13 @@ async function bedrockFetch(
   // SigV4 signing (minimal implementation for Deno edge functions).
   const encoder = new TextEncoder()
   const hash = async (data: string | Uint8Array) => {
-    const buf = await crypto.subtle.digest('SHA-256', typeof data === 'string' ? encoder.encode(data) : data)
+    // BufferSource casts: Deno 2.9's lib types a plain Uint8Array as ArrayBufferLike-backed.
+    const buf = await crypto.subtle.digest('SHA-256', (typeof data === 'string' ? encoder.encode(data) : data) as BufferSource)
     return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('')
   }
   const hmac = async (key: Uint8Array | string, data: string) => {
     const k = typeof key === 'string' ? encoder.encode(key) : key
-    const cryptoKey = await crypto.subtle.importKey('raw', k, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+    const cryptoKey = await crypto.subtle.importKey('raw', k as BufferSource, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
     const sig = await crypto.subtle.sign('HMAC', cryptoKey, encoder.encode(data))
     return new Uint8Array(sig)
   }

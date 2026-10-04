@@ -15,6 +15,7 @@ import { usePublishPageContext } from '../lib/pageContext'
 import { useRealtimeReload } from '../lib/realtime'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { SetupNudge } from '../components/SetupNudge'
+import { PageLoadError } from '../components/PageLoadError'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { ResponsiveTable } from '../components/ResponsiveTable'
@@ -24,7 +25,6 @@ import {
   SegmentedControl,
   Badge,
   Btn,
-  ErrorAlert,
 } from '../components/ui'
 import {
   ActionPill,
@@ -102,6 +102,7 @@ export function CostPage() {
     data: statsData,
     loading: statsLoading,
     error: statsError,
+    errorCode: statsErrorCode,
     reload: reloadStats,
     lastFetchedAt,
     isValidating,
@@ -133,6 +134,16 @@ export function CostPage() {
     },
     [searchParams, setSearchParams],
   )
+
+  // "N failed calls in 24h → View failures" lands on exactly those rows.
+  const viewFailures = useCallback(() => {
+    const next = new URLSearchParams(searchParams)
+    next.set('tab', 'log')
+    next.set('log_status', 'failed')
+    next.set('log_since', '24h')
+    next.delete('log_page')
+    setSearchParams(next, { replace: true, preventScrollReset: true })
+  }, [searchParams, setSearchParams])
 
   useEffect(() => {
     if (!ux.isQuickstart || !activeProjectId || statsLoading) return
@@ -237,7 +248,7 @@ export function CostPage() {
     return <PanelSkeleton rows={6} label="Loading LLM cost" />
   }
   if (statsError) {
-    return <ErrorAlert message={`Failed to load cost stats: ${statsError}`} onRetry={reloadAll} />
+    return <PageLoadError error={statsError} code={statsErrorCode} onRetry={reloadAll} />
   }
 
   return (
@@ -278,7 +289,14 @@ export function CostPage() {
         slots={[
           {
             priority: POSTURE_PRIORITY.status,
-            children: <CostStatusBanner stats={stats} onTab={setActive} plainBanner={ux.plainBanner} />,
+            children: (
+              <CostStatusBanner
+                stats={stats}
+                onTab={setActive}
+                onViewFailures={viewFailures}
+                plainBanner={ux.plainBanner}
+              />
+            ),
           },
           {
             priority: POSTURE_PRIORITY.heroOrSnapshot,

@@ -144,6 +144,10 @@ export function registerCodeHealthRoutes(app: Hono<{ Variables: Variables }>): v
     let topPriorityLabel: string | null = null
     let topPriorityTo: string | null = `/code-health?project=${projectId}`
 
+    if (errorCount > 0 || warnCount > 0) {
+      // Land on the findings list, not the top of the page you are on.
+      topPriorityTo = `/code-health?project=${projectId}#god-files`
+    }
     if (errorCount > 0) {
       topPriority = 'errors'
       topPriorityLabel = `${errorCount} file${errorCount === 1 ? '' : 's'} over the 2,000 LOC budget — split before the next release.`

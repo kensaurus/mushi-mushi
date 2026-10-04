@@ -10,12 +10,12 @@
  *            - generate synthetic reports to validate prompt changes
  */
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
-import {
-  Btn,
-  ErrorAlert,
-} from '../components/ui'
+import { Btn } from '../components/ui'
+import { PageLoadError } from '../components/PageLoadError'
+import { describeApiError } from '../lib/humanizeApiError'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { shouldHideGuideWhenBannerActive, COMMON_HEALTHY_PRIORITIES } from '../lib/pagePostureHelpers'
@@ -25,7 +25,7 @@ import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { usePublishPageContext } from '../lib/pageContext'
-import type { PromptLabData, PromptVersion } from '../components/prompt-lab/types'
+import { STAGE_LABELS, type PromptLabData, type PromptVersion } from '../components/prompt-lab/types'
 import { PromptStageTable } from '../components/prompt-lab/PromptStageTable'
 import { PromptEditorModal } from '../components/prompt-lab/PromptEditorModal'
 import { PromptDiffModal } from '../components/prompt-lab/PromptDiffModal'
@@ -46,9 +46,14 @@ import {
 import { CHIP_TONE } from '../lib/chipTone'
 
 export function PromptLabPage() {
-  const { data, loading, error, reload } = usePageData<PromptLabData>('/v1/admin/prompt-lab')
-  const { data: statsData, lastFetchedAt: statsFetchedAt, isValidating: statsValidating } =
-    usePageData<PromptLabStats>('/v1/admin/prompt-lab/stats')
+  const { data, loading, error, errorCode, reload } = usePageData<PromptLabData>('/v1/admin/prompt-lab')
+  const {
+    data: statsData,
+    lastFetchedAt: statsFetchedAt,
+    isValidating: statsValidating,
+    reload: reloadStats,
+  } = usePageData<PromptLabStats>('/v1/admin/prompt-lab/stats')
+  const [searchParams] = useSearchParams()
   usePublishPageHeroStats('/prompt-lab', statsData)
   const promptLabStats = statsData ?? EMPTY_PROMPT_LAB_STATS
   const [editing, setEditing] = useState<PromptVersion | null>(null)
@@ -88,18 +93,6 @@ export function PromptLabPage() {
     'stage1', 'stage2', 'judge', 'fix', 'intelligence',
     'nl_plan', 'nl_summary', 'synthetic', 'modernizer', 'prompt_tune',
   ] as const
-  const STAGE_LABEL: Record<string, string> = {
-    stage1: 'Stage 1 (fast-filter)',
-    stage2: 'Stage 2 (classify)',
-    judge: 'Judge',
-    fix: 'Fix-worker',
-    intelligence: 'Intelligence digest',
-    nl_plan: 'NL → SQL planner',
-    nl_summary: 'NL → summary',
-    synthetic: 'Synthetic generator',
-    modernizer: 'Dep modernizer',
-    prompt_tune: 'Prompt auto-tune',
-  }
   const orderedStages = Object.keys(grouped).sort((a, b) => {
     const ia = STAGE_ORDER.indexOf(a as typeof STAGE_ORDER[number])
     const ib = STAGE_ORDER.indexOf(b as typeof STAGE_ORDER[number])
@@ -110,6 +103,24 @@ export function PromptLabPage() {
   })
   const [activeStage, setActiveStage] = useState<string | null>(null)
   const visibleStage = activeStage ?? orderedStages[0] ?? null
+
+  // Banner and deep links send ?tab=prompts&stage=<stage>: open that stage's
+  // table and bring it into view (the param used to be ignored, so the
+  // banner's only action re-rendered the same page).
+  const tabParam = searchParams.get('tab')
+  const stageParam = searchParams.get('stage')
+  // Applied once per link, so a background reload does not scroll again.
+  const appliedLinkRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!data) return
+    const key = `${tabParam ?? ''}|${stageParam ?? ''}`
+    if (appliedLinkRef.current === key) return
+    appliedLinkRef.current = key
+    if (stageParam && grouped[stageParam]) setActiveStage(stageParam)
+    if (tabParam === 'prompts' || stageParam) {
+      document.getElementById('prompt-lab-stages')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }, [data, grouped, tabParam, stageParam])
 
   async function clonePrompt(p: PromptVersion) {
     setBusy(p.id)
@@ -127,8 +138,10 @@ export function PromptLabPage() {
     if (res.ok) {
       toast.push({ tone: 'success', message: `Cloned to ${newVersion}` })
       reload()
+      reloadStats()
     } else {
-      toast.push({ tone: 'error', message: res.error?.message ?? 'Clone failed' })
+      const e = describeApiError(res.error, 'Could not clone the prompt')
+      toast.error(e.title, e.hint)
     }
   }
 
@@ -150,7 +163,8 @@ export function PromptLabPage() {
       toast.push({ tone: 'success', message: `${p.version} is now serving 100% of ${p.stage}` })
       reload()
     } else {
-      toast.push({ tone: 'error', message: res.error?.message ?? 'Activation failed' })
+      const e = describeApiError(res.error, 'Could not activate the prompt')
+      toast.error(e.title, e.hint)
     }
   }
 
@@ -174,7 +188,8 @@ export function PromptLabPage() {
       toast.push({ tone: 'success', message: `Traffic set to ${pct}%` })
       reload()
     } else {
-      toast.push({ tone: 'error', message: res.error?.message ?? 'Update failed' })
+      const e = describeApiError(res.error, 'Could not change the traffic split')
+      toast.error(e.title, e.hint)
     }
   }
 
@@ -193,7 +208,8 @@ export function PromptLabPage() {
       toast.push({ tone: 'success', message: 'Prompt deleted' })
       reload()
     } else {
-      toast.push({ tone: 'error', message: res.error?.message ?? 'Delete failed' })
+      const e = describeApiError(res.error, 'Could not delete the prompt')
+      toast.error(e.title, e.hint)
     }
   }
 
@@ -210,7 +226,8 @@ export function PromptLabPage() {
       setEditing(null)
       reload()
     } else {
-      toast.push({ tone: 'error', message: res.error?.message ?? 'Save failed' })
+      const e = describeApiError(res.error, 'Could not save the prompt')
+      toast.error(e.title, e.hint)
     }
   }
 
@@ -229,7 +246,7 @@ export function PromptLabPage() {
   })
 
   if (loading) return <TableSkeleton rows={6} columns={5} showFilters showKpiStrip label="Loading prompt lab" />
-  if (error) return <ErrorAlert message={error} onRetry={reload} />
+  if (error) return <PageLoadError error={error} code={errorCode} onRetry={reload} />
   if (!data) return null
 
   const totalEvals = data.prompts.reduce((s, p) => s + p.total_evaluations, 0)
@@ -263,7 +280,16 @@ export function PromptLabPage() {
         slots={[
           {
             priority: POSTURE_PRIORITY.status,
-            children: <PromptLabStatusBanner stats={promptLabStats} />,
+            children: (
+              <PromptLabStatusBanner
+                stats={promptLabStats}
+                onRefresh={() => {
+                  reload()
+                  reloadStats()
+                }}
+                refreshing={statsValidating}
+              />
+            ),
           },
           {
             priority: POSTURE_PRIORITY.heroOrSnapshot,
@@ -328,7 +354,10 @@ export function PromptLabPage() {
         // "what stage am I in?" answer is double-encoded (background
         // + chip), satisfying NN/g #1 (Visibility) at a squint.
         // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
-        <div className="flex flex-wrap items-center gap-1 rounded-md border border-edge-subtle bg-surface-raised p-1">
+        <div
+          id="prompt-lab-stages"
+          className="flex flex-wrap items-center gap-1 rounded-md border border-edge-subtle bg-surface-raised p-1 scroll-mt-4"
+        >
           <ConfigHelp helpId="prompt-lab.stage" />
           {orderedStages.map((stage) => {
             const count = grouped[stage]?.length ?? 0
@@ -347,7 +376,7 @@ export function PromptLabPage() {
                     : 'text-fg-muted hover:text-fg hover:bg-surface-overlay/60 border-0 bg-transparent'
                 }`}
               >
-                {STAGE_LABEL[stage] ?? stage}
+                {STAGE_LABELS[stage] ?? stage}
                 <span className={`ml-1.5 text-2xs font-mono ${active ? 'text-brand' : 'text-fg-faint'}`}>
                   {count}
                 </span>
@@ -360,7 +389,7 @@ export function PromptLabPage() {
       {visibleStage && (
         <PromptStageTable
           key={visibleStage}
-          stage={visibleStage as 'stage1' | 'stage2'}
+          stage={visibleStage}
           prompts={grouped[visibleStage] ?? []}
           busy={busy}
           onClone={clonePrompt}
