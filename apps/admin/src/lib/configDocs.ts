@@ -727,11 +727,11 @@ const INTEGRATIONS: ConfigDoc[] = [
     label: 'Jira API token',
     summary: 'Atlassian API token paired with the email above for basic auth.',
     howItWorks:
-      'Saved in the Jira routing row’s config as entered (not in Vault); the console only ever shows its last 4 characters. Create at id.atlassian.com → Security → API tokens.',
+      'Stored in Supabase Vault; the routing row keeps only a reference, and the console shows that a token is set. Create at id.atlassian.com → Security → API tokens.',
     default: { value: 'unset' },
     backend: {
       table: 'project_integrations',
-      column: 'config.apiToken (integration_type = jira)',
+      column: 'config.apiToken (integration_type = jira, Vault)',
       endpoint: 'POST /v1/admin/integrations',
       readBy: ['route-to-jira edge function'],
     },
@@ -759,11 +759,11 @@ const INTEGRATIONS: ConfigDoc[] = [
     label: 'Linear API key',
     summary: 'Personal API key used to mirror reports as Linear issues.',
     howItWorks:
-      'Sent as the `Authorization` header on every Linear GraphQL call. Saved in the Linear routing row’s config as entered (not in Vault); the console only ever shows its last 4 characters. Generate at Linear → Settings → API → Personal API keys.',
+      'Sent as the `Authorization` header on every Linear GraphQL call. Stored in Supabase Vault; the routing row keeps only a reference, and the console shows that a token is set. Generate at Linear → Settings → API → Personal API keys.',
     default: { value: 'unset' },
     backend: {
       table: 'project_integrations',
-      column: 'config.apiKey (integration_type = linear)',
+      column: 'config.apiKey (integration_type = linear, Vault)',
       endpoint: 'POST /v1/admin/integrations',
       readBy: ['route-to-linear edge function'],
     },
@@ -791,11 +791,11 @@ const INTEGRATIONS: ConfigDoc[] = [
     label: 'GitHub Issues PAT',
     summary: 'Fine-grained PAT with `Issues:write` on the public-tracker repo.',
     howItWorks:
-      'Distinct from the auto-fix repo PAT — this one targets the tracker repo (often public), not the code repo. Saved in the GitHub routing row’s config as entered (not in Vault); the console only ever shows its last 4 characters.',
+      'Distinct from the auto-fix repo PAT — this one targets the tracker repo (often public), not the code repo. Stored in Supabase Vault; the routing row keeps only a reference, and the console shows that a token is set.',
     default: { value: 'unset' },
     backend: {
       table: 'project_integrations',
-      column: 'config.token (integration_type = github)',
+      column: 'config.token (integration_type = github, Vault)',
       endpoint: 'POST /v1/admin/integrations',
       readBy: ['route-to-github-issues edge function'],
     },
@@ -844,7 +844,7 @@ const INTEGRATIONS: ConfigDoc[] = [
     default: { value: 'unset' },
     backend: {
       table: 'project_integrations',
-      column: 'config.routingKey (integration_type = pagerduty)',
+      column: 'config.routingKey (integration_type = pagerduty, Vault)',
       endpoint: 'POST /v1/admin/integrations',
       readBy: ['route-to-pagerduty edge function'],
     },

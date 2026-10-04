@@ -14,6 +14,7 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 
 import { HEALTH_PROBE_ANTHROPIC_MODEL, HEALTH_PROBE_OPENAI_MODEL } from './models.ts'
 import { isOperatorProject } from './operator-gate.ts'
+import { resolveRoutingSecrets } from './routing-secrets.ts'
 import { safeFetch } from './inventory-guards.ts'
 import { isCodebaseIndexFailing } from './sweep-error-classifier.ts'
 import { dereferenceMaybeVault } from './settings-secrets.ts'
@@ -143,6 +144,8 @@ export async function probeIntegration(
   let status: ProbeResult['status'] = 'unknown'
   let detail = ''
   let httpStatus = 0
+  // Routing tokens live in Vault as `vault://` refs; probe with the value.
+  routingConfig = await resolveRoutingSecrets(db, routingConfig)
 
   try {
     if (kind === 'sentry') {

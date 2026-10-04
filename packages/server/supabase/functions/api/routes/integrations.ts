@@ -15,6 +15,7 @@ import {
 import { platformCardValues } from '../../_shared/platform-config.ts';
 import { extractInboundTraceparent } from '../../_shared/trace.ts';
 import { log } from '../../_shared/logger.ts';
+import { vaultRoutingSecrets } from '../../_shared/routing-secrets.ts';
 import { resolveEffectivePlatformSettings } from '../../_shared/integration-settings.ts';
 import { classifyPlatformConnection } from '../../_shared/setup-signals.ts';
 import { getMushiClaudeFixWorkflowYaml, MUSHI_CLAUDE_GITHUB_SECRETS } from '../../_shared/mushi-claude-workflow.ts';
@@ -57,7 +58,8 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
           lower.endsWith('key') ||
           lower === 'routingkey';
         if (looksSensitive && typeof v === 'string') {
-          out[k] = v.length > 4 ? `…${v.slice(-4)}` : '****';
+          // A Vault ref says nothing about the token; show that one is set.
+          out[k] = v.startsWith('vault://') ? '…****' : v.length > 4 ? `…${v.slice(-4)}` : '****';
         } else {
           out[k] = v;
         }
@@ -112,11 +114,22 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
       merged[k] = v === '' ? null : v;
     }
 
+    // Credentials go to Vault; the row keeps `vault://` refs only.
+    let stored: Record<string, unknown>;
+    try {
+      stored = await vaultRoutingSecrets(db, project.id as string, body.type, merged);
+    } catch (err) {
+      log.error('routing secret vault write failed', { type: body.type, err: err instanceof Error ? err.message : String(err) });
+      return c.json(
+        { ok: false, error: { code: 'VAULT_WRITE_FAILED', message: 'Mushi could not store the token safely. Nothing was saved; try again in a moment.' } },
+        500,
+      );
+    }
     const { error } = await db.from('project_integrations').upsert(
       {
         project_id: project.id,
         integration_type: body.type,
-        config: merged,
+        config: stored,
         is_active: body.isActive ?? true,
       },
       { onConflict: 'project_id,integration_type' },

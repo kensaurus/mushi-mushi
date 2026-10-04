@@ -651,11 +651,11 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Summary** — Atlassian API token paired with the email above for basic auth.
 
-**How it works** — Saved in the Jira routing row’s config as entered (not in Vault); the console only ever shows its last 4 characters. Create at id.atlassian.com → Security → API tokens.
+**How it works** — Stored in Supabase Vault; the routing row keeps only a reference, and the console shows that a token is set. Create at id.atlassian.com → Security → API tokens.
 
 **Default** — `unset`
 
-**Where it lives** — table `project_integrations.config.apiToken (integration_type = jira)` · endpoint `POST /v1/admin/integrations` · read by `route-to-jira edge function`
+**Where it lives** — table `project_integrations.config.apiToken (integration_type = jira, Vault)` · endpoint `POST /v1/admin/integrations` · read by `route-to-jira edge function`
 
 **When to change** — Rotate quarterly. Re-issue immediately if the owning email changes.
 
@@ -683,11 +683,11 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Summary** — Personal API key used to mirror reports as Linear issues.
 
-**How it works** — Sent as the `Authorization` header on every Linear GraphQL call. Saved in the Linear routing row’s config as entered (not in Vault); the console only ever shows its last 4 characters. Generate at Linear → Settings → API → Personal API keys.
+**How it works** — Sent as the `Authorization` header on every Linear GraphQL call. Stored in Supabase Vault; the routing row keeps only a reference, and the console shows that a token is set. Generate at Linear → Settings → API → Personal API keys.
 
 **Default** — `unset`
 
-**Where it lives** — table `project_integrations.config.apiKey (integration_type = linear)` · endpoint `POST /v1/admin/integrations` · read by `route-to-linear edge function`
+**Where it lives** — table `project_integrations.config.apiKey (integration_type = linear, Vault)` · endpoint `POST /v1/admin/integrations` · read by `route-to-linear edge function`
 
 **When to change** — Rotate when the issuing user changes role. Linear keys don't auto-expire, so quarterly review is wise.
 
@@ -715,11 +715,11 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Summary** — Fine-grained PAT with `Issues:write` on the public-tracker repo.
 
-**How it works** — Distinct from the auto-fix repo PAT — this one targets the tracker repo (often public), not the code repo. Saved in the GitHub routing row’s config as entered (not in Vault); the console only ever shows its last 4 characters.
+**How it works** — Distinct from the auto-fix repo PAT — this one targets the tracker repo (often public), not the code repo. Stored in Supabase Vault; the routing row keeps only a reference, and the console shows that a token is set.
 
 **Default** — `unset`
 
-**Where it lives** — table `project_integrations.config.token (integration_type = github)` · endpoint `POST /v1/admin/integrations` · read by `route-to-github-issues edge function`
+**Where it lives** — table `project_integrations.config.token (integration_type = github, Vault)` · endpoint `POST /v1/admin/integrations` · read by `route-to-github-issues edge function`
 
 **When to change** — Use when you want a public-facing changelog of reviewed bugs without exposing your code repo.
 
@@ -767,7 +767,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset`
 
-**Where it lives** — table `project_integrations.config.routingKey (integration_type = pagerduty)` · endpoint `POST /v1/admin/integrations` · read by `route-to-pagerduty edge function`
+**Where it lives** — table `project_integrations.config.routingKey (integration_type = pagerduty, Vault)` · endpoint `POST /v1/admin/integrations` · read by `route-to-pagerduty edge function`
 
 **When to change** — Set this once you have a real on-call rotation. Don't use a personal key — use a service-level integration key.
 
