@@ -30,7 +30,7 @@ import { RESOLVED_EXTERNAL_API_URL, RESOLVED_MCP_HTTP_URL } from '../../lib/env'
 import { ClientConnectButton } from '../ClientConnectButton'
 import { ContainedBlock } from './ReportSurface'
 import { CopyRepoDigestButton } from '../explore/CopyRepoDigestButton'
-import { buildFixPrompt, buildMcpFixPrompt, FIX_PROMPT_URL_MAX_CHARS } from './fixPrompt'
+import { buildFixPrompt, buildMcpFixPrompt, buildUrlFixPrompt } from './fixPrompt'
 import type { ReportDetail } from './types'
 
 interface FixWithAgentPanelProps {
@@ -73,7 +73,7 @@ export function FixWithAgentPanel({ report, cursorWorkspace }: FixWithAgentPanel
   const { fixPrompt, urlPrompt, mcpPrompt } = useMemo(
     () => ({
       fixPrompt: buildFixPrompt(report),
-      urlPrompt: buildFixPrompt(report, { maxChars: FIX_PROMPT_URL_MAX_CHARS, includeCode: false }),
+      urlPrompt: buildUrlFixPrompt(report),
       mcpPrompt: buildMcpFixPrompt(report),
     }),
     [report],

@@ -37,8 +37,12 @@ import type { ReportDetail } from './types'
  * @internal Exported for unit tests only.
  */
 export const FIX_PROMPT_MAX_CHARS = 7_500
-/** Cap for the copy carried inside a URL (Cursor deeplink / cloud agent). */
-export const FIX_PROMPT_URL_MAX_CHARS = 3_500
+/**
+ * Cap on the URL-ENCODED prompt carried inside a link (Cursor deeplink, cloud
+ * agent). Encoding grows newlines, "·", "…" and non-ASCII 3-9x, so the budget
+ * is measured after encodeURIComponent, not on raw characters.
+ */
+export const FIX_PROMPT_URL_MAX_ENCODED = 6_000
 
 /** Below this Stage-2 confidence the prompt hedges instead of asserting a cause. */
 const LOW_CONFIDENCE = 0.7
@@ -218,7 +222,12 @@ export function buildFixPrompt(report: PromptReport, options: FixPromptOptions =
   const confidence = d?.confidence ?? report.confidence ?? null
   const hedge = confidence != null && confidence < LOW_CONFIDENCE
   const component = d?.component ?? report.component ?? null
-  const what = (report.title?.trim() || report.summary?.trim() || clip(report.description ?? '', 160)) || 'A user reported a bug.'
+  // Only model-written text goes outside the fences. The reporter's own words
+  // stay in the fenced "What the user said" block, even when nothing else exists.
+  const what =
+    report.title?.trim() ||
+    report.summary?.trim() ||
+    (report.description?.trim() ? 'Not summarised yet. See what the user said below.' : 'A user reported a bug.')
 
   const head: string[] = [
     `# Fix this bug (Mushi report ${report.id})`,
@@ -344,6 +353,20 @@ export function buildFixPrompt(report: PromptReport, options: FixPromptOptions =
     const tailText = tail.join('\n')
     const bodyBudget = Math.max(0, maxChars - tailText.length - 40)
     prompt = `${assemble(0, false).slice(0, bodyBudget).trimEnd()}\n\n[…trimmed to fit]\n\n${tailText}`
+  }
+  return prompt
+}
+
+/**
+ * The shorter copy of the fix prompt for a link: no code, and shrunk until its
+ * encodeURIComponent form fits FIX_PROMPT_URL_MAX_ENCODED.
+ */
+export function buildUrlFixPrompt(report: PromptReport, maxEncoded: number = FIX_PROMPT_URL_MAX_ENCODED): string {
+  let maxChars = Math.min(FIX_PROMPT_MAX_CHARS, maxEncoded)
+  let prompt = buildFixPrompt(report, { maxChars, includeCode: false })
+  while (encodeURIComponent(prompt).length > maxEncoded && maxChars > 400) {
+    maxChars = Math.max(400, Math.floor(maxChars * 0.8))
+    prompt = buildFixPrompt(report, { maxChars, includeCode: false })
   }
   return prompt
 }
