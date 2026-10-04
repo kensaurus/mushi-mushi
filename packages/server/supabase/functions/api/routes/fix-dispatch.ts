@@ -178,8 +178,7 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
         .from('fix_attempts')
         .select('id, report_id, pr_number, pr_state, merged_at, created_at')
         .eq('report_id', body.reportId)
-        .or('merged_at.not.is.null,pr_state.eq.merged')
-        .limit(5);
+        .limit(50);
       if (mergedErr) return dbError(c, mergedErr);
       const resolvedBlock = fixDispatchResolvedBlock(ownReport, mergedAttempts ?? []);
       if (resolvedBlock) {

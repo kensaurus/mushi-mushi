@@ -9,6 +9,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { humanizeFixError } from '../../lib/humanizeFixError';
 import type { HumanizedFixError } from '../../lib/humanizeFixError';
+import { ContainedBlock } from '../report-detail/ReportSurface';
 
 interface Props {
   error: string | null | undefined;
@@ -34,7 +35,7 @@ export function FixErrorPanel({ error, agent, category, onRetry, supersededNote 
 
   if (supersededNote) {
     return (
-      <div className="rounded-md border border-edge-subtle bg-surface-overlay/40 px-3 py-2.5 space-y-1.5 text-xs text-fg-secondary">
+      <ContainedBlock tone="muted" className="space-y-1.5 text-fg-secondary">
         <p className="font-medium text-fg-secondary">{supersededNote}</p>
         <p className="text-fg-muted">This attempt stopped earlier: {h.title}</p>
         <button
@@ -47,7 +48,7 @@ export function FixErrorPanel({ error, agent, category, onRetry, supersededNote 
         {rawOpen && (
           <pre className="text-2xs font-mono text-fg-faint whitespace-pre-wrap break-all">{h.raw}</pre>
         )}
-      </div>
+      </ContainedBlock>
     );
   }
 
