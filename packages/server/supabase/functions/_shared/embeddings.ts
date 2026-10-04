@@ -2,7 +2,7 @@ import { getServiceClient } from './db.ts'
 import { openAiCompatibleModelId } from './openai-compat.ts'
 import { createTrace } from './observability.ts'
 import { log } from './logger.ts'
-import { markKeyStatus, resolveLlmKey } from './byok.ts'
+import { markKeyStatus, markKeyUsed, resolveLlmKey } from './byok.ts'
 import { extractLlmUsage, recordLlmUsage } from './llm-usage.ts'
 
 const embLog = log.child('embeddings')
@@ -285,6 +285,11 @@ function recordEmbeddingCall(
     }, error === undefined
       ? { result: state.body, usage: { outputTokens: 0 } }
       : { error, usage: { ...extractLlmUsage(state.body), outputTokens: 0 } })
+    // A successful call on the project's own key updates that key's "last
+    // used" in AI keys; embeddings never did, so search-only keys looked idle.
+    if (error === undefined && state.resolved.source === 'byok' && state.resolved.keyId && opts.projectId) {
+      void markKeyUsed(getServiceClient(), opts.projectId, 'openai', state.resolved.keyId).catch(() => {})
+    }
   } catch (err) {
     embLog.warn('Embedding usage row not written', { err: String(err).slice(0, 120) })
   }

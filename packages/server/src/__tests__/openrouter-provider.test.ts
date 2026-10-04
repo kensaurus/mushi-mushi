@@ -114,3 +114,11 @@ describe('validation', () => {
     expect(move).toMatch(/SET provider_slug = 'openrouter',\s*base_url = NULL/)
   })
 })
+
+describe('embedding key bookkeeping', () => {
+  it('a successful embedding on a project key updates its last-used time', () => {
+    const src = read('_shared/embeddings.ts')
+    expect(src).toMatch(/error === undefined && state\.resolved\.source === 'byok' && state\.resolved\.keyId/)
+    expect(src).toMatch(/markKeyUsed\(getServiceClient\(\), opts\.projectId, 'openai', state\.resolved\.keyId\)/)
+  })
+})
