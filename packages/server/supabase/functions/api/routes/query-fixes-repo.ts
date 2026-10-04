@@ -47,6 +47,7 @@ import {
 import { isFixCountedFailed } from '../../_shared/fix-loop-status.ts';
 import { summarizeFixTruths } from '../../_shared/fix-report-truth.ts';
 import { loadReportFixTruths, reportTitle } from '../../_shared/fix-report-truth-load.ts';
+import { resolveUserDisplays } from '../../_shared/user-display.ts';
 import {
   installationIdForAttempt,
   parseGithubRepoUrl,
@@ -309,39 +310,9 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     // because a single power user often owns 5+ saved prompts and we
     // don't want N admin.getUserById calls when 1 would do (mirrors the
     // organizations.ts inviter-email pattern).
-    const authorIds = Array.from(
-      new Set(rows.map((r) => r.user_id).filter((id): id is string => Boolean(id))),
-    );
-    const authorById = new Map<string, { email: string | null; name: string | null }>();
-    await Promise.all(
-      authorIds.map(async (id) => {
-        try {
-          const { data: row } = await db.auth.admin.getUserById(id);
-          const u = row.user;
-          if (!u) {
-            authorById.set(id, { email: null, name: null });
-            return;
-          }
-          const meta = (u.user_metadata ?? {}) as Record<string, unknown>;
-          const pick = (key: string): string | null => {
-            const v = meta[key];
-            return typeof v === 'string' && v.trim() ? v.trim() : null;
-          };
-          let name = pick('full_name') ?? pick('name') ?? pick('display_name');
-          if (!name && u.email) {
-            const local = u.email.split('@')[0] ?? '';
-            name =
-              local
-                .split(/[._-]+/)
-                .filter(Boolean)
-                .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
-                .join(' ') || null;
-          }
-          authorById.set(id, { email: u.email ?? null, name });
-        } catch {
-          authorById.set(id, { email: null, name: null });
-        }
-      }),
+    const authorById = await resolveUserDisplays(
+      db as unknown as Parameters<typeof resolveUserDisplays>[0],
+      rows.map((r) => r.user_id),
     );
 
     const decorated = rows.map((r) => {

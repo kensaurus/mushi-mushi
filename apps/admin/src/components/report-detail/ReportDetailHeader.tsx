@@ -13,6 +13,7 @@ import {
 } from '../../lib/tokens'
 import { useReportPresence } from '../../lib/reportPresence'
 import { reportHeading } from '../../lib/clipText'
+import { reporterLabel } from '../../lib/reporterLabel'
 import type { ReportDeployLive, ReportDetail } from './types'
 
 export function ReportDetailHeader({ report, reporterShort }: { report: ReportDetail; reporterShort: string }) {
@@ -27,6 +28,7 @@ export function ReportDetailHeader({ report, reporterShort }: { report: ReportDe
   const pageRoute = (report.environment as { route?: string } | null)?.route
     ?? (report.environment as { url?: string } | null)?.url
   const glow = severityGlowClass(report.severity)
+  const reporter = reporterLabel(report, reporterShort)
   return (
     <div
       // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
@@ -111,13 +113,10 @@ export function ReportDetailHeader({ report, reporterShort }: { report: ReportDe
                 : `/reports?reporter=${encodeURIComponent(report.reporter_token_hash)}`
             }
           >
-            {report.reporter_identity?.display_name ?? report.reporter_display_name ? (
-              <span className="max-w-48 truncate">
-                {report.reporter_identity?.display_name ?? report.reporter_display_name}
-              </span>
-            ) : (
-              <span className="font-mono">{reporterShort}</span>
-            )}
+            <span className="max-w-48 truncate" title={reporter.title ?? undefined}>
+              {reporter.text}
+            </span>
+            {reporter.shortId ? <span className="font-mono text-3xs text-fg-faint">{reporter.shortId}</span> : null}
             {(report.reporter_identity?.jwt_verified_at || report.reporter_jwt_verified) && (
               <span
                 className="text-3xs text-ok font-semibold uppercase tracking-wide"
