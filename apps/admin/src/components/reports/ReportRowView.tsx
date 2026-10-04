@@ -19,7 +19,6 @@ import { closedRowAction } from './reportRowAction'
 import { useRowFlash } from '../../lib/useRowFlash'
 import { useStaggeredAppear } from '../../lib/useStaggeredAppear'
 import { reportDetailPath, reportPermalink } from '../../lib/reportUrl'
-import { featureRequestDispatchBlock } from '../../lib/dispatchConfirm'
 import { useActiveProjectId } from '../ProjectSwitcher'
 import { StatusStepper } from './StatusStepper'
 import { BreadcrumbPeek } from './BreadcrumbPeek'
@@ -301,7 +300,7 @@ function ReportRowViewInner({
                   blastRadius={blastRadius}
                   confidence={row.confidence}
                   onConfirm={onDispatchFix}
-                  blockReason={featureRequestDispatchBlock(row)}
+                  blockReason={row.dispatch_block ?? null}
                   onOpenDetail={onOpen}
                   preflight={preflight}
                   repoUrl={preflight?.repoUrl ?? null}

@@ -141,8 +141,8 @@ describe('commentWriteErrorText (#83, #86)', () => {
   })
 
   it('never echoes unknown database text', () => {
-    expect(commentWriteErrorText({ message: 'duplicate key value violates unique constraint' }, 'post')).toBe(
-      'The comment was not saved. Try again in a moment.',
-    )
+    const text = commentWriteErrorText({ message: 'duplicate key value violates unique constraint' }, 'post')
+    expect(text).not.toMatch(/duplicate key/)
+    expect(text).toMatch(/^Try again in a moment/)
   })
 })

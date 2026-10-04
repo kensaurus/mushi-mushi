@@ -52,6 +52,25 @@ export const REPORT_LIST_PLATFORMS = Object.keys(PLATFORM_PATTERNS);
 export const REPORT_LIST_SDK_PACKAGES = ['@mushi-mushi/web', '@mushi-mushi/react-native'] as const;
 
 /**
+ * Wrapper packages report as the web SDK. The console once offered React and
+ * Capacitor as SDK options, so saved views and bookmarks still carry them:
+ * they resolve to `@mushi-mushi/web` rather than failing.
+ */
+const SDK_PACKAGE_ALIASES: Record<string, string> = {
+  '@mushi-mushi/react': '@mushi-mushi/web',
+  '@mushi-mushi/vue': '@mushi-mushi/web',
+  '@mushi-mushi/svelte': '@mushi-mushi/web',
+  '@mushi-mushi/angular': '@mushi-mushi/web',
+  '@mushi-mushi/capacitor': '@mushi-mushi/web',
+};
+
+/** `sdkPackage` query value → the stored package to match, or null when unknown. */
+export function resolveSdkPackageFilter(raw: string): string | null {
+  if ((REPORT_LIST_SDK_PACKAGES as readonly string[]).includes(raw)) return raw;
+  return SDK_PACKAGE_ALIASES[raw] ?? null;
+}
+
+/**
  * PostgREST `or=` body for one Platform choice, or null for an unknown value.
  * "Web" also matches reports stamped by the web SDK, whatever OS they ran on.
  */

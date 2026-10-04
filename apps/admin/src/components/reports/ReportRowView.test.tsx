@@ -103,3 +103,36 @@ describe('ReportRowView row actions', () => {
     expect(apiFetch).not.toHaveBeenCalled()
   })
 })
+
+describe('ReportRowView dispatch gate', () => {
+  it('a feature request cannot be queued from the row', async () => {
+    const row = { ...ROW, status: 'classified', dispatch_block: 'The reporter filed this as a feature request.' } as ReportRow
+    await act(async () => {
+      root.render(
+        createElement(
+          MemoryRouter,
+          null,
+          createElement('table', null, createElement('tbody', null,
+            createElement(ReportRowView, {
+              row,
+              index: 0,
+              isSelected: false,
+              isCursor: false,
+              onToggleSelect: vi.fn(),
+              onFocus: vi.fn(),
+              onOpen: vi.fn(),
+              onCopyLink: vi.fn(),
+              onDismiss: vi.fn(),
+              onDispatchFix: vi.fn(),
+            }),
+          )),
+        ),
+      )
+    })
+    const trigger = container.querySelector<HTMLButtonElement>('button[aria-haspopup="dialog"]')
+    await act(async () => trigger?.click())
+    const queue = Array.from(document.body.querySelectorAll('button')).find((b) => b.textContent?.trim() === 'Cannot dispatch yet')
+    expect(queue?.disabled).toBe(true)
+    expect(queue?.title).toBe('The reporter filed this as a feature request.')
+  })
+})

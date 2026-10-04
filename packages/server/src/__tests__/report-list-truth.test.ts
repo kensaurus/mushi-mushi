@@ -29,6 +29,7 @@ import {
   parseWindowDays,
   platformOrClause,
   reportWindowStartIso,
+  resolveSdkPackageFilter,
 } from '../../supabase/functions/_shared/report-list-filters.ts'
 
 const FUNCTIONS = resolve(__dirname, '../../supabase/functions')
@@ -62,6 +63,19 @@ describe('platform filter (#16)', () => {
 
   it('offers only SDK packages that stamp reports', () => {
     expect([...REPORT_LIST_SDK_PACKAGES]).toEqual(['@mushi-mushi/web', '@mushi-mushi/react-native'])
+  })
+
+  it('maps old wrapper SDK values to the web SDK and rejects the rest', () => {
+    expect(resolveSdkPackageFilter('@mushi-mushi/react')).toBe('@mushi-mushi/web')
+    expect(resolveSdkPackageFilter('@mushi-mushi/capacitor')).toBe('@mushi-mushi/web')
+    expect(resolveSdkPackageFilter('@mushi-mushi/react-native')).toBe('@mushi-mushi/react-native')
+    expect(resolveSdkPackageFilter('left-pad')).toBeNull()
+  })
+
+  it('every list row carries the dispatch rule the dispatch route enforces', () => {
+    const list = routeBody(REPORTS, "app.get('/v1/admin/reports', adminOrApiKey()", 12000)
+    expect(list).toContain('stage1_category:stage1_classification->>category')
+    expect(list).toContain('const dispatch_block = featureRequestDispatchBlock(')
   })
 
   it('ANDs search and platform as one nested or= value', () => {

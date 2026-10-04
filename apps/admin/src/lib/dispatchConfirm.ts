@@ -1,3 +1,5 @@
+import { humanizeApiError, type HumanizedApiError } from './humanizeApiError'
+
 /**
  * Copy for the report-detail "Dispatch fix" confirm. One click used to spend
  * LLM budget and open a PR with no pause; the MCP tools already require the
@@ -80,26 +82,23 @@ export function dispatchBlock(input: {
 }
 
 /**
- * Plain-English text for a failed POST /v1/admin/fixes/dispatch. Never shows
- * the error code (it used to read "AUTOFIX_DISABLED: Enable Autofix…").
+ * A failed POST /v1/admin/fixes/dispatch in plain English, through
+ * humanizeApiError, with its fix action when there is one. Never shows the
+ * error code (the chip used to read "AUTOFIX_DISABLED: Enable Autofix…").
  */
+export function humanizeDispatchError(error: { code?: string; message?: string } | null | undefined): HumanizedApiError {
+  return (
+    humanizeApiError(error?.message || 'Request failed', error?.code ?? null, { action: 'queue the fix' }) ?? {
+      title: 'Could not queue the fix.',
+      hint: 'Try again in a moment.',
+      severity: 'soft',
+      raw: '',
+    }
+  )
+}
+
+/** One-line form of {@link humanizeDispatchError} for chips and toasts. */
 export function dispatchErrorText(error: { code?: string; message?: string } | null | undefined): string {
-  switch (error?.code) {
-    case 'AUTOFIX_DISABLED':
-      return 'Auto-fix is off for this project. Turn it on in Settings, then dispatch again.'
-    case 'FEATURE_REQUEST':
-      return 'This is a feature request. Set its category to the bug type first, then dispatch.'
-    case 'ALREADY_DISPATCHED':
-      return 'A fix is already running for this report. Watch it on the Fixes page.'
-    case 'TARGET_REPO_NOT_IN_PROJECT':
-      return 'That repo is no longer linked to this project. Pick another repo and try again.'
-    case 'REPORT_NOT_FOUND':
-      return 'This report is no longer in the project. Refresh the page.'
-    case 'FORBIDDEN':
-      return 'You do not have access to dispatch fixes on this project.'
-    case 'RATE_LIMITED':
-      return 'Too many dispatches just now. Wait a minute and try again.'
-    default:
-      return 'The fix could not be queued. Try again in a moment.'
-  }
+  const h = humanizeDispatchError(error)
+  return `${h.title} ${h.hint}`
 }

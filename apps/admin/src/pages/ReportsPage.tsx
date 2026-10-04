@@ -52,8 +52,8 @@ import { IconReports } from '../components/icons'
 import { PageLoadError } from '../components/PageLoadError'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { DismissReportDialog } from '../components/reports/DismissReportDialog'
-import { bulkConfirmCopy, defaultSortDir, kpiTileFilter } from '../lib/reportsListFilters'
-import { dispatchErrorText } from '../lib/dispatchConfirm'
+import { bulkConfirmCopy, defaultSortDir, kpiTileFilter, sanitizeListFilters } from '../lib/reportsListFilters'
+import { humanizeDispatchError } from '../lib/dispatchConfirm'
 
 export function ReportsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -73,8 +73,13 @@ export function ReportsPage() {
   const category = searchParams.get('category') ?? ''
   const userCategory = searchParams.get('user_category') ?? ''
   const severity = searchParams.get('severity') ?? ''
-  const platform = searchParams.get('platform') ?? ''
-  const sdkPackage = searchParams.get('sdkPackage') ?? ''
+  // Unknown values from old bookmarks are dropped, not sent (the server
+  // rejects them); legacy React / Capacitor SDK values map to the web SDK.
+  const { platform, sdkPackage, days } = sanitizeListFilters({
+    platform: searchParams.get('platform') ?? '',
+    sdkPackage: searchParams.get('sdkPackage') ?? '',
+    days: searchParams.get('days') ?? '',
+  })
   const component = searchParams.get('component') ?? ''
   const reporter = searchParams.get('reporter') ?? ''
   // Per-user / per-session browsing (2026-08-22): deep-linked from the
@@ -82,9 +87,8 @@ export function ReportsPage() {
   const endUser = searchParams.get('end_user') ?? ''
   const session = searchParams.get('session') ?? ''
   const area = searchParams.get('area') ?? ''
-  // Created in the last N days — set by the severity KPI tiles and the
-  // critical banners so the list counts what the tile counted.
-  const days = searchParams.get('days') ?? ''
+  // `days` (created in the last N days) is set by the severity KPI tiles and
+  // the critical banners so the list counts what the tile counted.
   const sort = (searchParams.get('sort') as SortField | null) ?? 'created_at'
   const dir = (searchParams.get('dir') as SortDir | null) ?? 'desc'
   const page = Math.max(0, Number(searchParams.get('page') ?? '0') || 0)
@@ -695,7 +699,15 @@ export function ReportsPage() {
         return next
       })
       if (!res.ok) {
-        toast.error('Fix not dispatched', dispatchErrorText(res.error))
+        const h = humanizeDispatchError(res.error)
+        const target = h.action?.target
+        toast.error(
+          h.title,
+          h.hint,
+          h.action && target?.kind === 'route'
+            ? { label: h.action.label, onClick: () => navigate(target.hash ? `${target.to}#${target.hash}` : target.to) }
+            : undefined,
+        )
         return
       }
       // This row does not stream progress; the Fixes page does.

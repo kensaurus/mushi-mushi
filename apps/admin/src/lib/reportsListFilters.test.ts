@@ -15,6 +15,7 @@ import {
   defaultSortDir,
   kpiTileFilter,
   reporterReportsHref,
+  sanitizeListFilters,
   statusChipCount,
   statusFilterLabel,
 } from './reportsListFilters'
@@ -92,5 +93,25 @@ describe('bulk confirm copy (#87)', () => {
     const fixed = bulkConfirmCopy({ action: 'set_status', value: 'fixed' }, 1)
     expect(fixed.title).toBe('Mark 1 report fixed?')
     expect(fixed.confirmLabel).toBe('Mark fixed')
+  })
+})
+
+describe('sanitizeListFilters (stale bookmarks)', () => {
+  it('maps the old React and Capacitor SDK values to the web SDK', () => {
+    expect(sanitizeListFilters({ platform: '', sdkPackage: '@mushi-mushi/react', days: '' }).sdkPackage).toBe('@mushi-mushi/web')
+    expect(sanitizeListFilters({ platform: '', sdkPackage: '@mushi-mushi/capacitor', days: '' }).sdkPackage).toBe('@mushi-mushi/web')
+  })
+
+  it('drops values the list cannot apply instead of failing the page', () => {
+    expect(sanitizeListFilters({ platform: 'playstation', sdkPackage: 'left-pad', days: '400' })).toEqual({
+      platform: '',
+      sdkPackage: '',
+      days: '',
+    })
+    expect(sanitizeListFilters({ platform: 'ios', sdkPackage: '@mushi-mushi/react-native', days: '14' })).toEqual({
+      platform: 'ios',
+      sdkPackage: '@mushi-mushi/react-native',
+      days: '14',
+    })
   })
 })
