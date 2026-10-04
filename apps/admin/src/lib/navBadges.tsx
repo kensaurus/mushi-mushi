@@ -303,9 +303,10 @@ export function resolveNavBadge(
     case '/skills':
       return sliceBadgeSpec(skillsNavBadge(slices.skills), slices.skills?.catalogTotal ?? 0)
     case '/integrations/config': {
-      const sliceBadge = integrationsNavBadge(slices.integrations)
-      if (sliceBadge) return sliceBadgeSpec(sliceBadge)
-      return { kind: 'integration' }
+      // The self-fetching dot (two more requests) is only the fallback for a
+      // missing slice; a slice with nothing to report means no badge.
+      if (!slices.integrations) return { kind: 'integration' }
+      return sliceBadgeSpec(integrationsNavBadge(slices.integrations))
     }
     case '/mcp':
       return sliceBadgeSpec(mcpNavBadge(slices.mcp))
