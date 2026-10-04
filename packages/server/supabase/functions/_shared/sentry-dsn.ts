@@ -90,11 +90,12 @@ export function parseSentryDsn(
   };
 }
 
+declare const Deno: { env: { get(name: string): string | undefined } };
+
 /** Operator allowlist for self-hosted Sentry, read at call time. */
 export function sentrySelfHostedHosts(): string[] {
-  const env = (globalThis as { Deno?: { env: { get(name: string): string | undefined } } }).Deno
-    ?.env;
-  return (env?.get('MUSHI_SENTRY_SELF_HOSTED_HOSTS') ?? '')
+  if (typeof Deno === 'undefined') return [];
+  return (Deno.env.get('MUSHI_SENTRY_SELF_HOSTED_HOSTS') ?? '')
     .split(',')
     .map((h) => h.trim())
     .filter(Boolean);
