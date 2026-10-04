@@ -31,6 +31,7 @@ import {
 } from '../helpers.ts';
 import { validateFixBranchTemplate } from '../../_shared/github-pr.ts';
 import { parseSupabaseProjectRefSetting } from '../../_shared/supabase-project-ref.ts';
+import { parseSentryDsnSetting, sentrySelfHostedHosts } from '../../_shared/sentry-dsn.ts';
 import { isOperatorProject } from '../../_shared/operator-gate.ts';
 import {
   byokKeyIdSchema,
@@ -543,6 +544,14 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         const forbidden = requireProjectAdmin(c, project);
         if (forbidden) return forbidden;
         const verdict = parseSupabaseProjectRefSetting(value);
+        if (!verdict.ok) {
+          return c.json({ error: { code: 'VALIDATION_ERROR', message: verdict.message } }, 400);
+        }
+        updates[key] = verdict.value;
+        continue;
+      }
+      if (key === 'sentry_dsn') {
+        const verdict = parseSentryDsnSetting(value, sentrySelfHostedHosts());
         if (!verdict.ok) {
           return c.json({ error: { code: 'VALIDATION_ERROR', message: verdict.message } }, 400);
         }

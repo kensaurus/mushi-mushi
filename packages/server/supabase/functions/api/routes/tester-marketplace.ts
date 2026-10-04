@@ -65,6 +65,7 @@ const rlog = log.child('tester-marketplace-routes')
 import { checkSanctions } from '../../_shared/sanctions.ts'
 import { hashTesterTin, normalizeTin } from '../../_shared/tin-hash.ts'
 import { reporterKey } from '../../_shared/reporter-token.ts'
+import { parseSentryDsn, sentrySelfHostedHosts } from '../../_shared/sentry-dsn.ts'
 
 // ─── Helper: forward submission event to developer's Sentry DSN ──────────────
 // Parses the DSN to extract the store endpoint and sends a minimal Sentry
@@ -82,12 +83,19 @@ async function forwardToSentryDsn(
     appId: string
   },
 ): Promise<void> {
-  // DSN format: https://<key>@<host>/<project_id>
-  const dsnMatch = dsn.match(/^https?:\/\/([^@]+)@([^/]+)\/(\d+)$/)
-  if (!dsnMatch) return
+  // Re-validate at send time: a DSN stored before save-time validation
+  // existed must not turn into a request to an arbitrary or internal host.
+  const parsed = parseSentryDsn(dsn, sentrySelfHostedHosts())
+  if (!parsed.ok) {
+    rlog.warn('Skipping Sentry forward: stored DSN failed validation', {
+      appId: payload.appId,
+      reason: parsed.message,
+    })
+    return
+  }
 
-  const [, key, host, projectId] = dsnMatch
-  const storeUrl = `https://${host}/api/${projectId}/store/?sentry_version=7&sentry_key=${key}`
+  const { publicKey: key, host, projectId, pathPrefix } = parsed.value
+  const storeUrl = `https://${host}${pathPrefix}/api/${projectId}/store/?sentry_version=7&sentry_key=${encodeURIComponent(key)}`
 
   const sentryEvent = {
     event_id: payload.submissionId.replace(/-/g, ''),
@@ -114,6 +122,8 @@ async function forwardToSentryDsn(
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Sentry-Auth': `Sentry sentry_version=7,sentry_key=${key}` },
     body: JSON.stringify(sentryEvent),
+    // A validated host must not bounce the request somewhere else.
+    redirect: 'error',
   })
 }
 
