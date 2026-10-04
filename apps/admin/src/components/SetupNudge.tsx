@@ -8,7 +8,6 @@
  *          generic "no data yet" message + optional `fallback` action.
  */
 
-import { Link } from 'react-router-dom'
 import type { ReactNode } from 'react'
 import { EmptyState, Btn } from './ui'
 import { useSetupStatus, type SetupStepId } from '../lib/useSetupStatus'
@@ -65,9 +64,9 @@ export function SetupNudge({
         title="Create your first project to get started"
         description="A project groups all bug reports from one application."
         action={
-          <Link to="/onboarding" className="inline-block">
-            <Btn size="sm">Open setup wizard</Btn>
-          </Link>
+          <Btn size="sm" to="/onboarding">
+            Open setup wizard
+          </Btn>
         }
       />
     )
@@ -88,9 +87,9 @@ export function SetupNudge({
         title={step.label}
         description={step.description}
         action={
-          <Link to={step.cta_to} className="inline-block">
-            <Btn size="sm">{step.cta_label}</Btn>
-          </Link>
+          <Btn size="sm" to={step.cta_to}>
+            {step.cta_label}
+          </Btn>
         }
       />
     )

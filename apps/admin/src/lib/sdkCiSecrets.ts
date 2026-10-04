@@ -42,6 +42,13 @@ export interface SyncCiSecretsResult {
   written: string[]
   failed: Array<{ name: string; reason: string }>
   fallback: { commands: string[]; envBlock: string }
+  /**
+   * Prefixes of the older ci-auto keys revoked after GitHub accepted the new
+   * one. Empty when nothing was revoked (the key secret was not written);
+   * null when the revoke itself failed and the old key is still live.
+   */
+  priorKeysRevoked?: string[] | null
+  revokeError?: string | null
 }
 
 export interface SyncCiSecretsResponse {

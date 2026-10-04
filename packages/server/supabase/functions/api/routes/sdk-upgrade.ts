@@ -119,6 +119,9 @@ export function registerSdkUpgradeRoutes(app: Hono<{ Variables: Variables }>): v
       if (decision.code === 'ALREADY_IN_PROGRESS' && decision.jobId && blocking?.status !== 'awaiting_lockfile') {
         void scheduleSdkUpgradeRun(decision.jobId)
       }
+      // `data.jobId` too: the console's envelope keeps `data` on an error but
+      // drops extra error fields, so the client could not follow the running
+      // job and showed a raw "ALREADY_IN_PROGRESS" failure (QA #124).
       return c.json({
         ok: false,
         error: {
@@ -126,6 +129,7 @@ export function registerSdkUpgradeRoutes(app: Hono<{ Variables: Variables }>): v
           message: decision.message,
           ...(decision.jobId ? { jobId: decision.jobId } : {}),
         },
+        ...(decision.jobId ? { data: { jobId: decision.jobId } } : {}),
       }, decision.status as 400 | 409)
     }
 
@@ -179,6 +183,7 @@ export function registerSdkUpgradeRoutes(app: Hono<{ Variables: Variables }>): v
               message: 'An SDK upgrade is already in progress for this project.',
               jobId: raced.id,
             },
+            data: { jobId: raced.id },
           }, 409)
         }
       }

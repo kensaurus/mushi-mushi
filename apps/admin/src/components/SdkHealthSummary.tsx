@@ -69,6 +69,8 @@ export interface SdkHealthApiKey {
   id: string
   key_prefix: string
   label?: string | null
+  /** Present on rows from GET /v1/admin/projects. */
+  scopes?: string[] | null
   is_active: boolean
   created_at: string
   last_seen_at?: string | null

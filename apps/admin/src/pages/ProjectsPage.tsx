@@ -28,6 +28,7 @@ import {
 } from '../components/ui'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { useToast } from '../lib/toast'
+import { describeActionError } from '../lib/actionError'
 import { canCreateProject, viewerRoleHint } from '../lib/orgPermissions'
 import { useCreateProject } from '../lib/useCreateProject'
 import { useUpdateProject } from '../lib/useUpdateProject'
@@ -49,6 +50,7 @@ import {
   type ProjectsTabId,
 } from '../components/projects/types'
 import {
+  projectKeyCounts,
   type Project,
   type ScopePresetId,
   type OrgRole,
@@ -433,7 +435,9 @@ export function ProjectsPage() {
           next.delete(composite)
           return next
         })
-        toast.error('Failed to revoke key', res.error?.message)
+        toast.error('Could not revoke key', describeActionError(res.error, 'Try again in a moment.'))
+        // Already revoked elsewhere: refresh so the list shows the truth.
+        if (res.error?.code === 'KEY_NOT_FOUND') reload()
         return
       }
       setPendingRevokeIds((prev) => {
@@ -706,13 +710,23 @@ export function ProjectsPage() {
         <ProjectsSetupReadout
           activeProjectId={stats.activeProjectId}
           activeProjectName={stats.activeProjectName}
-          activeKeyCount={stats.activeKeyCount}
-          staleKeyCount={stats.staleKeyCount}
+          // The active project's own keys, matching the prefixes listed
+          // beside them (stats.* are workspace-wide totals).
+          activeKeyCount={
+            selectedProject?.id === stats.activeProjectId
+              ? projectKeyCounts(selectedProject.api_keys).active
+              : null
+          }
+          staleKeyCount={
+            selectedProject?.id === stats.activeProjectId
+              ? projectKeyCounts(selectedProject.api_keys).neverSeen
+              : null
+          }
           activeProjectSdkConnected={stats.activeProjectSdkConnected}
           keyPrefixes={
-            selectedProject?.api_keys
-              ?.filter((k) => k.is_active)
-              .map((k) => k.key_prefix) ?? []
+            selectedProject?.id === stats.activeProjectId
+              ? selectedProject.api_keys.filter((k) => k.is_active).map((k) => k.key_prefix)
+              : []
           }
           fetchedAt={fetchedAt}
           validating={validating}

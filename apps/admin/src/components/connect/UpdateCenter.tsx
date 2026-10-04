@@ -191,6 +191,9 @@ export function UpdateCenter({ project, preflight }: UpdateCenterProps) {
           {view.newerThanPr ? ` A newer release (${view.packages[0]?.latest}) is out since.` : ''}
         </p>
       )}
+      {state.syncError && (
+        <p className="text-xs text-danger-foreground" role="status">{state.syncError}</p>
+      )}
       {view.mode === 'failed' && state.error && (
         <p className="text-xs text-danger-foreground">{state.error}</p>
       )}
@@ -199,12 +202,15 @@ export function UpdateCenter({ project, preflight }: UpdateCenterProps) {
         {hasGithubReady ? (
           <>
             {(view.mode === 'pr_open' || view.mode === 'pr_merged') && state.prUrl ? (
-              <a href={state.prUrl} target="_blank" rel="noopener noreferrer">
-                <Btn size="md" variant={view.mode === 'pr_open' ? 'primary' : 'ghost'} className="gap-2">
-                  <IconExternalLink className="h-4 w-4" aria-hidden />
-                  View PR {prNumberFrom(state.prUrl) ?? ''}
-                </Btn>
-              </a>
+              <Btn
+                size="md"
+                variant={view.mode === 'pr_open' ? 'primary' : 'ghost'}
+                className="gap-2"
+                href={state.prUrl}
+              >
+                <IconExternalLink className="h-4 w-4" aria-hidden />
+                View PR {prNumberFrom(state.prUrl) ?? ''}
+              </Btn>
             ) : null}
             {view.mode === 'pr_open' && view.newerThanPr ? (
               <Tooltip content="Move the open PR to the newest release." side="top">
