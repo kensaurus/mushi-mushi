@@ -203,6 +203,12 @@ const EXTRA_CODE_COPY: Record<string, CodeCopy> = {
     severity: 'soft',
     action: { label: 'Retry', target: { kind: 'retry' } },
   },
+  UPSTREAM_ERROR: {
+    title: 'The background job could not finish.',
+    hint: 'Retry in a moment. If it keeps failing, check that the project has an LLM key under Settings → AI keys.',
+    severity: 'soft',
+    action: { label: 'Retry', target: { kind: 'retry' } },
+  },
   WORKER_FAILED: {
     title: 'The background job could not finish.',
     hint: 'Retry in a moment. If it keeps failing, check that the project has an LLM key under Settings → AI keys.',
@@ -227,6 +233,27 @@ const ALWAYS_HUMANIZE = new Set([
   'INVALID_RESPONSE',
 ])
 
+/**
+ * Some proxies still pass a worker's JSON reply as the message
+ * (`{"error":"No metric data"}`). Pull the readable sentence out of it.
+ */
+function sentenceFromJsonBlob(message: string): string | null {
+  const m = message.trim()
+  if (!m.startsWith('{')) return null
+  try {
+    const body = JSON.parse(m) as Record<string, unknown>
+    const err = body.error
+    if (typeof err === 'string') return err
+    if (err && typeof err === 'object' && typeof (err as Record<string, unknown>).message === 'string') {
+      return (err as Record<string, string>).message
+    }
+    if (typeof body.message === 'string') return body.message
+  } catch {
+    // not JSON after all
+  }
+  return null
+}
+
 function looksLikePlainSentence(message: string, code: string): boolean {
   const m = message.trim()
   if (!m) return false
@@ -249,7 +276,8 @@ export function describeApiError(
 ): { title: string; hint: string } {
   const code = (error?.code ?? '').toUpperCase()
   const parsed = parsePageDataError(error?.message ?? null)
-  const message = parsed?.message ?? ''
+  const rawMessage = parsed?.message ?? ''
+  const message = sentenceFromJsonBlob(rawMessage) ?? rawMessage
   const effectiveCode = code || parsed?.code || ''
   if (!ALWAYS_HUMANIZE.has(effectiveCode) && looksLikePlainSentence(message, effectiveCode)) {
     return { title, hint: message }

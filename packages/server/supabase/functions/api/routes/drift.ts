@@ -226,10 +226,10 @@ export function registerDriftRoutes(parent: Hono<{ Variables: Variables }>) {
     const body = await c.req.json().catch(() => ({}))
     const { project_id } = body
     if (!project_id) return c.json({ ok: false, error: { code: 'ERROR', message: 'project_id required' } }, 400)
-    // Whole number 1–500, else the worker default (an empty field used to
+    // Whole number 10–1000 (the console field range), else the worker default (an empty field used to
     // arrive as NaN → null).
-    const rawMax = Number(body.max_paths)
-    const max_paths = Number.isFinite(rawMax) ? Math.min(500, Math.max(1, Math.round(rawMax))) : undefined
+    const rawMax = body.max_paths == null || body.max_paths === '' ? Number.NaN : Number(body.max_paths)
+    const max_paths = Number.isFinite(rawMax) ? Math.min(1000, Math.max(10, Math.round(rawMax))) : undefined
     if (!(await callerCanAccess(c.get('userId') as string, project_id))) {
       return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Access to this project is not allowed' } }, 403)
     }
