@@ -190,7 +190,7 @@ export async function detectRegression(
   embeddingText: string,
 ): Promise<{ isRegression: boolean; originalGroupId?: string; originalReportId?: string }> {
   const { createEmbedding } = await import('./embeddings.ts')
-  const embedding = await createEmbedding(embeddingText, { projectId })
+  const embedding = await createEmbedding(embeddingText, { projectId, functionName: 'knowledge-graph' })
 
   // The pgvector RPC expects `[v1,v2,...]` literal text. Pass numeric arrays
   // through PostgREST as that string form so it casts cleanly to `vector`.

@@ -23,6 +23,7 @@ import type { Variables } from '../types.ts'
 import { z } from 'npm:zod@3'
 import { getServiceClient } from '../../_shared/db.ts'
 import { log } from '../../_shared/logger.ts'
+import { recordLlmUsage } from '../../_shared/llm-usage.ts'
 import { denyViewerWrite } from '../viewer-gate.ts'
 import { jwtAuth, apiKeyAuth, adminOrApiKey, requireApiKeyScope } from '../../_shared/auth.ts'
 import {
@@ -475,6 +476,17 @@ export function registerLessonsRoutes(app: Hono<{ Variables: Variables }>) {
       return c.json({ ok: false, error: { code: 'EMBEDDINGS_UNAVAILABLE', message: 'Lesson search is not set up on this server (no embeddings key). Ask the operator to configure it.' } }, 503)
     }
 
+    // Platform key, so key_source 'env'; embeddings record cost but are not
+    // debited from the hosted wallet (skipHostedBilling).
+    const embedUsage = {
+      functionName: 'lessons-query',
+      stage: 'embedding',
+      projectId: project_id,
+      model: 'text-embedding-3-small',
+      keySource: 'env',
+      startedAt: Date.now(),
+      skipHostedBilling: true,
+    } as const
     const embedRes = await fetch('https://api.openai.com/v1/embeddings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${openaiKey}` },
@@ -484,10 +496,12 @@ export function registerLessonsRoutes(app: Hono<{ Variables: Variables }>) {
     if (!embedRes.ok) {
       const err = await embedRes.text()
       log.warn('lessons_query_embedding_failed', { status: embedRes.status, body: err.slice(0, 300) })
+      void recordLlmUsage(db, embedUsage, { error: new Error(`Embedding API error: ${embedRes.status}`) })
       return c.json({ ok: false, error: { code: 'EMBEDDINGS_FAILED', message: 'The search service did not answer. Try again in a minute.' } }, 502)
     }
 
-    const embedData = await embedRes.json() as { data: Array<{ embedding: number[] }> }
+    const embedData = await embedRes.json() as { data: Array<{ embedding: number[] }>; usage?: { prompt_tokens?: number } }
+    void recordLlmUsage(db, embedUsage, { result: embedData, usage: { outputTokens: 0 } })
     const queryEmbedding = embedData.data[0]?.embedding
     if (!queryEmbedding) {
       return c.json({ ok: false, error: { code: 'EMBEDDINGS_FAILED', message: 'The search service did not answer. Try again in a minute.' } }, 502)

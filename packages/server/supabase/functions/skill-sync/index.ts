@@ -342,7 +342,7 @@ async function syncSource(
       let embedding: number[] | null = null
       if (openaiKey) {
         try {
-          embedding = await createEmbedding(skill.frontmatter.description, { projectId: source.project_id })
+          embedding = await createEmbedding(skill.frontmatter.description, { projectId: source.project_id, functionName: 'skill-sync' })
         } catch (embErr) {
           slog.warn('Embedding failed — storing without vector', { slug: skill.slug, err: String(embErr) })
         }

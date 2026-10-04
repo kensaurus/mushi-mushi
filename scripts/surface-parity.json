@@ -62,6 +62,7 @@
     "GET /v1/admin/billing/invoices": {"allow": "jwt-only"},
     "GET /v1/admin/billing/stats": {"mcp": ["get_usage"], "cli": ["billing cap", "budgets show", "usage"]},
     "GET /v1/admin/byok/browserbase": {"allow": "jwt-only"},
+    "GET /v1/admin/byok/credits": {"allow": "parity-debt"},
     "GET /v1/admin/byok/firecrawl": {"allow": "jwt-only"},
     "GET /v1/admin/byok/keys": {"mcp": ["list_byok_keys"], "cli": ["keys list"]},
     "GET /v1/admin/chart-events": {"allow": "jwt-only"},

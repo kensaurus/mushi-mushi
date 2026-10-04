@@ -2,7 +2,7 @@
   "mcpServers": {
     "mushi": {
       "type": "http",
-      "url": "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/mcp"
+      "url": "https://kensaur.us/mushi-mushi/hosted-mcp/"
     },
     "mushi-stdio": {
       "type": "stdio",

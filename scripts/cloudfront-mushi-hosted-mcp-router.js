@@ -5,8 +5,8 @@
  * (MCP_PUBLIC_BASE_URL) so HEAD responses include a JSON body — required by
  * Smithery RFC 8414 discovery. CloudFront Functions omit bodies on synthetic HEAD.
  *
- * OAuth authorize GET is handled here (viewer has querystring; UserAgentReferer ORP
- * does not forward query strings to Supabase). Smithery's publisher scan gets
+ * OAuth authorize GET is handled here (the origin policy was UserAgentReferer,
+ * which forwarded no query string; since 2026-10-04 it is AllViewerExceptHost). Smithery's publisher scan gets
  * the stub redirect at the edge; every REAL MCP client (claude mcp login,
  * Cursor — loopback redirect URIs) is 302'd to the api function's authorize
  * endpoint with the query string reassembled, which validates and forwards to

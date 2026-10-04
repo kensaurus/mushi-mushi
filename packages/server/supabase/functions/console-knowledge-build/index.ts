@@ -55,11 +55,11 @@ async function runBuild(): Promise<Response> {
     const batch = docs.slice(i, i + BATCH);
     let embeddings: number[][] = [];
     try {
-      embeddings = await createEmbeddingBatch(batch.map((d) => d.body));
+      embeddings = await createEmbeddingBatch(batch.map((d) => d.body), { functionName: 'console-knowledge-build' });
     } catch {
       for (const d of batch) {
         try {
-          const emb = await createEmbedding(d.body);
+          const emb = await createEmbedding(d.body, { functionName: 'console-knowledge-build' });
           embeddings.push(emb);
         } catch (e) {
           errors.push(`${d.doc_path}:${d.section}: ${e instanceof Error ? e.message : String(e)}`);

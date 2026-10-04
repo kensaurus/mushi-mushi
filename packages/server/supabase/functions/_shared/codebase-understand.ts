@@ -383,7 +383,7 @@ export async function retrieveCodeForQuestion(
 
   let embedding: number[]
   try {
-    embedding = await createEmbedding(trimmed, { projectId })
+    embedding = await createEmbedding(trimmed, { projectId, functionName: 'codebase-understand' })
   } catch {
     return { files: [], wikiChunks: [], reason: 'embedding_failed' }
   }

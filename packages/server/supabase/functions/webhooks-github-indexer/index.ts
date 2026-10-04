@@ -734,7 +734,7 @@ async function indexFixIntoCorpus(
 
   let embedding: number[] | null = null;
   try {
-    embedding = await createEmbedding(embeddingInput, { projectId: attempt.project_id });
+    embedding = await createEmbedding(embeddingInput, { projectId: attempt.project_id, functionName: 'webhooks-github-indexer' });
   } catch (err) {
     // Non-fatal — we still insert the row sans embedding so the audit
     // trail is intact; a backfill cron can re-embed later.
@@ -1515,7 +1515,7 @@ async function sweepIndexRepo(
     try {
       embeddings = await createEmbeddingBatch(
         batch.map((b) => b.text),
-        { projectId },
+        { projectId, functionName: 'webhooks-github-indexer' },
       );
     } catch (err) {
       failed += batch.length;
@@ -1738,7 +1738,7 @@ async function indexPushForProject(
     try {
       embeddings = await createEmbeddingBatch(
         batch.map((b) => b.text),
-        { projectId },
+        { projectId, functionName: 'webhooks-github-indexer' },
       );
     } catch (err) {
       // Push embeddings are best-effort — log and move on. The next push

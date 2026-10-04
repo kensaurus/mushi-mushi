@@ -1039,7 +1039,7 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
     }
 
     const { createEmbedding } = await import('../../_shared/embeddings.ts')
-    const embedding = await createEmbedding(body.query.trim(), { projectId })
+    const embedding = await createEmbedding(body.query.trim(), { projectId, functionName: 'codebase-search' })
 
     const { data: hits, error: rpcErr } = await db.rpc('match_codebase_files', {
       query_embedding: embedding,
