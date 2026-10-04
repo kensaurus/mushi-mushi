@@ -44,7 +44,7 @@ import {
 } from '../../_shared/codebase-understand.ts'
 import { resolveImpactChangedPaths } from '../../_shared/codebase-impact-resolve.ts'
 import { enqueueCodebaseAnalyzeJob, runCodebaseAnalyzeJob } from '../../_shared/codebase-analyze-runner.ts'
-import { normalizeWikiRoot } from '../../_shared/wiki-ingest.ts'
+import { normalizeWikiRoot, WIKI_STALE_MS } from '../../_shared/wiki-ingest.ts'
 import { dbError, callerCanAccessProject } from '../shared.ts'
 
 const routeLog = log.child('codebase-understand')
@@ -1103,7 +1103,7 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
     const db = getServiceClient()
     const { data, error } = await db
       .from('project_codebase_wiki_sources')
-      .select('id, kind, root_path, label, status, error, created_at, updated_at')
+      .select('id, kind, root_path, label, status, error, config, created_at, updated_at')
       .eq('project_id', projectId)
       .order('created_at', { ascending: false })
     if (error) return dbError(c, error)
@@ -1164,13 +1164,17 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
     if (forbidden) return forbidden
 
     const db = getServiceClient()
+    // Finished rows, plus pending/indexing rows nobody has touched for
+    // WIKI_STALE_MS (never picked up, or the worker died mid-read). A row
+    // being read right now is left alone.
+    const staleBefore = new Date(Date.now() - WIKI_STALE_MS).toISOString()
     const { data, error } = await db
       .from('project_codebase_wiki_sources')
       .update({ status: 'pending', error: null, updated_at: new Date().toISOString() })
       .eq('id', sourceId)
       .eq('project_id', projectId)
-      .in('status', ['failed', 'pending', 'ready'])
-      .select('id, kind, root_path, label, status, error')
+      .or(`status.in.(failed,ready),updated_at.lt.${staleBefore}`)
+      .select('id, kind, root_path, label, status, error, updated_at')
       .maybeSingle()
     if (error) return dbError(c, error)
     if (!data) {
