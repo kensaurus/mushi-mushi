@@ -97,11 +97,11 @@ export function registerModernizationHealthSuperRoutes(app: Hono<{ Variables: Va
       .select('id, project_id, related_report_id, dep_name, status')
       .eq('id', findingId)
       .maybeSingle();
-    if (!finding) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
+    if (!finding) return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'That finding no longer exists. Refresh the page.' } }, 404);
 
     // Teams v1: owner / org-member / project-member can act on findings.
     const access = await callerCanAccessProject(c, db, userId, finding.project_id);
-    if (!access.allowed) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
+    if (!access.allowed) return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'This finding belongs to a project you cannot access.' } }, 403);
 
     if (!finding.related_report_id) {
       return c.json(
@@ -203,11 +203,11 @@ export function registerModernizationHealthSuperRoutes(app: Hono<{ Variables: Va
       .select('project_id, dep_name')
       .eq('id', findingId)
       .maybeSingle();
-    if (!finding) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
+    if (!finding) return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'That finding no longer exists. Refresh the page.' } }, 404);
 
     // Teams v1: owner / org-member / project-member can act on findings.
     const access = await callerCanAccessProject(c, db, userId, finding.project_id);
-    if (!access.allowed) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
+    if (!access.allowed) return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'This finding belongs to a project you cannot access.' } }, 403);
 
     const { error } = await db
       .from('modernization_findings')

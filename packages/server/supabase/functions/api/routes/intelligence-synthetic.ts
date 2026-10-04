@@ -421,14 +421,14 @@ export function registerIntelligenceSyntheticRoutes(app: Hono<{ Variables: Varia
       const id = c.req.param('id')!;
       const db = getServiceClient();
       const projectIds = await callerProjectIds(c, db, userId);
-      if (projectIds.length === 0) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
+      if (projectIds.length === 0) return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'You have no project in this team, so there is no job to cancel.' } }, 403);
       const { data: job } = await db
         .from('intelligence_generation_jobs')
         .select('id, project_id, status')
         .eq('id', id)
         .maybeSingle();
       if (!job || !projectIds.includes(job.project_id)) {
-        return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
+        return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'That job no longer exists or belongs to another project. Refresh the page.' } }, 404);
       }
       if (job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled') {
         return c.json(
