@@ -107,9 +107,9 @@ export function buildInboxCards(
         failedFixes > 0
           ? {
               tone: 'do',
-              title: `${failedFixes} fix attempt${failedFixes === 1 ? '' : 's'} failed`,
-              reason: 'Review the failure, fix the agent prompt, or retry manually.',
-              primary: { kind: 'link', to: '/fixes?status=failed', label: 'Open failed fixes' },
+              title: `Auto-fix stopped on ${failedFixes} report${failedFixes === 1 ? '' : 's'}`,
+              reason: 'Read why the last attempt stopped, then retry or fix it in your editor.',
+              primary: { kind: 'link', to: '/fixes?tab=attempts&status=failed', label: 'See why it stopped' },
             }
           : null,
     },

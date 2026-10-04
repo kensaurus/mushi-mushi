@@ -16,6 +16,7 @@ import { apiKeyAuth, jwtAuth } from '../../_shared/auth.ts';
 import { logAudit } from '../../_shared/audit.ts';
 import { emitProductEvent } from '../../_shared/product-events.ts';
 import { dbError, enumerateAccessibleProjectIds } from '../shared.ts';
+import { failedFixPreviews, loadReportFixTruths } from '../../_shared/fix-report-truth-load.ts';
 
 export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>): void {
   // Lenient UUID matcher (any 8-4-4-4-12 hex). The strict v1–v5 form in
@@ -152,9 +153,11 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
           .lt('created_at', oneHourAgo),
         db
           .from('fix_attempts')
-          .select('id, project_id, status, report_id, error, finished_at')
+          .select('report_id')
           .in('project_id', projectIds)
-          .in('status', ['pending', 'running', 'pr_open', 'failed']),
+          .or('status.in.(pending,queued,running,failed),status.like.skipped*')
+          .order('created_at', { ascending: false })
+          .limit(1000),
         db
           .from('classification_evaluations')
           .select('report_id, project_id, classification_agreed, created_at')
@@ -305,62 +308,21 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
       planBacklogMap[r.project_id] = (planBacklogMap[r.project_id] ?? 0) + 1;
     }
 
+    // Per REPORT from its current state (fix-report-truth.ts): a report a
+    // merged PR fixed never counts as failed, however many earlier attempts
+    // failed. The query above only picks candidate reports; the loader reads
+    // every attempt on them.
+    const projectFixTruths = await loadReportFixTruths(
+      db as unknown as Parameters<typeof loadReportFixTruths>[0],
+      (doFlights.data ?? []).map((f) => (f as { report_id: string }).report_id),
+    );
     const fixInflightMap: Record<string, number> = {};
     const fixFailedMap: Record<string, number> = {};
-    interface FailedFixPreviewRow {
-      id: string;
-      report_id: string;
-      error_head: string | null;
-      finished_at: string | null;
-    }
-    const failedFixPreviewByProject: Record<string, FailedFixPreviewRow[]> = {};
-    for (const f of doFlights.data ?? []) {
-      if (f.status === 'failed') {
-        fixFailedMap[f.project_id] = (fixFailedMap[f.project_id] ?? 0) + 1;
-        const err = (f as { error?: string | null }).error ?? null;
-        const row: FailedFixPreviewRow = {
-          id: (f as { id: string }).id,
-          report_id: (f as { report_id: string }).report_id,
-          error_head: err ? err.split('\n')[0].slice(0, 160) : null,
-          finished_at: (f as { finished_at?: string | null }).finished_at ?? null,
-        };
-        if (!failedFixPreviewByProject[f.project_id]) {
-          failedFixPreviewByProject[f.project_id] = [];
-        }
-        failedFixPreviewByProject[f.project_id].push(row);
-      } else {
-        fixInflightMap[f.project_id] = (fixInflightMap[f.project_id] ?? 0) + 1;
-      }
-    }
-    for (const pid of Object.keys(failedFixPreviewByProject)) {
-      failedFixPreviewByProject[pid].sort((a, b) => {
-        const ta = a.finished_at ? new Date(a.finished_at).getTime() : 0;
-        const tb = b.finished_at ? new Date(b.finished_at).getTime() : 0;
-        return tb - ta;
-      });
-      failedFixPreviewByProject[pid] = failedFixPreviewByProject[pid].slice(0, 3);
-    }
-
-    const failedReportIds = [
-      ...new Set(
-        Object.values(failedFixPreviewByProject)
-          .flat()
-          .map((r) => r.report_id),
-      ),
-    ];
-    const reportTitleById: Record<string, string | null> = {};
-    if (failedReportIds.length > 0) {
-      const { data: titleRows } = await db
-        .from('reports')
-        .select('id, summary, description')
-        .in('id', failedReportIds);
-      for (const r of titleRows ?? []) {
-        const summary = (r as { summary?: string | null }).summary?.trim();
-        const desc = (r as { description?: string | null }).description?.trim();
-        reportTitleById[r.id] =
-          summary ||
-          (desc ? desc.slice(0, 80) + (desc.length > 80 ? '…' : '') : null);
-      }
+    for (const t of projectFixTruths.truths.values()) {
+      const pid = projectFixTruths.reports.get(t.reportId)?.project_id;
+      if (!pid) continue;
+      if (t.state === 'failed') fixFailedMap[pid] = (fixFailedMap[pid] ?? 0) + 1;
+      else if (t.state === 'in_flight') fixInflightMap[pid] = (fixInflightMap[pid] ?? 0) + 1;
     }
 
     const checkDisagreeMap: Record<string, number> = {};
@@ -495,7 +457,7 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
       if (doFailed > 0) {
         bottleneckStage = 'do';
         bottleneckCount = doFailed;
-        bottleneckLabel = `${doFailed} ${doFailed === 1 ? 'fix needs' : 'fixes need'} retry`;
+        bottleneckLabel = `${doFailed} ${doFailed === 1 ? 'report' : 'reports'} still unfixed after an auto-fix attempt`;
       } else if (planCount > 5) {
         bottleneckStage = 'plan';
         bottleneckCount = planCount;
@@ -623,12 +585,7 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
         pdca_bottleneck: bottleneckStage,
         pdca_bottleneck_label: bottleneckLabel,
         pdca_bottleneck_count: bottleneckCount,
-        failed_fixes_preview: (failedFixPreviewByProject[p.id] ?? []).map((row) => ({
-          id: row.id,
-          report_id: row.report_id,
-          error_head: row.error_head,
-          report_title: reportTitleById[row.report_id] ?? null,
-        })),
+        failed_fixes_preview: failedFixPreviews(projectFixTruths, { projectId: p.id, limit: 3 }),
         sdk_package: sdkPackage,
         sdk_version: sdkVersion,
         sdk_observation_source: resolvedSdk.sdk_observation_source,

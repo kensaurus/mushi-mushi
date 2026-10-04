@@ -10,6 +10,7 @@ import { StatusBannerAction } from '../StatusBannerAction'
 import {
   fixesFailedAction,
   fixesFailedHint,
+  fixesFailedTitle,
   integrationIssuesHint,
   scopedHref,
   triageBacklogHint,
@@ -97,7 +98,7 @@ export function DashboardStatusBanner({
     return (
       <StatusBannerShell
         tone="danger"
-        title={`${stats.fixesFailed} auto-fix${stats.fixesFailed === 1 ? '' : 'es'} failed`}
+        title={fixesFailedTitle(stats.fixesFailed)}
         subtitle={stats.topPriorityLabel ?? fixesFailedHint(stats.fixesFailed)}
         action={
           <StatusBannerAction

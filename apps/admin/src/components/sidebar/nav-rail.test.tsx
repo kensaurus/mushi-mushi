@@ -322,7 +322,7 @@ describe('resolveNavBadge', () => {
     expect(resolveNavBadge('/fixes', counts, NO_EXTRAS)).toMatchObject({
       kind: 'health',
       count: 2,
-      label: '2 failed fixes — needs attention',
+      label: 'Auto-fix stopped on 2 reports',
     })
   })
 

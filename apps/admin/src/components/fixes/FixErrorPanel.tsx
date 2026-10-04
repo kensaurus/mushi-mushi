@@ -15,9 +15,14 @@ interface Props {
   agent?: string | null;
   category?: string | null;
   onRetry?: () => void;
+  /**
+   * Set when a later attempt fixed the report ("Superseded — fixed by PR #N").
+   * The panel then reads as neutral history: no red, no Retry.
+   */
+  supersededNote?: string | null;
 }
 
-export function FixErrorPanel({ error, agent, category, onRetry }: Props) {
+export function FixErrorPanel({ error, agent, category, onRetry, supersededNote }: Props) {
   const [rawOpen, setRawOpen] = useState(false);
   const navigate = useNavigate();
 
@@ -27,11 +32,32 @@ export function FixErrorPanel({ error, agent, category, onRetry }: Props) {
 
   if (!h) return null;
 
+  if (supersededNote) {
+    return (
+      <div className="rounded-md border border-edge-subtle bg-surface-overlay/40 px-3 py-2.5 space-y-1.5 text-xs text-fg-secondary">
+        <p className="font-medium text-fg-secondary">{supersededNote}</p>
+        <p className="text-fg-muted">This attempt stopped earlier: {h.title}</p>
+        <button
+          type="button"
+          onClick={() => setRawOpen((o) => !o)}
+          className="text-xs text-fg-faint underline underline-offset-2 hover:text-fg-muted"
+        >
+          {rawOpen ? 'Hide technical error' : 'Show technical error'}
+        </button>
+        {rawOpen && (
+          <pre className="text-2xs font-mono text-fg-faint whitespace-pre-wrap break-all">{h.raw}</pre>
+        )}
+      </div>
+    );
+  }
+
   const isSoft = h.severity === 'soft';
+  // A retry action is only offered when the page says a retry can help now.
+  const action = h.action && (h.action.target.kind !== 'retry' || onRetry) ? h.action : null;
 
   function handleAction() {
-    if (!h?.action) return;
-    const { target } = h.action;
+    if (!action) return;
+    const { target } = action;
     if (target.kind === 'retry') {
       onRetry?.();
     } else if (target.kind === 'route') {
@@ -68,7 +94,7 @@ export function FixErrorPanel({ error, agent, category, onRetry }: Props) {
 
       {/* Action + raw toggle row */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pl-5">
-        {h.action && (
+        {action && (
           <button
             type="button"
             onClick={handleAction}
@@ -78,7 +104,7 @@ export function FixErrorPanel({ error, agent, category, onRetry }: Props) {
                 : 'text-danger hover:text-danger/80'
             }`}
           >
-            {h.action.label}
+            {action.label}
           </button>
         )}
         <button
