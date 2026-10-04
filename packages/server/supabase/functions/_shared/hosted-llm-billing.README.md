@@ -55,14 +55,22 @@ that charges the same call twice.
 This is a first cut. It bills the paths that were already instrumented, not
 every path that can burn a platform key.
 
-**Debited** — every generation that runs on the platform key and writes an
-`llm_invocations` row with `keySource: 'env'`. Since 2026-10-04 that is every
-generation path except the two listed below: the earlier gaps (`judge-batch`, `generate-synthetic`,
-`mistake-clusterer`, `mistake-summarizer`, `release-builder`, `pdca-runner`,
-`test-gen-from-report`, `test-gen-from-story`, `library-modernizer`,
-`prompt-auto-tune`, `nl-query`, the `classify-report` vision call) now write
-their row through `_shared/llm-usage.ts`, and `inventory-propose` /
-`story-mapper` moved from `meter` to that row.
+**Debited** — a call that runs on the platform key, writes an
+`llm_invocations` row with `keySource: 'env'`, and whose path opts in.
+Recording a call's cost does not bill it: `_shared/llm-usage.ts` writes rows
+with `skipHostedBilling` unless the site passes `billHosted: true`. Since
+2026-10-04 only `inventory-propose` and `story-mapper` opt in (they were
+billed before through the `meter`), plus the paths that call
+`logLlmInvocation` directly as before (classify-report, fast-filter,
+fix-worker, ask-mushi, codebase-understand, repo-diagram, voice).
+
+**Recorded, not debited (owner decision to bill):** `judge-batch`,
+`generate-synthetic`, `mistake-clusterer`, `mistake-summarizer`,
+`release-builder`, `pdca-runner`, `test-gen-from-report`,
+`test-gen-from-story`, `library-modernizer`, `prompt-auto-tune`,
+`nl-query`, the `classify-report` vision call, and embeddings. Their cost
+shows on Costs and counts toward the monthly budget. To bill one, pass
+`billHosted: true` at the site; a test pins the opt-in list.
 
 **Not debited:**
 
@@ -78,7 +86,7 @@ their row through `_shared/llm-usage.ts`, and `inventory-propose` /
 - `generate-synthetic`, `mistake-*` and `release-builder` read
   `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` straight from the environment and
   never honour a customer's BYOK key — a separate bug. Their rows are
-  `key_source = 'env'`, so they are debited.
+  `key_source = 'env'`; they are recorded, not debited.
 - `fine-tune-vendor` predictions (an `ft:` model has no price row) and the
   `integration-probes` key checks write no row.
 
@@ -92,8 +100,8 @@ The `on`-mode preflight lives in `withLlmFailover`, so it covers every
 `withAnthropicOrOpenAi` caller. Paths that call the provider directly
 (`judge-batch`, `generate-synthetic`, `mistake-*`, `release-builder`,
 `library-modernizer`, `prompt-auto-tune`, `nl-query`, the vision call) are
-debited after the call but not gated before it: an empty wallet does not
-refuse them.
+neither gated nor debited. If one is opted into billing, give it the same
+preflight first, or an empty wallet will not refuse it.
 
 One softness worth knowing: `keySource` is what the caller *inferred*, not what
 `resolveLlmKey` returned. `classify-report` does

@@ -111,7 +111,15 @@ export interface LlmUsageContext {
   fallbackReason?: string | null
   promptVersion?: string | null
   langfuseTraceId?: string | null
-  /** Embeddings: write the cost row, never debit the hosted wallet. */
+  /**
+   * Debit the hosted wallet for this call (platform key only). Off by default:
+   * recording a call's cost must not start billing for it. Only paths that
+   * were already billed before 2026-10-04 opt in (inventory-propose and
+   * story-mapper, which used the withLlmFailover meter); billing any other
+   * path is an owner pricing decision.
+   */
+  billHosted?: boolean
+  /** Kept for callers that say it explicitly; billing is already off by default. */
   skipHostedBilling?: boolean
 }
 
@@ -158,7 +166,7 @@ export function buildLlmUsageRecord(ctx: LlmUsageContext, outcome: LlmUsageOutco
     langfuseTraceId: ctx.langfuseTraceId ?? null,
     cacheCreationInputTokens: cache.cacheCreationInputTokens,
     cacheReadInputTokens: cache.cacheReadInputTokens,
-    skipHostedBilling: ctx.skipHostedBilling ?? false,
+    skipHostedBilling: ctx.skipHostedBilling === true || ctx.billHosted !== true,
   }
 }
 

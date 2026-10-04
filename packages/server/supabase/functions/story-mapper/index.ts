@@ -278,6 +278,8 @@ Deno.serve(
                   model: STORY_MAP_MODEL,
                   keySource: k.source,
                   langfuseTraceId: trace.id,
+                  // Billed before (withLlmFailover meter); keeps that debit.
+                  billHosted: true,
                 },
                 () => claudeGenerateText({
                   apiKey: k.key,

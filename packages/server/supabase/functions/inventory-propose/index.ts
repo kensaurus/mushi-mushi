@@ -400,6 +400,8 @@ async function proposeAndPersist(
               projectId,
               model: modelId,
               keySource: resolved.source,
+              // Billed before (withLlmFailover meter); keeps that debit.
+              billHosted: true,
             },
             modelId,
             prompt,

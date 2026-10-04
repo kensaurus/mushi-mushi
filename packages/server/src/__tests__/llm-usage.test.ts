@@ -10,7 +10,7 @@
  * Costs page and the monthly budget, and platform-key calls were never
  * debited. The recorder runs on the request path, so it must never throw.
  */
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -121,7 +121,8 @@ describe('buildLlmUsageRecord', () => {
       keySource: 'byok',
       cacheReadInputTokens: 5,
       cacheCreationInputTokens: 2,
-      skipHostedBilling: false,
+      // Recording a cost never starts billing for it.
+      skipHostedBilling: true,
     })
   })
 
@@ -318,5 +319,24 @@ describe('every paid model call writes an llm_invocations row', () => {
     expect(src).toMatch(/stage: 'embedding'[\s\S]{0,200}skipHostedBilling: true/)
     const telemetry = readFileSync(resolve(FUNCTIONS_ROOT, '_shared/telemetry.ts'), 'utf8')
     expect(telemetry).toMatch(/rec\.keySource === 'env' && rec\.projectId && !rec\.skipHostedBilling/)
+  })
+})
+
+describe('hosted billing stays where it was before recording', () => {
+  it('records without debiting unless the site opts in', () => {
+    const base = { functionName: 'judge-batch', model: 'claude-opus-4-7', keySource: 'env' as const, projectId: 'p1' }
+    expect(buildLlmUsageRecord(base, { result: {} }).skipHostedBilling).toBe(true)
+    expect(buildLlmUsageRecord({ ...base, billHosted: true }, { result: {} }).skipHostedBilling).toBe(false)
+    expect(buildLlmUsageRecord({ ...base, billHosted: true, skipHostedBilling: true }, { result: {} }).skipHostedBilling).toBe(true)
+  })
+
+  it('only the two paths billed before 2026-10-04 opt in', () => {
+    const optedIn = ['inventory-propose/index.ts', 'story-mapper/index.ts']
+    const all = readdirSync(resolve(FUNCTIONS_ROOT, '.'), { recursive: true, withFileTypes: false }) as string[]
+    const users = all
+      .filter((f) => f.endsWith('.ts') && !f.includes('node_modules'))
+      .filter((f) => /billHosted:\s*true/.test(readFileSync(resolve(FUNCTIONS_ROOT, f), 'utf8')))
+      .map((f) => f.split('\\').join('/'))
+    expect(users.sort()).toEqual(optedIn)
   })
 })
