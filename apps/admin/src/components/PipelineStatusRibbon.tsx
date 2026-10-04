@@ -333,7 +333,7 @@ export function PipelineStatusRibbon({ embedded = false }: { embedded?: boolean 
         : nav.prsOpen === 0
           ? 'No PRs awaiting review'
           : `${nav.prsOpen} PR${nav.prsOpen === 1 ? '' : 's'} awaiting review`,
-    to: '/repo?tab=prs',
+    to: '/repo?tab=branches&status=open',
   }
 
   const tiles: RibbonTile[] = [plan, doTile, check, act]

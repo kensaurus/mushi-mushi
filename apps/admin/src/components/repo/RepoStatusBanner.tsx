@@ -121,13 +121,19 @@ export function RepoStatusBanner({
   }
 
   if (stats.topPriority === 'waiting') {
+    // PRs are open and waiting for review: say so, and open them (QA 99 —
+    // the title used to read "No fix branches yet" next to "3 PRs open").
     return (
       <StatusBannerShell
         tone="brand"
-        title="No fix branches yet"
+        title={`${stats.prOpen} fix PR${stats.prOpen === 1 ? '' : 's'} waiting for review`}
         subtitle={stats.topPriorityLabel}
         action={
-          <Btn to="/reports" size="sm" variant="ghost">{actions.reports ?? 'Open Reports'}</Btn>
+          stats.topPriorityTo ? (
+            <Btn to={stats.topPriorityTo} size="sm" variant="ghost">Review open PRs</Btn>
+          ) : onTab ? (
+            <Btn size="sm" variant="ghost" onClick={() => onTab('branches')}>Review open PRs</Btn>
+          ) : null
         }
       />
     )

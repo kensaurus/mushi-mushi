@@ -56,6 +56,15 @@ import { usePageData } from '../lib/usePageData'
 import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { ProjectReposCard } from '../components/repo/ProjectReposCard'
 import { RepoIndexStatus } from '../components/repo/RepoIndexStatus'
+import { ListPager } from '../components/ListPager'
+import {
+  REPO_FILTERS,
+  countRepoFilters,
+  matchesRepoFilter,
+  resolveRepoFilter,
+  type RepoFilter,
+  type RepoServerBucket,
+} from '../lib/repoBranches'
 
 interface RepoBranch {
   id: string
@@ -65,6 +74,9 @@ interface RepoBranch {
   pr_number: number | null
   commit_sha?: string | null
   pr_state?: 'open' | 'closed' | 'merged' | 'draft' | null
+  merged_at?: string | null
+  /** Filter bucket from the server's counting rule (repo-branch-counts.ts). */
+  bucket?: RepoServerBucket | null
   llm_model?: string | null
   agent?: string | null
   status: string
@@ -100,6 +112,8 @@ interface RepoOverview {
     merged: number
     failed_to_open: number
     total: number
+    /** Distinct branches (older servers omit it). */
+    branches?: number
   }
   branches: RepoBranch[]
 }
@@ -117,15 +131,11 @@ interface RepoActivityEvent {
   status?: 'ok' | 'fail' | 'pending'
 }
 
-type Bucket = 'all' | 'open' | 'ci_passing' | 'ci_failed' | 'failed'
+type Bucket = RepoFilter
+const BUCKETS = REPO_FILTERS
 
-const BUCKETS: { id: Bucket; label: string }[] = [
-  { id: 'all', label: 'All' },
-  { id: 'open', label: 'PR open' },
-  { id: 'ci_passing', label: 'CI passing' },
-  { id: 'ci_failed', label: 'CI failing' },
-  { id: 'failed', label: 'Failed' },
-]
+/** Branch cards per page; the server returns the latest 200 attempts. */
+const BRANCHES_PAGE_SIZE = 50
 
 const REPO_TABS: Array<{ id: RepoTabId; label: string; description: string }> = [
   {
@@ -148,15 +158,6 @@ const REPO_TABS: Array<{ id: RepoTabId; label: string; description: string }> = 
 function resolveRepoTab(value: string | null): RepoTabId {
   if (value === 'branches' || value === 'activity') return value
   return 'overview'
-}
-
-function bucketize(b: RepoBranch): Bucket {
-  const concl = b.check_run_conclusion?.toLowerCase()
-  if (concl === 'success') return 'ci_passing'
-  if (concl === 'failure' || concl === 'timed_out') return 'ci_failed'
-  if (b.status === 'failed' && !b.pr_url) return 'failed'
-  if (b.pr_url) return 'open'
-  return 'all'
 }
 
 function ciBadge(b: RepoBranch): { label: string; className: string } {
@@ -301,7 +302,22 @@ export function RepoPage() {
   const [activityError, setActivityError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [bucket, setBucket] = useState<Bucket>('all')
+  // The filter lives in the URL so a tile or banner ("Open failing CI") can
+  // land on it (console QA 99).
+  const bucket: Bucket = resolveRepoFilter(searchParams.get('status'))
+  const [branchPage, setBranchPage] = useState(1)
+  const setBucket = useCallback(
+    (next: Bucket) => {
+      setSearchParams((prev) => {
+        const params = new URLSearchParams(prev)
+        if (next === 'all') params.delete('status')
+        else params.set('status', next)
+        return params
+      }, { replace: true, preventScrollReset: true })
+      setBranchPage(1)
+    },
+    [setSearchParams],
+  )
 
   // Single fetcher shared by the initial mount and `reload()` so the retry
   // path always refetches BOTH resources — if the activity request fails
@@ -364,25 +380,16 @@ export function RepoPage() {
 
   const filteredBranches = useMemo(() => {
     if (!overview) return []
-    if (bucket === 'all') return overview.branches
-    return overview.branches.filter((b) => bucketize(b) === bucket)
+    return overview.branches.filter((b) => matchesRepoFilter(b, bucket))
   }, [overview, bucket])
+  const pagedBranches = useMemo(
+    () => filteredBranches.slice((branchPage - 1) * BRANCHES_PAGE_SIZE, branchPage * BRANCHES_PAGE_SIZE),
+    [filteredBranches, branchPage],
+  )
 
-  // Tab badges MUST be derived from the same `bucketize` the filter uses —
-  // otherwise the badge count and the rendered list diverge. The server's
-  // `counts.*` are orthogonal attribute totals (a PR can be "open" AND
-  // "ci_passing" at the same time), which is correct for the header chips
-  // above but wrong as mutually-exclusive tab counts.
-  const bucketCounts = useMemo(() => {
-    const counts: Record<Bucket, number> = { all: 0, open: 0, ci_passing: 0, ci_failed: 0, failed: 0 }
-    if (!overview) return counts
-    counts.all = overview.branches.length
-    for (const b of overview.branches) {
-      const bucket = bucketize(b)
-      if (bucket !== 'all') counts[bucket] += 1
-    }
-    return counts
-  }, [overview])
+  // Filter counts use the same predicate as the list and the server's rule,
+  // so each count equals its header chip and the rows it shows.
+  const bucketCounts = useMemo(() => countRepoFilters(overview?.branches ?? []), [overview])
 
   const tabOptions = useMemo(
     () => [
@@ -409,7 +416,7 @@ export function RepoPage() {
   const hasRepo = Boolean(repo.repo_url)
 
   const headerChips: DefinitionChipItem[] = [
-    { label: 'Branches', value: pluralizeWithCount(counts.total, 'attempt') },
+    { label: 'Branches', value: pluralizeWithCount(counts.branches ?? counts.total, 'branch', 'branches') },
     { label: 'PR open', value: counts.open },
     { label: 'CI passing', value: <span className="text-ok font-semibold">{counts.ci_passing}</span> },
     { label: 'CI failing', value: <span className="text-danger font-semibold">{counts.ci_failed}</span> },
@@ -483,9 +490,16 @@ export function RepoPage() {
         </div>
       ) : (
         <div className="space-y-2">
-          {filteredBranches.map((b) => (
+          {pagedBranches.map((b) => (
             <BranchRow key={b.id} branch={b} />
           ))}
+          <ListPager
+            page={branchPage}
+            pageSize={BRANCHES_PAGE_SIZE}
+            total={filteredBranches.length}
+            noun="fix attempts"
+            onPage={setBranchPage}
+          />
         </div>
       )}
     </div>
@@ -591,7 +605,7 @@ export function RepoPage() {
       >
         <FreshnessPill at={statsFetchedAt} isValidating={statsValidating} />
         <span className="text-2xs text-fg-faint font-mono">
-          {pluralizeWithCount(counts.total, 'branch', 'branches')}
+          {pluralizeWithCount(counts.branches ?? counts.total, 'branch', 'branches')}
         </span>
         <Btn size="sm" variant="ghost" onClick={reload} loading={statsValidating}>
           Refresh
