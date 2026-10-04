@@ -188,3 +188,47 @@ describe('ExploreDiagramPanel overlay', () => {
     expect(container.textContent).toContain('Overlay down')
   })
 })
+
+describe('ExploreDiagramPanel permissions and unpublish', () => {
+  const published = {
+    published: true,
+    url: 'https://example.com/d/acme/shop',
+    commit_sha: SHA,
+    repo_private: false,
+    published_at: '2026-10-02T00:00:00Z',
+    outdated: false,
+  }
+
+  it('hides draw and publish controls the server would refuse', async () => {
+    const member = {
+      ok: true,
+      data: { ...diagramResponse.data, publication: published, permissions: { can_draw: false, can_manage_page: false } },
+    }
+    apiFetch.mockImplementation((path: string) => Promise.resolve(path.endsWith('/overlay') ? overlayResponse : member))
+    render()
+    await flush()
+    const labels = [...container.querySelectorAll('button')].map((b) => b.textContent)
+    expect(labels).not.toContain('Redraw')
+    expect(labels).not.toContain('Unpublish')
+    expect(container.querySelector('[data-testid="diagram-publish-owner-only"]')).not.toBeNull()
+  })
+
+  it('asks before taking the public page offline', async () => {
+    const owner = {
+      ok: true,
+      data: { ...diagramResponse.data, publication: published, permissions: { can_draw: true, can_manage_page: true } },
+    }
+    apiFetch.mockImplementation((path: string) => Promise.resolve(path.endsWith('/overlay') ? overlayResponse : owner))
+    apiFetchMutate.mockResolvedValue({ ok: true, data: { published: false } })
+    render()
+    await flush()
+    const unpublish = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Unpublish')!
+    await act(async () => unpublish.click())
+    expect(apiFetchMutate).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('Take the public page offline?')
+    const confirm = [...document.body.querySelectorAll('button')].filter((b) => b.textContent === 'Unpublish').pop()!
+    await act(async () => confirm.click())
+    await flush()
+    expect(apiFetchMutate).toHaveBeenCalledWith('/v1/admin/projects/p1/codebase/diagram/publish', { method: 'DELETE' })
+  })
+})
