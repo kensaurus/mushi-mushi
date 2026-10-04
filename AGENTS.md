@@ -296,7 +296,7 @@ mushi qa run <story-id>
 
 # ── Doctor checks ─────────────────────────────────────────────────────────
 # Full pre-flight + server + QA story health check
-mushi doctor --server --qa-stories
+mushi doctor --qa-stories
 
 # ── TDD / Story mapping ───────────────────────────────────────────────────
 # Map user stories from live app

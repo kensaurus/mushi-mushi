@@ -330,7 +330,7 @@ Sets `projects.archived_at`.  **Irreversible.**
 ### `mushi fixes tail --report-id <id>`
 
 Streams dispatch events for a report in real-time via SSE.  Pairs with
-`mushi doctor --server` for headless debugging without opening the admin console.
+`mushi doctor` for headless debugging without opening the admin console.
 
 ```bash
 mushi fixes tail --report-id 11111111-2222-3333-4444-555555555555

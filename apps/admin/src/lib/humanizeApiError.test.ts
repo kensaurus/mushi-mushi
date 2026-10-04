@@ -163,7 +163,7 @@ describe('humanizeApiError action errors (group B, 2026-10-04)', () => {
   it('maps dispatch codes to plain English with the fix', () => {
     const h = humanizeApiError('Enable Autofix in project settings first', 'AUTOFIX_DISABLED', { action: 'queue the fix' })
     expect(h?.title).toBe('Auto-fix is off for this project.')
-    expect(h?.action?.target).toEqual({ kind: 'route', to: '/settings?tab=autofix' })
+    expect(h?.action?.target).toEqual({ kind: 'route', to: '/integrations/config', hash: 'integrations-codebase' })
   })
 
   it('maps test-gen codes to the GitHub fix', () => {

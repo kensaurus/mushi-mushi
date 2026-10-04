@@ -182,7 +182,7 @@ export function registerProjectIntegrationsRoutes(app: Hono<{ Variables: Variabl
         ready: hasAutofix,
         label: 'Autofix enabled',
         hint: 'Turn on Autofix in Project Settings to allow the worker to open PRs.',
-        fixHref: '/settings?tab=autofix',
+        fixHref: '/integrations/config#integrations-codebase',
       },
     ];
 
