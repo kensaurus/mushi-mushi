@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { apiFetch } from '../../lib/supabase'
+import { apiErrorMessage } from '../../lib/humanizeApiError'
 import { useExploreUx } from '../../lib/exploreModeUx'
 import { Btn, Card } from '../ui'
 import { ExploreUnderstandEmpty } from './ExploreUnderstandEmpty'
@@ -120,9 +121,14 @@ export function ExploreSymbolPanel({
     )
     setSummaryLoading(false)
     if (!res.ok) {
-      if (res.error?.code === 'NO_LLM_KEY' || res.error?.code === 'INDEX_DISABLED') {
-        setSummaryError(res.error)
-      }
+      // Keep key/index errors as they are (they carry their own fix button);
+      // every other failure (LLM error, not found) used to vanish silently.
+      const code = res.error?.code ?? 'ERROR'
+      setSummaryError(
+        code === 'NO_LLM_KEY' || code === 'INDEX_DISABLED'
+          ? res.error!
+          : { code, message: apiErrorMessage(res.error, 'The explanation could not be written. Try again.') },
+      )
       return
     }
     setSummary(res.data?.summary ?? null)

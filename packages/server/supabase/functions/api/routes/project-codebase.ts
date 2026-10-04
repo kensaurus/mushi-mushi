@@ -759,7 +759,7 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
       topPriority = 'ready'
       topPriorityLabel = indexCoverage && indexCoverage.state !== 'complete' && indexCoverage.summary
         ? `Partly indexed: ${indexCoverage.summary}. Answers only see those files.`
-        : `${indexedFiles.toLocaleString()} files ready · ${withEmbeddings.toLocaleString()} embedded for semantic search.`
+        : `${indexedFiles.toLocaleString()} files ready · ${withEmbeddings.toLocaleString()} search chunks embedded.`
       topPriorityTo = scoped('/explore?tab=ask')
     }
 
