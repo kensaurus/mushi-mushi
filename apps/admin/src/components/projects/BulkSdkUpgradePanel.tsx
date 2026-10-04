@@ -417,6 +417,10 @@ function BulkUpgradeRow({
         </Tooltip>
       )}
 
+      {state.syncError && (
+        <p className="mt-1 text-2xs text-danger-foreground" role="status">{state.syncError}</p>
+      )}
+
       {/* Compact release hint — full actions live in the panel header */}
       {state.status === 'completed' && state.prUrl && state.releaseStatus && (
         <div className="mt-1">

@@ -168,6 +168,11 @@ interface BtnProps extends ButtonHTMLAttributes<HTMLButtonElement> {
    * a button, since a link cannot be disabled.
    */
   to?: string
+  /**
+   * External URL, opened in a new tab. Same reason as `to`: `<a><Btn/></a>`
+   * nests a button in a link (two Tab stops, invalid HTML).
+   */
+  href?: string
 }
 
 const BTN_BASE =
@@ -221,9 +226,25 @@ export function Btn({
   leadingIcon,
   disabled,
   to,
+  href,
   ...rest
 }: BtnProps) {
   const isDisabled = disabled || loading
+  if (href && !isDisabled) {
+    const { type: _type, form: _form, formAction: _formAction, ...anchorRest } = rest
+    return (
+      <a
+        {...(anchorRest as unknown as React.AnchorHTMLAttributes<HTMLAnchorElement>)}
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={`${BTN_BASE} ${BTN_SIZES[size]} ${BTN_VARIANTS[variant]} ${className}`}
+      >
+        {leadingIcon}
+        {children}
+      </a>
+    )
+  }
   if (to && !isDisabled) {
     // Button-only attributes (type, form*) have no meaning on a link.
     const { type: _type, form: _form, formAction: _formAction, ...anchorRest } = rest

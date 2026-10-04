@@ -4,8 +4,9 @@
  *          MCP setup, CLI install, and SDK upgrade PRs.
  */
 
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { humanizeApiError } from '../lib/humanizeApiError'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import {
   ACTIVE_PROJECT_QUERY_PARAM,
@@ -201,6 +202,11 @@ export function ConnectPage() {
   const projectMissing =
     Boolean(activeProjectId) && !projectsFeed.loading && !projectsFeed.error && project == null
   const feedError = projectsFeed.error
+  // Plain English, never "Request failed (NETWORK_ERROR)" (QA bug 262).
+  const feedErrorText = useMemo(() => {
+    const h = humanizeApiError(feedError)
+    return h ? `${h.title} ${h.hint}` : null
+  }, [feedError])
 
   const fallbackGithubRepoUrl = project?.primary_repo?.repo_url ?? null
   const githubCheck = preflight.checks.find((c) => c.key === 'github')
@@ -230,9 +236,9 @@ export function ConnectPage() {
             Complete <strong>{nextSetupStep.label}</strong> in the setup wizard before
             wiring integrations here.
           </p>
-          <Link to={nextSetupStep.cta_to} className="mt-2 inline-block">
-            <Btn size="sm" variant="ghost">{nextSetupStep.cta_label} →</Btn>
-          </Link>
+          <Btn size="sm" variant="ghost" className="mt-2" to={nextSetupStep.cta_to}>
+            {nextSetupStep.cta_label} →
+          </Btn>
         </HelpBanner>
       )}
 
@@ -318,7 +324,7 @@ export function ConnectPage() {
           title="Couldn't load your projects"
           icon={<IconAlertTriangle className="h-4 w-4 text-danger-foreground" />}
         >
-          <p className="text-xs">{feedError}</p>
+          <p className="text-xs">{feedErrorText}</p>
           <Btn size="sm" variant="ghost" className="mt-2" onClick={() => projectsFeed.reload()}>
             Retry
           </Btn>

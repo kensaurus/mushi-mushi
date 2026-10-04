@@ -390,7 +390,7 @@ export function McpSetupPanel({
                 <p className="font-medium">{connectionTestResult.message}</p>
                 {!connectionTestResult.ok && (
                   <p className="text-fg-muted">
-                    Run <code className="font-mono bg-surface px-1 rounded">mushi doctor --server</code> for a full diagnostic, or check the Supabase Edge Function logs.
+                    Run <code className="font-mono bg-surface px-1 rounded">mushi doctor</code> for a full diagnostic, or check the Supabase Edge Function logs.
                   </p>
                 )}
                 <p className="text-fg-muted">

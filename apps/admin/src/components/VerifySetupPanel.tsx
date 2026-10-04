@@ -11,6 +11,7 @@ import { CodeInline } from './CodePanel'
 import { apiFetch } from '../lib/supabase'
 import { useSetupStatus, SETUP_STEPS } from '../lib/useSetupStatus'
 import { IconCheck, IconTerminal, IconCopy } from './icons'
+import { DOCTOR_DISPATCH_ONLY, DOCTOR_INGEST_ONLY } from '../lib/cliSetupCommands'
 
 interface PreflightCheck {
   key: string
@@ -121,8 +122,8 @@ export function VerifySetupPanel({
     } catch { /* ignore */ }
   }
 
-  const cliIngest = 'mushi doctor --ingest'
-  const cliDispatch = 'mushi doctor --server'
+  const cliIngest = DOCTOR_INGEST_ONLY
+  const cliDispatch = DOCTOR_DISPATCH_ONLY
   const mcpIngest = 'diagnose_setup (mode=ingest)'
   const mcpDispatch = 'diagnose_setup (mode=dispatch)'
 
