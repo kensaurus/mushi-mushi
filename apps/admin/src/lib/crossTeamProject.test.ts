@@ -79,8 +79,9 @@ describe('resolveTeamForProject', () => {
 describe('urlProjectNeedsTeamCheck', () => {
   beforeEach(() => window.localStorage.clear())
 
-  it('checks only when a team is active and the project is not known to be in it', () => {
-    expect(urlProjectNeedsTeamCheck(PROJECT, null)).toBe(false)
+  it('checks unless the project is known to be in the active team', () => {
+    // Fresh browser: no team yet, so the link must decide it.
+    expect(urlProjectNeedsTeamCheck(PROJECT, null)).toBe(true)
     expect(urlProjectNeedsTeamCheck(PROJECT, ORG_A)).toBe(true)
     rememberProjectTeams([{ id: PROJECT, organizationId: ORG_A }])
     expect(urlProjectNeedsTeamCheck(PROJECT, ORG_A)).toBe(false)

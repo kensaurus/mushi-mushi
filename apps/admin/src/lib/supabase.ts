@@ -149,10 +149,16 @@ function coalesceKey(
 ): string | null {
   if (method !== 'GET' && method !== 'HEAD') return null
   if (body != null) return null
-  const org = scope === 'none' ? 'no-org' : getActiveOrgIdSnapshot() ?? 'no-org'
-  const project = scope === 'project' ? getActiveProjectIdForApi() ?? 'no-project' : 'no-project'
-  return `${method}:${scope}:${org}:${project}:${path}`
+  // The team's project list ignores X-Mushi-Project-Id server-side
+  // (enumerateAccessibleProjectIds), so a `project`-scoped and an
+  // `enumeration`-scoped read of it are the same answer: share one key.
+  const effective = scope === 'project' && PROJECT_BLIND_PATHS.has(path) ? 'enumeration' : scope
+  const org = effective === 'none' ? 'no-org' : getActiveOrgIdSnapshot() ?? 'no-org'
+  const project = effective === 'project' ? getActiveProjectIdForApi() ?? 'no-project' : 'no-project'
+  return `${method}:${effective}:${org}:${project}:${path}`
 }
+
+const PROJECT_BLIND_PATHS: ReadonlySet<string> = new Set(['/v1/admin/projects'])
 
 // ─── Team gate for deep links (A4) ─────────────────────────────────────────
 //

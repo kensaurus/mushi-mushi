@@ -71,11 +71,11 @@ let root: Root
 const seen: Record<string, NavCounts> = {}
 
 /** Fresh module per test: the store is module-level by design. */
-async function renderReaders(ids: string[]) {
+async function renderReaders(ids: string[], slices: string[] | null = null) {
   vi.resetModules()
   const { useNavCounts } = await import('./useNavCounts')
   function Reader({ id }: { id: string }) {
-    seen[id] = useNavCounts(id === 'layout' ? { live: true } : {})
+    seen[id] = useNavCounts(id === 'layout' ? { live: true, slices } : {})
     return null
   }
   await act(async () => {
@@ -99,7 +99,7 @@ afterEach(() => {
 })
 
 describe('useNavCounts', () => {
-  it('two readers share ONE nav-meta request that asks for the counters', async () => {
+  it('only the live owner loads; a second reader shares its ONE request', async () => {
     api.apiFetch.mockResolvedValue({ ok: true, data: navMeta() })
     await renderReaders(['layout', 'ribbon'])
     expect(api.apiFetch).toHaveBeenCalledTimes(1)
@@ -149,12 +149,22 @@ describe('useNavCounts', () => {
     expect(seen.layout.healthIssues).toBe(2)
   })
 
-  it('does not fan out per slice when nav-meta is down (5xx)', async () => {
+  it('asks only for the slices the sidebar renders', async () => {
+    api.apiFetch.mockResolvedValue({ ok: true, data: navMeta() })
+    await renderReaders(['layout'], ['settings', 'dashboard', 'fixes'])
+    expect(api.apiFetch.mock.calls[0][0]).toBe(
+      '/v1/admin/workspace/nav-meta?include=counts&slices=dashboard%2Cfixes%2Csettings',
+    )
+  })
+
+  it('on an outage before any load, stays "not checked" instead of showing zeros', async () => {
     api.apiFetch.mockResolvedValue({ ok: false, error: { code: 'HTTP_ERROR', message: '503: unavailable' } })
     await renderReaders(['layout'])
     expect(api.apiFetch).toHaveBeenCalledTimes(1)
+    // No per-slice fan-out against a struggling API.
     expect(fallback.fetchNavSlicesFallback).not.toHaveBeenCalled()
-    expect(seen.layout.ready).toBe(true)
+    // ready=false: badges, section counts, hero and ribbon all hide.
+    expect(seen.layout.ready).toBe(false)
   })
 
   it('falls back per slice only when the API has no nav-meta route (404)', async () => {

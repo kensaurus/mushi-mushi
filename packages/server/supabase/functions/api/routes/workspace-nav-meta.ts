@@ -131,6 +131,63 @@ export function clearNavMetaCache(): void {
 
 type NavMetaInclude = 'counts' | 'inventory' | 'superadmin'
 
+const NAV_META_SLICE_KEYS = [
+  'contentQuality',
+  'codeHealth',
+  'qaCoverage',
+  'experiments',
+  'lessons',
+  'drift',
+  'anomalies',
+  'iterate',
+  'onboarding',
+  'rewards',
+  'billing',
+  'audit',
+  'intelligence',
+  'releases',
+  'fullstackAudit',
+  'dashboard',
+  'explore',
+  'promptLab',
+  'research',
+  'graph',
+  'inventory',
+  'health',
+  'fixes',
+  'repo',
+  'mcp',
+  'marketplace',
+  'settings',
+  'costs',
+  'sso',
+  'compliance',
+  'storage',
+  'query',
+  'integrations',
+  'featureBoard',
+  'skills',
+  'projects',
+  'members',
+] as const
+
+type NavMetaSliceKey = (typeof NAV_META_SLICE_KEYS)[number]
+
+/**
+ * `null` = no `slices` param: answer every slice (older consoles). An empty
+ * or all-unknown list is a real request for no slices (counts only).
+ */
+export function parseNavMetaSlices(raw: string | undefined): Set<NavMetaSliceKey> | null {
+  if (raw === undefined) return null
+  const known = new Set<string>(NAV_META_SLICE_KEYS)
+  const out = new Set<NavMetaSliceKey>()
+  for (const part of raw.split(',')) {
+    const v = part.trim()
+    if (known.has(v)) out.add(v as NavMetaSliceKey)
+  }
+  return out
+}
+
 export function parseNavMetaInclude(raw: string | undefined): Set<NavMetaInclude> {
   const out = new Set<NavMetaInclude>()
   for (const part of (raw ?? '').split(',')) {
@@ -255,13 +312,20 @@ export function registerWorkspaceNavMetaRoutes(
     const projectId = c.req.header('X-Mushi-Project-Id') ?? c.req.header('x-mushi-project-id')
     const orgId = c.req.header('X-Mushi-Org-Id') ?? c.req.header('x-mushi-org-id')
     const include = parseNavMetaInclude(c.req.query('include'))
+    const wanted = parseNavMetaSlices(c.req.query('slices'))
     const fresh = c.req.query('fresh') === '1'
 
     // Cache only for a verified user: the key must name whose data this is.
     // `include` is part of the key so a counts-less answer never satisfies a
     // request that asked for counts.
     const cacheKey = userId
-      ? [userId, orgId ?? '', projectId ?? '', [...include].sort().join('+')].join('|')
+      ? [
+          userId,
+          orgId ?? '',
+          projectId ?? '',
+          [...include].sort().join('+'),
+          wanted ? [...wanted].sort().join('+') : '*',
+        ].join('|')
       : null
     if (cacheKey && !fresh) {
       const cached = readCache(cacheKey, startedAt)
@@ -280,45 +344,52 @@ export function registerWorkspaceNavMetaRoutes(
       ...(orgId ? { 'X-Mushi-Org-Id': orgId } : {}),
     }
 
-    const paths = [
-      '/v1/admin/content-quality/stats',
-      '/v1/admin/code-health/stats',
-      '/v1/admin/experiments/stats',
-      '/v1/admin/lessons/stats',
-      '/v1/admin/drift/stats',
-      '/v1/admin/anomalies/stats',
-      '/v1/admin/pdca/stats',
-      '/v1/admin/onboarding/stats',
-      '/v1/admin/rewards/stats',
-      '/v1/admin/billing/stats',
-      '/v1/admin/audit/stats',
-      '/v1/admin/intelligence/stats',
-      '/v1/admin/releases/stats',
-      '/v1/admin/fullstack-audit/stats',
-      '/v1/admin/dashboard/stats',
-      '/v1/admin/explore/stats',
-      '/v1/admin/prompt-lab/stats',
-      '/v1/admin/research/stats',
-      '/v1/admin/graph/stats',
-      '/v1/admin/inventory/stats',
-      '/v1/admin/health/stats',
-      '/v1/admin/fixes/stats',
-      '/v1/admin/repo/stats',
-      '/v1/admin/mcp/stats',
-      '/v1/admin/marketplace/stats',
-      '/v1/admin/settings/stats',
-      '/v1/admin/sso/stats',
-      '/v1/admin/compliance/stats',
-      '/v1/admin/storage/stats',
-      '/v1/admin/query/stats',
-      '/v1/admin/integrations/stats',
-      '/v1/admin/feature-board/stats',
-      '/v1/admin/skills/stats',
-      ...(projectId ? [`/v1/admin/projects/${encodeURIComponent(projectId)}/qa-coverage/stats`] : []),
-      ...(projectId ? [`/v1/admin/costs/stats?project_id=${encodeURIComponent(projectId)}`] : []),
-      '/v1/admin/projects/stats',
-      ...(orgId ? [`/v1/org/${encodeURIComponent(orgId)}/members/stats`] : []),
+    // Slice key → the stats route that answers it. `?slices=a,b` limits the
+    // fan-out to what the caller renders (the Quick and Beginner sidebars
+    // show ~10 badges, not 45); no `slices` param means every slice, which
+    // keeps older console builds working.
+    const sliceRoutes: Array<[NavMetaSliceKey, string | null]> = [
+      ['contentQuality', '/v1/admin/content-quality/stats'],
+      ['codeHealth', '/v1/admin/code-health/stats'],
+      ['experiments', '/v1/admin/experiments/stats'],
+      ['lessons', '/v1/admin/lessons/stats'],
+      ['drift', '/v1/admin/drift/stats'],
+      ['anomalies', '/v1/admin/anomalies/stats'],
+      ['iterate', '/v1/admin/pdca/stats'],
+      ['onboarding', '/v1/admin/onboarding/stats'],
+      ['rewards', '/v1/admin/rewards/stats'],
+      ['billing', '/v1/admin/billing/stats'],
+      ['audit', '/v1/admin/audit/stats'],
+      ['intelligence', '/v1/admin/intelligence/stats'],
+      ['releases', '/v1/admin/releases/stats'],
+      ['fullstackAudit', '/v1/admin/fullstack-audit/stats'],
+      ['dashboard', '/v1/admin/dashboard/stats'],
+      ['explore', '/v1/admin/explore/stats'],
+      ['promptLab', '/v1/admin/prompt-lab/stats'],
+      ['research', '/v1/admin/research/stats'],
+      ['graph', '/v1/admin/graph/stats'],
+      ['inventory', '/v1/admin/inventory/stats'],
+      ['health', '/v1/admin/health/stats'],
+      ['fixes', '/v1/admin/fixes/stats'],
+      ['repo', '/v1/admin/repo/stats'],
+      ['mcp', '/v1/admin/mcp/stats'],
+      ['marketplace', '/v1/admin/marketplace/stats'],
+      ['settings', '/v1/admin/settings/stats'],
+      ['sso', '/v1/admin/sso/stats'],
+      ['compliance', '/v1/admin/compliance/stats'],
+      ['storage', '/v1/admin/storage/stats'],
+      ['query', '/v1/admin/query/stats'],
+      ['integrations', '/v1/admin/integrations/stats'],
+      ['featureBoard', '/v1/admin/feature-board/stats'],
+      ['skills', '/v1/admin/skills/stats'],
+      ['qaCoverage', projectId ? `/v1/admin/projects/${encodeURIComponent(projectId)}/qa-coverage/stats` : null],
+      ['costs', projectId ? `/v1/admin/costs/stats?project_id=${encodeURIComponent(projectId)}` : null],
+      ['projects', '/v1/admin/projects/stats'],
+      ['members', orgId ? `/v1/org/${encodeURIComponent(orgId)}/members/stats` : null],
     ]
+    const paths: string[] = sliceRoutes
+      .filter(([key, path]) => path !== null && (!wanted || wanted.has(key)))
+      .map(([, path]) => path as string)
 
     // Sidebar per-item counters, answered by the same routes the console
     // used to call one by one.

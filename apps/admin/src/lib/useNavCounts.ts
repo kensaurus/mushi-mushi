@@ -160,11 +160,14 @@ function navMetaPath(opts: {
   inventoryEnabled: boolean
   isSuperAdmin: boolean
   fresh: boolean
+  /** Slice keys to compute; null = all (Advanced shows every badge). */
+  slices: readonly string[] | null
 }): string {
   const include = ['counts']
   if (opts.inventoryEnabled) include.push('inventory')
   if (opts.isSuperAdmin) include.push('superadmin')
   const params = new URLSearchParams({ include: include.join(',') })
+  if (opts.slices) params.set('slices', [...opts.slices].sort().join(','))
   if (opts.fresh) params.set('fresh', '1')
   return `/v1/admin/workspace/nav-meta?${params.toString()}`
 }
@@ -225,6 +228,7 @@ interface LoadContext {
   key: string
   inventoryEnabled: boolean
   isSuperAdmin: boolean
+  slices: readonly string[] | null
 }
 
 let snapshot: NavCounts = INITIAL
@@ -251,7 +255,12 @@ async function runLoad(ctx: LoadContext, fresh: boolean): Promise<void> {
   inflightKey = ctx.key
   try {
     const res = await apiFetch<WorkspaceNavMetaResponse>(
-      navMetaPath({ inventoryEnabled: ctx.inventoryEnabled, isSuperAdmin: ctx.isSuperAdmin, fresh }),
+      navMetaPath({
+        inventoryEnabled: ctx.inventoryEnabled,
+        isSuperAdmin: ctx.isSuperAdmin,
+        slices: ctx.slices,
+        fresh,
+      }),
       fresh ? { cache: 'no-store' } : undefined,
     )
     if (seq !== loadSeq) return
@@ -295,11 +304,14 @@ async function runLoad(ctx: LoadContext, fresh: boolean): Promise<void> {
             : null,
         }),
       )
-    } else {
-      // Outage: keep whatever was shown, but mark the hook loaded so
-      // consumers stop waiting. Absent badges read as "not checked", never 0.
-      publish({ ...snapshot, ready: true })
+    } else if (!snapshot.ready) {
+      // Outage before anything loaded: stay not-ready. Every consumer
+      // (badges, section counts, page hero, pipeline ribbon) treats that as
+      // "not checked" — publishing ready with the all-zero initial snapshot
+      // would show "0 failed / all clear" as a fact.
+      publish({ ...snapshot })
     }
+    // Outage after a good load: keep the last real numbers on screen.
     loadedKey = ctx.key
   } finally {
     if (seq === loadSeq) inflightKey = null
@@ -323,28 +335,38 @@ function requestLoad(ctx: LoadContext, fresh: boolean): void {
 }
 
 /**
- * Sidebar counters, shared across every caller. `live` subscribes to
- * realtime and should be set by exactly one long-lived owner (Layout); other
- * readers just share the snapshot.
+ * Sidebar counters, shared across every caller.
+ *
+ * The `live` caller (Layout, exactly one) owns loading: it says which slices
+ * the visible sidebar and page need (`slices`, null = all) and subscribes to
+ * realtime. Every other caller only reads the shared snapshot, so a second
+ * reader never starts a second request set.
  */
-export function useNavCounts(opts: { live?: boolean } = {}): NavCounts {
+export function useNavCounts(
+  opts: { live?: boolean; slices?: readonly string[] | null } = {},
+): NavCounts {
   const counts = useSyncExternalStore(subscribe, () => snapshot, () => INITIAL)
   const { isSuperAdmin, has: hasFeature } = useEntitlements()
   const inventoryEnabled = hasFeature('inventory_v2')
   const activeProjectSignal = useActiveProjectSignal()
   const activeOrgSignal = useActiveOrgSignal()
-  const key = `${activeOrgSignal}|${activeProjectSignal}|${inventoryEnabled ? 1 : 0}|${isSuperAdmin ? 1 : 0}`
+  const live = opts.live === true
+  const slices = opts.slices ?? null
+  const slicesKey = slices ? [...slices].sort().join(',') : '*'
+  const key = `${activeOrgSignal}|${activeProjectSignal}|${inventoryEnabled ? 1 : 0}|${isSuperAdmin ? 1 : 0}|${slicesKey}`
 
   useEffect(() => {
-    requestLoad({ key, inventoryEnabled, isSuperAdmin }, false)
-  }, [key, inventoryEnabled, isSuperAdmin])
+    if (!live) return
+    requestLoad({ key, inventoryEnabled, isSuperAdmin, slices }, false)
+    // `slices` is captured through `key` (slicesKey).
+  }, [live, key, inventoryEnabled, isSuperAdmin])
 
   useRealtimeReload(
     NAV_COUNT_TABLES,
     () => {
-      requestLoad({ key, inventoryEnabled, isSuperAdmin }, true)
+      requestLoad({ key, inventoryEnabled, isSuperAdmin, slices }, true)
     },
-    { debounceMs: 1500, enabled: opts.live === true },
+    { debounceMs: 1500, enabled: live },
   )
 
   return counts
