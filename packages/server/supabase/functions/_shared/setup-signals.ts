@@ -353,3 +353,34 @@ export async function loadProjectSetupSignals(
   }
   return out
 }
+
+/** A probe older than this no longer proves a connection works (matches the console card). */
+export const CONNECTION_VERIFIED_FRESH_MS = 7 * 24 * 60 * 60 * 1000
+
+export type PlatformConnectionVerdict = 'working' | 'down' | 'attention'
+
+/**
+ * One configured platform connection → the verdict the /integrations banner
+ * counts. Mirrors the console's ConnectionStatus rules so the banner can never
+ * say "healthy" next to a card that says "Needs attention":
+ *   - a failing probe is down;
+ *   - no probe, or a probe older than 7 days, needs attention (not checked);
+ *   - a connection that receives events (Sentry alerts) needs at least one
+ *     accepted delivery — a passing API probe alone is only half the loop.
+ */
+export function classifyPlatformConnection(input: {
+  probeStatus: string | null | undefined
+  probeCheckedAt: string | null | undefined
+  needsInbound?: boolean
+  inboundAccepted?: boolean
+  now?: number
+}): PlatformConnectionVerdict {
+  const now = input.now ?? Date.now()
+  if (input.probeStatus === 'down' || input.probeStatus === 'degraded') return 'down'
+  const at = input.probeCheckedAt ? Date.parse(input.probeCheckedAt) : NaN
+  if (input.probeStatus !== 'ok' || !Number.isFinite(at) || now - at > CONNECTION_VERIFIED_FRESH_MS) {
+    return 'attention'
+  }
+  if (input.needsInbound && !input.inboundAccepted) return 'attention'
+  return 'working'
+}
