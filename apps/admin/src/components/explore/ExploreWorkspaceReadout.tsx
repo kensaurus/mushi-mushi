@@ -11,10 +11,11 @@ import { IconGlobe, IconHealth } from '../icons'
 
 export interface ExploreWorkspaceReadoutProps {
   projectId: string
-  scopePaths?: string[]
+  /** Saved scope; null = not loaded yet (never shown as "Full repo"). */
+  scopePaths: string[] | null
 }
 
-export function ExploreWorkspaceReadout({ projectId, scopePaths = [] }: ExploreWorkspaceReadoutProps) {
+export function ExploreWorkspaceReadout({ projectId, scopePaths }: ExploreWorkspaceReadoutProps) {
   const settingsUrl = `${RESOLVED_EXTERNAL_API_URL}/v1/admin/projects/${projectId}/codebase/settings`
   const analyzeUrl = `${RESOLVED_EXTERNAL_API_URL}/v1/admin/projects/${projectId}/codebase/analyze`
 
@@ -28,7 +29,12 @@ export function ExploreWorkspaceReadout({ projectId, scopePaths = [] }: ExploreW
     },
     {
       label: 'Index scope paths',
-      value: scopePaths.length > 0 ? scopePaths.join(', ') : 'Full repo (default)',
+      value:
+        scopePaths == null
+          ? 'Not loaded yet'
+          : scopePaths.length > 0
+            ? scopePaths.join(', ')
+            : 'Full repo (default)',
       wrap: true,
     },
   ]

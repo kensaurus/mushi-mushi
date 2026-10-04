@@ -439,8 +439,21 @@ export async function checkDiagnosisQuota(
   const { start, end } = periodWindow()
   const periodResetsAt = end.toISOString()
 
-  const [{ data: sub }, { data: projectRow }, { count: diagCount, error: diagErr }] =
-    await Promise.all([
+  const diagnosesInPeriod = () =>
+    db
+      .from('usage_events')
+      .select('id', { count: 'exact', head: true })
+      .eq('project_id', projectId)
+      .eq('event_name', 'diagnoses')
+      .gte('occurred_at', start.toISOString())
+      .lt('occurred_at', end.toISOString())
+
+  const [
+    { data: sub },
+    { data: projectRow },
+    { count: allCount, error: allErr },
+    { count: shadowCount, error: shadowErr },
+  ] = await Promise.all([
       db
         .from('billing_subscriptions')
         .select('status, plan_id, current_period_end, monthly_spend_cap_usd_override')
@@ -454,18 +467,16 @@ export async function checkDiagnosisQuota(
         .select('organization_id, organizations(billing_mode, plan_id)')
         .eq('id', projectId)
         .maybeSingle(),
-      // Count real diagnoses only (exclude Phase-1 shadow rows).
-      // The shadow flag is stored in metadata->>'shadow'. We use a filter
-      // expression that treats absent key as non-shadow.
-      db
-        .from('usage_events')
-        .select('id', { count: 'exact', head: true })
-        .eq('project_id', projectId)
-        .eq('event_name', 'diagnoses')
-        .not('metadata->>shadow', 'eq', 'true')
-        .gte('occurred_at', start.toISOString())
-        .lt('occurred_at', end.toISOString()),
+      // Real diagnoses = all − Phase-1 shadow rows. A single
+      // `.not('metadata->>shadow','eq','true')` dropped every row WITHOUT a
+      // shadow key (NULL <> 'true' is NULL in SQL), so it counted 0 of 116
+      // real diagnoses and the quota and spend cap never applied. Same rule
+      // as billing-usage-counts.ts, so the gate and Billing agree.
+      diagnosesInPeriod(),
+      diagnosesInPeriod().eq('metadata->>shadow', 'true'),
     ])
+  const diagErr = allErr ?? shadowErr
+  const diagCount = Math.max(0, (allCount ?? 0) - (shadowCount ?? 0))
 
   const plan = await planFromProjectRows(sub, projectRow, COMP_OVERRIDES_FREE)
 

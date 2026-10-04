@@ -990,7 +990,7 @@ export const COPY: CopyRegistry = {
           'Audit which reporter tokens were notified for a given report',
           'Debug stale unread rows when client polling stops',
         ],
-        howToUse: 'Filter by type or unread, expand payloads to inspect JSON, mark read when verified. Requires reporter_notifications_enabled in Settings.',
+        howToUse: 'Filter by type or unread, expand payloads to inspect JSON, mark read when verified. Reporter updates must be on (Setup tab).',
       },
     },
     '/billing': {
@@ -1189,7 +1189,7 @@ export const COPY: CopyRegistry = {
       actionLabels: {
         setup: 'Continue setup',
         triage: 'Review bugs',
-        failed: 'View failed fixes',
+        failed: 'See why it stopped',
         health: 'View health',
         verify: 'Send test report',
         healthy: 'View loop',
@@ -1380,7 +1380,7 @@ export const COPY: CopyRegistry = {
         calls: 'AI calls',
         errors: 'Error rate',
         fallbacks: 'Fallback rate',
-        latency: 'Speed p50 / p95',
+        latency: 'Speed avg / p95',
         cron: 'Jobs OK',
         lastCall: 'Last call',
       },
@@ -1403,7 +1403,7 @@ export const COPY: CopyRegistry = {
         whatIsIt:
           'Real-time vitals for every LLM call Mushi makes — how fast it responds, how often it fails, and how much each call costs you.',
         useCases: [
-          'Catch a slow-down before users notice (p50 / p95 latency trend)',
+          'Catch a slow-down before users notice (average / p95 latency trend)',
           'Spot a model outage early (error rate spike)',
           'Watch your daily LLM spend so you don\u2019t blow your budget',
         ],
@@ -1469,7 +1469,7 @@ export const COPY: CopyRegistry = {
     '/settings': {
       title: 'Tune your project',
       description:
-        'Status banner first — General for bug-sorting knobs, LLM keys for your own API keys, Health for a smoke test.',
+        'The banner says what to do first. General sets alerts and bug sorting, Your AI keys holds your own keys, Health check sends a test bug.',
       sections: { snapshot: 'Summary' },
       statLabels: {
         byok: 'API keys',
@@ -1478,30 +1478,23 @@ export const COPY: CopyRegistry = {
         classifier: 'Classifier',
       },
       actionLabels: {
-        byok: 'Fix LLM keys',
+        byok: 'Fix keys',
         health: 'Open Health',
         test: 'Test keys',
         integrations: 'Integrations',
-        pipeline: 'Run smoke test',
-      },
-      tabLabels: {
-        general: 'General',
-        byok: 'LLM keys',
-        firecrawl: 'Firecrawl',
-        health: 'Health',
-        dev: 'Dev tools',
+        pipeline: 'Send a test bug',
       },
       help: {
         title: 'About settings',
         whatIsIt:
-          'Project settings for the active app: your own LLM keys (optional), how bugs get classified, dedup sensitivity, widget copy, and developer toggles.',
+          'Settings for the active app: where bug alerts go, your own AI keys (optional), how bugs are sorted and grouped, the feedback widget, and developer options.',
         useCases: [
           'Bring your own Anthropic / OpenAI keys so cost stays on your bill',
           'Run Health → Send test report before wiring production SDK traffic',
           'Tune the classifier model and dedup threshold after false positives in review',
         ],
         howToUse:
-          'General saves Slack/Sentry and classifier fields. LLM keys tab tests your keys. Health sends a test report through the full path. Changes save immediately on Save.',
+          'Each tab is a list. Every row says what it does, whether it works, and the one thing to do next. Changes apply when you press Save.',
       },
     },
     '/onboarding': {
@@ -1701,7 +1694,7 @@ export const COPY: CopyRegistry = {
     },
     '/settings': {
       title: 'Settings',
-      description: 'Project keys, BYOK vault, developer toggles.',
+      description: 'Your AI keys, alerts, and developer options.',
     },
     '/onboarding': {
       title: 'Setup wizard',

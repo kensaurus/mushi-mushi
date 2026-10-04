@@ -11,18 +11,22 @@ import { apiFetch, apiFetchMutate } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
 import { publishToast, type DiagramPublication, type DiagramPublishPreview, type StaticPageStatus } from '../../lib/repoUnderstanding'
 import { Btn, Card, Checkbox, CopyButton } from '../ui'
+import { ConfirmDialog } from '../ConfirmDialog'
 
 interface Props {
   projectId: string
   publication: DiagramPublication
   onChanged: () => void
+  /** False for members and viewers: the server refuses publish and unpublish. */
+  canManage?: boolean
 }
 
-export function ExploreDiagramPublishCard({ projectId, publication, onChanged }: Props) {
+export function ExploreDiagramPublishCard({ projectId, publication, onChanged, canManage = true }: Props) {
   const toast = useToast()
   const [preview, setPreview] = useState<DiagramPublishPreview | null>(null)
   const [confirmed, setConfirmed] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [confirmUnpublish, setConfirmUnpublish] = useState(false)
 
   const base = `/v1/admin/projects/${projectId}/codebase/diagram`
 
@@ -70,6 +74,7 @@ export function ExploreDiagramPublishCard({ projectId, publication, onChanged }:
     setBusy(true)
     const res = await apiFetchMutate<{ published: false }>(`${base}/publish`, { method: 'DELETE' })
     setBusy(false)
+    setConfirmUnpublish(false)
     if (!res.ok) {
       toast.error('Could not unpublish', res.error?.message)
       return
@@ -128,7 +133,13 @@ export function ExploreDiagramPublishCard({ projectId, publication, onChanged }:
           </div>
         )}
 
-        {!preview && (
+        {!canManage && (
+          <p className="text-xs text-fg-muted" data-testid="diagram-publish-owner-only">
+            Only a project owner or admin can publish or unpublish this page.
+          </p>
+        )}
+
+        {!preview && canManage && (
           <div className="flex flex-wrap gap-2">
             {(!publication.published || publication.outdated) && (
               <Btn size="sm" variant="ghost" onClick={() => void loadPreview()} loading={busy}>
@@ -136,7 +147,7 @@ export function ExploreDiagramPublishCard({ projectId, publication, onChanged }:
               </Btn>
             )}
             {publication.published && (
-              <Btn size="sm" variant="danger" onClick={() => void unpublish()} loading={busy}>
+              <Btn size="sm" variant="danger" onClick={() => setConfirmUnpublish(true)} loading={busy}>
                 Unpublish
               </Btn>
             )}
@@ -208,6 +219,17 @@ export function ExploreDiagramPublishCard({ projectId, publication, onChanged }:
           </div>
         )}
       </Card>
+      {confirmUnpublish && publication.published ? (
+        <ConfirmDialog
+          title="Take the public page offline?"
+          body="The page, its Markdown copy and the README badge stop working for everyone with the link. You can publish again later."
+          confirmLabel="Unpublish"
+          tone="danger"
+          loading={busy}
+          onCancel={() => setConfirmUnpublish(false)}
+          onConfirm={unpublish}
+        />
+      ) : null}
     </section>
   )
 }

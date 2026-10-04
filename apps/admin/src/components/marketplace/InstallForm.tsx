@@ -6,7 +6,7 @@
  */
 
 import { Btn, Input, Section } from '../ui'
-import type { MarketplacePlugin } from './types'
+import { PLUGIN_SECRET_MIN_LENGTH, type MarketplacePlugin } from './types'
 import { httpsUrl, token } from '../../lib/validators'
 
 interface Props {
@@ -55,7 +55,7 @@ export function InstallForm({
         helpId="marketplace.plugin_signing_secret"
         value={webhookSecret}
         onChange={(e) => onWebhookSecretChange(e.target.value)}
-        validate={token({ minLength: 32, optional: false })}
+        validate={token({ minLength: PLUGIN_SECRET_MIN_LENGTH, optional: false })}
       />
       <Input
         label="Subscribed events (comma-separated, * for all)"

@@ -28,6 +28,10 @@ import { useState, useEffect } from 'react'
 import { Btn, Input } from '../ui'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
+import { describeApiFailure } from '../../lib/humanizeApiError'
+import { ConfirmDialog } from '../ConfirmDialog'
+import { ConnectionStatus } from '../ui/ConnectionStatus'
+import { connectionFromProbe, newestProbe, probeFromTestSend, type ProbeLike } from '../../lib/integrationConnection'
 import { discordWebhookUrl } from '../../lib/validators'
 import { HealthSparkline } from './HealthSparkline'
 import type { HealthRow } from './types'
@@ -67,6 +71,8 @@ const validateDiscordUrl = discordWebhookUrl({ optional: true })
 
 interface Props {
   projectId: string | null
+  /** Re-read the settings stats after a save or remove so every card agrees. */
+  onChanged?: () => void
   discordConfigured: boolean
   latestProbe?: HealthRow
   sparkline?: HealthRow[]
@@ -79,6 +85,7 @@ export function DiscordIntegrationCard({
   discordConfigured,
   latestProbe,
   sparkline = [],
+  onChanged,
 }: Props) {
   const toast = useToast()
 
@@ -88,6 +95,8 @@ export function DiscordIntegrationCard({
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
   const [clearing, setClearing] = useState(false)
+  const [confirmRemove, setConfirmRemove] = useState(false)
+  const [localProbe, setLocalProbe] = useState<ProbeLike | undefined>(undefined)
 
   // Sync if parent re-fetches and the prop changes
   useEffect(() => { setConnected(discordConfigured) }, [discordConfigured])
@@ -121,8 +130,10 @@ export function DiscordIntegrationCard({
         toast.success('Discord webhook saved — test it below.')
         setWebhookUrl('')
         setUrlError(null)
+        onChanged?.()
       } else {
-        toast.error(res.error?.message ?? 'Could not save Discord webhook URL.')
+        const t = describeApiFailure(res.error, 'Could not save the Discord webhook')
+        toast.error(t.title, t.description)
       }
     } finally {
       setSaving(false)
@@ -140,9 +151,15 @@ export function DiscordIntegrationCard({
         { method: 'POST' },
       )
       if (res.ok) {
+        setLocalProbe(probeFromTestSend(true, null))
         toast.success('Test message sent to Discord!')
       } else {
-        toast.error(translateDiscordTestError(res.error?.message ?? ''))
+        const reason =
+          res.error?.code === 'NO_WEBHOOK_CONFIGURED'
+            ? describeApiFailure(res.error, '').description
+            : translateDiscordTestError(res.error?.message ?? '')
+        setLocalProbe(probeFromTestSend(false, reason))
+        toast.error('Discord test failed', reason)
       }
     } catch {
       toast.error('Could not reach the Discord test endpoint — check your connection.')
@@ -163,9 +180,12 @@ export function DiscordIntegrationCard({
       })
       if (res.ok) {
         setConnected(false)
+        setConfirmRemove(false)
         toast.success('Discord webhook removed.')
+        onChanged?.()
       } else {
-        toast.error('Could not remove Discord webhook.')
+        const t = describeApiFailure(res.error, 'Could not remove the Discord webhook')
+        toast.error(t.title, t.description)
       }
     } finally {
       setClearing(false)
@@ -174,8 +194,22 @@ export function DiscordIntegrationCard({
 
   // ── Render ────────────────────────────────────────────────────────────────
 
+  // Webhook channels are only verified by a test send: a check holds 30 days.
+  const probe = newestProbe(latestProbe, localProbe)
+  const probed = connectionFromProbe({ configured: connected, probe, staleAfterMs: 30 * 24 * 60 * 60 * 1000 })
+  const connection =
+    probed.state === 'checking' ? { ...probed, detail: 'Webhook saved, but no test message sent yet.' } : probed
+  const connectionAction =
+    connection.state === 'not_connected'
+      ? { label: 'Add webhook URL', onClick: () => document.getElementById('discord-webhook-url')?.focus() }
+      : connection.state === 'working'
+        ? undefined
+        : probe?.status === 'down' || probe?.status === 'degraded'
+          ? { label: 'Replace webhook URL', onClick: () => document.getElementById('discord-webhook-url')?.focus() }
+          : { label: 'Send test', onClick: () => void handleTest() }
+
   return (
-    <div className="rounded-xl border border-edge-subtle bg-surface p-5 space-y-4">
+    <div id="integrations-discord" className="rounded-xl border border-edge-subtle bg-surface p-5 space-y-4 scroll-mt-chrome">
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-center gap-3 min-w-0">
@@ -185,13 +219,6 @@ export function DiscordIntegrationCard({
           </div>
           <div className="min-w-0">
             <h3 className="text-sm font-semibold text-fg">Discord</h3>
-            {connected ? (
-              <p className="text-xs text-ok truncate">Webhook connected — receiving report alerts</p>
-            ) : (
-              <p className="text-xs text-fg-muted truncate">
-                Not connected — paste an incoming webhook URL to enable alerts
-              </p>
-            )}
           </div>
         </div>
 
@@ -205,7 +232,7 @@ export function DiscordIntegrationCard({
             </span>
           )}
 
-          {connected && (
+          {connected && connectionAction?.label !== 'Send test' && (
             <Btn
               type="button"
               variant="ghost"
@@ -220,22 +247,27 @@ export function DiscordIntegrationCard({
         </div>
       </div>
 
-      {/* Connected state — show clear control */}
+      <div title={probed.raw && probed.raw !== connection.detail ? probed.raw : undefined}>
+        <ConnectionStatus
+          state={testing ? 'checking' : connection.state}
+          label={testing ? 'Sending a test…' : undefined}
+          detail={testing ? undefined : connection.detail}
+          action={testing ? undefined : connectionAction}
+        />
+      </div>
+
+      {/* Saved webhook — remove control */}
       {connected && (
-        <div className="flex items-center justify-between gap-3 rounded-lg border border-ok/30 bg-ok-muted/50 px-3 py-2">
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="shrink-0 text-ok-foreground text-sm" aria-hidden>✓</span>
-            <p className="text-xs font-medium text-ok-foreground">Discord webhook active</p>
-          </div>
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-edge-subtle px-3 py-2">
+          <p className="text-xs text-fg-secondary min-w-0">An incoming webhook URL is saved.</p>
           <Btn
             type="button"
             variant="danger"
             size="sm"
-            onClick={() => void handleClear()}
-            loading={clearing}
+            onClick={() => setConfirmRemove(true)}
             className="shrink-0"
           >
-            {clearing ? 'Removing…' : 'Remove'}
+            Remove
           </Btn>
         </div>
       )}
@@ -284,6 +316,21 @@ export function DiscordIntegrationCard({
             <li>Fix merged / deployed events (when plugins enabled)</li>
           </ul>
         </div>
+      )}
+
+      {confirmRemove && (
+        <ConfirmDialog
+          title="Remove the Discord webhook?"
+          body="Mushi stops posting to this Discord channel. The URL can't be shown again, so you'll need to copy it from Discord to reconnect."
+          confirmLabel="Remove webhook"
+          cancelLabel="Keep it"
+          tone="danger"
+          loading={clearing}
+          onConfirm={() => void handleClear()}
+          onCancel={() => {
+            if (!clearing) setConfirmRemove(false)
+          }}
+        />
       )}
     </div>
   )

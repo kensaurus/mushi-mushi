@@ -14,10 +14,7 @@
  */
 
 import { useState } from 'react'
-import { Card } from '../../components/ui'
-import { Section, Btn, Input, Callout } from '../ui'
-import { ConnectionStatus } from '../ConnectionStatus'
-import { SettingsCard } from './SettingsPanelLayout'
+import { Btn, Input, Callout } from '../ui'
 import {
   checkEnv,
   saveAndApplyInstanceConfig,
@@ -83,109 +80,80 @@ export function BackendModePanel() {
       (draftUrl !== (current.supabaseUrl ?? '') || draftKey !== (current.supabaseAnonKey ?? '')))
 
   return (
-    <Section title="Backend">
-      <div className="space-y-4">
-        {isOverridden && (
-          <Callout tone="info" label="Runtime override active">
-            Backend is configured from a saved localStorage preference, not the build-time .env.
-            {' '}
-            <button
-              type="button"
-              onClick={handleReset}
-              className="underline text-accent-foreground hover:text-accent"
-            >
-              Reset to build defaults
-            </button>
-          </Callout>
-        )}
-
-        {/* Mode selector */}
-        <div className="flex gap-2">
-          <ModeCard
-            active={draftMode === 'cloud'}
-            onClick={() => setDraftMode('cloud')}
-            title="Mushi Cloud"
-            badge="Paid"
-            description="Reports, classification, and the fix-worker run on Mushi Mushi Cloud. No Supabase setup required."
-          />
-          <ModeCard
-            active={draftMode === 'self-hosted'}
-            onClick={() => setDraftMode('self-hosted')}
-            title="Self-hosted"
-            badge="Free"
-            description="Deploy the Mushi backend on your own Supabase project. Full BYOK — no vendor lock-in."
-          />
-        </div>
-
-        {/* Self-hosted credentials form */}
-        {draftMode === 'self-hosted' && (
-          <Card  className="space-y-3 p-3">
-            <p className="text-xs text-fg-muted">
-              Point to your own Supabase project. These values replace{' '}
-              <code className="font-mono text-2xs">VITE_SUPABASE_URL</code> /{' '}
-              <code className="font-mono text-2xs">VITE_SUPABASE_ANON_KEY</code> at runtime.
-            </p>
-            <Input
-              label="Supabase project URL"
-              placeholder="https://xxxx.supabase.co"
-              value={draftUrl}
-              onChange={e => setDraftUrl(e.target.value)}
-              error={urlErr}
-            />
-            <Input
-              label="Supabase anon key"
-              placeholder="eyJhbGci..."
-              value={draftKey}
-              onChange={e => setDraftKey(e.target.value)}
-              error={keyErr}
-            />
-            <p className="text-2xs text-fg-faint">
-              The anon key is public by design — it grants only RLS-gated access.
-              The service-role key stays server-side in your edge function secrets.
-            </p>
-          </Card>
-        )}
-
-        {/* Cloud note */}
-        {draftMode === 'cloud' && current.mode !== 'cloud' && (
-          <Callout tone="warn" label="Switching to Cloud">
-            Your reports will be sent to Mushi Cloud. Make sure you have a cloud account and
-            the project credentials match.
-          </Callout>
-        )}
-
-        <div className="flex items-center gap-2">
-          <Btn
-            variant="primary"
-            size="sm"
-            onClick={handleSave}
-            disabled={!isDirty}
+    <div className="space-y-3">
+      {isOverridden && (
+        <Callout tone="info" label="Saved in this browser">
+          This browser uses a backend you picked here, not the one the console was built with.{' '}
+          <button
+            type="button"
+            onClick={handleReset}
+            className="underline text-accent-foreground hover:text-accent"
           >
-            Save and reload
-          </Btn>
-          {isDirty && (
-            <span className="text-2xs text-fg-faint">Page reloads to apply the new backend URL.</span>
-          )}
-        </div>
+            Go back to the default
+          </button>
+        </Callout>
+      )}
 
-        {/* Live health check for the current (not draft) backend */}
-        <div className="pt-2">
-          <p className="text-xs text-fg-muted mb-2">
-            Current backend:{' '}
-            <span className={`font-medium ${current.mode === 'cloud' ? 'text-brand' : 'text-ok'}`}>
-              {current.mode === 'cloud' ? 'Mushi Cloud' : 'Self-hosted'}
-            </span>
-            {current.mode === 'self-hosted' && (
-              <span className="text-2xs font-mono ml-1 text-fg-faint">({current.supabaseUrl})</span>
-            )}
-          </p>
-          <SettingsCard className="p-4">
-            <ConnectionStatus />
-          </SettingsCard>
-        </div>
+      <div className="flex flex-col gap-2 sm:flex-row" role="radiogroup" aria-label="Where your data is stored">
+        <ModeCard
+          active={draftMode === 'cloud'}
+          onClick={() => setDraftMode('cloud')}
+          title="Mushi Cloud"
+          badge="Paid"
+          description="Reports, triage and fixes run on Mushi's servers. Nothing to set up."
+        />
+        <ModeCard
+          active={draftMode === 'self-hosted'}
+          onClick={() => setDraftMode('self-hosted')}
+          title="Self-hosted"
+          badge="Free"
+          description="Run the Mushi backend on your own Supabase project."
+        />
       </div>
-    </Section>
+
+      {draftMode === 'self-hosted' && (
+        <div className="space-y-3">
+          <Input
+            label="Supabase project URL"
+            placeholder="https://xxxx.supabase.co"
+            value={draftUrl}
+            onChange={e => setDraftUrl(e.target.value)}
+            error={urlErr}
+          />
+          <Input
+            label="Supabase anon key"
+            placeholder="eyJhbGci..."
+            value={draftKey}
+            onChange={e => setDraftKey(e.target.value)}
+            error={keyErr}
+          />
+          <p className="text-xs text-fg-muted">
+            The anon key is meant to be public; your data stays behind row-level security. The service-role key stays in your
+            edge function secrets.
+          </p>
+        </div>
+      )}
+
+      {draftMode === 'cloud' && current.mode !== 'cloud' && (
+        <Callout tone="warn" label="Switching to Mushi Cloud">
+          New reports go to Mushi Cloud. Make sure you have a Cloud account for this project first.
+        </Callout>
+      )}
+
+      <div className="flex flex-wrap items-center gap-2">
+        <Btn variant="primary" size="sm" onClick={handleSave} disabled={!isDirty}>
+          Save and reload
+        </Btn>
+        {isDirty && <span className="text-xs text-fg-muted">The page reloads to use the new backend.</span>}
+      </div>
+    </div>
   )
+}
+
+/** "Mushi Cloud" or "Self-hosted (https://…)", for the row status line. */
+export function currentBackendLabel(): string {
+  const current = checkEnv()
+  return current.mode === 'cloud' ? 'Mushi Cloud' : `Self-hosted (${current.supabaseUrl})`
 }
 
 interface ModeCardProps {
@@ -200,6 +168,8 @@ function ModeCard({ active, onClick, title, badge, description }: ModeCardProps)
   return (
     <button
       type="button"
+      role="radio"
+      aria-checked={active}
       onClick={onClick}
       className={[
         'flex-1 rounded-md border p-3 text-left transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-1 focus-visible:ring-offset-surface',
@@ -209,7 +179,7 @@ function ModeCard({ active, onClick, title, badge, description }: ModeCardProps)
       ].join(' ')}
     >
       <div className="flex items-center gap-2 mb-1">
-        <span className={`text-xs font-semibold ${active ? 'text-brand' : 'text-fg'}`}>{title}</span>
+        <span className={`text-sm font-semibold ${active ? 'text-brand' : 'text-fg'}`}>{title}</span>
         <span
           className={[
             'inline-flex items-center rounded-full px-1.5 py-0.5 text-2xs font-medium',
@@ -226,7 +196,7 @@ function ModeCard({ active, onClick, title, badge, description }: ModeCardProps)
           </span>
         )}
       </div>
-      <p className="text-2xs text-fg-muted leading-relaxed">{description}</p>
+      <p className="text-sm text-fg-muted leading-relaxed">{description}</p>
     </button>
   )
 }

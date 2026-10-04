@@ -36,22 +36,17 @@ export function DashboardLoopReadout({
 
   const rows: DetailRowItem[] = [
     {
+      // The name, never the id: the full UUID led this card on every
+      // dashboard (2026-10-04 audit). The id is in Developer details.
       label: 'Active project',
-      value: projectName ?? projectId,
+      value: projectName ?? 'Unnamed project',
       wrap: true,
     },
     {
-      label: 'Project ref',
-      value: projectId,
-      mono: true,
-      copyable: true,
-      wrap: true,
-    },
-    {
-      // Same measure as the "Triage backlog" KPI: untriaged for over an hour.
+      // Same measure as the "Triage backlog" KPI: every report still waiting for triage.
       // Overview's "unresolved" counts every report not yet fixed, so the
       // two numbers differ on purpose and must not share a name.
-      label: 'Untriaged > 1h',
+      label: 'Waiting to triage',
       value: String(openBacklog),
       tone: openBacklog > 0 ? 'warn' : 'ok',
     },
@@ -61,7 +56,7 @@ export function DashboardLoopReadout({
       tone: fixesInProgress > 0 ? 'info' : 'muted',
     },
     {
-      label: 'Failed fixes',
+      label: 'Auto-fix stopped',
       value: String(fixesFailed),
       tone: fixesFailed > 0 ? 'danger' : 'muted',
     },
@@ -88,6 +83,12 @@ export function DashboardLoopReadout({
             <ReadoutSection title="Endpoints" icon={<IconGlobe size={14} aria-hidden />}>
               <EndpointCodeRow label="Ingest API" url={RESOLVED_EXTERNAL_API_URL} />
             </ReadoutSection>
+            <div className="mt-3">
+              <DetailRows
+                items={[{ label: 'Project id', value: projectId, mono: true, copyable: true, wrap: true }]}
+                dense
+              />
+            </div>
           </DisclosurePanel>
         </div>
       )}

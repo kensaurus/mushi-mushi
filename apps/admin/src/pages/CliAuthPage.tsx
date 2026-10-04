@@ -29,9 +29,10 @@
  */
 
 import { useEffect, useState } from 'react'
+import { interpretClaimPoll } from '../lib/cliAuthPoll'
+import { describeActionError } from '../lib/actionError'
 import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
-import { humanizeApiError } from '../lib/humanizeApiError'
 import { CliAuthReadout } from '../components/cli-auth/CliAuthReadout'
 import { Btn, ErrorAlert } from '../components/ui'
 
@@ -94,6 +95,12 @@ export function CliAuthPage() {
   const [approveState, setApproveState] = useState<ApproveState>('idle')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [waitingSlow, setWaitingSlow] = useState(false)
+  // Approval succeeded but the terminal never confirmed (expired / denied /
+  // gone). Approving again cannot help, so the page says so instead of
+  // offering "Retry approve" (QA bug 268).
+  const [confirmEnded, setConfirmEnded] = useState(false)
+  // Last confirm poll failed for a transient reason; still waiting.
+  const [pollTrouble, setPollTrouble] = useState(false)
 
   // Use code from URL (CLI opens the page with ?code=XXXX-XXXX) or
   // fall back to the manual input (user typed it themselves).
@@ -115,35 +122,18 @@ export function CliAuthPage() {
         { cache: 'no-store', scope: 'none' },
       ).catch(() => null)
       if (cancelled) return
-      if (res?.ok && res.data?.claimed) {
+      const outcome = interpretClaimPoll(res)
+      if (outcome.kind === 'connected') {
         setApproveState('connected')
         return
       }
-      if (res?.ok && res.data?.status === 'expired') {
+      if (outcome.kind === 'ended') {
+        setConfirmEnded(true)
         setApproveState('error')
-        setErrorMessage(
-          'This request expired before your terminal picked it up. Re-run the command and approve the newest tab.',
-        )
+        setErrorMessage(outcome.message)
         return
       }
-      // Defensive terminal states: 'rejected' should be unreachable for a row
-      // this tab just approved (reject only flips still-pending rows), but a
-      // future change or edge race must not leave the spinner running
-      // forever. NOT_FOUND means the polled request no longer exists.
-      if (res?.ok && res.data?.status === 'rejected') {
-        setApproveState('error')
-        setErrorMessage('This request was denied. Run the command again to get a fresh code.')
-        return
-      }
-      if (res && !res.ok) {
-        setApproveState('error')
-        setErrorMessage(
-          res.error?.code === 'NOT_FOUND'
-            ? 'This request could not be found — it may have expired. Re-run the command and try again.'
-            : (res.error?.message ?? 'Something went wrong while checking your terminal — please try again.'),
-        )
-        return
-      }
+      setPollTrouble(outcome.transient)
       if (Date.now() - startedAt >= CLAIM_SLOW_AFTER_MS) {
         setWaitingSlow(true)
       }
@@ -162,6 +152,7 @@ export function CliAuthPage() {
     setApproveState('approving')
     setErrorMessage(null)
     setWaitingSlow(false)
+    setPollTrouble(false)
 
     // Device approve is account-scoped — no active project required. Avoid
     // sending a stale/missing project header that can confuse gate middleware.
@@ -176,12 +167,9 @@ export function CliAuthPage() {
       setApproveState('waiting')
     } else {
       setApproveState('error')
-      const humanized = humanizeApiError(res.error?.message, res.error?.code)
-      setErrorMessage(
-        humanized
-          ? `${humanized.title}${humanized.hint ? ` ${humanized.hint}` : ''}`
-          : (res.error?.message ?? 'Something went wrong — please try again.'),
-      )
+      // humanizeApiError's catch-all reads "Could not load this page", wrong
+      // for a button; this keeps the server's sentence when it is readable.
+      setErrorMessage(describeActionError(res.error, 'Something went wrong — please try again.'))
     }
   }
 
@@ -215,6 +203,11 @@ export function CliAuthPage() {
             Keep this tab open for a moment. It will confirm as soon as your
             terminal picks up the connection (usually within a few seconds).
           </p>
+          {pollTrouble && (
+            <p className="mt-2 text-xs text-fg-muted" role="status">
+              Can&apos;t reach Mushi to confirm right now. Your approval stands; still checking.
+            </p>
+          )}
         </div>
         {waitingSlow && (
           <div className="max-w-md rounded-xl border border-warn/40 bg-warn-muted/50 px-5 py-4 text-left">
@@ -345,12 +338,16 @@ export function CliAuthPage() {
         {/* Error */}
         {approveState === 'error' && errorMessage && (
           <div className="mb-4">
-            <ErrorAlert
-              title="Couldn't approve CLI connection"
-              message={errorMessage}
-              endpoint="/v1/cli/auth/device/approve"
-              onRetry={() => void handleApprove()}
-            />
+            {confirmEnded ? (
+              <ErrorAlert title="Your terminal did not finish connecting" message={errorMessage} />
+            ) : (
+              <ErrorAlert
+                title="Couldn't approve CLI connection"
+                message={errorMessage}
+                endpoint="/v1/cli/auth/device/approve"
+                onRetry={() => void handleApprove()}
+              />
+            )}
           </div>
         )}
 
@@ -363,6 +360,7 @@ export function CliAuthPage() {
           >
             Deny
           </Btn>
+          {!confirmEnded && (
           <Btn
             onClick={handleApprove}
             disabled={!userCode || approveState === 'approving'}
@@ -374,6 +372,7 @@ export function CliAuthPage() {
                 ? 'Retry approve'
                 : 'Approve CLI connection'}
           </Btn>
+          )}
         </div>
 
         {/* Security note */}

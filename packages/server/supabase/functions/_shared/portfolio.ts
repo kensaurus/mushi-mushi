@@ -11,7 +11,10 @@
  * project cards do not count.
  */
 
-import type { FindingGroup, IntegrationHole, KindSource, ProjectKind, SdkSkewEntry } from './portfolio-types.ts'
+import type { FindingGroup, IntegrationHole, KindSource, PortfolioCardProblem, ProjectKind, SdkSkewEntry } from './portfolio-types.ts'
+import type { ElementState, RecipeElementKey, RecipeElementSummary } from './recipe-types.ts'
+import { RADAR_RULES } from './radar/types.ts'
+import { gateLabel } from './recipe-state.ts'
 
 // ── semver ───────────────────────────────────────────────────────────────────
 
@@ -138,7 +141,9 @@ export function groupRepeatedFindings(rows: readonly OpenFindingRow[], minProjec
     const projectIds = [...g.projects].sort()
     groups.push({
       ruleId,
+      title: ruleTitle(ruleId),
       gate: g.gate,
+      gateLabel: gateLabel(g.gate),
       severity: g.severity,
       projectIds,
       findingCount: g.count,
@@ -147,6 +152,28 @@ export function groupRepeatedFindings(rows: readonly OpenFindingRow[], minProjec
     })
   }
   return groups.sort((a, b) => SEV_RANK[b.severity] - SEV_RANK[a.severity] || b.projectIds.length - a.projectIds.length || a.ruleId.localeCompare(b.ruleId))
+}
+
+/** A rule id's title from the existing rule catalog; null when the catalog has none (the console then shows the finding's own message). */
+export function ruleTitle(ruleId: string): string | null {
+  return Object.prototype.hasOwnProperty.call(RADAR_RULES, ruleId) ? (RADAR_RULES as Record<string, { title: string }>)[ruleId].title : null
+}
+
+// ── card problems ────────────────────────────────────────────────────────────
+
+const PROBLEM_RANK: Partial<Record<ElementState, number>> = { error: 0, drift: 1, unknown: 2 }
+
+/**
+ * The recipe elements that make a portfolio card worse than ok, worst first.
+ * `not_connected` is left out: every element is optional (ADR 0016), so "not
+ * set up" is not a problem to name on the card.
+ */
+export function cardProblems(elements: Readonly<Record<RecipeElementKey, RecipeElementSummary>>, keys: readonly RecipeElementKey[]): PortfolioCardProblem[] {
+  return keys
+    .map((k) => elements[k])
+    .filter((e) => e && PROBLEM_RANK[e.state] !== undefined)
+    .sort((a, b) => (PROBLEM_RANK[a.state] ?? 9) - (PROBLEM_RANK[b.state] ?? 9))
+    .map((e) => ({ element: e.key, label: e.label, state: e.state, reason: e.reason }))
 }
 
 // ── integration holes ────────────────────────────────────────────────────────

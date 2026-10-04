@@ -36,6 +36,12 @@ export interface PortfolioCard {
   elements: Partial<Record<RecipeElementKey, ElementState>>
   /** Set when composing this project's recipe failed; the card then reads `error`. */
   error: string | null
+  /**
+   * What makes `worst` worse than ok, worst first: each recipe element that is
+   * not ok and not merely "not set up", with its plain-English reason (which
+   * already says what to do). Optional so an older server still renders.
+   */
+  needsLook?: PortfolioCardProblem[]
   openReports: number
   sdk: SdkSkewEntry[]
   latestRelease: { version: string; publishedAt: string | null } | null
@@ -97,9 +103,20 @@ interface PortfolioSpendColumn {
   capsKnown: boolean
 }
 
-interface FindingGroup {
+export interface PortfolioCardProblem {
+  element: RecipeElementKey
+  label: string
+  state: ElementState
+  reason: string
+}
+
+export interface FindingGroup {
   ruleId: string
+  /** Human title from the server's rule catalog; null (or absent on an older server) when the rule has none. */
+  title?: string | null
   gate: string
+  /** The gate as people read it ("Mushi setup check"). */
+  gateLabel?: string
   /** The highest severity among the grouped findings. */
   severity: 'info' | 'warn' | 'error'
   projectIds: string[]

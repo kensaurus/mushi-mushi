@@ -12,6 +12,8 @@ import type { CostStats, CostTabId } from './types'
 interface Props {
   stats: CostStats
   onTab?: (tab: CostTabId) => void
+  /** Opens the raw log filtered to the failed calls the banner counts. */
+  onViewFailures?: () => void
   plainBanner?: boolean
 }
 
@@ -21,7 +23,7 @@ function fmtUsd(n: number): string {
   return `$${n.toFixed(6)}`
 }
 
-export function CostStatusBanner({ stats, onTab, plainBanner = false }: Props) {
+export function CostStatusBanner({ stats, onTab, onViewFailures, plainBanner = false }: Props) {
   const copy = usePageCopy('/cost')
   const actions = copy?.actionLabels ?? {}
   const projectLabel = stats.projectName ?? 'this project'
@@ -101,8 +103,8 @@ export function CostStatusBanner({ stats, onTab, plainBanner = false }: Props) {
             : 'Failed invocations may still incur partial token cost — filter Raw log by operation and check Langfuse traces.'
         }
         action={
-          onTab ? (
-            <Btn size="sm" variant="ghost" onClick={() => onTab('log')}>
+          onViewFailures || onTab ? (
+            <Btn size="sm" variant="ghost" onClick={() => (onViewFailures ? onViewFailures() : onTab?.('log'))}>
               {actions.failures ?? 'View failures'}
             </Btn>
           ) : null

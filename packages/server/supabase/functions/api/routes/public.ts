@@ -6,6 +6,7 @@ import { toSseEvent, sanitizeSseString, sseHeartbeat } from '../../_shared/sse.t
 import { AguiEmitter } from '../../_shared/agui.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { log } from '../../_shared/logger.ts';
+import { pickHighestVersion } from '../../_shared/sdk-version-compare.ts';
 import { unverifiedGithubInstallsAllowed } from '../../_shared/github-install-trust.ts';
 import { reportError } from '../../_shared/sentry.ts';
 import { apiKeyAuth, jwtAuth, adminOrApiKey } from '../../_shared/auth.ts';
@@ -259,15 +260,14 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
     }
 
     const db = getServiceClient();
-    const { data, error } = await db
+    const { data: rows, error } = await db
       .from('sdk_versions')
       .select('package, version, deprecated, deprecation_message, released_at')
       .eq('package', packageName)
-      .order('released_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .limit(500);
 
     if (error) return dbError(c, error);
+    const data = pickHighestVersion(rows ?? []);
     c.header('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400');
     return c.json({
       ok: true,
@@ -288,7 +288,7 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
       .from('project_settings')
       .select(
         'sdk_config_enabled, sdk_widget_position, sdk_widget_theme, sdk_widget_trigger_text, ' +
-          'sdk_widget_launcher, sdk_banner_variant, sdk_banner_position, sdk_banner_bug_cta, sdk_banner_feature_cta, sdk_banner_message, sdk_banner_label, ' +
+          'sdk_widget_launcher, sdk_widget_attach_selector, sdk_banner_variant, sdk_banner_position, sdk_banner_bug_cta, sdk_banner_feature_cta, sdk_banner_message, sdk_banner_label, ' +
           'sdk_screenshot_sensitive_hint, ' +
           'sdk_capture_console, sdk_capture_network, sdk_capture_performance, sdk_capture_screenshot, ' +
           'sdk_capture_element_selector, sdk_native_trigger_mode, sdk_min_description_length, sdk_config_updated_at, ' +

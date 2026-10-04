@@ -13,6 +13,7 @@ import { useTesterStatus, reputationTier } from '../../lib/useTesterStatus'
 import { appChromeHeaderClass, appChromeMainClass } from '../../lib/appChrome'
 import { PAGE_SHELL_CLASS } from '../../lib/pageLayout'
 import { useDocumentTitle } from '../../lib/useDocumentTitle'
+import { usePublishPageContext } from '../../lib/pageContext'
 import { SidebarBrandToggles } from '../SidebarBrandToggles'
 import { SidebarFooterControls } from '../SidebarFooterControls'
 import { SidebarUserCard } from '../SidebarUserCard'
@@ -96,7 +97,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/tester/wallet': 'Wallet',
   '/tester/learn': 'Learn',
   '/tester/settings': 'Settings',
-  '/tester/submissions': 'Submissions',
+  '/tester/submissions': 'Reports',
 }
 
 function BalanceStrip() {
@@ -202,6 +203,9 @@ export function TesterLayout() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const pageTitle = PAGE_TITLES[pathname] ?? 'Tester'
 
+  // Tab title from the portal's own page names. The navRegistry fallback had
+  // no /tester/submissions entry, so that tab showed the generic site title.
+  usePublishPageContext({ route: pathname, title: pageTitle === 'Tester' ? 'Tester' : `Tester · ${pageTitle}` })
   useDocumentTitle()
 
   useEffect(() => {

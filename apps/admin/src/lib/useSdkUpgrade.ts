@@ -12,6 +12,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiFetch, supabase } from './supabase'
 import { RESOLVED_API_URL } from './env'
 import { openSseStream, type SseEvent } from './sseClient'
+import { describeActionError } from './actionError'
 
 export type SdkUpgradeStatus =
   | 'idle'
@@ -38,6 +39,8 @@ export interface SdkUpgradeState {
   prUrl?: string
   plan?: BumpEntry[]
   error?: string
+  /** Last "Check CI status" / "Refresh all" failure, in plain English. Cleared on success. */
+  syncError?: string
   /** True when POST returned an existing open upgrade PR instead of enqueueing. */
   reused?: boolean
   // Release cockpit fields — populated after PR is opened via syncStatus / mergePr
@@ -48,6 +51,8 @@ export interface SdkUpgradeState {
   deployStatus?: string
   deployUrl?: string
   workflowUrl?: string
+  /** Set once the upgrade PR merged (from the job row or a sync). */
+  mergedAt?: string
 }
 
 interface JobRow {
@@ -282,6 +287,7 @@ export function useSdkUpgrade(projectId: string) {
             checkRunConclusion: job.check_run_conclusion ?? undefined,
             deployStatus: job.deploy_status ?? undefined,
             deployUrl: job.deploy_url ?? undefined,
+            mergedAt: job.merged_at ?? undefined,
           }
           persistTerminal(projectId, next)
           setState(next)
@@ -299,6 +305,7 @@ export function useSdkUpgrade(projectId: string) {
       setState({
         status: job.status as SdkUpgradeStatus,
         jobId: job.id,
+        plan: job.plan ?? undefined,
         releaseStatus: job.release_status ?? undefined,
         prState: job.pr_state ?? undefined,
         checkRunStatus: job.check_run_status ?? undefined,
@@ -343,15 +350,18 @@ export function useSdkUpgrade(projectId: string) {
           },
         )
         if (!res.ok || !res.data) {
-          const err = (res as { error?: { code?: string; message?: string; jobId?: string } }).error
-          const errCode = err?.code ?? 'UPGRADE_FAILED'
-          const errMsg = err?.message ?? 'Could not start upgrade'
-          if (errCode === 'ALREADY_IN_PROGRESS' && err?.jobId) {
-            setState({ status: 'queued', jobId: err.jobId })
-            void subscribeStream(err.jobId)
+          // The envelope keeps `data` on an error but drops extra error
+          // fields, so the running job's id arrives as `data.jobId` (QA bug 124).
+          const runningJobId = alreadyInProgressJobId(res)
+          if (runningJobId) {
+            setState({ status: 'queued', jobId: runningJobId })
+            void subscribeStream(runningJobId)
             return
           }
-          setState({ status: 'failed', error: `${errCode}: ${errMsg}` })
+          setState({
+            status: 'failed',
+            error: describeActionError(res.error, 'Could not start the upgrade. Try again in a moment.'),
+          })
           return
         }
 
@@ -371,6 +381,7 @@ export function useSdkUpgrade(projectId: string) {
             checkRunConclusion: prior?.check_run_conclusion ?? undefined,
             deployStatus: prior?.deploy_status ?? undefined,
             deployUrl: prior?.deploy_url ?? undefined,
+            mergedAt: prior?.merged_at ?? undefined,
             error: data.message,
           }
           persistTerminal(projectId, next)
@@ -414,11 +425,18 @@ export function useSdkUpgrade(projectId: string) {
       deployUrl: string | null
       deployEnvironment: string | null
     }>(`/v1/admin/projects/${projectId}/sdk-upgrade/${jobId}/sync`, { method: 'POST' })
-    if (!res.ok || !res.data) return
+    if (!res.ok || !res.data) {
+      // Used to return silently, so "Check CI status" / "Refresh all" looked
+      // like nothing happened (QA bug 260).
+      const message = describeActionError(res.error, 'Could not check CI status on GitHub. Try again in a moment.')
+      setState((s) => ({ ...s, syncError: message }))
+      return
+    }
     const d = res.data
     setState((s) => {
       const updated: SdkUpgradeState = {
         ...s,
+        syncError: undefined,
         releaseStatus: d.releaseStatus,
         prState: d.prState,
         checkRunStatus: d.checkRunStatus ?? undefined,
@@ -442,8 +460,11 @@ export function useSdkUpgrade(projectId: string) {
       { method: 'POST', body: JSON.stringify({ method }) },
     )
     if (!res.ok) {
-      const err = (res as { error?: { message?: string } }).error
-      setState((s) => ({ ...s, releaseStatus: 'pr_opened', error: err?.message ?? 'Merge failed' }))
+      setState((s) => ({
+        ...s,
+        releaseStatus: 'pr_opened',
+        error: describeActionError(res.error, 'Could not merge the PR on GitHub. Open it on GitHub to see why.'),
+      }))
       return
     }
     setState((s) => ({ ...s, releaseStatus: 'merged', prState: 'merged' }))
@@ -469,4 +490,22 @@ export function useSdkUpgrade(projectId: string) {
   }, [projectId])
 
   return { state, createUpgradePr, refreshUpgradePr, cancel, reset, mergePr, syncStatus }
+}
+
+/**
+ * The running job's id when POST /sdk-upgrade answered 409
+ * ALREADY_IN_PROGRESS: read from `data.jobId` (what apiFetch keeps), falling
+ * back to `error.jobId` for older servers.
+ * @internal Exported for unit tests.
+ */
+export function alreadyInProgressJobId(res: {
+  ok: boolean
+  data?: unknown
+  error?: { code?: string } & Record<string, unknown>
+}): string | null {
+  if (res.ok || res.error?.code !== 'ALREADY_IN_PROGRESS') return null
+  const fromData = (res.data as { jobId?: unknown } | undefined)?.jobId
+  if (typeof fromData === 'string' && fromData) return fromData
+  const fromError = res.error?.jobId
+  return typeof fromError === 'string' && fromError ? fromError : null
 }

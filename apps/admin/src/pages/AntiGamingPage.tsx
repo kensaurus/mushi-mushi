@@ -5,7 +5,8 @@
  *          devices, plus filter the audit-grade event log.
  */
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { apiFetch } from '../lib/supabase'
 import { useRealtime } from '../lib/realtime'
@@ -19,6 +20,7 @@ import { AntiGamingStatusBanner } from '../components/anti-gaming/AntiGamingStat
 import {
   EMPTY_ANTI_GAMING_STATS,
   type AntiGamingStats,
+  type AntiGamingTabId,
 } from '../components/anti-gaming/AntiGamingStatsTypes'
 import {
   Card,
@@ -35,7 +37,8 @@ import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { KpiTile } from '../components/charts'
 import { SetupNudge } from '../components/SetupNudge'
 import { ConfigHelp } from '../components/ConfigHelp'
-import { PromptDialog } from '../components/ConfirmDialog'
+import { ConfirmDialog, PromptDialog } from '../components/ConfirmDialog'
+import { plainApiError } from '../lib/humanizeApiError'
 import { useMergedErrors } from '../lib/useMergedErrors'
 import { pluralizeWithCount } from '../lib/format'
 import { IconEye, IconChevronUp, IconFlag, IconFlagOff } from '../components/icons'
@@ -152,7 +155,25 @@ export function AntiGamingPage() {
     { deps: [projectId] },
   )
   const shellStats = shellStatsData ?? EMPTY_ANTI_GAMING_STATS
-  const [filter, setFilter] = useState<'flagged' | 'all'>('flagged')
+  // The device filter lives in the URL so the status banner's links
+  // (?filter=flagged, ?tab=events) and shared links actually do something.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const filter: 'flagged' | 'all' = searchParams.get('filter') === 'all' ? 'all' : 'flagged'
+  const setFilter = useCallback(
+    (next: 'flagged' | 'all') => {
+      setSearchParams(
+        (prev) => {
+          const qs = new URLSearchParams(prev)
+          qs.set('filter', next)
+          return qs
+        },
+        { replace: true, preventScrollReset: true },
+      )
+    },
+    [setSearchParams],
+  )
+  const tabParam = searchParams.get('tab')
+  const [unflagTarget, setUnflagTarget] = useState<string | null>(null)
   const [eventFilter, setEventFilter] = useState('')
   const [search, setSearch] = useState('')
   const [expanded, setExpanded] = useState<string | null>(null)
@@ -183,11 +204,20 @@ export function AntiGamingPage() {
   // though it represents a different bucket.
   const resetCollapsed = useCallback(() => setCollapsedGroups(new Set()), [])
 
-  const devicesPath = `/v1/admin/anti-gaming/devices${filter === 'flagged' ? '?flagged=true' : ''}`
-  const devicesQuery = usePageData<{ devices: ReporterDevice[] }>(devicesPath, { deps: [filter] })
+  // Scoped to the active project so the list matches the KPI tiles above.
+  const deviceParams = new URLSearchParams()
+  if (filter === 'flagged') deviceParams.set('flagged', 'true')
+  if (projectId) deviceParams.set('project_id', projectId)
+  const devicesQs = deviceParams.toString()
+  const devicesPath = `/v1/admin/anti-gaming/devices${devicesQs ? `?${devicesQs}` : ''}`
+  const devicesQuery = usePageData<{ devices: ReporterDevice[] }>(devicesPath, { deps: [filter, projectId] })
+  const eventParams = new URLSearchParams()
+  if (eventFilter) eventParams.set('event_type', eventFilter)
+  if (projectId) eventParams.set('project_id', projectId)
+  const eventsQs = eventParams.toString()
   const eventsQuery = usePageData<{ events: AntiGamingEvent[] }>(
-    `/v1/admin/anti-gaming/events${eventFilter ? `?event_type=${eventFilter}` : ''}`,
-    { deps: [eventFilter] },
+    `/v1/admin/anti-gaming/events${eventsQs ? `?${eventsQs}` : ''}`,
+    { deps: [eventFilter, projectId] },
   )
 
   const allDevices = devicesQuery.data?.devices ?? []
@@ -344,19 +374,51 @@ export function AntiGamingPage() {
   }
 
 
-  async function unflag(deviceId: string) {
+  // Unflag also clears the cross-account flag, so it is confirmed first.
+  function unflag(deviceId: string) {
+    setUnflagTarget(deviceId)
+  }
+
+  async function commitUnflag() {
+    const deviceId = unflagTarget
+    if (!deviceId) return
     setBusy(deviceId)
     try {
       const res = await apiFetch(`/v1/admin/anti-gaming/devices/${deviceId}/unflag`, { method: 'POST' })
-      if (!res.ok) throw new Error(res.error?.message ?? 'Unflag failed')
+      if (!res.ok) {
+        toast.error('Could not unflag device', plainApiError(res.error, 'Try again in a moment.'))
+        return
+      }
       toast.success('Device unflagged')
       reloadAll()
     } catch (err) {
       toast.error('Could not unflag device', err instanceof Error ? err.message : String(err))
     } finally {
       setBusy(null)
+      setUnflagTarget(null)
     }
   }
+
+  // Banner buttons act on this page instead of only changing the URL.
+  const goToSection = useCallback(
+    (tab: AntiGamingTabId) => {
+      if (tab === 'events') {
+        document.getElementById('anti-gaming-events')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        return
+      }
+      const showFlagged = shellStats.topPriority === 'cross_account' || shellStats.topPriority === 'flagged'
+      setFilter(showFlagged ? 'flagged' : 'all')
+      setSearch('')
+      document.getElementById('anti-gaming-devices')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    },
+    [setFilter, shellStats.topPriority],
+  )
+
+  // Deep link: /anti-gaming?tab=events lands on the event log.
+  useEffect(() => {
+    if (tabParam !== 'events' || loading) return
+    document.getElementById('anti-gaming-events')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [tabParam, loading])
 
   function flag(deviceId: string) {
     setFlagTarget(deviceId)
@@ -413,6 +475,7 @@ export function AntiGamingPage() {
             children: (
               <AntiGamingStatusBanner
                 stats={shellStats}
+                onTab={goToSection}
                 onRefresh={reloadAll}
                 refreshing={loading || shellValidating}
               />
@@ -505,6 +568,7 @@ export function AntiGamingPage() {
         </Section>
       )}
 
+      <div id="anti-gaming-devices" className="scroll-mt-4">
       <Section
         title={
           (filter === 'flagged' ? 'Flagged devices' : 'All tracked devices') +
@@ -610,8 +674,9 @@ export function AntiGamingPage() {
           </div>
         )}
       </Section>
+      </div>
 
-      <div data-dav-anchor="anti-gaming:verify">
+      <div data-dav-anchor="anti-gaming:verify" id="anti-gaming-events" className="scroll-mt-4">
       <Section
         title={
           aggregateEvents && collapsedCount > 0
@@ -727,6 +792,18 @@ export function AntiGamingPage() {
         )}
       </Section>
       </div>
+
+      {unflagTarget && (
+        <ConfirmDialog
+          title="Unflag this device?"
+          body="Its reports will count normally again and it can earn rewards. This also clears its cross-account flag. Only unflag after checking it was a false alarm (shared office network, a test account)."
+          confirmLabel="Unflag device"
+          tone="danger"
+          loading={busy === unflagTarget}
+          onConfirm={commitUnflag}
+          onCancel={() => setUnflagTarget(null)}
+        />
+      )}
 
       {flagTarget && (
         <PromptDialog
@@ -906,13 +983,16 @@ function WithheldRedemptionRow({
 }) {
   const toast = useToast()
   const [acting, setActing] = useState<'approve' | 'deny' | null>(null)
+  // Approve releases a real gift card; deny refunds the points. Both are
+  // confirmed so a mis-click cannot pay out or reverse a payout.
+  const [confirming, setConfirming] = useState<'approve' | 'deny' | null>(null)
 
   const act = async (action: 'approve' | 'deny') => {
     setActing(action)
     try {
       const res = await apiFetch(`/v1/admin/tester-redemptions/${redemption.id}/${action}`, { method: 'POST' })
       if (!res.ok) {
-        toast.error(res.error?.message ?? 'Action failed')
+        toast.error(plainApiError(res.error, action === 'approve' ? 'Could not approve the redemption.' : 'Could not deny the redemption.'))
         return
       }
       toast.success(action === 'approve' ? 'Redemption approved' : 'Redemption denied — points refunded')
@@ -921,10 +1001,12 @@ function WithheldRedemptionRow({
       toast.error(err instanceof Error ? err.message : 'Action failed')
     } finally {
       setActing(null)
+      setConfirming(null)
     }
   }
 
-  const handle = redemption.mushi_testers?.public_handle ?? redemption.tester_id.slice(0, 8)
+  const handle = redemption.mushi_testers?.public_handle ?? 'unknown tester'
+  const value = redemption.face_value_usd ? `$${redemption.face_value_usd} ` : ''
 
   return (
     <Card  className="flex items-center justify-between gap-3 px-3 py-2">
@@ -942,13 +1024,28 @@ function WithheldRedemptionRow({
         </p>
       </div>
       <div className="flex gap-1.5 flex-shrink-0">
-        <Btn size="sm" variant="primary" disabled={!!acting} onClick={() => act('approve')}>
+        <Btn size="sm" variant="primary" disabled={!!acting} onClick={() => setConfirming('approve')}>
           {acting === 'approve' ? '…' : 'Approve'}
         </Btn>
-        <Btn size="sm" variant="ghost" disabled={!!acting} onClick={() => act('deny')}>
+        <Btn size="sm" variant="ghost" disabled={!!acting} onClick={() => setConfirming('deny')}>
           {acting === 'deny' ? '…' : 'Deny'}
         </Btn>
       </div>
+      {confirming && (
+        <ConfirmDialog
+          title={confirming === 'approve' ? `Release this ${value}redemption?` : 'Deny this redemption?'}
+          body={
+            confirming === 'approve'
+              ? `@${handle} will receive it. A gift card is ordered for real and cannot be taken back.`
+              : `@${handle} gets their ${redemption.points_spent.toLocaleString()} points back and the redemption is cancelled.`
+          }
+          confirmLabel={confirming === 'approve' ? 'Release redemption' : 'Deny and refund'}
+          tone={confirming === 'approve' ? 'default' : 'danger'}
+          loading={acting === confirming}
+          onConfirm={() => act(confirming)}
+          onCancel={() => setConfirming(null)}
+        />
+      )}
     </Card>
   )
 }

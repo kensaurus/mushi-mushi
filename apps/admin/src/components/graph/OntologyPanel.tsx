@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { apiFetch } from '../../lib/supabase'
 import { usePageData } from '../../lib/usePageData'
 import { useToast } from '../../lib/toast'
+import { apiErrorMessage } from '../../lib/humanizeApiError'
 import { Card, Btn, ErrorAlert, EmptyState, Input } from '../ui'
 import { TableSkeleton } from '../skeletons/TableSkeleton'
 
@@ -48,7 +49,13 @@ export function OntologyPanel() {
       setAdding(false)
       reload()
     } else {
-      toast.push({ tone: 'error', message: res.error?.message ?? 'Add failed' })
+      toast.push({
+        tone: 'error',
+        message:
+          res.error?.code === 'DUPLICATE_TAG'
+            ? `"${tag.trim()}" is already in the ontology.`
+            : apiErrorMessage(res.error, 'Could not add the tag. Try again.'),
+      })
     }
   }
 

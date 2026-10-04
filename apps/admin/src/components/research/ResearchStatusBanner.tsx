@@ -11,12 +11,14 @@ import type { ResearchStats, ResearchTabId } from './ResearchStatsTypes'
 interface Props {
   stats: ResearchStats
   onTab?: (tab: ResearchTabId) => void
+  /** Opens the session whose snippets still need attaching. */
+  onAttach?: () => void
   onRefresh?: () => void
   refreshing?: boolean
   plainBanner?: boolean
 }
 
-export function ResearchStatusBanner({ stats, onTab, onRefresh, refreshing, plainBanner = false }: Props) {
+export function ResearchStatusBanner({ stats, onTab, onAttach, onRefresh, refreshing, plainBanner = false }: Props) {
   const copy = usePageCopy('/research')
   const actions = copy?.actionLabels ?? {}
   const projectLabel = stats.projectName ?? 'workspace'
@@ -103,8 +105,10 @@ export function ResearchStatusBanner({ stats, onTab, onRefresh, refreshing, plai
         title={`${stats.unattachedSnippets} snippet${stats.unattachedSnippets === 1 ? '' : 's'} awaiting attach`}
         subtitle={stats.topPriorityLabel}
         action={
-          onTab ? (
-            <Btn size="sm" variant="ghost" onClick={() => onTab('search')}>{actions.attach ?? 'Attach evidence'}</Btn>
+          onAttach ? (
+            <Btn size="sm" variant="ghost" onClick={onAttach}>{actions.attach ?? 'Attach evidence'}</Btn>
+          ) : onTab ? (
+            <Btn size="sm" variant="ghost" onClick={() => onTab('history')}>{actions.attach ?? 'Attach evidence'}</Btn>
           ) : (
             <Btn to="/research?tab=search" size="sm" variant="ghost">{actions.attach ?? 'Attach evidence'}</Btn>
           )

@@ -34,7 +34,7 @@ interface FunnelBuilderProps {
   onChange: (next: FunnelDefinition) => void
   onRun: () => void
   running?: boolean
-  /** Event names seen in the window — from `summary.top_events`. */
+  /** Event names seen in the window (lib/analyticsLists eventCatalogue). */
   availableEvents: string[]
   saved: FunnelDefinition[]
   onSave: (def: FunnelDefinition) => void
@@ -59,6 +59,13 @@ export function FunnelBuilder({
 }: FunnelBuilderProps) {
   const [customEvent, setCustomEvent] = useState('')
   const [saveName, setSaveName] = useState(value.name)
+  // Loading a saved funnel swaps `value`; the name field must follow it, or
+  // Save overwrites that funnel under the last typed name (QA 291).
+  const [nameForId, setNameForId] = useState(value.id)
+  if (nameForId !== value.id) {
+    setNameForId(value.id)
+    setSaveName(value.name)
+  }
 
   const steps = value.steps
   const full = steps.length >= FUNNEL_MAX_STEPS

@@ -2,7 +2,6 @@
  * Visible intro for Integrations — what to connect first and why.
  */
 
-import { Link } from 'react-router-dom'
 import { FeatureExplainPanel } from '../FeatureExplainPanel'
 import { WorkflowStageRow } from '../workflow/WorkflowStageRow'
 import { INTEGRATIONS_EXPLAINER } from '../../lib/integrationsExplainer'
@@ -25,6 +24,7 @@ export function IntegrationsPageIntro({ topPriority, flags }: Props) {
   const needsGuidance =
     topPriority === 'empty' ||
     topPriority === 'incomplete' ||
+    topPriority === 'attention' ||
     topPriority === 'no_project' ||
     topPriority === 'platform_down'
 
@@ -59,11 +59,8 @@ export function IntegrationsPageIntro({ topPriority, flags }: Props) {
         })}
       </div>
       <p className="text-2xs text-fg-faint">
-        Each card below has setup steps and a Test button. See also{' '}
-        <Link to="/health?fn=integration-probe" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
-          Health probes
-        </Link>{' '}
-        if a connection keeps failing.
+        Each card below has setup steps and a Test button. If a connection keeps failing, its card
+        says why and has the fix next to it; test again once it is fixed.
       </p>
     </FeatureExplainPanel>
   )

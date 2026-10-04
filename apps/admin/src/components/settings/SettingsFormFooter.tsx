@@ -11,6 +11,8 @@ interface SettingsFormFooterProps {
   onSave: () => void
   onDiscard: () => void
   saveLabel?: string
+  /** When set, Save is off and this sentence says what to fix first. */
+  blockedReason?: string | null
 }
 
 export function SettingsFormFooter({
@@ -20,6 +22,7 @@ export function SettingsFormFooter({
   onSave,
   onDiscard,
   saveLabel = 'Save changes',
+  blockedReason = null,
 }: SettingsFormFooterProps) {
   if (!dirty) return null
 
@@ -35,7 +38,7 @@ export function SettingsFormFooter({
       aria-label="Unsaved settings actions"
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-2xs text-fg-muted">
+        <p className="text-xs text-fg-muted">
           <span className="inline-block h-1.5 w-1.5 rounded-full bg-warn mr-1.5 align-middle" aria-hidden />
           {countLabel}
         </p>
@@ -43,11 +46,16 @@ export function SettingsFormFooter({
           <Btn variant="ghost" size="sm" onClick={onDiscard} disabled={saving}>
             Reset to saved
           </Btn>
-          <Btn size="sm" onClick={onSave} disabled={saving} loading={saving}>
+          <Btn size="sm" onClick={onSave} disabled={saving || Boolean(blockedReason)} loading={saving}>
             {saveLabel}
           </Btn>
         </div>
       </div>
+      {blockedReason && (
+        <p className="mt-2 text-sm text-danger" role="alert">
+          {blockedReason}
+        </p>
+      )}
     </div>
   )
 }

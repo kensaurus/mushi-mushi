@@ -7,15 +7,17 @@
  *   2. ProtectedRoute wraps every authenticated route, so unauthenticated
  *      visitors are bounced to /login first; on return Supabase restores
  *      the session and we land back here.
- *   3. We read the live Supabase session, capture the access token + active
- *      project + active org, and post a structured message back to the
- *      opener at the EXACT requested origin (never `*`).
+ *   3. We ask the user to confirm ("Sign in to the docs as <email>?").
+ *      Only after Allow do we read the live Supabase session, capture the
+ *      access token + active project + active org, and post a structured
+ *      message back to the opener at the EXACT requested origin (never `*`).
  *   4. The opener verifies origin + nonce + message type before trusting
  *      the token and storing it in sessionStorage.
  *
  * SECURITY GUARDS HERE
- *   - returnOrigin must be in the allowlist below (mirrors the cors block
- *     in packages/server/supabase/functions/api/index.ts → DOCS_ORIGIN_ALLOWLIST).
+ *   - returnOrigin must be in the allowlist (lib/docsBridgeOrigins.ts).
+ *     Local docs origins are allowed only when this console runs locally.
+ *   - Nothing is posted without an explicit Allow click.
  *   - nonce is required and forwarded back unchanged so the opener can
  *     pin the response to the request it initiated.
  *   - We refuse to post when window.opener is missing or cross-origin
@@ -32,55 +34,30 @@ import { supabase } from '../lib/supabase'
 import { RESOLVED_API_URL } from '../lib/env'
 import { getActiveProjectIdSnapshot } from '../lib/activeProject'
 import { getActiveOrgIdSnapshot } from '../lib/activeOrg'
+import { docsBridgeAllowedOrigins, normalizeOrigin } from '../lib/docsBridgeOrigins'
 import { ContainedBlock, SignalChip } from '../components/report-detail/ReportSurface'
 import { PageHeaderBar } from '../components/PageHeaderBar'
+import { Btn } from '../components/ui'
 
-type BridgeStatus = 'pending' | 'sent' | 'invalid_origin' | 'missing_opener' | 'no_session' | 'no_nonce'
+type BridgeStatus =
+  | 'pending'
+  | 'awaiting_consent'
+  | 'sent'
+  | 'cancelled'
+  | 'invalid_origin'
+  | 'missing_opener'
+  | 'no_session'
+  | 'no_nonce'
 
-/* The server-side CORS allowlist for docs origins is env-extendable via
- * `MUSHI_DOCS_ORIGIN_ALLOWLIST` (see packages/server/supabase/functions/api/index.ts).
- * Without an equivalent here, ops can wire a new docs host into the API
- * allowlist and still have this bridge reject the popup with
- * `invalid_origin` — drift that is hard to spot in production. Mirror the
- * same env knob on the admin (Vite-prefixed) so the two stay in lockstep:
+/* Allowed docs origins: the hosted docs, plus local docs dev servers only
+ * when this console is itself running locally (see lib/docsBridgeOrigins).
+ * VITE_DOCS_ORIGIN_ALLOWLIST mirrors MUSHI_DOCS_ORIGIN_ALLOWLIST on the API:
  *   VITE_DOCS_ORIGIN_ALLOWLIST="https://docs.example.com,https://staging.example.com"
- * Defaults are unchanged so existing deployments keep working untouched. */
-const DEFAULT_DOCS_ORIGINS = [
-  'https://kensaur.us',
-  'https://www.kensaur.us',
-  'http://localhost:3000',
-  'http://127.0.0.1:3000',
-  'http://localhost:3001',
-  'http://127.0.0.1:3001',
-] as const
-
-const ALLOWED_DOCS_ORIGINS = new Set<string>(
-  (() => {
-    /* `import.meta.env.VITE_*` is typed `any` in this app (no global Vite
-     * env d.ts narrows our custom keys), so coerce to `string` early to
-     * avoid the implicit-any cascade through `.split` / `.map`. */
-    const raw: string = String(import.meta.env.VITE_DOCS_ORIGIN_ALLOWLIST ?? '').trim()
-    const extras: string[] = raw
-      ? raw
-          .split(',')
-          .map((s: string) => s.trim())
-          .filter((s: string) => s.length > 0)
-      : []
-    return [...DEFAULT_DOCS_ORIGINS, ...extras]
-      .map((s: string) => normalizeOrigin(s))
-      .filter((s): s is string => typeof s === 'string' && s.length > 0)
-  })(),
+ * `import.meta.env.VITE_*` is typed `any` here, so coerce to string early. */
+const ALLOWED_DOCS_ORIGINS = docsBridgeAllowedOrigins(
+  typeof window === 'undefined' ? '' : window.location.hostname,
+  String(import.meta.env.VITE_DOCS_ORIGIN_ALLOWLIST ?? '').trim(),
 )
-
-function normalizeOrigin(raw: string | null): string | null {
-  if (!raw) return null
-  try {
-    const u = new URL(raw)
-    return `${u.protocol}//${u.host}`.replace(/\/+$/, '')
-  } catch {
-    return null
-  }
-}
 
 export function DocsBridgePage() {
   const { session, loading } = useAuth()
@@ -90,6 +67,8 @@ export function DocsBridgePage() {
   const [status, setStatus] = useState<BridgeStatus>('pending')
   const sentRef = useRef(false)
 
+  // Validate the request, then wait for the user. Nothing is posted until
+  // they press Allow: an allowed origin is not consent to hand it a token.
   useEffect(() => {
     if (sentRef.current) return
     if (loading) return
@@ -110,16 +89,32 @@ export function DocsBridgePage() {
       setStatus('missing_opener')
       return
     }
+    setStatus((prev) => (prev === 'cancelled' ? prev : 'awaiting_consent'))
+  }, [loading, nonce, returnOrigin, session])
+
+  async function allow() {
+    if (sentRef.current || !returnOrigin || !ALLOWED_DOCS_ORIGINS.has(returnOrigin)) return
+    if (typeof window === 'undefined' || !window.opener) {
+      setStatus('missing_opener')
+      return
+    }
+    // Read the session at click time so the docs get the freshest token.
+    const { data } = await supabase.auth.getSession()
+    const current = data.session ?? session
+    if (!current?.access_token) {
+      setStatus('no_session')
+      return
+    }
 
     sentRef.current = true
     const payload = {
       type: 'mushi:docs-bridge:token' as const,
       nonce,
-      accessToken: session.access_token,
+      accessToken: current.access_token,
       // Supabase exposes expires_at as a unix-seconds number; we forward
       // unchanged so the docs side can refresh-on-expiry without rederiving.
-      expiresAt: session.expires_at ?? Math.floor(Date.now() / 1000) + 60 * 60,
-      email: session.user?.email ?? null,
+      expiresAt: current.expires_at ?? Math.floor(Date.now() / 1000) + 60 * 60,
+      email: current.user?.email ?? null,
       projectId: getActiveProjectIdSnapshot(),
       organizationId: getActiveOrgIdSnapshot(),
       apiUrl: RESOLVED_API_URL,
@@ -137,9 +132,19 @@ export function DocsBridgePage() {
         }
       }, 500)
     } catch {
+      sentRef.current = false
       setStatus('missing_opener')
     }
-  }, [loading, nonce, returnOrigin, session])
+  }
+
+  function cancel() {
+    setStatus('cancelled')
+    try {
+      window.close()
+    } catch {
+      /* user agent may refuse to close non-script-opened windows */
+    }
+  }
 
   // Keep the access token fresh in case it was about to expire when the
   // popup opened, so the docs side gets a token that survives at least the
@@ -187,12 +192,12 @@ export function DocsBridgePage() {
         title="Docs bridge"
 
         helpTitle="About the docs bridge"
-        helpWhatIsIt="Cross-origin auth bridge opened by the docs Migration Hub — posts your Supabase access token to the docs origin after login."
+        helpWhatIsIt="Sign-in bridge opened by the docs Migration Hub. After you press Allow, it hands your current sign-in to the docs site that asked."
         helpUseCases={[
           'Sync migration checklist progress from docs to admin',
           'Authenticate the docs site without re-entering credentials',
         ]}
-        helpHowToUse="Opened automatically from docs — sign in if prompted, then this window closes once the token is delivered."
+        helpHowToUse="Opened from the docs. Sign in if prompted, check the docs address shown, then press Allow. The window closes once the docs are signed in."
         showCopyLink={false}
       />
     <main className="grid place-items-center">
@@ -204,6 +209,36 @@ export function DocsBridgePage() {
               <p className="text-sm text-fg-muted">Connecting your Mushi account to the docs…</p>
             </ContainedBlock>
           </>
+        )}
+        {status === 'awaiting_consent' && (
+          <>
+            <SignalChip tone="brand">Docs sign-in</SignalChip>
+            <p className="text-base font-medium text-fg">
+              Sign in to the docs as {session?.user?.email ?? 'your Mushi account'}?
+            </p>
+            <ContainedBlock tone="muted">
+              <p className="text-sm text-fg-muted">
+                <span className="font-mono text-fg">{returnOrigin}</span> is asking to use your Mushi
+                sign-in so it can sync your migration checklist. Only allow this if you opened it from
+                the Mushi docs.
+              </p>
+            </ContainedBlock>
+            <div className="flex justify-center gap-2">
+              <Btn variant="ghost" size="sm" onClick={cancel}>
+                Cancel
+              </Btn>
+              <Btn variant="primary" size="sm" onClick={() => void allow()}>
+                Allow
+              </Btn>
+            </div>
+          </>
+        )}
+        {status === 'cancelled' && (
+          <ContainedBlock tone="muted">
+            <p className="text-sm text-fg">
+              Cancelled. The docs did not get your sign-in. You can close this window.
+            </p>
+          </ContainedBlock>
         )}
         {status === 'sent' && (
           <>

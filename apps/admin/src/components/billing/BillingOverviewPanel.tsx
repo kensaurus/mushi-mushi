@@ -90,7 +90,7 @@ export function BillingOverviewPanel({
               Connect Sentry to pull stack traces, breadcrumbs, and Seer AI summaries directly into each triage diagnosis — so Cursor gets more context without you copying anything.
             </p>
           </div>
-          <Link to="/integrations" className="shrink-0">
+          <Link to="/integrations/config" className="shrink-0">
             <span className="text-2xs font-medium text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity underline-offset-2">
               Connect →
             </span>

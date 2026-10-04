@@ -9,7 +9,8 @@
  */
 
 import type { ReactElement } from 'react'
-import { Callout, ErrorAlert, Loading } from '../ui'
+import { Callout, Loading } from '../ui'
+import { PageLoadError } from '../PageLoadError'
 import { usePageData } from '../../lib/usePageData'
 import type { RecipeElementKey, RecipeSourceElement, RecipeSourceFile, RecipeSources } from '../../lib/recipeTypes'
 import { EnvForm, GatesForm, RoutesForm, type ChangeFormProps } from './RecipeChangeForms'
@@ -38,7 +39,7 @@ export function RecipeChangeTab({ projectId, element }: { projectId: string; ele
   const { data, loading, error, reload } = usePageData<RecipeSources>(path)
 
   if (loading && !data) return <Loading text="Reading the files this change edits…" />
-  if (error) return <ErrorAlert message={error} endpoint={path} onRetry={reload} />
+  if (error) return <PageLoadError error={error} resource="the change form" endpoint={path} onRetry={reload} />
   if (!data) return null
   if (!data.ok) {
     return (

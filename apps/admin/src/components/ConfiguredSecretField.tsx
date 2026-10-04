@@ -3,7 +3,7 @@
  * exists server-side, plus a separate rotate input — never a blank value area.
  */
 
-import { Input } from './ui'
+import { SecretInput } from './ui'
 import { ConfigHelp } from './ConfigHelp'
 
 /** Build a display-safe masked key from server hint or provider prefix. */
@@ -36,7 +36,6 @@ interface ConfiguredSecretFieldProps {
   onChange: (value: string) => void
   placeholder: string
   rotatePlaceholder?: string
-  autoComplete?: string
   /** Override the green pill — default "In Vault" */
   configuredLabel?: string
 }
@@ -51,7 +50,6 @@ export function ConfiguredSecretField({
   onChange,
   placeholder,
   rotatePlaceholder = 'Paste new value to rotate…',
-  autoComplete = 'new-password',
   configuredLabel = 'In Vault',
 }: ConfiguredSecretFieldProps) {
   const hasDraft = value.trim().length > 0
@@ -82,21 +80,17 @@ export function ConfiguredSecretField({
           {showConfigured && (
             <span className="text-2xs text-fg-faint">Rotate</span>
           )}
-          <Input
-            type="password"
+          <SecretInput
             value={value}
             onChange={(e) => onChange(e.target.value)}
             placeholder={rotatePlaceholder}
-            autoComplete={autoComplete}
           />
         </div>
       ) : (
-        <Input
-          type="password"
+        <SecretInput
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
-          autoComplete={autoComplete}
         />
       )}
     </div>

@@ -12,14 +12,15 @@
 
 import { Hono } from 'npm:hono@4'
 import { requireAuth } from '../middleware/auth.ts'
-import { requireProjectAccess } from '../middleware/project.ts'
+import { checkProjectAccessIfNamed } from '../middleware/project.ts'
 import { getServiceClient } from '../../_shared/db.ts'
 import { ownedProjectIds, resolveOwnedProject } from '../shared.ts'
 import type { Variables } from '../types.ts'
+import { readWorkerResult } from '../../_shared/worker-result.ts'
 
 function db() { return getServiceClient() }
 
-// requireProjectAccess only sees a project_id in the query string or header.
+// checkProjectAccessIfNamed only sees a project_id in the query string or header.
 // Routes that take it from the body, or act on a row by id, check the row's
 // project here — they used to reach any tenant's scans, snapshots and findings.
 async function callerCanAccess(userId: string, projectId: unknown): Promise<boolean> {
@@ -192,7 +193,7 @@ export function registerDriftRoutes(parent: Hono<{ Variables: Variables }>) {
   })
 
   const r = new Hono<{ Variables: Variables }>()
-  r.use('*', requireAuth, requireProjectAccess)
+  r.use('*', requireAuth, checkProjectAccessIfNamed)
 
   // List findings
   r.get('/', async (c) => {
@@ -222,9 +223,13 @@ export function registerDriftRoutes(parent: Hono<{ Variables: Variables }>) {
 
   // Trigger a drift scan
   r.post('/scan', async (c) => {
-    const body = await c.req.json()
-    const { project_id, max_paths } = body
+    const body = await c.req.json().catch(() => ({}))
+    const { project_id } = body
     if (!project_id) return c.json({ ok: false, error: { code: 'ERROR', message: 'project_id required' } }, 400)
+    // Whole number 10–1000 (the console field range), else the worker default (an empty field used to
+    // arrive as NaN → null).
+    const rawMax = body.max_paths == null || body.max_paths === '' ? Number.NaN : Number(body.max_paths)
+    const max_paths = Number.isFinite(rawMax) ? Math.min(1000, Math.max(10, Math.round(rawMax))) : undefined
     if (!(await callerCanAccess(c.get('userId') as string, project_id))) {
       return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Access to this project is not allowed' } }, 403)
     }
@@ -235,9 +240,11 @@ export function registerDriftRoutes(parent: Hono<{ Variables: Variables }>) {
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${serviceKey}` },
       body: JSON.stringify({ project_id, max_paths }),
     })
-    const json = await res.json()
-    if (!res.ok) return c.json({ ok: false, error: { code: 'UPSTREAM_ERROR', message: JSON.stringify(json) } }, res.status as 200)
-    return c.json({ ok: true, ...json })
+    const result = await readWorkerResult(res, 'The drift scan could not finish. Try again in a moment.')
+    if (!result.ok) {
+      return c.json({ ok: false, error: { code: 'WORKER_FAILED', message: result.message } }, result.status as 502)
+    }
+    return c.json({ ...result.body, ok: true })
   })
 
   // List snapshots
@@ -298,12 +305,25 @@ export function registerDriftRoutes(parent: Hono<{ Variables: Variables }>) {
     if (!finding || !(await callerCanAccess(c.get('userId') as string, finding.project_id))) {
       return c.json(notFound, 404)
     }
+    const lessonName = `[Drift] ${finding.finding_type}`
+    // One lesson per drift message: a second click (or the same finding on
+    // the next scan) points at the existing lesson instead of adding a copy.
+    const { data: existing, error: existingErr } = await db()
+      .from('mistake_clusters')
+      .select('id')
+      .eq('project_id', finding.project_id)
+      .eq('name', lessonName)
+      .eq('summary', finding.message)
+      .limit(1)
+      .maybeSingle()
+    if (existingErr) return c.json({ ok: false, error: { code: 'DB_ERROR', message: existingErr.message } }, 500)
+    if (existing) return c.json({ ok: true, lesson_id: existing.id, existing: true })
     const { data: lesson, error } = await db()
       .from('mistake_clusters')
       .insert({
         project_id: finding.project_id,
         status: 'candidate',
-        name: `[Drift] ${finding.finding_type}`,
+        name: lessonName,
         summary: finding.message,
         suggested_rule: `Fix: ${finding.message}`,
         cluster_size: 1,
@@ -312,7 +332,7 @@ export function registerDriftRoutes(parent: Hono<{ Variables: Variables }>) {
       .select()
       .single()
     if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
-    return c.json({ ok: true, lesson_id: lesson.id })
+    return c.json({ ok: true, lesson_id: lesson.id, existing: false })
   })
 
   parent.route('/v1/admin/drift', r)

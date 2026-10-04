@@ -5,8 +5,8 @@ import { FIX_AGENT_KINDS, PLATFORM_KINDS, TICKET_INTEGRATION_KINDS } from '../..
 import { getServiceClient } from '../../_shared/db.ts';
 import { jwtAuth, adminOrApiKey } from '../../_shared/auth.ts';
 import { logAudit } from '../../_shared/audit.ts';
-import { createExternalIssue } from '../../_shared/integrations.ts';
-import { callerProjectIds, requireProjectAdmin, resolveOwnedProject, resolveAccessibleOrg } from '../shared.ts';
+import { createExternalIssue, listSyncDestinations } from '../../_shared/integrations.ts';
+import { callerProjectIds, isProjectAdmin, requireProjectAdmin, resolveOwnedProject, resolveAccessibleOrg } from '../shared.ts';
 import {
   parseSentryExtraProjectSlugs,
   validatePlatformBody,
@@ -15,7 +15,9 @@ import {
 import { platformCardValues } from '../../_shared/platform-config.ts';
 import { extractInboundTraceparent } from '../../_shared/trace.ts';
 import { log } from '../../_shared/logger.ts';
+import { vaultRoutingSecrets } from '../../_shared/routing-secrets.ts';
 import { resolveEffectivePlatformSettings } from '../../_shared/integration-settings.ts';
+import { classifyPlatformConnection } from '../../_shared/setup-signals.ts';
 import { getMushiClaudeFixWorkflowYaml, MUSHI_CLAUDE_GITHUB_SECRETS } from '../../_shared/mushi-claude-workflow.ts';
 
 export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>): void {
@@ -56,7 +58,8 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
           lower.endsWith('key') ||
           lower === 'routingkey';
         if (looksSensitive && typeof v === 'string') {
-          out[k] = v.length > 4 ? `…${v.slice(-4)}` : '****';
+          // A Vault ref says nothing about the token; show that one is set.
+          out[k] = v.startsWith('vault://') ? '…****' : v.length > 4 ? `…${v.slice(-4)}` : '****';
         } else {
           out[k] = v;
         }
@@ -68,7 +71,11 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
       ...row,
       config: maskRoutingConfig(row.config as Record<string, unknown> | null),
     }));
-    return c.json({ ok: true, data: { integrations } });
+    // Where POST /v1/admin/integrations/sync/:reportId would push a report:
+    // the active rows above plus Linear connected from the console, which has
+    // no project_integrations row (same loader as the sync).
+    const syncDestinations = await listSyncDestinations(db, project.id as string);
+    return c.json({ ok: true, data: { integrations, syncDestinations } });
   });
 
   app.post('/v1/admin/integrations', jwtAuth, async (c) => {
@@ -107,11 +114,22 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
       merged[k] = v === '' ? null : v;
     }
 
+    // Credentials go to Vault; the row keeps `vault://` refs only.
+    let stored: Record<string, unknown>;
+    try {
+      stored = await vaultRoutingSecrets(db, project.id as string, body.type, merged);
+    } catch (err) {
+      log.error('routing secret vault write failed', { type: body.type, err: err instanceof Error ? err.message : String(err) });
+      return c.json(
+        { ok: false, error: { code: 'VAULT_WRITE_FAILED', message: 'Mushi could not store the token safely. Nothing was saved; try again in a moment.' } },
+        500,
+      );
+    }
     const { error } = await db.from('project_integrations').upsert(
       {
         project_id: project.id,
         integration_type: body.type,
-        config: merged,
+        config: stored,
         is_active: body.isActive ?? true,
       },
       { onConflict: 'project_id,integration_type' },
@@ -127,7 +145,7 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
 
   // DELETE a routing destination (Jira/Linear/GitHub Issues/PagerDuty) so the
   // CRUD editor on IntegrationsPage can fully unwire a target without leaving
-  // stale rows. Auditable; only the project owner can delete their own rows.
+  // stale rows. Auditable; owner/admin only, like the POST that created it.
   app.delete('/v1/admin/integrations/:type', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const integrationType = c.req.param('type')!;
@@ -135,6 +153,8 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
     const resolvedProject = await resolveOwnedProject(c, db, userId);
     if ('response' in resolvedProject) return resolvedProject.response;
     const project = resolvedProject.project;
+    const forbidden = requireProjectAdmin(c, project);
+    if (forbidden) return forbidden;
 
     const { error } = await db
       .from('project_integrations')
@@ -210,7 +230,12 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
     const platformKinds = Object.keys(requiredByKind);
 
     // Use the effective resolver so inherited org credentials count as connected.
-    const [{ settings: effectiveSettings, sourceByField }, { data: routingRows }, { data: probes }] =
+    const [
+      { settings: effectiveSettings, sourceByField },
+      { data: routingRows },
+      { data: probes },
+      { data: sentryDelivered },
+    ] =
       await Promise.all([
         resolveEffectivePlatformSettings(db, project.id as string),
         db
@@ -223,6 +248,15 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
           .eq('project_id', project.id)
           .order('checked_at', { ascending: false })
           .limit(50),
+        // Has any Sentry alert ever reached this project? The API probe only
+        // proves the token; the inbound webhook is the other half.
+        db
+          .from('webhook_audit_log')
+          .select('id')
+          .eq('project_id', project.id)
+          .eq('webhook_source', 'sentry')
+          .eq('outcome', 'accepted')
+          .limit(1),
       ]);
 
     const row = (effectiveSettings ?? {}) as Record<string, unknown>;
@@ -235,6 +269,8 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
     let platformConnected = 0;
     let platformHealthy = 0;
     let platformDown = 0;
+    const attentionKinds: string[] = [];
+    const downKinds: string[] = [];
 
     const latestProbeByKind = new Map<string, { status: string; checked_at: string }>();
     for (const p of probes ?? []) {
@@ -246,17 +282,55 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
       }
     }
 
+    const missingKinds: string[] = [];
     for (const kind of platformKinds) {
       const required = requiredByKind[kind] ?? [];
       const connected = required.every(
         (f) => (row[f] != null && row[f] !== '') || envBackedFields.has(f),
       );
-      if (!connected) continue;
+      if (!connected) {
+        missingKinds.push(kind);
+        continue;
+      }
       platformConnected += 1;
       const probe = latestProbeByKind.get(kind);
-      if (probe?.status === 'ok') platformHealthy += 1;
-      else if (probe?.status === 'down' || probe?.status === 'degraded') platformDown += 1;
+      const verdict = classifyPlatformConnection({
+        probeStatus: probe?.status,
+        probeCheckedAt: probe?.checked_at,
+        needsInbound: kind === 'sentry',
+        inboundAccepted: (sentryDelivered ?? []).length > 0,
+      });
+      if (verdict === 'working') platformHealthy += 1;
+      else if (verdict === 'down') {
+        platformDown += 1;
+        downKinds.push(kind);
+      } else attentionKinds.push(kind);
     }
+
+    // Fix agents (Cursor Cloud, Claude Code) have cards on the same page, so a
+    // failing or unproven agent must show in the banner too. They count toward
+    // down/attention only: picking one agent is enough, so an unconfigured
+    // agent never reads as "missing credentials".
+    const fixAgentRequired: Record<string, string> = {
+      cursor_cloud: 'cursor_api_key_ref',
+      claude_code_agent: 'claude_api_key_ref',
+    };
+    for (const kind of FIX_AGENT_KINDS as string[]) {
+      const field = fixAgentRequired[kind];
+      if (!field) continue;
+      const configured = (row[field] != null && row[field] !== '') || envBackedFields.has(field);
+      if (!configured) continue;
+      const probe = latestProbeByKind.get(kind);
+      const verdict = classifyPlatformConnection({
+        probeStatus: probe?.status,
+        probeCheckedAt: probe?.checked_at,
+      });
+      if (verdict === 'down') {
+        platformDown += 1;
+        downKinds.push(kind);
+      } else if (verdict === 'attention') attentionKinds.push(kind);
+    }
+    const platformAttention = attentionKinds.length;
 
     const routing = routingRows ?? [];
     const routingActive = routing.filter((r) => r.is_active).length;
@@ -269,30 +343,46 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
     const scoped = (path: string) =>
       `${path}${path.includes('?') ? '&' : '?'}project=${encodeURIComponent(pid)}`;
 
-    let topPriority: 'platform_down' | 'incomplete' | 'empty' | 'healthy' = 'healthy';
+    let topPriority: 'platform_down' | 'incomplete' | 'attention' | 'empty' | 'healthy' = 'healthy';
     let topPriorityLabel: string | null = null;
     let topPriorityTo: string | null = null;
 
+    const KIND_NAMES: Record<string, string> = {
+      sentry: 'Sentry',
+      langfuse: 'Langfuse',
+      github: 'GitHub',
+      cursor_cloud: 'Cursor Cloud',
+      claude_code_agent: 'Claude Code',
+    };
+    const nameList = (kinds: string[]) => kinds.map((k) => KIND_NAMES[k] ?? k).join(', ');
     if (platformDown > 0) {
       topPriority = 'platform_down';
-      topPriorityLabel = `${platformDown} connection${platformDown === 1 ? '' : 's'} failing health checks — open the card below and click Test, or run a probe in Health.`;
-      topPriorityTo = scoped('/health?fn=integration-probe');
+      topPriorityLabel = `${nameList(downKinds)} ${platformDown === 1 ? 'is' : 'are'} failing — the card below says why and has the fix.`;
+      topPriorityTo = `${scoped('/integrations/config')}#platform-card-${downKinds[0]}`;
     } else if (platformConnected === 0 && routingActive === 0) {
       // Nothing configured at all — must precede the `incomplete` check below,
       // which would otherwise always swallow this case (0 < platformKinds.length).
       topPriority = 'empty';
       topPriorityLabel =
         'Start with GitHub so fix-worker can open draft PRs, then add Sentry or Langfuse for richer bug context.';
-      topPriorityTo = scoped('/integrations/config');
+      // Every CTA lands on the card it names: a bare /integrations/config
+      // link from this page reloaded the view the user was already on.
+      topPriorityTo = `${scoped('/integrations/config')}#platform-card-github`;
     } else if (platformConnected < platformKinds.length) {
       const missing = platformKinds.length - platformConnected;
       topPriority = 'incomplete';
       topPriorityLabel = `${missing} of ${platformKinds.length} core tools still need credentials — GitHub is required before auto-fix PRs can ship.`;
-      topPriorityTo = scoped('/integrations/config');
+      const firstMissing = missingKinds.includes('github') ? 'github' : missingKinds[0];
+      topPriorityTo = `${scoped('/integrations/config')}#platform-card-${firstMissing}`;
+    } else if (platformAttention > 0) {
+      topPriority = 'attention';
+      topPriorityLabel = `${nameList(attentionKinds)} ${platformAttention === 1 ? 'needs' : 'need'} attention — each card below says what and has the fix.`;
+      topPriorityTo = `${scoped('/integrations/config')}#platform-card-${attentionKinds[0]}`;
     } else {
       topPriority = 'healthy';
       topPriorityLabel = `${platformConnected}/${platformKinds.length} platform tools connected · ${routingActive} routing rule${routingActive === 1 ? '' : 's'} active`;
-      topPriorityTo = scoped('/integrations/config');
+      // The healthy banner's CTA is "Check repo index".
+      topPriorityTo = `${scoped('/integrations/config')}#integrations-codebase`;
     }
 
     return c.json({
@@ -305,6 +395,7 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
         platformConnected,
         platformHealthy,
         platformDown,
+        platformAttention,
         routingActive,
         routingPaused,
         routingTotal: routing.length,
@@ -347,7 +438,10 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
       'cursor_auto_create_pr',
       'cursor_max_iterations',
     ],
-    claude_code_agent: ['claude_api_key_ref'],
+    // The three settings the card renders next to the key. They were missing
+    // here, so a save that changed only them hit NO_FIELDS and a save with
+    // the key silently dropped them.
+    claude_code_agent: ['claude_api_key_ref', 'claude_default_model', 'claude_workflow_event', 'claude_default_branch'],
     // Linear: vault-backed credentials replacing project_integrations.config for 'linear'
     linear: [
       'linear_api_key_ref',
@@ -430,7 +524,9 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
       for (const [f, v] of Object.entries(values)) platform[kind][f] = maskField(f, v);
     }
 
-    return c.json({ ok: true, data: { platform, sourceByField, organizationId } });
+    // canManage mirrors requireProjectAdmin on the PUT / apply / routing /
+    // Linear writes, so the console can disable those controls up front.
+    return c.json({ ok: true, data: { platform, sourceByField, organizationId, canManage: isProjectAdmin(project) } });
   });
 
   // Fields that should be auto-vaulted: when the user submits a raw secret
@@ -471,6 +567,14 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
     if (invalid) return c.json({ ok: false, error: invalid }, 400);
 
     const allowed = PLATFORM_KIND_FIELDS[kind];
+    // anthropic / openai are probe kinds (BYOK lives in Settings → API keys),
+    // not cards with fields here; iterating `undefined` below used to 500.
+    if (!allowed) {
+      return c.json(
+        { ok: false, error: { code: 'BAD_KIND', message: `"${kind}" keys are managed in Settings → API keys, not here.` } },
+        400,
+      );
+    }
     const vaulted = new Set(VAULTED_FIELDS_BY_KIND[kind] ?? []);
     // Only persist whitelisted fields. Empty strings clear the value (so the
     // UI can offer a "remove" affordance without a separate DELETE endpoint).
@@ -613,6 +717,14 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
     if (invalid) return c.json({ ok: false, error: invalid }, 400);
 
     const allowed = PLATFORM_KIND_FIELDS[kind];
+    // anthropic / openai are probe kinds (BYOK lives in Settings → API keys),
+    // not cards with fields here; iterating `undefined` below used to 500.
+    if (!allowed) {
+      return c.json(
+        { ok: false, error: { code: 'BAD_KIND', message: `"${kind}" keys are managed in Settings → API keys, not here.` } },
+        400,
+      );
+    }
     const vaulted = new Set(VAULTED_FIELDS_BY_KIND[kind] ?? []);
     const updates: Record<string, unknown> = { organization_id: organizationId };
 
@@ -841,16 +953,23 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
     if ('response' in resolvedProject) return resolvedProject.response;
 
     const mushiSupabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+    // Render the YAML for the event this project is set to send.
+    const { data: claudeRow } = await db
+      .from('project_settings')
+      .select('claude_workflow_event')
+      .eq('project_id', resolvedProject.project.id)
+      .maybeSingle();
+    const eventType = (claudeRow as { claude_workflow_event?: string | null } | null)?.claude_workflow_event ?? null;
 
     return c.json({
       ok: true,
       data: {
-        workflowYaml: getMushiClaudeFixWorkflowYaml(),
+        workflowYaml: getMushiClaudeFixWorkflowYaml(eventType),
         workflowPath: '.github/workflows/mushi-claude-fix.yml',
         githubSecrets: MUSHI_CLAUDE_GITHUB_SECRETS,
         mushiSupabaseUrl,
         serviceRoleHint:
-          'MUSHI_SERVICE_ROLE_KEY is only used by the workflow to PATCH the fix_attempts row when the run finishes — it never leaves your GitHub Actions environment.',
+          'Hosted Mushi cannot receive the run result from this workflow yet: the draft PR opens in your repo, but its status is not written back to the Fix card. On a self-hosted Mushi, MUSHI_SERVICE_ROLE_KEY enables the write-back and never leaves your GitHub Actions environment.',
       },
     });
   });
@@ -921,6 +1040,8 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
     });
     if ('response' in resolvedProject) return resolvedProject.response;
     const project = resolvedProject.project;
+    const forbidden = requireProjectAdmin(c, project);
+    if (forbidden) return forbidden;
 
     const clientId = Deno.env.get('LINEAR_OAUTH_CLIENT_ID');
     if (!clientId) {
@@ -968,6 +1089,8 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
     });
     if ('response' in resolvedProject) return resolvedProject.response;
     const project = resolvedProject.project;
+    const forbidden = requireProjectAdmin(c, project);
+    if (forbidden) return forbidden;
 
     const { error } = await db
       .from('project_settings')

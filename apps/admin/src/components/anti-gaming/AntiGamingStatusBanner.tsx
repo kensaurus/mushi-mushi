@@ -50,12 +50,14 @@ export function AntiGamingStatusBanner({ stats, onTab, onRefresh, refreshing }: 
         title={`${stats.crossAccountDevices} cross-account on ${projectLabel}`}
         subtitle={stats.topPriorityLabel}
         action={
-          stats.topPriorityTo ? (
-            <Btn to={stats.topPriorityTo} size="sm" variant="ghost">Review devices</Btn>
-          ) : onTab ? (
+          // The page's handler filters and scrolls; a bare link to the same
+          // page only changed the URL.
+          onTab ? (
             <Btn size="sm" variant="ghost" onClick={() => onTab('devices')}>
               Review devices
             </Btn>
+          ) : stats.topPriorityTo ? (
+            <Btn to={stats.topPriorityTo} size="sm" variant="ghost">Review devices</Btn>
           ) : null
         }
       />
@@ -69,7 +71,11 @@ export function AntiGamingStatusBanner({ stats, onTab, onRefresh, refreshing }: 
         title={`${stats.flaggedDevices} flagged device${stats.flaggedDevices === 1 ? '' : 's'}`}
         subtitle={stats.topPriorityLabel}
         action={
-          stats.topPriorityTo ? (
+          onTab ? (
+            <Btn size="sm" variant="ghost" onClick={() => onTab('devices')}>
+              Open flagged
+            </Btn>
+          ) : stats.topPriorityTo ? (
             <Btn to={stats.topPriorityTo} size="sm" variant="ghost">Open flagged</Btn>
           ) : null
         }
@@ -84,12 +90,12 @@ export function AntiGamingStatusBanner({ stats, onTab, onRefresh, refreshing }: 
         title={`${stats.velocityEvents24h} velocity anomal${stats.velocityEvents24h === 1 ? 'y' : 'ies'} (24h)`}
         subtitle={stats.topPriorityLabel}
         action={
-          stats.topPriorityTo ? (
-            <Btn to={stats.topPriorityTo} size="sm" variant="ghost">Open events</Btn>
-          ) : onTab ? (
+          onTab ? (
             <Btn size="sm" variant="ghost" onClick={() => onTab('events')}>
               Open events
             </Btn>
+          ) : stats.topPriorityTo ? (
+            <Btn to={stats.topPriorityTo} size="sm" variant="ghost">Open events</Btn>
           ) : null
         }
       />

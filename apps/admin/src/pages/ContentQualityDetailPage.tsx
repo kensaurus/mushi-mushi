@@ -8,6 +8,9 @@
 import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
+import { apiErrorText } from '../lib/apiErrorText'
+import { useEntitlements } from '../lib/useEntitlements'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
 import { langfuseTraceUrl } from '../lib/env'
@@ -69,7 +72,7 @@ const LANG_NAMES: Record<string, string> = {
 }
 
 const STATUS_TONE: Record<string, 'ok' | 'warn' | 'neutral' | 'info' | 'danger'> = {
-  open: 'warn', in_review: 'info', resolved: 'ok', dismissed: 'neutral',
+  open: 'warn', in_review: 'info', regenerating: 'info', resolved: 'ok', dismissed: 'neutral',
 }
 
 const REGEN_TONE: Record<string, 'ok' | 'warn' | 'danger' | 'neutral' | 'info'> = {
@@ -199,7 +202,10 @@ function SourceDescription({ text }: { text: string }) {
 export function ContentQualityDetailPage() {
   const { id } = useParams<{ id: string }>()
   const toast = useToast()
+  const { canEditProject } = useEntitlements()
   const [regenerating, setRegenerating] = useState(false)
+  const [confirmDismiss, setConfirmDismiss] = useState(false)
+  const [updating, setUpdating] = useState(false)
 
   const { data: issue, loading, error, reload } = usePageData<ContentQualityIssue>(
     id ? `/v1/admin/content-quality/${id}` : null,
@@ -211,33 +217,37 @@ export function ContentQualityDetailPage() {
     try {
       const res = await apiFetch(`/v1/admin/content-quality/${id}/regen`, { method: 'POST' })
       if (!res.ok) {
-        toast.error(res.error?.message ?? 'Failed to trigger regeneration')
+        toast.error('Regeneration not started', apiErrorText(res.error, 'Try again in a moment.'))
         return
       }
       toast.success('Regeneration queued — the source project will generate a candidate and promote it if the score improves.')
       reload()
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to trigger regeneration')
+    } catch {
+      toast.error('Regeneration not started', 'Check your connection and try again.')
     } finally {
       setRegenerating(false)
     }
   }
 
-  async function handleResolve(newStatus: 'resolved' | 'dismissed') {
+  async function handleResolve(newStatus: 'resolved' | 'dismissed' | 'open') {
     if (!id) return
+    setUpdating(true)
     try {
       const res = await apiFetch(`/v1/admin/content-quality/${id}/resolve`, {
         method: 'POST',
         body: JSON.stringify({ status: newStatus }),
       })
       if (!res.ok) {
-        toast.error(res.error?.message ?? 'Failed to update')
+        toast.error('Issue not updated', apiErrorText(res.error, 'Try again in a moment.'))
         return
       }
-      toast.success(`Issue ${newStatus}`)
+      setConfirmDismiss(false)
+      toast.success(newStatus === 'open' ? 'Issue reopened' : `Issue ${newStatus}`)
       reload()
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to update')
+    } catch {
+      toast.error('Issue not updated', 'Check your connection and try again.')
+    } finally {
+      setUpdating(false)
     }
   }
 
@@ -250,7 +260,8 @@ export function ContentQualityDetailPage() {
 
   const fb = issue.feedback_summary
   const traceUrl = langfuseTraceUrl(issue.langfuse_trace_id)
-  const canRegen = issue.status !== 'resolved'
+  const canRegen = canEditProject
+    && issue.status !== 'resolved'
     && issue.status !== 'dismissed'
     && issue.regen_status !== 'running'
     && issue.regen_status !== 'queued'
@@ -293,16 +304,22 @@ export function ContentQualityDetailPage() {
                 Regenerate &amp; push
               </Btn>
             )}
-            {issue.status === 'open' && (
-              <Btn variant="ghost" size="sm" onClick={() => handleResolve('resolved')}
+            {issue.status === 'open' && canEditProject && (
+              <Btn variant="ghost" size="sm" onClick={() => void handleResolve('resolved')} disabled={updating}
                 title="Mark as manually resolved — the content was fixed or is acceptable.">
                 Resolve
               </Btn>
             )}
-            {issue.status === 'open' && (
-              <Btn variant="ghost" size="sm" onClick={() => handleResolve('dismissed')}
+            {issue.status === 'open' && canEditProject && (
+              <Btn variant="ghost" size="sm" onClick={() => setConfirmDismiss(true)} disabled={updating}
                 title="Dismiss — this issue doesn't need action.">
                 Dismiss
+              </Btn>
+            )}
+            {(issue.status === 'resolved' || issue.status === 'dismissed') && canEditProject && (
+              <Btn variant="ghost" size="sm" onClick={() => void handleResolve('open')} loading={updating}
+                title="Put this issue back in the Open list.">
+                Reopen
               </Btn>
             )}
           </div>
@@ -322,6 +339,20 @@ export function ContentQualityDetailPage() {
           <InlineProof>flagged {new Date(issue.created_at).toLocaleDateString()}</InlineProof>
         </div>
       </div>
+
+      {confirmDismiss && (
+        <ConfirmDialog
+          title="Dismiss this issue?"
+          body="It leaves the Open list and no regeneration runs. You can reopen it later from this page."
+          confirmLabel="Dismiss"
+          cancelLabel="Keep open"
+          loading={updating}
+          onConfirm={() => void handleResolve('dismissed')}
+          onCancel={() => {
+            if (!updating) setConfirmDismiss(false)
+          }}
+        />
+      )}
 
       {/* ── Body ── */}
       <div className="flex-1 overflow-auto px-4 py-4 space-y-4 max-w-4xl w-full">

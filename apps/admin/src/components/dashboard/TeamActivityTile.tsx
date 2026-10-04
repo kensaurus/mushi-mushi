@@ -22,6 +22,10 @@ interface AuditEntry {
   id: string
   actor_id: string | null
   actor_email: string | null
+  /** Member name looked up from the user id (server); null for agents and system. */
+  actor_name?: string | null
+  /** Stored email, or the member's email looked up from the user id. */
+  actor_display_email?: string | null
   action: string
   resource_type: string
   resource_id: string | null
@@ -35,19 +39,27 @@ interface AuditResponse {
 
 type ActorKind = 'human' | 'agent' | 'system'
 
+const NIL_UUID = '00000000-0000-0000-0000-000000000000'
+
 /**
- * Classify the actor for a small tone glyph. Mirrors the audit stat-mix
- * convention: email/uuid → human, `agent_*` ids → agent, null actor → system.
+ * Classify the actor for a small tone glyph. A user id the server could name
+ * is a member; `agent_*` ids and `agent-…@` emails are agents; no actor, the
+ * all-zero id, or a `…@mushi-mushi` service address is the system.
  */
 function actorKind(e: AuditEntry): ActorKind {
-  if (e.actor_email) return 'human'
-  if (!e.actor_id) return 'system'
-  if (e.actor_id.startsWith('agent_')) return 'agent'
+  const email = e.actor_email ?? ''
+  if (!e.actor_id || e.actor_id === NIL_UUID || email.endsWith('@mushi-mushi')) return 'system'
+  if (e.actor_id.startsWith('agent_') || email.startsWith('agent-')) return 'agent'
+  if (e.actor_name || e.actor_display_email) return 'human'
   return 'agent'
 }
 
-function actorLabel(e: AuditEntry): string {
-  return e.actor_email ?? e.actor_id ?? 'system'
+/** A name or email — never a raw id (2026-10-04: rows read "Agent eb0c15cc-…"). */
+function actorLabel(e: AuditEntry, kind: ActorKind): string {
+  const name = e.actor_name ?? e.actor_display_email ?? e.actor_email
+  if (name) return name
+  if (kind === 'system') return 'Mushi'
+  return kind === 'agent' ? 'Automation' : 'Former member'
 }
 
 const KIND_TONE: Record<ActorKind, 'info' | 'neutral'> = {
@@ -102,11 +114,12 @@ export function TeamActivityTile({ projectId }: Props) {
         <ul className="space-y-1.5">
           {logs.map((e) => {
             const kind = actorKind(e)
-            const who = actorLabel(e)
+            const who = actorLabel(e, kind)
             return (
               <li key={e.id}>
                 <Link
-                  to={`/audit?actor=${encodeURIComponent(who)}`}
+                  to={e.actor_email ? `/audit?actor=${encodeURIComponent(e.actor_email)}` : '/audit'}
+                  title={e.actor_id ? `Actor id ${e.actor_id}` : undefined}
                   className="group block rounded-md border border-edge-subtle/70 bg-surface-overlay/25 px-2 py-1.5 motion-safe:transition-opacity hover:border-edge hover:bg-surface-overlay/45"
                 >
                   <div className="flex items-center gap-2">

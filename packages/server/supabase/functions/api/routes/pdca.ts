@@ -13,7 +13,7 @@
 import { Hono } from 'npm:hono@4'
 import type { Context } from 'npm:hono@4'
 import { requireAuth } from '../middleware/auth.ts'
-import { requireProjectAccess } from '../middleware/project.ts'
+import { checkProjectAccessIfNamed } from '../middleware/project.ts'
 import { getServiceClient } from '../../_shared/db.ts'
 import { accessibleProjectIds } from '../../_shared/project-access.ts'
 import {
@@ -24,6 +24,7 @@ import {
 } from '../shared.ts'
 import type { Variables } from '../types.ts'
 import { PDCA_DEFAULT_MODEL, pdcaModelError } from '../../_shared/pdca-models.ts'
+import { unwrapUpstreamError } from '../../_shared/upstream-error.ts'
 
 const app = new Hono<{ Variables: Variables }>()
 
@@ -87,7 +88,7 @@ export function registerPdcaRoutes(parent: Hono<{ Variables: Variables }>) {
 
 function pdcaRoutes() {
   const r = new Hono<{ Variables: Variables }>()
-  r.use('*', requireAuth, requireProjectAccess)
+  r.use('*', requireAuth, checkProjectAccessIfNamed)
 
   // Stats for KPI strip + posture banner — must be registered before /:id
   r.get('/stats', async (c) => {
@@ -294,6 +295,31 @@ function pdcaRoutes() {
     const access = await assertTargetProjectAccess(c, db(), userId, projectId)
     if (!access.ok) return access.response
 
+    // The runner looks the persona up in agent_personas and silently falls
+    // back to a generic critic when it is missing, so an unknown slug is
+    // refused here instead (console QA #100).
+    const personaSlug = typeof persona === 'string' && persona.trim() ? persona.trim() : 'nng-heuristic'
+    const { data: personaRow, error: personaErr } = await db()
+      .from('agent_personas')
+      .select('slug')
+      .eq('slug', personaSlug)
+      .maybeSingle()
+    if (personaErr) {
+      return c.json({ ok: false, error: { code: 'DB_ERROR', message: personaErr.message } }, 500)
+    }
+    if (!personaRow) {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'BAD_REQUEST',
+            message: `There is no critic persona called "${personaSlug.slice(0, 64)}". Pick one from the list.`,
+          },
+        },
+        400,
+      )
+    }
+
     const { data, error } = await db()
       .from('pdca_runs')
       .insert({
@@ -303,7 +329,7 @@ function pdcaRoutes() {
         iterations_target: iterations_target ?? 5,
         primary_model: typeof primary_model === 'string' && primary_model.trim() ? primary_model.trim() : PDCA_DEFAULT_MODEL,
         judge_model: typeof judge_model === 'string' && judge_model.trim() ? judge_model.trim() : PDCA_DEFAULT_MODEL,
-        persona: persona ?? 'nng-heuristic',
+        persona: personaSlug,
         target_score: target_score ?? 0.7,
       })
       .select()
@@ -369,17 +395,44 @@ function pdcaRoutes() {
         },
         body: JSON.stringify({ run_id: runId }),
       })
-      const json = await res.json()
-      if (!res.ok) return c.json({ ok: false, error: json }, res.status as 200)
-      return c.json({ ok: true, ...json })
+      const json = await res.json().catch(() => null)
+      if (!res.ok) {
+        // pdca-runner answers `{ ok:false, error:'Run not found or already taken' }`
+        // or `{ error:{code,message} }`; keep its reason (console QA #101).
+        const error = unwrapUpstreamError(json, {
+          code: 'TRIGGER_FAILED',
+          message: `The PDCA runner could not start this run (HTTP ${res.status}). Try again in a minute.`,
+        })
+        return c.json({ ok: false, error }, (res.status >= 400 ? res.status : 502) as 502)
+      }
+      return c.json({ ok: true, ...(json ?? {}) })
     } catch (err) {
-      return c.json({ ok: false, error: { code: 'ERROR', message: String(err) } }, 500)
+      return c.json(
+        { ok: false, error: { code: 'TRIGGER_UNREACHABLE', message: `Couldn't reach the PDCA runner: ${String(err)}` } },
+        502,
+      )
     }
   })
 
   // Phase 3: Trigger PDCA QA story auto-improve
   r.post('/improve-qa-stories', async (c) => {
-    const body = await c.req.json().catch(() => ({})) as { project_id?: string }
+    const body = await c.req.json().catch(() => ({})) as { project_id?: unknown }
+    // The runner improves every project when it gets no project_id, so a
+    // caller must always name one it can reach: the body, the named project,
+    // or a bound key's own project.
+    const projectId =
+      (typeof body.project_id === 'string' && body.project_id) ||
+      projectIdFromRequest(c) ||
+      (c.get('authMethod') === 'apiKey' ? (c.get('projectId') as string | undefined) : undefined) ||
+      null
+    if (!projectId) {
+      return c.json(
+        { ok: false, error: { code: 'PROJECT_REQUIRED', message: 'Choose a project first: send project_id.' } },
+        400,
+      )
+    }
+    const access = await assertTargetProjectAccess(c, db(), c.get('userId') as string, projectId)
+    if (!access.ok) return access.response
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -387,7 +440,7 @@ function pdcaRoutes() {
       const res = await fetch(`${supabaseUrl}/functions/v1/pdca-runner`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${serviceKey}` },
-        body: JSON.stringify({ mode: 'qa_story_improve', project_id: body.project_id }),
+        body: JSON.stringify({ mode: 'qa_story_improve', project_id: projectId }),
       })
       const json = await res.json()
       if (!res.ok) return c.json({ ok: false, error: json }, res.status as 200)

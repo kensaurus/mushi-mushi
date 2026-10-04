@@ -24,6 +24,8 @@ export interface HumanizedFixError {
   };
   /** Verbatim source for power-user forensics. */
   raw: string;
+  /** false when no rule matched and the title is the generic fallback. */
+  known?: false;
 }
 
 type Context = {
@@ -54,7 +56,12 @@ export function humanizeFixError(
   }
 
   // Cursor: unrecognised body key (schema drift like branchName removal)
-  if (m.includes('cursor api error 400') && m.includes('unrecognized key')) {
+  // Mushi sent a request shape Cursor's API rejects (field removed, or a
+  // field combination such as envVars + agentId — fixed 2026-10-03).
+  if (
+    (m.includes('cursor api error 400') && m.includes('unrecognized key')) ||
+    (m.includes('cursor api 400') && m.includes('validation_error'))
+  ) {
     return {
       title: 'Mushi sent Cursor a field it no longer accepts.',
       hint: 'This is a Mushi-side issue from an API schema change. Retrying usually works; a Mushi update will fully fix it.',
@@ -297,6 +304,27 @@ export function humanizeFixError(
     };
   }
 
+  // The agent's own review gate refused the patch, or its edits did not
+  // apply to the current code. Both stop before a PR is opened.
+  if (m.startsWith('review_failed') && m.includes('could not be applied')) {
+    return {
+      title: "The fix's edits did not apply to your current code.",
+      hint: 'The code changed after the agent read it. A retry reads the latest code.',
+      severity: 'soft',
+      action: { label: 'Retry', target: { kind: 'retry' } },
+      raw,
+    };
+  }
+  if (m.startsWith('review_failed') || category === 'review_failed') {
+    return {
+      title: 'The fix agent was not confident in its own patch.',
+      hint: 'It flagged the change for human review, so no PR was opened. Read the reason in Details, then retry or fix it in your editor.',
+      severity: 'soft',
+      action: { label: 'Retry', target: { kind: 'retry' } },
+      raw,
+    };
+  }
+
   // Sandbox timeout
   if ((m.includes('sandbox') && m.includes('timeout')) || category === 'sandbox_timeout') {
     return {
@@ -362,5 +390,6 @@ export function humanizeFixError(
     severity: 'soft',
     action: { label: 'Retry', target: { kind: 'retry' } },
     raw,
+    known: false,
   };
 }

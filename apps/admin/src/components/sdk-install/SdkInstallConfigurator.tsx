@@ -117,6 +117,9 @@ export function SdkInstallConfigurator({
               { value: 'auto',     label: 'Floating stamp (FAB)',    hint: 'SDK renders a bug-stamp in the chosen corner.' },
               { value: 'edge-tab', label: 'Edge tab',               hint: 'A vertical tab on the screen edge.' },
               { value: 'manual',   label: 'Headless (manual)',       hint: 'Use <MushiTrigger> anywhere in your JSX.' },
+              // The server already stores 'hidden'; without an option here a
+              // project set to it showed no selected mode (QA bug 121).
+              { value: 'hidden',   label: 'Hidden',                  hint: 'No launcher at all. Open the reporter from code with Mushi.open().' },
             ] as const).map(({ value, label, hint }) => (
               <button
                 key={value}

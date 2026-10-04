@@ -22,7 +22,9 @@ export function useNotificationsUx(): NotificationsUxFlags {
     isQuickstart,
     isBeginner,
     isAdvanced,
-    hideTabs: isQuickstart,
+    // Kept visible in Quick mode: nothing else on the page leads to the
+    // Outbox, so hiding the tabs made held reporter updates unreachable.
+    hideTabs: false,
     plainBanner: !isAdvanced,
     hideOverviewChrome: !isAdvanced,
     hideNotificationsSnapshot: isQuickstart,

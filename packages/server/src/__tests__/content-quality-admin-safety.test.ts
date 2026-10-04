@@ -57,10 +57,24 @@ describe('content-quality admin safety (MUSHI-MUSHI-SERVER-1A)', () => {
   });
 
   it('admin list handler guards project access before querying issues', () => {
-    // The inline owner/member check must use maybeSingle + null guards.
-    expect(src).toContain(".eq('owner_id', userId)");
-    expect(src).toMatch(/if \(!access\)\s*\{/);
-    expect(src).toMatch(/if \(!member\)\s*return/);
+    // Org-aware like every other content-quality route (console QA bug 54:
+    // the old owner-or-project_members check refused org teammates).
+    const start = src.indexOf("app.get('/v1/admin/content-quality',");
+    const list = src.slice(start, src.indexOf('app.get(', start + 10));
+    const guard = list.indexOf('if (!access.allowed)');
+    expect(list).toContain('callerCanAccessProject(c, db, userId, projectId)');
+    expect(guard).toBeGreaterThan(0);
+    expect(guard).toBeLessThan(list.indexOf(".from('content_quality_issues')"));
+    expect(list).not.toContain(".eq('owner_id', userId)");
+  });
+
+  it('resolve and regen refuse viewers; resolve can reopen (console QA bug 203)', () => {
+    const resolveStart = src.indexOf("app.post('/v1/admin/content-quality/:id/resolve'");
+    const resolveRoute = src.slice(resolveStart);
+    expect(resolveRoute).toContain('denyViewerWrite(c, loaded.role');
+    expect(resolveRoute).toMatch(/body\.status === 'open' \? 'open'/);
+    const regen = src.slice(src.indexOf("app.post('/v1/admin/content-quality/:id/regen'"), resolveStart);
+    expect(regen).toContain('denyViewerWrite(c, loaded.role');
   });
 
   it('never dereferences a project-access result before its null guard', () => {

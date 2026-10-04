@@ -26,6 +26,7 @@ import { resolveEndUser } from '../../_shared/end-user-resolver.ts'
 import {
   assertTargetProjectAccess,
   callerProjectIds,
+  dbError,
   intersectOrgAndProjectScope,
   jsonForbidden,
   jsonNotFound,
@@ -36,6 +37,7 @@ import { log } from '../../_shared/logger.ts'
 import { reporterKey } from '../../_shared/reporter-token.ts'
 import { publishRelease } from '../../_shared/release-publish.ts'
 import { findOpenAutoDraft } from '../../_shared/auto-release.ts'
+import { denyViewerWrite } from '../viewer-gate.ts'
 
 async function assertReleaseRowAccess(
   c: Parameters<typeof assertTargetProjectAccess>[0],
@@ -43,7 +45,7 @@ async function assertReleaseRowAccess(
   userId: string,
   releaseId: string,
 ): Promise<
-  | { ok: true; projectId: string }
+  | { ok: true; projectId: string; role: string | null }
   | { ok: false; response: Response }
 > {
   const { data: release } = await db
@@ -56,7 +58,152 @@ async function assertReleaseRowAccess(
   }
   const access = await assertTargetProjectAccess(c, db, userId, release.project_id as string)
   if (!access.ok) return { ok: false, response: access.response }
-  return { ok: true, projectId: release.project_id as string }
+  return { ok: true, projectId: release.project_id as string, role: access.role ?? null }
+}
+
+type ReleaseStatsDb = ReturnType<typeof getServiceClient>
+
+interface ReleaseStatsCounts {
+  totalReleases: number
+  draftCount: number
+  publishedCount: number
+  fixedReportsCount: number
+  fulfilledTicketsShipped: number
+  openFeedbackTickets: number
+  lastPublishedAt: string | null
+  lastDraftAt: string | null
+  totalFixesLinked: number
+  totalContributors: number
+  draftFixes: number
+  draftContributors: number
+  totalCredits: number
+  creditsNotified: number
+}
+
+const RELEASE_STATS_PAGE = 500
+
+/**
+ * Counts for GET /v1/admin/releases/stats. Counts are exact counts, and the
+ * array totals read only the two array columns, page by page: the route feeds
+ * the sidebar counters (nav-meta) on every page, and the old unbounded select
+ * of every release and every credit capped silently at PostgREST's 1,000
+ * rows. A failed read throws: the banner must not turn an outage into
+ * "0 drafts".
+ */
+async function loadReleaseStatsCounts(db: ReleaseStatsDb, pid: string): Promise<ReleaseStatsCounts> {
+  const must = <T extends { error: { message?: string } | null }>(r: T): T => {
+    if (r.error) throw new Error(r.error.message ?? 'release stats read failed')
+    return r
+  }
+  const headCount = (q: PromiseLike<{ count: number | null; error: { message?: string } | null }>) =>
+    Promise.resolve(q).then((r) => must(r).count ?? 0)
+  const releaseCount = (status?: string) => {
+    let q = db.from('releases').select('id', { count: 'exact', head: true }).eq('project_id', pid)
+    if (status) q = q.eq('status', status)
+    return headCount(q)
+  }
+  const newestAt = async (status: string, col: 'published_at' | 'created_at') => {
+    const r = must(
+      await db
+        .from('releases')
+        .select(col)
+        .eq('project_id', pid)
+        .eq('status', status)
+        .order(col, { ascending: false })
+        .limit(1),
+    )
+    return ((r.data ?? [])[0] as Record<string, string | null> | undefined)?.[col] ?? null
+  }
+
+  const [
+    totalReleases,
+    draftCount,
+    publishedCount,
+    fixedReportsCount,
+    fulfilledTicketsShipped,
+    openFeedbackTickets,
+    lastPublishedAt,
+    lastDraftAt,
+  ] = await Promise.all([
+    releaseCount(),
+    releaseCount('draft'),
+    releaseCount('published'),
+    headCount(db.from('reports').select('id', { count: 'exact', head: true }).eq('project_id', pid).eq('status', 'fixed')),
+    headCount(
+      db
+        .from('support_tickets')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', pid)
+        .not('shipped_in_release_id', 'is', null),
+    ),
+    headCount(
+      db
+        .from('support_tickets')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', pid)
+        .in('status', ['open', 'in_progress']),
+    ),
+    newestAt('published', 'published_at'),
+    newestAt('draft', 'created_at'),
+  ])
+
+  const out: ReleaseStatsCounts = {
+    totalReleases,
+    draftCount,
+    publishedCount,
+    fixedReportsCount,
+    fulfilledTicketsShipped,
+    openFeedbackTickets,
+    lastPublishedAt,
+    lastDraftAt,
+    totalFixesLinked: 0,
+    totalContributors: 0,
+    draftFixes: 0,
+    draftContributors: 0,
+    totalCredits: 0,
+    creditsNotified: 0,
+  }
+  for (let from = 0; from < totalReleases; from += RELEASE_STATS_PAGE) {
+    const { data: page } = must(
+      await db
+        .from('releases')
+        .select('id, status, fixed_report_ids, credited_reporter_ids')
+        .eq('project_id', pid)
+        .order('created_at', { ascending: false })
+        .range(from, from + RELEASE_STATS_PAGE - 1),
+    )
+    const rows = (page ?? []) as Array<{
+      id: string
+      status: string | null
+      fixed_report_ids: string[] | null
+      credited_reporter_ids: string[] | null
+    }>
+    if (rows.length === 0) break
+    for (const r of rows) {
+      const fixes = r.fixed_report_ids?.length ?? 0
+      const contributors = r.credited_reporter_ids?.length ?? 0
+      out.totalFixesLinked += fixes
+      out.totalContributors += contributors
+      if (r.status === 'draft') {
+        out.draftFixes += fixes
+        out.draftContributors += contributors
+      }
+    }
+    const ids = rows.map((r) => r.id)
+    const [credits, notified] = await Promise.all([
+      headCount(db.from('release_credits').select('id', { count: 'exact', head: true }).in('release_id', ids)),
+      headCount(
+        db
+          .from('release_credits')
+          .select('id', { count: 'exact', head: true })
+          .in('release_id', ids)
+          .not('notified_at', 'is', null),
+      ),
+    ])
+    out.totalCredits += credits
+    out.creditsNotified += notified
+  }
+  return out
 }
 
 export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
@@ -113,58 +260,29 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
     const activeProject = resolvedProject.project
     const pid = activeProject.id
 
-    const [releasesRes, fixedReportsRes, shippedTicketsRes, openTicketsRes] = await Promise.all([
-      db
-        .from('releases')
-        .select('id, status, fixed_report_ids, credited_reporter_ids, published_at, created_at')
-        .eq('project_id', pid)
-        .order('created_at', { ascending: false }),
-      db
-        .from('reports')
-        .select('id', { count: 'exact', head: true })
-        .eq('project_id', pid)
-        .eq('status', 'fixed'),
-      db
-        .from('support_tickets')
-        .select('id', { count: 'exact', head: true })
-        .eq('project_id', pid)
-        .not('shipped_in_release_id', 'is', null),
-      db
-        .from('support_tickets')
-        .select('id', { count: 'exact', head: true })
-        .eq('project_id', pid)
-        .in('status', ['open', 'in_progress']),
-    ])
-
-    const releases = releasesRes.data ?? []
-    const releaseIds = releases.map((r) => r.id as string)
-
-    const creditsRes =
-      releaseIds.length > 0
-        ? await db
-            .from('release_credits')
-            .select('id, notified_at')
-            .in('release_id', releaseIds)
-        : { data: [] as Array<{ id: string; notified_at: string | null }> }
-
-    const credits = creditsRes.data ?? []
-    const draftCount = releases.filter((r) => r.status === 'draft').length
-    const publishedCount = releases.filter((r) => r.status === 'published').length
-    const totalFixesLinked = releases.reduce(
-      (sum, r) => sum + ((r.fixed_report_ids as string[] | null)?.length ?? 0),
-      0,
-    )
-    const totalContributors = releases.reduce(
-      (sum, r) => sum + ((r.credited_reporter_ids as string[] | null)?.length ?? 0),
-      0,
-    )
-    const creditsNotified = credits.filter((c) => c.notified_at != null).length
-    const creditsPending = credits.filter((c) => c.notified_at == null).length
-    const fixedReportsCount = fixedReportsRes.count ?? 0
-    const fulfilledTicketsShipped = shippedTicketsRes.count ?? 0
-    const openFeedbackTickets = openTicketsRes.count ?? 0
-    const lastPublished = releases.find((r) => r.status === 'published')
-    const lastDraft = releases.find((r) => r.status === 'draft')
+    let stats: ReleaseStatsCounts
+    try {
+      stats = await loadReleaseStatsCounts(db, pid)
+    } catch (err) {
+      return dbError(c, { message: err instanceof Error ? err.message : String(err) })
+    }
+    const {
+      totalReleases,
+      draftCount,
+      publishedCount,
+      fixedReportsCount,
+      fulfilledTicketsShipped,
+      openFeedbackTickets,
+      lastPublishedAt,
+      lastDraftAt,
+      totalFixesLinked,
+      totalContributors,
+      draftFixes,
+      draftContributors,
+      totalCredits,
+      creditsNotified,
+    } = stats
+    const creditsPending = totalCredits - creditsNotified
 
     let topPriority = empty.topPriority
     let topPriorityLabel: string | null = null
@@ -173,16 +291,13 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
     if (draftCount > 0) {
       topPriority = 'drafts_pending'
       // The banner is about the drafts, so count only what the drafts carry.
-      const drafts = releases.filter((r) => r.status === 'draft')
-      const draftFixes = drafts.reduce((sum, r) => sum + ((r.fixed_report_ids as string[] | null)?.length ?? 0), 0)
-      const draftContributors = drafts.reduce((sum, r) => sum + ((r.credited_reporter_ids as string[] | null)?.length ?? 0), 0)
       topPriorityLabel = `${draftContributors} contributor${draftContributors === 1 ? '' : 's'} credited · ${draftFixes} fix${draftFixes === 1 ? '' : 'es'} linked — review Markdown and publish to notify reporters.`
       topPriorityTo = '/releases?tab=drafts'
-    } else if (releases.length === 0 && fixedReportsCount > 0) {
+    } else if (totalReleases === 0 && fixedReportsCount > 0) {
       topPriority = 'no_releases'
       topPriorityLabel = `${fixedReportsCount} fixed report${fixedReportsCount === 1 ? '' : 's'} available — generate an AI changelog draft from the Draft tab.`
       topPriorityTo = '/releases?tab=draft'
-    } else if (releases.length === 0 && fixedReportsCount === 0) {
+    } else if (totalReleases === 0 && fixedReportsCount === 0) {
       topPriority = 'no_fixes'
       topPriorityLabel = 'Mark reports as fixed in Reports before generating a release draft.'
       topPriorityTo = '/reports?status=fixed'
@@ -192,7 +307,7 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
       topPriorityTo = '/releases?tab=draft'
     } else {
       topPriority = 'healthy'
-      topPriorityLabel = `${publishedCount} published · ${credits.length} credit${credits.length === 1 ? '' : 's'} · ${openFeedbackTickets} open feedback ticket${openFeedbackTickets === 1 ? '' : 's'}.`
+      topPriorityLabel = `${publishedCount} published · ${totalCredits} credit${totalCredits === 1 ? '' : 's'} · ${openFeedbackTickets} open feedback ticket${openFeedbackTickets === 1 ? '' : 's'}.`
       topPriorityTo = '/releases?tab=published'
     }
 
@@ -205,17 +320,17 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
         projectCount: projectIds.length,
         draftCount,
         publishedCount,
-        totalReleases: releases.length,
+        totalReleases,
         totalFixesLinked,
         totalContributors,
-        totalCredits: credits.length,
+        totalCredits,
         creditsNotified,
         creditsPending,
         fulfilledTicketsShipped,
         fixedReportsCount,
         openFeedbackTickets,
-        lastPublishedAt: lastPublished?.published_at ?? null,
-        lastDraftAt: lastDraft?.created_at ?? null,
+        lastPublishedAt,
+        lastDraftAt,
         topPriority,
         topPriorityLabel,
         topPriorityTo,
@@ -246,7 +361,7 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
     if (status) query = query.eq('status', status)
 
     const { data, count, error } = await query
-    if (error) return c.json({ ok: false, error: error.message }, 500)
+    if (error) return dbError(c, error)
     return c.json({ ok: true, data, meta: { total: count ?? 0, limit, offset } })
   })
 
@@ -277,13 +392,17 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
   })
 
   app.post('/v1/admin/releases/draft', writeAuth, async (c) => {
-    const body = draftSchema.safeParse(await c.req.json())
-    if (!body.success) return c.json({ ok: false, error: body.error.flatten() }, 400)
+    const body = draftSchema.safeParse(await c.req.json().catch(() => null))
+    if (!body.success) {
+      return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: 'Enter a version (for example 1.2.3) and pick a project.' } }, 400)
+    }
 
     const db = getServiceClient()
     const userId = c.get('userId') as string
     const access = await assertTargetProjectAccess(c, db, userId, body.data.project_id)
     if (!access.ok) return access.response
+    const viewerDenied = denyViewerWrite(c, access.role, 'draft releases')
+    if (viewerDenied) return viewerDenied
 
     // Call the release-builder edge function
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
@@ -301,7 +420,7 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
       })
     } catch (err) {
       log.error('fetch release-builder failed', { scope: 'releases/draft', err: String(err) })
-      return c.json({ ok: false, error: 'Could not reach release-builder function' }, 500)
+      return c.json({ ok: false, error: { code: 'RELEASE_BUILDER_UNAVAILABLE', message: 'The release writer did not answer. Try again in a minute.' } }, 502)
     }
 
     // The edge function may return plain-text "Internal Server Error" on crash —
@@ -315,9 +434,19 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
         scope: 'releases/draft',
         preview: rawText.slice(0, 200),
       })
-      return c.json({ ok: false, error: `release-builder error: ${rawText.slice(0, 100)}` }, 500)
+      return c.json({ ok: false, error: { code: 'RELEASE_BUILDER_FAILED', message: 'The release writer failed. Try again in a minute.' } }, 502)
     }
-    if (!res.ok) return c.json({ ok: false, error: (data.error as string) ?? 'release-builder failed' }, 500)
+    if (!res.ok) {
+      const upstream = data.error
+      const message = typeof upstream === 'string'
+        ? upstream
+        : (upstream as { message?: string } | undefined)?.message
+      log.warn('release-builder refused draft', { scope: 'releases/draft', status: res.status, message })
+      return c.json({
+        ok: false,
+        error: { code: 'RELEASE_BUILDER_FAILED', message: message || 'The release writer could not draft this release.' },
+      }, res.status >= 500 ? 502 : 400)
+    }
     return c.json({ ok: true, data: (data as { data?: unknown }).data ?? data })
   })
 
@@ -337,7 +466,7 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
         .eq('release_id', c.req.param('id')!),
     ])
 
-    if (releaseRes.error) return c.json({ ok: false, error: releaseRes.error.message }, 404)
+    if (releaseRes.error) return jsonNotFound(c, 'Release not found')
     return c.json({ ok: true, data: { ...releaseRes.data, credits: creditsRes.data ?? [] } })
   })
 
@@ -356,9 +485,13 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
     if (!idParsed.ok) return idParsed.error
     const rowAccess = await assertReleaseRowAccess(c, db, userId, idParsed.value)
     if (!rowAccess.ok) return rowAccess.response
+    const viewerDenied = denyViewerWrite(c, rowAccess.role, 'edit releases')
+    if (viewerDenied) return viewerDenied
 
-    const body = patchReleaseSchema.safeParse(await c.req.json())
-    if (!body.success) return c.json({ ok: false, error: body.error.flatten() }, 400)
+    const body = patchReleaseSchema.safeParse(await c.req.json().catch(() => null))
+    if (!body.success) {
+      return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: 'That change is not valid. Refresh the draft and try again.' } }, 400)
+    }
 
     const { data, error } = await db
       .from('releases')
@@ -366,9 +499,12 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
       .eq('id', c.req.param('id')!)
       .eq('status', 'draft') // can only edit drafts
       .select()
-      .single()
+      .maybeSingle()
 
-    if (error) return c.json({ ok: false, error: error.message }, 500)
+    if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: 'The draft could not be saved. Try again in a moment.' } }, 500)
+    if (!data) {
+      return c.json({ ok: false, error: { code: 'NOT_A_DRAFT', message: 'This release is already published, so it can no longer be edited.' } }, 409)
+    }
     return c.json({ ok: true, data })
   })
 
@@ -380,14 +516,20 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
     if (!idParsed.ok) return idParsed.error
     const rowAccess = await assertReleaseRowAccess(c, db, userId, idParsed.value)
     if (!rowAccess.ok) return rowAccess.response
+    const viewerDenied = denyViewerWrite(c, rowAccess.role, 'delete release drafts')
+    if (viewerDenied) return viewerDenied
 
-    const { error } = await db
+    const { data: deleted, error } = await db
       .from('releases')
       .delete()
       .eq('id', c.req.param('id')!)
       .eq('status', 'draft')
+      .select('id')
 
-    if (error) return c.json({ ok: false, error: error.message }, 500)
+    if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: 'The draft could not be deleted. Try again in a moment.' } }, 500)
+    if (!deleted || deleted.length === 0) {
+      return c.json({ ok: false, error: { code: 'NOT_A_DRAFT', message: 'Only drafts can be deleted, and this release is already published.' } }, 409)
+    }
     return c.json({ ok: true })
   })
 
@@ -399,12 +541,23 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
     if (!idParsed.ok) return idParsed.error
     const rowAccess = await assertReleaseRowAccess(c, db, userId, idParsed.value)
     if (!rowAccess.ok) return rowAccess.response
+    const viewerDenied = denyViewerWrite(c, rowAccess.role, 'publish releases')
+    if (viewerDenied) return viewerDenied
 
     // Mark published, ship tickets, message each reporter (Plan 018 §5) and
     // stamp delivered credits — the same path the opt-in auto-release takes.
     const published = await publishRelease(db, idParsed.value, { kind: 'admin', id: userId })
     // `published: true` = the release is live but some reporters were not told.
-    if (!published.ok) return c.json({ ok: false, error: published.error, published: published.published }, published.status)
+    if (!published.ok) {
+      log.warn('release publish incomplete', { scope: 'releases/publish', releaseId: idParsed.value, published: published.published, error: published.error })
+      const message = published.published
+        ? 'The release is live, but some follow-up steps failed: linked tickets or reporter messages may be missing. Check Notifications.'
+        : published.status === 404
+          ? 'This release is already published or no longer exists. Refresh the list.'
+          : 'The release could not be published. Try again in a moment.'
+      const code = published.published ? 'PUBLISHED_WITH_ERRORS' : published.status === 404 ? 'NOT_A_DRAFT' : 'PUBLISH_FAILED'
+      return c.json({ ok: false, error: { code, message }, published: published.published }, published.status)
+    }
 
     return c.json({
       ok: true,

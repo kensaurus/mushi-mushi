@@ -17,7 +17,8 @@
 import { Suspense, lazy, useCallback, useMemo, useState } from 'react'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
-import { Btn, Callout, EmptyState, ErrorAlert, Loading, SegmentedControl } from '../components/ui'
+import { Btn, Callout, EmptyState, Loading, SegmentedControl } from '../components/ui'
+import { PageLoadError } from '../components/PageLoadError'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageData } from '../lib/usePageData'
 import { apiFetchMutate } from '../lib/supabase'
@@ -112,8 +113,8 @@ function ProjectRecipe({ projectId }: { projectId: string }) {
       <PageHeaderBar
         title="Recipe"
         helpTitle="What is the recipe?"
-        helpWhatIsIt="What this app is made of — schema, design system, routes, gates, CI/CD, deploy, env names and integrations — and whether each one still matches what the app declares. Mushi hands this to the diagnosis so a fix respects your own tokens and schema."
-        helpHowToUse="Read the worst card first. Unknown means Mushi has not checked it recently; it is never a pass. Click a card for what Mushi knows and where its findings live. Add a mushi.recipe.json at your repo root to declare tokens, targets and budgets."
+        helpWhatIsIt="What this app is made of — database, design system, pages, automated checks, CI builds, what is live, environment variables and connected tools — and whether each one works. Mushi hands this to every diagnosis so a fix respects your own design and database."
+        helpHowToUse="Start with the card marked Needs attention or Check failed: its text says what is wrong and what to do. Not checked yet is never a pass. Not set up is optional. To declare design tokens, deploy targets and budgets, add a file named mushi.recipe.json at your repo root."
         helpFlowPath="/recipe"
       >
         <Btn
@@ -122,7 +123,7 @@ function ProjectRecipe({ projectId }: { projectId: string }) {
           onClick={onRefresh}
           loading={refreshing}
           disabled={refreshing}
-          title={refreshing ? 'Refreshing the recipe…' : 'Re-read mushi.recipe.json and the token files, then recompose the recipe'}
+          title={refreshing ? 'Checking again…' : 'Read your repo again (recipe file, design tokens, CI builds and environment variables) and rebuild this page'}
         >
           Refresh
         </Btn>
@@ -144,14 +145,14 @@ function ProjectRecipe({ projectId }: { projectId: string }) {
             <span role="status">{notice.text}</span>
           </Callout>
         )}
-        {error && <ErrorAlert message={error} endpoint={path} onRetry={reload} />}
+        {error && <PageLoadError error={error} resource="the app recipe" endpoint={path} onRetry={reload} />}
         {loading && !data && <Loading text="Composing the recipe…" />}
 
         {data && (
           <>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-xs text-fg-muted">
-                {isValidating ? 'Updating…' : 'Click a card to open its details.'}
+                {isValidating ? 'Updating…' : 'Click a card for what is wrong and how to fix it.'}
               </p>
               <SegmentedControl<ViewMode>
                 value={view}

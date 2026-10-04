@@ -4,6 +4,7 @@ import { assertSafeOutboundUrl } from './inventory-guards.ts'
 import {
   CURSOR_DEFAULT_MODEL,
   CursorApiError,
+  cancelCursorRun,
   createCursorAgentV1,
   deterministicCursorAgentId,
   extractCursorPrUrl,
@@ -566,9 +567,17 @@ async function deliverSkillPipelineStep(
     (d.contextPacket ?? '').slice(0, 32_000),
   ].join('\n')
 
+  // A run cancelled from the console must not start (or keep) an agent
+  // (console QA #24): check before creating one, and again after.
+  if (!(await skillRunIsOpen(db, d.runId))) {
+    pluginLog.info('Skill pipeline step not dispatched: run is closed', { runId: d.runId, stepIndex: d.stepIndex })
+    return
+  }
+
   const deliveryId = crypto.randomUUID()
   const start = Date.now()
   let agentId: string | null = null
+  let runId: string | null = null
   let excerpt = ''
 
   // v1 has no `target.branchName`; the prompt asks for the branch instead.
@@ -589,6 +598,7 @@ async function deliverSkillPipelineStep(
       },
     )
     agentId = created.agent.id
+    runId = created.run?.id ?? null
   } catch (err) {
     if (err instanceof CursorApiError && err.status === 409 && err.code === 'agent_id_conflict') {
       // Retried delivery for a step that is already running — idempotent.
@@ -601,6 +611,15 @@ async function deliverSkillPipelineStep(
   }
 
   const now = new Date().toISOString()
+  if (agentId && runId && !(await skillRunIsOpen(db, d.runId))) {
+    // Cancelled while the agent was being created: stop it right away.
+    try {
+      await cancelCursorRun({ apiKey: resolvedApiKey }, agentId, runId)
+    } catch (err) {
+      pluginLog.warn('Cursor run cancel after pipeline abort failed', { runId: d.runId, err: String(err).slice(0, 200) })
+    }
+    return
+  }
   if (agentId) {
     await db
       .from('skill_pipeline_step_runs')
@@ -612,6 +631,8 @@ async function deliverSkillPipelineStep(
       })
       .eq('run_id', d.runId)
       .eq('step_index', d.stepIndex)
+      // A cancel closes open steps as skipped; never reopen one.
+      .in('status', ['pending', 'running'])
   }
 
   try {
@@ -638,6 +659,12 @@ async function deliverSkillPipelineStep(
       agentId,
     })
   }
+}
+
+async function skillRunIsOpen(db: SupabaseClient, runId: string): Promise<boolean> {
+  const { data } = await db.from('skill_pipeline_runs').select('status').eq('id', runId).maybeSingle()
+  const status = (data as { status?: string } | null)?.status
+  return status === 'pending' || status === 'running'
 }
 
 async function failSkillPipelineStep(

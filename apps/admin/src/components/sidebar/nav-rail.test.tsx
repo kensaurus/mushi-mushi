@@ -50,6 +50,8 @@ const NAV_COUNTS_ZERO: NavCounts = {
   fixesInFlight: 0,
   fixesFailed: 0,
   prsOpen: 0,
+  fixesRetryable: 0,
+  urgentOpenReports: 0,
   regressedActions: 0,
   inboxOpenActions: 0,
   notificationsUnread: 0,
@@ -322,7 +324,7 @@ describe('resolveNavBadge', () => {
     expect(resolveNavBadge('/fixes', counts, NO_EXTRAS)).toMatchObject({
       kind: 'health',
       count: 2,
-      label: '2 failed fixes — needs attention',
+      label: 'Auto-fix stopped on 2 reports',
     })
   })
 

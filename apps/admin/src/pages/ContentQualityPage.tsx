@@ -11,10 +11,10 @@ import { usePageData } from '../lib/usePageData'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import {
   EmptyState,
-  ErrorAlert,
   Btn,
 } from '../components/ui'
 import { PageHeaderBar } from '../components/PageHeaderBar'
+import { PageLoadError } from '../components/PageLoadError'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { ResponsiveTable } from '../components/ResponsiveTable'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
@@ -193,6 +193,7 @@ export function ContentQualityPage() {
         >
           <option value="open">Open</option>
           <option value="in_review">In review</option>
+          <option value="regenerating">Regenerating</option>
           <option value="resolved">Resolved</option>
           <option value="dismissed">Dismissed</option>
           <option value="all">All statuses</option>
@@ -226,7 +227,7 @@ export function ContentQualityPage() {
       />
 
       <div className="flex-1 overflow-auto p-4">
-        {error && <ErrorAlert message={error} />}
+        {error && <PageLoadError error={error} resource="content issues" />}
         {loading && <TableSkeleton rows={8} />}
 
         {!loading && items.length === 0 && (

@@ -14,7 +14,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReportDetail } from './types'
 
-vi.mock('./CursorAgentLaunch', () => ({ CursorAgentLaunch: () => null }))
+vi.mock('./FixWithAgentPanel', () => ({ FixWithAgentPanel: () => null }))
 
 import { DiagnosisFixHero, inlineMarkdown } from './DiagnosisFixHero'
 

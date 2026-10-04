@@ -7,6 +7,9 @@ import { logAudit } from '../../_shared/audit.ts';
 import { emitProductEvent } from '../../_shared/product-events.ts';
 import { withIdempotency } from '../../_shared/idempotency.ts';
 import { dbError, callerCanAccessProject } from '../shared.ts';
+import { parseRotateBody, pickRotationTarget, type RotatableKeyRow } from '../../_shared/api-key-rotation.ts';
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function registerProjectKeysRoutes(app: Hono<{ Variables: Variables }>): void {
   // Scopes vocabulary is enforced at the DB level (CHECK constraint from
@@ -228,14 +231,18 @@ export function registerProjectKeysRoutes(app: Hono<{ Variables: Variables }>): 
             ? 'mcp-readonly'
             : 'default';
 
-    const { error } = await db.from('project_api_keys').insert({
-      project_id: projectId,
-      key_hash: keyHash,
-      key_prefix: prefix,
-      label,
-      scopes,
-      is_active: true,
-    });
+    const { data: inserted, error } = await db
+      .from('project_api_keys')
+      .insert({
+        project_id: projectId,
+        key_hash: keyHash,
+        key_prefix: prefix,
+        label,
+        scopes,
+        is_active: true,
+      })
+      .select('id')
+      .single();
 
     if (error) return dbError(c, error);
     // Company funnel (mushi-self): fire-and-forget. The prefix is the 12-char
@@ -247,7 +254,8 @@ export function registerProjectKeysRoutes(app: Hono<{ Variables: Variables }>): 
       properties: { project_id: projectId, label, scopes: scopes.join(',') },
       dedupKey: `key_minted:${prefix}`,
     });
-    return c.json({ ok: true, data: { key: rawKey, prefix, scopes, label } }, 201);
+    // `id` lets the console rotate or revoke exactly this key later.
+    return c.json({ ok: true, data: { id: inserted?.id ?? null, key: rawKey, prefix, scopes, label } }, 201);
   });
 
   // Rotation endpoint advertised by the auth manifest.: previously a
@@ -298,21 +306,39 @@ export function registerProjectKeysRoutes(app: Hono<{ Variables: Variables }>): 
       return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404);
     }
 
-    const { data: existing, error: fetchError } = await db
+    // `{ key_id }` or `{ key_prefix }` rotates that one key and keeps its
+    // label and scopes. No key named = the legacy rotate-everything path.
+    // An empty body is the legacy rotate-everything call; a body that is not
+    // JSON is refused, never read as "no key named".
+    const target = parseRotateBody(await c.req.text().catch(() => ''));
+    if (target && 'error' in target) {
+      return c.json({ ok: false, error: { code: 'INVALID_KEY', message: target.error } }, 400);
+    }
+
+    const { data: existingRows, error: fetchError } = await db
       .from('project_api_keys')
-      .select('id, key_prefix')
+      .select('id, key_prefix, label, scopes')
       .eq('project_id', projectId)
       .eq('is_active', true);
     if (fetchError) return dbError(c, fetchError);
 
-    const revokedAt = new Date().toISOString();
-    if (existing && existing.length > 0) {
-      const { error: revokeError } = await db
-        .from('project_api_keys')
-        .update({ is_active: false, revoked_at: revokedAt })
-        .eq('project_id', projectId)
-        .eq('is_active', true);
-      if (revokeError) return dbError(c, revokeError);
+    let existing = (existingRows ?? []) as RotatableKeyRow[];
+    let successor: { label: string; scopes: string[] | null; rotatedFrom: string | null } = {
+      label: 'rotated',
+      scopes: null,
+      rotatedFrom: null,
+    };
+    if (target) {
+      const pick = pickRotationTarget(existing, target);
+      if (!pick.ok) {
+        return c.json({ ok: false, error: { code: pick.code, message: pick.message } }, pick.status);
+      }
+      existing = [pick.row];
+      successor = {
+        label: pick.row.label ?? 'rotated',
+        scopes: pick.row.scopes && pick.row.scopes.length > 0 ? pick.row.scopes : null,
+        rotatedFrom: pick.row.id,
+      };
     }
 
     const rawKey = `mushi_${crypto.randomUUID().replace(/-/g, '')}`;
@@ -330,20 +356,53 @@ export function registerProjectKeysRoutes(app: Hono<{ Variables: Variables }>): 
         project_id: projectId,
         key_hash: keyHash,
         key_prefix: prefix,
-        label: 'rotated',
+        label: successor.label,
+        // Omitted = the column default ('report:write'), as before.
+        ...(successor.scopes ? { scopes: successor.scopes } : {}),
         is_active: true,
       })
-      .select('id')
+      .select('id, scopes')
       .single();
     if (insertError) return dbError(c, insertError);
 
-    // Company funnel (mushi-self): fire-and-forget. Rotation keeps the
-    // column default scopes ('report:write').
+    // Revoke only after the replacement exists, so a failure part way never
+    // leaves the project with no working key. The legacy path revokes every
+    // other active key; the new one is excluded by id.
+    const revokedAt = new Date().toISOString();
+    let revokeFailed = false;
+    if (existing.length > 0) {
+      let revoke = db
+        .from('project_api_keys')
+        .update({ is_active: false, revoked_at: revokedAt })
+        .eq('project_id', projectId)
+        .eq('is_active', true)
+        .neq('id', newRow.id);
+      if (target) revoke = revoke.eq('id', existing[0]!.id);
+      const { error: revokeError } = await revoke;
+      if (revokeError) {
+        revokeFailed = true;
+        log.error('rotate: old key not revoked', { projectId, err: revokeError.message });
+      }
+    }
+    // Lineage breadcrumb, best effort (as in cli-auth's rotate): a database
+    // without the column must not fail a rotation that already happened.
+    if (successor.rotatedFrom && newRow?.id) {
+      const { error: lineageError } = await db
+        .from('project_api_keys')
+        .update({ rotated_from: successor.rotatedFrom })
+        .eq('id', newRow.id);
+      if (lineageError) log.warn('rotated_from not recorded', { projectId, err: lineageError.message });
+    }
+    const newScopes = ((newRow as { scopes?: string[] | null } | null)?.scopes ?? successor.scopes ?? [
+      'report:write',
+    ]) as string[];
+
+    // Company funnel (mushi-self): fire-and-forget.
     void emitProductEvent(db, {
       userId,
       eventName: 'key_minted',
       surface: 'server',
-      properties: { project_id: projectId, label: 'rotated', scopes: 'report:write' },
+      properties: { project_id: projectId, label: successor.label, scopes: newScopes.join(',') },
       dedupKey: `key_minted:${newRow?.id ?? prefix}`,
     });
 
@@ -357,8 +416,10 @@ export function registerProjectKeysRoutes(app: Hono<{ Variables: Variables }>): 
       newRow?.id,
       {
         rotated: true,
-        revoked_count: existing?.length ?? 0,
-        revoked_prefixes: (existing ?? []).map((row: { key_prefix: string }) => row.key_prefix),
+        single_key: Boolean(target),
+        revoked_count: revokeFailed ? 0 : existing.length,
+        revoked_prefixes: revokeFailed ? [] : existing.map((row) => row.key_prefix),
+        revoke_failed: revokeFailed,
       },
       { email: userEmail },
     );
@@ -367,10 +428,20 @@ export function registerProjectKeysRoutes(app: Hono<{ Variables: Variables }>): 
       {
         ok: true,
         data: {
+          // `id` lets the console rotate or revoke this key later.
+          id: newRow?.id ?? null,
           key: rawKey,
           prefix,
-          revoked: existing?.length ?? 0,
+          label: successor.label,
+          scopes: newScopes,
+          old_key_still_active: revokeFailed,
+          revoked: revokeFailed ? 0 : existing.length,
+          revoked_prefixes: revokeFailed ? [] : existing.map((row) => row.key_prefix),
           rotated_at: revokedAt,
+          // The new key works; the old one is still live. The console says so.
+          ...(revokeFailed
+            ? { warning: 'The new key works, but Mushi could not revoke the old one. Revoke it from Projects.' }
+            : {}),
         },
       },
       201,
@@ -396,16 +467,36 @@ export function registerProjectKeysRoutes(app: Hono<{ Variables: Variables }>): 
       );
     }
 
-    await db
+    if (!UUID_RE.test(keyId)) {
+      return c.json({ ok: false, error: { code: 'KEY_NOT_FOUND', message: 'That key does not exist.' } }, 404);
+    }
+    const { data: revoked, error: revokeError } = await db
       .from('project_api_keys')
       .update({
         is_active: false,
         revoked_at: new Date().toISOString(),
       })
       .eq('id', keyId)
-      .eq('project_id', projectId);
+      .eq('project_id', projectId)
+      .eq('is_active', true)
+      .select('id');
+    if (revokeError) return dbError(c, revokeError);
+    // QA #260: a wrong id or an already-revoked key used to return ok:true
+    // without revoking anything.
+    if (!revoked || revoked.length === 0) {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'KEY_NOT_FOUND',
+            message: 'That key is already revoked or belongs to another project. Refresh the key list.',
+          },
+        },
+        404,
+      );
+    }
 
-    return c.json({ ok: true });
+    return c.json({ ok: true, data: { revoked: 1 } });
   });
 
 }

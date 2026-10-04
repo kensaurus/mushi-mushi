@@ -7,18 +7,29 @@
  * secrets in GitHub → Settings → Secrets and variables → Actions:
  *
  *   ANTHROPIC_API_KEY        — your Anthropic API key (BYOK)
- *   MUSHI_SERVICE_ROLE_KEY   — Mushi project service role (for status callback)
+ *   MUSHI_SERVICE_ROLE_KEY   — optional, self-hosted only (status callback)
  *
  * The fix-worker passes `mushi_supabase_url` in repository_dispatch
  * client_payload so each Mushi deployment can target the correct project.
  */
-export function getMushiClaudeFixWorkflowYaml(): string {
+/** The repository_dispatch event type the workflow listens for when none is saved. */
+export const DEFAULT_CLAUDE_WORKFLOW_EVENT = 'mushi_claude_fix'
+const EVENT_TYPE_RE = /^[A-Za-z0-9_.-]{1,100}$/
+
+/**
+ * `eventType` is the project's saved Workflow event (claude_workflow_event),
+ * so the YAML the console hands out listens for the event the project is
+ * set to send. Anything that is not a plain identifier falls back to the
+ * default rather than being written into the YAML.
+ */
+export function getMushiClaudeFixWorkflowYaml(eventType?: string | null): string {
+  const event = eventType && EVENT_TYPE_RE.test(eventType) ? eventType : DEFAULT_CLAUDE_WORKFLOW_EVENT
   return `name: Mushi Claude Code Fix
-# Triggered by Mushi via repository_dispatch (event: mushi_claude_fix).
+# Triggered by Mushi via repository_dispatch (event: ${event}).
 # Copy this file to .github/workflows/mushi-claude-fix.yml in your repo.
 on:
   repository_dispatch:
-    types: [mushi_claude_fix]
+    types: [${event}]
 
 jobs:
   fix:
@@ -123,8 +134,10 @@ export const MUSHI_CLAUDE_GITHUB_SECRETS = [
       'Your Anthropic API key. Claude Code runs in your GitHub Actions runner — Mushi never stores this in your public repo.',
   },
   {
+    // The console never hands out a service-role key (hosted users must never
+    // hold one), so this used to point at a control that does not exist.
     name: 'MUSHI_SERVICE_ROLE_KEY',
     description:
-      'Service role key for your Mushi Supabase project so the workflow can PATCH fix_attempts when the run finishes. Copy from Mushi Integrations → Claude Code Agent.',
+      'Optional, self-hosted Mushi only: the service role key of your own Mushi Supabase project, so the run can write its result back. Hosted Mushi does not hand out this key; leave it unset and the workflow skips the write-back step.',
   },
 ] as const;

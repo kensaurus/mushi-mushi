@@ -63,16 +63,16 @@ function buildBackendRows(data: GraphBackendStatus): DetailRowItem[] {
     },
     {
       label: 'Unsynced nodes',
-      value: data.unsynced.nodes != null ? data.unsynced.nodes.toLocaleString() : '—',
-      mono: true,
-      tone: (data.unsynced.nodes ?? 0) > 0 ? 'warn' : 'ok',
+      value: data.unsynced.nodes != null ? data.unsynced.nodes.toLocaleString() : 'Not checked yet',
+      mono: data.unsynced.nodes != null,
+      tone: data.unsynced.nodes == null ? 'muted' : data.unsynced.nodes > 0 ? 'warn' : 'ok',
       hint: 'Nodes present in SQL but not yet mirrored into AGE.',
     },
     {
       label: 'Unsynced edges',
-      value: data.unsynced.edges != null ? data.unsynced.edges.toLocaleString() : '—',
-      mono: true,
-      tone: (data.unsynced.edges ?? 0) > 0 ? 'warn' : 'ok',
+      value: data.unsynced.edges != null ? data.unsynced.edges.toLocaleString() : 'Not checked yet',
+      mono: data.unsynced.edges != null,
+      tone: data.unsynced.edges == null ? 'muted' : data.unsynced.edges > 0 ? 'warn' : 'ok',
       hint: 'Edges present in SQL but not yet mirrored into AGE.',
     },
   ]

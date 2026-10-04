@@ -9,7 +9,7 @@
  *   GET  /v1/admin/content-quality             — List issues (project-scoped)
  *   GET  /v1/admin/content-quality/:id         — Get single issue
  *   POST /v1/admin/content-quality/:id/regen   — Trigger regeneration
- *   POST /v1/admin/content-quality/:id/resolve — Resolve / dismiss
+ *   POST /v1/admin/content-quality/:id/resolve — Resolve / dismiss / reopen (status: open)
  */
 
 import type { Context, Hono } from 'npm:hono@4';
@@ -21,6 +21,7 @@ import { apiKeyAuth, jwtAuth, timingSafeEqual } from '../../_shared/auth.ts';
 import { checkIngestQuota } from '../../_shared/quota.ts';
 import { dereferenceMaybeVault } from '../../_shared/settings-secrets.ts';
 import { dbError, resolveOwnedProject, callerCanAccessProject } from '../shared.ts';
+import { denyViewerWrite } from '../viewer-gate.ts';
 
 const cqlog = log.child('content-quality');
 
@@ -54,7 +55,7 @@ async function loadAccessibleIssue(
   c: Context<{ Variables: Variables }>,
   db: ReturnType<typeof getServiceClient>,
   issueId: string,
-): Promise<{ ok: true; issue: Record<string, unknown> } | { ok: false; response: Response }> {
+): Promise<{ ok: true; issue: Record<string, unknown>; role: string | null } | { ok: false; response: Response }> {
   const notFound = () => c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Not found' } }, 404);
   const { data: issue, error } = await db
     .from('content_quality_issues')
@@ -67,7 +68,7 @@ async function loadAccessibleIssue(
   const access = await callerCanAccessProject(c, db, userId, issue.project_id as string);
   if (!access.allowed) return { ok: false, response: notFound() };
 
-  return { ok: true, issue: issue as Record<string, unknown> };
+  return { ok: true, issue: issue as Record<string, unknown>, role: access.role };
 }
 
 // ── Zod schema ────────────────────────────────────────────────────────────────
@@ -460,23 +461,15 @@ export function registerContentQualityRoutes(app: Hono<{ Variables: Variables }>
 
     if (!projectId) return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: 'project_id is required' } }, 400);
 
-    // Verify user has access to this project
-    const { data: access } = await db
-      .from('projects')
-      .select('id')
-      .eq('id', projectId)
-      .eq('owner_id', userId)
-      .maybeSingle();
-
-    if (!access) {
-      // Check project_members
-      const { data: member } = await db
-        .from('project_members')
-        .select('project_id')
-        .eq('project_id', projectId)
-        .eq('user_id', userId)
-        .maybeSingle();
-      if (!member) return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Forbidden' } }, 403);
+    // Same rule as every other content-quality route (owner, org member or
+    // project member). The old owner-or-project_members check refused org
+    // teammates while the sidebar badge still counted their open issues.
+    const access = await callerCanAccessProject(c, db, userId, projectId);
+    if (!access.allowed) {
+      return c.json(
+        { ok: false, error: { code: 'FORBIDDEN', message: 'You do not have access to this project. Pick another project in the header switcher.' } },
+        403,
+      );
     }
 
     let query = db
@@ -515,6 +508,8 @@ export function registerContentQualityRoutes(app: Hono<{ Variables: Variables }>
 
     const loaded = await loadAccessibleIssue(c, db, issueId);
     if (!loaded.ok) return loaded.response;
+    const viewerDenied = denyViewerWrite(c, loaded.role, 'regenerate content');
+    if (viewerDenied) return viewerDenied;
     const issue = loaded.issue;
     if (issue.regen_status === 'running' || issue.regen_status === 'queued') {
       return c.json({ ok: false, error: { code: 'CONFLICT', message: 'Regeneration already in progress' } }, 409);
@@ -566,11 +561,18 @@ export function registerContentQualityRoutes(app: Hono<{ Variables: Variables }>
 
     const loaded = await loadAccessibleIssue(c, db, issueId);
     if (!loaded.ok) return loaded.response;
+    const viewerDenied = denyViewerWrite(c, loaded.role, 'resolve or dismiss content issues');
+    if (viewerDenied) return viewerDenied;
 
     let body: { status: string } = { status: 'resolved' };
     try { body = await c.req.json(); } catch { /* use default */ }
 
-    const newStatus = body.status === 'dismissed' ? 'dismissed' : 'resolved';
+    // `open` reopens a resolved or dismissed issue, so a mis-clicked Dismiss
+    // can be taken back from the console.
+    const newStatus = body.status === 'dismissed' ? 'dismissed' : body.status === 'open' ? 'open' : 'resolved';
+    if (newStatus === 'open' && loaded.issue.status !== 'resolved' && loaded.issue.status !== 'dismissed') {
+      return c.json({ ok: false, error: { code: 'CONFLICT', message: 'Only resolved or dismissed issues can be reopened.' } }, 409);
+    }
 
     const { error } = await db
       .from('content_quality_issues')

@@ -7,6 +7,7 @@ import { Btn, RelativeTime } from '../ui'
 import { usePageCopy } from '../../lib/copy'
 import { StatusBannerShell } from '../StatusBannerShell'
 import type { ExploreStats, ExploreTabId } from './ExploreStatsTypes'
+import { exploreActionLabelFor } from '../../lib/exploreTabNavigation'
 
 interface Props {
   stats: ExploreStats
@@ -122,7 +123,7 @@ export function ExploreStatusBanner({ stats, onTab, onRefresh, refreshing, plain
         }
         action={
           stats.topPriorityTo ? (
-            <Btn to={stats.topPriorityTo} size="sm" variant="ghost">{actions.graph ?? 'Open Graph'}</Btn>
+            <Btn to={stats.topPriorityTo} size="sm" variant="ghost">{exploreActionLabelFor(stats.topPriorityTo)}</Btn>
           ) : onTab ? (
             <Btn size="sm" variant="ghost" onClick={() => onTab('graph')}>
               {actions.graph ?? 'Open Graph'}
@@ -151,7 +152,7 @@ export function ExploreStatusBanner({ stats, onTab, onRefresh, refreshing, plain
             {actions.refresh ?? 'Refresh'}
           </Btn>
         ) : stats.topPriorityTo ? (
-          <Btn to={stats.topPriorityTo} size="sm" variant="ghost">{actions.graph ?? 'Open Graph'}</Btn>
+          <Btn to={stats.topPriorityTo} size="sm" variant="ghost">{exploreActionLabelFor(stats.topPriorityTo)}</Btn>
         ) : onTab ? (
           <Btn size="sm" variant="ghost" onClick={() => onTab('graph')}>
             {actions.graph ?? 'Open Graph'}

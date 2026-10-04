@@ -4,6 +4,7 @@ import { upsertProjectSdkObservationAsync } from './sdk-observation.ts'
 import { mergeLogContext, type LogContext } from './log-context.ts'
 import { emitFunnelEvent } from './setup-funnel.ts'
 import type { ApiErrorCode } from './error-codes.ts'
+import { trustedSubRequestUser } from './request-memo.ts'
 
 export interface ProjectContext {
   projectId: string
@@ -628,6 +629,20 @@ export async function jwtAuth(c: Context, next: Next) {
   const authHeader = c.req.header('Authorization')
   if (!authHeader?.startsWith('Bearer ')) {
     return authError(c, 'MISSING_AUTH', 'Authorization Bearer token required')
+  }
+
+  // An in-process sub-request built by a fan-out route (nav-meta) that has
+  // already verified this exact token. Keyed by Request identity, so nothing
+  // arriving over the network can claim it. The outer request already ran the
+  // membership heartbeat, so it is skipped here.
+  const preVerified = trustedSubRequestUser(c.req.raw)
+  if (preVerified) {
+    c.set('userId', preVerified.id)
+    c.set('userEmail', preVerified.email ?? undefined)
+    c.set('authMethod', 'jwt')
+    applyLogContext(c, { authMethod: 'jwt', userId: preVerified.id })
+    await next()
+    return
   }
 
   const db = getServiceClient()

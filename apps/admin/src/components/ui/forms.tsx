@@ -12,13 +12,15 @@ interface FilterSelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   options: readonly string[]
   /** Override auto-generated id; defaults to filter-{slugified-label}. */
   id?: string
+  /** Human label for an option value; the raw value shows when omitted. */
+  optionLabel?: (value: string) => string
 }
 
 /** Compact filter-bar select chrome — matches FilterSelect. */
 export const FILTER_SELECT_CLASS =
   'bg-surface-raised border border-edge-subtle rounded-sm px-2 py-1 text-xs text-fg-secondary hover:border-edge focus-visible:outline-none focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand/40 motion-safe:transition-opacity motion-safe:duration-150'
 
-export function FilterSelect({ label, options, id, className = '', ...rest }: FilterSelectProps) {
+export function FilterSelect({ label, options, id, className = '', optionLabel, ...rest }: FilterSelectProps) {
   const selectId = id ?? `filter-${label.toLowerCase().replace(/\s+/g, '-')}`
   return (
     <label className="inline-flex flex-col gap-0.5">
@@ -31,7 +33,7 @@ export function FilterSelect({ label, options, id, className = '', ...rest }: Fi
       >
         <option value="">All {label}</option>
         {options.filter(Boolean).map((opt) => (
-          <option key={opt} value={opt}>{opt}</option>
+          <option key={opt} value={opt}>{optionLabel ? optionLabel(opt) : opt}</option>
         ))}
       </select>
     </label>
@@ -168,6 +170,11 @@ interface BtnProps extends ButtonHTMLAttributes<HTMLButtonElement> {
    * a button, since a link cannot be disabled.
    */
   to?: string
+  /**
+   * External URL, opened in a new tab. Same reason as `to`: `<a><Btn/></a>`
+   * nests a button in a link (two Tab stops, invalid HTML).
+   */
+  href?: string
 }
 
 const BTN_BASE =
@@ -221,9 +228,25 @@ export function Btn({
   leadingIcon,
   disabled,
   to,
+  href,
   ...rest
 }: BtnProps) {
   const isDisabled = disabled || loading
+  if (href && !isDisabled) {
+    const { type: _type, form: _form, formAction: _formAction, ...anchorRest } = rest
+    return (
+      <a
+        {...(anchorRest as unknown as React.AnchorHTMLAttributes<HTMLAnchorElement>)}
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={`${BTN_BASE} ${BTN_SIZES[size]} ${BTN_VARIANTS[variant]} ${className}`}
+      >
+        {leadingIcon}
+        {children}
+      </a>
+    )
+  }
   if (to && !isDisabled) {
     // Button-only attributes (type, form*) have no meaning on a link.
     const { type: _type, form: _form, formAction: _formAction, ...anchorRest } = rest
@@ -360,10 +383,32 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
    *  callers can use it for server-side validation that happens after
    *  Save and shouldn't be silently overwritten. */
   validate?: (value: string) => { message: string; severity?: 'error' | 'warn' } | null
+  /** Internal: render as a secret field. Use `<SecretInput>` instead. */
+  secret?: boolean
 }
 
+/**
+ * Attributes that keep browsers and password managers away from a field that
+ * holds an API key, token or webhook secret. A `type="password"` field makes
+ * Chrome, 1Password, LastPass and Bitwarden offer to save the value as the
+ * site login ("Update login details?"), so secrets use `type="text"` masked
+ * with CSS instead. `data-mushi-mask` keeps the value redacted in the
+ * console's own screenshot capture, which used to rely on type="password".
+ */
+const SECRET_FIELD_ATTRS = {
+  autoComplete: 'off',
+  'data-mushi-mask': '',
+  spellCheck: false,
+  autoCapitalize: 'off',
+  autoCorrect: 'off',
+  'data-1p-ignore': '',
+  'data-lpignore': 'true',
+  'data-bwignore': '',
+  'data-form-type': 'other',
+} as const
+
 export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
-  { label, className = '', id, error, tooltip, helpId, validate, onBlur, onChange, type, ...rest },
+  { label, className = '', id, error, tooltip, helpId, validate, onBlur, onChange, type, secret, ...rest },
   ref,
 ) {
   const inputId = id ?? label?.toLowerCase().replace(/\s+/g, '-')
@@ -390,8 +435,12 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   // the DOM node directly so React's controlled-input bookkeeping stays
   // happy. Right-padded so the eye button never overlaps the value.
   const isPassword = type === 'password'
-  const renderedType = isPassword && reveal ? 'text' : type
-  const inputClassName = `${FIELD_BASE} ${isPassword ? 'pr-9' : ''} ${className}`
+  // Secret fields stay `type="text"` and are masked with CSS, so no password
+  // manager treats them as a login.
+  const hasRevealToggle = isPassword || secret === true
+  const renderedType = secret ? 'text' : isPassword && reveal ? 'text' : type
+  const maskClass = secret && !reveal ? '[-webkit-text-security:disc]' : ''
+  const inputClassName = `${FIELD_BASE} ${hasRevealToggle ? 'pr-9' : ''} ${secret ? 'font-mono' : ''} ${maskClass} ${className}`
 
   return (
     <label className="block">
@@ -401,13 +450,14 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
           <LabelHelp helpId={helpId} tooltip={tooltip} />
         </span>
       )}
-      <span className={isPassword ? 'relative block' : undefined}>
+      <span className={hasRevealToggle ? 'relative block' : undefined}>
         <input
           ref={ref}
           id={inputId}
           type={renderedType}
           aria-invalid={visibleError ? true : undefined}
           className={inputClassName}
+          {...(secret ? SECRET_FIELD_ATTRS : {})}
           {...rest}
           onBlur={(e) => {
             if (!touched) setTouched(true)
@@ -418,7 +468,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
             onChange?.(e)
           }}
         />
-        {isPassword && (
+        {hasRevealToggle && (
           <button
             type="button"
             onClick={(e) => {
@@ -431,7 +481,9 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
               setReveal((v) => !v)
             }}
             onMouseDown={(e) => e.preventDefault()}
-            aria-label={reveal ? 'Hide password' : 'Show password'}
+            aria-label={
+              secret ? (reveal ? 'Hide value' : 'Show value') : reveal ? 'Hide password' : 'Show password'
+            }
             aria-pressed={reveal}
             className="absolute inset-y-0 right-0 flex w-9 items-center justify-center text-fg-faint hover:text-fg-muted focus-visible:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 rounded-sm motion-safe:transition-opacity"
           >
@@ -453,6 +505,20 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
       {visibleWarn && <p className={FIELD_WARN}>{visibleWarn}</p>}
     </label>
   )
+})
+
+type SecretInputProps = Omit<InputProps, 'type' | 'secret' | 'autoComplete'>
+
+/**
+ * The one field for API keys, tokens and webhook secrets: masked text with a
+ * Show toggle, autocomplete, spellcheck and every password manager turned
+ * off. Real account passwords (sign-in, reset) keep `<Input type="password">`.
+ */
+export const SecretInput = forwardRef<HTMLInputElement, SecretInputProps>(function SecretInput(
+  props,
+  ref,
+) {
+  return <Input ref={ref} {...props} secret />
 })
 
 interface SelectFieldProps extends SelectHTMLAttributes<HTMLSelectElement> {

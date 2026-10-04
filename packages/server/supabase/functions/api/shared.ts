@@ -13,6 +13,8 @@ import {
   ownedProjectIds as _ownedProjectIds,
 } from '../_shared/project-access.ts';
 import { isUuid } from './ids.ts';
+import { fanoutMemo } from '../_shared/request-memo.ts';
+import { NEW_BUCKET_STATUSES } from '../_shared/report-list-filters.ts';
 import { boundKeyTargetsOtherProject } from '../_shared/bound-key.ts';
 import {
   type ApiErrorCode,
@@ -197,6 +199,16 @@ export const OPEN_REPORT_STATUSES = [
   'grouped',
   'reopened',
 ] as const;
+
+/**
+ * Report statuses that still wait for triage — the `new` bucket. The reports
+ * list's `status=new` filter, the dashboard's triage backlog KPI and the
+ * inbox Plan flag all use it, so each count equals the list its link opens
+ * (before 2026-10-04 the KPI counted new|queued older than 1h in a 14-day
+ * window while its link listed every new|queued|pending|submitted report).
+ */
+// One list: the reports filter's `status=new` bucket (report-list-filters.ts).
+export const TRIAGE_BACKLOG_STATUSES = NEW_BUCKET_STATUSES;
 
 /**
  * Full accessible project set for enumeration endpoints (project list,
@@ -479,10 +491,10 @@ export async function resolveOwnedProject(
     };
   }
 
-  const { data: memberships } = await db
-    .from('organization_members')
-    .select('organization_id, role')
-    .eq('user_id', userId);
+  // Shared across the slices of one nav-meta fan-out (see request-memo.ts).
+  const { data: memberships } = await fanoutMemo(userId, 'organizationMemberRoles', async () =>
+    await db.from('organization_members').select('organization_id, role').eq('user_id', userId),
+  );
   const rolesByOrg = new Map<string, string>();
   for (const m of memberships ?? []) rolesByOrg.set(m.organization_id, m.role);
   const orgIds = Array.from(rolesByOrg.keys());
@@ -634,14 +646,29 @@ export async function scopedOwnedProjectIds(
 export const resolveAccessibleProject = resolveOwnedProject;
 
 /**
- * Credential writes (integration tokens, storage keys, bot tokens) are for org
- * owners and admins; members and viewers keep read access and ordinary
- * settings. API keys resolve as 'owner' in {@link resolveOwnedProject}.
+ * Credential writes (integration tokens, storage keys, bot tokens) and other
+ * owner-level actions are for org owners and admins; members and viewers keep
+ * read access and ordinary settings. API keys resolve as 'owner' in
+ * {@link resolveOwnedProject}. Pass `message` when the action is not a
+ * credential change, so the refusal names what was refused.
  */
-export function requireProjectAdmin(c: Context, project: OwnedProjectRef): Response | null {
+/**
+ * Whether the caller may make {@link requireProjectAdmin} writes on this
+ * project. GET routes return it so the console can disable owner-only
+ * controls with a reason instead of letting every click end in a 403.
+ */
+export function isProjectAdmin(project: Pick<OwnedProjectRef, 'organization_role'>): boolean {
   const role = project.organization_role;
-  if (role === 'owner' || role === 'admin') return null;
-  return jsonForbidden(c, 'Only organization owners and admins can change credentials.');
+  return role === 'owner' || role === 'admin';
+}
+
+export function requireProjectAdmin(
+  c: Context,
+  project: Pick<OwnedProjectRef, 'organization_role'>,
+  message = 'Only organization owners and admins can change credentials.',
+): Response | null {
+  if (isProjectAdmin(project)) return null;
+  return jsonForbidden(c, message);
 }
 
 export type OrgRole = 'owner' | 'admin' | 'member' | 'viewer';

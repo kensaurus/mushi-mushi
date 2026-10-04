@@ -38,6 +38,8 @@ export interface PlatformResponse {
   sourceByField?: Record<string, FieldSource>
   /** The organization the project belongs to (for bulk-apply). */
   organizationId?: string | null
+  /** False for members and viewers: credential writes are owner/admin only. */
+  canManage?: boolean
 }
 
 export interface HealthRow {
@@ -173,6 +175,8 @@ export interface IntegrationStats {
   platformConnected: number
   platformHealthy: number
   platformDown: number
+  /** Connected, not failing, but not proven working (never tested, stale, or no inbound event yet). */
+  platformAttention?: number
   routingActive: number
   routingPaused: number
   routingTotal: number
@@ -186,6 +190,7 @@ export type IntegrationTopPriority =
   | 'no_project'
   | 'platform_down'
   | 'incomplete'
+  | 'attention'
   | 'empty'
   | 'healthy'
 
@@ -204,13 +209,6 @@ export const EMPTY_INTEGRATION_STATS: IntegrationStats = {
   topPriority: 'no_project',
   topPriorityLabel: null,
   topPriorityTo: null,
-}
-
-export const PLATFORM_STATUS_MAP: Record<HealthRow['status'], string | null | undefined> = {
-  ok: 'ok',
-  degraded: 'degraded',
-  down: 'down',
-  unknown: undefined,
 }
 
 /**

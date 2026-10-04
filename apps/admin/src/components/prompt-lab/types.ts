@@ -84,4 +84,36 @@ export interface PromptLabData {
 export const STAGE_LABELS: Record<string, string> = {
   stage1: 'Stage 1 · Fast filter',
   stage2: 'Stage 2 · Classify',
+  judge: 'Judge',
+  fix: 'Fix-worker',
+  intelligence: 'Intelligence digest',
+  nl_plan: 'NL → SQL planner',
+  nl_summary: 'NL → summary',
+  synthetic: 'Synthetic generator',
+  modernizer: 'Dep modernizer',
+  prompt_tune: 'Prompt auto-tune',
+  'inventory-propose': 'Inventory proposer',
+  sentinel: 'Sentinel audit',
+}
+
+/**
+ * Stages a project may clone and customise: exactly the ones a worker reads
+ * through getPromptForStage. Mirrors CUSTOMIZABLE_PROMPT_STAGES in
+ * packages/server/supabase/functions/_shared/prompt-stages.ts.
+ */
+const CUSTOMIZABLE_PROMPT_STAGES: readonly string[] = [
+  'stage1',
+  'stage2',
+  'judge',
+  'fix',
+  'intelligence',
+  'nl_plan',
+  'nl_summary',
+  'synthetic',
+  'inventory-propose',
+  'sentinel',
+]
+
+export function isCustomizablePromptStage(stage: string): boolean {
+  return CUSTOMIZABLE_PROMPT_STAGES.includes(stage)
 }

@@ -4,6 +4,12 @@
  *          (Sources · Build · Deploy · Runtime), one node per element and a
  *          small set of "feeds" edges. Positions live here, never computed by
  *          a layout engine (same pattern as pdca-flow/pdcaFlow.data.ts).
+ *
+ *          Readability floor: the canvas never zooms out below
+ *          RECIPE_MIN_ZOOM, so the smallest card text (text-2xs, 12 px)
+ *          never renders under 12 px. Fitting a 4-lane diagram into a
+ *          narrow column used to scale it to ~0.5 (6 px text); now the
+ *          diagram opens at 100% anchored top-left and pans instead.
  */
 
 import { MarkerType, type Edge, type Node } from '@xyflow/react'
@@ -11,7 +17,19 @@ import type { RecipeElementKey, RecipeElementSummary } from '../../lib/recipeTyp
 import { RECIPE_LANES, elementStateMeta } from './recipeState'
 
 const RECIPE_NODE_WIDTH = 248
-const LANE_GAP = 336
+const LANE_GAP = 296
+/** Vertical step between stacked cards: tall enough for a card with a two-sentence reason and three facts. */
+const ROW = 280
+
+/** Never zoom out below 100%: card text is at least 12 px (text-2xs) and must render at 12 px or more. */
+export const RECIPE_MIN_ZOOM = 1
+export const RECIPE_MAX_ZOOM = 1.25
+/** Smallest font used inside the canvas (text-2xs), in px. */
+export const RECIPE_SMALLEST_FONT_PX = 12
+/** Space above the first card for the lane headings. */
+export const RECIPE_LANE_HEADER_Y = -76
+/** Tallest a card is laid out for (px); ROW leaves room for it. */
+export const RECIPE_CARD_MAX_HEIGHT = 260
 
 const LANE_X: Record<(typeof RECIPE_LANES)[number]['id'], number> = {
   sources: 0,
@@ -21,15 +39,26 @@ const LANE_X: Record<(typeof RECIPE_LANES)[number]['id'], number> = {
 }
 
 /** Top-left of each element card. Sources stack vertically; schema feeds routes. */
-const RECIPE_POSITIONS: Record<RecipeElementKey, { x: number; y: number }> = {
+export const RECIPE_POSITIONS: Record<RecipeElementKey, { x: number; y: number }> = {
   schema: { x: LANE_X.sources, y: 0 },
-  routes: { x: LANE_X.sources, y: 230 },
-  design: { x: LANE_X.sources, y: 520 },
-  gates: { x: LANE_X.build, y: 110 },
-  ci: { x: LANE_X.build, y: 330 },
-  deploy: { x: LANE_X.deploy, y: 390 },
-  env: { x: LANE_X.runtime, y: 230 },
-  integrations: { x: LANE_X.runtime, y: 520 },
+  routes: { x: LANE_X.sources, y: ROW },
+  design: { x: LANE_X.sources, y: ROW * 2 },
+  gates: { x: LANE_X.build, y: ROW / 2 },
+  ci: { x: LANE_X.build, y: ROW * 1.5 },
+  deploy: { x: LANE_X.deploy, y: ROW },
+  env: { x: LANE_X.runtime, y: ROW / 2 },
+  integrations: { x: LANE_X.runtime, y: ROW * 1.5 },
+}
+
+/** The diagram's extent in canvas px (lane headings included), for the pan bounds and the "does it fit" check. */
+export function recipeDiagramBounds(): { minX: number; minY: number; maxX: number; maxY: number; width: number; height: number } {
+  const xs = Object.values(RECIPE_POSITIONS).map((p) => p.x)
+  const ys = Object.values(RECIPE_POSITIONS).map((p) => p.y)
+  const minX = Math.min(...xs)
+  const maxX = Math.max(...xs) + RECIPE_NODE_WIDTH
+  const minY = RECIPE_LANE_HEADER_Y
+  const maxY = Math.max(...ys) + RECIPE_CARD_MAX_HEIGHT
+  return { minX, minY, maxX, maxY, width: maxX - minX, height: maxY - minY }
 }
 
 type RecipeHandleId = 'l' | 'r' | 't' | 'b'
@@ -70,7 +99,7 @@ export function buildRecipeNodes(
   const laneNodes: Node<RecipeLaneNodeData>[] = RECIPE_LANES.map((lane) => ({
     id: `lane:${lane.id}`,
     type: 'recipeLane',
-    position: { x: LANE_X[lane.id], y: -76 },
+    position: { x: LANE_X[lane.id], y: RECIPE_LANE_HEADER_Y },
     data: { label: lane.label, hint: lane.hint },
     draggable: false,
     selectable: false,

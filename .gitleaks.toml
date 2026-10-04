@@ -90,4 +90,5 @@ paths = [
   # to compare against. Never a real value; the real one is a Supabase secret.
   '''packages/server/src/__tests__/voice-intake\.test\.ts''',
   '''packages/server/src/__tests__/voice-intent\.test\.ts''',
+  '''packages/server/src/__tests__/voice-confirm-listing\.test\.ts''',
 ]

@@ -5,7 +5,7 @@
  * Graph/Layers/Search reuse the ReactFlow canvas, Sankey lane, and semantic search.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { type Edge, type Node } from '@xyflow/react'
@@ -15,6 +15,7 @@ import { usePageData } from '../lib/usePageData'
 import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { usePageCopy } from '../lib/copy'
 import { useExploreUx, resolveBeginnerExploreTab, resolveQuickExploreTab } from '../lib/exploreModeUx'
+import { useQuickstartLandingTab } from '../lib/useQuickstartTab'
 import {
   resolveExploreTab,
   primaryTabOf,
@@ -24,6 +25,7 @@ import {
   EXPLORE_MAP_VIEWS,
   isUnderstandView,
   isMapView,
+  exploreTabSearchParams,
   type ExplorePrimaryTabId,
   type ExploreUnderstandView,
   type ExploreMapView,
@@ -34,7 +36,6 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useTheme } from '../lib/useTheme'
 import { SnapshotSectionHint,
   SegmentedControl,
-  ErrorAlert,
   Section,
   StatCard,
   StatGrid,
@@ -68,6 +69,7 @@ import { ExploreSearchBar } from '../components/explore/ExploreSearchBar'
 import { LAYER_COLORS, LAYER_LABELS, LAYER_ORDER } from '../components/explore/exploreLayers'
 import { ExploreStatusBanner } from '../components/explore/ExploreStatusBanner'
 import { ExploreAtlasGuide } from '../components/explore/ExploreAtlasGuide'
+import { PageLoadError } from '../components/PageLoadError'
 import {
   ActionPill,
   ActionPillRow,
@@ -118,14 +120,6 @@ function resolveExploreTabFromParams(value: string | null): ExploreTabId {
   return resolveExploreTab(value)
 }
 
-function exploreErrorMessage(raw: string | null): string | null {
-  if (!raw) return null
-  if (raw.includes('404')) {
-    return 'Codebase explorer API is unavailable. If you just deployed, wait a minute and refresh — otherwise contact support.'
-  }
-  return raw
-}
-
 function buildIndexRows(stats: ExploreStats): DetailRowItem[] {
   return [
     {
@@ -158,11 +152,11 @@ function buildIndexRows(stats: ExploreStats): DetailRowItem[] {
       hint: 'Symbol rows when density = Symbols on Graph tab.',
     },
     {
-      label: 'Embeddings',
+      label: 'Embedded chunks',
       value: stats.withEmbeddings.toLocaleString(),
       mono: true,
       tone: stats.withEmbeddings > 0 ? 'ok' : 'warn',
-      hint: 'Files with vectors for semantic search.',
+      hint: 'Search chunks with vectors (whole files and symbols), so it can exceed Files.',
     },
     {
       label: 'Last indexed',
@@ -223,6 +217,9 @@ export function ExplorePage() {
   const [askSeed, setAskSeed] = useState<AskSeed | null>(null)
   const [tourStopOrder, setTourStopOrder] = useState<number | null>(null)
   const [impactActive, setImpactActive] = useState(false)
+  // Saved index scope, reported by the scope panel so the readout above it
+  // shows the same thing (null until loaded).
+  const [indexScope, setIndexScope] = useState<string[] | null>(null)
   const densityRef = useRef(density)
   densityRef.current = density
 
@@ -249,12 +246,7 @@ export function ExplorePage() {
 
   const setActiveTab = useCallback(
     (tab: ExploreTabId) => {
-      setSearchParams((prev) => {
-        const next = new URLSearchParams(prev)
-        if (tab === 'graph') next.delete('tab')
-        else next.set('tab', tab)
-        return next
-      })
+      setSearchParams((prev) => exploreTabSearchParams(prev, tab))
     },
     [setSearchParams],
   )
@@ -266,19 +258,17 @@ export function ExplorePage() {
     [setActiveTab],
   )
 
-  useEffect(() => {
-    if (statsLoading) return
-    if (tabParam != null) return
-    if (ux.isQuickstart) {
-      const quickTab = resolveQuickExploreTab(stats)
-      if (activeTab !== quickTab) setActiveTab(quickTab)
-      return
-    }
-    if (ux.isBeginner) {
-      const beginnerTab = resolveBeginnerExploreTab(stats)
-      if (activeTab !== beginnerTab) setActiveTab(beginnerTab)
-    }
-  }, [ux.isQuickstart, ux.isBeginner, statsLoading, stats, activeTab, tabParam, setActiveTab])
+  // Quick and Beginner modes open a posture tab once. The default tab (graph)
+  // has no `?tab`, so re-checking on every render bounced every "show in
+  // graph" action straight back to Ask/Summary/Search.
+  useQuickstartLandingTab({
+    enabled: ux.isQuickstart || ux.isBeginner,
+    ready: !statsLoading,
+    tabParam,
+    activeTab,
+    quickTab: ux.isQuickstart ? resolveQuickExploreTab(stats) : resolveBeginnerExploreTab(stats),
+    setActiveTab,
+  })
 
   const allNodes: ExploreNode[] = payload?.nodes ?? []
   const allEdges: ExploreEdge[] = payload?.edges ?? []
@@ -602,7 +592,14 @@ export function ExplorePage() {
   }
 
   if (statsError) {
-    return <ErrorAlert message={`Failed to load explore stats: ${statsError}`} onRetry={reloadStats} />
+    return (
+      <PageLoadError
+        error={statsError}
+        onRetry={reloadStats}
+        resource="the codebase atlas"
+        endpoint="/v1/admin/explore/stats"
+      />
+    )
   }
 
   if (!projectId) {
@@ -771,7 +768,7 @@ export function ExplorePage() {
   ) : loading ? (
     <GraphSkeleton />
   ) : error ? (
-    <ErrorAlert message={exploreErrorMessage(error) ?? error} onRetry={reloadAll} />
+    <PageLoadError error={error} onRetry={reloadAll} resource="the code map" endpoint={exploreUrl} />
   ) : notIndexed ? (
     <div className="space-y-3">
       <EmptySectionMessage
@@ -1190,8 +1187,8 @@ export function ExplorePage() {
 
       {activeTab === 'index' && (
         <div className="space-y-4">
-          <ExploreWorkspaceReadout projectId={projectId} />
-          <ExploreIndexScopePanel projectId={projectId} />
+          <ExploreWorkspaceReadout projectId={projectId} scopePaths={indexScope} />
+          <ExploreIndexScopePanel projectId={projectId} onScopeChange={setIndexScope} />
           <Card className="p-4 space-y-3">
             <p className="text-sm font-medium text-fg">Indexer debug</p>
             <ContainedBlock tone="muted">

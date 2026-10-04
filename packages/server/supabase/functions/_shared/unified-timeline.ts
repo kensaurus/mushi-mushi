@@ -71,7 +71,7 @@ export async function buildUnifiedReportTimeline(
 
   const { data: comments } = await db
     .from('report_comments')
-    .select('id, body, author_kind, created_at')
+    .select('id, body, author_kind, created_at, visible_to_reporter')
     .eq('report_id', reportId)
     .eq('project_id', projectId)
     .order('created_at', { ascending: true })
@@ -82,7 +82,7 @@ export async function buildUnifiedReportTimeline(
       id: `comment-${c.id}`,
       lane: c.author_kind === 'admin' ? 'admin_comment' : 'reporter_comment',
       at: c.created_at,
-      title: c.author_kind === 'admin' ? 'Team reply' : 'Reporter reply',
+      title: commentTimelineTitle(c),
       body: c.body,
       actor: c.author_kind,
     })
@@ -303,6 +303,15 @@ export async function buildUnifiedReportTimeline(
  * .toISOString()` throws RangeError).
  * @internal Exported for unit tests only.
  */
+/**
+ * A team comment is a reply only when the reporter can see it; the rest are
+ * internal triage notes, so the timeline must not call them replies.
+ */
+export function commentTimelineTitle(c: { author_kind: string | null; visible_to_reporter?: boolean | null }): string {
+  if (c.author_kind !== 'admin') return 'Reporter reply'
+  return c.visible_to_reporter ? 'Team reply' : 'Team note'
+}
+
 export function timelineIso(ts: unknown, fallbackIso: string): string {
   const d = typeof ts === 'number' || typeof ts === 'string' ? new Date(ts) : null
   return d && Number.isFinite(d.getTime()) ? d.toISOString() : fallbackIso

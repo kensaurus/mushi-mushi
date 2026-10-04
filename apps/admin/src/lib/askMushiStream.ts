@@ -20,7 +20,7 @@
  */
 
 import { openSseStream } from './sseClient'
-import { supabase } from './supabase'
+import { activeTenantHeaders, supabase } from './supabase'
 import { RESOLVED_API_URL } from './env'
 import { debugLog, debugError } from './debug'
 import type { AskMushiSendBody, AskMushiMessageMeta } from './askMushiTypes'
@@ -86,6 +86,10 @@ export async function openAskMushiStream(
           'Content-Type': 'application/json',
           Accept: 'text/event-stream',
           Authorization: `Bearer ${bearer}`,
+          // The selected project and team; without them the server answers
+          // about the caller's oldest project (the POST path sends them via
+          // apiFetch).
+          ...activeTenantHeaders(),
         },
         body: JSON.stringify(body),
         signal: ctrl.signal,

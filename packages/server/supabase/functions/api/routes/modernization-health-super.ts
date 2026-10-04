@@ -97,11 +97,11 @@ export function registerModernizationHealthSuperRoutes(app: Hono<{ Variables: Va
       .select('id, project_id, related_report_id, dep_name, status')
       .eq('id', findingId)
       .maybeSingle();
-    if (!finding) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
+    if (!finding) return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'That finding no longer exists. Refresh the page.' } }, 404);
 
     // Teams v1: owner / org-member / project-member can act on findings.
     const access = await callerCanAccessProject(c, db, userId, finding.project_id);
-    if (!access.allowed) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
+    if (!access.allowed) return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'This finding belongs to a project you cannot access.' } }, 403);
 
     if (!finding.related_report_id) {
       return c.json(
@@ -203,11 +203,11 @@ export function registerModernizationHealthSuperRoutes(app: Hono<{ Variables: Va
       .select('project_id, dep_name')
       .eq('id', findingId)
       .maybeSingle();
-    if (!finding) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
+    if (!finding) return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'That finding no longer exists. Refresh the page.' } }, 404);
 
     // Teams v1: owner / org-member / project-member can act on findings.
     const access = await callerCanAccessProject(c, db, userId, finding.project_id);
-    if (!access.allowed) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
+    if (!access.allowed) return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'This finding belongs to a project you cannot access.' } }, 403);
 
     const { error } = await db
       .from('modernization_findings')
@@ -245,33 +245,43 @@ export function registerModernizationHealthSuperRoutes(app: Hono<{ Variables: Va
     const userId = c.get('userId') as string;
     const kind = c.req.param('kind')! as IntegrationKind;
     if (!ALL_INTEGRATION_KINDS.includes(kind)) {
-      return c.json({ ok: false, error: { code: 'BAD_KIND' } }, 400);
+      return c.json(
+        { ok: false, error: { code: 'BAD_KIND', message: `Mushi cannot test "${kind}" connections yet.` } },
+        400,
+      );
     }
 
     const db = getServiceClient();
-    // Teams v1: any member can probe an integration in an org they belong to.
-    // Health probes are workspace-level — the precise project pick doesn't matter.
+    // Any member can probe an integration of a project they can read. The
+    // credentials are per project, so probe the one the console names: the
+    // first accessible project tested someone else's keys and wrote the
+    // health row there.
     const accessibleIds = await callerProjectIds(c, db, userId);
     if (accessibleIds.length === 0) return c.json({ ok: false, error: { code: 'NO_PROJECT' } }, 404);
-    const projectId = accessibleIds[0];
+    const requested = (c.req.query('project_id') ?? c.req.header('X-Mushi-Project-Id') ?? '').trim();
+    if (requested && !accessibleIds.includes(requested)) {
+      return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'You do not have access to that project.' } }, 403);
+    }
+    const projectId = requested || accessibleIds[0];
 
     const { data: settings } = await db
       .from('project_settings')
       .select(
-        'sentry_org_slug, sentry_auth_token_ref, langfuse_host, langfuse_public_key_ref, langfuse_secret_key_ref, github_repo_url, github_installation_token_ref, cursor_api_key_ref, cursor_default_model, claude_api_key_ref',
+        'sentry_org_slug, sentry_auth_token_ref, langfuse_host, langfuse_public_key_ref, langfuse_secret_key_ref, github_repo_url, github_installation_token_ref, cursor_api_key_ref, cursor_default_model, claude_api_key_ref, linear_access_token_ref, linear_api_key_ref, slack_bot_token_ref',
       )
       .eq('project_id', projectId)
       .single();
 
     // For routing-provider probes, load the stored config from project_integrations.
     // Map kind → integration_type (github_issues is stored as 'github' in project_integrations).
+    // A paused row is still tested: "Test" on a paused card checks the saved
+    // credentials (filtering on is_active probed an empty config instead).
     const routingType = kind === 'github_issues' ? 'github' : kind;
     const { data: routingRow } = await db
       .from('project_integrations')
       .select('config')
       .eq('project_id', projectId)
       .eq('integration_type', routingType)
-      .eq('is_active', true)
       .maybeSingle();
     const routingConfig = (routingRow?.config ?? {}) as Record<string, unknown>;
 
@@ -368,6 +378,22 @@ export function registerModernizationHealthSuperRoutes(app: Hono<{ Variables: Va
       });
     }
 
+    // The caller's role on the active project, so the console can hide or
+    // disable write controls the API refuses for viewers. Null = unknown
+    // (lookup failed); the UI then leaves controls on and the API decides.
+    let projectRole: string | null = null;
+    if (entitlement.projectId) {
+      try {
+        const access = await callerCanAccessProject(c, db, userId, entitlement.projectId);
+        projectRole = access.role;
+      } catch (err) {
+        log.warn('entitlements_project_role_lookup_failed', {
+          userId,
+          err: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
     const flags = { ...(entitlement.plan.feature_flags ?? {}) } as Record<string, unknown>;
     const em = (userEmail ?? '').toLowerCase();
     if (em && INVENTORY_V2_DOGFOOD_EMAILS.has(em)) {
@@ -387,6 +413,7 @@ export function registerModernizationHealthSuperRoutes(app: Hono<{ Variables: Va
           allowed: flags[r.flag] === true,
         })),
         isSuperAdmin,
+        projectRole,
         // Founder/operator flag (secret MUSHI_OPERATOR_USER_IDS) — drives the
         // /growth nav item; the route itself re-checks via requireOperator.
         operator: isOperatorUser(userId),
@@ -502,10 +529,16 @@ export function registerModernizationHealthSuperRoutes(app: Hono<{ Variables: Va
       return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Not found.' } }, 404);
     }
 
-    const [{ data: projects }, { data: subs }, { data: recentReports }] = await Promise.all([
+    const [
+      { data: projects, error: projectsErr },
+      { data: subs, error: subsErr },
+      { data: recentReports, error: reportsErr },
+    ] = await Promise.all([
       db
         .from('projects')
-        .select('id, name, slug, created_at, plan_tier, data_region')
+        // data_region was dropped (20260527070000); selecting it failed the
+        // whole query and the drawer showed every customer with 0 projects.
+        .select('id, name, slug, created_at, plan_tier, data_residency_region')
         .eq('owner_id', userId)
         .order('created_at', { ascending: false }),
       db
@@ -535,6 +568,16 @@ export function registerModernizationHealthSuperRoutes(app: Hono<{ Variables: Va
         .order('created_at', { ascending: false })
         .limit(20),
     ]);
+
+    // A failed read must never render as "No projects yet".
+    const detailErr = projectsErr ?? subsErr ?? reportsErr;
+    if (detailErr) {
+      log.error('super_admin_user_detail_failed', { err: detailErr.message });
+      return c.json(
+        { ok: false, error: { code: 'INTERNAL', message: "This user's projects could not be loaded. Retry in a moment." } },
+        500,
+      );
+    }
 
     return c.json({
       ok: true,

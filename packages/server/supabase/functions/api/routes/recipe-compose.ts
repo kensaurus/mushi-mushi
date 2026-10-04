@@ -10,7 +10,7 @@
  */
 
 import type { getServiceClient } from '../../_shared/db.ts'
-import { cadenceDays, deriveElementState, ELEMENT_META, worstState, type ElementInput } from '../../_shared/recipe-state.ts'
+import { cadenceDays, deriveElementState, ELEMENT_META, guardNeverChecked, worstState, type ElementInput } from '../../_shared/recipe-state.ts'
 import { judgingSet, toSetSummary, type StoredTokens } from '../../_shared/design-sets.ts'
 import { effectiveDesignRules, isWritablePath, RECIPE_MANIFEST_PATH, type RecipeManifest } from '../../_shared/recipe-schema.ts'
 import { evaluateContrast } from '../../_shared/design-deviance.ts'
@@ -76,12 +76,17 @@ const ghCache = new Map<string, { at: number; value: unknown }>()
 const GH_CACHE_MS = 5 * 60 * 1000
 
 async function cached<T>(key: string, now: number, fn: () => Promise<T>): Promise<T> {
+  return (await cachedAt(key, now, fn)).value
+}
+
+/** Like cached(), plus when the value was really read: a cache hit keeps the original read time, never "now". */
+async function cachedAt<T>(key: string, now: number, fn: () => Promise<T>): Promise<{ value: T; at: string }> {
   const hit = ghCache.get(key)
-  if (hit && now - hit.at < GH_CACHE_MS) return hit.value as T
+  if (hit && now - hit.at < GH_CACHE_MS) return { value: hit.value as T, at: new Date(hit.at).toISOString() }
   const value = await fn()
   ghCache.set(key, { at: now, value })
   if (ghCache.size > 500) ghCache.delete(ghCache.keys().next().value as string)
-  return value
+  return { value, at: new Date(now).toISOString() }
 }
 
 function errMessage(err: unknown): string {
@@ -322,8 +327,25 @@ export interface ComposedRecipe {
   details: Record<RecipeElementKey, Record<string, unknown>>
 }
 
-function summary(key: RecipeElementKey, st: { state: ElementState; reason: string }, lastCheckedAt: string | null, facts: RecipeElementSummary['facts'], findingsCount: number, links: RecipeLink[]): RecipeElementSummary {
-  return { key, label: ELEMENT_META[key].label, lane: ELEMENT_META[key].lane, state: st.state, reason: st.reason, lastCheckedAt, facts, findingsCount, links }
+/**
+ * One element card. `lastCheckedAt` must be the time of the read its state
+ * was judged from (never a release date or "now"), and an `ok` with no such
+ * time is downgraded to "Not checked yet" (guardNeverChecked).
+ */
+export function summary(key: RecipeElementKey, st: { state: ElementState; reason: string }, lastCheckedAt: string | null, facts: RecipeElementSummary['facts'], findingsCount: number, links: RecipeLink[]): RecipeElementSummary {
+  const judged = guardNeverChecked(st, lastCheckedAt)
+  return { key, label: ELEMENT_META[key].label, lane: ELEMENT_META[key].lane, state: judged.state, reason: judged.reason, lastCheckedAt, facts, findingsCount, links }
+}
+
+/**
+ * When the integrations card was last checked as a whole: the OLDEST check
+ * among the configured integrations, and null while any of them has never
+ * been checked, so the card can never say "never checked" and "checked 13
+ * minutes ago" at once.
+ */
+export function integrationsCheckedAt(list: ReadonlyArray<{ checkedAt: string | null }>): string | null {
+  if (list.length === 0 || list.some((i) => !i.checkedAt)) return null
+  return list.map((i) => i.checkedAt as string).sort()[0]
 }
 
 /**
@@ -439,18 +461,25 @@ export async function composeRecipe(db: Db, deps: ComposeDeps, projectId: string
   let envInput: ElementInput = { key: 'env', repoConnected: false, tokenAvailable: false, fetchError: null, required: deps.requiredEnvNames(project?.slug ?? null), missing: null }
   let ciDetail: Record<string, unknown> = {}
   let presentNames: string[] | null = null
+  /** When CI runs and env names were really read from GitHub (the cache keeps the first read time). */
+  let ciReadAt: string | null = null
+  let envReadAt: string | null = null
   if (repo.ok) {
     const nowMs = now.getTime()
     try {
       const head = await cached(`head:${projectId}`, nowMs, () => deps.getDefaultHead(repo.repo))
-      const run = await cached(`ci:${projectId}:${head.sha}`, nowMs, () => deps.fetchWorkflowRun(repo.repo, head.branch, head.sha))
+      const runRead = await cachedAt(`ci:${projectId}:${head.sha}`, nowMs, () => deps.fetchWorkflowRun(repo.repo, head.branch, head.sha))
+      const run = runRead.value
+      ciReadAt = runRead.at
       ciInput = { key: 'ci', repoConnected: true, tokenAvailable: true, fetchError: null, run: run ? { status: run.status, conclusion: run.conclusion, updatedAt: run.updatedAt, name: run.name } : null, driftFindings: driftOf('ci_drift') }
       ciDetail = { branch: head.branch, headSha: head.sha, run }
     } catch (err) {
       ciInput = { key: 'ci', repoConnected: true, tokenAvailable: true, fetchError: errMessage(err), run: null }
     }
     try {
-      presentNames = await cached(`env:${projectId}`, nowMs, () => deps.listActionsNames(repo.repo))
+      const namesRead = await cachedAt(`env:${projectId}`, nowMs, () => deps.listActionsNames(repo.repo))
+      presentNames = namesRead.value
+      envReadAt = namesRead.at
       const required = deps.requiredEnvNames(project?.slug ?? null)
       envInput = { key: 'env', repoConnected: true, tokenAvailable: true, fetchError: null, required, missing: required.filter((n) => !presentNames!.includes(n)), driftFindings: driftOf('env_drift') }
     } catch (err) {
@@ -515,7 +544,7 @@ export async function composeRecipe(db: Db, deps: ComposeDeps, projectId: string
   const elements: Record<RecipeElementKey, RecipeElementSummary> = {
     schema: summary('schema', schemaState, schemaReadAt,
       { linked: Boolean(settings.supabase_project_ref) }, schemaRun ? findingCounts.get(schemaRun.id) ?? 0 : 0,
-      [{ label: 'Drift', to: '/drift' }]),
+      [{ label: 'Schema changes', to: '/drift' }]),
     design: summary('design', design.state, design.latestScan?.completed_at ?? snapshot?.captured_at ?? null, {
       set: design.set?.name ?? null,
       tokens: design.set?.tokens.length ?? 0,
@@ -526,17 +555,18 @@ export async function composeRecipe(db: Db, deps: ComposeDeps, projectId: string
       [{ label: 'Inventory', to: '/inventory' }]),
     gates: summary('gates', gatesState, latest.map((r) => r.completed_at).filter(Boolean).sort().pop() ?? null,
       { gates: latest.length, cadenceDays: cadence, bundleKb: latestMetrics.get('bundle.web.gzip_kb')?.value ?? null }, gateInputs.reduce((n, g) => n + g.openFindings, 0),
-      [{ label: 'Code health', to: '/code-health' }]),
-    ci: summary('ci', ciState, ciInput.key === 'ci' ? ciInput.run?.updatedAt ?? null : null,
+      [{ label: 'Full-stack audit (every check result)', to: '/fullstack-audit' }, { label: 'Code health', to: '/code-health' }]),
+    ci: summary('ci', ciState, ciInput.key === 'ci' && !ciInput.fetchError ? ciReadAt : null,
       { branch: (ciDetail.branch as string | undefined) ?? null, conclusion: ciInput.key === 'ci' ? ciInput.run?.conclusion ?? null : null }, 0,
       ciInput.key === 'ci' && (ciDetail.run as WorkflowRunSnapshot | null)?.htmlUrl ? [{ label: 'Workflow run', to: (ciDetail.run as WorkflowRunSnapshot).htmlUrl! }] : []),
-    deploy: summary('deploy', deployState, releaseRows[0]?.published_at ?? null,
+    // A release date is not a check: only a probe of a declared target is.
+    deploy: summary('deploy', deployState, [...latestObs.values()].map((o) => o.observedAt).sort().pop() ?? null,
       { releases: releaseRows.length, latestRelease: releaseRows[0]?.version ?? null, versionsSeen: versions.size }, 0,
       [{ label: 'Releases', to: '/releases' }]),
-    env: summary('env', envState, null,
+    env: summary('env', envState, envInput.key === 'env' && envInput.missing != null ? envReadAt : null,
       { required: envInput.key === 'env' ? envInput.required.length : 0, missing: envInput.key === 'env' ? envInput.missing?.length ?? null : null }, envInput.key === 'env' ? envInput.missing?.length ?? 0 : 0,
       [{ label: 'Connect', to: '/connect' }]),
-    integrations: summary('integrations', integrationsState, integrationsList.map((i) => i.checkedAt).filter(Boolean).sort().pop() ?? null,
+    integrations: summary('integrations', integrationsState, integrationsCheckedAt(integrationsList),
       { connected: integrationsList.length }, integrationsList.filter((i) => i.health === 'down' || i.health === 'degraded').length,
       [{ label: 'Integrations', to: '/integrations' }]),
   }

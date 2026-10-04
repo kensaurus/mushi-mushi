@@ -26,6 +26,10 @@ export interface HealthStats {
   fallbackRatePct: number
   avgLatencyMs: number
   p95LatencyMs: number
+  /** False while latency comes from the newest calls only (aggregate not deployed). */
+  latencyExact?: boolean
+  /** Owner/admin: may run a job by hand (Trigger now). */
+  canRunJobs?: boolean
   cronJobCount: number
   cronHealthyCount: number
   cronErrorCount: number

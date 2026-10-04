@@ -9,6 +9,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   compareSemver,
+  pickHighestVersion,
   resolveSdkFreshnessStatus,
   stripPreRelease,
 } from '../../supabase/functions/_shared/sdk-version-compare.ts'
@@ -101,5 +102,20 @@ describe('resolveSdkFreshnessStatus', () => {
         catalogDeprecated: true,
       }),
     ).toBe('up-to-date')
+  })
+})
+
+describe('pickHighestVersion', () => {
+  it('picks by semver, not by row order or release date', () => {
+    const rows = [
+      { version: '1.9.0', released_at: '2026-10-03' },
+      { version: '1.28.0', released_at: '2026-01-01' },
+      { version: '1.3.2', released_at: '2026-10-04' },
+    ]
+    expect(pickHighestVersion(rows)?.version).toBe('1.28.0')
+  })
+
+  it('returns null for an empty catalogue', () => {
+    expect(pickHighestVersion([])).toBeNull()
   })
 })

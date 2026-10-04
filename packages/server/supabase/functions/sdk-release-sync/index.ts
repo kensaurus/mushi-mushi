@@ -46,7 +46,9 @@ app.post('/sdk-release-sync', async (c) => {
   const { data: jobs, error } = await db
     .from('sdk_upgrade_jobs')
     .select('id, project_id, pr_url, pr_state, release_status, merged_at, commit_sha')
-    .in('release_status', SYNC_STATUSES)
+    // Jobs that opened a PR before the runner stamped release_status (NULL)
+    // are picked up too, so a PR merged on GitHub stops reading as open.
+    .or(`release_status.in.(${SYNC_STATUSES.join(',')}),and(release_status.is.null,status.eq.completed)`)
     .not('pr_url', 'is', null)
     .order('created_at', { ascending: false })
     .limit(50)

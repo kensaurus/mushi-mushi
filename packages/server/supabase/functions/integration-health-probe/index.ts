@@ -72,6 +72,9 @@ interface PlatformSettingsRow {
   // Linear — vault-backed (added in migration 20260718000001_linear_integration)
   linear_api_key_ref: string | null
   linear_access_token_ref: string | null
+  // Slack: a vaulted per-project bot, or a channel posted to by the operator bot.
+  slack_bot_token_ref: string | null
+  slack_channel_id: string | null
 }
 
 interface RoutingRow {
@@ -119,6 +122,11 @@ function hasLinearPlatform(s: PlatformSettingsRow): boolean {
   return !!(s.linear_access_token_ref || s.linear_api_key_ref)
 }
 
+/** Slack is set up when a bot token is vaulted or a channel is picked (operator bot). */
+function hasSlack(s: PlatformSettingsRow): boolean {
+  return !!(s.slack_bot_token_ref || s.slack_channel_id)
+}
+
 // Map project_integrations.integration_type → probe kind.
 // 'github' in routing is stored as 'github' but probed as 'github_issues'
 // to distinguish it from the platform GitHub (code-repo) integration.
@@ -156,7 +164,7 @@ async function handler(req: Request): Promise<Response> {
       db
         .from('project_settings')
         .select(
-          'project_id, sentry_org_slug, sentry_auth_token_ref, langfuse_host, langfuse_public_key_ref, langfuse_secret_key_ref, github_repo_url, github_installation_token_ref, claude_api_key_ref, cursor_api_key_ref, linear_api_key_ref, linear_access_token_ref',
+          'project_id, sentry_org_slug, sentry_auth_token_ref, langfuse_host, langfuse_public_key_ref, langfuse_secret_key_ref, github_repo_url, github_installation_token_ref, claude_api_key_ref, cursor_api_key_ref, linear_api_key_ref, linear_access_token_ref, slack_bot_token_ref, slack_channel_id',
         ),
       db.from('projects').select('id, organization_id, owner_id'),
       db.from('organization_integration_settings').select('organization_id, sentry_org_slug, sentry_auth_token_ref, langfuse_host, langfuse_public_key_ref, langfuse_secret_key_ref, github_repo_url, github_installation_token_ref, claude_api_key_ref, cursor_api_key_ref, linear_api_key_ref, linear_access_token_ref'),
@@ -231,6 +239,8 @@ async function handler(req: Request): Promise<Response> {
       if (hasLinearPlatform(s)) {
         tasks.push({ projectId: s.project_id, kind: 'linear', settings: s, routingConfig: {} })
       }
+      // auth.test only: the probe posts nothing to the channel.
+      if (hasSlack(s)) tasks.push({ projectId: s.project_id, kind: 'slack', settings: s, routingConfig: {} })
     }
 
     for (const r of allRouting) {

@@ -2,7 +2,6 @@
  * Compact dashboard / get-started strip — nudges users to Support.
  */
 
-import { Link } from 'react-router-dom'
 import { usePageData } from '../../lib/usePageData'
 import { useRealtimeReload } from '../../lib/realtime'
 import { Card, Btn, Badge } from '../ui'
@@ -79,11 +78,10 @@ export function FeedbackHubStrip({ className = '' }: { className?: string }) {
             {(s.reopened ?? 0) > 0 ? ` · ${s.reopened} reopened` : ''}
           </InlineProof>
         </div>
-        <Link to="/feedback" className="shrink-0">
-          <Btn size="sm" variant={hasNews ? 'primary' : 'ghost'}>
-            {hasNews ? 'Read replies' : 'View all'}
-          </Btn>
-        </Link>
+        {/* Btn renders the link itself: one control, one tab stop (QA 287). */}
+        <Btn to="/feedback" size="sm" variant={hasNews ? 'primary' : 'ghost'} className="shrink-0">
+          {hasNews ? 'Read replies' : 'View all'}
+        </Btn>
       </div>
     </Card>
   )

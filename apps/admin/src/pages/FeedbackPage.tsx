@@ -76,8 +76,13 @@ function isFeedbackTab(value: string | null): value is FeedbackTabId {
   return FEEDBACK_TABS.some((t) => t.id === value)
 }
 
-function buildTicketsUrl(tab: FeedbackTabId, listFilter: ListFilter): string {
-  const params = new URLSearchParams({ limit: '50' })
+const TICKETS_PAGE_SIZE = 50
+
+function buildTicketsUrl(tab: FeedbackTabId, listFilter: ListFilter, page: number): string {
+  const params = new URLSearchParams({ limit: String(TICKETS_PAGE_SIZE), page: String(page) })
+  // Active is filtered by the API, so older open tickets are not lost
+  // behind the newest 50.
+  if (tab === 'active') params.set('status', 'active')
   if (tab === 'shipped') params.set('shipped', '1')
   if (tab === 'all' && listFilter === 'bug') params.set('category', 'bug')
   if (tab === 'all' && listFilter === 'feature') params.set('category', 'feature')
@@ -106,8 +111,13 @@ export function FeedbackPage() {
   } = usePageData<FeedbackStats>('/v1/admin/feedback/stats')
   const stats = statsData ?? EMPTY_FEEDBACK_STATS
 
-  const ticketsUrl = buildTicketsUrl(activeTab, listFilter)
-  const ticketsQuery = usePageData<{ tickets: SupportTicket[] }>(ticketsUrl)
+  const [ticketPage, setTicketPage] = useState(0)
+  // A different list starts on its first page.
+  useEffect(() => setTicketPage(0), [activeTab, listFilter])
+  const ticketsUrl = buildTicketsUrl(activeTab, listFilter, ticketPage)
+  const ticketsQuery = usePageData<{ tickets: SupportTicket[]; total?: number; limit?: number }>(ticketsUrl)
+  const ticketsTotal = ticketsQuery.data?.total ?? null
+  const ticketPageCount = ticketsTotal !== null ? Math.max(1, Math.ceil(ticketsTotal / TICKETS_PAGE_SIZE)) : 1
   const projectsQuery = usePageData<{ projects: { id: string; name: string }[] }>('/v1/admin/projects')
 
   const tickets = ticketsQuery.data?.tickets ?? []
@@ -150,11 +160,21 @@ export function FeedbackPage() {
     return tickets
   }, [activeTab, tickets])
 
+  // `?ticket=<id>` opens that ticket once. Closing the modal removes the
+  // param; before, it stayed in the URL and every tab switch (which reloads
+  // the list) opened the modal again.
   const ticketFromUrl = searchParams.get('ticket')
   useEffect(() => {
-    if (!ticketFromUrl || ticketsQuery.loading) return
+    if (!ticketFromUrl) return
     setOpenTicketId(ticketFromUrl)
-  }, [ticketFromUrl, ticketsQuery.loading])
+  }, [ticketFromUrl])
+  const closeTicket = useCallback(() => {
+    setOpenTicketId(null)
+    if (!searchParams.has('ticket')) return
+    const next = new URLSearchParams(searchParams)
+    next.delete('ticket')
+    setSearchParams(next, { replace: true, preventScrollReset: true })
+  }, [searchParams, setSearchParams])
 
   const bannerSeverity: 'ok' | 'warn' | 'brand' | 'info' | 'neutral' =
     !stats.hasAnyProject
@@ -395,6 +415,27 @@ export function FeedbackPage() {
               ))}
             </ul>
           )}
+
+          {ticketsTotal !== null && ticketPageCount > 1 && (
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-edge-subtle pt-2 text-2xs text-fg-muted">
+              <span className="tabular-nums">
+                {ticketPage * TICKETS_PAGE_SIZE + 1}–{Math.min(ticketsTotal, (ticketPage + 1) * TICKETS_PAGE_SIZE)} of {ticketsTotal}
+              </span>
+              <div className="flex gap-1">
+                <Btn size="sm" variant="ghost" disabled={ticketPage === 0} onClick={() => setTicketPage((p) => Math.max(0, p - 1))}>
+                  Newer
+                </Btn>
+                <Btn
+                  size="sm"
+                  variant="ghost"
+                  disabled={ticketPage + 1 >= ticketPageCount}
+                  onClick={() => setTicketPage((p) => p + 1)}
+                >
+                  Older
+                </Btn>
+              </div>
+            </div>
+          )}
         </Card>
       )}
 
@@ -413,9 +454,9 @@ export function FeedbackPage() {
       <SupportTicketDetailModal
         ticket={openTicket}
         projectName={openTicket ? projectName(openTicket.project_id) : ''}
-        onClose={() => setOpenTicketId(null)}
+        onClose={closeTicket}
         onChanged={() => {
-          setOpenTicketId(null)
+          closeTicket()
           handleSubmitted()
         }}
       />

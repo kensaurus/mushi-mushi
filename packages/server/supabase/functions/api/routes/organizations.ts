@@ -7,6 +7,7 @@ import { requireFeature } from '../../_shared/entitlements.ts';
 import { logAudit } from '../../_shared/audit.ts';
 import { withIdempotency } from '../../_shared/idempotency.ts';
 import { dbError } from '../shared.ts';
+import { memberRemovalDenial, roleChangeDenial } from '../../_shared/org-member-policy.ts';
 
 const ORG_ROLES = ['owner', 'admin', 'member', 'viewer'] as const;
 const INVITE_ROLES = ['admin', 'member', 'viewer'] as const;
@@ -48,6 +49,42 @@ async function firstProjectId(db: ReturnType<typeof getServiceClient>, orgId: st
     .limit(1)
     .maybeSingle();
   return data?.id ?? null;
+}
+
+async function ownerCount(db: ReturnType<typeof getServiceClient>, orgId: string): Promise<number> {
+  const { count } = await db
+    .from('organization_members')
+    .select('user_id', { count: 'exact', head: true })
+    .eq('organization_id', orgId)
+    .eq('role', 'owner');
+  return count ?? 0;
+}
+
+const INVITE_EMAIL_FAILED = 'The invite email could not be sent. Copy the invite link and send it to them.';
+const INVITE_EMAIL_EXISTING_USER =
+  'This person already has a Mushi account, so no invite email was sent. Copy the invite link and send it to them.';
+
+/**
+ * Send (or re-send) the Supabase invite email and report what happened.
+ * supabase-js returns `{ error }` instead of throwing, so the previous
+ * `.catch(() => null)` dropped every refusal (most often "a user with this
+ * email address has already been registered") and the console still said
+ * "Invite sent".
+ */
+async function sendInviteEmail(
+  db: ReturnType<typeof getServiceClient>,
+  email: string,
+  options: { redirectTo: string; data: Record<string, unknown> },
+): Promise<{ emailSent: boolean; emailError: string | null }> {
+  try {
+    const { error } = await db.auth.admin.inviteUserByEmail(email, options);
+    if (!error) return { emailSent: true, emailError: null };
+    const raw = (error.message ?? '').toLowerCase();
+    const existing = raw.includes('already') && (raw.includes('registered') || raw.includes('exists'));
+    return { emailSent: false, emailError: existing ? INVITE_EMAIL_EXISTING_USER : INVITE_EMAIL_FAILED };
+  } catch {
+    return { emailSent: false, emailError: INVITE_EMAIL_FAILED };
+  }
 }
 
 async function userEmailById(db: ReturnType<typeof getServiceClient>, userId: string): Promise<string | null> {
@@ -449,7 +486,12 @@ export function registerOrganizationRoutes(app: Hono<{ Variables: Variables }>):
     if (!UUID_RE.test(orgId)) return c.json({ ok: false, error: { code: 'BAD_ORG' } }, 400);
     const db = getServiceClient();
     const role = await loadMembership(db, orgId, userId);
-    if (!role) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
+    if (!role) {
+      return c.json(
+        { ok: false, error: { code: 'NOT_A_MEMBER', message: 'You are not a member of this team. Pick another team in the header switcher.' } },
+        404,
+      );
+    }
 
     const [{ data: org }, { data: members, error }, { data: invitations }] = await Promise.all([
       db.from('organizations').select('id, slug, name, plan_id, is_personal').eq('id', orgId).maybeSingle(),
@@ -477,6 +519,9 @@ export function registerOrganizationRoutes(app: Hono<{ Variables: Variables }>):
         .eq('organization_id', orgId)
         .is('accepted_at', null)
         .is('revoked_at', null)
+        // Expired rows stay listed on purpose: uq_pending_invitation_email
+        // ignores expiry, so the console must show them (with Cancel). The
+        // console counts only unexpired rows as "open", matching /stats.
         .order('created_at', { ascending: false }),
     ]);
     if (error) return dbError(c, error);
@@ -641,12 +686,25 @@ export function registerOrganizationRoutes(app: Hono<{ Variables: Variables }>):
       return c.json({ ok: false, error: { code: 'BAD_REQUEST' } }, 400);
     }
     const db = getServiceClient();
-    const actorRole = await loadMembership(db, orgId, actorId);
-    if (actorRole !== 'owner' && actorRole !== 'admin') {
-      return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
+    const [actorRole, targetRole] = await Promise.all([
+      loadMembership(db, orgId, actorId),
+      loadMembership(db, orgId, targetUserId),
+    ]);
+    if (actorRole && !targetRole) {
+      return c.json(
+        { ok: false, error: { code: 'NOT_FOUND', message: 'That person is no longer on this team. Refresh the roster.' } },
+        404,
+      );
     }
-    if (body.role === 'owner' && actorRole !== 'owner') {
-      return c.json({ ok: false, error: { code: 'OWNER_REQUIRED' } }, 403);
+    const denial = roleChangeDenial({
+      actorRole,
+      targetRole,
+      nextRole: body.role,
+      isSelf: actorId === targetUserId,
+      ownerCount: targetRole === 'owner' ? await ownerCount(db, orgId) : 0,
+    });
+    if (denial) {
+      return c.json({ ok: false, error: { code: denial.code, message: denial.message } }, denial.status);
     }
     const { error } = await db
       .from('organization_members')
@@ -672,10 +730,23 @@ export function registerOrganizationRoutes(app: Hono<{ Variables: Variables }>):
       return c.json({ ok: false, error: { code: 'BAD_REQUEST' } }, 400);
     }
     const db = getServiceClient();
-    const actorRole = await loadMembership(db, orgId, actorId);
-    if (!actorRole) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
-    if (actorId !== targetUserId && actorRole !== 'owner' && actorRole !== 'admin') {
-      return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
+    const [actorRole, targetRole] = await Promise.all([
+      loadMembership(db, orgId, actorId),
+      loadMembership(db, orgId, targetUserId),
+    ]);
+    if (actorRole && !targetRole) {
+      // Already gone: removal is idempotent.
+      return c.json({ ok: true, data: { alreadyRemoved: true, left: false } });
+    }
+    const isSelf = actorId === targetUserId;
+    const denial = memberRemovalDenial({
+      actorRole,
+      targetRole,
+      isSelf,
+      ownerCount: targetRole === 'owner' ? await ownerCount(db, orgId) : 0,
+    });
+    if (denial) {
+      return c.json({ ok: false, error: { code: denial.code, message: denial.message } }, denial.status);
     }
     const { error } = await db
       .from('organization_members')
@@ -683,7 +754,15 @@ export function registerOrganizationRoutes(app: Hono<{ Variables: Variables }>):
       .eq('organization_id', orgId)
       .eq('user_id', targetUserId);
     if (error) return dbError(c, error);
-    return c.json({ ok: true });
+    const projectId = await firstProjectId(db, orgId);
+    if (projectId) {
+      await logAudit(db, projectId, actorId, 'settings.updated', 'organization_member', targetUserId, {
+        organizationId: orgId,
+        action: isSelf ? 'left' : 'removed',
+        role: targetRole,
+      }).catch(() => {});
+    }
+    return c.json({ ok: true, data: { alreadyRemoved: false, left: isSelf } });
   });
 
   app.post('/v1/org/:id/invitations', jwtAuth, requireFeature('teams'), async (c) => {
@@ -725,13 +804,32 @@ export function registerOrganizationRoutes(app: Hono<{ Variables: Variables }>):
     const seatMiss = await checkSeatCap(db, orgId);
     if (seatMiss) return c.json(seatMiss.body, seatMiss.status as 402);
 
+    // An expired, never-answered invite for the same address still holds the
+    // uq_pending_invitation_email slot, so re-inviting failed with a raw
+    // unique-violation. Retire it first; it could not be accepted anyway.
+    const nowIso = new Date().toISOString();
+    await db
+      .from('invitations')
+      .update({ revoked_at: nowIso, revoked_by: actorId })
+      .eq('organization_id', orgId)
+      .eq('email', email)
+      .is('accepted_at', null)
+      .is('revoked_at', null)
+      .lte('expires_at', nowIso);
+
     const { data: invite, error } = await db
       .from('invitations')
       .insert({ organization_id: orgId, email, role, invited_by: actorId, note })
       .select('id, email, role, token, expires_at, created_at, note')
       .single();
+    if (error?.code === '23505') {
+      return c.json({
+        ok: false,
+        error: { code: 'ALREADY_INVITED', message: 'This address already has a pending invite. Resend it or copy its link from the list below.' },
+      }, 409);
+    }
     if (error || !invite) {
-      return c.json({ ok: false, error: { code: 'INVITE_FAILED', message: error?.message ?? 'Invite failed' } }, 400);
+      return c.json({ ok: false, error: { code: 'INVITE_FAILED', message: 'The invite could not be created. Try again in a moment.' } }, 400);
     }
 
     const acceptPath = `/invite/accept?token=${encodeURIComponent(invite.token)}`;
@@ -745,20 +843,18 @@ export function registerOrganizationRoutes(app: Hono<{ Variables: Variables }>):
       db.from('organizations').select('name').eq('id', orgId).maybeSingle(),
       userDisplayInfoById(db, actorId),
     ]);
-    await db.auth.admin
-      .inviteUserByEmail(email, {
-        redirectTo: adminUrl(acceptPath),
-        data: {
-          org_name: org?.name ?? 'your team',
-          org_id: orgId,
-          inviter_name: inviter.name,
-          inviter_email: inviter.email,
-          role,
-          note,
-          accept_url: adminUrl(acceptPath),
-        },
-      })
-      .catch(() => null);
+    const delivery = await sendInviteEmail(db, email, {
+      redirectTo: adminUrl(acceptPath),
+      data: {
+        org_name: org?.name ?? 'your team',
+        org_id: orgId,
+        inviter_name: inviter.name,
+        inviter_email: inviter.email,
+        role,
+        note,
+        accept_url: adminUrl(acceptPath),
+      },
+    });
 
     if (projectId) {
       await logAudit(db, projectId, actorId, 'settings.updated', 'organization_invitation', invite.id, {
@@ -768,7 +864,7 @@ export function registerOrganizationRoutes(app: Hono<{ Variables: Variables }>):
         hasNote: Boolean(note),
       }).catch(() => {});
     }
-    return c.json({ ok: true, data: { invitation: invite, acceptUrl: adminUrl(acceptPath) } }, 201);
+    return c.json({ ok: true, data: { invitation: invite, acceptUrl: adminUrl(acceptPath), ...delivery } }, 201);
     }); // withIdempotency
   });
 
@@ -898,21 +994,23 @@ export function registerOrganizationRoutes(app: Hono<{ Variables: Variables }>):
       db.from('organizations').select('name').eq('id', orgId).maybeSingle(),
       userDisplayInfoById(db, actorId),
     ]);
-    await db.auth.admin
-      .inviteUserByEmail(existing.email, {
-        redirectTo: adminUrl(acceptPath),
-        data: {
-          org_name: org?.name ?? 'your team',
-          org_id: orgId,
-          inviter_name: inviter.name,
-          inviter_email: inviter.email,
-          role: existing.role,
-          note: existing.note ?? null,
-          accept_url: adminUrl(acceptPath),
-          resend: true,
-        },
-      })
-      .catch(() => null);
+    const delivery = await sendInviteEmail(db, existing.email, {
+      redirectTo: adminUrl(acceptPath),
+      data: {
+        org_name: org?.name ?? 'your team',
+        org_id: orgId,
+        inviter_name: inviter.name,
+        inviter_email: inviter.email,
+        role: existing.role,
+        note: existing.note ?? null,
+        accept_url: adminUrl(acceptPath),
+        resend: true,
+      },
+    });
+    if (!delivery.emailSent) {
+      // Nothing went out, so it does not count as a resend.
+      return c.json({ ok: false, error: { code: 'EMAIL_NOT_SENT', message: delivery.emailError } }, 409);
+    }
 
     const nowIso = new Date().toISOString();
     const { error: updErr } = await db

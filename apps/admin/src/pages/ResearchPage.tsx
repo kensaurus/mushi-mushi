@@ -3,7 +3,7 @@
  * PURPOSE: Banner + RESEARCH SNAPSHOT + tabs: Overview | Search | History.
  */
 
-import { useCallback, useMemo, useState, useEffect } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
@@ -15,6 +15,7 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { usePageCopy } from '../lib/copy'
 import { useResearchUx, resolveQuickResearchTab } from '../lib/researchModeUx'
+import { useQuickstartLandingTab } from '../lib/useQuickstartTab'
 import { SetupNudge } from '../components/SetupNudge'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
@@ -22,7 +23,6 @@ import { Btn,
   Badge,
   Input,
   SegmentedControl,
-  ErrorAlert,
   EmptyState,
   RelativeTime,
   FreshnessPill,
@@ -36,6 +36,8 @@ import {
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { useToast } from '../lib/toast'
 import { ResearchStatusBanner } from '../components/research/ResearchStatusBanner'
+import { PageLoadError } from '../components/PageLoadError'
+import { describeApiError } from '../lib/humanizeApiError'
 import { ResearchSnapshotStrip } from '../components/research/ResearchSnapshotStrip'
 import { ResearchReadout } from '../components/research/ResearchReadout'
 import {
@@ -105,6 +107,7 @@ export function ResearchPage() {
     data: statsData,
     loading: statsLoading,
     error: statsError,
+    errorCode: statsErrorCode,
     reload: reloadStats,
     lastFetchedAt: statsFetchedAt,
     isValidating: statsValidating,
@@ -118,6 +121,7 @@ export function ResearchPage() {
     data: historyData,
     loading: historyLoading,
     error: historyError,
+    errorCode: historyErrorCode,
     reload: loadHistory,
     isValidating: historyValidating,
   } = usePageData<{ sessions: SessionRow[] }>(sessionsPath, { deps: [activeProjectId, activeTab] })
@@ -169,11 +173,15 @@ export function ResearchPage() {
     [copy?.tabLabels, stats.sessions, stats.unattachedSnippets],
   )
 
-  useEffect(() => {
-    if (!ux.isQuickstart || statsLoading) return
-    const quickTab = resolveQuickResearchTab(stats)
-    if (activeTab !== quickTab) setActiveTab(quickTab)
-  }, [ux.isQuickstart, statsLoading, stats, activeTab, setActiveTab])
+  // Quick mode opens the posture tab once; links and clicks then win.
+  useQuickstartLandingTab({
+    enabled: ux.isQuickstart,
+    ready: !statsLoading,
+    tabParam: searchParams.get('tab'),
+    activeTab: activeTab,
+    quickTab: resolveQuickResearchTab(stats),
+    setActiveTab: setActiveTab,
+  })
 
   const runSearch = useCallback(async (q: string) => {
     if (!activeProjectId) {
@@ -205,7 +213,8 @@ export function ResearchPage() {
       } else if (code === 'RATE_LIMITED') {
         toast.error('Firecrawl rate-limited — try again shortly.')
       } else {
-        toast.error('Search failed', res.error?.message)
+        const e = describeApiError(res.error, 'The search failed')
+        toast.error(e.title, e.hint)
       }
     }
   }, [activeProjectId, reloadAll, setActiveTab, toast])
@@ -223,9 +232,28 @@ export function ResearchPage() {
       })
       setActiveTab('search')
     } else {
-      toast.error('Failed to load session', res.error?.message)
+      const e = describeApiError(res.error, 'Could not open that search')
+      toast.error(e.title, e.hint)
     }
   }, [setActiveTab, toast])
+
+  // Deep links (and the status banner) carry ?session=<id>: open that
+  // search with its snippets so they can be attached straight away.
+  const sessionParam = searchParams.get('session')
+  useEffect(() => {
+    if (!sessionParam || !activeProjectId || active?.sessionId === sessionParam) return
+    void loadSession(sessionParam)
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      next.delete('session')
+      return next
+    }, { replace: true })
+  }, [sessionParam, activeProjectId, active?.sessionId, loadSession, setSearchParams])
+
+  const openUnattached = useCallback(() => {
+    if (stats.latestUnattachedSessionId) void loadSession(stats.latestUnattachedSessionId)
+    else setActiveTab('history')
+  }, [stats.latestUnattachedSessionId, loadSession, setActiveTab])
 
   const attach = useCallback(async (snippetId: string) => {
     const reportId = (attachInput[snippetId] ?? '').trim()
@@ -252,7 +280,8 @@ export function ResearchPage() {
     } else if (res.error?.code === 'REPORT_NOT_FOUND') {
       toast.error('No report with that id in your project.')
     } else {
-      toast.error('Attach failed', res.error?.message)
+      const e = describeApiError(res.error, 'Could not attach the snippet')
+      toast.error(e.title, e.hint)
     }
   }, [active, attachInput, reloadStats, toast])
 
@@ -271,7 +300,7 @@ export function ResearchPage() {
   }
 
   if (statsError) {
-    return <ErrorAlert message={`Failed to load research stats: ${statsError}`} onRetry={reloadStats} />
+    return <PageLoadError error={statsError} code={statsErrorCode} onRetry={reloadStats} />
   }
 
   const bannerSeverity: 'ok' | 'warn' | 'danger' | 'brand' | 'info' | 'neutral' =
@@ -361,6 +390,7 @@ export function ResearchPage() {
               <ResearchStatusBanner
                 stats={stats}
                 onTab={setActiveTab}
+                onAttach={openUnattached}
                 onRefresh={reloadAll}
                 refreshing={statsValidating}
                 plainBanner={ux.plainBanner}
@@ -580,7 +610,7 @@ export function ResearchPage() {
                 <TableSkeleton rows={4} columns={5} showFilters={false} label="Loading research history" />
               )}
               {historyError && (
-                <ErrorAlert message={`Failed to load history: ${historyError}`} onRetry={loadHistory} />
+                <PageLoadError error={historyError} code={historyErrorCode} resource="research history" onRetry={loadHistory} />
               )}
               {!historyLoading && !historyError && (
                 <ResearchSessionTable

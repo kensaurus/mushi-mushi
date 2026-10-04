@@ -23,6 +23,9 @@ export interface ReportRow {
   status: string
   created_at: string
   user_category: string
+  /** Why "Fix →" cannot queue this report (a feature request not yet
+   *  re-categorized), computed by the list route with the dispatch rule. */
+  dispatch_block?: string | null
   confidence: number | null
   component: string | null
   /** Total reports filed against the same fingerprint (>=1). Lets the table

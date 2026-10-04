@@ -6,45 +6,46 @@
  *          horizontal real estate without paying the focus-mode tax of
  *          hiding the sub-header + PDCA ribbon entirely.
  *
- *          Mirrors the focusMode hook contract:
- *            - localStorage-backed (`mushi:sidebarCollapsed:v1`)
- *            - useEffect writes the flag back to <html data-sidebar="…">
- *              so CSS / other components can react if needed
- *            - returns the same `[value, setter]` shape so callers can
- *              swap between this and useFocusMode without rewiring
+ *          Stored through usePersistentState (`mushi:ui:sidebar-collapsed`,
+ *          console-wide, fail-safe when storage is blocked). The first read
+ *          after this change seeds from the older `mushi:sidebarCollapsed:v1`
+ *          key so nobody's choice resets.
+ *
+ *          A useEffect writes the flag to <html data-sidebar="…"> so CSS and
+ *          other components can react. Returns `[value, setter]` like
+ *          useFocusMode so callers can swap between the two.
  *
  *          Mobile is unaffected: the mobile sidebar is a full overlay
  *          opened from a hamburger, so "collapsed" doesn't make sense
- *          below the `md:` breakpoint. The desktop layout reads this
- *          flag only when rendering the `hidden md:flex` aside.
- *
- *          Pattern reference: Linear's collapsible sidebar
- *          (https://linear.app/changelog/unpublished-collapsible-sidebar) —
- *          icon-only collapsed state with hover tooltips, `[` hotkey,
- *          and persistent state across reloads.
+ *          below the `md:` breakpoint.
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
+import { usePersistentState } from './usePersistentState'
 
-const KEY = 'mushi:sidebarCollapsed:v1'
+const LEGACY_KEY = 'mushi:sidebarCollapsed:v1'
 
-function readSidebarCollapsed(): boolean {
-  if (typeof window === 'undefined') return true
-  const stored = window.localStorage.getItem(KEY)
-  if (stored === '1') return true
-  if (stored === '0') return false
-  return true
+/** The pre-usePersistentState value, or collapsed (the default) when absent. */
+function legacySidebarCollapsed(): boolean {
+  try {
+    const stored = typeof window === 'undefined' ? null : window.localStorage.getItem(LEGACY_KEY)
+    if (stored === '0') return false
+    return true
+  } catch {
+    return true
+  }
 }
 
 export function useSidebarCollapsed(): [
   boolean,
   (next: boolean | ((current: boolean) => boolean)) => void,
 ] {
-  const [collapsed, setCollapsed] = useState(readSidebarCollapsed)
+  const [collapsed, setCollapsed] = usePersistentState('sidebar-collapsed', legacySidebarCollapsed(), {
+    validate: (v): v is boolean => typeof v === 'boolean',
+  })
 
   useEffect(() => {
     document.documentElement.dataset.sidebar = collapsed ? 'collapsed' : 'expanded'
-    window.localStorage.setItem(KEY, collapsed ? '1' : '0')
   }, [collapsed])
 
   return [collapsed, setCollapsed]
