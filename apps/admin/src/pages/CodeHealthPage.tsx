@@ -14,14 +14,14 @@
  *  3. God-file findings — list of files over the LOC budget
  */
 
-import { useMemo, useCallback } from 'react'
-import { Link } from 'react-router-dom'
+import { useMemo, useCallback, useEffect } from 'react'
+import { Link, useLocation } from 'react-router-dom'
+import { PageLoadError } from '../components/PageLoadError'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import {
   Badge,
   Section,
-  ErrorAlert,
   EmptyState,
   Btn,
   Card,
@@ -357,7 +357,16 @@ export function CodeHealthPage() {
   const projectId = useActiveProjectId()
   const path = projectId ? `/v1/admin/code-health?project_id=${projectId}` : null
 
-  const { data: codeHealth, loading, error, reload } = usePageData<CodeHealthResponse>(path)
+  const { data: codeHealth, loading, error, errorCode, reload } = usePageData<CodeHealthResponse>(path)
+  // The status banner links to #god-files. React Router does not scroll to
+  // hashes, so do it once the section exists (location.key re-runs it when
+  // the link is clicked while already on this page).
+  const location = useLocation()
+  const godFilesReady = Boolean(codeHealth)
+  useEffect(() => {
+    if (location.hash !== '#god-files' || !godFilesReady) return
+    document.getElementById('god-files')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [location.hash, location.key, godFilesReady])
   const {
     data: statsData,
     reload: reloadStats,
@@ -482,7 +491,7 @@ export function CodeHealthPage() {
       />
 
       <div className="flex w-full min-w-0 flex-col gap-6">
-        {error && <ErrorAlert message={error} />}
+        {error && <PageLoadError error={error} code={errorCode} resource="code-health data" onRetry={reload} />}
 
         {loading && !codeHealth && (
           <div className="flex items-center justify-center py-12">
@@ -496,11 +505,9 @@ export function CodeHealthPage() {
             description="Mint an SDK ingest key, add CI secrets, and push to main — bundle sizes and god-file findings will appear here automatically."
             action={
               <div className="flex flex-wrap items-center justify-center gap-2">
-                <Link to={`/projects?tab=list&project=${projectId}`}>
-                  <Btn size="sm" variant="primary">
-                    Mint ingest key
-                  </Btn>
-                </Link>
+                <Btn to={`/projects?tab=list&project=${projectId}`} size="sm" variant="primary">
+                  Mint ingest key
+                </Btn>
                 <Btn to="/fullstack-audit" size="sm" variant="ghost">
                     Full-Stack Audit →
                   </Btn>
@@ -529,6 +536,7 @@ export function CodeHealthPage() {
             </Card>
 
             {hasGodFileErrors && (
+              <div id="god-files" className="scroll-mt-4">
               <Section
                 title="God-file findings"
                 action={
@@ -546,6 +554,7 @@ export function CodeHealthPage() {
               >
                 <GodFileList findings={codeHealth.godFiles} />
               </Section>
+              </div>
             )}
 
             {bundleSeries.length > 0 && (
@@ -587,6 +596,7 @@ export function CodeHealthPage() {
             )}
 
             {!hasGodFileErrors && (
+              <div id="god-files" className="scroll-mt-4">
               <Section
                 title="God-file findings"
                 action={
@@ -599,6 +609,7 @@ export function CodeHealthPage() {
               >
                 <GodFileList findings={codeHealth.godFiles} />
               </Section>
+              </div>
             )}
           </>
         )}
