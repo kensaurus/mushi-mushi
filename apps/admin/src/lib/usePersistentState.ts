@@ -35,7 +35,7 @@ export interface PersistentStateOptions<T> {
   validate?: (value: unknown) => value is T
 }
 
-export function persistentStorageKey(key: string, projectId?: string | null): string {
+function persistentStorageKey(key: string, projectId?: string | null): string {
   return projectId ? `${PREFIX}${projectId}:${key}` : `${PREFIX}${key}`
 }
 
@@ -47,7 +47,7 @@ function storage(): Storage | null {
   }
 }
 
-export function readPersistentValue<T>(
+function readPersistentValue<T>(
   storageKey: string,
   fallback: T,
   version = 1,
@@ -67,7 +67,7 @@ export function readPersistentValue<T>(
   }
 }
 
-export function writePersistentValue(storageKey: string, value: unknown, version = 1): void {
+function writePersistentValue(storageKey: string, value: unknown, version = 1): void {
   try {
     storage()?.setItem(storageKey, JSON.stringify({ v: version, value }))
   } catch {

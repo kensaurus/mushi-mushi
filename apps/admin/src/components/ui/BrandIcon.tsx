@@ -105,11 +105,6 @@ export function resolveBrand(input: string | null | undefined): BrandId | null {
   return ALIASES[slug] ?? null
 }
 
-export function brandTitle(input: string | null | undefined): string | null {
-  const id = resolveBrand(input)
-  return id ? BRAND_MARKS[id].title : null
-}
-
 interface BrandIconProps {
   /** Brand id, service name or domain. */
   brand: string

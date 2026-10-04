@@ -4,12 +4,12 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import {
-  persistentStorageKey,
-  readPersistentValue,
-  usePersistentState,
-  writePersistentValue,
-} from './usePersistentState'
+import { usePersistentState } from './usePersistentState'
+
+/** Seed storage the way the hook writes it. */
+function seed(key: string, value: unknown, version = 1) {
+  window.localStorage.setItem(key, JSON.stringify({ v: version, value }))
+}
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -56,10 +56,15 @@ function mountHook<T>(
   }
 }
 
-describe('persistentStorageKey', () => {
-  it('namespaces per project and globally', () => {
-    expect(persistentStorageKey('settings:tab', 'p1')).toBe('mushi:ui:p1:settings:tab')
-    expect(persistentStorageKey('sidebar')).toBe('mushi:ui:sidebar')
+describe('storage keys', () => {
+  it('namespaces per project, and globally without one', () => {
+    const perProject = mountHook('settings:tab', 'general', { projectId: 'p1' })
+    act(() => perProject.latest.set('byok'))
+    expect(window.localStorage.getItem('mushi:ui:p1:settings:tab')).not.toBeNull()
+    act(() => root?.unmount())
+    const global = mountHook('sidebar', true)
+    act(() => global.latest.set(false))
+    expect(window.localStorage.getItem('mushi:ui:sidebar')).toBe('{"v":1,"value":false}')
   })
 })
 
@@ -77,7 +82,7 @@ describe('usePersistentState', () => {
   })
 
   it('keeps each project separate and re-reads when the project changes', () => {
-    writePersistentValue('mushi:ui:p2:settings:tab', 'health')
+    seed('mushi:ui:p2:settings:tab', 'health')
     const hook = mountHook('settings:tab', 'general', { projectId: 'p1' })
     act(() => hook.latest.set('voice'))
     hook.rerender({ projectId: 'p2' })
@@ -93,7 +98,7 @@ describe('usePersistentState', () => {
   })
 
   it('falls back to the default when a stored value fails validation', () => {
-    writePersistentValue('mushi:ui:settings:tab', 'removed-tab')
+    seed('mushi:ui:settings:tab', 'removed-tab')
     const isTab = (v: unknown): v is string => v === 'general' || v === 'byok'
     const hook = mountHook('settings:tab', 'general', { validate: isTab })
     expect(hook.latest.value).toBe('general')
@@ -114,6 +119,7 @@ describe('usePersistentState', () => {
 
   it('treats corrupt JSON as no value', () => {
     window.localStorage.setItem('mushi:ui:open', '{not json')
-    expect(readPersistentValue('mushi:ui:open', true)).toBe(true)
+    const hook = mountHook('open', true)
+    expect(hook.latest.value).toBe(true)
   })
 })

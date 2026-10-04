@@ -51,7 +51,7 @@ export function isLegacyKey(key: ManagedKey): key is LegacyKey {
 }
 
 /** What the row's main button does. */
-export type KeyAction = 'replace' | 'remove' | 'test' | 'enable' | 'add_backup' | null
+type KeyAction = 'replace' | 'remove' | 'test' | 'enable' | 'add_backup' | null
 
 export interface KeyStatusView {
   state: ConnectionState
@@ -65,7 +65,7 @@ export interface KeyStatusView {
 
 const DAY_MS = 24 * 60 * 60 * 1000
 /** Owner asked for a week's warning before a key lapses. */
-export const KEY_EXPIRY_WARN_DAYS = 7
+const KEY_EXPIRY_WARN_DAYS = 7
 
 function formatClock(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })

@@ -4,7 +4,7 @@
 import { act, type ReactElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it } from 'vitest'
-import { BrandIcon, brandTitle, resolveBrand } from './BrandIcon'
+import { BrandIcon, resolveBrand } from './BrandIcon'
 import { BRAND_MARKS } from './brandMarks'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -76,7 +76,6 @@ describe('resolveBrand', () => {
   it('returns null for an unknown service', () => {
     expect(resolveBrand('langfuse')).toBeNull()
     expect(resolveBrand('')).toBeNull()
-    expect(brandTitle('nope')).toBeNull()
   })
 })
 
