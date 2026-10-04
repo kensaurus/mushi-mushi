@@ -28,7 +28,7 @@
   "mcp_servers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.24.2"],
+      "args": ["-y", "@mushi-mushi/mcp@0.24.3"],
       "env": {
         "MUSHI_API_ENDPOINT": "${MUSHI_API_ENDPOINT}",
         "MUSHI_PROJECT_ID": "${MUSHI_PROJECT_ID}",
