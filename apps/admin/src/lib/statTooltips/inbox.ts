@@ -87,16 +87,16 @@ export function criticalTooltip(stats: InboxStats, opts: Opts = {}): MetricToolt
   const plain = opts.plainStageLabels ?? false
   const takeaway =
     stats.criticalReports14d > 0
-      ? `${stats.criticalReports14d} critical-severity report${stats.criticalReports14d === 1 ? '' : 's'} in the last 14 days${stats.failedFixes14d > 0 ? `; ${stats.failedFixes14d} failed fix${stats.failedFixes14d === 1 ? '' : 'es'} in the same window.` : '.'}`
+      ? `${stats.criticalReports14d} open critical report${stats.criticalReports14d === 1 ? '' : 's'} from the last 14 days${stats.failedFixes14d > 0 ? `; ${stats.failedFixes14d} failed fix${stats.failedFixes14d === 1 ? '' : 'es'} in the same window.` : '.'}`
       : stats.failedFixes14d > 0
         ? `No critical reports in 14d, but ${stats.failedFixes14d} failed fix attempt${stats.failedFixes14d === 1 ? '' : 's'}.`
-        : 'No critical-severity reports in the rolling 14-day window.'
+        : 'No open critical reports from the last 14 days.'
 
   return metricTip(
     plain
-      ? 'Critical-severity bug reports in the last 14 days.'
-      : 'Critical-severity bug reports ingested in the last 14 days.',
-    'Counts reports rows where severity (case-insensitive) equals critical and created_at is within 14 days. failedFixes14d counts fix_attempts with status failed in the same window.',
+      ? 'Critical bugs from the last 14 days that still need a decision.'
+      : 'Critical reports from the last 14 days that are still open (not fixing, fixed or dismissed).',
+    'Counts reports where severity is critical, created_at is within the 14-day window, and status is still open. Fixed and dismissed reports drop out. failedFixes14d counts reports still unfixed after an auto-fix attempt.',
     takeaway,
     stats.criticalReports14d > 0
       ? {

@@ -58,6 +58,8 @@ export interface TriageItem {
 export interface DashboardCounts {
   reports14d: number
   openBacklog: number
+  /** Critical reports from the 14-day window still needing a decision. */
+  openCritical14d?: number
   fixesTotal: number
   openPrs: number
   llmCalls14d: number
