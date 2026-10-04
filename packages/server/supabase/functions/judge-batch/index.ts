@@ -1,4 +1,4 @@
-import { createOpenAI } from 'npm:@ai-sdk/openai@1'
+import { openAiProvider } from '../_shared/openai-compat.ts'
 import { generateObject } from 'npm:ai@4'
 import { z } from 'npm:zod@3'
 import { getServiceClient } from '../_shared/db.ts'
@@ -337,7 +337,7 @@ Score each dimension 0-1. Be critical of vague components, miscalibrated severit
               model: normalizedModel,
               skippedPrimary: !tryAnthropic,
             })
-            const openai = createOpenAI({
+            const openai = openAiProvider({
               apiKey: openaiKey,
               ...(openaiResolved?.baseUrl ? { baseURL: openaiResolved.baseUrl } : {}),
             })

@@ -12,7 +12,7 @@
  */
 
 import { generateObject } from 'npm:ai@4'
-import { createOpenAI } from 'npm:@ai-sdk/openai@1'
+import { openAiProvider } from '../_shared/openai-compat.ts'
 import { z } from 'npm:zod@3'
 
 import { getServiceClient } from '../_shared/db.ts'
@@ -282,7 +282,7 @@ Write a comprehensive Playwright TDD test for this user story.`
         },
         async (openaiKey) => {
           const { object } = await withLlmUsage(db, { ...usageCtx, model: STAGE2_FALLBACK, keySource: openaiKey.source }, () => generateObject({
-            model: createOpenAI({ apiKey: openaiKey.key })(STAGE2_FALLBACK, { structuredOutputs: false }),
+            model: openAiProvider({ apiKey: openaiKey.key, baseURL: openaiKey.baseUrl })(STAGE2_FALLBACK, { structuredOutputs: false }),
             system: SYSTEM_PROMPT,
             prompt,
             schema: testGenSchema,

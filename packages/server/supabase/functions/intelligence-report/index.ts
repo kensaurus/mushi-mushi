@@ -1,4 +1,4 @@
-import { createOpenAI } from 'npm:@ai-sdk/openai@1';
+import { openAiProvider } from '../_shared/openai-compat.ts';
 import { generateText } from 'npm:ai@4';
 import { getServiceClient } from '../_shared/db.ts';
 import { sendSlackNotification } from '../_shared/slack.ts';
@@ -129,7 +129,7 @@ Cross-customer benchmarks available: ${benchmarks.optedIn ? 'yes' : 'no (project
             },
             async (resolved) => {
               keySource = resolved.source;
-              const openai = createOpenAI({
+              const openai = openAiProvider({
                 apiKey: resolved.key,
                 ...(resolved.baseUrl ? { baseURL: resolved.baseUrl } : {}),
               });

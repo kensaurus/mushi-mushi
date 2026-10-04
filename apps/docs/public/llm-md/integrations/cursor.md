@@ -28,7 +28,7 @@ npx mushi-mushi login \
   --project-id xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 ```
 
-Find your credentials in the admin console → **Settings → API Keys**.
+Find your credentials in the admin console → **Settings → AI keys**.
 
 ### Wire Cursor
 
@@ -98,7 +98,7 @@ the installation token automatically.
 `.cursor/mcp.json` exists. Run `mushi whoami` to verify credentials.
 
 **`[INSUFFICIENT_SCOPE]` error:** Your key needs `mcp:write` scope to
-dispatch fixes. Rotate to a key with the right scope in Settings → API Keys.
+dispatch fixes. Rotate to a key with the right scope in Settings → AI keys.
 
 **Stale lessons:** Run `mushi sync-lessons` to pull the latest rules.
 

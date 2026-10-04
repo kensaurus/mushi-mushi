@@ -85,7 +85,7 @@ export function detectByokKeyInvalid(
         'Mushi skips it, so calls fall back to another key or fail. Replace it in Settings → API Keys.',
       suggested_fix: {
         kind: 'console',
-        path: '/settings?tab=keys',
+        path: '/settings?tab=byok',
         provider: k.provider_slug,
         last_error: k.last_error?.slice(0, 200) ?? null,
       },

@@ -1,6 +1,7 @@
 /**
  * FILE: apps/admin/src/components/settings/HealthPanel.tsx
- * PURPOSE: Settings → Health check. Rows:
+ * PURPOSE: Settings → SDK & connection (the debug-logging list under it is
+ *          DevToolsPanel). Rows:
  *            Send a test bug        the whole path, end to end
  *            Connection to Mushi    can this browser reach the backend
  *            Where your data lives  Mushi Cloud or your own Supabase
@@ -40,7 +41,7 @@ export function HealthPanel({ projectId, projectName, projectSlug }: HealthPanel
   return (
     <>
       <SettingsList
-        title="Health check"
+        title="Check the connection"
         description={`Check that bug reports from ${project.name} reach Mushi and come out the other end.`}
       >
         <QuickTestRow project={project} />

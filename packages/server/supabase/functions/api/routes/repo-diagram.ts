@@ -29,7 +29,7 @@
 
 import type { Hono } from 'npm:hono@4'
 import type { Variables } from '../types.ts'
-import { createOpenAI } from 'npm:@ai-sdk/openai@1'
+import { openAiProvider } from '../../_shared/openai-compat.ts'
 import { z } from 'npm:zod@3'
 
 import { getServiceClient } from '../../_shared/db.ts'
@@ -461,7 +461,7 @@ export function registerRepoDiagramRoutes(app: Hono<{ Variables: Variables }>): 
         (key) => {
           usedModel = ASSIST_FALLBACK
           fallbackUsed = true
-          const openai = createOpenAI({ apiKey: key.key, baseURL: key.baseUrl })
+          const openai = openAiProvider({ apiKey: key.key, baseURL: key.baseUrl })
           return generateValidatedObject(DiagramLlmSchema, {
             model: openai(ASSIST_FALLBACK),
             system: DIAGRAM_SYSTEM_PROMPT,

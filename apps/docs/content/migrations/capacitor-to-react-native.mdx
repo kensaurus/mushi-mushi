@@ -100,7 +100,7 @@ export default function App() {
 ### Get the snippet from the admin console
 
 The **Install SDK** card in the admin console (Onboarding, Projects → your
-project, Settings → Health) now exposes **React Native**, **Expo**, and
+project, Settings → SDK & connection) now exposes **React Native**, **Expo**, and
 **Capacitor** tabs alongside React / Vue / Svelte / Vanilla. The snippets
 are populated with your real project ID and (right after a key mint) your
 real API key.

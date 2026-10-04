@@ -168,5 +168,5 @@ export async function assertLlmBudget(
 
 /** Providers whose calls are LLM generations the budget covers. */
 export function isBudgetedProvider(provider: string): boolean {
-  return provider === 'anthropic' || provider === 'openai'
+  return provider === 'anthropic' || provider === 'openai' || provider === 'openrouter'
 }

@@ -118,10 +118,11 @@ function scan(): Violation[] {
       if (!block || !/\bmodel\s*:/.test(block)) continue
 
       // OpenAI factory? Matches `model: openai(...)` and
-      // `model: createOpenAI({...})(MODEL, ...)` shapes.
+      // `model: openAiProvider({...})(MODEL, ...)` shapes (_shared/openai-compat.ts
+      // wraps createOpenAI; the bare name stays matched for any direct use).
       const modelMatch = block.match(/model\s*:\s*([^,\n]*(?:\n[^,\n]*)?)/)
       const modelExpr = modelMatch?.[1] ?? ''
-      const isOpenAi = /\bopenai\s*\(|createOpenAI\s*\([^)]*\)\s*\(/i.test(modelExpr)
+      const isOpenAi = /\bopenai\s*\(|(?:createOpenAI|openAiProvider)\s*\([^)]*\)\s*\(/i.test(modelExpr)
       if (!isOpenAi) continue
       if (/structuredOutputs\s*:\s*false/.test(block)) continue
 

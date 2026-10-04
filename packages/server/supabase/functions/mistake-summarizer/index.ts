@@ -16,7 +16,7 @@
  */
 
 import { createAnthropic } from 'npm:@ai-sdk/anthropic@1'
-import { createOpenAI } from 'npm:@ai-sdk/openai@1'
+import { openAiProvider } from '../_shared/openai-compat.ts'
 import { generateText } from 'npm:ai@4'
 import { getServiceClient } from '../_shared/db.ts'
 import { withSentry } from '../_shared/sentry.ts'
@@ -79,7 +79,7 @@ ${reportContext || '(none available)'}`
     // Haiku 4.5 still takes the AI SDK v4 call shape; Sonnet goes through
     // claude-messages.ts (Sonnet 5.5 rejects temperature and forced tools).
     const anthropicFast = createAnthropic({ apiKey: anthropicKey })
-    const openaiMini = createOpenAI({
+    const openaiMini = openAiProvider({
       apiKey: openaiResolved?.key,
       ...(openaiResolved?.baseUrl ? { baseURL: openaiResolved.baseUrl } : {}),
     })

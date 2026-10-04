@@ -6,7 +6,7 @@
 // (same transport pattern as fix-worker — no Octokit in Deno).
 
 import { generateObject } from 'npm:ai@4'
-import { createOpenAI } from 'npm:@ai-sdk/openai@1'
+import { openAiProvider } from '../_shared/openai-compat.ts'
 import { z } from 'npm:zod@3'
 
 import { getServiceClient } from '../_shared/db.ts'
@@ -420,7 +420,7 @@ async function handler(req: Request): Promise<Response> {
         return object
       },
       async (openaiResolved) => {
-        const openai = createOpenAI({
+        const openai = openAiProvider({
           apiKey: openaiResolved.key,
           ...(openaiResolved.baseUrl ? { baseURL: openaiResolved.baseUrl } : {}),
         })

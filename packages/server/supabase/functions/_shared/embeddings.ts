@@ -1,7 +1,8 @@
 import { getServiceClient } from './db.ts'
+import { openAiCompatibleModelId } from './openai-compat.ts'
 import { createTrace } from './observability.ts'
 import { log } from './logger.ts'
-import { markKeyStatus, resolveLlmKey } from './byok.ts'
+import { markKeyStatus, markKeyUsed, resolveLlmKey } from './byok.ts'
 import { extractLlmUsage, recordLlmUsage } from './llm-usage.ts'
 
 const embLog = log.child('embeddings')
@@ -271,19 +272,27 @@ function recordEmbeddingCall(
   error?: unknown,
 ): void {
   if (!state.resolved) return
+  // The id actually sent (`openai/…` through OpenRouter), so the AI keys spend
+  // line can tell which service served the call.
+  const sentModel = openAiCompatibleModelId(model, state.resolved.baseUrl)
   try {
     void recordLlmUsage(getServiceClient(), {
       functionName: opts.functionName ?? 'embeddings',
       stage: 'embedding',
       projectId: opts.projectId ?? null,
       reportId: opts.reportId ?? null,
-      model,
+      model: sentModel,
       keySource: state.resolved.source,
       startedAt,
       skipHostedBilling: true,
     }, error === undefined
       ? { result: state.body, usage: { outputTokens: 0 } }
       : { error, usage: { ...extractLlmUsage(state.body), outputTokens: 0 } })
+    // A successful call on the project's own key updates that key's "last
+    // used" in AI keys; embeddings never did, so search-only keys looked idle.
+    if (error === undefined && state.resolved.source === 'byok' && state.resolved.keyId && opts.projectId) {
+      void markKeyUsed(getServiceClient(), opts.projectId, 'openai', state.resolved.keyId).catch(() => {})
+    }
   } catch (err) {
     embLog.warn('Embedding usage row not written', { err: String(err).slice(0, 120) })
   }
@@ -316,7 +325,8 @@ async function fetchEmbedding(
       'Authorization': `Bearer ${resolved.key}`,
     },
     body: JSON.stringify({
-      model: embeddingModel,
+      // OpenRouter wants `openai/text-embedding-3-small`; OpenAI wants the bare id.
+      model: openAiCompatibleModelId(embeddingModel, resolved.baseUrl),
       input: truncatedInput,
       dimensions: DEFAULT_DIMENSIONS,
     }),

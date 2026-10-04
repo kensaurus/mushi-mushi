@@ -65,7 +65,7 @@ agent's side (ingest and fix-dispatch readiness) and names the next action.
    and read `error_message`.
 2. Common causes:
    - No Firecrawl key: add one in **Settings → Web crawl**
-     (`/settings?tab=firecrawl`) or with `mushi keys add --provider firecrawl`.
+     (`/settings?tab=byok#key-firecrawl`) or with `mushi keys add --provider firecrawl`.
    - The URL is behind a login: use the Browserbase provider and configure
      session cookies.
    - Claude quota exhausted: add a backup Anthropic key (step 6).

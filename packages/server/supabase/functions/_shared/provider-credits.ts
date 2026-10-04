@@ -95,7 +95,7 @@ export async function fetchProviderCredits(
     }
   }
 
-  if (provider === 'openai' && isOpenRouterBaseUrl(baseUrl)) {
+  if (provider === 'openrouter' || (provider === 'openai' && isOpenRouterBaseUrl(baseUrl))) {
     const r = await getJson(fetchImpl, 'https://openrouter.ai/api/v1/key', { Authorization: `Bearer ${secret}` })
     if (!r.ok) return { kind: 'error', message: `OpenRouter answered ${r.status || 'no response'}: ${r.message}` }
     const d = (r.body.data ?? {}) as Record<string, unknown>

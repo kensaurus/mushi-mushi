@@ -1469,7 +1469,7 @@ export const COPY: CopyRegistry = {
     '/settings': {
       title: 'Tune your project',
       description:
-        'The banner says what to do first. General sets alerts and bug sorting, Your AI keys holds your own keys, Health check sends a test bug.',
+        'The banner says what to do first. General sets alerts and bug sorting, AI keys holds your own keys, SDK & connection installs the widget and sends a test bug.',
       sections: { snapshot: 'Summary' },
       statLabels: {
         byok: 'API keys',
@@ -1479,7 +1479,7 @@ export const COPY: CopyRegistry = {
       },
       actionLabels: {
         byok: 'Fix keys',
-        health: 'Open Health',
+        sdk: 'Open SDK & connection',
         test: 'Test keys',
         integrations: 'Integrations',
         pipeline: 'Send a test bug',
@@ -1490,7 +1490,7 @@ export const COPY: CopyRegistry = {
           'Settings for the active app: where bug alerts go, your own AI keys (optional), how bugs are sorted and grouped, the feedback widget, and developer options.',
         useCases: [
           'Bring your own Anthropic / OpenAI keys so cost stays on your bill',
-          'Run Health → Send test report before wiring production SDK traffic',
+          'Run SDK & connection → Send a test bug before wiring production SDK traffic',
           'Tune the classifier model and dedup threshold after false positives in review',
         ],
         howToUse:
@@ -1694,7 +1694,7 @@ export const COPY: CopyRegistry = {
     },
     '/settings': {
       title: 'Settings',
-      description: 'Your AI keys, alerts, and developer options.',
+      description: 'Alerts, AI keys, web tools, voice reports, and the SDK connection.',
     },
     '/onboarding': {
       title: 'Setup wizard',
