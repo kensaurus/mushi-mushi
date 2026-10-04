@@ -93,7 +93,7 @@ describe('SdkNativeConnectivityCard', () => {
     api.apiFetchMutate.mockResolvedValue({
       ok: true,
       data: {
-        minted: { prefix: 'mushi_abc123', rawKey: 'mushi_abc123xyz' },
+        minted: { prefix: 'mushi_abc123', rawKey: 'fake' },
         written: ['NEXT_PUBLIC_MUSHI_API_KEY'],
         failed: [],
         fallback: { commands: [], envBlock: '' },
