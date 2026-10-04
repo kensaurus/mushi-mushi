@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { classifyAuthError, loginActionFor } from './loginSubmit'
+import { NO_ACCOUNT_FOR_EMAIL_LINK, classifyAuthError, loginActionFor } from './loginSubmit'
 
 describe('loginActionFor', () => {
   it('honours the Password tab on the tester track', () => {
@@ -34,9 +34,8 @@ describe('loginActionFor', () => {
 
 describe('classifyAuthError', () => {
   it('explains the email-link refusal for an unknown email, with the fix', () => {
-    const text = classifyAuthError('Signups not allowed for otp', { cloud: true })
-    expect(text).toMatch(/No account uses this email yet/)
-    expect(text).toMatch(/Create account/)
+    // LoginPage shows a "Create an account" button beside this exact text.
+    expect(classifyAuthError('Signups not allowed for otp', { cloud: true })).toBe(NO_ACCOUNT_FOR_EMAIL_LINK)
   })
 
   it('keeps the existing mappings', () => {

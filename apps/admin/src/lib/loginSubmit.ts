@@ -41,6 +41,11 @@ export function loginActionFor(mode: LoginFormMode, track: LoginTrack): LoginAct
   }
 }
 
+/** Shown when a console email link is asked for an email with no account.
+ *  The login form renders a "Create an account" button beside it. */
+export const NO_ACCOUNT_FOR_EMAIL_LINK =
+  'No account uses this email yet. Create one with a password, or check the address for typos.'
+
 /** Supabase Auth error text → a sentence that says what to do next. */
 export function classifyAuthError(raw: string, opts: { cloud: boolean }): string {
   const lower = raw.toLowerCase()
@@ -49,7 +54,7 @@ export function classifyAuthError(raw: string, opts: { cloud: boolean }): string
   if (lower.includes('email not confirmed'))
     return 'Please confirm your email address first. Check your inbox for a verification link.'
   if (lower.includes('signups not allowed for otp') || lower.includes('otp_disabled'))
-    return 'No account uses this email yet. Choose "Create account" to sign up with a password, or check the address for typos.'
+    return NO_ACCOUNT_FOR_EMAIL_LINK
   if (lower.includes('signups not allowed') || lower.includes('signup_disabled'))
     return 'New sign-ups are turned off on this server. Ask the workspace owner to invite you.'
   if (lower.includes('rate limit') || lower.includes('too many'))

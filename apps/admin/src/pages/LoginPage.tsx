@@ -14,6 +14,7 @@ import { nextPathFromLoginState } from '../lib/authRedirect'
 import {
   classifyAuthError as classifyAuthErrorText,
   loginActionFor,
+  NO_ACCOUNT_FOR_EMAIL_LINK,
   type LoginFormMode,
   type LoginTrack,
 } from '../lib/loginSubmit'
@@ -569,6 +570,17 @@ export function LoginPage() {
             {error && (
               <div className="rounded-sm border border-danger/30 bg-danger-muted/10 px-3 py-2">
                 <p className="text-xs text-danger">{error}</p>
+                {error === NO_ACCOUNT_FOR_EMAIL_LINK && (
+                  <Btn
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => switchMode('signup')}
+                    className="mt-2"
+                  >
+                    Create an account
+                  </Btn>
+                )}
               </div>
             )}
 

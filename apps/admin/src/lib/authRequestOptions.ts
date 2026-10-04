@@ -8,8 +8,9 @@
  *     A new console user signs up with a password or OAuth.
  *   - The tester track may create an account from an email link, and stamps
  *     `signup_intent: 'tester'` so the `handle_new_tester_user` trigger
- *     provisions the tester rows. Supabase applies `data` only when it creates
- *     the user, so an existing account is never changed by it.
+ *     (AFTER INSERT on auth.users) provisions the tester rows. That trigger
+ *     runs only for a newly created user, so an existing account gets no new
+ *     tester rows from this path; it enrols from the tester portal instead.
  *   - Every link returns to the page the user was trying to reach (`next`),
  *     sanitised by `authRedirectUrl`, instead of always `/dashboard`.
  */
