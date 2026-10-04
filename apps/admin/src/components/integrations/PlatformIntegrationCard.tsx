@@ -217,6 +217,7 @@ export function PlatformIntegrationCard({
         probe: latestProbe,
         latestDelivery,
         deliveriesLoaded: deliveries.data != null,
+        deliveriesFailed: Boolean(deliveries.error),
       })
     : connectionFromProbe({ configured: requiredOk, probe: latestProbe })
   const probeFailing = latestProbe?.status === 'down' || latestProbe?.status === 'degraded'

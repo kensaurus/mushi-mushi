@@ -80,6 +80,19 @@ describe('sentryConnection (finding B25)', () => {
     ).toBe('attention')
   })
 
+  it('a failed deliveries request says so instead of checking forever', () => {
+    const v = sentryConnection({
+      configured: true,
+      probe: ok,
+      latestDelivery: undefined,
+      deliveriesLoaded: false,
+      deliveriesFailed: true,
+      now: NOW,
+    })
+    expect(v.state).toBe('checking')
+    expect(v.detail).toMatch(/^Couldn't check/)
+  })
+
   it('a failing API probe wins over deliveries', () => {
     expect(
       sentryConnection({
