@@ -7,15 +7,12 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import {
-  experimentTransitionError,
-  MIN_VARIANTS_TO_LAUNCH,
-} from '../../supabase/functions/_shared/experiment-lifecycle.ts'
+import { experimentTransitionError } from '../../supabase/functions/_shared/experiment-lifecycle.ts'
 import { readWorkerResult } from '../../supabase/functions/_shared/worker-result.ts'
 
 describe('experimentTransitionError', () => {
   it('launches only a draft with a control and a treatment', () => {
-    expect(experimentTransitionError('launch', 'draft', MIN_VARIANTS_TO_LAUNCH)).toBeNull()
+    expect(experimentTransitionError('launch', 'draft', 2)).toBeNull()
     expect(experimentTransitionError('launch', 'draft', 1)).toMatch(/at least 2 variants/)
     expect(experimentTransitionError('launch', 'running', 3)).toMatch(/already running/)
   })

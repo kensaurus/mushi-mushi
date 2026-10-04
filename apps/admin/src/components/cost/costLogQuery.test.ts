@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { costLogQuery } from './CostRawLogTable'
+import { costLogQuery } from './costLogQuery'
 
 describe('costLogQuery', () => {
   const base = { projectId: 'p1', page: 1, limit: 25, sort: 'occurred_at', order: 'desc', q: '' }

@@ -14,7 +14,6 @@ import {
   HUMAN_ACTOR_TYPES,
   auditSearchFilter,
   auditSearchTerms,
-  classifyAuditActor,
   outcomeActions,
   parseAuditOutcome,
 } from '../../supabase/functions/_shared/audit-signals.ts'
@@ -37,12 +36,9 @@ describe('auditSearchTerms', () => {
 })
 
 describe('actor kinds', () => {
-  it('classifies by actor_type', () => {
-    expect(classifyAuditActor('user')).toBe('human')
-    expect(classifyAuditActor('cli')).toBe('human')
-    expect(classifyAuditActor('api_key')).toBe('agent')
-    expect(classifyAuditActor('system')).toBe('system')
-    expect(classifyAuditActor('something-new')).toBe('system')
+  it('counts every surface a person drives as human, and keys as agents', () => {
+    expect([...HUMAN_ACTOR_TYPES]).toEqual(expect.arrayContaining(['user', 'console', 'cli', 'slack']))
+    expect([...AGENT_ACTOR_TYPES]).toEqual(expect.arrayContaining(['agent', 'api_key']))
   })
 
   it('human and agent lists never overlap, so the three counts partition the rows', () => {

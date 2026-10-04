@@ -101,7 +101,7 @@ export const STAGE_LABELS: Record<string, string> = {
  * through getPromptForStage. Mirrors CUSTOMIZABLE_PROMPT_STAGES in
  * packages/server/supabase/functions/_shared/prompt-stages.ts.
  */
-export const CUSTOMIZABLE_PROMPT_STAGES: readonly string[] = [
+const CUSTOMIZABLE_PROMPT_STAGES: readonly string[] = [
   'stage1',
   'stage2',
   'judge',

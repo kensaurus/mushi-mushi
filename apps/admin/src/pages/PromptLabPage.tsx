@@ -10,7 +10,7 @@
  *            - generate synthetic reports to validate prompt changes
  */
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { Btn } from '../components/ui'
@@ -109,16 +109,18 @@ export function PromptLabPage() {
   // banner's only action re-rendered the same page).
   const tabParam = searchParams.get('tab')
   const stageParam = searchParams.get('stage')
-  const hasData = data != null
+  // Applied once per link, so a background reload does not scroll again.
+  const appliedLinkRef = useRef<string | null>(null)
   useEffect(() => {
-    if (!hasData) return
+    if (!data) return
+    const key = `${tabParam ?? ''}|${stageParam ?? ''}`
+    if (appliedLinkRef.current === key) return
+    appliedLinkRef.current = key
     if (stageParam && grouped[stageParam]) setActiveStage(stageParam)
     if (tabParam === 'prompts' || stageParam) {
       document.getElementById('prompt-lab-stages')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }
-    // grouped is derived from data; re-run only when the link changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasData, tabParam, stageParam])
+  }, [data, grouped, tabParam, stageParam])
 
   async function clonePrompt(p: PromptVersion) {
     setBusy(p.id)

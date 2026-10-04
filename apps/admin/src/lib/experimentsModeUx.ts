@@ -30,7 +30,7 @@ export function useExperimentsUx(): ExperimentsUxFlags {
 }
 
 /** Quick mode: land on experiments list or create form. */
-export function resolveQuickExperimentsTab(stats: ExperimentsStats): ExperimentsTabId {
+function resolveQuickExperimentsTab(stats: ExperimentsStats): ExperimentsTabId {
   if (stats.topPriority === 'running') return 'experiments'
   if (stats.topPriority === 'draft_ready' || stats.topPriority === 'draft_incomplete') return 'experiments'
   if (stats.topPriority === 'winners_found') return 'experiments'

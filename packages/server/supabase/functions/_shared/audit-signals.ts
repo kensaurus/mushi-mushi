@@ -18,7 +18,7 @@
 export const AUDIT_FAIL_ACTIONS = ['fix.failed', 'integration.disconnected'] as const
 export const AUDIT_WARN_ACTIONS = ['api_key.revoked', 'plugin.uninstalled'] as const
 
-export type AuditOutcome = 'failure' | 'warning'
+type AuditOutcome = 'failure' | 'warning'
 
 export function parseAuditOutcome(raw: string | null | undefined): AuditOutcome | null {
   return raw === 'failure' || raw === 'warning' ? raw : null
@@ -33,17 +33,10 @@ export const HUMAN_ACTOR_TYPES = ['user', 'console', 'cli', 'slack'] as const
 /** actor_type values written by LLM agents and API-key (MCP) callers. */
 export const AGENT_ACTOR_TYPES = ['agent', 'api_key'] as const
 
-export type AuditActorKind = 'human' | 'agent' | 'system'
+type AuditActorKind = 'human' | 'agent' | 'system'
 
 export function parseAuditActorKind(raw: string | null | undefined): AuditActorKind | null {
   return raw === 'human' || raw === 'agent' || raw === 'system' ? raw : null
-}
-
-/** Everything that is neither human nor agent (system, cron, unknown) is system. */
-export function classifyAuditActor(actorType: string | null | undefined): AuditActorKind {
-  if ((HUMAN_ACTOR_TYPES as readonly string[]).includes(actorType ?? '')) return 'human'
-  if ((AGENT_ACTOR_TYPES as readonly string[]).includes(actorType ?? '')) return 'agent'
-  return 'system'
 }
 
 /** PostgREST `in` list literal, e.g. `(user,console)`. */

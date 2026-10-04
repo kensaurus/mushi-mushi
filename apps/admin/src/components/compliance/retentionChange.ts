@@ -33,7 +33,7 @@ export function describeRetentionChange(
 }
 
 /** Column defaults of project_retention_policies (migration 20260418001300). */
-export const NEW_POLICY_DEFAULTS = {
+const NEW_POLICY_DEFAULTS = {
   audit_retention_days: 730,
   llm_traces_retention_days: 90,
   byok_audit_retention_days: 365,
@@ -49,6 +49,7 @@ export function describeNewPolicy(projectName: string, reportsDays: number): str
     `${projectName} keeps reports for ${reportsDays} days, the same as today. ` +
     `A policy also starts deleting audit log entries older than ${NEW_POLICY_DEFAULTS.audit_retention_days} days ` +
     `and BYOK audit entries older than ${NEW_POLICY_DEFAULTS.byok_audit_retention_days} days at the nightly sweep; ` +
-    'today those are kept indefinitely. You can change every window after the policy is created.'
+    'today those are kept indefinitely. The reports window then stays fixed at this value (a later plan change no longer moves it) ' +
+    'until you edit it, and you can change every window after the policy is created.'
   )
 }
