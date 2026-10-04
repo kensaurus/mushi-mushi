@@ -21,7 +21,7 @@
  * vanish on the dark theme; BrandIcon draws those in the text colour instead.
  */
 
-export interface BrandMarkPath {
+interface BrandMarkPath {
   d: string
   evenOdd?: boolean
 }
