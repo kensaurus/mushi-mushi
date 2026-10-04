@@ -8,6 +8,8 @@ import {
   canCreateProject,
   canDeleteProject,
   canManageOrg,
+  mayManageActiveOrg,
+  resolveActiveOrgRole,
   viewerRoleHint,
 } from './orgPermissions'
 
@@ -28,5 +30,27 @@ describe('orgPermissions', () => {
   it('viewerRoleHint explains restrictions', () => {
     expect(viewerRoleHint('viewer')).toContain('viewer')
     expect(viewerRoleHint('owner')).toBeNull()
+  })
+})
+
+describe('resolveActiveOrgRole', () => {
+  const orgs = [
+    { id: 'a', role: 'owner' },
+    { id: 'b', role: 'viewer' },
+  ]
+  it('returns the active team role', () => {
+    expect(resolveActiveOrgRole(orgs, 'b')).toBe('viewer')
+  })
+  it('falls back to the only team when none is picked', () => {
+    expect(resolveActiveOrgRole([{ id: 'x', role: 'member' }], null)).toBe('member')
+  })
+  it('is unknown while loading or ambiguous', () => {
+    expect(resolveActiveOrgRole(undefined, 'a')).toBeNull()
+    expect(resolveActiveOrgRole(orgs, null)).toBeNull()
+  })
+  it('only a known member/viewer role blocks management', () => {
+    expect(mayManageActiveOrg(null)).toBe(true)
+    expect(mayManageActiveOrg('admin')).toBe(true)
+    expect(mayManageActiveOrg('member')).toBe(false)
   })
 })
