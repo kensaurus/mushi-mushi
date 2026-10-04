@@ -1,15 +1,17 @@
 /**
  * FILE: apps/admin/src/components/recipe/RecipeElementCard.tsx
  * PURPOSE: One App Recipe element as a selectable card: state chip (shape +
- *          colour), the one-line reason, when it was last checked, the open
- *          findings count and up to three facts. Shared by the canvas node and
- *          the ordered-list fallback so both paths say the same thing.
+ *          colour), the one-line reason (which says what to do next), when it
+ *          was last checked, the open problem count and up to three facts.
+ *          Shared by the canvas node and the ordered-list fallback so both
+ *          paths say the same thing. The chip and the "Checked ..." line read
+ *          the same `lastCheckedAt`, so they cannot contradict each other.
  */
 
 import { formatRelative } from '../ui'
 import type { RecipeElementKey, RecipeElementSummary } from '../../lib/recipeTypes'
 import { RecipeStateChip } from './RecipeStateChip'
-import { describeLastChecked, elementStateMeta, formatFactValue, humanizeKey } from './recipeState'
+import { describeLastChecked, elementStateMeta, factLabel, formatFactValue, problemCountText } from './recipeState'
 
 const MAX_FACTS = 3
 
@@ -22,18 +24,9 @@ interface RecipeElementCardProps {
 }
 
 export function RecipeElementCard({ element, selected = false, onSelect, layout = 'list' }: RecipeElementCardProps) {
-  const meta = elementStateMeta(element.state)
-  const checked = describeLastChecked(element.lastCheckedAt, formatRelative)
+  const meta = elementStateMeta(element.state, element.lastCheckedAt)
+  const checked = describeLastChecked(element.lastCheckedAt, formatRelative, element.state)
   const facts = Object.entries(element.facts ?? {}).slice(0, MAX_FACTS)
-  const findings = element.findingsCount
-  // Open findings are always shown when there are any; zero only means "none"
-  // for an element that was actually checked.
-  const findingsText =
-    findings > 0
-      ? `${findings.toLocaleString()} open finding${findings === 1 ? '' : 's'}`
-      : meta.state === 'ok' || meta.state === 'drift'
-        ? 'No open findings'
-        : 'Findings not checked'
 
   return (
     <button
@@ -46,18 +39,18 @@ export function RecipeElementCard({ element, selected = false, onSelect, layout 
     >
       <span className="flex items-start justify-between gap-2">
         <span className="text-sm font-semibold text-fg">{element.label}</span>
-        <RecipeStateChip state={element.state} />
+        <RecipeStateChip state={element.state} lastCheckedAt={element.lastCheckedAt} className="shrink-0" />
       </span>
       <span className="text-xs leading-snug text-fg-secondary">{element.reason}</span>
-      <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-fg-muted">
+      <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-fg-muted">
         <span title={checked.title}>{checked.text}</span>
-        <span>{findingsText}</span>
+        <span>{problemCountText(meta.state, element.findingsCount)}</span>
       </span>
       {facts.length > 0 && (
         <span className="flex flex-col gap-0.5 border-t border-edge-subtle pt-2">
           {facts.map(([k, v]) => (
             <span key={k} className="flex items-baseline justify-between gap-2 text-2xs">
-              <span className="text-fg-faint">{humanizeKey(k)}</span>
+              <span className="text-fg-faint">{factLabel(k)}</span>
               <span className="min-w-0 truncate font-mono text-fg-secondary">{formatFactValue(v)}</span>
             </span>
           ))}

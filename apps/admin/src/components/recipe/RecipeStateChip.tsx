@@ -60,8 +60,9 @@ export function RecipeStateGlyph({ glyph, className = 'h-3 w-3' }: { glyph: Stat
   }
 }
 
-export function RecipeStateChip({ state, className = '' }: { state: unknown; className?: string }) {
-  const meta = elementStateMeta(state)
+/** `lastCheckedAt`: pass the element's check time so a checked-but-unconfirmed element reads "Not confirmed". */
+export function RecipeStateChip({ state, lastCheckedAt, className = '' }: { state: unknown; lastCheckedAt?: string | null; className?: string }) {
+  const meta = elementStateMeta(state, lastCheckedAt)
   return (
     <Badge tone={meta.tone} title={meta.description} className={`gap-1 ${className}`}>
       <RecipeStateGlyph glyph={meta.glyph} />

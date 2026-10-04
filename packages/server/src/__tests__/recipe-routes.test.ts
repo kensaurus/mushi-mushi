@@ -276,7 +276,7 @@ describe('GET /design (glot.it Pha Khram fixture)', () => {
     expect(res.status).toBe(200)
     const d = res.body.data as Record<string, any>
     expect(d.state).toBe('unknown')
-    expect(d.reason).toMatch(/never run/)
+    expect(d.reason).toMatch(/design check has not run yet/)
     expect(d.sets.map((s: any) => [s.name, s.active])).toEqual([['soi-signpaint', true], ['pha-khram', false], ['nang-lamp', false], ['export', false]])
     expect(d.cssScopes.map((s: any) => s.selector)).toEqual(['html:root[data-direction="soi-signpaint"]', 'html.dark:root[data-direction="soi-signpaint"]'])
     expect(d.shownSet).toBe('soi-signpaint')

@@ -8,6 +8,13 @@
  *          DEFAULT branch is `unknown`. A state the console does not recognise
  *          (a new server value, a typo, `"constructor"`) renders as unknown —
  *          never as ok, and `unknown` never uses a green tone.
+ *
+ *          Labels are plain English ("Needs attention", "Not checked yet",
+ *          "Not set up"); the state ids stay as the server sends them.
+ *          An element can never read OK without a check time
+ *          (`orderedRecipeElements`), and an unknown element that WAS checked
+ *          reads "Not confirmed", never "Not checked yet" next to "Checked 3
+ *          days ago".
  */
 
 import { RECIPE_ELEMENT_KEYS } from '../../lib/recipeTypes'
@@ -40,52 +47,65 @@ const OK: ElementStateMeta = {
   label: 'OK',
   tone: 'okSubtle',
   glyph: 'check',
-  description: 'Checked recently and matches what the app declares.',
+  description: 'Checked recently, and nothing needs fixing.',
   cardEdge: 'border border-edge-subtle',
 }
 
 const DRIFT: ElementStateMeta = {
   state: 'drift',
-  label: 'Drift',
+  label: 'Needs attention',
   tone: 'warnSubtle',
   glyph: 'triangle',
-  description: 'Reality differs from what the app declares.',
+  description: 'Something here does not match what your app expects. The card says what and how to fix it.',
   cardEdge: 'border-2 border-warn/60',
 }
 
 const UNKNOWN: ElementStateMeta = {
   state: 'unknown',
-  label: 'Unknown',
+  label: 'Not checked yet',
   tone: 'neutral',
   glyph: 'question',
-  description: 'Configured, but never observed or not observed recently. Not a pass.',
+  description: 'Mushi has not checked this yet, so it is not a pass.',
   cardEdge: 'border-2 border-dashed border-edge',
+}
+
+/** `unknown` for an element that WAS checked: the result is old or could not decide. */
+const UNCONFIRMED: ElementStateMeta = {
+  ...UNKNOWN,
+  label: 'Not confirmed',
+  description: 'Checked, but the result is out of date or could not decide. Not a pass.',
 }
 
 const NOT_CONNECTED: ElementStateMeta = {
   state: 'not_connected',
-  label: 'Not connected',
+  label: 'Not set up',
   tone: 'neutral',
   glyph: 'ring',
-  description: 'Nothing is configured for this element yet.',
+  description: 'Not set up yet. It is optional; the card says how to set it up.',
   cardEdge: 'border border-dashed border-edge-subtle',
 }
 
 const ERROR: ElementStateMeta = {
   state: 'error',
-  label: 'Error',
+  label: 'Check failed',
   tone: 'dangerSubtle',
   glyph: 'cross',
-  description: 'The last check failed, so the state cannot be trusted.',
+  description: 'The last check could not finish, so Mushi cannot say if this works.',
   cardEdge: 'border-2 border-danger/60',
 }
 
 /**
  * Map any server value to its presentation. Explicit switch, not a lookup
  * table, so prototype keys and new values cannot resolve to anything but the
- * `unknown` default.
+ * `unknown` default. Pass the element's `lastCheckedAt` so an unknown that
+ * was checked reads "Not confirmed" instead of "Not checked yet".
  */
-export function elementStateMeta(raw: unknown): ElementStateMeta {
+export function elementStateMeta(raw: unknown, lastCheckedAt?: string | null): ElementStateMeta {
+  const meta = baseStateMeta(raw)
+  return meta.state === 'unknown' && lastCheckedAt ? UNCONFIRMED : meta
+}
+
+function baseStateMeta(raw: unknown): ElementStateMeta {
   switch (raw) {
     case 'ok':
       return OK
@@ -127,9 +147,9 @@ export function worstState(states: readonly unknown[]): ElementState {
 
 export const RECIPE_LANES: ReadonlyArray<{ id: RecipeLane; label: string; hint: string }> = [
   { id: 'sources', label: 'Sources', hint: 'Schema, design system, routes and stories' },
-  { id: 'build', label: 'Build', hint: 'Gates and CI/CD' },
-  { id: 'deploy', label: 'Deploy', hint: 'Build and deploy targets' },
-  { id: 'runtime', label: 'Runtime', hint: 'Env presence and integrations' },
+  { id: 'build', label: 'Build', hint: 'Automated checks and CI builds' },
+  { id: 'deploy', label: 'Deploy', hint: 'What is live, and where' },
+  { id: 'runtime', label: 'Runtime', hint: 'Environment variables and connected tools' },
 ]
 
 /** Lane each element sits in on the canvas (fixed layout, Plan 019 §3). */
@@ -145,32 +165,39 @@ export const ELEMENT_LANE: Record<RecipeElementKey, RecipeLane> = {
 }
 
 const FALLBACK_LABEL: Record<RecipeElementKey, string> = {
-  schema: 'Schema',
+  schema: 'Database schema',
   design: 'Design system',
-  routes: 'Routes & stories',
-  gates: 'Gates',
-  ci: 'CI/CD',
-  deploy: 'Deploy',
-  env: 'Env',
-  integrations: 'Integrations',
+  routes: 'Pages and user flows',
+  gates: 'Automated checks',
+  ci: 'CI builds',
+  deploy: 'What is live',
+  env: 'Environment variables',
+  integrations: 'Connected tools',
 }
+
+const NOT_CHECKED_REASON = 'Not checked yet, so this is not a pass.'
 
 /**
  * The 8 elements in canonical lane order. A key the server left out renders
  * as an `unknown` placeholder card instead of disappearing (or turning green).
+ * Every view (cards, list, header, diagram edges) reads elements through
+ * here, so this is where "OK but never checked" is refused: an `ok` with no
+ * check time becomes "Not checked yet" (the server applies the same rule).
  */
 export function orderedRecipeElements(
   elements: Partial<Record<RecipeElementKey, RecipeElementSummary>> | null | undefined,
 ): RecipeElementSummary[] {
   return RECIPE_ELEMENT_KEYS.map((key) => {
     const found = elements?.[key]
-    if (found) return found
+    if (found) {
+      return found.state === 'ok' && !found.lastCheckedAt ? { ...found, state: 'unknown' as const, reason: NOT_CHECKED_REASON } : found
+    }
     return {
       key,
       label: FALLBACK_LABEL[key],
       lane: ELEMENT_LANE[key],
       state: 'unknown',
-      reason: 'The server did not return this element.',
+      reason: 'Mushi could not load this part of the recipe. Press Refresh to try again.',
       lastCheckedAt: null,
       facts: {},
       findingsCount: 0,
@@ -179,15 +206,49 @@ export function orderedRecipeElements(
   })
 }
 
-/** "3 hours ago" / "Never checked" — a null or unparseable stamp is never the epoch. */
+/**
+ * "Checked 3 hours ago" / "Not checked yet". A null or unparseable stamp is
+ * never the epoch. With no stamp, the words follow the element's state, so a
+ * card never says "Check failed · Not checked yet" or "Needs attention · Not
+ * checked yet".
+ */
 export function describeLastChecked(
   iso: string | null | undefined,
   formatRelative: (d: Date) => string,
+  state?: unknown,
 ): { text: string; title: string | undefined } {
-  if (!iso) return { text: 'Never checked', title: undefined }
+  if (!iso) {
+    switch (state === undefined ? 'unknown' : elementStateMeta(state).state) {
+      case 'error':
+        return { text: 'Last check did not finish', title: undefined }
+      case 'drift':
+        return { text: 'Check time not recorded', title: undefined }
+      case 'not_connected':
+        return { text: 'Nothing to check until it is set up', title: undefined }
+      default:
+        return { text: 'Not checked yet', title: undefined }
+    }
+  }
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return { text: 'Check time unknown', title: iso }
   return { text: `Checked ${formatRelative(d)}`, title: d.toLocaleString() }
+}
+
+/** "2 problems to fix" / "Nothing open to fix": zero only means "nothing" for an element that was actually judged. */
+export function problemCountText(state: ElementState, findings: number): string {
+  if (findings > 0) return `${findings.toLocaleString()} problem${findings === 1 ? '' : 's'} to fix`
+  return state === 'ok' || state === 'drift' ? 'Nothing open to fix' : 'Not checked for problems'
+}
+
+/**
+ * The elements the header names next to the overall chip: those in the worst
+ * state. None when the worst is OK or merely "not set up" (every element is
+ * optional), so the header never names a non-problem.
+ */
+export function elementsBehindWorst(elements: readonly RecipeElementSummary[]): RecipeElementSummary[] {
+  const worst = worstState(elements.map((e) => e.state))
+  if (worst === 'ok' || worst === 'not_connected') return []
+  return elements.filter((e) => elementStateMeta(e.state).state === worst)
 }
 
 /** Card fact value → short display string. */
@@ -196,6 +257,34 @@ export function formatFactValue(v: string | number | boolean | null | undefined)
   if (typeof v === 'boolean') return v ? 'Yes' : 'No'
   if (typeof v === 'number') return Number.isFinite(v) ? v.toLocaleString() : String(v)
   return v
+}
+
+/** Plain labels for the fact keys the server sends; the keys themselves stay as they are. */
+const FACT_LABEL: Readonly<Record<string, string>> = {
+  linked: 'Supabase linked',
+  set: 'Token set',
+  tokens: 'Design tokens',
+  deviance: 'Off-system score',
+  manifest: 'Recipe file',
+  graphNodes: 'Pages known',
+  inventory: 'inventory.yaml',
+  validationErrors: 'File errors',
+  gates: 'Checks that ran',
+  cadenceDays: 'Expected every (days)',
+  bundleKb: 'Web bundle (KB)',
+  branch: 'Branch',
+  conclusion: 'Last result',
+  releases: 'Releases',
+  latestRelease: 'Latest release',
+  versionsSeen: 'App versions seen',
+  required: 'Required',
+  missing: 'Missing',
+  connected: 'Connected',
+}
+
+/** A fact key as a label: the plain label when there is one, else the humanised key. */
+export function factLabel(key: string): string {
+  return Object.prototype.hasOwnProperty.call(FACT_LABEL, key) ? FACT_LABEL[key] : humanizeKey(key)
 }
 
 /** `camelCase` / `snake_case` key → "Camel case". */

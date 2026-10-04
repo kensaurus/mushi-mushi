@@ -5,11 +5,11 @@
  *            • What it is — GET /recipe/elements/:element: the typed view for
  *                           schema, CI, deploy and env (RecipeElementViews),
  *                           the rest rendered generically
- *            • Drift      — open findings count + where they are rendered
+ *            • Problems   — open problem count + where they are listed
  *            • Change     — gates, env and routes only: edit form → dry-run
  *                           diff → draft PR (RecipeChangeTab)
- *          The Drift tab never says "no drift" for an element that has not
- *          been checked: unknown / not_connected / error say so instead.
+ *          The Problems tab never says "nothing to fix" for an element that
+ *          has not been checked: unknown / not_connected / error say so instead.
  */
 
 import { useState } from 'react'
@@ -29,7 +29,7 @@ type PanelTab = 'what' | 'drift' | 'change'
 
 const BASE_TABS: Array<{ id: PanelTab; label: string }> = [
   { id: 'what', label: 'What it is' },
-  { id: 'drift', label: 'Drift' },
+  { id: 'drift', label: 'Problems' },
 ]
 const CHANGE_TABS: Array<{ id: PanelTab; label: string }> = [...BASE_TABS, { id: 'change', label: 'Change' }]
 
@@ -46,14 +46,14 @@ export function RecipeSidePanel({ projectId, element, onClose }: RecipeSidePanel
     return (
       <Card className="p-3 self-start">
         <p className="text-xs text-fg-muted">
-          Select a card to see what Mushi knows about it and where it has drifted.
+          Pick a card to see what Mushi knows about it, what needs fixing, and how.
         </p>
       </Card>
     )
   }
 
-  const meta = elementStateMeta(element.state)
-  const checked = describeLastChecked(element.lastCheckedAt, formatRelative)
+  const meta = elementStateMeta(element.state, element.lastCheckedAt)
+  const checked = describeLastChecked(element.lastCheckedAt, formatRelative, element.state)
   const changeKey = hasChangeTab(element.key) ? element.key : null
   const changeable = changeKey !== null
   // A Change tab picked on gates falls back to "What it is" on an element without one.
@@ -63,11 +63,11 @@ export function RecipeSidePanel({ projectId, element, onClose }: RecipeSidePanel
     <Card className="p-3 self-start space-y-3">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 space-y-1">
-          <div className="text-2xs uppercase tracking-wider text-fg-faint">Recipe element</div>
+          <div className="text-xs text-fg-faint">Part of your app</div>
           <h2 className="text-sm font-medium text-fg wrap-break-word">{element.label}</h2>
           <div className="flex flex-wrap items-center gap-2">
-            <RecipeStateChip state={element.state} />
-            <span className="text-2xs text-fg-muted" title={checked.title}>
+            <RecipeStateChip state={element.state} lastCheckedAt={element.lastCheckedAt} />
+            <span className="text-xs text-fg-muted" title={checked.title}>
               {checked.text}
             </span>
           </div>
@@ -134,7 +134,7 @@ function WhatItIs({ projectId, element }: { projectId: string; element: RecipeEl
 }
 
 function DriftTab({ element, stateLabel }: { element: RecipeElementSummary; stateLabel: string }) {
-  const state = elementStateMeta(element.state).state
+  const state = elementStateMeta(element.state, element.lastCheckedAt).state
   const notJudged = state === 'unknown' || state === 'not_connected' || state === 'error'
   const n = element.findingsCount
 
@@ -142,22 +142,22 @@ function DriftTab({ element, stateLabel }: { element: RecipeElementSummary; stat
     <div className="space-y-3">
       {notJudged ? (
         <p className="text-xs text-fg-secondary">
-          This element is <span className="font-medium">{stateLabel.toLowerCase()}</span>, so drift
-          cannot be judged yet. {n > 0 ? `${n.toLocaleString()} older finding${n === 1 ? '' : 's'} are still open.` : ''}
+          This is <span className="font-medium">{stateLabel.toLowerCase()}</span>, so Mushi cannot say yet whether anything needs fixing.{' '}
+          {n > 0 ? `${n.toLocaleString()} problem${n === 1 ? '' : 's'} from an earlier check ${n === 1 ? 'is' : 'are'} still open.` : ''}
         </p>
       ) : (
         <p className="text-sm text-fg">
           <span className="font-semibold tabular-nums">{n.toLocaleString()}</span>{' '}
-          open finding{n === 1 ? '' : 's'}
-          {n === 0 && <span className="text-xs text-fg-muted"> — matches what the app declares.</span>}
+          problem{n === 1 ? '' : 's'} to fix
+          {n === 0 && <span className="text-xs text-fg-muted"> — nothing open from the last check.</span>}
         </p>
       )}
       <div className="space-y-1">
-        <h3 className="text-xs font-medium text-fg-secondary">Where the findings live</h3>
-        <RecipeLinkList links={element.links} empty="No findings page is linked for this element." />
+        <h3 className="text-xs font-medium text-fg-secondary">Where to see and fix them</h3>
+        <RecipeLinkList links={element.links} empty="No page lists these problems yet." />
         {element.key === 'design' && (
           <Link to="/design" className={`text-xs ${LINK_ACCENT}`}>
-            Design system: tokens, contrast and deviance
+            Design system: tokens, contrast and hard-coded styles
           </Link>
         )}
       </div>

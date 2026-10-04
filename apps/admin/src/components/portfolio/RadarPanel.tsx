@@ -1,5 +1,5 @@
 /**
- * RadarPanel — the hole checks for one project (Plan 020 Phase 1), shown on
+ * RadarPanel — the risk checks ("radar") for one project (Plan 020 Phase 1), shown on
  * the Recipe page. Every check is listed; one that never ran says "Not
  * checked yet" and is never shown as passing.
  *
@@ -41,9 +41,9 @@ export function RadarPanel({ projectId }: { projectId: string }) {
 
   return (
     <Section
-      title="Hole checks"
+      title="Risk checks"
       action={
-        <Btn size="sm" variant="ghost" onClick={run} loading={running} disabled={running} title="Run every hole check for this app now">
+        <Btn size="sm" variant="ghost" onClick={run} loading={running} disabled={running} title="Run every risk check for this app now">
           Run checks
         </Btn>
       }
@@ -57,7 +57,7 @@ export function RadarPanel({ projectId }: { projectId: string }) {
         </Callout>
       )}
       {error && <ErrorAlert message={error} endpoint={path} onRetry={reload} />}
-      {loading && !data && <Loading text="Reading the hole checks…" />}
+      {loading && !data && <Loading text="Reading the risk checks…" />}
       {data && (
         <ul className="flex flex-col divide-y divide-edge-subtle">
           {data.detectors.map((d) => {

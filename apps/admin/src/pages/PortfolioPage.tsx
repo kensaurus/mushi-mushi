@@ -2,10 +2,11 @@
  * PortfolioPage — every app in the active team at once (Plan 019 Phase P1,
  * Plan 020 Phase 1 columns).
  *
- * One card per project: the worst recipe state, open reports, the Mushi SDK
- * against the latest release, the hole checks (radar) and, in Advanced mode,
- * Mushi's own LLM spend. Below the grid: problems open in 2+ projects ("fix
- * once"), SDK versions, and integrations most siblings have but one lacks.
+ * One card per project: the worst recipe state with the parts behind it named
+ * (`needsLook`), open reports, the Mushi SDK against the latest release, the
+ * risk checks (radar) and, in Advanced mode, Mushi's own LLM spend. Below the
+ * grid: problems open in 2+ projects ("fix once"), SDK versions, and
+ * integrations most siblings have but one lacks.
  *
  * Data: GET /v1/admin/orgs/:orgId/portfolio → PortfolioResponse
  *       GET /v1/admin/orgs/:orgId/portfolio/findings → PortfolioFindingsResponse
@@ -35,7 +36,10 @@ import { setActiveProjectIdSnapshot } from '../lib/activeProject'
 import type { PortfolioCard, PortfolioFindingsResponse, PortfolioReadError, PortfolioResponse } from '../lib/portfolioTypes'
 import {
   budgetText,
+  cardNeedsLook,
+  findingGroupTitle,
   kindLabel,
+  needsALook,
   openReportsText,
   radarLabel,
   releaseText,
@@ -73,16 +77,16 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
   const { isAdvanced } = useAdminMode()
   const cards = useMemo(() => sortPortfolioCards(page.data?.cards ?? []), [page.data])
   const names = useMemo(() => new Map((page.data?.cards ?? []).map((c) => [c.projectId, c.name])), [page.data])
-  const needsLook = cards.filter((c) => c.worst !== 'ok').length
+  const needsLook = cards.filter(needsALook).length
 
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-portfolio">
       <PageHeaderBar
         title="Portfolio"
-        description="All your apps in one place: what is broken, drifting or behind, and what to fix once for all of them."
+        description="All your apps in one place: what is broken, out of date or behind, and what to fix once for all of them."
         helpTitle="About Portfolio"
-        helpWhatIsIt="Each card is one app's recipe at a glance, plus its open reports, its Mushi SDK version and its hole checks. Below the cards are problems that show up in two or more apps, so you can fix them once."
-        helpHowToUse="Start with the worst card. Not checked yet means Mushi has not looked; it is never a pass. Copy a fix-once prompt into your editor to fix the same problem in every repo."
+        helpWhatIsIt="Each card is one app at a glance: what needs attention and why, its open reports, its Mushi SDK version and its risk checks. Below the cards are problems that show up in two or more apps, so you can fix them once."
+        helpHowToUse="Start with the first card: it lists what needs attention and what to do. Not checked yet means Mushi has not looked; it is never a pass. Copy a fix-once prompt into your editor to fix the same problem in every repo."
         helpFlowPath="/portfolio"
       >
         <FreshnessPill at={page.lastFetchedAt} isValidating={page.isValidating} />
@@ -99,7 +103,7 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
             children: page.data ? (
               <StatGrid>
                 <StatCard label="Apps" value={String(page.data.totalProjects)} />
-                <StatCard label="Need a look" value={String(needsLook)} accent={needsLook > 0 ? 'text-warn' : undefined} />
+                <StatCard label="Need a look" value={String(needsLook)} accent={needsLook > 0 ? 'text-warn' : undefined} hint="Apps with something to fix or not yet checked" />
                 <StatCard label="Fix once" value={String(page.data.repeatedGroups)} hint="Problems open in two or more apps" />
                 <StatCard
                   label="Missing setups"
@@ -179,9 +183,13 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
   )
 }
 
+const MAX_NAMED_PROBLEMS = 2
+
 function PortfolioCardTile({ card, showSpend }: { card: PortfolioCard; showSpend: boolean }) {
   const radar = radarLabel(card.radar, card.unreadable)
   const sdk = sdkLabel(card.sdk, card.unreadable)
+  const problems = cardNeedsLook(card)
+  const shown = problems.slice(0, MAX_NAMED_PROBLEMS)
   const open = () => setActiveProjectIdSnapshot(card.projectId)
   return (
     <Card className="relative flex flex-col gap-3 p-4">
@@ -192,11 +200,26 @@ function PortfolioCardTile({ card, showSpend }: { card: PortfolioCard; showSpend
               {card.name}
             </Link>
           </h3>
-          <p className="mt-0.5 text-2xs text-fg-faint">{kindLabel(card)}</p>
+          <p className="mt-0.5 text-xs text-fg-faint">{kindLabel(card)}</p>
         </div>
         <RecipeStateChip state={card.worst} className="shrink-0" />
       </div>
       {card.error && <p className="text-xs text-danger" role="status">{card.error}</p>}
+      {shown.length > 0 && (
+        <ul className="flex flex-col gap-1.5" aria-label="What needs attention">
+          {shown.map((p) => (
+            <li key={p.element} className="text-xs leading-snug">
+              <span className="font-medium text-fg">{p.label}:</span> <span className="text-fg-secondary">{p.reason}</span>
+            </li>
+          ))}
+          {problems.length > shown.length && (
+            <li className="text-xs text-fg-muted">
+              +{problems.length - shown.length} more on the{' '}
+              <Link to="/recipe" onClick={open} className="text-brand hover:underline">Recipe page</Link>
+            </li>
+          )}
+        </ul>
+      )}
       <div className="flex flex-wrap gap-1.5">
         <Badge tone={radar.tone} title={radar.hint}>{radar.text}</Badge>
         <Badge tone={sdk.tone} title={sdk.hint}>{sdk.text}</Badge>
@@ -215,8 +238,8 @@ function PortfolioCardTile({ card, showSpend }: { card: PortfolioCard; showSpend
           </>
         )}
       </dl>
-      <div className="mt-auto flex gap-3 border-t border-edge pt-2 text-2xs">
-        <Link to="/recipe" onClick={open} className="text-brand hover:underline">Recipe →</Link>
+      <div className="mt-auto flex gap-3 border-t border-edge pt-2 text-xs">
+        <Link to="/recipe" onClick={open} className="text-brand hover:underline">Open recipe →</Link>
         <Link to="/reports" onClick={open} className="text-fg-muted hover:text-fg hover:underline">Reports</Link>
       </div>
     </Card>
@@ -244,13 +267,19 @@ function FindingsSections({ findings, names }: { findings: PageDataState<Portfol
         ) : (
           <ul className="flex flex-col gap-2">
             {data.groups.map((g) => (
-              <li key={g.ruleId} className="flex flex-col gap-1 rounded-md border border-edge-subtle p-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-fg">
-                    <code className="font-mono text-xs">{g.ruleId}</code> in {g.projectIds.length} apps
-                    <Badge tone={g.severity === 'error' ? 'dangerSubtle' : 'warnSubtle'} className="ml-2">{g.severity === 'error' ? 'Serious' : 'Look at'}</Badge>
+              <li key={g.ruleId} className="flex flex-col gap-2 rounded-md border border-edge-subtle p-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0 space-y-0.5">
+                  <p className="text-sm font-medium text-fg" title={g.ruleId}>
+                    {findingGroupTitle(g)}
+                    <Badge tone={g.severity === 'error' ? 'dangerSubtle' : 'warnSubtle'} className="ml-2">
+                      {g.severity === 'error' ? 'Serious' : 'Look at'} · {g.projectIds.length} apps
+                    </Badge>
                   </p>
-                  <p className="truncate text-xs text-fg-muted">{g.projectIds.map(name).join(', ')}</p>
+                  {g.title && g.sampleMessage && <p className="text-xs text-fg-secondary">{g.sampleMessage}</p>}
+                  <p className="text-xs text-fg-muted">
+                    {g.gateLabel ? `${g.gateLabel} · ` : ''}
+                    {g.projectIds.map(name).join(', ')}
+                  </p>
                 </div>
                 <CopyButton value={g.suggestedFix} label="Copy fix prompt" />
               </li>
@@ -319,7 +348,7 @@ function ReadErrorsCallout({ errors }: { errors: PortfolioReadError[] }) {
           <li key={`${e.part}:${e.kind}`}>{e.message}</li>
         ))}
       </ul>
-      <p className="mt-1 text-2xs text-fg-muted">Cells that depend on these read "Could not read". Refresh in a minute.</p>
+      <p className="mt-1 text-xs text-fg-muted">Cells that depend on these read "Could not read". Refresh in a minute.</p>
     </Callout>
   )
 }
