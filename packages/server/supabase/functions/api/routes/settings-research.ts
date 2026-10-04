@@ -2982,7 +2982,9 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
 
     const byProvider = new Map<string, { provider: string; calls: number; costUsd: number; inputTokens: number; outputTokens: number; byokCalls: number }>();
     for (const row of spendRes.data ?? []) {
-      const provider = providerFromModel(row.used_model as string | null);
+      // A vendor-prefixed id (`openai/gpt-5.4`) is what Mushi sends to OpenRouter.
+      const usedModel = (row.used_model as string | null) ?? '';
+      const provider = usedModel.includes('/') ? 'openrouter' : providerFromModel(usedModel);
       const cur = byProvider.get(provider) ?? { provider, calls: 0, costUsd: 0, inputTokens: 0, outputTokens: 0, byokCalls: 0 };
       cur.calls++;
       cur.costUsd += Number(row.cost_usd ?? 0);

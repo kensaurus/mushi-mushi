@@ -278,7 +278,9 @@ function recordEmbeddingCall(
       stage: 'embedding',
       projectId: opts.projectId ?? null,
       reportId: opts.reportId ?? null,
-      model,
+      // The id actually sent: `openai/…` through OpenRouter, so the AI keys
+      // spend line can tell which service served the call.
+      model: openAiCompatibleModelId(model, state.resolved.baseUrl),
       keySource: state.resolved.source,
       startedAt,
       skipHostedBilling: true,

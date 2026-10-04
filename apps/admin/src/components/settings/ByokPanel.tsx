@@ -609,7 +609,7 @@ export function ByokPanel() {
               }
             >
               {noticeHere(`provider:${provider}`)}
-              {Array.isArray(credits.data?.spend30d) && (provider === 'anthropic' || provider === 'openai') && (
+              {Array.isArray(credits.data?.spend30d) && (provider === 'anthropic' || provider === 'openai' || provider === 'openrouter') && (
                 <p className="text-xs text-fg-muted">
                   {spendLine(credits.data?.spend30d?.find((s) => s.provider === provider))}
                 </p>
