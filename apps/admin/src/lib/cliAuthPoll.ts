@@ -3,7 +3,7 @@
  * PURPOSE: What /cli-auth does with one "did my terminal pick the token up?"
  *          poll result, after the code was already approved.
  *
- * QA bug 268: any poll error (a network blip) flipped the page to "Couldn't
+ * QA bug 268: a single poll error (a network blip) flipped the page to "Couldn't
  * approve CLI connection" with a "Retry approve" button, for a code that was
  * already approved; retrying then failed with "No pending request". A
  * transient failure now keeps waiting; only a real end state stops it, and

@@ -3,7 +3,7 @@
 > The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor.
 
 Canonical docs: https://kensaur.us/mushi-mushi/docs
-Generated: 2026-10-03
+Generated: 2026-10-04
 Pages: 207
 
 This file contains the full prose of every documentation page, stripped of
@@ -77,13 +77,22 @@ description: Run npx mushi-mushi, ship, and turn your first user-reported bug in
 
 # Incident loop
 
-  **Today:** classification in seconds; fix brief via MCP tools. **Target:** sub-10-second end-to-end diagnosis. MCP needs a Mushi account + project key — not a separate OpenAI/Anthropic key.
+  **Today:** classification in seconds; a paste-ready fix prompt on the report page, or the fix brief via MCP tools. **Target:** sub-10-second end-to-end diagnosis. MCP needs a Mushi account + project key — not a separate OpenAI/Anthropic key.
+
+## No MCP? Copy the fix prompt
+
+Open the report in the console and click **Copy fix prompt** under **Fix it with
+your coding agent**. You get one self-contained prompt (diagnosis, suggested fix,
+repro steps, page and browser, the key console lines, likely files, and what
+"done" means), ready to paste into Claude Code, Cursor, Codex or Windsurf. No
+MCP or editor setup is needed. The steps below are the MCP route, which lets
+the agent pull context and close the report itself.
 
 ## Prerequisites
 
 1. A Mushi project + API key ([credentials](/concepts/credentials))
 2. At least one report (SDK capture, test report from `npx mushi-mushi`, or Sentry inbound)
-3. MCP wired into Cursor — [MCP quickstart](/quickstart/mcp) or **Connect & Update → Add to Cursor**
+3. MCP wired into Cursor — [MCP quickstart](/quickstart/mcp) or **Connect & Update → Add to Cursor**. The key it creates can read and write by default; the agent needs write access to mark the report fixed.
 
 ## Step 1 — Capture or pick a report
 
@@ -216,7 +225,7 @@ Add to `.cursor/mcp.json` in your repo root:
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.24.1"],
+      "args": ["-y", "@mushi-mushi/mcp@0.24.2"],
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
@@ -242,7 +251,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.24.1"],
+      "args": ["-y", "@mushi-mushi/mcp@0.24.2"],
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
@@ -6227,7 +6236,7 @@ npm install -g @mushi-mushi/cli
 
 mushi login
 mushi connect --project-id <uuid> --endpoint <url> --wait
-mushi doctor --server --qa-stories
+mushi doctor --qa-stories
 mushi reports list --status new
 mushi fix <reportId> --agent cursor_cloud --wait
 mushi fixes merge <fixId>          # squash-merge the PR + mark report Fixed
@@ -6277,11 +6286,11 @@ Console URL resolution: `MUSHI_CONSOLE_URL` → saved config → localhost `:646
 ### `mushi doctor`
 
 ```bash
-mushi doctor                  # local: config, endpoint, SDK install
-mushi doctor --server         # + 4 dispatch checks (GitHub, codebase, Anthropic, autofix)
-mushi doctor --ingest         # + SDK heartbeat / first-report ingest steps
+mushi doctor                  # config, endpoint, SDK install, ingest and dispatch readiness
+mushi doctor --no-server      # skip the 4 dispatch checks (GitHub, codebase, Anthropic, autofix)
+mushi doctor --no-ingest      # skip the SDK heartbeat / first-report checks
 mushi doctor --host-app       # + host wiring: env vars, MCP config, hash-router capture
-mushi doctor --qa-stories     # + QA story setup warnings (needs --server credentials)
+mushi doctor --qa-stories     # + QA story setup warnings (needs a signed-in CLI)
 mushi doctor --full           # run every check category in one pass
 mushi doctor --json           # machine-readable; exits 1 if any check fails
 ```
@@ -7738,7 +7747,7 @@ description: Every tool, resource and prompt the Mushi MCP server exposes to Cur
 | `submit_fix_result` | Record a fix outcome | Record a fix outcome from an external agent (e.g. your own Cursor/Claude run): branch, PR URL, files changed, lines added/removed. Creates a fix_attempt row then patches it to completed and links it to the report. Returns \{ fixAttemptId }. Write; NOT idempotent — each call creates a new fix_attempt, so call once per PR. Use after you opened a PR outside Mushi; use dispatch_fix to have Mushi open the PR instead, or merge_fix once CI is green. |
 | `dispatch_fix` | Dispatch Mushi fix agent | Start a Mushi fix agent for a classified report; it writes a branch and opens a signed draft PR. Set agent="cursor_cloud" to dispatch a Cursor Cloud Agent (default uses the in-repo worker). For a project with several linked repos, set targetRepoId (a project_repos.id) to choose the repo the PR opens against; omit it for the primary repo. Requires GitHub connected + an LLM key (run diagnose_setup mode=dispatch first). Returns \{ fixId, status } (fixId is the dispatch id; get_fix_timeline accepts it immediately); poll get_fix_timeline for progress and merge_fix when CI is green. Write; pass the same idempotencyKey to retry safely — without it each call starts a new attempt. Report must be classified — run triage_issue if not. |
 | `trigger_judge` | Run Sonnet-as-Judge | Queue the Sonnet-as-Judge to grade recent fix quality across accessible projects. Returns \{ dispatched: number } — one judge-batch job per project; scores land asynchronously in judge_results (read back with run_nl_query). Write; consumes LLM budget. Idempotent within a short window. Use before shipping to vet fix quality; use get_fix_timeline to inspect a single attempt instead. |
-| `test_gen_from_report` | Generate Playwright test from report | Generate a Playwright regression test from a classified report using your project LLM key, then open a draft GitHub PR with the spec. Requires the inventory_v2 plan plus GitHub and LLM keys configured. Returns \{ qaStoryId, prUrl }. Write; consumes LLM budget; NOT idempotent — each call opens a new PR. Use to lock in a regression as an E2E test; use generate_tdd_from_story to build a test from a mapped user story instead. |
+| `test_gen_from_report` | Generate Playwright test from report | Generate a Playwright regression test from a classified report using your project LLM key, then open a draft GitHub PR with the spec. Requires the inventory_v2 plan plus GitHub and LLM keys configured. Returns \{ prUrl, prNumber, branch, path }. Write; consumes LLM budget; NOT idempotent — each call opens a new PR. Use to lock in a regression as an E2E test; use generate_tdd_from_story to build a test from a mapped user story instead. |
 | `transition_status` | Move report between states | Move a report to a new workflow state, enforcing the same transition rules as the admin UI. Valid targets: classified, grouped, fixing, fixed, verified, reopened, dismissed. When dismissing, closedReason (duplicate, not_reproducible, wont_fix, working_as_intended, spam) sets what the reporter is told — spam closes silently, and duplicate needs the report grouped under another one first; reporterMessage posts your note to the reporter verbatim. Returns \{ ok }. Write; idempotent (setting the current status is a no-op); rejects illegal transitions. Use to dismiss a duplicate or mark fixed; use merge_fix to mark fixed via a merged PR, or reopen_report for the reopened path. |
 | `merge_fix` | Merge fix PR | Squash-merge the GitHub PR for a fix attempt, mark the linked report fixed, and notify the reporter. Re-readies the PR first if it is still a draft. Returns \{ merged, reportStatus }. Write; destructive and irreversible from Mushi's side — once GitHub merges into the target repo's default branch there is no unmerge endpoint, only a manual revert PR outside this tool. Idempotent — re-running an already-merged attempt is a safe no-op. Prerequisite: CI green (check with refresh_ci); confirm the diff and CI status with the user before calling on a PR you have not reviewed. Use to ship a fix opened by dispatch_fix; use transition_status to change state without merging. |
 | `refresh_ci` | Refresh fix CI status | Re-poll GitHub for the latest check-run status of a fix attempt's PR and persist it on the fix_attempt row (does not merge or mutate GitHub). Returns \{ check_run_status, check_run_conclusion, check_run_updated_at }. Write; idempotent. Use right before merge_fix to confirm CI is green; use get_fix_timeline for the full attempt lifecycle. |
@@ -15880,7 +15889,7 @@ with Contents + PR + Actions secrets if you need CI auto-write).
 Copy the framework snippet → paste into your app → deploy or run locally.
 
 ### Wire MCP
-Click **Add to Cursor** → restart IDE → `mushi doctor --server`.
+Click **Add to Cursor** → restart IDE → `mushi doctor`.
 
 ### Wire CLI (SDK + env + MCP)
 Copy **Connect SDK + MCP** from the CLI section:
@@ -20315,8 +20324,14 @@ diagnosis + a paste-ready fix* — as a single block:
 1. **"Here's why it broke"** — a 1–3 sentence plain-English diagnosis (the
    Stage-2 `summary`) with severity, category, and a **confidence chip**
    (`NN% sure`), plus the likely component.
-2. **"Here's the fix"** — the paste-ready Cursor prompt and Open-in-Cursor
-   deeplink (the same `CursorAgentLaunch` brief exposed to MCP as `fixPrompt`).
+2. **"Fix it with your coding agent"** — **Copy fix prompt** copies one
+   self-contained prompt: what broke, why, the suggested fix, how to reproduce,
+   the page, browser and OS, the most relevant console and network lines, the
+   likely files, what "done" means, and a last step to open a PR that
+   references the report. It works pasted into any agent (Claude Code, Cursor,
+   Codex, Windsurf) with no MCP setup. **Use with Claude Code**, **Use with
+   Cursor** (IDE deeplink or cloud agent) and **Use MCP** (the tool-driven
+   prompt for agents with Mushi MCP connected) sit underneath.
 
 **Fail-graceful, by design.** Accuracy matters most for this audience — a
 confident-but-wrong diagnosis is worse than none — so when classifier

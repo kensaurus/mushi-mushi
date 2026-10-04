@@ -524,7 +524,7 @@ function RetryPageDialog({
   return (
     <ConfirmDialog
       title={`Retry ${count} job${count === 1 ? '' : 's'}?`}
-      body={`Each ${lane.replace(/_/g, ' ')} job on this page runs again from the start, which re-runs AI triage for its report. Fix the cause of the failure first, or they will fail again.`}
+      body={`Each ${lane.replace(/_/g, ' ')} job on this page runs again from the start, which diagnoses its report again. Fix the cause of the failure first, or they will fail again.`}
       confirmLabel={`Retry ${count}`}
       cancelLabel="Cancel"
       loading={loading}
