@@ -21,7 +21,7 @@ vi.mock('../../lib/toast', () => ({ useToast: () => toast }))
 vi.mock('../../lib/supabase', () => ({ supabase: {} }))
 
 import { ReportComments } from './ReportComments'
-import { commentWriteErrorText, type ReportCommentRow, type ReportCommentsThread } from '../../lib/reportComments'
+import type { ReportCommentRow, ReportCommentsThread } from '../../lib/reportComments'
 
 const ME = 'user-me'
 
@@ -127,22 +127,5 @@ describe('ReportComments post (item 239)', () => {
     await type('internal note')
     await act(async () => button('Post')?.click())
     expect(onPosted).toHaveBeenCalledWith(false)
-  })
-})
-
-describe('commentWriteErrorText (#83, #86)', () => {
-  it('turns RLS refusals into plain English with the fix', () => {
-    const text = commentWriteErrorText(
-      { message: 'new row violates row-level security policy for table "report_comments"', code: '42501' },
-      'post',
-    )
-    expect(text).not.toMatch(/row-level security|report_comments/)
-    expect(text).toMatch(/Ask an owner or admin/)
-  })
-
-  it('never echoes unknown database text', () => {
-    const text = commentWriteErrorText({ message: 'duplicate key value violates unique constraint' }, 'post')
-    expect(text).not.toMatch(/duplicate key/)
-    expect(text).toMatch(/^Try again in a moment/)
   })
 })

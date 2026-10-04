@@ -57,7 +57,7 @@ export interface ReportCommentsThread {
  * Plain-English text for a failed comment write. Raw Postgres text ("new row
  * violates row-level security policy for table …") used to reach the toast.
  */
-export function commentWriteErrorText(error: { message?: string; code?: string }, action: 'post' | 'delete'): string {
+function commentWriteErrorText(error: { message?: string; code?: string }, action: 'post' | 'delete'): string {
   const msg = (error.message ?? '').toLowerCase()
   if (error.code === '42501' || msg.includes('row-level security') || msg.includes('permission denied')) {
     return action === 'post'
