@@ -16,7 +16,9 @@ const MARKETPLACE_URL = '/mushi-mushi/testers/'
 
 export function TesterWelcomeEnroll() {
   const toast = useToast()
-  const { enroll, reload } = useTesterStatus()
+  // enroll() refreshes every useTesterStatus() on success, so the portal
+  // gate swaps this form for the portal without a manual reload.
+  const { enroll } = useTesterStatus()
   const [termsAccepted, setTermsAccepted] = useState(false)
   const [marketing, setMarketing] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -31,7 +33,6 @@ export function TesterWelcomeEnroll() {
       const ok = await enroll({ marketingOptIn: marketing, acceptedTerms: true })
       if (ok) {
         toast.success('Welcome to Mushi Bounties — pick an app and start testing.')
-        reload()
       } else {
         toast.error('Could not activate your tester account. Try again in a moment.')
       }

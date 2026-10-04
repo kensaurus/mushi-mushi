@@ -4,7 +4,45 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { humanizeApiError, parsePageDataError } from './humanizeApiError'
+import { humanizeApiError, parsePageDataError, plainApiError } from './humanizeApiError'
+
+// Group K entries 215 and 216: action toasts printed raw slugs, codes and JSON.
+describe('plainApiError', () => {
+  it('maps a bare slug message (coerced to code ERROR) to plain English', () => {
+    const text = plainApiError({ code: 'ERROR', message: 'region_not_supported' }, 'Could not join.')
+    expect(text).not.toContain('region_not_supported')
+    expect(text).toMatch(/country/i)
+  })
+
+  it('maps an upper-case code with no message', () => {
+    const text = plainApiError({ code: 'INVALID_WEBHOOK', message: 'INVALID_WEBHOOK' }, 'x')
+    expect(text).toMatch(/https:\/\//)
+  })
+
+  it('keeps a readable server sentence', () => {
+    expect(plainApiError({ code: 'daily_cap_exceeded', message: 'Daily acceptance cap reached for this bounty tier.' }, 'x'))
+      .toBe('Daily acceptance cap reached for this bounty tier.')
+  })
+
+  it('reads the JSON out of an HTTP_ERROR body', () => {
+    const text = plainApiError(
+      { code: 'HTTP_ERROR', message: '400: {"error":{"formErrors":[],"fieldErrors":{"name":["Required"]}}}' },
+      'Save failed.',
+    )
+    expect(text).toBe('Name: Required')
+  })
+
+  it('never shows [object Object] or raw database text', () => {
+    expect(plainApiError({ code: 'ERROR', message: '[object Object]' }, 'Save failed.')).toBe('Save failed.')
+    expect(plainApiError({ code: 'DB_ERROR', message: 'relation "x" does not exist' }, 'Save failed.'))
+      .not.toContain('relation')
+  })
+
+  it('falls back when there is nothing usable', () => {
+    expect(plainApiError(null, 'Could not save.')).toBe('Could not save.')
+    expect(plainApiError({ code: 'HTTP_ERROR', message: '502: <html>' }, 'Could not save.')).toBe('Could not save.')
+  })
+})
 
 describe('parsePageDataError', () => {
   it('extracts code from usePageData format', () => {

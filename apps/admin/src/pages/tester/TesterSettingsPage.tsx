@@ -2,6 +2,9 @@
  * TesterSettingsPage — manage tester profile: handle, bio, expertise tags, KYC, data export/delete.
  */
 import { useState, useEffect } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { useAuth } from '../../lib/auth'
+import { plainApiError } from '../../lib/humanizeApiError'
 import { usePageData } from '../../lib/usePageData'
 import { TESTER_API_OPTS } from '../../lib/tester-page-data'
 import { apiFetch } from '../../lib/supabase'
@@ -31,6 +34,9 @@ interface TesterProfile {
 
 export function TesterSettingsPage() {
   const toast = useToast()
+  const navigate = useNavigate()
+  const { hash } = useLocation()
+  const { signOut } = useAuth()
   const { data: profile, loading, error: profileError, reload } = usePageData<TesterProfile>('/v1/tester/me', TESTER_API_OPTS)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -42,6 +48,13 @@ export function TesterSettingsPage() {
   useEffect(() => {
     if (profile) setForm(profile)
   }, [profile])
+
+  // Wallet and Learn link here with #kyc / #feedback; an in-app navigation
+  // does not scroll to the anchor by itself.
+  useEffect(() => {
+    if (!hash || loading) return
+    document.getElementById(hash.slice(1))?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [hash, loading])
 
   const handleSave = async () => {
     setSaving(true)
@@ -63,7 +76,7 @@ export function TesterSettingsPage() {
         toast.success('Profile saved.')
         reload()
       } else {
-        toast.error(res.error?.message ?? 'Could not save profile.')
+        toast.error(plainApiError(res.error, 'Could not save your profile. Try again.'))
       }
     } finally {
       setSaving(false)
@@ -92,9 +105,13 @@ export function TesterSettingsPage() {
     try {
       const res = await apiFetch('/v1/tester/delete', { method: 'POST', scope: 'none' })
       if (res.ok) {
-        window.location.href = '/login'
+        // Sign out before leaving: the old raw '/login' redirect skipped the
+        // router base path (a 404 in production) and kept the session alive.
+        toast.success('Your tester data was deleted.')
+        await signOut()
+        navigate('/login', { replace: true })
       } else {
-        toast.error(res.error?.message ?? 'Could not delete account.')
+        toast.error(plainApiError(res.error, 'Could not delete your tester data. Try again.'))
         setDeleting(false)
       }
     } catch {

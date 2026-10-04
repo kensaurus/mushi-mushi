@@ -6,7 +6,7 @@
 
 import { useEffect } from 'react'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
-import { Navigate, useSearchParams } from 'react-router-dom'
+import { Link, Navigate, useSearchParams } from 'react-router-dom'
 import { PublishingTab } from '../components/rewards/PublishingTab'
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageHeroStats } from '../lib/heroSnapshots'
@@ -19,6 +19,7 @@ import { RewardsStatusBanner } from '../components/rewards/RewardsStatusBanner'
 import { RewardsEconomyGuide } from '../components/rewards/RewardsEconomyGuide'
 import { RewardsSnapshotStrip } from '../components/rewards/RewardsSnapshotStrip'
 import { RewardsTabNav } from '../components/rewards/RewardsTabNav'
+import { ProjectRewardsSwitch, useProjectRewardsToggle } from '../components/rewards/ProjectRewardsSwitch'
 import { EMPTY_REWARDS_STATS, type RewardsStats, type RewardsTabId } from '../components/rewards/types'
 import { rewardsTabMeta, resolveRewardsTabParam } from '../components/rewards/rewardsTabs'
 import { useRewardsUx, resolveQuickRewardsTab } from '../lib/rewardsModeUx'
@@ -51,6 +52,7 @@ export function RewardsPage() {
   usePublishPageHeroStats('/rewards', rewardsStatsData)
   const rewardsStats = rewardsStatsData ?? EMPTY_REWARDS_STATS
   const ux = useRewardsUx(rewardsStats)
+  const projectRewards = useProjectRewardsToggle(reloadRewardsStats)
 
   const [searchParams, setSearchParams] = useSearchParams()
   const param = searchParams.get('tab')
@@ -121,6 +123,12 @@ export function RewardsPage() {
                 onTab={setActive}
                 onRefresh={reloadRewardsStats}
                 refreshing={rewardsStatsValidating}
+                onEnableRewards={
+                  canEdit && rewardsStats.projectId
+                    ? () => void projectRewards.toggle(rewardsStats.projectId!, rewardsStats.projectName, true)
+                    : undefined
+                }
+                enabling={projectRewards.busy}
               />
             ),
           },
@@ -149,7 +157,7 @@ export function RewardsPage() {
       {showHobbyInline && (
         <Card  className="p-3 text-xs text-warn">
           <strong>Rewards program requires Starter or higher.</strong>{' '}
-          <a href="/billing" className="underline">Upgrade your plan</a> to configure rules, tiers, and webhooks.
+          <Link to="/billing" className="underline">Upgrade your plan</Link> to configure rules, tiers, and webhooks.
           You can preview the program below.
         </Card>
       )}
@@ -170,11 +178,22 @@ export function RewardsPage() {
           {active === 'publishing' && <PublishingTab />}
           {active === 'rules' && <ActivityRulesTab canEdit={canEdit} />}
           {active === 'tiers' && <TierLadderTab canEdit={canEdit} />}
-          {active === 'contributors' && <ContributorsTab />}
+          {active === 'contributors' && <ContributorsTab canEdit={canEdit} />}
           {active === 'quests' && <QuestsTab canEdit={canEdit} />}
           {active === 'analytics' && <RetentionAnalyticsTab />}
           {active === 'sandbox' && <SandboxSimulatorTab />}
-          {active === 'settings' && <SettingsTab canEdit={canEdit} />}
+          {active === 'settings' && (
+            <>
+              <ProjectRewardsSwitch
+                projectId={rewardsStats.projectId}
+                projectName={rewardsStats.projectName}
+                enabled={rewardsStats.projectRewardsEnabled}
+                canEdit={canEdit}
+                onChanged={reloadRewardsStats}
+              />
+              <SettingsTab canEdit={canEdit} />
+            </>
+          )}
         </div>
       )}
     </div>
