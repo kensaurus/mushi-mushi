@@ -114,7 +114,7 @@ export function DigestCard({ orgId, projects }: { orgId: string; projects: Proje
             )}
           </Card>
           {canManage === false && <p className="text-xs text-fg-muted">Digest settings: {ORG_ADMIN_ONLY_HINT}</p>}
-          <fieldset className="flex flex-col gap-2 text-sm" disabled={busy || canManage !== true}>
+          <fieldset className="flex flex-col gap-2 text-sm" disabled={busy || canManage === false}>
             <legend className="sr-only">Where to send the digest</legend>
             <label className="flex items-center gap-2">
               <input type="checkbox" checked={s.enabled} onChange={(e) => save({ enabled: e.target.checked })} />
@@ -160,7 +160,7 @@ export function DigestCard({ orgId, projects }: { orgId: string; projects: Proje
               {s.lastSentAt ? `Last sent ${new Date(s.lastSentAt).toLocaleString()} (${s.lastStatus ?? 'unknown'})` : 'Never sent yet.'}
               {s.lastError ? ` ${s.lastError}` : ''}
             </span>
-            {canManage === true && (
+            {canManage !== false && (
               <Btn size="sm" variant="ghost" onClick={sendNow} loading={busy} disabled={busy || !s.enabled}>
                 Send now
               </Btn>
