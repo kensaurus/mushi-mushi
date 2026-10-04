@@ -3,6 +3,8 @@ import type { Variables } from '../types.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { adminOrApiKey } from '../../_shared/auth.ts';
 import { getPlan, listPlans } from '../../_shared/plans.ts';
+import { countPeriodUsage, llmCostSince } from '../../_shared/billing-usage-counts.ts';
+import { log } from '../../_shared/logger.ts';
 import { assertTargetProjectAccess, callerProjectIds, requireProjectAdmin } from '../shared.ts';
 
 export function registerBillingRoutes(app: Hono<{ Variables: Variables }>): void {
@@ -86,8 +88,8 @@ export function registerBillingRoutes(app: Hono<{ Variables: Variables }>): void
     const [
       { data: subs },
       { data: customers },
-      { data: usage },
-      { data: llmCosts },
+      usageCounts,
+      llmCostUsdRaw,
       { data: orgs },
       plans,
     ] = await Promise.all([
@@ -99,19 +101,16 @@ export function registerBillingRoutes(app: Hono<{ Variables: Variables }>): void
         .from('billing_customers')
         .select('project_id, stripe_customer_id, default_payment_ok')
         .in('project_id', projectIds),
-      db
-        .from('usage_events')
-        .select('project_id, event_name, quantity')
-        .in('project_id', projectIds)
-        .gte('occurred_at', periodStart.toISOString()),
+      // Count-only, for the active project (the only one this route
+      // reports). The old read pulled every usage_events row for every
+      // project unbounded: PostgREST capped it at 1000 rows, so a busy month
+      // under-reported. Counting rows matches the quota gate (quota.ts).
       activeProject
-        ? db
-          .from('llm_invocations')
-          .select('cost_usd')
-          .eq('project_id', activeProject.id)
-          .gte('created_at', periodStart.toISOString())
-          .not('cost_usd', 'is', null)
-        : Promise.resolve({ data: [] as { cost_usd: number }[] }),
+        ? countPeriodUsage(db, activeProject.id, periodStart.toISOString())
+        : Promise.resolve(null),
+      activeProject
+        ? llmCostSince(db, activeProject.id, periodStart.toISOString())
+        : Promise.resolve(0),
       orgIds.length > 0
         ? db.from('organizations').select('id, plan_id, billing_mode').in('id', orgIds)
         : Promise.resolve({ data: [] as { id: string; plan_id: string; billing_mode: string }[] }),
@@ -132,31 +131,17 @@ export function registerBillingRoutes(app: Hono<{ Variables: Variables }>): void
     const customerByProject = new Map<string, { stripe_customer_id?: string; default_payment_ok?: boolean }>();
     for (const cu of customers ?? []) customerByProject.set(cu.project_id, cu);
 
+    if (usageCounts instanceof Error) {
+      log.error('billing/stats: usage counts failed', { err: usageCounts.message });
+      return c.json(
+        { ok: false, error: { code: 'DB_ERROR', message: "Could not count this month's usage. Retry in a moment." } },
+        500,
+      );
+    }
     const usageByProject = new Map<string, { reports: number; fixes: number; fixesSucceeded: number; diagnoses: number }>();
+    if (activeProject && usageCounts) usageByProject.set(activeProject.id, usageCounts);
 
-    for (const u of usage ?? []) {
-      const cur = usageByProject.get(u.project_id) ?? { reports: 0, fixes: 0, fixesSucceeded: 0, diagnoses: 0 };
-      if (u.event_name === 'reports_ingested') cur.reports += Number(u.quantity);
-      else if (u.event_name === 'fixes_attempted') cur.fixes += Number(u.quantity);
-      else if (u.event_name === 'fixes_succeeded') cur.fixesSucceeded += Number(u.quantity);
-      else if (u.event_name === 'diagnoses') {
-        // Shadow events (Phase 1 validation) excluded from quota counts.
-        // Real events have no metadata or metadata.shadow != 'true'.
-        const meta = (u as unknown as { metadata?: Record<string, unknown> }).metadata;
-        if (!meta || meta['shadow'] !== 'true') cur.diagnoses += Number(u.quantity);
-      }
-      usageByProject.set(u.project_id, cur);
-    }
-
-    let llmCostUsdMonth = 0;
-    const llmCostRows =
-      llmCosts && typeof llmCosts === 'object' && 'data' in llmCosts
-        ? ((llmCosts as { data: { cost_usd: number }[] | null }).data ?? [])
-        : [];
-    for (const row of llmCostRows) {
-      llmCostUsdMonth += Number(row.cost_usd ?? 0);
-    }
-    llmCostUsdMonth = Math.round(llmCostUsdMonth * 10000) / 10000;
+    const llmCostUsdMonth = Math.round(llmCostUsdRaw * 10000) / 10000;
 
     const hobby = plans.find((pl) => pl.id === 'hobby');
     const freeCloud = plans.find((pl) => pl.id === 'free_cloud');
