@@ -26,7 +26,7 @@ const SDK_WIDGET_POSITIONS = ['top-left', 'top-right', 'bottom-left', 'bottom-ri
 const SDK_WIDGET_THEMES = ['auto', 'light', 'dark'] as const;
 const SDK_SCREENSHOT_MODES = ['on-report', 'auto', 'off'] as const;
 const SDK_NATIVE_TRIGGER_MODES = ['shake', 'button', 'both', 'none'] as const;
-const SDK_WIDGET_LAUNCHERS = ['auto', 'banner', 'edge-tab', 'manual', 'hidden'] as const;
+const SDK_WIDGET_LAUNCHERS = ['auto', 'banner', 'edge-tab', 'attach', 'manual', 'hidden'] as const;
 const SDK_BANNER_VARIANTS = ['neon', 'brand', 'subtle'] as const;
 const SDK_BANNER_POSITIONS = ['top', 'bottom'] as const;
 
@@ -36,8 +36,10 @@ export interface SdkConfigRow {
   sdk_widget_position?: string | null;
   sdk_widget_theme?: string | null;
   sdk_widget_trigger_text?: string | null;
-  /** Launcher mode: 'auto' (FAB), 'banner', 'edge-tab', 'manual', 'hidden'. */
+  /** Launcher mode: 'auto' (FAB), 'banner', 'edge-tab', 'attach', 'manual', 'hidden'. */
   sdk_widget_launcher?: string | null;
+  /** CSS selector of the host button when the launcher is 'attach' (20261004120000). */
+  sdk_widget_attach_selector?: string | null;
   /** Banner strip variant when launcher is 'banner'. */
   sdk_banner_variant?: string | null;
   /** Banner strip position. */
@@ -96,6 +98,7 @@ export const SDK_CONFIG_CONSOLE_COLUMNS = [
   'sdk_widget_theme',
   'sdk_widget_trigger_text',
   'sdk_widget_launcher',
+  'sdk_widget_attach_selector',
   'sdk_banner_variant',
   'sdk_banner_position',
   'sdk_banner_bug_cta',
@@ -182,6 +185,8 @@ export function normalizeSdkConfig(row?: SdkConfigRow | null, opts: NormalizeSdk
       row?.sdk_widget_launcher !== 'auto'
         ? { launcher: row.sdk_widget_launcher }
         : {}),
+      // QA bug 121: 'attach' and its selector used to be dropped on save.
+      ...(row?.sdk_widget_attach_selector ? { attachToSelector: row.sdk_widget_attach_selector } : {}),
       ...(isOneOf(row?.sdk_banner_variant, SDK_BANNER_VARIANTS) && row?.sdk_banner_variant !== 'brand'
         ? { bannerVariant: row.sdk_banner_variant }
         : {}),
@@ -270,6 +275,12 @@ export function coerceSdkConfigUpdate(body: Record<string, unknown>): Record<str
     updates.sdk_widget_trigger_text = null;
   }
   if (isOneOf(widget.launcher, SDK_WIDGET_LAUNCHERS)) updates.sdk_widget_launcher = widget.launcher;
+  if (typeof widget.attachToSelector === 'string') {
+    const trimmed = widget.attachToSelector.trim();
+    updates.sdk_widget_attach_selector = trimmed ? trimmed.slice(0, 200) : null;
+  } else if (widget.attachToSelector === null) {
+    updates.sdk_widget_attach_selector = null;
+  }
   if (isOneOf(widget.bannerVariant, SDK_BANNER_VARIANTS)) updates.sdk_banner_variant = widget.bannerVariant;
   if (isOneOf(widget.bannerPosition, SDK_BANNER_POSITIONS)) updates.sdk_banner_position = widget.bannerPosition;
   if (typeof widget.bannerBugCta === 'string') {

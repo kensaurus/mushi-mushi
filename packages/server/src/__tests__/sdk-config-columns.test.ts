@@ -25,6 +25,7 @@ const FULL_ROW: SdkConfigRow = {
   sdk_widget_theme: 'dark',
   sdk_widget_trigger_text: 'Bug?',
   sdk_widget_launcher: 'banner',
+  sdk_widget_attach_selector: '#report-bug',
   sdk_banner_variant: 'neon',
   sdk_banner_position: 'bottom',
   sdk_banner_bug_cta: 'Report it',
@@ -72,6 +73,7 @@ describe('SDK_CONFIG_CONSOLE_COLUMNS', () => {
           theme: 'dark',
           triggerText: 'x',
           launcher: 'banner',
+          attachToSelector: '#x',
           bannerVariant: 'neon',
           bannerPosition: 'bottom',
           bannerBugCta: 'x',
@@ -97,5 +99,24 @@ describe('coerceSdkConfigUpdate bannerBugCta', () => {
 
   it('an absent field leaves the column untouched', () => {
     expect('sdk_banner_bug_cta' in coerceSdkConfigUpdate({ widget: {} })).toBe(false)
+  })
+})
+
+describe('attach launcher (QA bug 121)', () => {
+  it('saves and reads back attach mode and its selector', () => {
+    const updates = coerceSdkConfigUpdate({ widget: { launcher: 'attach', attachToSelector: '  #report-button ' } })
+    expect(updates.sdk_widget_launcher).toBe('attach')
+    expect(updates.sdk_widget_attach_selector).toBe('#report-button')
+    const widget = normalizeSdkConfig({
+      sdk_widget_launcher: 'attach',
+      sdk_widget_attach_selector: '#report-button',
+    }).widget as Record<string, unknown>
+    expect(widget.launcher).toBe('attach')
+    expect(widget.attachToSelector).toBe('#report-button')
+  })
+
+  it('a cleared selector saves as null', () => {
+    expect(coerceSdkConfigUpdate({ widget: { attachToSelector: null } }).sdk_widget_attach_selector).toBeNull()
+    expect(coerceSdkConfigUpdate({ widget: { attachToSelector: '  ' } }).sdk_widget_attach_selector).toBeNull()
   })
 })
