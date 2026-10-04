@@ -65,6 +65,43 @@ import {
   triggerClassification,
   type SdkConfigRow,
 } from '../helpers.ts';
+import {
+  PROJECT_REPO_ROLES,
+  REPO_BRANCH_WINDOW,
+  classifyRepoBranch,
+  countRepoBranches,
+  isProjectRepoRole,
+} from '../../_shared/repo-branch-counts.ts';
+
+function repoRoleMessage(role: unknown): string {
+  return `"${String(role).slice(0, 32)}" is not a repo role. Use one of: ${PROJECT_REPO_ROLES.join(', ')}.`;
+}
+
+/**
+ * Make `repoId` the project's primary repo. The unique partial index allows
+ * one primary per project, so setting a second one without unsetting the
+ * first always failed (console QA #20). Callers run this only AFTER their own
+ * write succeeded, so a failed save never leaves the project without one.
+ */
+async function movePrimaryRepo(
+  db: ReturnType<typeof getServiceClient>,
+  projectId: string,
+  repoId: string,
+): Promise<{ message: string; code?: string } | null> {
+  const { error: clearErr } = await db
+    .from('project_repos')
+    .update({ is_primary: false })
+    .eq('project_id', projectId)
+    .eq('is_primary', true)
+    .neq('id', repoId);
+  if (clearErr) return clearErr;
+  const { error } = await db
+    .from('project_repos')
+    .update({ is_primary: true })
+    .eq('id', repoId)
+    .eq('project_id', projectId);
+  return error ?? null;
+}
 
 export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>): void {
   app.get('/v1/admin/query/stats', jwtAuth, async (c) => {
@@ -545,15 +582,16 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
         retryable > 0
           ? `${failed} report${failed === 1 ? '' : 's'} still unfixed after the last attempt — ${retryable} can be retried now; open the rest to read why.`
           : `${failed} report${failed === 1 ? '' : 's'} still unfixed after the last attempt — open ${failed === 1 ? 'it' : 'each one'} to read why and what to do.`
-      topPriorityTo = `/fixes?status=failed&project=${encodeURIComponent(pid)}`
+      // tab=attempts: the failed list lives there, not on Overview (QA #94).
+      topPriorityTo = `/fixes?tab=attempts&status=failed&project=${encodeURIComponent(pid)}`
     } else if (inflightDispatches + inProgress > 0) {
       topPriority = 'inflight'
       topPriorityLabel = `${inflightDispatches + inProgress} fix${inflightDispatches + inProgress === 1 ? '' : 'es'} dispatching — check back shortly.`
-      topPriorityTo = '/fixes?status=running'
+      topPriorityTo = '/fixes?tab=pipeline'
     } else if (prsOpen > 0) {
       topPriority = 'waiting'
       topPriorityLabel = `${prsOpen} PR${prsOpen === 1 ? '' : 's'} open — merge or close to advance the loop.`
-      topPriorityTo = '/repo?tab=prs'
+      topPriorityTo = '/repo?tab=branches&status=open'
     } else {
       topPriorityLabel = `${completed} report${completed === 1 ? '' : 's'} fixed in the last 30 days.`
       topPriorityTo = '/fixes'
@@ -597,7 +635,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     // pipeline. The previous project_members-only filter showed "0 fixes"
     // to invited org members.
     const projectIds = await callerProjectIds(c, db, userId);
-    if (projectIds.length === 0) return c.json({ ok: true, data: { fixes: [] } });
+    if (projectIds.length === 0) return c.json({ ok: true, data: { fixes: [], total: 0 } });
 
     // Optional `q` substring search — the admin command palette needs fast
     // alias-matching against summary/rationale/branch, otherwise live search
@@ -611,15 +649,21 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     if (reportIdParam && !/^[0-9a-f-]{36}$/i.test(reportIdParam)) {
       return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: 'report_id must be a report id' } }, 400);
     }
+    // `offset` + the exact `total` let /fixes load older attempts instead of
+    // stopping at the first page (console QA #91).
+    const queryOffset = Math.max(Math.floor(Number(c.req.query('offset')) || 0), 0);
 
     let query = db
       .from('fix_attempts')
       .select(
-        'id, report_id, project_id, agent, branch, pr_url, pr_number, commit_sha, status, files_changed, lines_changed, summary, rationale, review_passed, started_at, completed_at, created_at, langfuse_trace_id, llm_model, llm_input_tokens, llm_output_tokens, check_run_status, check_run_conclusion, pr_state, merged_at, error, spec_validation_warnings, inventory_action_node_id, failure_category',
+        // cursor_* / claude_workflow_run_url / check_run_updated_at feed the
+        // agent badges, links, artifacts gallery and "CI synced" (QA #89).
+        'id, report_id, project_id, agent, branch, pr_url, pr_number, commit_sha, status, files_changed, lines_changed, summary, rationale, review_passed, started_at, completed_at, created_at, langfuse_trace_id, llm_model, llm_input_tokens, llm_output_tokens, check_run_status, check_run_conclusion, check_run_updated_at, pr_state, merged_at, error, spec_validation_warnings, inventory_action_node_id, failure_category, cursor_agent_id, cursor_artifacts, claude_workflow_run_url',
+        { count: 'exact' },
       )
       .in('project_id', projectIds)
       .order('started_at', { ascending: false })
-      .limit(queryLimit);
+      .range(queryOffset, queryOffset + queryLimit - 1);
 
     if (reportIdParam) query = query.eq('report_id', reportIdParam);
     if (search) {
@@ -629,7 +673,8 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       );
     }
 
-    const { data } = await query;
+    const { data, error: listErr, count } = await query;
+    if (listErr) return dbError(c, listErr);
     const fixes = data ?? [];
 
     // Every row carries its report's CURRENT fix state, so the console can
@@ -654,7 +699,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       };
     });
 
-    return c.json({ ok: true, data: { fixes: enriched } });
+    return c.json({ ok: true, data: { fixes: enriched, total: count ?? enriched.length, offset: queryOffset } });
   });
 
   app.post('/v1/admin/fixes', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {
@@ -1184,12 +1229,13 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
         .eq('project_id', pid)
         .eq('provider', 'github')
         .maybeSingle(),
+      // Same window and rule as /repo/overview (repo-branch-counts.ts), so the
+      // snapshot tiles and the header chips cannot disagree (console QA #243).
       db.from('fix_attempts')
-        .select('id, status, pr_url, check_run_conclusion, created_at')
+        .select('id, branch, status, pr_url, pr_state, merged_at, check_run_conclusion, created_at')
         .eq('project_id', pid)
-        .not('pr_url', 'is', null)
         .order('created_at', { ascending: false })
-        .limit(200),
+        .limit(REPO_BRANCH_WINDOW),
       db.from('project_codebase_files')
         .select('id, updated_at', { count: 'exact', head: false })
         .eq('project_id', pid)
@@ -1229,14 +1275,9 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     const indexedFiles = codebaseRes.count ?? 0
     const lastIndexedAt = codebaseRes.data?.[0]?.updated_at ?? null
 
-    const attempts = attemptsRes.data ?? []
-    const prOpen = attempts.filter((a) => a.pr_url && a.status === 'completed').length
-    const ciPassing = attempts.filter((a) => a.check_run_conclusion === 'success').length
-    const ciFailed = attempts.filter((a) =>
-      a.check_run_conclusion && a.check_run_conclusion !== 'success' && a.check_run_conclusion !== 'neutral'
-    ).length
-    const merged = 0
-    const failedToOpen = attempts.filter((a) => a.status === 'failed').length
+    const { totalBranches, prOpen, ciPassing, ciFailed, merged, failedToOpen } = countRepoBranches(
+      attemptsRes.data ?? [],
+    )
 
     let topPriority: typeof empty.topPriority = 'healthy'
     let topPriorityLabel: string | null = null
@@ -1252,16 +1293,17 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       topPriorityTo = '/integrations/config'
     } else if (ciFailed > 0) {
       topPriority = 'ci_failing'
-      topPriorityLabel = `${ciFailed} PR${ciFailed === 1 ? '' : 's'} have failing CI — review before merging.`
-      topPriorityTo = '/repo?tab=prs'
+      topPriorityLabel = `${ciFailed} open PR${ciFailed === 1 ? ' has' : 's have'} failing CI — review before merging.`
+      // /repo has no "prs" tab: open the branch list on its CI-failing filter (QA #99).
+      topPriorityTo = '/repo?tab=branches&status=ci_failed'
     } else if (failedToOpen > 0) {
       topPriority = 'stuck'
       topPriorityLabel = `${failedToOpen} fix${failedToOpen === 1 ? '' : 'es'} failed to open a PR — retry from Fixes.`
-      topPriorityTo = '/fixes?status=failed'
+      topPriorityTo = '/fixes?tab=attempts&status=failed'
     } else if (prOpen > 0) {
       topPriority = 'waiting'
       topPriorityLabel = `${prOpen} PR${prOpen === 1 ? '' : 's'} open and awaiting review.`
-      topPriorityTo = '/repo?tab=prs'
+      topPriorityTo = '/repo?tab=branches&status=open'
     } else {
       topPriorityLabel = `${ciPassing} PR${ciPassing === 1 ? '' : 's'} passing CI.`
       topPriorityTo = '/repo'
@@ -1281,7 +1323,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
         indexingEnabled: indexedFiles > 0,
         lastIndexedAt,
         indexedFiles,
-        totalBranches: 0,
+        totalBranches,
         prOpen,
         ciPassing,
         ciFailed,
@@ -1335,11 +1377,11 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       db
         .from('fix_attempts')
         .select(
-          'id, report_id, branch, pr_url, pr_number, commit_sha, pr_state, agent, llm_model, status, check_run_status, check_run_conclusion, files_changed, lines_changed, started_at, completed_at, created_at, summary',
+          'id, report_id, branch, pr_url, pr_number, commit_sha, pr_state, merged_at, agent, llm_model, status, check_run_status, check_run_conclusion, files_changed, lines_changed, started_at, completed_at, created_at, summary',
         )
         .eq('project_id', projectId)
         .order('created_at', { ascending: false })
-        .limit(50),
+        .limit(REPO_BRANCH_WINDOW),
     ]);
 
     // Pull the human-readable summary off the linked reports in one batch
@@ -1368,6 +1410,9 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
         pr_number: f.pr_number,
         commit_sha: f.commit_sha,
         pr_state: f.pr_state,
+        merged_at: f.merged_at ?? null,
+        // The page filters on this, so its tabs use the same rule as the counts.
+        bucket: classifyRepoBranch(f),
         agent: f.agent,
         llm_model: f.llm_model,
         status: f.status,
@@ -1384,22 +1429,9 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       };
     });
 
-    // Counts are cheap to derive FE-side but computing them here means the
-    // header chips never disagree with the branch list rendered below.
-    let open = 0;
-    let ci_passing = 0;
-    let ci_failed = 0;
-    let merged = 0;
-    let failed_to_open = 0;
-    for (const b of branches) {
-      const st = (b.status ?? '').toLowerCase();
-      const concl = (b.check_run_conclusion ?? '').toLowerCase();
-      if (st === 'failed' && !b.pr_url) failed_to_open += 1;
-      if (b.pr_url && st !== 'failed') open += 1;
-      if (concl === 'success') ci_passing += 1;
-      if (concl === 'failure' || concl === 'timed_out') ci_failed += 1;
-      if (st === 'completed' && concl === 'success' && b.pr_url) merged += 1;
-    }
+    // One rule with /repo/stats (repo-branch-counts.ts), so the header chips,
+    // the snapshot tiles and the branch filter never disagree.
+    const tally = countRepoBranches(branches);
 
     const repoUrl =
       primaryRepo?.repo_url ?? settings?.github_repo_url ?? settings?.codebase_repo_url ?? null;
@@ -1418,7 +1450,15 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
           index_files_indexed: primaryRepo?.index_files_indexed ?? null,
           index_files_eligible: primaryRepo?.index_files_eligible ?? null,
         },
-        counts: { open, ci_passing, ci_failed, merged, failed_to_open, total: branches.length },
+        counts: {
+          open: tally.prOpen,
+          ci_passing: tally.ciPassing,
+          ci_failed: tally.ciFailed,
+          merged: tally.merged,
+          failed_to_open: tally.failedToOpen,
+          total: tally.total,
+          branches: tally.totalBranches,
+        },
         branches,
       },
     });
@@ -1723,8 +1763,12 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     }
     // Normalize repo URL (strip trailing .git, trailing slash)
     const repoUrl = body.repoUrl.trim().replace(/\.git$/, '').replace(/\/$/, '');
-    const validRoles = ['frontend', 'backend', 'monorepo', 'library', 'docs', 'other'];
-    const role = validRoles.includes(body.role ?? '') ? body.role : 'monorepo';
+    // The roles the project_repos CHECK allows; anything else is refused
+    // instead of saved as "monorepo" without a word (console QA #97).
+    if (body.role !== undefined && !isProjectRepoRole(body.role)) {
+      return c.json({ ok: false, error: { code: 'BAD_REQUEST', message: repoRoleMessage(body.role) } }, 400);
+    }
+    const role = body.role ?? 'monorepo';
     // The repo form pre-fills "main"; store the branch GitHub really has.
     const parsedRepo = parseGithubRepoUrl(repoUrl);
     const { branch: defaultBranch } = parsedRepo
@@ -1735,6 +1779,8 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
           requested: body.defaultBranch,
         })
       : { branch: body.defaultBranch?.trim() || 'main' };
+    // Insert as non-primary, then move "primary" only once the row exists, so
+    // a duplicate URL never costs the project its current primary (QA #20).
     const { data, error } = await db
       .from('project_repos')
       .insert({
@@ -1743,12 +1789,25 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
         role,
         path_globs: body.pathGlobs ?? null,
         default_branch: defaultBranch,
-        is_primary: body.isPrimary ?? false,
+        is_primary: false,
         indexing_enabled: true,
       })
       .select('id, repo_url, role, path_globs, default_branch, is_primary, created_at')
       .single();
-    if (error) return dbError(c, error);
+    if (error) {
+      if (error.code === '23505') {
+        return c.json(
+          { ok: false, error: { code: 'DUPLICATE', message: 'That repo is already linked to this project.' } },
+          409,
+        );
+      }
+      return dbError(c, error);
+    }
+    if (body.isPrimary && data) {
+      const moved = await movePrimaryRepo(db, body.projectId, data.id as string);
+      if (moved) return dbError(c, moved);
+      return c.json({ ok: true, data: { ...data, is_primary: true } });
+    }
     return c.json({ ok: true, data });
   });
 
@@ -1772,13 +1831,16 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     if (!access.allowed) {
       return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Not a member' } }, 403);
     }
-    const validRoles = ['frontend', 'backend', 'monorepo', 'library', 'docs', 'other'];
+    if (body.role !== undefined && !isProjectRepoRole(body.role)) {
+      return c.json({ ok: false, error: { code: 'BAD_REQUEST', message: repoRoleMessage(body.role) } }, 400);
+    }
     const updates: Record<string, unknown> = {};
     if (body.repoUrl !== undefined) updates.repo_url = body.repoUrl.trim().replace(/\.git$/, '').replace(/\/$/, '');
-    if (body.role !== undefined && validRoles.includes(body.role)) updates.role = body.role;
+    if (body.role !== undefined) updates.role = body.role;
     if (body.pathGlobs !== undefined) updates.path_globs = body.pathGlobs;
     if (body.defaultBranch !== undefined) updates.default_branch = body.defaultBranch;
-    if (body.isPrimary !== undefined) updates.is_primary = body.isPrimary;
+    // Turning "primary" ON is applied after the update succeeds (movePrimaryRepo).
+    if (body.isPrimary === false) updates.is_primary = false;
     if (body.indexingEnabled !== undefined) updates.indexing_enabled = body.indexingEnabled;
     const { data, error } = await db
       .from('project_repos')
@@ -1788,6 +1850,14 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       .select('id, repo_url, role, path_globs, default_branch, is_primary, indexing_enabled, updated_at')
       .single();
     if (error) return dbError(c, error);
+    if (!data) {
+      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'That repo is no longer linked to this project.' } }, 404);
+    }
+    if (body.isPrimary === true && !data.is_primary) {
+      const moved = await movePrimaryRepo(db, body.projectId, repoId);
+      if (moved) return dbError(c, moved);
+      return c.json({ ok: true, data: { ...data, is_primary: true } });
+    }
     return c.json({ ok: true, data });
   });
 

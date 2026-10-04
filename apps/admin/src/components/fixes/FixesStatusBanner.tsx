@@ -113,7 +113,7 @@ export function FixesStatusBanner({
           ) : (
             <StatusBannerAction
               label={actions.pipeline ?? 'Open pipeline'}
-              to={stats.topPriorityTo ?? scopedHref('/fixes?status=running', pid)}
+              to={stats.topPriorityTo ?? scopedHref('/fixes?tab=pipeline', pid)}
               tone="info"
             />
           )

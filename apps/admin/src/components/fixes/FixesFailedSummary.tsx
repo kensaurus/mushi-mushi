@@ -13,6 +13,7 @@ import type { FixAttempt } from './types'
 interface Props {
   fixes: FixAttempt[]
   projectId?: string | null
+  /** Open the failed list on Attempts, narrowed to one cause ('' = every cause). */
   onReviewCategory?: (category: string) => void
   compact?: boolean
 }
@@ -25,7 +26,9 @@ export function FixesFailedSummary({ fixes, projectId, onReviewCategory, compact
     id: f.id,
     title: fixReportLabel(f),
     subtitle: failureHeadline(f)?.title ?? fixCauseLabel(failureCause(f)),
-    href: scopedHref(`/fixes?status=failed#fix-${f.id}`, projectId),
+    // Scope first, then the anchor: scopedHref reads everything after "?" as
+    // query, so a hash inside it became part of the status value (QA 94).
+    href: `${scopedHref('/fixes?tab=attempts&status=failed', projectId)}#fix-${f.id}`,
   }))
 
   const buckets = new Map<string, number>()
@@ -43,7 +46,7 @@ export function FixesFailedSummary({ fixes, projectId, onReviewCategory, compact
         headline={fixesFailedTitle(failed.length)}
         hint={fixesFailedHint(failed.length)}
         actionLabel={fixesFailedAction(failed.length)}
-        actionHref={scopedHref('/fixes?status=failed', projectId)}
+        actionHref={scopedHref('/fixes?tab=attempts&status=failed', projectId)}
         preview={preview}
       />
       {!compact && sorted.length > 0 ? (
@@ -54,6 +57,7 @@ export function FixesFailedSummary({ fixes, projectId, onReviewCategory, compact
               key={category}
               type="button"
               onClick={() => onReviewCategory?.(category)}
+              title={`Show the ${count} failed ${count === 1 ? 'fix' : 'fixes'} with this cause`}
               className="inline-flex items-center gap-1 rounded-full border border-danger/25 bg-surface-raised/80 px-2 py-0.5 text-2xs hover:border-danger/40 motion-safe:transition-opacity"
             >
               <span className="font-mono text-danger">{count}</span>
@@ -62,7 +66,7 @@ export function FixesFailedSummary({ fixes, projectId, onReviewCategory, compact
           ))}
           {onReviewCategory ? (
             <Btn size="sm" variant="ghost" className="!text-2xs !py-0.5" onClick={() => onReviewCategory('')}>
-              Show all
+              Show all failed
             </Btn>
           ) : null}
         </div>

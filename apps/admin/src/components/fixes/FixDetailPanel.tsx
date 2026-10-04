@@ -18,6 +18,7 @@ import type { FixAttempt } from './types'
 import { RelativeTime } from '../ui'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
+import { describeCiRefresh, type CiRefreshResult } from '../../lib/fixRetry'
 import * as Sentry from '@sentry/react'
 
 interface InventoryActionSummary {
@@ -61,10 +62,23 @@ export function FixDetailPanel({
     if (ciRefreshing) return
     setCiRefreshing(true)
     try {
-      await apiFetch(`/v1/admin/fixes/${fix.id}/refresh-ci`, { method: 'POST' })
+      // apiFetch returns { ok:false } for HTTP errors instead of throwing, so
+      // the result is read here: a failed sync used to look like a success
+      // (console QA 88).
+      const res = await apiFetch<CiRefreshResult>(`/v1/admin/fixes/${fix.id}/refresh-ci`, { method: 'POST' })
+      const outcome = describeCiRefresh(res)
+      if (res.ok) {
+        toast.success(outcome.title, outcome.description)
+      } else {
+        toast.error(outcome.title, outcome.description)
+        Sentry.captureMessage('fix refresh-ci failed', {
+          level: 'warning',
+          extra: { fixId: fix.id, code: res.error?.code ?? null },
+        })
+      }
       onRefreshed?.()
     } catch (err) {
-      toast.error('Could not refresh CI status from GitHub')
+      toast.error("Couldn't read CI from GitHub", 'Check your connection and try again.')
       Sentry.captureMessage('fix refresh-ci failed', {
         level: 'warning',
         extra: { fixId: fix.id, error: err instanceof Error ? err.message : String(err) },

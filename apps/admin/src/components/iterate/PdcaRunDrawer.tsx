@@ -8,22 +8,25 @@ import { Badge, Btn, Card, RelativeTime } from '../ui'
 import { Drawer } from '../Drawer'
 import { ScoreBar } from './ScoreBar'
 import type { PdcaIteration, PdcaRun } from './types'
-import { STATUS_CLS, STATUS_LABEL, scoreBarClass } from './types'
+import { STATUS_CLS, STATUS_LABEL, personaLabel, scoreBarClass } from './types'
 
 interface Props {
   run: PdcaRun
   open: boolean
   onClose: () => void
+  /** Asks for confirmation before aborting (the page owns the dialog). */
   onAbort: (id: string) => void
   onTrigger: (id: string) => void
   onRefresh: () => void
+  /** True while a Trigger or Abort for this run is in flight. */
+  busy?: boolean
 }
 
 function statusBadge(status: PdcaRun['status']) {
   return <Badge className={STATUS_CLS[status]}>{STATUS_LABEL[status]}</Badge>
 }
 
-export function PdcaRunDrawer({ run, open, onClose, onAbort, onTrigger, onRefresh }: Props) {
+export function PdcaRunDrawer({ run, open, onClose, onAbort, onTrigger, onRefresh, busy = false }: Props) {
   const iterations = run.iterations ?? []
   const [activeIter, setActiveIter] = useState<PdcaIteration | null>(iterations.at(-1) ?? null)
 
@@ -60,12 +63,12 @@ export function PdcaRunDrawer({ run, open, onClose, onAbort, onTrigger, onRefres
             </span>
           )}
           {run.status === 'queued' && (
-            <Btn size="sm" variant="primary" onClick={() => onTrigger(run.id)}>
+            <Btn size="sm" variant="primary" onClick={() => onTrigger(run.id)} disabled={busy} loading={busy}>
               Trigger now
             </Btn>
           )}
           {(run.status === 'queued' || run.status === 'running') && (
-            <Btn size="sm" variant="danger" onClick={() => onAbort(run.id)}>
+            <Btn size="sm" variant="danger" onClick={() => onAbort(run.id)} disabled={busy}>
               Abort
             </Btn>
           )}
@@ -199,7 +202,7 @@ export function PdcaRunDrawer({ run, open, onClose, onAbort, onTrigger, onRefres
           </div>
           <div className="flex gap-2">
             <span className="w-28 shrink-0">Persona</span>
-            <span className="font-mono">{run.persona}</span>
+            <span title={run.persona}>{personaLabel(run.persona)}</span>
           </div>
           <div className="flex gap-2">
             <span className="w-28 shrink-0">Target score</span>

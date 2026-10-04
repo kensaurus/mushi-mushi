@@ -5,6 +5,13 @@ import { jwtAuth, adminOrApiKey } from '../../_shared/auth.ts';
 import { dbError, callerProjectIds, resolveOwnedProject } from '../shared.ts';
 import { JUDGE_ELIGIBLE_STATUSES, judgeEmptyResult } from '../../_shared/judge-eligibility.ts';
 
+/** A valid ISO instant from a query value, or null (never a raw filter string). */
+function isoOrNull(raw: string | undefined): string | null {
+  if (!raw) return null;
+  const t = Date.parse(raw);
+  return Number.isFinite(t) ? new Date(t).toISOString() : null;
+}
+
 export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
   // GET /v1/admin/judge/stats — posture banner + JUDGE SNAPSHOT.
   app.get('/v1/admin/judge/stats', jwtAuth, async (c) => {
@@ -149,8 +156,9 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
       topPriorityTo = ungradedReports > 0 ? scoped('/judge?action=run') : scoped('/reports?tab=queue');
     } else if (latestWeekScore != null && latestWeekScore < 0.6) {
       topPriority = 'low_score';
-      topPriorityLabel = `Classifier scores are ${Math.round(latestWeekScore * 100)}% — triage quality may be wrong. Review recent evaluations or Prompt Lab.`;
-      topPriorityTo = scoped('/prompt-lab?tab=prompts');
+      topPriorityLabel = `Classifier scores are ${Math.round(latestWeekScore * 100)}% — triage quality may be wrong. Review the lowest-scored evaluations, then tune the prompt in Prompt Lab.`;
+      // The banner button reads "Review evaluations" (console QA #248).
+      topPriorityTo = scoped('/judge?tab=evaluations&sort=score_asc');
     } else if (weekOverWeekDriftPct != null && weekOverWeekDriftPct >= 5) {
       topPriority = 'drifting';
       topPriorityLabel = `Scores dropped ${weekOverWeekDriftPct}% week-over-week — review mismatches before merging fixes.`;
@@ -267,6 +275,7 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
     if (projectIds.length === 0) return c.json({ ok: true, data: { evaluations: [] } });
 
     const limit = Math.min(Math.max(Number(c.req.query('limit') ?? 50), 1), 200);
+    const page = Math.max(Math.floor(Number(c.req.query('page') ?? 1)) || 1, 1);
     const sort =
       c.req.query('sort') === 'score_asc'
         ? { col: 'judge_score', asc: true }
@@ -277,23 +286,52 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
     // but rows were inert. Filter is a string match on the stored prompt
     // version label (e.g. "v3-active", "v4-cand").
     const promptVersion = c.req.query('prompt_version')?.trim() || null;
+    // The leaderboard ranks a (stage, version) pair: judge-batch credits a
+    // report's score to its stage1 AND stage2 prompt versions. So a stage
+    // drill-down matches reports that ran that version AT that stage, not the
+    // single prompt_version string stored on the evaluation (console QA #247).
+    const promptStage = c.req.query('prompt_stage')?.trim() || null;
+    // Disagreements are filtered here, over every evaluation, so the list
+    // agrees with the "N disagree" badge instead of the latest 50 (QA #247).
+    const disagreementOnly = c.req.query('disagreement') === '1';
+    // Trend brush range (QA #107): ISO instants, validated.
+    const fromIso = isoOrNull(c.req.query('from'));
+    const toIso = isoOrNull(c.req.query('to'));
 
+    // Stage drill-down: an inner join on the report's own stage version, so
+    // the filter covers every matching evaluation in one query.
+    const stageColumn =
+      promptVersion && promptStage === 'stage1'
+        ? 'stage1_prompt_version'
+        : promptVersion && promptStage === 'stage2'
+          ? 'stage2_prompt_version'
+          : null;
+
+    const evalColumns =
+      'id, report_id, project_id, judge_model, judge_score, accuracy_score, severity_score, component_score, repro_score, classification_agreed, judge_reasoning, prompt_version, created_at, judge_fallback_used';
     let q = db
       .from('classification_evaluations')
-      .select(
-        'id, report_id, project_id, judge_model, judge_score, accuracy_score, severity_score, component_score, repro_score, classification_agreed, judge_reasoning, prompt_version, created_at, judge_fallback_used',
-      )
+      .select(stageColumn ? `${evalColumns}, reports!inner(${stageColumn})` : evalColumns, { count: 'exact' })
       .in('project_id', projectIds);
-    if (promptVersion) q = q.eq('prompt_version', promptVersion);
-    const { data, error } = await q.order(sort.col, { ascending: sort.asc }).limit(limit);
+    if (stageColumn) q = q.eq(`reports.${stageColumn}`, promptVersion);
+    else if (promptVersion) q = q.eq('prompt_version', promptVersion);
+    if (disagreementOnly) q = q.eq('classification_agreed', false);
+    if (fromIso) q = q.gte('created_at', fromIso);
+    if (toIso) q = q.lte('created_at', toIso);
+    const { data, error, count } = await q
+      .order(sort.col, { ascending: sort.asc })
+      .range((page - 1) * limit, page * limit - 1);
     if (error) return dbError(c, error);
+    // The select string is computed (stage join), so the typed parser cannot
+    // read it: name the row shape here.
+    const evalRows = (data ?? []) as unknown as Array<Record<string, unknown> & { reports?: unknown }>;
 
     // Hydrate each row with the underlying report's human summary so the
     // Judge table can display "Submit button on /checkout has wrong size"
     // instead of "f9b3c2…" — the original UX audit called the hash-only
     // column literally unreadable for triage decisions.
     const reportIds = Array.from(
-      new Set((data ?? []).map((r) => r.report_id as string).filter(Boolean)),
+      new Set(evalRows.map((r) => r.report_id as string).filter(Boolean)),
     );
     const summaryMap = new Map<
       string,
@@ -318,7 +356,9 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
         });
       }
     }
-    const enriched = (data ?? []).map((row) => {
+    const enriched = evalRows.map((joined) => {
+      // Drop the join column; the row keeps its own fields only.
+      const { reports: _join, ...row } = joined;
       const meta = summaryMap.get(row.report_id as string);
       return {
         ...row,
@@ -327,7 +367,7 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
         report_status: meta?.status ?? null,
       };
     });
-    return c.json({ ok: true, data: { evaluations: enriched } });
+    return c.json({ ok: true, data: { evaluations: enriched, total: count ?? enriched.length, page, limit } });
   });
 
   // Score distribution histogram (bucketed into 10 deciles).

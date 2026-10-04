@@ -59,6 +59,9 @@ import { ChartActionsMenu } from '../components/ChartActionsMenu'
 import { ChartAnnotations } from '../components/charts/ChartAnnotations'
 import type { ChartEvent } from '../lib/apiSchemas'
 import { CHIP_TONE } from '../lib/chipTone'
+import { ConfirmDialog } from '../components/ConfirmDialog'
+import { ListPager } from '../components/ListPager'
+import { judgeEvaluationsPath, judgeRunConfirmBody } from '../lib/judgeFilters'
 
 interface WeekData {
   week_start: string
@@ -273,6 +276,8 @@ function ScorePill({ value }: { value: number | null }) {
 }
 
 const JUDGE_RUN_BUTTON_ID = 'judge-run-now'
+/** Evaluations per page on the Evaluations tab. */
+const EVAL_PAGE_SIZE = 50
 
 export function JudgePage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -280,6 +285,11 @@ export function JudgePage() {
   const activeTab = resolveJudgeTab(tabParam)
   const activeTabMeta = JUDGE_TABS.find((t) => t.id === activeTab) ?? JUDGE_TABS[0]
   const disagreementOnly = searchParams.get('filter') === 'disagreement'
+  // Trend brush range (QA 107) and sort live in the URL so a banner or tile
+  // link can open the exact view it names (QA 248: "Review evaluations").
+  const rangeFrom = searchParams.get('from')
+  const rangeTo = searchParams.get('to')
+  const sort: 'recent' | 'score_asc' = searchParams.get('sort') === 'score_asc' ? 'score_asc' : 'recent'
   const toast = useToast()
 
   const {
@@ -319,7 +329,28 @@ export function JudgePage() {
     quickTab: resolveQuickJudgeTab(stats),
     setActiveTab: setActiveTab,
   })
-  const [sort, setSort] = useState<'recent' | 'score_asc'>('recent')
+  const setSort = useCallback(
+    (next: 'recent' | 'score_asc') => {
+      setSearchParams((prev) => {
+        const params = new URLSearchParams(prev)
+        if (next === 'recent') params.delete('sort')
+        else params.set('sort', next)
+        return params
+      }, { replace: true })
+    },
+    [setSearchParams],
+  )
+  const clearRange = useCallback(() => {
+    setSearchParams((prev) => {
+      const params = new URLSearchParams(prev)
+      params.delete('from')
+      params.delete('to')
+      return params
+    }, { replace: true })
+  }, [setSearchParams])
+  const [evalPage, setEvalPage] = useState(1)
+  // Run judge spends LLM budget: it goes through a confirm (QA 248).
+  const [runConfirmOpen, setRunConfirmOpen] = useState(false)
   const [running, setRunning] = useState(false)
   const [heroCollapsed, setHeroCollapsed] = useState(true)
   // Sticky inline receipt for "Run judge now" — toast disappears, this stays
@@ -343,21 +374,29 @@ export function JudgePage() {
     '/v1/admin/chart-events?kinds=deploy,cron,byok',
   )
   const chartEvents = chartEventsQuery.data?.events ?? []
-  const evalsQuery = usePageData<{ evaluations: EvalRow[] }>(
-    `/v1/admin/judge/evaluations?limit=50&sort=${sort === 'score_asc' ? 'score_asc' : 'recent'}${promptFilter ? `&prompt_version=${encodeURIComponent(promptFilter.version)}` : ''}`,
+  const evalFilterKey = [sort, disagreementOnly, promptFilter?.version, promptFilter?.stage, rangeFrom, rangeTo].join('|')
+  useEffect(() => {
+    setEvalPage(1)
+  }, [evalFilterKey])
+  // Every filter runs on the server over all evaluations, so the list agrees
+  // with the "N disagree" badge and a prompt row's stage (QA 247).
+  const evalsQuery = usePageData<{ evaluations: EvalRow[]; total?: number }>(
+    judgeEvaluationsPath({
+      sort,
+      page: evalPage,
+      pageSize: EVAL_PAGE_SIZE,
+      disagreementOnly,
+      prompt: promptFilter,
+      from: rangeFrom,
+      to: rangeTo,
+    }),
   )
   const promptsQuery = usePageData<{ prompts: PromptRow[] }>('/v1/admin/judge/prompts')
   const distQuery = usePageData<Distribution>('/v1/admin/judge/distribution')
 
   const weeks = weeksQuery.data?.weeks ?? []
-  const evalsRaw = evalsQuery.data?.evaluations ?? []
-  const evals = useMemo(
-    () =>
-      disagreementOnly
-        ? evalsRaw.filter((e) => e.classification_agreed === false)
-        : evalsRaw,
-    [evalsRaw, disagreementOnly],
-  )
+  const evals = evalsQuery.data?.evaluations ?? []
+  const evalsTotal = evalsQuery.data?.total ?? evals.length
   const prompts = promptsQuery.data?.prompts ?? []
 
   const dist = distQuery.data ?? null
@@ -447,18 +486,16 @@ export function JudgePage() {
         ],
   })
 
-  const disagreementRate = evalsRaw.length > 0
-    ? evalsRaw.filter((e) => e.classification_agreed === false).length / evalsRaw.length
-    : null
+  // From the stats route, over every evaluation: the list below is filtered
+  // and paged, so it is not a sample of anything.
+  const disagreementRate = stats.disagreementRatePct != null ? stats.disagreementRatePct / 100 : null
   // Age only matters while something is waiting to be graded; otherwise the
   // "re-check" nudge asks for a run that evaluates nothing.
-  const staleHoursAgo = stats.ungradedReports > 0 && evalsRaw[0]?.created_at
-    ? Math.floor((Date.now() - new Date(evalsRaw[0].created_at).getTime()) / 3_600_000)
-    : null
+  const staleHoursAgo = stats.ungradedReports > 0 ? stats.staleHours : null
   const heroAction = useNextBestAction({
     scope: 'judge',
     disagreementRate,
-    sampledCount: evalsRaw.length,
+    sampledCount: stats.totalEvaluations,
     staleHoursAgo,
   })
 
@@ -577,10 +614,15 @@ export function JudgePage() {
                   onRangeSelect={
                     trendTimestamps.every(Boolean)
                       ? ({ fromIso, toIso }) => {
-                          const next = new URLSearchParams(window.location.search)
-                          next.set('from', fromIso)
-                          next.set('to', toIso)
-                          window.history.pushState(null, '', `${window.location.pathname}?${next.toString()}`)
+                          // Drill into the evaluations graded in the selected
+                          // weeks, through the router (QA 107).
+                          setSearchParams((prev) => {
+                            const next = new URLSearchParams(prev)
+                            next.set('tab', 'evaluations')
+                            next.set('from', fromIso)
+                            next.set('to', toIso)
+                            return next
+                          })
                         }
                       : undefined
                   }
@@ -732,7 +774,7 @@ export function JudgePage() {
           size="sm"
           variant="primary"
           id={JUDGE_RUN_BUTTON_ID}
-          onClick={runNow}
+          onClick={() => setRunConfirmOpen(true)}
           disabled={running}
           loading={running}
           leadingIcon={<PlayIcon />}
@@ -759,7 +801,7 @@ export function JudgePage() {
                   onTab={setActiveTab}
                   onRefresh={loadAll}
                   refreshing={statsValidating || evalsQuery.isValidating || weeksQuery.isValidating}
-                  onRunJudge={runNow}
+                  onRunJudge={() => setRunConfirmOpen(true)}
                   running={running}
                   plainBanner={ux.plainBanner}
                 />
@@ -1032,6 +1074,20 @@ export function JudgePage() {
                 <span aria-hidden="true">×</span>
               </Btn>
             )}
+            {rangeFrom && rangeTo && (
+              <Btn
+                variant="ghost"
+                size="sm"
+                onClick={clearRange}
+                className="inline-flex items-center gap-1 px-2 py-0.5 text-2xs bg-brand/12 text-brand border border-brand/28 hover:bg-brand/20 focus-visible:ring-1 focus-visible:ring-brand/60"
+                aria-label="Clear the date range"
+              >
+                <span>
+                  {new Date(rangeFrom).toLocaleDateString()} – {new Date(rangeTo).toLocaleDateString()}
+                </span>
+                <span aria-hidden="true">×</span>
+              </Btn>
+            )}
             {promptFilter && (
               <Btn
                 variant="ghost"
@@ -1041,7 +1097,7 @@ export function JudgePage() {
                 aria-label={`Clear filter on prompt ${promptFilter.version}`}
                 title="Clear prompt filter"
               >
-                <span>Filtered: {promptFilter.version}</span>
+                <span>Filtered: {promptFilter.version} ({promptFilter.stage})</span>
                 <span aria-hidden="true">×</span>
               </Btn>
             )}
@@ -1068,7 +1124,7 @@ export function JudgePage() {
           <EmptySectionMessage
             text="No evaluations match."
             hint={
-              disagreementOnly || promptFilter
+              disagreementOnly || promptFilter || (rangeFrom && rangeTo)
                 ? 'Clear the active filter or run judge now to seed fresh evaluations.'
                 : 'Run judge now or wait for the nightly cron to score classified reports.'
             }
@@ -1186,9 +1242,30 @@ export function JudgePage() {
             </table>
           </ResponsiveTable>
         )}
+        <ListPager
+          page={evalPage}
+          pageSize={EVAL_PAGE_SIZE}
+          total={evalsTotal}
+          noun="evaluations"
+          onPage={setEvalPage}
+          busy={evalsQuery.isValidating}
+        />
       </Section>
       )}
 
+      {runConfirmOpen && (
+        <ConfirmDialog
+          title="Run the judge now?"
+          body={judgeRunConfirmBody(stats.ungradedReports)}
+          confirmLabel="Run judge"
+          loading={running}
+          onConfirm={() => {
+            setRunConfirmOpen(false)
+            void runNow()
+          }}
+          onCancel={() => setRunConfirmOpen(false)}
+        />
+      )}
     </div>
   )
 }

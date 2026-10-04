@@ -45,6 +45,7 @@ import {
 } from '../_shared/mcp-triage-context.ts'
 import { linearSearchIssues } from '../_shared/linear-mcp-client.ts'
 import { isLinearConnected } from '../_shared/linear.ts';
+import { findActiveSkillBySlug } from '../_shared/skill-catalog.ts';
 import { clipAtWord } from '../_shared/text-clip.ts';
 import { isFeatureRequest, reporterCategoryHint, respectReporterCategory } from '../_shared/report-category.ts';
 import {
@@ -1603,12 +1604,12 @@ async function recommendByKeyword(
   };
   const slug = categorySkillMap[category] ?? 'debug-error';
 
-  const { data: skill } = await db
-    .from('agent_skills')
-    .select('slug, title, description')
-    .eq('slug', slug)
-    .eq('is_active', true)
-    .maybeSingle();
+  // Several sources can carry the same slug; one row per slug (skill-catalog.ts).
+  const { skill } = await findActiveSkillBySlug<{ slug: string; title?: string; description?: string }>(
+    db,
+    slug,
+    'slug, title, description',
+  );
 
   if (!skill) return;
 
