@@ -9,7 +9,7 @@
  *
  * Why (2026-09-23): the fix that stopped a failed load from rendering
  * all-ON defaults also treated a successful load with
- * `notificationPrefs: null` (a project that never saved prefs) as a failure,
+ * `notification_prefs: null` (a project that never saved prefs) as a failure,
  * so those projects could not configure notifications at all. Null means
  * "server defaults", which are exactly DEFAULT_PREFS.
  */
@@ -58,7 +58,7 @@ describe('NotificationPrefsMatrix', () => {
   }
 
   it('renders every toggle ON when the project has never saved prefs', async () => {
-    api.apiFetch.mockResolvedValue({ ok: true, data: { notificationPrefs: null } })
+    api.apiFetch.mockResolvedValue({ ok: true, data: { notification_prefs: null } })
     await render()
 
     const toggles = switches(container)
@@ -70,7 +70,7 @@ describe('NotificationPrefsMatrix', () => {
   it('reflects saved prefs, defaulting the keys a project never set', async () => {
     api.apiFetch.mockResolvedValue({
       ok: true,
-      data: { notificationPrefs: { 'fix.failed': false } },
+      data: { notification_prefs: { 'fix.failed': false } },
     })
     await render()
 
@@ -87,5 +87,32 @@ describe('NotificationPrefsMatrix', () => {
     expect(switches(container)).toHaveLength(0)
     expect(container.textContent).toContain("Couldn't load notification preferences")
     expect(container.textContent).toContain('Retry')
+  })
+
+  it('round-trips a saved suppression: it loads OFF and Save sends it back OFF', async () => {
+    // GET /v1/admin/settings returns the raw project_settings row (snake_case).
+    api.apiFetch.mockImplementation((_path: string, init?: { method?: string }) =>
+      Promise.resolve(
+        init?.method === 'PATCH'
+          ? { ok: true }
+          : { ok: true, data: { notification_prefs: { 'fix.merged': false, report_severity_min: 'high' } } },
+      ),
+    )
+    await render()
+
+    const fixMerged = container.querySelector('button[aria-label="Fix merged"]')
+    expect(fixMerged?.getAttribute('aria-checked')).toBe('false')
+
+    const save = Array.from(container.querySelectorAll('button')).find((b) => /Save preferences/.test(b.textContent ?? ''))
+    expect(save).toBeTruthy()
+    await act(async () => {
+      save!.click()
+      await flush()
+    })
+    const patch = api.apiFetch.mock.calls.find((c) => (c[1] as { method?: string } | undefined)?.method === 'PATCH')
+    expect(patch).toBeTruthy()
+    const body = JSON.parse((patch![1] as { body: string }).body) as { notification_prefs: Record<string, unknown> }
+    expect(body.notification_prefs['fix.merged']).toBe(false)
+    expect(body.notification_prefs.report_severity_min).toBe('high')
   })
 })

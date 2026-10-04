@@ -49,6 +49,8 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageCopy } from '../lib/copy'
 import { useHealthUx, resolveQuickHealthTab } from '../lib/healthModeUx'
 import { useQuickstartLandingTab } from '../lib/useQuickstartTab'
+import { describeApiFailure } from '../lib/humanizeApiError'
+import { ADMIN_ONLY_HINT } from '../lib/orgPermissions'
 import {
   errorRateDetail,
   errorRateTooltip,
@@ -94,6 +96,10 @@ interface LlmHealth {
   errorRate: number
   avgLatencyMs: number
   p95LatencyMs?: number
+  /** False while latency comes from the newest calls only. */
+  latencyExact?: boolean
+  /** The breakdowns below cover the newest `breakdownCalls` of `totalCalls`. */
+  breakdownCalls?: number
   byModel: Record<string, { calls: number; errors: number; tokens: number }>
   byFunction: Record<string, {
     calls: number
@@ -218,7 +224,8 @@ function HealthPageContent() {
   useQuickstartLandingTab({
     enabled: ux.isQuickstart,
     ready: !statsLoading,
-    tabParam: tabParam,
+    // A status shortcut (?status=) picks a tab too, so it counts as a deep link.
+    tabParam: tabParam ?? searchParams.get('status'),
     activeTab: activeTab,
     quickTab: resolveQuickHealthTab(stats),
     setActiveTab: setActiveTab,
@@ -290,7 +297,8 @@ function HealthPageContent() {
         { method: 'POST' },
       )
       if (!res.ok || !res.data) {
-        toast.error(`Probe failed for ${kind}`, res.error?.message)
+        const t = describeApiFailure(res.error, `Could not test ${kind === 'anthropic' ? 'Anthropic' : 'OpenAI'}`)
+        toast.error(t.title, t.description)
         setProbeResults((prev) => ({
           ...prev,
           [kind]: { status: 'down', latencyMs: 0, detail: res.error?.message, at: new Date().toISOString() },
@@ -312,11 +320,15 @@ function HealthPageContent() {
     setTriggering(job)
     try {
       const res = await apiFetch(`/v1/admin/health/cron/${job}/trigger`, { method: 'POST' })
-      if (!res.ok) throw new Error(res.error?.message ?? 'Trigger failed')
-      toast.success(`Triggered ${job}`)
+      if (!res.ok) {
+        const t = describeApiFailure(res.error, `Could not run ${job}`)
+        toast.error(t.title, t.description)
+        return
+      }
+      toast.success(`Ran ${job}`, 'Its result shows in the job card below.')
       reloadAll()
-    } catch (err) {
-      toast.error(`Could not trigger ${job}`, err instanceof Error ? err.message : String(err))
+    } catch {
+      toast.error(`Could not run ${job}`, 'Could not reach Mushi. Check your connection and retry.')
     } finally {
       setTriggering(null)
     }
@@ -417,6 +429,7 @@ function HealthPageContent() {
     fallbackRatePct: Math.round((llm.fallbackRate ?? 0) * 1000) / 10,
     avgLatencyMs: llm.avgLatencyMs ?? 0,
     p95LatencyMs: llm.p95LatencyMs ?? 0,
+    latencyExact: llm.latencyExact,
   }
   const byFunction = llm.byFunction ?? {}
   const byModel = llm.byModel ?? {}
@@ -704,16 +717,22 @@ function HealthPageContent() {
                 to={healthLinks.errorRate}
               />
               <StatCard
-                label="Latency p50 / p95"
+                label="Latency avg / p95"
                 value={`${llm.avgLatencyMs}ms / ${llm.p95LatencyMs ?? 0}ms`}
                 tooltip={latencyTooltip(llmTabStats)}
-                detail={latencyDetail()}
+                detail={llm.latencyExact === false ? 'From the newest calls only' : latencyDetail()}
                 to={healthLinks.latency}
               />
             </div>
           </Section>
 
           <Section title="Per-function breakdown">
+            {llm.breakdownCalls != null && llm.breakdownCalls < llm.totalCalls && (
+              <InlineProof className="mb-2">
+                Covers the newest {llm.breakdownCalls.toLocaleString()} of {llm.totalCalls.toLocaleString()} calls in
+                this window. The totals above count every call.
+              </InlineProof>
+            )}
             {fnNames.length === 0 ? (
               <EmptyState
                 icon={<HeroPulseHealth />}
@@ -852,6 +871,8 @@ function HealthPageContent() {
                         variant="ghost"
                         onClick={() => triggerJob(job as 'judge-batch' | 'intelligence-report')}
                         loading={triggering === job}
+                        disabled={stats.canRunJobs === false}
+                        title={stats.canRunJobs === false ? ADMIN_ONLY_HINT : 'Runs this job now; it spends AI budget.'}
                       >
                         Trigger now
                       </Btn>

@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { apiErrorMessage, describeApiError, humanizeApiError, parsePageDataError, plainApiError } from './humanizeApiError'
+import { describeApiFailure, apiErrorMessage, describeApiError, humanizeApiError, parsePageDataError, plainApiError } from './humanizeApiError'
 
 // Group K entries 215 and 216: action toasts printed raw slugs, codes and JSON.
 describe('plainApiError', () => {
@@ -198,5 +198,42 @@ describe('humanizeApiError: invitation accept (QA #68)', () => {
   it('tells an invitee with the wrong account what to do', () => {
     expect(humanizeApiError('invitation_email_mismatch', 'EMAIL_MISMATCH')?.hint).toMatch(/sign in with the email/i)
     expect(humanizeApiError('invitation_invalid_or_expired', 'EXPIRED_OR_REVOKED')?.hint).toMatch(/new invite/i)
+  })
+})
+
+describe('describeApiFailure', () => {
+  it('keeps a plain server sentence', () => {
+    expect(
+      describeApiFailure({ code: 'FORBIDDEN', message: 'Only organization owners and admins can change credentials.' }, 'Could not save'),
+    ).toEqual({ title: 'Could not save', description: 'Only organization owners and admins can change credentials.' })
+  })
+
+  it('maps a bare code without showing it', () => {
+    const t = describeApiFailure({ code: 'BAD_KIND', message: 'BAD_KIND' }, 'Probe failed for Linear')
+    expect(t.description).not.toMatch(/BAD_KIND/)
+    expect(t.description).toMatch(/cannot be tested/)
+  })
+
+  it('never shows a column-name dump', () => {
+    const t = describeApiFailure(
+      { code: 'INVALID_WEBHOOK_URL', message: 'teams_webhook_url: host is not an allowed webhook provider' },
+      'Could not save the Teams webhook',
+    )
+    expect(t.description).not.toMatch(/teams_webhook_url/)
+  })
+
+  it('falls back to a generic next step for unknown failures', () => {
+    const t = describeApiFailure({ code: 'ERROR', message: 'Request failed' }, 'Could not trigger job')
+    expect(t.description).toMatch(/Retry/)
+  })
+
+  it('never passes a code, an envelope or a field-name dump through as the description', () => {
+    const plain = (message: string) => describeApiFailure({ code: 'ERROR', message }, 'Failed').description === message
+    expect(plain('NO_FIELDS')).toBe(false)
+    expect(plain('Request failed')).toBe(false)
+    expect(plain('Add an access token to test Vercel.')).toBe(true)
+    expect(plain('webhookUrl must be a public https URL (private host).')).toBe(false)
+    expect(plain('pluginName is required')).toBe(false)
+    expect(plain('400: {"error":{"code":"X"}}')).toBe(false)
   })
 })

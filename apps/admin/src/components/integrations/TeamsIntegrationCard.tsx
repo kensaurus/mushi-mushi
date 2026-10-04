@@ -26,6 +26,9 @@ import { useState, useEffect } from 'react'
 import { Btn, Input } from '../ui'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
+import { isNotificationWebhookHost } from '../../lib/notificationWebhookHosts'
+import { describeApiFailure } from '../../lib/humanizeApiError'
+import { ConfirmDialog } from '../ConfirmDialog'
 import type { HealthRow } from './types'
 import { ConnectionStatus } from '../ui/ConnectionStatus'
 import { connectionFromProbe, newestProbe, probeFromTestSend, type ProbeLike } from '../../lib/integrationConnection'
@@ -58,13 +61,17 @@ function TeamsIcon({ size = 20 }: { size?: number }) {
 
 // ─── Simple HTTPS URL validator ───────────────────────────────────────────────
 
+// Same host list the settings PATCH enforces, so a wrong URL is refused here
+// with a reason instead of failing the save with a server error.
 function validateTeamsUrl(url: string): string | null {
   const trimmed = url.trim()
   if (!trimmed) return null
   try {
     const u = new URL(trimmed)
     if (u.protocol !== 'https:') return 'URL must start with https://'
-    if (!u.hostname.includes('.')) return 'Enter a valid webhook URL'
+    if (!isNotificationWebhookHost('teams_webhook_url', u.hostname)) {
+      return 'That is not a Teams webhook URL. Use the Power Automate or Incoming Webhook URL (on office.com, logic.azure.com or powerplatform.com).'
+    }
     return null
   } catch {
     return 'Enter a valid HTTPS webhook URL'
@@ -87,6 +94,8 @@ function translateTeamsTestError(raw: string): string {
 
 interface Props {
   projectId: string | null
+  /** Re-read the settings stats after a save or remove so every card agrees. */
+  onChanged?: () => void
   teamsConfigured: boolean
   /** Latest health row for kind `teams` (test sends are recorded there). */
   latestProbe?: HealthRow
@@ -94,7 +103,7 @@ interface Props {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function TeamsIntegrationCard({ projectId, teamsConfigured, latestProbe }: Props) {
+export function TeamsIntegrationCard({ projectId, teamsConfigured, latestProbe, onChanged }: Props) {
   const toast = useToast()
 
   const [connected, setConnected] = useState(teamsConfigured)
@@ -103,6 +112,7 @@ export function TeamsIntegrationCard({ projectId, teamsConfigured, latestProbe }
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
   const [clearing, setClearing] = useState(false)
+  const [confirmRemove, setConfirmRemove] = useState(false)
   const [localProbe, setLocalProbe] = useState<ProbeLike | undefined>(undefined)
   const [showGuide, setShowGuide] = useState(false)
 
@@ -135,8 +145,10 @@ export function TeamsIntegrationCard({ projectId, teamsConfigured, latestProbe }
         toast.success('Teams webhook saved — test it below.')
         setWebhookUrl('')
         setUrlError(null)
+        onChanged?.()
       } else {
-        toast.error(res.error?.message ?? 'Could not save Teams webhook URL.')
+        const t = describeApiFailure(res.error, 'Could not save the Teams webhook')
+        toast.error(t.title, t.description)
       }
     } finally {
       setSaving(false)
@@ -157,8 +169,12 @@ export function TeamsIntegrationCard({ projectId, teamsConfigured, latestProbe }
         setLocalProbe(probeFromTestSend(true, null))
         toast.success('Test message sent to Microsoft Teams!')
       } else {
-        setLocalProbe(probeFromTestSend(false, translateTeamsTestError(res.error?.message ?? '')))
-        toast.error(translateTeamsTestError(res.error?.message ?? ''))
+        const reason =
+          res.error?.code === 'NO_WEBHOOK_CONFIGURED'
+            ? describeApiFailure(res.error, '').description
+            : translateTeamsTestError(res.error?.message ?? '')
+        setLocalProbe(probeFromTestSend(false, reason))
+        toast.error('Teams test failed', reason)
       }
     } catch {
       toast.error('Could not reach the Teams test endpoint — check your connection.')
@@ -179,9 +195,12 @@ export function TeamsIntegrationCard({ projectId, teamsConfigured, latestProbe }
       })
       if (res.ok) {
         setConnected(false)
+        setConfirmRemove(false)
         toast.success('Teams webhook removed.')
+        onChanged?.()
       } else {
-        toast.error('Could not remove Teams webhook.')
+        const t = describeApiFailure(res.error, 'Could not remove the Teams webhook')
+        toast.error(t.title, t.description)
       }
     } finally {
       setClearing(false)
@@ -251,11 +270,10 @@ export function TeamsIntegrationCard({ projectId, teamsConfigured, latestProbe }
             type="button"
             variant="danger"
             size="sm"
-            onClick={() => void handleClear()}
-            loading={clearing}
+            onClick={() => setConfirmRemove(true)}
             className="shrink-0"
           >
-            {clearing ? 'Removing…' : 'Remove'}
+            Remove
           </Btn>
         </div>
       )}
@@ -336,6 +354,21 @@ export function TeamsIntegrationCard({ projectId, teamsConfigured, latestProbe }
             <li>Fix merged / deployed events (when plugins enabled)</li>
           </ul>
         </div>
+      )}
+
+      {confirmRemove && (
+        <ConfirmDialog
+          title="Remove the Teams webhook?"
+          body="Mushi stops posting to this Teams channel. The URL can't be shown again, so you'll need to copy it from Teams to reconnect."
+          confirmLabel="Remove webhook"
+          cancelLabel="Keep it"
+          tone="danger"
+          loading={clearing}
+          onConfirm={() => void handleClear()}
+          onCancel={() => {
+            if (!clearing) setConfirmRemove(false)
+          }}
+        />
       )}
     </div>
   )

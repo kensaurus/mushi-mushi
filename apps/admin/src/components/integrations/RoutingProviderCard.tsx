@@ -5,7 +5,7 @@
  *          Test button that probes the provider's credentials live.
  */
 
-import { Card, Btn, Input, RelativeTime, Tooltip } from '../ui'
+import { Card, Btn, Input, SecretInput, RelativeTime, Tooltip } from '../ui'
 import { ConfigHelp } from '../ConfigHelp'
 import { resolveValidator } from '../../lib/validators'
 import { HealthSparkline } from './HealthSparkline'
@@ -15,6 +15,7 @@ import { InlineProof } from '../report-detail/ReportSurface'
 import type { HealthRow, RoutingIntegration, RoutingProviderDef } from './types'
 import { ConnectionStatus } from '../ui/ConnectionStatus'
 import { connectionFromProbe } from '../../lib/integrationConnection'
+import { ADMIN_ONLY_HINT } from '../../lib/orgPermissions'
 
 /** Maps probe status to a left-border color class on the card. */
 function statusBorderClass(status: HealthRow['status'], isConnected: boolean): string {
@@ -43,6 +44,8 @@ interface Props {
   onTest: () => void
   onTogglePause: () => void
   onDisconnect: () => void
+  /** False for members and viewers: routing writes are owner/admin only. */
+  canManage?: boolean
 }
 
 export function RoutingProviderCard({
@@ -61,6 +64,7 @@ export function RoutingProviderCard({
   onTest,
   onTogglePause,
   onDisconnect,
+  canManage = true,
 }: Props) {
   // Status comes only from the probe history. A saved, active row used to read
   // as "ok" with no check at all; that is "not checked yet".
@@ -71,17 +75,18 @@ export function RoutingProviderCard({
     ? { state: 'attention' as const, detail: 'Paused — new reports are not forwarded here.' }
     : probed
   const probeFailing = latestProbe?.status === 'down' || latestProbe?.status === 'degraded'
+  const writes = (label: string, onClick: () => void) => (canManage ? { label, onClick } : undefined)
   const connectionAction = isEditing
     ? undefined
     : connection.state === 'not_connected'
-      ? { label: 'Connect', onClick: onStartEdit }
+      ? writes('Connect', onStartEdit)
       : paused
-        ? { label: 'Resume', onClick: onTogglePause }
+        ? writes('Resume', onTogglePause)
         : connection.state === 'checking'
           ? { label: 'Test now', onClick: onTest }
           : connection.state === 'attention'
             ? probeFailing
-              ? { label: 'Edit credentials', onClick: onStartEdit }
+              ? writes('Edit credentials', onStartEdit)
               : { label: 'Test again', onClick: onTest }
             : undefined
 
@@ -145,20 +150,22 @@ export function RoutingProviderCard({
                     <IconPlay size={14} />
                   </Btn>
                 </Tooltip>
-                <Tooltip content={existing.is_active ? 'Pause' : 'Resume'}>
+                <Tooltip content={!canManage ? ADMIN_ONLY_HINT : existing.is_active ? 'Pause' : 'Resume'}>
                   <Btn
                     variant="ghost"
                     onClick={onTogglePause}
+                    disabled={!canManage}
                     aria-label={existing.is_active ? 'Pause integration' : 'Resume integration'}
                     className="px-2"
                   >
                     {existing.is_active ? <IconPause size={14} /> : <IconPlay size={14} />}
                   </Btn>
                 </Tooltip>
-                <Tooltip content="Disconnect">
+                <Tooltip content={canManage ? 'Disconnect' : ADMIN_ONLY_HINT}>
                   <Btn
                     variant="ghost"
                     onClick={onDisconnect}
+                    disabled={!canManage}
                     aria-label="Disconnect integration"
                     className="px-2 text-fg-muted hover:text-danger"
                   >
@@ -182,10 +189,11 @@ export function RoutingProviderCard({
             </Tooltip>
 
             {!isEditing && (
-              <Tooltip content={existing ? 'Edit credentials' : 'Connect'}>
+              <Tooltip content={!canManage ? ADMIN_ONLY_HINT : existing ? 'Edit credentials' : 'Connect'}>
                 <Btn
                   variant={existing ? 'ghost' : 'primary'}
                   onClick={onStartEdit}
+                  disabled={!canManage}
                   aria-label={existing ? 'Edit integration' : 'Connect integration'}
                   className={existing ? 'px-2' : undefined}
                 >
@@ -226,13 +234,25 @@ export function RoutingProviderCard({
                 </span>
                 {field.helpId && <ConfigHelp helpId={field.helpId} />}
               </label>
-              <Input
-                type={field.type ?? 'text'}
-                placeholder={field.placeholder}
-                value={draft[field.name] ?? ''}
-                onChange={(e) => onChangeField(field.name, e.target.value)}
-                validate={resolveValidator(field.validator)}
-              />
+              {field.type === 'password' ? (
+                // type="text" + CSS mask: password managers never offer to
+                // save a routing token as the site login.
+                <SecretInput
+                  placeholder={field.placeholder}
+                  value={draft[field.name] ?? ''}
+                  onChange={(e) => onChangeField(field.name, e.target.value)}
+                  validate={resolveValidator(field.validator)}
+                />
+              ) : (
+                <Input
+                  type={field.type ?? 'text'}
+                  placeholder={field.placeholder}
+                  value={draft[field.name] ?? ''}
+                  onChange={(e) => onChangeField(field.name, e.target.value)}
+                  validate={resolveValidator(field.validator)}
+                  autoComplete="off"
+                />
+              )}
               {field.help ? <InlineProof className="mt-1">{field.help}</InlineProof> : null}
             </div>
           ))}

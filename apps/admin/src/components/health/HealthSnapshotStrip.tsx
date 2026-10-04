@@ -68,7 +68,7 @@ export function HealthSnapshotStrip({
           to={healthLinks.fallbackRate}
         />
         <StatCard
-          label={statLabels?.latency ?? 'Latency p50 / p95'}
+          label={statLabels?.latency ?? 'Latency avg / p95'}
           value={`${stats.avgLatencyMs} / ${stats.p95LatencyMs}ms`}
           tooltip={latencyTooltip(stats)}
           detail={latencyDetail()}

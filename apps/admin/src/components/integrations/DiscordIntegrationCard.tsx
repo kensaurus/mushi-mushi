@@ -28,6 +28,8 @@ import { useState, useEffect } from 'react'
 import { Btn, Input } from '../ui'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
+import { describeApiFailure } from '../../lib/humanizeApiError'
+import { ConfirmDialog } from '../ConfirmDialog'
 import { ConnectionStatus } from '../ui/ConnectionStatus'
 import { connectionFromProbe, newestProbe, probeFromTestSend, type ProbeLike } from '../../lib/integrationConnection'
 import { discordWebhookUrl } from '../../lib/validators'
@@ -69,6 +71,8 @@ const validateDiscordUrl = discordWebhookUrl({ optional: true })
 
 interface Props {
   projectId: string | null
+  /** Re-read the settings stats after a save or remove so every card agrees. */
+  onChanged?: () => void
   discordConfigured: boolean
   latestProbe?: HealthRow
   sparkline?: HealthRow[]
@@ -81,6 +85,7 @@ export function DiscordIntegrationCard({
   discordConfigured,
   latestProbe,
   sparkline = [],
+  onChanged,
 }: Props) {
   const toast = useToast()
 
@@ -90,6 +95,7 @@ export function DiscordIntegrationCard({
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
   const [clearing, setClearing] = useState(false)
+  const [confirmRemove, setConfirmRemove] = useState(false)
   const [localProbe, setLocalProbe] = useState<ProbeLike | undefined>(undefined)
 
   // Sync if parent re-fetches and the prop changes
@@ -124,8 +130,10 @@ export function DiscordIntegrationCard({
         toast.success('Discord webhook saved — test it below.')
         setWebhookUrl('')
         setUrlError(null)
+        onChanged?.()
       } else {
-        toast.error(res.error?.message ?? 'Could not save Discord webhook URL.')
+        const t = describeApiFailure(res.error, 'Could not save the Discord webhook')
+        toast.error(t.title, t.description)
       }
     } finally {
       setSaving(false)
@@ -146,8 +154,12 @@ export function DiscordIntegrationCard({
         setLocalProbe(probeFromTestSend(true, null))
         toast.success('Test message sent to Discord!')
       } else {
-        setLocalProbe(probeFromTestSend(false, translateDiscordTestError(res.error?.message ?? '')))
-        toast.error(translateDiscordTestError(res.error?.message ?? ''))
+        const reason =
+          res.error?.code === 'NO_WEBHOOK_CONFIGURED'
+            ? describeApiFailure(res.error, '').description
+            : translateDiscordTestError(res.error?.message ?? '')
+        setLocalProbe(probeFromTestSend(false, reason))
+        toast.error('Discord test failed', reason)
       }
     } catch {
       toast.error('Could not reach the Discord test endpoint — check your connection.')
@@ -168,9 +180,12 @@ export function DiscordIntegrationCard({
       })
       if (res.ok) {
         setConnected(false)
+        setConfirmRemove(false)
         toast.success('Discord webhook removed.')
+        onChanged?.()
       } else {
-        toast.error('Could not remove Discord webhook.')
+        const t = describeApiFailure(res.error, 'Could not remove the Discord webhook')
+        toast.error(t.title, t.description)
       }
     } finally {
       setClearing(false)
@@ -249,11 +264,10 @@ export function DiscordIntegrationCard({
             type="button"
             variant="danger"
             size="sm"
-            onClick={() => void handleClear()}
-            loading={clearing}
+            onClick={() => setConfirmRemove(true)}
             className="shrink-0"
           >
-            {clearing ? 'Removing…' : 'Remove'}
+            Remove
           </Btn>
         </div>
       )}
@@ -302,6 +316,21 @@ export function DiscordIntegrationCard({
             <li>Fix merged / deployed events (when plugins enabled)</li>
           </ul>
         </div>
+      )}
+
+      {confirmRemove && (
+        <ConfirmDialog
+          title="Remove the Discord webhook?"
+          body="Mushi stops posting to this Discord channel. The URL can't be shown again, so you'll need to copy it from Discord to reconnect."
+          confirmLabel="Remove webhook"
+          cancelLabel="Keep it"
+          tone="danger"
+          loading={clearing}
+          onConfirm={() => void handleClear()}
+          onCancel={() => {
+            if (!clearing) setConfirmRemove(false)
+          }}
+        />
       )}
     </div>
   )

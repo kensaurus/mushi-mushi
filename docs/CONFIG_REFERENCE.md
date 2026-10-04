@@ -873,35 +873,35 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **When to change** — Drop to 5–15 minutes for high-sensitivity data. Bump up to a day if your team works asynchronously and copies links into long-running threads.
 
-### Access key (vault ref)
+### Access key ID
 
 <a id="storage-access-key-ref"></a>
 
 `storage.access_key_ref`
 
-**Summary** — Reference to the access-key half of the storage credentials — stored in Supabase Vault, never plaintext.
+**Summary** — The access-key half of your bucket credentials. Paste the key itself; Mushi stores it in Supabase Vault, never in plain text.
 
-**How it works** — Form takes the raw key on save and stashes it in Vault, then stores only `vault://<id>` here. The adapter resolves the secret at request time.
+**How it works** — On Save the server stores the raw key in Vault under the project's own Vault name (mushi/storage/<project>/access_key) and keeps only that name. The storage adapter reads the secret when it signs a request. A saved key is never shown again; paste a new one to replace it.
 
 **Default** — `unset`
 
-**Where it lives** — table `storage_configs.access_key_ref` · endpoint `PUT /v1/admin/storage` · read by `storage adapter`
+**Where it lives** — table `project_storage_settings.access_key_vault_ref` · endpoint `PUT /v1/admin/storage/:projectId` · read by `storage adapter`
 
 **When to change** — Rotate quarterly, or immediately if the key may have leaked.
 
-### Secret key (vault ref)
+### Secret access key
 
 <a id="storage-secret-key-ref"></a>
 
 `storage.secret_key_ref`
 
-**Summary** — Reference to the secret-key half of the storage credentials.
+**Summary** — The secret half of your bucket credentials. Paste it as your provider shows it.
 
-**How it works** — Same Vault flow as the access key. Pair must be rotated together — half-rotations leave the adapter unable to sign.
+**How it works** — Same Vault flow as the access key. Rotate the pair together — half-rotations leave the adapter unable to sign.
 
 **Default** — `unset`
 
-**Where it lives** — table `storage_configs.secret_key_ref` · endpoint `PUT /v1/admin/storage` · read by `storage adapter`
+**Where it lives** — table `project_storage_settings.secret_key_vault_ref` · endpoint `PUT /v1/admin/storage/:projectId` · read by `storage adapter`
 
 **When to change** — Rotate alongside the access key. Never paste the raw value into an email or ticket.
 

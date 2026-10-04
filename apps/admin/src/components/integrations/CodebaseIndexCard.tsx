@@ -46,6 +46,9 @@ import {
   type DetailRowItem,
 } from '../ui'
 import { useToast } from '../../lib/toast'
+import { ConfirmDialog } from '../ConfirmDialog'
+import { describeApiFailure } from '../../lib/humanizeApiError'
+import { ADMIN_ONLY_HINT } from '../../lib/orgPermissions'
 import { GitHubAppInstallButton, GitHubPatDisclosure } from './GitHubAppInstallButton'
 import { CHIP_TONE } from '../../lib/chipTone'
 import { RESOLVED_EXTERNAL_API_URL } from '../../lib/env'
@@ -81,6 +84,8 @@ interface RotateSecretResponse {
 
 interface Props {
   projectId: string
+  /** False for members and viewers: enable, reconfigure and rotate are owner/admin only. */
+  canManage?: boolean
 }
 
 function buildStatsRows(stats: CodebaseStats, hasFiles: boolean): DetailRowItem[] {
@@ -148,7 +153,7 @@ function buildStatsRows(stats: CodebaseStats, hasFiles: boolean): DetailRowItem[
   return rows
 }
 
-export function CodebaseIndexCard({ projectId }: Props) {
+export function CodebaseIndexCard({ projectId, canManage = true }: Props) {
   const toast = useToast()
   const [stats, setStats] = useState<CodebaseStats | null>(null)
   const [loading, setLoading] = useState(true)
@@ -160,6 +165,7 @@ export function CodebaseIndexCard({ projectId }: Props) {
   const [pathGlobs, setPathGlobs] = useState('')
   const [issuedSecret, setIssuedSecret] = useState<string | null>(null)
   const [rotatingSec, setRotatingSec] = useState(false)
+  const [confirmRotate, setConfirmRotate] = useState(false)
   const [enableError, setEnableError] = useState<string | null>(null)
   const [rotateError, setRotateError] = useState<string | null>(null)
   // Autofix toggle lives next to codebase indexing because they're the
@@ -243,9 +249,9 @@ export function CodebaseIndexCard({ projectId }: Props) {
     })
     setSaving(false)
     if (!res.ok) {
-      const msg = res.error?.message ?? res.error?.code ?? 'Unknown error'
-      toast.error('Enable failed', msg)
-      setEnableError(msg)
+      const t = describeApiFailure(res.error, 'Could not turn on codebase indexing')
+      toast.error(t.title, t.description)
+      setEnableError(t.description)
       return
     }
     setEnableError(null)
@@ -263,10 +269,11 @@ export function CodebaseIndexCard({ projectId }: Props) {
       { method: 'POST' },
     )
     setRotatingSec(false)
+    setConfirmRotate(false)
     if (!res.ok) {
-      const msg = res.error?.message ?? res.error?.code ?? 'Unknown error'
-      toast.error('Rotate failed', msg)
-      setRotateError(msg)
+      const t = describeApiFailure(res.error, 'Could not rotate the webhook secret')
+      toast.error(t.title, t.description)
+      setRotateError(t.description)
       return
     }
     setRotateError(null)
@@ -304,13 +311,26 @@ export function CodebaseIndexCard({ projectId }: Props) {
               {rotateError && (
                 <span className="text-2xs text-danger">{rotateError}</span>
               )}
-              <Btn variant="ghost" size="sm" onClick={() => void rotateSecret()} loading={rotatingSec}>
+              <Btn
+                variant="ghost"
+                size="sm"
+                onClick={() => setConfirmRotate(true)}
+                loading={rotatingSec}
+                disabled={!canManage}
+                title={canManage ? undefined : ADMIN_ONLY_HINT}
+              >
                 Rotate secret
               </Btn>
             </>
           )}
           {!editing && (
-            <Btn variant="ghost" size="sm" onClick={() => setEditing(true)}>
+            <Btn
+              variant="ghost"
+              size="sm"
+              onClick={() => setEditing(true)}
+              disabled={!canManage}
+              title={canManage ? undefined : ADMIN_ONLY_HINT}
+            >
               {enabled ? 'Reconfigure' : 'Enable'}
             </Btn>
           )}
@@ -465,6 +485,20 @@ export function CodebaseIndexCard({ projectId }: Props) {
         </div>
       )}
 
+      {confirmRotate && (
+        <ConfirmDialog
+          title="Rotate the GitHub webhook secret?"
+          body="The old secret stops working at once: push indexing and CI check-run updates fail until you paste the new secret into your GitHub repo's webhook settings. This is the same secret the GitHub card uses. The new one is shown only once."
+          confirmLabel="Rotate secret"
+          cancelLabel="Keep current secret"
+          tone="danger"
+          loading={rotatingSec}
+          onConfirm={() => void rotateSecret()}
+          onCancel={() => {
+            if (!rotatingSec) setConfirmRotate(false)
+          }}
+        />
+      )}
       {issuedSecret && (
         <WebhookSecretReveal secret={issuedSecret} onDismiss={() => setIssuedSecret(null)} />
       )}
@@ -590,7 +624,7 @@ function WebhookSecretReveal({ secret, onDismiss }: { secret: string; onDismiss:
           rel="noreferrer"
           className="text-2xs text-accent hover:underline ml-auto"
         >
-          How GitHub validates this \u2192
+          How GitHub validates this →
         </a>
       </div>
     </div>

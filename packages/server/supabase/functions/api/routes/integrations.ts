@@ -6,7 +6,7 @@ import { getServiceClient } from '../../_shared/db.ts';
 import { jwtAuth, adminOrApiKey } from '../../_shared/auth.ts';
 import { logAudit } from '../../_shared/audit.ts';
 import { createExternalIssue, listSyncDestinations } from '../../_shared/integrations.ts';
-import { callerProjectIds, requireProjectAdmin, resolveOwnedProject, resolveAccessibleOrg } from '../shared.ts';
+import { callerProjectIds, isProjectAdmin, requireProjectAdmin, resolveOwnedProject, resolveAccessibleOrg } from '../shared.ts';
 import {
   parseSentryExtraProjectSlugs,
   validatePlatformBody,
@@ -269,12 +269,16 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
       }
     }
 
+    const missingKinds: string[] = [];
     for (const kind of platformKinds) {
       const required = requiredByKind[kind] ?? [];
       const connected = required.every(
         (f) => (row[f] != null && row[f] !== '') || envBackedFields.has(f),
       );
-      if (!connected) continue;
+      if (!connected) {
+        missingKinds.push(kind);
+        continue;
+      }
       platformConnected += 1;
       const probe = latestProbeByKind.get(kind);
       const verdict = classifyPlatformConnection({
@@ -348,12 +352,15 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
       topPriority = 'empty';
       topPriorityLabel =
         'Start with GitHub so fix-worker can open draft PRs, then add Sentry or Langfuse for richer bug context.';
-      topPriorityTo = scoped('/integrations/config');
+      // Every CTA lands on the card it names: a bare /integrations/config
+      // link from this page reloaded the view the user was already on.
+      topPriorityTo = `${scoped('/integrations/config')}#platform-card-github`;
     } else if (platformConnected < platformKinds.length) {
       const missing = platformKinds.length - platformConnected;
       topPriority = 'incomplete';
       topPriorityLabel = `${missing} of ${platformKinds.length} core tools still need credentials — GitHub is required before auto-fix PRs can ship.`;
-      topPriorityTo = scoped('/integrations/config');
+      const firstMissing = missingKinds.includes('github') ? 'github' : missingKinds[0];
+      topPriorityTo = `${scoped('/integrations/config')}#platform-card-${firstMissing}`;
     } else if (platformAttention > 0) {
       topPriority = 'attention';
       topPriorityLabel = `${nameList(attentionKinds)} ${platformAttention === 1 ? 'needs' : 'need'} attention — each card below says what and has the fix.`;
@@ -361,7 +368,8 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
     } else {
       topPriority = 'healthy';
       topPriorityLabel = `${platformConnected}/${platformKinds.length} platform tools connected · ${routingActive} routing rule${routingActive === 1 ? '' : 's'} active`;
-      topPriorityTo = scoped('/integrations/config');
+      // The healthy banner's CTA is "Check repo index".
+      topPriorityTo = `${scoped('/integrations/config')}#integrations-codebase`;
     }
 
     return c.json({
@@ -417,7 +425,10 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
       'cursor_auto_create_pr',
       'cursor_max_iterations',
     ],
-    claude_code_agent: ['claude_api_key_ref'],
+    // The three settings the card renders next to the key. They were missing
+    // here, so a save that changed only them hit NO_FIELDS and a save with
+    // the key silently dropped them.
+    claude_code_agent: ['claude_api_key_ref', 'claude_default_model', 'claude_workflow_event', 'claude_default_branch'],
     // Linear: vault-backed credentials replacing project_integrations.config for 'linear'
     linear: [
       'linear_api_key_ref',
@@ -500,7 +511,9 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
       for (const [f, v] of Object.entries(values)) platform[kind][f] = maskField(f, v);
     }
 
-    return c.json({ ok: true, data: { platform, sourceByField, organizationId } });
+    // canManage mirrors requireProjectAdmin on the PUT / apply / routing /
+    // Linear writes, so the console can disable those controls up front.
+    return c.json({ ok: true, data: { platform, sourceByField, organizationId, canManage: isProjectAdmin(project) } });
   });
 
   // Fields that should be auto-vaulted: when the user submits a raw secret
@@ -541,6 +554,14 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
     if (invalid) return c.json({ ok: false, error: invalid }, 400);
 
     const allowed = PLATFORM_KIND_FIELDS[kind];
+    // anthropic / openai are probe kinds (BYOK lives in Settings → API keys),
+    // not cards with fields here; iterating `undefined` below used to 500.
+    if (!allowed) {
+      return c.json(
+        { ok: false, error: { code: 'BAD_KIND', message: `"${kind}" keys are managed in Settings → API keys, not here.` } },
+        400,
+      );
+    }
     const vaulted = new Set(VAULTED_FIELDS_BY_KIND[kind] ?? []);
     // Only persist whitelisted fields. Empty strings clear the value (so the
     // UI can offer a "remove" affordance without a separate DELETE endpoint).
@@ -683,6 +704,14 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
     if (invalid) return c.json({ ok: false, error: invalid }, 400);
 
     const allowed = PLATFORM_KIND_FIELDS[kind];
+    // anthropic / openai are probe kinds (BYOK lives in Settings → API keys),
+    // not cards with fields here; iterating `undefined` below used to 500.
+    if (!allowed) {
+      return c.json(
+        { ok: false, error: { code: 'BAD_KIND', message: `"${kind}" keys are managed in Settings → API keys, not here.` } },
+        400,
+      );
+    }
     const vaulted = new Set(VAULTED_FIELDS_BY_KIND[kind] ?? []);
     const updates: Record<string, unknown> = { organization_id: organizationId };
 
@@ -911,16 +940,23 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
     if ('response' in resolvedProject) return resolvedProject.response;
 
     const mushiSupabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+    // Render the YAML for the event this project is set to send.
+    const { data: claudeRow } = await db
+      .from('project_settings')
+      .select('claude_workflow_event')
+      .eq('project_id', resolvedProject.project.id)
+      .maybeSingle();
+    const eventType = (claudeRow as { claude_workflow_event?: string | null } | null)?.claude_workflow_event ?? null;
 
     return c.json({
       ok: true,
       data: {
-        workflowYaml: getMushiClaudeFixWorkflowYaml(),
+        workflowYaml: getMushiClaudeFixWorkflowYaml(eventType),
         workflowPath: '.github/workflows/mushi-claude-fix.yml',
         githubSecrets: MUSHI_CLAUDE_GITHUB_SECRETS,
         mushiSupabaseUrl,
         serviceRoleHint:
-          'MUSHI_SERVICE_ROLE_KEY is only used by the workflow to PATCH the fix_attempts row when the run finishes — it never leaves your GitHub Actions environment.',
+          'Hosted Mushi cannot receive the run result from this workflow yet: the draft PR opens in your repo, but its status is not written back to the Fix card. On a self-hosted Mushi, MUSHI_SERVICE_ROLE_KEY enables the write-back and never leaves your GitHub Actions environment.',
       },
     });
   });
