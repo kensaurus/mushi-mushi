@@ -131,7 +131,7 @@ describe('IteratePage abort (QA 21)', () => {
   it('asks before aborting, then shows the aborted state in the open drawer', async () => {
     let current = run({ status: 'running' })
     mocks.listRuns = [current]
-    mocks.apiFetch.mockImplementation(async (path: string, init?: RequestInit) => {
+    mocks.apiFetch.mockImplementation(async (_path: string, init?: RequestInit) => {
       if (init?.method === 'DELETE') {
         current = { ...current, status: 'aborted' }
         return { ok: true }
@@ -162,7 +162,7 @@ describe('IteratePage abort (QA 21)', () => {
   it('refreshes the drawer after Trigger so "Trigger now" is not offered twice', async () => {
     let current = run({ status: 'queued', current_iteration: 0 })
     mocks.listRuns = [current]
-    mocks.apiFetch.mockImplementation(async (path: string, init?: RequestInit) => {
+    mocks.apiFetch.mockImplementation(async (path: string) => {
       if (String(path).endsWith('/trigger')) {
         current = { ...current, status: 'running' }
         return { ok: true }

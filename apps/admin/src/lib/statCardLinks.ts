@@ -29,11 +29,11 @@ export const reportsLinks = {
 
 export const fixesLinks = {
   totalAttempts: '/fixes?tab=attempts',
-  completed: '/fixes?tab=attempts',
-  failed: '/fixes?tab=attempts',
+  completed: '/fixes?tab=attempts&status=merged',
+  failed: '/fixes?tab=attempts&status=failed',
   inProgress: '/fixes?tab=pipeline',
-  prsOpen: '/fixes?tab=attempts',
-  prsCiPassing: '/fixes?tab=attempts',
+  prsOpen: '/fixes?tab=attempts&status=pr_open',
+  prsCiPassing: '/fixes?tab=attempts&status=pr_open',
 } as const
 
 /* ── Health ────────────────────────────────────────────────────────────── */
@@ -83,11 +83,11 @@ export const releasesLinks = {
 
 export const repoLinks = {
   branches: '/repo?tab=branches',
-  prOpen: '/repo?tab=branches',
-  ciPassing: '/repo?tab=branches',
-  ciFailed: '/repo?tab=branches',
-  merged: '/repo?tab=activity',
-  stuck: '/fixes?tab=attempts',
+  prOpen: '/repo?tab=branches&status=open',
+  ciPassing: '/repo?tab=branches&status=ci_passing',
+  ciFailed: '/repo?tab=branches&status=ci_failed',
+  merged: '/repo?tab=branches&status=merged',
+  stuck: '/fixes?tab=attempts&status=failed',
 } as const
 
 /* ── Inbox ───────────────────────────────────────────────────────────── */
@@ -102,10 +102,10 @@ export const inboxLinks = {
 /* ── Judge ─────────────────────────────────────────────────────────────── */
 
 export const judgeLinks = {
-  week: '/judge?tab=scores',
-  total: '/judge?tab=scores',
-  disagree: '/judge?tab=disagreements',
-  drift: '/judge?tab=scores',
+  week: '/judge?tab=trend',
+  total: '/judge?tab=evaluations',
+  disagree: '/judge?tab=evaluations&filter=disagreement',
+  drift: '/judge?tab=trend',
   classified: '/reports',
   prompts: '/judge?tab=prompts',
 } as const
