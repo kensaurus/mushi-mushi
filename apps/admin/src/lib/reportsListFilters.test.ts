@@ -61,8 +61,9 @@ describe('severity KPI tiles (item 231)', () => {
     expect(kpiTileFilter('high', 14)).toEqual({ severity: 'high', days: '14', status: 'active' })
   })
 
-  it('clear all three when the active tile is clicked again', () => {
-    expect(kpiTileFilter(null, 14)).toEqual({ severity: '', days: '', status: '' })
+  it('clearing the tile removes only what the tile set', () => {
+    expect(kpiTileFilter(null, 14, { status: 'active', days: '14' })).toEqual({ severity: '', days: '', status: '' })
+    expect(kpiTileFilter(null, 14, { status: 'fixed', days: '30' })).toEqual({ severity: '', days: '30', status: 'fixed' })
   })
 })
 
