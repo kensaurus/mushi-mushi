@@ -16,7 +16,7 @@
 import { useState } from 'react'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
-import { Btn, Card, Input, Section } from '../ui'
+import { Btn, Card, Input, SecretInput, Section } from '../ui'
 
 type TaxFormKind = 'W9' | 'W8BEN' | 'W8BEN-E' | 'none'
 
@@ -122,12 +122,10 @@ export function KycForm({ countryCode, onSubmitted }: KycFormProps) {
             <label className="block text-xs font-medium text-fg-secondary mb-1">
               {formKind === 'W9' ? 'SSN or EIN' : 'Foreign TIN'}
             </label>
-            <Input
+            <SecretInput
               value={tin}
               onChange={(e) => setTin(e.target.value)}
               placeholder={formKind === 'W9' ? '9-digit SSN or EIN' : 'Foreign tax ID number'}
-              type="password"
-              autoComplete="off"
               required
             />
             <p className="mt-1 text-2xs text-fg-faint">

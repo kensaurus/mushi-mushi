@@ -13,7 +13,7 @@
  */
 
 import { useState } from 'react'
-import { Btn, Input } from '../ui'
+import { Btn, Input, SecretInput } from '../ui'
 import { apiFetch } from '../../lib/supabase'
 import { ConnectionStatus } from '../ui/ConnectionStatus'
 import { connectionFromProbe } from '../../lib/integrationConnection'
@@ -278,15 +278,11 @@ export function LinearIntegrationCard({
           <div className="flex gap-2 items-end">
             <div className="flex-1 min-w-0">
               <label className="block text-xs text-fg-secondary mb-1">API key</label>
-              <Input
-                type="password"
+              <SecretInput
                 placeholder="lin_api_…"
-                className="font-mono text-xs"
+                className="text-xs"
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
-                // new-password, not off: Chrome ignores off on a password box
-                // and fills the saved console login into nearby text fields.
-                autoComplete="new-password"
               />
             </div>
             <div className="w-32 shrink-0">
