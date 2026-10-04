@@ -20,6 +20,8 @@ vi.mock('../lib/supabase', () => ({ apiFetch: api.apiFetch }))
 vi.mock('../lib/paletteAssist', () => ({ sendPaletteAssist: vi.fn() }))
 vi.mock('../lib/pageContext', () => ({ usePageContext: () => null }))
 vi.mock('../lib/recentEntities', () => ({ useRecentEntities: () => [] }))
+const viewer = vi.hoisted(() => ({ isSuperAdmin: false, isOperator: false }))
+vi.mock('../lib/useEntitlements', () => ({ useEntitlements: () => viewer }))
 
 import { CommandPalette } from './CommandPalette'
 import { commandPalette } from '../lib/useCommandPalette'
@@ -128,5 +130,31 @@ describe('CommandPalette search', () => {
       await vi.advanceTimersByTimeAsync(10)
     })
     expect(currentPath).toBe('/reports/r-1')
+  })
+})
+
+describe('CommandPalette role gating (QA #72)', () => {
+  afterEach(() => {
+    viewer.isSuperAdmin = false
+    viewer.isOperator = false
+  })
+
+  const pageLabels = () =>
+    [...document.querySelectorAll('[cmdk-item]')].map((el) => el.textContent ?? '')
+
+  it('hides operator and super-admin pages from everyone else', async () => {
+    await render()
+    await act(async () => typeInto(input(), 'growth'))
+    expect(pageLabels().some((t) => t.includes('Growth'))).toBe(false)
+    await act(async () => typeInto(input(), 'all users'))
+    expect(pageLabels().some((t) => t.includes('All users'))).toBe(false)
+  })
+
+  it('lists them for the people who can open them', async () => {
+    viewer.isOperator = true
+    viewer.isSuperAdmin = true
+    await render()
+    await act(async () => typeInto(input(), 'growth'))
+    expect(pageLabels().some((t) => t.includes('Growth'))).toBe(true)
   })
 })
