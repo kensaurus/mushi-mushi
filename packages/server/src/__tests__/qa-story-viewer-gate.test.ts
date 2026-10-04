@@ -39,13 +39,25 @@ describe('QA story writes refuse viewers', () => {
   })
 })
 
-describe('generated-test approval refuses viewers', () => {
-  it('checks the role before it updates the story', () => {
-    const inv = readFileSync(resolve(__dirname, '../../supabase/functions/api/routes/inventory.ts'), 'utf8')
-    const start = inv.indexOf("'/v1/admin/inventory/:projectId/stories/:qaStoryId/approval'")
-    const body = inv.slice(start, start + 2000)
-    const gate = body.indexOf('denyViewerWrite(')
-    expect(gate).toBeGreaterThan(0)
-    expect(body.indexOf(".from('qa_stories')")).toBeGreaterThan(gate)
+describe('inventory writes refuse viewers', () => {
+  const inv = readFileSync(resolve(__dirname, '../../supabase/functions/api/routes/inventory.ts'), 'utf8')
+
+  it('every write route uses the write scope, never the read scope', () => {
+    const writes = [...inv.matchAll(/app\.(post|patch|put|delete)\(\s*'([^']+)'/g)]
+    expect(writes.length).toBeGreaterThanOrEqual(12)
+    for (const m of writes) {
+      const body = inv.slice(m.index!, m.index! + 1500)
+      const next = body.slice(10).search(/\n {2}app\.(get|post|patch|put|delete)\(/)
+      const route = next === -1 ? body : body.slice(0, next + 10)
+      expect(route, m[2]).toContain('assertProjectWriteScope(c, projectId, db,')
+      expect(route, m[2]).not.toContain('assertProjectScope(c, projectId, db)')
+    }
+  })
+
+  it('the write scope applies the shared viewer rule to signed-in callers', () => {
+    const start = inv.indexOf('async function assertProjectWriteScope')
+    const helper = inv.slice(start, start + 700)
+    expect(helper).toContain("scope.authMethod !== 'jwt'")
+    expect(helper).toContain('denyViewerWrite(c, access.role, action)')
   })
 })
