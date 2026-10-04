@@ -122,6 +122,8 @@ function planBadgeTone(plan: string | null): {
   return { chipClass: CHIP_TONE.neutral, label: plan }
 }
 
+const USERS_PAGE_SIZE = 100
+
 export function UsersPage() {
   const copy = usePageCopy('/users')
   const { isSuperAdmin, loading: entitlementsLoading } = useEntitlements()
@@ -138,12 +140,20 @@ export function UsersPage() {
     return () => clearTimeout(t)
   }, [search])
 
+  // Cursor paging: the API returns `next_cursor` when more signups exist.
+  // The stack holds the cursor of each page opened so far, so Newer can step
+  // back. A new search or plan filter starts again at the newest page.
+  const [cursorStack, setCursorStack] = useState<string[]>([])
+  useEffect(() => setCursorStack([]), [debouncedSearch, planFilter])
+  const cursor = cursorStack[cursorStack.length - 1] ?? null
+
   const queryString = useMemo(() => {
-    const params = new URLSearchParams({ limit: '100' })
+    const params = new URLSearchParams({ limit: String(USERS_PAGE_SIZE) })
     if (debouncedSearch) params.set('search', debouncedSearch)
     if (planFilter) params.set('plan', planFilter)
+    if (cursor) params.set('cursor', cursor)
     return params.toString()
-  }, [debouncedSearch, planFilter])
+  }, [debouncedSearch, planFilter, cursor])
 
   const usersPath = isSuperAdmin
     ? `/v1/super-admin/users?${queryString}`
@@ -185,6 +195,8 @@ export function UsersPage() {
   }
 
   const users = usersData?.users ?? []
+  const nextCursor = usersData?.next_cursor ?? null
+  const pageStart = cursorStack.length * USERS_PAGE_SIZE + 1
 
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-users">
@@ -319,6 +331,35 @@ export function UsersPage() {
                 })}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {users.length > 0 && (cursorStack.length > 0 || nextCursor) && (
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-2xs text-fg-muted">
+            <span className="tabular-nums">
+              Showing users {pageStart}–{pageStart + users.length - 1}
+              {nextCursor ? ', newest first. Older signups are on the next page.' : ', newest first. This is the last page.'}
+            </span>
+            <div className="flex gap-1">
+              <Btn
+                size="sm"
+                variant="ghost"
+                disabled={cursorStack.length === 0 || usersLoading}
+                onClick={() => setCursorStack((stack) => stack.slice(0, -1))}
+              >
+                Newer
+              </Btn>
+              <Btn
+                size="sm"
+                variant="ghost"
+                disabled={!nextCursor || usersLoading}
+                onClick={() => {
+                  if (nextCursor) setCursorStack((stack) => [...stack, nextCursor])
+                }}
+              >
+                Older
+              </Btn>
+            </div>
           </div>
         )}
       </Section>

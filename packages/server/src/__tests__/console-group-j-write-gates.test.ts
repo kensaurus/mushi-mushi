@@ -116,6 +116,20 @@ describe('requireProjectAccess envelope (bug 211)', () => {
   })
 })
 
+describe('super-admin user detail (bug 53)', () => {
+  const src = read('routes/modernization-health-super.ts')
+  const detail = routeSlice(src, "app.get('/v1/super-admin/users/:id'")
+  it('selects no dropped column and reports a failed read', () => {
+    expect(detail).not.toMatch(/'id, name, slug, created_at, plan_tier, data_region'/)
+    expect(detail).toMatch(/data_residency_region/)
+    expect(detail).toMatch(/projectsErr/)
+  })
+
+  it('entitlements expose the caller project role for UI write gates', () => {
+    expect(routeSlice(src, "app.get('/v1/admin/entitlements'")).toMatch(/projectRole,/)
+  })
+})
+
 describe('support tickets list (bug 311)', () => {
   const list = routeSlice(read('routes/admin-ops.ts'), "app.get('/v1/admin/support/tickets'")
   it('pages and filters active tickets on the server', () => {
