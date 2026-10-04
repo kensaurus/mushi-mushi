@@ -1,3 +1,4 @@
+import { isNotificationWebhookField, validateNotificationWebhookUrl } from '../../_shared/notification-webhook-url.ts';
 import type { Hono } from 'npm:hono@4';
 import { isSpendLimitField, SPEND_LIMIT_FIELDS, validateSpendLimit } from '../../_shared/autofix-budget.ts';
 import type { Variables } from '../types.ts';
@@ -172,46 +173,7 @@ function slackRedirectUri(): string {
   return `${base}/functions/v1/api/v1/webhooks/slack/oauth-callback`;
 }
 
-// ── Webhook URL validation (SSRF guard) ──────────────────────────────────────
-// Slack / Discord / Teams webhook URLs are persisted via the settings PATCH
-// route and later fetched server-side with the service role (inside the
-// provider network) by the notification helpers and by classify-report /
-// fast-filter. Without a write-time scheme + host allowlist an authenticated
-// project owner could point a webhook at an internal address (cloud metadata
-// endpoint, localhost, an internal service) and turn the notification fetch
-// into a blind SSRF probe. Validate at this single write path so every
-// downstream reader can trust the stored value.
-const WEBHOOK_HOST_SUFFIXES: Record<string, string[]> = {
-  slack_webhook_url: ['hooks.slack.com'],
-  discord_webhook_url: ['discord.com', 'discordapp.com'],
-  // Teams: legacy O365 connectors (*.webhook.office.com / outlook.office.com)
-  // and Power Automate "When a Teams webhook request is received" triggers
-  // (*.logic.azure.com / *.powerplatform.com).
-  teams_webhook_url: ['office.com', 'logic.azure.com', 'powerplatform.com'],
-};
-
-function isAllowedWebhookHost(hostname: string, suffixes: string[]): boolean {
-  const host = hostname.toLowerCase();
-  return suffixes.some((s) => host === s || host.endsWith(`.${s}`));
-}
-
-function validateWebhookUrl(
-  field: string,
-  raw: string,
-): { ok: true } | { ok: false; reason: string } {
-  let url: URL;
-  try {
-    url = new URL(raw);
-  } catch {
-    return { ok: false, reason: 'must be a valid URL' };
-  }
-  if (url.protocol !== 'https:') return { ok: false, reason: 'must use https://' };
-  const suffixes = WEBHOOK_HOST_SUFFIXES[field];
-  if (suffixes && !isAllowedWebhookHost(url.hostname, suffixes)) {
-    return { ok: false, reason: 'host is not an allowed webhook provider' };
-  }
-  return { ok: true };
-}
+// Webhook URL validation (SSRF guard) lives in _shared/notification-webhook-url.ts.
 
 async function hmacSign(payload: string, secret: string): Promise<Uint8Array> {
   const key = await crypto.subtle.importKey(
@@ -694,7 +656,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         // Non-string, non-null values for text fields are dropped.
         continue;
       }
-      if (key in WEBHOOK_HOST_SUFFIXES) {
+      if (isNotificationWebhookField(key)) {
         // Clearing the webhook is always allowed.
         if (value === null || value === '') {
           updates[key] = null;
@@ -706,10 +668,10 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
           updates[key] = null;
           continue;
         }
-        const verdict = validateWebhookUrl(key, trimmed);
+        const verdict = validateNotificationWebhookUrl(key, trimmed);
         if (!verdict.ok) {
           return c.json(
-            { error: { code: 'INVALID_WEBHOOK_URL', message: `${key}: ${verdict.reason}` } },
+            { ok: false, error: { code: 'INVALID_WEBHOOK_URL', message: verdict.message, field: key } },
             400,
           );
         }
@@ -928,22 +890,35 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
 
     // Vault the bot token and write project_settings
     const db = getServiceClient();
-    const { data: secretRow } = await db.rpc('vault_store_secret', {
-      secret: tokens.botToken,
-      name: `slack_bot_${projectId}`,
-      description: `Slack bot token for project ${projectId}`,
+    // vault_store_secret(secret_name, secret_value[, p_project_id]) returns the
+    // secret's uuid. This call used to pass `{ secret, name, description }`,
+    // which matches no signature: the RPC failed, the error was ignored, and
+    // the upsert stored the team name with no bot token. The console then
+    // said "connected" while nothing could post (prod 2026-10-04: 2 projects
+    // with slack_team_name, 0 with slack_bot_token_ref).
+    const { data: secretRow, error: vaultErr } = await db.rpc('vault_store_secret', {
+      secret_name: `slack_bot_${projectId}`,
+      secret_value: tokens.botToken,
     });
-    const vaultId = secretRow as string | null;
+    const vaultId = typeof secretRow === 'string' && secretRow ? secretRow : null;
+    if (vaultErr || !vaultId) {
+      log.error('slack oauth: vault_store_secret failed', { projectId, err: vaultErr?.message ?? 'no id returned' });
+      return c.redirect(`${failRedirect}token_not_saved`, 302);
+    }
 
-    await db.from('project_settings').upsert(
+    const { error: upsertErr } = await db.from('project_settings').upsert(
       {
         project_id: projectId,
-        slack_bot_token_ref: vaultId ?? undefined,
+        slack_bot_token_ref: vaultId,
         slack_team_id: tokens.teamId,
         slack_team_name: tokens.teamName,
       } as Record<string, unknown>,
       { onConflict: 'project_id' },
     );
+    if (upsertErr) {
+      log.error('slack oauth: project_settings upsert failed', { projectId, err: upsertErr.message });
+      return c.redirect(`${failRedirect}token_not_saved`, 302);
+    }
 
     return c.redirect(`${adminBase}/integrations/config?slack_connected=1`, 302);
   });
@@ -1279,7 +1254,10 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         return c.json(
           {
             ok: false,
-            error: 'No Discord webhook URL configured. Set one in Integrations → Discord.',
+            error: {
+              code: 'NO_WEBHOOK_CONFIGURED',
+              message: 'No Discord webhook URL is saved for this project. Paste one and click Save, then send a test.',
+            },
           },
           400,
         );
@@ -1336,7 +1314,10 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         return c.json(
           {
             ok: false,
-            error: 'No Teams webhook URL configured. Set one in Integrations → Microsoft Teams.',
+            error: {
+              code: 'NO_WEBHOOK_CONFIGURED',
+              message: 'No Microsoft Teams webhook URL is saved for this project. Paste one and click Save, then send a test.',
+            },
           },
           400,
         );
