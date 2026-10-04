@@ -9,7 +9,8 @@
  * - API key revealed once (masked by default, toggle to reveal), with a
  *   "shown only once" warning and a copy button
  * - Single prefilled `mushi init --project-id <id> --api-key <key>` command
- * - "Regenerate key" affordance (calls /v1/admin/projects/:id/keys/rotate)
+ * - "Regenerate key" affordance: confirms, then rotates only the key shown here
+ *   (/v1/admin/projects/:id/keys/rotate with its prefix)
  * - If automint failed (apiKey null), falls back to the old "Generate API key" CTA
  *
  * USAGE:
@@ -22,7 +23,8 @@ import { Btn, Card, CopyButton } from './ui'
 import { CodeInline } from './CodePanel'
 import { useToast } from '../lib/toast'
 import { buildMushiInitCommand } from '../lib/cliSetupCommands'
-import { apiFetch } from '../lib/supabase'
+import { ROTATE_KEY_TITLE, rotateKeyWarning, rotateProjectKey } from '../lib/apiKeyRotation'
+import { ConfirmDialog } from './ConfirmDialog'
 
 export interface CreatedProjectInfo {
   id: string
@@ -170,26 +172,29 @@ export function ProjectCreatedSuccessPanel({
   const toast = useToast()
   const [liveKey, setLiveKey] = useState<string | null>(project.apiKey ?? null)
   const [rotating, setRotating] = useState(false)
+  const [confirmRegenerate, setConfirmRegenerate] = useState(false)
+  // Only the key shown here is replaced; a key the CLI minted for this
+  // project keeps working.
+  const shownPrefix = liveKey ? liveKey.slice(0, 12) : null
 
   const handleRegenerate = useCallback(async () => {
+    if (!shownPrefix) return
     setRotating(true)
     try {
-      const res = await apiFetch<{ key: string; prefix: string }>(
-        `/v1/admin/projects/${project.id}/keys/rotate`,
-        { method: 'POST' },
-      )
+      const res = await rotateProjectKey(project.id, shownPrefix)
       if (res.ok && res.data?.key) {
         setLiveKey(res.data.key)
         toast.success('Key regenerated — copy the new key above.')
       } else {
-        toast.error('Could not regenerate key', res.error?.message ?? 'Try again from Settings → API Keys.')
+        toast.error('Could not regenerate key', res.error?.message ?? 'Nothing changed. Try again in a moment.')
       }
     } catch {
       toast.error('Could not reach the server', 'Check your connection and try again.')
     } finally {
       setRotating(false)
+      setConfirmRegenerate(false)
     }
-  }, [project.id, toast])
+  }, [project.id, shownPrefix, toast])
 
   const initCmd = buildMushiInitCommand(project.id, liveKey)
 
@@ -216,10 +221,25 @@ export function ProjectCreatedSuccessPanel({
       {liveKey ? (
         <ApiKeyRevealBlock
           rawKey={liveKey}
-          onRegenerate={() => void handleRegenerate()}
+          onRegenerate={() => setConfirmRegenerate(true)}
           regenerating={rotating}
         />
       ) : null}
+
+      {confirmRegenerate && shownPrefix && (
+        <ConfirmDialog
+          title={ROTATE_KEY_TITLE}
+          body={rotateKeyWarning(shownPrefix)}
+          confirmLabel="Regenerate key"
+          cancelLabel="Keep this key"
+          tone="danger"
+          loading={rotating}
+          onConfirm={() => void handleRegenerate()}
+          onCancel={() => {
+            if (!rotating) setConfirmRegenerate(false)
+          }}
+        />
+      )}
 
       {/* CLI command */}
       <div className="space-y-1.5">

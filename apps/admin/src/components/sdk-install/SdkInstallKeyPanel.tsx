@@ -6,7 +6,10 @@ import { Btn, Tooltip, CopyButton } from '../ui'
 import { CodeInline } from '../CodePanel'
 import { apiFetch, invalidateApiCache } from '../../lib/supabase'
 import { diagnoseKey, type SdkHealthApiKey } from '../SdkHealthSummary'
-import { CHIP_TONE } from '../../lib/chipTone'
+import { CHIP_TONE, LINK_ACCENT } from '../../lib/chipTone'
+import { Link } from 'react-router-dom'
+import { ConfirmDialog } from '../ConfirmDialog'
+import { ROTATE_KEY_TITLE, isSdkIngestKey, rotateKeyWarning, rotateProjectKey } from '../../lib/apiKeyRotation'
 
 /**
  * How many keys to show before collapsing behind "Show all". Long-lived
@@ -48,6 +51,8 @@ export function SdkInstallKeyPanel({
   const [rotating, setRotating] = useState(false)
   const [minting, setMinting] = useState(false)
   const [rotatedKey, setRotatedKey] = useState<string | null>(null)
+  const [rotatedScopes, setRotatedScopes] = useState<string[]>(['report:write'])
+  const [rotateTarget, setRotateTarget] = useState<SdkHealthApiKey | null>(null)
   const [showAll, setShowAll] = useState(false)
 
   useEffect(() => {
@@ -113,11 +118,13 @@ export function SdkInstallKeyPanel({
     setMinting(false)
     if (res.ok && res.data?.key) {
       setRotatedKey(res.data.key)
+      setRotatedScopes(['report:write'])
       setFetchedKeys((prev) => [
         {
           id: res.data!.prefix,
           key_prefix: res.data!.prefix,
           label: 'sdk-ingest',
+          scopes: ['report:write'],
           is_active: true,
           created_at: new Date().toISOString(),
         },
@@ -129,25 +136,33 @@ export function SdkInstallKeyPanel({
     }
   }
 
-  async function rotateKey() {
+  /**
+   * Rotate ONE bug-widget key, after the user confirmed in the dialog. Only
+   * that key is revoked; every other key keeps working.
+   */
+  async function rotateKey(target: SdkHealthApiKey) {
     setRotating(true)
-    const res = await apiFetch<{ key: string; prefix: string }>(`/v1/admin/projects/${projectId}/keys/rotate`, {
-      method: 'POST',
-    })
+    const res = await rotateProjectKey(projectId, target.key_prefix)
     setRotating(false)
+    setRotateTarget(null)
     if (res.ok && res.data?.key) {
-      setRotatedKey(res.data.key)
-      setFetchedKeys([
+      const fresh = res.data
+      setRotatedKey(fresh.key)
+      setRotatedScopes(fresh.scopes?.length ? fresh.scopes : ['report:write'])
+      setFetchedKeys((prev) => [
         {
-          id: res.data.prefix,
-          key_prefix: res.data.prefix,
+          id: fresh.prefix,
+          key_prefix: fresh.prefix,
+          label: fresh.label ?? target.label ?? null,
+          scopes: fresh.scopes ?? target.scopes ?? null,
           is_active: true,
           created_at: new Date().toISOString(),
         },
+        ...prev.filter((k) => k.key_prefix !== target.key_prefix),
       ])
       invalidateApiCache('/v1/admin/projects')
     } else {
-      onError(res.error?.message ?? 'Key rotation failed')
+      onError(res.error?.message ?? 'The key was not rotated. Nothing changed; try again in a moment.')
     }
   }
 
@@ -166,11 +181,6 @@ export function SdkInstallKeyPanel({
               >
                 <Btn size="sm" variant="primary" disabled={minting} onClick={() => void mintSdkKey()}>
                   {minting ? 'Minting…' : 'Mint SDK key'}
-                </Btn>
-              </Tooltip>
-              <Tooltip content="Revokes existing keys and replaces them with one new secret." side="top">
-                <Btn size="sm" variant="ghost" disabled={rotating} onClick={() => void rotateKey()}>
-                  {rotating ? 'Rotating…' : 'Rotate key'}
                 </Btn>
               </Tooltip>
             </div>
@@ -207,6 +217,17 @@ export function SdkInstallKeyPanel({
                       </Tooltip>
                     )}
                     <CopyButton value={k.key_prefix} label="Copy prefix" copiedLabel="Copied" size="sm" />
+                    {isSdkIngestKey(k.scopes) && (
+                      <Btn
+                        size="sm"
+                        variant="ghost"
+                        disabled={rotating}
+                        aria-label={`Rotate key ${k.key_prefix}`}
+                        onClick={() => setRotateTarget(k)}
+                      >
+                        Rotate
+                      </Btn>
+                    )}
                   </div>
                 </li>
               )
@@ -226,6 +247,15 @@ export function SdkInstallKeyPanel({
             Full secret shown once at mint or rotate. “Never used” keys were minted but no app has
             authenticated with them yet.
           </p>
+          {activeKeys.some((k) => !isSdkIngestKey(k.scopes)) && (
+            <p className="text-2xs text-fg-muted">
+              Keys for coding agents, phones or CI are rotated on{' '}
+              <Link to="/projects" className={LINK_ACCENT}>
+                Projects
+              </Link>
+              , so their secret never lands in this bug-widget snippet.
+            </p>
+          )}
         </Box>
       )}
 
@@ -246,9 +276,32 @@ export function SdkInstallKeyPanel({
           projectName={projectSlug ?? 'project'}
           projectSlug={projectSlug}
           apiKey={rotatedKey}
-          scopes={['report:write']}
+          scopes={rotatedScopes}
           onDismiss={() => setRotatedKey(null)}
         />
+      )}
+
+      {rotateTarget && (
+        <ConfirmDialog
+          title={ROTATE_KEY_TITLE}
+          body={rotateKeyWarning(rotateTarget.key_prefix)}
+          confirmLabel="Rotate key"
+          cancelLabel="Keep this key"
+          tone="danger"
+          loading={rotating}
+          onConfirm={() => void rotateKey(rotateTarget)}
+          onCancel={() => {
+            if (!rotating) setRotateTarget(null)
+          }}
+        >
+          <ul className="rounded-sm border border-edge-subtle px-2.5 py-2 text-sm text-fg" aria-label="Key that will be revoked">
+            <li className="flex flex-wrap items-center gap-2">
+              <span className="font-mono">{rotateTarget.key_prefix}…</span>
+              {rotateTarget.label && <span className="text-fg-muted">{rotateTarget.label}</span>}
+            </li>
+          </ul>
+          <p className="text-sm text-fg-secondary">Your other keys keep working.</p>
+        </ConfirmDialog>
       )}
     </>
   )
