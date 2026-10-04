@@ -9,7 +9,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { useRealtimeReload } from '../lib/realtime'
 import { usePublishPageContext } from '../lib/pageContext'
@@ -35,7 +35,15 @@ import { FixesTable } from '../components/fixes/FixesTable'
 import { FixBulkActionBar } from '../components/fixes/FixBulkActionBar'
 import { canMergeFix, isFixMerged, mergeFixAttempt } from '../lib/mergeFix'
 import { isFixCountedFailed } from '../lib/pdcaAct'
-import { fixReportLabel, needsAttention, retryCandidates } from '../lib/fixReportTruth'
+import { failureCause, fixCauseLabel, fixReportLabel, needsAttention, retryCandidates } from '../lib/fixReportTruth'
+import {
+  RETRY_AGENT_OPTIONS,
+  commonRetryAgent,
+  resolveFixesTabParam,
+  retryAgentFor,
+  retryDispatchBody,
+  type RetryAgent,
+} from '../lib/fixRetry'
 import type { FixAttempt, DispatchJob, FixSummary } from '../components/fixes/types'
 import { FixesStatusBanner } from '../components/fixes/FixesStatusBanner'
 import { FixesPipelineGuide } from '../components/fixes/FixesPipelineGuide'
@@ -88,10 +96,13 @@ const FIXES_TABS: Array<{ id: FixesTabId; label: string; description: string }> 
   },
 ]
 
-function resolveFixesTab(value: string | null): FixesTabId {
-  if (value === 'pipeline' || value === 'attempts') return value
-  return 'overview'
-}
+/** Attempts per request; the list route allows up to 200. */
+const FIXES_PAGE_SIZE = 200
+
+type RetryRequest =
+  | { kind: 'one'; reportId: string; agent: RetryAgent }
+  | { kind: 'all'; agent: RetryAgent }
+  | { kind: 'selected'; agent: RetryAgent }
 
 function bucketize(fix: FixAttempt): StatusBucket {
   const status = fix.status?.toLowerCase()
@@ -122,7 +133,11 @@ export function FixesPage() {
   const ux = useFixesUx()
 
   const tabParam = searchParams.get('tab')
-  const activeTab = resolveFixesTab(tabParam)
+  // A status filter lives on Attempts, so `/fixes?status=failed` (banners,
+  // alerts, tiles) opens it instead of Overview (console QA 94).
+  const activeTab = resolveFixesTabParam(tabParam, searchParams.get('status'))
+  const causeFilter = searchParams.get('cause')
+  const location = useLocation()
   const activeTabMeta = FIXES_TABS.find((t) => t.id === activeTab) ?? FIXES_TABS[0]
 
   const {
@@ -142,6 +157,11 @@ export function FixesPage() {
       const next = new URLSearchParams(searchParams)
       if (id === 'overview') next.delete('tab')
       else next.set('tab', id)
+      // The status and cause filters belong to Attempts.
+      if (id !== 'attempts') {
+        next.delete('status')
+        next.delete('cause')
+      }
       setSearchParams(next, { replace: true, preventScrollReset: true })
     },
     [searchParams, setSearchParams],
@@ -152,7 +172,17 @@ export function FixesPage() {
     const quickTab = resolveQuickFixesTab(fixesStats)
     if (activeTab !== quickTab) setActiveTab(quickTab)
   }, [ux.isQuickstart, activeProjectId, statsLoading, fixesStats, activeTab, setActiveTab])
-  const [fixes, setFixes] = useState<FixAttempt[]>([])
+  // Latest page (refreshed by realtime) plus older pages loaded on request,
+  // so every attempt is reachable instead of the first 50 (console QA 91).
+  const [latestFixes, setLatestFixes] = useState<FixAttempt[]>([])
+  const [olderFixes, setOlderFixes] = useState<FixAttempt[]>([])
+  const [fixesTotal, setFixesTotal] = useState<number | null>(null)
+  const [loadingOlder, setLoadingOlder] = useState(false)
+  const fixes = useMemo(() => {
+    if (olderFixes.length === 0) return latestFixes
+    const seen = new Set(latestFixes.map((f) => f.id))
+    return [...latestFixes, ...olderFixes.filter((f) => !seen.has(f.id))]
+  }, [latestFixes, olderFixes])
   const [codebaseStats, setCodebaseStats] = useState<CodebaseStats | null>(null)
   const [dispatches, setDispatches] = useState<DispatchJob[]>([])
   const [summary, setSummary] = useState<FixSummary | null>(null)
@@ -165,13 +195,14 @@ export function FixesPage() {
   const [error, setError] = useState(false)
   const [expanded, setExpanded] = useState<string | null>(null)
   const [retryingAll, setRetryingAll] = useState(false)
-  const [retryAllConfirm, setRetryAllConfirm] = useState(false)
+  // Every retry spends LLM budget, so each one goes through a confirm that
+  // also picks the agent (console QA 96, 241).
+  const [retryRequest, setRetryRequest] = useState<RetryRequest | null>(null)
   // Bulk selection on the Attempts tab. Set of fix_attempt ids.
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [bulkBusy, setBulkBusy] = useState(false)
   const [bulkProgress, setBulkProgress] = useState<string | null>(null)
   const [bulkMergeConfirm, setBulkMergeConfirm] = useState(false)
-  const [bulkRetryConfirm, setBulkRetryConfirm] = useState(false)
   const urlStatus = searchParams.get('status')
   const initialBucket: StatusBucket =
     urlStatus === 'failed' ? 'failed' :
@@ -201,13 +232,15 @@ export function FixesPage() {
     setIsValidating(true)
     try {
       const [fixRes, dispRes, sumRes] = await Promise.all([
-        apiFetch<{ fixes: FixAttempt[] }>('/v1/admin/fixes'),
+        apiFetch<{ fixes: FixAttempt[]; total?: number }>(`/v1/admin/fixes?limit=${FIXES_PAGE_SIZE}`),
         apiFetch<{ dispatches: DispatchJob[] }>('/v1/admin/fixes/dispatches'),
         apiFetch<FixSummary>('/v1/admin/fixes/summary'),
       ])
       if (cancelledRef.current) return
-      if (fixRes.ok && fixRes.data) setFixes(fixRes.data.fixes)
-      else setError(true)
+      if (fixRes.ok && fixRes.data) {
+        setLatestFixes(fixRes.data.fixes)
+        setFixesTotal(typeof fixRes.data.total === 'number' ? fixRes.data.total : null)
+      } else setError(true)
       if (dispRes.ok && dispRes.data) setDispatches(dispRes.data.dispatches)
       if (sumRes.ok && sumRes.data) setSummary(sumRes.data)
       if (!cancelledRef.current) setLastFetchedAt(new Date().toISOString())
@@ -221,6 +254,27 @@ export function FixesPage() {
       }
     }
   }, [])
+
+  const loadOlderFixes = useCallback(async () => {
+    setLoadingOlder(true)
+    try {
+      const res = await apiFetch<{ fixes: FixAttempt[]; total?: number }>(
+        `/v1/admin/fixes?limit=${FIXES_PAGE_SIZE}&offset=${fixes.length}`,
+      )
+      if (res.ok && res.data) {
+        const page = res.data.fixes
+        setOlderFixes((prev) => {
+          const seen = new Set(prev.map((f) => f.id))
+          return [...prev, ...page.filter((f) => !seen.has(f.id))]
+        })
+        if (typeof res.data.total === 'number') setFixesTotal(res.data.total)
+      } else {
+        toast.push({ tone: 'error', message: res.error?.message ?? "Couldn't load older attempts. Try again." })
+      }
+    } finally {
+      setLoadingOlder(false)
+    }
+  }, [fixes.length, toast])
 
   // Codebase-index state drives the "you'll get stub PRs" banner. Loaded
   // once per project switch; cheap single-row + count read on the backend.
@@ -334,10 +388,42 @@ export function FixesPage() {
     return counts
   }, [fixes])
 
+  // "Common causes" chips narrow the failed list to one cause (console QA 93).
   const visibleFixes = useMemo(() => {
-    if (statusBucket === 'all') return fixes
-    return fixes.filter((f) => bucketize(f) === statusBucket)
-  }, [fixes, statusBucket])
+    const inBucket = statusBucket === 'all' ? fixes : fixes.filter((f) => bucketize(f) === statusBucket)
+    if (!causeFilter || statusBucket !== 'failed') return inBucket
+    return inBucket.filter((f) => failureCause(f) === causeFilter)
+  }, [fixes, statusBucket, causeFilter])
+
+  // `#fix-<id>` (failed-alert previews) expands and scrolls to that row.
+  const anchoredRef = useRef<string | null>(null)
+  useEffect(() => {
+    const m = /^#fix-([0-9a-f-]{8,})$/i.exec(location.hash)
+    if (!m || loading) return
+    const id = m[1]!
+    if (anchoredRef.current === id || !fixes.some((f) => f.id === id)) return
+    anchoredRef.current = id
+    setExpanded(id)
+    requestAnimationFrame(() => document.getElementById(`fix-${id}`)?.scrollIntoView({ block: 'center' }))
+  }, [location.hash, loading, fixes])
+
+  const reviewFailedCause = useCallback(
+    (category: string) => {
+      const next = new URLSearchParams(searchParams)
+      next.set('tab', 'attempts')
+      next.set('status', 'failed')
+      if (category) next.set('cause', category)
+      else next.delete('cause')
+      setSearchParams(next, { replace: true, preventScrollReset: true })
+      setStatusBucket('failed')
+    },
+    [searchParams, setSearchParams],
+  )
+  const clearCause = useCallback(() => {
+    const next = new URLSearchParams(searchParams)
+    next.delete('cause')
+    setSearchParams(next, { replace: true, preventScrollReset: true })
+  }, [searchParams, setSearchParams])
 
   // (Page context publish moved below retryAllFailed so the action
   // closures bind to the live function reference without TDZ issues.)
@@ -387,17 +473,14 @@ export function FixesPage() {
   }, [])
 
   const retryOne = useCallback(
-    async (reportId: string) => {
+    async (reportId: string, agent: RetryAgent) => {
       const optimisticId = pushOptimistic(reportId)
       const res = await apiFetch('/v1/admin/fixes/dispatch', {
         method: 'POST',
-        body: JSON.stringify({ reportId, projectId: activeProjectId }),
+        body: retryDispatchBody(reportId, activeProjectId, agent),
       })
       if (res.ok) {
-        trackSelf('fix_dispatched', {
-          report_id: reportId,
-          agent: failedFixes.find((f) => f.report_id === reportId)?.agent ?? 'default',
-        })
+        trackSelf('fix_dispatched', { report_id: reportId, agent: agent === 'auto' ? 'default' : agent })
         toast.push({ tone: 'success', message: 'Fix re-dispatched' })
         settleOptimistic(optimisticId, 'ok')
         void loadFixes()
@@ -406,10 +489,19 @@ export function FixesPage() {
         settleOptimistic(optimisticId, 'error', res.error?.message)
       }
     },
-    [activeProjectId, failedFixes, loadFixes, pushOptimistic, settleOptimistic, toast],
+    [activeProjectId, loadFixes, pushOptimistic, settleOptimistic, toast],
   )
 
-  const retryAllFailed = useCallback(async () => {
+  /** Open the retry confirm for one report, defaulting to its last agent. */
+  const requestRetryOne = useCallback(
+    (reportId: string) => {
+      const last = fixes.find((f) => f.report_id === reportId && f.is_latest_attempt) ?? fixes.find((f) => f.report_id === reportId)
+      setRetryRequest({ kind: 'one', reportId, agent: retryAgentFor(last?.agent) })
+    },
+    [fixes],
+  )
+
+  const retryAllFailed = useCallback(async (agent: RetryAgent) => {
     if (failedFixes.length === 0) return
     setRetryingAll(true)
     const optimisticIds = failedFixes.map((f) => ({ reportId: f.report_id, id: pushOptimistic(f.report_id) }))
@@ -417,7 +509,7 @@ export function FixesPage() {
       optimisticIds.map(({ reportId }) =>
         apiFetch('/v1/admin/fixes/dispatch', {
           method: 'POST',
-          body: JSON.stringify({ reportId, projectId: activeProjectId }),
+          body: retryDispatchBody(reportId, activeProjectId, agent),
         }),
       ),
     )
@@ -426,7 +518,7 @@ export function FixesPage() {
       const { id, reportId } = optimisticIds[idx]
       const ok = r.status === 'fulfilled' && (r.value as { ok: boolean }).ok
       const msg = r.status === 'fulfilled' ? (r.value as { error?: { message?: string } }).error?.message : 'Request failed'
-      if (ok) trackSelf('fix_dispatched', { report_id: reportId, agent: failedFixes[idx]?.agent ?? 'default' })
+      if (ok) trackSelf('fix_dispatched', { report_id: reportId, agent: agent === 'auto' ? 'default' : agent })
       settleOptimistic(id, ok ? 'ok' : 'error', msg)
     })
     const ok = results.filter((r) => r.status === 'fulfilled' && (r.value as { ok: boolean }).ok).length
@@ -466,6 +558,14 @@ export function FixesPage() {
   )
 
   const clearSelection = useCallback(() => setSelectedIds(new Set()), [])
+  const toggleSelectFix = useCallback((fixId: string, on: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (on) next.add(fixId)
+      else next.delete(fixId)
+      return next
+    })
+  }, [])
 
   // Select-all operates on the *current view* (the active status bucket), and
   // the label communicates that scope explicitly — NN/g guideline for select-all.
@@ -539,7 +639,7 @@ export function FixesPage() {
     void loadFixes()
   }, [selectedMergeable, loadFixes, toast])
 
-  const retrySelected = useCallback(async () => {
+  const retrySelected = useCallback(async (agent: RetryAgent) => {
     if (selectedFailed.length === 0) return
     setBulkBusy(true)
     setBulkProgress(`Re-dispatching ${selectedFailed.length}…`)
@@ -548,7 +648,7 @@ export function FixesPage() {
       optimisticIds.map(({ reportId }) =>
         apiFetch('/v1/admin/fixes/dispatch', {
           method: 'POST',
-          body: JSON.stringify({ reportId, projectId: activeProjectId }),
+          body: retryDispatchBody(reportId, activeProjectId, agent),
         }),
       ),
     )
@@ -556,7 +656,7 @@ export function FixesPage() {
       const { id, reportId } = optimisticIds[idx]
       const okRes = r.status === 'fulfilled' && (r.value as { ok: boolean }).ok
       const msg = r.status === 'fulfilled' ? (r.value as { error?: { message?: string } }).error?.message : 'Request failed'
-      if (okRes) trackSelf('fix_dispatched', { report_id: reportId, agent: selectedFailed[idx]?.agent ?? 'default' })
+      if (okRes) trackSelf('fix_dispatched', { report_id: reportId, agent: agent === 'auto' ? 'default' : agent })
       settleOptimistic(id, okRes ? 'ok' : 'error', msg)
     })
     const ok = results.filter((r) => r.status === 'fulfilled' && (r.value as { ok: boolean }).ok).length
@@ -604,7 +704,7 @@ export function FixesPage() {
             id: 'retry-all-failed',
             label: `Retry ${pluralizeWithCount(failedFixes.length, 'unfixed report', 'unfixed reports')}`,
             hint: 'Re-dispatches each still-unfixed report whose last attempt failed',
-            run: () => { void retryAllFailed() },
+            run: () => setRetryRequest({ kind: 'all', agent: commonRetryAgent(failedFixes.map((f) => f.agent)) }),
           }]
         : []),
       ...(statusBucket !== 'all'
@@ -698,14 +798,16 @@ export function FixesPage() {
       >
         <FreshnessPill at={lastFetchedAt ?? statsFetchedAt} isValidating={isValidating || statsValidating} channel={channelState} />
         <span className="inline-flex items-center rounded-sm border border-edge-subtle bg-surface-overlay/40 px-2 py-0.5 font-mono text-2xs tabular-nums text-fg-muted">
-          {pluralizeWithCount(fixes.length, 'attempt')}
+          {fixesTotal != null && fixesTotal > fixes.length
+            ? `${fixes.length} of ${pluralizeWithCount(fixesTotal, 'attempt')}`
+            : pluralizeWithCount(fixes.length, 'attempt')}
         </span>
         {failedFixes.length > 0 && (
           <Btn
             type="button"
             variant="ghost"
             size="sm"
-            onClick={() => setRetryAllConfirm(true)}
+            onClick={() => setRetryRequest({ kind: 'all', agent: commonRetryAgent(failedFixes.map((f) => f.agent)) })}
             loading={retryingAll}
             title={`Re-dispatch ${pluralizeWithCount(failedFixes.length, 'report')} still unfixed after a failed attempt. Reports fixed by a later PR are never retried.`}
           >
@@ -798,7 +900,7 @@ export function FixesPage() {
             <FixesFailedSummary
               fixes={fixes}
               projectId={activeProjectId}
-              onReviewCategory={() => setStatusBucket('failed')}
+              onReviewCategory={reviewFailedCause}
             />
           )}
           <InflightDispatches dispatches={mergedDispatches} />
@@ -836,6 +938,15 @@ export function FixesPage() {
                   tone: 'info' as const,
                 }]
               : []
+            if (causeFilter && statusBucket === 'failed') {
+              activeFilters.push({
+                key: 'cause',
+                label: 'Cause',
+                value: fixCauseLabel(causeFilter),
+                onClear: clearCause,
+                tone: 'info' as const,
+              })
+            }
             return (
               <ActiveFiltersRail
                 filters={activeFilters}
@@ -864,7 +975,9 @@ export function FixesPage() {
                 busy={bulkBusy}
                 progressLabel={bulkProgress}
                 onMergeSelected={() => setBulkMergeConfirm(true)}
-                onRetrySelected={() => setBulkRetryConfirm(true)}
+                onRetrySelected={() =>
+                  setRetryRequest({ kind: 'selected', agent: commonRetryAgent(selectedFailed.map((f) => f.agent)) })
+                }
                 onClear={clearSelection}
               />
               <FixesTable
@@ -876,52 +989,75 @@ export function FixesPage() {
                 inFlightReportIds={inFlightReportIds}
                 inventoryActions={inventoryActions}
                 onToggle={(fixId) => setExpanded(expanded === fixId ? null : fixId)}
-                onRetry={retryOne}
+                onRetry={requestRetryOne}
                 onRefreshed={loadFixes}
+                selectedIds={selectedIds}
+                onSelectFix={toggleSelectFix}
                 compactTable={ux.compactTable}
                 hideTableChrome={ux.hideTableChrome}
               />
+              {fixesTotal != null && fixesTotal > fixes.length ? (
+                <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-2xs text-fg-muted">
+                  <span>
+                    Showing the latest {fixes.length} of {pluralizeWithCount(fixesTotal, 'attempt')}. Filter counts cover the loaded ones.
+                  </span>
+                  <Btn size="sm" variant="ghost" onClick={() => void loadOlderFixes()} loading={loadingOlder}>
+                    Load {Math.min(FIXES_PAGE_SIZE, fixesTotal - fixes.length)} older
+                  </Btn>
+                </div>
+              ) : null}
             </>
           )}
         </>
       )
       )}
 
-      {retryAllConfirm && failedFixes.length > 0 ? (
-        <ConfirmDialog
-          title={`Retry ${pluralizeWithCount(failedFixes.length, 'unfixed report')}?`}
-          body="Each retry runs the auto-fix agent again and spends LLM tokens. Failed attempts stay in history — you can review them on this page."
-          confirmLabel="Retry all"
-          cancelLabel="Cancel"
-          tone="danger"
-          loading={retryingAll}
-          onConfirm={() => {
-            setRetryAllConfirm(false)
-            void retryAllFailed()
-          }}
-          onCancel={() => {
-            if (!retryingAll) setRetryAllConfirm(false)
-          }}
-        />
-      ) : null}
-
-      {bulkRetryConfirm && selectedFailed.length > 0 ? (
-        <ConfirmDialog
-          title={`Retry ${selectedFailed.length} ${pluralize(selectedFailed.length, 'fix', 'fixes')}?`}
-          body="Each retry runs the auto-fix agent again and spends LLM tokens. Failed attempts stay in history — you can review them on this page."
-          confirmLabel={`Retry ${selectedFailed.length}`}
-          cancelLabel="Cancel"
-          tone="danger"
-          loading={bulkBusy}
-          onConfirm={() => {
-            setBulkRetryConfirm(false)
-            void retrySelected()
-          }}
-          onCancel={() => {
-            if (!bulkBusy) setBulkRetryConfirm(false)
-          }}
-        />
-      ) : null}
+      {retryRequest ? (() => {
+        const count =
+          retryRequest.kind === 'one' ? 1 : retryRequest.kind === 'all' ? failedFixes.length : selectedFailed.length
+        const busy = retryRequest.kind === 'all' ? retryingAll : retryRequest.kind === 'selected' ? bulkBusy : false
+        if (count === 0) return null
+        const title =
+          retryRequest.kind === 'one'
+            ? 'Retry this fix?'
+            : retryRequest.kind === 'all'
+              ? `Retry ${pluralizeWithCount(count, 'unfixed report')}?`
+              : `Retry ${count} ${pluralize(count, 'fix', 'fixes')}?`
+        return (
+          <ConfirmDialog
+            title={title}
+            body="Each retry runs a coding agent again and spends LLM tokens. Failed attempts stay in history on this page."
+            confirmLabel={count === 1 ? 'Retry' : `Retry ${count}`}
+            cancelLabel="Cancel"
+            tone="danger"
+            loading={busy}
+            onConfirm={() => {
+              const req = retryRequest
+              setRetryRequest(null)
+              if (req.kind === 'one') void retryOne(req.reportId, req.agent)
+              else if (req.kind === 'all') void retryAllFailed(req.agent)
+              else void retrySelected(req.agent)
+            }}
+            onCancel={() => {
+              if (!busy) setRetryRequest(null)
+            }}
+          >
+            <label className="flex flex-col gap-1 text-2xs text-fg-secondary">
+              <span className="font-medium">Run it with</span>
+              <select
+                value={retryRequest.agent}
+                onChange={(e) => setRetryRequest({ ...retryRequest, agent: e.target.value as RetryAgent })}
+                className="input text-xs"
+                aria-label="Agent for the retry"
+              >
+                {RETRY_AGENT_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </label>
+          </ConfirmDialog>
+        )
+      })() : null}
 
       {bulkMergeConfirm && selectedMergeable.length > 0 ? (
         <ConfirmDialog
