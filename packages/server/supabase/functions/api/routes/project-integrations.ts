@@ -15,6 +15,7 @@ import { classifyIngestRateLimitError } from './ingest-rate-limit.ts';
 // Pure readiness → dry-run shaping lives in its own import-free module so it
 // can be unit-tested under CI's permission-less `deno test`.
 import { buildDryRunResult, type DispatchReadiness } from './dispatch-dry-run.ts';
+import { loadIntegrationSignals } from '../../_shared/setup-signals.ts';
 
 /**
  * Console test reports per user per hour. Each one runs the real Stage-1
@@ -101,7 +102,7 @@ export function registerProjectIntegrationsRoutes(app: Hono<{ Variables: Variabl
       return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404);
     }
 
-    const [settingsRes, reposRes, anthropicKey] = await Promise.all([
+    const [settingsRes, reposRes, anthropicKey, integrationSignals] = await Promise.all([
       db
         .from('project_settings')
         .select(
@@ -118,6 +119,7 @@ export function registerProjectIntegrationsRoutes(app: Hono<{ Variables: Variabl
         .order('is_primary', { ascending: false })
         .limit(1),
       resolveLlmKey(db, projectId, 'anthropic', { purpose: 'probe' }),
+      loadIntegrationSignals(db, [projectId]),
     ]);
 
     const settings = settingsRes.data;
@@ -129,7 +131,9 @@ export function registerProjectIntegrationsRoutes(app: Hono<{ Variables: Variabl
       settings?.codebase_repo_url ??
       (repos.length > 0 ? (repos[0] as { repo_url?: string | null }).repo_url ?? null : null);
 
-    const hasGithub = Boolean(settings?.github_repo_url) || repos.length > 0;
+    // Same rule as the setup checklist: a repo to patch AND a credential
+    // (project, org default, GitHub App install, or platform token).
+    const hasGithub = integrationSignals.get(projectId)?.hasGithub ?? false;
     const hasAnthropic = Boolean(anthropicKey);
     const anthropicSource = anthropicKey?.source ?? null;
     const hasCodebase = Boolean(settings?.codebase_index_enabled);
@@ -148,15 +152,17 @@ export function registerProjectIntegrationsRoutes(app: Hono<{ Variables: Variabl
         key: 'github',
         ready: hasGithub,
         label: 'GitHub repo connected',
-        hint: 'Connect a GitHub repository so the fix worker can open pull requests.',
-        fixHref: '/integrations/config?tab=github',
+        hint: repoUrl
+          ? 'The repo is set, but Mushi has no GitHub token or App install to open pull requests with. Install the GitHub App or add a token.'
+          : 'Connect a GitHub repository so the fix worker can open pull requests.',
+        fixHref: '/integrations/config#platform-card-github',
       },
       {
         key: 'codebase',
         ready: hasCodebase,
         label: 'Codebase indexed',
         hint: 'Enable codebase indexing so the AI can read your source files.',
-        fixHref: '/integrations/config?tab=codebase',
+        fixHref: '/integrations/config#integrations-codebase',
       },
       {
         key: 'anthropic',
