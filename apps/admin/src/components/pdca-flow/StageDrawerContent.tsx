@@ -143,7 +143,7 @@ function PlanDrawer({ stage, onClose }: { stage?: PdcaStage | null; onClose: () 
             method: 'PATCH',
             body: JSON.stringify({ status: 'dismissed' }),
           })
-          return { ok: res.ok, error: res.error?.message }
+          return { ok: res.ok, error: res.ok ? undefined : actionErrorText(res.error) }
         },
       })
     },

@@ -18,7 +18,11 @@ import { useActiveProjectSignal } from './activeProject'
 import type { OrganizationSummary } from '../components/OrgSwitcher'
 
 export interface OrgManageState {
-  /** true = owner or admin; false = member or viewer; null = not known yet. */
+  /**
+   * true = owner or admin; false = member or viewer; null = not known (the
+   * role list failed or has not loaded). Hide a control only on false: an
+   * unknown role keeps it, and the server still refuses a member.
+   */
   canManage: boolean | null
 }
 

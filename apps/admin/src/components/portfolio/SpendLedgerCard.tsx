@@ -161,7 +161,7 @@ export function SpendLedgerCard({ orgId, projects }: { orgId: string; projects: 
           {canManage === false ? (
             <p className="text-xs text-fg-muted">Importing a bill: {ORG_ADMIN_ONLY_HINT}</p>
           ) : (
-          <fieldset className="flex flex-col gap-2 rounded-md border border-edge-subtle p-3 text-xs" disabled={busy || canManage !== true}>
+          <fieldset className="flex flex-col gap-2 rounded-md border border-edge-subtle p-3 text-xs" disabled={busy}>
             <legend className="px-1 text-xs font-medium text-fg">Import a bill</legend>
             <p className="text-fg-muted">
               A FOCUS export from Vercel or AWS, an AWS Cost and Usage Report, or any CSV with date, service and cost columns. Importing the same bill again replaces those days. Owners and admins only.
@@ -181,7 +181,7 @@ export function SpendLedgerCard({ orgId, projects }: { orgId: string; projects: 
                 </select>
               </label>
               <input ref={fileRef} type="file" accept=".csv,text/csv" aria-label="Bill CSV file" className="text-xs" />
-              <Btn size="sm" variant="ghost" onClick={upload} loading={busy} disabled={busy || canManage !== true}>Import</Btn>
+              <Btn size="sm" variant="ghost" onClick={upload} loading={busy} disabled={busy}>Import</Btn>
             </div>
           </fieldset>
           )}
@@ -201,7 +201,7 @@ export function SpendLedgerCard({ orgId, projects }: { orgId: string; projects: 
                       {i.filename ? ` · ${i.filename}` : ''}
                       {i.rowsSkipped > 0 ? ` · ${i.rowsSkipped} skipped` : ''}
                     </span>
-                    {canManage === true && (
+                    {canManage !== false && (
                       <Btn
                         size="sm"
                         variant="ghost"

@@ -26,7 +26,9 @@ vi.mock('../../lib/supabase', () => ({ apiFetch: mocks.apiFetch, apiFetchMutate:
 vi.mock('../../lib/usePageData', () => ({
   usePageData: (path: string | null) => {
     if (path === '/v1/org') {
-      return { data: { organizations: [{ id: ORG, slug: 'a', name: 'A', plan_id: 'free', role: mocks.role.value }] }, loading: false, error: null, reload: vi.fn() }
+      // 'unknown-org': the caller's team list does not include this org, so the role is unknown.
+      const orgs = mocks.role.value === 'unknown-org' ? [] : [{ id: ORG, slug: 'a', name: 'A', plan_id: 'free', role: mocks.role.value }]
+      return { data: { organizations: orgs }, loading: false, error: null, reload: vi.fn() }
     }
     if (path?.endsWith('/connectors')) {
       return mocks.error.value
@@ -109,6 +111,13 @@ describe('ConnectorsCard', () => {
     expect(button('Check')).toBeUndefined()
     expect(container.textContent).not.toContain('Add a source')
     expect(container.textContent).toContain('Only team owners and admins can change this.')
+  })
+
+  it('keeps the controls when the role is not known yet; the server still enforces it', async () => {
+    mocks.role.value = 'unknown-org'
+    await render()
+    expect(button('Remove')).toBeDefined()
+    expect(container.textContent).not.toContain('Only team owners and admins can change this.')
   })
 
   it('explains a load error without the raw code', async () => {

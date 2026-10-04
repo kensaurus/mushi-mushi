@@ -143,7 +143,7 @@ export function ConnectorsCard({ orgId, projects }: { orgId: string; projects: A
                       {i.status_reason && <p className="text-xs text-fg-muted">{i.status_reason}</p>}
                       {i.bindings.length > 0 && <p className="text-2xs text-fg-faint">{i.bindings.map((b) => `${nameOf(b.projectId)} → ${b.externalId}`).join(' · ')}</p>}
                     </div>
-                    {canManage === true && (data.available.find((a) => a.kind === i.kind)?.actions.length ?? 0) > 0 && (
+                    {canManage !== false && (data.available.find((a) => a.kind === i.kind)?.actions.length ?? 0) > 0 && (
                       <div className="w-full sm:w-auto">
                         <DisclosurePanel title={i.enabled_capabilities.includes('act') ? 'Release actions: on' : 'Release actions: off'}>
                           <div className="flex flex-col gap-2 p-3">
@@ -157,7 +157,7 @@ export function ConnectorsCard({ orgId, projects }: { orgId: string; projects: A
                         </DisclosurePanel>
                       </div>
                     )}
-                    {canManage === true && (
+                    {canManage !== false && (
                       <div className="flex shrink-0 gap-2">
                         <Btn size="sm" variant="ghost" disabled={busy} onClick={() => act(() => apiFetchMutate(`${path}/${i.id}/probe`, { method: 'POST', body: '{}' }), 'Checked again.')}>Check</Btn>
                         <Btn size="sm" variant="ghost" disabled={busy} onClick={() => setConfirmRemove({ id: i.id, name: i.display_name })}>Remove</Btn>
@@ -174,7 +174,7 @@ export function ConnectorsCard({ orgId, projects }: { orgId: string; projects: A
               .filter((i) => i.enabled_capabilities.includes('act'))
               .map((i) => ({ id: i.id, name: i.display_name, actions: data.available.find((a) => a.kind === i.kind)?.actions ?? [] }))}
           />
-          {canManage === true && (
+          {canManage !== false && (
           <DisclosurePanel title="Add a source">
             <div className="flex flex-col gap-2 p-3">
               <SelectField label="Kind" value={kind} onChange={(e) => { setKind(e.target.value); setConfigValue('') }}>

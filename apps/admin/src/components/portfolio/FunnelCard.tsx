@@ -70,7 +70,7 @@ export function FunnelCard({ orgId }: { orgId: string }) {
   }
 
   return (
-    <Section title="Funnel across apps" action={data && !editing && canManage === true ? <Btn size="sm" variant="ghost" onClick={startEdit}>{data.definition ? 'Change steps' : 'Set up'}</Btn> : undefined}>
+    <Section title="Funnel across apps" action={data && !editing && canManage !== false ? <Btn size="sm" variant="ghost" onClick={startEdit}>{data.definition ? 'Change steps' : 'Set up'}</Btn> : undefined}>
       {error && <PageLoadError error={error} resource="the funnel across apps" endpoint={path} onRetry={reload} />}
       {loading && !data && <Loading text="Reading the funnel…" />}
       {editing && (
