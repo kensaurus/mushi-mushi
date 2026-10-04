@@ -15,6 +15,8 @@ export interface QueueItem {
   last_error: string | null
   created_at: string
   completed_at: string | null
+  started_at?: string | null
+  scheduled_at?: string | null
   reports?: { description: string; user_category: string; created_at: string }
 }
 
