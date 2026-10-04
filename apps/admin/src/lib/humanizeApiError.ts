@@ -238,6 +238,11 @@ export function apiErrorMessage(
   if (!error) return fallback
   const code = (typeof error === 'string' ? '' : error.code ?? '').toUpperCase()
   const message = (typeof error === 'string' ? error : error.message ?? '').trim()
+  // A refusal names the rule that applies ("Viewers cannot merge report
+  // groups."); the generic team-switch hint would point at the wrong fix.
+  if (code === 'FORBIDDEN' && message && message.toUpperCase() !== code && !looksInternal(message)) {
+    return message
+  }
   if (code && !READABLE_MESSAGE_CODES.has(code)) {
     const known = humanizeApiError(message || code, code)
     if (known && known.title !== 'Could not load this page.') return `${known.title} ${known.hint}`

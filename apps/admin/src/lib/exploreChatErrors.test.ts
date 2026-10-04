@@ -7,7 +7,7 @@ describe('askErrorMessage', () => {
     expect(askErrorMessage({ code: 'HTTP_429', message: 'x' })).toMatch(/Too many requests/)
     expect(askErrorMessage({ code: 'LLM_ERROR', message: 'upstream 529' })).toMatch(/AI model/)
     expect(askErrorMessage({ code: 'STREAM_EMPTY', message: 'x' })).toMatch(/stopped before it finished/)
-    expect(askErrorMessage({ code: 'FORBIDDEN', message: 'x' })).toMatch(/access/)
+    expect(askErrorMessage({ code: 'FORBIDDEN', message: 'Not a member of this project' })).toBe('Not a member of this project')
   })
 
   it('never shows a bare code', () => {
