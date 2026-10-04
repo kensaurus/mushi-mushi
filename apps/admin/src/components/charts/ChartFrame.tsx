@@ -20,6 +20,8 @@ export interface ChartFrameProps {
   xLabels?: string[]
   /** When set, X ticks align to categorical bar/ bucket centers (not span endpoints). */
   xBucketCount?: number
+  /** Cap on X-axis labels; narrow tiles pass 2 (first and last). */
+  maxXTicks?: number
   yAxisCaption?: string
   xAxisCaption?: string
   className?: string
@@ -35,6 +37,7 @@ export function ChartFrame({
   yTickLabels,
   xLabels,
   xBucketCount,
+  maxXTicks,
   yAxisCaption,
   xAxisCaption,
   className = '',
@@ -43,7 +46,7 @@ export function ChartFrame({
   accessibleRows,
 }: ChartFrameProps) {
   const ticks = yTickLabels.length > 0 ? yTickLabels : ['0']
-  const xSparse = xLabels?.length ? sparseXLabels(xLabels) : []
+  const xSparse = xLabels?.length ? sparseXLabels(xLabels, maxXTicks) : []
   const xLast = xLabels ? xLabels.length - 1 : 0
 
   const chartVisual = (
