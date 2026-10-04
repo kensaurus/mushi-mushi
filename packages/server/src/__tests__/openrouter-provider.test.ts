@@ -125,7 +125,7 @@ describe('embedding key bookkeeping', () => {
 
 describe('spend attribution', () => {
   it('records the id actually sent, and groups prefixed ids under OpenRouter', () => {
-    expect(read('_shared/embeddings.ts')).toMatch(/model: openAiCompatibleModelId\(model, state\.resolved\.baseUrl\)/)
+    expect(read('_shared/embeddings.ts')).toMatch(/const sentModel = openAiCompatibleModelId\(model, state\.resolved\.baseUrl\)[\s\S]{0,400}model: sentModel,/)
     expect(read('api/routes/settings-research.ts')).toMatch(/usedModel\.includes\('\/'\) \? 'openrouter' : providerFromModel\(usedModel\)/)
   })
 })

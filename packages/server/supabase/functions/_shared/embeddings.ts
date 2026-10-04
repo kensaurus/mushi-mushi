@@ -272,15 +272,16 @@ function recordEmbeddingCall(
   error?: unknown,
 ): void {
   if (!state.resolved) return
+  // The id actually sent (`openai/…` through OpenRouter), so the AI keys spend
+  // line can tell which service served the call.
+  const sentModel = openAiCompatibleModelId(model, state.resolved.baseUrl)
   try {
     void recordLlmUsage(getServiceClient(), {
       functionName: opts.functionName ?? 'embeddings',
       stage: 'embedding',
       projectId: opts.projectId ?? null,
       reportId: opts.reportId ?? null,
-      // The id actually sent: `openai/…` through OpenRouter, so the AI keys
-      // spend line can tell which service served the call.
-      model: openAiCompatibleModelId(model, state.resolved.baseUrl),
+      model: sentModel,
       keySource: state.resolved.source,
       startedAt,
       skipHostedBilling: true,
