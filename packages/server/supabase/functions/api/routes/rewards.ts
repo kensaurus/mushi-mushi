@@ -31,7 +31,10 @@ import type { Variables } from '../types.ts'
 import { z } from 'npm:zod@3'
 import { getServiceClient } from '../../_shared/db.ts'
 import { apiKeyAuth, jwtAuth, adminOrApiKey } from '../../_shared/auth.ts'
-import { resolveAccessibleOrg } from '../shared.ts'
+import { jsonError, resolveAccessibleOrg } from '../shared.ts'
+import { canManageProjectSdkConfig } from '../helpers.ts'
+import { organizationHasPlanFeature } from '../../_shared/entitlements.ts'
+import { leaderboardSearchTerm, plainIssues, rewardsWriteDenial } from '../../_shared/rewards-admin.ts'
 import { resolveEndUser } from '../../_shared/end-user-resolver.ts'
 import { awardPointsForEndUser, invalidateRuleCache } from '../../_shared/reputation.ts'
 import { dispatchRewardWebhook } from '../../_shared/reward-webhooks.ts'
@@ -314,27 +317,22 @@ async function requireRewardsOrg(
 }
 
 /**
- * {@link requireRewardsOrg} for writes: rules, tiers, webhooks, quests,
- * identity providers, point awards, tier overrides and dispute decisions
- * change the program for every reporter, so they need an org owner or admin.
- * A project-bound API key resolves as 'owner' (it was minted by one).
+ * Org gate for every rewards WRITE: membership plus an owner or admin role (rules, tiers, webhooks,
+ * quests, awards and disputes change the program for every reporter) plus a
+ * plan with `rewards_program` (rewardsWriteDenial). Reads keep requireRewardsOrg.
  */
-async function requireRewardsOrgAdmin(
+async function requireRewardsWriter(
   c: Context,
   userId: string,
 ): Promise<{ ok: true; orgId: string } | { ok: false; response: Response }> {
   const db = getServiceClient()
   const resolved = await resolveAccessibleOrg(c, db, userId)
   if (!resolved.ok) return { ok: false, response: resolved.response }
-  if (resolved.role !== 'owner' && resolved.role !== 'admin') {
-    return {
-      ok: false,
-      response: c.json(
-        { ok: false, error: { code: 'FORBIDDEN', message: 'Only organization owners and admins can change rewards.' } },
-        403,
-      ),
-    }
-  }
+  const planHasRewards = resolved.role !== 'owner' && resolved.role !== 'admin'
+    ? false
+    : await organizationHasPlanFeature(db, resolved.organizationId, 'rewards_program')
+  const denial = rewardsWriteDenial(resolved.role, planHasRewards)
+  if (denial) return { ok: false, response: jsonError(c, denial.code, denial.message, denial.status) }
   return { ok: true, orgId: resolved.organizationId }
 }
 
@@ -472,7 +470,7 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
     const projectId = c.get('projectId') as string
     let raw: unknown
     try { raw = await c.req.json() } catch {
-      return c.json({ ok: false, error: { code: 'INVALID_JSON' } }, 400)
+      return c.json({ ok: false, error: { code: 'INVALID_JSON', message: 'The request body was not valid JSON.' } }, 400)
     }
     const s = z.object({ user_id: z.string(), opted_in: z.boolean() }).safeParse(raw)
     if (!s.success) return c.json({ ok: false, error: { code: 'INVALID_BODY' } }, 422)
@@ -982,8 +980,8 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
 
     if (!projectRewardsEnabled) {
       topPriority = 'project_disabled'
-      topPriorityLabel = `rewards_enabled is off for ${projectName ?? 'active project'} — SDK activity ingest returns early without awarding points.`
-      topPriorityTo = '/settings?tab=dev'
+      topPriorityLabel = `Rewards are off for ${projectName ?? 'this project'}, so activity from your app earns no points yet. Turn them on to start awarding points.`
+      topPriorityTo = '/rewards?tab=settings'
     } else if (webhooksFailing > 0) {
       topPriority = 'webhooks_failing'
       topPriorityLabel = `${webhooksFailing} webhook${webhooksFailing === 1 ? '' : 's'} returned HTTP ≥400 on last delivery — tier-change events may not reach your host app.`
@@ -1038,6 +1036,50 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
         topPriorityTo,
       },
     })
+  })
+
+  // ===========================================================
+  // ADMIN: PUT /v1/admin/rewards/project-status
+  // The only writer of project_settings.rewards_enabled. Without it the
+  // "Rewards are off" banner had no fix and SDK activity never earned points.
+  // ===========================================================
+  app.put('/v1/admin/rewards/project-status', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string
+    const orgGate = await requireRewardsWriter(c, userId)
+    if (!orgGate.ok) return orgGate.response
+    const orgId = orgGate.orgId
+
+    let raw: unknown
+    try { raw = await c.req.json() } catch {
+      return c.json({ ok: false, error: { code: 'INVALID_JSON', message: 'The request body was not valid JSON.' } }, 400)
+    }
+    const parsed = z.object({ project_id: z.string().uuid(), enabled: z.boolean() }).safeParse(raw)
+    if (!parsed.success) {
+      return jsonError(c, 'VALIDATION_ERROR', 'Send a project_id and enabled: true or false.', 422)
+    }
+    const { project_id: projectId, enabled } = parsed.data
+
+    const db = getServiceClient()
+    const { data: project } = await db
+      .from('projects')
+      .select('id, name')
+      .eq('id', projectId)
+      .eq('organization_id', orgId)
+      .maybeSingle()
+    if (!project) {
+      return jsonError(c, 'PROJECT_NOT_FOUND', 'That project is not in this team. Pick one of this team’s projects.', 404)
+    }
+    if (!(await canManageProjectSdkConfig(db, projectId, userId))) {
+      return jsonError(c, 'FORBIDDEN', 'Only a team owner or admin can turn rewards on or off for a project.', 403)
+    }
+
+    const { error } = await db
+      .from('project_settings')
+      .upsert({ project_id: projectId, rewards_enabled: enabled }, { onConflict: 'project_id' })
+    if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+
+    rlog.info('rewards_project_status_changed', { orgId, projectId, enabled })
+    return c.json({ ok: true, data: { project_id: projectId, project_name: project.name, enabled } })
   })
 
   // ===========================================================
@@ -1110,6 +1152,8 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
     if (!orgGate.ok) return orgGate.response
     const orgId = orgGate.orgId
 
+    // Disabled rules are listed too: the console's Enabled checkbox is the only
+    // way to turn a rule back on (presets skip actions that already exist).
     // Prefer explicit ?projectId query param, then X-Mushi-Project-Id header
     const projectId = c.req.query('projectId')
       ?? c.req.header('x-mushi-project-id')
@@ -1124,7 +1168,6 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
         .select('*')
         .eq('organization_id', orgId)
         .eq('project_id', projectId)
-        .eq('enabled', true)
         .order('action', { ascending: true })
 
       if (e1) return c.json({ ok: false, error: { code: 'DB_ERROR', message: e1.message } }, 500)
@@ -1137,7 +1180,6 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
       .select('*')
       .eq('organization_id', orgId)
       .is('project_id', null)
-      .eq('enabled', true)
       .order('action', { ascending: true })
 
     if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
@@ -1146,18 +1188,18 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
 
   app.put('/v1/admin/rewards/rules', jwtAuth, async (c) => {
     const userId = c.get('userId') as string
-    const orgGate = await requireRewardsOrgAdmin(c, userId)
+    const orgGate = await requireRewardsWriter(c, userId)
     if (!orgGate.ok) return orgGate.response
     const orgId = orgGate.orgId
 
     let raw: unknown
     try { raw = await c.req.json() } catch {
-      return c.json({ ok: false, error: { code: 'INVALID_JSON' } }, 400)
+      return c.json({ ok: false, error: { code: 'INVALID_JSON', message: 'The request body was not valid JSON.' } }, 400)
     }
 
     const parsed = z.array(rewardRuleUpsertSchema).safeParse(raw)
     if (!parsed.success) {
-      return c.json({ ok: false, error: { code: 'INVALID_RULES', issues: parsed.error.issues } }, 422)
+      return c.json({ ok: false, error: { code: 'INVALID_RULES', message: plainIssues('Check the rules:', parsed.error.issues), issues: parsed.error.issues } }, 422)
     }
 
     const db = getServiceClient()
@@ -1200,13 +1242,13 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
 
   app.put('/v1/admin/rewards/tiers', jwtAuth, async (c) => {
     const userId = c.get('userId') as string
-    const orgGate = await requireRewardsOrgAdmin(c, userId)
+    const orgGate = await requireRewardsWriter(c, userId)
     if (!orgGate.ok) return orgGate.response
     const orgId = orgGate.orgId
 
     let raw: unknown
     try { raw = await c.req.json() } catch {
-      return c.json({ ok: false, error: { code: 'INVALID_JSON' } }, 400)
+      return c.json({ ok: false, error: { code: 'INVALID_JSON', message: 'The request body was not valid JSON.' } }, 400)
     }
 
     const parsed = z.array(rewardTierUpsertSchema).safeParse(raw)
@@ -1235,7 +1277,7 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   // ===========================================================
   app.post('/v1/admin/rewards/presets/apply', jwtAuth, async (c) => {
     const userId = c.get('userId') as string
-    const orgGate = await requireRewardsOrgAdmin(c, userId)
+    const orgGate = await requireRewardsWriter(c, userId)
     if (!orgGate.ok) return orgGate.response
     const orgId = orgGate.orgId
     const db = getServiceClient()
@@ -1423,7 +1465,8 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
     const range = c.req.query('range') === 'all' ? 'all' : '30d'
     const limit = Math.min(parseInt(c.req.query('limit') ?? '50', 10), 200)
     const offset = Math.max(parseInt(c.req.query('offset') ?? '0', 10), 0)
-    const search = (c.req.query('search') ?? '').trim().toLowerCase()
+    // Sanitised: `,` `(` `)` in raw input broke the PostgREST .or() filter (DB_ERROR).
+    const search = leaderboardSearchTerm(c.req.query('search'))
     const tierSlug = c.req.query('tier') ?? ''
     const db = getServiceClient()
 
@@ -1531,16 +1574,24 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   // ===========================================================
   app.post('/v1/admin/rewards/webhooks', jwtAuth, async (c) => {
     const userId = c.get('userId') as string
-    const orgGate = await requireRewardsOrgAdmin(c, userId)
+    const orgGate = await requireRewardsWriter(c, userId)
     if (!orgGate.ok) return orgGate.response
     const orgId = orgGate.orgId
 
     let raw: unknown
     try { raw = await c.req.json() } catch {
-      return c.json({ ok: false, error: { code: 'INVALID_JSON' } }, 400)
+      return c.json({ ok: false, error: { code: 'INVALID_JSON', message: 'The request body was not valid JSON.' } }, 400)
     }
     const parsed = webhookCreateSchema.safeParse(raw)
-    if (!parsed.success) return c.json({ ok: false, error: { code: 'INVALID_WEBHOOK' } }, 422)
+    if (!parsed.success) {
+      return c.json({
+        ok: false,
+        error: {
+          code: 'INVALID_WEBHOOK',
+          message: 'Check the webhook: the URL must start with https:// and a custom signing secret must be at least 16 characters.',
+        },
+      }, 422)
+    }
 
     const db = getServiceClient()
     const webhookId = crypto.randomUUID()
@@ -1601,7 +1652,7 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   // ===========================================================
   app.delete('/v1/admin/rewards/webhooks/:id', jwtAuth, async (c) => {
     const userId = c.get('userId') as string
-    const orgGate = await requireRewardsOrgAdmin(c, userId)
+    const orgGate = await requireRewardsWriter(c, userId)
     if (!orgGate.ok) return orgGate.response
     const orgId = orgGate.orgId
 
@@ -1623,12 +1674,12 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   // ===========================================================
   app.post('/v1/admin/rewards/webhooks/test', jwtAuth, async (c) => {
     const userId = c.get('userId') as string
-    const orgGate = await requireRewardsOrgAdmin(c, userId)
+    const orgGate = await requireRewardsWriter(c, userId)
     if (!orgGate.ok) return orgGate.response
     const orgId = orgGate.orgId
 
     const db = getServiceClient()
-    await dispatchRewardWebhook(db, orgId, {
+    const deliveries = await dispatchRewardWebhook(db, orgId, {
       event: 'reward.tier_changed',
       end_user_id: 'test-user',
       tier_before: null,
@@ -1637,7 +1688,20 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
       occurred_at: new Date().toISOString(),
     })
 
-    return c.json({ ok: true, data: { message: 'Test webhook delivered (see last_status on each row for result)' } })
+    // Report what each endpoint answered instead of a blanket "delivered":
+    // a 500 or a timeout must read as a failure.
+    const results = deliveries.map((d) => ({
+      webhook_id: d.webhookId,
+      url: d.url,
+      status: d.status,
+      ok: d.status >= 200 && d.status < 300,
+      ...(d.skipped ? { skipped: d.skipped } : {}),
+    }))
+    const failed = results.filter((r) => !r.ok).length
+    return c.json({
+      ok: true,
+      data: { attempted: results.length, delivered: results.length - failed, failed, results },
+    })
   })
 
   // ===========================================================
@@ -1683,17 +1747,17 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
 
   app.post('/v1/admin/rewards/quests', jwtAuth, async (c) => {
     const userId = c.get('userId') as string
-    const orgGate = await requireRewardsOrgAdmin(c, userId)
+    const orgGate = await requireRewardsWriter(c, userId)
     if (!orgGate.ok) return orgGate.response
     const orgId = orgGate.orgId
 
     let raw: unknown
     try { raw = await c.req.json() } catch {
-      return c.json({ ok: false, error: { code: 'INVALID_JSON' } }, 400)
+      return c.json({ ok: false, error: { code: 'INVALID_JSON', message: 'The request body was not valid JSON.' } }, 400)
     }
     const parsed = questUpsertSchema.safeParse(raw)
     if (!parsed.success) {
-      return c.json({ ok: false, error: { code: 'INVALID_QUEST', issues: parsed.error.issues } }, 422)
+      return c.json({ ok: false, error: { code: 'INVALID_QUEST', message: plainIssues('Check the quest:', parsed.error.issues), issues: parsed.error.issues } }, 422)
     }
 
     const db = getServiceClient()
@@ -1725,7 +1789,7 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   // ===========================================================
   app.delete('/v1/admin/rewards/quests/:id', jwtAuth, async (c) => {
     const userId = c.get('userId') as string
-    const orgGate = await requireRewardsOrgAdmin(c, userId)
+    const orgGate = await requireRewardsWriter(c, userId)
     if (!orgGate.ok) return orgGate.response
     const orgId = orgGate.orgId
 
@@ -1804,13 +1868,13 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
 
   app.post('/v1/admin/rewards/identity-providers', jwtAuth, async (c) => {
     const userId = c.get('userId') as string
-    const orgGate = await requireRewardsOrgAdmin(c, userId)
+    const orgGate = await requireRewardsWriter(c, userId)
     if (!orgGate.ok) return orgGate.response
     const orgId = orgGate.orgId
 
     let raw: unknown
     try { raw = await c.req.json() } catch {
-      return c.json({ ok: false, error: { code: 'INVALID_JSON' } }, 400)
+      return c.json({ ok: false, error: { code: 'INVALID_JSON', message: 'The request body was not valid JSON.' } }, 400)
     }
     const parsed = identityProviderCreateSchema.safeParse(raw)
     if (!parsed.success) {
@@ -1852,14 +1916,14 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   // ===========================================================
   app.patch('/v1/admin/rewards/identity-providers/:id', jwtAuth, async (c) => {
     const userId = c.get('userId') as string
-    const orgGate = await requireRewardsOrgAdmin(c, userId)
+    const orgGate = await requireRewardsWriter(c, userId)
     if (!orgGate.ok) return orgGate.response
     const orgId = orgGate.orgId
 
     const id = c.req.param('id')!
     let raw: unknown
     try { raw = await c.req.json() } catch {
-      return c.json({ ok: false, error: { code: 'INVALID_JSON' } }, 400)
+      return c.json({ ok: false, error: { code: 'INVALID_JSON', message: 'The request body was not valid JSON.' } }, 400)
     }
 
     const patchSchema = z.object({
@@ -1907,13 +1971,13 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   // Award ad-hoc bonus points to a contributor (MCP write surface).
   // ===========================================================
   app.post('/v1/admin/rewards/bonus-points', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {
-    const orgResolved = await requireRewardsOrgAdmin(c, (c.get('userId') as string | undefined) ?? '')
+    const orgResolved = await requireRewardsWriter(c, (c.get('userId') as string | undefined) ?? '')
     if (!orgResolved.ok) return orgResolved.response
     const orgId = orgResolved.orgId
 
     let raw: unknown
     try { raw = await c.req.json() } catch {
-      return c.json({ ok: false, error: { code: 'INVALID_JSON' } }, 400)
+      return c.json({ ok: false, error: { code: 'INVALID_JSON', message: 'The request body was not valid JSON.' } }, 400)
     }
     const schema = z.object({
       // Accept either the internal UUID or the external string ID
@@ -1972,13 +2036,13 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   // Manually override a contributor's tier (MCP write surface).
   // ===========================================================
   app.post('/v1/admin/rewards/set-tier', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {
-    const orgResolved = await requireRewardsOrgAdmin(c, (c.get('userId') as string | undefined) ?? '')
+    const orgResolved = await requireRewardsWriter(c, (c.get('userId') as string | undefined) ?? '')
     if (!orgResolved.ok) return orgResolved.response
     const orgId = orgResolved.orgId
 
     let raw: unknown
     try { raw = await c.req.json() } catch {
-      return c.json({ ok: false, error: { code: 'INVALID_JSON' } }, 400)
+      return c.json({ ok: false, error: { code: 'INVALID_JSON', message: 'The request body was not valid JSON.' } }, 400)
     }
     const schema = z.object({
       end_user_id: z.string().uuid().optional(),
@@ -2118,7 +2182,7 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
 
     let raw: unknown
     try { raw = await c.req.json() } catch {
-      return c.json({ ok: false, error: { code: 'INVALID_JSON' } }, 400)
+      return c.json({ ok: false, error: { code: 'INVALID_JSON', message: 'The request body was not valid JSON.' } }, 400)
     }
     const schema = z.object({
       events: z.array(z.object({
@@ -2202,14 +2266,14 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   // ===========================================================
   app.post('/v1/admin/rewards/disputes/:id/resolve', jwtAuth, async (c) => {
     const userId = c.get('userId') as string
-    const orgGate = await requireRewardsOrgAdmin(c, userId)
+    const orgGate = await requireRewardsWriter(c, userId)
     if (!orgGate.ok) return orgGate.response
     const orgId = orgGate.orgId
 
     const id = c.req.param('id')!
     let raw: unknown
     try { raw = await c.req.json() } catch {
-      return c.json({ ok: false, error: { code: 'INVALID_JSON' } }, 400)
+      return c.json({ ok: false, error: { code: 'INVALID_JSON', message: 'The request body was not valid JSON.' } }, 400)
     }
 
     const resolveSchema = z.object({
@@ -2257,7 +2321,7 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   // ===========================================================
   app.delete('/v1/admin/rewards/identity-providers/:id', jwtAuth, async (c) => {
     const userId = c.get('userId') as string
-    const orgGate = await requireRewardsOrgAdmin(c, userId)
+    const orgGate = await requireRewardsWriter(c, userId)
     if (!orgGate.ok) return orgGate.response
     const orgId = orgGate.orgId
 

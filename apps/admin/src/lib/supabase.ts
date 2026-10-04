@@ -16,7 +16,7 @@ import {
   isValidProjectId,
 } from './activeProject'
 import { getActiveOrgIdSnapshot, isValidOrgId } from './activeOrg'
-import { coerceApiResult, type ApiResult } from './apiEnvelope'
+import { coerceApiResult, errorFromBody, type ApiResult } from './apiEnvelope'
 import type * as CrossTeamProject from './crossTeamProject'
 
 const authOptions = {
@@ -486,13 +486,17 @@ async function doFetch<T>(
         }
       }
       try {
-        const coerced = coerceApiResult<T>(JSON.parse(body))
+        const parsedBody: unknown = JSON.parse(body)
+        const coerced = coerceApiResult<T>(parsedBody)
         // A non-2xx body without an explicit error envelope (e.g. a proxy's
-        // `{ "message": "..." }`) must never coerce into a success.
+        // `{ "message": "..." }`) must never coerce into a success. When it
+        // still carries an `error` object (a route returning zod's
+        // `{ error: flatten() }`), keep its readable text instead of raw JSON.
         if (coerced.ok) {
+          const bodyError = errorFromBody(parsedBody)
           return attachRequestId({
             ok: false,
-            error: { code: 'HTTP_ERROR', message: `${res.status}: ${body.slice(0, 200)}` },
+            error: bodyError ?? { code: 'HTTP_ERROR', message: `${res.status}: ${body.slice(0, 200)}` },
           })
         }
         return attachRequestId(coerced)
