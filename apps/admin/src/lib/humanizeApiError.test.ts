@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { describeApiFailure, humanizeApiError, isPlainSentence, parsePageDataError } from './humanizeApiError'
+import { describeApiFailure, humanizeApiError, parsePageDataError } from './humanizeApiError'
 
 describe('parsePageDataError', () => {
   it('extracts code from usePageData format', () => {
@@ -66,12 +66,13 @@ describe('describeApiFailure', () => {
     expect(t.description).toMatch(/Retry/)
   })
 
-  it('isPlainSentence rejects codes and envelopes', () => {
-    expect(isPlainSentence('NO_FIELDS')).toBe(false)
-    expect(isPlainSentence('Request failed')).toBe(false)
-    expect(isPlainSentence('Add an access token to test Vercel.')).toBe(true)
-    expect(isPlainSentence('webhookUrl must be a public https URL (private host).')).toBe(false)
-    expect(isPlainSentence('pluginName is required')).toBe(false)
-    expect(isPlainSentence('400: {"error":{"code":"X"}}')).toBe(false)
+  it('never passes a code, an envelope or a field-name dump through as the description', () => {
+    const plain = (message: string) => describeApiFailure({ code: 'ERROR', message }, 'Failed').description === message
+    expect(plain('NO_FIELDS')).toBe(false)
+    expect(plain('Request failed')).toBe(false)
+    expect(plain('Add an access token to test Vercel.')).toBe(true)
+    expect(plain('webhookUrl must be a public https URL (private host).')).toBe(false)
+    expect(plain('pluginName is required')).toBe(false)
+    expect(plain('400: {"error":{"code":"X"}}')).toBe(false)
   })
 })
