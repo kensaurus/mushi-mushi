@@ -7,6 +7,9 @@ import { logAudit } from '../../_shared/audit.ts';
 import { emitProductEvent } from '../../_shared/product-events.ts';
 import { withIdempotency } from '../../_shared/idempotency.ts';
 import { dbError, callerCanAccessProject } from '../shared.ts';
+import { rotatedKeyLabel, rotationScopes } from '../../_shared/api-key-rotation.ts';
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function registerProjectKeysRoutes(app: Hono<{ Variables: Variables }>): void {
   // Scopes vocabulary is enforced at the DB level (CHECK constraint from
@@ -228,14 +231,18 @@ export function registerProjectKeysRoutes(app: Hono<{ Variables: Variables }>): 
             ? 'mcp-readonly'
             : 'default';
 
-    const { error } = await db.from('project_api_keys').insert({
-      project_id: projectId,
-      key_hash: keyHash,
-      key_prefix: prefix,
-      label,
-      scopes,
-      is_active: true,
-    });
+    const { data: inserted, error } = await db
+      .from('project_api_keys')
+      .insert({
+        project_id: projectId,
+        key_hash: keyHash,
+        key_prefix: prefix,
+        label,
+        scopes,
+        is_active: true,
+      })
+      .select('id')
+      .single();
 
     if (error) return dbError(c, error);
     // Company funnel (mushi-self): fire-and-forget. The prefix is the 12-char
@@ -247,24 +254,21 @@ export function registerProjectKeysRoutes(app: Hono<{ Variables: Variables }>): 
       properties: { project_id: projectId, label, scopes: scopes.join(',') },
       dedupKey: `key_minted:${prefix}`,
     });
-    return c.json({ ok: true, data: { key: rawKey, prefix, scopes, label } }, 201);
+    // `id` lets the console rotate or revoke exactly this key later.
+    return c.json({ ok: true, data: { id: inserted?.id ?? null, key: rawKey, prefix, scopes, label } }, 201);
   });
 
-  // Rotation endpoint advertised by the auth manifest.: previously a
-  // 404 because no Hono route existed despite being listed under
-  // `mushi-api-key.rotation_endpoint`. Atomic-ish rotate-then-issue:
+  // Rotation endpoint advertised by the auth manifest. Rotates ONE named key:
   //
-  //   1. Mark every active key on the project as revoked (soft-delete, audit
-  //      log keeps the prefix for forensics).
-  //   2. Mint a fresh key with the same crypto pattern as POST /keys.
-  //   3. Return only the new key once — same one-shot semantics as initial
-  //      generation so callers know to copy immediately.
-  //
-  // "Atomic-ish" because Supabase Edge Functions don't expose transactions; in
-  // the worst case (network blip between the revoke and the insert) the project
-  // is keyless until the second call retries. That is strictly safer than the
-  // inverse — leaking a window where both the old and new keys are valid would
-  // silently extend the rotated key's effective lifetime.
+  //   1. Body `{ keyId }` names the active key to replace. It is required:
+  //      the old behaviour revoked EVERY active key on the project (MCP,
+  //      voice, CI and OAuth keys included) and minted one report:write key,
+  //      so one misclick disconnected every editor, phone shortcut and CI
+  //      build (QA #31).
+  //   2. Mint the replacement first, with the old key's scopes and label.
+  //   3. Revoke only the named key, once the replacement exists. If that
+  //      revoke fails, the old key stays live and the response says so.
+  //   4. Return the new key once (same one-shot semantics as POST /keys).
   app.post('/v1/admin/projects/:id/keys/rotate', jwtAuth, async (c) => {
     const projectId = c.req.param('id')!;
     // Set explicitly (rather than relying on withIdempotency's body-based
@@ -277,6 +281,7 @@ export function registerProjectKeysRoutes(app: Hono<{ Variables: Variables }>): 
     return withIdempotency(c, async () => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
+    const body = (await c.req.json().catch(() => ({}))) as { keyId?: unknown };
 
     // Rotating an API key is owner/admin-only.
     const access = await callerCanAccessProject(c, db, userId, projectId);
@@ -289,30 +294,40 @@ export function registerProjectKeysRoutes(app: Hono<{ Variables: Variables }>): 
         403,
       );
     }
-    const { data: project } = await db
-      .from('projects')
-      .select('id, name')
-      .eq('id', projectId)
-      .single();
-    if (!project) {
-      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404);
+
+    const keyId = typeof body.keyId === 'string' ? body.keyId.trim() : '';
+    if (!UUID_RE.test(keyId)) {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'KEY_ID_REQUIRED',
+            message: 'Pick the key to rotate. Rotation replaces one key and leaves the others working.',
+          },
+        },
+        400,
+      );
     }
 
-    const { data: existing, error: fetchError } = await db
+    const { data: oldKey, error: fetchError } = await db
       .from('project_api_keys')
-      .select('id, key_prefix')
+      .select('id, key_prefix, label, scopes')
+      .eq('id', keyId)
       .eq('project_id', projectId)
-      .eq('is_active', true);
+      .eq('is_active', true)
+      .maybeSingle();
     if (fetchError) return dbError(c, fetchError);
-
-    const revokedAt = new Date().toISOString();
-    if (existing && existing.length > 0) {
-      const { error: revokeError } = await db
-        .from('project_api_keys')
-        .update({ is_active: false, revoked_at: revokedAt })
-        .eq('project_id', projectId)
-        .eq('is_active', true);
-      if (revokeError) return dbError(c, revokeError);
+    if (!oldKey) {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'KEY_NOT_FOUND',
+            message: 'That key is already revoked or belongs to another project. Refresh the key list.',
+          },
+        },
+        404,
+      );
     }
 
     const rawKey = `mushi_${crypto.randomUUID().replace(/-/g, '')}`;
@@ -324,26 +339,48 @@ export function registerProjectKeysRoutes(app: Hono<{ Variables: Variables }>): 
       .map((b) => b.toString(16).padStart(2, '0'))
       .join('');
 
+    const scopes = rotationScopes(oldKey.scopes);
+    const label = rotatedKeyLabel(oldKey.label);
     const { data: newRow, error: insertError } = await db
       .from('project_api_keys')
       .insert({
         project_id: projectId,
         key_hash: keyHash,
         key_prefix: prefix,
-        label: 'rotated',
+        label,
+        scopes,
         is_active: true,
+        rotated_from: oldKey.id,
       })
       .select('id')
       .single();
     if (insertError) return dbError(c, insertError);
 
-    // Company funnel (mushi-self): fire-and-forget. Rotation keeps the
-    // column default scopes ('report:write').
+    const revokedAt = new Date().toISOString();
+    const { data: revokedRows, error: revokeError } = await db
+      .from('project_api_keys')
+      .update({ is_active: false, revoked_at: revokedAt })
+      .eq('id', oldKey.id)
+      .eq('project_id', projectId)
+      .eq('is_active', true)
+      .select('id');
+    if (revokeError) {
+      // The new key exists and the old one is still live. Report that
+      // instead of a rotation that did not happen.
+      log.warn('Key rotation: replacement minted but the old key was not revoked', {
+        projectId,
+        oldKeyPrefix: oldKey.key_prefix,
+        error: revokeError.message,
+      });
+    }
+    const revokedOld = !revokeError && (revokedRows?.length ?? 0) > 0;
+
+    // Company funnel (mushi-self): fire-and-forget.
     void emitProductEvent(db, {
       userId,
       eventName: 'key_minted',
       surface: 'server',
-      properties: { project_id: projectId, label: 'rotated', scopes: 'report:write' },
+      properties: { project_id: projectId, label, scopes: scopes.join(',') },
       dedupKey: `key_minted:${newRow?.id ?? prefix}`,
     });
 
@@ -357,8 +394,8 @@ export function registerProjectKeysRoutes(app: Hono<{ Variables: Variables }>): 
       newRow?.id,
       {
         rotated: true,
-        revoked_count: existing?.length ?? 0,
-        revoked_prefixes: (existing ?? []).map((row: { key_prefix: string }) => row.key_prefix),
+        revoked_count: revokedOld ? 1 : 0,
+        revoked_prefixes: revokedOld ? [oldKey.key_prefix] : [],
       },
       { email: userEmail },
     );
@@ -367,9 +404,14 @@ export function registerProjectKeysRoutes(app: Hono<{ Variables: Variables }>): 
       {
         ok: true,
         data: {
+          id: newRow?.id ?? null,
           key: rawKey,
           prefix,
-          revoked: existing?.length ?? 0,
+          scopes,
+          label,
+          revoked: revokedOld ? 1 : 0,
+          revoked_prefix: revokedOld ? oldKey.key_prefix : null,
+          old_key_still_active: !revokedOld,
           rotated_at: revokedAt,
         },
       },
@@ -396,16 +438,36 @@ export function registerProjectKeysRoutes(app: Hono<{ Variables: Variables }>): 
       );
     }
 
-    await db
+    if (!UUID_RE.test(keyId)) {
+      return c.json({ ok: false, error: { code: 'KEY_NOT_FOUND', message: 'That key does not exist.' } }, 404);
+    }
+    const { data: revoked, error: revokeError } = await db
       .from('project_api_keys')
       .update({
         is_active: false,
         revoked_at: new Date().toISOString(),
       })
       .eq('id', keyId)
-      .eq('project_id', projectId);
+      .eq('project_id', projectId)
+      .eq('is_active', true)
+      .select('id');
+    if (revokeError) return dbError(c, revokeError);
+    // QA #260: a wrong id or an already-revoked key used to return ok:true
+    // without revoking anything.
+    if (!revoked || revoked.length === 0) {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'KEY_NOT_FOUND',
+            message: 'That key is already revoked or belongs to another project. Refresh the key list.',
+          },
+        },
+        404,
+      );
+    }
 
-    return c.json({ ok: true });
+    return c.json({ ok: true, data: { revoked: 1 } });
   });
 
 }

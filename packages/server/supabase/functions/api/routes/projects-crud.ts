@@ -17,6 +17,29 @@ import { logAudit } from '../../_shared/audit.ts';
 import { emitProductEvent } from '../../_shared/product-events.ts';
 import { dbError, enumerateAccessibleProjectIds } from '../shared.ts';
 import { failedFixPreviews, loadRecentFixTruths } from '../../_shared/fix-report-truth-load.ts';
+import { projectCapabilities } from '../../_shared/project-capabilities.ts';
+
+/**
+ * Exact report count per project, one `head: true` count query each. Never
+ * reads report rows, so PostgREST's max-rows cap cannot truncate the
+ * answer. Throws on the first query error.
+ */
+async function countReportsPerProject(
+  db: ReturnType<typeof getServiceClient>,
+  projectIds: string[],
+): Promise<Record<string, number>> {
+  const entries = await Promise.all(
+    projectIds.map(async (id) => {
+      const { count, error } = await db
+        .from('reports')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', id);
+      if (error) throw error;
+      return [id, count ?? 0] as const;
+    }),
+  );
+  return Object.fromEntries(entries);
+}
 
 export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>): void {
   // Lenient UUID matcher (any 8-4-4-4-12 hex). The strict v1–v5 form in
@@ -57,7 +80,7 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
         // ProjectsPage had no way to show "this project is on Pro, EU".
         // Boost shipped 2026-05-07 along with the repo + codebase joins
         // below.
-        .select('id, name, slug, created_at, organization_id, plan_tier, data_residency_region')
+        .select('id, name, slug, created_at, organization_id, owner_id, plan_tier, data_residency_region')
         .in('id', accessibleIds)
         .order('created_at', { ascending: false }),
       db
@@ -68,6 +91,12 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
 
     const roleByOrg = new Map<string, string>();
     for (const m of memberships ?? []) roleByOrg.set(m.organization_id, m.role);
+
+    // owner_id stays server-side; it only feeds projectCapabilities below.
+    const ownerById = new Map<string, string | null>();
+    for (const p of projectRows ?? []) {
+      ownerById.set(p.id, (p as { owner_id?: string | null }).owner_id ?? null);
+    }
 
     const projects = (projectRows ?? []).map((p) => ({
       id: p.id,
@@ -120,10 +149,9 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
       severityRows,
       projectSettingsRows,
     ] = await Promise.all([
-        db
-          .from('reports')
-          .select('project_id', { count: 'exact', head: false })
-          .in('project_id', projectIds),
+        // One exact head count per project: reading the rows and counting
+        // them in JS stopped at PostgREST's row cap (QA #136).
+        countReportsPerProject(db, projectIds),
         // Pull `last_seen_*` per-key alongside the existing identity columns so
         // ProjectsPage's SdkHealthSummary can render per-key connectivity
         // status without a second round-trip. The same heartbeat columns power
@@ -206,9 +234,7 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
         (s as { github_repo_url?: string | null }).github_repo_url ?? null;
     }
 
-    const countMap: Record<string, number> = {};
-    for (const r of reportCounts.data ?? [])
-      countMap[r.project_id] = (countMap[r.project_id] ?? 0) + 1;
+    const countMap: Record<string, number> = reportCounts;
 
     const keyMap: Record<string, Array<Record<string, unknown>>> = {};
     for (const k of allKeys.data ?? []) {
@@ -562,8 +588,17 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
         trendDirection = 'down';
       }
       const sentryReports = sentryConnectedCount[p.id] ?? 0;
+      const capabilities = projectCapabilities({
+        userId,
+        ownerId: ownerById.get(p.id) ?? null,
+        organizationId: p.organization_id ?? null,
+        orgRole: p.organization_role,
+        projectRole:
+          (memberMap[p.id] ?? []).find((m) => m.user_id === userId)?.role ?? null,
+      });
       return {
         ...p,
+        ...capabilities,
         report_count: countMap[p.id] ?? 0,
         api_keys: keys,
         active_key_count: keys.filter((k) => k.is_active).length,
@@ -671,7 +706,13 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
         .from('project_api_keys')
         .select('project_id, is_active, last_seen_at')
         .in('project_id', accessibleIds),
-      db.from('reports').select('project_id').in('project_id', accessibleIds),
+      // Which projects have at least one report: one exact head count per
+      // project. Reading every report row stopped at PostgREST's row cap, so
+      // a busy project could push the others into "never ingested" (QA #136).
+      countReportsPerProject(db, accessibleIds).then(
+        (counts) => ({ data: Object.keys(counts).filter((id) => counts[id] > 0), error: null }),
+        (error: unknown) => ({ data: null, error: error as { message: string } }),
+      ),
       db
         .from('reports')
         .select('id', { count: 'exact', head: true })
@@ -703,10 +744,7 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
         staleKeyCount += 1;
       }
     }
-    const projectsWithReportsSet = new Set<string>();
-    for (const r of reportProjectRows ?? []) {
-      projectsWithReportsSet.add(r.project_id as string);
-    }
+    const projectsWithReportsSet = new Set<string>(reportProjectRows ?? []);
 
     const projectCount = accessibleIds.length;
     const projectsWithReports = projectsWithReportsSet.size;
