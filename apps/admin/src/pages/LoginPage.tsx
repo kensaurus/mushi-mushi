@@ -12,6 +12,12 @@ import { Input, SelectField, Btn, Tooltip, HelpBanner } from '../components/ui'
 import { isCloudMode, RESOLVED_SUPABASE_URL } from '../lib/env'
 import { nextPathFromLoginState } from '../lib/authRedirect'
 import {
+  classifyAuthError as classifyAuthErrorText,
+  loginActionFor,
+  type LoginFormMode,
+  type LoginTrack,
+} from '../lib/loginSubmit'
+import {
   forgetRememberedLoginEmail,
   readRememberedLoginEmail,
   rememberLoginEmail,
@@ -28,10 +34,8 @@ import {
 } from '../lib/signupAttribution'
 
 type HealthStatus = 'checking' | 'ok' | 'error' | 'unknown'
-type FormMode = 'login' | 'magic' | 'signup' | 'forgot'
+type FormMode = LoginFormMode
 type SuccessState = null | 'signup-confirm' | 'reset-sent' | 'magic-sent'
-/** Which portal flow led the user to this login page. */
-type LoginTrack = 'tester' | 'console'
 
 const cloud = isCloudMode()
 
@@ -41,24 +45,11 @@ function getSupabaseHost(): string {
 }
 
 function classifyAuthError(raw: string): string {
-  const lower = raw.toLowerCase()
-  if (lower.includes('invalid login') || lower.includes('invalid_credentials'))
-    return 'Invalid email or password. Check your credentials and try again.'
-  if (lower.includes('email not confirmed'))
-    return 'Please confirm your email address first. Check your inbox for a verification link.'
-  if (lower.includes('rate limit') || lower.includes('too many'))
-    return 'Too many attempts. Wait a moment and try again.'
-  if (lower.includes('fetch') || lower.includes('network') || lower.includes('failed'))
-    return cloud
-      ? 'Cannot reach the server. Please check your network connection and try again.'
-      : 'Cannot reach the Supabase server. Check your .env configuration and network connection.'
-  if (lower.includes('user already registered'))
-    return 'An account with this email already exists. Try signing in instead.'
-  return raw
+  return classifyAuthErrorText(raw, { cloud })
 }
 
 export function LoginPage() {
-  const { session, signIn, signInWithMagicLink, signInWithGitHub, signInWithGoogle, signInWithPasskey, signUp, resetPassword } = useAuth()
+  const { session, signIn, signInWithMagicLink, signInAsTester, signInWithGitHub, signInWithGoogle, signInWithPasskey, signUp, resetPassword } = useAuth()
   const location = useLocation()
   const [searchParams] = useSearchParams()
   const initialRememberedEmail = readRememberedLoginEmail()
@@ -160,7 +151,8 @@ export function LoginPage() {
     setLoading(true)
 
     try {
-      if (mode === 'forgot') {
+      const action = loginActionFor(mode, track)
+      if (action === 'reset') {
         const result = await resetPassword(email)
         if (result.error) {
           setError(classifyAuthError(result.error))
@@ -168,18 +160,24 @@ export function LoginPage() {
           persistEmailChoice()
           setSuccess('reset-sent')
         }
-      } else if (mode === 'magic' || track === 'tester') {
-        // Both tracks use magic-link; the post-auth redirect is driven by `nextPath`.
-        const magicFn = signInWithMagicLink
-        const result = await magicFn(email)
+      } else if (action === 'email-link' || action === 'tester-email-link') {
+        // The link returns to `nextPath` (an invite, a deep link, /tester…).
+        // Only the tester link may create an account; see authRequestOptions.
+        const result =
+          action === 'tester-email-link'
+            ? await signInAsTester(email, { next: nextPath })
+            : await signInWithMagicLink(email, { next: nextPath })
         if (result.error) {
           setError(classifyAuthError(result.error))
         } else {
           persistEmailChoice()
           setSuccess('magic-sent')
         }
-      } else if (mode === 'signup') {
-        const result = await signUp(email, password, buildSignupMeta())
+      } else if (action === 'signup' || action === 'tester-signup') {
+        const result = await signUp(email, password, buildSignupMeta(), {
+          next: nextPath,
+          ...(action === 'tester-signup' ? { intent: 'tester' as const } : {}),
+        })
         if (result.error) {
           setError(classifyAuthError(result.error))
         } else if (result.needsConfirmation) {
