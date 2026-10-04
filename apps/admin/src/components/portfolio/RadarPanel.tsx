@@ -13,7 +13,8 @@
  */
 
 import { useState } from 'react'
-import { Badge, Btn, Callout, CopyButton, ErrorAlert, Loading, Section } from '../ui'
+import { Badge, Btn, Callout, CopyButton, Loading, Section } from '../ui'
+import { PageLoadError } from '../PageLoadError'
 import { usePageData } from '../../lib/usePageData'
 import { apiFetchMutate } from '../../lib/supabase'
 import type { RadarView } from '../../lib/radarTypes'
@@ -56,7 +57,7 @@ export function RadarPanel({ projectId }: { projectId: string }) {
           <span role="status">{notice.text}</span>
         </Callout>
       )}
-      {error && <ErrorAlert message={error} endpoint={path} onRetry={reload} />}
+      {error && <PageLoadError error={error} resource="the radar checks" endpoint={path} onRetry={reload} />}
       {loading && !data && <Loading text="Reading the risk checks…" />}
       {data && (
         <ul className="flex flex-col divide-y divide-edge-subtle">

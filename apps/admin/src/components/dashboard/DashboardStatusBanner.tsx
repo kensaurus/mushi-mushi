@@ -86,7 +86,7 @@ export function DashboardStatusBanner({
         action={
           <StatusBannerAction
             label={actions.triage ?? `Triage ${stats.openBacklog} reports`}
-            to={stats.topPriorityTo ?? scopedHref('/reports?tab=queue&status=new', pid)}
+            to={stats.topPriorityTo ?? scopedHref('/reports?status=new', pid)}
             tone="danger"
           />
         }

@@ -14,7 +14,8 @@
 
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Btn, Card, DisclosurePanel, ErrorAlert, Loading, SegmentedControl, formatRelative } from '../ui'
+import { Btn, Card, DisclosurePanel, Loading, SegmentedControl, formatRelative } from '../ui'
+import { PageLoadError } from '../PageLoadError'
 import { usePageData } from '../../lib/usePageData'
 import { LINK_ACCENT } from '../../lib/chipTone'
 import type { RecipeElementDetail, RecipeElementSummary } from '../../lib/recipeTypes'
@@ -106,7 +107,7 @@ function WhatItIs({ projectId, element }: { projectId: string; element: RecipeEl
   return (
     <div className="space-y-3">
       {loading && !data && <Loading text="Loading element detail…" />}
-      {error && <ErrorAlert message={error} endpoint={path} onRetry={reload} />}
+      {error && <PageLoadError error={error} resource="the recipe" endpoint={path} onRetry={reload} />}
       {data && view && (
         <>
           <RecipeElementView view={view} />
