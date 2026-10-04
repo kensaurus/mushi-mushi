@@ -48,8 +48,11 @@ export function PageHeader({ title, description, children, contextChip, projectS
   return (
     <div className="mb-5 w-full min-w-0 space-y-1.5">
       {chip && <div>{chip}</div>}
-      <div className="flex items-start justify-between gap-3">
-        <h2 className="min-w-0 flex-1 text-base font-semibold text-fg leading-snug">
+      {/* Wraps on phones (B26): the title takes the full row and the
+          actions drop below it, instead of squeezing the title into a
+          130px column that broke it mid-phrase. */}
+      <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
+        <h2 className="min-w-0 flex-1 basis-full sm:basis-0 text-base font-semibold text-fg leading-snug text-balance">
           {title}
           {projectScope && (
             <>
@@ -92,6 +95,7 @@ function AutoPdcaChip() {
   return (
     <Tooltip content={meta.hint}>
       <span
+        role="img"
         className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-2xs uppercase tracking-wider cursor-help ${meta.tintBg} ${meta.tintBorder} ${meta.text}`}
         aria-label={ariaLabel}
       >
