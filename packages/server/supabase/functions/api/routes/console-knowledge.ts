@@ -7,6 +7,7 @@ import type { Hono } from 'npm:hono@4';
 import type { Variables } from '../types.ts';
 import { jwtAuth } from '../../_shared/auth.ts';
 import { getServiceClient } from '../../_shared/db.ts';
+import { requireSuperAdmin } from '../../_shared/super-admin.ts';
 import { dbError } from '../shared.ts';
 
 export function registerConsoleKnowledgeRoutes(app: Hono<{ Variables: Variables }>): void {
@@ -37,7 +38,10 @@ export function registerConsoleKnowledgeRoutes(app: Hono<{ Variables: Variables 
     });
   });
 
-  app.post('/v1/admin/console-knowledge/rebuild', jwtAuth, async (c) => {
+  // The index is global (one corpus for every tenant) and the build spends
+  // the platform's embedding budget with the service role, so only a
+  // super-admin may start it. Everyone else gets the opaque 404.
+  app.post('/v1/admin/console-knowledge/rebuild', jwtAuth, requireSuperAdmin, async (c) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     if (!supabaseUrl || !serviceKey) {

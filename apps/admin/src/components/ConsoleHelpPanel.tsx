@@ -5,6 +5,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { apiFetch, apiFetchMutate } from '../lib/supabase'
+import { useEntitlements } from '../lib/useEntitlements'
 import { Btn, Section } from './ui'
 
 interface Status {
@@ -14,6 +15,9 @@ interface Status {
 }
 
 export function ConsoleHelpPanel() {
+  // The index is shared by every workspace and the rebuild spends platform
+  // embedding budget, so the server lets only super-admins start it.
+  const { isSuperAdmin } = useEntitlements()
   const [status, setStatus] = useState<Status | null>(null)
   const [loading, setLoading] = useState(true)
   const [rebuilding, setRebuilding] = useState(false)
@@ -50,8 +54,8 @@ export function ConsoleHelpPanel() {
   return (
     <Section title="Console help index" freshness={{ at: status?.lastUpdated ?? null, isValidating: loading }}>
       <p className="text-xs text-fg-muted mb-3 max-w-prose">
-        Powers Cmd+K natural-language answers (how-to steps and page deep links). Rebuild after
-        deploying admin copy or recipe changes.
+        Powers Cmd+K natural-language answers (how-to steps and page deep links). It is
+        shared by every workspace and rebuilt after admin copy or recipe changes.
       </p>
       {loading ? (
         <p className="text-xs text-fg-faint">Loading…</p>
@@ -62,9 +66,15 @@ export function ConsoleHelpPanel() {
             : `${status?.chunkCount ?? 0} chunks · last updated ${status?.lastUpdated ? new Date(status.lastUpdated).toLocaleString() : 'never'}`}
         </p>
       )}
-      <Btn variant="ghost" size="sm" disabled={rebuilding || status?.schemaPending} onClick={() => void rebuild()}>
-        {rebuilding ? 'Rebuilding…' : 'Rebuild console help index'}
-      </Btn>
+      {isSuperAdmin ? (
+        <Btn variant="ghost" size="sm" disabled={rebuilding || status?.schemaPending} onClick={() => void rebuild()}>
+          {rebuilding ? 'Rebuilding…' : 'Rebuild console help index'}
+        </Btn>
+      ) : (
+        <p className="text-2xs text-fg-muted">
+          The Mushi team rebuilds this index after each release. Nothing to do here.
+        </p>
+      )}
       {message && <p className="text-2xs text-fg-muted mt-2">{message}</p>}
     </Section>
   )
