@@ -141,7 +141,7 @@ export function voiceActionLabel(action: string | null | undefined): string {
 // ── upload ───────────────────────────────────────────────────────────────────
 
 /** Accepted formats, in the words shown to the user. */
-export const VOICE_ACCEPTED_FORMATS = '.m4a, .mp3, .ogg, .webm or .wav'
+const VOICE_ACCEPTED_FORMATS = '.m4a, .mp3, .ogg, .webm or .wav'
 
 /**
  * Mirrors the server's `extensionForMime` (_shared/stt.ts): every alias it
@@ -183,7 +183,7 @@ const VOICE_EXTENSION_MIME: Record<string, string> = {
  * knows, else the file extension, else null (the caller then names the
  * formats that work instead of sending a request the server refuses).
  */
-export function resolveVoiceMime(file: { type?: string; name?: string }): string | null {
+function resolveVoiceMime(file: { type?: string; name?: string }): string | null {
   const base = (file.type ?? '').split(';')[0]!.trim().toLowerCase()
   const fromType = VOICE_MIME_ALIASES[base]
   if (fromType) return fromType

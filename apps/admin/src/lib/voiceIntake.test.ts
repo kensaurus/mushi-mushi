@@ -20,7 +20,6 @@ import {
   canConfirmVoiceSession,
   effectiveVoiceStatus,
   isVoiceIntakeEnabled,
-  resolveVoiceMime,
   uploadAndSubmitVoice,
 } from './voiceIntake'
 
@@ -30,24 +29,33 @@ beforeEach(() => {
   uploadToSignedUrl.mockReset()
 })
 
-describe('resolveVoiceMime', () => {
-  it('maps every alias the server accepts to the canonical bucket type', () => {
-    expect(resolveVoiceMime({ type: 'audio/webm;codecs=opus' })).toBe('audio/webm')
-    expect(resolveVoiceMime({ type: 'audio/x-m4a' })).toBe('audio/mp4')
-    expect(resolveVoiceMime({ type: 'audio/mp3' })).toBe('audio/mpeg')
-    expect(resolveVoiceMime({ type: 'audio/x-wav' })).toBe('audio/wav')
-    expect(resolveVoiceMime({ type: 'application/ogg' })).toBe('audio/ogg')
+/** The mime the upload-url request asked for, or null when none was sent. */
+async function mimeAskedFor(name: string, type: string): Promise<string | null> {
+  apiFetchMutate.mockReset()
+  apiFetchMutate.mockResolvedValue({ ok: false, error: { code: 'X', message: 'stop here' } })
+  await uploadAndSubmitVoice(new File([new Uint8Array([1])], name, { type }))
+  const call = apiFetchMutate.mock.calls[0]
+  return call ? (JSON.parse(call[1].body) as { mime: string }).mime : null
+}
+
+describe('the audio type sent for upload', () => {
+  it('maps every alias the server accepts to the canonical bucket type', async () => {
+    expect(await mimeAskedFor('a', 'audio/webm;codecs=opus')).toBe('audio/webm')
+    expect(await mimeAskedFor('a', 'audio/x-m4a')).toBe('audio/mp4')
+    expect(await mimeAskedFor('a', 'audio/mp3')).toBe('audio/mpeg')
+    expect(await mimeAskedFor('a', 'audio/x-wav')).toBe('audio/wav')
+    expect(await mimeAskedFor('a', 'application/ogg')).toBe('audio/ogg')
   })
 
-  it('falls back to the file extension when the browser gives no type or an alias the server refuses', () => {
-    expect(resolveVoiceMime({ type: '', name: 'Recording 12.m4a' })).toBe('audio/mp4')
-    expect(resolveVoiceMime({ type: 'audio/mp4a-latm', name: 'memo.M4A' })).toBe('audio/mp4')
-    expect(resolveVoiceMime({ type: '', name: 'clip.opus' })).toBe('audio/ogg')
+  it('falls back to the file extension when the browser gives no type or an alias the server refuses', async () => {
+    expect(await mimeAskedFor('Recording 12.m4a', '')).toBe('audio/mp4')
+    expect(await mimeAskedFor('memo.M4A', 'audio/mp4a-latm')).toBe('audio/mp4')
+    expect(await mimeAskedFor('clip.opus', '')).toBe('audio/ogg')
   })
 
-  it('returns null for formats the server cannot transcribe', () => {
-    expect(resolveVoiceMime({ type: '', name: 'memo.caf' })).toBeNull()
-    expect(resolveVoiceMime({ type: 'video/mp4', name: 'noext' })).toBeNull()
+  it('sends nothing for formats the server cannot transcribe', async () => {
+    expect(await mimeAskedFor('memo.caf', '')).toBeNull()
+    expect(await mimeAskedFor('noext', 'video/mp4')).toBeNull()
   })
 })
 
