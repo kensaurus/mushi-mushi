@@ -205,7 +205,7 @@ const EXTRA_CODE_COPY: Record<string, CodeCopy> = {
   },
   WORKER_FAILED: {
     title: 'The background job could not finish.',
-    hint: 'Retry in a moment. If it keeps failing, check that the project has an LLM key under Settings → API keys.',
+    hint: 'Retry in a moment. If it keeps failing, check that the project has an LLM key under Settings → AI keys.',
     severity: 'soft',
     action: { label: 'Retry', target: { kind: 'retry' } },
   },

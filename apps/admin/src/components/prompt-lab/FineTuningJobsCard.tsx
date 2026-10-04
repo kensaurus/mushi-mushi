@@ -2,6 +2,7 @@ import { useState, useRef } from 'react'
 import { apiFetch } from '../../lib/supabase'
 import { Card, Badge, Btn, RelativeTime, EmptyState } from '../ui'
 import { useToast } from '../../lib/toast'
+import { describeApiError } from '../../lib/humanizeApiError'
 import { formatPct } from '../charts'
 import { ConfirmDialog, PromptDialog } from '../ConfirmDialog'
 import { Modal } from '../Modal'
@@ -11,8 +12,10 @@ import {
   IconBolt,
   IconClose,
   IconTrash,
+  IconRefresh,
 } from '../icons'
 import type { FineTuningJob } from './types'
+import { fineTuneNextActions } from './fineTuneActions'
 import { CHIP_TONE, runStatusChipTone } from '../../lib/chipTone'
 
 // See PromptStageTable for the icon-button pattern. Same `!px-1.5` trick
@@ -44,12 +47,9 @@ const VENDOR_OPTIONS = [
     label: 'Bedrock — Claude 3 Haiku (requires AWS setup)',
     description: 'AWS Bedrock fine-tuning. Requires MUSHI_BEDROCK_FINETUNE_ENABLED=1, IAM role, and S3 bucket.',
   },
-  {
-    value: 'anthropic:contact-required',
-    label: 'Anthropic direct — not publicly available',
-    description: 'Anthropic\'s direct fine-tuning API requires contacting your account team. Use Bedrock for Claude fine-tuning.',
-  },
 ] as const
+// Anthropic direct is deliberately absent: it has no public fine-tuning API,
+// so a job for it could never train (the server refuses it at create time).
 
 export function FineTuningJobsCard({ jobs, onChange }: FineTuningJobsCardProps) {
   const toast = useToast()
@@ -84,7 +84,8 @@ export function FineTuningJobsCard({ jobs, onChange }: FineTuningJobsCardProps) 
       toast.push({ tone: 'success', message: 'Fine-tuning job created. Hit Export to gather samples.' })
       await onChange()
     } else {
-      toast.push({ tone: 'error', message: res.error?.message ?? 'Create failed' })
+      const e = describeApiError(res.error, 'Could not create the job')
+      toast.error(e.title, e.hint)
     }
   }
 
@@ -97,12 +98,55 @@ export function FineTuningJobsCard({ jobs, onChange }: FineTuningJobsCardProps) 
       if (res.ok && res.data) {
         toast.push({
           tone: 'success',
-          message: `Exported ${res.data.sampleCount.toLocaleString()} samples (${(res.data.sizeBytes / 1024).toFixed(1)} KB)`,
+          message: `Exported ${res.data.sampleCount.toLocaleString()} samples (${(res.data.sizeBytes / 1024).toFixed(1)} KB). Next: Submit for training.`,
         })
         await onChange()
       } else {
-        toast.push({ tone: 'error', message: res.error?.message ?? 'Export failed' })
+        const e = describeApiError(res.error, 'Could not export training samples')
+        toast.error(e.title, e.hint)
+        await onChange()
       }
+    })
+  }
+
+  async function submitJob(job: FineTuningJob) {
+    await withBusy(job.id, async () => {
+      const res = await apiFetch<{ vendor: string; vendorJobId: string }>(
+        `/v1/admin/fine-tuning/${job.id}/submit`,
+        { method: 'POST' },
+      )
+      if (res.ok) {
+        toast.push({
+          tone: 'success',
+          message: 'Submitted for training. Training takes minutes to hours; use Check status to see when it finishes.',
+        })
+      } else {
+        const e = describeApiError(res.error, 'Could not submit the job for training')
+        toast.error(e.title, e.hint)
+      }
+      await onChange()
+    })
+  }
+
+  async function pollJob(job: FineTuningJob) {
+    await withBusy(job.id, async () => {
+      const res = await apiFetch<{ status: 'running' | 'succeeded' | 'failed'; error: string | null }>(
+        `/v1/admin/fine-tuning/${job.id}/poll`,
+        { method: 'POST' },
+      )
+      if (!res.ok || !res.data) {
+        const e = describeApiError(res.error, 'Could not check training status')
+        toast.error(e.title, e.hint)
+        return
+      }
+      if (res.data.status === 'succeeded') {
+        toast.push({ tone: 'success', message: 'Training finished. Next: Validate the model.' })
+      } else if (res.data.status === 'failed') {
+        toast.error('Training failed', res.data.error ?? 'The vendor reported a failure.')
+      } else {
+        toast.push({ tone: 'info', message: 'Still training. Check again later.' })
+      }
+      await onChange()
     })
   }
 
@@ -121,7 +165,8 @@ export function FineTuningJobsCard({ jobs, onChange }: FineTuningJobsCardProps) 
         })
         await onChange()
       } else {
-        toast.push({ tone: 'error', message: res.error?.message ?? 'Validate failed' })
+        const e = describeApiError(res.error, 'Could not validate the model')
+        toast.error(e.title, e.hint)
       }
     })
   }
@@ -139,7 +184,8 @@ export function FineTuningJobsCard({ jobs, onChange }: FineTuningJobsCardProps) 
         toast.push({ tone: 'success', message: `Promoted to ${res.data.stage}` })
         await onChange()
       } else {
-        toast.push({ tone: 'error', message: res.error?.message ?? 'Promote failed' })
+        const e = describeApiError(res.error, 'Could not promote the model')
+        toast.error(e.title, e.hint)
       }
     })
   }
@@ -157,7 +203,8 @@ export function FineTuningJobsCard({ jobs, onChange }: FineTuningJobsCardProps) 
         toast.push({ tone: 'success', message: 'Job rejected' })
         await onChange()
       } else {
-        toast.push({ tone: 'error', message: res.error?.message ?? 'Reject failed' })
+        const e = describeApiError(res.error, 'Could not reject the job')
+        toast.error(e.title, e.hint)
       }
     })
   }
@@ -172,18 +219,10 @@ export function FineTuningJobsCard({ jobs, onChange }: FineTuningJobsCardProps) 
         toast.push({ tone: 'success', message: 'Job deleted' })
         await onChange()
       } else {
-        toast.push({ tone: 'error', message: res.error?.message ?? 'Delete failed' })
+        const e = describeApiError(res.error, 'Could not delete the job')
+        toast.error(e.title, e.hint)
       }
     })
-  }
-
-  function nextActions(job: FineTuningJob) {
-    const status = job.status
-    const canExport = status === 'pending' || status === 'rejected' || status === 'failed'
-    const canValidate = status === 'trained' || status === 'rejected'
-    const canPromote = status === 'validated' || (status === 'trained' && (job.validation_report?.passed ?? false))
-    const canReject = status !== 'rejected' && status !== 'promoted' && status !== 'pending'
-    return { canExport, canValidate, canPromote, canReject }
   }
 
   return (
@@ -192,7 +231,7 @@ export function FineTuningJobsCard({ jobs, onChange }: FineTuningJobsCardProps) 
         <div>
           <h3 className="text-xs font-semibold text-fg-secondary">Fine-tuning jobs</h3>
           <p className="text-2xs text-fg-faint">
-            Vendor-side fine-tunes for the rare case where prompts alone aren't enough. Workflow: <span className="font-mono">Create → Export → Validate → Promote</span>.
+            Vendor-side fine-tunes for the rare case where prompts alone aren't enough. Workflow: <span className="font-mono">Create → Export → Submit → Check status → Validate → Promote</span>.
           </p>
         </div>
         <Btn size="sm" onClick={() => { setAskingStage(true); setStageError(null) }} disabled={creating} loading={creating}>
@@ -222,7 +261,7 @@ export function FineTuningJobsCard({ jobs, onChange }: FineTuningJobsCardProps) 
             </thead>
             <tbody>
               {jobs.map((job) => {
-                const actions = nextActions(job)
+                const actions = fineTuneNextActions(job)
                 const tone = fineTuneStatusTone(job.status)
                 const acc = job.validation_report?.accuracy
                 return (
@@ -275,6 +314,30 @@ export function FineTuningJobsCard({ jobs, onChange }: FineTuningJobsCardProps) 
                           aria-label="Export training samples"
                         >
                           <IconExport />
+                        </Btn>
+                      )}
+                      {actions.canSubmit && (
+                        <Btn
+                          size="sm"
+                          variant="primary"
+                          disabled={busy === job.id}
+                          loading={busy === job.id}
+                          onClick={() => submitJob(job)}
+                          title="Upload the exported samples to the vendor and start training"
+                        >
+                          Submit
+                        </Btn>
+                      )}
+                      {actions.canPoll && (
+                        <Btn
+                          size="sm"
+                          variant="ghost"
+                          leadingIcon={<IconRefresh />}
+                          disabled={busy === job.id}
+                          onClick={() => pollJob(job)}
+                          title="Ask the vendor whether training has finished"
+                        >
+                          Check status
                         </Btn>
                       )}
                       {actions.canValidate && (
@@ -378,6 +441,9 @@ export function FineTuningJobsCard({ jobs, onChange }: FineTuningJobsCardProps) 
             <p className="text-2xs text-fg-faint leading-relaxed">
               {VENDOR_OPTIONS.find((o) => o.value === selectedVendor)?.description ?? ''}
             </p>
+            <p className="text-2xs text-fg-faint leading-relaxed">
+              Anthropic has no public fine-tuning API, so Claude is fine-tuned through Bedrock.
+            </p>
           </div>
           <p className="text-2xs text-fg-secondary leading-snug">
             Pick which stage to promote once it passes validation. Most operators use <span className="font-mono">stage2</span> (the deeper classifier).
@@ -440,3 +506,4 @@ export function FineTuningJobsCard({ jobs, onChange }: FineTuningJobsCardProps) 
     </Card>
   )
 }
+

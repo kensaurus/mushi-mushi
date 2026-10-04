@@ -8,6 +8,7 @@ import { dbError, callerProjectIds, resolveOwnedProject, scopedOwnedProjectIds }
 import { sanitizeRenderedHtml } from '../../_shared/html-sanitize.ts';
 import { log } from '../../_shared/logger.ts';
 import { isJobFailureSuperseded } from './intelligence-priority.ts';
+import { readWorkerResult } from '../../_shared/worker-result.ts';
 
 const syntheticTriggerSchema = z.object({
   count: z.number().int().min(1).max(50).optional(),
@@ -38,8 +39,31 @@ export function registerIntelligenceSyntheticRoutes(app: Hono<{ Variables: Varia
       },
       body: JSON.stringify({ projectId: project.id, count }),
     });
-    const result = await res.json();
-    return c.json({ ok: true, data: result.data });
+    // The generator answers 503 without an LLM key and 200 with
+    // `generated: 0` when every call failed; both used to come back as
+    // ok:true, so the console announced reports that never existed.
+    const result = await readWorkerResult(
+      res,
+      'Synthetic reports could not be generated. Check that the project has an LLM key under Settings → AI keys.',
+    );
+    if (!result.ok) {
+      return c.json({ ok: false, error: { code: 'WORKER_FAILED', message: result.message } }, result.status as 502);
+    }
+    const data = (result.body.data ?? {}) as { generated?: unknown; evaluated?: unknown };
+    const generated = typeof data.generated === 'number' ? data.generated : 0;
+    if (generated === 0) {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'WORKER_FAILED',
+            message: 'No synthetic reports were generated. Check that the project has a working LLM key under Settings → AI keys, then try again.',
+          },
+        },
+        502,
+      );
+    }
+    return c.json({ ok: true, data: { generated, evaluated: typeof data.evaluated === 'number' ? data.evaluated : 0, requested: count } });
   });
 
   app.get('/v1/admin/synthetic', jwtAuth, async (c) => {
