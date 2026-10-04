@@ -155,7 +155,7 @@ function MissingConfigCallout({ configId }: { configId: string }) {
   if (!doc) return null
   // Derive a best-guess anchor path for "Configure" link
   const route = configId.startsWith('settings.') ? '/settings'
-    : configId.startsWith('integrations.') ? '/integrations'
+    : configId.startsWith('integrations.') ? '/integrations/config'
     : configId.startsWith('compliance.') ? '/compliance'
     : configId.startsWith('storage.') ? '/storage'
     : configId.startsWith('anti-gaming.') ? '/anti-gaming'
