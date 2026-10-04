@@ -17,6 +17,8 @@ export interface RecommendationAction {
   href?: string
   onClick?: () => void
   tone?: 'primary' | 'ghost' | 'danger'
+  /** Set on "Retry dispatch" while the dispatch gate blocks it. */
+  disabled?: boolean
 }
 
 export interface Recommendation {
@@ -118,12 +120,42 @@ function mergeReadyRecommendation(
   }
 }
 
+/**
+ * The recommendation card for a report. `onRequestDispatch` must be the
+ * page's confirm-and-preflight path (useConfirmedDispatch().request), never
+ * a raw dispatch: every "Dispatch fix" / "Retry dispatch" here goes through
+ * it. `block` is the same gate the triage bar uses; while it blocks, those
+ * controls render disabled and the reason shows as a chip.
+ */
 export function deriveRecommendation(
   report: ReportDetail,
   dispatchState: DispatchState,
   commentCount: number,
-  onDispatch: () => void | Promise<void>,
+  onRequestDispatch: () => void,
   nowMs: number = Date.now(),
+  block: { blocked: boolean; reason: string | null } = { blocked: false, reason: null },
+): Recommendation {
+  const rec = recommendationFor(report, dispatchState, commentCount, onRequestDispatch, nowMs)
+  if (!block.blocked) return rec
+  const isDispatch = (onClick: (() => void) | undefined) => onClick === onRequestDispatch
+  const touchesDispatch = isDispatch(rec.cta?.onClick) || (rec.actions ?? []).some((a) => isDispatch(a.onClick))
+  if (!touchesDispatch) return rec
+  return {
+    ...rec,
+    cta: rec.cta && isDispatch(rec.cta.onClick) ? { ...rec.cta, disabled: true } : rec.cta,
+    actions: rec.actions?.map((a) => (isDispatch(a.onClick) ? { ...a, disabled: true } : a)),
+    meta: block.reason
+      ? [...(rec.meta ?? []), { label: 'Cannot dispatch', value: block.reason, tone: 'warn' as const }]
+      : rec.meta,
+  }
+}
+
+function recommendationFor(
+  report: ReportDetail,
+  dispatchState: DispatchState,
+  commentCount: number,
+  onDispatch: () => void,
+  nowMs: number,
 ): Recommendation {
   if (dispatchState.status === 'completed' && dispatchState.prUrl) {
     return mergeReadyRecommendation(report, dispatchState.prUrl, pickPrimaryFixAttempt(report.fix_attempts))
@@ -231,7 +263,7 @@ export function deriveRecommendation(
         actions: [
           { label: 'Check BYOK keys \u2192', to: '/settings?tab=byok', tone: 'primary' },
           { label: 'Open Fixes pipeline \u2192', to: '/fixes', tone: 'ghost' },
-          { label: 'Retry dispatch', onClick: () => onDispatch(), tone: 'ghost' },
+          { label: 'Retry dispatch', onClick: onDispatch, tone: 'ghost' },
         ],
       }
     }
@@ -249,7 +281,7 @@ export function deriveRecommendation(
         meta: lastAttemptMeta,
         actions: [
           { label: 'Configure codebase indexing \u2192', to: '/integrations/config#integrations-codebase', tone: 'primary' },
-          { label: 'Retry dispatch', onClick: () => onDispatch(), tone: 'ghost' },
+          { label: 'Retry dispatch', onClick: onDispatch, tone: 'ghost' },
         ],
       }
     }
@@ -300,7 +332,7 @@ export function deriveRecommendation(
         tone: 'urgent',
         meta: lastAttemptMeta,
         actions: [
-          { label: 'Retry dispatch', onClick: () => onDispatch(), tone: 'primary' },
+          { label: 'Retry dispatch', onClick: onDispatch, tone: 'primary' },
           {
             label: 'Check Anthropic dashboard \u2192',
             href: 'https://console.anthropic.com',
@@ -352,7 +384,7 @@ export function deriveRecommendation(
         meta: lastAttemptMeta,
         actions: [
           { label: 'View pipeline log \u2192', to: '/fixes', tone: 'ghost' },
-          { label: 'Retry dispatch', onClick: () => onDispatch(), tone: 'primary' },
+          { label: 'Retry dispatch', onClick: onDispatch, tone: 'primary' },
         ],
       }
     }
@@ -367,7 +399,7 @@ export function deriveRecommendation(
         meta: lastAttemptMeta,
         actions: [
           { label: 'View pipeline log \u2192', to: '/fixes', tone: 'ghost' },
-          { label: 'Retry dispatch', onClick: () => onDispatch(), tone: 'primary' },
+          { label: 'Retry dispatch', onClick: onDispatch, tone: 'primary' },
         ],
       }
     }
@@ -399,7 +431,7 @@ export function deriveRecommendation(
     return {
       title: `Confirm priority for this ${severityLabel(report.severity).toLowerCase()} bug`,
       description: 'Set the status to Classified, then dispatch a fix or hand off to engineering.',
-      cta: { label: 'Dispatch fix', onClick: () => onDispatch() },
+      cta: { label: 'Dispatch fix', onClick: onDispatch },
       tone: 'urgent',
     }
   }
@@ -408,7 +440,7 @@ export function deriveRecommendation(
     return {
       title: 'Triage this report',
       description: 'Add a triage note for context, or dispatch an autofix attempt.',
-      cta: { label: 'Dispatch fix', onClick: () => onDispatch() },
+      cta: { label: 'Dispatch fix', onClick: onDispatch },
       tone: 'info',
     }
   }
@@ -417,7 +449,7 @@ export function deriveRecommendation(
     return {
       title: 'Start triage',
       description: 'Set the severity and update status, or dispatch a fix if confidence is high.',
-      cta: { label: 'Dispatch fix', onClick: () => onDispatch() },
+      cta: { label: 'Dispatch fix', onClick: onDispatch },
       tone: 'info',
     }
   }

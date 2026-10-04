@@ -14,6 +14,7 @@ import {
 import { useReportPresence } from '../../lib/reportPresence'
 import { reportHeading } from '../../lib/clipText'
 import { reporterLabel } from '../../lib/reporterLabel'
+import { reporterReportsHref } from '../../lib/reportsListFilters'
 import type { ReportDeployLive, ReportDetail } from './types'
 
 export function ReportDetailHeader({ report, reporterShort }: { report: ReportDetail; reporterShort: string }) {
@@ -107,11 +108,9 @@ export function ReportDetailHeader({ report, reporterShort }: { report: ReportDe
             // Identified users filter by the durable end_users FK (stable
             // across devices); anonymous reporters fall back to the
             // per-device token hash.
-            to={
-              report.end_user_id
-                ? `/reports?end_user=${encodeURIComponent(report.end_user_id)}`
-                : `/reports?reporter=${encodeURIComponent(report.reporter_token_hash)}`
-            }
+            // No reporter (integration / Sentry import): no link. It used
+            // to open /reports?reporter=null, an empty list.
+            to={reporterReportsHref(report) ?? undefined}
           >
             <span className="max-w-48 truncate" title={reporter.title ?? undefined}>
               {reporter.text}
@@ -125,7 +124,7 @@ export function ReportDetailHeader({ report, reporterShort }: { report: ReportDe
                 ✓ verified
               </span>
             )}
-            <span className="text-fg-faint">· view all</span>
+            {reporterReportsHref(report) ? <span className="text-fg-faint">· view all</span> : null}
           </MetaChip>
           {report.session_id && (
             <MetaChip

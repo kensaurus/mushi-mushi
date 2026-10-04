@@ -97,11 +97,14 @@ export function FixProgressStream({ reportId, dispatchState, hasFixHistory = tru
     }
     let cancelled = false
     const fetchLatest = async () => {
-      const res = await apiFetch<{ fixes: FixAttempt[] }>('/v1/admin/fixes')
+      // Ask for this report's newest attempt. The unfiltered list stops at the
+      // 50 newest fixes, so an older report's fix never showed here.
+      const res = await apiFetch<{ fixes: FixAttempt[] }>(
+        `/v1/admin/fixes?report_id=${encodeURIComponent(reportId)}&limit=1`,
+      )
       if (cancelled) return
       if (res.ok && res.data) {
-        const mine = res.data.fixes.find(f => (f as FixAttempt & { report_id: string }).report_id === reportId)
-        setLatest(mine ?? null)
+        setLatest(res.data.fixes[0] ?? null)
       }
       setLoading(false)
     }
