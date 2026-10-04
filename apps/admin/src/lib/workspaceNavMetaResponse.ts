@@ -4,7 +4,7 @@
 
 import type { NavStatSlices } from './extendedNavMeta'
 
-export interface NavMetaCounts {
+interface NavMetaCounts {
   fixesInFlight: number | null
   fixesFailed: number | null
   prsOpen: number | null
