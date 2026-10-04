@@ -31,6 +31,8 @@ export interface SettingsStats {
   byokKeysPassing: number
   byokKeysFailing: number
   byokKeysUntested: number
+  /** Keys that stop working within 7 days (servers before 2026-10-04 omit it). */
+  byokKeysExpiring?: number
   githubRepoConfigured: boolean
   autofixEnabled: boolean
   topPriority?: SettingsTopPriority
@@ -56,6 +58,7 @@ export const EMPTY_SETTINGS_STATS: SettingsStats = {
   byokKeysPassing: 0,
   byokKeysFailing: 0,
   byokKeysUntested: 0,
+  byokKeysExpiring: 0,
   githubRepoConfigured: false,
   autofixEnabled: false,
   topPriority: 'no_project',

@@ -105,6 +105,22 @@ describe('keyStatusView', () => {
     expect(gone).toMatchObject({ state: 'attention', label: 'Expired', action: 'replace' })
   })
 
+  it('a rejected or expired key beside a working key says remove, not replace again', () => {
+    const working = pool({ id: 'k-new' })
+    const rejected = pool({ id: 'k-old', status: 'auth_failed', test_status: 'error_auth' })
+    expect(view(rejected, [working, rejected])).toMatchObject({ state: 'attention', action: 'remove' })
+    expect(view(rejected, [working, rejected]).detail).toMatch(/Another key is working, so remove this one/)
+    const expired = pool({ id: 'k-exp', expires_at: iso(-H) })
+    expect(view(expired, [working, expired])).toMatchObject({ state: 'attention', action: 'remove' })
+    // Alone, the same keys still ask to be replaced.
+    expect(view(rejected, [rejected]).action).toBe('replace')
+    expect(view(expired, [expired]).action).toBe('replace')
+  })
+
+  it('an expiring key carries its date so the chip can count the days', () => {
+    expect(view(pool({ expires_at: iso(5 * 24 * H) })).expiresAt).toBe(iso(5 * 24 * H))
+  })
+
   it('an old single key next to a working pooled key must be removed', () => {
     const working = pool()
     expect(view(legacy(), [working])).toEqual({
