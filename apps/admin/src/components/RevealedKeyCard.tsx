@@ -24,7 +24,10 @@ import { MCP_PIN_SPEC } from '@mushi-mushi/mcp/clients'
 
 type Mode = 'raw' | 'env' | 'cursor' | 'admin' | 'expo' | 'github' | 'sdk'
 
-/** MCP paste targets only make sense for a key that can call MCP tools. */
+/**
+ * MCP paste targets only make sense for a key that can call MCP tools.
+ * @internal Exported for unit tests.
+ */
 export function isMcpCapableKey(scopes: readonly string[]): boolean {
   return scopes.includes('mcp:read') || scopes.includes('mcp:write')
 }
