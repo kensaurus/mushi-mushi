@@ -212,11 +212,11 @@ export const feedbackLinks = {
 
 export const qaCoverageLinks = {
   stories: '/qa-coverage?tab=stories',
-  passing: '/qa-coverage?tab=stories',
+  passing: '/qa-coverage?tab=passing',
   failing: '/qa-coverage?tab=failing',
   avgPassRate: '/qa-coverage?tab=stories',
   runs24h: '/qa-coverage?tab=stories',
-  noData: '/qa-coverage?tab=stories',
+  noData: '/qa-coverage?tab=no_data',
 } as const
 
 export const queryLinks = {
