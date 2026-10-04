@@ -136,10 +136,11 @@ describe('configDocs dictionary', () => {
     for (const doc of settingsEntries) {
       // Composite columns are written as `a / b` in the dictionary so the
       // popover can render both halves; the underlying API still validates
-      // each column individually, so we split before lookup.
+      // each column individually, so we split before lookup. A trailing
+      // note such as `(Vault)` is display text, not part of the column name.
       const cols = (doc.backend?.column ?? '')
         .split(/\s*\/\s*/)
-        .map((c) => c.trim())
+        .map((c) => c.replace(/\s*\([^)]*\)\s*$/, '').trim())
         .filter(Boolean)
       if (cols.length === 0) {
         drift.push(`${doc.id}: missing backend.column`)
