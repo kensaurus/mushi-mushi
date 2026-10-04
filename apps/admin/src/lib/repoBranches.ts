@@ -37,7 +37,7 @@ export interface RepoBranchLike {
 const FAILING = new Set(['failure', 'timed_out', 'startup_failure', 'action_required'])
 
 /** The server's bucket, or the same rule for a row from an older server. */
-export function branchBucket(b: RepoBranchLike): RepoServerBucket {
+function branchBucket(b: RepoBranchLike): RepoServerBucket {
   if (b.bucket) return b.bucket
   const status = (b.status ?? '').toLowerCase()
   if (b.merged_at || (b.pr_state ?? '').toLowerCase() === 'merged') return 'merged'

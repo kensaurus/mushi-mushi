@@ -118,7 +118,7 @@ function FixRowViewInner({
           <div className="flex flex-col gap-0.5 min-w-0">
             {onSelectChange ? (
               <label
-                className="inline-flex items-center gap-1 text-3xs text-fg-faint cursor-pointer w-fit"
+                className="inline-flex items-center gap-1 text-2xs text-fg-faint cursor-pointer w-fit"
                 onClick={(e) => e.stopPropagation()}
               >
                 <input

@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { branchBucket, countRepoFilters, matchesRepoFilter, repoActionErrorMessage, resolveRepoFilter } from './repoBranches'
+import { countRepoFilters, matchesRepoFilter, repoActionErrorMessage, resolveRepoFilter } from './repoBranches'
 
 describe('repo filters', () => {
   const rows = [
@@ -25,9 +25,10 @@ describe('repo filters', () => {
   })
 
   it('reads a row from an older server with the same rule', () => {
-    expect(branchBucket({ pr_url: 'u', merged_at: 'x', check_run_conclusion: 'failure' })).toBe('merged')
-    expect(branchBucket({ pr_url: 'u', check_run_conclusion: 'action_required' })).toBe('ci_failed')
-    expect(branchBucket({ status: 'failed', pr_url: null })).toBe('failed')
+    expect(matchesRepoFilter({ pr_url: 'u', merged_at: 'x', check_run_conclusion: 'failure' }, 'merged')).toBe(true)
+    expect(matchesRepoFilter({ pr_url: 'u', merged_at: 'x', check_run_conclusion: 'failure' }, 'ci_failed')).toBe(false)
+    expect(matchesRepoFilter({ pr_url: 'u', check_run_conclusion: 'action_required' }, 'ci_failed')).toBe(true)
+    expect(matchesRepoFilter({ status: 'failed', pr_url: null }, 'failed')).toBe(true)
   })
 
   it('ignores an unknown ?status', () => {
