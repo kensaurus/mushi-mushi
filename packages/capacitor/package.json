@@ -95,7 +95,7 @@
     "@mushi-mushi/core": "workspace:^"
   },
   "devDependencies": {
-    "@capacitor/core": "^8.4.1",
+    "@capacitor/core": "^8.5.2",
     "@mushi-mushi/eslint-config": "workspace:*",
     "@mushi-mushi/tsconfig": "workspace:*",
     "@size-limit/file": "^12.1.0",
