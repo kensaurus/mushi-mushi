@@ -15,6 +15,7 @@ import {
   Badge,
   Btn,
   Input,
+  SecretInput,
   EmptyState,
   ErrorAlert,
   SelectField,
@@ -1708,9 +1709,8 @@ export function SettingsTab({ canEdit }: { canEdit: boolean }) {
               onChange={(ev) => setWebhookUrl(ev.target.value)}
               validate={httpsUrl({ optional: false })}
             />
-            <Input
+            <SecretInput
               label="Signing secret (≥ 16 chars, optional)"
-              type="password"
               placeholder="Leave blank to auto-generate — shown once after save"
               value={webhookSecret}
               onChange={(ev) => setWebhookSecret(ev.target.value)}
