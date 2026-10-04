@@ -14,6 +14,9 @@ import { usePageData } from '../lib/usePageData'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useToast } from '../lib/toast'
 import { apiFetch } from '../lib/supabase'
+import { apiErrorText } from '../lib/apiErrorText'
+import { isFeatureClosed, isFeatureShipped } from '../lib/featureBoardStatus'
+import { PageLoadError } from '../components/PageLoadError'
 import { ContainedBlock, InlineProof } from '../components/report-detail/ReportSurface'
 import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
 import { HeroPlugIntegration } from '../components/illustrations/HeroIllustrations'
@@ -25,7 +28,6 @@ import {
   Btn,
   Card,
   EmptyState,
-  ErrorAlert,
   FreshnessPill,
   Loading,
   RelativeTime,
@@ -36,7 +38,7 @@ import { CHIP_TONE, SELECTED_TONE, SELECTED_TONE_IDLE, runStatusChipTone } from 
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type TicketStatus = 'open' | 'in_progress' | 'resolved' | 'closed'
+type TicketStatus = 'open' | 'in_progress' | 'resolved' | 'closed' | 'cancelled'
 
 interface FeatureTicket {
   id: string
@@ -77,6 +79,7 @@ const STATUS_LABEL: Record<TicketStatus, string> = {
   in_progress: 'In progress',
   resolved: 'Shipped',
   closed: 'Closed',
+  cancelled: 'Cancelled',
 }
 
 const STATUS_BADGE: Record<TicketStatus, string> = {
@@ -84,6 +87,7 @@ const STATUS_BADGE: Record<TicketStatus, string> = {
   in_progress: runStatusChipTone('in_progress'),
   resolved: runStatusChipTone('resolved'),
   closed: runStatusChipTone('closed'),
+  cancelled: runStatusChipTone('cancelled'),
 }
 
 const SORT_OPTIONS: { id: SortKey; label: string }[] = [
@@ -126,7 +130,7 @@ function CommentThread({
         body: JSON.stringify({ body: trimmed }),
       })
       if (!res.ok) {
-        toast.error(res.error?.message ?? 'Could not post comment')
+        toast.error('Comment not posted', apiErrorText(res.error, 'Try again in a moment.'))
         return
       }
       setBody('')
@@ -193,12 +197,15 @@ function FeatureRow({
   onVote,
   onShip,
   shipPending,
+  canShip,
 }: {
   ticket: FeatureTicket
   projectId: string
   onVote: (id: string) => Promise<void>
   onShip: (id: string) => void
   shipPending: boolean
+  /** False for viewers: the API refuses their ship requests. */
+  canShip: boolean
 }) {
   const [expanded, setExpanded] = useState(false)
   const [voting, setVoting] = useState(false)
@@ -213,7 +220,8 @@ function FeatureRow({
     }
   }
 
-  const isShipped = ticket.status === 'resolved' || Boolean(ticket.shipped_in_release_id)
+  const isShipped = isFeatureShipped(ticket)
+  const isClosed = isFeatureClosed(ticket)
 
   return (
     <li className="flex gap-3 px-3 py-3 first:pt-2 last:pb-2">
@@ -221,7 +229,7 @@ function FeatureRow({
         variant="ghost"
         size="sm"
         onClick={handleVote}
-        disabled={voting}
+        disabled={voting || (isClosed && !ticket.my_vote)}
         aria-pressed={ticket.my_vote}
         aria-label={ticket.my_vote ? 'Remove your vote' : 'Upvote this request'}
         title={ticket.my_vote ? 'Remove your vote' : 'Upvote this request'}
@@ -249,13 +257,13 @@ function FeatureRow({
         <div className="flex items-start justify-between gap-2">
           <h3 className="text-sm font-medium leading-snug text-fg">{ticket.subject}</h3>
           <div className="flex shrink-0 items-center gap-1.5">
-            {isShipped && (
+            {isShipped && ticket.status !== 'resolved' && (
               <Badge className={`border border-ok/30 ${CHIP_TONE.okSubtle} text-3xs`}>
                 Shipped
               </Badge>
             )}
-            <Badge className={STATUS_BADGE[ticket.status]}>
-              {STATUS_LABEL[ticket.status]}
+            <Badge className={STATUS_BADGE[ticket.status] ?? runStatusChipTone(ticket.status)}>
+              {STATUS_LABEL[ticket.status] ?? ticket.status.replace(/_/g, ' ')}
             </Badge>
           </div>
         </div>
@@ -303,7 +311,7 @@ function FeatureRow({
             {expanded ? 'Hide comments' : 'Comments'}
             {ticket.comment_count > 0 ? ` (${ticket.comment_count})` : ''}
           </Btn>
-          {ticket.status !== 'resolved' && ticket.status !== 'closed' && (
+          {!isClosed && canShip && (
             <Btn
               size="sm"
               variant="ghost"
@@ -341,18 +349,21 @@ export function FeatureBoardPage() {
     reload,
     lastFetchedAt,
     isValidating,
-  } = usePageData<{ tickets: FeatureTicket[] }>(
+  } = usePageData<{ tickets: FeatureTicket[]; can_ship?: boolean }>(
     projectId ? `/v1/admin/feature-board?project_id=${projectId}` : null,
   )
 
   const tickets = data?.tickets ?? []
+  // Older API builds do not send can_ship; leave the control on and let the
+  // API decide.
+  const canShip = data?.can_ship !== false
 
   const openCount = useMemo(
     () => tickets.filter((t) => t.status === 'open' || t.status === 'in_progress').length,
     [tickets],
   )
   const shippedCount = useMemo(
-    () => tickets.filter((t) => Boolean(t.shipped_in_release_id)).length,
+    () => tickets.filter(isFeatureShipped).length,
     [tickets],
   )
   const totalVotes = useMemo(
@@ -383,7 +394,7 @@ export function FeatureBoardPage() {
     if (statusFilter === 'open') {
       list = list.filter((t) => t.status === 'open' || t.status === 'in_progress')
     } else if (statusFilter === 'shipped') {
-      list = list.filter((t) => t.status === 'resolved' || Boolean(t.shipped_in_release_id))
+      list = list.filter(isFeatureShipped)
     }
 
     if (search.trim()) {
@@ -412,12 +423,12 @@ export function FeatureBoardPage() {
           method: 'POST',
         })
         if (!res.ok) {
-          toast.error(res.error?.message ?? 'Vote failed')
+          toast.error('Vote not saved', apiErrorText(res.error, 'Try again in a moment.'))
           return
         }
         reload()
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : 'Vote failed')
+      } catch {
+        toast.error('Vote not saved', 'Check your connection and try again.')
       }
     },
     [projectId, reload, toast],
@@ -443,15 +454,15 @@ export function FeatureBoardPage() {
         body: JSON.stringify({ note: shipNote.trim() || null }),
       })
       if (!res.ok) {
-        toast.error(res.error?.message ?? 'Could not mark shipped')
+        toast.error('Not marked shipped', apiErrorText(res.error, 'Try again in a moment.'))
         return
       }
-      toast.success('Marked shipped')
+      toast.success('Marked shipped', 'The requester sees it, with your note, on their Support page.')
       setShipModalId(null)
       setShipNote('')
       reload()
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not mark shipped')
+    } catch {
+      toast.error('Not marked shipped', 'Check your connection and try again.')
     } finally {
       setShipBusy(false)
     }
@@ -475,7 +486,7 @@ export function FeatureBoardPage() {
         title="Feature board"
         withPageHero={false}
         helpTitle="About the feature board"
-        helpWhatIsIt="Community feature requests from the Feedback form, ranked by votes. Operators can mark items shipped and notify requesters."
+        helpWhatIsIt="Community feature requests from the Feedback form, ranked by votes. Owners, admins and members can mark items shipped; the requester then sees it on their Support page."
         helpUseCases={[
           'See which ideas your users care about most',
           'Upvote requests to signal priority',
@@ -556,7 +567,7 @@ export function FeatureBoardPage() {
             </label>
           </div>
 
-          {error && <ErrorAlert message={error} onRetry={reload} />}
+          {error && <PageLoadError error={error} onRetry={reload} resource="feature requests" />}
 
           {loading && tickets.length === 0 && (
             <Loading text="Loading feature requests…" />
@@ -597,6 +608,7 @@ export function FeatureBoardPage() {
                   onVote={handleVote}
                   onShip={requestShip}
                   shipPending={shipBusy && shipModalId === ticket.id}
+                  canShip={canShip}
                 />
               ))}
             </ul>
@@ -634,7 +646,7 @@ export function FeatureBoardPage() {
         }
       >
         <Input
-          label="Shipped note (shown to requester, optional)"
+          label="Shipped note (optional, shown on the requester's Support page)"
           value={shipNote}
           onChange={(e) => setShipNote(e.target.value)}
           placeholder="e.g. Shipped in v1.24"

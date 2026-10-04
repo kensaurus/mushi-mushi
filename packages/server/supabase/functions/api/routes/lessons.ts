@@ -22,10 +22,13 @@ import type { Hono } from 'npm:hono@4'
 import type { Variables } from '../types.ts'
 import { z } from 'npm:zod@3'
 import { getServiceClient } from '../../_shared/db.ts'
+import { log } from '../../_shared/logger.ts'
+import { denyViewerWrite } from '../viewer-gate.ts'
 import { jwtAuth, apiKeyAuth, adminOrApiKey, requireApiKeyScope } from '../../_shared/auth.ts'
 import {
   assertTargetProjectAccess,
   callerProjectIds,
+  dbError,
   intersectOrgAndProjectScope,
   jsonNotFound,
   parseUuidParam,
@@ -42,7 +45,7 @@ async function assertLessonRowAccess(
   if (!lesson?.project_id) return { ok: false as const, response: jsonNotFound(c, 'Lesson not found') }
   const access = await assertTargetProjectAccess(c, db, userId, lesson.project_id as string)
   if (!access.ok) return { ok: false as const, response: access.response }
-  return { ok: true as const, projectId: lesson.project_id as string }
+  return { ok: true as const, projectId: lesson.project_id as string, role: access.role }
 }
 
 async function assertClusterRowAccess(
@@ -59,7 +62,7 @@ async function assertClusterRowAccess(
   if (!cluster?.project_id) return { ok: false as const, response: jsonNotFound(c, 'Cluster not found') }
   const access = await assertTargetProjectAccess(c, db, userId, cluster.project_id as string)
   if (!access.ok) return { ok: false as const, response: access.response }
-  return { ok: true as const, projectId: cluster.project_id as string }
+  return { ok: true as const, projectId: cluster.project_id as string, role: access.role }
 }
 
 export function registerLessonsRoutes(app: Hono<{ Variables: Variables }>) {
@@ -276,9 +279,13 @@ export function registerLessonsRoutes(app: Hono<{ Variables: Variables }>) {
     if (!idParsed.ok) return idParsed.error
     const rowAccess = await assertLessonRowAccess(c, db, userId, idParsed.value)
     if (!rowAccess.ok) return rowAccess.response
+    const viewerDenied = denyViewerWrite(c, rowAccess.role, 'retire or edit lessons')
+    if (viewerDenied) return viewerDenied
 
-    const body = patchLessonSchema.safeParse(await c.req.json())
-    if (!body.success) return c.json({ ok: false, error: body.error.flatten() }, 400)
+    const body = patchLessonSchema.safeParse(await c.req.json().catch(() => null))
+    if (!body.success) {
+      return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: 'That lesson change is not valid. Refresh and try again.' } }, 400)
+    }
 
     const updates: Record<string, unknown> = {}
     if (body.data.retired !== undefined) {
@@ -294,7 +301,7 @@ export function registerLessonsRoutes(app: Hono<{ Variables: Variables }>) {
       .select()
       .single()
 
-    if (error) return c.json({ ok: false, error: error.message }, 500)
+    if (error) return dbError(c, error)
     return c.json({ ok: true, data })
   })
 
@@ -384,30 +391,44 @@ export function registerLessonsRoutes(app: Hono<{ Variables: Variables }>) {
     if (!idParsed.ok) return idParsed.error
     const rowAccess = await assertClusterRowAccess(c, db, userId, idParsed.value)
     if (!rowAccess.ok) return rowAccess.response
-
-    const { data: cluster } = await db
-      .from('mistake_clusters')
-      .select('*')
-      .eq('id', c.req.param('id')!)
-      .single()
-
-    if (!cluster) return c.json({ ok: false, error: 'cluster not found' }, 404)
+    const viewerDenied = denyViewerWrite(c, rowAccess.role, 'promote clusters to lessons')
+    if (viewerDenied) return viewerDenied
 
     const body = await c.req.json().catch(() => ({}))
-    const rule = body.rule_text ?? cluster.suggested_rule ?? 'No rule suggested'
 
+    // Claim the cluster first: only a `candidate` flips to `promoted`, so a
+    // second click (or a concurrent one) gets no row back and inserts no
+    // duplicate lesson. A read-then-check would still race.
+    const { data: claimed, error: claimErr } = await db
+      .from('mistake_clusters')
+      .update({ status: 'promoted' })
+      .eq('id', idParsed.value)
+      .eq('status', 'candidate')
+      .select('*')
+      .maybeSingle()
+    if (claimErr) return dbError(c, claimErr)
+    if (!claimed) {
+      return c.json(
+        { ok: false, error: { code: 'ALREADY_PROMOTED', message: 'This cluster is already a lesson. Refresh to see it under Lessons.' } },
+        409,
+      )
+    }
+
+    const rule = body.rule_text ?? claimed.suggested_rule ?? 'No rule suggested'
     const { data: lesson, error } = await db.from('lessons').insert({
-      project_id: cluster.project_id,
-      cluster_id: cluster.id,
+      project_id: claimed.project_id,
+      cluster_id: claimed.id,
       rule_text: rule,
-      summary_paragraph: cluster.summary,
+      summary_paragraph: claimed.summary,
       severity: 'warn',
-      frequency: cluster.cluster_size,
+      frequency: claimed.cluster_size,
     }).select().single()
 
-    if (error) return c.json({ ok: false, error: error.message }, 500)
-
-    await db.from('mistake_clusters').update({ status: 'promoted' }).eq('id', c.req.param('id')!)
+    if (error) {
+      // Give the claim back so the operator can retry.
+      await db.from('mistake_clusters').update({ status: 'candidate' }).eq('id', idParsed.value)
+      return dbError(c, error)
+    }
     return c.json({ ok: true, data: lesson })
   })
 
@@ -423,21 +444,25 @@ export function registerLessonsRoutes(app: Hono<{ Variables: Variables }>) {
 
   app.post('/v1/admin/lessons/query', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
     const body = querySchema.safeParse(await c.req.json())
-    if (!body.success) return c.json({ ok: false, error: body.error.flatten() }, 400)
+    if (!body.success) {
+      return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: 'Paste up to 50,000 characters and keep the token budget between 100 and 8,000.' } }, 400)
+    }
 
     const authMethod = c.get('authMethod') as string | undefined
     const callerProjectId = c.get('projectId') as string | undefined
     const { diff_text, max_tokens, top_k } = body.data
+    // Console callers name the project in the body, or (older builds) only
+    // through the X-Mushi-Project-Id header apiFetch always sends.
     const project_id = authMethod === 'apiKey' && callerProjectId
       ? callerProjectId
-      : body.data.project_id
+      : (body.data.project_id ?? c.req.query('project_id') ?? c.req.header('x-mushi-project-id') ?? undefined)
     const db = getServiceClient()
 
     // match_lessons treats a null project as "every project", and the body's
     // project_id is caller-chosen, so both must resolve to a project the
     // caller can reach.
     if (!project_id) {
-      return c.json({ ok: false, error: { code: 'PROJECT_REQUIRED', message: 'project_id is required' } }, 400)
+      return c.json({ ok: false, error: { code: 'PROJECT_REQUIRED', message: 'Pick a project in the header switcher, then query again.' } }, 400)
     }
     const allowed = await callerProjectIds(c, db, c.get('userId') as string)
     if (!allowed.includes(project_id)) {
@@ -446,7 +471,9 @@ export function registerLessonsRoutes(app: Hono<{ Variables: Variables }>) {
 
     // Embed the diff text
     const openaiKey = Deno.env.get('OPENAI_API_KEY')
-    if (!openaiKey) return c.json({ ok: false, error: 'OPENAI_API_KEY not configured' }, 500)
+    if (!openaiKey) {
+      return c.json({ ok: false, error: { code: 'EMBEDDINGS_UNAVAILABLE', message: 'Lesson search is not set up on this server (no embeddings key). Ask the operator to configure it.' } }, 503)
+    }
 
     const embedRes = await fetch('https://api.openai.com/v1/embeddings', {
       method: 'POST',
@@ -456,12 +483,15 @@ export function registerLessonsRoutes(app: Hono<{ Variables: Variables }>) {
 
     if (!embedRes.ok) {
       const err = await embedRes.text()
-      return c.json({ ok: false, error: `Embedding failed: ${err}` }, 500)
+      log.warn('lessons_query_embedding_failed', { status: embedRes.status, body: err.slice(0, 300) })
+      return c.json({ ok: false, error: { code: 'EMBEDDINGS_FAILED', message: 'The search service did not answer. Try again in a minute.' } }, 502)
     }
 
     const embedData = await embedRes.json() as { data: Array<{ embedding: number[] }> }
     const queryEmbedding = embedData.data[0]?.embedding
-    if (!queryEmbedding) return c.json({ ok: false, error: 'No embedding returned' }, 500)
+    if (!queryEmbedding) {
+      return c.json({ ok: false, error: { code: 'EMBEDDINGS_FAILED', message: 'The search service did not answer. Try again in a minute.' } }, 502)
+    }
 
     // Stage 1: bi-encoder retrieval via match_lessons RPC
     const { data: stage1 } = await db.rpc('match_lessons', {

@@ -19,6 +19,8 @@
  *     always have an escape hatch.
  */
 
+import { composeFeedbackBody, feedbackBodyBudget, feedbackPageContextLine } from '../lib/feedbackBody'
+import { apiErrorText } from '../lib/apiErrorText'
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Btn, Card } from './ui'
@@ -38,13 +40,12 @@ interface FeedbackModalProps {
 }
 
 const FALLBACK_EMAIL = 'kensaurus@gmail.com'
-const MAX_BODY = 5000
 const MAX_SUBJECT = 200
 
 /** Page path + query for support triage. Excludes fragment (#…) which may carry sensitive tokens. */
 function feedbackPageContext(): string {
   if (typeof window === 'undefined') return 'Page: (unknown)'
-  return `Page: ${window.location.pathname}${window.location.search}`
+  return feedbackPageContextLine(window.location.pathname, window.location.search)
 }
 
 const TYPE_CONFIG: Record<FeedbackType, {
@@ -132,10 +133,7 @@ export function FeedbackModal({ onClose, initialType = 'bug', onSubmitted }: Fee
     setError(null)
     setSubmitting(true)
 
-    const pageCtx = feedbackPageContext()
-    const bodyWithContext = cleanBody
-      ? `[${type === 'bug' ? 'Bug' : 'Feature Request'}]\n\n${cleanBody}\n\n---\n${pageCtx}`
-      : `[${type === 'bug' ? 'Bug' : 'Feature Request'}]\n\n(no description provided)\n\n---\n${pageCtx}`
+    const bodyWithContext = composeFeedbackBody(type, cleanBody, feedbackPageContext())
 
     const result = await apiFetch<{ ticket_id: string; created_at: string }>('/v1/support/contact', {
       method: 'POST',
@@ -158,7 +156,7 @@ export function FeedbackModal({ onClose, initialType = 'bug', onSubmitted }: Fee
         openFallbackMailto()
         onClose()
       } else {
-        setError(err?.message ?? 'Something went wrong. Please try again or email kensaurus@gmail.com.')
+        setError(apiErrorText(err, `Something went wrong. Please try again or email ${FALLBACK_EMAIL}.`))
       }
       return
     }
@@ -176,8 +174,10 @@ export function FeedbackModal({ onClose, initialType = 'bug', onSubmitted }: Fee
     window.open(href, '_blank')
   }
 
+  // Room left after the [Bug] header and page footer the API also counts.
+  const maxBody = feedbackBodyBudget(type, feedbackPageContext())
   const bodyLen = body.length
-  const bodyNearLimit = bodyLen > MAX_BODY * 0.85
+  const bodyNearLimit = bodyLen > maxBody * 0.85
 
   return (
     <Modal
@@ -290,15 +290,15 @@ export function FeedbackModal({ onClose, initialType = 'bug', onSubmitted }: Fee
                 <textarea
                   id="feedback-body"
                   value={body}
-                  onChange={(e) => setBody(e.target.value.slice(0, MAX_BODY))}
+                  onChange={(e) => setBody(e.target.value.slice(0, maxBody))}
                   placeholder={config.bodyPlaceholder}
                   rows={4}
                   className="w-full rounded-sm border border-edge bg-surface-raised px-2.5 py-1.5 text-xs text-fg placeholder:text-fg-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:border-brand resize-y leading-relaxed"
-                  maxLength={MAX_BODY}
+                  maxLength={maxBody}
                 />
                 {bodyNearLimit && (
-                  <p className={`text-3xs text-right ${bodyLen >= MAX_BODY ? 'text-danger' : 'text-warn'}`}>
-                    {bodyLen} / {MAX_BODY}
+                  <p className={`text-3xs text-right ${bodyLen >= maxBody ? 'text-danger' : 'text-warn'}`}>
+                    {bodyLen} / {maxBody}
                   </p>
                 )}
               </div>

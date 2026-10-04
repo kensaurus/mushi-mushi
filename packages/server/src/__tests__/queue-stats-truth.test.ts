@@ -24,6 +24,7 @@ vi.mock('../../supabase/functions/api/helpers.ts', () => ({
 vi.mock('../../supabase/functions/api/shared.ts', () => ({
   dbError: vi.fn((c: Ctx, err: { message: string }) => c.json({ ok: false, error: { code: 'DB_ERROR', message: err.message } }, 500)),
   callerProjectIds: async () => ['p1'],
+  userCanAccessProject: async () => ({ allowed: true, role: 'owner' }),
 }))
 
 interface Result { data?: unknown; count?: number; error?: { message: string } | null }
@@ -144,7 +145,7 @@ describe('POST /v1/admin/queue/:id/retry', () => {
     tables = { 'processing_queue:single': { data: { id: 'q1', status: 'completed', report_id: 'r1', project_id: 'p1' }, error: null } }
     const res = await call('post', '/v1/admin/queue/:id/retry', { id: 'q1' })
     expect(res.status).toBe(409)
-    expect(res.body.error).toEqual({ code: 'NOT_RETRYABLE', message: 'This job already finished — there is nothing to retry.' })
+    expect(res.body.error).toEqual({ code: 'NOT_RETRYABLE', message: 'This job already finished. Retrying it would re-run triage and spend AI budget.' })
   })
 
   it('still retries a dead-letter job', async () => {

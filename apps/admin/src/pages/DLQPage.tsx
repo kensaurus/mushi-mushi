@@ -6,9 +6,14 @@
  *          item card) can be reasoned about in isolation.
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { apiFetch } from '../lib/supabase'
+import { apiErrorText } from '../lib/apiErrorText'
+import { useEntitlements } from '../lib/useEntitlements'
+import { ConfirmDialog } from '../components/ConfirmDialog'
+import { isQueueItemRetryable, parseQueueLaneParam } from '../components/dlq/queueRetry'
 import {
   Btn,
   FilterSelect,
@@ -61,8 +66,31 @@ export function DLQPage() {
   // we fall back to the first non-empty status (in priority order) so a
   // healthy pipeline lands the user on the populated `completed` lane
   // instead of an empty page.
-  const [filter, setFilter] = useState<StatusFilter>('dead_letter')
-  const [filterTouched, setFilterTouched] = useState(false)
+  // The lane lives in the URL (`?status=`), so banner, chart-menu and
+  // cross-page links open the lane they name. Without one, the page picks
+  // the first non-empty lane once the summary loads.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const laneFromUrl = parseQueueLaneParam(searchParams)
+  const [autoLane, setAutoLane] = useState<StatusFilter>('dead_letter')
+  const filter: StatusFilter = laneFromUrl ?? autoLane
+  const setFilter = useCallback(
+    (next: StatusFilter) => {
+      setSearchParams(
+        (prev) => {
+          const params = new URLSearchParams(prev)
+          params.set('status', next)
+          params.delete('filter')
+          params.delete('tab')
+          return params
+        },
+        { replace: true },
+      )
+    },
+    [setSearchParams],
+  )
+  const [confirmRetryPage, setConfirmRetryPage] = useState(false)
+  const [retryingPage, setRetryingPage] = useState(false)
+  const { canEditProject } = useEntitlements()
   const [stage, setStage] = useState<string>('')
   const toast = useToast()
   const {
@@ -72,8 +100,6 @@ export function DLQPage() {
     isValidating: statsValidating,
   } = usePageData<QueueStats>('/v1/admin/queue/stats')
   const stats = queueStats ?? EMPTY_QUEUE_STATS
-  // Only jobs that stopped can be retried; a completed job never offers Retry.
-  const retryableItems = items.filter((item) => item.status === 'failed' || item.status === 'dead_letter')
 
   const loadAll = useCallback(async () => {
     setError(false)
@@ -115,17 +141,24 @@ export function DLQPage() {
   // pivot to the first non-empty status in priority order so a healthy
   // pipeline doesn't show an empty page.
   useEffect(() => {
-    if (!summary || filterTouched) return
+    if (!summary || laneFromUrl) return
     if ((summary.byStatus.dead_letter ?? 0) > 0) return
     const priority: StatusFilter[] = ['failed', 'pending', 'running', 'completed']
     const next = priority.find((s) => (summary.byStatus[s] ?? 0) > 0)
-    if (next) setFilter(next)
-  }, [summary, filterTouched])
+    if (next) setAutoLane(next)
+  }, [summary, laneFromUrl])
 
   const onFilterChange = (next: StatusFilter) => {
-    setFilterTouched(true)
     setFilter(next)
   }
+
+  // Only failed, dead-letter and stuck jobs can be retried (the API refuses
+  // the rest). Bulk retry acts on exactly these.
+  const retryableItems = useMemo(() => {
+    const now = Date.now()
+    return items.filter((item) => isQueueItemRetryable(item, now))
+  }, [items])
+  const retryableIds = useMemo(() => new Set(retryableItems.map((i) => i.id)), [retryableItems])
 
   async function retryItem(id: string) {
     setRetrying((r) => ({ ...r, [id]: true }))
@@ -135,7 +168,7 @@ export function DLQPage() {
       toast.push({ tone: 'success', message: 'Retry scheduled' })
       await loadAll()
     } else {
-      toast.push({ tone: 'error', message: res.error?.message ?? 'Retry failed' })
+      toast.push({ tone: 'error', message: apiErrorText(res.error, 'The job was not retried. Try again in a moment.') })
     }
   }
 
@@ -156,7 +189,7 @@ export function DLQPage() {
       })
       await loadAll()
     } else {
-      toast.push({ tone: 'error', message: res.error?.message ?? 'Flush failed' })
+      toast.push({ tone: 'error', message: apiErrorText(res.error, 'Nothing was flushed. Try again in a moment.') })
     }
   }
 
@@ -178,17 +211,20 @@ export function DLQPage() {
       })
       await loadAll()
     } else {
-      toast.push({ tone: 'error', message: res.error?.message ?? 'Recovery failed' })
+      toast.push({ tone: 'error', message: apiErrorText(res.error, 'Recovery did not run. Try again in a moment.') })
     }
   }
 
   async function retryAll() {
     if (retryableItems.length === 0) return
+    setRetryingPage(true)
     const results = await Promise.allSettled(
       retryableItems.map((item) =>
         apiFetch(`/v1/admin/queue/${item.id}/retry`, { method: 'POST' }),
       ),
     )
+    setRetryingPage(false)
+    setConfirmRetryPage(false)
     const ok = results.filter(
       (r) => r.status === 'fulfilled' && (r.value as { ok: boolean }).ok,
     ).length
@@ -234,8 +270,8 @@ export function DLQPage() {
             onChange={(e) => setStage(e.currentTarget.value)}
           />
         )}
-        {retryableItems.length > 0 && (
-          <Btn size="sm" variant="success" onClick={retryAll}>
+        {retryableItems.length > 0 && canEditProject && (
+          <Btn size="sm" variant="success" onClick={() => setConfirmRetryPage(true)}>
             Retry page ({retryableItems.length})
           </Btn>
         )}
@@ -387,7 +423,11 @@ export function DLQPage() {
                   : `${total} ${total === 1 ? 'job is' : 'jobs are'} retrying — investigate before they exhaust`
               }
               description={`Inspect the last error to understand the root cause, fix it, then retry in bulk.${stageHint}`}
-              cta={retryableItems.length > 0 ? { label: `Retry page (${retryableItems.length})`, onClick: retryAll } : undefined}
+              cta={
+                retryableItems.length > 0 && canEditProject
+                  ? { label: `Retry page (${retryableItems.length})`, onClick: () => setConfirmRetryPage(true) }
+                  : undefined
+              }
             />
           )
         })()}
@@ -419,6 +459,7 @@ export function DLQPage() {
                 key={item.id}
                 item={item}
                 retrying={!!retrying[item.id]}
+                canRetry={canEditProject && retryableIds.has(item.id)}
                 onRetry={() => retryItem(item.id)}
               />
             ))}
@@ -449,7 +490,45 @@ export function DLQPage() {
           )}
         </>
       )}
+
+      {confirmRetryPage && (
+        <RetryPageDialog
+          count={retryableItems.length}
+          lane={filter}
+          loading={retryingPage}
+          onConfirm={() => void retryAll()}
+          onCancel={() => {
+            if (!retryingPage) setConfirmRetryPage(false)
+          }}
+        />
+      )}
     </div>
+  )
+}
+
+function RetryPageDialog({
+  count,
+  lane,
+  loading,
+  onConfirm,
+  onCancel,
+}: {
+  count: number
+  lane: string
+  loading: boolean
+  onConfirm: () => void
+  onCancel: () => void
+}) {
+  return (
+    <ConfirmDialog
+      title={`Retry ${count} job${count === 1 ? '' : 's'}?`}
+      body={`Each ${lane.replace(/_/g, ' ')} job on this page runs again from the start, which re-runs AI triage for its report. Fix the cause of the failure first, or they will fail again.`}
+      confirmLabel={`Retry ${count}`}
+      cancelLabel="Cancel"
+      loading={loading}
+      onConfirm={onConfirm}
+      onCancel={onCancel}
+    />
   )
 }
 

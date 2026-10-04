@@ -3,11 +3,12 @@ import type { Variables } from '../types.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { jwtAuth } from '../../_shared/auth.ts';
 import { logAudit } from '../../_shared/audit.ts';
-import { dbError, callerProjectIds } from '../shared.ts';
+import { dbError, callerProjectIds, userCanAccessProject } from '../shared.ts';
+import { queueRetryDenial } from '../../_shared/queue-retry-policy.ts';
+import { denyViewerWrite } from '../viewer-gate.ts';
 import { ingestReport, triggerClassification } from '../helpers.ts';
 
 /** Queue job statuses a person can retry: the job stopped without finishing. */
-const RETRYABLE_QUEUE_STATUSES: ReadonlySet<string> = new Set(['failed', 'dead_letter']);
 
 export function registerQueueRoutes(app: Hono<{ Variables: Variables }>): void {
   // DLQ admin endpoints
@@ -292,22 +293,15 @@ export function registerQueueRoutes(app: Hono<{ Variables: Variables }>): void {
         404,
       );
 
-    // Only a job that stopped can be retried. Re-queueing a completed job
-    // re-ran classification on a report that was already done.
-    if (!RETRYABLE_QUEUE_STATUSES.has(item.status)) {
-      return c.json(
-        {
-          ok: false,
-          error: {
-            code: 'NOT_RETRYABLE',
-            message:
-              item.status === 'completed'
-                ? 'This job already finished — there is nothing to retry.'
-                : 'This job is still waiting or running — retry it only if it fails.',
-          },
-        },
-        409,
-      );
+    const access = await userCanAccessProject(db, userId, item.project_id);
+    const viewerDenied = denyViewerWrite(c, access.role, 'retry pipeline jobs');
+    if (viewerDenied) return viewerDenied;
+
+    // Retrying re-runs classification (LLM spend, may overwrite triage), so
+    // completed and still-active jobs are refused. See queue-retry-policy.ts.
+    const denial = queueRetryDenial(item, Date.now());
+    if (denial) {
+      return c.json({ ok: false, error: { code: 'NOT_RETRYABLE', message: denial } }, 409);
     }
 
     await db
