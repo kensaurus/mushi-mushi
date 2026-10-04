@@ -72,7 +72,7 @@ export function ConsoleHelpPanel() {
         </Btn>
       ) : (
         <p className="text-2xs text-fg-muted">
-          The Mushi team rebuilds this index after each release. Nothing to do here.
+          Only Mushi staff can rebuild this shared index. Nothing to do here.
         </p>
       )}
       {message && <p className="text-2xs text-fg-muted mt-2">{message}</p>}
