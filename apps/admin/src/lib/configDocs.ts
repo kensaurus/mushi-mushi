@@ -83,7 +83,11 @@ export interface ConfigDoc {
     table?: string;
     /** Column inside `table`. For composite values use a slash-separated
      *  list (e.g. `'allowed_domains / max_pages_per_call'`) — the
-     *  generated markdown renders it verbatim. */
+     *  generated markdown renders it verbatim. A trailing note in
+     *  parentheses is allowed: `(Vault)` when the column holds a Vault
+     *  reference instead of the value, or the column type (`(text[])`).
+     *  `configDocs.lineage.test.ts` checks that `table` is created by a
+     *  migration. */
     column?: string;
     /** Admin REST endpoint that writes the value. */
     endpoint?: string;
@@ -163,7 +167,7 @@ const SETTINGS_GENERAL: ConfigDoc[] = [
     default: { value: 'unset (inbound disabled)' },
     backend: {
       table: 'project_settings',
-      column: 'sentry_webhook_secret',
+      column: 'sentry_webhook_secret (Vault)',
       endpoint: 'PATCH /v1/admin/settings',
       readBy: ['POST /v1/webhooks/sentry (api route)', 'POST /v1/webhooks/sentry/seer (api route)'],
     },
@@ -291,7 +295,7 @@ const SETTINGS_BYOK: ConfigDoc[] = [
     default: { value: 'unset (uses platform default)' },
     backend: {
       table: 'project_settings',
-      column: 'byok_anthropic_key_ref (vault://…)',
+      column: 'byok_anthropic_key_ref (Vault)',
       endpoint: 'PUT /v1/admin/byok/anthropic',
       readBy: ['fast-filter', 'classify-report', 'fix-worker edge functions'],
     },
@@ -312,7 +316,7 @@ const SETTINGS_BYOK: ConfigDoc[] = [
     default: { value: 'unset (failover disabled)' },
     backend: {
       table: 'project_settings',
-      column: 'byok_openai_key_ref (vault://…)',
+      column: 'byok_openai_key_ref (Vault)',
       endpoint: 'PUT /v1/admin/byok/openai',
       readBy: ['fast-filter', 'classify-report', 'judge-batch edge function'],
     },
@@ -349,7 +353,7 @@ const SETTINGS_FIRECRAWL: ConfigDoc[] = [
     default: { value: 'unset (web research disabled)' },
     backend: {
       table: 'project_settings',
-      column: 'firecrawl_api_key_ref (vault://…)',
+      column: 'byok_firecrawl_key_ref (Vault)',
       endpoint: 'PUT /v1/admin/byok/firecrawl',
       readBy: ['settings-research API routes', 'fix-worker edge function', 'library-modernizer edge function'],
     },
@@ -450,7 +454,7 @@ const PROJECTS: ConfigDoc[] = [
     default: { value: 'SDK send-only (report:write only)' },
     backend: {
       table: 'project_api_keys',
-      column: 'scopes (jsonb)',
+      column: 'scopes (text[])',
       endpoint: 'POST /v1/admin/projects/{id}/keys',
       readBy: ['POST /v1/reports (api route)', 'mcp server (@mushi-mushi/mcp)'],
     },
@@ -466,7 +470,7 @@ const PROJECTS: ConfigDoc[] = [
     default: { value: 'enabled by default for new keys' },
     backend: {
       table: 'project_api_keys',
-      column: 'scopes (jsonb)',
+      column: 'scopes (text[])',
       endpoint: 'POST /v1/admin/projects/{id}/keys',
       readBy: ['POST /v1/reports (api route)'],
     },
@@ -483,7 +487,7 @@ const PROJECTS: ConfigDoc[] = [
     default: { value: 'disabled by default — opt-in via the mint dialog' },
     backend: {
       table: 'project_api_keys',
-      column: 'scopes (jsonb)',
+      column: 'scopes (text[])',
       endpoint: 'POST /v1/admin/projects/{id}/keys',
       readBy: ['mcp server (@mushi-mushi/mcp)'],
     },
@@ -500,7 +504,7 @@ const PROJECTS: ConfigDoc[] = [
     default: { value: 'disabled by default' },
     backend: {
       table: 'project_api_keys',
-      column: 'scopes (jsonb)',
+      column: 'scopes (text[])',
       endpoint: 'POST /v1/admin/projects/{id}/keys',
       readBy: ['mcp server (@mushi-mushi/mcp)'],
     },
@@ -512,14 +516,8 @@ const PROJECTS: ConfigDoc[] = [
     label: 'Active Project',
     summary: "Picks which project's data the entire admin operates on for this session.",
     howItWorks:
-      'Every admin API call carries the active project id as a header. Switching here re-issues all queries — there\'s no manual "reload everything" step. Persisted per-user in your auth profile, so each operator can have their own default.',
+      'Every admin API call carries the active project id in the `X-Mushi-Project-Id` header. Switching here re-issues all queries — there\'s no manual "reload everything" step. The choice is kept in this browser (localStorage `mushi:active_project_id`, or `?project=` in the URL), not on the server, so each browser keeps its own default.',
     default: { value: 'first project the user has access to' },
-    backend: {
-      table: 'auth.users / user_profile',
-      column: 'active_project_id',
-      endpoint: 'PATCH /v1/admin/me/active-project',
-      readBy: ['every admin API endpoint'],
-    },
     whenToChange:
       'Switch when reviewing bugs across multiple apps. For SSO orgs, ask the workspace owner to scope your invite so the picker only shows projects you should see.',
   },
@@ -535,9 +533,9 @@ const INTEGRATIONS: ConfigDoc[] = [
       'Used to scope every Sentry API call (issues, events, Seer root-cause). Wrong slug → 404 on every request and the integration goes red.',
     default: { value: 'unset' },
     backend: {
-      table: 'platform_integrations',
-      column: 'config.sentry_org_slug',
-      endpoint: 'PUT /v1/admin/integrations/sentry',
+      table: 'project_settings',
+      column: 'sentry_org_slug',
+      endpoint: 'PUT /v1/admin/integrations/platform/sentry',
       readBy: ['sentry-seer-poll edge function', 'integration-health-probe edge function'],
     },
     whenToChange: 'Set once at install. Update only if Sentry renames your org (rare).',
@@ -551,9 +549,9 @@ const INTEGRATIONS: ConfigDoc[] = [
       'Scopes the event search when enriching a report. Leave blank to search across all projects under the org (slower; recommended only for tiny orgs).',
     default: { value: 'unset (org-wide search)' },
     backend: {
-      table: 'platform_integrations',
-      column: 'config.sentry_project_slug',
-      endpoint: 'PUT /v1/admin/integrations/sentry',
+      table: 'project_settings',
+      column: 'sentry_project_slug',
+      endpoint: 'PUT /v1/admin/integrations/platform/sentry',
       readBy: ['sentry-seer-poll edge function', 'integration-health-probe edge function'],
     },
     whenToChange:
@@ -568,9 +566,9 @@ const INTEGRATIONS: ConfigDoc[] = [
       'Stored as a vault reference (`vault://id`) — never in plaintext. Used to import existing issues, fetch the matching event payload for a report, and resolve linked Sentry issues when their fix PR merges.',
     default: { value: 'unset (enrichment disabled)' },
     backend: {
-      table: 'platform_integrations',
-      column: 'config.sentry_auth_token_ref',
-      endpoint: 'PUT /v1/admin/integrations/sentry',
+      table: 'project_settings',
+      column: 'sentry_auth_token_ref (Vault)',
+      endpoint: 'PUT /v1/admin/integrations/platform/sentry',
       readBy: [
         'sentry-seer-poll edge function',
         'integration-health-probe edge function',
@@ -588,9 +586,9 @@ const INTEGRATIONS: ConfigDoc[] = [
       'Every LLM call (Stage 1, Stage 2, fix-worker, judge) emits a trace to this host. Stripped of trailing slashes server-side, so paste either form.',
     default: { value: 'unset (tracing disabled)' },
     backend: {
-      table: 'platform_integrations',
-      column: 'config.langfuse_host',
-      endpoint: 'PUT /v1/admin/integrations/langfuse',
+      table: 'project_settings',
+      column: 'langfuse_host',
+      endpoint: 'PUT /v1/admin/integrations/platform/langfuse',
       readBy: ['fast-filter', 'classify-report', 'fix-worker', 'judge-batch'],
     },
     whenToChange:
@@ -604,9 +602,9 @@ const INTEGRATIONS: ConfigDoc[] = [
       'Sent as the username portion of every trace POST. Safe to commit — the secret key is what gates writes.',
     default: { value: 'unset' },
     backend: {
-      table: 'platform_integrations',
-      column: 'config.langfuse_public_key_ref',
-      endpoint: 'PUT /v1/admin/integrations/langfuse',
+      table: 'project_settings',
+      column: 'langfuse_public_key_ref (Vault)',
+      endpoint: 'PUT /v1/admin/integrations/platform/langfuse',
       readBy: ['LLM observability layer'],
     },
     whenToChange: 'Rotate together with the secret key whenever you suspect either is leaked.',
@@ -619,9 +617,9 @@ const INTEGRATIONS: ConfigDoc[] = [
       'Stored as a vault reference. Sent as the password portion of HTTP Basic auth on every trace POST.',
     default: { value: 'unset' },
     backend: {
-      table: 'platform_integrations',
-      column: 'config.langfuse_secret_key_ref',
-      endpoint: 'PUT /v1/admin/integrations/langfuse',
+      table: 'project_settings',
+      column: 'langfuse_secret_key_ref (Vault)',
+      endpoint: 'PUT /v1/admin/integrations/platform/langfuse',
       readBy: ['LLM observability layer'],
     },
     whenToChange: 'Rotate quarterly, or immediately on any suspicion of leak.',
@@ -634,9 +632,9 @@ const INTEGRATIONS: ConfigDoc[] = [
       'Full HTTPS URL (SSH URLs are normalised). The fix-worker clones the default branch, applies the LLM patch on a feature branch, and pushes a draft PR with the report id in the body.',
     default: { value: 'unset (autofix disabled)' },
     backend: {
-      table: 'platform_integrations',
-      column: 'config.github_repo_url',
-      endpoint: 'PUT /v1/admin/integrations/github',
+      table: 'project_settings',
+      column: 'github_repo_url',
+      endpoint: 'PUT /v1/admin/integrations/platform/github',
       readBy: ['fix-worker edge function'],
     },
     whenToChange:
@@ -650,9 +648,9 @@ const INTEGRATIONS: ConfigDoc[] = [
       'Defaults to `main` when blank. Override for repos that branch from `master`, `develop`, or a release line. The branch name is also used as the PR base.',
     default: { value: 'main' },
     backend: {
-      table: 'platform_integrations',
-      column: 'config.github_default_branch',
-      endpoint: 'PUT /v1/admin/integrations/github',
+      table: 'project_settings',
+      column: 'github_default_branch',
+      endpoint: 'PUT /v1/admin/integrations/platform/github',
       readBy: ['fix-worker edge function'],
     },
     whenToChange:
@@ -667,9 +665,9 @@ const INTEGRATIONS: ConfigDoc[] = [
       'Needs `Contents:write` + `Pull requests:write` on the target repo. Stored as a vault reference. App tokens are preferred — they auto-rotate and have a shorter blast radius than PATs.',
     default: { value: 'unset' },
     backend: {
-      table: 'platform_integrations',
-      column: 'config.github_installation_token_ref',
-      endpoint: 'PUT /v1/admin/integrations/github',
+      table: 'project_settings',
+      column: 'github_installation_token_ref (Vault)',
+      endpoint: 'PUT /v1/admin/integrations/platform/github',
       readBy: ['fix-worker edge function'],
     },
     whenToChange:
@@ -683,9 +681,9 @@ const INTEGRATIONS: ConfigDoc[] = [
       "Mushi's webhook handler verifies the `X-Hub-Signature-256` header against this secret. Without a match → 401, the event is dropped. The same value must be set in the GitHub repo Settings → Webhooks.",
     default: { value: 'unset (CI sync disabled)' },
     backend: {
-      table: 'platform_integrations',
-      column: 'config.github_webhook_secret',
-      endpoint: 'PUT /v1/admin/integrations/github',
+      table: 'project_settings',
+      column: 'github_webhook_secret (Vault)',
+      endpoint: 'PUT /v1/admin/integrations/platform/github',
       readBy: ['github-webhook edge function'],
     },
     whenToChange:
@@ -699,9 +697,9 @@ const INTEGRATIONS: ConfigDoc[] = [
       'Used to build issue URLs (`{baseUrl}/browse/{key}`) and as the API host for create/update calls. Cloud URLs typically end in `.atlassian.net`.',
     default: { value: 'unset' },
     backend: {
-      table: 'routing_destinations',
-      column: 'config.baseUrl',
-      endpoint: 'POST /v1/admin/routing',
+      table: 'project_integrations',
+      column: 'config.baseUrl (integration_type = jira)',
+      endpoint: 'POST /v1/admin/integrations',
       readBy: ['route-to-jira edge function'],
     },
     whenToChange:
@@ -716,9 +714,9 @@ const INTEGRATIONS: ConfigDoc[] = [
       'Sent as the username for every Jira request. Pair with the API token in the next field.',
     default: { value: 'unset' },
     backend: {
-      table: 'routing_destinations',
-      column: 'config.email',
-      endpoint: 'POST /v1/admin/routing',
+      table: 'project_integrations',
+      column: 'config.email (integration_type = jira)',
+      endpoint: 'POST /v1/admin/integrations',
       readBy: ['route-to-jira edge function'],
     },
     whenToChange:
@@ -728,12 +726,13 @@ const INTEGRATIONS: ConfigDoc[] = [
     id: 'integrations.routing.jira.api_token',
     label: 'Jira API token',
     summary: 'Atlassian API token paired with the email above for basic auth.',
-    howItWorks: 'Stored as vault reference. Create at id.atlassian.com → Security → API tokens.',
+    howItWorks:
+      'Saved in the Jira routing row’s config as entered (not in Vault); the console only ever shows its last 4 characters. Create at id.atlassian.com → Security → API tokens.',
     default: { value: 'unset' },
     backend: {
-      table: 'routing_destinations',
-      column: 'config.apiToken',
-      endpoint: 'POST /v1/admin/routing',
+      table: 'project_integrations',
+      column: 'config.apiToken (integration_type = jira)',
+      endpoint: 'POST /v1/admin/integrations',
       readBy: ['route-to-jira edge function'],
     },
     whenToChange: 'Rotate quarterly. Re-issue immediately if the owning email changes.',
@@ -747,9 +746,9 @@ const INTEGRATIONS: ConfigDoc[] = [
       'Used in the `POST /rest/api/3/issue` payload as `fields.project.key`. The created issues get keys like `BUG-123`. Wrong key → Jira rejects the create call.',
     default: { value: 'unset' },
     backend: {
-      table: 'routing_destinations',
-      column: 'config.projectKey',
-      endpoint: 'POST /v1/admin/routing',
+      table: 'project_integrations',
+      column: 'config.projectKey (integration_type = jira)',
+      endpoint: 'POST /v1/admin/integrations',
       readBy: ['route-to-jira edge function'],
     },
     whenToChange:
@@ -760,12 +759,12 @@ const INTEGRATIONS: ConfigDoc[] = [
     label: 'Linear API key',
     summary: 'Personal API key used to mirror reports as Linear issues.',
     howItWorks:
-      'Sent as the `Authorization` header on every Linear GraphQL call. Stored as vault reference. Generate at Linear → Settings → API → Personal API keys.',
+      'Sent as the `Authorization` header on every Linear GraphQL call. Saved in the Linear routing row’s config as entered (not in Vault); the console only ever shows its last 4 characters. Generate at Linear → Settings → API → Personal API keys.',
     default: { value: 'unset' },
     backend: {
-      table: 'routing_destinations',
-      column: 'config.apiKey',
-      endpoint: 'POST /v1/admin/routing',
+      table: 'project_integrations',
+      column: 'config.apiKey (integration_type = linear)',
+      endpoint: 'POST /v1/admin/integrations',
       readBy: ['route-to-linear edge function'],
     },
     whenToChange:
@@ -779,9 +778,9 @@ const INTEGRATIONS: ConfigDoc[] = [
       'Used as the `teamId` argument on `issueCreate`. Find it in Linear → Settings → API → "Find your team ID".',
     default: { value: 'unset' },
     backend: {
-      table: 'routing_destinations',
-      column: 'config.teamId',
-      endpoint: 'POST /v1/admin/routing',
+      table: 'project_integrations',
+      column: 'config.teamId (integration_type = linear)',
+      endpoint: 'POST /v1/admin/integrations',
       readBy: ['route-to-linear edge function'],
     },
     whenToChange:
@@ -792,12 +791,12 @@ const INTEGRATIONS: ConfigDoc[] = [
     label: 'GitHub Issues PAT',
     summary: 'Fine-grained PAT with `Issues:write` on the public-tracker repo.',
     howItWorks:
-      'Distinct from the auto-fix repo PAT — this one targets the tracker repo (often public), not the code repo. Stored as vault reference.',
+      'Distinct from the auto-fix repo PAT — this one targets the tracker repo (often public), not the code repo. Saved in the GitHub routing row’s config as entered (not in Vault); the console only ever shows its last 4 characters.',
     default: { value: 'unset' },
     backend: {
-      table: 'routing_destinations',
-      column: 'config.token',
-      endpoint: 'POST /v1/admin/routing',
+      table: 'project_integrations',
+      column: 'config.token (integration_type = github)',
+      endpoint: 'POST /v1/admin/integrations',
       readBy: ['route-to-github-issues edge function'],
     },
     whenToChange:
@@ -811,9 +810,9 @@ const INTEGRATIONS: ConfigDoc[] = [
     howItWorks: 'Concatenated into the GitHub API path: `/repos/{owner}/{repo}/issues`.',
     default: { value: 'unset' },
     backend: {
-      table: 'routing_destinations',
-      column: 'config.owner',
-      endpoint: 'POST /v1/admin/routing',
+      table: 'project_integrations',
+      column: 'config.owner (integration_type = github)',
+      endpoint: 'POST /v1/admin/integrations',
       readBy: ['route-to-github-issues edge function'],
     },
     whenToChange:
@@ -827,9 +826,9 @@ const INTEGRATIONS: ConfigDoc[] = [
       'Concatenated with the owner above into the API path. Case-sensitive on the GitHub API side.',
     default: { value: 'unset' },
     backend: {
-      table: 'routing_destinations',
-      column: 'config.repo',
-      endpoint: 'POST /v1/admin/routing',
+      table: 'project_integrations',
+      column: 'config.repo (integration_type = github)',
+      endpoint: 'POST /v1/admin/integrations',
       readBy: ['route-to-github-issues edge function'],
     },
     whenToChange:
@@ -844,9 +843,9 @@ const INTEGRATIONS: ConfigDoc[] = [
       'Mushi POSTs a v2 event payload with `event_action=trigger` and a fingerprint built from the report cluster id, so duplicate criticals dedupe instead of paging twice. Auto-resolves the incident when the linked report closes.',
     default: { value: 'unset' },
     backend: {
-      table: 'routing_destinations',
-      column: 'config.routingKey',
-      endpoint: 'POST /v1/admin/routing',
+      table: 'project_integrations',
+      column: 'config.routingKey (integration_type = pagerduty)',
+      endpoint: 'POST /v1/admin/integrations',
       readBy: ['route-to-pagerduty edge function'],
     },
     whenToChange:
@@ -864,9 +863,9 @@ const STORAGE: ConfigDoc[] = [
       'Switches the storage adapter used for new uploads — supabase (default, lives in Supabase Storage), s3 (any S3-compatible host), gcs (Google Cloud Storage), or r2 (Cloudflare R2). Existing artifacts stay where they were written; only new traffic moves.',
     default: { value: 'supabase' },
     backend: {
-      table: 'storage_configs',
+      table: 'project_storage_settings',
       column: 'provider',
-      endpoint: 'PUT /v1/admin/storage',
+      endpoint: 'PUT /v1/admin/storage/:projectId',
       readBy: ['storage adapter (every artifact upload/download)'],
     },
     whenToChange:
@@ -880,9 +879,9 @@ const STORAGE: ConfigDoc[] = [
       'Must already exist on the chosen provider — Mushi never creates buckets implicitly (avoids accidental data scattering across regions). The IAM identity behind the credentials below needs `s3:PutObject` / `s3:GetObject` (or the equivalent) on this bucket.',
     default: { value: 'unset' },
     backend: {
-      table: 'storage_configs',
+      table: 'project_storage_settings',
       column: 'bucket',
-      endpoint: 'PUT /v1/admin/storage',
+      endpoint: 'PUT /v1/admin/storage/:projectId',
       readBy: ['storage adapter'],
     },
     whenToChange:
@@ -897,9 +896,9 @@ const STORAGE: ConfigDoc[] = [
       'For S3, the region is part of the URL signing process; mismatch → SignatureDoesNotMatch. For Compliance: storage region is checked against `data_residency_region` and a mismatch triggers a hard refusal at write time.',
     default: { value: 'unset' },
     backend: {
-      table: 'storage_configs',
+      table: 'project_storage_settings',
       column: 'region',
-      endpoint: 'PUT /v1/admin/storage',
+      endpoint: 'PUT /v1/admin/storage/:projectId',
       readBy: ['storage adapter', 'compliance check'],
     },
     whenToChange:
@@ -914,9 +913,9 @@ const STORAGE: ConfigDoc[] = [
       'Leave blank for AWS S3 (the SDK builds the URL from region). Set explicitly for R2 (`https://<account>.r2.cloudflarestorage.com`), Backblaze B2, MinIO, or any other S3-compatible host.',
     default: { value: 'empty (provider default)' },
     backend: {
-      table: 'storage_configs',
+      table: 'project_storage_settings',
       column: 'endpoint',
-      endpoint: 'PUT /v1/admin/storage',
+      endpoint: 'PUT /v1/admin/storage/:projectId',
       readBy: ['storage adapter'],
     },
     whenToChange:
@@ -931,9 +930,9 @@ const STORAGE: ConfigDoc[] = [
       'A trailing slash is added if missing. Useful when one bucket hosts multiple Mushi projects or coexists with other apps — set to `mushi/prod/` so your tooling can audit just the Mushi paths without confusing them with neighbours.',
     default: { value: 'empty (writes to bucket root)' },
     backend: {
-      table: 'storage_configs',
+      table: 'project_storage_settings',
       column: 'path_prefix',
-      endpoint: 'PUT /v1/admin/storage',
+      endpoint: 'PUT /v1/admin/storage/:projectId',
       readBy: ['storage adapter'],
     },
     whenToChange:
@@ -948,9 +947,9 @@ const STORAGE: ConfigDoc[] = [
       'Every download in the admin (e.g. preview a screenshot, replay a session recording) is gated by a fresh presigned URL. Lower = tighter security (links expire fast); higher = friendlier UX (a copied link still works in a Slack thread an hour later).',
     default: { value: '3600 (1 hour)', range: '60 – 604800 (7 days)' },
     backend: {
-      table: 'storage_configs',
+      table: 'project_storage_settings',
       column: 'signed_url_ttl_secs',
-      endpoint: 'PUT /v1/admin/storage',
+      endpoint: 'PUT /v1/admin/storage/:projectId',
       readBy: ['storage adapter (every signed URL it mints)'],
     },
     whenToChange:
@@ -966,7 +965,7 @@ const STORAGE: ConfigDoc[] = [
     default: { value: 'unset' },
     backend: {
       table: 'project_storage_settings',
-      column: 'access_key_vault_ref',
+      column: 'access_key_vault_ref (Vault)',
       endpoint: 'PUT /v1/admin/storage/:projectId',
       readBy: ['storage adapter'],
     },
@@ -981,7 +980,7 @@ const STORAGE: ConfigDoc[] = [
     default: { value: 'unset' },
     backend: {
       table: 'project_storage_settings',
-      column: 'secret_key_vault_ref',
+      column: 'secret_key_vault_ref (Vault)',
       endpoint: 'PUT /v1/admin/storage/:projectId',
       readBy: ['storage adapter'],
     },
@@ -996,9 +995,9 @@ const STORAGE: ConfigDoc[] = [
       "When set, every PutObject specifies `x-amz-server-side-encryption: aws:kms` with this key id. Without it, the bucket's default encryption applies (typically AES256).",
     default: { value: 'empty (provider default encryption)' },
     backend: {
-      table: 'storage_configs',
+      table: 'project_storage_settings',
       column: 'kms_key_id',
-      endpoint: 'PUT /v1/admin/storage',
+      endpoint: 'PUT /v1/admin/storage/:projectId',
       readBy: ['storage adapter'],
     },
     whenToChange:
@@ -1070,7 +1069,7 @@ const COMPLIANCE: ConfigDoc[] = [
     default: { value: '180 (6 months)' },
     backend: {
       table: 'project_retention_policies',
-      column: 'attachments_retention_days',
+      column: 'byok_audit_retention_days',
       endpoint: 'PUT /v1/admin/compliance/retention/{projectId}',
       readBy: ['attachment-sweep cron'],
     },
@@ -1087,7 +1086,7 @@ const COMPLIANCE: ConfigDoc[] = [
     default: { value: '90' },
     backend: {
       table: 'project_retention_policies',
-      column: 'events_retention_days',
+      column: 'llm_traces_retention_days',
       endpoint: 'PUT /v1/admin/compliance/retention/{projectId}',
       readBy: ['events-sweep cron', 'health-rollups cron'],
     },
@@ -1119,9 +1118,9 @@ const COMPLIANCE: ConfigDoc[] = [
       'The DSAR (Data Subject Access Request) endpoint searches every report, attachment, and event whose `reporter_email` or session metadata matches this address, and produces either an export bundle or a delete plan.',
     default: { value: 'unset' },
     backend: {
-      table: 'dsar_requests',
+      table: 'data_subject_requests',
       column: 'subject_email',
-      endpoint: 'POST /v1/admin/compliance/dsar',
+      endpoint: 'POST /v1/admin/compliance/dsars',
       readBy: ['dsar-runner edge function'],
     },
     whenToChange:
@@ -1139,9 +1138,9 @@ const SSO: ConfigDoc[] = [
       "Determines which authn flow Mushi expects on the callback. SAML is fully self-service: Mushi calls the GoTrue Admin API to register the provider and returns the canonical ACS URL + Entity ID. OIDC is stored for audit but Mushi cannot auto-register it (GoTrue's Admin API does not yet expose an OIDC endpoint); selecting it returns HTTP 202 with `status: 'manual_required'` so you can quote the config id in a Supabase support ticket.",
     default: { value: 'saml' },
     backend: {
-      table: 'sso_providers',
+      table: 'enterprise_sso_configs',
       column: 'provider_type',
-      endpoint: 'PUT /v1/admin/sso',
+      endpoint: 'POST /v1/admin/sso',
       readBy: ['sso-callback edge function'],
     },
     whenToChange:
@@ -1155,9 +1154,9 @@ const SSO: ConfigDoc[] = [
       'Refetched daily so cert rotations propagate without a manual sync. If the URL goes 4xx, the previous cached metadata is used until it does.',
     default: { value: 'unset' },
     backend: {
-      table: 'sso_providers',
+      table: 'enterprise_sso_configs',
       column: 'metadata_url',
-      endpoint: 'PUT /v1/admin/sso',
+      endpoint: 'POST /v1/admin/sso',
       readBy: ['sso-callback edge function'],
     },
     whenToChange:
@@ -1172,9 +1171,9 @@ const SSO: ConfigDoc[] = [
       'Sent in the SAML AuthnRequest as `Issuer` and asserted by the IdP in the response. Mismatch → assertion rejected.',
     default: { value: 'unset' },
     backend: {
-      table: 'sso_providers',
+      table: 'enterprise_sso_configs',
       column: 'entity_id',
-      endpoint: 'PUT /v1/admin/sso',
+      endpoint: 'POST /v1/admin/sso',
       readBy: ['sso-callback edge function'],
     },
     whenToChange:
@@ -1188,9 +1187,9 @@ const SSO: ConfigDoc[] = [
       'On the login page, the email a user types is matched against this list — domain hit → redirect to SSO. Domain miss → fall back to password (or block, depending on the org\'s "SSO required" toggle).',
     default: { value: 'unset (no SSO routing)' },
     backend: {
-      table: 'sso_providers',
-      column: 'allowed_domains (text[])',
-      endpoint: 'PUT /v1/admin/sso',
+      table: 'enterprise_sso_configs',
+      column: 'domains (text[])',
+      endpoint: 'POST /v1/admin/sso',
       readBy: ['login-resolver edge function'],
     },
     whenToChange:
@@ -1210,7 +1209,7 @@ const PROMPT_LAB: ConfigDoc[] = [
     backend: {
       table: 'prompt_versions',
       column: 'stage',
-      endpoint: 'GET /v1/admin/prompt-lab/prompts',
+      endpoint: 'POST /v1/admin/prompt-lab/prompts',
       readBy: ['_shared/prompt-ab helper'],
     },
     whenToChange:
@@ -1245,7 +1244,7 @@ const PROMPT_LAB: ConfigDoc[] = [
     default: { value: 'shipped baseline (varies by stage)' },
     backend: {
       table: 'prompt_versions',
-      column: 'body',
+      column: 'prompt_template',
       endpoint: 'POST /v1/admin/prompt-lab/prompts',
       readBy: ['fast-filter', 'classify-report', 'fix-worker, judge-batch'],
     },
@@ -1261,10 +1260,9 @@ const PROMPT_LAB: ConfigDoc[] = [
       'Higher count = more statistical power on eval scores, but also more LLM spend (each case runs both the prompt and the judge). 25 is enough to spot regressions; 100+ is needed to detect <5% delta with confidence.',
     default: { value: '25', range: '5 – 200' },
     backend: {
-      table: 'prompt_versions',
-      column: '(driven by generator job, not stored)',
-      endpoint: 'POST /v1/admin/prompt-lab/synthesize',
-      readBy: ['eval-runner cron'],
+      // Not stored: the count is passed straight to the generator.
+      endpoint: 'POST /v1/admin/synthetic',
+      readBy: ['generate-synthetic edge function'],
     },
     whenToChange:
       'Bump to 100 when a regression is suspected and you need confidence; drop to 10 for quick smoke tests during iteration.',
@@ -1280,7 +1278,7 @@ const MARKETPLACE: ConfigDoc[] = [
       'Every subscribed event fires a JSON POST against this URL. Failed posts retry with exponential backoff up to 24 hours; persistently-failing webhooks are quarantined and surfaced as an alert.',
     default: { value: 'unset (plugin disabled)' },
     backend: {
-      table: 'marketplace_plugins',
+      table: 'project_plugins',
       column: 'webhook_url',
       endpoint: 'POST /v1/admin/plugins',
       readBy: ['marketplace-dispatcher edge function'],
@@ -1296,8 +1294,8 @@ const MARKETPLACE: ConfigDoc[] = [
       'Mushi signs every event with `X-Mushi-Signature: t=<ts>,v1=<hmac>`. Your plugin recomputes the HMAC against the raw body using this secret; mismatch = drop the event.',
     default: { value: 'auto-generated on plugin create' },
     backend: {
-      table: 'marketplace_plugins',
-      column: 'signing_secret_ref',
+      table: 'project_plugins',
+      column: 'webhook_secret_vault_ref (Vault)',
       endpoint: 'POST /v1/admin/plugins',
       readBy: ['marketplace-dispatcher edge function'],
     },
@@ -1313,7 +1311,7 @@ const MARKETPLACE: ConfigDoc[] = [
       'The dispatcher emits to your URL only for events on this list — every other event is no-op for your plugin. Keep the list minimal; each event is a billable webhook delivery.',
     default: { value: 'empty (plugin receives nothing)' },
     backend: {
-      table: 'marketplace_plugins',
+      table: 'project_plugins',
       column: 'subscribed_events (text[])',
       endpoint: 'POST /v1/admin/plugins',
       readBy: ['marketplace-dispatcher edge function'],
@@ -1352,12 +1350,12 @@ const ANTI_GAMING: ConfigDoc[] = [
     summary:
       'Free-text note attached to a flag — explains *why* this report tripped the human reviewer.',
     howItWorks:
-      'Persisted on the report and surfaced in the audit log. The next reviewer (or the LLM, if you wire it through Prompt Lab) can read this when deciding whether the flag still applies.',
+      'Persisted on the flagged reporter device (the fingerprint row, not the report) and logged as a `manual_flag` event in `anti_gaming_events`. The next reviewer (or the LLM, if you wire it through Prompt Lab) can read this when deciding whether the flag still applies.',
     default: { value: 'empty' },
     backend: {
-      table: 'reports',
+      table: 'reporter_devices',
       column: 'flag_reason',
-      endpoint: 'PATCH /v1/admin/reports/{id}/flag',
+      endpoint: 'POST /v1/admin/anti-gaming/devices/:id/flag',
       readBy: ['anti-gaming dashboard', 'audit log'],
     },
     whenToChange:
@@ -1419,9 +1417,9 @@ const BILLING: ConfigDoc[] = [
       'Plan changes go through Stripe Checkout / Customer Portal — Mushi mirrors the new plan id back via webhook. Downgrades are queued to the end of the current period; upgrades take effect immediately and are pro-rated.',
     default: { value: 'free' },
     backend: {
-      table: 'subscriptions',
+      table: 'billing_subscriptions',
       column: 'plan_id',
-      endpoint: '(via Stripe webhook → /v1/billing/webhook)',
+      endpoint: '(Stripe webhook → stripe-webhooks edge function)',
       readBy: ['feature-gate middleware', 'usage caps'],
     },
     whenToChange:
@@ -1469,7 +1467,7 @@ const BILLING: ConfigDoc[] = [
       'Submitted to the billing-support edge function which files a Zendesk-style ticket. Keep it specific (`"Refund for May overage — invoice 1234"`) so support doesn\'t bounce it back asking for clarification.',
     default: { value: 'empty' },
     backend: {
-      table: 'support_requests',
+      table: 'support_tickets',
       column: 'subject',
       endpoint: 'POST /v1/support/contact',
       readBy: ['billing-support edge function'],
@@ -1486,7 +1484,7 @@ const BILLING: ConfigDoc[] = [
       "The category is appended to the ticket body and used by the support inbox's automation to assign the right responder. Wrong category just means a slower first response, not a lost ticket.",
     default: { value: 'billing' },
     backend: {
-      table: 'support_requests',
+      table: 'support_tickets',
       column: 'category',
       endpoint: 'POST /v1/support/contact',
       readBy: ['billing-support edge function'],
@@ -1502,7 +1500,7 @@ const BILLING: ConfigDoc[] = [
       'Posted as the ticket body. Markdown is preserved on the support side, so feel free to use lists and code blocks. Maximum 10k chars.',
     default: { value: 'empty' },
     backend: {
-      table: 'support_requests',
+      table: 'support_tickets',
       column: 'body',
       endpoint: 'POST /v1/support/contact',
       readBy: ['billing-support edge function'],
