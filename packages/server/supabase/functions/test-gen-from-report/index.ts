@@ -401,6 +401,8 @@ async function handler(req: Request): Promise<Response> {
     reportId,
     primaryModel: modelId,
     langfuseTraceId: trace.id,
+    // A test the user asked for; withAnthropicOrOpenAi checks the wallet first.
+    billHosted: true,
   }
   try {
     const { result } = await withAnthropicOrOpenAi(

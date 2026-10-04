@@ -257,6 +257,8 @@ Write a comprehensive Playwright TDD test for this user story.`
       projectId: project_id,
       primaryModel: TEST_GEN_MODEL,
       langfuseTraceId: trace.id,
+      // A test the user asked for; withAnthropicOrOpenAi checks the wallet first.
+      billHosted: true,
     }
     try {
       // withAnthropicOrOpenAi takes TWO separate callbacks (anthropicFn,

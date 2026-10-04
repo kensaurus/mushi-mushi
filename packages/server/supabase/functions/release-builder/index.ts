@@ -30,6 +30,7 @@ import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { RELEASE_NOTES_EFFORT, RELEASE_NOTES_FALLBACK, RELEASE_NOTES_MODEL, THINKING_HEADROOM_TOKENS } from '../_shared/models.ts'
 import { claudeGenerateText } from '../_shared/claude-messages.ts'
 import { recordLlmUsage } from '../_shared/llm-usage.ts'
+import { projectLlmKey } from '../_shared/project-llm-key.ts'
 
 const bodySchema = z.object({
   project_id: z.string().uuid(),
@@ -205,18 +206,18 @@ async function llmReleaseBody(input: {
   projectId: string
 }): Promise<string> {
   const { version, reportSummaries, reports, db, projectId } = input
-  // Platform keys only (ANTHROPIC_API_KEY / OPENAI_API_KEY): key_source 'env'.
+  // The project's own key first, the platform key otherwise.
+  const anthropicResolved = await projectLlmKey(db, projectId, 'anthropic')
+  const anthropicKey = anthropicResolved?.key
   const usageCtx = {
     functionName: 'release-builder',
     stage: 'release-notes',
     projectId,
     primaryModel: RELEASE_NOTES_MODEL,
-    keySource: 'env',
-  } as const
-  const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY')
+  }
   const claudeStart = Date.now()
   try {
-    if (!anthropicKey) throw new Error('ANTHROPIC_API_KEY is not set')
+    if (!anthropicKey) throw new Error('No Anthropic key for this project')
     const result = await claudeGenerateText({
       apiKey: anthropicKey,
       model: RELEASE_NOTES_MODEL,
@@ -237,16 +238,21 @@ Keep it warm, human, and specific. Avoid developer jargon. Max 400 words.`,
       maxTokens: 600 + THINKING_HEADROOM_TOKENS,
     })
 
-    void recordLlmUsage(db, { ...usageCtx, model: RELEASE_NOTES_MODEL, startedAt: claudeStart }, { result })
+    void recordLlmUsage(db, { ...usageCtx, keySource: anthropicResolved?.source, model: RELEASE_NOTES_MODEL, startedAt: claudeStart }, { result })
     return result.text.trim()
   } catch (claudeErr) {
     // No key means no paid call, so no row.
     if (anthropicKey) {
-      void recordLlmUsage(db, { ...usageCtx, model: RELEASE_NOTES_MODEL, startedAt: claudeStart }, { error: claudeErr })
+      void recordLlmUsage(db, { ...usageCtx, keySource: anthropicResolved?.source, model: RELEASE_NOTES_MODEL, startedAt: claudeStart }, { error: claudeErr })
     }
-    const openaiUsage = { ...usageCtx, model: RELEASE_NOTES_FALLBACK, startedAt: Date.now() }
+    const openaiResolved = await projectLlmKey(db, projectId, 'openai')
+    if (!openaiResolved) return deterministicReleaseBody(reports)
+    const openaiUsage = { ...usageCtx, keySource: openaiResolved.source, model: RELEASE_NOTES_FALLBACK, startedAt: Date.now() }
     try {
-      const openai = createOpenAI({ apiKey: Deno.env.get('OPENAI_API_KEY') })
+      const openai = createOpenAI({
+        apiKey: openaiResolved.key,
+        ...(openaiResolved.baseUrl ? { baseURL: openaiResolved.baseUrl } : {}),
+      })
       const result = await generateText({
         model: openai(RELEASE_NOTES_FALLBACK),
         prompt: `Write a markdown changelog for version ${version} with these fixed reports:\n${reportSummaries || '(none)'}`,
