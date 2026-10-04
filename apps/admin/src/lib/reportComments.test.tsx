@@ -19,12 +19,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const { db } = vi.hoisted(() => ({
   db: {
     insertResult: { error: null as null | { message: string; code?: string } },
+    rows: [] as Array<Record<string, unknown>>,
     deleteResult: { data: [] as Array<{ id: number }>, error: null as null | { message: string } },
   },
 }))
 
 vi.mock('./supabase', () => {
-  const listQuery = { eq: () => listQuery, order: async () => ({ data: [], error: null }) }
+  const listQuery = { eq: () => listQuery, order: async () => ({ data: [...db.rows], error: null }) }
   const channel = { on: () => channel, subscribe: () => channel }
   return {
     supabase: {
@@ -33,7 +34,10 @@ vi.mock('./supabase', () => {
       removeChannel: async () => {},
       from: () => ({
         select: () => listQuery,
-        insert: async () => db.insertResult,
+        insert: async (row: Record<string, unknown>) => {
+          if (!db.insertResult.error) db.rows.push({ id: db.rows.length + 1, ...row })
+          return db.insertResult
+        },
         delete: () => ({ eq: () => ({ select: async () => db.deleteResult }) }),
       }),
     },
@@ -54,6 +58,7 @@ function Probe() {
 beforeEach(async () => {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
   db.insertResult = { error: null }
+  db.rows = []
   db.deleteResult = { data: [], error: null }
   container = document.createElement('div')
   document.body.appendChild(container)
@@ -88,5 +93,13 @@ describe('useReportComments writes', () => {
     const err = await thread.postComment('hello').catch((e: Error) => e)
     expect((err as Error).message).not.toMatch(/duplicate key/)
     expect((err as Error).message).toMatch(/^Try again in a moment/)
+  })
+})
+
+describe('useReportComments posting', () => {
+  it('shows a posted note at once, without waiting for a realtime event', async () => {
+    // The mocked channel never fires: only the hook's own reload can show it.
+    await act(async () => thread.postComment('Checked the TTFB, not a code bug'))
+    expect(thread.comments.map((c) => c.body)).toContain('Checked the TTFB, not a code bug')
   })
 })
