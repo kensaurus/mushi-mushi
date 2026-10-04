@@ -245,7 +245,10 @@ export function registerModernizationHealthSuperRoutes(app: Hono<{ Variables: Va
     const userId = c.get('userId') as string;
     const kind = c.req.param('kind')! as IntegrationKind;
     if (!ALL_INTEGRATION_KINDS.includes(kind)) {
-      return c.json({ ok: false, error: { code: 'BAD_KIND' } }, 400);
+      return c.json(
+        { ok: false, error: { code: 'BAD_KIND', message: `Mushi cannot test "${kind}" connections yet.` } },
+        400,
+      );
     }
 
     const db = getServiceClient();
@@ -258,20 +261,21 @@ export function registerModernizationHealthSuperRoutes(app: Hono<{ Variables: Va
     const { data: settings } = await db
       .from('project_settings')
       .select(
-        'sentry_org_slug, sentry_auth_token_ref, langfuse_host, langfuse_public_key_ref, langfuse_secret_key_ref, github_repo_url, github_installation_token_ref, cursor_api_key_ref, cursor_default_model, claude_api_key_ref',
+        'sentry_org_slug, sentry_auth_token_ref, langfuse_host, langfuse_public_key_ref, langfuse_secret_key_ref, github_repo_url, github_installation_token_ref, cursor_api_key_ref, cursor_default_model, claude_api_key_ref, linear_access_token_ref, linear_api_key_ref',
       )
       .eq('project_id', projectId)
       .single();
 
     // For routing-provider probes, load the stored config from project_integrations.
     // Map kind → integration_type (github_issues is stored as 'github' in project_integrations).
+    // A paused row is still tested: "Test" on a paused card checks the saved
+    // credentials (filtering on is_active probed an empty config instead).
     const routingType = kind === 'github_issues' ? 'github' : kind;
     const { data: routingRow } = await db
       .from('project_integrations')
       .select('config')
       .eq('project_id', projectId)
       .eq('integration_type', routingType)
-      .eq('is_active', true)
       .maybeSingle();
     const routingConfig = (routingRow?.config ?? {}) as Record<string, unknown>;
 

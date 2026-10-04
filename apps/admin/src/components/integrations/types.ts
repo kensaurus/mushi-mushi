@@ -38,6 +38,8 @@ export interface PlatformResponse {
   sourceByField?: Record<string, FieldSource>
   /** The organization the project belongs to (for bulk-apply). */
   organizationId?: string | null
+  /** False for members and viewers: credential writes are owner/admin only. */
+  canManage?: boolean
 }
 
 export interface HealthRow {

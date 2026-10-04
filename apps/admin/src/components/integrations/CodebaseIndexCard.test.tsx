@@ -141,4 +141,42 @@ describe('CodebaseIndexCard', () => {
     expect(container.textContent).toContain('Plan limit')
     expect(container.querySelector('[data-testid="codebase-coverage-callout"]')).toBeNull()
   })
+
+  it('asks before rotating the webhook secret, and only rotates on confirm', async () => {
+    await render(STATS)
+    const rotate = Array.from(container.querySelectorAll('button')).find((b) => b.textContent?.trim() === 'Rotate secret')!
+    await act(async () => {
+      rotate.click()
+      await flush()
+    })
+    const rotateCalls = () => api.apiFetch.mock.calls.filter((c) => String(c[0]).endsWith('/rotate-secret'))
+    expect(rotateCalls()).toHaveLength(0)
+    expect(document.body.textContent).toContain('Rotate the GitHub webhook secret?')
+    const confirm = Array.from(document.body.querySelectorAll('button')).find(
+      (b) => b.textContent?.trim() === 'Rotate secret' && b.hasAttribute('data-primary'),
+    )!
+    await act(async () => {
+      confirm.click()
+      await flush()
+    })
+    expect(rotateCalls()).toHaveLength(1)
+  })
+
+  it('renders the docs link with a real arrow, not an escape sequence', async () => {
+    await render(STATS)
+    expect(container.innerHTML).not.toContain('\u2192')
+  })
+
+  it('disables enable and rotate for members, with the reason', async () => {
+    api.apiFetch.mockImplementation(async (path: string) =>
+      path.endsWith('/codebase/stats') ? { ok: true, data: STATS } : { ok: true, data: { autofix_enabled: false } },
+    )
+    await act(async () => {
+      root.render(createElement(CodebaseIndexCard, { projectId: PROJECT, canManage: false }))
+      await flush()
+    })
+    const rotate = Array.from(container.querySelectorAll('button')).find((b) => b.textContent?.trim() === 'Rotate secret')!
+    expect(rotate.disabled).toBe(true)
+    expect(rotate.getAttribute('title')).toMatch(/Owners and admins/)
+  })
 })
