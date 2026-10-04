@@ -32,6 +32,7 @@ import { failureOfStatus, statusReason } from './http-util.ts'
 import { SUPABASE_PROJECT_REF_RE as REF_RE } from '../supabase-project-ref.ts'
 import { ConnectorError, notConnected, type ConnectorContext, type DriftFinding, type RecipeConnector } from './types.ts'
 import { mcpCallTool } from '../mcp-http-session.ts'
+import { normalizeMcpTables, unwrapUntrusted } from '../supabase-mcp-client.ts'
 
 const MCP_URL = 'https://mcp.supabase.com/mcp'
 
@@ -139,7 +140,8 @@ export const supabaseConnector: RecipeConnector = {
       tool(ctx, 'list_edge_functions'),
       tool(ctx, 'get_advisors', { type: 'security' }),
     ])
-    const tableList = json<Array<{ name?: string; schema?: string; rls_enabled?: boolean }>>(tables.text) ?? []
+    // `{ tables: [...] }` today; a bare array before. `.length` on the object read 0.
+    const tableList = normalizeMcpTables(json<unknown>(tables.text) ?? unwrapUntrusted(tables.text))
     const fns = json<Array<{ slug?: string; verify_jwt?: boolean }>>(fnsRes.text) ?? null
     return {
       observedAt: ctx.now().toISOString(),
@@ -148,7 +150,7 @@ export const supabaseConnector: RecipeConnector = {
       },
       resources: [{ kind: 'supabase_project', externalId: String(ctx.config.projectRef), role: 'database' }],
       facts: {
-        tables: tableList.map((t) => ({ name: t.name ?? null, rls: t.rls_enabled ?? null })),
+        tables: tableList.map((t) => ({ name: t.name || null, rls: t.rls_enabled })),
         appliedVersions: applied ? applied.map((a) => String(a.version)) : null,
         secretRpcs: secretRpcs,
         functionGrants: grants,
