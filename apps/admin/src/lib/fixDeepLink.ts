@@ -9,7 +9,7 @@
  * because old Slack messages and bookmarks still carry them.
  */
 
-export const FIX_DEEP_LINK_PARAM = 'fix'
+const FIX_DEEP_LINK_PARAM = 'fix'
 
 /** In-app path that opens the Attempts list with this fix expanded. */
 export function fixDeepLinkPath(fixId: string): string {
