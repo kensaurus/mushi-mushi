@@ -87,6 +87,7 @@ import type { SdkStatus } from '../components/SdkVersionBadge'
 import { CHIP_TONE } from '../lib/chipTone'
 import { shortReporterKey } from '../lib/reporterKey'
 import { PageLoadError } from '../components/PageLoadError'
+import { appUrl } from '../lib/appPath'
 import { humanizeApiError } from '../lib/humanizeApiError'
 import { useConfirmedDispatch } from '../components/report-detail/useConfirmedDispatch'
 
@@ -329,8 +330,8 @@ function RecommendedSkillsSection({ report }: { report: ReportDetail }) {
       }
       addToast({ type: 'success', message: `Pipeline started — track it in Skill Pipelines` })
       navigate('/skills?tab=pipelines')
-    } catch (err) {
-      addToast({ type: 'error', message: String(err) })
+    } catch {
+      addToast({ type: 'error', message: "Couldn't reach Mushi, so the pipeline did not start. Check your connection and try again." })
     } finally {
       setStartingSlug(null)
     }
@@ -397,7 +398,7 @@ function RecommendedSkillsSection({ report }: { report: ReportDetail }) {
         <p className="text-2xs text-fg-muted mt-1">
           Share triage link:{' '}
           <code className="font-mono text-brand">
-            {typeof window !== 'undefined' ? window.location.origin : ''}/reports/{report.id}?skill={displaySkills[0]?.slug}
+            {appUrl(`/reports/${report.id}?skill=${displaySkills[0]?.slug ?? ''}`)}
           </code>
         </p>
       </div>

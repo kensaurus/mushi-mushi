@@ -17,7 +17,8 @@
 import { Suspense, lazy, useCallback, useMemo, useState } from 'react'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
-import { Btn, Callout, EmptyState, ErrorAlert, Loading, SegmentedControl } from '../components/ui'
+import { Btn, Callout, EmptyState, Loading, SegmentedControl } from '../components/ui'
+import { PageLoadError } from '../components/PageLoadError'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageData } from '../lib/usePageData'
 import { apiFetchMutate } from '../lib/supabase'
@@ -144,7 +145,7 @@ function ProjectRecipe({ projectId }: { projectId: string }) {
             <span role="status">{notice.text}</span>
           </Callout>
         )}
-        {error && <ErrorAlert message={error} endpoint={path} onRetry={reload} />}
+        {error && <PageLoadError error={error} resource="the app recipe" endpoint={path} onRetry={reload} />}
         {loading && !data && <Loading text="Composing the recipe…" />}
 
         {data && (
