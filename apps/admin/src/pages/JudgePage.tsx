@@ -51,6 +51,7 @@ import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageCopy } from '../lib/copy'
 import { useJudgeUx, resolveQuickJudgeTab } from '../lib/judgeModeUx'
+import { useQuickstartLandingTab } from '../lib/useQuickstartTab'
 import { HeroJudgeScale } from '../components/illustrations/HeroIllustrations'
 import { PageHero } from '../components/PageHero'
 import { useNextBestAction } from '../lib/useNextBestAction'
@@ -309,11 +310,15 @@ export function JudgePage() {
   const copy = usePageCopy('/judge')
   const ux = useJudgeUx()
 
-  useEffect(() => {
-    if (!ux.isQuickstart || statsLoading) return
-    const quickTab = resolveQuickJudgeTab(stats)
-    if (activeTab !== quickTab) setActiveTab(quickTab)
-  }, [ux.isQuickstart, statsLoading, stats, activeTab, setActiveTab])
+  // Quick mode opens the posture tab once; links and clicks then win.
+  useQuickstartLandingTab({
+    enabled: ux.isQuickstart,
+    ready: !statsLoading,
+    tabParam: tabParam,
+    activeTab: activeTab,
+    quickTab: resolveQuickJudgeTab(stats),
+    setActiveTab: setActiveTab,
+  })
   const [sort, setSort] = useState<'recent' | 'score_asc'>('recent')
   const [running, setRunning] = useState(false)
   const [heroCollapsed, setHeroCollapsed] = useState(true)

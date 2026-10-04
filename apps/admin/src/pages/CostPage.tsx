@@ -4,11 +4,12 @@
  *          URL-driven tabs (Overview / Breakdown / Raw log).
  */
 
-import { useCallback, useEffect, useMemo } from 'react'
+import { useCallback, useMemo } from 'react'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { useSearchParams } from 'react-router-dom'
 import { usePageCopy } from '../lib/copy'
 import { useCostUx, resolveQuickCostTab } from '../lib/costModeUx'
+import { useQuickstartLandingTab } from '../lib/useQuickstartTab'
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { usePublishPageContext } from '../lib/pageContext'
@@ -134,11 +135,15 @@ export function CostPage() {
     [searchParams, setSearchParams],
   )
 
-  useEffect(() => {
-    if (!ux.isQuickstart || !activeProjectId || statsLoading) return
-    const quickTab = resolveQuickCostTab(stats)
-    if (active !== quickTab) setActive(quickTab)
-  }, [ux.isQuickstart, activeProjectId, statsLoading, stats, active, setActive])
+  // Quick mode opens the posture tab once; links and clicks then win.
+  useQuickstartLandingTab({
+    enabled: ux.isQuickstart && Boolean(activeProjectId),
+    ready: !statsLoading,
+    tabParam: param,
+    activeTab: active,
+    quickTab: resolveQuickCostTab(stats),
+    setActiveTab: setActive,
+  })
 
   const { byOp, byModel, dailySeries } = useMemo(() => {
     const op: Record<string, number> = {}

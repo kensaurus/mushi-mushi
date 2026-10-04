@@ -4,7 +4,7 @@
  *          signed deliveries for the active project.
  */
 
-import { useCallback, useMemo, useState, useEffect } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
@@ -18,6 +18,7 @@ import { SetupNudge } from '../components/SetupNudge'
 import { useToast } from '../lib/toast'
 import { usePageCopy } from '../lib/copy'
 import { useMarketplaceUx, resolveQuickMarketplaceTab } from '../lib/marketplaceModeUx'
+import { useQuickstartLandingTab } from '../lib/useQuickstartTab'
 import { useEntitlements } from '../lib/useEntitlements'
 import { UpgradePrompt } from '../components/billing/UpgradePrompt'
 import {
@@ -156,11 +157,15 @@ export function MarketplacePage() {
     [searchParams, setSearchParams],
   )
 
-  useEffect(() => {
-    if (!ux.isQuickstart || !activeProjectId || loading) return
-    const quickTab = resolveQuickMarketplaceTab(stats)
-    if (activeTab !== quickTab) setTab(quickTab)
-  }, [ux.isQuickstart, activeProjectId, loading, stats, activeTab, setTab])
+  // Quick mode opens the posture tab once; links and clicks then win.
+  useQuickstartLandingTab({
+    enabled: ux.isQuickstart && Boolean(activeProjectId),
+    ready: !loading,
+    tabParam: param,
+    activeTab: activeTab,
+    quickTab: resolveQuickMarketplaceTab(stats),
+    setActiveTab: setTab,
+  })
 
   const [installing, setInstalling] = useState<string | null>(null)
   const [installTarget, setInstallTarget] = useState<MarketplacePlugin | null>(null)
