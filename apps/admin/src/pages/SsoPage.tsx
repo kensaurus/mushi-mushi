@@ -11,6 +11,7 @@ import {
   Badge,
   Btn,
   Input,
+  SecretInput,
   SelectField,
   ErrorAlert,
   EmptyState,
@@ -293,9 +294,8 @@ export function SsoPage() {
                     value={form.clientId}
                     onChange={(e) => setForm({ ...form, clientId: e.target.value })}
                   />
-                  <Input
+                  <SecretInput
                     label="Client Secret"
-                    type="password"
                     placeholder="your-client-secret"
                     value={form.clientSecret}
                     onChange={(e) => setForm({ ...form, clientSecret: e.target.value })}

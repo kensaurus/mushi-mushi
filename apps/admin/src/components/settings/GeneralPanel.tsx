@@ -11,7 +11,7 @@ import { Card } from '../../components/ui'
 import { apiFetch } from '../../lib/supabase'
 import { usePageData } from '../../lib/usePageData'
 import { useToast } from '../../lib/toast'
-import { Section, Input, SelectField, ErrorAlert, Checkbox } from '../ui'
+import { Section, Input, SecretInput, SelectField, ErrorAlert, Checkbox } from '../ui'
 import { PanelSkeleton } from '../skeletons/PanelSkeleton'
 import { ConfigHelp } from '../ConfigHelp'
 import { slackWebhookUrl, sentryDsn, supabaseProjectRef, token } from '../../lib/validators'
@@ -265,10 +265,9 @@ export function GeneralPanel() {
           />
         </div>
         <div>
-          <Input
+          <SecretInput
             label="Webhook Secret"
             helpId="settings.general.sentry_webhook_secret"
-            type="password"
             value={settings.sentry_webhook_secret ?? ''}
             onChange={(e) => update({ sentry_webhook_secret: e.target.value })}
             placeholder={
