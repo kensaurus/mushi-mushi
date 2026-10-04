@@ -52,3 +52,22 @@ describe('reporter_notifications_enabled', () => {
     expect(body).toContain("typeof value !== 'boolean'")
   })
 })
+
+describe('who may change settings', () => {
+  it('refuses viewers before reading any key', () => {
+    const gate = route.indexOf("denyViewerWrite(c, project.organization_role, 'change project settings')")
+    expect(gate).toBeGreaterThan(0)
+    expect(gate).toBeLessThan(route.indexOf('for (const [key, value] of Object.entries(body))'))
+  })
+
+  it('keeps alert destinations to owners and admins', () => {
+    const from = src.indexOf('const ALERT_DESTINATION_KEYS')
+    const set = src.slice(from, src.indexOf(']);', from))
+    for (const key of ['slack_webhook_url', 'slack_channel_id', 'discord_webhook_url', 'teams_webhook_url', 'sentry_webhook_secret']) {
+      expect(set).toContain(`'${key}'`)
+    }
+    const check = route.indexOf('if (ALERT_DESTINATION_KEYS.has(key))')
+    expect(check).toBeGreaterThan(0)
+    expect(route.slice(check, check + 400)).toContain('requireProjectAdmin(c, project')
+  })
+})

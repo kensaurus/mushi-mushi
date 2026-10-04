@@ -2,6 +2,7 @@ import { isNotificationWebhookField, validateNotificationWebhookUrl } from '../.
 import type { Hono } from 'npm:hono@4';
 import { isSpendLimitField, SPEND_LIMIT_FIELDS, validateSpendLimit } from '../../_shared/autofix-budget.ts';
 import type { Variables } from '../types.ts';
+import { denyViewerWrite } from '../viewer-gate.ts';
 
 import { getServiceClient } from '../../_shared/db.ts';
 import { log } from '../../_shared/logger.ts';
@@ -181,6 +182,16 @@ function slackRedirectUri(): string {
 }
 
 // Webhook URL validation (SSRF guard) lives in _shared/notification-webhook-url.ts.
+
+/** Settings that decide where alerts and inbound events go: owners and admins only. */
+const ALERT_DESTINATION_KEYS: ReadonlySet<string> = new Set([
+  'slack_webhook_url',
+  'slack_channel_id',
+  'slack_team_id',
+  'discord_webhook_url',
+  'teams_webhook_url',
+  'sentry_webhook_secret',
+]);
 
 /** Names the console shows for settings columns, so errors never print a column name. */
 const SETTING_LABELS: Record<string, string> = {
@@ -440,6 +451,9 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     const resolvedProject = await resolveOwnedProject(c, db, userId);
     if ('response' in resolvedProject) return resolvedProject.response;
     const project = resolvedProject.project;
+    // Viewers read settings; every key below changes the project.
+    const viewerDenied = denyViewerWrite(c, project.organization_role, 'change project settings');
+    if (viewerDenied) return viewerDenied;
 
     const allowed = [
       'slack_webhook_url',
@@ -534,6 +548,12 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       // The GET above returns SECRET_MASK for set secrets; a form that sends
       // the whole row back has not changed them.
       if (value === SECRET_MASK && isSecretSettingsColumn(key)) continue;
+      if (ALERT_DESTINATION_KEYS.has(key)) {
+        // Where alerts go: a member pointing them at their own webhook would
+        // silently take the team's alerts. Same rule as the integration cards.
+        const forbidden = requireProjectAdmin(c, project, 'Only team owners and admins can change where alerts are sent.');
+        if (forbidden) return forbidden;
+      }
       if (key === 'widget_brand_footer') {
         if (value !== null && typeof value !== 'boolean') {
           return c.json(

@@ -9,6 +9,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { ADMIN_ONLY_HINT } from '../lib/orgPermissions'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { apiFetch } from '../lib/supabase'
 import { ErrorAlert, Panel, PanelSectionLabel } from '../components/ui'
@@ -505,6 +506,12 @@ export function IntegrationsPage() {
         <p className="px-4 pt-3 pb-2 text-xs text-fg-muted border-b border-panel-border">
           Connect one or more channels to receive real-time alerts when a report is triaged, a QA story fails, or a fix is merged.
         </p>
+        {!canManage && (
+          <p className="px-4 py-2 text-xs text-fg-muted border-b border-panel-border">{ADMIN_ONLY_HINT}</p>
+        )}
+        {/* Where alerts go is owner/admin only on the server; a disabled
+            fieldset locks every field and button in the three cards. */}
+        <fieldset disabled={!canManage} className="contents">
         <div className="grid gap-0 sm:grid-cols-1 lg:grid-cols-3 divide-y lg:divide-y-0 lg:divide-x divide-panel-border">
           <SlackIntegrationCard
             projectId={activeProjectId ?? null}
@@ -530,6 +537,7 @@ export function IntegrationsPage() {
             onChanged={reloadChannels}
           />
         </div>
+        </fieldset>
 
         {activeProjectId && (
           <div className="border-t border-panel-border px-4 py-4">
