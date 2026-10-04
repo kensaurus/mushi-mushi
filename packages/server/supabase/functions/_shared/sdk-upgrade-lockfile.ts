@@ -20,7 +20,6 @@ import { parseGithubRepoUrl, resolveProjectGithubToken } from './github.ts'
 import { findOpenPrByHeadPrefix, ghFetchOptional } from './github-pr.ts'
 import { openSdkUpgradePr, type LockfileOutcome } from './sdk-upgrade-pr.ts'
 import type { BumpEntry } from './sdk-upgrade-plan.ts'
-import { upsertProjectSdkObservationAsync } from './sdk-observation.ts'
 
 const log = rootLog.child('sdk-upgrade-lockfile')
 
@@ -221,15 +220,7 @@ export async function syncAwaitingLockfileJobs(
         .eq('id', job.id)
         .eq('status', 'awaiting_lockfile')
 
-      if (plan.length > 0) {
-        upsertProjectSdkObservationAsync(db, {
-          projectId: job.project_id,
-          sdkPackage: plan[0].package,
-          sdkVersion: plan[0].to,
-          source: 'upgrade_verify',
-          observedAt: finishedAt,
-        })
-      }
+      // No SDK observation: an opened PR is not an installed version (see sdk-upgrade-runner).
       results.push({ jobId: job.id, outcome: 'pr_opened', lockfile: decision.lockfile, prUrl: pr.url })
       log.info('opened deferred upgrade PR', { jobId: job.id, lockfile: decision.lockfile, prUrl: pr.url })
     } catch (err) {
