@@ -258,6 +258,18 @@ export function registerOnboardingSetupRoutes(app: Hono<{ Variables: Variables }
     // 20260505000000_project_api_keys_last_seen.sql for rationale.
     const signalsByProject = await loadProjectSetupSignals(db, projectIds);
 
+    type StepId =
+      | 'project_created'
+      | 'api_key_generated'
+      | 'sdk_installed'
+      | 'first_report_received'
+      | 'github_connected'
+      | 'sentry_connected'
+      | 'byok_anthropic'
+      | 'first_fix_dispatched'
+      | 'slack_connected'
+      | 'first_qa_story_passing';
+
     interface Step {
       id: StepId;
       label: string;
