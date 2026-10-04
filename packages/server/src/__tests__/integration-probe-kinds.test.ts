@@ -31,6 +31,7 @@ describe('ALL_INTEGRATION_KINDS', () => {
       'github_issues',
       'pagerduty',
       'vercel',
+      'slack',
     ]) {
       expect(ALL_INTEGRATION_KINDS).toContain(kind)
     }
@@ -62,5 +63,34 @@ describe('vercel probe', () => {
     const r = await probeIntegration('vercel', {} as never, {}, { project_slug: 'shop', team_slug: 'acme', access_token: 't' })
     expect(r.status).toBe('degraded')
     expect(r.detail).toMatch(/"shop"/)
+  })
+})
+
+describe('manual probe route', () => {
+  // Source-level: the Hono app is not booted under vitest.
+  const { readFileSync } = require('node:fs') as typeof import('node:fs')
+  const { resolve } = require('node:path') as typeof import('node:path')
+  const src = readFileSync(resolve(__dirname, '../../supabase/functions/api/routes/modernization-health-super.ts'), 'utf8')
+  const route = src.slice(src.indexOf("app.post('/v1/admin/health/integration/:kind'"), src.indexOf("app.post('/v1/admin/health/integration/:kind'") + 2500)
+
+  it('probes the project the console names, and refuses one the caller cannot read', () => {
+    expect(route).toContain("c.req.header('X-Mushi-Project-Id')")
+    expect(route).toContain('requested && !accessibleIds.includes(requested)')
+    expect(route).toContain('const projectId = requested || accessibleIds[0]')
+  })
+
+  it('reads the Slack token column the Slack probe needs', () => {
+    expect(route).toContain('slack_bot_token_ref')
+  })
+})
+
+describe('hourly probe cron', () => {
+  const { readFileSync } = require('node:fs') as typeof import('node:fs')
+  const { resolve } = require('node:path') as typeof import('node:path')
+  const cron = readFileSync(resolve(__dirname, '../../supabase/functions/integration-health-probe/index.ts'), 'utf8')
+
+  it('probes Slack for projects with a bot token or a channel', () => {
+    expect(cron).toContain("if (hasSlack(s)) tasks.push({ projectId: s.project_id, kind: 'slack'")
+    expect(cron).toContain('slack_bot_token_ref, slack_channel_id')
   })
 })

@@ -252,16 +252,22 @@ export function registerModernizationHealthSuperRoutes(app: Hono<{ Variables: Va
     }
 
     const db = getServiceClient();
-    // Teams v1: any member can probe an integration in an org they belong to.
-    // Health probes are workspace-level — the precise project pick doesn't matter.
+    // Any member can probe an integration of a project they can read. The
+    // credentials are per project, so probe the one the console names: the
+    // first accessible project tested someone else's keys and wrote the
+    // health row there.
     const accessibleIds = await callerProjectIds(c, db, userId);
     if (accessibleIds.length === 0) return c.json({ ok: false, error: { code: 'NO_PROJECT' } }, 404);
-    const projectId = accessibleIds[0];
+    const requested = (c.req.query('project_id') ?? c.req.header('X-Mushi-Project-Id') ?? '').trim();
+    if (requested && !accessibleIds.includes(requested)) {
+      return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'You do not have access to that project.' } }, 403);
+    }
+    const projectId = requested || accessibleIds[0];
 
     const { data: settings } = await db
       .from('project_settings')
       .select(
-        'sentry_org_slug, sentry_auth_token_ref, langfuse_host, langfuse_public_key_ref, langfuse_secret_key_ref, github_repo_url, github_installation_token_ref, cursor_api_key_ref, cursor_default_model, claude_api_key_ref, linear_access_token_ref, linear_api_key_ref',
+        'sentry_org_slug, sentry_auth_token_ref, langfuse_host, langfuse_public_key_ref, langfuse_secret_key_ref, github_repo_url, github_installation_token_ref, cursor_api_key_ref, cursor_default_model, claude_api_key_ref, linear_access_token_ref, linear_api_key_ref, slack_bot_token_ref',
       )
       .eq('project_id', projectId)
       .single();

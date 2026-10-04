@@ -49,6 +49,8 @@ export const TICKET_INTEGRATION_KINDS: IntegrationKind[] = ['linear']
 export const ROUTING_KINDS: IntegrationKind[] = ['jira', 'github_issues', 'pagerduty', 'reward_webhook']
 /** Deploy-preview integrations stored as project_integrations rows (Vercel). */
 export const DEPLOY_KINDS: IntegrationKind[] = ['vercel']
+/** Notification channels with a read-only probe (Slack: auth.test, posts nothing). */
+export const NOTIFICATION_PROBE_KINDS: IntegrationKind[] = ['slack']
 /**
  * Every kind POST /v1/admin/health/integration/:kind can probe. Linear and
  * Vercel were missing, so their cards' Test button always got a bare
@@ -60,6 +62,7 @@ export const ALL_INTEGRATION_KINDS: IntegrationKind[] = [
   ...TICKET_INTEGRATION_KINDS,
   ...ROUTING_KINDS,
   ...DEPLOY_KINDS,
+  ...NOTIFICATION_PROBE_KINDS,
 ]
 
 export interface ProbeResult {
