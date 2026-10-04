@@ -7,6 +7,7 @@ import { requireFeature, resolveActiveEntitlement } from '../../_shared/entitlem
 import { logAudit } from '../../_shared/audit.ts';
 import { requireEeLicense } from '../../_shared/ee-gate.ts';
 import { callerProjectIds, resolveOwnedProject } from '../shared.ts';
+import { resolveUserDisplays } from '../../_shared/user-display.ts';
 
 export function registerSsoAuditRoutes(app: Hono<{ Variables: Variables }>): void {
   // ============================================================
@@ -660,7 +661,24 @@ export function registerSsoAuditRoutes(app: Hono<{ Variables: Variables }>): voi
     }
 
     const { data, count } = await query;
-    return c.json({ ok: true, data: { logs: data ?? [], count: count ?? 0 } });
+    // Name the actor. Console and MCP actions log a user id with no email, so
+    // the activity feed showed raw UUIDs labelled "Agent" (2026-10-04 audit).
+    const rows = (data ?? []) as Array<{ actor_id: string | null; actor_email: string | null }>;
+    const people = await resolveUserDisplays(
+      db as unknown as Parameters<typeof resolveUserDisplays>[0],
+      rows.filter((r) => !r.actor_email).map((r) => r.actor_id),
+    );
+    const logs = rows.map((r) => {
+      const person = r.actor_id ? people.get(r.actor_id) : undefined;
+      // actor_email stays the stored value (the ?actor= filter matches it);
+      // the looked-up email rides alongside for display only.
+      return {
+        ...r,
+        actor_name: person?.name ?? null,
+        actor_display_email: r.actor_email ?? person?.email ?? null,
+      };
+    });
+    return c.json({ ok: true, data: { logs, count: count ?? 0 } });
   });
 
 }
