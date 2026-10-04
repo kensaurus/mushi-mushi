@@ -599,6 +599,20 @@ async function doFetch<T>(
   }
 }
 
+/**
+ * The active team and project as request headers, the same ones apiFetch
+ * sends. For callers that must use `fetch` directly (SSE streams); without
+ * them the server falls back to the caller's oldest project.
+ */
+export function activeTenantHeaders(): Record<string, string> {
+  const projectId = getActiveProjectIdForApi()
+  const orgId = getActiveOrgIdSnapshot()
+  return {
+    ...(projectId && isValidProjectId(projectId) ? { 'X-Mushi-Project-Id': projectId } : {}),
+    ...(orgId && isValidOrgId(orgId) ? { 'X-Mushi-Org-Id': orgId, 'x-org-id': orgId } : {}),
+  }
+}
+
 // Same auth + base URL handling as apiFetch but returns the raw Response so
 // callers can stream non-JSON payloads (HTML, CSV, blobs) without parsing.
 // Unlike apiFetch, network failures reject/throw rather than returning
@@ -611,16 +625,11 @@ export async function apiFetchRaw(path: string, options?: RequestInit): Promise<
   const t0 = performance.now()
   try {
     const token = await getAccessToken()
-    const activeProjectId = getActiveProjectIdForApi()
-    const activeOrgId = getActiveOrgIdSnapshot()
     const res = await fetch(`${API_BASE}${path}`, {
       ...options,
       headers: {
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...(activeProjectId ? { 'X-Mushi-Project-Id': activeProjectId } : {}),
-        ...(activeOrgId
-          ? { 'X-Mushi-Org-Id': activeOrgId, 'x-org-id': activeOrgId }
-          : {}),
+        ...activeTenantHeaders(),
         ...options?.headers,
       },
     })

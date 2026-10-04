@@ -41,6 +41,7 @@ import {
 } from '../lib/askMushiCommands'
 import type { NavStep, NavTarget } from '../lib/askMushiTypes'
 import { PaletteAssistView } from './PaletteAssistView'
+import { fixDeepLinkPath } from '../lib/fixDeepLink'
 
 interface LiveReport {
   id: string
@@ -727,7 +728,7 @@ export function CommandPalette() {
                   <Command.Item
                     key={`fix:${f.id}`}
                     value={`fix:${f.id}`}
-                    onSelect={() => handleSelect(`fix:${f.id}`, () => navigate(`/fixes#${f.id}`))}
+                    onSelect={() => handleSelect(`fix:${f.id}`, () => navigate(fixDeepLinkPath(f.id)))}
                     className="cmdk-item"
                   >
                     <span className="truncate flex-1">
