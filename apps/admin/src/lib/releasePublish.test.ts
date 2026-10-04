@@ -6,13 +6,19 @@
 
 import { describe, expect, it, vi } from 'vitest'
 
-vi.mock('./supabase', () => ({ apiFetchRaw: vi.fn() }))
+const api = vi.hoisted(() => ({ apiFetchRaw: vi.fn() }))
+vi.mock('./supabase', () => api)
 
-import { readPublishResponse } from './releasePublish'
+import { publishReleaseRequest } from './releasePublish'
 
-describe('readPublishResponse', () => {
-  it('reads the top-level delivery block apiFetch used to drop', () => {
-    const outcome = readPublishResponse({
+async function readPublishResponse(body: unknown) {
+  api.apiFetchRaw.mockResolvedValueOnce(new Response(JSON.stringify(body), { status: 200 }))
+  return publishReleaseRequest('11111111-1111-4111-8111-111111111111')
+}
+
+describe('publishReleaseRequest', () => {
+  it('reads the top-level delivery block apiFetch used to drop', async () => {
+    const outcome = await readPublishResponse({
       ok: true,
       data: { id: 'r1' },
       notified: 3,
@@ -21,8 +27,8 @@ describe('readPublishResponse', () => {
     expect(outcome).toEqual({ kind: 'published', told: 3, held: 1, failed: 2, alreadyShipped: 0 })
   })
 
-  it('reports a live release with failed follow-ups as published', () => {
-    const outcome = readPublishResponse({
+  it('reports a live release with failed follow-ups as published', async () => {
+    const outcome = await readPublishResponse({
       ok: false,
       published: true,
       error: { code: 'PUBLISHED_WITH_ERRORS', message: 'The release is live, but some follow-up steps failed.' },
@@ -30,13 +36,13 @@ describe('readPublishResponse', () => {
     expect(outcome.kind).toBe('published-with-errors')
   })
 
-  it('reports a real failure in plain English', () => {
-    const outcome = readPublishResponse({ ok: false, published: false, error: { code: 'NOT_A_DRAFT', message: 'This release is already published.' } })
+  it('reports a real failure in plain English', async () => {
+    const outcome = await readPublishResponse({ ok: false, published: false, error: { code: 'NOT_A_DRAFT', message: 'This release is already published.' } })
     expect(outcome).toEqual({ kind: 'failed', message: 'This release is already published.' })
   })
 
-  it('never shows [object Object] for a legacy error', () => {
-    const outcome = readPublishResponse({ ok: false, error: { code: 'DB_ERROR' } })
+  it('never shows [object Object] for a legacy error', async () => {
+    const outcome = await readPublishResponse({ ok: false, error: { code: 'DB_ERROR' } })
     expect(outcome.kind).toBe('failed')
     if (outcome.kind === 'failed') expect(outcome.message).not.toContain('[object')
   })

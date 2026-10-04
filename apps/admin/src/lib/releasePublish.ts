@@ -35,7 +35,7 @@ export type PublishOutcome =
 
 const count = (n: unknown): number => (typeof n === 'number' && Number.isFinite(n) && n > 0 ? n : 0)
 
-export function readPublishResponse(body: unknown): PublishOutcome {
+function readPublishResponse(body: unknown): PublishOutcome {
   const result = coerceApiResult<unknown>(body)
   const raw = (body && typeof body === 'object' ? body : {}) as { published?: unknown; delivery?: ReleaseDelivery }
   if (!result.ok) {
