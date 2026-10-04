@@ -154,7 +154,10 @@ export function useReportComments(opts: UseReportCommentsOptions): ReportComment
       debugWarn('comments', 'insert failed', { error: error.message })
       throw new Error(commentWriteErrorText(error, 'post'))
     }
-  }, [reportId, projectId])
+    // Show the note now. Waiting on the realtime echo left a posted note
+    // missing until a reload whenever the channel was slow or not joined yet.
+    await refresh()
+  }, [reportId, projectId, refresh])
 
   const deleteComment = useCallback(async (id: number) => {
     // RLS lets authors delete only their own comments; a blocked delete

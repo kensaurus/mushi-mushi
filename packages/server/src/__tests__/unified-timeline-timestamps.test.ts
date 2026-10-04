@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { timelineIso } from '../../supabase/functions/_shared/unified-timeline.ts'
+import { commentTimelineTitle, timelineIso } from '../../supabase/functions/_shared/unified-timeline.ts'
 import { sentryEventTimeMs } from '../../supabase/functions/_shared/sentry-ingest.ts'
 
 describe('timelineIso', () => {
@@ -21,5 +21,13 @@ describe('sentryEventTimeMs', () => {
     expect(sentryEventTimeMs({ datetime: '2026-09-24T05:04:19Z' }, null)).toBe(Date.parse('2026-09-24T05:04:19Z'))
     expect(sentryEventTimeMs({ timestamp: 1790226259 }, null)).toBe(1790226259000)
     expect(sentryEventTimeMs({}, { firstSeen: '2026-09-28T01:00:00Z' })).toBe(Date.parse('2026-09-28T01:00:00Z'))
+  })
+})
+
+describe('commentTimelineTitle', () => {
+  it('calls an internal team note a note, not a reply', () => {
+    expect(commentTimelineTitle({ author_kind: 'admin', visible_to_reporter: false })).toBe('Team note')
+    expect(commentTimelineTitle({ author_kind: 'admin', visible_to_reporter: true })).toBe('Team reply')
+    expect(commentTimelineTitle({ author_kind: 'reporter', visible_to_reporter: true })).toBe('Reporter reply')
   })
 })
