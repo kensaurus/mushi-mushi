@@ -23,6 +23,22 @@ export const TRUTH_ATTEMPT_COLUMNS =
 
 const ID_CHUNK = 100
 
+/**
+ * One window for every fix count: a report is counted when it had a fix
+ * attempt in the last 30 days (UTC, today included). The dashboard, /inbox,
+ * /fixes, nav badges and project rows all pick their reports through
+ * `loadRecentFixTruths`, so a report never ages out of one surface while
+ * another still counts it.
+ */
+export const FIX_TRUTH_WINDOW_DAYS = 30
+
+export function fixTruthWindowStart(now: Date = new Date()): string {
+  const since = new Date(now)
+  since.setUTCDate(since.getUTCDate() - (FIX_TRUTH_WINDOW_DAYS - 1))
+  since.setUTCHours(0, 0, 0, 0)
+  return since.toISOString()
+}
+
 // Structural type: the Supabase builder is awaited after `.in()` (or after a
 // trailing `.limit()`), which keeps this module free of the client import.
 type QueryResult = PromiseLike<{ data: unknown[] | null; error?: unknown }>
@@ -31,6 +47,9 @@ interface TruthDb {
     select: (cols: string) => {
       in: (col: string, values: string[]) => QueryResult & {
         limit: (n: number) => QueryResult
+        gte: (col: string, value: string) => {
+          order: (col: string, opts: { ascending: boolean }) => { limit: (n: number) => QueryResult }
+        }
       }
     }
   }
@@ -137,6 +156,29 @@ export async function loadReportFixTruths(
     for (const [rid, t] of derived) truths.set(rid, t)
   }
   return { truths, reports, attemptsByReport }
+}
+
+/**
+ * The fix truth for every report with an attempt in the shared window, in
+ * the given projects. Use this for any fix count shown to a user.
+ */
+export async function loadRecentFixTruths(
+  db: TruthDb,
+  projectIds: string[],
+  now: Date = new Date(),
+): Promise<LoadedFixTruths> {
+  if (projectIds.length === 0) {
+    return { truths: new Map(), reports: new Map(), attemptsByReport: new Map() }
+  }
+  const { data } = await db
+    .from('fix_attempts')
+    .select('report_id')
+    .in('project_id', projectIds)
+    .gte('created_at', fixTruthWindowStart(now))
+    .order('created_at', { ascending: false })
+    .limit(2000)
+  const ids = ((data ?? []) as Array<{ report_id: string }>).map((r) => r.report_id)
+  return loadReportFixTruths(db, ids)
 }
 
 export interface FailedFixPreview {

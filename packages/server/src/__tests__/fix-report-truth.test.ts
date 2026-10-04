@@ -17,7 +17,14 @@ import {
   type TruthAttempt,
   type TruthReport,
 } from '../../supabase/functions/_shared/fix-report-truth.ts'
-import { failedFixPreviews, reportTitle } from '../../supabase/functions/_shared/fix-report-truth-load.ts'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+import {
+  failedFixPreviews,
+  fixTruthWindowStart,
+  FIX_TRUTH_WINDOW_DAYS,
+  reportTitle,
+} from '../../supabase/functions/_shared/fix-report-truth-load.ts'
 import { GLOT_ATTEMPTS, GLOT_REPORT_IDS, GLOT_REPORTS } from './fixtures/glot-fix-attempts.ts'
 
 const reportsById = new Map<string, TruthReport>(GLOT_REPORTS.map((r) => [r.id, r]))
@@ -165,5 +172,19 @@ describe('reportTitle', () => {
     expect(reportTitle({ summary: '  Audio breaks ', description: 'x' })).toBe('Audio breaks')
     expect(reportTitle({ summary: null, description: 'a'.repeat(90) })).toBe(`${'a'.repeat(80)}…`)
     expect(reportTitle(null)).toBeNull()
+  })
+})
+
+describe('one window for every fix count', () => {
+  it('starts 29 UTC days before today at midnight (30 days inclusive)', () => {
+    expect(FIX_TRUTH_WINDOW_DAYS).toBe(30)
+    expect(fixTruthWindowStart(new Date('2026-10-04T15:00:00Z'))).toBe('2026-09-05T00:00:00.000Z')
+  })
+
+  it('is the only way the dashboard, /inbox, /fixes and project rows pick reports to count', () => {
+    const read = (f: string) => readFileSync(resolve(__dirname, '../../supabase/functions/api/routes', f), 'utf8')
+    expect(read('dashboard.ts').match(/loadRecentFixTruths\(/g)?.length).toBe(3)
+    expect(read('query-fixes-repo.ts').match(/loadRecentFixTruths\(/g)?.length).toBe(2)
+    expect(read('projects-crud.ts').match(/loadRecentFixTruths\(/g)?.length).toBe(1)
   })
 })
