@@ -958,31 +958,31 @@ const STORAGE: ConfigDoc[] = [
   },
   {
     id: 'storage.access_key_ref',
-    label: 'Access key (vault ref)',
+    label: 'Access key ID',
     summary:
-      'Reference to the access-key half of the storage credentials — stored in Supabase Vault, never plaintext.',
+      'The access-key half of your bucket credentials. Paste the key itself; Mushi stores it in Supabase Vault, never in plain text.',
     howItWorks:
-      'Form takes the raw key on save and stashes it in Vault, then stores only `vault://<id>` here. The adapter resolves the secret at request time.',
+      "On Save the server stores the raw key in Vault under the project's own Vault name (mushi/storage/<project>/access_key) and keeps only that name. The storage adapter reads the secret when it signs a request. A saved key is never shown again; paste a new one to replace it.",
     default: { value: 'unset' },
     backend: {
-      table: 'storage_configs',
-      column: 'access_key_ref',
-      endpoint: 'PUT /v1/admin/storage',
+      table: 'project_storage_settings',
+      column: 'access_key_vault_ref',
+      endpoint: 'PUT /v1/admin/storage/:projectId',
       readBy: ['storage adapter'],
     },
     whenToChange: 'Rotate quarterly, or immediately if the key may have leaked.',
   },
   {
     id: 'storage.secret_key_ref',
-    label: 'Secret key (vault ref)',
-    summary: 'Reference to the secret-key half of the storage credentials.',
+    label: 'Secret access key',
+    summary: 'The secret half of your bucket credentials. Paste it as your provider shows it.',
     howItWorks:
-      'Same Vault flow as the access key. Pair must be rotated together — half-rotations leave the adapter unable to sign.',
+      'Same Vault flow as the access key. Rotate the pair together — half-rotations leave the adapter unable to sign.',
     default: { value: 'unset' },
     backend: {
-      table: 'storage_configs',
-      column: 'secret_key_ref',
-      endpoint: 'PUT /v1/admin/storage',
+      table: 'project_storage_settings',
+      column: 'secret_key_vault_ref',
+      endpoint: 'PUT /v1/admin/storage/:projectId',
       readBy: ['storage adapter'],
     },
     whenToChange:
