@@ -8,7 +8,7 @@
 
 import { Btn } from './ui'
 
-export function pageRange(page: number, pageSize: number, total: number): { from: number; to: number; pages: number } {
+function pageRange(page: number, pageSize: number, total: number): { from: number; to: number; pages: number } {
   const pages = Math.max(1, Math.ceil(total / pageSize))
   const current = Math.min(Math.max(1, page), pages)
   if (total === 0) return { from: 0, to: 0, pages }
