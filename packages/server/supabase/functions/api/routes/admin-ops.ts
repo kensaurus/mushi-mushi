@@ -21,7 +21,13 @@ import { getPlan } from '../../_shared/plans.ts';
 import { withIdempotency } from '../../_shared/idempotency.ts';
 import { notifyOperator } from '../../_shared/operator-notify.ts';
 import { SUPPORT_EMAIL, SUPPORT_URL } from '../../_shared/support.ts';
-import { dbError, ownedProjectIds, requireProjectAdmin, resolveOwnedProject } from '../shared.ts';
+import {
+  callerCanAccessProject,
+  dbError,
+  ownedProjectIds,
+  requireProjectAdmin,
+  resolveOwnedProject,
+} from '../shared.ts';
 import { isProjectStorageSecretRef, storageSecretPrefix } from '../../_shared/vault-ref.ts';
 import { assertSafeOutboundUrl } from '../../_shared/inventory-guards.ts';
 import { requireSuperAdmin } from '../../_shared/super-admin.ts';
@@ -689,10 +695,17 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
     const userId = c.get('userId') as string;
     const projectId = c.req.param('projectId')!;
     const db = getServiceClient();
-    const projectIds = await ownedProjectIds(db, userId);
-    if (!projectIds.includes(projectId)) {
+    const access = await callerCanAccessProject(c, db, userId, projectId);
+    if (!access.allowed) {
       return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Not your project' } }, 403);
     }
+    // Retention windows and legal hold drive the nightly deletion sweep.
+    const forbidden = requireProjectAdmin(
+      c,
+      { organization_role: access.role },
+      'Only organization owners and admins can change retention or legal hold.',
+    );
+    if (forbidden) return forbidden;
 
     const body = await c.req.json().catch(() => ({}));
     const updates: Record<string, unknown> = { project_id: projectId };
@@ -1030,10 +1043,17 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
     const userId = c.get('userId') as string;
     const projectId = c.req.param('projectId')!;
     const db = getServiceClient();
-    const projectIds = await ownedProjectIds(db, userId);
-    if (!projectIds.includes(projectId)) {
+    const access = await callerCanAccessProject(c, db, userId, projectId);
+    if (!access.allowed) {
       return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
     }
+    // Pinning a region cannot be undone from the console.
+    const forbidden = requireProjectAdmin(
+      c,
+      { organization_role: access.role },
+      'Only organization owners and admins can pin a data region.',
+    );
+    if (forbidden) return forbidden;
     const body = await c.req.json().catch(() => ({}));
     const region = body.region as string | undefined;
     if (!region || !['us', 'eu', 'jp', 'self'].includes(region)) {

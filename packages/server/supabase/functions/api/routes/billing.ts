@@ -3,7 +3,7 @@ import type { Variables } from '../types.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { adminOrApiKey } from '../../_shared/auth.ts';
 import { getPlan, listPlans } from '../../_shared/plans.ts';
-import { callerProjectIds } from '../shared.ts';
+import { assertTargetProjectAccess, callerProjectIds, requireProjectAdmin } from '../shared.ts';
 
 export function registerBillingRoutes(app: Hono<{ Variables: Variables }>): void {
   // =================================================================================
@@ -629,6 +629,14 @@ export function registerBillingRoutes(app: Hono<{ Variables: Variables }>): void
     if (!projectIdsForUser.includes(projectId)) {
       return c.json({ ok: false, error: 'Not found' }, 404);
     }
+    const capAccess = await assertTargetProjectAccess(c, db, userId, projectId);
+    if (!capAccess.ok) return capAccess.response;
+    const capForbidden = requireProjectAdmin(
+      c,
+      { organization_role: capAccess.role },
+      'Only organization owners and admins can change the spend cap.',
+    );
+    if (capForbidden) return capForbidden;
 
     const { error } = await db
       .from('billing_subscriptions')
@@ -699,6 +707,14 @@ export function registerBillingRoutes(app: Hono<{ Variables: Variables }>): void
     if (!projectIdsForUser.includes(projectId)) {
       return c.json({ ok: false, error: 'Not found' }, 404);
     }
+    const emailAccess = await assertTargetProjectAccess(c, db, userId, projectId);
+    if (!emailAccess.ok) return emailAccess.response;
+    const emailForbidden = requireProjectAdmin(
+      c,
+      { organization_role: emailAccess.role },
+      'Only organization owners and admins can change where quota alerts go.',
+    );
+    if (emailForbidden) return emailForbidden;
 
     const { error } = await db
       .from('project_settings')

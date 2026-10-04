@@ -13,7 +13,7 @@
 import { Hono } from 'npm:hono@4'
 import type { Context } from 'npm:hono@4'
 import { requireAuth } from '../middleware/auth.ts'
-import { requireProjectAccess } from '../middleware/project.ts'
+import { checkProjectAccessIfNamed } from '../middleware/project.ts'
 import { getServiceClient } from '../../_shared/db.ts'
 import { accessibleProjectIds } from '../../_shared/project-access.ts'
 import {
@@ -87,7 +87,7 @@ export function registerPdcaRoutes(parent: Hono<{ Variables: Variables }>) {
 
 function pdcaRoutes() {
   const r = new Hono<{ Variables: Variables }>()
-  r.use('*', requireAuth, requireProjectAccess)
+  r.use('*', requireAuth, checkProjectAccessIfNamed)
 
   // Stats for KPI strip + posture banner — must be registered before /:id
   r.get('/stats', async (c) => {
@@ -379,7 +379,23 @@ function pdcaRoutes() {
 
   // Phase 3: Trigger PDCA QA story auto-improve
   r.post('/improve-qa-stories', async (c) => {
-    const body = await c.req.json().catch(() => ({})) as { project_id?: string }
+    const body = await c.req.json().catch(() => ({})) as { project_id?: unknown }
+    // The runner improves every project when it gets no project_id, so a
+    // caller must always name one it can reach: the body, the named project,
+    // or a bound key's own project.
+    const projectId =
+      (typeof body.project_id === 'string' && body.project_id) ||
+      projectIdFromRequest(c) ||
+      (c.get('authMethod') === 'apiKey' ? (c.get('projectId') as string | undefined) : undefined) ||
+      null
+    if (!projectId) {
+      return c.json(
+        { ok: false, error: { code: 'PROJECT_REQUIRED', message: 'Choose a project first: send project_id.' } },
+        400,
+      )
+    }
+    const access = await assertTargetProjectAccess(c, db(), c.get('userId') as string, projectId)
+    if (!access.ok) return access.response
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -387,7 +403,7 @@ function pdcaRoutes() {
       const res = await fetch(`${supabaseUrl}/functions/v1/pdca-runner`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${serviceKey}` },
-        body: JSON.stringify({ mode: 'qa_story_improve', project_id: body.project_id }),
+        body: JSON.stringify({ mode: 'qa_story_improve', project_id: projectId }),
       })
       const json = await res.json()
       if (!res.ok) return c.json({ ok: false, error: json }, res.status as 200)
