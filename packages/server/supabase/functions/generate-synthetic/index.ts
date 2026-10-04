@@ -216,7 +216,8 @@ Deno.serve(
                 model: ANTHROPIC_HAIKU,
                 keySource: 'env',
                 startedAt: Date.now(),
-                promptVersion: stage2Selection.promptVersion ?? null,
+                // No promptVersion: this eval is not production stage2 traffic,
+                // and Prompt Lab sums cost and calls per prompt_version.
                 langfuseTraceId: trace.id,
               } as const;
               const evaluation = await generateObject({

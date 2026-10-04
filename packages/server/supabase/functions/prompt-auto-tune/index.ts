@@ -306,7 +306,8 @@ Judge's correction: ${JSON.stringify(f.suggestedCorrection ?? {}).slice(0, 200)}
       projectId,
       model,
       keySource: resolved?.key ? resolved.source : 'env',
-      promptVersion: active.version,
+      // No promptVersion: `active.version` is the prompt being tuned, not one
+      // that ran, and Prompt Lab sums cost per prompt_version.
       langfuseTraceId: trace.id,
     }, () => claudeGenerateObject({
       apiKey,
