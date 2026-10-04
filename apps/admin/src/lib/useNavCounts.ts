@@ -31,12 +31,16 @@ export type HealthTone = 'idle' | 'ok' | 'warn' | 'danger'
 export interface NavCounts {
   /** Reports with status='new' that have been sitting > 1h. */
   untriagedBacklog: number
-  /** Fix attempts in queued/running state. */
+  /** Unfixed reports with a fix queued or running (counted per report). */
   fixesInFlight: number
-  /** Fix attempts whose last state is failure or CI-failed. */
+  /** Unfixed reports whose latest attempt failed, was skipped, or whose PR closed / went red. */
   fixesFailed: number
-  /** Repo-level aggregate: open PRs awaiting review. */
+  /** Subset of `fixesFailed` a retry can clear right now. */
+  fixesRetryable: number
+  /** Unfixed reports with a fix PR awaiting review or merge. */
   prsOpen: number
+  /** Critical or high reports still waiting on a decision (any age). */
+  urgentOpenReports: number
   /** Action nodes in inventory with status regressed (v2). */
   regressedActions: number
   /**
@@ -85,7 +89,9 @@ const INITIAL: NavCounts = {
   untriagedBacklog: 0,
   fixesInFlight: 0,
   fixesFailed: 0,
+  fixesRetryable: 0,
   prsOpen: 0,
+  urgentOpenReports: 0,
   regressedActions: 0,
   inboxOpenActions: 0,
   notificationsUnread: 0,
@@ -112,6 +118,7 @@ const INITIAL: NavCounts = {
 interface FixSummaryResp {
   inProgress?: number
   failed?: number
+  retryable?: number
   prsOpen?: number
 }
 
@@ -150,6 +157,7 @@ interface SuperAdminMetricsResp {
 
 interface InboxStatsResp {
   openActions?: number
+  urgentOpenReports?: number
 }
 
 function countHealthIssues(dashboard: DashboardData | undefined): number {
@@ -276,7 +284,9 @@ export function useNavCounts(): NavCounts {
       untriagedBacklog: reports?.total ?? 0,
       fixesInFlight: summary?.inProgress ?? 0,
       fixesFailed: summary?.failed ?? 0,
+      fixesRetryable: summary?.retryable ?? 0,
       prsOpen: summary?.prsOpen ?? 0,
+      urgentOpenReports: inboxStatsRes.ok ? (inboxStatsRes.data?.urgentOpenReports ?? 0) : 0,
       regressedActions: regressed,
       inboxOpenActions,
       notificationsUnread: notifUnread,
