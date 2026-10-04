@@ -20,7 +20,7 @@ vi.mock('../../lib/toast', () => ({
   useToast: () => ({ success: mocks.success, error: mocks.error, info: vi.fn(), warn: vi.fn() }),
 }))
 
-import { TesterSubmissionCard, reviewActionsFor } from './TesterSubmissionCard'
+import { TesterSubmissionCard } from './TesterSubmissionCard'
 
 let container: HTMLDivElement
 let root: Root
@@ -63,11 +63,21 @@ async function render(status: 'pending' | 'spam' | 'accepted', onReviewed = vi.f
   return onReviewed
 }
 
-describe('reviewActionsFor', () => {
-  it('offers every grade while pending, none once graded, and an override for spam', () => {
-    expect(reviewActionsFor('pending')).toEqual(['accept', 'informative', 'duplicate', 'spam'])
-    expect(reviewActionsFor('accepted')).toEqual([])
-    expect(reviewActionsFor('spam')).toEqual(['accept', 'informative', 'duplicate'])
+function gradeLabels(): string[] {
+  return buttons()
+    .map((b) => b.textContent ?? '')
+    .filter((t) => /Accept|Informative|Duplicate|Spam/.test(t))
+}
+
+describe('grade buttons by status', () => {
+  it('offers every grade while pending, an override for spam, and none once graded', async () => {
+    await render('pending')
+    expect(gradeLabels()).toHaveLength(4)
+    await render('spam')
+    expect(gradeLabels().some((t) => /Spam/.test(t))).toBe(false)
+    expect(gradeLabels()).toHaveLength(3)
+    await render('accepted')
+    expect(gradeLabels()).toHaveLength(0)
   })
 })
 

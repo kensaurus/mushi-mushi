@@ -54,7 +54,7 @@ const REVIEW_SUCCESS_LABEL: Record<ReviewAction, string> = {
  * overridden (reports held by the old velocity cap were stored as spam with
  * no way to review them), so it offers every grade except spam again.
  */
-export function reviewActionsFor(status: TesterSub['status']): ReviewAction[] {
+function reviewActionsFor(status: TesterSub['status']): ReviewAction[] {
   if (status === 'pending') return ACTIONS.map((a) => a.action)
   if (status === 'spam') return ACTIONS.map((a) => a.action).filter((a) => a !== 'spam')
   return []
