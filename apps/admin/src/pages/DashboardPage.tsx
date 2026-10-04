@@ -19,7 +19,8 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useToast } from '../lib/toast'
 import { useMilestoneCelebration } from '../lib/useMilestoneCelebration'
 import { Confetti } from '../components/Confetti'
-import { Btn, ErrorAlert, FreshnessPill, RefreshIconButton, Card } from '../components/ui'
+import { Btn, FreshnessPill, RefreshIconButton, Card } from '../components/ui'
+import { PageLoadError } from '../components/PageLoadError'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
@@ -180,7 +181,7 @@ export function DashboardPage() {
   // redirected prematurely.
   if (!setup.loading && !setup.hasAnyProject) return <Navigate to="/onboarding" replace />
   if (loading || setup.loading) return <DashboardSkeleton />
-  if (error) return <ErrorAlert message={error} onRetry={reload} />
+  if (error) return <PageLoadError error={error} onRetry={reload} resource="the dashboard" endpoint="/v1/admin/dashboard" />
   if (!data || data.empty) return <GettingStartedEmpty />
 
   const counts = data.counts!

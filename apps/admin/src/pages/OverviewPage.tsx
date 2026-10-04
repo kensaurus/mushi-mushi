@@ -126,7 +126,7 @@ function healthBadgeLabel(card: ProjectCard, tone: HealthTone): string {
     case 'silent':
       return 'Silent'
     case 'warn':
-      return `${card.open_reports} unresolved`
+      return `${card.open_reports} open`
     case 'quiet':
       return 'Quiet'
     case 'ok':
@@ -138,7 +138,7 @@ const HEALTH_BADGE_HINT: Record<HealthTone, string | undefined> = {
   critical: undefined,
   'not-connected': HEARTBEAT_HINT.never,
   silent: HEARTBEAT_HINT.dead,
-  warn: 'Reports not yet resolved: new, triaged, or with a fix in progress.',
+  warn: 'Open reports: waiting for triage or a decision (new, classified, grouped or reopened).',
   quiet: 'No user sessions in the last 7 days.',
   ok: undefined,
 }
@@ -220,7 +220,7 @@ export function OverviewPage() {
                 <StatCard label="Projects" value={fmt(portfolioTotals.projectCount)} />
                 <StatCard label="Sessions (7d)" value={fmt(portfolioTotals.totalSessions)} />
                 <StatCard label="Users (7d)" value={fmt(portfolioTotals.totalUsers)} />
-                <StatCard label="Unresolved reports" value={fmt(portfolioTotals.totalOpen)} />
+                <StatCard label="Open reports" value={fmt(portfolioTotals.totalOpen)} />
                 {portfolioTotals.totalCritical > 0 && (
                   <StatCard
                     label="Critical"
@@ -429,12 +429,13 @@ function ProjectHealthCard({ card, recipeWorst }: { card: ProjectCard; recipeWor
         >
           Activity →
         </Link>
+        {/* The count is the open-status list (QA 175), so the link opens that list. */}
         <Link
-          to="/reports"
+          to={card.open_reports > 0 ? '/reports?status=open' : '/reports'}
           onClick={handleSwitchProject}
           className="inline-flex min-h-6 items-center text-2xs text-fg-muted hover:text-fg hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 rounded-sm"
         >
-          {card.open_reports > 0 ? `${card.open_reports} unresolved` : 'Reports'}
+          {card.open_reports > 0 ? `${card.open_reports} open` : 'Reports'}
         </Link>
         <Link
           to="/dashboard"
