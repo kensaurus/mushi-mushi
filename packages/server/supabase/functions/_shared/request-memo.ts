@@ -13,13 +13,13 @@
  *     `jwtAuth` accepts that instead of calling GoTrue again. The map is keyed
  *     by object identity, so a request arriving from the network can never be
  *     in it — there is no header or flag a caller could forge.
- *   - `withFanoutMemo` / `fanoutMemo`: while a fan-out runs for a user,
- *     identical membership reads for that same user share one promise. The
- *     window closes when the fan-out settles; outside it `fanoutMemo` is a
- *     plain call. A concurrent ordinary request by the same user inside the
- *     window may share a read too — it is that user's own access set, read
- *     moments earlier, so the answer is the one it would have computed.
+ *   - `withFanoutMemo` / `fanoutMemo`: inside one fan-out, identical
+ *     membership reads for its user share one promise. The window is the
+ *     fan-out's async context (AsyncLocalStorage), so it closes when the
+ *     fan-out settles and no other request ever reads from it.
  */
+
+import { AsyncLocalStorage } from 'node:async_hooks'
 
 export interface TrustedUser {
   id: string
@@ -41,35 +41,32 @@ export function trustedSubRequestUser(req: Request | undefined): TrustedUser | n
 }
 
 interface FanoutScope {
-  depth: number
+  userId: string
   reads: Map<string, Promise<unknown>>
 }
 
-const fanoutScopes = new Map<string, FanoutScope>()
+// The window is bound to the fan-out's own async chain, not to the user: a
+// request by the same user that arrives over the network while a fan-out is
+// in flight runs outside this context and reads fresh. A user-keyed window
+// let overlapping nav-meta calls keep a removed or demoted member's old
+// access set alive for every request on the isolate.
+const fanoutStore = new AsyncLocalStorage<FanoutScope>()
 
 /** Run `fn` with a shared-read window open for `userId`. Re-entrant. */
-export async function withFanoutMemo<T>(userId: string, fn: () => Promise<T>): Promise<T> {
-  let scope = fanoutScopes.get(userId)
-  if (!scope) {
-    scope = { depth: 0, reads: new Map() }
-    fanoutScopes.set(userId, scope)
-  }
-  scope.depth++
-  try {
-    return await fn()
-  } finally {
-    scope.depth--
-    if (scope.depth === 0 && fanoutScopes.get(userId) === scope) fanoutScopes.delete(userId)
-  }
+export function withFanoutMemo<T>(userId: string, fn: () => Promise<T>): Promise<T> {
+  const current = fanoutStore.getStore()
+  if (current && current.userId === userId) return fn()
+  return fanoutStore.run({ userId, reads: new Map() }, fn)
 }
 
 /**
- * Share one in-flight read per `(userId, key)` while a fan-out window is open
- * for `userId`. A rejected read is evicted so a retry runs again.
+ * Share one in-flight read per `(userId, key)` inside a fan-out window for
+ * `userId`. Outside one it is a plain call. A rejected read is evicted so a
+ * retry runs again.
  */
 export function fanoutMemo<T>(userId: string, key: string, fn: () => Promise<T>): Promise<T> {
-  const scope = fanoutScopes.get(userId)
-  if (!scope) return fn()
+  const scope = fanoutStore.getStore()
+  if (!scope || scope.userId !== userId) return fn()
   const hit = scope.reads.get(key)
   if (hit) return hit as Promise<T>
   const pending = fn()
