@@ -6,6 +6,7 @@ import {
   buildProjectDirectory,
   clearNavMetaCache,
   parseNavMetaInclude,
+  parseNavMetaSlices,
   registerWorkspaceNavMetaRoutes,
 } from './workspace-nav-meta.ts'
 
@@ -219,4 +220,25 @@ Deno.test('buildProjectDirectory lists teams in join order and names every proje
     ['p1', 'o1'],
     ['p3', null],
   ])
+})
+
+Deno.test('nav-meta with slices= dispatches only the slices asked for', async () => {
+  clearNavMetaCache()
+  await withRuntimeTraceLimit(async () => {
+    const res = await buildAuthedApp({ drift: 0 }).fetch(navMetaRequest('?slices=drift,bogus&include=counts'))
+    const data = (await res.json()).data
+    assertEquals(data.slices.drift.openFindings, 4)
+    const dispatched = Object.keys(data.timingsMs)
+    // drift + the 8 counters; none of the other 36 stats routes.
+    assert(dispatched.includes('/v1/admin/drift/stats'))
+    assert(!dispatched.includes('/v1/admin/health/stats'))
+    assert(!dispatched.includes('/v1/admin/projects/stats'))
+    assertEquals(dispatched.length, 9)
+  })
+})
+
+Deno.test('parseNavMetaSlices: absent = all, list = known keys only', () => {
+  assertEquals(parseNavMetaSlices(undefined), null)
+  assertEquals([...(parseNavMetaSlices('drift, projects,nope') ?? [])].sort(), ['drift', 'projects'])
+  assertEquals(parseNavMetaSlices('')?.size, 0)
 })

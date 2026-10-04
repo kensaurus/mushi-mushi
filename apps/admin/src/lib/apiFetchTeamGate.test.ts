@@ -146,6 +146,17 @@ describe('apiFetch team gate for cross-team deep links', () => {
     expect(calls.map((c) => c.url)).toEqual(['http://api.local/v1/org'])
   })
 
+  it('a fresh browser (no stored team) takes the team of the linked project, not the first team', async () => {
+    const calls: Call[] = []
+    vi.stubGlobal('fetch', directoryFetch(calls))
+    const m = await freshModules()
+    window.history.replaceState({}, '', `/reports?project=${PROJECT_IN_B}`)
+    await m.apiFetch('/v1/admin/reports')
+    const scoped = calls.filter((c) => !c.url.endsWith('/v1/admin/workspace/projects'))
+    expect(scoped[0].headers['X-Mushi-Org-Id']).toBe(ORG_B)
+    expect(m.getActiveOrgIdSnapshot()).toBe(ORG_B)
+  })
+
   it('fails open when the directory cannot be read', async () => {
     const calls: Call[] = []
     vi.stubGlobal(
@@ -196,5 +207,23 @@ describe('coalesce key carries the scope', () => {
     await m.apiFetch('/v1/admin/projects', { method: 'POST', body: '{}' })
     await m.apiFetch('/v1/admin/setup')
     expect(calls.filter((c) => c.url.endsWith('/v1/admin/setup'))).toHaveLength(2)
+  })
+})
+
+describe('team project list is one read whatever the caller scope', () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals()
+    window.localStorage.clear()
+    window.history.replaceState({}, '', '/')
+  })
+
+  it('a project-scoped and an enumeration-scoped /v1/admin/projects share one request', async () => {
+    const calls: Call[] = []
+    vi.stubGlobal('fetch', directoryFetch(calls))
+    const m = await freshModules()
+    m.setActiveOrgIdSnapshot(ORG_A)
+    await m.apiFetch('/v1/admin/projects')
+    await m.apiFetch('/v1/admin/projects', { scope: 'enumeration' })
+    expect(calls.filter((c) => c.url.endsWith('/v1/admin/projects'))).toHaveLength(1)
   })
 })

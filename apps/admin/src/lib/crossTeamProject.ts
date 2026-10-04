@@ -66,7 +66,7 @@ type DirectoryRead =
 export async function readProjectDirectory(): Promise<DirectoryRead> {
   // scope 'none': this read decides the team, so it must not carry one.
   const res = await apiFetch<ProjectDirectory>(PROJECT_DIRECTORY_PATH, { scope: 'none' })
-  if (!res.ok || !res.data) {
+  if (!res.ok || !res.data || !Array.isArray(res.data.projects) || !Array.isArray(res.data.teams)) {
     const code = res.error?.code ?? ''
     if (code === 'INVALID_TOKEN' || code === 'MISSING_AUTH' || code === 'UNAUTHORIZED') {
       return { status: 'unauthenticated' }
@@ -128,11 +128,12 @@ export async function resolveTeamForProject(
 
 /**
  * True when the URL's project is not known to belong to the active team, so
- * team-scoped requests must wait for {@link resolveTeamForProject}. With no
- * active team there is no wrong header to send, so nothing waits.
+ * team-scoped requests must wait for {@link resolveTeamForProject}. A fresh
+ * browser (no active team yet) checks too: otherwise the team switcher falls
+ * back to the user's FIRST team and the link's project 404s under it.
  */
 export function urlProjectNeedsTeamCheck(projectId: string, activeOrgId: string | null): boolean {
-  if (!activeOrgId) return false
+  if (!activeOrgId) return true
   return knownProjectTeam(projectId) !== activeOrgId
 }
 

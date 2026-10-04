@@ -13,7 +13,7 @@ import {
   IconSignOut, IconBell, IconEye, IconChevronRight,
 } from './icons'
 import { useNavCounts, toneForBacklog } from '../lib/useNavCounts'
-import { renderNavBadge, resolveNavBadge } from '../lib/navBadges'
+import { navSlicesForPaths, renderNavBadge, resolveNavBadge } from '../lib/navBadges'
 import { NavRailFlyout } from './sidebar/NavRailFlyout'
 import { NavRailLink, railBadgeText, railDescriptionId } from './sidebar/NavRailLink'
 import { workspaceSectionAttention } from '../lib/workspaceNavMeta'
@@ -545,7 +545,6 @@ export function Layout({ children }: { children: ReactNode }) {
   const [activityOpen, setActivityOpen] = useState(false)
   const [activityUnread, setActivityUnread] = useState(0)
   const whatsNew = useWhatsNew()
-  const navCounts = useNavCounts({ live: true })
   const pageHeroSnapshot = usePageHeroSnapshot()
   const postureHasStatusBanner = usePostureHasStatusBanner()
   const projectSnapshots = useProjectSnapshots()
@@ -559,10 +558,6 @@ export function Layout({ children }: { children: ReactNode }) {
   const fallbackHero = shouldShowLayoutPageHero(pathname, postureHasStatusBanner)
     ? PAGE_HERO_FALLBACKS[pathname]
     : null
-  const resolvedHero = useMemo(
-    () => resolveLayoutHero(pathname, fallbackHero, navCounts, pageHeroSnapshot),
-    [pathname, fallbackHero, navCounts, pageHeroSnapshot],
-  )
   const pageShellWidth = pageLayoutWidthForPath(pathname)
   const [focusModePreference, setFocusMode] = useFocusMode()
   /** Consent routes always hide chrome; preference still drives the toggle. */
@@ -783,6 +778,22 @@ export function Layout({ children }: { children: ReactNode }) {
     has,
     setupStatus.selectors.done,
   ])
+
+  // One nav-meta request for the sidebar. Advanced shows every section
+  // badge, so it asks for every slice; Quick and Beginner ask only for what
+  // their ~10 items and the current page's hero read (slices = null → all).
+  const navSlices = useMemo(
+    () =>
+      isAdvanced
+        ? null
+        : navSlicesForPaths([...visibleNav.flatMap((s) => s.items.map((i) => i.path)), pathname]),
+    [isAdvanced, visibleNav, pathname],
+  )
+  const navCounts = useNavCounts({ live: true, slices: navSlices })
+  const resolvedHero = useMemo(
+    () => resolveLayoutHero(pathname, fallbackHero, navCounts, pageHeroSnapshot),
+    [pathname, fallbackHero, navCounts, pageHeroSnapshot],
+  )
 
   // Keep the open category aligned with the current route when navigating.
   useEffect(() => {

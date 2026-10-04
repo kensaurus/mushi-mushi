@@ -88,7 +88,11 @@ describe('apiFetch active project scoping', () => {
     setActiveProjectIdSnapshot('11111111-1111-4111-8111-111111111111')
     await apiFetch('/v1/admin/settings')
 
-    expect(requestInitAt(fetchMock, 0).headers).toMatchObject({
+    // With no team stored, apiFetch first asks which team owns the linked
+    // project (A4); the settings request is the one after that.
+    const calls = fetchMock.mock.calls as unknown as Array<[string, RequestInit]>
+    const settings = calls.find(([url]) => url.endsWith('/v1/admin/settings'))
+    expect(settings?.[1].headers).toMatchObject({
       'X-Mushi-Project-Id': '22222222-2222-4222-8222-222222222222',
     })
   })
