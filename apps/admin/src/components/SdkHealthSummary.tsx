@@ -61,6 +61,7 @@ import {
 } from '../lib/projectMushiEnv'
 import { sdkPlatformHintFromUserAgent, sdkOriginKind } from '../lib/sdkClientPlatform'
 import { CHIP_TONE } from '../lib/chipTone'
+import { freshestHeartbeatKey } from '../lib/heartbeat'
 
 // Heartbeat columns mirror the server-side select in
 // routes/billing-projects-queue-graph.ts on /v1/admin/projects.
@@ -655,9 +656,7 @@ export function SdkHealthSummary({
   const tone = STATUS_TONE[status]
   const playbook = buildPlaybook(envVars, projectSlug)[status]
   const activeKeys = apiKeys.filter((k) => k.is_active)
-  const freshest = activeKeys
-    .filter((k) => k.last_seen_at)
-    .sort((a, b) => (a.last_seen_at! < b.last_seen_at! ? 1 : -1))[0]
+  const freshest = freshestHeartbeatKey(activeKeys)
 
   async function sendTestReport() {
     setSending(true)

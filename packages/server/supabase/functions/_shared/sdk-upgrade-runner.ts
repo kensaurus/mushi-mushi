@@ -29,8 +29,7 @@ import {
   fetchAllLatestVersions,
   type BumpEntry,
 } from './sdk-upgrade-plan.ts'
-import { upsertProjectSdkObservationAsync } from './sdk-observation.ts'
-import { UPGRADE_BRANCH_PREFIX } from './sdk-upgrade-gates.ts'
+import { UPGRADE_BRANCH_PREFIX, completedJobCockpitFields } from './sdk-upgrade-gates.ts'
 import { SDK_UPGRADE_STALE_MS, shouldClaimSdkUpgradeJob } from './sdk-upgrade-reclaim.ts'
 
 const log = rootLog.child('sdk-upgrade-runner')
@@ -124,21 +123,14 @@ export async function runSdkUpgradeJob(jobId: string): Promise<SdkUpgradeRunResu
     } = {},
   ) => {
     const finishedAt = new Date().toISOString()
+    const cockpit = completedJobCockpitFields(status, extra.pr_url)
     await db
       .from('sdk_upgrade_jobs')
-      .update({ status, finished_at: finishedAt, ...extra })
+      .update({ status, finished_at: finishedAt, ...cockpit, ...extra })
       .eq('id', jobId)
-
-    if (status === 'completed' && extra.plan?.length) {
-      const primaryBump = extra.plan[0]
-      upsertProjectSdkObservationAsync(db, {
-        projectId: job.project_id,
-        sdkPackage: primaryBump.package,
-        sdkVersion: primaryBump.to,
-        source: 'upgrade_verify',
-        observedAt: finishedAt,
-      })
-    }
+    // No SDK observation here: an opened PR is not an installed version.
+    // Recording plan[0].to made the Update center say the app ran the new
+    // version before the PR merged; heartbeats and reports record the truth.
   }
 
   try {

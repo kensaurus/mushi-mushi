@@ -248,7 +248,7 @@ export function deriveRecommendation(
         tone: 'urgent',
         meta: lastAttemptMeta,
         actions: [
-          { label: 'Configure codebase indexing \u2192', to: '/integrations', tone: 'primary' },
+          { label: 'Configure codebase indexing \u2192', to: '/integrations/config#integrations-codebase', tone: 'primary' },
           { label: 'Retry dispatch', onClick: () => onDispatch(), tone: 'ghost' },
         ],
       }
@@ -280,7 +280,7 @@ export function deriveRecommendation(
           'The configured agent type cannot handle this report. Switch to the default Claude agent in project settings.',
         tone: 'urgent',
         meta: lastAttemptMeta,
-        actions: [{ label: 'View project settings \u2192', to: '/integrations', tone: 'primary' }],
+        actions: [{ label: 'View project settings \u2192', to: '/integrations/config', tone: 'primary' }],
       }
     }
 
@@ -329,7 +329,7 @@ export function deriveRecommendation(
         tone: 'urgent',
         meta: lastAttemptMeta,
         actions: [
-          { label: 'Re-connect GitHub \u2192', to: '/integrations', tone: 'primary' },
+          { label: 'Re-connect GitHub \u2192', to: '/integrations/config#platform-card-github', tone: 'primary' },
           { label: 'View pipeline log \u2192', to: '/fixes', tone: 'ghost' },
         ],
       }

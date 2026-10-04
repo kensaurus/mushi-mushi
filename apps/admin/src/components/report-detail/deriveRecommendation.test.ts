@@ -196,7 +196,7 @@ describe('deriveRecommendation', () => {
       expect(rec.tone).toBe('urgent')
       expect(rec.title).toContain('index')
       const actions = rec.actions ?? []
-      const indexAction = actions.find((a) => a.to === '/integrations')
+      const indexAction = actions.find((a) => a.to === '/integrations/config#integrations-codebase')
       expect(indexAction).toBeDefined()
     })
 
@@ -256,7 +256,7 @@ describe('deriveRecommendation', () => {
       })
       const rec = deriveRecommendation(report, makeDispatchState(), 0, noOp)
       expect(rec.tone).toBe('urgent')
-      const settingsLink = rec.actions?.find((a) => a.to === '/integrations')
+      const settingsLink = rec.actions?.find((a) => a.to === '/integrations/config')
       expect(settingsLink).toBeDefined()
     })
   })
@@ -294,7 +294,7 @@ describe('deriveRecommendation', () => {
       })
       const rec = deriveRecommendation(report, makeDispatchState(), 0, noOp)
       expect(rec.title).toContain('GitHub')
-      const ghAction = rec.actions?.find((a) => a.to === '/integrations')
+      const ghAction = rec.actions?.find((a) => a.to === '/integrations/config#platform-card-github')
       expect(ghAction).toBeDefined()
     })
 

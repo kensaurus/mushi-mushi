@@ -113,16 +113,16 @@ export const judgeLinks = {
 /* ── Integrations / Settings / Onboarding / Billing / MCP ────────────── */
 
 export const integrationsLinks = {
-  platform: '/integrations?tab=platform',
-  healthy: '/integrations?tab=platform',
-  routing: '/integrations?tab=routing',
-  failing: '/integrations?tab=platform',
+  platform: '/integrations/config#integrations-required',
+  healthy: '/integrations/config#integrations-required',
+  routing: '/integrations/config#integrations-routing',
+  failing: '/integrations/config#integrations-required',
 } as const
 
 export const settingsLinks = {
   byok: '/settings?tab=byok',
   sdk: '/settings?tab=sdk',
-  routing: '/integrations?tab=routing',
+  routing: '/integrations/config#integrations-routing',
   classifier: '/settings?tab=general',
 } as const
 

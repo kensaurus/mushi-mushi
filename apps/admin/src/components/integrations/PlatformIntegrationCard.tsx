@@ -7,13 +7,11 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { Card, Btn, Badge, Input, RelativeTime, ResultChip, Tooltip, ErrorAlert, CopyButton } from '../ui'
+import { Card, Btn, Badge, Input, RelativeTime, Tooltip, ErrorAlert, CopyButton } from '../ui'
 import { RESOLVED_EXTERNAL_API_URL } from '../../lib/env'
 import { useActiveProjectId } from '../ProjectSwitcher'
 import { ConfigHelp } from '../ConfigHelp'
 import { resolveValidator } from '../../lib/validators'
-import { isStale } from '../../lib/staleness'
-import { HealthPill } from '../charts'
 import { HealthSparkline } from './HealthSparkline'
 import { IconPlay, IconPencil, IconExternalLink, IconAlertTriangle, IconDots } from '../icons'
 import { ServiceFavicon } from './ServiceFavicon'
@@ -22,7 +20,9 @@ import { ClaudeCodeSetupPanel } from './ClaudeCodeSetupPanel'
 import { SentryImportPanel } from './SentryImportPanel'
 import { IntegrationSetupGuide } from './IntegrationSetupGuide'
 import { IntegrationCredentialChips } from './IntegrationCredentialChips'
-import { PLATFORM_STATUS_MAP, type FieldSource, type HealthRow, type PlatformDef } from './types'
+import type { FieldSource, HealthRow, PlatformDef } from './types'
+import { ConnectionStatus } from '../ui/ConnectionStatus'
+import { connectionFromProbe, sentryConnection, type ConnectionView } from '../../lib/integrationConnection'
 import { CHIP_TONE } from '../../lib/chipTone'
 import { usePageData } from '../../lib/usePageData'
 import { sentryProjectsFromConfig } from '../../lib/platformIntegrationForm'
@@ -43,16 +43,13 @@ import { sentryProjectsFromConfig } from '../../lib/platformIntegrationForm'
  * (Sentry issue alerts / user feedback). Substitutes the active project id
  * so the user pastes a working URL, not a template.
  */
-function WebhookReceiveUrl({ path, source }: { path: string; source: string }) {
+type InboundDeliveries = {
+  deliveries: Array<{ outcome: string; created_at: string; error_message: string | null }>
+}
+
+function WebhookReceiveUrl({ path, latest }: { path: string; latest: InboundDeliveries['deliveries'][number] | undefined }) {
   const projectId = useActiveProjectId()
   const url = `${RESOLVED_EXTERNAL_API_URL}${path.replace('{projectId}', projectId ?? '<project-id>')}`
-  // Round-trip receipt: the newest inbound delivery for this source proves the
-  // vendor-side webhook actually reaches us — "configured" is a claim, a
-  // delivery timestamp is evidence.
-  const deliveries = usePageData<{ deliveries: Array<{ outcome: string; created_at: string; error_message: string | null }> }>(
-    `/v1/admin/integrations/inbound-deliveries?source=${encodeURIComponent(source)}`,
-  )
-  const latest = deliveries.data?.deliveries?.[0]
   return (
     <div className="mt-1.5 space-y-1 min-w-0">
       <div className="flex items-center gap-1.5 min-w-0">
@@ -70,9 +67,6 @@ function WebhookReceiveUrl({ path, source }: { path: string; source: string }) {
               {latest.outcome}
             </span>{' '}
             · <RelativeTime value={latest.created_at} />
-            {latest.outcome !== 'accepted' && latest.error_message ? (
-              <span className="text-fg-faint"> — {latest.error_message.slice(0, 80)}</span>
-            ) : null}
           </>
         ) : (
           'No inbound deliveries yet — fire a test alert from the vendor to prove the round trip.'
@@ -207,8 +201,43 @@ export function PlatformIntegrationCard({
 
   const status: HealthRow['status'] = !requiredOk ? 'unknown' : (latestProbe?.status ?? 'unknown')
   const pulseClass = useSuccessPulse(latestProbe)
-  const isDown = requiredOk && (latestProbe?.status === 'down')
-  const isDegraded = requiredOk && (latestProbe?.status === 'degraded')
+
+  // Round-trip receipt: the newest inbound delivery proves the vendor-side
+  // webhook actually reaches us — "configured" is a claim, a delivery is
+  // evidence. Fetched here so the status line and the receive URL agree.
+  const deliveries = usePageData<InboundDeliveries>(
+    def.webhookPath && requiredOk
+      ? `/v1/admin/integrations/inbound-deliveries?source=${encodeURIComponent(def.kind)}`
+      : null,
+  )
+  const latestDelivery = deliveries.data?.deliveries?.[0]
+  const connection: ConnectionView = def.webhookPath
+    ? sentryConnection({
+        configured: requiredOk,
+        probe: latestProbe,
+        latestDelivery,
+        deliveriesLoaded: deliveries.data != null,
+        deliveriesFailed: Boolean(deliveries.error),
+      })
+    : connectionFromProbe({ configured: requiredOk, probe: latestProbe })
+  const probeFailing = latestProbe?.status === 'down' || latestProbe?.status === 'degraded'
+  const connectionAction = (() => {
+    if (isEditing) return undefined
+    if (connection.state === 'not_connected') return { label: 'Connect', onClick: onStartEdit }
+    if (connection.state === 'checking') return { label: 'Test now', onClick: onTest }
+    if (connection.state === 'attention' && probeFailing) {
+      const credentialProblem = /key|token|credential|auth|revoked|401|403/i.test(latestProbe?.message ?? '')
+      return { label: credentialProblem ? 'Replace key' : 'Edit settings', onClick: onStartEdit }
+    }
+    if (connection.state === 'attention' && def.kind === 'sentry') {
+      // Alert rules are where Sentry's webhook action lives.
+      const org = typeof config.sentry_org_slug === 'string' ? config.sentry_org_slug : null
+      const url = org ? `https://${encodeURIComponent(org)}.sentry.io/alerts/rules/` : 'https://sentry.io/alerts/rules/'
+      return { label: 'Open Sentry', onClick: () => { window.open(url, '_blank', 'noopener,noreferrer') } }
+    }
+    if (connection.state === 'attention') return { label: 'Test again', onClick: onTest }
+    return undefined
+  })()
   // A fix-agent card (Cursor Cloud, Claude Code) depends on GitHub being connected first.
   const hasDependencyBlock = def.dependsOn != null && !dependencyOk
 
@@ -255,15 +284,7 @@ export function PlatformIntegrationCard({
                 colorClass={def.color}
               />
               <h3 className="text-sm font-semibold text-fg">{def.label}</h3>
-              <HealthPill status={PLATFORM_STATUS_MAP[status]} />
-              {!requiredOk && (
-                <Badge tone="warnSubtle">Not configured</Badge>
-              )}
-              {requiredOk && latestProbe?.checked_at && isStale(latestProbe.checked_at) && (
-                <Tooltip content="Auto-probe runs every 15 min. Click Test to refresh now.">
-                  <Badge tone="warnSubtle">Stale</Badge>
-                </Tooltip>
-              )}
+
               {/* Inheritance source badges */}
               {orgFields > 0 && (
                 <Tooltip content={`${orgFields} field${orgFields > 1 ? 's' : ''} inherited from org defaults — project-level values take precedence when set.`}>
@@ -288,19 +309,15 @@ export function PlatformIntegrationCard({
               )}
             </div>
 
-            {/* Down/degraded error banner — high-signal inline alert */}
-            {(isDown || isDegraded) && latestProbe?.message && (
-              <div className={`mt-1.5 flex items-start gap-1.5 rounded-sm px-2 py-1 text-2xs ${isDown ? CHIP_TONE.dangerSubtle : CHIP_TONE.warnSubtle}`}>
-                <IconAlertTriangle size={11} className="mt-0.5 shrink-0" />
-                <span className="leading-snug font-mono truncate">{latestProbe.message}</span>
-              </div>
-            )}
-            {/* "Never tested" nudge — shown when required fields are OK but no probe has run yet */}
-            {requiredOk && !latestProbe && !isEditing && (
-              <p className="mt-1 text-2xs text-fg-faint leading-snug">
-                Click <strong className="font-medium text-fg-muted">Test</strong> to verify the connection.
-              </p>
-            )}
+            {/* One status line: the same four states as every connection card. */}
+            <div className="mt-1.5" title={connection.raw && connection.raw !== connection.detail ? connection.raw : undefined}>
+              <ConnectionStatus
+                state={testing ? 'checking' : connection.state}
+                label={testing ? 'Testing…' : undefined}
+                detail={testing ? undefined : connection.detail}
+                action={testing ? undefined : connectionAction}
+              />
+            </div>
 
             <p className="text-2xs text-fg-secondary mt-1.5 pl-2 border-l border-brand/20 leading-snug">{def.whyItMatters}</p>
 
@@ -309,7 +326,7 @@ export function PlatformIntegrationCard({
               <IntegrationCredentialChips fields={def.fields} config={config} />
             )}
 
-            {def.webhookPath && <WebhookReceiveUrl path={def.webhookPath} source={def.kind} />}
+            {def.webhookPath && requiredOk && <WebhookReceiveUrl path={def.webhookPath} latest={latestDelivery} />}
 
             {!requiredOk && def.setupSteps && def.setupSteps.length > 0 && (
               <IntegrationSetupGuide
@@ -334,21 +351,6 @@ export function PlatformIntegrationCard({
 
           {/* Right: probe chip + action buttons */}
           <div className="flex items-center gap-1.5 flex-wrap">
-            {requiredOk && testing && (
-              <ResultChip tone="running">Testing…</ResultChip>
-            )}
-            {requiredOk && !testing && latestProbe && (
-              <ResultChip
-                tone={latestProbe.status === 'ok' ? 'success' : latestProbe.status === 'degraded' ? 'info' : 'error'}
-                at={latestProbe.checked_at}
-              >
-                {latestProbe.status === 'ok'
-                  ? 'Connection OK'
-                  : latestProbe.status === 'degraded'
-                    ? 'Degraded'
-                    : latestProbe.message ?? 'Failed'}
-              </ResultChip>
-            )}
 
             {/* External link to the service */}
             <Tooltip content={`Open ${def.label}`}>

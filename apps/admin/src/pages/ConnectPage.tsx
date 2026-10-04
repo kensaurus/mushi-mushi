@@ -41,6 +41,7 @@ import {
 } from '../components/icons'
 import type { SdkStatus } from '../components/SdkVersionBadge'
 import { isExpoReporterProject } from '../lib/projectMushiEnv'
+import { latestHeartbeatAt } from '../lib/heartbeat'
 
 interface ProjectRepoLite {
   repo_url: string | null
@@ -166,7 +167,6 @@ export function ConnectPage() {
   const copy = usePageCopy('/connect')
   const connectUx = useConnectUx()
   const showSectionDescriptions = connectUx.hideConnectSnapshot
-  const hideVersionInUpdate = !connectUx.hideConnectSnapshot
   usePublishPageContext({
     route: '/connect',
     title: 'Connect & Update',
@@ -206,9 +206,7 @@ export function ConnectPage() {
   const githubCheck = preflight.checks.find((c) => c.key === 'github')
   const githubRepoUrl = preflight.repoUrl ?? fallbackGithubRepoUrl
   const githubConnected = Boolean(githubRepoUrl) && (githubCheck?.ready ?? Boolean(githubRepoUrl))
-  const sdkConnected = Boolean(
-    project?.api_keys?.some((k) => k.is_active && k.last_seen_at),
-  )
+  const sdkConnected = latestHeartbeatAt(project?.api_keys) != null
   const setupStatus = useSetupStatus(activeProjectId)
   const nextSetupStep = nextRequiredSetupStep(
     setupStatus.activeProject ?? { steps: [], required_total: 0, required_complete: 0, total: 0, complete: 0, done: false, report_count: 0, fix_count: 0, merged_fix_count: 0, project_id: '', project_name: '', project_slug: '', created_at: '' },
@@ -285,9 +283,7 @@ export function ConnectPage() {
                 githubConnected={githubConnected}
                 githubRepoUrl={githubRepoUrl}
                 sdkConnected={sdkConnected}
-                sdkLastSeenAt={
-                  project?.api_keys?.find((k) => k.is_active && k.last_seen_at)?.last_seen_at ?? null
-                }
+                sdkLastSeenAt={latestHeartbeatAt(project?.api_keys)}
                 sdkVersion={project?.sdk_version ?? null}
                 sdkLatestVersion={project?.sdk_latest_version ?? null}
                 sdkStatus={project?.sdk_status ?? null}
@@ -418,7 +414,6 @@ export function ConnectPage() {
                 <UpdateCenter
                   project={project}
                   preflight={preflight}
-                  hideVersionBadge={hideVersionInUpdate}
                 />
               ) : (
                 <ProjectFallbackNote

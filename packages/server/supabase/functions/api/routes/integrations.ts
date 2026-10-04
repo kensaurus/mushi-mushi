@@ -16,6 +16,7 @@ import { platformCardValues } from '../../_shared/platform-config.ts';
 import { extractInboundTraceparent } from '../../_shared/trace.ts';
 import { log } from '../../_shared/logger.ts';
 import { resolveEffectivePlatformSettings } from '../../_shared/integration-settings.ts';
+import { classifyPlatformConnection } from '../../_shared/setup-signals.ts';
 import { getMushiClaudeFixWorkflowYaml, MUSHI_CLAUDE_GITHUB_SECRETS } from '../../_shared/mushi-claude-workflow.ts';
 
 export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>): void {
@@ -210,7 +211,12 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
     const platformKinds = Object.keys(requiredByKind);
 
     // Use the effective resolver so inherited org credentials count as connected.
-    const [{ settings: effectiveSettings, sourceByField }, { data: routingRows }, { data: probes }] =
+    const [
+      { settings: effectiveSettings, sourceByField },
+      { data: routingRows },
+      { data: probes },
+      { data: sentryDelivered },
+    ] =
       await Promise.all([
         resolveEffectivePlatformSettings(db, project.id as string),
         db
@@ -223,6 +229,15 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
           .eq('project_id', project.id)
           .order('checked_at', { ascending: false })
           .limit(50),
+        // Has any Sentry alert ever reached this project? The API probe only
+        // proves the token; the inbound webhook is the other half.
+        db
+          .from('webhook_audit_log')
+          .select('id')
+          .eq('project_id', project.id)
+          .eq('webhook_source', 'sentry')
+          .eq('outcome', 'accepted')
+          .limit(1),
       ]);
 
     const row = (effectiveSettings ?? {}) as Record<string, unknown>;
@@ -235,6 +250,8 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
     let platformConnected = 0;
     let platformHealthy = 0;
     let platformDown = 0;
+    const attentionKinds: string[] = [];
+    const downKinds: string[] = [];
 
     const latestProbeByKind = new Map<string, { status: string; checked_at: string }>();
     for (const p of probes ?? []) {
@@ -254,9 +271,43 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
       if (!connected) continue;
       platformConnected += 1;
       const probe = latestProbeByKind.get(kind);
-      if (probe?.status === 'ok') platformHealthy += 1;
-      else if (probe?.status === 'down' || probe?.status === 'degraded') platformDown += 1;
+      const verdict = classifyPlatformConnection({
+        probeStatus: probe?.status,
+        probeCheckedAt: probe?.checked_at,
+        needsInbound: kind === 'sentry',
+        inboundAccepted: (sentryDelivered ?? []).length > 0,
+      });
+      if (verdict === 'working') platformHealthy += 1;
+      else if (verdict === 'down') {
+        platformDown += 1;
+        downKinds.push(kind);
+      } else attentionKinds.push(kind);
     }
+
+    // Fix agents (Cursor Cloud, Claude Code) have cards on the same page, so a
+    // failing or unproven agent must show in the banner too. They count toward
+    // down/attention only: picking one agent is enough, so an unconfigured
+    // agent never reads as "missing credentials".
+    const fixAgentRequired: Record<string, string> = {
+      cursor_cloud: 'cursor_api_key_ref',
+      claude_code_agent: 'claude_api_key_ref',
+    };
+    for (const kind of FIX_AGENT_KINDS as string[]) {
+      const field = fixAgentRequired[kind];
+      if (!field) continue;
+      const configured = (row[field] != null && row[field] !== '') || envBackedFields.has(field);
+      if (!configured) continue;
+      const probe = latestProbeByKind.get(kind);
+      const verdict = classifyPlatformConnection({
+        probeStatus: probe?.status,
+        probeCheckedAt: probe?.checked_at,
+      });
+      if (verdict === 'down') {
+        platformDown += 1;
+        downKinds.push(kind);
+      } else if (verdict === 'attention') attentionKinds.push(kind);
+    }
+    const platformAttention = attentionKinds.length;
 
     const routing = routingRows ?? [];
     const routingActive = routing.filter((r) => r.is_active).length;
@@ -269,14 +320,22 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
     const scoped = (path: string) =>
       `${path}${path.includes('?') ? '&' : '?'}project=${encodeURIComponent(pid)}`;
 
-    let topPriority: 'platform_down' | 'incomplete' | 'empty' | 'healthy' = 'healthy';
+    let topPriority: 'platform_down' | 'incomplete' | 'attention' | 'empty' | 'healthy' = 'healthy';
     let topPriorityLabel: string | null = null;
     let topPriorityTo: string | null = null;
 
+    const KIND_NAMES: Record<string, string> = {
+      sentry: 'Sentry',
+      langfuse: 'Langfuse',
+      github: 'GitHub',
+      cursor_cloud: 'Cursor Cloud',
+      claude_code_agent: 'Claude Code',
+    };
+    const nameList = (kinds: string[]) => kinds.map((k) => KIND_NAMES[k] ?? k).join(', ');
     if (platformDown > 0) {
       topPriority = 'platform_down';
-      topPriorityLabel = `${platformDown} connection${platformDown === 1 ? '' : 's'} failing health checks — open the card below and click Test, or run a probe in Health.`;
-      topPriorityTo = scoped('/health?fn=integration-probe');
+      topPriorityLabel = `${nameList(downKinds)} ${platformDown === 1 ? 'is' : 'are'} failing — the card below says why and has the fix.`;
+      topPriorityTo = `${scoped('/integrations/config')}#platform-card-${downKinds[0]}`;
     } else if (platformConnected === 0 && routingActive === 0) {
       // Nothing configured at all — must precede the `incomplete` check below,
       // which would otherwise always swallow this case (0 < platformKinds.length).
@@ -289,6 +348,10 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
       topPriority = 'incomplete';
       topPriorityLabel = `${missing} of ${platformKinds.length} core tools still need credentials — GitHub is required before auto-fix PRs can ship.`;
       topPriorityTo = scoped('/integrations/config');
+    } else if (platformAttention > 0) {
+      topPriority = 'attention';
+      topPriorityLabel = `${nameList(attentionKinds)} ${platformAttention === 1 ? 'needs' : 'need'} attention — each card below says what and has the fix.`;
+      topPriorityTo = `${scoped('/integrations/config')}#platform-card-${attentionKinds[0]}`;
     } else {
       topPriority = 'healthy';
       topPriorityLabel = `${platformConnected}/${platformKinds.length} platform tools connected · ${routingActive} routing rule${routingActive === 1 ? '' : 's'} active`;
@@ -305,6 +368,7 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
         platformConnected,
         platformHealthy,
         platformDown,
+        platformAttention,
         routingActive,
         routingPaused,
         routingTotal: routing.length,
