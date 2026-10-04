@@ -24,7 +24,7 @@
  * same fixtures. Change both together.
  */
 
-import type { ConnectionState } from '../ui/ConnectionStatus'
+import { EXPIRY_WARNING_DAYS, type ConnectionState } from '../ui/ConnectionStatus'
 import { relativeTime } from '../../lib/setupGuideSteps'
 import { isRuntimeEligiblePoolKey, type PoolKey, type PoolKeyStatus, type PoolTestStatus } from './byokPool'
 
@@ -64,8 +64,6 @@ export interface KeyStatusView {
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000
-/** Owner asked for a week's warning before a key lapses. */
-const KEY_EXPIRY_WARN_DAYS = 7
 
 function formatClock(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
@@ -179,7 +177,7 @@ export function keyStatusView(
     }
   }
 
-  if (Number.isFinite(expiresMs) && expiresMs - now <= KEY_EXPIRY_WARN_DAYS * DAY_MS) {
+  if (Number.isFinite(expiresMs) && expiresMs - now <= EXPIRY_WARNING_DAYS * DAY_MS) {
     return {
       state: 'expiring',
       detail: `Works until ${formatDay(expiresAt!)}. Create a new key before then and add it here.`,

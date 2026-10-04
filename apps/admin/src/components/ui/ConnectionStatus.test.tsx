@@ -5,7 +5,7 @@ import { act, type ReactElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
-import { ConnectionStatus, connectionStateFrom } from './ConnectionStatus'
+import { ConnectionStatus, EXPIRY_WARNING_DAYS, connectionStateFrom } from './ConnectionStatus'
 
 const NOW = Date.parse('2026-10-04T01:00:00Z')
 const H = 3_600_000
@@ -46,6 +46,23 @@ describe('connectionStateFrom', () => {
     expect(
       connectionStateFrom({ configured: true, verifiedAt: iso(-H), expiresAt: iso(60 * 24 * H), now: NOW }),
     ).toBe('working')
+    // One 7-day window console-wide (shared with the Settings key rows).
+    expect(EXPIRY_WARNING_DAYS).toBe(7)
+    expect(
+      connectionStateFrom({ configured: true, verifiedAt: iso(-H), expiresAt: iso(7 * 24 * H), now: NOW }),
+    ).toBe('expiring')
+    expect(
+      connectionStateFrom({ configured: true, verifiedAt: iso(-H), expiresAt: iso(10 * 24 * H), now: NOW }),
+    ).toBe('working')
+    expect(
+      connectionStateFrom({
+        configured: true,
+        verifiedAt: iso(-H),
+        expiresAt: iso(10 * 24 * H),
+        now: NOW,
+        expiryWarningDays: 14,
+      }),
+    ).toBe('expiring')
     expect(
       connectionStateFrom({ configured: true, verifiedAt: iso(-H), expiresAt: iso(-H), now: NOW }),
     ).toBe('attention')
