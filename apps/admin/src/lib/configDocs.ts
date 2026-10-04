@@ -660,16 +660,16 @@ const INTEGRATIONS: ConfigDoc[] = [
     label: 'GitHub default branch',
     summary: 'The repo’s default branch as saved on the GitHub card.',
     howItWorks:
-      'Shown on the GitHub card and copied by "Apply to projects". The fix-worker does not read it: it takes the PR base from the primary connected repo (`project_repos.default_branch`), or `main` when that is empty.',
+      'The branch fix PRs are opened against when the connected repo has none of its own. The fix-worker takes the PR base from the primary connected repo (`project_repos.default_branch`) first, then this branch, then `main`. "Apply to projects" copies it to your other projects.',
     default: { value: 'unset' },
     backend: {
       table: 'project_settings',
       column: 'github_default_branch',
       endpoint: 'PUT /v1/admin/integrations/platform/github',
-      readBy: ['api edge function (GET /v1/admin/integrations/platform, POST …/platform/github/apply)'],
+      readBy: ['fix-worker edge function (when project_repos.default_branch is empty)', 'api edge function (GET /v1/admin/integrations/platform, POST …/platform/github/apply)'],
     },
     whenToChange:
-      "Keep it matching your repo's default branch. To change the branch fixes are opened against, change the connected repo's default branch instead.",
+      "Keep it matching your repo's default branch, for example `master` for an older repo. A branch set on the connected repo wins over this one.",
   },
   {
     id: 'integrations.github.installation_token',
@@ -760,21 +760,6 @@ const INTEGRATIONS: ConfigDoc[] = [
     whenToChange: 'Turn it off if you want to review a skill-pipeline step’s branch before any PR exists.',
   },
   {
-    id: 'integrations.cursor_cloud.max_iterations',
-    label: 'Cursor max iterations',
-    summary: 'Intended cap on agent iterations per Cursor run. Saved, but not sent to Cursor yet.',
-    howItWorks:
-      'The skill-pipeline dispatcher reads it along with the other Cursor settings, but no Cursor request includes it today, so runs use Cursor’s own limit. The server does not range-check it; the card suggests 1–10.',
-    default: { value: '1' },
-    backend: {
-      table: 'project_settings',
-      column: 'cursor_max_iterations',
-      endpoint: 'PUT /v1/admin/integrations/platform/cursor_cloud',
-      readBy: ['api edge function (read by _shared/plugins.ts, not sent to Cursor)'],
-    },
-    whenToChange: 'Leave it at 1 for now: changing it has no effect on runs yet.',
-  },
-  {
     id: 'integrations.claude_code_agent.api_key',
     label: 'Claude Code agent: Anthropic API key',
     summary: 'Anthropic key Mushi uses only to check that the Claude Code agent integration is healthy.',
@@ -790,21 +775,6 @@ const INTEGRATIONS: ConfigDoc[] = [
     whenToChange: 'Rotate it together with the `ANTHROPIC_API_KEY` secret in your repo, so the health check tests the key the workflow uses.',
   },
   {
-    id: 'integrations.claude_code_agent.default_model',
-    label: 'Claude Code agent: default model',
-    summary: 'Model slug saved for the Claude Code fix workflow.',
-    howItWorks:
-      'Validated and stored only. No Mushi code sends it anywhere yet: the server has no dispatch path for the Claude Code workflow today, so the workflow in your repo picks its own model.',
-    default: { value: 'claude-opus-4-1 (database default)' },
-    backend: {
-      table: 'project_settings',
-      column: 'claude_default_model',
-      endpoint: 'PUT /v1/admin/integrations/platform/claude_code_agent',
-      readBy: [],
-    },
-    whenToChange: 'No need to change it yet; it has no effect until Mushi dispatches the workflow.',
-  },
-  {
     id: 'integrations.claude_code_agent.workflow_event',
     label: 'Claude Code agent: workflow event',
     summary: 'The `repository_dispatch` event type your mushi-claude-fix workflow listens for.',
@@ -818,21 +788,6 @@ const INTEGRATIONS: ConfigDoc[] = [
       readBy: ['api edge function (GET /v1/admin/integrations/claude-code-agent/setup)'],
     },
     whenToChange: 'Change it only if the default event name clashes with another workflow, then copy the regenerated YAML into your repo.',
-  },
-  {
-    id: 'integrations.claude_code_agent.default_branch',
-    label: 'Claude Code agent: base branch',
-    summary: 'Branch saved as the base for Claude Code fix runs.',
-    howItWorks:
-      'Validated and stored only. No Mushi code reads it yet: the server has no dispatch path for the Claude Code workflow today, so the workflow checks out whatever its YAML says.',
-    default: { value: 'main (database default)' },
-    backend: {
-      table: 'project_settings',
-      column: 'claude_default_branch',
-      endpoint: 'PUT /v1/admin/integrations/platform/claude_code_agent',
-      readBy: [],
-    },
-    whenToChange: 'No need to change it yet; set the branch in the workflow YAML instead.',
   },
   {
     id: 'integrations.routing.jira.base_url',
@@ -1268,19 +1223,18 @@ const COMPLIANCE: ConfigDoc[] = [
   {
     id: 'compliance.retention.events_days',
     label: 'LLM traces retention (days)',
-    summary: 'The retention window recorded for LLM call traces. No sweep enforces it yet.',
+    summary: 'How long LLM call records are kept. The nightly sweep deletes older ones, never fewer than 35 days.',
     howItWorks:
-      'Saved with the project’s retention policy and shown here, but neither nightly sweep reads it: LLM call records are not deleted by age today. Set it to the window your policy promises, so it is in place once a sweep enforces it.',
+      'The nightly retention-sweep deletes this project’s LLM call records (llm_invocations) older than this many days, once a retention policy is saved for the project. Projects with no saved policy keep their records. At least 35 days are always kept, because the AI budget, the auto-fix spend limit and billing read the last 30 days of these records. A legal hold stops the deletes.',
     default: { value: '90' },
     backend: {
       table: 'project_retention_policies',
       column: 'llm_traces_retention_days',
       endpoint: 'PUT /v1/admin/compliance/retention/{projectId}',
-      // No reader yet: mushi_apply_retention() and retention-sweep skip it.
-      readBy: [],
+      readBy: ['retention-sweep edge function'],
     },
     whenToChange:
-      'Match what your privacy policy says about AI processing logs. Changing it does not delete anything yet.',
+      'Match what your privacy policy says about AI processing logs. Lowering it deletes older records at the next nightly sweep (03:00 UTC), and they cannot be restored.',
   },
   {
     id: 'compliance.legal_hold',

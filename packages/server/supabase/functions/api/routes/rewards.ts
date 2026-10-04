@@ -36,7 +36,7 @@ import { canManageProjectSdkConfig } from '../helpers.ts'
 import { organizationHasPlanFeature } from '../../_shared/entitlements.ts'
 import { leaderboardSearchTerm, plainIssues, rewardsWriteDenial } from '../../_shared/rewards-admin.ts'
 import { resolveEndUser } from '../../_shared/end-user-resolver.ts'
-import { awardPointsForEndUser, invalidateRuleCache } from '../../_shared/reputation.ts'
+import { awardPointsForEndUser, basePointsFor, invalidateRuleCache } from '../../_shared/reputation.ts'
 import { dispatchRewardWebhook } from '../../_shared/reward-webhooks.ts'
 import { verifyHostJwt } from '../../_shared/verify-host-jwt.ts'
 import { MUSHI_USER_TOKEN_HEADER, verifyEndUserToken } from '../../_shared/end-user-identity.ts'
@@ -504,11 +504,16 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
     if (!access.ok) return c.json({ ok: false, error: { code: access.code, message: access.message } }, access.status)
     const eu = access.endUserId ? { id: access.endUserId } : null
 
-    if (!eu) return c.json({ ok: true, data: { total_points: 0, points_30d: 0, points_lifetime: 0, tier: null, next_tier: null, report_submit_pts: 50 } })
+    // Ingest awards `report.submitted`; read its points the way the award path
+    // does. This used to read a `report_submit` org rule and fall back to 50,
+    // while 10 was credited.
+    const reportSubmitPts = (await basePointsFor(db, projectId, 'report.submitted')) ?? 10
+
+    if (!eu) return c.json({ ok: true, data: { total_points: 0, points_30d: 0, points_lifetime: 0, tier: null, next_tier: null, report_submit_pts: reportSubmitPts } })
 
     // Fetch point totals and all tiers in one pass so we can compute
     // current tier, next tier, and progress bar data in a single round-trip.
-    const [ptsRes, tiersRes, ruleRes] = await Promise.all([
+    const [ptsRes, tiersRes] = await Promise.all([
       db.from('end_user_points')
         .select('total_points, points_30d, points_lifetime')
         .eq('end_user_id', eu.id)
@@ -519,12 +524,6 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
         .select('slug, display_name, points_threshold, perks')
         .eq('organization_id', organizationId)
         .order('points_threshold', { ascending: true }),
-      db.from('reward_rules')
-        .select('base_points')
-        .eq('organization_id', organizationId)
-        .eq('action', 'report_submit')
-        .eq('enabled', true)
-        .single(),
     ])
 
     if (tiersRes.error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: 'Could not read reward tiers' } }, 500)
@@ -532,7 +531,6 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
     const sortedTiers = tiersRes.data ?? []
     const currentTier = [...sortedTiers].reverse().find(t => t.points_threshold <= totalPoints) ?? null
     const nextTier = sortedTiers.find(t => t.points_threshold > totalPoints) ?? null
-    const reportSubmitPts = ruleRes.data?.base_points ?? 50
 
     return c.json({
       ok: true,

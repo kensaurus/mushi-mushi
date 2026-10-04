@@ -9,8 +9,11 @@
  *   ANTHROPIC_API_KEY        — your Anthropic API key (BYOK)
  *   MUSHI_SERVICE_ROLE_KEY   — optional, self-hosted only (status callback)
  *
- * The fix-worker passes `mushi_supabase_url` in repository_dispatch
- * client_payload so each Mushi deployment can target the correct project.
+ * Mushi does not send the repository_dispatch yet (no claude_code_agent
+ * adapter in agent-adapters.ts); operators trigger it themselves. The payload
+ * carries report text in `prompt`, so every client_payload value reaches the
+ * shell through env and is quoted there, and the Claude step gets no GitHub
+ * token.
  */
 /** The repository_dispatch event type the workflow listens for when none is saved. */
 export const DEFAULT_CLAUDE_WORKFLOW_EVENT = 'mushi_claude_fix'
@@ -37,12 +40,30 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-      id-token: write
+    # Every dispatch value reaches the shell through env and is quoted there,
+    # never through an expression inside run: (the prompt carries report text).
+    env:
+      TARGET_BRANCH: \${{ github.event.client_payload.target_branch }}
+      BRANCH_NAME: \${{ github.event.client_payload.branch_name }}
+      REPORT_ID: \${{ github.event.client_payload.report_id }}
+      FIX_ATTEMPT_ID: \${{ github.event.client_payload.fix_attempt_id }}
+      DISPATCH_EVENT_ID: \${{ github.event.client_payload.dispatch_event_id }}
+      MUSHI_SUPABASE_URL: \${{ github.event.client_payload.mushi_supabase_url }}
     steps:
+      - name: Check dispatch values
+        run: |
+          ref_ok() { [[ "$1" =~ ^[A-Za-z0-9._/-]{1,200}$ ]] && [[ "$1" != *..* ]]; }
+          ref_ok "$TARGET_BRANCH" || { echo "target_branch is not a branch name"; exit 1; }
+          ref_ok "$BRANCH_NAME" || { echo "branch_name is not a branch name"; exit 1; }
+          [[ "$REPORT_ID" =~ ^[A-Za-z0-9-]{1,64}$ ]] || { echo "report_id is not an id"; exit 1; }
+          [[ -z "$FIX_ATTEMPT_ID" || "$FIX_ATTEMPT_ID" =~ ^[A-Za-z0-9-]{1,64}$ ]] || { echo "fix_attempt_id is not an id"; exit 1; }
+          [[ -z "$DISPATCH_EVENT_ID" || "$DISPATCH_EVENT_ID" =~ ^[A-Za-z0-9-]{1,64}$ ]] || { echo "dispatch_event_id is not an id"; exit 1; }
+
       - uses: actions/checkout@v4
         with:
-          ref: \${{ github.event.client_payload.target_branch }}
+          ref: \${{ env.TARGET_BRANCH }}
           token: \${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
 
       - uses: actions/setup-node@v4
         with:
@@ -54,17 +75,18 @@ jobs:
           git config user.name "Mushi Claude Bot"
 
       - name: Create fix branch
-        run: |
-          git checkout -b "\${{ github.event.client_payload.branch_name }}"
+        run: git checkout -b "$BRANCH_NAME"
 
+      # Claude gets the Anthropic key only: no GitHub token, so text in a
+      # report cannot talk it into pushing or calling the GitHub API.
       - name: Run Claude Code fix
         env:
           ANTHROPIC_API_KEY: \${{ secrets.ANTHROPIC_API_KEY }}
-          GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
+          FIX_PROMPT: \${{ github.event.client_payload.prompt }}
         run: |
           npx --yes @anthropic-ai/claude-code@latest \\
             --dangerously-skip-permissions \\
-            -p "\${{ github.event.client_payload.prompt }}"
+            -p "$FIX_PROMPT"
 
       - name: Commit and open PR
         id: commit-pr
@@ -74,50 +96,41 @@ jobs:
           git add -A
           if git diff --staged --quiet; then
             echo "No changes made by Claude."
-            echo "pr_created=false" >> $GITHUB_OUTPUT
+            echo "pr_created=false" >> "$GITHUB_OUTPUT"
             exit 1
           fi
-          git commit -m "fix: mushi-\${{ github.event.client_payload.report_id }}"
-          git push origin "HEAD:\${{ github.event.client_payload.branch_name }}"
-          PR_URL=$(gh pr create \\
-            --draft \\
-            --title "fix: mushi-\${{ github.event.client_payload.report_id }}" \\
-            --body "<!-- mushi-fix-id: \${{ github.event.client_payload.dispatch_event_id }} -->
-
-          Auto-fix by Mushi Claude Code Agent.
-
-          **Report**: \${{ github.event.client_payload.report_id }}
-          **Fix attempt**: \${{ github.event.client_payload.fix_attempt_id }}")
-          echo "pr_url=$PR_URL" >> $GITHUB_OUTPUT
-          echo "pr_created=true" >> $GITHUB_OUTPUT
+          git commit -m "fix: mushi-$REPORT_ID"
+          git -c "http.extraheader=AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)" \\
+            push origin "HEAD:refs/heads/$BRANCH_NAME"
+          BODY=$(printf '<!-- mushi-fix-id: %s -->\\n\\nAuto-fix by Mushi Claude Code Agent.\\n\\n**Report**: %s\\n**Fix attempt**: %s\\n' \\
+            "$DISPATCH_EVENT_ID" "$REPORT_ID" "$FIX_ATTEMPT_ID")
+          PR_URL=$(gh pr create --draft --head "$BRANCH_NAME" --base "$TARGET_BRANCH" \\
+            --title "fix: mushi-$REPORT_ID" --body "$BODY")
+          echo "pr_url=$PR_URL" >> "$GITHUB_OUTPUT"
+          echo "pr_created=true" >> "$GITHUB_OUTPUT"
 
       - name: Report result to Mushi
         if: always()
         env:
           MUSHI_SERVICE_ROLE_KEY: \${{ secrets.MUSHI_SERVICE_ROLE_KEY }}
+          PR_CREATED: \${{ steps.commit-pr.outputs.pr_created }}
+          PR_URL: \${{ steps.commit-pr.outputs.pr_url }}
+          RUN_ID: \${{ github.run_id }}
+          RUN_URL: \${{ github.server_url }}/\${{ github.repository }}/actions/runs/\${{ github.run_id }}
         run: |
-          SUPABASE_URL="\${{ github.event.client_payload.mushi_supabase_url }}"
-          FIX_ATTEMPT_ID="\${{ github.event.client_payload.fix_attempt_id }}"
-          RUN_ID="\${{ github.run_id }}"
-          RUN_URL="\${{ github.server_url }}/\${{ github.repository }}/actions/runs/\${{ github.run_id }}"
-          PR_CREATED="\${{ steps.commit-pr.outputs.pr_created }}"
-          PR_URL="\${{ steps.commit-pr.outputs.pr_url }}"
-
-          if [ -z "$SUPABASE_URL" ] || [ -z "$MUSHI_SERVICE_ROLE_KEY" ]; then
+          if [ -z "$MUSHI_SUPABASE_URL" ] || [ -z "$MUSHI_SERVICE_ROLE_KEY" ] || [ -z "$FIX_ATTEMPT_ID" ]; then
             echo "Skip Mushi callback: set MUSHI_SERVICE_ROLE_KEY repo secret and ensure dispatch includes mushi_supabase_url."
             exit 0
           fi
-
           if [ "$PR_CREATED" = "true" ]; then
-            STATUS="pr_opened"
-            DATA="{\\"claude_workflow_run_id\\": $RUN_ID, \\"claude_workflow_run_url\\": \\"$RUN_URL\\", \\"status\\": \\"$STATUS\\", \\"pr_url\\": \\"$PR_URL\\"}"
+            DATA=$(jq -n --argjson id "$RUN_ID" --arg url "$RUN_URL" --arg pr "$PR_URL" \\
+              '{claude_workflow_run_id: $id, claude_workflow_run_url: $url, status: "pr_opened", pr_url: $pr}')
           else
-            STATUS="failed"
-            DATA="{\\"claude_workflow_run_id\\": $RUN_ID, \\"claude_workflow_run_url\\": \\"$RUN_URL\\", \\"status\\": \\"$STATUS\\", \\"failure_category\\": \\"claude_api_error\\", \\"error\\": \\"Claude Code analyzed the codebase but made no file changes. Try a more specific report or manual investigation.\\", \\"completed_at\\": \\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\\"}"
+            DATA=$(jq -n --argjson id "$RUN_ID" --arg url "$RUN_URL" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \\
+              '{claude_workflow_run_id: $id, claude_workflow_run_url: $url, status: "failed", failure_category: "claude_api_error", error: "Claude Code analyzed the codebase but made no file changes. Try a more specific report or manual investigation.", completed_at: $at}')
           fi
-
           curl -sf -X PATCH \\
-            "$SUPABASE_URL/rest/v1/fix_attempts?id=eq.$FIX_ATTEMPT_ID" \\
+            "$MUSHI_SUPABASE_URL/rest/v1/fix_attempts?id=eq.$FIX_ATTEMPT_ID" \\
             -H "apikey: $MUSHI_SERVICE_ROLE_KEY" \\
             -H "Authorization: Bearer $MUSHI_SERVICE_ROLE_KEY" \\
             -H "Content-Type: application/json" \\

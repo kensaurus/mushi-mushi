@@ -57,3 +57,38 @@ describe('MUSHI_CLAUDE_GITHUB_SECRETS', () => {
     expect(svc?.description).toMatch(/self-hosted/i)
   })
 })
+
+describe('getMushiClaudeFixWorkflowYaml keeps dispatch values out of the shell text', () => {
+  const yaml = getMushiClaudeFixWorkflowYaml()
+  // Every run: value: the inline text, or the indented block under `run: |`.
+  const runBlocks: string[] = []
+  const lines = yaml.split('\n')
+  lines.forEach((line, i) => {
+    const m = /^(\s*)(?:- )?run: (.*)$/.exec(line)
+    if (!m) return
+    if (m[2] !== '|') return void runBlocks.push(m[2])
+    const indent = m[1].length
+    const body: string[] = []
+    for (let j = i + 1; j < lines.length && (lines[j].trim() === '' || lines[j].search(/\S/) > indent); j++) body.push(lines[j])
+    runBlocks.push(body.join('\n'))
+  })
+
+  it('has no ${{ }} expression inside any run: block', () => {
+    expect(runBlocks.length).toBeGreaterThanOrEqual(5)
+    for (const run of runBlocks) expect(run).not.toContain('${{')
+  })
+
+  it('passes the prompt through env and gives Claude no GitHub token', () => {
+    const claude = yaml.slice(yaml.indexOf('- name: Run Claude Code fix'), yaml.indexOf('- name: Commit and open PR'))
+    expect(claude).toContain('FIX_PROMPT: ${{ github.event.client_payload.prompt }}')
+    expect(claude).toContain('-p "$FIX_PROMPT"')
+    expect(claude).not.toContain('GH_TOKEN')
+    expect(claude).not.toContain('GITHUB_TOKEN')
+  })
+
+  it('checks branch names and ids before using them', () => {
+    expect(yaml).toContain('- name: Check dispatch values')
+    expect(yaml.indexOf('- name: Check dispatch values')).toBeLessThan(yaml.indexOf('uses: actions/checkout@v4'))
+    expect(yaml).toContain('persist-credentials: false')
+  })
+})
