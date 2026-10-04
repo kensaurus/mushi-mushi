@@ -250,8 +250,8 @@ const SETTINGS_GENERAL: ConfigDoc[] = [
     summary:
       'Branch name pattern when Mushi opens a draft fix PR on GitHub.',
     howItWorks:
-      'When auto-fix opens a PR, it derives the branch name from this template. Supported tokens are substituted per report: `{date}` → `YYYY-MM-DD` (UTC), `{category}` → the report category slug, `{shortId}` → the first 8 characters of the report UUID. Leave empty to fall back to the legacy scheme `mushi/fix-<shortId>-<timestamp36>`.',
-    default: { value: 'mushi/fix/{date}-{category}-{shortId}' },
+      'When auto-fix opens a PR, it names the branch from this pattern. Every name must look like `<type>/MUSHI-<reportId>-<words>`: a type (`bugfix/`, `feature/`, `hotfix/`, `refactor/`, `chore/`, `docs/`, `test/` or `ci/`), then `MUSHI-{reportId}-`, then lowercase words. After that you can use `{category}` (the report category), `{date}` (`YYYY-MM-DD`, UTC) and `{shortId}` (the first 8 characters of the report id). Leave it empty to use `bugfix/MUSHI-<reportId>-<summary words>`.',
+    default: { value: 'bugfix/MUSHI-{reportId}-{category}' },
     backend: {
       table: 'project_settings',
       column: 'fix_branch_template',
@@ -259,7 +259,7 @@ const SETTINGS_GENERAL: ConfigDoc[] = [
       readBy: ['fix-worker edge function'],
     },
     whenToChange:
-      'Change it to match your team\u2019s branch convention (e.g. `fixes/{date}-{shortId}`) so Mushi PRs sort alongside your existing branches. Keep `{shortId}` in the template to guarantee uniqueness and avoid branch collisions across reports.',
+      'Change the type or the words after `MUSHI-{reportId}-` to match your team\u2019s convention (e.g. `hotfix/MUSHI-{reportId}-{date}`). The `MUSHI-{reportId}-` part is required: it keeps each branch unique and links the PR back to its report.',
   },
   {
     id: 'settings.general.supabase_project_ref',

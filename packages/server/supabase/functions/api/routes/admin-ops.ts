@@ -419,8 +419,8 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
     if (!notificationsEnabled) {
       topPriority = 'disabled';
       topPriorityLabel =
-        'reporter_notifications_enabled is off — the SDK widget will not poll outbound messages until you turn it on in Settings.';
-      topPriorityTo = '/settings';
+        'Reporter updates are off, so people who report a bug never hear back in the widget. Turn them on in Setup.';
+      topPriorityTo = '/notifications?tab=setup';
     } else if (unread > 0) {
       topPriority = 'unread_backlog';
       topPriorityLabel = `${unread} unread message${unread === 1 ? '' : 's'} — expand payloads in Inbox to debug whether the reporter SDK stopped polling.`;
@@ -428,7 +428,7 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
     } else if (list.length === 0) {
       topPriority = 'no_messages';
       topPriorityLabel =
-        'No outbound messages yet — classify or fix a report; a message should land here when reporter_notifications_enabled is on.';
+        'No messages to reporters yet. One lands here when a reported bug is triaged or fixed.';
       topPriorityTo = '/notifications?tab=setup';
     } else {
       topPriority = 'healthy';
@@ -495,7 +495,9 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
       .order('created_at', { ascending: false })
       .limit(limit);
     if (type) query = query.eq('notification_type', type);
-    if (onlyUnread) query = query.is('read_at', null);
+    // Unread = sent and not read, the same rule as the stats badge: held
+    // Outbox rows have not reached the reporter, discarded ones never will.
+    if (onlyUnread) query = query.is('read_at', null).eq('status', 'sent');
 
     const { data, error } = await query;
     if (error) return dbError(c, error);
@@ -530,7 +532,10 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
       .from('reporter_notifications')
       .update({ read_at: new Date().toISOString() }, { count: 'exact' })
       .eq('project_id', project.id)
-      .is('read_at', null);
+      .is('read_at', null)
+      // Only sent rows: a held Outbox row must not be stamped read before it
+      // is released, and the count must match the badge.
+      .eq('status', 'sent');
     if (error) return dbError(c, error);
     await logAudit(db, project.id, userId, 'settings.updated', 'notifications', undefined, {
       marked_read: count ?? 0,
@@ -1459,12 +1464,12 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
       billing_interval?: 'monthly' | 'annual';
     } | null;
     if (!body?.project_id || !body?.email) {
-      return c.json({ ok: false, error: { code: 'INVALID_BODY' } }, 400);
+      return c.json({ ok: false, error: { code: 'INVALID_BODY', message: 'Checkout needs the project and your email. Reload the page and try again.' } }, 400);
     }
     const db = getServiceClient();
     const owned = await ownedProjectIds(db, userId);
     if (!owned.includes(body.project_id))
-      return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
+      return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Only the people who own this project can change its plan.' } }, 403);
     const { data: projectRef } = await db
       .from('projects')
       .select('id, organization_id')
@@ -1499,7 +1504,7 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
 
     const cfg = stripeFromEnv();
     if (!cfg.secretKey) {
-      return c.json({ ok: false, error: { code: 'STRIPE_NOT_CONFIGURED' } }, 503);
+      return c.json({ ok: false, error: { code: 'STRIPE_NOT_CONFIGURED', message: 'Payments are not set up on this Mushi server yet, so plans cannot be bought here.' } }, 503);
     }
 
     const planId = body.plan_id ?? 'indie';
@@ -1672,11 +1677,11 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
     return withIdempotency(c, async () => {
     const userId = c.get('userId') as string;
     const body = (await c.req.json().catch(() => null)) as { project_id?: string } | null;
-    if (!body?.project_id) return c.json({ ok: false, error: { code: 'INVALID_BODY' } }, 400);
+    if (!body?.project_id) return c.json({ ok: false, error: { code: 'INVALID_BODY', message: 'The request was missing the project. Reload the page and try again.' } }, 400);
     const db = getServiceClient();
     const owned = await ownedProjectIds(db, userId);
     if (!owned.includes(body.project_id))
-      return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
+      return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Only the people who own this project can manage its billing.' } }, 403);
 
     const { data: customer } = await db
       .from('billing_customers')
@@ -1684,7 +1689,7 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
       .eq('project_id', body.project_id)
       .maybeSingle();
     if (!customer?.stripe_customer_id) {
-      return c.json({ ok: false, error: { code: 'NO_STRIPE_CUSTOMER' } }, 404);
+      return c.json({ ok: false, error: { code: 'NO_STRIPE_CUSTOMER', message: 'This project has no billing account yet, so there is nothing to manage. Pick a plan to start one.' } }, 404);
     }
 
     const cfg = stripeFromEnv();

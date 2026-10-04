@@ -17,6 +17,7 @@ import { useToast } from '../lib/toast'
 import { usePageCopy } from '../lib/copy'
 import { useNotificationsUx, resolveQuickNotificationsTab } from '../lib/notificationsModeUx'
 import { useQuickstartLandingTab } from '../lib/useQuickstartTab'
+import { ReporterNotificationsToggle } from '../components/notifications/ReporterNotificationsToggle'
 import {
   Section,
   Card,
@@ -245,7 +246,7 @@ export function NotificationsPage() {
           }
           helpHowToUse={
             copy?.help?.howToUse ??
-            'Filter by type or unread on Inbox, expand a row for the JSON payload, and mark read once verified. Requires reporter_notifications_enabled in Settings.'
+            'Filter by type or unread on Inbox, expand a row for the JSON payload, and mark read once verified. Reporter updates must be on (Setup tab).'
           }
         />
         <SetupNudge
@@ -306,7 +307,7 @@ export function NotificationsPage() {
         }
         helpHowToUse={
           copy?.help?.howToUse ??
-          'Filter by type or unread on Inbox, expand a row for the JSON payload, and mark read once verified. Requires reporter_notifications_enabled in Settings.'
+          'Filter by type or unread on Inbox, expand a row for the JSON payload, and mark read once verified. Reporter updates must be on (Setup tab).'
         }
       >
         {!ux.hideOverviewChrome && (
@@ -325,10 +326,14 @@ export function NotificationsPage() {
               {headerBadge}
             </Badge>
             <FreshnessPill at={fetchedAt} isValidating={validating} />
-            <Btn variant="ghost" size="sm" onClick={reloadAll} loading={validating}>
-              Refresh
-            </Btn>
-            {activeTab === 'inbox' && (
+          </>
+        )}
+        {/* Refresh, filters and Mark all read work in every mode: the page
+            help tells everyone to filter the Inbox. */}
+        <Btn variant="ghost" size="sm" onClick={reloadAll} loading={validating}>
+          Refresh
+        </Btn>
+        {activeTab === 'inbox' && (
               <>
                 <SelectField
                   label="Show"
@@ -358,8 +363,6 @@ export function NotificationsPage() {
                 </Btn>
               </>
             )}
-          </>
-        )}
       </PageHeaderBar>
 
       <PagePosture
@@ -421,9 +424,9 @@ export function NotificationsPage() {
           {stats.topPriority === 'disabled' && (
             <RecommendedAction
               tone="info"
-              title="Enable reporter notifications"
-              description={stats.topPriorityLabel ?? 'Turn on reporter_notifications_enabled in Settings.'}
-              cta={{ label: 'Open Settings', to: '/settings' }}
+              title="Turn on reporter updates"
+              description="People who report a bug never hear back in the widget while this is off."
+              cta={{ label: 'Open Setup', to: '/notifications?tab=setup' }}
             />
           )}
           {stats.topPriority === 'unread_backlog' && (
@@ -500,7 +503,7 @@ export function NotificationsPage() {
                       ? `No notifications for ${projectName} yet`
                       : 'No notifications yet'
                   }
-                  emptyDescription="Messages fire when a report is classified, fixed, or rewarded. If reports exist but nothing shows here, check reporter_notifications_enabled in Settings."
+                  emptyDescription="Messages fire when a report is classified, fixed, or rewarded. If reports exist but nothing shows here, check that reporter updates are on in Setup."
                   emptyAction={
                     <Btn variant="ghost" size="sm" onClick={() => setTab('setup')}>
                       Open Setup tab
@@ -589,17 +592,8 @@ export function NotificationsPage() {
           <div className="space-y-3" data-dav-anchor="notifications:verify">
             <Card className="p-4 space-y-3">
               <h3 className="text-sm font-semibold text-fg">Reporter loop prerequisites</h3>
+              <ReporterNotificationsToggle enabled={stats.notificationsEnabled} onChanged={reloadAll} />
               <ul className="space-y-2 text-xs text-fg-muted">
-                <li className="flex items-start gap-2">
-                  <span
-                    className={`mt-1 h-2 w-2 shrink-0 rounded-full ${stats.notificationsEnabled ? 'bg-ok' : 'bg-warn'}`}
-                    aria-hidden
-                  />
-                  <span>
-                    <span className="font-medium text-fg">reporter_notifications_enabled</span>{' '}
-                    — {stats.notificationsEnabled ? 'on' : 'off'} in project Settings
-                  </span>
-                </li>
                 <li className="flex items-start gap-2">
                   <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-info" aria-hidden />
                   <span>
@@ -619,7 +613,6 @@ export function NotificationsPage() {
                 </li>
               </ul>
               <div className="flex flex-wrap gap-2 pt-1">
-                <Btn to="/settings" size="sm">Open Settings</Btn>
                 <Btn variant="ghost" size="sm" onClick={() => navigate('/reports')}>
                   View bug queue
                 </Btn>
