@@ -476,7 +476,7 @@ importers:
         version: 6.0.3
       vitest:
         specifier: '>=4.1.11 <5'
-        version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@22.20.0)(jsdom@29.1.1(@noble/hashes@2.2.0))(msw@2.14.6(@types/node@22.20.0)(typescript@6.0.3))(vite@8.1.0(@types/node@22.20.0)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))
+        version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@22.20.0)(jsdom@29.1.1(@noble/hashes@2.2.0))(msw@2.14.6(@types/node@22.20.0)(typescript@6.0.3))(vite@8.1.0(@types/node@22.20.0)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))
 
   packages/agents:
     dependencies:
@@ -528,7 +528,7 @@ importers:
         version: 6.0.3
       vitest:
         specifier: '>=4.1.11 <5'
-        version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@22.20.0)(jsdom@29.1.1(@noble/hashes@2.2.0))(msw@2.14.6(@types/node@22.20.0)(typescript@6.0.3))(vite@8.1.0(@types/node@22.20.0)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))
+        version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@22.20.0)(jsdom@29.1.1(@noble/hashes@2.2.0))(msw@2.14.6(@types/node@22.20.0)(typescript@6.0.3))(vite@8.1.0(@types/node@22.20.0)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -1485,6 +1485,9 @@ importers:
       '@supabase/supabase-js':
         specifier: ^2.108.2
         version: 2.108.2
+      hono:
+        specifier: ^4.13.7
+        version: 4.13.7
       supabase:
         specifier: ^2.108.0
         version: 2.108.0
