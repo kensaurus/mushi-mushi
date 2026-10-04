@@ -2001,6 +2001,9 @@ async function dispatchToCloudAgent(
       dispatched_at: now,
     },
   };
+  // The model the agent was asked to run (Cursor model id plus params), so
+  // the Fix card says what ran instead of leaving it blank.
+  if (model) attemptUpdate.llm_model = model.slice(0, 200);
   if (requestedAgent === 'cursor_cloud') {
     attemptUpdate.cursor_agent_id = result.externalAgentId;
     if (result.externalRunId) attemptUpdate.cursor_run_id = result.externalRunId;
