@@ -4,7 +4,7 @@
  *          14d LLM tokens/calls sparklines. Pure presentation.
  */
 
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { Card, PanelHeader, PanelSubheader } from '../ui'
 import { SeverityStackedBars, LineSparkline } from '../charts'
 import { ChartAnnotations } from '../charts/ChartAnnotations'
@@ -18,19 +18,16 @@ interface Props {
    *  which owns the chart-events query. Defaults to `[]` so existing
    *  render tests don't have to stub the query. */
   chartEvents?: ChartEvent[]
+  /** The server read its row cap for a chart; the KPI counts stay exact. */
+  sampled?: boolean
 }
 
 const LLM_CHART_HEIGHT = 72
 
-export function ChartsRow({ reportsByDay, llmByDay, chartEvents = [] }: Props) {
-  const navigate = useNavigate()
+// No drag-to-filter on the LLM sparklines (QA 173): it opened /reports with
+// from/to, which Reports does not read, so the range was silently dropped.
+export function ChartsRow({ reportsByDay, llmByDay, chartEvents = [], sampled = false }: Props) {
   const llmTimestamps = llmByDay.map((d) => d.day)
-  const onLlmRange = (range: { fromIso: string; toIso: string }) => {
-    const next = new URLSearchParams()
-    next.set('from', range.fromIso)
-    next.set('to', range.toIso)
-    navigate(`/reports?${next.toString()}`)
-  }
 
   return (
     <div className="mb-3 grid grid-cols-1 gap-2.5 lg:grid-cols-2">
@@ -44,6 +41,11 @@ export function ChartsRow({ reportsByDay, llmByDay, chartEvents = [] }: Props) {
           }
         />
         <SeverityStackedBars data={reportsByDay} />
+        {sampled ? (
+          <p className="mt-1.5 text-3xs text-fg-faint">
+            Busy window: the charts draw the newest 5,000 rows. The counts above include every report.
+          </p>
+        ) : null}
       </Card>
 
       <Card className="@container/chart-card min-w-0 p-3">
@@ -62,14 +64,13 @@ export function ChartsRow({ reportsByDay, llmByDay, chartEvents = [] }: Props) {
               <LineSparkline
                 values={llmByDay.map((d) => d.tokens)}
                 timestamps={llmTimestamps}
-                onRangeSelect={onLlmRange}
                 showAxes
                 scaleToData
                 valueFormat="count"
                 showRangeSummary
                 seriesLabel="Tokens"
                 height={LLM_CHART_HEIGHT}
-                ariaLabel="LLM tokens per day — drag to filter reports by date range"
+                ariaLabel="LLM tokens per day, last 14 days"
               />
               {llmTimestamps.length > 1 && chartEvents.length > 0 && (
                 <ChartAnnotations
@@ -88,7 +89,6 @@ export function ChartsRow({ reportsByDay, llmByDay, chartEvents = [] }: Props) {
               <LineSparkline
                 values={llmByDay.map((d) => d.calls)}
                 timestamps={llmTimestamps}
-                onRangeSelect={onLlmRange}
                 accent="text-info"
                 showAxes
                 scaleToData
@@ -96,7 +96,7 @@ export function ChartsRow({ reportsByDay, llmByDay, chartEvents = [] }: Props) {
                 showRangeSummary
                 seriesLabel="Calls"
                 height={LLM_CHART_HEIGHT}
-                ariaLabel="LLM calls per day — drag to filter reports by date range"
+                ariaLabel="LLM calls per day, last 14 days"
               />
               {llmTimestamps.length > 1 && chartEvents.length > 0 && (
                 <ChartAnnotations

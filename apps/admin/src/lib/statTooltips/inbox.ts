@@ -57,22 +57,22 @@ export function backlogTooltip(stats: InboxStats, opts: Opts = {}): MetricToolti
   const takeaway =
     stats.openBacklog > 0
       ? plain
-        ? `${stats.openBacklog} report${stats.openBacklog === 1 ? '' : 's'} waiting over an hour in new or queued status — review before sending to auto-fix.`
-        : `${stats.openBacklog} report${stats.openBacklog === 1 ? '' : 's'} waiting over an hour in new or queued status — triage before dispatching fixes.`
+        ? `${stats.openBacklog} report${stats.openBacklog === 1 ? '' : 's'} waiting for triage — review before sending to auto-fix.`
+        : `${stats.openBacklog} report${stats.openBacklog === 1 ? '' : 's'} waiting for triage — triage before dispatching fixes.`
       : plain
-        ? 'Bug queue is current — no reports stuck waiting longer than one hour.'
-        : 'Triage queue is current — no reports stuck waiting longer than one hour.'
+        ? 'Bug queue is current — nothing waiting for triage.'
+        : 'Triage queue is current — nothing waiting for triage.'
 
   return metricTip(
     plain
-      ? 'Reports in new or queued status that have waited more than one hour.'
-      : 'Reports in new or queued status that have waited more than one hour to be triaged.',
-    'Counts reports rows in the 14-day window where status is new or queued and created_at is older than 60 minutes.',
+      ? 'Reports still waiting for triage, any age.'
+      : 'Reports still waiting to be triaged, any age.',
+    'Counts reports whose status is new, queued, pending or submitted: the same list Reports shows for the New filter.',
     takeaway,
     stats.openBacklog > 0
       ? {
           tone: 'warn',
-          text: plain ? 'Stale backlog — start with the oldest new report.' : 'Stale triage backlog — start with the oldest new report.',
+          text: plain ? 'Backlog waiting — start with the oldest new report.' : 'Triage backlog waiting — start with the oldest new report.',
         }
       : undefined,
   )
@@ -80,7 +80,7 @@ export function backlogTooltip(stats: InboxStats, opts: Opts = {}): MetricToolti
 
 export function backlogDetail(stats: InboxStats, opts: Opts = {}): string {
   const plain = opts.plainStageLabels ?? false
-  return stats.openBacklog > 0 ? (plain ? 'Reports > 1h waiting' : 'Reports > 1h untriaged') : 'Queue current'
+  return stats.openBacklog > 0 ? (plain ? 'Reports waiting' : 'Reports untriaged') : 'Queue current'
 }
 
 export function criticalTooltip(stats: InboxStats, opts: Opts = {}): MetricTooltipData {

@@ -43,10 +43,10 @@ export function DashboardLoopReadout({
       wrap: true,
     },
     {
-      // Same measure as the "Triage backlog" KPI: untriaged for over an hour.
+      // Same measure as the "Triage backlog" KPI: every report still waiting for triage.
       // Overview's "unresolved" counts every report not yet fixed, so the
       // two numbers differ on purpose and must not share a name.
-      label: 'Untriaged > 1h',
+      label: 'Waiting to triage',
       value: String(openBacklog),
       tone: openBacklog > 0 ? 'warn' : 'ok',
     },
