@@ -68,8 +68,11 @@ function timingSafeEqual(a: Uint8Array, b: Uint8Array): boolean {
   return diff === 0
 }
 
-/** Load the project's identity secret from Vault (null if not configured). */
-async function loadIdentitySecret(db: SupabaseClient, projectId: string): Promise<string | null> {
+/**
+ * Load the project's identity secret from Vault (null if not configured).
+ * Also used by POST /v1/sdk/erase-subject (erase tokens share the secret).
+ */
+export async function loadIdentitySecret(db: SupabaseClient, projectId: string): Promise<string | null> {
   const { data: settings } = await db
     .from('project_settings')
     .select('assistant_identity_secret_ref')
@@ -87,7 +90,11 @@ async function loadIdentitySecret(db: SupabaseClient, projectId: string): Promis
   return typeof data === 'string' ? data : null
 }
 
-async function verifyHs256(token: string, secret: string): Promise<IdentityClaims | null> {
+/**
+ * Verify an HS256 JWT signature and return its payload, or null. Checks the
+ * signature only: callers check exp / projectId / purpose themselves.
+ */
+export async function verifyHs256<T = IdentityClaims>(token: string, secret: string): Promise<T | null> {
   const parts = token.split('.')
   if (parts.length !== 3) return null
   const [headerB64, payloadB64, sigB64] = parts
@@ -122,7 +129,7 @@ async function verifyHs256(token: string, secret: string): Promise<IdentityClaim
   if (!timingSafeEqual(expected, provided)) return null
 
   try {
-    return JSON.parse(base64UrlToString(payloadB64)) as IdentityClaims
+    return JSON.parse(base64UrlToString(payloadB64)) as T
   } catch {
     return null
   }

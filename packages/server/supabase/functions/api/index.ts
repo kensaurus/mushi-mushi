@@ -35,6 +35,7 @@ import { registerOpenApiRoute } from './routes/openapi.ts';
 import { registerSchemaRoutes } from './routes/schemas.ts';
 import { registerQaCoverageRoutes } from './routes/qa-coverage.ts';
 import { registerRewardsRoutes } from './routes/rewards.ts';
+import { registerEraseSubjectRoutes } from './routes/erase-subject.ts';
 import { registerCliAuthRoutes } from './routes/cli-auth.ts';
 import { registerMcpOauthRoutes } from './routes/mcp-oauth.ts';
 // ---------------------------------------------------------------------------
@@ -613,6 +614,10 @@ registerInventoryRoutes(app);
 registerQaCoverageRoutes(app);
 
 registerRewardsRoutes(app);
+
+// Host-backend account deletion: erase one end user's reports + reporter data.
+// Erase-token auth (identity secret), not the SDK key. Not CORS-exposed.
+registerEraseSubjectRoutes(app);
 
 // RFC 8628 device-auth (CLI login) + CLI-authenticated project endpoints.
 registerCliAuthRoutes(app);

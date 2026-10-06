@@ -851,6 +851,12 @@ Generated manifest: [`docs/API_ROUTE_MANIFEST.generated.md`](docs/API_ROUTE_MANI
 | `GET /v1/reports/:id/status` | Report status poll |
 | `/v1/sdk/me/*` | Cross-app reporter rewards surface (`rewards.ts`) |
 
+### Host-backend erasure (erase token, no API key)
+
+| Route | Role |
+| --- | --- |
+| `POST /v1/sdk/erase-subject` | Account deletion: deletes one end user's reports (screenshots first) and reporter data in the project; org identity too with `erase_identity`. `X-Mushi-Erase-Token` = HS256 with the project identity secret, `purpose: "erase-subject"`, ≤5 min. ADR 0020, `erase-subject.ts`. |
+
 ### MCP / CLI sync mirror (`adminOrApiKey` or scoped JWT)
 
 Prefix **`/v1/sync/*`** — reports, lessons, ingest-setup mirrors for MCP and CLI offline sync. See `api/routes/sync.ts`.
