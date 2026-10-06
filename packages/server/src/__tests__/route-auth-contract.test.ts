@@ -29,7 +29,7 @@ const PUBLIC_ROUTES: Record<string, string> = {
   'erase-subject.ts':
     'POST /v1/sdk/erase-subject — called by a host app backend, which holds no Mushi API key; every request is ' +
     'authenticated by an HS256 erase token signed with the project identity secret, purpose "erase-subject", ' +
-    '≤5 min (_shared/subject-erasure.ts), before any subject lookup (ADR 0020)',
+    '≤5 min (_shared/subject-erasure.ts), before any subject lookup (ADR 0021)',
 };
 
 /**

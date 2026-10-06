@@ -1,4 +1,4 @@
-# 0020. Host-backend erasure deletes the subject's reports
+# 0021. Host-backend erasure deletes the subject's reports
 
 Status: Proposed Date: 2026-10-06
 

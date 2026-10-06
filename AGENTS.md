@@ -855,7 +855,7 @@ Generated manifest: [`docs/API_ROUTE_MANIFEST.generated.md`](docs/API_ROUTE_MANI
 
 | Route | Role |
 | --- | --- |
-| `POST /v1/sdk/erase-subject` | Account deletion: deletes one end user's reports (screenshots first) and reporter data in the project; org identity too with `erase_identity`. `X-Mushi-Erase-Token` = HS256 with the project identity secret, `purpose: "erase-subject"`, ≤5 min. ADR 0020, `erase-subject.ts`. |
+| `POST /v1/sdk/erase-subject` | Account deletion: deletes one end user's reports (screenshots first) and reporter data in the project; org identity too with `erase_identity`. `X-Mushi-Erase-Token` = HS256 with the project identity secret, `purpose: "erase-subject"`, ≤5 min. ADR 0021, `erase-subject.ts`. |
 
 ### MCP / CLI sync mirror (`adminOrApiKey` or scoped JWT)
 
