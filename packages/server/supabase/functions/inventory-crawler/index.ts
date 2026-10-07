@@ -49,6 +49,7 @@ import { computeStats, parseInventoryYaml, type Inventory } from '../_shared/inv
 import { resolveStoryExternalId } from '../_shared/inventory-story-scope.ts'
 import {
   inventoryAppAllowHosts,
+  pickCrawlBaseUrl,
   safeFetch,
   type SafeUrlOptions,
 } from '../_shared/inventory-guards.ts'
@@ -91,7 +92,10 @@ interface PageDiff {
   error?: string
 }
 
-async function loadProject(db: SupabaseClient, projectId: string): Promise<CrawlerProject | null> {
+async function loadProject(
+  db: SupabaseClient,
+  projectId: string,
+): Promise<{ ok: true; project: CrawlerProject & { inventory: Inventory } } | { ok: false; reason: string }> {
   const { data: settings } = await db
     .from('project_settings')
     .select('crawler_base_url, crawler_auth_config')
@@ -113,22 +117,40 @@ async function loadProject(db: SupabaseClient, projectId: string): Promise<Crawl
     inventory = parsed.inventory ?? null
   }
 
-  const baseUrl =
-    (settings?.crawler_base_url as string | null) ??
-    inventory?.app.preview_url ??
-    inventory?.app.staging_url ??
-    inventory?.app.base_url ??
-    null
-  if (!baseUrl) return null
+  if (!inventory) {
+    return { ok: false, reason: 'no current inventory; ingest inventory.yaml first' }
+  }
+
+  // A localhost / private preview_url is skipped for the production URL: a
+  // cloud crawler cannot reach the developer's machine (glot.it's inventory
+  // pointed every crawl at http://localhost:3000).
+  const choice = pickCrawlBaseUrl(settings?.crawler_base_url as string | null, inventory.app)
+  if (!choice.url) {
+    const why = choice.skipped.length ? `: ${choice.skipped.join('; ')}` : ''
+    return {
+      ok: false,
+      reason: `no crawlable URL; set crawler_base_url in project settings${why}`,
+    }
+  }
+  if (choice.skipped.length) {
+    rlog.info('crawler: passed over unreachable inventory URLs', {
+      project_id: projectId,
+      using: choice.source,
+      skipped: choice.skipped,
+    })
+  }
 
   const authConfig = (settings?.crawler_auth_config as AuthConfig | null) ?? null
 
   return {
-    id: projectId,
-    inventory,
-    baseUrl,
-    authConfig,
-    concurrency: 4,
+    ok: true,
+    project: {
+      id: projectId,
+      inventory,
+      baseUrl: choice.url,
+      authConfig,
+      concurrency: 4,
+    },
   }
 }
 
@@ -270,16 +292,16 @@ async function crawlAndPersist(
   findings: number
   discoveredApis: number
 }> {
-  const project = await loadProject(db, projectId)
-  if (!project || !project.inventory) {
-    rlog.warn('crawler: no inventory or base_url; skipping', { project_id: projectId })
+  const loaded = await loadProject(db, projectId)
+  if (!loaded.ok) {
+    rlog.warn('crawler: skipping', { project_id: projectId, reason: loaded.reason })
     const { data: skip } = await db
       .from('gate_runs')
       .insert({
         project_id: projectId,
         gate: 'crawl',
         status: 'skipped',
-        summary: { reason: 'no inventory or crawler_base_url' },
+        summary: { reason: loaded.reason },
         triggered_by: triggeredBy ?? 'crawler',
         completed_at: new Date().toISOString(),
       })
@@ -293,6 +315,7 @@ async function crawlAndPersist(
       discoveredApis: 0,
     }
   }
+  const project = loaded.project
 
   const { data: run, error: runErr } = await db
     .from('gate_runs')
