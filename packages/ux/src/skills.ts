@@ -72,7 +72,7 @@ function npmSource(spec: string, doFetch: typeof fetch): Promise<NpmSource> | nu
     const name = m[1]
     let version = m[2]
     if (!version) {
-      const res = await doFetch(`https://registry.npmjs.org/${name.replace('/', '%2f')}/latest`, { headers: { 'User-Agent': 'mushi-ux' } })
+      const res = await doFetch(`https://registry.npmjs.org/${name.replaceAll('/', '%2f')}/latest`, { headers: { 'User-Agent': 'mushi-ux' } })
       if (!res.ok) throw new Error(`npm answered ${res.status} for ${name}.`)
       version = String(((await res.json()) as { version?: unknown }).version ?? '')
       if (!/^[\w.+-]+$/.test(version)) throw new Error(`npm gave no version for ${name}.`)

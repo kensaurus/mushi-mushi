@@ -62,7 +62,12 @@ async function ensureLocalExcludes(repoRoot: string): Promise<void> {
   if (!isAbsolute(common)) common = join(repoRoot, common)
   const file = join(common, 'info', 'exclude')
   mkdirSync(dirname(file), { recursive: true })
-  const current = existsSync(file) ? readFileSync(file, 'utf8') : ''
+  let current = ''
+  try {
+    current = readFileSync(file, 'utf8')
+  } catch {
+    // No exclude file yet: append creates it.
+  }
   const lines = new Set(current.split(/\r?\n/).map((l) => l.trim()))
   const missing = LOCAL_EXCLUDES.filter((p) => !lines.has(p))
   if (missing.length === 0) return
