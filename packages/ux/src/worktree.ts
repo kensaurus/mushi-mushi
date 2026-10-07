@@ -125,6 +125,26 @@ export async function changedFiles(wt: string): Promise<string[]> {
     .map((l) => l.slice(3).trim().replace(/^"|"$/g, ''))
 }
 
+/**
+ * The agent's uncommitted edits as text, for a reviewer: tracked changes from
+ * `git diff HEAD` and new files in full, capped. Stages nothing, so
+ * revertAll still restores the tree.
+ */
+export async function diffText(wt: string, maxChars = 20_000): Promise<string> {
+  const tracked = await run('git', ['diff', 'HEAD', '--', '.', `:(exclude)${SCRATCH_DIR}`], { cwd: wt, timeoutMs: 120_000 })
+  let out = tracked.stdout
+  const untracked = await run('git', ['ls-files', '--others', '--exclude-standard'], { cwd: wt, timeoutMs: 120_000 })
+  for (const f of untracked.stdout.split(/\r?\n/).filter((x) => x && !x.startsWith(SCRATCH_DIR))) {
+    if (out.length >= maxChars) break
+    try {
+      out += `\n--- new file ${f} ---\n${readFileSync(join(wt, f), 'utf8').slice(0, 4000)}\n`
+    } catch {
+      out += `\n--- new file ${f} (unreadable) ---\n`
+    }
+  }
+  return out.slice(0, maxChars)
+}
+
 export async function commitAll(wt: string, message: string): Promise<string> {
   // .mushi-ux/ is in .git/info/exclude (ensureLocalExcludes), so -A skips it.
   await git(wt, ['add', '-A'])

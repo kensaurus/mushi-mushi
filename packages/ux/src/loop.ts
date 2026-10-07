@@ -19,6 +19,7 @@ import { getAgent, type AgentAdapter, type AgentName, type AgentRunOptions } fro
 import { captureSurface, openSession, type BrowserSession } from './capture.js'
 import { discover } from './discover.js'
 import type { AllowRule } from './guard.js'
+import { checkStep, type CheckerSpec } from './checker.js'
 import { pixelDiff } from './image.js'
 import { judgeSurface } from './judge.js'
 import { buildPacket, buildPlanPacket, findDesignFiles, MAX_PLAN_STEPS, MAX_STEP_FILES, parsePlan, PLAN_POINTER_PROMPT, POINTER_PROMPT } from './packet.js'
@@ -47,6 +48,7 @@ import {
   changedFiles,
   commitAll,
   createWorktree,
+  diffText,
   detectInstallCommand,
   headSha,
   resetRunBranch,
@@ -112,6 +114,13 @@ export interface LoopOptions {
   preflight?: boolean
   /** Plan each screen into small steps first, then make one step per attempt (iterations caps the steps). */
   steps?: boolean
+  /**
+   * A second model that reviews each kept step and may roll it back, never
+   * keep a rejected one (ADR 0021). null: measurements alone decide.
+   */
+  checker?: CheckerSpec | null
+  /** Keep an edit with nothing visible, flagged for review (ADR 0021). Default on. */
+  keepInvisible?: boolean
   /** Saved with the run for a later resume only: the login URL behind profileDir, and whether it synced. */
   loginUrl?: string | null
   sync?: boolean
@@ -238,6 +247,8 @@ async function runLoop(opts: LoopOptions, runId: string, dir: string): Promise<R
       startPaths: opts.startPaths,
       crawl: opts.crawl,
       iterations,
+      checker: opts.checker ?? null,
+      keepInvisible: opts.keepInvisible !== false,
       maxSurfaces: opts.maxSurfaces ?? 10,
       agentTimeoutMs: timeoutMs,
       ignore: opts.ignore,
@@ -349,6 +360,16 @@ async function runLoop(opts: LoopOptions, runId: string, dir: string): Promise<R
       if (state.surfaces.length === 0) {
         log('Mapping screens…')
         phase('mapping', null)
+        // Ask for every named page at once first: the dev server compiles them
+        // together instead of one per visit (mapping took 10 min for 8 pages
+        // on glot.it's webpack dev server, 2026-10-07). Plain GETs only.
+        if (opts.startPaths?.length) {
+          const t0 = Date.now()
+          await Promise.all(
+            opts.startPaths.map((p) => fetch(new URL(p, server.url), { signal: AbortSignal.timeout(180_000), redirect: 'manual' }).catch(() => null)),
+          )
+          log(`warmed ${opts.startPaths.length} page(s) in ${Math.round((Date.now() - t0) / 1000)} s`)
+        }
         const skipped: string[] = []
         const found = await discover(session, {
           baseUrl: server.url,
@@ -472,7 +493,7 @@ async function runLoop(opts: LoopOptions, runId: string, dir: string): Promise<R
      * away). Null when it produced no usable list: the screen then gets
      * whole-screen attempts instead.
      */
-    async function planSurface(s: SurfaceState, current: Record<string, ShotRef>, entryFiles: string[]): Promise<{ steps: PlanStep[] } | null> {
+    async function planSurface(s: SurfaceState, current: Record<string, ShotRef>, entryFiles: string[]): Promise<{ steps: PlanStep[]; session?: string | null } | null> {
       const planMs = Math.min(timeoutMs, PLAN_TIMEOUT_MS)
       const { shots, probes } = prepareScratch(current)
       const maxSteps = Math.min(MAX_PLAN_STEPS, iterations)
@@ -528,7 +549,7 @@ async function runLoop(opts: LoopOptions, runId: string, dir: string): Promise<R
         return null
       }
       log(`  plan: ${items.map((t, i) => `${i + 1}. ${t}`).join('  ')}`)
-      return { steps: items.map((t) => ({ text: t, status: 'pending' as const })) }
+      return { steps: items.map((t) => ({ text: t, status: 'pending' as const })), session: agent.canResume ? sessionIdOf(res.stdout) : null }
     }
 
     /** Record which plan step an attempt worked on, and how it went. */
@@ -547,9 +568,9 @@ async function runLoop(opts: LoopOptions, runId: string, dir: string): Promise<R
     }
 
     async function capture(s: SurfaceState): Promise<Record<string, { png: Buffer; probes: ProbeResult }>> {
-      const out: Record<string, { png: Buffer; probes: ProbeResult }> = {}
-      for (const vp of VIEWPORTS) out[vp.name] = await captureSurface(session, state.baseUrl, s.surface, vp)
-      return out
+      // Each capture has its own clean browser context, so the viewports run side by side.
+      const shots = await Promise.all(VIEWPORTS.map((vp) => captureSurface(session, state.baseUrl, s.surface, vp)))
+      return Object.fromEntries(VIEWPORTS.map((vp, i) => [vp.name, shots[i]]))
     }
 
     function shotRefs(s: SurfaceState, label: string, shots: Record<string, { png: Buffer; probes: ProbeResult }>) {
@@ -591,6 +612,10 @@ async function runLoop(opts: LoopOptions, runId: string, dir: string): Promise<R
         persist()
       }
       const plan = opts.steps && s.plan?.steps.length ? s.plan : null
+      // The session each step resumes, so the agent keeps the files it already read
+      // (each fresh step re-read 5-19 files and ran 3-23 searches, glot.it 2026-10-07).
+      // Only while the files match its memory: after the plan or a kept step.
+      let carrySession: string | null = plan && agent.canResume && !s.iterations.some((i) => i.outcome !== 'accepted') ? plan.session ?? null : null
       const pending = plan ? plan.steps.filter((p) => p.status === 'pending').length : 0
       const settled = last?.outcome === 'no_change' || (last?.outcome === 'agent_failed' && !last.timedOut)
       const first = s.iterations.length + 1
@@ -636,10 +661,11 @@ async function runLoop(opts: LoopOptions, runId: string, dir: string): Promise<R
         try {
           res = await runWithNudge({
             cwd: wtPath,
-            prompt: POINTER_PROMPT,
+            prompt: carrySession ? `${POINTER_PROMPT}\n\nThis continues your session for this screen: you have already read its files. Do not read them again unless you need a file you have not seen. Make this step's change now.` : POINTER_PROMPT,
             model: opts.model,
             timeoutMs,
             signal: opts.signal,
+            resumeSession: carrySession ?? undefined,
             nudge: {
               prompt: EDIT_NUDGE,
               ms: EDIT_NUDGE_MS,
@@ -730,6 +756,7 @@ async function runLoop(opts: LoopOptions, runId: string, dir: string): Promise<R
             const d = pixelDiff(before, shot.png)
             ratios[vp] = Math.round(d.ratio * 10_000) / 10_000
             record.diffPng[vp] = savePng(dir, `shots/${s.surface.key}/iter${n}-${vp}-diff.png`, d.diffPng)
+            record.changes = { ...record.changes, [vp]: { width: d.width, height: d.height, boxes: d.regions } }
           }
         }
         record.pixelDiff = ratios
@@ -738,6 +765,7 @@ async function runLoop(opts: LoopOptions, runId: string, dir: string): Promise<R
           before: Object.fromEntries(Object.entries(current).map(([vp, r]) => [vp, r.probes])),
           after: afterShots ? Object.fromEntries(Object.entries(afterShots).map(([vp, r]) => [vp, r.probes])) : null,
           pixelRatios: ratios,
+          keepInvisible: opts.keepInvisible !== false,
         })
         record.outcome = verdict.outcome
         record.reason = verdict.reason
@@ -755,6 +783,33 @@ async function runLoop(opts: LoopOptions, runId: string, dir: string): Promise<R
           record.outcome = 'rejected'
           record.reason = `Too big for one step: ${files.length} files changed (at most ${MAX_STEP_FILES}). Make a smaller change.`
         }
+        if (record.outcome === 'accepted') record.needsReview = verdict.needsReview || undefined
+        // The checker only ever vetoes: it reviews what the measurements kept (ADR 0021).
+        if (record.outcome === 'accepted' && opts.checker) {
+          log(`  checking with ${opts.checker.model}…`)
+          phase('working', `${s.surface.label}: ${opts.checker.model} reviews the change`)
+          const vp = afterShots?.mobile ? 'mobile' : Object.keys(afterShots ?? {})[0]
+          const visible = !record.needsReview && vp && afterShots?.[vp]
+          const review = await checkStep({
+            dir,
+            name: `${s.surface.key}-iter${n}`,
+            screen: s.surface.label,
+            step: step?.text ?? 'Improve this screen for the person using it.',
+            visual: visible ? { before: readFileSync(join(dir, current[vp].png)), after: afterShots![vp]!.png, regions: record.changes?.[vp]?.boxes ?? [] } : null,
+            diff: await diffText(wtPath).catch(() => ''),
+            spec: opts.checker,
+            signal: opts.signal,
+          })
+          record.checker = review
+          if (review.verdict === 'revert') {
+            record.outcome = 'rejected'
+            record.reason = `Rolled back by ${review.model}: ${review.summary}`.slice(0, 600)
+          } else if (review.error) {
+            record.reason += ` The ${review.model} review could not run (${review.error.slice(0, 160)}), so the measurements decided.`
+          } else {
+            record.reason += ` ${review.model}: ${review.verdict === 'keep' ? 'agrees' : 'unsure, kept on the measurements'}.`
+          }
+        }
         markStep(step, stepInfo, record, record.outcome === 'accepted' ? 'done' : record.outcome === 'no_change' ? 'skipped' : 'failed')
         log(`  attempt ${n}: ${record.reason}`)
 
@@ -765,7 +820,7 @@ async function runLoop(opts: LoopOptions, runId: string, dir: string): Promise<R
           s.status = 'accepted'
           s.iterations.push(record)
           persist()
-          await checkRegressions(s)
+          carrySession = agent.canResume ? sessionIdOf(res.stdout) ?? carrySession : null
           continue
         }
         await revertAll(wtPath)
@@ -775,10 +830,15 @@ async function runLoop(opts: LoopOptions, runId: string, dir: string): Promise<R
         // step. A blocked agent (it said so) stops either way.
         if (verdict.outcome === 'no_change' && (!step || record.outcome === 'agent_failed')) break
         previousRejection = record.outcome === 'rejected' ? record.reason : null
+        // A rolled-back edit is gone from the files but not from the session's memory: start fresh.
+        carrySession = null
       }
 
       // Decided from the records: a later no-change attempt must not hide a kept one.
       const kept = s.iterations.filter((i) => i.outcome === 'accepted')
+      // Once per screen, not after every kept step: the screens it might have moved
+      // are re-shot once for all of this screen's steps.
+      if (kept.length > 0) await checkRegressions(s)
       if (kept.length > 0) {
         s.status = 'accepted'
         s.note = kept[kept.length - 1].reason

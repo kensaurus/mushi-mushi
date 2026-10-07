@@ -27,7 +27,7 @@ import { isSafeSelector } from './ignore.js'
 import { DEFAULT_JUDGE_MODEL } from './judge.js'
 import { agentAccount, studioOptions } from './launcher.js'
 import { listModels } from './models.js'
-import { DEFAULT_SKILLS_REPO, listSkills, resolveSkill } from './skills.js'
+import { DEFAULT_SKILLS_REPO, listSkills, resolveSkill, resolveSkillChain } from './skills.js'
 import { startLoop, type LoopEvent, type LoopOptions } from './loop.js'
 import { resumeSettings, type ResumeSettings } from './resume.js'
 import { runDir } from './state.js'
@@ -79,6 +79,8 @@ function settingsFromSaved(saved: ResumeSettings, runId: string): RunSettings {
     profileDir: o.loginUrl ? profileDirFor(o.loginUrl) : undefined,
     sync: o.sync,
     steps: o.steps,
+    checker: o.checker ?? null,
+    keepInvisible: o.keepInvisible,
   }
 }
 const collectSelector = (v: string, prev: string[]) => {
@@ -142,8 +144,8 @@ program
   .option('--iterations <n>', 'Attempts per screen', '2')
   .option('--max-surfaces <n>', 'Screens to work on', '10')
   .option('--timeout <minutes>', 'Time box per agent attempt', '10')
-  .option('--skill <name|path>', 'Skill to apply: a name from the skills repo, or a SKILL.md / skill folder')
-  .option('--skills-repo <repo>', 'Where skill names come from: owner/repo[@ref]', DEFAULT_SKILLS_REPO)
+  .option('--skill <names|path>', 'Skill to apply: a name from the skills package, several names comma-separated to chain them in order, or a SKILL.md / skill folder')
+  .option('--skills-repo <repo>', 'Where skill names come from: npm:@scope/pkg[@version] or owner/repo[@ref] on GitHub', DEFAULT_SKILLS_REPO)
   .option('--base <ref>', 'Branch the run from this ref (e.g. origin/main) instead of HEAD', 'HEAD')
   .option('--allow <rule>', 'Allow a non-GET request that only reads (repeatable)', collect, [])
   .option('--ignore <selector>', 'CSS selector that is not part of the app: hidden in screenshots, skipped by checks (repeatable)', collectSelector, [])
@@ -151,6 +153,9 @@ program
   .option('--login-url <url>', 'Reuse the session saved by `mushi-ux login --url <url>`')
   .option('--judge-model <id>', 'Model for the final before/after review (your Anthropic credentials)', DEFAULT_JUDGE_MODEL)
   .option('--no-judge', 'Skip the final review')
+  .option('--checker <model>', 'A second model that reviews each kept step and may roll it back, never keep a rejected one (e.g. claude-opus-5-5)')
+  .option('--checker-via <how>', 'claude-code (your Claude sign-in) or anthropic-api (ANTHROPIC_API_KEY)', 'claude-code')
+  .option('--no-keep-invisible', 'Roll back edits with nothing visible in a screenshot instead of keeping them for review')
   .option('--resume <runId>', 'Continue a stopped run with the settings it started with (other run options are ignored)')
   .option('--no-preflight', 'Skip the one-minute check that the agent can read files')
   .option('--no-dashboard', 'Do not start the local dashboard')
@@ -177,6 +182,9 @@ program
       sync?: boolean
       judgeModel: string
       judge: boolean
+      checker?: string
+      checkerVia: string
+      keepInvisible: boolean
       dashboard: boolean
       preflight: boolean
     }) => {
@@ -207,7 +215,7 @@ program
           iterations: Number(o.iterations),
           maxSurfaces: Number(o.maxSurfaces),
           agentTimeoutMs: Number(o.timeout) * 60_000,
-          skill: o.skill ? await resolveSkill(o.skill, { repo: o.skillsRepo }) : null,
+          skill: o.skill ? await resolveSkillChain(o.skill, { repo: o.skillsRepo }) : null,
           baseRef: o.base,
           allow: o.allow,
           ignore: o.ignore,
@@ -218,6 +226,8 @@ program
           judgeModel: o.judge ? o.judgeModel : null,
           sync: o.sync,
           steps: o.steps,
+          checker: o.checker ? { via: o.checkerVia === 'anthropic-api' ? 'anthropic-api' : 'claude-code', model: o.checker } : null,
+          keepInvisible: o.keepInvisible,
         }
       }
       const adapter = AGENTS[settings.agent]
@@ -280,7 +290,7 @@ program
   .command('ui')
   .description('Open the studio: pick an agent, a model from your account and a skill, start a run, and watch every attempt.')
   .option('--port <n>', 'Port on 127.0.0.1 (default: any free port)', '0')
-  .option('--skills-repo <repo>', 'Where skill names come from: owner/repo[@ref]', DEFAULT_SKILLS_REPO)
+  .option('--skills-repo <repo>', 'Where skill names come from: npm:@scope/pkg[@version] or owner/repo[@ref] on GitHub', DEFAULT_SKILLS_REPO)
   .option('--login-url <url>', 'Reuse the session saved by `mushi-ux login --url <url>`')
   .option('--allow <rule>', 'Allow a non-GET request that only reads (repeatable)', collect, [])
   .option('--no-open', 'Do not open the browser')
@@ -319,7 +329,7 @@ program
     }
     const launch = async (input: LaunchInput) => {
       if (!(input.agent in AGENTS)) throw new Error(`Unknown agent ${input.agent}`)
-      const skill = input.skill ? await resolveSkill(input.skill, { repo: o.skillsRepo }) : null
+      const skill = input.skill ? await resolveSkillChain(input.skill, { repo: o.skillsRepo }) : null
       return startRun(
         {
           crawl: input.crawl,
@@ -339,6 +349,8 @@ program
           judgeModel: input.judgeModel,
           sync: input.sync,
           steps: input.steps,
+          checker: input.checkerModel ? { via: input.checkerVia, model: input.checkerModel } : null,
+          keepInvisible: input.keepInvisible,
         },
         input.sync,
       )
@@ -372,6 +384,10 @@ program
       },
       listSkills: () => listSkills({ repo: o.skillsRepo }),
       account: (agent) => agentAccount(agent),
+      skillInfo: async (name) => {
+        const sk = await resolveSkill(name, { repo: o.skillsRepo })
+        return { name: sk.name, related: sk.related ?? [] }
+      },
       options: () =>
         studioOptions({
           repoRoot,
@@ -406,7 +422,7 @@ program
 program
   .command('skills')
   .description('List the skills --skill accepts by name.')
-  .option('--skills-repo <repo>', 'owner/repo[@ref]', DEFAULT_SKILLS_REPO)
+  .option('--skills-repo <repo>', 'npm:@scope/pkg[@version] or owner/repo[@ref]', DEFAULT_SKILLS_REPO)
   .action(async (o: { skillsRepo: string }) => {
     const skills = await listSkills({ repo: o.skillsRepo })
     let group: string | null | undefined

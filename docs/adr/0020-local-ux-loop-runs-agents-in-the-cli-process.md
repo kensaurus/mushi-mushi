@@ -38,7 +38,7 @@ so anything that clicks through the app can mutate real data.
    unless it matches an explicit per-target allowlist. Forms are never
    submitted. Destructive-looking controls (delete, pay, send, log out, …) are
    never clicked.
-4. **Keep or revert is decided by measurement, not by a model.** That means
+4. **Keep or revert is decided by measurement, not by a model.** (Amended by [0021](0021-a-second-model-may-veto-a-kept-ux-step.md): a second model may veto a step the measurements kept, never keep a rejected one.) That means
    axe, sideways scroll, tap targets, console errors and layout shift, plus a
    pixel diff. The different-model review at the end is advisory and
    evidence-bound: every claim carries a box in the image, and images are shown

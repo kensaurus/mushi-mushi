@@ -19,11 +19,19 @@ export interface VerdictInput {
   /** Null when the after-capture failed (page broke, axe failed, timeout). */
   after: Record<string, ProbeResult> | null
   pixelRatios: Record<string, number>
+  /**
+   * Keep an edit whose effect is not visible in a still screenshot (motion,
+   * haptics, another screen) when nothing measured got worse, flagged for a
+   * person to read (ADR 0021). Off: such an edit is rolled back.
+   */
+  keepInvisible?: boolean
 }
 
 export interface Verdict {
   outcome: 'accepted' | 'rejected' | 'no_change' | 'capture_failed'
   reason: string
+  /** Kept without a visible change: a person should read the diff. */
+  needsReview?: boolean
 }
 
 /**
@@ -141,6 +149,13 @@ export function decide(input: VerdictInput): Verdict {
   if (worse.length) return { outcome: 'rejected', reason: `Rolled back: ${worse.join('; ')}.` }
   const maxRatio = Math.max(0, ...Object.values(input.pixelRatios))
   if (maxRatio < MIN_VISIBLE_RATIO) {
+    if (input.keepInvisible) {
+      return {
+        outcome: 'accepted',
+        needsReview: true,
+        reason: `Kept, needs your review: the edit changed ${input.filesChanged} file(s) but nothing visible in a still screenshot (motion, haptics or another screen). Read the diff.`,
+      }
+    }
     return { outcome: 'no_change', reason: `The edits changed ${input.filesChanged} file(s) but nothing visible on this screen.` }
   }
   return {

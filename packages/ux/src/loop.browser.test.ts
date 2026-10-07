@@ -227,7 +227,8 @@ describe('startLoop on a fixture repo', () => {
       const home = state.surfaces.find((s) => s.surface.label === 'Home')
       expect(resumed).toHaveLength(2)
       expect(resumed[0]).toMatch(/^Time is up\. .*PLAN\.md/)
-      expect(resumed[1]).toMatch(/^Time is up\. .*Make the one change/)
+      // The step continues the planning session from its start (it keeps what it read), so it needs no nudge.
+      expect(resumed[1]).toMatch(/continues your session for this screen/)
       expect(home?.plan?.steps).toMatchObject([{ text: 'Darken the muted text in site/style.css', status: 'done' }])
       expect(home?.iterations.map((i) => i.outcome)).toEqual(['accepted'])
     } finally {

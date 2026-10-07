@@ -70,8 +70,7 @@ const NO_SUBMIT_SCRIPT = `(() => {
   HTMLFormElement.prototype.requestSubmit = function () {}
 })()`
 
-export async function installGuard(context: BrowserContext, allow: readonly AllowRule[]): Promise<GuardLog> {
-  const log: GuardLog = { blocked: [] }
+export async function installGuard(context: BrowserContext, allow: readonly AllowRule[], log: GuardLog = { blocked: [] }): Promise<GuardLog> {
   await context.addInitScript({ content: NO_SUBMIT_SCRIPT })
   await context.route('**/*', async (route) => {
     const req = route.request()

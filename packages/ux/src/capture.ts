@@ -8,14 +8,23 @@
  * never named to the coding agent (ADR 0006).
  */
 
-import { chromium, type BrowserContext, type Page } from 'playwright'
+import { chromium, type Browser, type BrowserContext, type Page } from 'playwright'
 import { installGuard, isGuardNoise, type AllowRule, type GuardLog } from './guard.js'
 import { ignoreList, ignoreStyle } from './ignore.js'
 import { isFrameworkNoise, runProbes } from './probes.js'
 import type { ProbeResult, ReplayStep, Surface, Viewport } from './types.js'
 
 export interface BrowserSession {
+  /** Discovery browses here; app state it leaves behind stays here. */
   context: BrowserContext
+  /**
+   * A clean context for one capture: the cookies and storage the session
+   * started with (a saved login included), the same guard and init scripts.
+   * Captures share no client state, so a screen looks the same however many
+   * other screens were visited before it (glot.it /words lost its empty
+   * state after other screens wrote to localStorage, 2026-10-07).
+   */
+  freshContext(): Promise<BrowserContext>
   guard: GuardLog
   /** Selectors hidden in screenshots and left out of every probe (ignore.ts). */
   ignore: readonly string[]
@@ -45,20 +54,34 @@ export async function openSession(opts: SessionOptions = {}): Promise<BrowserSes
   const headless = opts.headless ?? true
   let context: BrowserContext
   let closeBrowser: () => Promise<void>
+  let browser: Browser
   // Playwright's docs say requests a Service Worker handles can bypass
   // context.route. Chromium on 1.61 routed them in a probe (Plan 021 §5), but
   // the guard must not depend on that: block Service Workers outright.
   if (opts.profileDir) {
     context = await chromium.launchPersistentContext(opts.profileDir, { headless, serviceWorkers: 'block' })
-    closeBrowser = () => context.close()
+    // A persistent profile cannot spawn contexts: captures run in a second browser seeded from it.
+    browser = await chromium.launch({ headless })
+    closeBrowser = async () => {
+      await context.close()
+      await browser.close()
+    }
   } else {
-    const browser = await chromium.launch({ headless })
+    browser = await chromium.launch({ headless })
     context = await browser.newContext({ serviceWorkers: 'block' })
     closeBrowser = () => browser.close()
   }
   const guard = await installGuard(context, opts.allow ?? [])
   await context.addInitScript({ content: CLS_SCRIPT })
-  return { context, guard, ignore: ignoreList(opts.ignore), close: closeBrowser }
+  // The state every capture starts from, taken before any app page has run.
+  const seed = await context.storageState({ indexedDB: true })
+  const freshContext = async () => {
+    const fresh = await browser.newContext({ serviceWorkers: 'block', storageState: seed })
+    await installGuard(fresh, opts.allow ?? [], guard)
+    await fresh.addInitScript({ content: CLS_SCRIPT })
+    return fresh
+  }
+  return { context, freshContext, guard, ignore: ignoreList(opts.ignore), close: closeBrowser }
 }
 
 /**
@@ -177,7 +200,8 @@ export async function captureSurface(
   surface: Pick<Surface, 'path' | 'steps'>,
   viewport: Viewport,
 ): Promise<Capture> {
-  const page = await session.context.newPage()
+  const ctx = await session.freshContext()
+  const page = await ctx.newPage()
   const consoleErrors: string[] = []
   page.on('console', (msg) => {
     if (msg.type() === 'error' && !isGuardNoise(msg.text()) && !isFrameworkNoise(msg.text())) consoleErrors.push(msg.text().slice(0, 300))
@@ -197,6 +221,6 @@ export async function captureSurface(
     const probes = await runProbes(page, consoleErrors, session.ignore)
     return { png, probes }
   } finally {
-    await page.close()
+    await ctx.close()
   }
 }

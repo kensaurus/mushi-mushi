@@ -177,3 +177,31 @@ describe('a page that keeps navigating while it is read', () => {
     }
   }, 120_000)
 })
+
+describe('captures share no client state', () => {
+  // glot.it /words showed its empty-state starter bank on its own capture,
+  // then only collapsed panels once other screens had written localStorage,
+  // and was flagged as moved by another fix (2026-10-07).
+  it('shows a screen the same however many screens were visited before it', async () => {
+    const server = createServer((req, res) => {
+      const body = req.url === '/writer'
+        ? '<h1>Writer</h1><script>localStorage.setItem("visited", "yes")</script>'
+        : '<h1>Reader</h1><p id="p"></p><script>document.getElementById("p").textContent = localStorage.getItem("visited") ? "Welcome back, here is a long changed paragraph that moves the layout a lot." : "First visit"</script>'
+      const filler = '<p>Enough words on this screen for the content wait to settle quickly.</p>'
+      res.end(`<!doctype html><html lang="en"><title>t</title><main>${body}${filler}</main></html>`)
+    })
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', r))
+    const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
+    const own = await openSession()
+    try {
+      const vp = VIEWPORTS[1]
+      const first = await captureSurface(own, url, { path: '/reader', steps: [] }, vp)
+      await captureSurface(own, url, { path: '/writer', steps: [] }, vp)
+      const again = await captureSurface(own, url, { path: '/reader', steps: [] }, vp)
+      expect(again.png.equals(first.png)).toBe(true)
+    } finally {
+      await own.close()
+      await new Promise((r) => server.close(r))
+    }
+  }, 60_000)
+})

@@ -39,6 +39,73 @@ export interface PixelDiff {
   height: number
   /** Red-on-grey overlay of the changed pixels. */
   diffPng: Buffer
+  /** Where the change is, largest first, so a viewer can zoom to it. */
+  regions: ChangeRegion[]
+}
+
+export interface ChangeRegion {
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
+/** pixelmatch paints a real difference pure red (anti-aliasing is yellow, ignored). */
+function isDiffPixel(d: Uint8Array | Buffer, i: number): boolean {
+  return d[i] === 255 && d[i + 1] === 0 && d[i + 2] === 0
+}
+
+/**
+ * Pure: boxes around the changed pixels of a pixelmatch output. Changed pixels
+ * are counted on a grid of `cell`-px squares; touching cells form one region;
+ * each region is padded so a crop shows context. At most `max`, largest first.
+ * A small change (a checkbox, a moved link) on a tall page is a few percent
+ * of the pixels, which a full-size side by side hides.
+ */
+export function changeRegions(diff: { width: number; height: number; data: Uint8Array | Buffer }, cell = 16, max = 4, pad = 24): ChangeRegion[] {
+  const cols = Math.ceil(diff.width / cell)
+  const rows = Math.ceil(diff.height / cell)
+  const hit = new Uint8Array(cols * rows)
+  for (let y = 0; y < diff.height; y++) {
+    for (let x = 0; x < diff.width; x++) {
+      if (isDiffPixel(diff.data, (y * diff.width + x) * 4)) hit[Math.floor(y / cell) * cols + Math.floor(x / cell)] = 1
+    }
+  }
+  const seen = new Uint8Array(cols * rows)
+  const boxes: Array<ChangeRegion & { cells: number }> = []
+  for (let start = 0; start < hit.length; start++) {
+    if (!hit[start] || seen[start]) continue
+    let minC = cols, minR = rows, maxC = 0, maxR = 0, cells = 0
+    const stack = [start]
+    seen[start] = 1
+    while (stack.length) {
+      const i = stack.pop() as number
+      const c = i % cols
+      const r = Math.floor(i / cols)
+      cells++
+      minC = Math.min(minC, c); maxC = Math.max(maxC, c); minR = Math.min(minR, r); maxR = Math.max(maxR, r)
+      // 8-neighbours, and one empty cell of gap still joins (a line of text with spaces).
+      for (let dr = -2; dr <= 2; dr++) {
+        for (let dc = -2; dc <= 2; dc++) {
+          const rr = r + dr
+          const cc = c + dc
+          if (rr < 0 || cc < 0 || rr >= rows || cc >= cols) continue
+          const j = rr * cols + cc
+          if (hit[j] && !seen[j]) {
+            seen[j] = 1
+            stack.push(j)
+          }
+        }
+      }
+    }
+    const x = Math.max(0, minC * cell - pad)
+    const y = Math.max(0, minR * cell - pad)
+    boxes.push({ x, y, w: Math.min(diff.width, (maxC + 1) * cell + pad) - x, h: Math.min(diff.height, (maxR + 1) * cell + pad) - y, cells })
+  }
+  return boxes
+    .sort((a, b) => b.w * b.h - a.w * a.h)
+    .slice(0, max)
+    .map(({ x, y, w, h }) => ({ x, y, w, h }))
 }
 
 export function pixelDiff(before: Buffer, after: Buffer, threshold = 0.1): PixelDiff {
@@ -58,6 +125,7 @@ export function pixelDiff(before: Buffer, after: Buffer, threshold = 0.1): Pixel
     width,
     height,
     diffPng: encodePng(out),
+    regions: changedPixels ? changeRegions(out) : [],
   }
 }
 

@@ -96,6 +96,15 @@ describe('decide', () => {
   })
 })
 
+describe('an edit with nothing visible', () => {
+  it('is kept and flagged for review when that is allowed, rolled back otherwise', () => {
+    const input = { filesChanged: 1, before: { mobile: clean() }, after: { mobile: clean() }, pixelRatios: { mobile: 0 } }
+    expect(decide(input)).toMatchObject({ outcome: 'no_change' })
+    expect(decide({ ...input, keepInvisible: true })).toMatchObject({ outcome: 'accepted', needsReview: true })
+    expect(decide({ ...input, keepInvisible: true }).reason).toMatch(/^Kept, needs your review/)
+  })
+})
+
 describe('assistantText', () => {
   it('keeps every message the agent wrote, newlines and all, when there is no final result', async () => {
     const { assistantText } = await import('./verdict.js')

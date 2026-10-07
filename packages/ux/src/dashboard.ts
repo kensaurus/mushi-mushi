@@ -17,7 +17,9 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { AddressInfo } from 'node:net'
 import { basename, dirname, join, normalize, sep } from 'node:path'
 import { z } from 'zod'
+import { PNG } from 'pngjs'
 import { attemptLogBase } from './agent-events.js'
+import { changeRegions } from './image.js'
 import { isSafeSelector } from './ignore.js'
 import type { AgentAccount } from './launcher.js'
 import type { LoopEvent } from './loop.js'
@@ -57,6 +59,11 @@ export const LaunchInput = z
     crawl: z.boolean().default(false),
     /** Plan each screen into small steps, then one step per attempt. */
     steps: z.boolean().default(false),
+    /** A second model that may roll a kept step back (ADR 0021); null = measurements alone. */
+    checkerModel: z.string().max(120).regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/).nullable().default(null),
+    checkerVia: z.enum(['claude-code', 'anthropic-api']).default('claude-code'),
+    /** Keep edits with nothing visible, flagged for review. */
+    keepInvisible: z.boolean().default(true),
     /** Selectors that are not the app's UI; added to DEFAULT_IGNORE. */
     ignore: z
       .array(z.string().trim().refine(isSafeSelector, 'Not a usable CSS selector (no { } < > ; or backslash, at most 200 characters).'))
@@ -81,6 +88,8 @@ export interface StudioOptions {
   resume?: (runId: string) => Promise<{ runId: string; events: EventEmitter }>
   listModels?: (agent: string) => Promise<ModelList>
   listSkills?: () => Promise<SkillListItem[]>
+  /** One skill's hand-offs, for the launcher's "next skill" suggestions. */
+  skillInfo?: (name: string) => Promise<{ name: string; related: string[] }>
   /** The account an agent would spend (null when the agent does not say). */
   account?: (agent: string) => Promise<AgentAccount | null>
   /** Launcher defaults: agents found, dev command guesses, refs, page suggestions. */
@@ -219,6 +228,14 @@ export async function startStudio(opts: StudioOptions): Promise<Dashboard> {
         res.writeHead(200, { 'content-type': 'image/png', 'cache-control': 'max-age=3600' })
         return res.end(readFileSync(abs))
       }
+      // Change areas from a saved diff image, for attempts recorded before they were stored.
+      if (req.method === 'GET' && url.pathname === '/api/changes') {
+        const dir = runDirOf(url.searchParams.get('run'))
+        const abs = dir ? safeShotPath(dir, url.searchParams.get('p') ?? '') : null
+        if (!abs || !existsSync(abs)) return json(res, 404, { error: 'No such diff image' })
+        const png = PNG.sync.read(readFileSync(abs))
+        return json(res, 200, { width: png.width, height: png.height, boxes: changeRegions(png) })
+      }
       if (req.method === 'GET' && url.pathname === '/api/options') {
         return json(res, 200, opts.options ? await opts.options() : {})
       }
@@ -226,6 +243,11 @@ export async function startStudio(opts: StudioOptions): Promise<Dashboard> {
         const agent = url.searchParams.get('agent') ?? ''
         if (!opts.listModels || !/^[a-z][a-z-]{1,30}$/.test(agent)) return json(res, 400, { error: 'Unknown agent' })
         return json(res, 200, await opts.listModels(agent))
+      }
+      if (req.method === 'GET' && url.pathname === '/api/skill') {
+        const name = url.searchParams.get('name') ?? ''
+        if (!/^[a-z0-9][a-z0-9-]{0,80}$/.test(name) || !opts.skillInfo) return json(res, 400, { error: 'Unknown skill' })
+        return json(res, 200, await opts.skillInfo(name).catch(() => ({ name, related: [] })))
       }
       if (req.method === 'GET' && url.pathname === '/api/account') {
         const agent = url.searchParams.get('agent') ?? ''

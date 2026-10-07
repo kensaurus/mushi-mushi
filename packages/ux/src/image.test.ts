@@ -47,3 +47,24 @@ describe('dHash', () => {
     expect(hammingHex(dHash(gradient), dHash(reversed))).toBeGreaterThan(40)
   })
 })
+
+describe('change regions', () => {
+  it('boxes each separate change, largest first, with a little context', () => {
+    // A white 400×1200 page; the after has a 40×40 mark at the top and a 120×20 bar far below.
+    const before = solid(400, 1200, () => 255)
+    const after = solid(400, 1200, (x, y) => ((x >= 300 && x < 340 && y >= 40 && y < 80) || (x >= 50 && x < 170 && y >= 1000 && y < 1020) ? 0 : 255))
+    const d = pixelDiff(before, after)
+    expect(d.regions).toHaveLength(2)
+    const [big, small] = d.regions
+    expect(big.y).toBeGreaterThan(900)
+    expect(big.x).toBeLessThanOrEqual(50)
+    expect(big.x + big.w).toBeGreaterThanOrEqual(170)
+    expect(small.y).toBeLessThanOrEqual(40)
+    expect(small.y + small.h).toBeGreaterThanOrEqual(80)
+  })
+
+  it('finds nothing when nothing changed', () => {
+    const page = solid(100, 100, () => 200)
+    expect(pixelDiff(page, page).regions).toEqual([])
+  })
+})

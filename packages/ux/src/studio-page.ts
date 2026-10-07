@@ -53,6 +53,10 @@ section.detail{padding:14px 18px;min-width:0}
 @media (min-width:1100px){.split.mobile{grid-template-columns:minmax(0,420px) minmax(0,1fr)}.split.mobile .side h3:first-child{margin-top:0}}
 .compare img{display:block;width:100%;height:auto}.compare .after{position:absolute;inset:0;clip-path:inset(0 0 0 var(--cut,50%))}
 .compare .diff{position:absolute;inset:0;mix-blend-mode:multiply;opacity:.85}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:8px}.pair figure{margin:0;min-width:0}.pair figcaption{font-size:11px;color:var(--muted);margin-bottom:3px}
+.pair img{display:block;width:100%;height:auto;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
+.crop{border:1px solid var(--line);border-radius:8px;background-repeat:no-repeat;background-color:var(--panel);width:100%}
+.changes{display:grid;gap:12px}.changes h4{margin:0 0 4px;font-size:12px;color:var(--muted);font-weight:600}
 .cap{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-top:4px;gap:8px}
 input[type=range]{width:100%;max-width:100%}
 .plan{list-style:none;margin:6px 0 4px;padding:0;display:grid;gap:6px}.plan li{display:flex;gap:8px;align-items:flex-start;font-size:13px;border:1px solid var(--line);border-radius:8px;padding:6px 8px;background:var(--panel)}.plan .mark{width:16px;flex:none;text-align:center;font-weight:600}.pl-done .mark{color:var(--ok)}.pl-failed .mark{color:var(--bad)}.pl-skipped .mark,.pl-pending .mark{color:var(--idle)}.pl-now{border-color:var(--info)}.pl-now .mark{color:var(--info)}
@@ -110,7 +114,7 @@ const STATUS = { accepted: 'Improved', reverted: 'Rolled back', regressed: 'Move
 const PHASE = { starting: 'Starting', worktree: 'Creating worktree', install: 'Installing', 'dev-server': 'Starting dev server', mapping: 'Mapping screens', working: 'Working', reviewing: 'Reviewing', done: 'Done', failed: 'Failed' }
 const FINISHED = ['accepted', 'reverted', 'skipped', 'regressed', 'blocked']
 const store = { get(k) { try { return JSON.parse(localStorage.getItem('mushi-ux:' + k)) } catch { return null } }, set(k, v) { try { localStorage.setItem('mushi-ux:' + k, JSON.stringify(v)) } catch {} } }
-let meta = null, runs = [], runId = null, state = null, selected = null, vp = 'mobile', diffOn = false, pick = null
+let meta = null, runs = [], runId = null, state = null, selected = null, vp = 'mobile', diffOn = false, pick = null, view = 'changes'
 const agentLog = {}, runLog = [], stepsFetched = new Set()
 const chip = (st) => '<span class="chip s-' + st + '">' + esc(STATUS[st] || st) + '</span>'
 const shot = (p) => q('/shot?run=' + encodeURIComponent(runId) + '&p=' + encodeURIComponent(p))
@@ -237,14 +241,21 @@ function renderRun() {
   let html = '<div class="row"><h2 style="margin:0;font-size:18px">' + esc(s.surface.label) + '</h2>' + chip(shownStatus(s)) + '</div>'
   if (s.note) html += '<p class="sub">' + esc(s.note) + '</p>'
   html += '<div class="toolbar"><div class="seg" role="group" aria-label="Viewport">' + ['mobile', 'desktop'].map((v) => '<button data-vp="' + v + '" aria-pressed="' + (v === vp) + '">' + v + '</button>').join('') + '</div>'
-  if (after) html += '<label class="sub"><input type="checkbox" id="diff"' + (diffOn ? ' checked' : '') + '> Show changed pixels</label>'
+  if (after) html += '<div class="seg" role="group" aria-label="How to compare">' + [['changes', 'Changes'], ['side', 'Side by side'], ['slider', 'Slider']].map(([v, l]) => '<button data-view="' + v + '" aria-pressed="' + (v === view) + '">' + l + '</button>').join('') + '</div>'
+  if (after && view === 'slider') html += '<label class="sub"><input type="checkbox" id="diff"' + (diffOn ? ' checked' : '') + '> Show changed pixels</label>'
   // Wide screens: the phone screenshot on the left, attempts and the agent's steps beside it.
   html += '</div><div class="split ' + vp + '"><div>'
   let problemsHtml = ''
   if (base) {
-    html += '<div class="compare ' + vp + '" id="cmp"><img alt="Before" src="' + shot(base.png) + '">' + (after ? '<img class="after" alt="After" src="' + shot(after.png) + '">' : '') + (after && diffOn && chosen.diffPng[vp] ? '<img class="diff" alt="Changed pixels" src="' + shot(chosen.diffPng[vp]) + '">' : '') + '</div>'
-    if (after) html += '<input type="range" id="cut" min="0" max="100" value="50" aria-label="Before / after split"><div class="cap"><span>Before · problem score ' + base.penalty + '</span><span>Attempt ' + chosen.n + ' · problem score ' + after.penalty + '</span></div>'
-    else html += '<div class="cap"><span>Baseline · problem score ' + base.penalty + '</span><span>' + (shownStatus(s) === 'iterating' ? 'Agent working…' : '') + '</span></div>'
+    // Before = the screen this attempt started from (the last kept step), so every view shows what THIS attempt changed.
+    const prev = after ? startedFrom(s, chosen.n, vp) : null
+    if (after && view === 'changes') html += changesHtml(prev, after, chosen, s)
+    else if (after && view === 'side') html += '<div class="pair"><figure><figcaption>Before ' + esc(stepName(s, chosen.n, true)) + ' · problem score ' + prev.penalty + '</figcaption><img alt="Before" src="' + shot(prev.png) + '"></figure><figure><figcaption>' + esc(stepName(s, chosen.n)) + ' · problem score ' + after.penalty + '</figcaption><img alt="After" src="' + shot(after.png) + '"></figure></div>'
+    else {
+      html += '<div class="compare ' + vp + '" id="cmp"><img alt="Before" src="' + shot((prev || base).png) + '">' + (after ? '<img class="after" alt="After" src="' + shot(after.png) + '">' : '') + (after && diffOn && chosen.diffPng[vp] ? '<img class="diff" alt="Changed pixels" src="' + shot(chosen.diffPng[vp]) + '">' : '') + '</div>'
+      if (after) html += '<input type="range" id="cut" min="0" max="100" value="50" aria-label="Before / after split"><div class="cap"><span>◀ Before · problem score ' + prev.penalty + '</span><span>' + esc(stepName(s, chosen.n)) + ' · problem score ' + after.penalty + ' ▶</span></div><p class="sub">Drag the handle: left of it is before, right of it is after. One screenshot split in two, not cut off.</p>'
+      else html += '<div class="cap"><span>Baseline · problem score ' + base.penalty + '</span><span>' + (shownStatus(s) === 'iterating' ? 'Agent working…' : '') + '</span></div>'
+    }
     const probes = (after || base).probes, lines = []
     for (const a of probes.axe || []) lines.push(a.help + ' (' + a.count + ')')
     if (probes.overflowX) lines.push('Scrolls sideways')
@@ -255,7 +266,7 @@ function renderRun() {
   html += '</div><div class="side">' + planHtml(s) + '<h3>Attempts</h3><div class="attempts">' + s.iterations.map((i) => {
     const a = i.after[vp] || i.after.desktop || i.after.mobile
     const tone = i.outcome === 'accepted' ? 'accepted' : i.outcome === 'rejected' || i.outcome === 'capture_failed' ? 'reverted' : 'skipped'
-    return '<button class="att" data-n="' + i.n + '" aria-pressed="' + (chosen && chosen.n === i.n) + '"' + (a ? '' : ' disabled') + '>' + (a ? '<img alt="Attempt ' + i.n + '" loading="lazy" src="' + shot(a.png) + '">' : '<div class="ph">no screenshot</div>') + '<div class="body"><div class="row"><strong>Attempt ' + i.n + '</strong>' + chip(tone).replace(/>[^<]+</, '>' + esc(i.outcome.replace('_', ' ')) + '<') + '</div><div class="sub">' + esc(i.reason) + '</div><div class="sub mono">' + dur(i.durationMs) + (i.pixelDiff[vp] != null ? ' · ' + (i.pixelDiff[vp] * 100).toFixed(1) + '% px' : '') + (i.commitSha ? ' · ' + i.commitSha.slice(0, 8) : '') + '</div></div></button>'
+    return '<button class="att" data-n="' + i.n + '" aria-pressed="' + (chosen && chosen.n === i.n) + '"' + (a ? '' : ' disabled') + '>' + (a ? '<img alt="Attempt ' + i.n + '" loading="lazy" src="' + shot(a.png) + '">' : '<div class="ph">no screenshot</div>') + '<div class="body"><div class="row"><strong>Attempt ' + i.n + '</strong>' + chip(tone).replace(/>[^<]+</, '>' + esc(i.outcome.replace('_', ' ')) + '<') + '</div>' + (i.needsReview ? '<div class="sub warn">Needs your review: nothing visible changed</div>' : '') + (i.checker ? '<div class="sub">' + esc(checkerLine(i.checker)) + '</div>' : '') + '<div class="sub">' + esc(i.reason) + '</div><div class="sub mono">' + dur(i.durationMs) + (i.pixelDiff[vp] != null ? ' · ' + (i.pixelDiff[vp] * 100).toFixed(1) + '% px' : '') + (i.commitSha ? ' · ' + i.commitSha.slice(0, 8) : '') + '</div></div></button>'
   }).join('') + (s.status === 'iterating' ? workingCard(s) : '') + '</div>'
   if (!s.iterations.length && s.status !== 'iterating') html += '<p class="sub">No attempts yet.</p>'
   const mine = (agentLog[selected] || []).slice(-80)
@@ -280,10 +291,55 @@ function renderRun() {
     }).catch(() => {})
   }
   box.querySelectorAll('[data-vp]').forEach((b) => b.onclick = () => { vp = b.dataset.vp; renderRun() })
+  box.querySelectorAll('[data-view]').forEach((b) => b.onclick = () => { view = b.dataset.view; renderRun() })
   box.querySelectorAll('.att[data-n]').forEach((b) => b.onclick = () => { pick = Number(b.dataset.n); renderRun() })
   const d = document.getElementById('diff'); if (d) d.onchange = () => { diffOn = d.checked; renderRun() }
   const c = document.getElementById('cut'); if (c) c.oninput = () => document.getElementById('cmp').style.setProperty('--cut', c.value + '%')
   const out = document.getElementById('agentout'); if (out) out.scrollTop = out.scrollHeight
+}
+// ── Before / after ─────────────────────────────────────────────────────────
+/** The screenshot attempt n started from: the last kept attempt before it, else the baseline. */
+const changeCache = {}
+function checkerLine(c) {
+  if (c.error) return c.model + ': review failed'
+  const votes = (c.votes || []).map((v) => v.preferred).join(' / ')
+  return c.model + ': ' + (c.verdict === 'revert' ? 'rolled back' : c.verdict === 'keep' ? 'agrees' : 'unsure') + (votes ? ' (' + votes + ')' : '')
+}
+function startedFrom(s, n, v) {
+  const kept = s.iterations.filter((i) => i.n < n && i.outcome === 'accepted' && i.after[v]).pop()
+  return (kept && kept.after[v]) || s.baseline[v] || s.baseline.desktop
+}
+function stepName(s, n, before) {
+  const it = s.iterations.find((i) => i.n === n), steps = (s.plan && s.plan.steps) || []
+  const k = it && it.step ? steps.findIndex((p) => p.text === it.step) : -1
+  return k >= 0 ? (before ? 'step ' : 'Step ') + (k + 1) : (before ? 'attempt ' : 'Attempt ') + n
+}
+/** One changed area as a zoomed crop of a screenshot (CSS sprite maths, no canvas). */
+function cropHtml(png, box, size, label) {
+  const sx = box.w >= size.width ? 0 : (box.x / (size.width - box.w)) * 100
+  const sy = box.h >= size.height ? 0 : (box.y / (size.height - box.h)) * 100
+  const style = 'aspect-ratio:' + box.w + '/' + box.h + ';background-image:url(&quot;' + shot(png) + '&quot;);background-size:' + (size.width / box.w) * 100 + '% auto;background-position:' + sx + '% ' + sy + '%'
+  return '<figure><figcaption>' + esc(label) + '</figcaption><div class="crop" role="img" aria-label="' + esc(label) + '" style="' + style + '"></div></figure>'
+}
+function changesHtml(prev, after, it, s) {
+  let ch = it.changes && it.changes[vp]
+  const pct = it.pixelDiff[vp] != null ? (it.pixelDiff[vp] * 100).toFixed(1) + '% of the screen changed' : ''
+  if (!ch && it.diffPng && it.diffPng[vp]) {
+    // An older attempt: work the areas out from its saved diff image once.
+    const key = runId + ' ' + it.diffPng[vp]
+    ch = changeCache[key]
+    if (!ch) {
+      if (!changeCache[key + '?']) {
+        changeCache[key + '?'] = true
+        api('/api/changes?run=' + encodeURIComponent(runId) + '&p=' + encodeURIComponent(it.diffPng[vp])).then((c) => { changeCache[key] = c; renderRun() }).catch(() => {})
+      }
+      return '<p class="sub">Finding the changed areas…</p>'
+    }
+  }
+  if (!ch) return '<p class="sub">No change areas for this attempt. Use Side by side.</p>'
+  if (!ch.boxes.length) return '<p class="sub">Nothing changed on this screen in this attempt.</p>'
+  return '<div class="changes"><p class="sub">' + ch.boxes.length + ' changed area' + (ch.boxes.length === 1 ? '' : 's') + (pct ? ' · ' + pct : '') + '. Each is shown before and after ' + esc(stepName(s, it.n, true)) + ', zoomed in.</p>' + ch.boxes.map((b, i) =>
+    '<div><h4>Change ' + (i + 1) + ' · ' + b.w + '×' + b.h + ' px at ' + b.x + ',' + b.y + '</h4><div class="pair">' + cropHtml(prev.png, b, ch, 'Before') + cropHtml(after.png, b, ch, 'After') + '</div></div>').join('') + '</div>'
 }
 async function loadState() { state = runId ? await api('/api/state?run=' + runId).catch(() => state) : null; renderRun() }
 async function loadRuns() {
@@ -339,9 +395,9 @@ async function openLauncher() {
         '<label class="sub"><input type="checkbox" id="f-crawl"' + (last.crawl ? ' checked' : '') + '> Also follow links from these pages</label>' +
       '</div>' +
       '<div class="grid">' +
-        '<label class="f"><span>Skill: what the agent focuses on (' + esc(options.skillsRepo || 'skills repo') + ')</span><select id="f-skill"><option value="">None — built-in UX guidance</option></select></label>' +
+        '<label class="f"><span>Skills: what the agent focuses on, applied in order (' + esc(options.skillsRepo || 'skills package') + ')</span><select id="f-skill"><option value="">Add a skill…</option></select></label>' +
         '<label class="f"><span>…or your own SKILL.md / folder</span><input type="text" id="f-skill-path" placeholder="./skills/my-skill" autocomplete="off"></label>' +
-      '</div><div class="note" id="f-skill-note"></div>' +
+      '</div><div class="pills" id="f-chain" aria-label="Skill chain"></div><div class="pills" id="f-next"></div><div class="note" id="f-skill-note"></div>' +
       '<label class="sub"><input type="checkbox" id="f-steps"' + (last.steps === false ? '' : ' checked') + '> Small steps (recommended): plan each screen first, then one small change per attempt, each kept or rolled back on its own</label>' +
     '</div>' +
     '<div class="card"><h2><span class="n">2</span>Who does the work</h2><div class="grid">' +
@@ -350,6 +406,11 @@ async function openLauncher() {
       '<label class="f" id="f-custom-wrap" hidden><span>Model id</span><input type="text" id="f-custom" placeholder="e.g. grok-4.7" autocomplete="off"></label>' +
     '</div><div class="params" id="f-params"></div><div class="note" id="f-model-note"></div>' +
     '<div class="summary" id="f-account"><span class="note">Checking the account…</span></div>' +
+    '<div class="grid">' +
+      '<label class="f"><span>Checker: a second model reviews each kept step and may roll it back</span><select id="f-checker">' + checkerOptions(agents, last) + '</select></label>' +
+    '</div>' +
+    '<div class="note">The checker sees the changed area before and after, twice with the order swapped, and rolls a step back only when both reviews prefer the original. It never keeps a step the measurements rejected. Each review costs about $0.10–0.30 of your Claude usage.</div>' +
+    '<label class="sub"><input type="checkbox" id="f-invisible"' + (last.keepInvisible === false ? '' : ' checked') + '> Keep changes that are not visible in a screenshot (motion, haptics, press feedback) and flag them for your review</label>' +
     '<div class="row"><span class="sub mono" id="f-spec"></span><button type="button" class="btn" id="f-refresh">Refresh list</button></div></div>' +
     '<div class="card"><h2><span class="n">3</span>How much</h2><div class="grid">' +
       '<label class="f"><span>Screens at most</span><input type="number" id="f-max" min="1" max="100" value="' + (last.maxSurfaces || 8) + '"></label>' +
@@ -388,6 +449,20 @@ async function openLauncher() {
   document.getElementById('lf').onsubmit = (e) => { e.preventDefault(); start() }
   loadModels(false)
   loadSkills(last.skill)
+}
+function checkerOptions(agents, last) {
+  const claude = agents.some((a) => a.name === 'claude-code' && a.installed)
+  const opts = [['', 'None: measurements alone decide']]
+  if (claude) opts.push(['claude-code|claude-opus-5-5', 'Claude Opus 5.5, via Claude Code (your sign-in)'], ['claude-code|claude-sonnet-5-5', 'Claude Sonnet 5.5, via Claude Code (cheaper)'])
+  if (options.judgeAvailable) opts.push(['anthropic-api|claude-opus-5-5', 'Claude Opus 5.5, via the Anthropic API key'])
+  const want = last.checkerModel ? (last.checkerVia || 'claude-code') + '|' + last.checkerModel : (claude ? 'claude-code|claude-opus-5-5' : '')
+  return opts.map(([v, l]) => '<option value="' + esc(v) + '"' + (v === want ? ' selected' : '') + '>' + esc(l) + '</option>').join('') + (claude ? '' : '<option disabled>Claude Code not found: install it to use Claude as the checker</option>')
+}
+function checkerPick() {
+  const v = document.getElementById('f-checker').value
+  if (!v) return { model: null, via: 'claude-code' }
+  const [via, model] = v.split('|')
+  return { model, via }
 }
 function scope() { const r = document.querySelector('input[name=f-scope]:checked'); return r ? r.value : 'whole' }
 // Published per-million-token prices (cursor.com/docs/models-and-pricing, read 2026-10-07).
@@ -458,16 +533,38 @@ function modelSpec() {
   return params.length ? base + '?' + params.join('&') : base
 }
 function updateSpec() { const s = modelSpec(); document.getElementById('f-spec').textContent = s ? 'model: ' + s : 'model: the agent’s default'; loadAccount() }
+let chain = [], knownSkills = new Set()
 async function loadSkills(last) {
   const sel = document.getElementById('f-skill'), note = document.getElementById('f-skill-note')
   try {
     const { skills } = await api('/api/skills')
+    knownSkills = new Set(skills.map((s) => s.name))
     const groups = {}
     for (const s of skills) (groups[s.group || 'Skills'] = groups[s.group || 'Skills'] || []).push(s.name)
-    sel.innerHTML = '<option value="">None — built-in UX guidance</option>' + Object.entries(groups).map(([g, names]) => '<optgroup label="' + esc(g) + '">' + names.map((n) => '<option' + (n === last ? ' selected' : '') + '>' + esc(n) + '</option>').join('') + '</optgroup>').join('')
-    note.textContent = skills.length + ' skills. The whole skill folder (references too) is given to the agent.'
+    sel.innerHTML = '<option value="">Add a skill…</option>' + Object.entries(groups).map(([g, names]) => '<optgroup label="' + esc(g) + '">' + names.map((n) => '<option>' + esc(n) + '</option>').join('') + '</optgroup>').join('')
+    note.textContent = skills.length + ' skills. Each skill\\'s whole folder (references too) is given to the agent. With several, the agent applies them in this order.'
   } catch (e) { note.textContent = e.message; note.className = 'note warn' }
-  if (last && sel.value !== last && /[\\\\/.]/.test(last)) document.getElementById('f-skill-path').value = last
+  if (last && /[\\\\/.]/.test(last)) document.getElementById('f-skill-path').value = last
+  else chain = (last || '').split(',').map((x) => x.trim()).filter((x) => knownSkills.has(x))
+  sel.onchange = () => { if (sel.value && !chain.includes(sel.value) && chain.length < 5) chain.push(sel.value); sel.value = ''; renderChain() }
+  renderChain()
+}
+const relatedCache = {}
+async function renderChain() {
+  const box = document.getElementById('f-chain'), next = document.getElementById('f-next')
+  box.innerHTML = chain.length
+    ? chain.map((n, i) => '<button type="button" class="pill" aria-pressed="true" data-rm="' + esc(n) + '" title="Remove">' + (i + 1) + '. ' + esc(n) + ' ×</button>').join('')
+    : '<span class="note">No skill: the agent uses the built-in UX guidance.</span>'
+  box.querySelectorAll('[data-rm]').forEach((b) => b.onclick = () => { chain = chain.filter((x) => x !== b.dataset.rm); renderChain() })
+  next.innerHTML = ''
+  const lastSkill = chain[chain.length - 1]
+  if (!lastSkill || chain.length >= 5) return
+  relatedCache[lastSkill] = relatedCache[lastSkill] || api('/api/skill?name=' + encodeURIComponent(lastSkill)).catch(() => ({ related: [] }))
+  const { related } = await relatedCache[lastSkill]
+  const offer = (related || []).filter((n) => knownSkills.has(n) && !chain.includes(n)).slice(0, 6)
+  if (chain[chain.length - 1] !== lastSkill) return
+  next.innerHTML = offer.length ? '<span class="note">' + esc(lastSkill) + ' hands over to:</span>' + offer.map((n) => '<button type="button" class="pill" data-add="' + esc(n) + '">+ ' + esc(n) + '</button>').join('') : ''
+  next.querySelectorAll('[data-add]').forEach((b) => b.onclick = () => { chain.push(b.dataset.add); renderChain() })
 }
 async function start() {
   const err = document.getElementById('f-error'), btn = document.getElementById('f-start')
@@ -477,7 +574,7 @@ async function start() {
   const body = {
     agent: document.getElementById('f-agent').value,
     model: modelSpec(),
-    skill: document.getElementById('f-skill-path').value.trim() || document.getElementById('f-skill').value || null,
+    skill: document.getElementById('f-skill-path').value.trim() || chain.join(',') || null,
     devCommand: document.getElementById('f-dev').value.trim(),
     baseRef: document.getElementById('f-base').value,
     startPaths: scope() === 'whole' ? [] : document.getElementById('f-paths').value.split(',').map((x) => x.trim()).filter(Boolean),
@@ -486,6 +583,9 @@ async function start() {
     sync: document.getElementById('f-sync').checked,
     crawl: scope() === 'pages' && document.getElementById('f-crawl').checked,
     steps: document.getElementById('f-steps').checked,
+    checkerModel: checkerPick().model,
+    checkerVia: checkerPick().via,
+    keepInvisible: document.getElementById('f-invisible').checked,
     ignore: document.getElementById('f-ignore').value.split('\\n').map((x) => x.trim()).filter(Boolean),
   }
   if (!body.devCommand) { err.textContent = 'Give the dev command.'; return }

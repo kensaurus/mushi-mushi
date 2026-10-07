@@ -7,6 +7,7 @@
 
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+import type { CheckerVerdict } from './checker.js'
 import type { JudgeVerdict } from './judge.js'
 import type { ProbeResult, Surface } from './types.js'
 
@@ -40,11 +41,20 @@ export interface IterationRecord {
   pixelDiff: Record<string, number>
   after: Record<string, ShotRef>
   diffPng: Record<string, string>
+  /**
+   * Where this attempt changed the screen, per viewport, against the screen
+   * before it (the last kept state): image size and up to four boxes.
+   */
+  changes?: Record<string, { width: number; height: number; boxes: Array<{ x: number; y: number; w: number; h: number }> }>
   logTail: string
   /** agent_failed because the time box ran out (another attempt may still succeed). */
   timedOut?: boolean
   /** Steps mode: the plan step this attempt worked on. */
   step?: string
+  /** Kept without a visible change: a person should read the diff (ADR 0021). */
+  needsReview?: boolean
+  /** The second model's review of a kept step (ADR 0021). */
+  checker?: CheckerVerdict
 }
 
 /** One small, separate improvement from a screen's plan; each gets its own attempt. */
@@ -58,7 +68,8 @@ export interface PlanStep {
 
 export interface SurfaceState {
   /** Steps mode: the screen's plan, made before any edit; null when planning produced none. */
-  plan?: { steps: PlanStep[] } | null
+  /** `session`: the agent session that planned, resumed by each step so it keeps what it read. */
+  plan?: { steps: PlanStep[]; session?: string | null } | null
   surface: Surface
   status: SurfaceStatus
   /** Why it is blocked / skipped / regressed, in a sentence. */
@@ -114,6 +125,10 @@ export interface SavedRunOptions {
   sync?: boolean
   /** Steps mode: plan each screen, then one small change per attempt. */
   steps?: boolean
+  /** The reviewing model that may veto a kept step (ADR 0021). */
+  checker?: { via: 'claude-code' | 'anthropic-api'; model: string } | null
+  /** Keep edits with nothing visible, flagged for review. */
+  keepInvisible?: boolean
 }
 
 export interface RunState {
