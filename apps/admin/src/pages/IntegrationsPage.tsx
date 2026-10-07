@@ -232,6 +232,28 @@ export function IntegrationsPage() {
   const [pendingApplyKind, setPendingApplyKind] = useState<Kind | null>(null)
   const [applyingKind, setApplyingKind] = useState<Kind | null>(null)
 
+  // Remove key: pending confirmation + in-flight state
+  const [pendingRemoveKeyKind, setPendingRemoveKeyKind] = useState<Kind | null>(null)
+  const [removingKeyKind, setRemovingKeyKind] = useState<Kind | null>(null)
+
+  const confirmRemoveKey = async () => {
+    if (!pendingRemoveKeyKind) return
+    const kind = pendingRemoveKeyKind
+    setRemovingKeyKind(kind)
+    const res = await apiFetch<{ cleared: string[] }>(`/v1/admin/integrations/platform/${kind}/key`, {
+      method: 'DELETE',
+    })
+    setRemovingKeyKind(null)
+    setPendingRemoveKeyKind(null)
+    if (!res.ok) {
+      const t = describeApiFailure(res.error, `Could not remove the ${kindLabel(kind)} key`)
+      toast.error(t.title, t.description)
+      return
+    }
+    toast.success(`${kindLabel(kind)} key removed`)
+    reloadAll()
+  }
+
   const latestByKind = useMemo(() => {
     const map: Partial<Record<string, HealthRow>> = {}
     for (const h of history) {
@@ -584,6 +606,8 @@ export function IntegrationsPage() {
                     onTest={() => void testKind(def.kind)}
                     onApplyToAll={organizationId ? () => setPendingApplyKind(def.kind) : undefined}
                     applyingToAll={applyingKind === def.kind}
+                    onRemoveKey={() => setPendingRemoveKeyKind(def.kind)}
+                    removingKey={removingKeyKind === def.kind}
                     canManage={canManage}
                   />
                 </div>
@@ -623,6 +647,8 @@ export function IntegrationsPage() {
                     dependencyAnchorId="platform-card-github"
                     onApplyToAll={organizationId ? () => setPendingApplyKind(def.kind) : undefined}
                     applyingToAll={applyingKind === def.kind}
+                    onRemoveKey={() => setPendingRemoveKeyKind(def.kind)}
+                    removingKey={removingKeyKind === def.kind}
                     canManage={canManage}
                   />
                 </div>
@@ -747,6 +773,21 @@ export function IntegrationsPage() {
           loading={false}
           onConfirm={() => void confirmApplyToAll()}
           onCancel={() => setPendingApplyKind(null)}
+        />
+      )}
+
+      {pendingRemoveKeyKind && (
+        <ConfirmDialog
+          title={`Remove the ${kindLabel(pendingRemoveKeyKind)} key?`}
+          body={`The keys, tokens and webhook secrets this project stores for ${kindLabel(pendingRemoveKeyKind)} are deleted. Other settings on the card stay. If your team or the server also has a ${kindLabel(pendingRemoveKeyKind)} key, the card keeps using that one; otherwise it stops working until you add a key again.`}
+          confirmLabel="Remove key"
+          cancelLabel="Keep key"
+          tone="danger"
+          loading={removingKeyKind === pendingRemoveKeyKind}
+          onConfirm={() => void confirmRemoveKey()}
+          onCancel={() => {
+            if (!removingKeyKind) setPendingRemoveKeyKind(null)
+          }}
         />
       )}
     </div>

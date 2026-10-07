@@ -26,7 +26,7 @@ import { ConnectionStatus } from '../ui/ConnectionStatus'
 import { connectionFromProbe, sentryConnection, type ConnectionView } from '../../lib/integrationConnection'
 import { CHIP_TONE } from '../../lib/chipTone'
 import { usePageData } from '../../lib/usePageData'
-import { sentryProjectsFromConfig } from '../../lib/platformIntegrationForm'
+import { projectStoredSecretFields, sentryProjectsFromConfig } from '../../lib/platformIntegrationForm'
 
 /**
  * Triggers a one-shot success-pulse signal when the latest probe transitions
@@ -154,6 +154,14 @@ interface Props {
   /** Whether the apply-to-all is in progress. */
   applyingToAll?: boolean
   /**
+   * When provided, the overflow menu shows "Remove key" while this project
+   * stores a secret for the integration. The page confirms before calling
+   * DELETE /v1/admin/integrations/platform/:kind/key.
+   */
+  onRemoveKey?: () => void
+  /** Whether the key removal is in progress. */
+  removingKey?: boolean
+  /**
    * False when the caller is a member or viewer: the server refuses their
    * credential writes, so Edit / Configure / Apply are disabled with a reason.
    */
@@ -181,6 +189,8 @@ export function PlatformIntegrationCard({
   dependencyAnchorId,
   onApplyToAll,
   applyingToAll,
+  onRemoveKey,
+  removingKey,
   canManage = true,
 }: Props) {
   const [overflowOpen, setOverflowOpen] = useState(false)
@@ -205,6 +215,12 @@ export function PlatformIntegrationCard({
     const src = sourceByField?.[f.name]
     return src === 'org' || src === 'env'
   })
+
+  // Overflow actions: copying needs a full set of credentials; removing needs
+  // a secret this project stores itself (an inherited org/env value is not
+  // this card's to remove).
+  const showApplyToAll = Boolean(onApplyToAll) && requiredOk
+  const showRemoveKey = Boolean(onRemoveKey) && projectStoredSecretFields(def, config, sourceByField).length > 0
 
   const status: HealthRow['status'] = !requiredOk ? 'unknown' : (latestProbe?.status ?? 'unknown')
   const pulseClass = useSuccessPulse(latestProbe)
@@ -405,8 +421,8 @@ export function PlatformIntegrationCard({
                 Cancel
               </Btn>
             )}
-            {/* Overflow menu — "Apply to all projects" */}
-            {onApplyToAll && canManage && requiredOk && !isEditing && (
+            {/* Overflow menu — "Apply to all projects" + "Remove key" */}
+            {canManage && !isEditing && (showApplyToAll || showRemoveKey) && (
               <div className="relative" onBlur={handleOverflowBlur}>
                 <Tooltip content="More actions">
                   <Btn
@@ -421,19 +437,36 @@ export function PlatformIntegrationCard({
                 {overflowOpen && (
                   // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
                   <div className="absolute right-0 top-full mt-1 z-20 min-w-[220px] rounded-md border border-edge bg-surface shadow-lg py-1">
-                    <Btn
-                      variant="ghost"
-                      size="sm"
-                      className="flex w-full items-center justify-start gap-2 rounded-none px-3 py-2.5 text-left text-xs font-normal text-fg hover:bg-surface-hover"
-                      onClick={() => {
-                        setOverflowOpen(false)
-                        onApplyToAll()
-                      }}
-                      disabled={applyingToAll}
-                      loading={applyingToAll}
-                    >
-                      {applyingToAll ? 'Applying to all projects…' : 'Copy credentials to all projects in org'}
-                    </Btn>
+                    {showApplyToAll && onApplyToAll && (
+                      <Btn
+                        variant="ghost"
+                        size="sm"
+                        className="flex w-full items-center justify-start gap-2 rounded-none px-3 py-2.5 text-left text-xs font-normal text-fg hover:bg-surface-hover"
+                        onClick={() => {
+                          setOverflowOpen(false)
+                          onApplyToAll()
+                        }}
+                        disabled={applyingToAll}
+                        loading={applyingToAll}
+                      >
+                        {applyingToAll ? 'Applying to all projects…' : 'Copy credentials to all projects in org'}
+                      </Btn>
+                    )}
+                    {showRemoveKey && onRemoveKey && (
+                      <Btn
+                        variant="ghost"
+                        size="sm"
+                        className="flex w-full items-center justify-start gap-2 rounded-none px-3 py-2.5 text-left text-xs font-normal text-danger hover:bg-surface-hover"
+                        onClick={() => {
+                          setOverflowOpen(false)
+                          onRemoveKey()
+                        }}
+                        disabled={removingKey}
+                        loading={removingKey}
+                      >
+                        {removingKey ? 'Removing key…' : 'Remove key'}
+                      </Btn>
+                    )}
                   </div>
                 )}
               </div>
