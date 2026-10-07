@@ -164,6 +164,13 @@ export async function baseRefs(repoRoot: string): Promise<{ refs: Array<{ ref: s
     refs.push({ ref: remoteHead, label: `${remoteHead} (remote tip${behind && behind !== '0' ? `; your checkout is ${behind} commits behind` : ''})` })
   }
   refs.push({ ref: 'HEAD', label: `HEAD — ${head}${dirty ? ` (${dirty} uncommitted change${dirty === 1 ? '' : 's'} not included)` : ''}` })
+  // Earlier runs' branches and the review PRs built from them, so a new run can
+  // continue one (one PR, one release) instead of starting beside it.
+  const runBranches = ((await git(repoRoot, ['for-each-ref', '--sort=-committerdate', '--count=8', '--format=%(refname:short)', 'refs/remotes/origin/mushi-ux/'])) ?? '').split('\n').filter(Boolean)
+  for (const ref of runBranches) {
+    const ahead = remoteHead ? await git(repoRoot, ['rev-list', '--count', `${remoteHead}..${ref}`]) : null
+    refs.push({ ref, label: `${ref} (earlier UX work${ahead ? `; ${ahead} commit${ahead === '1' ? '' : 's'} ahead of ${remoteHead}` : ''})` })
+  }
   // The remote tip is the safer default when the checkout is behind or dirty.
   const defaultRef = remoteHead && (dirty > 0 || head !== remoteHead.replace(/^origin\//, '')) ? remoteHead : 'HEAD'
   return { refs, defaultRef }
