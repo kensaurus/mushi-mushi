@@ -20,6 +20,7 @@ import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { useToast } from '../lib/toast'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useSetupStatus } from '../lib/useSetupStatus'
+import { refreshNavCounts } from '../lib/useNavCounts'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageCopy } from '../lib/copy'
 import { useLessonsUx, resolveQuickLessonsTab } from '../lib/lessonsModeUx'
@@ -586,6 +587,13 @@ export function LessonsPage() {
     lastFetchedAt: statsFetchedAt,
     isValidating: statsValidating,
   } = usePageData<LessonsStats>('/v1/admin/lessons/stats')
+  // Retire / restore / promote change the sidebar's "N active lessons" too.
+  // lessons and mistake_clusters are not in the realtime publication, so the
+  // badge is refreshed here instead of waiting for a full reload.
+  const onLessonsChanged = useCallback(() => {
+    reloadStats()
+    refreshNavCounts()
+  }, [reloadStats])
   usePublishPageHeroStats('/lessons', statsData)
   const stats = { ...EMPTY_LESSONS_STATS, ...statsData }
   const activeTab = resolveModeAwareTab<LessonsTabId>({
@@ -825,8 +833,8 @@ export function LessonsPage() {
         </div>
       )}
 
-      {activeTab === 'lessons' && <LessonsTab onChanged={reloadStats} canEditProject={canEditProject} />}
-      {activeTab === 'clusters' && <ClustersTab onChanged={reloadStats} canEditProject={canEditProject} />}
+      {activeTab === 'lessons' && <LessonsTab onChanged={onLessonsChanged} canEditProject={canEditProject} />}
+      {activeTab === 'clusters' && <ClustersTab onChanged={onLessonsChanged} canEditProject={canEditProject} />}
       {activeTab === 'query' && <QuerySimTab />}
     </div>
   )

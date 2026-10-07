@@ -291,7 +291,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/admin/inventory",
     markdown: "admin/inventory.md",
     keywords: ["admin", "inventory", "user", "stories"],
-    headings: ["What you see", "Run gates / Run crawler from a row", "SDK-driven discovery", "Surface mode in the graph", "Five gates", "Synthetic monitor", "Spec traceability — every fix carries the originating Action", "See also"],
+    headings: ["What you see", "Run gates / Run crawler", "SDK-driven discovery", "Surface mode in the graph", "Five gates", "Synthetic monitor", "Spec traceability — every fix carries the originating Action", "See also"],
     excerpt: "The User stories page manages your inventory.yaml — every page, action and story your app should have — and shows which of them the gates cover.",
   },
   {

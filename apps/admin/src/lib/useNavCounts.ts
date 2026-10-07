@@ -331,8 +331,12 @@ async function runLoad(ctx: LoadContext, fresh: boolean): Promise<void> {
   }
 }
 
+/** The context the `live` caller last asked for; `refreshNavCounts` reuses it. */
+let liveCtx: LoadContext | null = null
+
 /** Load for `ctx` unless that exact context is already loaded or loading. */
 function requestLoad(ctx: LoadContext, fresh: boolean): void {
+  liveCtx = ctx
   if (!fresh && (loadedKey === ctx.key || inflightKey === ctx.key)) return
   if (fresh && inflightKey === ctx.key) {
     // A load for this context is running; refresh once it lands.
@@ -340,6 +344,16 @@ function requestLoad(ctx: LoadContext, fresh: boolean): void {
     return
   }
   void runLoad(ctx, fresh)
+}
+
+/**
+ * Re-read the sidebar counters now, bypassing the server's short cache.
+ * Realtime moves most badges on its own, but some tables (lessons,
+ * mistake_clusters, …) are not in the realtime publication, so a page that
+ * changes them calls this after its own reload. No-op before Layout loaded.
+ */
+export function refreshNavCounts(): void {
+  if (liveCtx) requestLoad(liveCtx, true)
 }
 
 /**

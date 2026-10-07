@@ -2,7 +2,7 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-10-07 · **679** routes.
+> Generated: 2026-10-07 · **680** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
@@ -10,7 +10,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | --- | ---: |
 | `adminOrApiKey` | 170 |
 | `apiKeyAuth` | 58 |
-| `jwtAuth` | 344 |
+| `jwtAuth` | 345 |
 | `jwtOrApiKey` | 3 |
 | `unknown` | 104 |
 
@@ -167,6 +167,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/integrations/platform` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/integrations.ts` |
 | PUT | `/v1/admin/integrations/platform/:kind` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/integrations.ts` |
 | POST | `/v1/admin/integrations/platform/:kind/apply` | `jwtAuth` | `packages/server/supabase/functions/api/routes/integrations.ts` |
+| DELETE | `/v1/admin/integrations/platform/:kind/key` | `jwtAuth` | `packages/server/supabase/functions/api/routes/integrations.ts` |
 | GET | `/v1/admin/integrations/slack/channels` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | GET | `/v1/admin/integrations/slack/install` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | GET | `/v1/admin/integrations/stats` | `jwtAuth` | `packages/server/supabase/functions/api/routes/integrations.ts` |

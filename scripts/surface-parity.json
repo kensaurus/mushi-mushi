@@ -19,6 +19,7 @@
     "DELETE /v1/admin/experiments/:id": {"allow": "jwt-only"},
     "DELETE /v1/admin/fine-tuning/:id": {"allow": "jwt-only"},
     "DELETE /v1/admin/integrations/:type": {"allow": "jwt-only"},
+    "DELETE /v1/admin/integrations/platform/:kind/key": {"allow": "jwt-only", "note": "The integration card's Remove key (owner/admin). Deleting a stored credential stays a deliberate console action."},
     "DELETE /v1/admin/linear-oauth/disconnect": {"allow": "credentials"},
     "DELETE /v1/admin/orgs/:orgId/accounts/:id": {"mcp": ["remove_register_account"], "cli": ["accounts remove"]},
     "DELETE /v1/admin/orgs/:orgId/connectors/:id": {"allow": "credentials"},
