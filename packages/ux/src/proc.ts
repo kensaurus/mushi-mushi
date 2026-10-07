@@ -87,6 +87,11 @@ export function run(cmd: string, args: readonly string[], opts: RunOptions): Pro
       if (partial.trim() && opts.onLine) opts.onLine(partial)
       resolve({ exitCode: code, timedOut, durationMs: Date.now() - started, tail, stdout })
     })
+    // A child that exits before reading stdin (git, a quick CLI) makes this
+    // write fail with EPIPE; without a listener that is an uncaught exception
+    // that takes the whole process down (seen in CI, 2026-10-07). The exit
+    // code still reports how the child ended.
+    child.stdin?.on('error', () => {})
     child.stdin?.end(opts.stdin ?? '')
   })
 }
