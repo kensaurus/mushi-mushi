@@ -332,8 +332,12 @@ async function processRepo(
     if (!insData) continue
 
     if (!insData.related_report_id && (f.severity === 'security' || f.severity === 'major' || f.severity === 'deprecated')) {
-      const { data: report } = await db.from('reports').insert({
+      const { data: report, error: reportErr } = await db.from('reports').insert({
         project_id: row.project_id,
+        // Without it the column default 'widget' showed a dependency bot as a
+        // user's widget report (glot.it, 2026-10-07). Needs migration
+        // 20261007140000 applied first, or reports_source_check refuses it.
+        source: 'library_modernizer',
         category: 'other',
         description: `[Library Modernization] ${f.name} ${f.currentVersion} → ${f.suggestedVersion}\n\n${f.summary}`,
         summary: `Update ${f.name} (${f.severity})`,
@@ -348,6 +352,10 @@ async function processRepo(
         reporter_token_hash: 'cron:library-modernizer',
         environment: { source: 'library-modernizer', changelogUrl: f.changelogUrl ?? null },
       }).select('id').maybeSingle()
+
+      // Never silent: a refused insert (e.g. the source CHECK) would otherwise
+      // look like "no report needed".
+      if (reportErr) log.warn('modernization report insert failed', { dep: f.name, error: reportErr.message })
 
       if (report) {
         await db
