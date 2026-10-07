@@ -603,21 +603,25 @@ export const gatesRunRateLimiter = new RateLimiter({
 // ────────────────────────────────────────────────────────────────────────
 
 /**
- * True when an inventory URL is something a cloud crawler can reach: https
- * and not a loopback, private, `*.localhost` or `*.local` host. An inventory's
- * `preview_url` is often the developer's `http://localhost:3000`.
+ * Why a cloud crawler cannot use an inventory URL, or null when it can: the
+ * host must not be loopback, private, `*.localhost` or `*.local`, and a
+ * preview must also be https. An inventory's `preview_url` is often the
+ * developer's `http://localhost:3000`; staging and production keep http.
  */
-function isCloudReachableUrl(raw: string): boolean {
+function crawlUrlProblem(raw: string, requireHttps: boolean): string | null {
   let url: URL
   try {
     url = new URL(raw)
   } catch {
-    return false
+    return 'is not a valid URL'
   }
-  if (url.protocol !== 'https:') return false
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') return 'is not an http(s) URL'
   const host = url.hostname.toLowerCase()
-  if (host.endsWith('.localhost') || host.endsWith('.local')) return false
-  return !isPrivateOrSpecialHost(host)
+  if (host.endsWith('.localhost') || host.endsWith('.local') || isPrivateOrSpecialHost(host)) {
+    return 'is a local or private address a cloud crawler cannot reach'
+  }
+  if (requireHttps && url.protocol !== 'https:') return 'is not https'
+  return null
 }
 
 /** Which URL the crawl uses, and why the others were passed over. */
@@ -631,6 +635,7 @@ type CrawlBaseUrlChoice =
  * production URLs are tried in that order, and only one a cloud crawler can
  * reach counts: a `http://localhost:3000` preview falls through to the
  * production `base_url`, while a real https preview is still preferred.
+ * Only the preview must be https; staging and production may be plain http.
  */
 export function pickCrawlBaseUrl(
   crawlerBaseUrl: string | null | undefined,
@@ -647,8 +652,9 @@ export function pickCrawlBaseUrl(
   for (const [source, raw] of candidates) {
     const value = raw?.trim()
     if (!value) continue
-    if (isCloudReachableUrl(value)) return { url: value, source, skipped }
-    skipped.push(`${source} ${value} is not a public https URL`)
+    const problem = crawlUrlProblem(value, source === 'preview_url')
+    if (!problem) return { url: value, source, skipped }
+    skipped.push(`${source} ${value} ${problem}`)
   }
   return { url: null, skipped }
 }

@@ -46,7 +46,16 @@ describe('pickCrawlBaseUrl', () => {
     expect(pickCrawlBaseUrl(null, glot)).toEqual({
       url: 'https://kensaur.us/glot-it',
       source: 'base_url',
-      skipped: ['preview_url http://localhost:3000 is not a public https URL'],
+      skipped: ['preview_url http://localhost:3000 is a local or private address a cloud crawler cannot reach'],
+    })
+  })
+
+  it('needs https for a preview only; a public http production URL still counts', () => {
+    const choice = pickCrawlBaseUrl(null, { preview_url: 'http://pr-3.preview.example.com', base_url: 'http://legacy.example.com' })
+    expect(choice).toEqual({
+      url: 'http://legacy.example.com',
+      source: 'base_url',
+      skipped: ['preview_url http://pr-3.preview.example.com is not https'],
     })
   })
 
@@ -78,11 +87,11 @@ describe('pickCrawlBaseUrl', () => {
   })
 
   it('returns no URL, with the reasons, when nothing is reachable', () => {
-    expect(pickCrawlBaseUrl('', { preview_url: 'http://localhost:3000', base_url: 'http://localhost:3000' })).toEqual({
+    expect(pickCrawlBaseUrl('', { preview_url: 'http://localhost:3000', base_url: 'ftp://files.example.com' })).toEqual({
       url: null,
       skipped: [
-        'preview_url http://localhost:3000 is not a public https URL',
-        'base_url http://localhost:3000 is not a public https URL',
+        'preview_url http://localhost:3000 is a local or private address a cloud crawler cannot reach',
+        'base_url ftp://files.example.com is not an http(s) URL',
       ],
     })
     expect(pickCrawlBaseUrl(null, null)).toEqual({ url: null, skipped: [] })
