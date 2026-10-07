@@ -204,7 +204,24 @@ const DANGLING = /[\s,]+(?:a|an|and|as|at|between|by|for|from|in|into|is|of|on|o
 export function commitMessage(path: string, screen: string, step: string | null, reason: string): string {
   const name = screen.split(/\s+[—|–]\s+/)[0].trim() || path
   const summary = (step ? stepSummary(step) : '') || `improve the ${name} screen`
-  return [`fix(ux): ${lowerFirst(summary)}`, step ? `${name} (${path}): ${step}` : `${name} (${path})`, reason].join('\n\n')
+  const body = [step ? `${name} (${path}): ${step}` : `${name} (${path})`, reason]
+  return [`fix(ux): ${lowerFirst(summary)}`, ...body.map((p) => wrapAt(p, BODY_WIDTH))].join('\n\n')
+}
+
+/** Conventional-commit lint rejects body lines over 100 characters. */
+const BODY_WIDTH = 100
+
+function wrapAt(text: string, width: number): string {
+  const lines: string[] = []
+  let line = ''
+  for (const word of text.split(/\s+/).filter(Boolean)) {
+    if (line && [...`${line} ${word}`].length > width) {
+      lines.push(line)
+      line = word
+    } else line = line ? `${line} ${word}` : word
+  }
+  if (line) lines.push(line)
+  return lines.join('\n')
 }
 
 /** "Fix the caption" → "fix the caption"; "CTA buttons" and quoted text stay as they are. */

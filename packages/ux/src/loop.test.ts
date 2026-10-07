@@ -56,4 +56,11 @@ describe('commit messages for kept attempts', () => {
     expect(msg).toContain('Kept: problem score 1→0.')
     expect(commitMessage('/chat/', 'Chat · แชท — glot.it', 'In `a.tsx`, do x.', 'r')).toContain('Chat · แชท (/chat/): In `a.tsx`, do x.')
   })
+
+  it('wraps the body at 100 characters, which commitlint requires', () => {
+    const long = 'Kept, needs your review: the edit changed 1 file(s) but nothing visible in a still screenshot (motion, haptics or another screen). Read the diff.'
+    const lines = commitMessage('/chat/', 'Chat', 'In `a.tsx`, ' + 'make the bubble steady '.repeat(8), long).split('\n')
+    for (const l of lines) expect([...l].length).toBeLessThanOrEqual(100)
+    expect(lines.join(' ').replace(/\s+/g, ' ')).toContain(long)
+  })
 })
