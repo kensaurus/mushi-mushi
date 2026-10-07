@@ -57,8 +57,9 @@ audits run at high error rates (Baymard).
 
 ## Consequences
 
-- A checked step costs one or two extra model calls (measured: about $0.13
-  and 12 s per Opus 5.5 review through Claude Code on glot.it).
+- A checked step costs two model calls: on glot.it, Opus 5.5 through Claude
+  Code took 37 s and $0.46 for both reviews of one step (a single
+  two-image probe: 12 s, $0.13).
 - "Kept, needs your review" commits reach the draft PR; the PR description
   must list them so a person reads their diffs.
 - The final advisory review (0020 decision 4's second half) stays as it is.

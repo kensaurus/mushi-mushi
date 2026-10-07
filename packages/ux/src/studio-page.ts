@@ -409,7 +409,7 @@ async function openLauncher() {
     '<div class="grid">' +
       '<label class="f"><span>Checker: a second model reviews each kept step and may roll it back</span><select id="f-checker">' + checkerOptions(agents, last) + '</select></label>' +
     '</div>' +
-    '<div class="note">The checker sees the changed area before and after, twice with the order swapped, and rolls a step back only when both reviews prefer the original. It never keeps a step the measurements rejected. Each review costs about $0.10–0.30 of your Claude usage.</div>' +
+    '<div class="note">The checker sees the changed area before and after, twice with the order swapped, and rolls a step back only when both reviews prefer the original. It never keeps a step the measurements rejected. Each checked step costs about $0.20–0.50 of your Claude usage (two reviews; measured $0.46 on glot.it).</div>' +
     '<label class="sub"><input type="checkbox" id="f-invisible"' + (last.keepInvisible === false ? '' : ' checked') + '> Keep changes that are not visible in a screenshot (motion, haptics, press feedback) and flag them for your review</label>' +
     '<div class="row"><span class="sub mono" id="f-spec"></span><button type="button" class="btn" id="f-refresh">Refresh list</button></div></div>' +
     '<div class="card"><h2><span class="n">3</span>How much</h2><div class="grid">' +
