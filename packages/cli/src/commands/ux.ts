@@ -18,17 +18,28 @@ function cmdQuote(arg: string): string {
   return /^[\w./:=@-]+$/.test(arg) ? arg : `"${arg.replace(/"/g, '""')}"`
 }
 
+/**
+ * Where npm's npx-cli.js sits next to the running Node: beside node.exe on
+ * Windows, under <prefix>/lib/node_modules on Linux and macOS (CI found only
+ * the Windows layout and fell back to a bare `npx`, 2026-10-07).
+ */
+const NPX_CLI_CANDIDATES: readonly string[] = [
+  join(dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npx-cli.js'),
+  join(dirname(process.execPath), '..', 'lib', 'node_modules', 'npm', 'bin', 'npx-cli.js'),
+]
+
 function uxCommandLine(
   args: readonly string[],
   env: NodeJS.ProcessEnv = process.env,
   platform: NodeJS.Platform = process.platform,
-  npxCli: string = join(dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npx-cli.js'),
+  npxCli: string | readonly string[] = NPX_CLI_CANDIDATES,
   hasFile: (p: string) => boolean = existsSync,
 ): UxSpawn {
   const local = env.MUSHI_UX_BIN?.trim()
   if (local) return { cmd: process.execPath, argv: [local, ...args], shell: false }
   const npxArgs = ['--yes', '--package', UX_PACKAGE, 'mushi-ux', ...args]
-  if (hasFile(npxCli)) return { cmd: process.execPath, argv: [npxCli, ...npxArgs], shell: false }
+  const found = (typeof npxCli === 'string' ? [npxCli] : npxCli).find((p) => hasFile(p))
+  if (found) return { cmd: process.execPath, argv: [found, ...npxArgs], shell: false }
   if (platform === 'win32') return { cmd: 'npx', argv: npxArgs.map(cmdQuote), shell: true }
   return { cmd: 'npx', argv: npxArgs, shell: false }
 }
