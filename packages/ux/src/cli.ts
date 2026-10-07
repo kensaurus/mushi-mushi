@@ -15,6 +15,7 @@
 import { spawn } from 'node:child_process'
 import { EventEmitter } from 'node:events'
 import { createHash } from 'node:crypto'
+import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { Command, InvalidArgumentError, Option } from 'commander'
@@ -367,8 +368,12 @@ program
       const dir = runDir(repoRoot, runId)
       const state = loadState(dir)
       if (!state) throw new Error('No such run.')
+      // Push from the run's worktree: a host's pre-push hook then checks the code being pushed,
+      // not whatever is uncommitted in the main checkout (glot.it's lefthook typechecked another
+      // session's work in progress and refused the push, 2026-10-07).
+      const cwd = state.worktree && existsSync(state.worktree) ? state.worktree : repoRoot
       const exec = async (cmd: string, args: readonly string[]) => {
-        const r = await run(cmd, args, { cwd: repoRoot, timeoutMs: 120_000 })
+        const r = await run(cmd, args, { cwd, timeoutMs: 600_000 })
         if (r.exitCode !== 0) throw new Error(`${cmd} ${args.slice(0, 2).join(' ')} failed: ${r.tail.trim().slice(-300)}`)
         return r.stdout
       }
