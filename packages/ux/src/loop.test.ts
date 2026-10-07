@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 import { describe, expect, it } from 'vitest'
-import { noScreensMessage } from './loop.js'
+import { commitMessage, noScreensMessage } from './loop.js'
 
 describe('a run that maps no screen', () => {
   it('blames the dev server when every page returned the same 5xx', () => {
@@ -16,5 +16,44 @@ describe('a run that maps no screen', () => {
       'No screen to work on: all 2 page(s) were skipped (it opens /b/ instead; HTTP 404).',
     )
     expect(noScreensMessage([], null)).toMatch(/^No screen to work on: mapping found no page/)
+  })
+})
+
+// Host apps build their in-app changelog from commit subjects (glot.it, 2026-10-07).
+describe('commit messages for kept attempts', () => {
+  const subject = (step: string | null, screen = 'Chat · แชท — glot.it') => commitMessage('/chat/', screen, step, 'Kept.').split('\n')[0]
+
+  it('uses the plan step’s plain summary', () => {
+    expect(subject('Fix the low-vocab caption contrast: in `features/word-bank/components/grammar-inline-view.tsx`, replace `text-error/80`')).toBe(
+      'ux(/chat/): Fix the low-vocab caption contrast',
+    )
+  })
+
+  it('drops file names and code from a step with no summary, ending on a whole word', () => {
+    const s = subject(
+      'In `app/chat/_components/chat-content.tsx`, keep a fixed-height slot for the reconnecting `Alert` between the speak hub and the scenario list, and fill that slot while `chatHealth` is `"checking"`.',
+    )
+    const summary = s.replace('ux(/chat/): ', '')
+    expect(summary).toMatch(/^Keep a fixed-height slot for the reconnecting Alert between/)
+    expect(summary.length).toBeLessThanOrEqual(72)
+    expect(s).not.toMatch(/\.tsx|`/)
+    const words = 'Keep a fixed-height slot for the reconnecting Alert between the speak hub and the scenario list'.split(' ')
+    for (const w of summary.split(' ')) expect(words).toContain(w)
+  })
+
+  it('keeps code names as words, drops paths with their preposition, and never ends inside a bracket', () => {
+    expect(subject('Analyze in `features/reader/components/reader-input.tsx` looks like a live CTA while the field is empty.')).toBe(
+      'ux(/chat/): Analyze looks like a live CTA while the field is empty',
+    )
+    expect(subject('In `x.tsx`, pass an accessible `label` into `CircularProgress` (the 0/77 ring beside the long page title) so the progressbar has a name')).toBe(
+      'ux(/chat/): Pass an accessible label into CircularProgress',
+    )
+  })
+
+  it('names the screen without the site suffix when there was no plan, and keeps the details in the body', () => {
+    const msg = commitMessage('/friends/challenge/', 'Challenge a Friend | glot.it', null, 'Kept: problem score 1→0.')
+    expect(msg.split('\n')[0]).toBe('ux(/friends/challenge/): Improve the Challenge a Friend screen')
+    expect(msg).toContain('Kept: problem score 1→0.')
+    expect(commitMessage('/chat/', 'Chat · แชท — glot.it', 'In `a.tsx`, do x.', 'r')).toContain('Chat · แชท: In `a.tsx`, do x.')
   })
 })

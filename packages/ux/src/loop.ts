@@ -189,6 +189,50 @@ export function noScreensMessage(skipped: string[], devError: string | null): st
   return lines.join('\n')
 }
 
+/** A commit subject's summary stops here, at a whole word. */
+const SUMMARY_MAX = 72
+const DANGLING = /[\s,]+(?:a|an|and|as|at|between|by|for|from|in|into|is|of|on|or|so|that|the|to|while|with)$/i
+
+/**
+ * Pure: the commit message for a kept attempt. Host apps turn commit subjects
+ * into their in-app changelog (glot.it's generate-changelog maps `ux:` to
+ * "improved"), so the subject is a plain sentence that ends on a whole word,
+ * without file names; the step and the measurements go in the body.
+ * @internal Exported for tests only.
+ */
+export function commitMessage(path: string, screen: string, step: string | null, reason: string): string {
+  const name = screen.split(/\s+[—|–]\s+/)[0].trim() || path
+  const summary = step ? stepSummary(step) : ''
+  const subject = `ux(${path}): ${summary || `Improve the ${name} screen`}`
+  return [subject, step ? `${name}: ${step}` : name, reason].join('\n\n')
+}
+
+const isPath = (code: string) => code.includes('/') || /\.[a-z]{2,4}$/i.test(code)
+
+function stepSummary(step: string): string {
+  // Plans lead with a plain summary before a colon ("Fix the caption contrast: in `x.tsx`, ...").
+  const lead = step.match(/^([^:`]{8,90}):\s/)?.[1]
+  let s = lead ?? step.replace(/^(?:In\s+)?`[^`]+`(?:\s*\([^)]*\))?\s*[,:]?\s*/i, '').split(/(?<=\.)\s|;\s/)[0]
+  s = s
+    .replace(/\s*\(([^()]*)\)/g, (m, inner: string) => (inner.includes('`') ? '' : m))
+    // A file named after "in" or "from" goes with its preposition.
+    .replace(/\s+(?:in|from|of|on)\s+`([^`]*)`/gi, (m, inner: string) => (isPath(inner) ? '' : m))
+    // Code spans pair left to right: paths go, other code stays as words.
+    .replace(/`([^`]*)`/g, (_m, inner: string) => (isPath(inner) ? ' ' : inner.replace(/["']/g, '')))
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+  if (s.length > SUMMARY_MAX) {
+    const cut = s.lastIndexOf(' ', SUMMARY_MAX)
+    s = s.slice(0, cut > 0 ? cut : SUMMARY_MAX)
+    const open = s.lastIndexOf('(')
+    if (open > s.lastIndexOf(')')) s = s.slice(0, open)
+    // A cut sentence should not end on a word that needs the next one.
+    while (DANGLING.test(s)) s = s.replace(DANGLING, '')
+  }
+  s = s.replace(/^[\s,;:.—–-]+|[\s,;:.—–-]+$/g, '')
+  return s ? s[0].toUpperCase() + s.slice(1) : ''
+}
+
 export function startLoop(opts: LoopOptions): LoopHandle {
   const runId = opts.resumeRunId ?? newRunId()
   const dir = runDir(opts.repoRoot, runId)
@@ -820,8 +864,7 @@ async function runLoop(opts: LoopOptions, runId: string, dir: string): Promise<R
         log(`  attempt ${n}: ${record.reason}`)
 
         if (record.outcome === 'accepted') {
-          const title = step ? `${s.surface.label}: ${step.text.slice(0, 60)}` : s.surface.label
-          record.commitSha = await commitAll(wtPath, `ux(${s.surface.path}): ${title}\n\n${record.reason}`)
+          record.commitSha = await commitAll(wtPath, commitMessage(s.surface.path, s.surface.label, step?.text ?? null, record.reason))
           current = record.after
           s.status = 'accepted'
           s.iterations.push(record)
