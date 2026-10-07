@@ -22,7 +22,7 @@ import { EmptySectionMessage } from '../components/report-detail/ReportClassific
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { ActiveFiltersRail, type ActiveFilter } from '../components/ActiveFiltersRail'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
-import { SetupNudge } from '../components/SetupNudge'
+import { NextStep } from '../components/NextStep'
 import { HeroFixWrench } from '../components/illustrations/HeroIllustrations'
 import { useToast } from '../lib/toast'
 import { useSetupStatus } from '../lib/useSetupStatus'
@@ -933,7 +933,8 @@ export function FixesPage() {
 
       {activeTab === 'attempts' && (
         fixes.length === 0 ? (
-        <SetupNudge
+        <NextStep
+          variant="inline"
           requires={['github_connected', 'first_report_received', 'byok_anthropic']}
           emptyTitle="No fix attempts yet"
           emptyDescription="Open a classified report and click “Dispatch fix” to start the auto-fix loop. Mushi opens a draft PR you review and merge — nothing ships without you."

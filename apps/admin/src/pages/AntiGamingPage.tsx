@@ -35,7 +35,7 @@ import {
 } from '../components/ui'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { KpiTile } from '../components/charts'
-import { SetupNudge } from '../components/SetupNudge'
+import { NextStep } from '../components/NextStep'
 import { ConfigHelp } from '../components/ConfigHelp'
 import { ConfirmDialog, PromptDialog } from '../components/ConfirmDialog'
 import { plainApiError } from '../lib/humanizeApiError'
@@ -615,7 +615,8 @@ export function AntiGamingPage() {
               hint="Switch to All to inspect every tracked device, or wait for the detector to fire."
             />
           ) : (
-            <SetupNudge
+            <NextStep
+              variant="inline"
               requires={['first_report_received']}
               emptyTitle="No tracked devices yet"
               emptyDescription="Devices appear here once a reporter submits at least one report from them."

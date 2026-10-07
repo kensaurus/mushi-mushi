@@ -232,6 +232,23 @@ mushi qa run <storyId>
 mushi audit                        # full-stack project health audit
 ```
 
+### UX pass over every screen
+
+`mushi ux` runs [`@mushi-mushi/ux`](https://www.npmjs.com/package/@mushi-mushi/ux) on your machine. It maps every page, tab and dialog of your running app, then hands one screen at a time to the coding agent you choose, in a separate git worktree. An edit is kept only if accessibility, layout and console measurements don't get worse. Exploring the app never sends a write request.
+
+```bash
+mushi ux discover --url http://localhost:5173            # list the screens; edits nothing
+mushi ux login --url http://localhost:5173               # sign in once, by hand, for signed-in screens
+mushi ux run --dev "pnpm dev --port {port}" --agent claude-code
+mushi ux run --dev "pnpm dev --port {port}" --agent cursor --model <id>   # id from `agent --list-models`
+mushi ux run --dev "pnpm dev --port {port}" --agent cursor-cloud --model grok-4.7   # edits run in Cursor Cloud
+mushi ux open <runId>                                    # dashboard for a past run
+```
+
+The run ends with a branch, `mushi-ux/`, for you to review and open as a draft PR. Nothing is merged.
+
+To run it on your repo's GitHub Actions instead, add the [`mushi-ux.yml` workflow](https://github.com/kensaurus/mushi-mushi/blob/master/docs/templates/mushi-ux.yml) and use **Run in the cloud** on the console's [UX runs](/admin/ux-runs) page. It uses `cursor-cloud` and opens one draft PR.
+
 ### Gate findings
 
 `mushi audit findings` lists each finding from the recent gate runs with its

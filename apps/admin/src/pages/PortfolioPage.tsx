@@ -20,7 +20,7 @@
  * read" (`card.unreadable`), never $0, "Not set" or "None yet".
  */
 
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useMemo } from 'react'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
@@ -54,6 +54,9 @@ import { ReleasesCard } from '../components/portfolio/ReleasesCard'
 import { FunnelCard } from '../components/portfolio/FunnelCard'
 import { AccountsRegisterCard } from '../components/portfolio/AccountsRegisterCard'
 import { SpendLedgerCard } from '../components/portfolio/SpendLedgerCard'
+import { ProjectGroupsBar } from '../components/portfolio/ProjectGroupsBar'
+import { readActiveGroup, useProjectGroups, writeActiveGroup } from '../lib/projectGroups'
+import { PROJECT_DIRECTORY_PATH, type ProjectDirectory } from '../lib/crossTeamProject'
 
 export function PortfolioPage() {
   const orgId = useActiveOrgId()
@@ -71,9 +74,29 @@ export function PortfolioPage() {
 }
 
 function OrgPortfolio({ orgId }: { orgId: string }) {
-  const path = `/v1/admin/orgs/${orgId}/portfolio`
-  const page = usePageData<PortfolioResponse>(path)
-  const findings = usePageData<PortfolioFindingsResponse>(`${path}/findings`)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const groups = useProjectGroups(orgId)
+  const groupList = groups.data?.groups ?? []
+  const requested = searchParams.get('group') ?? readActiveGroup()
+  // A remembered group that was deleted (or belongs to another team) falls back to all apps.
+  const group = requested && groupList.some((g) => g.slug === requested) ? requested : null
+  const directory = usePageData<ProjectDirectory>(PROJECT_DIRECTORY_PATH, { scope: 'none' })
+  const teamApps = useMemo(
+    () => (directory.data?.projects ?? []).filter((p) => p.organizationId === orgId).map((p) => ({ projectId: p.id, name: p.name })),
+    [directory.data, orgId],
+  )
+  const selectGroup = (slug: string | null) => {
+    writeActiveGroup(slug)
+    const next = new URLSearchParams(searchParams)
+    if (slug) next.set('group', slug)
+    else next.delete('group')
+    setSearchParams(next, { replace: true })
+  }
+  const base = `/v1/admin/orgs/${orgId}/portfolio`
+  const query = group ? `?group=${encodeURIComponent(group)}` : ''
+  const path = `${base}${query}`
+  const page = usePageData<PortfolioResponse>(groups.loading && !groups.data ? null : path)
+  const findings = usePageData<PortfolioFindingsResponse>(groups.loading && !groups.data ? null : `${base}/findings${query}`)
   const { isAdvanced } = useAdminMode()
   const cards = useMemo(() => sortPortfolioCards(page.data?.cards ?? []), [page.data])
   const names = useMemo(() => new Map((page.data?.cards ?? []).map((c) => [c.projectId, c.name])), [page.data])
@@ -116,6 +139,21 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
         ]}
       />
 
+      {groups.data && (
+        <ProjectGroupsBar
+          orgId={orgId}
+          groups={groupList}
+          apps={teamApps}
+          active={group}
+          onSelect={selectGroup}
+          onChanged={() => {
+            groups.reload()
+            page.reload()
+            findings.reload()
+          }}
+        />
+      )}
+
       {page.loading && !page.data && <Loading text="Reading every app's recipe…" />}
       {page.error && (
         <PageLoadError error={page.error} code={page.errorCode} resource="portfolio" endpoint={page.errorEndpoint} requestId={page.requestId} onRetry={page.reload} />
@@ -123,9 +161,13 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
       {page.data && page.data.readErrors.length > 0 && <ReadErrorsCallout errors={page.data.readErrors} />}
       {page.data && page.data.cards.length === 0 && (
         <Card className="px-4 py-8 text-center text-sm text-fg-faint">
-          <p className="font-medium text-fg-muted">No apps in this team yet</p>
+          <p className="font-medium text-fg-muted">{group ? 'No apps in this group yet' : 'No apps in this team yet'}</p>
           <p className="mt-1 text-xs">
-            <Link to="/onboarding" className="text-brand hover:underline">Connect your first app →</Link>
+            {group ? (
+              'Open Manage groups above to choose its apps.'
+            ) : (
+              <Link to="/onboarding" className="text-brand hover:underline">Connect your first app →</Link>
+            )}
           </p>
         </Card>
       )}

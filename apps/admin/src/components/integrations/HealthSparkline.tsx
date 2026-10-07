@@ -7,6 +7,9 @@
 
 import type { HealthRow } from './types'
 
+/** The last 14 probes; more turned the header into a wide striped bar (2026-10-06). */
+const MAX_BARS = 14
+
 interface Props {
   rows: HealthRow[]
 }
@@ -26,7 +29,8 @@ const BG_BY_STATUS: Record<HealthRow['status'], string> = {
 }
 
 export function HealthSparkline({ rows }: Props) {
-  const ordered = [...rows].reverse()
+  // Newest first in, oldest-on-the-left out; capped so the header keeps its width.
+  const ordered = rows.slice(0, MAX_BARS).reverse()
   return (
     <span className="inline-flex items-end gap-px h-3" aria-label="Recent health history">
       {ordered.map((r) => (

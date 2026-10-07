@@ -349,6 +349,7 @@ export function ConnectPage() {
                 Connect your repository to enable one-click upgrade PRs and autofix.
               </SectionDescription>
               <GithubConnectionCard
+                projectId={activeProjectId}
                 preflight={preflight}
                 fallbackRepoUrl={fallbackGithubRepoUrl}
               />
@@ -376,7 +377,7 @@ export function ConnectPage() {
                     Code Health only, not the in-app band.
                   </p>
                   <Link
-                    to={`/setup-copilot?project=${project.id}`}
+                    to={`/onboarding?tab=copilot&project=${project.id}`}
                     className={`mt-2 inline-block text-xs ${LINK_ACCENT}`}
                   >
                     Open Setup Copilot → CI &amp; store builds

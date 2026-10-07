@@ -20,7 +20,7 @@ import { apiFetch } from '../lib/supabase'
 import { useRealtimeReload } from '../lib/realtime'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useSetupStatus } from '../lib/useSetupStatus'
-import { SetupNudge } from '../components/SetupNudge'
+import { NextStep } from '../components/NextStep'
 import { useToast } from '../lib/toast'
 import { describeActionError } from '../lib/actionError'
 import { usePageCopy } from '../lib/copy'
@@ -313,7 +313,8 @@ export function McpPage() {
           }
         />
 
-        <SetupNudge
+        <NextStep
+          variant="inline"
           requires={['project']}
           emptyTitle="Select a project"
           emptyDescription="MCP keys and snippets are scoped to the active project in the header."

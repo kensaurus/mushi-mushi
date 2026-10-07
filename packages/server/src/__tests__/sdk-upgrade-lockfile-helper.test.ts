@@ -150,6 +150,43 @@ describe('runSdkUpgradeJob — lockfile helper', () => {
   })
 })
 
+describe('runSdkUpgradeJob — linked repo choice', () => {
+  it('scans GitHub\'s default branch even when the project_repos row still says main', async () => {
+    const { db } = createFakeDb((q: FakeQuery) => {
+      if (q.table === 'sdk_upgrade_jobs' && q.op === 'select') {
+        return { data: { id: JOB, project_id: PROJECT, status: 'queued', started_at: null } }
+      }
+      if (q.table === 'sdk_upgrade_jobs' && q.op === 'update') return { data: [{ id: JOB }] }
+      if (q.table === 'project_repos') {
+        return {
+          data: [{
+            repo_url: `https://github.com/${OWNER}/${REPO}`,
+            role: 'frontend',
+            is_primary: true,
+            default_branch: 'main',
+            github_app_installation_id: null,
+          }],
+        }
+      }
+      if (q.table === 'project_settings') return { data: null }
+      return { data: null }
+    })
+    state.db = db
+    state.ghRoutes = [
+      [`/repos/${OWNER}/${REPO}/git/trees/`, { tree: [{ path: 'package.json', type: 'blob' }] }],
+      [`/repos/${OWNER}/${REPO}/contents/package.json?ref=master`, { content: b64(JSON.stringify(PKG)) }],
+      [`/repos/${OWNER}/${REPO}/contents/`, null],
+      [`/repos/${OWNER}/${REPO}`, { default_branch: 'master' }],
+    ]
+
+    const result = await runSdkUpgradeJob(JOB)
+
+    // On `main` the package.json is absent and the job would end "up to date".
+    expect(result).toMatchObject({ ok: true, status: 'completed' })
+    expect(gh.createPrFromFiles).toHaveBeenCalledTimes(1)
+  })
+})
+
 describe('syncAwaitingLockfileJobs', () => {
   const NOW = new Date('2026-10-03T12:00:00Z')
   const awaitingJob = (minutesAgo: number) => ({

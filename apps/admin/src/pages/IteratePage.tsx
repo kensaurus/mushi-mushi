@@ -17,7 +17,7 @@ import { useSetupStatus } from '../lib/useSetupStatus'
 import { usePageCopy } from '../lib/copy'
 import { useIterateUx, resolveQuickIterateTab } from '../lib/iterateModeUx'
 import { useQuickstartLandingTab } from '../lib/useQuickstartTab'
-import { SetupNudge } from '../components/SetupNudge'
+import { NextStep } from '../components/NextStep'
 import { useToast } from '../lib/toast'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
@@ -436,7 +436,8 @@ export function IteratePage() {
       )}
 
       {!activeProjectId ? (
-        <SetupNudge
+        <NextStep
+          variant="inline"
           requires={['project']}
           emptyTitle="Select a project"
           emptyDescription="PDCA runs are scoped to the active project in the header."

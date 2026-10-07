@@ -232,6 +232,32 @@ mushi qa run <storyId>
 mushi audit                        # full-stack project health audit
 ```
 
+### UX pass over every screen
+
+`mushi ux` runs [`@mushi-mushi/ux`](https://www.npmjs.com/package/@mushi-mushi/ux) on your machine. It maps every page, tab and dialog of your running app, then hands one screen at a time to the coding agent you choose, in a separate git worktree. An edit is kept only if accessibility, layout and console measurements don't get worse. Exploring the app never sends a write request.
+
+```bash
+mushi ux ui                                              # studio: pick agent, model and skill; start; watch every attempt
+mushi ux models --agent cursor                           # the models your account can use
+mushi ux skills                                          # skill names from kensaurus/skills
+mushi ux discover --url http://localhost:5173            # list the screens; edits nothing
+mushi ux login --url http://localhost:5173               # sign in once, by hand, for signed-in screens
+mushi ux run --dev "pnpm dev --port {port}" --agent claude-code
+mushi ux run --dev "pnpm dev --port {port}" --agent cursor --model <id> --skill enhance-mobile-native-feel --base origin/main
+mushi ux run --dev "pnpm dev --port {port}" --agent cursor-cloud --model grok-4.7   # edits run in Cursor Cloud
+mushi ux open <runId>                                    # dashboard for a past run
+```
+
+The run ends with a branch, `mushi-ux/<runId>`, for you to review and open as a draft PR. Nothing is merged.
+
+With `--steps` (on by default in `mushi ux ui`), the agent first plans each screen as 2–5 small, separate improvements without editing, then makes one per attempt; each step is measured and kept or rolled back on its own, so one bad step never costs the rest.
+
+A run that stops for any reason (Stop, a closed terminal, a killed process) can be resumed with **Resume** in `mushi ux ui`, or with `mushi ux run --resume <runId>`: it carries on from the first unfinished screen with the settings it started with.
+
+A run first checks, in about a minute, that the agent can read a file, and tells you what to fix if it cannot (`--no-preflight` skips it). On Windows, start the Cursor agent from PowerShell or cmd: the Cursor CLI also runs your Claude Code hooks, which can fail under Git Bash. Pass `--ignore <selector>` (repeatable) for elements that are not your app's UI, such as a dev badge; dev overlays, build stamps and the Mushi widget are skipped already.
+
+To run it on your repo's GitHub Actions instead, add the [`mushi-ux.yml` workflow](https://github.com/kensaurus/mushi-mushi/blob/master/docs/templates/mushi-ux.yml) and use **Run in the cloud** on the console's [UX runs](/admin/ux-runs) page. It uses `cursor-cloud` and opens one draft PR.
+
 ### Gate findings
 
 `mushi audit findings` lists each finding from the recent gate runs with its

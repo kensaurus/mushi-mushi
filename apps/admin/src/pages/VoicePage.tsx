@@ -36,7 +36,7 @@ import { Badge, Btn, Card, ErrorAlert, FreshnessPill, Section } from '../compone
 import { ContainedBlock, SignalChip } from '../components/report-detail/ReportSurface'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
-import { SetupNudge } from '../components/SetupNudge'
+import { NextStep } from '../components/NextStep'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
 import { IconMic } from '../components/icons'
 import { VoiceRecorderCard, type SubmitStage } from '../components/voice/VoiceRecorderCard'
@@ -192,7 +192,7 @@ export function VoicePage() {
     return (
       <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-voice">
         <PageHeaderBar title="Voice" helpTitle={HELP.title} helpWhatIsIt={HELP.whatIsIt} helpUseCases={HELP.useCases} helpHowToUse={HELP.howToUse} />
-        <SetupNudge requires={['project']} emptyTitle="Select a project" emptyDescription="Voice requests are scoped to the active project in the header." />
+        <NextStep variant="inline" requires={['project']} emptyTitle="Select a project" emptyDescription="Voice requests are scoped to the active project in the header." />
       </div>
     )
   }

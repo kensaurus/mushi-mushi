@@ -3,8 +3,8 @@
 > The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor.
 
 Canonical docs: https://kensaur.us/mushi-mushi/docs
-Generated: 2026-10-04
-Pages: 207
+Generated: 2026-10-06
+Pages: 209
 
 This file contains the full prose of every documentation page, stripped of
 JSX syntax, suitable for offline LLM ingestion. Getting-started pages come
@@ -6456,6 +6456,23 @@ mushi qa runs <storyId>
 mushi qa run <storyId>
 mushi audit                        # full-stack project health audit
 ```
+
+### UX pass over every screen
+
+`mushi ux` runs [`@mushi-mushi/ux`](https://www.npmjs.com/package/@mushi-mushi/ux) on your machine. It maps every page, tab and dialog of your running app, then hands one screen at a time to the coding agent you choose, in a separate git worktree. An edit is kept only if accessibility, layout and console measurements don't get worse. Exploring the app never sends a write request.
+
+```bash
+mushi ux discover --url http://localhost:5173            # list the screens; edits nothing
+mushi ux login --url http://localhost:5173               # sign in once, by hand, for signed-in screens
+mushi ux run --dev "pnpm dev --port {port}" --agent claude-code
+mushi ux run --dev "pnpm dev --port {port}" --agent cursor --model <id>   # id from `agent --list-models`
+mushi ux run --dev "pnpm dev --port {port}" --agent cursor-cloud --model grok-4.7   # edits run in Cursor Cloud
+mushi ux open <runId>                                    # dashboard for a past run
+```
+
+The run ends with a branch, `mushi-ux/`, for you to review and open as a draft PR. Nothing is merged.
+
+To run it on your repo's GitHub Actions instead, add the [`mushi-ux.yml` workflow](https://github.com/kensaurus/mushi-mushi/blob/master/docs/templates/mushi-ux.yml) and use **Run in the cloud** on the console's [UX runs](/admin/ux-runs) page. It uses `cursor-cloud` and opens one draft PR.
 
 ### Gate findings
 
@@ -21508,6 +21525,42 @@ See [Security → Data residency](/security/data-residency) for the full matrix.
 
 ---
 
+## Team
+
+Source: https://kensaur.us/mushi-mushi/docs/admin/team
+
+---
+title: Team
+description: The Team page in the Mushi console brings members, billing, AI spend, audit log, single sign-on, compliance and storage together as views of one page.
+---
+
+# Team
+
+**Route:** `/team`
+
+> **Scenario:** You want to invite someone, check the bill, see what AI calls cost,
+> or change how your team signs in — without hunting through the sidebar.
+
+Everything about your team is one page. Pick a view at the top; the link keeps it
+(`/team?view=billing`), so you can bookmark or share it.
+
+| View | What it is for | Where it used to be |
+|------|----------------|---------------------|
+| **Members** | Invite teammates and set roles. Teams plan. | `/organization/members` |
+| **Billing** | Plan, invoices and the spend cap. | `/billing` |
+| **AI spend** | What diagnoses and fixes cost, by project and model. | `/cost` |
+| **Audit log** | Who changed what, when. Audit-log plan. | `/audit` |
+| **Single sign-on** | SAML / OIDC for your team. SSO plan. | `/sso` |
+| **Compliance** | SOC 2 evidence, data requests. Compliance plan. | `/compliance` |
+| **Storage** | Where screenshots and attachments are kept. | `/storage` |
+
+Views your plan does not include are hidden. Old links still work: each former route
+opens its view here with the rest of the link kept.
+
+Project settings (keys, SDK, integrations for one app) stay on [Settings](/admin/settings).
+
+---
+
 ## teams
 
 Source: https://kensaur.us/mushi-mushi/docs/admin/teams
@@ -21651,6 +21704,88 @@ session. Attempts from non-operator sessions return `404 NOT_FOUND`.
 - [Organization members](/admin/teams) — manage roles within your own org
 - [Audit log](/admin/audit) — per-user action history
 - [Billing](/admin/billing) — subscription and plan detail
+
+---
+
+## UX runs
+
+Source: https://kensaur.us/mushi-mushi/docs/admin/ux-runs
+
+---
+title: UX runs
+description: The UX runs page in the Mushi console shows each screen your coding agent worked on during a mushi ux run, on your machine or on GitHub Actions — improved, rolled back, moved by another fix, or could not load — with before and after screenshots.
+---
+
+# UX runs
+
+**Route:** `/ux-runs`
+
+> **Scenario:** You let your coding agent work through every page, tab and dialog of
+> your app overnight and want to see, screen by screen, what it changed and whether
+> anything got worse.
+
+`mushi ux run` runs on your machine. It maps your running app, gives one screen at a
+time to the agent you choose (Claude Code, Cursor, Codex) in a separate git branch, and
+keeps an edit only when accessibility, layout and console measurements did not get
+worse. With `--sync` it mirrors the run here as it goes.
+
+```bash
+mushi ux run --dev "pnpm dev --port {port}" --agent claude-code --sync
+```
+
+  Exploring your app never sends a write request: every request that is not a read is
+  blocked, forms are not submitted, and buttons such as Delete or Pay are never clicked.
+
+## Run in the cloud
+
+No machine to leave running? **Run in the cloud** starts the same pass on your repo's
+GitHub Actions, with a [Cursor Cloud](https://cursor.com/docs/cloud-agent/api/endpoints)
+agent making the edits. It appears on this page like a local run and ends with one
+draft PR. You need, in the app's front end repo:
+
+1. [`.github/workflows/mushi-ux.yml`](https://github.com/kensaurus/mushi-mushi/blob/master/docs/templates/mushi-ux.yml)
+   on the default branch, with `dev-command` set to how your app starts.
+2. Secrets `CURSOR_API_KEY` and `MUSHI_API_KEY` (a key with `mcp:write`), the variable
+   `MUSHI_PROJECT_ID`, and optionally `ANTHROPIC_API_KEY` for the review.
+3. **Settings → Actions → General → Allow GitHub Actions to create pull requests**, or
+   the run ends with a compare link instead of a draft PR.
+
+Mushi starts it with a `repository_dispatch` event through your GitHub connection,
+at most three times an hour per app. When it cannot (no workflow, no connection,
+GitHub refused), the card shows the `gh workflow run` command to start it yourself.
+
+  A cloud run sees your app signed out: screens behind sign-in show as **Could not
+  load**. Each attempt is a commit Cursor pushes to `mushi-ux/`; if your CI runs
+  on every push, add `branches-ignore: ['mushi-ux/**']` to it.
+
+---
+
+## What you see
+
+| Status | Meaning | What to do |
+|--------|---------|------------|
+| **Moved by another fix** | A change kept on another screen (often a shared component or token) changed this one. | Check it first. |
+| **Rolled back** | Every attempt made a measured problem worse, so it was undone. | File it as a bug, or run again with a different model. |
+| **Could not load** | The screen did not render for capture. | Run `mushi ux login` for signed-in screens, or allow the reads your app makes with POST (`--allow`). |
+| **Improved** | An edit was kept. | Review it on the run's branch. |
+| **No change needed** | The agent made no edit, or nothing visible changed. | Nothing. |
+
+Select a screen to see a before/after slider, the changed pixels, the problems still
+measured, each attempt with its commit, and the optional review by a second model.
+The review is advisory: it never keeps or reverts anything.
+
+## File as bug
+
+**File as bug** adds the screen to your normal bug queue (source `ux_loop`) with the
+measurements and the review's notes. It makes no AI call.
+
+## Where the changes are
+
+Kept edits are commits on the branch shown above the screen list
+(`mushi-ux/`). Nothing is merged for you: review the branch and open it as a
+draft PR. Screenshots are kept for the project's retention window (30 days by default).
+
+See also: [CLI reference](/sdks/cli#ux-pass-over-every-screen).
 
 ---
 

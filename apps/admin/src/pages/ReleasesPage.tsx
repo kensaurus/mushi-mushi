@@ -19,7 +19,7 @@ import { useRealtimeReload } from '../lib/realtime'
 import { useToast } from '../lib/toast'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
-import { SetupNudge } from '../components/SetupNudge'
+import { NextStep } from '../components/NextStep'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { usePageCopy } from '../lib/copy'
 import { useReleasesUx, resolveQuickReleasesTab } from '../lib/releasesModeUx'
@@ -452,7 +452,8 @@ function ReleasesList({
 
   if (releases.length === 0) {
     return (
-      <SetupNudge
+      <NextStep
+        variant="inline"
         requires={['project']}
         emptyTitle={status === 'draft' ? 'No draft releases' : 'No published releases'}
         emptyDescription={
@@ -803,7 +804,8 @@ export function ReleasesPage() {
 
       {activeTab === 'draft' && (
         !activeProjectId ? (
-          <SetupNudge
+          <NextStep
+            variant="inline"
             requires={['project']}
             emptyTitle="Select a project"
             emptyDescription="Releases are scoped to the active project. Pick one in the header to generate a draft."
@@ -815,7 +817,8 @@ export function ReleasesPage() {
 
       {(activeTab === 'drafts' || activeTab === 'published') && (
         !activeProjectId ? (
-          <SetupNudge
+          <NextStep
+            variant="inline"
             requires={['project']}
             emptyTitle="Select a project"
             emptyDescription="Releases are scoped to the active project. Pick one in the header to view drafts and published changelogs."

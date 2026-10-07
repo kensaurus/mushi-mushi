@@ -24,6 +24,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { useSetupStatus } from '../lib/useSetupStatus'
+import { useClaimNextStep } from '../lib/useNextStep'
 import { useActiveProjectId } from './ProjectSwitcher'
 
 type StopId = 'reports' | 'dispatch' | 'askMushi' | 'report-diagnosis'
@@ -148,6 +149,9 @@ export function FirstRunTour() {
   const [running, setRunning] = useState<boolean>(false)
   const [reportId, setReportId] = useState<string | null>(null)
   const [rect, setRect] = useState<DOMRect | null>(null)
+  // A running tour is the screen's guide: the NextStep banner and card stand
+  // down until it ends, so the spotlight never competes with a second CTA.
+  useClaimNextStep('overlay', running)
 
   // Listen for cross-tab completion + explicit start requests. The tour is
   // click-triggered only — there is no auto-launch effect on purpose.

@@ -2,17 +2,17 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-10-04 · **663** routes.
+> Generated: 2026-10-06 · **674** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
 | Auth | Count |
 | --- | ---: |
-| `adminOrApiKey` | 164 |
+| `adminOrApiKey` | 169 |
 | `apiKeyAuth` | 58 |
-| `jwtAuth` | 340 |
+| `jwtAuth` | 341 |
 | `jwtOrApiKey` | 3 |
-| `unknown` | 98 |
+| `unknown` | 103 |
 
 ## Routes by path
 
@@ -259,6 +259,11 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | POST | `/v1/admin/orgs/:orgId/portfolio/changes` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/recipe-changes.ts` |
 | GET | `/v1/admin/orgs/:orgId/portfolio/findings` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/portfolio.ts` |
 | GET | `/v1/admin/orgs/:orgId/portfolio/resources` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/recipe-ingest.ts` |
+| GET | `/v1/admin/orgs/:orgId/project-groups` | `unknown` | `packages/server/supabase/functions/api/routes/project-groups.ts` |
+| POST | `/v1/admin/orgs/:orgId/project-groups` | `unknown` | `packages/server/supabase/functions/api/routes/project-groups.ts` |
+| DELETE | `/v1/admin/orgs/:orgId/project-groups/:gid` | `unknown` | `packages/server/supabase/functions/api/routes/project-groups.ts` |
+| PATCH | `/v1/admin/orgs/:orgId/project-groups/:gid` | `unknown` | `packages/server/supabase/functions/api/routes/project-groups.ts` |
+| PUT | `/v1/admin/orgs/:orgId/project-groups/:gid/projects` | `unknown` | `packages/server/supabase/functions/api/routes/project-groups.ts` |
 | GET | `/v1/admin/orgs/:orgId/radar` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/radar.ts` |
 | GET | `/v1/admin/orgs/:orgId/releases` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/recipe-changes.ts` |
 | GET | `/v1/admin/orgs/:orgId/spend` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/spend-ledger.ts` |
@@ -381,6 +386,12 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/projects/:pid/sdk-upgrade/:id/stream` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/sdk-upgrade.ts` |
 | POST | `/v1/admin/projects/:pid/sdk-upgrade/:id/sync` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/sdk-upgrade.ts` |
 | GET | `/v1/admin/projects/:pid/sdk-upgrade/in-flight` | `jwtAuth` | `packages/server/supabase/functions/api/routes/sdk-upgrade.ts` |
+| GET | `/v1/admin/projects/:pid/ux-runs` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ux-runs.ts` |
+| GET | `/v1/admin/projects/:pid/ux-runs/:runId` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ux-runs.ts` |
+| PUT | `/v1/admin/projects/:pid/ux-runs/:runId` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ux-runs.ts` |
+| POST | `/v1/admin/projects/:pid/ux-runs/:runId/surfaces/:key/report` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ux-runs.ts` |
+| POST | `/v1/admin/projects/:pid/ux-runs/:runId/uploads` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ux-runs.ts` |
+| POST | `/v1/admin/projects/:pid/ux-runs/cloud` | `jwtAuth` | `packages/server/supabase/functions/api/routes/ux-cloud.ts` |
 | GET | `/v1/admin/projects/:projectId/support-tickets/linkable` | `jwtAuth` | `packages/server/supabase/functions/api/routes/admin-ops.ts` |
 | GET | `/v1/admin/projects/stats` | `jwtAuth` | `packages/server/supabase/functions/api/routes/projects-crud.ts` |
 | GET | `/v1/admin/prompt-lab` | `jwtAuth` | `packages/server/supabase/functions/api/routes/prompt-lab.ts` |

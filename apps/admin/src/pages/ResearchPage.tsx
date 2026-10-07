@@ -16,7 +16,7 @@ import { useSetupStatus } from '../lib/useSetupStatus'
 import { usePageCopy } from '../lib/copy'
 import { useResearchUx, resolveQuickResearchTab } from '../lib/researchModeUx'
 import { useQuickstartLandingTab } from '../lib/useQuickstartTab'
-import { SetupNudge } from '../components/SetupNudge'
+import { NextStep } from '../components/NextStep'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { Btn,
@@ -426,7 +426,8 @@ export function ResearchPage() {
       )}
 
       {!activeProjectId ? (
-        <SetupNudge
+        <NextStep
+          variant="inline"
           requires={['project']}
           emptyTitle="Select a project"
           emptyDescription="Research sessions and Firecrawl settings are scoped to the active project in the header."

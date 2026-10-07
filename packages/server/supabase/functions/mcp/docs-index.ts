@@ -31,7 +31,7 @@ function docUrl(route: string): string {
   return route === '/' ? MUSHI_DOCS_BASE : MUSHI_DOCS_BASE + route
 }
 
-/** 207 pages, generated from llms.txt. */
+/** 209 pages, generated from llms.txt. */
 export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
   {
     title: "Mushi Mushi — know why your AI-built app broke, with the fix ready",
@@ -547,6 +547,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     excerpt: "The Storage page chooses where Mushi keeps report attachments and recordings — managed storage, or your own bucket for residency or cost.",
   },
   {
+    title: "Team",
+    url: docUrl("/admin/team"),
+    route: "/admin/team",
+    markdown: "admin/team.md",
+    keywords: ["admin", "team"],
+    headings: [],
+    excerpt: "The Team page in the Mushi console brings members, billing, AI spend, audit log, single sign-on, compliance and storage together as views of one page.",
+  },
+  {
     title: "Teams and Members",
     url: docUrl("/admin/teams"),
     route: "/admin/teams",
@@ -563,6 +572,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     keywords: ["admin", "users"],
     headings: ["Metrics row", "User directory", "User detail drawer", "API", "Related pages"],
     excerpt: "The Users page is an operator-only directory of every Mushi account with plan, MRR and churn; other visitors see a not-found page instead.",
+  },
+  {
+    title: "UX runs",
+    url: docUrl("/admin/ux-runs"),
+    route: "/admin/ux-runs",
+    markdown: "admin/ux-runs.md",
+    keywords: ["admin", "ux-runs", "runs", "ux"],
+    headings: ["Run in the cloud", "What you see", "File as bug", "Where the changes are"],
+    excerpt: "The UX runs page in the Mushi console shows each screen your coding agent worked on during a mushi ux run, on your machine or on GitHub Actions — improved, rolled back, moved by…",
   },
   {
     title: "Voice intake",

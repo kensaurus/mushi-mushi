@@ -277,6 +277,13 @@ export function IconGlobe(p: IconProps) {
   </>)
 }
 
+export function IconMobile(p: IconProps) {
+  return wrap(p, <>
+    <rect x="4.5" y="1.5" width="7" height="13" rx="1.5" />
+    <path d="M7 12.5h2" strokeLinecap="round" />
+  </>)
+}
+
 export function IconGauge(p: IconProps) {
   return wrap(p, <>
     <path d="M3 11a5 5 0 0 1 10 0" />

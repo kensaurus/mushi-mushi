@@ -1,0 +1,91 @@
+# Mushi UX pass. Save as .github/workflows/mushi-ux.yml on your default branch.
+# The console's "Start a cloud run" (Check → UX runs) fires it; you can also
+# run it from the Actions tab. It works through your app screen by screen with
+# a Cursor Cloud agent and opens one draft PR with the changes it kept.
+#
+# Secrets:   CURSOR_API_KEY (required), MUSHI_API_KEY (a key with mcp:write,
+#            from `mushi login` or Projects → API keys), ANTHROPIC_API_KEY
+#            (optional: the final before/after review).
+# Variables: MUSHI_PROJECT_ID.
+# Settings → Actions → General: allow GitHub Actions to create pull requests,
+# or the run ends with a compare link instead of a draft PR.
+#
+# Pushes this workflow makes with its GITHUB_TOKEN start no other workflow, and
+# the draft PR it opens runs no CI until you push to it or re-run it. The cloud
+# agent's own commits do: Cursor pushes each attempt to the run's mushi-ux/*
+# branch through its GitHub App. If your CI runs on every push, add
+#   branches-ignore: ['mushi-ux/**']
+# to its `push:` trigger so attempts don't each start a CI run.
+#
+# Runs see your app signed out (there is no login on a runner): screens behind
+# sign-in show as "Could not load".
+# Docs: https://kensaur.us/mushi-mushi/docs/admin/ux-runs
+name: Mushi UX pass
+
+on:
+  repository_dispatch:
+    types: [mushi-ux-run]
+  workflow_dispatch:
+    inputs:
+      agent:
+        description: Coding agent
+        type: choice
+        options: [cursor-cloud]
+        default: cursor-cloud
+      model:
+        description: Cursor model id (empty = Cursor's default), e.g. grok-4.7?reasoning_effort=xhigh
+        required: false
+        default: ''
+      max_surfaces:
+        description: Screens to work on
+        default: '5'
+      iterations:
+        description: Attempts per screen (1-3)
+        default: '2'
+      paths:
+        description: Comma-separated start paths, e.g. /,/pricing
+        required: false
+        default: ''
+      skill:
+        description: Skill from kensaurus/skills, e.g. enhance-mobile-native-feel (empty = built-in UX guidance)
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+  pull-requests: write
+
+# One pass at a time; a second request waits instead of cancelling the first.
+concurrency:
+  group: mushi-ux
+  cancel-in-progress: false
+
+jobs:
+  ux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0
+        with:
+          # No version file? Replace with  node-version: 22
+          node-version-file: .nvmrc  # or .node-version / package.json
+          package-manager-cache: false
+      - uses: kensaurus/mushi-mushi/.github/actions/ux-loop@master
+        with:
+          # EDIT: how your app starts locally. {port} is replaced; PORT is also set.
+          dev-command: npm run dev -- --port {port}
+          agent: ${{ github.event.client_payload.agent || inputs.agent || 'cursor-cloud' }}
+          model: ${{ github.event.client_payload.model || inputs.model }}
+          max-surfaces: ${{ github.event.client_payload.max_surfaces || inputs.max_surfaces || '5' }}
+          iterations: ${{ github.event.client_payload.iterations || inputs.iterations || '2' }}
+          paths: ${{ github.event.client_payload.paths || inputs.paths }}
+          skill: ${{ github.event.client_payload.skill || inputs.skill }}
+          # OPTIONAL: elements that are not your app's UI, one selector per line.
+          # ignore: |
+          #   .dev-badge
+        env:
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+          MUSHI_API_KEY: ${{ secrets.MUSHI_API_KEY }}
+          MUSHI_PROJECT_ID: ${{ vars.MUSHI_PROJECT_ID }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

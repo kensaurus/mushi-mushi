@@ -25,7 +25,8 @@ import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { DashboardSkeleton } from '../components/skeletons/DashboardSkeleton'
-import { SetupChecklist } from '../components/SetupChecklist'
+import { NextStep } from '../components/NextStep'
+import { openSetupGuide } from '../lib/setupGuidePrefs'
 import { GettingStartedEmpty } from '../components/dashboard/GettingStartedEmpty'
 import { FirstReportHero } from '../components/dashboard/FirstReportHero'
 import { QuotaBanner } from '../components/dashboard/QuotaBanner'
@@ -347,14 +348,9 @@ export function DashboardPage() {
       />
 
       <div className="space-y-4 border-b border-edge-subtle pb-4">
-      {setup.activeProject && (
-        <SetupChecklist
-          project={setup.activeProject}
-          mode="banner"
-          onRefresh={setup.reload}
-          adminEndpointHost={setup.data?.admin_endpoint_host ?? null}
-        />
-      )}
+      {/* The dashboard's one next step. The setup list itself lives in the
+          docked setup guide, so it is not repeated here. */}
+      <NextStep variant="card" />
 
       {setup.activeProject && (
         <SdkUpgradeBanner projectId={setup.activeProject.project_id} />
@@ -363,11 +359,18 @@ export function DashboardPage() {
       {setupIncomplete && !showFullDashboard && (
         <Card  className="flex items-center justify-between px-3 py-2.5">
           <p className="text-xs text-fg-muted">
-            Finish setup above to unlock the full dashboard. You can peek now if you like.
+            Finish setup to unlock the full dashboard. You can peek now if you like.
           </p>
-          <Btn size="sm" variant="ghost" onClick={() => setShowFullDashboard(true)}>
-            Show full dashboard
-          </Btn>
+          <div className="flex shrink-0 items-center gap-2">
+            {/* The setup list lives in the docked guide; bring it back if the
+                user dismissed it (and in Advanced, where no card shows). */}
+            <Btn size="sm" variant="ghost" onClick={openSetupGuide}>
+              Show setup guide
+            </Btn>
+            <Btn size="sm" variant="ghost" onClick={() => setShowFullDashboard(true)}>
+              Show full dashboard
+            </Btn>
+          </div>
         </Card>
       )}
       </div>

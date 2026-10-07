@@ -37,7 +37,7 @@ import { IconEye } from '../components/icons'
 import { useToast } from '../lib/toast'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
-import { SetupNudge } from '../components/SetupNudge'
+import { NextStep } from '../components/NextStep'
 import { ComplianceStatusBanner, isComplianceStatusBannerCritical } from '../components/compliance/ComplianceStatusBanner'
 import { ComplianceGuide } from '../components/compliance/ComplianceGuide'
 import { ComplianceSnapshotStrip } from '../components/compliance/ComplianceSnapshotStrip'
@@ -642,7 +642,8 @@ export function CompliancePage() {
             'Evidence is auto-generated nightly at 04:30 UTC. Retention sweeps run nightly at 03:30 UTC. Click Refresh evidence to take an on-demand snapshot.'
           }
         />
-        <SetupNudge
+        <NextStep
+          variant="inline"
           requires={['project']}
           emptyTitle="Select a project"
           emptyDescription="Compliance evidence and DSAR queues are scoped to the active project — pick mushi-mushi (or your app) first."

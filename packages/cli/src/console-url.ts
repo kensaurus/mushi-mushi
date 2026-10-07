@@ -168,11 +168,16 @@ export async function openInBrowser(url: string): Promise<void> {
         ? (['open', [safeUrl]] as const)
         : (['xdg-open', [safeUrl]] as const)
 
+  // Settle once the opener has started, not when it exits. The child is
+  // unref'd, so waiting for 'exit' left a promise nothing kept alive: when
+  // rundll32 outlived the CLI's own work, Node's event loop emptied and the
+  // process ended with code 0 mid-command (`mushi login` stopped right after
+  // its banner, without the sign-in URL, on Windows, 2026-10-06).
   await new Promise<void>((resolve) => {
     try {
-      const child = spawn(command, [...args], { stdio: 'ignore', shell: false })
-      child.on('error', () => resolve())
-      child.on('exit', () => resolve())
+      const child = spawn(command, [...args], { stdio: 'ignore', shell: false, detached: process.platform !== 'win32' })
+      child.once('spawn', () => resolve())
+      child.once('error', () => resolve())
       child.unref()
     } catch {
       resolve()

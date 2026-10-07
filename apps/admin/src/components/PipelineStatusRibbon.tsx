@@ -13,7 +13,7 @@
  *          - Tiles link directly to the relevant page so "huh, Plan is
  *            red" becomes "let me click it and see" in one motion.
  *          - Hidden in beginner / quickstart modes because those users
- *            already have the global NextBestAction strip; stacking two
+ *            already have the global NextStep banner; stacking two
  *            status bars would be noisy.
  *
  *          Data source:
@@ -260,7 +260,7 @@ export function PipelineStatusRibbon({ embedded = false }: { embedded?: boolean 
   }, [collapsed, pathname])
 
   // Only Advanced mode surfaces the ribbon — beginners and quickstart
-  // users have the NextBestAction strip which is higher signal for their
+  // users have the NextStep banner which is higher signal for their
   // level of context.
   if (!isAdvanced) return null
 

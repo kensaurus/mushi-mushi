@@ -19,7 +19,7 @@ import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
 import { usePageData } from '../lib/usePageData'
 import { useMergedErrors } from '../lib/useMergedErrors'
 import { useToast } from '../lib/toast'
-import { SetupNudge } from '../components/SetupNudge'
+import { NextStep } from '../components/NextStep'
 import { HeroPlugIntegration } from '../components/illustrations/HeroIllustrations'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
@@ -492,7 +492,8 @@ export function IntegrationsPage() {
       <IntegrationsPageIntro topPriority={stats.topPriority} flags={integrationIntroFlags} />
 
       {!setup.hasAnyProject && (
-        <SetupNudge
+        <NextStep
+          variant="inline"
           requires={['project_created']}
           emptyTitle="Create a project before wiring integrations"
           emptyDescription="Integrations are scoped to a project. Once you have one, you can wire Sentry, Langfuse, GitHub, and your routing destinations."
@@ -512,7 +513,7 @@ export function IntegrationsPage() {
         {/* Where alerts go is owner/admin only on the server; a disabled
             fieldset locks every field and button in the three cards. */}
         <fieldset disabled={!canManage} className="contents">
-        <div className="grid gap-0 sm:grid-cols-1 lg:grid-cols-3 divide-y lg:divide-y-0 lg:divide-x divide-panel-border">
+        <div className="grid gap-4 p-4 md:grid-cols-2 2xl:grid-cols-3">
           <SlackIntegrationCard
             projectId={activeProjectId ?? null}
             slackConfigured={Boolean(settingsQuery.data?.slackConfigured)}

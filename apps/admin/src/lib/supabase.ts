@@ -83,8 +83,8 @@ export type { ApiResult } from './apiEnvelope'
 // ─── Request dedup + micro-cache ────────────────────────────────────────────
 //
 // The admin console mounts ~17 components that each call `useSetupStatus()`
-// (DashboardPage, FixesPage, NextBestAction, QuickstartMegaCta, FirstRunTour,
-// SetupNudge, ProjectSwitcher, GettingStartedEmpty, etc). Without dedup,
+// (DashboardPage, FixesPage, FirstRunTour,
+// NextStep, ProjectSwitcher, GettingStartedEmpty, etc). Without dedup,
 // every page load fires GET /v1/admin/setup 12+ times in parallel — wasted
 // bandwidth, wasted Supabase function invocations, and duplicated render-time
 // loading flickers. Same problem with /v1/admin/dashboard and /v1/admin/billing.

@@ -51,3 +51,23 @@ describe('computeNextAction', () => {
     )
   })
 })
+
+describe('computeNextAction with the setup checklist open', () => {
+  const NEEDS_SDK: NbaSetup = {
+    hasAnyProject: true,
+    activeProject: { report_count: 0, fix_count: 0 },
+    isStepIncomplete: (step) => step === 'sdk_installed',
+  }
+
+  it('leaves setup steps to the checklist instead of repeating them', () => {
+    expect(computeNextAction(NEEDS_SDK, QUIET, '/reports')?.title).toBe('Install the Mushi widget in your app')
+    expect(computeNextAction(NEEDS_SDK, QUIET, '/reports', { setupGuideOpen: true })).toBeNull()
+  })
+
+  it('still names real work while the checklist is open', () => {
+    const urgent = { ...QUIET, urgentOpenReports: 2 }
+    expect(computeNextAction(NEEDS_SDK, urgent, '/reports', { setupGuideOpen: true })?.title).toBe(
+      '2 critical or high reports are still unfixed',
+    )
+  })
+})

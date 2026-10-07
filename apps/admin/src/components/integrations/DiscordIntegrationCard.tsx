@@ -211,8 +211,8 @@ export function DiscordIntegrationCard({
   return (
     <div id="integrations-discord" className="rounded-xl border border-edge-subtle bg-surface p-5 space-y-4 scroll-mt-chrome">
       {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex items-center gap-3 min-w-0">
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+        <div className="flex min-w-0 flex-1 basis-40 items-center gap-3">
           {/* mushi-mushi-allowlist: Discord brand blurple tint behind the trademark icon chip. */}
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-discord-blurple/10">
             <DiscordIcon size={20} />
@@ -222,7 +222,7 @@ export function DiscordIntegrationCard({
           </div>
         </div>
 
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           {sparkline.length > 0 && (
             <span
               className="hidden sm:flex"

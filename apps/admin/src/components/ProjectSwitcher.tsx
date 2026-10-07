@@ -32,6 +32,8 @@ import {
   type TeamAutoSwitchDetail,
 } from '../lib/crossTeamProject'
 import { usePageData } from '../lib/usePageData'
+import { readActiveGroup, useProjectGroups, writeActiveGroup } from '../lib/projectGroups'
+import { SELECTED_TONE, SELECTED_TONE_IDLE } from '../lib/chipTone'
 import { useToast } from '../lib/toast'
 import { ProjectFavicon } from './ProjectFavicon'
 import { ErrorAlert } from './ui'
@@ -124,6 +126,9 @@ export function ProjectSwitcher() {
     scope: 'none',
   })
   const activeTeamRole = teams.data?.organizations?.find((o) => o.id === activeOrg)?.role ?? null
+  // Project groups (Plan 021): narrow this team's list to one group.
+  const groups = useProjectGroups(activeOrg, open)
+  const [groupFilter, setGroupFilter] = useState<string | null>(() => readActiveGroup())
   const mayCreateProject = offerProjectCreate(activeTeamRole)
 
   // Hydrate the active project from URL > localStorage > first project. Once
@@ -230,6 +235,9 @@ export function ProjectSwitcher() {
     getActiveProjectIdSnapshot() ??
     projects[0].project_id
   const active = projects.find((p) => p.project_id === activeId) ?? projects[0]
+  const groupList = groups.data?.groups ?? []
+  const activeGroup = groupList.find((g) => g.slug === groupFilter) ?? null
+  const shownProjects = activeGroup ? projects.filter((p) => activeGroup.project_ids.includes(p.project_id)) : projects
 
   /** Pick a project in another team: switch team first, then project. */
   function pickInTeam(projectId: string, orgId: string) {
@@ -313,8 +321,33 @@ export function ProjectSwitcher() {
               {currentTeamName ? `${currentTeamName} (this team)` : 'This team'}
             </p>
           )}
+          {groupList.length > 0 && (
+            <div role="group" aria-label="Filter by project group" className="flex flex-wrap gap-1 px-2.5 pt-2 pb-1">
+              {[null, ...groupList].map((g) => {
+                const slug = g?.slug ?? null
+                const selected = (activeGroup?.slug ?? null) === slug
+                return (
+                  <button
+                    key={slug ?? 'all'}
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() => {
+                      setGroupFilter(slug)
+                      writeActiveGroup(slug)
+                    }}
+                    className={`rounded-full border px-2 py-0.5 text-2xs ${selected ? SELECTED_TONE : SELECTED_TONE_IDLE}`}
+                  >
+                    {g ? g.name : 'All'}
+                  </button>
+                )
+              })}
+            </div>
+          )}
           <ul role="listbox" aria-label="Projects in this team" className="divide-y divide-edge-subtle/60">
-            {projects.map((p) => {
+            {shownProjects.length === 0 && (
+              <li className="px-2.5 py-2 text-xs text-fg-faint">No projects in this group. Add some from Portfolio → Manage groups.</li>
+            )}
+            {shownProjects.map((p) => {
               const isActive = p.project_id === active.project_id
               return (
                 <li key={p.project_id}>

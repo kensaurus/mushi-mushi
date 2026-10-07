@@ -22,7 +22,7 @@ import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { PageHero } from '../components/PageHero'
 import { ActionPill, ActionPillRow } from '../components/report-detail/ReportSurface'
-import { SetupNudge } from '../components/SetupNudge'
+import { NextStep } from '../components/NextStep'
 import { HeroGraphNodes } from '../components/illustrations/HeroIllustrations'
 import { UpgradePrompt } from '../components/billing/UpgradePrompt'
 import { UserStoryMap } from '../components/inventory/UserStoryMap'
@@ -523,7 +523,8 @@ export function InventoryPage() {
 {/* PageHelp migrated to PageHeaderBar above */}
 
       {!snapshot && (
-        <SetupNudge
+        <NextStep
+          variant="inline"
           requires={['github_connected']}
           emptyTitle="No inventory yet"
           emptyDescription="Either install @mushi-mushi/web with discoverInventory: true and let the SDK observe your app — Claude will draft an inventory.yaml — or hand-author one and paste it from the Yaml tab."

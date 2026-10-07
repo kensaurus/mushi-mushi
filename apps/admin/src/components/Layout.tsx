@@ -31,7 +31,7 @@ import { useAdminMode } from '../lib/mode'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { Tooltip, Btn } from './ui'
 import { RouteProgress } from './RouteProgress'
-import { NextBestAction } from './NextBestAction'
+import { NextStep } from './NextStep'
 import { DavChromeCoachmark } from './DavChromeCoachmark'
 import { GlobalStatusStrip } from './GlobalStatusStrip'
 import { ChromeBreadcrumb } from './ChromeBreadcrumb'
@@ -1295,10 +1295,10 @@ export function Layout({ children }: { children: ReactNode }) {
             >
               {!focusMode && <GlobalStatusStrip />}
               {!focusMode && <DavChromeCoachmark />}
-              {!focusMode && <NextBestAction work={navCounts} />}
+              {!focusMode && <NextStep variant="banner" />}
               <ScrollToHashAnchor />
               {!focusMode && <RoutePageHelp />}
-              {/* Beginner mode uses NextBestAction — skip layout PageHero to avoid
+              {/* Beginner mode uses the NextStep banner — skip layout PageHero to avoid
                   duplicating the same guidance (NN/g #8 Aesthetic & Minimalist). */}
               {resolvedHero && !isBeginner && (
                 <PageHero

@@ -26,7 +26,7 @@ import { SnapshotSectionHint,
   Btn,
   Card, } from '../components/ui'
 import { GraphSkeleton } from '../components/skeletons/GraphSkeleton'
-import { SetupNudge } from '../components/SetupNudge'
+import { NextStep } from '../components/NextStep'
 import { HeroGraphNodes } from '../components/illustrations/HeroIllustrations'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
@@ -537,7 +537,8 @@ export function GraphPage() {
       </div>
 
       {rawNodes.length === 0 ? (
-        <SetupNudge
+        <NextStep
+          variant="inline"
           requires={['first_report_received']}
           emptyTitle="The graph is empty"
           emptyDescription="Nodes and edges populate automatically as the LLM pipeline classifies reports. Submit a report from the dashboard to seed the graph."

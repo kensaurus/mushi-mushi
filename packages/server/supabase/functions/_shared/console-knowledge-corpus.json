@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-10-04T15:34:58.577Z",
+  "generatedAt": "2026-10-06T03:48:11.206Z",
   "docs": [
     {
       "doc_path": "recipes/connect-github-and-sdk.md",
@@ -93,13 +93,13 @@
       "content_hash": "54815373dacb65bdfcb1696e84e728487468f5663eb2cdd6346d9862a8dbfd82"
     },
     {
-      "doc_path": "pages/overview.md",
+      "doc_path": "pages/dashboard--view-apps.md",
       "section": "main",
       "title": "App activity",
-      "body": "# App activity\n\nLast 7 days for every app in this team: sessions, users and open bugs, with links into each app.\n\nRoute: /overview\nSection: Start\n\nKeywords: overview, portfolio view, all projects, activity, sessions, consolidated\n\nUse this page when the user asks about: overview, portfolio view, all projects, activity, sessions, consolidated",
-      "route_path": "/overview",
+      "body": "# App activity\n\nLast 7 days for every app in this team: sessions, users and open bugs, with links into each app.\n\nRoute: /dashboard?view=apps\nSection: Start\n\nKeywords: overview, portfolio view, all projects, activity, sessions, consolidated\n\nUse this page when the user asks about: overview, portfolio view, all projects, activity, sessions, consolidated",
+      "route_path": "/dashboard",
       "kind": "page",
-      "content_hash": "e699371113087b982c590dc9c25157f268b104b3546ff7d2508fe27019ef7e21"
+      "content_hash": "e4181fd1ebb37af51714b73cc60c5ed87d8ff52e4f6c25b61725d69511827098"
     },
     {
       "doc_path": "pages/connect.md",
@@ -282,22 +282,31 @@
       "content_hash": "c51900efe324b6ef74d3ac48aa482e50d30e246b13bc17573046ec018511512f"
     },
     {
-      "doc_path": "pages/health.md",
+      "doc_path": "pages/ux-runs.md",
       "section": "main",
-      "title": "System health",
-      "body": "# System health\n\nAre your integrations and background jobs working: uptime, errors and failed checks.\n\nRoute: /health\nSection: Check\n\nKeywords: health, status, uptime, availability, sentry, slo, monitoring, incidents, verification hub\n\nUse this page when the user asks about: health, status, uptime, availability, sentry, slo",
-      "route_path": "/health",
+      "title": "UX runs",
+      "body": "# UX runs\n\nYour coding agent worked through every screen; see which were improved, rolled back or moved by another fix, with before/after screenshots.\n\nRoute: /ux-runs\nSection: Check\n\nKeywords: ux, ux runs, ui, screens, screenshots, before after, agent, mushi ux, visual, accessibility\n\nUse this page when the user asks about: ux, ux runs, ui, screens, screenshots, before after",
+      "route_path": "/ux-runs",
       "kind": "page",
-      "content_hash": "2c2f8624dbf44447022dd6579e1ca7275232b30f11713547bd0ebc5b371e3b65"
+      "content_hash": "2c90bc676f81af7d0ae1a6f9d05de946ec7b21626ece85140ce01eb6654e1e6b"
     },
     {
-      "doc_path": "pages/code-health.md",
+      "doc_path": "pages/health.md",
+      "section": "main",
+      "title": "App health",
+      "body": "# App health\n\nAre your integrations and background jobs working: uptime, errors and failed checks.\n\nRoute: /health\nSection: Check\n\nKeywords: health, status, uptime, availability, sentry, slo, monitoring, incidents, verification hub\n\nUse this page when the user asks about: health, status, uptime, availability, sentry, slo",
+      "route_path": "/health",
+      "kind": "page",
+      "content_hash": "c452db277a3118ed7c4b67710774cf3db930dfd86406918ec90fd23c16864db6"
+    },
+    {
+      "doc_path": "pages/health--view-code.md",
       "section": "main",
       "title": "Code size",
-      "body": "# Code size\n\nBundle-size trends and very large files, pushed from your repo’s CI.\n\nRoute: /code-health\nSection: Check\n\nKeywords: code health, bundle, loc, god file, refactor, gzip, ci, budget, file size\n\nUse this page when the user asks about: code health, bundle, loc, god file, refactor, gzip",
-      "route_path": "/code-health",
+      "body": "# Code size\n\nBundle-size trends and very large files, pushed from your repo’s CI.\n\nRoute: /health?view=code\nSection: Check\n\nKeywords: code health, bundle, loc, god file, refactor, gzip, ci, budget, file size\n\nUse this page when the user asks about: code health, bundle, loc, god file, refactor, gzip",
+      "route_path": "/health",
       "kind": "page",
-      "content_hash": "7e0c24ffe216766f2a1a778ca4ec1fd6c8e1f100da73c6f161f98f406e2b7a0e"
+      "content_hash": "8d96c1ca3c5c9c6198285a77d1602fba7e3f7f3fc46caf374dc3195f0775e761"
     },
     {
       "doc_path": "pages/recipe.md",
@@ -309,40 +318,40 @@
       "content_hash": "5dee8b49078a7d61b216d6bae02417d4235a5bd221562e85caff0648963e71b7"
     },
     {
-      "doc_path": "pages/drift.md",
+      "doc_path": "pages/health--view-schema.md",
       "section": "main",
       "title": "Schema changes",
-      "body": "# Schema changes\n\nYour database schema compared with the last scan: dropped columns, missing access rules, unexpected changes.\n\nRoute: /drift\nSection: Check\n\nKeywords: drift, schema, backend, migration, database\n\nUse this page when the user asks about: drift, schema, backend, migration, database",
-      "route_path": "/drift",
+      "body": "# Schema changes\n\nYour database schema compared with the last scan: dropped columns, missing access rules, unexpected changes.\n\nRoute: /health?view=schema\nSection: Check\n\nKeywords: drift, schema, backend, migration, database\n\nUse this page when the user asks about: drift, schema, backend, migration, database",
+      "route_path": "/health",
       "kind": "page",
-      "content_hash": "b68098bfbbb9f3b844a07947186677c7177048c09474e0672ef102eee4a470f7"
+      "content_hash": "f5e906f336080f85d312b0823589f841e8e74d9db3b19013b2ed731a5a7edb94"
     },
     {
-      "doc_path": "pages/anomalies.md",
+      "doc_path": "pages/health--view-spikes.md",
       "section": "main",
       "title": "Unusual spikes",
-      "body": "# Unusual spikes\n\nSudden jumps in errors or reports, including ones that started with a release.\n\nRoute: /anomalies\nSection: Check\n\nKeywords: anomalies, anomaly, spike, outlier, metrics\n\nUse this page when the user asks about: anomalies, anomaly, spike, outlier, metrics",
-      "route_path": "/anomalies",
+      "body": "# Unusual spikes\n\nSudden jumps in errors or reports, including ones that started with a release.\n\nRoute: /health?view=spikes\nSection: Check\n\nKeywords: anomalies, anomaly, spike, outlier, metrics\n\nUse this page when the user asks about: anomalies, anomaly, spike, outlier, metrics",
+      "route_path": "/health",
       "kind": "page",
-      "content_hash": "6fdd8682bab49a5e15087c4671fa26de834b1ea5838b51e4dabd4844ec17939d"
+      "content_hash": "d051bd1e9f94313291adf248e27ae442e6042429ca85d66f4fd71801a133d614"
     },
     {
-      "doc_path": "pages/activity.md",
+      "doc_path": "pages/dashboard--view-users.md",
       "section": "main",
       "title": "User activity",
-      "body": "# User activity\n\nPer-app activity — sessions, page views, identified vs. anonymous users, top routes.\n\nRoute: /activity\nSection: Check\n\nKeywords: activity, sessions, users, page views, analytics, dau, engagement\n\nUse this page when the user asks about: activity, sessions, users, page views, analytics, dau",
-      "route_path": "/activity",
+      "body": "# User activity\n\nPer-app activity — sessions, page views, identified vs. anonymous users, top routes.\n\nRoute: /dashboard?view=users\nSection: Check\n\nKeywords: activity, sessions, users, page views, analytics, dau, engagement\n\nUse this page when the user asks about: activity, sessions, users, page views, analytics, dau",
+      "route_path": "/dashboard",
       "kind": "page",
-      "content_hash": "483b5328c4203dec8cf9d6a8e2f8a50fdc1605fb45ccbe377132f67bfc4bc7af"
+      "content_hash": "6a3e30a894107bb0dc2aafce571077791539dde63af51c4a6f2c7134515971b8"
     },
     {
-      "doc_path": "pages/analytics.md",
+      "doc_path": "pages/dashboard--view-funnels.md",
       "section": "main",
       "title": "Users & funnels",
-      "body": "# Users & funnels\n\nProduct analytics from Mushi.track() — event volume, funnels, next-step paths, people, and weekly retention.\n\nRoute: /analytics\nSection: Check\n\nKeywords: users & funnels, funnel, funnels, events, track, analytics, retention, paths, people, conversion, cohort\n\nUse this page when the user asks about: users & funnels, funnel, funnels, events, track, analytics",
-      "route_path": "/analytics",
+      "body": "# Users & funnels\n\nProduct analytics from Mushi.track() — event volume, funnels, next-step paths, people, and weekly retention.\n\nRoute: /dashboard?view=funnels\nSection: Check\n\nKeywords: users & funnels, funnel, funnels, events, track, analytics, retention, paths, people, conversion, cohort\n\nUse this page when the user asks about: users & funnels, funnel, funnels, events, track, analytics",
+      "route_path": "/dashboard",
       "kind": "page",
-      "content_hash": "39ea95338d1ae2fa6e8d03272817493365fbaccf21d171315ee85ee97b180fa5"
+      "content_hash": "b1273e8203d1863f2e12a5189589c691c2ccf05a29ddbe0478fa9461ca802649"
     },
     {
       "doc_path": "pages/releases.md",
@@ -354,13 +363,13 @@
       "content_hash": "5d4c2294c564b2db8892c5e39fbe16d7338ef64525bb30d8e9f25be0b63a844b"
     },
     {
-      "doc_path": "pages/intelligence.md",
+      "doc_path": "pages/dashboard--view-insights.md",
       "section": "main",
       "title": "Weekly insights",
-      "body": "# Weekly insights\n\nA weekly plain-English report across your apps: what breaks most and who it hits.\n\nRoute: /intelligence\nSection: Check\n\nKeywords: intelligence, insights, analytics, trends, heatmap, cohort, weekly report\n\nUse this page when the user asks about: intelligence, insights, analytics, trends, heatmap, cohort",
-      "route_path": "/intelligence",
+      "body": "# Weekly insights\n\nA weekly plain-English report across your apps: what breaks most and who it hits.\n\nRoute: /dashboard?view=insights\nSection: Check\n\nKeywords: intelligence, insights, analytics, trends, heatmap, cohort, weekly report\n\nUse this page when the user asks about: intelligence, insights, analytics, trends, heatmap, cohort",
+      "route_path": "/dashboard",
       "kind": "page",
-      "content_hash": "43ea264ee49245806abc85862d291235bfec4c86f88298e2edc022de58e6a1d1"
+      "content_hash": "93bf9a1fa574a51d88aa5e57ef904ac0dae60792780de819a7235cf50acedb3a"
     },
     {
       "doc_path": "pages/research.md",
@@ -381,13 +390,13 @@
       "content_hash": "c661a6741aa89bdc699a3829585dc712d1040a1edc1b99dd5847ae5c656e66fc"
     },
     {
-      "doc_path": "pages/growth.md",
+      "doc_path": "pages/dashboard--view-growth.md",
       "section": "main",
       "title": "Growth",
-      "body": "# Growth\n\nOperator-only company funnel — activated external projects per week, by signup source.\n\nRoute: /growth\nSection: Check\n\nKeywords: growth, funnel, signups, activation, activated, paid, source, operator\n\nUse this page when the user asks about: growth, funnel, signups, activation, activated, paid",
-      "route_path": "/growth",
+      "body": "# Growth\n\nOperator-only company funnel — activated external projects per week, by signup source.\n\nRoute: /dashboard?view=growth\nSection: Check\n\nKeywords: growth, funnel, signups, activation, activated, paid, source, operator\n\nUse this page when the user asks about: growth, funnel, signups, activation, activated, paid",
+      "route_path": "/dashboard",
       "kind": "page",
-      "content_hash": "21f8274c2dd615f7f866171085817aa39915d78c5634ecc0b94336d76d064db0"
+      "content_hash": "5fad66e28d0a894790f549fafa5970e3b7ab73eef8c281b44289dd3633b25ba3"
     },
     {
       "doc_path": "pages/integrations/config.md",
@@ -444,13 +453,22 @@
       "content_hash": "be55bfedc0b374a86559a4949296836c4b869c4f48728d7c864978330ad0d52c"
     },
     {
-      "doc_path": "pages/organization/members.md",
+      "doc_path": "pages/team--view-members.md",
       "section": "main",
       "title": "Team members",
-      "body": "# Team members\n\nInvite teammates and manage their roles.\n\nRoute: /organization/members\nSection: Workspace\n\nKeywords: members, invite, team, organization, roles\n\nUse this page when the user asks about: members, invite, team, organization, roles",
-      "route_path": "/organization/members",
+      "body": "# Team members\n\nInvite teammates and manage their roles.\n\nRoute: /team?view=members\nSection: Workspace\n\nKeywords: members, invite, team, organization, roles\n\nUse this page when the user asks about: members, invite, team, organization, roles",
+      "route_path": "/team",
       "kind": "page",
-      "content_hash": "e758e78ca3f3b6e984fa8a9bdb3f30fd1330f5cac6540b65f8e521c63e619425"
+      "content_hash": "3aa9fdae7c1e25a32191cbd2bffd031c7574a3db1d5fc32dd76b63daea83c0bf"
+    },
+    {
+      "doc_path": "pages/team.md",
+      "section": "main",
+      "title": "Team",
+      "body": "# Team\n\nYour team in one place: members, billing, AI spend, audit log, single sign-on, compliance and storage.\n\nRoute: /team\nSection: Workspace\n\nKeywords: team, organization, members, billing, spend, cost, audit, sso, compliance, storage, workspace\n\nUse this page when the user asks about: team, organization, members, billing, spend, cost",
+      "route_path": "/team",
+      "kind": "page",
+      "content_hash": "aa3446cac4df6aa4db7052c188138f94729a26b44fcf9b4eb5f743e6d0f12133"
     },
     {
       "doc_path": "pages/settings.md",
@@ -462,22 +480,22 @@
       "content_hash": "65455aa46612ecc8a0c1633636b816f412bbafc057f6a1e0de8e6bc9de659442"
     },
     {
-      "doc_path": "pages/billing.md",
+      "doc_path": "pages/team--view-billing.md",
       "section": "main",
       "title": "Billing",
-      "body": "# Billing\n\nPlan, seats, invoices, and usage-based charges.\n\nRoute: /billing\nSection: Workspace\n\nKeywords: billing, stripe, plan, invoice, seats, usage, subscription, upgrade\n\nUse this page when the user asks about: billing, stripe, plan, invoice, seats, usage",
-      "route_path": "/billing",
+      "body": "# Billing\n\nPlan, seats, invoices, and usage-based charges.\n\nRoute: /team?view=billing\nSection: Workspace\n\nKeywords: billing, stripe, plan, invoice, seats, usage, subscription, upgrade\n\nUse this page when the user asks about: billing, stripe, plan, invoice, seats, usage",
+      "route_path": "/team",
       "kind": "page",
-      "content_hash": "fbcedd9530f620f2b40231fffda2b10bdc57e6c7393f8d6da82e8a13ee18e4c5"
+      "content_hash": "993281151a8ed40416a065b2d274d91f9ada62676c19f6178966a85b026fc741"
     },
     {
-      "doc_path": "pages/cost.md",
+      "doc_path": "pages/team--view-spend.md",
       "section": "main",
       "title": "AI spend",
-      "body": "# AI spend\n\nWhat the AI behind diagnoses and fixes costs, by step and day.\n\nRoute: /cost\nSection: Workspace\n\nKeywords: llm cost, cost, llm, tokens, spend, usage\n\nUse this page when the user asks about: llm cost, cost, llm, tokens, spend, usage",
-      "route_path": "/cost",
+      "body": "# AI spend\n\nWhat the AI behind diagnoses and fixes costs, by step and day.\n\nRoute: /team?view=spend\nSection: Workspace\n\nKeywords: llm cost, cost, llm, tokens, spend, usage\n\nUse this page when the user asks about: llm cost, cost, llm, tokens, spend, usage",
+      "route_path": "/team",
       "kind": "page",
-      "content_hash": "1c8b4a962a2443ab944bdab926e7254acd7147d3a6c7d23cd01641446ee02a83"
+      "content_hash": "97b13e77cbaf07e1e67a0e59d6f6d2027dc06bc2066207f666b520750f6800f8"
     },
     {
       "doc_path": "pages/rewards.md",
@@ -489,40 +507,40 @@
       "content_hash": "77c171c659b7d11ea7634c68ad4663420d690db0ed70b173c310e465c464a45b"
     },
     {
-      "doc_path": "pages/sso.md",
+      "doc_path": "pages/team--view-sso.md",
       "section": "main",
       "title": "Single sign-on",
-      "body": "# Single sign-on\n\nSingle sign-on, SAML, and identity provider setup.\n\nRoute: /sso\nSection: Workspace\n\nKeywords: sso, saml, oidc, identity, login, auth\n\nUse this page when the user asks about: sso, saml, oidc, identity, login, auth",
-      "route_path": "/sso",
+      "body": "# Single sign-on\n\nSingle sign-on, SAML, and identity provider setup.\n\nRoute: /team?view=sso\nSection: Workspace\n\nKeywords: sso, saml, oidc, identity, login, auth\n\nUse this page when the user asks about: sso, saml, oidc, identity, login, auth",
+      "route_path": "/team",
       "kind": "page",
-      "content_hash": "2c6ed04aa88a974a85bec680a3d8a382e0fe89bf06b3b173ad629cfe068d3c93"
+      "content_hash": "bdd80ee723baae44015845d34f13b176c7d7eb67ec03a7df8d46501b9a8ecd89"
     },
     {
-      "doc_path": "pages/compliance.md",
+      "doc_path": "pages/team--view-compliance.md",
       "section": "main",
       "title": "Compliance",
-      "body": "# Compliance\n\nSOC 2, GDPR, and DSAR — evidence bundles and retention rules.\n\nRoute: /compliance\nSection: Workspace\n\nKeywords: compliance, soc2, gdpr, dsar, privacy, retention, evidence, regulator\n\nUse this page when the user asks about: compliance, soc2, gdpr, dsar, privacy, retention",
-      "route_path": "/compliance",
+      "body": "# Compliance\n\nSOC 2, GDPR, and DSAR — evidence bundles and retention rules.\n\nRoute: /team?view=compliance\nSection: Workspace\n\nKeywords: compliance, soc2, gdpr, dsar, privacy, retention, evidence, regulator\n\nUse this page when the user asks about: compliance, soc2, gdpr, dsar, privacy, retention",
+      "route_path": "/team",
       "kind": "page",
-      "content_hash": "33fe02770647554a2a176e3ea6c91f4785ee6a51f665d3f2348f0a3a1900a8e2"
+      "content_hash": "4d941fbebeb9fdc92a31a463558499adeb432bb7ec6707f758c0ff2017b985f6"
     },
     {
-      "doc_path": "pages/audit.md",
+      "doc_path": "pages/team--view-audit.md",
       "section": "main",
       "title": "Audit log",
-      "body": "# Audit log\n\nWho changed what in this console, and when.\n\nRoute: /audit\nSection: Workspace\n\nKeywords: audit log, log, history, forensic, security, changes, who did what\n\nUse this page when the user asks about: audit log, log, history, forensic, security, changes",
-      "route_path": "/audit",
+      "body": "# Audit log\n\nWho changed what in this console, and when.\n\nRoute: /team?view=audit\nSection: Workspace\n\nKeywords: audit log, log, history, forensic, security, changes, who did what\n\nUse this page when the user asks about: audit log, log, history, forensic, security, changes",
+      "route_path": "/team",
       "kind": "page",
-      "content_hash": "9be391fcaf1f0eff429a9c384231383c9a05d92d715230c4d8508345e3e30763"
+      "content_hash": "04e7a67b2e8b96e7143af3ef5fe1ffbe9ad6c963d518195d5217316cee76c5f0"
     },
     {
-      "doc_path": "pages/storage.md",
+      "doc_path": "pages/team--view-storage.md",
       "section": "main",
       "title": "Storage",
-      "body": "# Storage\n\nBucket usage, screenshot retention, and data-lifecycle policies.\n\nRoute: /storage\nSection: Workspace\n\nKeywords: storage, s3, bucket, screenshots, attachments, retention, lifecycle\n\nUse this page when the user asks about: storage, s3, bucket, screenshots, attachments, retention",
-      "route_path": "/storage",
+      "body": "# Storage\n\nBucket usage, screenshot retention, and data-lifecycle policies.\n\nRoute: /team?view=storage\nSection: Workspace\n\nKeywords: storage, s3, bucket, screenshots, attachments, retention, lifecycle\n\nUse this page when the user asks about: storage, s3, bucket, screenshots, attachments, retention",
+      "route_path": "/team",
       "kind": "page",
-      "content_hash": "cfcfe439de74c403aad270289bcde7a8a22831831d7178b25f6603e14d8850e9"
+      "content_hash": "f18559112449ef1195aee279127a3cbc96c2afbd298b817cca45ddfb0c550c01"
     },
     {
       "doc_path": "pages/query.md",
@@ -546,10 +564,10 @@
       "doc_path": "pages/setup-copilot.md",
       "section": "main",
       "title": "Setup copilot",
-      "body": "# Setup copilot\n\nGuided verify-and-dispatch setup assistant.\n\nRoute: /setup-copilot\nSection: Start\n\nKeywords: setup, copilot, verify, dispatch, guided\n\nUse this page when the user asks about: setup, copilot, verify, dispatch, guided",
+      "body": "# Setup copilot\n\nDiagnose setup: SDK heartbeat, version and fix dispatch for one project, with copy-paste commands.\n\nRoute: /setup-copilot\nSection: Start\n\nKeywords: setup, copilot, verify, dispatch, guided, diagnose\n\nUse this page when the user asks about: setup, copilot, verify, dispatch, guided, diagnose",
       "route_path": "/setup-copilot",
       "kind": "page",
-      "content_hash": "e5a1618b6163157545695ed38fd9315d6252b9ab0caa56702e163002e3110ee9"
+      "content_hash": "58aad796278b0427135ffdf151342976e89555142e988e0f66469b33b31cbf46"
     },
     {
       "doc_path": "pages/cli-auth.md",

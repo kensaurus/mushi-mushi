@@ -8,13 +8,18 @@
  *              `/onboarding` page.
  *
  *          Drives every "what should I configure first" surface in the admin so
- *          end users always see one canonical answer instead of guessing.
+ *          end users always see one canonical answer instead of guessing. The
+ *          "do this next" row comes from useNextStep (the same rule as the
+ *          docked setup guide and the onboarding lanes). While the list shows
+ *          that row it claims the setup slot, so the <NextStep> banner names
+ *          real work only and never repeats a setup step beside it.
  */
 
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { SetupProject, SetupStep } from '../lib/useSetupStatus'
 import { CHIP_TONE } from '../lib/chipTone'
+import { useClaimNextStep, useNextStep } from '../lib/useNextStep'
 import { Card, RefreshIconButton } from './ui'
 
 interface SetupChecklistProps {
@@ -55,9 +60,9 @@ export function SetupChecklist({ project, mode, onRefresh, adminEndpointHost }: 
   const requiredDone = project.required_complete >= project.required_total
   const allDone = project.complete >= project.total
   const pct = Math.round((project.required_complete / Math.max(1, project.required_total)) * 100)
-  // Highlight the next required step with a "Do this next" chip + brand ring,
-  // mirroring the dashboard HeroIntro language. .
-  const nextRequiredId = project.steps.find((s) => s.required && !s.complete)?.id ?? null
+  // Highlight the next step with a "Do this next" chip + brand ring. Same
+  // rule as the docked setup guide and the onboarding lanes.
+  const nextRequiredId = useNextStep({ kind: 'setup', project }).stepId
 
   if (mode === 'banner') {
     return (
@@ -108,6 +113,7 @@ function BannerChecklist({
   // checklist for attention. .
   const overallPct = project.complete / Math.max(1, project.total)
   const [open, setOpen] = useState(!(requiredDone || overallPct >= 0.8))
+  useClaimNextStep('setup', open && nextRequiredId !== null)
 
   if (!open) {
     const collapsedCopy = allDone
@@ -194,6 +200,7 @@ function BannerChecklist({
 }
 
 function WizardChecklist({ project, requiredDone, pct, nextRequiredId, adminEndpointHost }: InternalProps) {
+  useClaimNextStep('setup', nextRequiredId !== null)
   return (
     <div className="space-y-3">
       <Card  className="px-3 py-2.5">

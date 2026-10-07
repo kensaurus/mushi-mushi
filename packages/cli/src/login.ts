@@ -344,12 +344,26 @@ export async function runLogin(opts: RunLoginOptions = {}): Promise<void> {
     }
   }
 
+  // A failed mint used to be swallowed, and the run still printed "Key
+  // upgraded!" with the old key in place (a member, not owner/admin, gets 403).
+  let mintError: string | null = null
   if (!apiKey && chosenProjectId) {
     try {
       apiKey = (await mintProjectKey(endpoint, cliToken, chosenProjectId, { scopes: mintScopes })) ?? undefined
-    } catch {
-      /* non-fatal — user can copy from console */
+    } catch (err) {
+      mintError = err instanceof Error ? err.message : String(err)
     }
+  }
+
+  if (mintError) {
+    // Leave the saved login as it was: pairing the old key with the newly
+    // chosen project would make every later command act on the wrong app.
+    process.stderr.write(`\n  ✗ No key was created for ${chosenProjectName ?? chosenProjectId}: ${mintError}\n`)
+    if (/owner or admin|forbidden|403/i.test(mintError)) {
+      process.stderr.write('    Only the project\'s owners and admins can create keys. Ask one of them to make you an admin, then run this again.\n')
+    }
+    process.stderr.write('    Your saved login was not changed.\n\n')
+    process.exit(1)
   }
 
   const config = loadConfig()

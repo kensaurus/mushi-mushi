@@ -4,7 +4,7 @@
  *          Overview | LLM | Cron | Activity.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, lazy } from 'react'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { Link, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
@@ -71,6 +71,12 @@ import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { shouldHideGuideWhenBannerActive } from '../lib/pagePostureHelpers'
 import { CheckVerificationHub } from '../components/check/CheckVerificationHub'
 import { CHIP_TONE } from '../lib/chipTone'
+import { PageHubView } from '../components/PageHubView'
+import { HEALTH_HUB } from '../lib/pageHubs'
+
+const CodeHealthPage = lazy(() => import('./CodeHealthPage').then((m) => ({ default: m.CodeHealthPage })))
+const DriftPage = lazy(() => import('./DriftPage').then((m) => ({ default: m.DriftPage })))
+const AnomaliesPage = lazy(() => import('./AnomaliesPage').then((m) => ({ default: m.AnomaliesPage })))
 
 interface LlmRecent {
   function_name: string
@@ -179,7 +185,18 @@ export function HealthPage() {
   if (hubParams.get('hub') === 'check') {
     return <CheckVerificationHub />
   }
-  return <HealthPageContent />
+  // App health (Plan 021): Code size, Schema changes and Unusual spikes are views here now.
+  return (
+    <PageHubView
+      hub={HEALTH_HUB}
+      render={{
+        integrations: () => <HealthPageContent />,
+        code: () => <CodeHealthPage />,
+        schema: () => <DriftPage />,
+        spikes: () => <AnomaliesPage />,
+      }}
+    />
+  )
 }
 
 function HealthPageContent() {

@@ -1,3 +1,5 @@
+import { legacyHubRoutes } from './lib/pageHubs'
+import { HubRedirect } from './components/PageHubView'
 import { lazy, Suspense, useEffect } from 'react'
 import { Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom'
 import { AuthProvider, useAuth } from './lib/auth'
@@ -36,11 +38,6 @@ const envStatus = checkEnv()
 
 const ContentQualityPage = lazy(() => import('./pages/ContentQualityPage').then(m => ({ default: m.ContentQualityPage })))
 const ContentQualityDetailPage = lazy(() => import('./pages/ContentQualityDetailPage').then(m => ({ default: m.ContentQualityDetailPage })))
-const ActivityPage = lazy(() => import('./pages/ActivityPage').then(m => ({ default: m.ActivityPage })))
-const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage').then(m => ({ default: m.AnalyticsPage })))
-const GrowthPage = lazy(() => import('./pages/GrowthPage').then(m => ({ default: m.GrowthPage })))
-const OverviewPage = lazy(() => import('./pages/OverviewPage').then(m => ({ default: m.OverviewPage })))
-const DashboardPage = lazy(() => import('./pages/DashboardPage').then(m => ({ default: m.DashboardPage })))
 const ReportsPage = lazy(() => import('./pages/ReportsPage').then(m => ({ default: m.ReportsPage })))
 const ReportDetailPage = lazy(() => import('./pages/ReportDetailPage').then(m => ({ default: m.ReportDetailPage })))
 const SettingsPage = lazy(() => import('./pages/SettingsPage').then(m => ({ default: m.SettingsPage })))
@@ -54,24 +51,20 @@ const ResearchPage = lazy(() => import('./pages/ResearchPage').then(m => ({ defa
 const FixesPage = lazy(() => import('./pages/FixesPage').then(m => ({ default: m.FixesPage })))
 const RepoPage = lazy(() => import('./pages/RepoPage').then(m => ({ default: m.RepoPage })))
 const VoicePage = lazy(() => import('./pages/VoicePage').then(m => ({ default: m.VoicePage })))
-const SsoPage = lazy(() => import('./pages/SsoPage').then(m => ({ default: m.SsoPage })))
-const AuditPage = lazy(() => import('./pages/AuditPage').then(m => ({ default: m.AuditPage })))
 const FullStackAuditPage = lazy(() => import('./pages/FullStackAuditPage').then(m => ({ default: m.FullStackAuditPage })))
-const CodeHealthPage = lazy(() => import('./pages/CodeHealthPage').then(m => ({ default: m.CodeHealthPage })))
 const RecipePage = lazy(() => import('./pages/RecipePage').then(m => ({ default: m.RecipePage })))
 const DesignPage = lazy(() => import('./pages/DesignPage').then(m => ({ default: m.DesignPage })))
+const TeamPage = lazy(() => import('./pages/TeamPage').then(m => ({ default: m.TeamPage })))
+const HomePage = lazy(() => import('./pages/HomePage').then(m => ({ default: m.HomePage })))
+const UxRunsPage = lazy(() => import('./pages/UxRunsPage').then(m => ({ default: m.UxRunsPage })))
 const PortfolioPage = lazy(() => import('./pages/PortfolioPage').then(m => ({ default: m.PortfolioPage })))
 const PromptLabPage = lazy(() => import('./pages/PromptLabPage').then(m => ({ default: m.PromptLabPage })))
-const IntelligencePage = lazy(() => import('./pages/IntelligencePage').then(m => ({ default: m.IntelligencePage })))
-const CompliancePage = lazy(() => import('./pages/CompliancePage').then(m => ({ default: m.CompliancePage })))
-const StoragePage = lazy(() => import('./pages/StoragePage').then(m => ({ default: m.StoragePage })))
 const MarketplacePage = lazy(() => import('./pages/MarketplacePage').then(m => ({ default: m.MarketplacePage })))
 const IntegrationsPage = lazy(() => import('./pages/IntegrationsPage').then(m => ({ default: m.IntegrationsPage })))
 import { IntegrationsRouteGate } from './pages/IntegrationsRouteGate'
 const ConnectPage = lazy(() => import('./pages/ConnectPage').then(m => ({ default: m.ConnectPage })))
 const McpPage = lazy(() => import('./pages/McpPage').then(m => ({ default: m.McpPage })))
 const OnboardingPage = lazy(() => import('./pages/OnboardingPage').then(m => ({ default: m.OnboardingPage })))
-const SetupCopilotPage = lazy(() => import('./pages/SetupCopilotPage').then(m => ({ default: m.SetupCopilotPage })))
 const FeedbackPage = lazy(() => import('./pages/FeedbackPage').then(m => ({ default: m.FeedbackPage })))
 const FeatureBoardPage = lazy(() => import('./pages/FeatureBoardPage').then(m => ({ default: m.FeatureBoardPage })))
 const HealthPage = lazy(() => import('./pages/HealthPage').then(m => ({ default: m.HealthPage })))
@@ -85,12 +78,8 @@ const LessonsPage = lazy(() => import('./pages/LessonsPage').then(m => ({ defaul
 const ReleasesPage = lazy(() => import('./pages/ReleasesPage').then(m => ({ default: m.ReleasesPage })))
 const IteratePage = lazy(() => import('./pages/IteratePage').then(m => ({ default: m.IteratePage })))
 const SkillPipelinesPage = lazy(() => import('./pages/SkillPipelinesPage').then(m => ({ default: m.SkillPipelinesPage })))
-const DriftPage = lazy(() => import('./pages/DriftPage').then(m => ({ default: m.DriftPage })))
 const ExperimentsPage = lazy(() => import('./pages/ExperimentsPage').then(m => ({ default: m.ExperimentsPage })))
-const AnomaliesPage = lazy(() => import('./pages/AnomaliesPage').then(m => ({ default: m.AnomaliesPage })))
-const CostPage = lazy(() => import('./pages/CostPage').then(m => ({ default: m.CostPage })))
 const NotificationsPage = lazy(() => import('./pages/NotificationsPage').then(m => ({ default: m.NotificationsPage })))
-const BillingPage = lazy(() => import('./pages/BillingPage').then(m => ({ default: m.BillingPage })))
 const OrganizationSettingsPage = lazy(() => import('./pages/OrganizationSettingsPage').then(m => ({ default: m.OrganizationSettingsPage })))
 const AcceptInvitePage = lazy(() => import('./pages/AcceptInvitePage').then(m => ({ default: m.AcceptInvitePage })))
 const ReporterEmailLinkPage = lazy(() => import('./pages/ReporterEmailLinkPage').then(m => ({ default: m.ReporterEmailLinkPage })))
@@ -171,6 +160,13 @@ function NotFoundPage() {
       }}
     />
   )
+}
+
+function SetupCopilotRedirect() {
+  const { search } = useLocation()
+  const params = new URLSearchParams(search)
+  params.set('tab', 'copilot')
+  return <Navigate to={`/onboarding?${params.toString()}`} replace />
 }
 
 /**
@@ -370,11 +366,13 @@ export function App() {
                 <RouteErrorBoundary source="protected-route">
                 <Suspense fallback={<Loading text="Loading…" />}>
                 <SentryRoutes>
-                  <Route path="/overview" element={<OverviewPage />} />
-                  <Route path="/activity" element={<ActivityPage />} />
-                  <Route path="/analytics" element={<AnalyticsPage />} />
-                  <Route path="/growth" element={<GrowthPage />} />
-                  <Route path="/dashboard" element={<DashboardPage />} />
+                  {/* Plan 021: pages that are views of Home, App health or Team now
+                      (lib/pageHubs.ts) redirect there with the query kept. */}
+                  {legacyHubRoutes().map(({ path, hub, viewId }) => (
+                    <Route key={path} path={path} element={<HubRedirect hub={hub} viewId={viewId} />} />
+                  ))}
+                  <Route path="/team" element={<TeamPage />} />
+                  <Route path="/dashboard" element={<HomePage />} />
                   <Route path="/console" element={<Navigate to="/dashboard" replace />} />
                   <Route path="/reports" element={<ReportsPage />} />
                   <Route path="/reports/:id" element={<ReportDetailPage />} />
@@ -391,18 +389,13 @@ export function App() {
                   <Route path="/fixes" element={<FixesPage />} />
                   <Route path="/repo" element={<RepoPage />} />
                   <Route path="/voice" element={<VoicePage />} />
-                  <Route path="/sso" element={<SsoPage />} />
-                  <Route path="/audit" element={<AuditPage />} />
                   <Route path="/fullstack-audit" element={<FullStackAuditPage />} />
-                  <Route path="/code-health" element={<CodeHealthPage />} />
                   <Route path="/recipe" element={<RecipePage />} />
                   <Route path="/design" element={<DesignPage />} />
+                  <Route path="/ux-runs" element={<UxRunsPage />} />
                   <Route path="/portfolio" element={<PortfolioPage />} />
                   <Route path="/prompt-lab" element={<PromptLabPage />} />
                   <Route path="/fine-tuning" element={<Navigate to="/prompt-lab" replace />} />
-                  <Route path="/intelligence" element={<IntelligencePage />} />
-                  <Route path="/compliance" element={<CompliancePage />} />
-                  <Route path="/storage" element={<StoragePage />} />
                   <Route path="/marketplace" element={<MarketplacePage />} />
                   <Route path="/integrations/config" element={<IntegrationsPage />} />
                   <Route path="/mcp" element={<McpPage />} />
@@ -426,7 +419,8 @@ export function App() {
                       </Suspense>
                     }
                   />
-                  <Route path="/setup-copilot" element={<SetupCopilotPage />} />
+                  {/* One setup path (Plan 021): Setup Copilot is the Diagnose tab of /onboarding. */}
+                  <Route path="/setup-copilot" element={<SetupCopilotRedirect />} />
                   <Route path="/feedback" element={<FeedbackPage />} />
                   <Route path="/feature-board" element={<FeatureBoardPage />} />
                   <Route path="/health" element={<HealthPage />} />
@@ -440,13 +434,8 @@ export function App() {
                   <Route path="/releases" element={<ReleasesPage />} />
                   <Route path="/iterate" element={<IteratePage />} />
                   <Route path="/skills" element={<SkillPipelinesPage />} />
-                  <Route path="/drift" element={<DriftPage />} />
                   <Route path="/experiments" element={<ExperimentsPage />} />
-                  <Route path="/anomalies" element={<AnomaliesPage />} />
-                  <Route path="/cost" element={<CostPage />} />
                   <Route path="/notifications" element={<NotificationsPage />} />
-                  <Route path="/billing" element={<BillingPage />} />
-                  <Route path="/organization/members" element={<OrganizationSettingsPage />} />
                   <Route path="/org/:slug/settings/*" element={<OrganizationSettingsPage />} />
                   <Route path="/inbox" element={<InboxPage />} />
                   <Route path="/explore" element={<ExplorePage />} />

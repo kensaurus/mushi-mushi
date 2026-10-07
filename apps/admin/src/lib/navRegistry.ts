@@ -154,7 +154,7 @@ export const SIMPLE_NAV_GROUPS: readonly SimpleNavGroup[] = [
     id: 'simple-apps',
     title: 'Your apps',
     quick: ['/portfolio', '/projects'],
-    beginner: ['/portfolio', '/overview', '/analytics', '/projects'],
+    beginner: ['/portfolio', '/ux-runs', '/projects'],
   },
   {
     id: 'simple-connect',
@@ -166,7 +166,7 @@ export const SIMPLE_NAV_GROUPS: readonly SimpleNavGroup[] = [
     id: 'simple-account',
     title: 'Account',
     quick: ['/settings'],
-    beginner: ['/settings', '/billing', '/feedback'],
+    beginner: ['/settings', '/team', '/feedback'],
   },
 ]
 
@@ -273,8 +273,10 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
   },
   {
     id: 'nav:overview',
-    path: '/overview',
+    path: '/dashboard?view=apps',
     label: 'App activity',
+    // A view of Home now (Plan 021): searchable, not a sidebar entry.
+    inSidebar: false,
     sectionId: 'start',
     iconKey: 'overview',
     paletteDescription: 'Last 7 days for every app in this team: sessions, users and open bugs, with links into each app.',
@@ -509,9 +511,21 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     paletteGroup: 'Check',
   },
   {
+    id: 'nav:ux-runs',
+    path: '/ux-runs',
+    label: 'UX runs',
+    sectionId: 'check',
+    pdcaStage: 'check',
+    checkSubGroup: 'quality-gates',
+    iconKey: 'iterate',
+    paletteDescription: 'Your coding agent worked through every screen; see which were improved, rolled back or moved by another fix, with before/after screenshots.',
+    paletteKeywords: ['ux', 'ux runs', 'ui', 'screens', 'screenshots', 'before after', 'agent', 'mushi ux', 'visual', 'accessibility'],
+    paletteGroup: 'Check',
+  },
+  {
     id: 'nav:health',
     path: '/health',
-    label: 'System health',
+    label: 'App health',
     sectionId: 'check',
     pdcaStage: 'check',
     checkSubGroup: 'system-health',
@@ -522,8 +536,10 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
   },
   {
     id: 'nav:code-health',
-    path: '/code-health',
+    path: '/health?view=code',
     label: 'Code size',
+    // A view of a hub page now (Plan 021, lib/pageHubs.ts): searchable, not a sidebar entry.
+    inSidebar: false,
     sectionId: 'check',
     pdcaStage: 'check',
     checkSubGroup: 'system-health',
@@ -546,8 +562,10 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
   },
   {
     id: 'nav:drift',
-    path: '/drift',
+    path: '/health?view=schema',
     label: 'Schema changes',
+    // A view of a hub page now (Plan 021, lib/pageHubs.ts): searchable, not a sidebar entry.
+    inSidebar: false,
     sectionId: 'check',
     pdcaStage: 'check',
     checkSubGroup: 'system-health',
@@ -558,8 +576,10 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
   },
   {
     id: 'nav:anomalies',
-    path: '/anomalies',
+    path: '/health?view=spikes',
     label: 'Unusual spikes',
+    // A view of a hub page now (Plan 021, lib/pageHubs.ts): searchable, not a sidebar entry.
+    inSidebar: false,
     sectionId: 'check',
     pdcaStage: 'check',
     checkSubGroup: 'system-health',
@@ -570,8 +590,10 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
   },
   {
     id: 'nav:activity',
-    path: '/activity',
+    path: '/dashboard?view=users',
     label: 'User activity',
+    // A view of Home now (Plan 021): searchable, not a sidebar entry.
+    inSidebar: false,
     sectionId: 'check',
     pdcaStage: 'check',
     checkSubGroup: 'release-intel',
@@ -585,8 +607,10 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     // (docs: apps/docs/content/admin/users.mdx), so the customer-facing
     // product-analytics page lives at `/analytics`.
     id: 'nav:analytics',
-    path: '/analytics',
+    path: '/dashboard?view=funnels',
     label: 'Users & funnels',
+    // A view of Home now (Plan 021): searchable, not a sidebar entry.
+    inSidebar: false,
     sectionId: 'check',
     pdcaStage: 'check',
     checkSubGroup: 'release-intel',
@@ -609,8 +633,10 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
   },
   {
     id: 'nav:intelligence',
-    path: '/intelligence',
+    path: '/dashboard?view=insights',
     label: 'Weekly insights',
+    // A view of Home now (Plan 021): searchable, not a sidebar entry.
+    inSidebar: false,
     sectionId: 'check',
     pdcaStage: 'check',
     checkSubGroup: 'release-intel',
@@ -645,8 +671,10 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
   },
   {
     id: 'nav:growth',
-    path: '/growth',
+    path: '/dashboard?view=growth',
     label: 'Growth',
+    // A view of Home now (Plan 021): searchable, not a sidebar entry.
+    inSidebar: false,
     sectionId: 'check',
     pdcaStage: 'check',
     checkSubGroup: 'release-intel',
@@ -725,13 +753,25 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
   },
   {
     id: 'nav:members',
-    path: '/organization/members',
+    path: '/team?view=members',
     label: 'Team members',
+    // A view of a hub page now (Plan 021, lib/pageHubs.ts): searchable, not a sidebar entry.
+    inSidebar: false,
     sectionId: 'workspace',
     iconKey: 'members',
     requiresFeature: 'teams',
     paletteDescription: 'Invite teammates and manage their roles.',
     paletteKeywords: ['members', 'invite', 'team', 'organization', 'roles'],
+    paletteGroup: 'Workspace',
+  },
+  {
+    id: 'nav:team',
+    path: '/team',
+    label: 'Team',
+    sectionId: 'workspace',
+    iconKey: 'members',
+    paletteDescription: 'Your team in one place: members, billing, AI spend, audit log, single sign-on, compliance and storage.',
+    paletteKeywords: ['team', 'organization', 'members', 'billing', 'spend', 'cost', 'audit', 'sso', 'compliance', 'storage', 'workspace'],
     paletteGroup: 'Workspace',
   },
   {
@@ -746,8 +786,10 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
   },
   {
     id: 'nav:billing',
-    path: '/billing',
+    path: '/team?view=billing',
     label: 'Billing',
+    // A view of a hub page now (Plan 021, lib/pageHubs.ts): searchable, not a sidebar entry.
+    inSidebar: false,
     sectionId: 'workspace',
     iconKey: 'billing',
     paletteDescription: 'Plan, seats, invoices, and usage-based charges.',
@@ -756,8 +798,10 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
   },
   {
     id: 'nav:cost',
-    path: '/cost',
+    path: '/team?view=spend',
     label: 'AI spend',
+    // A view of a hub page now (Plan 021, lib/pageHubs.ts): searchable, not a sidebar entry.
+    inSidebar: false,
     sectionId: 'workspace',
     iconKey: 'cost',
     paletteDescription: 'What the AI behind diagnoses and fixes costs, by step and day.',
@@ -776,8 +820,10 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
   },
   {
     id: 'nav:sso',
-    path: '/sso',
+    path: '/team?view=sso',
     label: 'Single sign-on',
+    // A view of a hub page now (Plan 021, lib/pageHubs.ts): searchable, not a sidebar entry.
+    inSidebar: false,
     sectionId: 'workspace',
     iconKey: 'sso',
     requiresFeature: 'sso',
@@ -787,8 +833,10 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
   },
   {
     id: 'nav:compliance',
-    path: '/compliance',
+    path: '/team?view=compliance',
     label: 'Compliance',
+    // A view of a hub page now (Plan 021, lib/pageHubs.ts): searchable, not a sidebar entry.
+    inSidebar: false,
     sectionId: 'workspace',
     iconKey: 'compliance',
     requiresFeature: 'soc2',
@@ -798,8 +846,10 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
   },
   {
     id: 'nav:audit',
-    path: '/audit',
+    path: '/team?view=audit',
     label: 'Audit log',
+    // A view of a hub page now (Plan 021, lib/pageHubs.ts): searchable, not a sidebar entry.
+    inSidebar: false,
     sectionId: 'workspace',
     iconKey: 'audit',
     requiresFeature: 'audit_log',
@@ -809,8 +859,10 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
   },
   {
     id: 'nav:storage',
-    path: '/storage',
+    path: '/team?view=storage',
     label: 'Storage',
+    // A view of a hub page now (Plan 021, lib/pageHubs.ts): searchable, not a sidebar entry.
+    inSidebar: false,
     sectionId: 'workspace',
     iconKey: 'storage',
     paletteDescription: 'Bucket usage, screenshot retention, and data-lifecycle policies.',
@@ -845,9 +897,10 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     label: 'Setup copilot',
     sectionId: 'start',
     iconKey: 'terminal',
+    // The Diagnose tab of /onboarding now (Plan 021): opens /onboarding?tab=copilot.
     inSidebar: false,
-    paletteDescription: 'Guided verify-and-dispatch setup assistant.',
-    paletteKeywords: ['setup', 'copilot', 'verify', 'dispatch', 'guided'],
+    paletteDescription: 'Diagnose setup: SDK heartbeat, version and fix dispatch for one project, with copy-paste commands.',
+    paletteKeywords: ['setup', 'copilot', 'verify', 'dispatch', 'guided', 'diagnose'],
     paletteGroup: 'Start',
   },
   {
@@ -1038,4 +1091,9 @@ export function routeFallbackTitle(pathname: string): string | null {
  *   vs To-do (/inbox, decisions) vs Improvement runs (/iterate); Bugs
  *   (/reports) vs Processing jobs (/queue); All apps (/portfolio, setup and
  *   holes) vs App activity (/overview, 7-day usage).
+ * - Plan 021 (owner, 2026-10-06) supersedes the "stay separate" part for three
+ *   families: Home (/dashboard), App health (/health) and Team (/team) each
+ *   host their former pages as `?view=` views (lib/pageHubs.ts); the old
+ *   routes redirect. Palette entries stay so every former label still finds
+ *   its page.
  */

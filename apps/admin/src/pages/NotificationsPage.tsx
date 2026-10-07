@@ -41,7 +41,7 @@ import {
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
-import { SetupNudge } from '../components/SetupNudge'
+import { NextStep } from '../components/NextStep'
 import { HeroSearch } from '../components/illustrations/HeroIllustrations'
 import { ConfigHelp } from '../components/ConfigHelp'
 import { NotificationsStatusBanner } from '../components/notifications/NotificationsStatusBanner'
@@ -249,7 +249,8 @@ export function NotificationsPage() {
             'Filter by type or unread on Inbox, expand a row for the JSON payload, and mark read once verified. Reporter updates must be on (Setup tab).'
           }
         />
-        <SetupNudge
+        <NextStep
+          variant="inline"
           requires={['project']}
           emptyTitle="Select a project"
           emptyDescription="Reporter notifications are scoped to the active project in the header."
@@ -496,7 +497,8 @@ export function NotificationsPage() {
                   }
                 />
               ) : (
-                <SetupNudge
+                <NextStep
+                  variant="inline"
                   requires={['first_report_received']}
                   emptyTitle={
                     projectName

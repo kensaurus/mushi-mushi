@@ -129,6 +129,13 @@ function renderPortfolioFindings(data: PortfolioFindingsData): string[] {
   return lines
 }
 
+interface ProjectGroupRow {
+  id: string
+  name: string
+  slug: string
+  project_ids: string[]
+}
+
 export function registerPortfolioCommands(program: Command): void {
   const portfolio = program
     .command('portfolio')
@@ -139,11 +146,13 @@ export function registerPortfolioCommands(program: Command): void {
     .description('Health, open reports, holes, SDK version and last release for each app')
     .option(ORG_HELP, ORG_DESC)
     .option('--page <n>', 'Page of apps (25 per page)', '1')
+    .option('--group <slug>', 'Only the apps in this project group (see `mushi portfolio groups list`)')
     .option('--json', 'Machine-readable JSON output')
-    .action(async (opts: { org?: string; page: string; json?: boolean }) => {
+    .action(async (opts: { org?: string; page: string; group?: string; json?: boolean }) => {
       const config = requireConfig()
       const page = Math.max(1, Number.parseInt(opts.page, 10) || 1)
-      const result = await apiCall<PortfolioData>(`/v1/admin/orgs/${orgSegment(opts.org)}/portfolio?page=${page}`, config)
+      const group = opts.group ? `&group=${encodeURIComponent(opts.group)}` : ''
+      const result = await apiCall<PortfolioData>(`/v1/admin/orgs/${orgSegment(opts.org)}/portfolio?page=${page}${group}`, config)
       if (!result.ok) dieOrgError(result)
       if (outputIsJson(opts.json)) {
         console.log(JSON.stringify(result.data, null, 2))
@@ -182,6 +191,90 @@ export function registerPortfolioCommands(program: Command): void {
         return
       }
       for (const line of renderPortfolioResources(result.data)) console.log(line)
+    })
+
+  const groups = portfolio
+    .command('groups')
+    .description('Named groups of apps in your team, for the portfolio filter and project switcher')
+
+  groups
+    .command('list')
+    .description('Each group and how many of your apps are in it')
+    .option(ORG_HELP, ORG_DESC)
+    .option('--json', 'Machine-readable JSON output')
+    .action(async (opts: { org?: string; json?: boolean }) => {
+      const config = requireConfig()
+      const result = await apiCall<{ groups: ProjectGroupRow[] }>(`/v1/admin/orgs/${orgSegment(opts.org)}/project-groups`, config)
+      if (!result.ok) dieOrgError(result)
+      if (outputIsJson(opts.json)) {
+        console.log(JSON.stringify(result.data.groups, null, 2))
+        return
+      }
+      if (result.data.groups.length === 0) console.log('No groups yet. Add one: mushi portfolio groups add "Client work"')
+      for (const g of result.data.groups) console.log(`${g.slug.padEnd(24)} ${g.name}  (${g.project_ids.length} app${g.project_ids.length === 1 ? '' : 's'})  ${g.id}`)
+    })
+
+  groups
+    .command('add <name>')
+    .description('Create a group (team owners and admins)')
+    .option(ORG_HELP, ORG_DESC)
+    .option('--json', 'Machine-readable JSON output')
+    .action(async (name: string, opts: { org?: string; json?: boolean }) => {
+      const config = requireConfig()
+      const result = await apiCall<{ group: ProjectGroupRow }>(`/v1/admin/orgs/${orgSegment(opts.org)}/project-groups`, config, {
+        method: 'POST',
+        body: JSON.stringify({ name }),
+      })
+      if (!result.ok) dieOrgError(result)
+      if (outputIsJson(opts.json)) console.log(JSON.stringify(result.data.group, null, 2))
+      else console.log(`Created "${result.data.group.name}" (${result.data.group.slug}) ${result.data.group.id}`)
+    })
+
+  groups
+    .command('set <groupId> [projectIds...]')
+    .description('Set exactly which apps are in a group (team owners and admins); no ids empties it')
+    .option(ORG_HELP, ORG_DESC)
+    .action(async (groupId: string, projectIds: string[], opts: { org?: string }) => {
+      const config = requireConfig()
+      const gid = requireUuid(groupId, 'group id')
+      const ids = (projectIds ?? []).map((p) => requireUuid(p, 'project id'))
+      const result = await apiCall<{ added: number; removed: number }>(
+        `/v1/admin/orgs/${orgSegment(opts.org)}/project-groups/${gid}/projects`,
+        config,
+        { method: 'PUT', body: JSON.stringify({ project_ids: ids }) },
+      )
+      if (!result.ok) dieOrgError(result)
+      console.log(`Added ${result.data.added}, removed ${result.data.removed}.`)
+    })
+
+  groups
+    .command('rename <groupId> <name>')
+    .description('Rename a group (team owners and admins)')
+    .option(ORG_HELP, ORG_DESC)
+    .action(async (groupId: string, name: string, opts: { org?: string }) => {
+      const config = requireConfig()
+      const result = await apiCall<{ group: ProjectGroupRow }>(
+        `/v1/admin/orgs/${orgSegment(opts.org)}/project-groups/${requireUuid(groupId, 'group id')}`,
+        config,
+        { method: 'PATCH', body: JSON.stringify({ name }) },
+      )
+      if (!result.ok) dieOrgError(result)
+      console.log(`Renamed to "${result.data.group.name}" (${result.data.group.slug}).`)
+    })
+
+  groups
+    .command('remove <groupId>')
+    .description('Delete a group; its apps stay (team owners and admins)')
+    .option(ORG_HELP, ORG_DESC)
+    .action(async (groupId: string, opts: { org?: string }) => {
+      const config = requireConfig()
+      const result = await apiCall<{ deleted: string }>(
+        `/v1/admin/orgs/${orgSegment(opts.org)}/project-groups/${requireUuid(groupId, 'group id')}`,
+        config,
+        { method: 'DELETE' },
+      )
+      if (!result.ok) dieOrgError(result)
+      console.log('Group deleted. Its apps are unchanged.')
     })
 
   portfolio
