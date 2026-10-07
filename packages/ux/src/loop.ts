@@ -62,10 +62,15 @@ import {
 const REGRESSION_CONTENT_RATIO = 0.05
 /** Ignore tiny moves (a clock, a counter) below this many pixels. */
 const REGRESSION_MIN_PIXELS = 200
-/** The planning pass of steps mode gets at most this long. */
-const PLAN_TIMEOUT_MS = 4 * 60_000
+/**
+ * The planning pass of steps mode gets at most this long. Grok 4.7 xhigh took
+ * 16 steps in 6 minutes on a three-skill chain and wrote no plan with 4 + 2
+ * minutes (glot.it tone training, 2026-10-07); a plan that fails costs the
+ * screen its small steps.
+ */
+const PLAN_TIMEOUT_MS = 6 * 60_000
 /** "Time is up" continuations of the same agent session, when a box ran out with nothing to show. */
-const PLAN_NUDGE_MS = 2 * 60_000
+const PLAN_NUDGE_MS = 3 * 60_000
 const EDIT_NUDGE_MS = 3 * 60_000
 const PLAN_NUDGE =
   'Time is up. Do not read any more files. Write .mushi-ux/PLAN.md now with the improvements you found, one per line starting with "- ", then stop.'
