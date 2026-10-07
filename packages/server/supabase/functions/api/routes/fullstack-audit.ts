@@ -26,6 +26,10 @@ import { readAllPages, type PageCount } from '../../_shared/paged-read.ts'
 import { resolveSupabasePat, getSupabaseAdvisors, getLogs, listTables } from '../../_shared/supabase-mcp-client.ts'
 import { resolveOwnedProject } from '../shared.ts'
 import { log } from '../../_shared/logger.ts'
+import { runInBackground } from '../../_shared/background.ts'
+import { INVENTORY_V2_DOGFOOD_EMAILS, resolvePlanForScope } from '../../_shared/entitlements.ts'
+import { parseInventoryYaml } from '../../_shared/inventory.ts'
+import { gatesRunRateLimiter, pickCrawlBaseUrl, reconcileRateLimiter } from '../../_shared/inventory-guards.ts'
 import type { Variables } from '../types.ts'
 
 const alog = log.child('fullstack-audit')
@@ -67,6 +71,8 @@ export interface AuditResult {
   recent_backend_errors: number
   /** Plain-English list of the reads that failed; empty when the audit is complete. */
   read_errors: string[]
+  /** Which stale inventory gates this audit re-ran, and which it skipped and why. */
+  gate_refresh: AuditGateRefresh
 }
 
 export interface FullstackAuditStats {
@@ -200,7 +206,86 @@ interface GateRunRow {
   gate: string
   status: string
   findings_count: number | null
+  started_at: string | null
   completed_at: string | null
+}
+
+/**
+ * Gates the audit re-runs when stale, the same way the Inventory page does:
+ * `crawl` through the inventory-crawler (POST …/inventory/:id/reconcile), the
+ * rest through inventory-gates (POST …/inventory/:id/gates/run).
+ */
+const AUDIT_REFRESH_GATES = ['crawl', 'status_claim', 'api_contract', 'orphan_endpoint', 'unknown_call'] as const
+/** A gate that started a run within this window is fresh enough. */
+const AUDIT_REFRESH_FRESH_MS = 24 * 60 * 60 * 1000
+
+interface AuditGateRefresh {
+  /** Gates whose re-run was started by this audit. Results land in gate_runs. */
+  triggered: string[]
+  /** Gates not re-run, each with the plain-English reason. */
+  skipped: Array<{ gate: string; reason: string }>
+}
+
+/**
+ * Decide which inventory gates this audit re-runs. Freshness is per gate:
+ * the newest run of ANY gate (radar and portfolio_radar run daily) used to
+ * stand in for all of them, so crawl / status_claim / api_contract never
+ * re-ran. A gate with no run in the 7-day read window is stale.
+ *
+ * @internal Exported for fullstack-audit-gate-refresh.test.ts.
+ */
+export function planAuditGateRefresh(input: {
+  /** null when the gate runs could not be read. */
+  latestByGate: ReadonlyMap<string, Pick<GateRunRow, 'started_at' | 'completed_at'>> | null
+  /** 'unknown' when the inventory could not be read. */
+  inventory: 'current' | 'none' | 'unknown'
+  /** False when the project's plan does not include inventory checks. */
+  entitled: boolean
+  crawlUrl: { url: string | null; skipped: string[] }
+  envReady: boolean
+  nowMs: number
+}): { crawl: boolean; gates: string[]; skipped: AuditGateRefresh['skipped'] } {
+  const skipped: AuditGateRefresh['skipped'] = []
+  let crawl = false
+  const gates: string[] = []
+  for (const gate of AUDIT_REFRESH_GATES) {
+    const skip = (reason: string) => skipped.push({ gate, reason })
+    if (!input.latestByGate) {
+      skip('The gate runs could not be read, so whether this gate is stale is unknown.')
+      continue
+    }
+    const last = input.latestByGate.get(gate)
+    const lastAt = last?.started_at ?? last?.completed_at ?? null
+    const ageMs = lastAt ? input.nowMs - new Date(lastAt).getTime() : Number.POSITIVE_INFINITY
+    if (ageMs < AUDIT_REFRESH_FRESH_MS) {
+      skip(`Ran ${Math.max(0, Math.round(ageMs / 3_600_000))} h ago; re-runs once a day.`)
+      continue
+    }
+    if (!input.entitled) {
+      skip("The project's plan does not include inventory checks.")
+      continue
+    }
+    if (input.inventory === 'none') {
+      skip('No current inventory. Ingest inventory.yaml (Inventory → Yaml) first.')
+      continue
+    }
+    if (input.inventory === 'unknown') {
+      skip('The inventory could not be read.')
+      continue
+    }
+    if (gate === 'crawl' && !input.crawlUrl.url) {
+      const why = input.crawlUrl.skipped.length ? ` (${input.crawlUrl.skipped.join('; ')})` : ''
+      skip(`No crawlable URL: set crawler_base_url in project settings${why}.`)
+      continue
+    }
+    if (!input.envReady) {
+      skip('The api function has no SUPABASE_URL or service key, so it cannot start the run.')
+      continue
+    }
+    if (gate === 'crawl') crawl = true
+    else gates.push(gate)
+  }
+  return { crawl, gates, skipped }
 }
 
 /** The newest run per gate over the last 7 days, or an error message when the runs could not be read. */
@@ -214,7 +299,7 @@ export async function readLatestGateRuns(
     const read = await readAllPages<GateRunRow>(
       (from, to, count) => db
         .from('gate_runs')
-        .select('id, gate, status, findings_count, completed_at', { count })
+        .select('id, gate, status, findings_count, started_at, completed_at', { count })
         .eq('project_id', projectId)
         .gte('started_at', since)
         .order('started_at', { ascending: false })
@@ -229,6 +314,107 @@ export async function readLatestGateRuns(
     alog.warn('audit: gate_runs read failed', { projectId, err: err instanceof Error ? err.message : String(err) })
     return { ok: false, message: 'The gate runs of the last 7 days could not be read.' }
   }
+}
+
+type InventoryApp = { base_url?: string | null; preview_url?: string | null; staging_url?: string | null }
+
+/** The current inventory's app URLs, mirroring inventory-crawler's loadProject. */
+async function readCurrentInventoryApp(
+  db: Db,
+  projectId: string,
+): Promise<{ state: 'current'; app: InventoryApp | null } | { state: 'none' | 'unknown' }> {
+  const { data, error } = await db
+    .from('inventories')
+    .select('id, app:parsed->app')
+    .eq('project_id', projectId)
+    .eq('is_current', true)
+    .maybeSingle()
+  if (error) {
+    alog.warn('audit: inventory read failed', { projectId, err: error.message })
+    return { state: 'unknown' }
+  }
+  if (!data) return { state: 'none' }
+  const app = (data as { app?: InventoryApp | null }).app ?? null
+  if (app) return { state: 'current', app }
+  // An inventory stored as YAML only: the crawler parses raw_yaml, so do the same.
+  const { data: raw } = await db.from('inventories').select('raw_yaml').eq('id', (data as { id: string }).id).maybeSingle()
+  const yaml = (raw as { raw_yaml?: string | null } | null)?.raw_yaml
+  return { state: 'current', app: yaml ? parseInventoryYaml(yaml).inventory?.app ?? null : null }
+}
+
+/**
+ * Re-run the stale inventory gates for the audit, with the same guards as the
+ * Inventory page's write routes (plan feature, per-project rate limits), and
+ * report each skipped gate with its reason. The crawl and the gates start in
+ * parallel, so api_contract reads the previous crawl's discovered APIs.
+ */
+async function refreshStaleInventoryGates(
+  db: Db,
+  args: {
+    projectId: string
+    organizationId: string | null
+    userEmail: string | null
+    crawlerBaseUrl: string | null
+    latestByGate: ReadonlyMap<string, Pick<GateRunRow, 'started_at' | 'completed_at'>> | null
+  },
+): Promise<AuditGateRefresh> {
+  const { projectId } = args
+  const [inventory, plan] = await Promise.all([
+    readCurrentInventoryApp(db, projectId),
+    resolvePlanForScope(db, { organizationId: args.organizationId, projectId }),
+  ])
+  const email = args.userEmail?.toLowerCase() ?? ''
+  const entitled =
+    (plan.feature_flags as Record<string, unknown> | undefined)?.inventory_v2 === true ||
+    (email !== '' && INVENTORY_V2_DOGFOOD_EMAILS.has(email))
+  const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+
+  const decision = planAuditGateRefresh({
+    latestByGate: args.latestByGate,
+    inventory: inventory.state,
+    entitled,
+    crawlUrl: pickCrawlBaseUrl(args.crawlerBaseUrl, inventory.state === 'current' ? inventory.app : null),
+    envReady: Boolean(supabaseUrl && serviceKey),
+    nowMs: Date.now(),
+  })
+  const triggered: string[] = []
+  const skipped = [...decision.skipped]
+
+  const invoke = (fn: 'inventory-crawler' | 'inventory-gates', body: Record<string, unknown>) =>
+    runInBackground(
+      fetch(`${supabaseUrl}/functions/v1/${fn}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${serviceKey}` },
+        body: JSON.stringify({ project_id: projectId, triggered_by: 'fullstack-audit', ...body }),
+      }).then(async (res) => {
+        if (!res.ok) alog.warn('audit: gate re-run refused', { projectId, fn, status: res.status })
+        await res.body?.cancel()
+      }),
+      `fullstack-audit:${fn}`,
+    )
+
+  if (decision.crawl) {
+    const verdict = reconcileRateLimiter.consume(`${projectId}:reconcile`)
+    if (verdict.allowed) {
+      invoke('inventory-crawler', {})
+      triggered.push('crawl')
+    } else {
+      skipped.push({ gate: 'crawl', reason: `Rate-limited; retry in ${verdict.retryAfterSeconds} s.` })
+    }
+  }
+  if (decision.gates.length > 0) {
+    const verdict = gatesRunRateLimiter.consume(`${projectId}:gates.run`)
+    if (verdict.allowed) {
+      invoke('inventory-gates', { gates: decision.gates })
+      triggered.push(...decision.gates)
+    } else {
+      for (const gate of decision.gates) {
+        skipped.push({ gate, reason: `Rate-limited; retry in ${verdict.retryAfterSeconds} s.` })
+      }
+    }
+  }
+  return { triggered, skipped }
 }
 
 export function registerFullstackAuditRoutes(parent: Hono<{ Variables: Variables }>) {
@@ -396,30 +582,16 @@ export function registerFullstackAuditRoutes(parent: Hono<{ Variables: Variables
       }
     }
 
-    // ── 4. Trigger a fresh gate run (async fire-and-forget) ────────────────
-    // We don't wait — the scorecard shows the last known state; background
-    // job will refresh findings. Only trigger if gates haven't run today, and
-    // only when the runs were actually read (an unread list is not "none today").
-    const lastRunAt = gateRead.ok ? gateRead.runs[0]?.completed_at : undefined
-    const runToday = lastRunAt && new Date(lastRunAt).toDateString() === new Date().toDateString()
-    if (gateRead.ok && !runToday) {
-      const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
-      const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-      if (supabaseUrl && serviceKey) {
-        void fetch(`${supabaseUrl}/functions/v1/inventory-gates`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${serviceKey}`,
-          },
-          body: JSON.stringify({
-            project_id: projectId,
-            gates: ['api_contract', 'status_claim', 'orphan_endpoint', 'unknown_call'],
-            triggered_by: 'fullstack-audit',
-          }),
-        }).catch((err) => alog.warn('async gate run failed', { err: String(err) }))
-      }
-    }
+    // ── 4. Re-run stale inventory gates (in the background) ────────────────
+    // The scorecard shows the last known state; the re-runs land in gate_runs
+    // for the next audit. Each skipped gate is reported with its reason.
+    const gateRefresh = await refreshStaleInventoryGates(db, {
+      projectId,
+      organizationId: (project as { organization_id?: string | null }).organization_id ?? null,
+      userEmail: (c.get('userEmail') as string | undefined) ?? null,
+      crawlerBaseUrl: settings?.crawler_base_url ?? null,
+      latestByGate: gateRead.ok ? gateRead.latestByGate : null,
+    })
 
     // ── 5. Compute summary ─────────────────────────────────────────────────
     const errorCount = findings.filter((f) => f.severity === 'error').length
@@ -440,6 +612,7 @@ export function registerFullstackAuditRoutes(parent: Hono<{ Variables: Variables
       schema_snapshot_taken: schemaSnapshotTaken,
       recent_backend_errors: recentBackendErrors,
       read_errors: readErrors,
+      gate_refresh: gateRefresh,
     }
 
     return c.json({ ok: true, data: result })
