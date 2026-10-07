@@ -17,6 +17,7 @@ vi.mock('../../supabase/functions/_shared/db.ts', () => ({
 }))
 vi.mock('../../supabase/functions/_shared/auth.ts', () => ({
   adminOrApiKey: () => async (_c: unknown, next: () => Promise<void>) => next(),
+  keyGrantsAnyScope: (scopes: string[], accepted: string[]) => accepted.some((s) => scopes.includes(s)),
   jwtAuth: async (_c: unknown, next: () => Promise<void>) => next(),
 }))
 vi.mock('../../supabase/functions/_shared/sentry.ts', () => ({ reportError: vi.fn(), reportMessage: vi.fn() }))
@@ -39,6 +40,7 @@ const hoursAgo = (h: number) => new Date(NOW - h * 3_600_000).toISOString()
 const run = (h: number) => ({ started_at: hoursAgo(h), completed_at: hoursAgo(h) })
 
 const base = {
+  canWrite: true,
   inventory: 'current' as const,
   entitled: true,
   crawlUrl: { url: 'https://kensaur.us/glot-it', skipped: [] },
@@ -78,20 +80,22 @@ describe('planAuditGateRefresh', () => {
     const plan = audit.planAuditGateRefresh({
       ...base,
       latestByGate: new Map(),
-      crawlUrl: { url: null, skipped: ['preview_url http://localhost:3000 is not a public https URL'] },
+      crawlUrl: { url: null, skipped: ['preview_url http://localhost:3000 is not https'] },
     })
     expect(plan.crawl).toBe(false)
     expect(plan.gates).toHaveLength(4)
     expect(plan.skipped).toEqual([
       {
         gate: 'crawl',
-        reason: 'No crawlable URL: set crawler_base_url in project settings (preview_url http://localhost:3000 is not a public https URL).',
+        reason: 'No crawlable URL: set crawler_base_url in project settings (preview_url http://localhost:3000 is not https).',
       },
     ])
   })
 
   it.each([
     [{ latestByGate: null }, /could not be read, so whether this gate is stale is unknown/],
+    // A read-only key (mcp:read) may audit, but not start runs: the crawl sends crawler_auth_config.
+    [{ canWrite: false }, /read-only access \(a key without mcp:write, or a viewer\)/],
     [{ entitled: false }, /plan does not include inventory checks/],
     [{ inventory: 'none' as const }, /No current inventory/],
     [{ inventory: 'unknown' as const }, /inventory could not be read/],
@@ -122,5 +126,10 @@ describe('audit route wiring', () => {
     expect(src).toMatch(/gatesRunRateLimiter\.consume\(`\$\{projectId\}:gates\.run`\)/)
     expect(src).toMatch(/invoke\('inventory-crawler'/)
     expect(src).toMatch(/invoke\('inventory-gates', \{ gates: decision\.gates \}\)/)
+  })
+
+  it('applies the Inventory write rule: mcp:write for keys, no viewers', () => {
+    expect(src).toMatch(/keyGrantsAnyScope\(c\.get\('apiKeyScopes'\) \?\? \[\], \['mcp:write'\]\)/)
+    expect(src).toMatch(/project\.organization_role !== 'viewer'/)
   })
 })

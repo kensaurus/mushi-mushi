@@ -21,6 +21,7 @@ vi.mock('../../supabase/functions/_shared/db.ts', () => ({
 }))
 vi.mock('../../supabase/functions/_shared/auth.ts', () => ({
   adminOrApiKey: () => async (_c: unknown, next: () => Promise<void>) => next(),
+  keyGrantsAnyScope: (scopes: string[], accepted: string[]) => accepted.some((s) => scopes.includes(s)),
   jwtAuth: async (_c: unknown, next: () => Promise<void>) => next(),
 }))
 vi.mock('../../supabase/functions/_shared/sentry.ts', () => ({ reportError: vi.fn(), reportMessage: vi.fn() }))

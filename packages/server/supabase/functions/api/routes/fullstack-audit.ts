@@ -20,7 +20,7 @@
  */
 
 import { Hono } from 'npm:hono@4'
-import { adminOrApiKey } from '../../_shared/auth.ts'
+import { adminOrApiKey, keyGrantsAnyScope } from '../../_shared/auth.ts'
 import { getServiceClient } from '../../_shared/db.ts'
 import { readAllPages, type PageCount } from '../../_shared/paged-read.ts'
 import { resolveSupabasePat, getSupabaseAdvisors, getLogs, listTables } from '../../_shared/supabase-mcp-client.ts'
@@ -237,6 +237,11 @@ interface AuditGateRefresh {
 export function planAuditGateRefresh(input: {
   /** null when the gate runs could not be read. */
   latestByGate: ReadonlyMap<string, Pick<GateRunRow, 'started_at' | 'completed_at'>> | null
+  /**
+   * False for a key without mcp:write or a viewer: the Inventory routes that
+   * start these runs need write access (the crawl sends crawler_auth_config).
+   */
+  canWrite: boolean
   /** 'unknown' when the inventory could not be read. */
   inventory: 'current' | 'none' | 'unknown'
   /** False when the project's plan does not include inventory checks. */
@@ -259,6 +264,10 @@ export function planAuditGateRefresh(input: {
     const ageMs = lastAt ? input.nowMs - new Date(lastAt).getTime() : Number.POSITIVE_INFINITY
     if (ageMs < AUDIT_REFRESH_FRESH_MS) {
       skip(`Ran ${Math.max(0, Math.round(ageMs / 3_600_000))} h ago; re-runs once a day.`)
+      continue
+    }
+    if (!input.canWrite) {
+      skip('This caller has read-only access (a key without mcp:write, or a viewer), so it cannot start a run.')
       continue
     }
     if (!input.entitled) {
@@ -354,6 +363,7 @@ async function refreshStaleInventoryGates(
     projectId: string
     organizationId: string | null
     userEmail: string | null
+    canWrite: boolean
     crawlerBaseUrl: string | null
     latestByGate: ReadonlyMap<string, Pick<GateRunRow, 'started_at' | 'completed_at'>> | null
   },
@@ -372,6 +382,7 @@ async function refreshStaleInventoryGates(
 
   const decision = planAuditGateRefresh({
     latestByGate: args.latestByGate,
+    canWrite: args.canWrite,
     inventory: inventory.state,
     entitled,
     crawlUrl: pickCrawlBaseUrl(args.crawlerBaseUrl, inventory.state === 'current' ? inventory.app : null),
@@ -589,6 +600,11 @@ export function registerFullstackAuditRoutes(parent: Hono<{ Variables: Variables
       projectId,
       organizationId: (project as { organization_id?: string | null }).organization_id ?? null,
       userEmail: (c.get('userEmail') as string | undefined) ?? null,
+      // The same write rule as POST …/inventory/:id/reconcile and /gates/run:
+      // a key needs mcp:write, and a viewer may not start runs.
+      canWrite:
+        (c.get('authMethod') !== 'apiKey' || keyGrantsAnyScope(c.get('apiKeyScopes') ?? [], ['mcp:write'])) &&
+        project.organization_role !== 'viewer',
       crawlerBaseUrl: settings?.crawler_base_url ?? null,
       latestByGate: gateRead.ok ? gateRead.latestByGate : null,
     })
