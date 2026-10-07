@@ -95,12 +95,18 @@ export function registerGateFindingDismissRoutes(
       })
     }
 
-    const { error: updErr } = await db
+    // Only an open row is written, so two clicks at once write (and audit) once.
+    const { data: updated, error: updErr } = await db
       .from('gate_findings')
       .update({ allowlisted: true, allowlist_reason: reason })
       .eq('id', findingId)
       .eq('project_id', projectId)
+      .eq('allowlisted', false)
+      .select('id')
     if (updErr) return dbError(c, updErr)
+    if (!Array.isArray(updated) || updated.length === 0) {
+      return c.json({ ok: true, data: { id: findingId, allowlisted: true, allowlistReason: null, alreadyDismissed: true } })
+    }
 
     await logAudit(db, projectId, userId, 'gate_finding.dismissed', 'gate_finding', findingId, {
       reason,

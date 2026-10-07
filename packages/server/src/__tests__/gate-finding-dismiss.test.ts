@@ -105,6 +105,13 @@ describe('dismiss a gate finding', () => {
     expect(db.table('audit_logs')).toHaveLength(1)
   })
 
+  it('two dismissals at once write and audit once', async () => {
+    const [a, b] = await Promise.all([call(P, F, { reason: 'first reason' }), call(P, F, { reason: 'second reason' })])
+    expect([a.status, b.status]).toEqual([200, 200])
+    expect([a.body.data?.alreadyDismissed, b.body.data?.alreadyDismissed].sort()).toEqual([false, true])
+    expect(db.table('audit_logs')).toHaveLength(1)
+  })
+
   it('needs a reason of 3 to 300 characters', async () => {
     for (const body of [{}, { reason: '' }, { reason: '  ab  ' }, { reason: 'x'.repeat(301) }, { reason: 42 }, null]) {
       const res = await call(P, F, body)
