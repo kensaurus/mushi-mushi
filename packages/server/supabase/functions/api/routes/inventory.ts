@@ -41,6 +41,8 @@ import {
 } from '../../_shared/inventory.ts'
 import { logAudit } from '../../_shared/audit.ts'
 import { dbError } from '../shared.ts'
+import { GATE_IDS } from '../../_shared/gate-ids.ts'
+import { loadLatestGateRuns } from './recipe-compose.ts'
 import {
   assertProjectScope,
   assertSafeOutboundUrl,
@@ -703,10 +705,28 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
       .order('started_at', { ascending: false })
       .limit(50)
     if (gate) runsQuery = runsQuery.eq('gate', gate)
-    const { data: runs, error: runsErr } = await runsQuery
+    const { data: recent, error: runsErr } = await runsQuery
     if (runsErr) return dbError(c, runsErr)
 
-    const runIds = (runs ?? []).map((r) => r.id)
+    // The newest finished run of EVERY check, read per check: a check that
+    // runs often (the schema scanner) filled the newest 50 on its own and hid
+    // design drift's 82 findings from the Full-stack audit (glot.it, 2026-10-07).
+    let latest: Array<{ id: string }> = []
+    if (!gate) {
+      try {
+        latest = await loadLatestGateRuns(db, projectId, GATE_IDS)
+      } catch (err) {
+        return dbError(c, { message: (err as Error).message })
+      }
+    }
+    const recentRows = (recent ?? []) as Array<{ id: string; started_at?: string | null }>
+    const seen = new Set(recentRows.map((r) => r.id))
+    const runs = [...recentRows, ...(latest as typeof recentRows).filter((r) => !seen.has(r.id))]
+      .sort((a, b) => (b.started_at ?? '').localeCompare(a.started_at ?? ''))
+
+    // Findings of each check's newest run first, so the 500 cap is never
+    // spent on runs a newer one replaced.
+    const runIds = gate ? runs.map((r) => r.id) : latest.map((r) => r.id)
     let findings: unknown[] = []
     if (runIds.length > 0) {
       let findingsQuery = db

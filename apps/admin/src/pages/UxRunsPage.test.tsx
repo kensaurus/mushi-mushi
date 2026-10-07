@@ -101,9 +101,12 @@ function render(list: unknown, detail: unknown = null) {
 describe('UxRunsPage', () => {
   it('explains how to start a run when there is none', () => {
     render({ runs: [] })
-    expect(host.textContent).toContain('No UX runs yet')
-    expect(host.textContent).toContain('mushi ux run --dev')
-    expect(host.textContent).toContain('--sync')
+    expect(host.textContent).toContain('Start your first run')
+    expect(host.textContent).toContain('mushi ux ui')
+    for (const step of ['1. What to improve', '2. Who does the work', '3. How much', '4. Your app']) expect(host.textContent).toContain(step)
+    // Cost is stated plainly, with no invented balance and no automatic account switching.
+    expect(host.textContent).toContain('No agent reports how much credit is left')
+    expect(host.textContent).toContain('never switches accounts for you')
   })
 
   it('lists screens that need a human first and files one as a bug', async () => {

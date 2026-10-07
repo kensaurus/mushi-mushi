@@ -11,6 +11,7 @@
 
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
+import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { RECIPE_ELEMENT_KEYS, type RecipeElementSummary } from '../../lib/recipeTypes'
 import { RecipeElementList } from './RecipeElementList'
@@ -50,7 +51,7 @@ describe('RecipeElementList', () => {
 
   function render(elements: RecipeElementSummary[], onSelect = vi.fn()) {
     act(() => {
-      root.render(createElement(RecipeElementList, { elements, selectedKey: null, onSelect }))
+      root.render(createElement(MemoryRouter, null, createElement(RecipeElementList, { elements, selectedKey: null, onSelect })))
     })
   }
 
@@ -110,6 +111,15 @@ describe('RecipeElementList', () => {
     const routes = container.querySelector<HTMLButtonElement>('button[data-element="routes"]')
     expect(routes?.textContent).toContain('Needs attention')
     expect(routes?.textContent).not.toContain('Not checked yet')
+  })
+
+  it('says what checks each card and links to the page that owns it, outside the select button', () => {
+    render(orderedRecipeElements({ design: summary('design', 'drift', { links: [{ label: 'Design system', to: '/design' }] }) }))
+    const card = container.querySelector<HTMLButtonElement>('button[data-element="design"]')!
+    expect(card.textContent).toContain('How it is checked: The design scan reads your repo daily')
+    const link = [...container.querySelectorAll('a')].find((a) => a.textContent === 'Design system')
+    expect(link?.getAttribute('href')).toBe('/design')
+    expect(link?.closest('button')).toBeNull()
   })
 
   it('no rendered card ever pairs "Not checked yet" with a "Checked ..." time', () => {

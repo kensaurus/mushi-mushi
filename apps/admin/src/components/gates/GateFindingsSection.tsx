@@ -11,20 +11,24 @@
  * Data: GET /v1/admin/inventory/:projectId/findings[?gate=]
  */
 
-import { Loading } from '../ui'
+import { Link } from 'react-router-dom'
+import { Card, Loading, formatRelative } from '../ui'
 import { PageLoadError } from '../PageLoadError'
 import { GateFindingCard } from '../inventory/GateFindingCard'
 import { ApplySuggestedCapsButton } from './ApplySuggestedCapsButton'
 import { usePageData } from '../../lib/usePageData'
+import { LINK_ACCENT } from '../../lib/chipTone'
 import {
   FINDINGS_ROUTE_MAX_RUNS,
   findingsReadTruncated,
+  groupFindingsByCheck,
   latestOpenFindings,
   latestRunPerGate,
   spendCapSuggestion,
+  type CheckGroup,
   type GateFindingsPayload,
 } from '../../lib/gateFindings'
-import { gateLabel, type GateId } from '../../lib/gateLabels'
+import { gateInfo, gateLabel, type GateId } from '../../lib/gateLabels'
 
 interface Props {
   projectId: string
@@ -59,7 +63,7 @@ export function GateFindingsSection({ projectId, gate, neverRunText, limit = 50 
 
   const findings = latestOpenFindings(data)
   const errored = [...latestByGate.values()].filter((r) => r.status === 'error')
-  const shown = findings.slice(0, limit)
+  const groups = groupFindingsByCheck(data)
 
   return (
     <div className="flex flex-col gap-2">
@@ -72,21 +76,85 @@ export function GateFindingsSection({ projectId, gate, neverRunText, limit = 50 
       {findings.length === 0 && errored.length === 0 && !truncated && (
         <p className="text-xs text-fg-muted">The newest run of each check found nothing open.</p>
       )}
-      {shown.map((f) => {
-        const caps = spendCapSuggestion(f)
-        return (
-          <GateFindingCard
-            key={f.id}
-            f={f}
-            action={caps ? <ApplySuggestedCapsButton projectId={projectId} values={caps} /> : undefined}
-          />
-        )
-      })}
-      {findings.length > shown.length && (
-        <p className="text-2xs text-fg-faint">
-          {findings.length - shown.length} more not shown. MCP <code className="font-mono">list_gate_findings</code> lists all of them.
+      {groups.map((g) => (
+        <CheckGroupCard key={g.gate} projectId={projectId} group={g} limit={limit} />
+      ))}
+    </div>
+  )
+}
+
+const STATUS_TEXT: Record<string, { label: string; tone: string }> = {
+  fail: { label: 'Failing', tone: 'text-danger' },
+  error: { label: 'Could not finish', tone: 'text-danger' },
+  warn: { label: 'Needs a look', tone: 'text-warn' },
+  pass: { label: 'Passing', tone: 'text-ok' },
+}
+
+/**
+ * One check: what it looks at, when it last ran and against which commit,
+ * whether that result is old, its open findings by rule, and where to work
+ * on them. Small groups open by default; large ones show the rule summary.
+ */
+function CheckGroupCard({ projectId, group: g, limit }: { projectId: string; group: CheckGroup; limit: number }) {
+  const info = gateInfo(g.gate)
+  const status = STATUS_TEXT[g.status] ?? { label: g.status, tone: 'text-fg-muted' }
+  const days = g.ranAt ? Math.floor((Date.now() - Date.parse(g.ranAt)) / 86_400_000) : null
+  const shown = g.findings.slice(0, limit)
+  return (
+    <Card className="p-3 space-y-2" data-check={g.gate}>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0 space-y-0.5">
+          <h3 className="text-sm font-semibold text-fg">{gateLabel(g.gate)}</h3>
+          {info && <p className="text-xs text-fg-secondary">{info.checks}</p>}
+        </div>
+        <span className={`shrink-0 text-xs font-medium ${status.tone}`}>
+          {status.label} · {g.open.toLocaleString()} open
+        </span>
+      </div>
+      <p className="text-2xs text-fg-muted">
+        Last run {g.ranAt ? <span title={new Date(g.ranAt).toLocaleString()}>{formatRelative(g.ranAt)}</span> : 'at an unknown time'}
+        {g.commitSha ? <> on commit <code className="font-mono">{g.commitSha.slice(0, 7)}</code></> : null}
+        {g.stale && days != null && (
+          <span className="text-warn"> · {days} days old: run it again before acting on it</span>
+        )}
+      </p>
+      {g.rules.length > 0 && (
+        <p className="text-2xs text-fg-secondary">
+          {g.rules.slice(0, 5).map((r) => `${r.rule} × ${r.count}`).join(' · ')}
+          {g.rules.length > 5 ? ` · ${g.rules.length - 5} more rules` : ''}
         </p>
       )}
-    </div>
+      <div className="flex flex-wrap items-center gap-3">
+        {info?.page && (
+          <Link to={info.page.to} className={`text-xs ${LINK_ACCENT}`}>
+            {info.page.label} →
+          </Link>
+        )}
+      </div>
+      {g.open > 0 && (
+        <details open={g.open <= 3}>
+          <summary className="cursor-pointer text-xs text-fg-muted hover:text-fg">
+            {g.open <= 3 ? 'Findings' : `Show the ${Math.min(g.open, limit)} findings`}
+          </summary>
+          <div className="mt-2 flex flex-col gap-2">
+            {shown.map((f) => {
+              const caps = spendCapSuggestion(f)
+              return (
+                <GateFindingCard
+                  key={f.id}
+                  f={f}
+                  action={caps ? <ApplySuggestedCapsButton projectId={projectId} values={caps} /> : undefined}
+                />
+              )
+            })}
+            {g.findings.length > shown.length && (
+              <p className="text-2xs text-fg-faint">
+                {g.findings.length - shown.length} more not shown. MCP <code className="font-mono">list_gate_findings</code> lists all of them.
+              </p>
+            )}
+          </div>
+        </details>
+      )}
+    </Card>
   )
 }

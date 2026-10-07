@@ -15,6 +15,7 @@ interface GateRunRow {
   findings_count?: number | null
   started_at?: string | null
   completed_at?: string | null
+  commit_sha?: string | null
   summary?: unknown
 }
 
@@ -81,7 +82,53 @@ export function latestOpenFindings(payload: GateFindingsPayload): LatestGateFind
     .sort((a, b) => (SEVERITY_RANK[a.severity ?? 'info'] ?? 3) - (SEVERITY_RANK[b.severity ?? 'info'] ?? 3))
 }
 
-type SpendCapField = 'monthly_llm_budget_usd' | 'autofix_max_spend_usd' | 'autofix_max_dispatches_per_day'
+/** A check whose newest run is older than this reads as stale, not as current. */
+export const STALE_CHECK_DAYS = 14
+
+export interface CheckGroup {
+  gate: string
+  status: string
+  /** When the newest run finished (or started, when it never recorded an end). */
+  ranAt: string | null
+  commitSha: string | null
+  stale: boolean
+  open: number
+  /** Open findings per rule, most first. */
+  rules: Array<{ rule: string; count: number }>
+  findings: LatestGateFinding[]
+}
+
+const STATUS_RANK: Record<string, number> = { error: 0, fail: 1, warn: 2, pass: 3 }
+
+/**
+ * Pure: one entry per check, from its newest run: when it ran, against which
+ * commit, whether that is stale, and its open findings grouped by rule.
+ * Current problems first, then stale ones, then passing checks.
+ */
+export function groupFindingsByCheck(payload: GateFindingsPayload, now: number = Date.now()): CheckGroup[] {
+  const latest = latestRunPerGate(payload.runs)
+  const findings = latestOpenFindings(payload)
+  const groups = [...latest.values()].map((run): CheckGroup => {
+    const mine = findings.filter((f) => f.gate_run_id === run.id)
+    const perRule = new Map<string, number>()
+    for (const f of mine) perRule.set(f.rule_id ?? 'other', (perRule.get(f.rule_id ?? 'other') ?? 0) + 1)
+    const ranAt = run.completed_at ?? run.started_at ?? null
+    return {
+      gate: run.gate,
+      status: run.status,
+      ranAt,
+      commitSha: run.commit_sha ?? null,
+      stale: ranAt ? now - Date.parse(ranAt) > STALE_CHECK_DAYS * 86_400_000 : true,
+      open: mine.length,
+      rules: [...perRule].map(([rule, count]) => ({ rule, count })).sort((a, b) => b.count - a.count),
+      findings: mine,
+    }
+  })
+  const weight = (g: CheckGroup) => (g.open === 0 && g.status !== 'error' ? 2 : g.stale ? 1 : 0)
+  return groups.sort((a, b) => weight(a) - weight(b) || (STATUS_RANK[a.status] ?? 4) - (STATUS_RANK[b.status] ?? 4) || b.open - a.open)
+}
+
+type SpendCapField ='monthly_llm_budget_usd' | 'autofix_max_spend_usd' | 'autofix_max_dispatches_per_day'
 
 export type SpendCapValues = Partial<Record<SpendCapField, number>>
 

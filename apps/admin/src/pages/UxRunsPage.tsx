@@ -13,19 +13,18 @@
 import { useMemo, useState } from 'react'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
-import { Badge, Card, CodeValue, EmptyState, Loading, StatCard } from '../components/ui'
+import { Badge, EmptyState, Loading, StatCard } from '../components/ui'
 import { formatRelative } from '../components/ui/metrics'
 import { PageLoadError } from '../components/PageLoadError'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { UxCloudRunCard } from '../components/ux-runs/UxCloudRunCard'
+import { UxStartRunCard } from '../components/ux-runs/UxStartRunCard'
 import { UxRunProgress } from '../components/ux-runs/UxRunProgress'
 import { UxSurfaceDetail } from '../components/ux-runs/UxSurfaceDetail'
 import { usePageData } from '../lib/usePageData'
 import { useRealtimeReload } from '../lib/realtime'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { sortSurfaces, UX_RUN_STATUS_LABEL, UX_STATUS_META, uxKeptEdits, type UxRunDetail, type UxRunListItem } from '../lib/uxRuns'
-
-const RUN_COMMAND = 'mushi ux run --dev "pnpm dev --port {port}" --agent claude-code --sync'
 
 export function UxRunsPage() {
   const projectId = useActiveProjectId()
@@ -75,7 +74,7 @@ function ProjectUxRuns({ projectId }: { projectId: string }) {
         title="UX runs"
         helpTitle="What is a UX run?"
         helpWhatIsIt="Your coding agent (Claude Code, Cursor, Codex) works through every page, tab and dialog of your app on your machine, or on your repo's GitHub Actions with a Cursor Cloud agent, one screen at a time, in a separate git branch. An edit is kept only if accessibility, layout and console measurements did not get worse. Screens a kept change moved elsewhere are flagged."
-        helpHowToUse="Run the command below in your repo, or start a cloud run. Start with screens marked Moved by another fix or Rolled back. File anything you want fixed as a bug. Review the branch and open it as a draft PR; nothing is merged for you."
+        helpHowToUse="Open the studio with mushi ux ui in your repo (see Start a run below), or start a cloud run. Start with screens marked Moved by another fix or Rolled back. File anything you want fixed as a bug. Review the branch and open it as a draft PR; nothing is merged for you."
         helpFlowPath="/ux-runs"
       />
 
@@ -103,15 +102,11 @@ function ProjectUxRuns({ projectId }: { projectId: string }) {
       {list.error && <PageLoadError error={list.error} resource="UX runs" endpoint={listPath} onRetry={list.reload} />}
       {list.loading && !list.data && <Loading text="Loading UX runs…" />}
 
+      {list.data && <UxStartRunCard hasRuns={runs.length > 0} />}
       {list.data && runs.length === 0 && (
-        <Card className="flex flex-col gap-2 p-4">
-          <p className="text-sm font-medium text-fg">No UX runs yet</p>
-          <p className="text-xs text-fg-secondary">
-            Run this in your repo. It maps every screen, runs your agent on each one in its own branch, and shows the result here as it goes.
-          </p>
-          <CodeValue value={RUN_COMMAND} />
-          <p className="text-2xs text-fg-muted">Exploring your app never sends a write request. Sign-in screens: run <code>mushi ux login --url http://localhost:5173</code> first.</p>
-        </Card>
+        <p className="text-2xs text-fg-muted">
+          Exploring your app never sends a write request. Sign-in screens: run <code>mushi ux login --url http://localhost:5173</code> first.
+        </p>
       )}
 
       {runs.length > 0 && (

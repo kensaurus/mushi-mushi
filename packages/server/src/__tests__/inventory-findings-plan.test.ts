@@ -97,6 +97,35 @@ describe('inventory findings on a plan without inventory_v2', () => {
     expect(res.body.data?.findings.map((f) => f.rule_id)).toEqual(['spend_cap_unset'])
   })
 
+  it('keeps every check when one check fills the newest 50 runs', async () => {
+    // glot.it, 2026-10-07: the schema scanner's runs hid design drift's 82 findings.
+    const schemaRuns = Array.from({ length: 60 }, (_, i) => ({
+      id: `schema-${i}`, project_id: P, gate: 'schema_drift', status: 'warn',
+      started_at: `2026-10-06T${String(10 + Math.floor(i / 6)).padStart(2, '0')}:${String((i % 6) * 10).padStart(2, '0')}:00Z`,
+      completed_at: null,
+    }))
+    db = makeFakeDb({
+      projects: [{ id: P, owner_id: 'user-a', organization_id: null }],
+      organization_members: [],
+      project_members: [],
+      gate_runs: [
+        ...schemaRuns,
+        { id: 'design-1', project_id: P, gate: 'design_drift', status: 'warn', summary: { phase: 'scan' }, started_at: '2026-10-05T00:00:00Z', completed_at: '2026-10-05T00:01:00Z' },
+      ],
+      gate_findings: [
+        { id: 'f-d', gate_run_id: 'design-1', severity: 'warn', rule_id: 'off_token_color', message: '#fff', file_path: 'a.css', created_at: '2026-10-05T00:01:00Z' },
+        { id: 'f-old', gate_run_id: 'schema-0', severity: 'warn', rule_id: 'schema-drift-table-modified', message: 'old', file_path: null, created_at: '2026-10-06T10:00:00Z' },
+        { id: 'f-new', gate_run_id: 'schema-59', severity: 'warn', rule_id: 'schema-drift-table-modified', message: 'new', file_path: null, created_at: '2026-10-06T19:50:00Z' },
+      ],
+    })
+    const res = await app.call('GET', `/v1/admin/inventory/${P}/findings`)
+    expect(res.status).toBe(200)
+    expect(res.body.data?.runs.map((r) => r.gate)).toContain('design_drift')
+    // Only each check's newest run contributes findings.
+    expect(res.body.data?.findings.map((f) => f.rule_id).sort()).toEqual(['off_token_color', 'schema-drift-table-modified'])
+    expect(res.body.data?.findings.find((f) => f.rule_id === 'schema-drift-table-modified')).toMatchObject({ file_path: null })
+  })
+
   it('still refuses a project the caller cannot reach', async () => {
     seed()
     const res = await app.call('GET', `/v1/admin/inventory/20000002-0000-4000-8000-000000000000/findings`)
