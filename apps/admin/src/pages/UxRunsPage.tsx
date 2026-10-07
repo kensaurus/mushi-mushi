@@ -23,7 +23,7 @@ import { UxSurfaceDetail } from '../components/ux-runs/UxSurfaceDetail'
 import { usePageData } from '../lib/usePageData'
 import { useRealtimeReload } from '../lib/realtime'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
-import { sortSurfaces, UX_STATUS_META, type UxRunDetail, type UxRunListItem } from '../lib/uxRuns'
+import { sortSurfaces, UX_RUN_STATUS_LABEL, UX_STATUS_META, uxKeptEdits, type UxRunDetail, type UxRunListItem } from '../lib/uxRuns'
 
 const RUN_COMMAND = 'mushi ux run --dev "pnpm dev --port {port}" --agent claude-code --sync'
 
@@ -67,6 +67,7 @@ function ProjectUxRuns({ projectId }: { projectId: string }) {
   // Follow the screen the agent is on until someone picks one.
   const selected = surfaces.find((s) => s.surface_key === selectedKey) ?? surfaces.find((s) => s.surface_key === currentKey) ?? surfaces[0] ?? null
   const counts = detail.data?.run.counts ?? {}
+  const keptEdits = uxKeptEdits(detail.data?.iterations ?? [])
 
   return (
     <div className={PAGE_CONTENT_STACK}>
@@ -85,17 +86,19 @@ function ProjectUxRuns({ projectId }: { projectId: string }) {
             show: detail.data != null,
             children: (
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <StatCard label="Improved" value={counts.accepted ?? 0} detail="edits kept" />
-                <StatCard label="Moved by another fix" value={counts.regressed ?? 0} detail="check these first" />
-                <StatCard label="Rolled back" value={counts.reverted ?? 0} detail="made something worse" />
-                <StatCard label="Could not load" value={counts.blocked ?? 0} detail="sign-in or allowlist" />
+                <StatCard
+                  label="Edits kept"
+                  value={keptEdits}
+                  detail={`on ${counts.accepted ?? 0} improved screen${(counts.accepted ?? 0) === 1 ? '' : 's'}`}
+                />
+                <StatCard label={UX_STATUS_META.regressed.label} value={counts.regressed ?? 0} detail="check these first" />
+                <StatCard label={UX_STATUS_META.reverted.label} value={counts.reverted ?? 0} detail="made something worse" />
+                <StatCard label={UX_STATUS_META.blocked.label} value={counts.blocked ?? 0} detail="the screen note says why" />
               </div>
             ),
           },
         ]}
       />
-
-      <UxCloudRunCard projectId={projectId} />
 
       {list.error && <PageLoadError error={list.error} resource="UX runs" endpoint={listPath} onRetry={list.reload} />}
       {list.loading && !list.data && <Loading text="Loading UX runs…" />}
@@ -127,12 +130,13 @@ function ProjectUxRuns({ projectId }: { projectId: string }) {
               >
                 <span className="flex items-center justify-between gap-2">
                   <span className="font-medium text-fg">{formatRelative(r.started_at)}</span>
-                  <Badge tone={r.status === 'running' ? 'infoSubtle' : r.status === 'done' ? 'okSubtle' : 'warnSubtle'}>
-                    {r.status === 'running' ? 'Running' : r.status === 'done' ? 'Done' : r.status}
+                  <Badge tone={r.status === 'running' ? 'infoSubtle' : r.status === 'done' ? 'okSubtle' : r.status === 'failed' ? 'dangerSubtle' : 'warnSubtle'}>
+                    {UX_RUN_STATUS_LABEL[r.status] ?? r.status}
                   </Badge>
                 </span>
-                <span className="mt-0.5 block font-mono text-2xs text-fg-muted">
-                  {r.agent}{r.model ? ` · ${r.model}` : ''}
+                <span className="mt-0.5 block text-2xs text-fg-secondary">{runSummary(r)}</span>
+                <span className="mt-0.5 block truncate font-mono text-2xs text-fg-muted">
+                  {r.agent}{r.model ? ` · ${r.model}` : ''}{r.skill ? ` · ${r.skill}` : ''}
                 </span>
               </button>
             ))}
@@ -191,6 +195,16 @@ function ProjectUxRuns({ projectId }: { projectId: string }) {
           </div>
         </div>
       )}
+
+      {/* Starting a run comes after the results: on a phone the form would otherwise fill the first screen. */}
+      <UxCloudRunCard projectId={projectId} />
     </div>
   )
+}
+
+/** "3 screens · 2 improved" from a run's per-status counts. */
+function runSummary(r: UxRunListItem): string {
+  const screens = Object.values(r.counts ?? {}).reduce((n, c) => n + (c ?? 0), 0)
+  const improved = r.counts?.accepted ?? 0
+  return `${screens} screen${screens === 1 ? '' : 's'} · ${improved} improved`
 }

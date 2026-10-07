@@ -168,6 +168,33 @@ describe('UxRunsPage, live progress and choices', () => {
       el.dispatchEvent(new Event('change', { bubbles: true }))
     })
 
+  it('shows a small-steps plan, names attempts by step, and counts kept edits not screens', () => {
+    const steps = { ...RUN, counts: { accepted: 1 }, skill: 'enhance-mobile-native-feel' }
+    const home = {
+      ...surface('home', 'Home', 'accepted'),
+      plan: [
+        { text: 'Unify the tile accents', status: 'done', attempt: 1 },
+        { text: 'Respect reduced motion', status: 'skipped', attempt: 2 },
+        { text: 'Raise the hint text size', status: 'done', attempt: 3 },
+      ],
+    }
+    const it3 = (n: number, outcome: string, step: string) => ({ id: `i${n}`, surface_id: 's-home', n, agent: 'cursor', model: null, duration_ms: 1000, outcome, reason: 'r', commit_sha: null, step, steps: '[find] a search\n[find] a search\n[edit] a.tsx' })
+    render(
+      { runs: [steps] },
+      { run: steps, surfaces: [home], iterations: [it3(1, 'accepted', 'Unify the tile accents'), it3(2, 'no_change', 'Respect reduced motion'), it3(3, 'accepted', 'Raise the hint text size')] },
+    )
+    expect(host.textContent).toContain('Plan: 2 of 3 steps kept')
+    expect(host.textContent).toContain('Step 2. Respect reduced motion (not needed)')
+    expect(host.textContent).toContain('What the agent did in step 3')
+    expect(host.textContent).toContain('Edits kept2on 1 improved screen')
+    expect(host.textContent).toContain('1 screen · 1 improved')
+    expect(host.textContent).toContain('enhance-mobile-native-feel')
+    expect(host.textContent).not.toContain('Attempt 3')
+    // An improved screen with nothing measured wrong offers no "File as bug".
+    expect(host.textContent).not.toContain('File as bug')
+    expect(host.querySelector('pre')?.textContent).toContain('[find] 2 searches')
+  })
+
   it('shows where a running run is and each attempt’s screenshot', () => {
     const live = { ...RUN, status: 'running', phase: 'working', current_surface: 'home', current_attempt: 2, skill: 'enhance-mobile-native-feel', base_ref: 'origin/main' }
     const home = {

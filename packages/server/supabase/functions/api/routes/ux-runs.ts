@@ -109,6 +109,18 @@ const Snapshot = z.object({
           .partial()
           .optional(),
         shots: z.record(z.string().max(200)).optional(),
+        // Small-steps mode: the screen's plan, one entry per step.
+        plan: z
+          .array(
+            z.object({
+              text: z.string().max(300),
+              status: z.enum(['pending', 'done', 'skipped', 'failed']),
+              attempt: z.number().int().min(1).max(20).nullable().optional(),
+            }),
+          )
+          .max(8)
+          .nullable()
+          .optional(),
         iterations: z
           .array(
             z.object({
@@ -123,6 +135,8 @@ const Snapshot = z.object({
               penalty_after: z.number().int().nullable().optional(),
               // What the agent did, one readable step per line ("[edit] app/page.tsx").
               steps: z.string().max(2000).nullable().optional(),
+              // Small-steps mode: the plan step this attempt made.
+              step: z.string().max(300).nullable().optional(),
               shots: z.record(z.string().max(200)).optional(),
             }),
           )
@@ -210,6 +224,7 @@ export function registerUxRunsRoutes(app: Hono<{ Variables: Variables }>): void 
             thumb_after: thumb(s.thumbs?.after),
             thumb_diff: thumb(s.thumbs?.diff),
             thumbs: uxShotPaths(projectId, runId, s.surface_key, s.shots, 'surface'),
+            plan: s.plan ?? null,
             updated_at: nowIso,
           })),
           { onConflict: 'run_id,surface_key' },
@@ -232,6 +247,7 @@ export function registerUxRunsRoutes(app: Hono<{ Variables: Variables }>): void 
           pixel_diff: it.pixel_diff,
           penalty_after: it.penalty_after ?? null,
           steps: it.steps ?? null,
+          step: it.step ?? null,
           thumbs: uxShotPaths(projectId, runId, s.surface_key, it.shots, 'iteration'),
         })),
       ).filter((it) => it.surface_id)
@@ -284,7 +300,7 @@ export function registerUxRunsRoutes(app: Hono<{ Variables: Variables }>): void 
     if (!access.allowed) return jsonError(c, 'FORBIDDEN', 'Not a member of this project', 403)
     const { data, error } = await db
       .from('ux_runs')
-      .select('id, local_run_id, mode, status, agent, model, judge_model, branch, counts, started_at, finished_at, updated_at')
+      .select('id, local_run_id, mode, status, agent, model, judge_model, skill, branch, counts, started_at, finished_at, updated_at')
       .eq('project_id', projectId)
       .order('started_at', { ascending: false })
       .limit(50)

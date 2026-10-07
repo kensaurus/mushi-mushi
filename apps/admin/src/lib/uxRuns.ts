@@ -120,6 +120,52 @@ export interface UxSurfaceRow {
   thumb_diff_url: string | null
   /** Signed URLs by slot (before-mobile, after-desktop, …). */
   thumb_urls?: Record<string, string>
+  /** Small-steps mode: the screen's plan as a checklist (absent on runs without it). */
+  plan?: UxPlanStep[] | null
+}
+
+export interface UxPlanStep {
+  text: string
+  status: 'pending' | 'done' | 'skipped' | 'failed'
+  attempt?: number | null
+}
+
+export const UX_PLAN_STEP_META: Record<UxPlanStep['status'], { mark: string; label: string }> = {
+  done: { mark: '✓', label: 'kept' },
+  failed: { mark: '✗', label: 'rolled back' },
+  skipped: { mark: '–', label: 'not needed' },
+  pending: { mark: '○', label: 'to do' },
+}
+
+export const UX_RUN_STATUS_LABEL: Record<UxRunListItem['status'], string> = {
+  running: 'Running',
+  done: 'Done',
+  failed: 'Failed',
+  stopped: 'Stopped',
+}
+
+/** Kept edits in a run: one per kept attempt, so a screen improved in 3 steps counts 3. */
+export function uxKeptEdits(iterations: ReadonlyArray<Pick<UxIterationRow, 'outcome'>>): number {
+  return iterations.filter((i) => i.outcome === 'accepted').length
+}
+
+/**
+ * Pure: an attempt's synced steps for reading, consecutive repeats folded
+ * ("[find] a search" ×4 becomes one "[find] 4 searches" line).
+ */
+export function foldSteps(steps: string): string[] {
+  const out: Array<{ line: string; n: number }> = []
+  for (const line of steps.split('\n').filter(Boolean)) {
+    const last = out[out.length - 1]
+    if (last && last.line === line) last.n++
+    else out.push({ line, n: 1 })
+  }
+  return out.map(({ line, n }) => {
+    if (n === 1) return line
+    if (line === '[find] a search') return `[find] ${n} searches`
+    if (line === '[run] a command') return `[run] ${n} commands`
+    return `${line} (×${n})`
+  })
 }
 
 export interface UxIterationRow {
@@ -136,6 +182,8 @@ export interface UxIterationRow {
   penalty_after?: number | null
   /** What the agent did, one step per line (absent on runs synced before it existed). */
   steps?: string | null
+  /** Small-steps mode: the plan step this attempt made. */
+  step?: string | null
   /** Signed URLs by slot (after-mobile, diff-desktop, …). */
   thumb_urls?: Record<string, string>
 }

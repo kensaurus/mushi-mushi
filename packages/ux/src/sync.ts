@@ -193,6 +193,10 @@ export function toSnapshot(state: RunState, finished: boolean, uploaded: Readonl
         label: s.surface.label.slice(0, 300),
         status: s.status,
         note: s.note?.slice(0, 1000) ?? null,
+        // Small-steps mode: the plan as a checklist (the step texts are the agent's own plan, file names included).
+        plan: s.plan?.steps.length
+          ? s.plan.steps.slice(0, 8).map((p) => ({ text: p.text.slice(0, 300), status: p.status, attempt: p.attempt ?? null }))
+          : null,
         penalty_before: worstPenalty(s.baseline),
         penalty_after: kept ? worstPenalty(kept.after) : null,
         probe_before: probeSummary(s.baseline.desktop?.probes),
@@ -230,6 +234,7 @@ export function toSnapshot(state: RunState, finished: boolean, uploaded: Readonl
             pixel_diff: it.pixelDiff,
             penalty_after: worstPenalty(it.after),
             steps: syncableSteps(it.logTail),
+            step: it.step?.slice(0, 300) ?? null,
             shots: itShots,
           }
         }),

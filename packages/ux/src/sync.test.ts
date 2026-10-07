@@ -44,7 +44,7 @@ describe('toSnapshot', () => {
     expect(s.probe_before).toEqual({ axe: [{ id: 'color-contrast', impact: 'serious', help: 'Contrast', count: 3 }], overflowX: false, smallTargets: 1, consoleErrors: 1, cls: 0 })
     expect(s.thumbs).toEqual({ before: 'root-42099b/before-desktop.png', after: null, diff: null })
     expect(s.shots).toEqual({ 'before-desktop': 'root-42099b/before-desktop.png' })
-    expect(s.iterations[0]).toEqual({ n: 1, agent: 'claude-code', model: null, duration_ms: 22000, outcome: 'accepted', reason: 'Kept', commit_sha: 'bbc51b74', pixel_diff: { desktop: 0.009 }, penalty_after: 1, steps: null, shots: {} })
+    expect(s.iterations[0]).toEqual({ n: 1, agent: 'claude-code', model: null, duration_ms: 22000, outcome: 'accepted', reason: 'Kept', commit_sha: 'bbc51b74', pixel_diff: { desktop: 0.009 }, penalty_after: 1, steps: null, step: null, shots: {} })
     expect(JSON.stringify(snap)).not.toContain('boom')
     expect(JSON.stringify(snap)).not.toContain('agent output stays local')
   })
@@ -59,6 +59,20 @@ describe('toSnapshot', () => {
     expect(snap.surfaces[0]!.iterations[0]!.steps).toBe('[read] app/page.tsx\n[run] a command\n[find] a search\n[edit] app/globals.css\n[done] Finished')
     expect(snap.current_progress).toEqual({ steps: 3, last_step: null, files: ['a.ts'], started_at: '2026-10-06T09:00:00.000Z', timeout_ms: 600000 })
     expect(JSON.stringify(snap)).not.toMatch(/sk-live|Bearer|secret plan|boom/)
+  })
+
+  it('sends a small-steps plan as a checklist and names the step each attempt made', () => {
+    const planned = structuredClone(state)
+    const s0 = planned.surfaces[0]!
+    s0.plan = { steps: [{ text: 'Darken the muted text', status: 'done', attempt: 1 }, { text: 'Shorten the hero copy', status: 'pending' }] }
+    s0.iterations[0]!.step = 'Darken the muted text'
+    const snap = toSnapshot(planned, false, new Map()).surfaces[0]!
+    expect(snap.plan).toEqual([
+      { text: 'Darken the muted text', status: 'done', attempt: 1 },
+      { text: 'Shorten the hero copy', status: 'pending', attempt: null },
+    ])
+    expect(snap.iterations[0]!.step).toBe('Darken the muted text')
+    expect(toSnapshot(state, false, new Map()).surfaces[0]!.plan).toBeNull()
   })
 
   it('reports the worse of the phone and desktop scores, so a rejected attempt never shows 0', () => {

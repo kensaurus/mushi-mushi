@@ -137,6 +137,17 @@ describe('steps mode', () => {
     expect(parsePlan('- The Continue bar hides “School &amp; Study” on mobile')).toEqual(['The Continue bar hides “School & Study” on mobile'])
   })
 
+  it('shortens a long step at a word, never inside a `code` span', async () => {
+    const { cutAtWord, parsePlan } = await import('./packet.js')
+    expect(cutAtWord('short enough', 40)).toBe('short enough')
+    expect(cutAtWord('increase the padding so the last tile clears the bar', 30)).toBe('increase the padding so the…')
+    expect(cutAtWord('increase padding in `FLOW_SCROLL_PADDING_BOTTOM` now', 40)).toBe('increase padding in…')
+    const long = `- ${'word '.repeat(80)}end`
+    const [step] = parsePlan(long)
+    expect(step.length).toBeLessThanOrEqual(280)
+    expect(step.endsWith('word…')).toBe(true)
+  })
+
   it('briefs one step at a time, and plans without editing', async () => {
     const { buildPacket, buildPlanPacket } = await import('./packet.js')
     const base = { surface: { key: 'home', kind: 'page' as const, path: '/', steps: [], label: 'Home', domHash: 'h' }, shots: { mobile: '.mushi-ux/mobile.png' }, probes: {}, designFiles: [], skillText: null, timeBudgetMin: 8, entryFiles: ['app/page.tsx'] }

@@ -95,10 +95,21 @@ export function parsePlan(text: string, max = MAX_PLAN_STEPS): string[] {
       .replace(/&(amp|lt|gt|quot|#39);/g, (_, e: string) => ({ amp: '&', lt: '<', gt: '>', quot: '"', '#39': "'" })[e] ?? _)
       .trim()
     if (!item || item.length < 8 || out.includes(item)) continue
-    out.push(item.slice(0, 240))
+    out.push(cutAtWord(item, 280))
     if (out.length >= max) break
   }
   return out
+}
+
+/** Pure: `text` within `max` characters, cut at a word with "…" so no word or `code` span ends half-way. */
+export function cutAtWord(text: string, max: number): string {
+  if (text.length <= max) return text
+  const head = text.slice(0, max - 1)
+  const space = head.lastIndexOf(' ')
+  let cut = (space > max / 2 ? head.slice(0, space) : head).replace(/[\s,;:.(-]+$/, '')
+  // An odd number of backticks means a code span was opened and not closed.
+  if ((cut.match(/`/g)?.length ?? 0) % 2 === 1) cut = cut.slice(0, cut.lastIndexOf('`')).trimEnd()
+  return `${cut}…`
 }
 
 /** Steps mode, the planning pass's pointer prompt. */
