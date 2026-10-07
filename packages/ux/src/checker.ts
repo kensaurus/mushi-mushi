@@ -22,15 +22,14 @@ import { PNG } from 'pngjs'
 import type { ChangeRegion } from './image.js'
 import { run } from './proc.js'
 
-export type CheckerVia = 'claude-code' | 'anthropic-api'
+type CheckerVia = 'claude-code' | 'anthropic-api'
 
 export interface CheckerSpec {
   via: CheckerVia
   model: string
 }
 
-export const DEFAULT_CHECKER: CheckerSpec = { via: 'claude-code', model: 'claude-opus-5-5' }
-
+/** One review's answer. @internal Exported for tests only. */
 export interface CheckerVote {
   /** Which capture the model preferred, after mapping its A/B answer back. */
   preferred: 'before' | 'after' | 'tie'
@@ -56,7 +55,7 @@ const MAX_CROP_HEIGHT = 1400
 const MAX_DIFF_CHARS = 20_000
 const CONTEXT_ROWS = 120
 
-/** Pure: one box around all changed areas, padded, within the image, at most MAX_CROP_HEIGHT tall. */
+/** Pure: one box around all changed areas, padded, within the image, at most MAX_CROP_HEIGHT tall. @internal Exported for tests only. */
 export function unionBox(regions: readonly ChangeRegion[], width: number, height: number): ChangeRegion {
   if (!regions.length) return { x: 0, y: 0, w: width, h: Math.min(height, MAX_CROP_HEIGHT) }
   const y0 = Math.min(...regions.map((r) => r.y))
@@ -76,7 +75,7 @@ function crop(png: Buffer, box: ChangeRegion): Buffer {
   return PNG.sync.write(out)
 }
 
-/** Pure: the first JSON object in a model's text answer, or null. */
+/** Pure: the first JSON object in a model's text answer, or null. @internal Exported for tests only. */
 export function firstJson(text: string): Record<string, unknown> | null {
   const start = text.indexOf('{')
   const end = text.lastIndexOf('}')
@@ -90,7 +89,7 @@ export function firstJson(text: string): Record<string, unknown> | null {
 
 const level = (v: unknown): CheckerVote['confidence'] => (v === 'high' || v === 'medium' ? v : 'low')
 
-/** Pure: map an A/B answer back to before/after. `aIsBefore` is the order shown. */
+/** Pure: map an A/B answer back to before/after. `aIsBefore` is the order shown. @internal Exported for tests only. */
 export function toVote(answer: Record<string, unknown> | null, aIsBefore: boolean): CheckerVote | null {
   if (!answer) return null
   const v = answer.verdict
@@ -103,7 +102,7 @@ export function toVote(answer: Record<string, unknown> | null, aIsBefore: boolea
   }
 }
 
-/** Pure: the veto rule. Both orders must prefer the original, each with at least medium confidence. */
+/** Pure: the veto rule. Both orders must prefer the original, each with at least medium confidence. @internal Exported for tests only. */
 export function combineVotes(votes: CheckerVote[]): { verdict: CheckerVerdict['verdict']; summary: string } {
   const firm = (v: CheckerVote) => v.confidence !== 'low'
   if (votes.length >= 2 && votes.every((v) => v.preferred === 'before' && firm(v))) {

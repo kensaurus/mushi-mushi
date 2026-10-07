@@ -114,7 +114,7 @@ async function fetchNpmFolder(slug: string, src: NpmSource, doFetch: typeof fetc
  * field in its frontmatter (2.5.0): hand-offs are the backticked names in a
  * "## Related" section and "→ skill-name" in the text.
  */
-export function relatedSkills(text: string): string[] {
+function relatedSkills(text: string): string[] {
   const out: string[] = []
   const section = text.match(/^##\s+Related\s*$([\s\S]*?)(?=^##\s|(?![\s\S]))/m)?.[1] ?? ''
   for (const m of section.matchAll(/`([a-z0-9][a-z0-9-]{1,80})`/g)) out.push(m[1])
@@ -127,7 +127,7 @@ export function relatedSkills(text: string): string[] {
  * Pure: several skills as one, applied in order. Each skill's files sit in a
  * folder named after it; the text says which folder is whose.
  */
-export function chainSkills(skills: readonly ResolvedSkill[]): ResolvedSkill {
+function chainSkills(skills: readonly ResolvedSkill[]): ResolvedSkill {
   if (skills.length === 1) return skills[0]
   const files: Record<string, Buffer> = {}
   for (const sk of skills) for (const [rel, buf] of Object.entries(sk.files)) files[`${sk.name}/${rel}`] = buf
