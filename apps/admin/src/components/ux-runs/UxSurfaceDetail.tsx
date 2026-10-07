@@ -20,6 +20,12 @@ const OUTCOME: Record<UxIterationRow['outcome'], { label: string; tone: 'okSubtl
   no_change: { label: 'No change', tone: 'neutral' },
 }
 
+type CompareView = 'side' | 'slider'
+const COMPARE_VIEWS: Array<{ id: CompareView; label: string }> = [
+  { id: 'side', label: 'Side by side' },
+  { id: 'slider', label: 'Slider' },
+]
+
 const VIEWPORTS: Array<{ id: UxViewport; label: string }> = [
   { id: 'mobile', label: 'Mobile' },
   { id: 'desktop', label: 'Desktop' },
@@ -59,6 +65,8 @@ export function UxSurfaceDetail({ projectId, runId, surface, iterations, working
   const [vp, setVp] = useState<UxViewport>(hasMobile ? 'mobile' : 'desktop')
   const [picked, setPicked] = useState<number | null>(null)
   const [cut, setCut] = useState(50)
+  // Side by side first: a half-split slider read as a cut-off screenshot (owner, 2026-10-07).
+  const [view, setView] = useState<CompareView>('side')
   const [showDiff, setShowDiff] = useState(false)
   const [filing, setFiling] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -113,7 +121,8 @@ export function UxSurfaceDetail({ projectId, runId, surface, iterations, working
 
       <div className="flex flex-wrap items-center gap-2">
         <SegmentedControl value={vp} onChange={setVp} options={VIEWPORTS} ariaLabel="Screen width" size="sm" />
-        {after && diff && (
+        {after && <SegmentedControl value={view} onChange={setView} options={COMPARE_VIEWS} ariaLabel="How to compare" size="sm" />}
+        {after && diff && view === 'slider' && (
           <label className="inline-flex items-center gap-1.5 text-2xs text-fg-secondary">
             <input type="checkbox" checked={showDiff} onChange={(e) => setShowDiff(e.target.checked)} />
             Show changed pixels
@@ -125,7 +134,18 @@ export function UxSurfaceDetail({ projectId, runId, surface, iterations, working
           stay full width below, where their badges and notes have room. */}
       <div className={vp === 'mobile' && plan ? 'flex flex-col gap-4 xl:flex-row xl:items-start' : 'flex flex-col gap-4'}>
         <div className={vp === 'mobile' && plan ? 'min-w-0 xl:w-96 xl:shrink-0' : 'min-w-0'}>
-      {before ? (
+      {before && after && view === 'side' ? (
+        <div className={`grid grid-cols-2 gap-2 ${vp === 'mobile' ? 'max-w-xl' : ''}`}>
+          <figure className="m-0 min-w-0">
+            <figcaption className="mb-1 text-2xs text-fg-muted">Before · problem score {surface.penalty_before ?? '—'}</figcaption>
+            <img src={before} alt="Before" className="block h-auto w-full rounded-md border border-edge-subtle bg-surface" />
+          </figure>
+          <figure className="m-0 min-w-0">
+            <figcaption className="mb-1 text-2xs text-fg-muted">{afterLabel} · problem score {afterScore ?? '—'}</figcaption>
+            <img src={after} alt={afterLabel} className="block h-auto w-full rounded-md border border-edge-subtle bg-surface" />
+          </figure>
+        </div>
+      ) : before ? (
         <div className="flex flex-col gap-2">
           <div className={`relative overflow-hidden rounded-md border border-edge-subtle bg-surface ${vp === 'mobile' ? 'max-w-sm' : ''}`}>
             <img src={before} alt="Before" className="block h-auto w-full" />
@@ -148,9 +168,12 @@ export function UxSurfaceDetail({ projectId, runId, surface, iterations, working
                 className={`w-full ${vp === 'mobile' ? 'max-w-sm' : ''}`}
               />
               <div className={`flex flex-wrap items-center justify-between gap-2 text-2xs text-fg-muted ${vp === 'mobile' ? 'max-w-sm' : ''}`}>
-                <span>Before · problem score {surface.penalty_before ?? '—'}</span>
-                <span>{afterLabel} · problem score {afterScore ?? '—'}</span>
+                <span>◀ Before · problem score {surface.penalty_before ?? '—'}</span>
+                <span>{afterLabel} · problem score {afterScore ?? '—'} ▶</span>
               </div>
+              <p className={`text-2xs text-fg-muted ${vp === 'mobile' ? 'max-w-sm' : ''}`}>
+                Drag the handle: left of it is before, right of it is after. One screenshot split in two, not cut off.
+              </p>
             </>
           )}
         </div>

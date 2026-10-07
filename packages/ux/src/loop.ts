@@ -366,7 +366,8 @@ async function runLoop(opts: LoopOptions, runId: string, dir: string): Promise<R
         if (opts.startPaths?.length) {
           const t0 = Date.now()
           await Promise.all(
-            opts.startPaths.map((p) => fetch(new URL(p, server.url), { signal: AbortSignal.timeout(180_000), redirect: 'manual' }).catch(() => null)),
+            // Follow redirects: /chat answers 308 → /chat/ at once, and only the target compiles.
+            opts.startPaths.map((p) => fetch(new URL(p, server.url), { signal: AbortSignal.timeout(180_000) }).then((r) => r.arrayBuffer()).catch(() => null)),
           )
           log(`warmed ${opts.startPaths.length} page(s) in ${Math.round((Date.now() - t0) / 1000)} s`)
         }
