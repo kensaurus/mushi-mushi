@@ -182,6 +182,18 @@ describe('full-stack audit stats', () => {
     const bad = await audit.readLatestGateRuns(seed(failing('gate_runs')) as never, P, NOW)
     expect(bad).toEqual({ ok: false, message: expect.stringMatching(/could not be read/) })
   })
+
+  it('the runs table stops counting a dismissed finding; a failed read keeps the stored count', async () => {
+    const runs = [{ id: 'run-1', project_id: P, gate: 'api_contract', status: 'fail', findings_count: 2, completed_at: '2026-10-02T00:00:00Z', started_at: '2026-10-02T00:00:00Z' }]
+    const findings = [
+      { id: 'f1', gate_run_id: 'run-1', severity: 'error', allowlisted: false },
+      { id: 'f2', gate_run_id: 'run-1', severity: 'error', allowlisted: true },
+    ]
+    const ok = await audit.readLatestGateRuns(makeFakeDb({ gate_runs: runs, gate_findings: findings }) as never, P, NOW)
+    expect(ok.ok && ok.latestByGate.get('api_contract')?.findings_count).toBe(1)
+    const unread = await audit.readLatestGateRuns(makeFakeDb({ gate_runs: runs, gate_findings: findings }, failing('gate_findings')) as never, P, NOW)
+    expect(unread.ok && unread.latestByGate.get('api_contract')?.findings_count).toBe(2)
+  })
 })
 
 describe('composeRecipe never composes from a failed read', () => {
