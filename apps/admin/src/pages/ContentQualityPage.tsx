@@ -1,13 +1,16 @@
 /**
  * ContentQualityPage — Content Quality Debug Station.
  *
- * Shows content assets that need review: low AI scores, user flags, poor ratings.
+ * Shows content assets that need review: low source scores, user flags, poor ratings.
  * Each row is one fixable asset — click to open the detail and trigger regeneration.
+ * Noise is cleared in bulk with ContentBulkDismissBar (ticked rows or the filter).
  */
 
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { usePageData } from '../lib/usePageData'
+import { useEntitlements } from '../lib/useEntitlements'
+import { useToast } from '../lib/toast'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import {
   EmptyState,
@@ -20,6 +23,10 @@ import { ResponsiveTable } from '../components/ResponsiveTable'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { SignalChip, ConfidenceMeter } from '../components/report-detail/ReportSurface'
 import { ContentQualityReadout } from '../components/content-quality/ContentQualityReadout'
+import {
+  ContentBulkDismissBar,
+  type ContentDismissFilter,
+} from '../components/content-quality/ContentBulkDismiss'
 import {
   EMPTY_CONTENT_QUALITY_STATS,
   type ContentQualityStats,
@@ -48,8 +55,10 @@ interface ListResponse {
   limit: number
 }
 
+// `low_judge_score` means the score the source app sent was low. That score is
+// not always an AI grade: glot.it, for one, sends its up/down vote score.
 const REASON_LABELS: Record<string, string> = {
-  low_judge_score:     'Low AI score',
+  low_judge_score:     'Low score',
   user_flag:           'User flagged',
   low_star_rating:     'Low stars',
   high_downvote_ratio: 'High downvotes',
@@ -118,25 +127,42 @@ function humanKey(key: string, contentType: string): string {
 }
 
 /**
- * Quality confidence: prefers AI judge score, falls back to signal-appropriate metric.
- * For user_flag items: the flag count is the signal; show "not scored" if no AI score.
- * For high_downvote_ratio: use approval rate.
+ * The number the Score column shows, and what it is. Prefers the score the
+ * source sent (`judge_score` — an AI grade or a vote score, depending on the
+ * source), then stars, then the approval rate for high-downvote rows.
  */
-function qualityScore(item: ContentQualityIssue): number | null {
-  if (item.judge_score != null) return item.judge_score
-  if (item.avg_star != null) return item.avg_star / 5
+function qualityScore(item: ContentQualityIssue): { value: number; basis: string } | null {
+  if (item.judge_score != null) return { value: item.judge_score, basis: 'score sent by source' }
+  if (item.avg_star != null) return { value: item.avg_star / 5, basis: 'star rating' }
   if (item.reason === 'high_downvote_ratio' && item.downvote_ratio != null) {
-    return 1 - item.downvote_ratio
+    return { value: 1 - item.downvote_ratio, basis: 'approval rate' }
   }
   return null
 }
 
+/** List query value for "rows with no source" (seed and test rows). */
+const NO_SOURCE = '__none__'
+
+const SCORE_BANDS: Array<{ value: string; label: string }> = [
+  { value: '', label: 'Any score' },
+  { value: 'unscored', label: 'No score' },
+  { value: 'below_0_3', label: 'Score below 0.3' },
+  { value: '0_3_to_0_6', label: 'Score 0.3–0.6' },
+  { value: '0_6_and_up', label: 'Score 0.6 and up' },
+]
+
 export function ContentQualityPage() {
   const navigate = useNavigate()
   const activeProjectId = useActiveProjectId()
+  const { canEditProject } = useEntitlements()
+  const toast = useToast()
   const [status, setStatus] = useState<string>('open')
   const [reason, setReason] = useState<string>('')
+  const [contentType, setContentType] = useState<string>('')
+  const [source, setSource] = useState<string>('')
+  const [scoreBand, setScoreBand] = useState<string>('')
   const [page, setPage] = useState(0)
+  const [selected, setSelected] = useState<Set<string>>(() => new Set())
   const LIMIT = 50
 
   const params = new URLSearchParams({
@@ -145,13 +171,16 @@ export function ContentQualityPage() {
     limit: String(LIMIT),
     page: String(page),
     ...(reason ? { reason } : {}),
+    ...(contentType ? { content_type: contentType } : {}),
+    ...(source ? { source } : {}),
+    ...(scoreBand ? { score_band: scoreBand } : {}),
   })
 
   const apiPath = activeProjectId
     ? `/v1/admin/content-quality?${params}`
     : null
 
-  const { data, loading, error } = usePageData<ListResponse>(apiPath)
+  const { data, loading, error, reload } = usePageData<ListResponse>(apiPath)
   const statsPath = activeProjectId
     ? `/v1/admin/content-quality/stats?project_id=${activeProjectId}`
     : null
@@ -159,10 +188,40 @@ export function ContentQualityPage() {
     data: statsData,
     lastFetchedAt: statsFetchedAt,
     isValidating: statsValidating,
+    reload: reloadStats,
   } = usePageData<ContentQualityStats>(statsPath, { deps: [activeProjectId] })
   const contentStats = statsData ?? EMPTY_CONTENT_QUALITY_STATS
   const items = data?.items ?? []
   const total = data?.total ?? 0
+
+  // Any filter or page change starts a fresh selection, so "Dismiss
+  // selected" never acts on rows the person can no longer see.
+  const changeFilter = (apply: () => void) => {
+    apply()
+    setPage(0)
+    setSelected(new Set())
+  }
+  const canBulkDismiss = canEditProject && (status === 'open' || status === 'in_review')
+  const dismissFilter: ContentDismissFilter = {
+    status: status === 'in_review' ? 'in_review' : 'open',
+    ...(reason ? { reason } : {}),
+    ...(contentType ? { content_type: contentType } : {}),
+    ...(source ? { source: source === NO_SOURCE ? null : source } : {}),
+    ...(scoreBand ? { score_band: scoreBand } : {}),
+  }
+  const pageIds = items.map(item => item.id)
+  const allOnPageSelected = pageIds.length > 0 && pageIds.every(id => selected.has(id))
+  const toggleRow = (id: string) => setSelected(prev => {
+    const next = new Set(prev)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    return next
+  })
+  const togglePage = () => setSelected(allOnPageSelected ? new Set() : new Set(pageIds))
+  // Filter options: the known content types plus whatever this page shows,
+  // and the sources this page shows (the list has no facet endpoint).
+  const typeOptions = [...new Set([...Object.keys(TYPE_ICON), ...items.map(i => i.content_type), ...(contentType ? [contentType] : [])])].sort()
+  const sourceOptions = [...new Set([...items.map(i => i.source).filter((s): s is string => !!s), ...(source && source !== NO_SOURCE ? [source] : [])])].sort()
 
   if (!activeProjectId) {
     return (
@@ -178,18 +237,20 @@ export function ContentQualityPage() {
         title="Content Quality"
 
         helpTitle="About Content Quality"
-        helpWhatIsIt="Content quality issues are surfaced by AI judge scores, user flags, star ratings, and downvote ratios. Each issue links to its Langfuse trace and full feedback history."
+        helpWhatIsIt="Content quality issues are surfaced by the score the source app sends, user flags, star ratings, and downvote ratios. The score is whatever the source sends: an AI judge grade or, for some sources, an up/down vote score. Each issue links to its Langfuse trace and full feedback history."
         helpUseCases={[
           'Find low-scoring generated content',
           'Trigger regeneration from the source project',
-          'View user ratings and flags alongside AI scores',
+          'View user ratings and flags alongside the source score',
+          'Clear noise in bulk: tick rows or filter, then dismiss with a reason',
         ]}
-        helpHowToUse="Filter by status or reason, open an issue to see the full context, then click Regenerate & push to create an improved version — the source project judges the candidate and only promotes it if the score improves."
+        helpHowToUse="Filter by status, reason, type, source or score, open an issue to see the full context, then click Regenerate & push to create an improved version — the source project judges the candidate and only promotes it if the score improves. To clear noise, tick rows or use Dismiss all matching; the dialog states the exact number of rows first."
       >
         <select
+          aria-label="Status"
           className="rounded border border-edge bg-surface px-2 py-1 text-xs"
           value={status}
-          onChange={e => { setStatus(e.target.value); setPage(0) }}
+          onChange={e => changeFilter(() => setStatus(e.target.value))}
         >
           <option value="open">Open</option>
           <option value="in_review">In review</option>
@@ -199,15 +260,43 @@ export function ContentQualityPage() {
           <option value="all">All statuses</option>
         </select>
         <select
+          aria-label="Reason"
           className="rounded border border-edge bg-surface px-2 py-1 text-xs"
           value={reason}
-          onChange={e => { setReason(e.target.value); setPage(0) }}
+          onChange={e => changeFilter(() => setReason(e.target.value))}
         >
           <option value="">All reasons</option>
-          <option value="low_judge_score">Low AI score</option>
+          <option value="low_judge_score">Low score</option>
           <option value="user_flag">User flagged</option>
           <option value="low_star_rating">Low stars</option>
           <option value="high_downvote_ratio">High downvotes</option>
+        </select>
+        <select
+          aria-label="Content type"
+          className="rounded border border-edge bg-surface px-2 py-1 text-xs"
+          value={contentType}
+          onChange={e => changeFilter(() => setContentType(e.target.value))}
+        >
+          <option value="">All types</option>
+          {typeOptions.map(t => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
+        </select>
+        <select
+          aria-label="Source"
+          className="rounded border border-edge bg-surface px-2 py-1 text-xs"
+          value={source}
+          onChange={e => changeFilter(() => setSource(e.target.value))}
+        >
+          <option value="">All sources</option>
+          <option value={NO_SOURCE}>No source</option>
+          {sourceOptions.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+        <select
+          aria-label="Score sent by source"
+          className="rounded border border-edge bg-surface px-2 py-1 text-xs"
+          value={scoreBand}
+          onChange={e => changeFilter(() => setScoreBand(e.target.value))}
+        >
+          {SCORE_BANDS.map(b => <option key={b.value} value={b.value}>{b.label}</option>)}
         </select>
       </PageHeaderBar>
 
@@ -248,13 +337,44 @@ export function ContentQualityPage() {
               Click any row to view the full asset context and trigger regeneration.
             </p>
 
+            {canBulkDismiss && (
+              <ContentBulkDismissBar
+                projectId={activeProjectId}
+                selectedIds={[...selected]}
+                matchingTotal={total}
+                filter={dismissFilter}
+                onDismissed={({ dismissed, remaining }) => {
+                  setSelected(new Set())
+                  setPage(0)
+                  toast.success(
+                    remaining > 0
+                      ? `Dismissed ${dismissed.toLocaleString()} rows. ${remaining.toLocaleString()} still match: run it again for the rest.`
+                      : `Dismissed ${dismissed.toLocaleString()} row${dismissed === 1 ? '' : 's'}.`,
+                  )
+                  reload()
+                  reloadStats()
+                }}
+              />
+            )}
+
             <ResponsiveTable ariaLabel="Content quality issues">
               <table className="w-full text-xs">
                 <thead className="bg-surface-overlay border-b border-edge">
                   <tr>
+                    {canBulkDismiss && (
+                      <th className="w-8 px-3 py-2.5 text-left">
+                        <input
+                          type="checkbox"
+                          aria-label="Select every row on this page"
+                          checked={allOnPageSelected}
+                          onChange={togglePage}
+                          className="h-3.5 w-3.5 rounded-sm border-edge bg-surface-raised accent-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+                        />
+                      </th>
+                    )}
                     <th className="px-3 py-2.5 text-left font-semibold text-fg-muted">Asset</th>
                     <th className="px-3 py-2.5 text-left font-semibold text-fg-muted">Reason</th>
-                    <th className="px-3 py-2.5 text-left font-semibold text-fg-muted">Quality</th>
+                    <th className="px-3 py-2.5 text-left font-semibold text-fg-muted">Score</th>
                     <th className="px-3 py-2.5 text-left font-semibold text-fg-muted">Status</th>
                     <th className="px-3 py-2.5 text-left font-semibold text-fg-muted">Detected</th>
                     <th className="w-5 px-3 py-2.5" />
@@ -274,6 +394,17 @@ export function ContentQualityPage() {
                         className="hover:bg-surface-overlay cursor-pointer transition-opacity group"
                         onClick={() => navigate(`/content/${item.id}`)}
                       >
+                        {canBulkDismiss && (
+                          <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              aria-label={`Select ${label}`}
+                              checked={selected.has(item.id)}
+                              onChange={() => toggleRow(item.id)}
+                              className="h-3.5 w-3.5 rounded-sm border-edge bg-surface-raised accent-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+                            />
+                          </td>
+                        )}
                         {/* Asset: icon + type + human key */}
                         <td className="px-3 py-3">
                           <div className="flex items-center gap-2">
@@ -302,10 +433,15 @@ export function ContentQualityPage() {
                           )}
                         </td>
 
-                        {/* Quality: score bar or "not scored" */}
+                        {/* Score: bar plus what the number is, or "not scored" */}
                         <td className="px-3 py-3 w-36">
                           {score != null
-                            ? <ConfidenceMeter confidence={score} />
+                            ? (
+                              <div className="flex flex-col gap-0.5">
+                                <ConfidenceMeter confidence={score.value} />
+                                <span className="text-2xs text-fg-muted">{score.basis}</span>
+                              </div>
+                            )
                             : <span className="text-2xs text-fg-muted italic">not scored</span>
                           }
                         </td>
@@ -360,10 +496,10 @@ export function ContentQualityPage() {
               Showing {page * LIMIT + 1}–{Math.min((page + 1) * LIMIT, total)} of {total}
             </span>
             <div className="flex gap-2">
-              <Btn size="sm" variant="ghost" disabled={page === 0} onClick={() => setPage(p => Math.max(0, p - 1))}>
+              <Btn size="sm" variant="ghost" disabled={page === 0} onClick={() => { setPage(p => Math.max(0, p - 1)); setSelected(new Set()) }}>
                 Previous
               </Btn>
-              <Btn size="sm" variant="ghost" disabled={(page + 1) * LIMIT >= total} onClick={() => setPage(p => p + 1)}>
+              <Btn size="sm" variant="ghost" disabled={(page + 1) * LIMIT >= total} onClick={() => { setPage(p => p + 1); setSelected(new Set()) }}>
                 Next
               </Btn>
             </div>

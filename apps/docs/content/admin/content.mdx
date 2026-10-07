@@ -14,13 +14,20 @@ The Content Quality Debug Station lists assets that need review:
 
 | Reason | Meaning |
 |--------|---------|
-| `low_judge_score` | Judge scored the asset below threshold |
+| `low_judge_score` | The score the source app sent (`judge_score`) is below its threshold. A source may send a vote score here rather than an AI judge grade, so the console calls it "Low score" |
 | `user_flag` | End users flagged the content |
 | `low_star_rating` | Aggregate star rating is low |
 | `high_downvote_ratio` | Downvotes dominate |
 
 Open a row (`/content/:id`) to inspect scores and trigger regeneration. Stats
 strip and readout follow the standard PagePosture chrome.
+
+To clear noise in bulk, tick rows or filter the list (status, reason, content
+type, source, score band), then choose **Dismiss selected** or **Dismiss all
+matching**. The dialog states the exact number of rows and needs a reason,
+which goes to the audit log. One run dismisses at most 10,000 rows. A
+dismissed row stays dismissed when the source re-sends the same item; only new
+flags, new downvotes or a clearly lower score reopen it.
 
 ## Related pages
 
