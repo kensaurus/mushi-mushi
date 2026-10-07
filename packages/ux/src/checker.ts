@@ -128,6 +128,7 @@ The change it was asked to make: ${step}
 The diff:
 ${diff}
 
+You may open at most 3 files from this repository (for example a class or component the diff uses) to check what it does; then answer. Do not search the repository.
 Keep it when the diff makes that change (or a reasonable part of it) without breaking behaviour, accessibility or the design system. Revert it when it does nothing useful, does something else, or risks breaking the screen.
 Answer with ONLY this JSON: {"verdict":"keep"|"revert","confidence":"low"|"medium"|"high","reason":"..."}`
 
@@ -138,8 +139,8 @@ interface Ask {
 }
 
 /** One question to Claude Code, headless and read-only, in `cwd`. */
-async function askClaudeCode(prompt: string, cwd: string, model: string, signal?: AbortSignal): Promise<Ask> {
-  const args = ['-p', '--model', model, '--tools', 'Read', '--disallowedTools', 'mcp__*', '--permission-mode', 'dontAsk', '--max-turns', '4', '--no-session-persistence', '--output-format', 'json']
+async function askClaudeCode(prompt: string, cwd: string, model: string, signal?: AbortSignal, maxTurns = 4): Promise<Ask> {
+  const args = ['-p', '--model', model, '--tools', 'Read', '--disallowedTools', 'mcp__*', '--permission-mode', 'dontAsk', '--max-turns', String(maxTurns), '--no-session-persistence', '--output-format', 'json']
   let last: Ask = { text: null, costUsd: null, error: 'Claude Code did not run.' }
   // One retry: a call that failed in a second with no output (studio run on
   // glot.it, 2026-10-07) answered normally when repeated.
@@ -148,9 +149,11 @@ async function askClaudeCode(prompt: string, cwd: string, model: string, signal?
     const res = await run('claude', args, { cwd, stdin: prompt, shell: process.platform === 'win32', timeoutMs: 240_000, signal })
     if (res.timedOut) return { text: null, costUsd: null, error: 'Claude Code did not answer within 4 minutes.' }
     try {
-      const j = JSON.parse(res.stdout) as { result?: unknown; total_cost_usd?: unknown; is_error?: unknown }
+      const j = JSON.parse(res.stdout) as { result?: unknown; subtype?: unknown; total_cost_usd?: unknown; is_error?: unknown }
       if (!j.is_error) return { text: String(j.result ?? ''), costUsd: typeof j.total_cost_usd === 'number' ? j.total_cost_usd : null }
-      last = { text: null, costUsd: null, error: `Claude Code: ${String(j.result).slice(0, 300)}` }
+      // An error result can carry no text, only its kind (error_max_turns, …).
+      last = { text: null, costUsd: null, error: `Claude Code: ${String(j.result ?? j.subtype ?? 'error with no message').slice(0, 300)}` }
+      if (j.subtype === 'error_max_turns') return last
     } catch {
       const said = `${res.stdout.trim().slice(0, 200)} ${res.tail.trim().slice(-300)}`.trim()
       last = { text: null, costUsd: null, error: `Claude Code exited ${res.exitCode}: ${said || 'no output on stdout or stderr'}` }
@@ -195,6 +198,8 @@ export interface CheckStepInput {
   /** null: nothing visible changed, review the diff instead. */
   visual: { before: Buffer; after: Buffer; regions: ChangeRegion[] } | null
   diff: string
+  /** The worktree: a code review runs there, so the model can read the files the diff touches. */
+  repoDir?: string
   spec: CheckerSpec
   signal?: AbortSignal
   client?: Anthropic
@@ -207,8 +212,8 @@ export async function checkStep(input: CheckStepInput): Promise<CheckerVerdict> 
   const base = join(input.dir, 'checker', input.name)
   const fail = (mode: CheckerVerdict['mode'], error: string): CheckerVerdict => ({ model: spec.model, mode, verdict: 'unsure', summary: '', votes: [], costUsd: null, error })
   let cost = 0
-  const ask = async (prompt: string, cwd: string, images: Buffer[]): Promise<Ask> => {
-    const a = spec.via === 'claude-code' ? await askClaudeCode(prompt, cwd, spec.model, input.signal) : await askApi(prompt, images, spec.model, input.client ?? new Anthropic())
+  const ask = async (prompt: string, cwd: string, images: Buffer[], maxTurns?: number): Promise<Ask> => {
+    const a = spec.via === 'claude-code' ? await askClaudeCode(prompt, cwd, spec.model, input.signal, maxTurns) : await askApi(prompt, images, spec.model, input.client ?? new Anthropic())
     if (a.costUsd) cost += a.costUsd
     return a
   }
@@ -216,7 +221,8 @@ export async function checkStep(input: CheckStepInput): Promise<CheckerVerdict> 
   if (!input.visual) {
     const diff = input.diff.slice(0, MAX_DIFF_CHARS)
     mkdirSync(base, { recursive: true })
-    const a = await ask(CODE_PROMPT(input.step, input.screen, diff), base, [])
+    // In the worktree, with room to open the files the diff touches (read-only).
+    const a = await ask(CODE_PROMPT(input.step, input.screen, diff), input.repoDir ?? base, [], 20)
     if (a.error || !a.text) return fail('code', a.error ?? 'No answer.')
     const j = firstJson(a.text)
     if (!j || (j.verdict !== 'keep' && j.verdict !== 'revert')) return fail('code', 'The answer was not the expected JSON.')

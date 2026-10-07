@@ -801,6 +801,7 @@ async function runLoop(opts: LoopOptions, runId: string, dir: string): Promise<R
             step: step?.text ?? 'Improve this screen for the person using it.',
             visual: visible ? { before: readFileSync(join(dir, current[vp].png)), after: afterShots![vp]!.png, regions: record.changes?.[vp]?.boxes ?? [] } : null,
             diff: await diffText(wtPath).catch(() => ''),
+            repoDir: wtPath,
             spec: opts.checker,
             signal: opts.signal,
           })
