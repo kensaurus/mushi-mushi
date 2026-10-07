@@ -158,6 +158,27 @@ function scrubFrameworkNoise(state: RunState): void {
   }
 }
 
+/**
+ * Pure: why mapping found no screen, from the "skipped" lines and the dev
+ * server's first error. Every page failing the same way (all HTTP 500) points
+ * at the app, not the pages, so that case leads with the dev server.
+ */
+export function noScreensMessage(skipped: string[], devError: string | null): string {
+  const reasons = skipped.map((s) => s.replace(/^\S+:\s*/, ''))
+  const unique = [...new Set(reasons)]
+  const lines: string[] = []
+  if (skipped.length && unique.length === 1 && /HTTP 5\d\d/.test(unique[0])) {
+    lines.push(`No screen to work on: every page returned ${unique[0]}, so the app's dev server is failing, not the pages.`)
+  } else if (skipped.length) {
+    lines.push(`No screen to work on: all ${new Set(skipped.map((s) => s.split(':')[0])).size} page(s) were skipped (${unique.slice(0, 3).join('; ')}).`)
+  } else {
+    lines.push('No screen to work on: mapping found no page. Name the pages to work on, or check that the home page loads.')
+  }
+  if (devError) lines.push(`The dev server said: ${devError}`)
+  lines.push('Fix the app or the dev command (for example a different bundler flag), then start a new run. The full output is in run.log.')
+  return lines.join('\n')
+}
+
 export function startLoop(opts: LoopOptions): LoopHandle {
   const runId = opts.resumeRunId ?? newRunId()
   const dir = runDir(opts.repoRoot, runId)
@@ -310,9 +331,14 @@ async function runLoop(opts: LoopOptions, runId: string, dir: string): Promise<R
 
     log(`Starting the dev server in the worktree: ${opts.devCommand}`)
     phase('dev-server', opts.devCommand)
+    // The dev server's first error line names the cause when every page fails.
+    let devError: string | null = null
     const server: DevServer = await startDevServer(wtPath, opts.devCommand, {
       path: opts.startPaths?.[0],
-      onLine: (l) => log(`[dev] ${l.slice(0, 200)}`),
+      onLine: (l) => {
+        log(`[dev] ${l.slice(0, 200)}`)
+        if (!devError && /\b(error|module not found)\b/i.test(l)) devError = l.trim().slice(0, 300)
+      },
     })
     state.baseUrl = server.url
     persist()
@@ -322,14 +348,22 @@ async function runLoop(opts: LoopOptions, runId: string, dir: string): Promise<R
       if (state.surfaces.length === 0) {
         log('Mapping screens…')
         phase('mapping', null)
+        const skipped: string[] = []
         const found = await discover(session, {
           baseUrl: server.url,
           startPaths: opts.startPaths,
           onlyStartPaths: Boolean(opts.startPaths?.length) && !opts.crawl,
           sourceDir: wtPath,
           signal: opts.signal,
-          onProgress: (m) => log(`found ${m}`),
+          onProgress: (m) => {
+            log(`found ${m}`)
+            if (m.startsWith('skipped ')) skipped.push(m.slice('skipped '.length))
+            // The studio shows the latest mapping line under the phase.
+            phase('mapping', m.slice(0, 200))
+          },
         })
+        // Nothing to work on is a failed run, not a finished one: say why.
+        if (found.length === 0) throw new Error(noScreensMessage(skipped, devError))
         state.surfaces = found.slice(0, opts.maxSurfaces ?? 10).map((surface) => ({
           surface,
           status: 'pending',

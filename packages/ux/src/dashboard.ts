@@ -19,6 +19,7 @@ import { basename, dirname, join, normalize, sep } from 'node:path'
 import { z } from 'zod'
 import { attemptLogBase } from './agent-events.js'
 import { isSafeSelector } from './ignore.js'
+import type { AgentAccount } from './launcher.js'
 import type { LoopEvent } from './loop.js'
 import type { ModelList } from './models.js'
 import type { SkillListItem } from './skills.js'
@@ -80,6 +81,8 @@ export interface StudioOptions {
   resume?: (runId: string) => Promise<{ runId: string; events: EventEmitter }>
   listModels?: (agent: string) => Promise<ModelList>
   listSkills?: () => Promise<SkillListItem[]>
+  /** The account an agent would spend (null when the agent does not say). */
+  account?: (agent: string) => Promise<AgentAccount | null>
   /** Launcher defaults: agents found, dev command guesses, refs, page suggestions. */
   options?: () => Promise<Record<string, unknown>>
   port?: number
@@ -223,6 +226,11 @@ export async function startStudio(opts: StudioOptions): Promise<Dashboard> {
         const agent = url.searchParams.get('agent') ?? ''
         if (!opts.listModels || !/^[a-z][a-z-]{1,30}$/.test(agent)) return json(res, 400, { error: 'Unknown agent' })
         return json(res, 200, await opts.listModels(agent))
+      }
+      if (req.method === 'GET' && url.pathname === '/api/account') {
+        const agent = url.searchParams.get('agent') ?? ''
+        if (!/^[a-z][a-z-]{1,30}$/.test(agent)) return json(res, 400, { error: 'Unknown agent' })
+        return json(res, 200, { account: opts.account ? await opts.account(agent).catch(() => null) : null })
       }
       if (req.method === 'GET' && url.pathname === '/api/skills') {
         if (!opts.listSkills) return json(res, 200, { skills: [] })

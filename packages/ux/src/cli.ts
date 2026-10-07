@@ -25,7 +25,7 @@ import { startDashboard, startStudio, type LaunchInput } from './dashboard.js'
 import { discover } from './discover.js'
 import { isSafeSelector } from './ignore.js'
 import { DEFAULT_JUDGE_MODEL } from './judge.js'
-import { studioOptions } from './launcher.js'
+import { agentAccount, studioOptions } from './launcher.js'
 import { listModels } from './models.js'
 import { DEFAULT_SKILLS_REPO, listSkills, resolveSkill } from './skills.js'
 import { startLoop, type LoopEvent, type LoopOptions } from './loop.js'
@@ -371,6 +371,7 @@ program
         return p
       },
       listSkills: () => listSkills({ repo: o.skillsRepo }),
+      account: (agent) => agentAccount(agent),
       options: () =>
         studioOptions({
           repoRoot,

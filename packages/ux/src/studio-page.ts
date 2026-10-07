@@ -75,6 +75,15 @@ label.f{display:grid;gap:4px;font-size:12px;color:var(--muted)}label.f>span{font
 .pills{display:flex;flex-wrap:wrap;gap:6px}.pill{all:unset;cursor:pointer;border:1px solid var(--line);border-radius:999px;padding:2px 8px;font-size:12px}
 .pill[aria-pressed=true]{background:var(--fg);color:var(--bg)}
 .note{font-size:12px;color:var(--muted)}.warn{color:var(--warn)}.err{color:var(--bad)}
+.card h2 .n{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:999px;background:var(--fg);color:var(--bg);font-size:11px;margin-right:6px}
+.lede{font-size:12px;color:var(--muted);margin:-4px 0 0}
+.choice{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px}
+.choice label{display:flex;gap:8px;align-items:flex-start;border:1px solid var(--line);border-radius:10px;padding:10px;cursor:pointer;font-size:12px;color:var(--muted)}
+.choice label b{display:block;color:var(--fg);font-size:13px}
+.choice label:has(input:checked){border-color:var(--fg)}
+.summary{border:1px dashed var(--line);border-radius:10px;padding:10px;font-size:12px;display:grid;gap:4px}
+.summary b{color:var(--fg)}
+details.adv summary{cursor:pointer;font-size:12px;color:var(--muted)}
 details.log{border-top:1px solid var(--line);background:var(--panel)}details.log summary{padding:8px 16px;cursor:pointer;font-size:12px;color:var(--muted)}details.log pre{border:0;border-radius:0;max-height:220px}details.steps{margin-top:8px}details.steps summary{cursor:pointer;font-size:12px;color:var(--muted)}details.steps pre{max-height:260px}
 [hidden]{display:none!important}
 </style></head><body>
@@ -309,36 +318,53 @@ async function openLauncher() {
   document.getElementById('status').hidden = true
   const box = document.getElementById('launcher')
   box.hidden = false
-  box.innerHTML = '<div class="form"><p class="empty">Loading options…</p></div>'
+  box.innerHTML = '<div class="form"><div class="card"><h2>New run</h2><p class="note">Checking which coding agents are installed and signed in, this repo’s branches and its pages. This takes up to 20 seconds.</p></div></div>'
   options = await api('/api/options').catch((e) => ({ error: e.message }))
   const last = store.get('last') || {}
   const agents = options.agents || []
   const agentOpt = (a) => '<option value="' + esc(a.name) + '"' + (a.name === (last.agent || options.defaultAgent) ? ' selected' : '') + (a.installed ? '' : ' disabled') + '>' + esc(a.label) + (a.installed ? '' : ' — ' + esc(a.note || 'not found')) + '</option>'
   const refOpt = (r) => '<option value="' + esc(r.ref) + '"' + (r.ref === (last.baseRef || options.defaultRef) ? ' selected' : '') + '>' + esc(r.label) + '</option>'
+  const lastPaths = last.startPaths || (options.lastRun ? options.lastRun.startPaths : [])
+  const whole = lastPaths.length === 0
   box.innerHTML = '<form class="form" id="lf" novalidate>' +
-    '<div class="card"><h2>Agent and model</h2><div class="grid">' +
-      '<label class="f"><span>Agent</span><select id="f-agent">' + agents.map(agentOpt).join('') + '</select></label>' +
+    '<div class="card"><h2><span class="n">1</span>What to improve</h2>' +
+      '<p class="lede">The agent works one screen at a time on its own branch. Each change is measured (accessibility, layout, console) and kept only if nothing got worse.</p>' +
+      '<div class="choice" role="radiogroup" aria-label="Which screens">' +
+        '<label><input type="radio" name="f-scope" value="whole"' + (whole ? ' checked' : '') + '><span><b>The whole app</b>Map screens from the home page and the links it opens, up to the screen limit below.</span></label>' +
+        '<label><input type="radio" name="f-scope" value="pages"' + (whole ? '' : ' checked') + '><span><b>Pages I pick</b>Only these pages, plus the tabs and dialogs they open.</span></label>' +
+      '</div>' +
+      '<div id="f-pages-box" class="card" style="padding:10px"' + (whole ? ' hidden' : '') + '>' +
+        '<label class="f"><span>Pages (comma-separated, or click below)</span><input type="text" id="f-paths" autocomplete="off" value="' + esc(lastPaths.join(', ')) + '"></label>' +
+        '<div class="pills" id="f-route-pills">' + (options.routes || []).slice(0, 40).map((r) => '<button type="button" class="pill" data-r="' + esc(r) + '" aria-pressed="false">' + esc(r) + '</button>').join('') + '</div>' +
+        '<label class="sub"><input type="checkbox" id="f-crawl"' + (last.crawl ? ' checked' : '') + '> Also follow links from these pages</label>' +
+      '</div>' +
+      '<div class="grid">' +
+        '<label class="f"><span>Skill: what the agent focuses on (' + esc(options.skillsRepo || 'skills repo') + ')</span><select id="f-skill"><option value="">None — built-in UX guidance</option></select></label>' +
+        '<label class="f"><span>…or your own SKILL.md / folder</span><input type="text" id="f-skill-path" placeholder="./skills/my-skill" autocomplete="off"></label>' +
+      '</div><div class="note" id="f-skill-note"></div>' +
+      '<label class="sub"><input type="checkbox" id="f-steps"' + (last.steps === false ? '' : ' checked') + '> Small steps (recommended): plan each screen first, then one small change per attempt, each kept or rolled back on its own</label>' +
+    '</div>' +
+    '<div class="card"><h2><span class="n">2</span>Who does the work</h2><div class="grid">' +
+      '<label class="f"><span>Coding agent</span><select id="f-agent">' + agents.map(agentOpt).join('') + '</select></label>' +
       '<label class="f"><span>Model</span><select id="f-model"><option>Loading…</option></select></label>' +
       '<label class="f" id="f-custom-wrap" hidden><span>Model id</span><input type="text" id="f-custom" placeholder="e.g. grok-4.7" autocomplete="off"></label>' +
     '</div><div class="params" id="f-params"></div><div class="note" id="f-model-note"></div>' +
+    '<div class="summary" id="f-account"><span class="note">Checking the account…</span></div>' +
     '<div class="row"><span class="sub mono" id="f-spec"></span><button type="button" class="btn" id="f-refresh">Refresh list</button></div></div>' +
-    '<div class="card"><h2>Skill</h2><div class="grid">' +
-      '<label class="f"><span>Skill from ' + esc(options.skillsRepo || 'the skills repo') + '</span><select id="f-skill"><option value="">None — built-in UX guidance</option></select></label>' +
-      '<label class="f"><span>…or a SKILL.md / folder path</span><input type="text" id="f-skill-path" placeholder="./skills/my-skill" autocomplete="off"></label>' +
-    '</div><div class="note" id="f-skill-note"></div></div>' +
-    '<div class="card"><h2>App</h2><div class="grid">' +
+    '<div class="card"><h2><span class="n">3</span>How much</h2><div class="grid">' +
+      '<label class="f"><span>Screens at most</span><input type="number" id="f-max" min="1" max="100" value="' + (last.maxSurfaces || 8) + '"></label>' +
+      '<label class="f"><span>Attempts (steps) per screen</span><input type="number" id="f-iter" min="1" max="5" value="' + (last.iterations || 4) + '"></label>' +
+      '<label class="f"><span>Minutes per attempt</span><input type="number" id="f-timeout" min="1" max="60" value="' + (last.timeoutMin || 8) + '"></label>' +
+    '</div><div class="summary" id="f-estimate"></div></div>' +
+    '<div class="card"><h2><span class="n">4</span>Your app</h2><div class="grid">' +
       '<label class="f" style="grid-column:1/-1"><span>Dev command ({port} is replaced)</span><input type="text" id="f-dev" list="f-devs" autocomplete="off"><datalist id="f-devs">' + (options.devCommands || []).map((d) => '<option value="' + esc(d) + '">').join('') + '</datalist></label>' +
       '<label class="f"><span>Branch from</span><select id="f-base">' + (options.refs || [{ ref: 'HEAD', label: 'HEAD' }]).map(refOpt).join('') + '</select></label>' +
-      '<label class="f"><span>Screens</span><input type="number" id="f-max" min="1" max="100" value="' + (last.maxSurfaces || 8) + '"></label>' +
-      '<label class="f"><span>Attempts per screen</span><input type="number" id="f-iter" min="1" max="5" value="' + (last.iterations || 2) + '"></label>' +
-      '<label class="f"><span>Minutes per attempt</span><input type="number" id="f-timeout" min="1" max="60" value="' + (last.timeoutMin || 15) + '"></label>' +
-    '</div><div class="note warn" id="f-dev-warn">' + esc(options.devWarning || '') + '</div>' +
-    '<label class="f"><span>Pages (comma-separated; empty = map from the home page)</span><input type="text" id="f-paths" autocomplete="off" value="' + esc((last.startPaths || []).join(', ')) + '"></label>' +
-    '<label class="sub"><input type="checkbox" id="f-crawl"' + (last.crawl ? ' checked' : '') + '> Also follow links from these pages (otherwise only these pages and the tabs and dialogs they open)</label>' +
-    '<label class="sub"><input type="checkbox" id="f-steps"' + (last.steps === false ? '' : ' checked') + '> Small steps: the agent plans each screen first, then makes one small change per attempt, each measured and kept or rolled back on its own ("Attempts per screen" caps the steps)</label>' +
-    '<div class="pills" id="f-route-pills">' + (options.routes || []).slice(0, 40).map((r) => '<button type="button" class="pill" data-r="' + esc(r) + '" aria-pressed="false">' + esc(r) + '</button>').join('') + '</div>' +
+    '</div>' +
+    (options.lastRun ? '<div class="note">Run ' + esc(options.lastRun.runId) + ' mapped screens with <code>' + esc(options.lastRun.devCommand) + '</code>, so it is first in the list.</div>' : '') +
+    '<div class="note warn" id="f-dev-warn">' + esc(options.devWarning || '') + '</div>' +
+    '<details class="adv"><summary>Advanced: parts of the page to leave out</summary>' +
     '<label class="f"><span>Not part of the app (CSS selectors, one per line): hidden in screenshots and skipped by every check</span><textarea id="f-ignore" rows="2" autocomplete="off" spellcheck="false" placeholder=".dev-badge">' + esc((last.ignore || []).join('\\n')) + '</textarea></label>' +
-    '<div class="note">Dev overlays, build stamps and the Mushi widget are already skipped. Add your own here, or mark an element with <code>data-mushi-ux-ignore</code>.</div></div>' +
+    '<div class="note">Dev overlays, build stamps and the Mushi widget are already skipped. Add your own here, or mark an element with <code>data-mushi-ux-ignore</code>.</div></details></div>' +
     '<div class="card"><h2>After the run</h2><div class="grid">' +
       '<label class="f"><span><input type="checkbox" id="f-judge"' + (options.judgeAvailable ? (last.judge === false ? '' : ' checked') : ' disabled') + '> Second-model review</span><input type="text" id="f-judge-model" value="' + esc(last.judgeModel || options.judgeModel || '') + '"' + (options.judgeAvailable ? '' : ' disabled') + '></label>' +
       '<label class="f"><span><input type="checkbox" id="f-sync"' + (options.syncAvailable ? (last.sync ? ' checked' : '') : ' disabled') + '> Mirror to the Mushi console</span><span class="note">' + esc(options.syncNote || '') + '</span></label>' +
@@ -347,6 +373,9 @@ async function openLauncher() {
   document.getElementById('f-dev').value = last.devCommand || (options.devCommands || [])[0] || ''
   syncPills()
   document.getElementById('f-paths').oninput = syncPills
+  box.querySelectorAll('input[name=f-scope]').forEach((r) => r.onchange = () => { document.getElementById('f-pages-box').hidden = scope() !== 'pages'; estimate() })
+  ;['f-max', 'f-iter', 'f-timeout', 'f-steps'].forEach((id) => document.getElementById(id).addEventListener('input', estimate))
+  estimate()
   box.querySelectorAll('.pill').forEach((p) => p.onclick = () => {
     const input = document.getElementById('f-paths'), set = new Set(input.value.split(',').map((x) => x.trim()).filter(Boolean))
     set.has(p.dataset.r) ? set.delete(p.dataset.r) : set.add(p.dataset.r)
@@ -359,6 +388,42 @@ async function openLauncher() {
   document.getElementById('lf').onsubmit = (e) => { e.preventDefault(); start() }
   loadModels(false)
   loadSkills(last.skill)
+}
+function scope() { const r = document.querySelector('input[name=f-scope]:checked'); return r ? r.value : 'whole' }
+// Published per-million-token prices (cursor.com/docs/models-and-pricing, read 2026-10-07).
+const PRICES = [
+  ['grok-4.7', 'Grok 4.7: $2 in / $6 out per million tokens; the Fast tier, the default speed on Pro and above, is $4 / $12. A Cursor model, so it draws on the larger included pool first.'],
+  ['opus-5.5', 'Claude Opus 5.5: $4 in / $20 out per million tokens.'],
+  ['opus-5-5', 'Claude Opus 5.5: $4 in / $20 out per million tokens.'],
+  ['sonnet-5.5', 'Claude Sonnet 5.5: $2 in / $10 out per million tokens.'],
+  ['sonnet-5-5', 'Claude Sonnet 5.5: $2 in / $10 out per million tokens.'],
+  ['composer', 'A Cursor model: it draws on the larger included pool first.'],
+]
+function priceNote() {
+  const spec = (modelSpec() || '').toLowerCase()
+  const hit = PRICES.find(([k]) => spec.includes(k))
+  return hit ? hit[1] : 'Billed at the model’s API rate: first from your plan’s included usage, then on-demand if you allow it.'
+}
+function estimate() {
+  const num = (id, d) => { const n = parseInt(document.getElementById(id).value, 10); return Number.isFinite(n) && n > 0 ? n : d }
+  const screens = num('f-max', 8), tries = num('f-iter', 4), mins = num('f-timeout', 8), steps = document.getElementById('f-steps').checked
+  const worst = screens * (tries * mins + (steps ? 4 : 0)) + 5
+  const h = Math.floor(worst / 60), m = worst % 60
+  document.getElementById('f-estimate').innerHTML =
+    '<span><b>Up to ' + screens * tries + ' attempts</b> (' + screens + ' screen' + (screens === 1 ? '' : 's') + ' × ' + tries + (steps ? ' steps, after a planning pass of up to 4 min each' : ' attempts') + ').</span>' +
+    '<span>Worst case about <b>' + (h ? h + ' h ' : '') + m + ' min</b> of agent time, since every attempt stops at its time box. Runs usually end sooner: a step that needs no change moves on.</span>' +
+    '<span class="note">' + (scope() === 'whole' ? 'Whole app: screens are mapped from the home page until the limit above.' : 'Pages you picked: at most ' + screens + ' of them are worked on.') + '</span>'
+}
+const accounts = {}
+async function loadAccount() {
+  const agent = document.getElementById('f-agent').value, box = document.getElementById('f-account')
+  // The CLI call takes a second or two; a model change only redraws the price.
+  accounts[agent] = accounts[agent] || api('/api/account?agent=' + encodeURIComponent(agent)).catch(() => ({ account: null }))
+  const r = await accounts[agent]
+  const a = r.account
+  const who = a ? '<span>Spends <b>' + esc(a.email || 'your account') + '</b>' + (a.plan ? ' · ' + esc(a.plan) + ' plan' : '') + '. To use a different account, sign in with that one in this shell (<code>agent login</code>) and restart the studio.</span>' : '<span>Spends the account this agent is signed in with in this shell.</span>'
+  const usage = '<span class="note">No agent reports how much credit is left, so this cannot show a balance. ' + (a && a.usageUrl ? 'Check it on <a href="' + esc(a.usageUrl) + '" target="_blank" rel="noopener">your usage page</a>. ' : '') + 'If the account runs out mid-run, the run stops; resume it later or with another account.</span>'
+  box.innerHTML = who + '<span>' + esc(priceNote()) + '</span>' + usage
 }
 function syncPills() {
   const set = new Set(document.getElementById('f-paths').value.split(',').map((x) => x.trim()))
@@ -392,7 +457,7 @@ function modelSpec() {
   const params = [...document.querySelectorAll('[data-param]')].filter((s) => s.value).map((s) => s.dataset.param + '=' + s.value)
   return params.length ? base + '?' + params.join('&') : base
 }
-function updateSpec() { const s = modelSpec(); document.getElementById('f-spec').textContent = s ? 'model: ' + s : 'model: the agent’s default' }
+function updateSpec() { const s = modelSpec(); document.getElementById('f-spec').textContent = s ? 'model: ' + s : 'model: the agent’s default'; loadAccount() }
 async function loadSkills(last) {
   const sel = document.getElementById('f-skill'), note = document.getElementById('f-skill-note')
   try {
@@ -415,11 +480,11 @@ async function start() {
     skill: document.getElementById('f-skill-path').value.trim() || document.getElementById('f-skill').value || null,
     devCommand: document.getElementById('f-dev').value.trim(),
     baseRef: document.getElementById('f-base').value,
-    startPaths: document.getElementById('f-paths').value.split(',').map((x) => x.trim()).filter(Boolean),
+    startPaths: scope() === 'whole' ? [] : document.getElementById('f-paths').value.split(',').map((x) => x.trim()).filter(Boolean),
     iterations: num('f-iter', 2), maxSurfaces: num('f-max', 8), timeoutMin: num('f-timeout', 15),
     judgeModel: judgeOn ? (document.getElementById('f-judge-model').value.trim() || null) : null,
     sync: document.getElementById('f-sync').checked,
-    crawl: document.getElementById('f-crawl').checked,
+    crawl: scope() === 'pages' && document.getElementById('f-crawl').checked,
     steps: document.getElementById('f-steps').checked,
     ignore: document.getElementById('f-ignore').value.split('\\n').map((x) => x.trim()).filter(Boolean),
   }
