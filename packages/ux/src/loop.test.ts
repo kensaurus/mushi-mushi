@@ -57,6 +57,13 @@ describe('commit messages for kept attempts', () => {
     expect(commitMessage('/chat/', 'Chat · แชท — glot.it', 'In `a.tsx`, do x.', 'r')).toContain('Chat · แชท (/chat/): In `a.tsx`, do x.')
   })
 
+  it('never starts a wrapped line with "word: ", which commitlint reads as a footer', () => {
+    const step = 'Make the Grammar, Culture, and Alphabet switcher work with a screen reader: in `features/practice/components/learn-tab-layout.tsx`, take the More chip out of the tablist.'
+    const lines = commitMessage('/practice/', 'Study', step, 'Kept.').split('\n').slice(1)
+    for (const l of lines) expect(l).not.toMatch(/^[A-Za-z][\w-]*: /)
+    expect(lines.join(' ')).toContain('screen reader: in')
+  })
+
   it('wraps the body at 100 characters, which commitlint requires', () => {
     const long = 'Kept, needs your review: the edit changed 1 file(s) but nothing visible in a still screenshot (motion, haptics or another screen). Read the diff.'
     const lines = commitMessage('/chat/', 'Chat', 'In `a.tsx`, ' + 'make the bubble steady '.repeat(8), long).split('\n')

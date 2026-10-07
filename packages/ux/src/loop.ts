@@ -226,8 +226,21 @@ function wrapAt(text: string, width: number): string {
     } else line = line ? `${line} ${word}` : word
   }
   if (line) lines.push(line)
+  // A line that starts "word: " reads as a commit footer to commitlint, which then wants a blank
+  // line before it ("…screen\nreader: in x.tsx" failed glot.it's lint, 2026-10-07). Pull the
+  // previous word down so the line starts mid-sentence.
+  for (let i = 1; i < lines.length; i++) {
+    if (!FOOTER_TOKEN.test(lines[i])) continue
+    const prev = lines[i - 1].split(' ')
+    if (prev.length < 2) continue
+    lines[i] = `${prev.pop()} ${lines[i]}`
+    lines[i - 1] = prev.join(' ')
+  }
   return lines.join('\n')
 }
+
+/** What conventional-commit parsers read as a footer token at the start of a line. */
+const FOOTER_TOKEN = /^(?:[A-Za-z][\w-]*|BREAKING CHANGE): /
 
 /** "Fix the caption" → "fix the caption"; "CTA buttons" and quoted text stay as they are. */
 const lowerFirst = (s: string) => (/^[A-Z][a-z]/.test(s) ? s[0].toLowerCase() + s.slice(1) : s)
