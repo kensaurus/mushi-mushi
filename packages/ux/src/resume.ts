@@ -10,7 +10,7 @@
  * the first unfinished screen.
  */
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join, relative } from 'node:path'
 import type { ResolvedSkill } from './skills.js'
 import { loadState, runDir, type RunState, type SavedRunOptions } from './state.js'
@@ -34,9 +34,10 @@ function loadSkillFiles(dir: string, meta: { name: string; source: string }): Re
   if (!existsSync(join(root, 'SKILL.md'))) return null
   const files: Record<string, Buffer> = {}
   const walk = (d: string) => {
-    for (const name of readdirSync(d)) {
-      const abs = join(d, name)
-      if (statSync(abs).isDirectory()) walk(abs)
+    // Dirent types, not a stat then a read of the same path (CodeQL js/file-system-race).
+    for (const entry of readdirSync(d, { withFileTypes: true })) {
+      const abs = join(d, entry.name)
+      if (entry.isDirectory()) walk(abs)
       else files[relative(root, abs).replace(/\\/g, '/')] = readFileSync(abs)
     }
   }

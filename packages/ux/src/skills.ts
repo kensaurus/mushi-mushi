@@ -11,7 +11,7 @@
  * read. Caps keep a large folder from flooding the worktree.
  */
 
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { closeSync, existsSync, fstatSync, openSync, readdirSync, readFileSync } from 'node:fs'
 import { basename, dirname, join, relative, sep } from 'node:path'
 
 export const DEFAULT_SKILLS_REPO = 'kensaurus/skills'
@@ -63,10 +63,16 @@ function readFolder(dir: string, source: string): ResolvedSkill {
       const abs = join(d, entry.name)
       if (entry.isDirectory()) walk(abs)
       else if (entry.isFile()) {
-        const size = statSync(abs).size
-        if (bytes + size > MAX_BYTES) continue
-        bytes += size
-        files[relative(dir, abs).split(sep).join('/')] = readFileSync(abs)
+        // One handle for the size check and the read (CodeQL js/file-system-race).
+        const fd = openSync(abs, 'r')
+        try {
+          const size = fstatSync(fd).size
+          if (bytes + size > MAX_BYTES) continue
+          bytes += size
+          files[relative(dir, abs).split(sep).join('/')] = readFileSync(fd)
+        } finally {
+          closeSync(fd)
+        }
       }
     }
   }
@@ -115,11 +121,19 @@ async function fetchFolder(slug: string, opts: SkillOptions): Promise<ResolvedSk
 }
 
 export async function resolveSkill(spec: string, opts: SkillOptions = {}): Promise<ResolvedSkill> {
-  if (existsSync(spec)) {
-    const st = statSync(spec)
-    if (st.isDirectory()) return readFolder(spec, spec)
+  // Read first and let the error say what the path is: a stat before the
+  // read could be raced (CodeQL js/file-system-race).
+  let text: string | null = null
+  try {
+    text = readFileSync(spec, 'utf8')
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code
+    if (code === 'EISDIR') return readFolder(spec, spec)
+    // Not a path on disk (what existsSync said false to): try it as a skill name.
+    if (!['ENOENT', 'ENOTDIR', 'EINVAL', 'ENAMETOOLONG'].includes(code ?? '')) throw err
+  }
+  if (text !== null) {
     if (basename(spec) === 'SKILL.md') return readFolder(dirname(spec), spec)
-    const text = readFileSync(spec, 'utf8')
     return { name: skillName(text, basename(spec).replace(/\.md$/i, '')), text, files: { 'SKILL.md': Buffer.from(text) }, source: spec }
   }
   if (!SLUG_RE.test(spec)) throw new Error(`"${spec}" is neither a file nor a skill name.`)

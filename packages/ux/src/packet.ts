@@ -8,7 +8,7 @@
  * the packet stays small enough for weaker, short-context models.
  */
 
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { closeSync, existsSync, fstatSync, openSync, readdirSync, readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { CLS_GOOD } from './probes.js'
 import type { ProbeResult, Surface } from './types.js'
@@ -192,21 +192,33 @@ export function findDesignFiles(root: string, maxFiles = 12): string[] {
       if (found.length >= maxFiles) return
       if (SKIP_DIRS.has(name)) continue
       const abs = join(dir, name)
-      let st
+      // One handle for the stat and the read, so the size checked is the
+      // size of the bytes read (CodeQL js/file-system-race).
+      let fd: number
+      let isDir: boolean
+      let css: string | null = null
       try {
-        st = statSync(abs)
+        fd = openSync(abs, 'r')
       } catch {
         continue
       }
-      if (st.isDirectory()) {
+      try {
+        const st = fstatSync(fd)
+        isDir = st.isDirectory()
+        if (!isDir && name.endsWith('.css') && st.size < 300_000) css = readFileSync(fd, 'utf8')
+      } catch {
+        continue
+      } finally {
+        closeSync(fd)
+      }
+      if (isDir) {
         walk(abs, depth + 1)
         continue
       }
       const rel = relative(root, abs).replace(/\\/g, '/')
       if (/^tailwind\.config\.(js|cjs|mjs|ts)$/.test(name) || /\.tokens\.json$|^tokens\.json$/.test(name)) {
         found.push(rel)
-      } else if (name.endsWith('.css') && st.size < 300_000) {
-        const css = readFileSync(abs, 'utf8')
+      } else if (css !== null) {
         if (/@theme\b/.test(css) || (css.match(/--[\w-]+\s*:/g)?.length ?? 0) > 20) found.push(rel)
       }
     }

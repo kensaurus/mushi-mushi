@@ -11,7 +11,7 @@
  *   safe value to invent for it.
  */
 
-import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { closeSync, fstatSync, openSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
 
 const SKIP_DIRS = new Set(['node_modules', '.git', '.next', 'dist', 'build', '.turbo', '.worktrees', '.mushi', '.mushi-ux', 'coverage', '__tests__'])
@@ -25,7 +25,9 @@ function isStatic(path: string): boolean {
 /** Pure, for tests: absolute static paths declared in one React Router source file. */
 export function reactRouterPaths(source: string): string[] {
   const out: string[] = []
-  const re = /\bpath\s*[=:]\s*\{?\s*(["'`])(\/[^"'`]*)\1/g
+  // `(?:\{\s*)?`, not `\{?\s*`: two adjacent `\s*` made a run of spaces with
+  // no quote after it quadratic (CodeQL js/polynomial-redos).
+  const re = /\bpath\s*[=:]\s*(?:\{\s*)?(["'`])(\/[^"'`]*)\1/g
   for (const m of source.matchAll(re)) if (isStatic(m[2])) out.push(m[2])
   return out
 }
@@ -72,13 +74,28 @@ export function routesFromSource(root: string): string[] {
     for (const name of names) {
       if (SKIP_DIRS.has(name)) continue
       const abs = join(dir, name)
-      let st
+      // One handle for the stat and the read, so the size checked is the
+      // size of the bytes read (CodeQL js/file-system-race).
+      let fd: number
+      let isDir: boolean
+      let text = ''
       try {
-        st = statSync(abs)
+        fd = openSync(abs, 'r')
       } catch {
         continue
       }
-      if (st.isDirectory()) {
+      try {
+        const st = fstatSync(fd)
+        isDir = st.isDirectory()
+        if (!isDir && st.size < 400_000 && /\.(tsx|jsx|ts|js)$/.test(name) && !/\.(test|spec|stories)\./.test(name)) {
+          text = readFileSync(fd, 'utf8')
+        }
+      } catch {
+        continue
+      } finally {
+        closeSync(fd)
+      }
+      if (isDir) {
         walk(abs, depth + 1)
         continue
       }
@@ -88,11 +105,8 @@ export function routesFromSource(root: string): string[] {
       const rel = relative(root, abs)
       const next = nextRoutePath(rel)
       if (next) found.add(next)
-      if (st.size < 400_000 && /\.(tsx|jsx|ts|js)$/.test(name)) {
-        const text = readFileSync(abs, 'utf8')
-        if (text.includes('Route') || text.includes('createBrowserRouter') || text.includes('createRoutesFromElements')) {
-          for (const p of reactRouterPaths(text)) found.add(p)
-        }
+      if (text.includes('Route') || text.includes('createBrowserRouter') || text.includes('createRoutesFromElements')) {
+        for (const p of reactRouterPaths(text)) found.add(p)
       }
     }
   }

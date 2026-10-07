@@ -99,11 +99,21 @@ interface Trigger {
   role: string
 }
 
+/** A quoted attribute value: backslashes escaped before quotes, or a trailing `\` would eat the closing quote. */
+function quoteAttr(value: string): string {
+  return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
+}
+
+/** Pure, for tests: the selector replay uses for a trigger, by test id first, else by role and name. */
+export function triggerSelector(testId: string | null, role: string, label: string): string {
+  if (testId) return `[data-testid=${quoteAttr(testId)}]`
+  return role ? `role=${role}[name=${quoteAttr(label)}]` : ''
+}
+
 /** Elements that open a state without navigating: tabs, dialog and menu triggers. */
 async function findTriggers(page: Page): Promise<Trigger[]> {
-  return page.evaluate(() => {
-    const found: Array<{ selector: string; label: string; role: string }> = []
-    const seen = new Set<string>()
+  const raw = await page.evaluate(() => {
+    const found: Array<{ testId: string | null; label: string; role: string }> = []
     const candidates = document.querySelectorAll(
       '[role="tab"]:not([aria-selected="true"]), [aria-haspopup="dialog"], [aria-haspopup="menu"], [aria-haspopup="true"], button[aria-expanded="false"]',
     )
@@ -113,18 +123,19 @@ async function findTriggers(page: Page): Promise<Trigger[]> {
       const label = (el.getAttribute('aria-label') || (el as HTMLElement).innerText || '').trim().replace(/\s+/g, ' ').slice(0, 60)
       if (!label) continue
       const role = el.getAttribute('role') || (el.tagName === 'BUTTON' ? 'button' : el.tagName === 'A' ? 'link' : '')
-      const testId = el.getAttribute('data-testid')
-      const selector = testId
-        ? `[data-testid="${testId.replace(/"/g, '\\"')}"]`
-        : role
-          ? `role=${role}[name="${label.replace(/"/g, '\\"')}"]`
-          : ''
-      if (!selector || seen.has(selector)) continue
-      seen.add(selector)
-      found.push({ selector, label, role })
+      found.push({ testId: el.getAttribute('data-testid'), label, role })
     }
     return found
   })
+  const triggers: Trigger[] = []
+  const seen = new Set<string>()
+  for (const { testId, label, role } of raw) {
+    const selector = triggerSelector(testId, role, label)
+    if (!selector || seen.has(selector)) continue
+    seen.add(selector)
+    triggers.push({ selector, label, role })
+  }
+  return triggers
 }
 
 async function openedKind(page: Page, trigger: Trigger): Promise<SurfaceKind | null> {

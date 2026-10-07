@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 import { describe, expect, it } from 'vitest'
-import { normalizeLink, surfaceKey, tidyLabels } from './discover.js'
+import { normalizeLink, surfaceKey, tidyLabels, triggerSelector } from './discover.js'
 
 const BASE = 'http://localhost:5173/app'
 
@@ -16,6 +16,20 @@ describe('normalizeLink', () => {
     expect(normalizeLink('/export.csv', BASE)).toBeNull()
     expect(normalizeLink('/logout', BASE)).toBeNull()
     expect(normalizeLink('/auth/sign-out', BASE)).toBeNull()
+  })
+})
+
+describe('triggerSelector', () => {
+  it('prefers the test id, falls back to role and name, and skips an element with neither', () => {
+    expect(triggerSelector('open-keys', 'tab', 'Keys')).toBe('[data-testid="open-keys"]')
+    expect(triggerSelector(null, 'tab', 'Keys')).toBe('role=tab[name="Keys"]')
+    expect(triggerSelector('', '', 'Keys')).toBe('')
+  })
+
+  it('escapes backslashes as well as quotes, so a trailing backslash cannot end the string (CodeQL js/incomplete-sanitization)', () => {
+    expect(triggerSelector('a\\"b', 'button', 'x')).toBe('[data-testid="a\\\\\\"b"]')
+    expect(triggerSelector(null, 'button', 'Path C:\\')).toBe('role=button[name="Path C:\\\\"]')
+    expect(triggerSelector(null, 'tab', 'Say "hi"')).toBe('role=tab[name="Say \\"hi\\""]')
   })
 })
 

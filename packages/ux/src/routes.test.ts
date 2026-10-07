@@ -16,6 +16,13 @@ describe('reactRouterPaths', () => {
       const routes = [{ path: '/billing', element: <Billing /> }, { path: '/docs/[slug]' }]`
     expect(reactRouterPaths(src)).toEqual(['/login', '/settings', '/billing'])
   })
+
+  it('reads a long run of whitespace with no quote after it in linear time (CodeQL js/polynomial-redos)', () => {
+    const src = 'path=' + '\t'.repeat(100_000) + 'x <Route path = {  "/ok" } />'
+    const started = performance.now()
+    expect(reactRouterPaths(src)).toEqual(['/ok'])
+    expect(performance.now() - started).toBeLessThan(500)
+  })
 })
 
 describe('nextRoutePath', () => {

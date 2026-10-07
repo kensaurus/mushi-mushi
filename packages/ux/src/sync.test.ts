@@ -89,6 +89,14 @@ describe('syncConfigFromEnv', () => {
     expect(syncConfigFromEnv({})).toBeNull()
     expect(syncConfigFromEnv({ MUSHI_API_KEY: 'k', MUSHI_PROJECT_ID: 'p' })?.endpoint).toBe('https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api')
     expect(syncConfigFromEnv({ MUSHI_API_KEY: 'k', MUSHI_PROJECT_ID: 'p', MUSHI_API_ENDPOINT: 'https://self.host/api/' })?.endpoint).toBe('https://self.host/api')
+    expect(syncConfigFromEnv({ MUSHI_API_KEY: 'k', MUSHI_PROJECT_ID: 'p', MUSHI_API_ENDPOINT: 'https://self.host/api///' })?.endpoint).toBe('https://self.host/api')
+  })
+
+  it('trims an endpoint with a long run of slashes in linear time (CodeQL js/polynomial-redos)', () => {
+    const endpoint = 'https://self.host/' + '/'.repeat(100_000) + 'api'
+    const started = performance.now()
+    expect(syncConfigFromEnv({ MUSHI_API_KEY: 'k', MUSHI_PROJECT_ID: 'p', MUSHI_API_ENDPOINT: endpoint })?.endpoint).toBe(endpoint)
+    expect(performance.now() - started).toBeLessThan(500)
   })
 
   it('marks a run on GitHub Actions as a cloud run', () => {

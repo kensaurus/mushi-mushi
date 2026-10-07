@@ -45,9 +45,16 @@ export function syncConfigFromEnv(env: NodeJS.ProcessEnv = process.env): SyncCon
   return {
     apiKey,
     projectId,
-    endpoint: (env.MUSHI_API_ENDPOINT?.trim() || CLOUD_API_ENDPOINT).replace(/\/+$/, ''),
+    endpoint: trimTrailingSlashes(env.MUSHI_API_ENDPOINT?.trim() || CLOUD_API_ENDPOINT),
     mode: env.GITHUB_ACTIONS === 'true' ? 'cloud' : 'local',
   }
+}
+
+/** A loop, not `/\/+$/`: that regex is quadratic on a long run of '/' that does not end the string. */
+function trimTrailingSlashes(s: string): string {
+  let end = s.length
+  while (end > 0 && s.charCodeAt(end - 1) === 47) end--
+  return s.slice(0, end)
 }
 
 const PROJECT_LINE_RE = /^\s*(?:NEXT_PUBLIC_|VITE_|EXPO_PUBLIC_|PUBLIC_)?MUSHI_PROJECT_ID\s*=\s*["']?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})["']?\s*$/im
