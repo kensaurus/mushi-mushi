@@ -2,7 +2,7 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-10-07 · **678** routes.
+> Generated: 2026-10-07 · **679** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
@@ -10,7 +10,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | --- | ---: |
 | `adminOrApiKey` | 170 |
 | `apiKeyAuth` | 58 |
-| `jwtAuth` | 343 |
+| `jwtAuth` | 344 |
 | `jwtOrApiKey` | 3 |
 | `unknown` | 104 |
 
@@ -363,6 +363,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | PUT | `/v1/admin/projects/:id/store/reviews/settings` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/store-review-intake.ts` |
 | POST | `/v1/admin/projects/:id/sync-ci-secrets` | `jwtAuth` | `packages/server/supabase/functions/api/routes/project-ci-secrets.ts` |
 | POST | `/v1/admin/projects/:id/test-report` | `jwtAuth` | `packages/server/supabase/functions/api/routes/project-integrations.ts` |
+| POST | `/v1/admin/projects/:pid/content-quality/dismiss` | `jwtAuth` | `packages/server/supabase/functions/api/routes/content-quality.ts` |
 | POST | `/v1/admin/projects/:pid/gate-findings/:id/dismiss` | `jwtAuth` | `packages/server/supabase/functions/api/routes/gate-finding-dismiss.ts` |
 | GET | `/v1/admin/projects/:pid/integrations` | `unknown` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | POST | `/v1/admin/projects/:pid/integrations/discord/test` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/settings-research.ts` |

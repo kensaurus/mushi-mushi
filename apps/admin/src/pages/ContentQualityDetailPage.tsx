@@ -285,7 +285,7 @@ export function ContentQualityDetailPage() {
           helpTitle="About content quality issues"
           helpWhatIsIt="Rich detail for a flagged learning asset — quality signals, Langfuse trace, user feedback, and regenerate or resolve actions."
           helpUseCases={[
-            'Review why an asset was flagged (low judge score, user flags, downvotes)',
+            'Review why an asset was flagged (low source score, user flags, downvotes)',
             'Trigger regeneration when the source project can improve the asset',
             'Resolve or dismiss after manual review',
           ]}
@@ -364,7 +364,7 @@ export function ContentQualityDetailPage() {
             && (issue.downvote_ratio == null || (issue.reason !== 'high_downvote_ratio' && issue.downvote_ratio === 0)) ? (
             <div className="space-y-1">
               <p className="text-xs text-fg-muted italic">
-                No AI quality score yet — this asset was flagged directly by users.
+                No score from the source yet — this asset was flagged directly by users.
               </p>
               {issue.flag_count > 0 && (
                 <p className="text-xs text-fg-muted">
@@ -375,7 +375,15 @@ export function ContentQualityDetailPage() {
             </div>
           ) : (
             <div className="space-y-2.5">
-              <ScoreBar score={issue.judge_score} label="AI judge" />
+              {/* judge_score is whatever the source app sent: an AI grade from
+                  some sources, an up/down vote score from others (glot.it). */}
+              <ScoreBar score={issue.judge_score} label="Source score" />
+              {issue.judge_score != null && (
+                <p className="text-2xs text-fg-muted">
+                  The score the source app sent. Some sources send an up/down vote score here rather than an AI
+                  judge grade; any vote counts are listed below.
+                </p>
+              )}
               {fb?.avg_star != null && (
                 <ScoreBar score={fb.avg_star / 5} label="User stars" />
               )}
