@@ -35,6 +35,7 @@ import { TeamsIntegrationCard } from '../components/integrations/TeamsIntegratio
 import { LinearIntegrationCard } from '../components/integrations/LinearIntegrationCard'
 import { NotificationPrefsMatrix } from '../components/integrations/NotificationPrefsMatrix'
 import { ConfirmDialog } from '../components/ConfirmDialog'
+import { refreshNavCounts } from '../lib/useNavCounts'
 import {
   PLATFORM_DEFS,
   ROUTING_PROVIDERS,
@@ -204,6 +205,7 @@ export function IntegrationsPage() {
         `Copied to ${count} project${count !== 1 ? 's' : ''}`,
         detail || undefined,
       )
+      refreshNavCounts()
     }
   }
 
@@ -252,6 +254,7 @@ export function IntegrationsPage() {
     }
     toast.success(`${kindLabel(kind)} key removed`)
     reloadAll()
+    refreshNavCounts()
   }
 
   const latestByKind = useMemo(() => {
@@ -321,6 +324,9 @@ export function IntegrationsPage() {
     toast.success(`${kindLabel(kind)} saved`)
     setEditing(null)
     reloadAll()
+    // project_settings is not in the realtime publication: move the sidebar
+    // Integrations badge now, not on the next reload.
+    refreshNavCounts()
   }
 
   /** One plain sentence per probe outcome; `unknown` means nothing to test yet. */
