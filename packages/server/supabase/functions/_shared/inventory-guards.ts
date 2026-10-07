@@ -603,6 +603,57 @@ export const gatesRunRateLimiter = new RateLimiter({
 // ────────────────────────────────────────────────────────────────────────
 
 /**
+ * True when an inventory URL is something a cloud crawler can reach: https
+ * and not a loopback, private, `*.localhost` or `*.local` host. An inventory's
+ * `preview_url` is often the developer's `http://localhost:3000`.
+ */
+function isCloudReachableUrl(raw: string): boolean {
+  let url: URL
+  try {
+    url = new URL(raw)
+  } catch {
+    return false
+  }
+  if (url.protocol !== 'https:') return false
+  const host = url.hostname.toLowerCase()
+  if (host.endsWith('.localhost') || host.endsWith('.local')) return false
+  return !isPrivateOrSpecialHost(host)
+}
+
+/** Which URL the crawl uses, and why the others were passed over. */
+type CrawlBaseUrlChoice =
+  | { url: string; source: 'crawler_base_url' | 'preview_url' | 'staging_url' | 'base_url'; skipped: string[] }
+  | { url: null; skipped: string[] }
+
+/**
+ * Pick the crawl's base URL. An explicit project `crawler_base_url` wins as
+ * set (the operator chose it). Otherwise the inventory's preview, staging and
+ * production URLs are tried in that order, and only one a cloud crawler can
+ * reach counts: a `http://localhost:3000` preview falls through to the
+ * production `base_url`, while a real https preview is still preferred.
+ */
+export function pickCrawlBaseUrl(
+  crawlerBaseUrl: string | null | undefined,
+  app: { base_url?: string | null; preview_url?: string | null; staging_url?: string | null } | null | undefined,
+): CrawlBaseUrlChoice {
+  const explicit = crawlerBaseUrl?.trim()
+  if (explicit) return { url: explicit, source: 'crawler_base_url', skipped: [] }
+  const skipped: string[] = []
+  const candidates = [
+    ['preview_url', app?.preview_url],
+    ['staging_url', app?.staging_url],
+    ['base_url', app?.base_url],
+  ] as const
+  for (const [source, raw] of candidates) {
+    const value = raw?.trim()
+    if (!value) continue
+    if (isCloudReachableUrl(value)) return { url: value, source, skipped }
+    skipped.push(`${source} ${value} is not a public https URL`)
+  }
+  return { url: null, skipped }
+}
+
+/**
  * Build the SafeUrlOptions.allowHosts list from an inventory.app shape.
  * The crawler + synthetic monitor are only ever supposed to talk to the
  * customer's own app, so we lock the host set to whatever the YAML
