@@ -17,6 +17,7 @@ import { useState } from 'react'
 import { PromptDialog } from '../ConfirmDialog'
 import { Btn } from '../ui'
 import { apiFetchMutate } from '../../lib/supabase'
+import { refreshNavCounts } from '../../lib/useNavCounts'
 import { useToast } from '../../lib/toast'
 import { describeApiError } from '../../lib/humanizeApiError'
 import { useActiveOrgRole } from '../../lib/useActiveOrgRole'
@@ -57,6 +58,7 @@ export function DismissFindingButton({ projectId, findingId, onDismissed }: Prop
     }
     setOpen(false)
     toast.success('Finding dismissed', 'It comes back only if a later run of this check finds it again.')
+    refreshNavCounts()
     onDismissed?.()
   }
 

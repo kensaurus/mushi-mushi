@@ -7,6 +7,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { refreshNavCounts } from '../lib/useNavCounts'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { apiFetch } from '../lib/supabase'
 import { useRealtime } from '../lib/realtime'
@@ -391,6 +392,7 @@ export function AntiGamingPage() {
       }
       toast.success('Device unflagged')
       reloadAll()
+      refreshNavCounts()
     } catch (err) {
       toast.error('Could not unflag device', err instanceof Error ? err.message : String(err))
     } finally {

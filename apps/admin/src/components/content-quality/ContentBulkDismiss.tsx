@@ -11,6 +11,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { apiFetch } from '../../lib/supabase'
+import { refreshNavCounts } from '../../lib/useNavCounts'
 import { apiErrorText } from '../../lib/apiErrorText'
 import { ConfirmDialog } from '../ConfirmDialog'
 import { Btn, Textarea } from '../ui'
@@ -104,6 +105,8 @@ function BulkDismissDialog({ projectId, scope, onDone, onCancel }: DialogProps) 
         cache: 'no-store',
       })
       if (res.ok && res.data) {
+        // The sidebar's Content checks badge counts open flags; it has no realtime feed.
+        refreshNavCounts()
         onDone(res.data)
         return
       }
