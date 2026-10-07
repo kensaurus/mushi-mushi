@@ -140,15 +140,24 @@ interface Ask {
 /** One question to Claude Code, headless and read-only, in `cwd`. */
 async function askClaudeCode(prompt: string, cwd: string, model: string, signal?: AbortSignal): Promise<Ask> {
   const args = ['-p', '--model', model, '--tools', 'Read', '--disallowedTools', 'mcp__*', '--permission-mode', 'dontAsk', '--max-turns', '4', '--no-session-persistence', '--output-format', 'json']
-  const res = await run('claude', args, { cwd, stdin: prompt, shell: process.platform === 'win32', timeoutMs: 240_000, signal })
-  if (res.timedOut) return { text: null, costUsd: null, error: 'Claude Code did not answer within 4 minutes.' }
-  try {
-    const j = JSON.parse(res.stdout) as { result?: unknown; total_cost_usd?: unknown; is_error?: unknown }
-    if (j.is_error) return { text: null, costUsd: null, error: `Claude Code: ${String(j.result).slice(0, 200)}` }
-    return { text: String(j.result ?? ''), costUsd: typeof j.total_cost_usd === 'number' ? j.total_cost_usd : null }
-  } catch {
-    return { text: null, costUsd: null, error: `Claude Code exited ${res.exitCode}: ${res.tail.trim().slice(-200) || 'no output'}` }
+  let last: Ask = { text: null, costUsd: null, error: 'Claude Code did not run.' }
+  // One retry: a call that failed in a second with no output (studio run on
+  // glot.it, 2026-10-07) answered normally when repeated.
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    if (signal?.aborted) break
+    const res = await run('claude', args, { cwd, stdin: prompt, shell: process.platform === 'win32', timeoutMs: 240_000, signal })
+    if (res.timedOut) return { text: null, costUsd: null, error: 'Claude Code did not answer within 4 minutes.' }
+    try {
+      const j = JSON.parse(res.stdout) as { result?: unknown; total_cost_usd?: unknown; is_error?: unknown }
+      if (!j.is_error) return { text: String(j.result ?? ''), costUsd: typeof j.total_cost_usd === 'number' ? j.total_cost_usd : null }
+      last = { text: null, costUsd: null, error: `Claude Code: ${String(j.result).slice(0, 300)}` }
+    } catch {
+      const said = `${res.stdout.trim().slice(0, 200)} ${res.tail.trim().slice(-300)}`.trim()
+      last = { text: null, costUsd: null, error: `Claude Code exited ${res.exitCode}: ${said || 'no output on stdout or stderr'}` }
+    }
+    if (attempt === 1) await new Promise((r) => setTimeout(r, 5000))
   }
+  return last
 }
 
 /** One question to the Anthropic API, with the images inline. */

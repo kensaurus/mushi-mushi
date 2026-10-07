@@ -398,6 +398,9 @@ async function runLoop(opts: LoopOptions, runId: string, dir: string): Promise<R
         persist()
       }
 
+      // Captures start from a visited app, the same for every screen (capture.ts warmUp).
+      log('Opening every screen once, so each capture starts from a loaded app…')
+      await session.warmUp(server.url, [...new Set(state.surfaces.map((x) => x.surface.path))])
       phase('working', null)
       for (const s of state.surfaces) {
         if (opts.signal?.aborted) throw new Error('Stopped.')
@@ -806,6 +809,7 @@ async function runLoop(opts: LoopOptions, runId: string, dir: string): Promise<R
             record.outcome = 'rejected'
             record.reason = `Rolled back by ${review.model}: ${review.summary}`.slice(0, 600)
           } else if (review.error) {
+            log(`  ${review.model} review failed: ${review.error}`)
             record.reason += ` The ${review.model} review could not run (${review.error.slice(0, 160)}), so the measurements decided.`
           } else {
             record.reason += ` ${review.model}: ${review.verdict === 'keep' ? 'agrees' : 'unsure, kept on the measurements'}.`

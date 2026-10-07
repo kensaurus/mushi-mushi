@@ -25,6 +25,14 @@ export interface BrowserSession {
    * state after other screens wrote to localStorage, 2026-10-07).
    */
   freshContext(): Promise<BrowserContext>
+  /**
+   * Visit each path once in the shared context, then seed every later capture
+   * from the storage that leaves behind. A first-ever visit can sit on a boot
+   * screen past the content wait (glot.it /chat: a skeleton on desktop, blank
+   * on the phone, 2026-10-07), so captures start from a visited app, the same
+   * one for every screen.
+   */
+  warmUp(baseUrl: string, paths: readonly string[]): Promise<void>
   guard: GuardLog
   /** Selectors hidden in screenshots and left out of every probe (ignore.ts). */
   ignore: readonly string[]
@@ -73,15 +81,27 @@ export async function openSession(opts: SessionOptions = {}): Promise<BrowserSes
   }
   const guard = await installGuard(context, opts.allow ?? [])
   await context.addInitScript({ content: CLS_SCRIPT })
-  // The state every capture starts from, taken before any app page has run.
-  const seed = await context.storageState({ indexedDB: true })
+  // The state every capture starts from; warmUp replaces it with a visited app.
+  let seed = await context.storageState({ indexedDB: true })
+  const warmUp = async (baseUrl: string, paths: readonly string[]) => {
+    const page = await context.newPage()
+    try {
+      for (const p of paths) {
+        await gotoPatiently(page, surfaceUrl(baseUrl, p)).catch(() => null)
+        await settle(page).catch(() => undefined)
+      }
+    } finally {
+      await page.close()
+    }
+    seed = await context.storageState({ indexedDB: true })
+  }
   const freshContext = async () => {
     const fresh = await browser.newContext({ serviceWorkers: 'block', storageState: seed })
     await installGuard(fresh, opts.allow ?? [], guard)
     await fresh.addInitScript({ content: CLS_SCRIPT })
     return fresh
   }
-  return { context, freshContext, guard, ignore: ignoreList(opts.ignore), close: closeBrowser }
+  return { context, freshContext, warmUp, guard, ignore: ignoreList(opts.ignore), close: closeBrowser }
 }
 
 /**
