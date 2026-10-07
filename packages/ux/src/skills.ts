@@ -13,6 +13,7 @@
 
 import { closeSync, existsSync, fstatSync, openSync, readdirSync, readFileSync } from 'node:fs'
 import { basename, dirname, join, relative, sep } from 'node:path'
+import { MAX_SKILL_CHARS } from './packet.js'
 
 /**
  * The published npm package (served by jsDelivr): pinned to one version per
@@ -127,15 +128,37 @@ function relatedSkills(text: string): string[] {
  * Pure: several skills as one, applied in order. Each skill's files sit in a
  * folder named after it; the text says which folder is whose.
  */
-function chainSkills(skills: readonly ResolvedSkill[]): ResolvedSkill {
+/**
+ * Pure: several skills as one, applied in order. The prompt carries
+ * MAX_SKILL_CHARS of skill text, so each skill gets an equal share, cut at a
+ * paragraph; its whole SKILL.md goes into its folder for the agent to read.
+ * (Three chained skills were 33K characters: the second and third fell
+ * outside the excerpt, 2026-10-07.)
+ * @internal Exported for tests only.
+ */
+export function chainSkills(skills: readonly ResolvedSkill[]): ResolvedSkill {
   if (skills.length === 1) return skills[0]
   const files: Record<string, Buffer> = {}
-  for (const sk of skills) for (const [rel, buf] of Object.entries(sk.files)) files[`${sk.name}/${rel}`] = buf
+  for (const sk of skills) {
+    for (const [rel, buf] of Object.entries(sk.files)) files[`${sk.name}/${rel}`] = buf
+    files[`${sk.name}/SKILL.md`] = Buffer.from(sk.text)
+  }
+  const head = `This run applies ${skills.length} skills in this order: ${skills.map((sk, i) => `${i + 1}. ${sk.name}`).join(', ')}. Work through them in that order: plan and make the first skill's changes before the next skill's. Each skill's whole text and supporting files are in a folder named after it.`
+  const share = Math.floor((MAX_SKILL_CHARS - head.length) / skills.length) - 120
   const text = [
-    `This run applies ${skills.length} skills in this order: ${skills.map((sk, i) => `${i + 1}. ${sk.name}`).join(', ')}. Work through them in that order: plan and make the first skill's changes before the next skill's. Each skill's supporting files are in a folder named after it.`,
-    ...skills.map((sk, i) => `\n## Skill ${i + 1}: ${sk.name} (files in ${sk.name}/)\n\n${sk.text}`),
+    head,
+    ...skills.map((sk, i) => `\n## Skill ${i + 1}: ${sk.name} (all of it: ${sk.name}/SKILL.md)\n\n${excerpt(sk.text, share, `${sk.name}/SKILL.md`)}`),
   ].join('\n')
   return { name: skills.map((sk) => sk.name).join(' → '), text, files, source: [...new Set(skills.map((sk) => sk.source))].join(', '), related: [] }
+}
+
+/** The start of a skill's text, cut at a paragraph, with where to read the rest. */
+function excerpt(text: string, max: number, rest: string): string {
+  if (text.length <= max) return text
+  const note = `\n\n[Shortened here. Read ${rest} for the rest.]`
+  const room = max - note.length
+  const cut = text.lastIndexOf('\n\n', room)
+  return text.slice(0, cut > room / 2 ? cut : room) + note
 }
 
 function parseRepo(spec: string | undefined): { owner: string; repo: string; ref: string } {

@@ -14,7 +14,8 @@ import { CLS_GOOD } from './probes.js'
 import type { ProbeResult, Surface } from './types.js'
 
 const MAX_PACKET_CHARS = 24_000
-const MAX_SKILL_CHARS = 12_000
+/** Skill text a prompt carries; a chain splits it between its skills (skills.ts). */
+export const MAX_SKILL_CHARS = 12_000
 
 const DEFAULT_GUIDANCE = `Improve this one screen's UI and UX. In order of priority:
 1. Fix every measured problem listed below (accessibility violations, sideways scrolling, tap targets under 24×24 px, console errors).
