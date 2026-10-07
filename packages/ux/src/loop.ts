@@ -194,18 +194,21 @@ const SUMMARY_MAX = 72
 const DANGLING = /[\s,]+(?:a|an|and|as|at|between|by|for|from|in|into|is|of|on|or|so|that|the|to|while|with)$/i
 
 /**
- * Pure: the commit message for a kept attempt. Host apps turn commit subjects
- * into their in-app changelog (glot.it's generate-changelog maps `ux:` to
- * "improved"), so the subject is a plain sentence that ends on a whole word,
- * without file names; the step and the measurements go in the body.
+ * Pure: the commit message for a kept attempt. Host apps lint commits as
+ * conventional commits (glot.it allows only the standard types) and turn the
+ * subjects into their in-app changelog, so the subject is `fix(ux):` and a
+ * plain sentence that ends on a whole word, without file names; the screen,
+ * the step and the measurements go in the body.
  * @internal Exported for tests only.
  */
 export function commitMessage(path: string, screen: string, step: string | null, reason: string): string {
   const name = screen.split(/\s+[—|–]\s+/)[0].trim() || path
-  const summary = step ? stepSummary(step) : ''
-  const subject = `ux(${path}): ${summary || `Improve the ${name} screen`}`
-  return [subject, step ? `${name}: ${step}` : name, reason].join('\n\n')
+  const summary = (step ? stepSummary(step) : '') || `improve the ${name} screen`
+  return [`fix(ux): ${lowerFirst(summary)}`, step ? `${name} (${path}): ${step}` : `${name} (${path})`, reason].join('\n\n')
 }
+
+/** "Fix the caption" → "fix the caption"; "CTA buttons" and quoted text stay as they are. */
+const lowerFirst = (s: string) => (/^[A-Z][a-z]/.test(s) ? s[0].toLowerCase() + s.slice(1) : s)
 
 const isPath = (code: string) => code.includes('/') || /\.[a-z]{2,4}$/i.test(code)
 

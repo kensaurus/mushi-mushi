@@ -25,7 +25,7 @@ describe('commit messages for kept attempts', () => {
 
   it('uses the plan step’s plain summary', () => {
     expect(subject('Fix the low-vocab caption contrast: in `features/word-bank/components/grammar-inline-view.tsx`, replace `text-error/80`')).toBe(
-      'ux(/chat/): Fix the low-vocab caption contrast',
+      'fix(ux): fix the low-vocab caption contrast',
     )
   })
 
@@ -33,27 +33,27 @@ describe('commit messages for kept attempts', () => {
     const s = subject(
       'In `app/chat/_components/chat-content.tsx`, keep a fixed-height slot for the reconnecting `Alert` between the speak hub and the scenario list, and fill that slot while `chatHealth` is `"checking"`.',
     )
-    const summary = s.replace('ux(/chat/): ', '')
-    expect(summary).toMatch(/^Keep a fixed-height slot for the reconnecting Alert between/)
+    const summary = s.replace('fix(ux): ', '')
+    expect(summary).toMatch(/^keep a fixed-height slot for the reconnecting Alert between/)
     expect(summary.length).toBeLessThanOrEqual(72)
     expect(s).not.toMatch(/\.tsx|`/)
-    const words = 'Keep a fixed-height slot for the reconnecting Alert between the speak hub and the scenario list'.split(' ')
+    const words = 'keep a fixed-height slot for the reconnecting Alert between the speak hub and the scenario list'.split(' ')
     for (const w of summary.split(' ')) expect(words).toContain(w)
   })
 
   it('keeps code names as words, drops paths with their preposition, and never ends inside a bracket', () => {
     expect(subject('Analyze in `features/reader/components/reader-input.tsx` looks like a live CTA while the field is empty.')).toBe(
-      'ux(/chat/): Analyze looks like a live CTA while the field is empty',
+      'fix(ux): analyze looks like a live CTA while the field is empty',
     )
     expect(subject('In `x.tsx`, pass an accessible `label` into `CircularProgress` (the 0/77 ring beside the long page title) so the progressbar has a name')).toBe(
-      'ux(/chat/): Pass an accessible label into CircularProgress',
+      'fix(ux): pass an accessible label into CircularProgress',
     )
   })
 
   it('names the screen without the site suffix when there was no plan, and keeps the details in the body', () => {
     const msg = commitMessage('/friends/challenge/', 'Challenge a Friend | glot.it', null, 'Kept: problem score 1→0.')
-    expect(msg.split('\n')[0]).toBe('ux(/friends/challenge/): Improve the Challenge a Friend screen')
+    expect(msg.split('\n')[0]).toBe('fix(ux): improve the Challenge a Friend screen')
     expect(msg).toContain('Kept: problem score 1→0.')
-    expect(commitMessage('/chat/', 'Chat · แชท — glot.it', 'In `a.tsx`, do x.', 'r')).toContain('Chat · แชท: In `a.tsx`, do x.')
+    expect(commitMessage('/chat/', 'Chat · แชท — glot.it', 'In `a.tsx`, do x.', 'r')).toContain('Chat · แชท (/chat/): In `a.tsx`, do x.')
   })
 })
