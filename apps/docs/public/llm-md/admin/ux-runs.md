@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/ux-runs
 
 ---
 title: UX runs
-description: The UX runs page in the Mushi console shows each screen your coding agent worked on during a mushi ux run, on your machine or on GitHub Actions — improved, rolled back, moved by another fix, or could not load — with before and after screenshots.
+description: Each screen your coding agent worked on in a mushi ux run, with its plan, every attempt, before and after screenshots, and what was kept.
 ---
 
 # UX runs
