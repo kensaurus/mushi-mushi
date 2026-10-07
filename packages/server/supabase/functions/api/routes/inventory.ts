@@ -117,6 +117,34 @@ async function assertProjectWriteScope(
   return denied ? { ok: false, response: denied } : scope
 }
 
+/**
+ * Open (not allowlisted) findings of the newest finished run of each gate,
+ * the same runs the findings route and the Full-stack audit read. Counting
+ * every finding ever recorded showed glot.it 747 findings across 18 runs
+ * when its latest runs held about 105 (2026-10-07). All severities count, as
+ * before. A failed read is an error, never 0.
+ */
+async function countLatestOpenFindings(
+  db: ReturnType<typeof getServiceClient>,
+  projectId: string,
+): Promise<{ count: number } | { error: string }> {
+  let runIds: string[]
+  try {
+    runIds = (await loadLatestGateRuns(db, projectId, GATE_IDS)).map((r) => r.id)
+  } catch (err) {
+    return { error: (err as Error).message }
+  }
+  if (runIds.length === 0) return { count: 0 }
+  const { count, error } = await db
+    .from('gate_findings')
+    .select('id', { count: 'exact', head: true })
+    .in('gate_run_id', runIds)
+    .eq('allowlisted', false)
+  if (error) return { error: `gate_findings: ${error.message}` }
+  if (typeof count !== 'number') return { error: 'gate_findings: no count returned' }
+  return { count }
+}
+
 export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): void {
   // ============================================================
   // GET /v1/admin/inventory/stats — shell banner + INVENTORY SNAPSHOT
@@ -178,7 +206,7 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
       summaryRpc,
       discoveryRes,
       proposalsRes,
-      findingsRes,
+      openFindingsRead,
       gateRunRes,
       projectRes,
     ] = await Promise.all([
@@ -198,11 +226,7 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
         .select('id', { count: 'exact', head: true })
         .eq('project_id', activeProject.id)
         .eq('status', 'draft'),
-      db
-        .from('gate_findings')
-        .select('id', { count: 'exact', head: true })
-        .eq('project_id', activeProject.id)
-        .eq('allowlisted', false),
+      countLatestOpenFindings(db, activeProject.id),
       db
         .from('gate_runs')
         .select('started_at')
@@ -237,7 +261,9 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
     const hasInventory = Boolean(snapshot)
     const discoveryEvents = discoveryRes.count ?? 0
     const draftProposals = proposalsRes.count ?? 0
-    const openFindings = findingsRes.count ?? 0
+    // A failed count must not read as "no open findings" (topPriority 'clear').
+    if ('error' in openFindingsRead) return dbError(c, { message: openFindingsRead.error })
+    const openFindings = openFindingsRead.count
     const hasGithub = Boolean(projectRes.data?.github_app_installation_id)
 
     let topPriority: typeof empty.topPriority = 'no_inventory'

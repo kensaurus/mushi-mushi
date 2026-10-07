@@ -466,6 +466,7 @@
     "POST /v1/admin/projects/:id/store/reviews/pull": {"mcp": ["pull_store_reviews"], "cli": ["store reviews-pull"]},
     "POST /v1/admin/projects/:id/sync-ci-secrets": {"allow": "jwt-only"},
     "POST /v1/admin/projects/:id/test-report": {"allow": "jwt-only"},
+    "POST /v1/admin/projects/:pid/gate-findings/:id/dismiss": {"allow": "jwt-only", "note": "Dismissing a finding with a reason is a person's decision in a console session; jwtAuth refuses API keys, so an agent cannot hide its own findings. A new run of the check is the terminal's way to clear a stale finding."},
     "POST /v1/admin/projects/:pid/integrations/discord/test": {"mcp": ["test_notification_channel"]},
     "POST /v1/admin/projects/:pid/integrations/teams/test": {"mcp": ["test_notification_channel"]},
     "POST /v1/admin/projects/:pid/qa-stories": {"allow": "jwt-only"},

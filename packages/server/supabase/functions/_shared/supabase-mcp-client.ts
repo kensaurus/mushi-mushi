@@ -205,6 +205,19 @@ export function normalizeMcpTables(raw: unknown): TableInfo[] {
 }
 
 /**
+ * The edge functions from `list_edge_functions`: a bare array before, and
+ * `{ functions: [...] }` now (glot.it radar, 2026-10-05: "fns.map is not a
+ * function" errored five rules). Untrusted-data delimiters are unwrapped.
+ * Anything without a list is null — "could not list", never "no functions".
+ */
+export function normalizeMcpEdgeFunctions(raw: unknown): Array<Record<string, unknown>> | null {
+  const v = unwrapUntrusted(raw)
+  const list = Array.isArray(v) ? v : v && typeof v === 'object' ? (v as { functions?: unknown }).functions : null
+  if (!Array.isArray(list)) return null
+  return list.filter((f): f is Record<string, unknown> => Boolean(f) && typeof f === 'object')
+}
+
+/**
  * Query tools answer with text that wraps the JSON in
  * `<untrusted-data-…>` delimiters; return the parsed JSON inside, or the
  * input unchanged when it is not such a string.

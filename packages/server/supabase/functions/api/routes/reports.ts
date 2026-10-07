@@ -92,11 +92,14 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
     const sinceIso = reportWindowStartIso(14);
     const now = Date.now();
 
+    // Every count is for the active project, like the list under the tiles.
+    // `projectIds` (every project the caller can reach) once mixed other
+    // apps' reports into total14d / critical14d / openBacklog (glot.it, 2026-10-07).
     const [reportsRes, reportCountRes, keysRes, heartbeatRes] = await Promise.all([
       db
         .from('reports')
         .select('id, status, severity, created_at')
-        .in('project_id', projectIds)
+        .eq('project_id', activeProject.id)
         .gte('created_at', sinceIso)
         .order('created_at', { ascending: false })
         .limit(1000),

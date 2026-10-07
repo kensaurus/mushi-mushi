@@ -145,6 +145,54 @@ describe('inventory findings on a plan without inventory_v2', () => {
   })
 })
 
+describe('GET /v1/admin/inventory/stats openFindings', () => {
+  type Stats = { openFindings: number; topPriority: string }
+  const base = () => ({
+    projects: [{ id: P, name: 'glot.it', owner_id: 'user-a', organization_id: null, created_at: '2026-01-01T00:00:00Z' }],
+    organization_members: [],
+    project_members: [],
+    inventories: [{ id: 'inv-1', project_id: P, is_current: true, commit_sha: 'abc', ingested_at: '2026-05-04T00:00:00Z' }],
+  })
+
+  it('counts only the open findings of each gate’s newest run', async () => {
+    // glot.it, 2026-10-07: 747 findings ever recorded vs about 105 in the latest runs.
+    const oldFindings = Array.from({ length: 40 }, (_, i) => ({
+      id: `old-${i}`, gate_run_id: 'crawl-old', project_id: P, severity: 'error', allowlisted: false, rule_id: 'crawl-fetch-failed', message: 'x',
+    }))
+    db = makeFakeDb({
+      ...base(),
+      gate_runs: [
+        { id: 'crawl-old', project_id: P, gate: 'crawl', status: 'fail', started_at: '2026-05-03T00:00:00Z' },
+        { id: 'crawl-new', project_id: P, gate: 'crawl', status: 'fail', started_at: '2026-05-04T00:00:00Z' },
+        { id: 'radar-1', project_id: P, gate: 'radar', status: 'warn', started_at: '2026-10-07T00:00:00Z' },
+        { id: 'radar-run', project_id: P, gate: 'radar', status: 'running', started_at: '2026-10-07T01:00:00Z' },
+      ],
+      gate_findings: [
+        ...oldFindings,
+        { id: 'n-1', gate_run_id: 'crawl-new', project_id: P, severity: 'error', allowlisted: false, rule_id: 'crawl-fetch-failed', message: 'x' },
+        { id: 'n-2', gate_run_id: 'crawl-new', project_id: P, severity: 'info', allowlisted: false, rule_id: 'crawl-missing-in-app', message: 'x' },
+        { id: 'n-dismissed', gate_run_id: 'crawl-new', project_id: P, severity: 'error', allowlisted: true, rule_id: 'crawl-fetch-failed', message: 'x' },
+        { id: 'r-1', gate_run_id: 'radar-1', project_id: P, severity: 'warn', allowlisted: false, rule_id: 'spend_cap_unset', message: 'x' },
+        { id: 'r-running', gate_run_id: 'radar-run', project_id: P, severity: 'warn', allowlisted: false, rule_id: 'spend_cap_unset', message: 'x' },
+      ],
+    })
+    const res = await app.call('GET', '/v1/admin/inventory/stats') as unknown as { status: number; body: { ok: boolean; data: Stats } }
+    expect(res.status).toBe(200)
+    expect(res.body.data.openFindings).toBe(3)
+    expect(res.body.data.topPriority).toBe('open_findings')
+  })
+
+  it('a failed findings read is an error, never "no open findings"', async () => {
+    db = makeFakeDb(
+      { ...base(), gate_runs: [{ id: 'radar-1', project_id: P, gate: 'radar', status: 'warn', started_at: '2026-10-07T00:00:00Z' }] },
+      { failRead: (t) => (t === 'gate_findings' ? 'boom' : null) },
+    )
+    const res = await app.call('GET', '/v1/admin/inventory/stats') as unknown as { status: number; body: { ok: boolean } }
+    expect(res.status).toBe(500)
+    expect(res.body.ok).toBe(false)
+  })
+})
+
 describe('GATED_ROUTES', () => {
   it('names the findings read as the one exception under /v1/admin/inventory', async () => {
     const { GATED_ROUTES } = await import('../../supabase/functions/_shared/entitlements.ts')

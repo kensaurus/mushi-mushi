@@ -28,6 +28,7 @@ import { UpgradePrompt } from '../components/billing/UpgradePrompt'
 import { UserStoryMap } from '../components/inventory/UserStoryMap'
 import { InventoryTree, type TreeRow } from '../components/inventory/InventoryTree'
 import { GateFindingCard, type GateFinding } from '../components/inventory/GateFindingCard'
+import { DismissFindingButton } from '../components/gates/DismissFindingButton'
 import { ActionDetailDrawer } from '../components/inventory/ActionDetailDrawer'
 import { InventoryYamlDropzone } from '../components/inventory/InventoryYamlDropzone'
 import { CrawlerSettingsCard } from '../components/inventory/CrawlerSettingsCard'
@@ -100,7 +101,8 @@ interface FindingsPayload {
     commit_sha?: string | null
     started_at?: string
   }>
-  findings: Array<GateFinding & { gate_run_id?: string }>
+  /** Dismissed (allowlisted) findings come back too; the page filters them out. */
+  findings: Array<GateFinding & { gate_run_id?: string; allowlisted?: boolean | null }>
 }
 
 /**
@@ -324,15 +326,25 @@ export function InventoryPage() {
   // render "X open findings" against each story. The reconciler/gates
   // pin findings to whichever graph_node they affect (action, element,
   // page) so this same map serves the per-action chip on each card.
+  // Dismissed (allowlisted) findings are not open: never listed or counted.
+  const allFindings = findingsQuery.data?.findings
+  const findings = useMemo(() => (allFindings ?? []).filter((f) => !f.allowlisted), [allFindings])
+  const dismissedPerRun = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const f of allFindings ?? []) {
+      if (f.allowlisted && f.gate_run_id) m.set(f.gate_run_id, (m.get(f.gate_run_id) ?? 0) + 1)
+    }
+    return m
+  }, [allFindings])
   const findingsByNode = useMemo(() => {
     const m = new Map<string, number>()
-    for (const f of findingsQuery.data?.findings ?? []) {
+    for (const f of findings) {
       const nid = (f as { node_id?: string | null }).node_id
       if (!nid) continue
       m.set(nid, (m.get(nid) ?? 0) + 1)
     }
     return m
-  }, [findingsQuery.data?.findings])
+  }, [findings])
 
   const synthActions = useMemo(
     () =>
@@ -348,7 +360,6 @@ export function InventoryPage() {
 
   const gateCards = ['dead_handler', 'mock_leak', 'api_contract', 'crawl', 'status_claim'] as const
   const runs = findingsQuery.data?.runs ?? []
-  const findings = findingsQuery.data?.findings ?? []
 
   const driftFromFindings = useMemo(() => {
     const crawl = findings.filter(
@@ -567,11 +578,13 @@ export function InventoryPage() {
           <div className="grid gap-2 md:grid-cols-5" data-dav-anchor="inventory:verify">
             {gateCards.map((g) => {
               const latest = runs.find((r) => r.gate === g)
+              // findings_count is stored when the run ends; a dismissal never lowers it.
+              const open = latest ? Math.max(0, (latest.findings_count ?? 0) - (dismissedPerRun.get(latest.id) ?? 0)) : 0
               return (
                 <Card key={g} className="p-3">
                   <p className="text-2xs uppercase text-fg-faint">{g.replace(/_/g, ' ')}</p>
                   <p className="text-sm font-semibold">{latest?.status ?? '—'}</p>
-                  <p className="text-2xs text-fg-muted">{latest?.findings_count ?? 0} findings</p>
+                  <p className="text-2xs text-fg-muted">{open} open findings</p>
                 </Card>
               )
             })}
@@ -588,6 +601,11 @@ export function InventoryPage() {
                   const q = encodeURIComponent(`${path}${line ? ` line ${line}` : ''}`)
                   window.open(`https://github.com/search?q=${q}&type=code`, '_blank', 'noopener,noreferrer')
                 }}
+                action={
+                  projectId ? (
+                    <DismissFindingButton projectId={projectId} findingId={f.id} onDismissed={findingsQuery.reload} />
+                  ) : undefined
+                }
               />
             ))}
           </div>

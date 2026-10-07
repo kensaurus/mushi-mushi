@@ -2,7 +2,8 @@
  * FILE: apps/admin/src/components/gates/GateFindingsSection.tsx
  * PURPOSE: The open findings of the newest run per gate, with file, line,
  *          message and rule, on every plan (ADR 0018). A `spend_cap_unset`
- *          finding gets the one-click "Apply suggested caps" button.
+ *          finding gets the one-click "Apply suggested caps" button; every
+ *          finding gets "Dismiss" with a required reason.
  *
  *          States are explicit: loading, a failed read (with retry), a gate
  *          that never ran ("not checked yet", never a pass), a run that
@@ -16,6 +17,7 @@ import { Card, Loading, formatRelative } from '../ui'
 import { PageLoadError } from '../PageLoadError'
 import { GateFindingCard } from '../inventory/GateFindingCard'
 import { ApplySuggestedCapsButton } from './ApplySuggestedCapsButton'
+import { DismissFindingButton } from './DismissFindingButton'
 import { usePageData } from '../../lib/usePageData'
 import { LINK_ACCENT } from '../../lib/chipTone'
 import {
@@ -77,7 +79,7 @@ export function GateFindingsSection({ projectId, gate, neverRunText, limit = 50 
         <p className="text-xs text-fg-muted">The newest run of each check found nothing open.</p>
       )}
       {groups.map((g) => (
-        <CheckGroupCard key={g.gate} projectId={projectId} group={g} limit={limit} />
+        <CheckGroupCard key={g.gate} projectId={projectId} group={g} limit={limit} onChanged={reload} />
       ))}
     </div>
   )
@@ -95,7 +97,7 @@ const STATUS_TEXT: Record<string, { label: string; tone: string }> = {
  * whether that result is old, its open findings by rule, and where to work
  * on them. Small groups open by default; large ones show the rule summary.
  */
-function CheckGroupCard({ projectId, group: g, limit }: { projectId: string; group: CheckGroup; limit: number }) {
+function CheckGroupCard({ projectId, group: g, limit, onChanged }: { projectId: string; group: CheckGroup; limit: number; onChanged: () => void }) {
   const info = gateInfo(g.gate)
   const status = STATUS_TEXT[g.status] ?? { label: g.status, tone: 'text-fg-muted' }
   const days = g.ranAt ? Math.floor((Date.now() - Date.parse(g.ranAt)) / 86_400_000) : null
@@ -143,7 +145,12 @@ function CheckGroupCard({ projectId, group: g, limit }: { projectId: string; gro
                 <GateFindingCard
                   key={f.id}
                   f={f}
-                  action={caps ? <ApplySuggestedCapsButton projectId={projectId} values={caps} /> : undefined}
+                  action={
+                    <>
+                      {caps && <ApplySuggestedCapsButton projectId={projectId} values={caps} />}
+                      <DismissFindingButton projectId={projectId} findingId={f.id} onDismissed={onChanged} />
+                    </>
+                  }
                 />
               )
             })}

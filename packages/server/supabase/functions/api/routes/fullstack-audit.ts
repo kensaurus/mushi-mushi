@@ -203,6 +203,36 @@ interface GateRunRow {
   completed_at: string | null
 }
 
+/** Dismissed findings read per call; dismissals are a person's clicks, so far fewer in practice. */
+const MAX_DISMISSED_ROWS = 1_000
+
+/**
+ * `findings_count` is stored when a run ends and a dismissal (allowlisted)
+ * never lowers it, so the runs table would keep counting a finding someone
+ * dismissed. Subtract each latest run's dismissed findings. A failed read
+ * keeps the stored counts (never fewer problems than recorded).
+ */
+async function subtractDismissed(db: Db, projectId: string, latestByGate: Map<string, GateRunRow>): Promise<void> {
+  const ids = [...latestByGate.values()].filter((r) => (r.findings_count ?? 0) > 0).map((r) => r.id)
+  if (ids.length === 0) return
+  const { data, error } = await db
+    .from('gate_findings')
+    .select('gate_run_id')
+    .in('gate_run_id', ids)
+    .eq('allowlisted', true)
+    .limit(MAX_DISMISSED_ROWS)
+  if (error) {
+    alog.warn('audit: dismissed findings read failed; showing stored counts', { projectId, err: error.message })
+    return
+  }
+  const dismissed = new Map<string, number>()
+  for (const f of (data ?? []) as Array<{ gate_run_id: string }>) dismissed.set(f.gate_run_id, (dismissed.get(f.gate_run_id) ?? 0) + 1)
+  for (const [gate, run] of latestByGate) {
+    const n = dismissed.get(run.id)
+    if (n) latestByGate.set(gate, { ...run, findings_count: Math.max(0, (run.findings_count ?? 0) - n) })
+  }
+}
+
 /** The newest run per gate over the last 7 days, or an error message when the runs could not be read. */
 export async function readLatestGateRuns(
   db: Db,
@@ -224,6 +254,7 @@ export async function readLatestGateRuns(
     )
     const latestByGate = new Map<string, GateRunRow>()
     for (const run of read.rows) if (!latestByGate.has(run.gate)) latestByGate.set(run.gate, run)
+    await subtractDismissed(db, projectId, latestByGate)
     return { ok: true, runs: read.rows, latestByGate, truncated: read.truncated }
   } catch (err) {
     alog.warn('audit: gate_runs read failed', { projectId, err: err instanceof Error ? err.message : String(err) })
