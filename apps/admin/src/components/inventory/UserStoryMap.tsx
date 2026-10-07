@@ -1,7 +1,9 @@
+import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { bannerEnterSpring } from '../../lib/motion-tokens'
 import { useMotionTransition } from '../../lib/useMotionTransition'
-import { Badge } from '../ui'
+import { Badge, Btn } from '../ui'
+import { IconDots } from '../icons'
 import { InventoryStatusPill } from './InventoryStatusPill'
 
 /**
@@ -71,6 +73,62 @@ function actionIntent(a: StoryAction): string | null {
   return meta.intent ?? meta.action ?? null
 }
 
+/**
+ * One quiet "⋯" per story instead of a "Run gates" + "Run crawler" pair on
+ * every card (a long story list showed 10+ identical crawler buttons). The
+ * page-wide Run crawler / Run gates live once in the page action row; these
+ * items say what the story-scoped versions do.
+ */
+function StoryActionsMenu({
+  storyTitle,
+  onRunGates,
+  onCrawlPages,
+}: {
+  storyTitle: string
+  onRunGates?: () => void
+  onCrawlPages?: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const item = (label: string, run: () => void) => (
+    <Btn
+      variant="ghost"
+      size="sm"
+      className="flex w-full items-center justify-start rounded-none px-3 py-2 text-left text-xs font-normal text-fg hover:bg-surface-hover"
+      onClick={(e) => {
+        e.stopPropagation()
+        setOpen(false)
+        run()
+      }}
+    >
+      {label}
+    </Btn>
+  )
+  return (
+    <div className="relative" onBlur={() => setTimeout(() => setOpen(false), 150)}>
+      <Btn
+        variant="ghost"
+        size="sm"
+        aria-label={`Actions for ${storyTitle}`}
+        aria-expanded={open}
+        className="px-1.5"
+        onClick={(e) => {
+          e.stopPropagation()
+          setOpen((o) => !o)
+        }}
+      >
+        <IconDots size={14} />
+      </Btn>
+      {open && (
+        // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
+        <div className="absolute right-0 top-full mt-1 z-20 min-w-[200px] rounded-md border border-edge bg-surface shadow-lg py-1">
+          {onCrawlPages && item("Crawl this story's pages", onCrawlPages)}
+          {onRunGates && item('Run gates on this story', onRunGates)}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function UserStoryMap({ stories, findingsByNode, onSelectAction, onRunGatesForStory, onRunCrawlerForStory }: Props) {
   const enterTransition = useMotionTransition(bannerEnterSpring)
 
@@ -133,31 +191,12 @@ export function UserStoryMap({ stories, findingsByNode, onSelectAction, onRunGat
                   >
                     {story.actions.length} actions
                   </Badge>
-                  {onRunGatesForStory && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        onRunGatesForStory(story.id)
-                      }}
-                      className="text-2xs px-1.5 py-0.5 rounded border border-edge-subtle text-fg-muted hover:text-fg hover:border-brand/40 hover:bg-surface-overlay transition-opacity"
-                      title="Run gates for actions in this user story"
-                    >
-                      Run gates
-                    </button>
-                  )}
-                  {onRunCrawlerForStory && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        onRunCrawlerForStory(story.id)
-                      }}
-                      className="text-2xs px-1.5 py-0.5 rounded border border-edge-subtle text-fg-muted hover:text-fg hover:border-brand/40 hover:bg-surface-overlay transition-opacity"
-                      title="Run crawler for pages linked to this user story"
-                    >
-                      Run crawler
-                    </button>
+                  {(onRunGatesForStory || onRunCrawlerForStory) && (
+                    <StoryActionsMenu
+                      storyTitle={title}
+                      onRunGates={onRunGatesForStory ? () => onRunGatesForStory(story.id) : undefined}
+                      onCrawlPages={onRunCrawlerForStory ? () => onRunCrawlerForStory(story.id) : undefined}
+                    />
                   )}
                 </div>
               </div>

@@ -629,7 +629,6 @@ export function InventoryPage() {
           missingInInventory={driftFromFindings.missingInv}
           missingInApp={driftFromFindings.missingApp}
           mismatches={driftFromFindings.mismatch}
-          onReconcile={reconcile}
         />
       )}
 
