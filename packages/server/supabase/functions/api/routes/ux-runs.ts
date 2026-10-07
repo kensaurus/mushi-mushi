@@ -7,21 +7,28 @@
  * GET  /v1/admin/projects/:pid/ux-runs                        — list runs
  * GET  /v1/admin/projects/:pid/ux-runs/:localRunId           — one run, its screens (signed image URLs) and attempts
  * POST /v1/admin/projects/:pid/ux-runs/:localRunId/surfaces/:key/report — "File as bug"
+ * GET  /v1/admin/projects/:pid/ux-runs/:localRunId/pull-request — the run's PR, checks and mergeability, live from GitHub
+ * POST /v1/admin/projects/:pid/ux-runs/:localRunId/merge        — merge that PR on a person's click (console session only; ADR 0017)
  *
  * The CLI authenticates with a project API key (mcp:write); the console with
  * its JWT. Every route checks the caller can access the project. Writes go
  * through the service client because members only have SELECT under RLS.
  */
 
-import type { Hono } from 'npm:hono@4'
+import type { Context, Hono } from 'npm:hono@4'
 import { z } from 'npm:zod@3'
 import type { Variables } from '../types.ts'
 import { getServiceClient } from '../../_shared/db.ts'
-import { adminOrApiKey } from '../../_shared/auth.ts'
+import { adminOrApiKey, jwtAuth } from '../../_shared/auth.ts'
 import { callerCanAccessProject, dbError, jsonError } from '../shared.ts'
+import { logAudit } from '../../_shared/audit.ts'
+import { mergeGithubPullRequest, parsePrRepoRef } from '../../_shared/fix-merge.ts'
+import { fetchPullRequestDetails, parseGithubRepoUrl, resolveProjectGithubToken, type GithubRepoRef } from '../../_shared/github.ts'
 import {
   buildUxLoopReport,
   countStatuses,
+  summarizeChecks,
+  type CheckRunLike,
   uxCapturePath,
   uxShotPaths,
   UX_CAPTURES_BUCKET,
@@ -29,6 +36,7 @@ import {
 } from '../../_shared/ux-runs.ts'
 
 const RUN_ID_RE = /^[0-9]{8}-[0-9]{6}-[a-z0-9]{4}$/
+const PR_URL_RE = /^https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/pull\/[0-9]+$/
 const SURFACE_KEY_RE = /^[a-z0-9][a-z0-9-]{0,79}$/
 const READ_URL_TTL_SEC = 3600
 
@@ -88,6 +96,11 @@ const Snapshot = z.object({
   branch: z.string().max(200).nullable(),
   base_sha: z.string().regex(/^[0-9a-f]{7,40}$/).nullable(),
   cli_version: z.string().max(40).nullable(),
+  // The draft PR the studio opened from the run's branch; absent = unchanged.
+  pr: z
+    .object({ url: z.string().regex(PR_URL_RE), number: z.number().int().positive() })
+    .nullable()
+    .optional(),
   started_at: z.string().datetime(),
   finished_at: z.string().datetime().nullable(),
   surfaces: z
@@ -186,6 +199,7 @@ export function registerUxRunsRoutes(app: Hono<{ Variables: Variables }>): void 
           branch: snap.branch,
           base_sha: snap.base_sha,
           cli_version: snap.cli_version,
+          ...(snap.pr !== undefined ? { pr_url: snap.pr?.url ?? null, pr_number: snap.pr?.number ?? null } : {}),
           counts: countStatuses(snap.surfaces.map((s) => s.status)),
           started_at: snap.started_at,
           finished_at: snap.finished_at,
@@ -361,6 +375,68 @@ export function registerUxRunsRoutes(app: Hono<{ Variables: Variables }>): void 
     return c.json({ ok: true, data: { run, surfaces: withUrls, iterations: itersWithUrls } })
   })
 
+  // ── GET the run's pull request, live from GitHub ─────────────────────────
+  app.get('/v1/admin/projects/:pid/ux-runs/:runId/pull-request', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
+    const ctx = await prContext(c)
+    if ('response' in ctx) return ctx.response
+    const { token, ref, number } = ctx
+    try {
+      const pr = await fetchPullRequestDetails(token, ref, number)
+      if (!pr) return jsonError(c, 'NO_PR', `Pull request #${number} is gone from GitHub.`, 404)
+      const [title, required, runs] = await Promise.all([
+        prTitle(token, ref, number),
+        pr.baseRef ? requiredChecks(token, ref, pr.baseRef) : Promise.resolve([] as string[]),
+        pr.headSha ? checkRuns(token, ref, pr.headSha) : Promise.resolve([] as CheckRunLike[]),
+      ])
+      const merged = pr.merged || ctx.run.pr_state === 'merged'
+      return c.json({
+        ok: true,
+        data: {
+          url: pr.htmlUrl ?? ctx.run.pr_url,
+          number,
+          title,
+          state: merged ? 'merged' : pr.state === 'closed' ? 'closed' : pr.draft ? 'draft' : 'open',
+          mergeable: pr.mergeable,
+          mergeableState: pr.mergeableState,
+          baseRef: pr.baseRef,
+          headRef: pr.headRef,
+          checks: summarizeChecks(required, runs),
+          mergedAt: ctx.run.pr_merged_at ?? null,
+        },
+      })
+    } catch (err) {
+      return jsonError(c, 'UPSTREAM_ERROR', `GitHub did not answer: ${(err as Error).message.slice(0, 200)}`, 502)
+    }
+  })
+
+  // ── POST merge the run's pull request (a person's click; ADR 0017) ───────
+  // Console session only (jwtAuth): an API key cannot merge, a person clicks Merge.
+  app.post('/v1/admin/projects/:pid/ux-runs/:runId/merge', jwtAuth, async (c) => {
+    const ctx = await prContext(c, { write: true })
+    if ('response' in ctx) return ctx.response
+    const body = z
+      .object({ method: z.enum(['squash', 'merge', 'rebase']).default('squash') })
+      .safeParse((await c.req.json().catch(() => ({}))) ?? {})
+    if (!body.success) return jsonError(c, 'VALIDATION_ERROR', 'method must be squash, merge or rebase')
+    let result
+    try {
+      result = await mergeGithubPullRequest(ctx.token, ctx.ref, ctx.number, { mergeMethod: body.data.method })
+    } catch (err) {
+      return jsonError(c, 'UPSTREAM_ERROR', `GitHub did not merge: ${(err as Error).message.slice(0, 200)}`, 502)
+    }
+    if (!result.merged) return jsonError(c, 'MERGE_REJECTED', result.message ?? 'GitHub refused the merge.', 409)
+    const mergedAt = result.mergedAt ?? new Date().toISOString()
+    const db = getServiceClient()
+    const { error } = await db.from('ux_runs').update({ pr_state: 'merged', pr_merged_at: mergedAt }).eq('id', ctx.run.id)
+    if (error) return dbError(c, error)
+    await logAudit(db, ctx.projectId, ctx.userId, 'ux_run.merged', 'ux_run', ctx.run.id, {
+      pr_number: ctx.number,
+      method: body.data.method,
+      already_merged: result.alreadyMerged,
+    }).catch(() => null)
+    return c.json({ ok: true, data: { merged: true, alreadyMerged: result.alreadyMerged, sha: result.sha, message: result.message } })
+  })
+
   // ── POST File as bug ──────────────────────────────────────────────────────
   app.post('/v1/admin/projects/:pid/ux-runs/:runId/surfaces/:key/report', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {
     const userId = c.get('userId') as string
@@ -418,4 +494,85 @@ export function registerUxRunsRoutes(app: Hono<{ Variables: Variables }>): void 
     }
     return c.json({ ok: true, data: { report_id: reportId, reused: false } }, 201)
   })
+}
+
+interface RunPrRow {
+  id: string
+  pr_url: string | null
+  pr_number: number | null
+  pr_state: string | null
+  pr_merged_at: string | null
+}
+
+type PrContext =
+  | { response: Response }
+  | { userId: string; projectId: string; run: RunPrRow; token: string; ref: GithubRepoRef; number: number }
+
+/**
+ * The run, its PR and a token for it. The PR must be in a repo connected to
+ * this project: the URL comes from the CLI's sync, and the stored token may
+ * reach other repos.
+ */
+async function prContext(c: Context<{ Variables: Variables }>, opts: { write?: boolean } = {}): Promise<PrContext> {
+  const userId = c.get('userId') as string
+  const projectId = c.req.param('pid')!
+  const localRunId = c.req.param('runId')!
+  if (!RUN_ID_RE.test(localRunId)) return { response: jsonError(c, 'VALIDATION_ERROR', 'Malformed run id.') }
+  const db = getServiceClient()
+  const access = await callerCanAccessProject(c, db, userId, projectId)
+  if (!access.allowed) return { response: jsonError(c, 'FORBIDDEN', 'Not a member of this project', 403) }
+  if (opts.write && access.role === 'viewer') return { response: jsonError(c, 'FORBIDDEN', 'Viewers cannot merge.', 403) }
+  const { data: run, error } = await db
+    .from('ux_runs')
+    .select('id, pr_url, pr_number, pr_state, pr_merged_at')
+    .eq('project_id', projectId)
+    .eq('local_run_id', localRunId)
+    .maybeSingle()
+  if (error) return { response: dbError(c, error) }
+  const row = run as RunPrRow | null
+  if (!row) return { response: jsonError(c, 'NOT_FOUND', 'No such run', 404) }
+  const ref = row.pr_url ? parsePrRepoRef(row.pr_url) : null
+  if (!row.pr_url || !row.pr_number || !ref) {
+    return { response: jsonError(c, 'NO_PR', 'This run has no pull request yet. Open one from the studio.', 404) }
+  }
+  const [{ data: repos }, { data: settings }] = await Promise.all([
+    db.from('project_repos').select('repo_url').eq('project_id', projectId),
+    db.from('project_settings').select('github_repo_url').eq('project_id', projectId).maybeSingle(),
+  ])
+  const own = [...((repos ?? []) as Array<{ repo_url: string | null }>).map((r) => r.repo_url), (settings as { github_repo_url?: string | null } | null)?.github_repo_url]
+    .map((u) => parseGithubRepoUrl(u ?? null))
+    .filter((r): r is GithubRepoRef => r !== null)
+  const same = (a: GithubRepoRef, b: GithubRepoRef) => a.owner.toLowerCase() === b.owner.toLowerCase() && a.repo.toLowerCase() === b.repo.toLowerCase()
+  if (!own.some((r) => same(r, ref))) {
+    return { response: jsonError(c, 'FORBIDDEN', `${ref.owner}/${ref.repo} is not connected to this project.`, 403) }
+  }
+  const token = await resolveProjectGithubToken(db, projectId, null, { allowEnvFallback: false })
+  if (!token) return { response: jsonError(c, 'GITHUB_NOT_CONNECTED', 'Connect GitHub for this project (App or token) to see and merge its pull requests.', 409) }
+  return { userId, projectId, run: row, token, ref, number: row.pr_number }
+}
+
+const gh = (token: string) => ({
+  Authorization: `Bearer ${token}`,
+  Accept: 'application/vnd.github+json',
+  'X-GitHub-Api-Version': '2022-11-28',
+})
+
+async function prTitle(token: string, ref: GithubRepoRef, n: number): Promise<string | null> {
+  const res = await fetch(`https://api.github.com/repos/${ref.owner}/${ref.repo}/issues/${n}`, { headers: gh(token), signal: AbortSignal.timeout(10_000) })
+  if (!res.ok) return null
+  return ((await res.json()) as { title?: string }).title ?? null
+}
+
+/** Status checks the base branch's rules require (rulesets); none when there are no rules. */
+async function requiredChecks(token: string, ref: GithubRepoRef, branch: string): Promise<string[]> {
+  const res = await fetch(`https://api.github.com/repos/${ref.owner}/${ref.repo}/rules/branches/${encodeURIComponent(branch)}`, { headers: gh(token), signal: AbortSignal.timeout(10_000) })
+  if (!res.ok) return []
+  const rules = (await res.json()) as Array<{ type?: string; parameters?: { required_status_checks?: Array<{ context?: string }> } }>
+  return [...new Set(rules.filter((r) => r.type === 'required_status_checks').flatMap((r) => (r.parameters?.required_status_checks ?? []).map((s) => s.context ?? '')).filter(Boolean))]
+}
+
+async function checkRuns(token: string, ref: GithubRepoRef, sha: string): Promise<CheckRunLike[]> {
+  const res = await fetch(`https://api.github.com/repos/${ref.owner}/${ref.repo}/commits/${sha}/check-runs?per_page=100`, { headers: gh(token), signal: AbortSignal.timeout(10_000) })
+  if (!res.ok) return []
+  return ((await res.json()) as { check_runs?: CheckRunLike[] }).check_runs ?? []
 }

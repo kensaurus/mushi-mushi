@@ -181,6 +181,7 @@ export function toSnapshot(state: RunState, finished: boolean, uploaded: Readonl
     branch: state.branch,
     base_sha: state.baseSha,
     cli_version: null,
+    ...(state.pr ? { pr: { url: state.pr.url, number: state.pr.number } } : {}),
     started_at: state.createdAt,
     finished_at: finished || status === 'failed' ? (state.finishedAt ?? new Date().toISOString()) : null,
     surfaces: state.surfaces.map((s) => {

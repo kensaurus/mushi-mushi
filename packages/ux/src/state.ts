@@ -9,6 +9,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import { dirname, join } from 'node:path'
 import type { CheckerVerdict } from './checker.js'
 import type { JudgeVerdict } from './judge.js'
+import type { RunPullRequest } from './pr.js'
 import type { ProbeResult, Surface } from './types.js'
 
 export type SurfaceStatus =
@@ -163,6 +164,8 @@ export interface RunState {
   worktree: string | null
   branch: string | null
   baseSha: string | null
+  /** The PR the studio opened from the branch, or the existing PR the run was added to. */
+  pr?: RunPullRequest | null
   surfaces: SurfaceState[]
 }
 

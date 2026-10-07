@@ -2,15 +2,15 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-10-07 · **675** routes.
+> Generated: 2026-10-07 · **677** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
 | Auth | Count |
 | --- | ---: |
-| `adminOrApiKey` | 169 |
+| `adminOrApiKey` | 170 |
 | `apiKeyAuth` | 58 |
-| `jwtAuth` | 341 |
+| `jwtAuth` | 342 |
 | `jwtOrApiKey` | 3 |
 | `unknown` | 104 |
 
@@ -389,6 +389,8 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/projects/:pid/ux-runs` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ux-runs.ts` |
 | GET | `/v1/admin/projects/:pid/ux-runs/:runId` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ux-runs.ts` |
 | PUT | `/v1/admin/projects/:pid/ux-runs/:runId` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ux-runs.ts` |
+| POST | `/v1/admin/projects/:pid/ux-runs/:runId/merge` | `jwtAuth` | `packages/server/supabase/functions/api/routes/ux-runs.ts` |
+| GET | `/v1/admin/projects/:pid/ux-runs/:runId/pull-request` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ux-runs.ts` |
 | POST | `/v1/admin/projects/:pid/ux-runs/:runId/surfaces/:key/report` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ux-runs.ts` |
 | POST | `/v1/admin/projects/:pid/ux-runs/:runId/uploads` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ux-runs.ts` |
 | POST | `/v1/admin/projects/:pid/ux-runs/cloud` | `jwtAuth` | `packages/server/supabase/functions/api/routes/ux-cloud.ts` |

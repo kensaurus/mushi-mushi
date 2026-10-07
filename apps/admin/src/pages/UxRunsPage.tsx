@@ -20,6 +20,7 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { UxCloudRunCard } from '../components/ux-runs/UxCloudRunCard'
 import { UxStartRunCard } from '../components/ux-runs/UxStartRunCard'
 import { UxRunProgress } from '../components/ux-runs/UxRunProgress'
+import { UxRunPullRequest } from '../components/ux-runs/UxRunPullRequest'
 import { UxSurfaceDetail } from '../components/ux-runs/UxSurfaceDetail'
 import { usePageData } from '../lib/usePageData'
 import { useRealtimeReload } from '../lib/realtime'
@@ -74,7 +75,7 @@ function ProjectUxRuns({ projectId }: { projectId: string }) {
         title="UX runs"
         helpTitle="What is a UX run?"
         helpWhatIsIt="Your coding agent (Claude Code, Cursor, Codex) works through every page, tab and dialog of your app on your machine, or on your repo's GitHub Actions with a Cursor Cloud agent, one screen at a time, in a separate git branch. An edit is kept only if accessibility, layout and console measurements did not get worse. Screens a kept change moved elsewhere are flagged."
-        helpHowToUse="Open the studio with mushi ux ui in your repo (see Start a run below), or start a cloud run. Start with screens marked Moved by another fix or Rolled back. File anything you want fixed as a bug. Review the branch and open it as a draft PR; nothing is merged for you."
+        helpHowToUse="Open the studio with mushi ux ui in your repo (see Start a run below), or start a cloud run. Start with screens marked Moved by another fix or Rolled back. File anything you want fixed as a bug. Review the branch, open it as a draft PR from the studio, and merge it here once its required checks pass. Nothing merges until you confirm."
         helpFlowPath="/ux-runs"
       />
 
@@ -140,10 +141,23 @@ function ProjectUxRuns({ projectId }: { projectId: string }) {
           <div className="flex min-w-0 flex-1 flex-col gap-3">
             {detail.error && <PageLoadError error={detail.error} resource="this run" endpoint={`${listPath}/${runId}`} onRetry={detail.reload} />}
             {detail.data && <UxRunProgress run={detail.data.run} surfaces={detail.data.surfaces} />}
-            {detail.data?.run.branch && (
-              <p className="text-xs text-fg-secondary">
-                Kept changes are on <code className="font-mono">{detail.data.run.branch}</code>. Review it and open a draft PR when you are happy.
-              </p>
+            {run?.pr_url && runId ? (
+              <UxRunPullRequest
+                key={runId}
+                projectId={projectId}
+                runId={runId}
+                run={run}
+                onMerged={() => {
+                  detail.reload()
+                  list.reload()
+                }}
+              />
+            ) : (
+              run?.branch && (
+                <p className="text-xs text-fg-secondary">
+                  Kept changes are on <code className="font-mono">{run.branch}</code>. When you are happy with them, open a draft PR with the Open draft PR button in the studio (<code className="font-mono">mushi ux ui</code>).
+                </p>
+              )
             )}
             <div className="flex flex-col gap-3 xl:flex-row xl:items-start">
               <ul aria-label="Screens" className="flex shrink-0 flex-col gap-1 xl:w-80">

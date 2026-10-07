@@ -30,7 +30,9 @@ import { listModels } from './models.js'
 import { DEFAULT_SKILLS_REPO, listSkills, resolveSkill, resolveSkillChain } from './skills.js'
 import { startLoop, type LoopEvent, type LoopOptions } from './loop.js'
 import { resumeSettings, type ResumeSettings } from './resume.js'
-import { runDir } from './state.js'
+import { loadState, runDir, saveState } from './state.js'
+import { openRunPullRequest } from './pr.js'
+import { run } from './proc.js'
 import { startSync, syncConfigFromEnv, syncProjectMismatch } from './sync.js'
 import { repoRootOf } from './worktree.js'
 
@@ -360,11 +362,31 @@ program
       const saved = resumeSettings(repoRoot, runId)
       return startRun(settingsFromSaved(saved, runId), Boolean(saved.options.sync))
     }
+    const openPr = async (runId: string) => {
+      if (running.has(runId)) throw new Error('This run is still going. Open its pull request when it finishes.')
+      const dir = runDir(repoRoot, runId)
+      const state = loadState(dir)
+      if (!state) throw new Error('No such run.')
+      const exec = async (cmd: string, args: readonly string[]) => {
+        const r = await run(cmd, args, { cwd: repoRoot, timeoutMs: 120_000 })
+        if (r.exitCode !== 0) throw new Error(`${cmd} ${args.slice(0, 2).join(' ')} failed: ${r.tail.trim().slice(-300)}`)
+        return r.stdout
+      }
+      const pr = await openRunPullRequest(state, exec)
+      saveState(dir, { ...state, pr })
+      // The console shows the PR and its merge button from the synced run.
+      if (syncCfg && !mismatch) {
+        const err = await startSync(dir, syncCfg, new EventEmitter(), (m) => console.warn(m)).finish()
+        if (err) console.warn(`The pull request is open, but the console did not get it: ${err}`)
+      }
+      return pr
+    }
     const studio = await startStudio({
       repoRoot,
       port: Number(o.port),
       launch,
       resume,
+      openPr,
       stop: (runId) => {
         const abort = running.get(runId)
         if (!abort) return false

@@ -84,6 +84,8 @@ export interface StudioOptions {
   launch?: (input: LaunchInput) => Promise<{ runId: string; events: EventEmitter }>
   /** Stops a run this studio started; false when it is not running here. */
   stop?: (runId: string) => boolean
+  /** Opens the finished run's PR (or adds it to its base branch's PR); rejects with the reason it cannot. */
+  openPr?: (runId: string) => Promise<{ url: string; number: number; added: boolean }>
   /** Continues a stopped run with its saved settings; rejects with the reason it cannot. */
   resume?: (runId: string) => Promise<{ runId: string; events: EventEmitter }>
   listModels?: (agent: string) => Promise<ModelList>
@@ -171,7 +173,7 @@ export async function startStudio(opts: StudioOptions): Promise<Dashboard> {
         return res.end(STUDIO_PAGE)
       }
       if (req.method === 'GET' && url.pathname === '/api/meta') {
-        return json(res, 200, { launcher: Boolean(opts.launch), canStop: Boolean(opts.stop), canResume: Boolean(opts.resume), active: active?.runId ?? null, initial: opts.runId ?? null, repo: basename(opts.repoRoot) })
+        return json(res, 200, { launcher: Boolean(opts.launch), canStop: Boolean(opts.stop), canResume: Boolean(opts.resume), canOpenPr: Boolean(opts.openPr), active: active?.runId ?? null, initial: opts.runId ?? null, repo: basename(opts.repoRoot) })
       }
       if (req.method === 'GET' && url.pathname === '/api/runs') {
         const ids = existsSync(uxDir) ? readdirSync(uxDir).filter((d) => RUN_ID_RE.test(d)) : []
@@ -268,6 +270,16 @@ export async function startStudio(opts: StudioOptions): Promise<Dashboard> {
         if (origin && origin !== `http://127.0.0.1:${(server.address() as AddressInfo).port}`) return json(res, 403, { error: 'Wrong origin' })
         if (!opts.stop?.(stopMatch[1])) return json(res, 409, { error: 'That run is not running in this studio.' })
         return json(res, 202, { stopping: true })
+      }
+      const prMatch = url.pathname.match(/^\/api\/runs\/([0-9]{8}-[0-9]{6}-[a-z0-9]{4})\/pr$/)
+      if (req.method === 'POST' && prMatch) {
+        if (!opts.openPr) return json(res, 404, { error: 'This view is read-only. Start the studio with `mushi-ux ui`.' })
+        if (!String(req.headers['content-type'] ?? '').startsWith('application/json')) return json(res, 415, { error: 'JSON only' })
+        const origin = req.headers.origin
+        if (origin && origin !== `http://127.0.0.1:${(server.address() as AddressInfo).port}`) return json(res, 403, { error: 'Wrong origin' })
+        const pr = await opts.openPr(prMatch[1]).catch((err: Error) => err)
+        if (pr instanceof Error) return json(res, 409, { error: pr.message })
+        return json(res, 201, pr)
       }
       const resumeMatch = url.pathname.match(/^\/api\/runs\/([0-9]{8}-[0-9]{6}-[a-z0-9]{4})\/resume$/)
       if (req.method === 'POST' && resumeMatch) {

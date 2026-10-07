@@ -39,6 +39,71 @@ export interface UxRunListItem {
   skill?: string | null
   base_ref?: string | null
   error?: string | null
+  /** Draft PR the studio opened from the run's branch (absent until one exists). */
+  pr_url?: string | null
+  pr_number?: number | null
+  pr_state?: 'merged' | null
+  pr_merged_at?: string | null
+}
+
+/** GET …/ux-runs/:localRunId/pull-request: the run's PR as GitHub sees it now. */
+export interface UxPullRequest {
+  url: string
+  number: number
+  title: string
+  state: 'draft' | 'open' | 'merged' | 'closed'
+  mergeable: boolean | null
+  mergeableState: string | null
+  baseRef: string | null
+  headRef: string | null
+  checks: {
+    required: string[]
+    items: Array<{ name: string; status: string; conclusion: string | null; url: string | null; required: boolean }>
+    passing: boolean
+    pending: number
+    failing: number
+  }
+  mergedAt: string | null
+}
+
+export type UxCheckResult = 'pass' | 'fail' | 'pending'
+
+export interface UxRequiredCheck {
+  name: string
+  url: string | null
+  result: UxCheckResult
+}
+
+const PASSING_CONCLUSIONS = new Set(['success', 'neutral', 'skipped'])
+
+/**
+ * Required checks only, one row per required name. A required check that has
+ * not reported yet counts as pending; optional checks never block the merge.
+ */
+export function uxRequiredChecks(checks: UxPullRequest['checks']): UxRequiredCheck[] {
+  const names = new Set([...checks.required, ...checks.items.filter((i) => i.required).map((i) => i.name)])
+  return [...names].map((name) => {
+    const item = checks.items.find((i) => i.name === name)
+    if (!item || item.conclusion == null) return { name, url: item?.url ?? null, result: 'pending' }
+    return { name, url: item.url, result: PASSING_CONCLUSIONS.has(item.conclusion) ? 'pass' : 'fail' }
+  })
+}
+
+/** Why "Merge" is off for this PR, in words for the person; null when it can merge. */
+export function uxMergeBlocker(pr: UxPullRequest): string | null {
+  if (pr.state === 'merged') return 'Already merged.'
+  if (pr.state === 'closed') return 'The PR was closed on GitHub. Reopen it there to merge.'
+  const checks = uxRequiredChecks(pr.checks)
+  const failing = checks.filter((c) => c.result === 'fail').map((c) => c.name)
+  if (failing.length) return `Required check failing: ${failing.join(', ')}.`
+  const pending = checks.filter((c) => c.result === 'pending').map((c) => c.name)
+  if (pending.length) return `Waiting for required check${pending.length === 1 ? '' : 's'}: ${pending.join(', ')}.`
+  if (pr.mergeable === false) {
+    return pr.mergeableState === 'dirty'
+      ? `It has merge conflicts with ${pr.baseRef ?? 'the default branch'}. Resolve them on GitHub.`
+      : `GitHub says it cannot be merged yet${pr.mergeableState ? ` (${pr.mergeableState})` : ''}.`
+  }
+  return null
 }
 
 interface UxRunLiveStep {

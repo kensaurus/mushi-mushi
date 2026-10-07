@@ -140,3 +140,49 @@ export function countStatuses(statuses: readonly string[]): Record<string, numbe
   for (const st of statuses) out[st] = (out[st] ?? 0) + 1
   return out
 }
+
+export interface CheckRunLike {
+  name: string
+  status: string
+  conclusion: string | null
+  html_url?: string | null
+  started_at?: string | null
+}
+
+export interface PrChecks {
+  required: string[]
+  items: Array<{ name: string; status: string; conclusion: string | null; url: string | null; required: boolean }>
+  /** Every required check succeeded (or, with none required, every check that ran). */
+  passing: boolean
+  pending: number
+  failing: number
+}
+
+const GOOD = new Set(['success', 'neutral', 'skipped'])
+
+/**
+ * Pure: a PR's checks for the console's merge button. Required checks come from
+ * the base branch's rules; a required check that has not reported yet counts as
+ * pending, since GitHub will refuse the merge until it does. The newest run of
+ * each name wins (re-runs report again under the same name).
+ */
+export function summarizeChecks(required: readonly string[], runs: readonly CheckRunLike[]): PrChecks {
+  const latest = new Map<string, CheckRunLike>()
+  for (const r of runs) {
+    const seen = latest.get(r.name)
+    if (!seen || (r.started_at ?? '') > (seen.started_at ?? '')) latest.set(r.name, r)
+  }
+  const req = new Set(required)
+  const items = [...latest.values()].map((r) => ({
+    name: r.name,
+    status: r.status,
+    conclusion: r.conclusion,
+    url: r.html_url ?? null,
+    required: req.has(r.name),
+  }))
+  for (const name of req) if (!latest.has(name)) items.push({ name, status: 'expected', conclusion: null, url: null, required: true })
+  const gate = req.size > 0 ? items.filter((i) => i.required) : items
+  const pending = gate.filter((i) => i.status !== 'completed').length
+  const failing = gate.filter((i) => i.status === 'completed' && !GOOD.has(i.conclusion ?? '')).length
+  return { required: [...req], items, passing: pending === 0 && failing === 0, pending, failing }
+}

@@ -98,7 +98,7 @@ details.log{border-top:1px solid var(--line);background:var(--panel)}details.log
   <button class="btn primary" id="newBtn" hidden>＋ New run</button>
 </header>
 <div class="status" id="status" hidden>
-  <div class="top"><span id="phase" class="chip"></span><span id="phaseDetail" class="sub"></span><span class="grow"></span><span id="clock" class="sub mono"></span><button class="btn" id="stopBtn" hidden>■ Stop</button><button class="btn primary" id="resumeBtn" hidden>▶ Resume</button></div>
+  <div class="top"><span id="phase" class="chip"></span><span id="phaseDetail" class="sub"></span><span class="grow"></span><span id="clock" class="sub mono"></span><button class="btn" id="stopBtn" hidden>■ Stop</button><button class="btn primary" id="resumeBtn" hidden>▶ Resume</button><button class="btn primary" id="prBtn" hidden>Open draft PR</button><a class="btn" id="prLink" hidden target="_blank" rel="noopener"></a></div>
   <div class="meter" id="meter" role="img"></div>
   <div class="sub" id="who"></div>
 </div>
@@ -160,6 +160,13 @@ function renderStatus() {
   const resumeBtn = document.getElementById('resumeBtn')
   resumeBtn.hidden = !((interrupted || state.phase === 'failed') && resumable())
   resumeBtn.disabled = false
+  // A finished run with kept changes: open its PR (or add it to the PR its branch came from), then merge from the console.
+  const kept = state.surfaces.some((x) => x.iterations.some((it) => it.outcome === 'accepted' && it.commitSha))
+  const prBtn = document.getElementById('prBtn'), prLink = document.getElementById('prLink')
+  prBtn.hidden = !(meta && meta.canOpenPr && state.phase === 'done' && kept && !state.pr)
+  prBtn.textContent = (state.baseRef || '').startsWith('origin/mushi-ux/') ? 'Add to its pull request' : 'Open draft PR'
+  prLink.hidden = !state.pr
+  if (state.pr) { prLink.href = state.pr.url; prLink.textContent = 'PR #' + state.pr.number + (state.pr.added ? ' (added) ↗' : ' ↗'); prLink.title = 'Merge it from the Mushi console once its checks pass' }
   tick()
 }
 /** Minutes since the run last saved its state (it does every 30 s while alive); 0 while it is fresh. */
@@ -607,6 +614,17 @@ document.getElementById('resumeBtn').onclick = async () => {
     if (meta) meta.active = runId
     await loadRuns(); await loadState()
   } catch (e) { pd.textContent = e.message; pd.className = 'sub err' } finally { b.textContent = '▶ Resume'; b.disabled = false }
+}
+document.getElementById('prBtn').onclick = async () => {
+  const b = document.getElementById('prBtn'), pd = document.getElementById('phaseDetail'), label = b.textContent
+  b.disabled = true
+  b.textContent = 'Pushing…'
+  try {
+    const pr = await api('/api/runs/' + runId + '/pr', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })
+    pd.textContent = (pr.added ? 'Added to PR #' : 'Opened draft PR #') + pr.number + '. Merge it from the Mushi console once its checks pass.'
+    pd.className = 'sub'
+    await loadState()
+  } catch (e) { pd.textContent = e.message; pd.className = 'sub err' } finally { b.textContent = label; b.disabled = false }
 }
 document.getElementById('newBtn').onclick = openLauncher
 document.getElementById('stopBtn').onclick = async () => {

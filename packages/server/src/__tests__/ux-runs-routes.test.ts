@@ -24,6 +24,15 @@ const state = vi.hoisted(() => ({
 vi.mock('../../supabase/functions/_shared/db.ts', () => ({ getServiceClient: () => state.db }))
 vi.mock('../../supabase/functions/_shared/auth.ts', () => ({
   adminOrApiKey: () => async (_c: unknown, next: () => Promise<void>) => next(),
+  jwtAuth: async (_c: unknown, next: () => Promise<void>) => next(),
+}))
+// The PR routes' GitHub helpers read Deno at load; ux-runs-pr.test.ts tests them.
+vi.mock('../../supabase/functions/_shared/audit.ts', () => ({ logAudit: async () => null }))
+vi.mock('../../supabase/functions/_shared/fix-merge.ts', () => ({ mergeGithubPullRequest: async () => null, parsePrRepoRef: () => null }))
+vi.mock('../../supabase/functions/_shared/github.ts', () => ({
+  parseGithubRepoUrl: () => null,
+  resolveProjectGithubToken: async () => null,
+  fetchPullRequestDetails: async () => null,
 }))
 vi.mock('../../supabase/functions/api/shared.ts', () => ({
   dbError: (c: { json: (b: unknown, s: number) => unknown }, err: { message?: string } | null) =>
