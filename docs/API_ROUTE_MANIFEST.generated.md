@@ -2,7 +2,7 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-10-06 · **674** routes.
+> Generated: 2026-10-07 · **675** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
@@ -12,7 +12,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | `apiKeyAuth` | 58 |
 | `jwtAuth` | 341 |
 | `jwtOrApiKey` | 3 |
-| `unknown` | 103 |
+| `unknown` | 104 |
 
 ## Routes by path
 
@@ -631,6 +631,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | POST | `/v1/sdk/assistant` | `apiKeyAuth` | `packages/server/supabase/functions/api/routes/sdk-assistant.ts` |
 | GET | `/v1/sdk/config` | `apiKeyAuth` | `packages/server/supabase/functions/api/routes/public.ts` |
 | POST | `/v1/sdk/discovery` | `apiKeyAuth` | `packages/server/supabase/functions/api/routes/public.ts` |
+| POST | `/v1/sdk/erase-subject` | `unknown` | `packages/server/supabase/functions/api/routes/erase-subject.ts` |
 | POST | `/v1/sdk/events` | `apiKeyAuth` | `packages/server/supabase/functions/api/routes/events.ts` |
 | GET | `/v1/sdk/hall-of-fame` | `apiKeyAuth` | `packages/server/supabase/functions/api/routes/rewards.ts` |
 | GET | `/v1/sdk/latest-version` | `unknown` | `packages/server/supabase/functions/api/routes/public.ts` |
