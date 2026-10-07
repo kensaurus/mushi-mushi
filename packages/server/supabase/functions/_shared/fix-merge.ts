@@ -48,7 +48,7 @@ export async function mergeGithubPullRequest(
   token: string,
   ref: GithubRepoRef,
   pullNumber: number,
-  opts?: { mergeMethod?: MergeMethod; commitTitle?: string },
+  opts?: { mergeMethod?: MergeMethod; commitTitle?: string; commitMessage?: string },
 ): Promise<{ merged: boolean; alreadyMerged: boolean; sha?: string; message?: string; mergedAt?: string | null }> {
   const pr = await fetchPullRequest(token, ref, pullNumber);
   if (pr?.draft) {
@@ -75,6 +75,7 @@ export async function mergeGithubPullRequest(
       body: JSON.stringify({
         merge_method: opts?.mergeMethod ?? 'squash',
         commit_title: opts?.commitTitle,
+        commit_message: opts?.commitMessage,
       }),
     },
   );

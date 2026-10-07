@@ -418,9 +418,21 @@ export function registerUxRunsRoutes(app: Hono<{ Variables: Variables }>): void 
       .object({ method: z.enum(['squash', 'merge', 'rebase']).default('squash') })
       .safeParse((await c.req.json().catch(() => ({}))) ?? {})
     if (!body.success) return jsonError(c, 'VALIDATION_ERROR', 'method must be squash, merge or rebase')
+    // GitHub's default squash message lists every commit's subject, and one "[skip ci]" in it
+    // (a bot's baseline commit) silences every workflow on the merge, a store release included
+    // (glot.it #146, 2026-10-07). Write the message instead.
+    const title = await prTitle(ctx.token, ctx.ref, ctx.number).catch(() => null)
     let result
     try {
-      result = await mergeGithubPullRequest(ctx.token, ctx.ref, ctx.number, { mergeMethod: body.data.method })
+      result = await mergeGithubPullRequest(ctx.token, ctx.ref, ctx.number, {
+        mergeMethod: body.data.method,
+        ...(body.data.method === 'rebase'
+          ? {}
+          : {
+              commitTitle: title ? `${stripCiSkips(title)} (#${ctx.number})` : undefined,
+              commitMessage: `Merged from the Mushi console (UX run ${c.req.param('runId')}).`,
+            }),
+      })
     } catch (err) {
       return jsonError(c, 'UPSTREAM_ERROR', `GitHub did not merge: ${(err as Error).message.slice(0, 200)}`, 502)
     }
@@ -549,6 +561,14 @@ async function prContext(c: Context<{ Variables: Variables }>, opts: { write?: b
   const token = await resolveProjectGithubToken(db, projectId, null, { allowEnvFallback: false })
   if (!token) return { response: jsonError(c, 'GITHUB_NOT_CONNECTED', 'Connect GitHub for this project (App or token) to see and merge its pull requests.', 409) }
   return { userId, projectId, run: row, token, ref, number: row.pr_number }
+}
+
+/**
+ * Drops CI-skip markers ("[skip ci]", "[ci skip]", "***NO_CI***", …) from text that becomes a commit message.
+ * @internal Exported for tests only.
+ */
+export function stripCiSkips(text: string): string {
+  return text.replace(/\[(?:skip ci|ci skip|no ci|skip actions|actions skip)\]|\*\*\*NO_CI\*\*\*/gi, '').replace(/\s{2,}/g, ' ').trim()
 }
 
 const gh = (token: string) => ({

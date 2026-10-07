@@ -101,6 +101,8 @@ function setup(repo = 'https://github.com/kensaurus/glot.it'): { db: FakeDb; app
   state.token = 'tok'
   state.merge.mockReset()
   state.audit.mockClear()
+  // No test reaches GitHub; stubGithub() replaces this where a test needs answers.
+  vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 404 })))
   const app = new FakeApp()
   routes.registerUxRunsRoutes(app as never)
   return { db, app }
@@ -160,7 +162,11 @@ describe('a UX run pull request', () => {
     state.merge.mockResolvedValueOnce({ merged: true, alreadyMerged: false, sha: 'def5678' })
     const res = await app.call('POST', `${BASE}/merge`, { method: 'squash' })
     expect(res.status).toBe(200)
-    expect(state.merge).toHaveBeenCalledWith('tok', { owner: 'kensaurus', repo: 'glot.it' }, 147, { mergeMethod: 'squash' })
+    expect(state.merge).toHaveBeenCalledWith('tok', { owner: 'kensaurus', repo: 'glot.it' }, 147, {
+      mergeMethod: 'squash',
+      commitTitle: undefined,
+      commitMessage: `Merged from the Mushi console (UX run ${RUN}).`,
+    })
     expect(db.table('ux_runs')[0]).toMatchObject({ pr_state: 'merged' })
     expect(state.audit).toHaveBeenCalledWith(expect.anything(), P, 'u1', 'ux_run.merged', 'ux_run', expect.any(String), expect.objectContaining({ pr_number: 147 }))
   })
@@ -173,6 +179,25 @@ describe('a UX run pull request', () => {
     expect(res.status).toBe(409)
     expect(res.body.error).toMatchObject({ code: 'MERGE_REJECTED', message: 'Required status check "gate" is failing.' })
     expect(db.table('ux_runs')[0].pr_state).toBeUndefined()
+  })
+})
+
+// A bot commit's "[skip ci]" in GitHub's default squash message skipped every workflow on the
+// merge, a store release included (glot.it #146, 2026-10-07).
+describe('the squash message a console merge writes', () => {
+  it('never carries a CI-skip marker', () => {
+    expect(routes.stripCiSkips('fix(ux): polish screens [skip ci]')).toBe('fix(ux): polish screens')
+    expect(routes.stripCiSkips('chore: [ci skip] regen ***NO_CI***')).toBe('chore: regen')
+  })
+  it('titles the squash with the PR title and its number', async () => {
+    const { app } = setup()
+    await app.call('PUT', BASE, snapshot({ url: PR, number: 147 }))
+    stubGithub([])
+    state.role = 'admin'
+    state.merge.mockResolvedValueOnce({ merged: true, alreadyMerged: false })
+    await app.call('POST', `${BASE}/merge`, { method: 'squash' })
+    expect(state.merge.mock.calls[0][3]).toMatchObject({ commitTitle: 'fix(ux): steadier tone training (#147)' })
+    expect(state.merge.mock.calls[0][3].commitMessage).not.toMatch(/skip ci/i)
   })
 })
 
