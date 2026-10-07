@@ -5,9 +5,13 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { startStudio, type Dashboard } from './dashboard.js'
-import { devCommandGuesses, lastWorkingRun, parseCursorAbout } from './launcher.js'
+import { devCommandGuesses, lastWorkingRun, pageSuggestions, parseCursorAbout } from './launcher.js'
 import { fromCursorApi, listModels, parseCursorCliModels } from './models.js'
-import { listSkills, resolveSkill } from './skills.js'
+import { listSkills, mergeSkillList, resolveSkill } from './skills.js'
+import { STUDIO_PAGE } from './studio-page.js'
+import { cursorCliModel } from './agents.js'
+import { isWorthVisiting } from './routes.js'
+import { pageLabel } from './discover.js'
 
 let root = ''
 let studio: Dashboard | null = null
@@ -69,7 +73,6 @@ describe('skills', () => {
   })
 
   it('lists the skill folders, not a stale index', async () => {
-    const { mergeSkillList } = await import('./skills.js')
     const index = [
       { name: 'audit-security', group: 'Audit' },
       { name: 'folded-into-references', group: 'Audit' },
@@ -165,7 +168,6 @@ describe('studio', () => {
   })
 
   it('serves a page script that parses (escapes inside the template literal)', async () => {
-    const { STUDIO_PAGE } = await import('./studio-page.js')
     const script = STUDIO_PAGE.slice(STUDIO_PAGE.indexOf('<script>') + 8, STUDIO_PAGE.lastIndexOf('</script>'))
     // Wrapped in an async function so top-level await parses; it is never called.
     expect(() => new Function(`return async () => {\n${script}\n}`)).not.toThrow()
@@ -180,7 +182,6 @@ describe('studio', () => {
 
 describe('page suggestions', () => {
   it('offers concrete pages only, shallow first', async () => {
-    const { pageSuggestions } = await import('./launcher.js')
     expect(pageSuggestions(['/learn/thai-tones', '/${path}', '/404', '/', '/auth/callback', '/dev/force-error', '/chat', '/words/[id]', '/api/x'])).toEqual([
       '/',
       '/chat',
@@ -224,13 +225,11 @@ describe('studio run log', () => {
 
 describe('run controls', () => {
   it('maps UI model settings to the Cursor CLI bracket form', async () => {
-    const { cursorCliModel } = await import('./agents.js')
     expect(cursorCliModel('grok-4.7-xhigh')).toBe('grok-4.7-xhigh')
     expect(cursorCliModel('claude-opus-4-8?context=1m&effort=high')).toBe('claude-opus-4-8[context=1m,effort=high]')
   })
 
   it('skips error, callback, API and dev-only routes', async () => {
-    const { isWorthVisiting } = await import('./routes.js')
     expect(['/', '/practice', '/words'].every(isWorthVisiting)).toBe(true)
     expect(['/dev/force-error', '/auth/callback', '/api/x', '/404', '/words/[id]', '/${path}'].some(isWorthVisiting)).toBe(false)
   })
@@ -278,7 +277,6 @@ describe('run controls', () => {
 
 describe('screen names', () => {
   it('names pages that share one title from their path', async () => {
-    const { pageLabel } = await import('./discover.js')
     const title = 'glot.it – Learn Thai'
     expect(pageLabel(title, '/', [])).toBe(title)
     expect(pageLabel(title, '/words/', [{ label: title }])).toBe('Words')
