@@ -108,7 +108,8 @@ function quoteAttr(value: string): string {
   return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
 }
 
-/** Pure, for tests: the selector replay uses for a trigger, by test id first, else by role and name. */
+/** Pure, for tests: the selector replay uses for a trigger, by test id first, else by role and name. * @internal Exported for tests only.
+ */
 export function triggerSelector(testId: string | null, role: string, label: string): string {
   if (testId) return `[data-testid=${quoteAttr(testId)}]`
   return role ? `role=${role}[name=${quoteAttr(label)}]` : ''

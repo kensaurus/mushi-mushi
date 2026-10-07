@@ -162,6 +162,7 @@ function scrubFrameworkNoise(state: RunState): void {
  * Pure: why mapping found no screen, from the "skipped" lines and the dev
  * server's first error. Every page failing the same way (all HTTP 500) points
  * at the app, not the pages, so that case leads with the dev server.
+ * @internal Exported for tests only.
  */
 export function noScreensMessage(skipped: string[], devError: string | null): string {
   const reasons = skipped.map((s) => s.replace(/^\S+:\s*/, ''))

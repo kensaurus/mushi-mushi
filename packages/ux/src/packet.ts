@@ -101,7 +101,8 @@ export function parsePlan(text: string, max = MAX_PLAN_STEPS): string[] {
   return out
 }
 
-/** Pure: `text` within `max` characters, cut at a word with "…" so no word or `code` span ends half-way. */
+/** Pure: `text` within `max` characters, cut at a word with "…" so no word or `code` span ends half-way. * @internal Exported for tests only.
+ */
 export function cutAtWord(text: string, max: number): string {
   if (text.length <= max) return text
   const head = text.slice(0, max - 1)

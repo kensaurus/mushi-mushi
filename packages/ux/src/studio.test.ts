@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { startStudio, type Dashboard } from './dashboard.js'
-import { devCommandGuesses } from './launcher.js'
+import { devCommandGuesses, lastWorkingRun, parseCursorAbout } from './launcher.js'
 import { fromCursorApi, listModels, parseCursorCliModels } from './models.js'
 import { listSkills, resolveSkill } from './skills.js'
 
@@ -285,5 +285,27 @@ describe('screen names', () => {
     expect(pageLabel('', '/', [])).toBe('Home')
     expect(pageLabel(title, '/account/settings/', [{ label: title }])).toBe('Account / Settings')
     expect(pageLabel(title, '/words?tab=2', [{ label: title }, { label: 'Words' }])).toBe('Words (/words?tab=2)')
+  })
+})
+
+describe('launcher account and last working run', () => {
+  it('reads the account and plan from `agent about --format json`, and nothing else', () => {
+    const out = 'Using Node v22\n{"cliVersion":"2026.10.01","subscriptionTier":"Ultra","userEmail":"dev@example.com","model":"Grok 4.7"}'
+    expect(parseCursorAbout(out)).toEqual({ email: 'dev@example.com', plan: 'Ultra', usageUrl: 'https://cursor.com/dashboard/usage' })
+    expect(parseCursorAbout('{"cliVersion":"x"}')).toBeNull()
+    expect(parseCursorAbout('not json')).toBeNull()
+  })
+
+  it('offers the dev command of the newest run that mapped screens, never one that found none', () => {
+    root = mkdtempSync(join(tmpdir(), 'mushi-ux-last-'))
+    const write = (id: string, devCommand: string, screens: number) => {
+      const dir = join(root, '.mushi', 'ux', id)
+      mkdirSync(dir, { recursive: true })
+      writeFileSync(join(dir, 'state.json'), JSON.stringify({ version: 1, runId: id, options: { devCommand, startPaths: ['/practice'] }, surfaces: Array.from({ length: screens }, () => ({})) }))
+    }
+    write('20261006-141328-dkvu', 'npx next dev --webpack -p {port}', 3)
+    write('20261007-032240-inna', 'npx next dev -p {port}', 0)
+    expect(lastWorkingRun(root)).toEqual({ runId: '20261006-141328-dkvu', devCommand: 'npx next dev --webpack -p {port}', startPaths: ['/practice'] })
+    expect(lastWorkingRun(join(root, 'nowhere'))).toBeNull()
   })
 })

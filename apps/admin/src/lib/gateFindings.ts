@@ -83,7 +83,7 @@ export function latestOpenFindings(payload: GateFindingsPayload): LatestGateFind
 }
 
 /** A check whose newest run is older than this reads as stale, not as current. */
-export const STALE_CHECK_DAYS = 14
+const STALE_CHECK_DAYS = 14
 
 export interface CheckGroup {
   gate: string

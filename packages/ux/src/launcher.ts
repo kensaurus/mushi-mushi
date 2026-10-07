@@ -92,6 +92,7 @@ export function devCommandGuesses(repoRoot: string): { commands: string[]; warni
  * screen: proof they work here, which a guess from package.json is not
  * (glot.it needs `--webpack` that its dev script does not carry). A run that
  * found nothing is skipped, so a broken command is never offered again.
+ * @internal Exported for tests only.
  */
 export function lastWorkingRun(repoRoot: string): { runId: string; devCommand: string; startPaths: string[] } | null {
   const dir = join(repoRoot, '.mushi', 'ux')
@@ -123,7 +124,8 @@ export interface AgentAccount {
   usageUrl: string | null
 }
 
-/** Pure: the account fields of `agent about --format json`. */
+/** Pure: the account fields of `agent about --format json`. * @internal Exported for tests only.
+ */
 export function parseCursorAbout(stdout: string): AgentAccount | null {
   try {
     const j = JSON.parse(stdout.slice(stdout.indexOf('{'))) as { userEmail?: unknown; subscriptionTier?: unknown }

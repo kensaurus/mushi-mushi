@@ -186,6 +186,7 @@ export async function listSkills(opts: SkillOptions = {}): Promise<SkillListItem
  * skills folded into references and missed enhance-mobile-native-feel), so it
  * only names groups: a folder it misses goes under "Other", a name it lists
  * without a folder is left out.
+ * @internal Exported for tests only.
  */
 export function mergeSkillList(dirs: string[], index: SkillListItem[] | null): SkillListItem[] {
   const exists = new Set(dirs.filter((d) => SLUG_RE.test(d)))

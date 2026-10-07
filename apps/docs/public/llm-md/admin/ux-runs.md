@@ -21,8 +21,24 @@ keeps an edit only when accessibility, layout and console measurements did not g
 worse. With `--sync` it mirrors the run here as it goes.
 
 ```bash
+mushi ux ui      # pick the agent, a model from your account, a skill and the pages, then start
+# or straight from the terminal:
 mushi ux run --dev "pnpm dev --port {port}" --agent claude-code --sync
 ```
+
+A synced run shows here as it goes: its phase (installing, mapping, working on
+"Home, attempt 2"), a progress bar by outcome, and the screen the agent is on.
+While an attempt runs you see its step count, the file it last read or edited,
+the files changed so far, and the time used out of its time box. A running
+run checks in every 30 seconds; when it stops, the page says how long it has
+been quiet and how to resume it.
+
+Each screen keeps every attempt's screenshot at phone and desktop width; pick
+one to compare it with the baseline. **What the agent did in attempt N** lists
+the files that attempt read and edited. The agent's own words and the commands
+it ran stay on the machine that ran it. A run only syncs to the project its
+app reports to: if your login is for another project, `--sync` says so and
+stops.
 
   Exploring your app never sends a write request: every request that is not a read is
   blocked, forms are not submitted, and buttons such as Delete or Pay are never clicked.
@@ -41,7 +57,10 @@ draft PR. You need, in the app's front end repo:
 3. **Settings → Actions → General → Allow GitHub Actions to create pull requests**, or
    the run ends with a compare link instead of a draft PR.
 
-Mushi starts it with a `repository_dispatch` event through your GitHub connection,
+Pick the model from your Cursor account's list (with its settings, such as
+effort and context; this needs a Cursor key under Settings → AI keys) and,
+optionally, a skill from the synced skills catalog. Mushi starts it with a
+`repository_dispatch` event through your GitHub connection,
 at most three times an hour per app. When it cannot (no workflow, no connection,
 GitHub refused), the card shows the `gh workflow run` command to start it yourself.
 

@@ -580,7 +580,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     markdown: "admin/ux-runs.md",
     keywords: ["admin", "ux-runs", "runs", "ux"],
     headings: ["Run in the cloud", "What you see", "File as bug", "Where the changes are"],
-    excerpt: "The UX runs page in the Mushi console shows each screen your coding agent worked on during a mushi ux run, on your machine or on GitHub Actions — improved, rolled back, moved by…",
+    excerpt: "Each screen your coding agent worked on in a mushi ux run, with its plan, every attempt, before and after screenshots, and what was kept.",
   },
   {
     title: "Voice intake",
