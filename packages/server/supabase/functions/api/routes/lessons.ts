@@ -25,6 +25,7 @@ import { getServiceClient } from '../../_shared/db.ts'
 import { log } from '../../_shared/logger.ts'
 import { recordLlmUsage } from '../../_shared/llm-usage.ts'
 import { denyViewerWrite } from '../viewer-gate.ts'
+import { retirePromotedCluster, type ClusterRetireDb } from '../../_shared/lesson-cluster-retire.ts'
 import { jwtAuth, apiKeyAuth, adminOrApiKey, requireApiKeyScope } from '../../_shared/auth.ts'
 import {
   assertTargetProjectAccess,
@@ -303,6 +304,18 @@ export function registerLessonsRoutes(app: Hono<{ Variables: Variables }>) {
       .single()
 
     if (error) return dbError(c, error)
+
+    // Retiring the lesson retires the cluster it was promoted from, so real
+    // reports stop joining it (the clusterer skips only retired clusters).
+    // A failure is returned, not swallowed: retiring again is safe.
+    if (body.data.retired === true) {
+      const cluster = await retirePromotedCluster(
+        db as unknown as ClusterRetireDb,
+        (data as { cluster_id?: string | null } | null)?.cluster_id,
+        rowAccess.projectId,
+      )
+      if (cluster.error) return dbError(c, { message: cluster.error })
+    }
     return c.json({ ok: true, data })
   })
 
