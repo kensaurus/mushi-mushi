@@ -68,6 +68,22 @@ describe('skills', () => {
     expect(await listSkills({ localDir: root })).toEqual([{ name: 'enhance-mobile-native-feel', group: 'Enhance' }])
   })
 
+  it('lists the skill folders, not a stale index', async () => {
+    const { mergeSkillList } = await import('./skills.js')
+    const index = [
+      { name: 'audit-security', group: 'Audit' },
+      { name: 'folded-into-references', group: 'Audit' },
+    ]
+    expect(mergeSkillList(['audit-security', 'enhance-mobile-native-feel', '.git'], index)).toEqual([
+      { name: 'audit-security', group: 'Audit' },
+      { name: 'enhance-mobile-native-feel', group: 'Other' },
+    ])
+    expect(mergeSkillList(['b', 'a'], null)).toEqual([
+      { name: 'a', group: null },
+      { name: 'b', group: null },
+    ])
+  })
+
   it('fetches a skill folder from GitHub when there is no checkout', async () => {
     const calls: string[] = []
     const fakeFetch = (async (url: string) => {

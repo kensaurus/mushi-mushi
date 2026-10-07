@@ -142,20 +142,41 @@ export async function listSkills(opts: SkillOptions = {}): Promise<SkillListItem
     )
   }
   if (local && existsSync(join(local, 'skills'))) {
-    const indexFile = join(local, 'skills.sh.json')
-    const listed = existsSync(indexFile) ? fromIndex(JSON.parse(readFileSync(indexFile, 'utf8'))) : null
-    if (listed?.length) return listed
-    return readdirSync(join(local, 'skills'), { withFileTypes: true })
-      .filter((e) => e.isDirectory() && SLUG_RE.test(e.name))
-      .map((e) => ({ name: e.name, group: null }))
+    let index: unknown = null
+    try {
+      index = JSON.parse(readFileSync(join(local, 'skills.sh.json'), 'utf8'))
+    } catch {
+      // No index (or a broken one): the folders alone, ungrouped.
+    }
+    const dirs = readdirSync(join(local, 'skills'), { withFileTypes: true })
+      .filter((e) => e.isDirectory())
+      .map((e) => e.name)
+    return mergeSkillList(dirs, fromIndex(index))
   }
   const doFetch = opts.fetch ?? fetch
   const { owner, repo, ref } = parseRepo(opts.repo)
   const res = await doFetch(`https://raw.githubusercontent.com/${owner}/${repo}/${encodeURIComponent(ref)}/skills.sh.json`, { headers: { 'User-Agent': 'mushi-ux' } })
-  if (res.ok) {
-    const listed = fromIndex(await res.json().catch(() => null))
-    if (listed?.length) return listed
-  }
+  const listed = res.ok ? fromIndex(await res.json().catch(() => null)) : null
   const dirs = (await fetchJson(doFetch, `https://api.github.com/repos/${owner}/${repo}/contents/skills?ref=${encodeURIComponent(ref)}`)) as Array<{ type: string; name: string }> | null
-  return (dirs ?? []).filter((d) => d.type === 'dir' && SLUG_RE.test(d.name)).map((d) => ({ name: d.name, group: null }))
+  // The folder listing can fail (GitHub's unauthenticated limit is 60 an hour): then the index is all there is.
+  if (!dirs) return listed ?? []
+  return mergeSkillList(
+    dirs.filter((d) => d.type === 'dir').map((d) => d.name),
+    listed,
+  )
+}
+
+/**
+ * Pure: the skills that exist (one folder each), grouped as the index groups
+ * them. The index can be stale both ways (kensaurus/skills 2.4.0 listed 22
+ * skills folded into references and missed enhance-mobile-native-feel), so it
+ * only names groups: a folder it misses goes under "Other", a name it lists
+ * without a folder is left out.
+ */
+export function mergeSkillList(dirs: string[], index: SkillListItem[] | null): SkillListItem[] {
+  const exists = new Set(dirs.filter((d) => SLUG_RE.test(d)))
+  const grouped = (index ?? []).filter((s) => exists.has(s.name))
+  const seen = new Set(grouped.map((s) => s.name))
+  const rest = [...exists].filter((d) => !seen.has(d)).sort()
+  return [...grouped, ...rest.map((name) => ({ name, group: index?.length ? 'Other' : null }))]
 }
