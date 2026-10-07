@@ -19,6 +19,7 @@ export type AuditAction = 'report.created' | 'report.classified' | 'report.triag
   | 'inventory.proposal.edit' | 'inventory.proposal.accept' | 'inventory.proposal.discard'
   | 'inventory.settings.update'
   | 'report.bulk_undone'
+  | 'content_quality.bulk_dismissed'
   | 'settings.deleted'
   | 'fix_dispatch.cancelled'
   | 'ux_run.cloud_requested'

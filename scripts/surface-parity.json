@@ -466,6 +466,7 @@
     "POST /v1/admin/projects/:id/store/reviews/pull": {"mcp": ["pull_store_reviews"], "cli": ["store reviews-pull"]},
     "POST /v1/admin/projects/:id/sync-ci-secrets": {"allow": "jwt-only"},
     "POST /v1/admin/projects/:id/test-report": {"allow": "jwt-only"},
+    "POST /v1/admin/projects/:pid/content-quality/dismiss": {"allow": "jwt-only", "note": "Bulk dismiss is a person's decision with a required reason and an in-page count confirmation; no API-key or agent path."},
     "POST /v1/admin/projects/:pid/integrations/discord/test": {"mcp": ["test_notification_channel"]},
     "POST /v1/admin/projects/:pid/integrations/teams/test": {"mcp": ["test_notification_channel"]},
     "POST /v1/admin/projects/:pid/qa-stories": {"allow": "jwt-only"},
