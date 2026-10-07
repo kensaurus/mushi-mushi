@@ -37,6 +37,10 @@ export interface DiscoverOptions {
 
 /** Redirects to one sign-in path before discovery treats it as an auth wall. */
 const AUTH_WALL_REDIRECTS = 5
+/** Redirects to one path that are followed; past it the target is a moving one. */
+const MAX_REDIRECT_FOLLOWS = 3
+/** Page loads one mapping may make, per page it may keep: a hard stop for any loop. */
+const LOADS_PER_PAGE = 5
 const SIGN_IN_PATH_RE = /\/(log-?in|sign-?in|auth)\b/i
 const SIGN_OUT_PATH_RE =/\/(log-?out|sign-?out|logoff)\b/i
 
@@ -185,6 +189,7 @@ export async function discover(session: BrowserSession, opts: DiscoverOptions): 
   // Many start paths landing on the same sign-in page = an auth wall.
   const redirectsTo = new Map<string, number>()
   const surfaces: Surface[] = []
+  let loads = 0
   const page = await session.context.newPage()
   await page.setViewportSize({ width: 1440, height: 900 })
 
@@ -209,6 +214,10 @@ export async function discover(session: BrowserSession, opts: DiscoverOptions): 
     while (queue.length > 0 && surfaces.filter((s) => s.kind === 'page').length < maxPages) {
       if (opts.signal?.aborted) throw new Error('Stopped.')
       const path = queue.shift() as string
+      if (++loads > maxPages * LOADS_PER_PAGE) {
+        progress(`stopped mapping after ${loads - 1} page loads; ${queue.length + 1} path(s) not tried`)
+        break
+      }
       if (visited.has(path)) {
         if (only) progress(`skipped ${path}: already visited`)
         continue
@@ -246,9 +255,11 @@ export async function discover(session: BrowserSession, opts: DiscoverOptions): 
       }
       if (landedPath !== path && !sameModuloSlash(landedPath, path)) {
         // Redirected (sign-in wall, trailing slash): record the target instead.
-        if (!visited.has(landedPath)) queue.unshift(landedPath)
         const n = (redirectsTo.get(landed.pathname) ?? 0) + 1
         redirectsTo.set(landed.pathname, n)
+        // A target that keeps changing (a timestamp in the query) would be
+        // followed forever: follow redirects to one path a few times only.
+        if (!visited.has(landedPath) && n <= MAX_REDIRECT_FOLLOWS) queue.unshift(landedPath)
         if (n === AUTH_WALL_REDIRECTS && SIGN_IN_PATH_RE.test(landed.pathname)) {
           // Seeded routes behind the wall would each cost a load and redirect; drop them.
           const skipped = queue.filter((p) => p !== landedPath).length
@@ -262,26 +273,40 @@ export async function discover(session: BrowserSession, opts: DiscoverOptions): 
       }
 
       const here = landedPath
-      const shape = await domHash(page)
-      // A page the person named is always worked on: in an app shell several
-      // routes share one structure while loading, and glot.it lost /words,
-      // /chat and /account to this check (2026-10-06).
-      if (seenShapes.has(shape) && !only) continue
+      // A page that redirects on the client after it loaded (glot.it's
+      // /profile → /account when signed out) destroys the page under a read:
+      // that skips this page, never the run (it lost 11 minutes of mapping
+      // and six found pages, 2026-10-07).
+      let shape: string
+      let title: string
+      let links: Array<{ href: string; label: string }>
+      try {
+        shape = await domHash(page)
+        // A page the person named is always worked on: in an app shell several
+        // routes share one structure while loading, and glot.it lost /words,
+        // /chat and /account to this check (2026-10-06).
+        if (seenShapes.has(shape) && !only) continue
+        title = pageLabel(await page.title(), here, surfaces)
+        links = await page.$$eval('a[href]', (as) =>
+          as.map((a) => ({ href: a.getAttribute('href') ?? '', label: (a as HTMLElement).innerText.trim() })),
+        )
+      } catch (err) {
+        if (opts.signal?.aborted) throw err
+        progress(`skipped ${path}: it changed while being read (${(err as Error).message.split('\n')[0].slice(0, 120)})`)
+        continue
+      }
       seenShapes.add(shape)
-      const title = pageLabel(await page.title(), here, surfaces)
       surfaces.push({ key: surfaceKey(here, []), kind: 'page', path: here, steps: [], label: title, domHash: shape })
       progress(`page ${here}`)
 
-      const links = await page.$$eval('a[href]', (as) =>
-        as.map((a) => ({ href: a.getAttribute('href') ?? '', label: (a as HTMLElement).innerText.trim() })),
-      )
       for (const { href, label } of links) {
         if (isDestructiveLabel(label)) continue
         const next = normalizeLink(href, page.url())
         if (!only && next && !visited.has(next) && !queue.includes(next)) queue.push(next)
       }
 
-      const triggers = (await findTriggers(page)).filter((t) => !isDestructiveLabel(t.label)).slice(0, maxStates)
+      // Same rule for its tabs and dialogs: a failed read skips that state only.
+      const triggers = (await findTriggers(page).catch(() => [] as Trigger[])).filter((t) => !isDestructiveLabel(t.label)).slice(0, maxStates)
       for (const trigger of triggers) {
         const step: ReplayStep = { action: 'click', selector: trigger.selector, label: trigger.label }
         try {
@@ -298,9 +323,16 @@ export async function discover(session: BrowserSession, opts: DiscoverOptions): 
           if (!only && next && !visited.has(next) && !queue.includes(next)) queue.push(next)
           continue
         }
-        const kind = await openedKind(page, trigger)
-        if (!kind) continue
-        const stateShape = await domHash(page)
+        let kind: SurfaceKind | null
+        let stateShape: string
+        try {
+          kind = await openedKind(page, trigger)
+          if (!kind) continue
+          stateShape = await domHash(page)
+        } catch (err) {
+          if (opts.signal?.aborted) throw err
+          continue
+        }
         if (seenShapes.has(stateShape)) continue
         seenShapes.add(stateShape)
         surfaces.push({

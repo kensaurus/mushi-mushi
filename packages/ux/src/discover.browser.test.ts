@@ -153,3 +153,27 @@ describe('a dev server reload during navigation', () => {
     }
   }, 60_000)
 })
+
+describe('a page that keeps navigating while it is read', () => {
+  // glot.it's /profile redirects to /account on the client after it loads;
+  // the read under it threw "Execution context was destroyed" and that one
+  // page failed the whole run, six found pages with it (2026-10-07).
+  it('skips that page and keeps the rest', async () => {
+    const server = createServer((req, res) => {
+      const text = '<p>Enough words on this screen for the content wait to settle quickly.</p>'
+      if (req.url === '/') res.end(`<!doctype html><html lang="en"><title>Home</title><main><h1>Home</h1>${text}</main></html>`)
+      else if (req.url?.startsWith('/restless')) res.end(`<!doctype html><html lang="en"><title>Restless</title><main><h1>Restless</h1>${text}</main><script>setTimeout(() => location.replace('/restless?n=' + Date.now()), 15)</script></html>`)
+      else res.writeHead(404).end()
+    })
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', r))
+    const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
+    const own = await openSession()
+    try {
+      const surfaces = await discover(own, { baseUrl: url, startPaths: ['/restless', '/'], onlyStartPaths: true })
+      expect(surfaces.map((s) => s.path)).toContain('/')
+    } finally {
+      await own.close()
+      await new Promise((r) => server.close(r))
+    }
+  }, 120_000)
+})
