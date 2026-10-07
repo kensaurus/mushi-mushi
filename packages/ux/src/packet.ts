@@ -56,6 +56,13 @@ export interface PacketInput {
 export const MAX_STEP_FILES = 6
 /** Steps planned per screen at most. */
 export const MAX_PLAN_STEPS = 5
+/**
+ * Source files the planning pass may open besides the entry files. Grok 4.7
+ * xhigh opened 12-16 and ran out of its 6 minutes with no plan (glot.it
+ * Challenge, 2026-10-07); a read cap took the checker's code review from
+ * running out of turns to an answer in 23 s.
+ */
+const PLAN_READ_BUDGET = 6
 
 /**
  * Steps mode, the planning pass: look, list small separate improvements,
@@ -73,12 +80,12 @@ export function buildPlanPacket(input: Omit<PacketInput, 'step' | 'iteration' | 
     input.entryFiles?.length ? `## Start here\nThese files render this screen:\n${input.entryFiles.map((f) => `- ${f}`).join('\n')}` : '',
     `## Screenshots (read these images first)\n${Object.entries(input.shots)
       .map(([vp, p]) => `- ${vp}: ${p}`)
-      .join('\n')}`,
+      .join('\n')}\nYour read tool opens them as images where they are: do not copy them anywhere.`,
     `## Measured problems\n${findings.length ? findings.join('\n') : '- None measured.'}`,
     input.skillText
       ? `## Guidance\nUse this skill to choose what to improve on this one screen (its supporting files are in \`${input.skillDir ?? '.mushi-ux/skill'}/\`):\n\n${input.skillText.slice(0, MAX_SKILL_CHARS)}`
       : `## Guidance\n${DEFAULT_GUIDANCE}`,
-    `## What to do\nList 2 to ${maxSteps} small, separate improvements for this screen, most valuable first. Each must be one focused change a developer could make in a few minutes, touching at most 3 files, that does not depend on the others. Name the component or file each one changes. Write them to \`.mushi-ux/PLAN.md\`, one per line starting with "- ", within your first 2 minutes, from the screenshots and the "Start here" files alone; then refine the file if you have time, and reply with the same list. You are stopped when the time is up, and a missing PLAN.md wastes the whole pass. Do not edit any other file: each item gets its own attempt later.`,
+    `## What to do\nList 2 to ${maxSteps} small, separate improvements for this screen, most valuable first. Each must be one focused change a developer could make in a few minutes, touching at most 3 files, that does not depend on the others. Name the component or file each one changes. Open at most ${PLAN_READ_BUDGET} source files besides the "Start here" ones; each step's own attempt reads the rest. Write them to \`.mushi-ux/PLAN.md\`, one per line starting with "- ", within your first 2 minutes, from the screenshots and the "Start here" files alone; then refine the file if you have time, and reply with the same list. You are stopped when the time is up, and a missing PLAN.md wastes the whole pass. Do not edit any other file: each item gets its own attempt later.`,
     `## Rules\n- Do not read or change node_modules or the framework's own code.\n- Do not plan changes to data fetching, API calls, auth, routing, state management or tests.\n- If the screen is already good, write fewer items.`,
   ]
   return sections.filter(Boolean).join('\n\n').slice(0, MAX_PACKET_CHARS)
