@@ -1,5 +1,13 @@
 # @mushi-mushi/node
 
+## 1.3.1
+
+### Patch Changes
+
+- 9556ab2: Shorter READMEs with a diagram of how the package fits, a copy-paste quick start and a table of what is inside. Fixes three wrong examples: the Node handlers and `attachUnhandledHook` take `{ client }` (Hono's handler also takes `next`), and `useMushi()` has no `open`, `close` or `setUser`.
+- Updated dependencies [9556ab2]
+  - @mushi-mushi/core@1.31.2
+
 ## 1.3.0
 
 ### Minor Changes
