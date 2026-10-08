@@ -40,6 +40,40 @@ declare const Deno: {
 
 const rlog = log.child('inventory-gates')
 
+/**
+ * The api_dep nodes the CURRENT inventory declares. Graph nodes outlive the
+ * snapshot that created them (an ingest finds or creates, never prunes), so
+ * reading every api_dep node kept a superseded draft's APIs in the contract
+ * check forever: glot.it's showed 13 APIs its inventory no longer lists
+ * (2026-10-08). When the current inventory cannot be read, every node is used.
+ *
+ * @internal Exported for inventory-gates-api-deps.test.ts.
+ */
+export async function readDeclaredApiDeps(
+  db: SupabaseClient,
+  projectId: string,
+): Promise<Array<{ id: string; label: string }>> {
+  const [{ data: nodes }, { data: current }] = await Promise.all([
+    db
+      .from('graph_nodes')
+      .select('id, label')
+      .eq('project_id', projectId)
+      .eq('node_type', 'api_dep')
+      .returns<Array<{ id: string; label: string }>>(),
+    db
+      .from('inventories')
+      .select('parsed')
+      .eq('project_id', projectId)
+      .eq('is_current', true)
+      .maybeSingle(),
+  ])
+  const pages = (current?.parsed as { pages?: Array<{ elements?: Array<{ backend?: Array<{ method: string; path: string }> }> }> } | null)?.pages
+  if (!Array.isArray(pages)) return nodes ?? []
+  const declared = new Set<string>()
+  for (const p of pages) for (const el of p.elements ?? []) for (const a of el.backend ?? []) declared.add(`${a.method}:${a.path}`)
+  return (nodes ?? []).filter((n) => declared.has(n.label))
+}
+
 type GateName =
   | 'dead_handler'
   | 'mock_leak'
@@ -236,12 +270,7 @@ async function runApiContractGate(
 ): Promise<GateOutcome> {
   const runId = await startGateRun(db, body, 'api_contract')
 
-  const { data: apiDeps } = await db
-    .from('graph_nodes')
-    .select('id, label, metadata')
-    .eq('project_id', body.project_id!)
-    .eq('node_type', 'api_dep')
-    .returns<Array<{ id: string; label: string; metadata: Record<string, unknown> | null }>>()
+  const apiDeps = await readDeclaredApiDeps(db, body.project_id!)
 
   // Prefer caller-supplied discovered_apis (the mcp-ci `discover-api`
   // helper walks Next.js + OpenAPI + Supabase for the customer in CI
@@ -326,14 +355,7 @@ async function runOrphanEndpointGate(
   // Collect discovered routes from the latest crawl + declared api_deps.
   const discovered: Set<string> = new Set(body.discovered_apis ?? [])
 
-  const { data: apiDeps } = await db
-    .from('graph_nodes')
-    .select('label')
-    .eq('project_id', body.project_id!)
-    .eq('node_type', 'api_dep')
-    .returns<Array<{ label: string }>>()
-
-  for (const dep of apiDeps ?? []) discovered.add(dep.label)
+  for (const dep of await readDeclaredApiDeps(db, body.project_id!)) discovered.add(dep.label)
 
   if (discovered.size === 0) {
     await finishGateRun(db, runId, 'skipped', { reason: 'no discovered routes' }, 0)
@@ -432,13 +454,7 @@ async function runUnknownCallGate(
 
   // Known-good: declared api_deps + discovered routes from latest crawl.
   const known = new Set<string>(body.discovered_apis ?? [])
-  const { data: apiDeps } = await db
-    .from('graph_nodes')
-    .select('label')
-    .eq('project_id', body.project_id!)
-    .eq('node_type', 'api_dep')
-    .returns<Array<{ label: string }>>()
-  for (const dep of apiDeps ?? []) known.add(dep.label)
+  for (const dep of await readDeclaredApiDeps(db, body.project_id!)) known.add(dep.label)
 
   // Get project base URL to filter out third-party calls.
   const { data: settings } = await db

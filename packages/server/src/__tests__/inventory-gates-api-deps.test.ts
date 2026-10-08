@@ -1,0 +1,38 @@
+/**
+ * The API-contract, orphan-endpoint and unknown-call gates read only the
+ * api_dep nodes the current inventory declares, not every node an earlier
+ * snapshot left in the graph.
+ */
+import { describe, expect, it } from 'vitest'
+import { readDeclaredApiDeps } from '../../supabase/functions/inventory-gates/index.ts'
+
+function fakeDb(nodes: Array<{ id: string; label: string }>, parsed: unknown) {
+  return {
+    from(table: string) {
+      const chain = {
+        select: () => chain,
+        eq: () => chain,
+        returns: async () => ({ data: nodes, error: null }),
+        maybeSingle: async () => ({ data: parsed === undefined ? null : { parsed }, error: null }),
+      }
+      void table
+      return chain
+    },
+  } as never
+}
+
+const nodes = [
+  { id: '1', label: 'POST:/functions/v1/glot-ai-chat' },
+  { id: '2', label: 'GET:/api/drills' },
+]
+
+describe('readDeclaredApiDeps', () => {
+  it('drops nodes a superseded snapshot left behind', async () => {
+    const parsed = { pages: [{ elements: [{ backend: [{ method: 'POST', path: '/functions/v1/glot-ai-chat' }] }] }] }
+    expect(await readDeclaredApiDeps(fakeDb(nodes, parsed), 'p1')).toEqual([nodes[0]])
+  })
+
+  it('keeps every node when the current inventory cannot be read', async () => {
+    expect(await readDeclaredApiDeps(fakeDb(nodes, undefined), 'p1')).toEqual(nodes)
+  })
+})
