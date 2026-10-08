@@ -88,7 +88,9 @@ import {
   attributeIndexPath,
   buildFullFileContext,
   extractReportLiterals,
+  isLocaleFile,
   literalSearchTerms,
+  localeKeysForText,
   rankContextCandidates,
   underRepoGlobs,
   FULL_CONTEXT_LIMITS,
@@ -2489,6 +2491,43 @@ async function assembleFullFileContext(
     }
   }
 
+  // i18n hop: a literal found only in a translation file names a key; the
+  // code that renders it uses the key, not the text (AppNudge.tsx says
+  // t("readOnApp"), en/common.json holds "Read on the app").
+  const localeHits = [...literalHits.entries(), ...indexLiteralHits.entries()]
+    .filter(([path]) => isLocaleFile(path))
+    .slice(0, 2);
+  const keysSearched: string[] = [];
+  if (ghToken && baseSha) {
+    for (const [path, lits] of localeHits) {
+      const state = await fetchBaseFileState(ghToken, repo.owner, repo.repo, baseSha, path);
+      if (state.kind !== 'exists') continue;
+      for (const lit of lits.slice(0, 2)) {
+        for (const key of localeKeysForText(state.contents, lit, 2)) {
+          if (keysSearched.includes(key)) continue;
+          keysSearched.push(key);
+          let users: string[] = [];
+          if (codeSearchUsable && searchCalls < MAX_CODE_SEARCH_CALLS) {
+            searchCalls++;
+            const found = await searchRepoCode(ghToken, repo.owner, repo.repo, key);
+            if (found === null) codeSearchUsable = false;
+            else users = found.totalCount > MAX_LITERAL_FILES ? [] : found.paths;
+          }
+          if (users.length === 0) {
+            try {
+              users = await indexFilesContaining(db, projectId, key);
+            } catch {
+              users = [];
+            }
+          }
+          for (const p of users.filter((u) => !isLocaleFile(u)).slice(0, FILES_PER_LITERAL)) {
+            addHit(literalHits, p, key);
+          }
+        }
+      }
+    }
+  }
+
   let frameRepoPaths: string[] = [];
   try {
     frameRepoPaths = await indexPathsForFrames(db, projectId, framePaths);
@@ -2521,6 +2560,7 @@ async function assembleFullFileContext(
 
   log.info('fix context assembled', {
     literals,
+    localeKeys: keysSearched,
     framePaths,
     codeSearchCalls: searchCalls,
     codeSearchUsable,

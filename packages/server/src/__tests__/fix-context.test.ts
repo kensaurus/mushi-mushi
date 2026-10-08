@@ -13,6 +13,8 @@ import {
   extractReportLiterals,
   globRoot,
   isBundledPath,
+  isLocaleFile,
+  localeKeysForText,
   literalSearchTerms,
   rankContextCandidates,
   underRepoGlobs,
@@ -299,5 +301,29 @@ describe('buildFullFileContext', () => {
     })
     expect(ctx.outcomes[0]).toMatchObject({ shown: 'omitted' })
     expect(ctx.states.get('a.ts')).toMatchObject({ kind: 'unreadable' })
+  })
+})
+
+describe('i18n hop (the-wanting-mind 08d0ecde)', () => {
+  const common = JSON.stringify({ readOnApp: 'Read on the app', reader: { nudge: { title: 'Read on the app today' } }, appStore: 'App Store' })
+
+  it('recognises translation files', () => {
+    expect(isLocaleFile('src/locales/en/common.json')).toBe(true)
+    expect(isLocaleFile('public/i18n/ja.json')).toBe(true)
+    expect(isLocaleFile('package.json')).toBe(false)
+    expect(isLocaleFile('src/locales/index.ts')).toBe(false)
+  })
+
+  it('finds the keys that hold the quoted text, flat and nested', () => {
+    expect(localeKeysForText(common, 'Read on the app')).toEqual(['readOnApp', 'reader.nudge.title', 'title'])
+    expect(localeKeysForText(common, 'nowhere')).toEqual([])
+    expect(localeKeysForText('not json', 'Read on the app')).toEqual([])
+  })
+
+  it('extracts the quoted on-screen text from the report as a literal', () => {
+    const { literals } = extractReportLiterals({
+      description: 'On desktop the "Read on the app" card and the audio player bar cover the first paragraphs.',
+    } as never)
+    expect(literals).toContain('Read on the app')
   })
 })

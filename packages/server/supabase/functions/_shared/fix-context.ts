@@ -609,3 +609,53 @@ export async function buildFullFileContext(
     states,
   }
 }
+
+// ---------------------------------------------------------------------------
+// i18n hop. A report quotes on-screen text ("Read on the app"); in a
+// translated app that text lives only in a locale file, and the component
+// says t("readOnApp"). Searching the text finds the locale file, never the
+// code that renders it (the-wanting-mind 08d0ecde: the fix agent got the
+// locale strings but not AppNudge.tsx, twice). These helpers find the key so
+// the worker can search for its use.
+// ---------------------------------------------------------------------------
+
+const LOCALE_DIR = /(^|\/)(locales?|i18n|lang|langs|translations?|messages)\//i
+
+/** A JSON translation file: under a locales/i18n/lang/messages folder. */
+export function isLocaleFile(path: string): boolean {
+  return path.toLowerCase().endsWith('.json') && LOCALE_DIR.test(path)
+}
+
+/**
+ * Keys in a translation file whose string value contains `text`
+ * (case-insensitive): each as its dotted path and, when nested, its leaf
+ * name too, since code calls either `t("a.b")` or `t("b", { ns })`.
+ */
+export function localeKeysForText(json: string, text: string, max = 3): string[] {
+  let data: unknown
+  try {
+    data = JSON.parse(json)
+  } catch {
+    return []
+  }
+  const needle = text.trim().toLowerCase()
+  if (needle.length < 4) return []
+  const out: string[] = []
+  const walk = (node: unknown, path: string[]) => {
+    if (out.length >= max * 2) return
+    if (typeof node === 'string') {
+      if (node.toLowerCase().includes(needle) && path.length > 0) {
+        const dotted = path.join('.')
+        if (!out.includes(dotted)) out.push(dotted)
+        const leaf = path[path.length - 1]
+        if (path.length > 1 && /^[A-Za-z_][\w-]{2,}$/.test(leaf) && !out.includes(leaf)) out.push(leaf)
+      }
+      return
+    }
+    if (node && typeof node === 'object' && !Array.isArray(node)) {
+      for (const [k, v] of Object.entries(node as Record<string, unknown>)) walk(v, [...path, k])
+    }
+  }
+  walk(data, [])
+  return out.slice(0, max)
+}
