@@ -2,10 +2,10 @@
   "version": 2,
   "manifest": {
     "version": 2,
-    "updated": "2026-09-28"
+    "updated": "2026-10-08"
   },
   "files": {
-    "apps.generated.ts": "22d38ee08f702db5c2fc6c5e6468a81bb566d0570e4462dc2b94a460af7ae690",
+    "apps.generated.ts": "3c0e643053066517b9856462514b0d3b6db7edbdaf64a18eae10c6e74d995069",
     "account.ts": "a00cb4f34fa6b43849644042e751a446f94de5e6d7fb7bacb933e9b4dbc66f17",
     "events.ts": "f945fa4ccd374a0f8a1638881073977ee0c73b0d9832a35b8d0424ae8ba0fb41",
     "links.ts": "ffdd3dcb251cc4f33da94d9d02fc8e06a5376ad1a5edb576eacfb0930739cf1b",
