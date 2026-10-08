@@ -62,7 +62,6 @@ export function JudgeSnapshotStrip({
         <StatCard
           label={statLabels?.total ?? 'Total evals'}
           value={stats.totalEvaluations}
-          accent={stats.totalEvaluations > 0 ? 'text-brand' : undefined}
           tooltip={totalTooltip(stats)}
           detail={totalDetail()}
           to={judgeLinks.total}
@@ -90,7 +89,6 @@ export function JudgeSnapshotStrip({
         <StatCard
           label={statLabels?.classified ?? 'Classified'}
           value={stats.classifiedReports}
-          accent={stats.classifiedReports > 0 && stats.totalEvaluations === 0 ? 'text-brand' : undefined}
           tooltip={classifiedTooltip(stats)}
           detail={classifiedDetail()}
           to={judgeLinks.classified}

@@ -13,9 +13,8 @@
  * - Mount on IteratePage with stats from GET /v1/admin/pdca/stats
  */
 
-import { Section } from '../ui'
 import { DetailRows, type DetailRowItem } from '../ui/fields'
-import { EndpointCodeRow, ReadoutSection } from '../readout'
+import { EndpointCodeRow, ReadoutSection, ReadoutPanel } from '../readout'
 import { RESOLVED_EXTERNAL_API_URL } from '../../lib/env'
 import type { IterateStats } from './IterateStatsTypes'
 import { IconGlobe, IconHealth } from '../icons'
@@ -66,7 +65,7 @@ export function IterateReadout({ stats, fetchedAt, isValidating }: Props) {
   ]
 
   return (
-    <Section title="Iterate readout" freshness={{ at: fetchedAt, isValidating }}>
+    <ReadoutPanel title="Iterate readout" freshness={{ at: fetchedAt, isValidating }}>
       <div className="grid gap-4 lg:grid-cols-2">
         <ReadoutSection title="Endpoints" icon={<IconGlobe size={14} aria-hidden />}>
           <EndpointCodeRow label="PDCA stats API" url={statsApi} />
@@ -78,6 +77,6 @@ export function IterateReadout({ stats, fetchedAt, isValidating }: Props) {
           <DetailRows items={rows} dense />
         </ReadoutSection>
       </div>
-    </Section>
+    </ReadoutPanel>
   )
 }

@@ -73,7 +73,6 @@ export function PromptLabSnapshotStrip({
         <StatCard
           label={statLabels?.dataset ?? 'Eval dataset'}
           value={stats.datasetLabelled.toLocaleString()}
-          accent={stats.datasetTotal > 0 ? 'text-brand' : undefined}
           hint="Reports with human-labelled ground truth for prompt evaluation."
           detail={
             stats.datasetLabelPct != null

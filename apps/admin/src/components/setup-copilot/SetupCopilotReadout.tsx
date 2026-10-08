@@ -3,9 +3,8 @@
  * PURPOSE: Setup Copilot provenance — ingest endpoint, project ref, connect command.
  */
 
-import { Section } from '../ui'
 import { DetailRows, type DetailRowItem } from '../ui/fields'
-import { EndpointCodeRow, ReadoutSection } from '../readout'
+import { EndpointCodeRow, ReadoutSection, ReadoutPanel } from '../readout'
 import { CodeInline } from '../CodePanel'
 import { RESOLVED_EXTERNAL_API_URL } from '../../lib/env'
 import { IconGlobe, IconHealth, IconTerminal } from '../icons'
@@ -57,7 +56,7 @@ export function SetupCopilotReadout({
   ]
 
   return (
-    <Section title="Copilot setup readout" freshness={{ at: fetchedAt ?? null, isValidating: validating }}>
+    <ReadoutPanel title="Copilot setup readout" freshness={{ at: fetchedAt ?? null, isValidating: validating }}>
       <p className="mb-4 text-xs leading-relaxed text-fg-muted">
         Canonical endpoints and refs for this project — paste the connect command in your repo, then
         verify heartbeat on the steps below.
@@ -77,6 +76,6 @@ export function SetupCopilotReadout({
           <DetailRows items={signalRows} dense />
         </ReadoutSection>
       </div>
-    </Section>
+    </ReadoutPanel>
   )
 }

@@ -66,7 +66,6 @@ export function InboxSnapshotStrip({
         <StatCard
           label="Critical 14d"
           value={stats.criticalReports14d}
-          accent={stats.criticalReports14d > 0 ? 'text-brand' : undefined}
           tooltip={criticalTooltip(stats, { plainStageLabels })}
           detail={criticalDetail(stats)}
           to={inboxLinks.critical}

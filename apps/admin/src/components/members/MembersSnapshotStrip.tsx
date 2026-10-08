@@ -39,7 +39,6 @@ export function MembersSnapshotStrip({
         <StatCard
           label="Members"
           value={stats.memberCount}
-          accent="text-brand"
           hint={`${stats.activeLast7d} active in the last 7 days`}
         />
         <StatCard

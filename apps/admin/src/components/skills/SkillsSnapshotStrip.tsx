@@ -38,7 +38,6 @@ export function SkillsSnapshotStrip({
         <StatCard
           label={statLabels?.catalog ?? 'Catalog'}
           value={stats.catalogTotal}
-          accent={stats.catalogTotal > 0 ? 'text-brand' : undefined}
           hint="Synced agent skills available to attach to reports."
           detail="synced from GitHub sources"
           to={skillsLinks.catalog}
@@ -46,7 +45,6 @@ export function SkillsSnapshotStrip({
         <StatCard
           label={statLabels?.activeRuns ?? 'Active runs'}
           value={stats.activeRuns}
-          accent={stats.activeRuns > 0 ? 'text-brand' : undefined}
           hint="Pipeline runs currently executing skill steps."
           detail="live pipeline runs"
           to={skillsLinks.activeRuns}

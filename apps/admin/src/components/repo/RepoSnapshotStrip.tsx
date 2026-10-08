@@ -50,7 +50,6 @@ export function RepoSnapshotStrip({
           <StatCard
             label={statLabels?.branches ?? 'Branches'}
             value={stats.totalBranches}
-            accent={stats.totalBranches > 0 ? 'text-brand' : undefined}
             tooltip={branchesTooltip(stats)}
             detail={branchesDetail(stats)}
             to={repoLinks.branches}
@@ -59,7 +58,6 @@ export function RepoSnapshotStrip({
         <StatCard
           label={statLabels?.prOpen ?? 'PRs open'}
           value={stats.prOpen}
-          accent={stats.prOpen > 0 ? 'text-brand' : undefined}
           tooltip={prOpenTooltip(stats)}
           detail={prOpenDetail()}
           to={repoLinks.prOpen}

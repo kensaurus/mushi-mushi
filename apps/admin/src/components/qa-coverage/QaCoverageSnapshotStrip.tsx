@@ -61,7 +61,6 @@ export function QaCoverageSnapshotStrip({
         <StatCard
           label={statLabels?.stories ?? 'Stories'}
           value={stats.totalStories}
-          accent={stats.totalStories > 0 ? 'text-brand' : undefined}
           tooltip={totalStoriesTooltip(stats)}
           detail={totalStoriesDetail(stats)}
           to={qaCoverageLinks.stories}

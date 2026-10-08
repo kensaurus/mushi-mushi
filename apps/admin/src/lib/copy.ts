@@ -1533,27 +1533,27 @@ export const COPY: CopyRegistry = {
   // flat makes it obvious what beginner mode adds rather than what it strips.
   advanced: {
     '/inbox': {
-      title: 'Inbox',
+      title: 'To-do',
       description: 'Cross-stage action queue — INBOX SNAPSHOT KPIs, then Overview | Actions | Stages | Activity tabs.',
     },
     '/feedback': {
-      title: 'Support',
+      title: 'Help & support',
       description: 'Support ticket inbox — FEEDBACK SNAPSHOT KPIs, then Overview | Active | Shipped | All tabs.',
     },
     '/projects': {
-      title: 'Projects',
+      title: 'Manage apps',
       description: 'Multi-tenant project registry — API keys, SDK heartbeat, per-project deep links.',
     },
     '/queue': {
-      title: 'Processing queue',
+      title: 'Processing jobs',
       description: 'DLQ + stuck pipeline items. Retry, inspect failure stage, flush backlog.',
     },
     '/inventory': {
-      title: 'Inventory',
+      title: 'User stories',
       description: 'Banner + INVENTORY SNAPSHOT — Overview | User stories | Tree | Gates | Discovery | Yaml tabs.',
     },
     '/query': {
-      title: 'Ask Your Data',
+      title: 'SQL query',
       description: 'NL + raw SQL analytics — saved history, team pins, 24h error/latency stats.',
     },
     '/research': {
@@ -1561,7 +1561,7 @@ export const COPY: CopyRegistry = {
       description: 'Banner + RESEARCH SNAPSHOT — Overview for posture, Search to query Firecrawl, History for sessions.',
     },
     '/repo': {
-      title: 'Repo',
+      title: 'Pull requests',
       description: 'GitHub OAuth, default branch, fix-worker target repo health.',
     },
     '/sso': {
@@ -1573,7 +1573,7 @@ export const COPY: CopyRegistry = {
       description: 'Append-only mutation trail — human + agent actors, filter stack, CSV export.',
     },
     '/prompt-lab': {
-      title: 'Prompt lab',
+      title: 'AI prompts',
       description: 'Versioned classifier/fix prompts with shadow tests on live reports.',
     },
     '/intelligence': {
@@ -1589,23 +1589,23 @@ export const COPY: CopyRegistry = {
       description: 'Per-project BYO bucket config — health probes, Vault refs, usage counts.',
     },
     '/marketplace': {
-      title: 'Marketplace',
+      title: 'Plugins',
       description: 'Webhook plugin catalog, installs, and signed delivery log per project.',
     },
     '/mcp': {
-      title: 'MCP',
+      title: 'Editor agents',
       description: 'Banner + MCP SNAPSHOT — Overview for key posture, Setup for IDE snippet, Catalog for tools.',
     },
     '/qa-coverage': {
-      title: 'QA coverage',
+      title: 'Scheduled tests',
       description: 'Banner + QA SNAPSHOT — Overview for posture, Stories for all tests, Failing for sub-80% pass rate.',
     },
     '/anti-gaming': {
-      title: 'Anti-gaming',
+      title: 'Spam & abuse',
       description: 'Heuristics for synthetic / duplicate / low-signal report abuse.',
     },
     '/rewards': {
-      title: 'Rewards',
+      title: 'Tester rewards',
       description: 'Banner + REWARDS SNAPSHOT — Overview for 24h SDK feed, Rules/Tiers to configure, Settings for webhooks.',
     },
     '/lessons': {
@@ -1617,7 +1617,7 @@ export const COPY: CopyRegistry = {
       description: 'Banner + RELEASES SNAPSHOT — Overview for posture, Drafts/Published to manage, Draft to generate with AI.',
     },
     '/iterate': {
-      title: 'Iterate',
+      title: 'Improvement runs',
       description: 'PDCA producer/critic loops on target URLs — queue, trigger, inspect critiques.',
     },
     '/drift': {
@@ -1637,7 +1637,7 @@ export const COPY: CopyRegistry = {
       description: 'Per-project llm_invocations telemetry — spend rollups, breakdown, and raw log.',
     },
     '/notifications': {
-      title: 'Reporter notifications',
+      title: 'Reporter updates',
       description: 'SDK widget inbox — classify, fix, and reward messages scoped per project.',
     },
     '/billing': {
@@ -1649,39 +1649,39 @@ export const COPY: CopyRegistry = {
       description: 'Org roster, roles (viewer → owner), invite lifecycle.',
     },
     '/explore': {
-      title: 'Codebase atlas',
+      title: 'Code map',
       description: 'Summary | Understand (Ask/Tour/Domains/Knowledge) | Map (Graph/Layers) | Search | Index.',
     },
     '/connect': {
-      title: 'Connect & Update',
+      title: 'Connect',
       description: 'GitHub connect, SDK install, MCP deeplinks, and one-click upgrade PRs.',
     },
     '/users': {
-      title: 'Users',
+      title: 'All users',
       description: 'Operator directory — signups, plans, last-seen activity.',
     },
     '/dashboard': {
-      title: 'PDCA cockpit',
+      title: 'Home',
       description: 'Plan → Do → Check → Act — banner + LOOP SNAPSHOT KPIs, then Overview | Loop | Metrics | Health tabs.',
     },
     '/reports': {
-      title: 'Triage queue',
+      title: 'Bugs',
       description: 'Banner + TRIAGE SNAPSHOT — Overview | Queue | Severity tabs. Fingerprinted, severity-classified, blast-radius-ranked.',
     },
     '/graph': {
-      title: 'Bug graph',
+      title: 'Bug clusters',
       description: 'Banner + GRAPH SNAPSHOT — Overview | Explore | Backend. Component/page adjacency with bug-incidence weighting.',
     },
     '/fixes': {
-      title: 'Auto-fix pipeline',
+      title: 'Fixes',
       description: 'Draft PRs from the agent. Judge score + screenshot-diff per attempt.',
     },
     '/judge': {
-      title: 'Judge scores',
+      title: 'Fix grading',
       description: 'Banner + JUDGE SNAPSHOT — Overview for posture, Trend for 12w chart, Evaluations for per-report grades.',
     },
     '/health': {
-      title: 'LLM health',
+      title: 'App health',
       description: 'Banner + HEALTH SNAPSHOT — Overview for posture, LLM for breakdowns, Cron for jobs, Activity for traces.',
     },
     '/integrations': {
@@ -1697,7 +1697,7 @@ export const COPY: CopyRegistry = {
       description: 'Alerts, AI keys, web tools, voice reports, and the SDK connection.',
     },
     '/onboarding': {
-      title: 'Setup wizard',
+      title: 'Set up',
       description: 'Project → SDK → first report → key rotation.',
     },
   },

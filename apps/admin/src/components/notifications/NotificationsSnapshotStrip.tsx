@@ -32,7 +32,6 @@ export function NotificationsSnapshotStrip({
         <StatCard
           label={statLabels?.total ?? 'Total'}
           value={stats.total}
-          accent={stats.total > 0 ? 'text-brand' : undefined}
           hint="Messages for this project"
           to={notificationsLinks.total}
         />

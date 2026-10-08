@@ -29,7 +29,6 @@ export function ProjectsSnapshotStrip({
         <StatCard
           label="Projects"
           value={stats.projectCount}
-          accent={stats.projectCount > 0 ? 'text-brand' : undefined}
           hint="Apps or environments tracked"
         />
         <StatCard
@@ -67,7 +66,6 @@ export function ProjectsSnapshotStrip({
         <StatCard
           label="Viewing"
           value={stats.activeProjectName ? 'Set' : 'None'}
-          accent={stats.activeProjectId ? 'text-brand' : undefined}
           hint={
             stats.activeProjectHasReports
               ? stats.activeProjectSdkConnected

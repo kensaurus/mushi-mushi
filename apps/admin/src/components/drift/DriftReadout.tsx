@@ -3,9 +3,8 @@
  * PURPOSE: Contract drift provenance — scanner API ref and open-finding signals.
  */
 
-import { Section } from '../ui'
 import { DetailRows, type DetailRowItem } from '../ui/fields'
-import { EndpointCodeRow, ReadoutSection } from '../readout'
+import { EndpointCodeRow, ReadoutSection, ReadoutPanel } from '../readout'
 import { RESOLVED_EXTERNAL_API_URL } from '../../lib/env'
 import type { DriftStats } from './DriftStatsTypes'
 import { IconGlobe, IconHealth } from '../icons'
@@ -51,7 +50,7 @@ export function DriftReadout({ stats, fetchedAt, validating }: DriftReadoutProps
   ]
 
   return (
-    <Section title="Drift readout" freshness={{ at: fetchedAt, isValidating: validating }}>
+    <ReadoutPanel title="Drift readout" freshness={{ at: fetchedAt, isValidating: validating }}>
       <p className="mb-4 text-xs leading-relaxed text-fg-muted">
         Contract walker compares live API surfaces to snapshots. Use the Scanner tab to enqueue a fresh scan.
       </p>
@@ -68,6 +67,6 @@ export function DriftReadout({ stats, fetchedAt, validating }: DriftReadoutProps
           <DetailRows items={rows} dense />
         </ReadoutSection>
       </div>
-    </Section>
+    </ReadoutPanel>
   )
 }

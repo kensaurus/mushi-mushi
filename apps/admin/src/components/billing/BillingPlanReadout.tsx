@@ -3,9 +3,8 @@
  * PURPOSE: Billing plan refs — Stripe portal link and API base as copyable rows.
  */
 
-import { Section } from '../ui'
 import { DetailRows, type DetailRowItem } from '../ui/fields'
-import { EndpointCodeRow, ReadoutSection } from '../readout'
+import { EndpointCodeRow, ReadoutSection, ReadoutPanel } from '../readout'
 import { RESOLVED_EXTERNAL_API_URL } from '../../lib/env'
 import { IconBilling, IconGlobe } from '../icons'
 
@@ -53,7 +52,7 @@ export function BillingPlanReadout({
   ]
 
   return (
-    <Section title="Billing readout" freshness={{ at: fetchedAt, isValidating }}>
+    <ReadoutPanel title="Billing readout" freshness={{ at: fetchedAt, isValidating }}>
       <p className="mb-4 text-xs leading-relaxed text-fg-muted">
         Plan reference and Stripe self-service portal — copy links for support tickets or CLI billing
         checks.
@@ -71,6 +70,6 @@ export function BillingPlanReadout({
           <DetailRows items={rows} dense />
         </ReadoutSection>
       </div>
-    </Section>
+    </ReadoutPanel>
   )
 }

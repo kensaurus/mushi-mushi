@@ -8,7 +8,7 @@ import { HelpBulletList, HelpRichText } from '../HelpRichText';
 import { HelpSection } from '../HelpSection';
 import { CopyViewLinkButton } from '../CopyViewLinkButton';
 import { usePageHelpRegister } from '../../lib/pageHelpContext';
-import { isPageHelpRead, markPageHelpRead, PAGEHELP_READ_EVENT } from '../../lib/pageHelpRead';
+import { isPageHelpRead, markPageHelpRead } from '../../lib/pageHelpRead';
 import { isDevFacingHint } from '../../lib/devHintCopy';
 import {
   PAGE_HELP_BANNER_INNER_BORDER,
@@ -16,7 +16,6 @@ import {
   PAGE_HELP_BANNER_SUMMARY_HOVER,
 } from '../../lib/pageHelpSurfaces';
 import { Tooltip } from './misc';
-import { CHIP_TONE } from '../../lib/chipTone'
 
 
 /* ── PageHeader ─────────────────────────────────────────────────────────── */
@@ -220,18 +219,6 @@ export function PageHelpBanner({
   const { pathname } = useLocation()
   const routeKey = resolveFlowPath(flowPath ?? pathname)
   const resolvedLinks = relatedLinks ?? PAGE_FLOW_LINKS[routeKey] ?? []
-  const [isRead, setIsRead] = useState(() => isPageHelpRead(routeKey))
-
-  useEffect(() => {
-    setIsRead(isPageHelpRead(routeKey))
-    const onRead = (event: Event) => {
-      const detail = (event as CustomEvent<string>).detail
-      if (detail === routeKey) setIsRead(true)
-    }
-    window.addEventListener(PAGEHELP_READ_EVENT, onRead)
-    return () => window.removeEventListener(PAGEHELP_READ_EVENT, onRead)
-  }, [routeKey])
-
   const [open, setOpen] = useState<boolean>(() => {
     if (defaultOpen !== undefined) return defaultOpen
     if (readPageHelpDismissed(title)) return false
@@ -246,19 +233,12 @@ export function PageHelpBanner({
     const next = e.currentTarget.open
     setOpen(next)
     writePageHelpDismissed(title, !next)
-    if (!next && !isPageHelpRead(routeKey)) {
-      markPageHelpRead(routeKey)
-      setIsRead(true)
-    }
+    if (!next && !isPageHelpRead(routeKey)) markPageHelpRead(routeKey)
   }
 
-  // Moss-green guide surface — calm, readable, distinct from warn/danger chrome.
+  // Quiet chrome row; the guide sections inside keep their own tones.
   const surfaceClass = PAGE_HELP_BANNER_SHELL
-  const iconClass = CHIP_TONE.okSubtle
-  const statusLabel = isRead ? 'Read' : 'New'
-  const statusBadgeClass = isRead
-    ? CHIP_TONE.ok
-    : CHIP_TONE.okSubtle
+  const iconClass = 'bg-surface-overlay text-fg-muted'
 
   return (
     <details
@@ -288,12 +268,6 @@ export function PageHelpBanner({
           </svg>
         </span>
         <span className="font-medium text-fg-secondary group-open:text-fg">{title}</span>
-        <span
-          className={`rounded-full border px-1.5 py-0.5 text-3xs font-semibold ${statusBadgeClass}`}
-        >
-          {statusLabel}
-        </span>
-        <span className="ml-auto hidden text-3xs text-fg-faint sm:inline">{open ? 'Click to collapse' : 'Click to expand'}</span>
       </summary>
       <div className={`w-full min-w-0 border-t px-3 py-3 sm:px-4 ${PAGE_HELP_BANNER_INNER_BORDER}`}>
         <div className="grid w-full min-w-0 grid-cols-1 gap-2.5 md:grid-cols-2">

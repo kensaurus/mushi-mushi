@@ -51,7 +51,6 @@ export function QueueSnapshotStrip({
         <StatCard
           label={statLabels?.running ?? 'Running'}
           value={stats.running}
-          accent={stats.running > 0 ? 'text-brand' : undefined}
           hint="Jobs currently being processed."
           detail="in flight now"
           to={queueLinks.running}
