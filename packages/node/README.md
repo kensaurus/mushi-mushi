@@ -2,84 +2,51 @@
 
 > **Your AI wrote it. Mushi tells you why it broke.**
 
-Server-side SDK for [Mushi Mushi](https://kensaur.us/mushi-mushi). The browser SDKs
-report user-observed bugs; this package reports **server-observed** ones —
-uncaught exceptions, slow requests, failed integrations — into the same
-`reports` table so classification, knowledge graph, and fix dispatch don't
-care whether the bug was seen by a user or the backend.
+The server-side SDK for [Mushi Mushi](https://github.com/kensaurus/mushi-mushi). Browser SDKs report the bugs users see; this one reports the bugs your backend sees: uncaught exceptions, failed webhooks, broken integrations. They land in the same queue and get the same plain-English diagnosis and fix.
 
-## Install
+```mermaid
+flowchart LR
+    A["Your server throws"] --> B["Mushi diagnoses the bug"] --> C["Fix lands in your editor"]
+```
+
+## Quick start
 
 ```bash
 npm i @mushi-mushi/node
 ```
 
-## Quick start
-
-### Express
+Create one client, then hand it to the error handler for your framework:
 
 ```ts
-import express from 'express'
+import { MushiNodeClient, attachUnhandledHook } from '@mushi-mushi/node'
+
+const client = new MushiNodeClient({
+  apiKey: process.env.MUSHI_API_KEY!,
+  projectId: process.env.MUSHI_PROJECT_ID!,
+  environment: process.env.NODE_ENV, // optional
+  release: process.env.GIT_SHA,      // optional
+})
+
+// Express: register after your routes
 import { mushiExpressErrorHandler } from '@mushi-mushi/node/express'
+app.use(mushiExpressErrorHandler({ client }))
 
-const app = express()
-
-// ... your routes ...
-
-app.use(
-  mushiExpressErrorHandler({
-    apiKey: process.env.MUSHI_API_KEY!,
-    projectId: process.env.MUSHI_PROJECT_ID!,
-    environment: process.env.NODE_ENV,
-    release: process.env.GIT_SHA,
-  }),
-)
-```
-
-### Fastify
-
-```ts
-import Fastify from 'fastify'
+// Fastify
 import { mushiFastifyPlugin } from '@mushi-mushi/node/fastify'
+mushiFastifyPlugin(app, { client })
 
-const app = Fastify()
-mushiFastifyPlugin(app, {
-  apiKey: process.env.MUSHI_API_KEY!,
-  projectId: process.env.MUSHI_PROJECT_ID!,
-})
-```
-
-### Hono (Node / Edge)
-
-```ts
-import { Hono } from 'hono'
+// Hono (Node or edge): onError must return a Response, so pass your own handler second
 import { mushiHonoErrorHandler } from '@mushi-mushi/node/hono'
+app.onError(mushiHonoErrorHandler({ client }, (err, c) => c.text('Server error', 500)))
 
-const app = new Hono()
-app.onError(
-  mushiHonoErrorHandler({
-    apiKey: process.env.MUSHI_API_KEY!,
-    projectId: process.env.MUSHI_PROJECT_ID!,
-  }),
-)
+// Any server: also report uncaughtException and unhandledRejection
+attachUnhandledHook({ client })
 ```
 
-### Manual capture
-
-Use the client directly when you want to report outside the request cycle
-(cron jobs, queue workers, integration failures):
+By default the handlers report thrown errors and 5xx responses, not 4xx. **Outside a request** (cron jobs, queue workers), call the client directly:
 
 ```ts
-import { MushiNodeClient } from '@mushi-mushi/node'
-
-const mushi = new MushiNodeClient({
-  apiKey: process.env.MUSHI_API_KEY!,
-  projectId: process.env.MUSHI_PROJECT_ID!,
-  environment: 'production',
-  release: process.env.GIT_SHA,
-})
-
-await mushi.captureReport({
+await client.captureReport({
   description: 'Stripe webhook signature verification failed',
   severity: 'high',
   component: 'billing',
@@ -87,106 +54,47 @@ await mushi.captureReport({
 })
 ```
 
-### Process-level fallbacks
+## What's inside
 
-Attach `uncaughtException` + `unhandledRejection` hooks so nothing escapes:
+| Export | What it does |
+| --- | --- |
+| `@mushi-mushi/node/express`, `/fastify`, `/hono` | Error handlers that report failed requests |
+| `MushiNodeClient` | `captureReport()` and `track()` from anywhere in your server |
+| `attachUnhandledHook()` | Reports process-level crashes |
+| `mushiTraceMiddleware`, `createOtelSpanProcessor` | Request spans and an OpenTelemetry span processor. The error handlers also read `traceparent` and `sentry-trace`, so a server error links to the browser report from the same request |
+| `createMushiRewardsHandler()` | Receives signed reward webhooks (see below) |
+| `connectLinearApiKey()` | Connects Linear from a script or CI |
 
-```ts
-import { attachUnhandledHook } from '@mushi-mushi/node'
+**Safe by design.** `captureReport` never throws: a failure is logged once and swallowed, so reporting can't take your server down. Requests time out after 10 seconds. The server SDK does not scrub PII, so remove user data before you send it.
 
-attachUnhandledHook({
-  apiKey: process.env.MUSHI_API_KEY!,
-  projectId: process.env.MUSHI_PROJECT_ID!,
-})
-```
+## Reward webhooks
 
-## Reward webhook receiver
-
-When a reporter crosses a reward tier (or earns points) in the Mushi console,
-Mushi sends a signed webhook to your app. `createMushiRewardsHandler` is a
-framework-agnostic receiver that **timing-safely verifies** the
-`X-Mushi-Signature` HMAC and routes events to typed callbacks — this is where
-you grant a role, unlock Pro, or apply a Stripe coupon.
+When a reporter earns points or reaches a new tier, Mushi sends your app a signed webhook. This is where you grant a role, unlock Pro, or apply a coupon. The handler checks the `X-Mushi-Signature` HMAC before any callback runs and answers `401` on a bad signature.
 
 ```ts
 import { createMushiRewardsHandler } from '@mushi-mushi/node'
 
 const handler = createMushiRewardsHandler({
-  // The mushi_whk_… secret shown once when you created the webhook in the console.
-  secret: process.env.MUSHI_REWARD_WEBHOOK_SECRET!,
-
+  secret: process.env.MUSHI_REWARD_WEBHOOK_SECRET!, // the mushi_whk_… secret shown once in the console
   onTierChanged: async (event) => {
-    // Flat payload. host_credit_payload is the opaque "grant this" instruction
-    // you defined on the tier in the console.
-    if (event.host_credit_payload?.kind === 'pro_coupon') {
-      await grantProAccess(event.external_user_id)
-    }
+    if (event.host_credit_payload?.kind === 'pro_coupon') await grantProAccess(event.external_user_id)
   },
-
-  onPointsAwarded: async (event) => {
-    // Fires on reward.points_awarded (e.g. report.submitted / report.triaged).
-  },
-
-  // onEvent: async (event) => { … }  // catch-all, runs after the specific cb
+  onPointsAwarded: async (event) => { /* event.action, event.points, event.total_points */ },
 })
-```
 
-### Next.js App Router / any Web-standard runtime
-
-```ts
-// app/api/mushi/reward-webhook/route.ts
+// Next.js App Router or any Web-standard runtime
 export const POST = (req: Request) => handler.fetch(req)
-```
 
-### Express / Connect
-
-`express.raw()` is **required** — the raw body must be available for HMAC
-verification (a re-stringified parsed body can fail verification on key-order
-differences):
-
-```ts
+// Express: the raw body is required to verify the signature
 app.post('/api/mushi/reward-webhook', express.raw({ type: '*/*' }), handler.express)
 ```
 
-### API
+`verifyRewardSignature()` and `parseRewardEvent()` are exported if you want to route events yourself. Event shapes and the rewards economy: [`docs/REWARDS.md`](https://github.com/kensaurus/mushi-mushi/blob/master/docs/REWARDS.md).
 
-| Export | Purpose |
-|---|---|
-| `createMushiRewardsHandler(opts)` | Returns `{ express, fetch }` adapters. A bad signature short-circuits with `401` before your callbacks run. |
-| `verifyRewardSignature(rawBody, signature, secret)` | Standalone timing-safe `sha256=<hex>` check if you want to handle routing yourself. |
-| `parseRewardEvent(rawBody)` | Parse a verified raw body into a typed `MushiRewardEvent` (throws on bad JSON). |
+## Learn more
 
-**Options:** `secret` (required), `onTierChanged`, `onPointsAwarded`, `onEvent`,
-`signatureHeader` (default `x-mushi-signature`).
-
-**Event types:** `MushiRewardEvent` (flat envelope: `event`, `end_user_id`,
-`external_user_id?`, `occurred_at`), `MushiTierChangedEvent`
-(`host_credit_payload`, `tier_slug`/`tier_after`), `MushiPointsAwardedEvent`
-(`action`, `points`, `total_points`). Full economy reference:
-[`docs/REWARDS.md`](https://github.com/kensaurus/mushi-mushi/blob/master/docs/REWARDS.md).
-
-## Distributed tracing
-
-Middleware automatically reads incoming `traceparent` (W3C Trace Context) and
-`sentry-trace` headers and stamps `traceId` / `spanId` on the report. This
-lets the Mushi knowledge graph correlate a server-side failure with the
-browser-side report a user filed from the same HTTP request, even across
-microservices.
-
-## Safety guarantees
-
-- `captureReport` **never throws** — failures are swallowed and warn-logged
-  once per process. Instrumentation can never take down the host.
-- Requests use a 10-second `AbortController` timeout by default.
-- No PII scrubbing runs on the server — scrub before calling the SDK if your
-  payloads contain user data.
+[Node SDK reference](https://kensaur.us/mushi-mushi/docs/sdks/node) · [Rewards](https://kensaur.us/mushi-mushi/docs/concepts/rewards) · [Mushi Mushi on GitHub](https://github.com/kensaurus/mushi-mushi)
 
 ## License
 
 MIT
-
-
-<!-- mushi-readme-stats-footer -->
----
-
-<sub>Monorepo scale (July 2026): 64 edge functions · 435 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
