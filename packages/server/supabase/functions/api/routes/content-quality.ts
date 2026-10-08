@@ -28,6 +28,7 @@ import {
   bulkDismissBodySchema,
   contentQualityFilterOps,
   isRegenStale,
+  regenCallbackOutcome,
   materiallyNewSignals,
   rowFilterFromSearchParams,
   type FilterOp,
@@ -411,8 +412,7 @@ export function registerContentQualityRoutes(app: Hono<{ Variables: Variables }>
     await db
       .from('content_quality_issues')
       .update({
-        regen_status: status === 'completed' ? 'completed' : 'failed',
-        status: status === 'completed' ? 'resolved' : 'open',
+        ...regenCallbackOutcome(status, result),
         regen_completed_at: new Date().toISOString(),
         regen_result: result as Record<string, unknown>,
         updated_at: new Date().toISOString(),

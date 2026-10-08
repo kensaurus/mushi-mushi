@@ -17,6 +17,7 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   isRegenStale,
+  regenCallbackOutcome,
   REGEN_STALE_MS,
   BULK_DISMISS_MAX_ROWS,
   bulkDismissBodySchema,
@@ -196,5 +197,20 @@ describe('isRegenStale', () => {
   it('frees one with no or a bad start time', () => {
     expect(isRegenStale(null, now)).toBe(true)
     expect(isRegenStale('nope', now)).toBe(true)
+  })
+})
+
+describe('regenCallbackOutcome', () => {
+  it('resolves only when the source replaced the content', () => {
+    expect(regenCallbackOutcome('completed', { regenerated: true, action: 'promoted' })).toEqual({ regen_status: 'completed', status: 'resolved' })
+    expect(regenCallbackOutcome('completed', {})).toEqual({ regen_status: 'completed', status: 'resolved' })
+  })
+  it('keeps the item open when the candidate was rejected or never made', () => {
+    for (const result of [{ action: 'no_improvement' }, { action: 'unjudged' }, { regenerated: false, reason: 'generation_returned_null' }]) {
+      expect(regenCallbackOutcome('completed', result)).toEqual({ regen_status: 'completed', status: 'open' })
+    }
+  })
+  it('marks a failed regeneration failed and open', () => {
+    expect(regenCallbackOutcome('failed', null)).toEqual({ regen_status: 'failed', status: 'open' })
   })
 })
