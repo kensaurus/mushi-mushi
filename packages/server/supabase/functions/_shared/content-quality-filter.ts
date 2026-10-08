@@ -165,3 +165,34 @@ export function materiallyNewSignals(prev: SignalSnapshot, next: SignalSnapshot)
   }
   return changes
 }
+
+/**
+ * A regeneration counts as stale after this long without a callback. The
+ * source project's regen takes about a minute; a lost callback must not lock
+ * the item forever.
+ */
+export const REGEN_STALE_MS = 15 * 60 * 1000
+
+/** True when a running or queued regeneration may be requested again. */
+export function isRegenStale(requestedAt: string | null | undefined, nowMs: number): boolean {
+  if (!requestedAt) return true
+  const t = Date.parse(requestedAt)
+  return Number.isNaN(t) || nowMs - t >= REGEN_STALE_MS
+}
+
+/**
+ * What a regeneration callback does to the issue. "completed" only means the
+ * source project finished; the issue is resolved only when it says it
+ * replaced the content (not `regenerated: false`, `no_improvement` or
+ * `unjudged`), so a rejected candidate leaves the item open.
+ */
+export function regenCallbackOutcome(
+  status: string,
+  result: unknown,
+): { regen_status: 'completed' | 'failed'; status: 'resolved' | 'open' } {
+  if (status !== 'completed') return { regen_status: 'failed', status: 'open' }
+  const r = (result && typeof result === 'object' ? result : {}) as { regenerated?: unknown; action?: unknown }
+  const notReplaced =
+    r.regenerated === false || r.action === 'no_improvement' || r.action === 'unjudged'
+  return { regen_status: 'completed', status: notReplaced ? 'open' : 'resolved' }
+}
