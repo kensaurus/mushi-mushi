@@ -481,6 +481,30 @@ async function runOrphanEndpointGate(
  * Finding severity: error when the path looks like a new/undeployed API
  * (e.g. /api/v2/*), warn for paths that may be third-party services.
  */
+/**
+ * Whether an SDK-observed network path is an API call at all. The SDK sees
+ * every fetch, so a Next.js app's router prefetches of its own pages
+ * (`/glot-it/chat/`), its RSC payloads (`__next._tree.txt`, `_next/…`) and
+ * static assets were reported as unknown API calls: 34 on glot.it, none of
+ * them an API (2026-10-08).
+ *
+ * @internal Exported for inventory-gates-api-deps.test.ts.
+ */
+export function isApiCallPath(path: string): boolean {
+  const p = path.split('?')[0] ?? path
+  if (/(^|\/)_next\/|__next\.|\.rsc$/i.test(p)) return false
+  if (/\.(?:js|mjs|css|map|png|jpe?g|gif|webp|avif|svg|ico|woff2?|ttf|otf|mp3|mp4|webm|wasm|txt|xml|webmanifest)$/i.test(p)) return false
+  // A trailing slash is a page in a static export (a prefetch of the document), not an endpoint.
+  if (p.length > 1 && p.endsWith('/') && !/\/(?:api|functions\/v1|rest\/v1|rpc)\//i.test(p)) return false
+  return true
+}
+
+/** `POST:/functions/v1/x` → `/functions/v1/x`: declared deps carry a method, observed paths do not. */
+function declaredPath(label: string): string {
+  const i = label.indexOf(':')
+  return i > 0 && /^[A-Z]+$/.test(label.slice(0, i)) ? label.slice(i + 1) : label
+}
+
 async function runUnknownCallGate(
   db: SupabaseClient,
   body: RequestBody,
@@ -488,8 +512,8 @@ async function runUnknownCallGate(
   const runId = await startGateRun(db, body, 'unknown_call')
 
   // Known-good: declared api_deps + discovered routes from latest crawl.
-  const known = new Set<string>(body.discovered_apis ?? [])
-  for (const dep of await readDeclaredApiDeps(db, body.project_id!)) known.add(dep.label)
+  const known = new Set<string>((body.discovered_apis ?? []).map(declaredPath))
+  for (const dep of await readDeclaredApiDeps(db, body.project_id!)) known.add(declaredPath(dep.label))
 
   // Get project base URL to filter out third-party calls.
   const { data: settings } = await db
@@ -523,6 +547,7 @@ async function runUnknownCallGate(
   const unknowns: string[] = []
 
   for (const path of allObserved) {
+    if (!isApiCallPath(path)) continue
     // Skip third-party calls (different origin from base URL).
     if (baseUrl) {
       try {
