@@ -3,7 +3,7 @@
  * PURPOSE: Skill pipeline KPI strip using MetricStrip — backed by /v1/admin/skills/stats.
  */
 
-import { Section, StatCard, SnapshotSectionHint } from '../ui'
+import { Section, StatCard, SnapshotSectionHint, formatRelative } from '../ui'
 import { MetricStrip } from '../MetricStrip'
 import type { SkillsStats } from './SkillsStatsTypes'
 
@@ -38,7 +38,6 @@ export function SkillsSnapshotStrip({
         <StatCard
           label={statLabels?.catalog ?? 'Catalog'}
           value={stats.catalogTotal}
-          accent={stats.catalogTotal > 0 ? 'text-brand' : undefined}
           hint="Synced agent skills available to attach to reports."
           detail="synced from GitHub sources"
           to={skillsLinks.catalog}
@@ -46,7 +45,6 @@ export function SkillsSnapshotStrip({
         <StatCard
           label={statLabels?.activeRuns ?? 'Active runs'}
           value={stats.activeRuns}
-          accent={stats.activeRuns > 0 ? 'text-brand' : undefined}
           hint="Pipeline runs currently executing skill steps."
           detail="live pipeline runs"
           to={skillsLinks.activeRuns}
@@ -56,7 +54,7 @@ export function SkillsSnapshotStrip({
           value={stats.failedRuns}
           accent={stats.failedRuns > 0 ? 'text-danger' : 'text-ok'}
           hint="Pipeline runs that failed — open Pipelines tab for step errors."
-          detail="needs operator review"
+          detail="needs your review"
           to={skillsLinks.failedRuns}
         />
         <StatCard
@@ -64,7 +62,11 @@ export function SkillsSnapshotStrip({
           value={stats.awaitingCheckin}
           accent={stats.awaitingCheckin > 0 ? 'text-warn' : undefined}
           hint="Handoff-mode steps paused until you mark them passed or failed."
-          detail="handoff mode"
+          detail={
+            stats.awaitingCheckin > 0 && stats.oldestAwaitingCheckinAt
+              ? `oldest from ${formatRelative(stats.oldestAwaitingCheckinAt)}`
+              : 'handoff mode'
+          }
           to={skillsLinks.awaitingCheckin}
         />
       </MetricStrip>

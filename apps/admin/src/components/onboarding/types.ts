@@ -3,7 +3,7 @@
  */
 
 /** @internal Exported for unit tests (stat-card link targets). */
-export const ONBOARDING_TAB_IDS = ['overview', 'steps', 'verify', 'sdk'] as const
+export const ONBOARDING_TAB_IDS = ['overview', 'steps', 'verify', 'sdk', 'copilot'] as const
 export type OnboardingTabId = (typeof ONBOARDING_TAB_IDS)[number]
 
 export interface OnboardingStats {

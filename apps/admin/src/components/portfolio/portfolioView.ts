@@ -139,3 +139,31 @@ const STATE_META: Record<DetectorState, { label: string; tone: BadgeTone }> = {
 export function radarStateMeta(state: string): { label: string; tone: BadgeTone } {
   return STATE_META[state as DetectorState] ?? STATE_META.unknown
 }
+
+const RADAR_STATE_ORDER: Record<string, number> = { finding: 0, error: 1 }
+
+/**
+ * The risk checks split for the Recipe page: problems first (Found, then
+ * Check failed), then the checks that never ran and the passing ones, which
+ * the panel collapses. An unknown state counts as not checked, never passing.
+ */
+export function groupRadarDetectors<T extends { state: string }>(detectors: readonly T[]): { problems: T[]; notChecked: T[]; passing: T[] } {
+  const problems = detectors
+    .filter((d) => d.state === 'finding' || d.state === 'error')
+    .sort((a, b) => (RADAR_STATE_ORDER[a.state] ?? 2) - (RADAR_STATE_ORDER[b.state] ?? 2))
+  return {
+    problems,
+    notChecked: detectors.filter((d) => d.state !== 'ok' && d.state !== 'finding' && d.state !== 'error'),
+    passing: detectors.filter((d) => d.state === 'ok'),
+  }
+}
+
+/**
+ * A plain sentence for a check whose last run failed. The raw reason is a
+ * server or JavaScript error ("fns.map is not a function"); the panel keeps it
+ * behind a disclosure.
+ */
+export function radarErrorSentence(checkedAt: string | null, formatAgo: (iso: string) => string): string {
+  const when = checkedAt ? `The last run (${formatAgo(checkedAt)}) could not finish` : 'The last run could not finish'
+  return `${when}, so this risk is unknown. Run the checks again; if it keeps failing, the detail below says why.`
+}

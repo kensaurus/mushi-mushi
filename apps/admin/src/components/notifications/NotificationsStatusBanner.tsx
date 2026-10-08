@@ -11,8 +11,6 @@ import type { NotificationStats, NotificationTabId } from './types'
 interface Props {
   stats: NotificationStats
   onTab?: (tab: NotificationTabId) => void
-  onRefresh?: () => void
-  refreshing?: boolean
   plainBanner?: boolean
 }
 
@@ -26,8 +24,6 @@ function tabFromPath(path: string | null): NotificationTabId | null {
 export function NotificationsStatusBanner({
   stats,
   onTab,
-  onRefresh,
-  refreshing,
   plainBanner = false,
 }: Props) {
   const copy = usePageCopy('/notifications')
@@ -70,16 +66,14 @@ export function NotificationsStatusBanner({
     )
   }
 
+  // read_at is set when the reporter opens the update in the widget (or an
+  // admin marks it read). Unread is normal, not a fault, so no warn tone.
   if (priority === 'unread_backlog') {
     return (
       <StatusBannerShell
-        tone="warn"
-        title={
-          plainBanner
-            ? `${stats.unread} unread update${stats.unread === 1 ? '' : 's'} for reporters`
-            : `${stats.unread} unread message${stats.unread === 1 ? '' : 's'}`
-        }
-        subtitle={label}
+        tone="info"
+        title={`${stats.unread} update${stats.unread === 1 ? '' : 's'} not opened by reporters yet`}
+        subtitle="Reporters see them the next time they open the widget."
         action={
           onTab ? (
             <Btn size="sm" variant="ghost" onClick={() => onTab('inbox')}>{actions.inbox ?? 'Review inbox'}</Btn>
@@ -114,11 +108,7 @@ export function NotificationsStatusBanner({
       title={plainBanner ? 'Reporter updates are working' : `Reporter loop active on ${projectLabel}`}
       subtitle={label}
       action={
-        onRefresh ? (
-          <Btn size="sm" variant="ghost" onClick={onRefresh} loading={refreshing} disabled={refreshing}>
-            {actions.refresh ?? 'Refresh'}
-          </Btn>
-        ) : onTab ? (
+        onTab ? (
           <Btn size="sm" variant="ghost" onClick={() => onTab('inbox')}>{actions.viewInbox ?? 'View inbox'}</Btn>
         ) : null
       }

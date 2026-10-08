@@ -3,6 +3,8 @@
  * PURPOSE: Pure decisions behind the console group K fixes (rewards,
  *          anti-gaming, tester portal), 2026-10-04.
  */
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   leaderboardSearchTerm,
@@ -112,6 +114,24 @@ describe('anti-gaming scope (#212)', () => {
     expect(antiGamingListScope(owned, 'p-new')).toEqual(['p-new'])
     expect(antiGamingListScope(owned, null)).toEqual(owned)
     expect(antiGamingListScope(owned, 'someone-else')).toEqual(owned)
+  })
+
+  it('scopes to the X-Mushi-Project-Id header when the query names no project', () => {
+    // The sidebar badge (nav-meta) sends the project only in the header.
+    expect(antiGamingListScope(owned, undefined, 'p-new')).toEqual(['p-new'])
+    expect(antiGamingListScope(owned, 'p-old', 'p-new')).toEqual(['p-old'])
+    expect(antiGamingListScope(owned, undefined, 'someone-else')).toEqual(owned)
+  })
+
+  it('counts flagged devices for the active project only (sidebar badge = page)', () => {
+    const src = readFileSync(
+      resolve(__dirname, '../../supabase/functions/api/routes/admin-ops.ts'),
+      'utf8',
+    )
+    const start = src.indexOf("app.get('/v1/admin/anti-gaming/devices'")
+    const body = src.slice(start, src.indexOf('\n  app.', start + 10))
+    expect(body).toMatch(/antiGamingListScope\(\s*projectIds,\s*c\.req\.query\('project_id'\),\s*c\.req\.header\('x-mushi-project-id'\)/)
+    expect(body).not.toMatch(/\.in\('project_id', projectIds\)/)
   })
 })
 

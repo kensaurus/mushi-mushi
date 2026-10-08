@@ -128,3 +128,15 @@ export function useSetupGuideView(): [
 
   return [stored, set]
 }
+
+/**
+ * Is the setup checklist open on this route right now? The same resolution
+ * SetupGuide renders with, for surfaces that must not repeat its steps.
+ */
+export function isSetupGuideOpen(
+  stored: StoredSetupGuideView,
+  requiredComplete: boolean,
+  pathname: string,
+): boolean {
+  return resolveSetupGuideView(stored, { requiredComplete, suppressAutoExpand: shouldSuppressAutoExpand(pathname) }) === 'expanded'
+}

@@ -205,6 +205,19 @@ export function normalizeMcpTables(raw: unknown): TableInfo[] {
 }
 
 /**
+ * The edge functions from `list_edge_functions`: a bare array before, and
+ * `{ functions: [...] }` now (glot.it radar, 2026-10-05: "fns.map is not a
+ * function" errored five rules). Untrusted-data delimiters are unwrapped.
+ * Anything without a list is null — "could not list", never "no functions".
+ */
+export function normalizeMcpEdgeFunctions(raw: unknown): Array<Record<string, unknown>> | null {
+  const v = unwrapUntrusted(raw)
+  const list = Array.isArray(v) ? v : v && typeof v === 'object' ? (v as { functions?: unknown }).functions : null
+  if (!Array.isArray(list)) return null
+  return list.filter((f): f is Record<string, unknown> => Boolean(f) && typeof f === 'object')
+}
+
+/**
  * Query tools answer with text that wraps the JSON in
  * `<untrusted-data-…>` delimiters; return the parsed JSON inside, or the
  * input unchanged when it is not such a string.
@@ -318,6 +331,44 @@ function canonicalize(value: unknown): string {
     .sort()
     .map((k) => `${JSON.stringify(k)}:${canonicalize((value as Record<string, unknown>)[k])}`)
   return `{${entries.join(',')}}`
+}
+
+/**
+ * The part of a table that is its schema: name, schema, RLS and the columns
+ * sorted by name. The row-count estimate changes every day without any schema
+ * change, so it is left out: with it, glot.it's 201 unchanged tables were
+ * reported as changed on every daily scan (2026-10-07).
+ */
+export function schemaShape(tables: readonly TableInfo[]): Array<Omit<TableInfo, 'row_count_estimate'>> {
+  return tables
+    .map((t) => ({
+      name: t.name,
+      schema: t.schema,
+      rls_enabled: t.rls_enabled,
+      columns: [...(t.columns ?? [])]
+        .map((c) => ({ name: c.name, type: c.type, nullable: c.nullable }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    }))
+    .sort((a, b) => `${a.schema}.${a.name}`.localeCompare(`${b.schema}.${b.name}`))
+}
+
+/**
+ * Pure: added, removed and changed tables between two reads, by schema shape.
+ * The previous read comes back from jsonb with its keys reordered, so tables
+ * are compared canonically, never by JSON.stringify.
+ */
+export function diffSchemaShapes(
+  prev: readonly TableInfo[],
+  curr: readonly TableInfo[],
+): { added: string[]; removed: string[]; modified: string[] } {
+  const key = (t: TableInfo) => t.name
+  const prevMap = new Map(schemaShape(prev).map((t) => [key(t), canonicalize(t)]))
+  const currMap = new Map(schemaShape(curr).map((t) => [key(t), canonicalize(t)]))
+  return {
+    added: [...currMap.keys()].filter((k) => !prevMap.has(k)),
+    removed: [...prevMap.keys()].filter((k) => !currMap.has(k)),
+    modified: [...currMap].filter(([k, v]) => prevMap.has(k) && prevMap.get(k) !== v).map(([k]) => k),
+  }
 }
 
 /**

@@ -3,7 +3,6 @@
  */
 
 import type { ReactNode } from 'react'
-import { InlineProof } from './report-detail/ReportSurface'
 import { SpringChromeEnter } from './motion/SpringChromeEnter'
 
 export type StatusBannerTone = 'info' | 'brand' | 'danger' | 'warn' | 'ok'
@@ -42,7 +41,8 @@ export function StatusBannerShell({
         />
         <div className="min-w-0 space-y-1">
           <p className={`text-xs font-medium ${shell.title}`}>{title}</p>
-          {subtitle ? <InlineProof>{subtitle}</InlineProof> : null}
+          {/* A sentence, not a chip: InlineProof's grey pill sat behind every banner subtitle. */}
+          {subtitle ? <p className="text-2xs text-fg-muted">{subtitle}</p> : null}
         </div>
       </div>
       {action ? <div className="shrink-0">{action}</div> : null}

@@ -7,11 +7,12 @@ import { usePageCopy } from '../../lib/copy'
 import { StatusBannerShell } from '../StatusBannerShell'
 import { StatusBannerAction } from '../StatusBannerAction'
 import { fixesFailedAction, fixesFailedHint, fixesFailedTitle, scopedHref } from '../../lib/humanPageHints'
-import type { FixesStats, FixesTabId } from './FixesStatsTypes'
+import type { FixesStats } from './FixesStatsTypes'
 
 interface Props {
   stats: FixesStats
-  onTab?: (tab: FixesTabId) => void
+  /** "Rejected AI key (3), Sandbox timeout (1)", shown under the failed title. */
+  causeSummary?: string
   onRefresh?: () => void
   refreshing?: boolean
   plainBanner?: boolean
@@ -19,7 +20,7 @@ interface Props {
 
 export function FixesStatusBanner({
   stats,
-  onTab,
+  causeSummary,
   onRefresh,
   refreshing,
   plainBanner: _plainBanner = false,
@@ -85,7 +86,7 @@ export function FixesStatusBanner({
       <StatusBannerShell
         tone="danger"
         title={fixesFailedTitle(stats.failed)}
-        subtitle={stats.topPriorityLabel ?? fixesFailedHint(stats.failed)}
+        subtitle={`${stats.topPriorityLabel ?? fixesFailedHint(stats.failed)}${causeSummary ? ` Most common: ${causeSummary}.` : ''}`}
         action={
           <StatusBannerAction
             label={actions.failed ?? fixesFailedAction(stats.failed)}
@@ -105,18 +106,14 @@ export function FixesStatusBanner({
         title={`${stats.inProgress} fix${stats.inProgress === 1 ? '' : 'es'} running now`}
         subtitle={
           stats.topPriorityLabel ??
-          'Agents are drafting branches and opening PRs — check the pipeline tab for live progress.'
+          'Agents are drafting branches and opening PRs — filter the list to In flight for live progress.'
         }
         action={
-          onTab ? (
-            <StatusBannerAction label={actions.pipeline ?? 'Open pipeline'} onClick={() => onTab('pipeline')} tone="info" />
-          ) : (
-            <StatusBannerAction
-              label={actions.pipeline ?? 'Open pipeline'}
-              to={stats.topPriorityTo ?? scopedHref('/fixes?tab=pipeline', pid)}
-              tone="info"
-            />
-          )
+          <StatusBannerAction
+            label={actions.pipeline ?? 'View in flight'}
+            to={scopedHref('/fixes?status=inflight', pid)}
+            tone="info"
+          />
         }
       />
     )

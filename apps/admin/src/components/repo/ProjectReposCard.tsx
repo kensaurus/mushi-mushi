@@ -2,7 +2,8 @@
  * FILE: apps/admin/src/components/repo/ProjectReposCard.tsx
  * PURPOSE: Multi-repo management card for the Repo page.
  *          Lists all project_repos rows, lets users add/edit/remove repos,
- *          and displays repo role + path_globs + GitHub App status.
+ *          and displays repo role, default branch, GitHub App and index
+ *          status, path_globs, and the Open / Install links per repo.
  *
  *          Data: GET /v1/admin/repo/repos?project_id=...
  *          Mutations: POST / PUT / DELETE /v1/admin/repo/repos
@@ -12,8 +13,9 @@ import { useCallback, useEffect, useState } from 'react'
 import { apiFetch } from '../../lib/supabase'
 import { Badge, Btn, Card, CodeValue, ErrorAlert, Tooltip } from '../ui'
 import { ContainedBlock, SignalChip, ActionPill, ActionPillRow } from '../report-detail/ReportSurface'
+import { githubAppInstallUrl } from '../integrations/GitHubAppInstallButton'
 import { IconGit, IconPencil, IconTrash } from '../icons'
-import { CHIP_TONE } from '../../lib/chipTone'
+import { REPO_ROLES, repoRoleMeta, type RepoRole } from '../../lib/repoRoles'
 import { RepoIndexStatus } from './RepoIndexStatus'
 import { ConfirmDialog } from '../ConfirmDialog'
 import { repoActionErrorMessage } from '../../lib/repoBranches'
@@ -35,17 +37,6 @@ interface ProjectRepo {
   is_primary: boolean
   created_at: string
   updated_at: string | null
-}
-
-/** The roles the project_repos CHECK and the API accept (repo-branch-counts.ts). */
-const ROLES = ['frontend', 'backend', 'monorepo', 'mobile', 'ai', 'infra', 'docs', 'other'] as const
-type RepoRole = (typeof ROLES)[number]
-
-const ROLE_BADGE_CLASS: Record<string, string> = {
-  frontend: 'bg-brand/12 text-brand border border-brand/28',
-  backend:  'bg-ok-muted/50 text-ok-foreground border border-ok/25',
-  monorepo: 'bg-info-muted/50 text-info-foreground border border-info/25',
-  mobile:   CHIP_TONE.accentSubtle,
 }
 
 interface Props {
@@ -179,9 +170,12 @@ export function ProjectReposCard({ projectId }: Props) {
           <IconGit />
           Linked repos ({repos.length})
         </h3>
-        {!showForm && (
-          <Btn size="sm" variant="ghost" onClick={openAdd}>+ Add repo</Btn>
-        )}
+        <ActionPillRow className="shrink-0">
+          <ActionPill to="/integrations/config" tone="neutral">Manage</ActionPill>
+          {!showForm && (
+            <Btn size="sm" variant="ghost" onClick={openAdd}>+ Add repo</Btn>
+          )}
+        </ActionPillRow>
       </div>
 
       {repos.length === 0 && !showForm && (
@@ -196,21 +190,14 @@ export function ProjectReposCard({ projectId }: Props) {
             <div className="flex items-center gap-2 flex-wrap justify-between">
               <div className="flex items-center gap-2 min-w-0 flex-1">
                 {repo.is_primary && (
-                  <Badge className="text-3xs bg-brand/12 text-brand border border-brand/28">primary</Badge>
+                  <Badge tone="brandSubtle" className="text-3xs">primary</Badge>
                 )}
-                <Badge className={`text-3xs border ${ROLE_BADGE_CLASS[repo.role] ?? 'border-edge-subtle text-fg-muted'}`}>
-                  {repo.role}
-                </Badge>
+                <RepoRoleBadge role={repo.role} />
                 <div className="min-w-0 flex-1">
                   <CodeValue value={repo.repo_url} tone="url" />
                 </div>
               </div>
               <div className="flex items-center gap-1.5 shrink-0">
-                {repo.github_app_installation_id ? (
-                  <SignalChip tone="ok">App installed</SignalChip>
-                ) : (
-                  <SignalChip tone="warn">No GitHub App</SignalChip>
-                )}
                 {editingId !== repo.id && (
                   <>
                     <Tooltip content="Edit repo">
@@ -239,10 +226,27 @@ export function ProjectReposCard({ projectId }: Props) {
                 )}
               </div>
             </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {repo.default_branch && <SignalChip tone="neutral">default: {repo.default_branch}</SignalChip>}
+              {repo.github_app_installation_id ? (
+                <SignalChip tone="ok">GitHub App installed</SignalChip>
+              ) : (
+                <SignalChip tone="warn">No GitHub App installation</SignalChip>
+              )}
+              <RepoIndexStatus repo={repo} variant="chip" />
+              <ActionPillRow className="ml-auto">
+                {/* Only when the App slug is configured: a hard-coded slug 404s on GitHub. */}
+                {!repo.github_app_installation_id && githubAppInstallUrl(projectId) && (
+                  <ActionPill href={githubAppInstallUrl(projectId)!} tone="brand">
+                    Install Mushi on GitHub ↗
+                  </ActionPill>
+                )}
+                <ActionPill href={repo.repo_url} tone="neutral">Open on GitHub ↗</ActionPill>
+              </ActionPillRow>
+            </div>
             {repo.path_globs && repo.path_globs.length > 0 && (
               <p className="text-2xs text-fg-faint font-mono">globs: {repo.path_globs.join(', ')}</p>
             )}
-            <RepoIndexStatus repo={repo} variant="line" />
 
             {editingId === repo.id && (
               <RepoForm
@@ -355,7 +359,7 @@ function RepoForm({
             onChange={(e) => set('role', e.target.value as RepoRole)}
             className="w-full rounded-sm border border-edge bg-surface-raised text-xs px-2 py-1"
           >
-            {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+            {REPO_ROLES.map((r) => <option key={r} value={r}>{repoRoleMeta(r).label}</option>)}
           </select>
         </div>
         <div>
@@ -412,5 +416,15 @@ function RepoForm({
         <ActionPill tone="neutral" onClick={onCancel}>Cancel</ActionPill>
       </ActionPillRow>
     </div>
+  )
+}
+
+function RepoRoleBadge({ role }: { role: string }) {
+  const { label, Icon, tone } = repoRoleMeta(role)
+  return (
+    <Badge tone={tone} className="text-3xs gap-1">
+      <Icon size={11} />
+      {label}
+    </Badge>
   )
 }

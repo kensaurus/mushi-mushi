@@ -261,6 +261,24 @@ export const NO_PROJECT_MODEL: SetupGuideModel = {
   nextStepId: 'project_created',
 }
 
+/**
+ * The one setup step to do now: the first incomplete required step whose
+ * prerequisite chain is satisfied. Every "do this next" marker on a setup
+ * list (the docked guide, the checklists, the onboarding lanes) reads this,
+ * via useNextStep, so they never point at different steps.
+ */
+export function nextSetupStepId(project: Pick<SetupProject, 'steps'> | null | undefined): string | null {
+  if (!project) return null
+  const completeById = new Map<string, boolean>(project.steps.map((s) => [s.id, s.complete]))
+  return (
+    project.steps.find((s) => {
+      if (!s.required || s.complete) return false
+      const prereq = REQUIRED_PREREQUISITE[s.id]
+      return !prereq || completeById.get(prereq) === true
+    })?.id ?? null
+  )
+}
+
 export function buildSetupGuideModel(
   project: SetupProject | null,
   options: {
@@ -282,13 +300,7 @@ export function buildSetupGuideModel(
   const completeById = new Map<string, boolean>(project.steps.map((s) => [s.id, s.complete]))
   const labelById = new Map<string, string>(project.steps.map((s) => [s.id, s.label]))
 
-  /** First incomplete required step whose prerequisite chain is satisfied. */
-  const nextStepId =
-    project.steps.find((s) => {
-      if (!s.required || s.complete) return false
-      const prereq = REQUIRED_PREREQUISITE[s.id]
-      return !prereq || completeById.get(prereq) === true
-    })?.id ?? null
+  const nextStepId = nextSetupStepId(project)
 
   const steps: SetupGuideStep[] = project.steps.map((step) => {
     const prereq = REQUIRED_PREREQUISITE[step.id]

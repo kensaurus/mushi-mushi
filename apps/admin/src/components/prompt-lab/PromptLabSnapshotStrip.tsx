@@ -6,18 +6,23 @@
 import { Section, StatCard, SnapshotSectionHint } from '../ui'
 import { MetricStrip } from '../MetricStrip'
 import type { PromptLabStats } from './PromptLabStatsTypes'
+import { bestScoreSource } from './types'
 
 const promptLabLinks = {
-  active: '/prompt-lab',
-  candidates: '/prompt-lab',
-  bestScore: '/prompt-lab',
-  dataset: '/prompt-lab',
+  active: '/prompt-lab?tab=prompts',
+  candidates: '/prompt-lab?tab=prompts',
+  bestScore: '/judge',
+  dataset: '/prompt-lab?tab=dataset',
 } as const
 
 interface Props {
   stats: PromptLabStats
   statsFetchedAt: string | null
   statsValidating?: boolean
+  /** The same classified-report counts the Eval dataset card shows. */
+  dataset: { total: number; labelled: number }
+  /** The best score belongs to a global default, scored on other projects. */
+  bestIsBuiltIn?: boolean
   sectionTitle?: string
   hint?: string
   statLabels?: Record<string, string>
@@ -27,16 +32,16 @@ export function PromptLabSnapshotStrip({
   stats,
   statsFetchedAt,
   statsValidating,
+  dataset,
+  bestIsBuiltIn = false,
   sectionTitle = 'PROMPT LAB SNAPSHOT',
   hint,
   statLabels,
 }: Props) {
   const bestScoreLabel =
     stats.bestScore != null ? `${Math.round(stats.bestScore * 100)}%` : '—'
-  const bestScoreDetail =
-    stats.bestStage && stats.bestVersion
-      ? `${stats.bestStage}/${stats.bestVersion}`
-      : 'no scored prompts yet'
+  const bestSource = bestScoreSource(stats) ?? (stats.bestScore != null ? 'judge score' : 'no scored prompts yet')
+  const bestScoreDetail = bestIsBuiltIn ? `${bestSource} · built-in default` : bestSource
 
   return (
     <Section title={sectionTitle} freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
@@ -66,20 +71,15 @@ export function PromptLabSnapshotStrip({
           label={statLabels?.bestScore ?? 'Best score'}
           value={bestScoreLabel}
           accent={stats.bestScore != null ? 'text-ok' : undefined}
-          hint="Highest mean judge score across active and candidate prompts."
+          hint="Highest mean judge score across active and candidate prompts. Opens Fix grading."
           detail={bestScoreDetail}
           to={promptLabLinks.bestScore}
         />
         <StatCard
           label={statLabels?.dataset ?? 'Eval dataset'}
-          value={stats.datasetLabelled.toLocaleString()}
-          accent={stats.datasetTotal > 0 ? 'text-brand' : undefined}
-          hint="Reports with human-labelled ground truth for prompt evaluation."
-          detail={
-            stats.datasetLabelPct != null
-              ? `${stats.datasetLabelPct}% labelled · ${stats.datasetTotal.toLocaleString()} total`
-              : `${stats.datasetTotal.toLocaleString()} total reports`
-          }
+          value={dataset.labelled.toLocaleString()}
+          hint="Classified reports a prompt experiment can be evaluated on: the list below."
+          detail={`labelled · ${dataset.total.toLocaleString()} reports in total`}
           to={promptLabLinks.dataset}
         />
       </MetricStrip>

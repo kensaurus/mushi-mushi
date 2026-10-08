@@ -8,7 +8,6 @@ import {
   iterateNavBadge,
   lessonsNavBadge,
   onboardingNavBadge,
-  planSectionAttention,
   qaCoverageNavBadge,
   rewardsNavBadge,
   fullstackAuditNavBadge,
@@ -161,9 +160,9 @@ describe('codeHealthNavBadge', () => {
   })
 })
 
-describe('planSectionAttention', () => {
-  it('rolls up content QA attention for Plan section', () => {
-    const result = planSectionAttention({
+describe('checkSectionAttention, content checks', () => {
+  it('rolls up content QA attention under Quality & health, where Content checks lives', () => {
+    const result = checkSectionAttention({
       ...EMPTY_NAV_STAT_SLICES,
       contentQuality: {
         openCount: 4,

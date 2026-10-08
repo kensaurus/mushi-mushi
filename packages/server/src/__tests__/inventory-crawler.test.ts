@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
-import { crawlPage, runWithConcurrency } from '../../supabase/functions/inventory-crawler/index.ts'
+import { crawlPage, crawlVerdict, isDynamicPath, runWithConcurrency } from '../../supabase/functions/inventory-crawler/index.ts'
 
 describe('runWithConcurrency', () => {
   it('processes every item even with concurrency > items.length', async () => {
@@ -102,5 +102,25 @@ describe('crawlPage diff', () => {
     )
     expect(r.error).toMatch(/refused/)
     expect(r.status_code).toBeNull()
+  })
+})
+
+describe('what the edge crawl can check', () => {
+  it('skips paths with a route parameter', () => {
+    expect(isDynamicPath('/lessons/[lessonId]')).toBe(true)
+    expect(isDynamicPath('/users/:id/edit')).toBe(true)
+    expect(isDynamicPath('/practice')).toBe(false)
+  })
+
+  it('reports a page with none of its testids as unverified, not as N misses', () => {
+    const none = { declared: ['a', 'b'], discovered: [] }
+    expect(crawlVerdict(none, { authRequired: true, hasAuth: false })).toBe('unverified-auth')
+    expect(crawlVerdict(none, { authRequired: false, hasAuth: false })).toBe('unverified-client')
+    expect(crawlVerdict(none, { authRequired: true, hasAuth: true })).toBe('unverified-client')
+  })
+
+  it('keeps real misses when some declared testids rendered', () => {
+    expect(crawlVerdict({ declared: ['a', 'b'], discovered: ['a'] }, { authRequired: true, hasAuth: false })).toBe('checked')
+    expect(crawlVerdict({ declared: ['a'], discovered: [], error: 'timeout' }, { authRequired: true, hasAuth: false })).toBe('checked')
   })
 })

@@ -19,7 +19,7 @@ export function totalAttemptsTooltip(stats: FixesStats, opts: Opts = {}): Metric
   const plain = opts.plainLanguage ?? false
   const takeaway =
     stats.totalAttempts > 0
-      ? `${stats.totalAttempts} fix attempt${stats.totalAttempts === 1 ? '' : 's'} dispatched in 30d.${stats.successRatePct != null ? ` Success rate: ${stats.successRatePct}%.` : ''} Open Pipeline for stage breakdown.`
+      ? `${stats.totalAttempts} fix attempt${stats.totalAttempts === 1 ? '' : 's'} dispatched in 30d. Filter the list to In flight for runs still going.`
       : plain
         ? 'No fix attempts in the last 30 days — dispatch from a reviewed report once GitHub and codebase index are wired.'
         : 'No fix attempts in the last 30 days — dispatch from a triaged report once GitHub and codebase index are wired.'
@@ -36,9 +36,8 @@ export function totalAttemptsTooltip(stats: FixesStats, opts: Opts = {}): Metric
   )
 }
 
-export function totalAttemptsDetail(stats: FixesStats): string {
-  if (stats.successRatePct != null) return `${stats.successRatePct}% success`
-  return stats.totalAttempts > 0 ? 'dispatched' : 'total dispatched'
+export function totalAttemptsDetail(): string {
+  return 'dispatched'
 }
 
 export function completedTooltip(stats: FixesStats): MetricTooltipData {
@@ -54,8 +53,10 @@ export function completedTooltip(stats: FixesStats): MetricTooltipData {
   )
 }
 
+/** "4 of 5 reports fixed": the success rate's own numerator and denominator. */
 export function completedDetail(stats: FixesStats): string {
-  return stats.successRatePct != null ? `${stats.successRatePct}% success` : 'no finished runs'
+  const finished = stats.completed + stats.failed
+  return finished > 0 ? `${stats.completed} of ${finished} reports fixed` : 'no finished runs'
 }
 
 export function failedTooltip(stats: FixesStats, opts: Opts = {}): MetricTooltipData {
@@ -115,12 +116,12 @@ export function inProgressDetail(): string {
 export function prsOpenTooltip(stats: FixesStats): MetricTooltipData {
   const takeaway =
     stats.prsOpen > 0
-      ? `${stats.prsOpen} unfixed report${stats.prsOpen === 1 ? ' has' : 's have'} a PR awaiting review or merge. Clear the merge backlog to advance Act.`
+      ? `${stats.prsOpen} fix attempt${stats.prsOpen === 1 ? ' has' : 's have'} a PR awaiting review or merge. Clear the merge backlog to advance Act.`
       : 'No open fix PRs — the merge queue is clear or no fixes have finished yet.'
 
   return metricTip(
-    'Unfixed reports with a fix pull request still open on GitHub.',
-    'Counts each report once. A closed or merged PR is not open, and a report already fixed never counts.',
+    'Fix attempts with a pull request still open on GitHub, whatever CI says.',
+    'Counts each loaded attempt with an open PR, the same rule as Pull requests. A closed or merged PR is not open; a red-CI PR is also counted under Failed.',
     takeaway,
     stats.prsOpen > 0
       ? { tone: 'info', text: `${stats.prsOpen} PR${stats.prsOpen === 1 ? '' : 's'} awaiting review — merge or close to advance the loop.` }
@@ -129,7 +130,7 @@ export function prsOpenTooltip(stats: FixesStats): MetricTooltipData {
 }
 
 export function prsOpenDetail(): string {
-  return 'awaiting review'
+  return 'attempts awaiting review'
 }
 
 export function prsCiPassingTooltip(stats: FixesStats): MetricTooltipData {
@@ -141,8 +142,8 @@ export function prsCiPassingTooltip(stats: FixesStats): MetricTooltipData {
         : 'No passing CI check runs logged for fix PRs in 30d.'
 
   return metricTip(
-    'Fix attempts whose GitHub check run concluded with success.',
-    'Counts fix_attempts rows in the 30-day window where check_run_conclusion equals success.',
+    'Fix attempts with an open PR whose GitHub check run concluded with success.',
+    'Counts each loaded attempt with an open PR and a successful check run, the same rule as Pull requests.',
     takeaway,
     stats.prsOpen > 0 && stats.prsCiPassing === 0
       ? { tone: 'warn', text: 'Open PRs without passing CI — inspect check runs before merge.' }

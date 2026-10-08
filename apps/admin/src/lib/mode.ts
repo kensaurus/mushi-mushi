@@ -10,7 +10,7 @@
  *
  *  Beginner mode is the secondary onboarding tier. It:
  *    1. Filters the sidebar to 9 loop-essential pages
- *    2. Surfaces a persistent <NextBestAction> strip on every page
+ *    2. Surfaces a persistent <NextStep> banner on every page
  *    3. Pulls plain-language copy from `lib/copy.ts`
  *    4. Forces full-detail microcopy: KPI tooltips, axis labels, etc.
  *
@@ -47,7 +47,7 @@ function writeMode(mode: AdminMode) {
     window.localStorage.setItem(STORAGE_KEY, mode)
     // Notify in-tab listeners; the native `storage` event only fires
     // cross-tab, so without this dispatch the toggle in the sidebar would
-    // not re-render the same tab's NavLinks/NextBestAction strip.
+    // not re-render the same tab's NavLinks/NextStep banner.
     window.dispatchEvent(new CustomEvent('mushi:mode-change', { detail: mode }))
   } catch {
     /* localStorage write may fail in private mode — non-fatal */

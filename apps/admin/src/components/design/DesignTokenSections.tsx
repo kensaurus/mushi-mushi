@@ -5,10 +5,13 @@
  *          (Latin + Thai), spacing bars, radius boxes, motion values and a
  *          plain table for anything else. All colours, sizes and families are
  *          applied from token DATA via inline style — none are written here.
+ *
+ *          A catalogue can hold hundreds of tokens, so it has a name filter and
+ *          each section shows its first PREVIEW_COUNT tokens until "View all".
  */
 
-import type { ReactNode } from 'react'
-import { Section } from '../ui'
+import { useState, type ReactNode } from 'react'
+import { Btn, Input, Section } from '../ui'
 import type { DesignEditability, DesignToken, TokenEdit } from '../../lib/recipeTypes'
 import {
   TOKEN_SECTION_LABEL,
@@ -16,6 +19,8 @@ import {
   cubicBezierString,
   editKey,
   sectionTokens,
+  swatchColor,
+  tokenPx,
   typographyParts,
   type TokenSection,
 } from './designTokens'
@@ -26,6 +31,8 @@ const THAI_SAMPLE = 'ภาษาไทยสวัสดีครับ เร�
 const MAX_TYPE_PX = 64
 const MAX_BAR_PX = 480
 const MAX_RADIUS_BOX_PX = 64
+/** Tokens a section shows before "View all". */
+const PREVIEW_COUNT = 12
 
 interface SectionProps {
   tokens: DesignToken[]
@@ -63,29 +70,29 @@ function EditSlot({ token, editable, set, queued, onQueue, locked }: { token: De
 function ColorTokens(props: SectionProps) {
   return (
     <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-      {props.tokens.map((t) => (
-        <li key={t.path} className="flex flex-col gap-2 rounded-md border border-edge-subtle p-2">
-          <div className="flex items-start gap-3">
-            {t.hex ? (
-              <span
-                className="h-12 w-12 shrink-0 rounded-sm border border-edge"
-                style={{ background: t.hex }}
-                role="img"
-                aria-label={`Swatch ${t.hex}`}
-              />
-            ) : (
-              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-sm border border-dashed border-edge text-2xs text-fg-faint">
-                n/a
-              </span>
-            )}
-            <div className="min-w-0 flex-1">
-              <TokenNames token={t} />
-              <span className="font-mono text-2xs text-fg-secondary">{t.hex ?? t.display}</span>
+      {props.tokens.map((t) => {
+        // tokenSection files a token here only when it has something to paint.
+        const swatch = swatchColor(t)
+        return (
+          <li key={t.path} className="flex flex-col gap-2 rounded-md border border-edge-subtle p-2">
+            <div className="flex items-start gap-3">
+              {swatch && (
+                <span
+                  className="h-12 w-12 shrink-0 rounded-sm border border-edge"
+                  style={{ background: swatch }}
+                  role="img"
+                  aria-label={`Swatch ${swatch}`}
+                />
+              )}
+              <div className="min-w-0 flex-1">
+                <TokenNames token={t} />
+                <span className="font-mono text-2xs text-fg-secondary">{t.hex ?? t.display}</span>
+              </div>
             </div>
-          </div>
-          <EditSlot token={t} {...props} />
-        </li>
-      ))}
+            <EditSlot token={t} {...props} />
+          </li>
+        )
+      })}
     </ul>
   )
 }
@@ -134,7 +141,7 @@ function SpacingTokens(props: SectionProps) {
   return (
     <ul className="flex flex-col gap-2">
       {props.tokens.map((t) => {
-        const w = clampPx(t.px, MAX_BAR_PX)
+        const w = clampPx(tokenPx(t), MAX_BAR_PX)
         return (
           <li key={t.path} className="flex flex-col gap-1">
             <div className="flex flex-wrap items-center gap-3">
@@ -165,7 +172,7 @@ function RadiusTokens(props: SectionProps) {
   return (
     <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
       {props.tokens.map((t) => {
-        const r = clampPx(t.px, MAX_RADIUS_BOX_PX)
+        const r = clampPx(tokenPx(t), MAX_RADIUS_BOX_PX)
         return (
           <li key={t.path} className="flex flex-col gap-2">
             <span
@@ -237,20 +244,53 @@ interface DesignTokenSectionsProps {
   locked: boolean
 }
 
+/** Tokens whose path or code names contain the filter text (case-insensitive). */
+function matchesFilter(t: DesignToken, needle: string): boolean {
+  if (!needle) return true
+  return [t.path, t.cssVar, t.ts, t.rn].some((n) => n?.toLowerCase().includes(needle))
+}
+
 export function DesignTokenSections({ tokens, editable, set, queued, onQueue, locked }: DesignTokenSectionsProps) {
-  const sections = sectionTokens(tokens)
+  const [filter, setFilter] = useState('')
+  const [expanded, setExpanded] = useState<ReadonlySet<TokenSection>>(new Set())
+  const needle = filter.trim().toLowerCase()
+  const sections = sectionTokens(tokens.filter((t) => matchesFilter(t, needle)))
+
+  const filterField = (
+    <Input
+      label="Filter by name"
+      type="search"
+      value={filter}
+      onChange={(e) => setFilter(e.target.value)}
+      placeholder="color.action, --space-md, radius…"
+      className="max-w-sm"
+    />
+  )
+
   if (sections.length === 0) {
     return (
-      <Section title="Tokens">
-        <p className="text-xs text-fg-muted">No tokens in this set.</p>
-      </Section>
+      <div className="flex flex-col gap-3">
+        {tokens.length > 0 && filterField}
+        <p className="text-xs text-fg-muted">{tokens.length > 0 ? 'No token name matches the filter.' : 'No tokens in this set.'}</p>
+      </div>
     )
   }
   return (
-    <>
+    <div className="flex flex-col gap-4">
+      {filterField}
       {sections.map(({ section, groups }) => {
         const Render = SECTION_RENDERER[section]
         const count = groups.reduce((n, g) => n + g.tokens.length, 0)
+        // A filter shows every match; otherwise the first PREVIEW_COUNT until "View all".
+        const showAll = needle !== '' || expanded.has(section)
+        let budget = showAll ? Infinity : PREVIEW_COUNT
+        const shownGroups = groups
+          .map((g) => {
+            const take = g.tokens.slice(0, Math.max(0, budget))
+            budget -= take.length
+            return { group: g.group, tokens: take }
+          })
+          .filter((g) => g.tokens.length > 0)
         return (
           <Section
             key={section}
@@ -258,7 +298,7 @@ export function DesignTokenSections({ tokens, editable, set, queued, onQueue, lo
             action={<span className="text-2xs text-fg-faint">{count.toLocaleString()} tokens</span>}
           >
             <div className="flex flex-col gap-4">
-              {groups.map((g) => (
+              {shownGroups.map((g) => (
                 <div key={g.group} className="flex flex-col gap-2">
                   {groups.length > 1 && (
                     <h3 className="font-mono text-2xs uppercase tracking-wider text-fg-muted">{g.group}</h3>
@@ -266,10 +306,20 @@ export function DesignTokenSections({ tokens, editable, set, queued, onQueue, lo
                   <Render tokens={g.tokens} editable={editable} set={set} queued={queued} onQueue={onQueue} locked={locked} />
                 </div>
               ))}
+              {!showAll && count > PREVIEW_COUNT && (
+                <Btn
+                  size="sm"
+                  variant="ghost"
+                  className="self-start"
+                  onClick={() => setExpanded((cur) => new Set(cur).add(section))}
+                >
+                  View all {count.toLocaleString()}
+                </Btn>
+              )}
             </div>
           </Section>
         )
       })}
-    </>
+    </div>
   )
 }

@@ -46,6 +46,9 @@ const SKIP = new Set([
   'ContentQualityDetailPage.tsx',
   'ContentQualityPage.tsx',
   'DocsBridgePage.tsx',
+  // Hub shells (Plan 021, lib/pageHubs.ts): each view is a full page with its own header and stack.
+  'HomePage.tsx',
+  'TeamPage.tsx',
   'IntegrationsRouteGate.tsx',
   'LoginPage.tsx',
   'McpAuthPage.tsx',

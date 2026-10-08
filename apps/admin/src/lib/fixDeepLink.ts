@@ -16,6 +16,11 @@ export function fixDeepLinkPath(fixId: string): string {
   return `/fixes?tab=attempts&${FIX_DEEP_LINK_PARAM}=${encodeURIComponent(fixId)}`
 }
 
+/** In-app path that opens the Fixes list narrowed to one report's attempts. */
+export function fixesForReportPath(reportId: string): string {
+  return `/fixes?report=${encodeURIComponent(reportId)}`
+}
+
 const FIX_ID = /^[0-9a-f-]{8,64}$/i
 
 /**

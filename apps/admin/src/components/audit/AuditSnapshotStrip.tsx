@@ -42,7 +42,6 @@ export function AuditSnapshotStrip({
         <StatCard
           label={statLabels?.events24h ?? '24h events'}
           value={stats.events24h}
-          accent={stats.events24h > 0 ? 'text-brand' : undefined}
           tooltip={events24hTooltip(stats)}
           detail={events24hDetail(stats)}
           to={auditLinks.events24h}
@@ -66,7 +65,6 @@ export function AuditSnapshotStrip({
         <StatCard
           label={statLabels?.allTime ?? 'All-time'}
           value={stats.totalEvents.toLocaleString()}
-          accent="text-brand"
           tooltip={totalEventsTooltip(stats)}
           detail={totalEventsDetail(stats)}
           to={auditLinks.allTime}

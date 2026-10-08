@@ -31,27 +31,38 @@ export function statusChipCount(value: string, stats: ReportStatusStats): number
 }
 
 /**
- * Severity quick chips. Values are stored severities (critical | high |
- * medium | low); the second chip used to send `major`, which no report has.
+ * Status quick chips — the list's only status filter (the Status select was
+ * dropped as a duplicate). `active` stays reachable from the severity tiles.
  */
-export const SEVERITY_CHIPS: ReadonlyArray<{ value: string; label: string; tone: 'warn' | 'danger' }> = [
-  { value: 'critical', label: 'Critical', tone: 'danger' },
-  { value: 'high', label: 'High', tone: 'warn' },
+export const STATUS_CHIPS: ReadonlyArray<{
+  value: string
+  label: string
+  tone: 'default' | 'warn' | 'info' | 'brand' | 'ok'
+}> = [
+  { value: '', label: 'All', tone: 'default' },
+  // Everything still waiting on a decision — what the dashboard's Bug queue
+  // previews and its "View backlog" link opens.
+  { value: 'open', label: 'Open', tone: 'warn' },
+  { value: 'new', label: 'New', tone: 'warn' },
+  { value: 'classified', label: 'Classified', tone: 'brand' },
+  { value: 'fixing', label: 'Fixing', tone: 'info' },
+  { value: 'fixed', label: 'Fixed', tone: 'ok' },
+  { value: 'verified', label: 'Verified', tone: 'ok' },
+  { value: 'reopened', label: 'Reopened', tone: 'warn' },
+  { value: 'dismissed', label: 'Dismissed', tone: 'default' },
 ]
 
-/** Status filter values, in select order. `active` is what KPI tiles count. */
-export const STATUS_FILTER_OPTIONS = [
-  'open',
-  'active',
-  'new',
-  'queued',
-  'classified',
-  'fixing',
-  'fixed',
-  'verified',
-  'reopened',
-  'dismissed',
-] as const
+/**
+ * Severity quick chips — the list's only severity filter. Values are stored
+ * severities (critical | high | medium | low); the second chip used to send
+ * `major`, which no report has.
+ */
+export const SEVERITY_CHIPS: ReadonlyArray<{ value: string; label: string; tone: 'warn' | 'danger' | 'info' | 'default' }> = [
+  { value: 'critical', label: 'Critical', tone: 'danger' },
+  { value: 'high', label: 'High', tone: 'warn' },
+  { value: 'medium', label: 'Medium', tone: 'info' },
+  { value: 'low', label: 'Low', tone: 'default' },
+]
 
 const STATUS_FILTER_LABELS: Record<string, string> = {
   open: 'Open (needs a decision)',

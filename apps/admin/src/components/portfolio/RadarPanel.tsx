@@ -3,23 +3,27 @@
  * the Recipe page. Every check is listed; one that never ran says "Not
  * checked yet" and is never shown as passing.
  *
- * Below them, Mushi's own setup checks for the app (gate `radar`: a rejected
- * key, no spend cap or AI budget, a webhook that never delivered, a stale
- * index), with a one-click "Apply suggested caps" on `spend_cap_unset`.
+ * Problems lead (Found, then Check failed); checks that never ran and passing
+ * checks sit in two closed disclosures. A failed check reads as a sentence
+ * with its last-run time; the raw server error stays behind "Show the error".
+ * Mushi's own setup checks (gate `radar`) are listed on the Full-stack audit
+ * page, which this panel links to instead of repeating them.
  *
  * Data: GET /v1/admin/projects/:id/radar → RadarView
  *       POST /v1/admin/projects/:id/radar/run (202; 1 per 10 min)
- *       GET /v1/admin/inventory/:id/findings?gate=radar (every plan, ADR 0018)
  */
 
 import { useState } from 'react'
-import { Badge, Btn, Callout, CopyButton, Loading, Section } from '../ui'
+import { Link } from 'react-router-dom'
+import { Badge, Btn, Callout, CopyButton, Loading, Section, formatRelative } from '../ui'
 import { PageLoadError } from '../PageLoadError'
 import { usePageData } from '../../lib/usePageData'
 import { apiFetchMutate } from '../../lib/supabase'
+import { LINK_ACCENT } from '../../lib/chipTone'
 import type { RadarView } from '../../lib/radarTypes'
-import { radarStateMeta } from './portfolioView'
-import { GateFindingsSection } from '../gates/GateFindingsSection'
+import { groupRadarDetectors, radarErrorSentence, radarStateMeta } from './portfolioView'
+
+type Detector = RadarView['detectors'][number]
 
 export function RadarPanel({ projectId }: { projectId: string }) {
   const path = `/v1/admin/projects/${projectId}/radar`
@@ -40,6 +44,8 @@ export function RadarPanel({ projectId }: { projectId: string }) {
     }
   }
 
+  const groups = data ? groupRadarDetectors(data.detectors) : null
+
   return (
     <Section
       title="Risk checks"
@@ -59,39 +65,72 @@ export function RadarPanel({ projectId }: { projectId: string }) {
       )}
       {error && <PageLoadError error={error} resource="the radar checks" endpoint={path} onRetry={reload} />}
       {loading && !data && <Loading text="Reading the risk checks…" />}
-      {data && (
-        <ul className="flex flex-col divide-y divide-edge-subtle">
-          {data.detectors.map((d) => {
-            const meta = radarStateMeta(d.state)
-            return (
-              <li key={d.ruleId} className="flex flex-col gap-1 py-2">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-sm font-medium text-fg" title={d.prevents}>{d.title}</span>
-                  <Badge tone={meta.tone}>{meta.label}</Badge>
-                </div>
-                <p className="text-xs text-fg-muted">{d.reason}</p>
-                {d.findings.map((f) => (
-                  <div key={f.id} className="flex flex-col gap-1 rounded-md border border-edge-subtle p-2 text-xs sm:flex-row sm:items-start sm:justify-between">
-                    <span className="min-w-0 text-fg">{f.message}</span>
-                    {f.fix && <CopyButton value={`${f.message}\n\nFix: ${f.fix}`} label="Copy fix prompt" />}
-                  </div>
-                ))}
-              </li>
-            )
-          })}
-        </ul>
+      {groups && (
+        <div className="flex flex-col gap-2">
+          {groups.problems.length > 0 ? (
+            <DetectorList detectors={groups.problems} />
+          ) : (
+            <p className="text-xs text-fg-muted">
+              {groups.passing.length > 0 ? 'No check found a problem.' : 'No check has a result yet.'}
+            </p>
+          )}
+          {groups.notChecked.length > 0 && (
+            <details className="rounded-md border border-edge-subtle px-3 py-2">
+              <summary className="cursor-pointer text-xs text-fg-muted hover:text-fg">
+                {groups.notChecked.length} not checked yet (not a pass)
+              </summary>
+              <DetectorList detectors={groups.notChecked} />
+            </details>
+          )}
+          {groups.passing.length > 0 && (
+            <details className="rounded-md border border-edge-subtle px-3 py-2">
+              <summary className="cursor-pointer text-xs text-fg-muted hover:text-fg">
+                {groups.passing.length} passing
+              </summary>
+              <DetectorList detectors={groups.passing} />
+            </details>
+          )}
+        </div>
       )}
-      <div className="mt-4 border-t border-edge-subtle pt-3">
-        <h3 className="text-sm font-medium text-fg">Mushi setup checks</h3>
-        <p className="mb-2 text-xs text-fg-muted">
-          Checked once a day: provider keys Mushi uses, spend caps and the monthly AI budget, webhooks, and how fresh the code index is.
-        </p>
-        <GateFindingsSection
-          projectId={projectId}
-          gate="radar"
-          neverRunText="Mushi's setup checks have not run for this app yet; they run once a day."
-        />
-      </div>
+      <p className="mt-3 border-t border-edge-subtle pt-3 text-xs text-fg-muted">
+        Mushi's own setup checks (provider keys, spend caps and the AI budget, webhooks, index freshness) are on the{' '}
+        <Link to="/fullstack-audit" className={LINK_ACCENT}>Full-stack audit</Link> page.
+      </p>
     </Section>
+  )
+}
+
+function DetectorList({ detectors }: { detectors: Detector[] }) {
+  return (
+    <ul className="flex flex-col divide-y divide-edge-subtle">
+      {detectors.map((d) => {
+        const meta = radarStateMeta(d.state)
+        return (
+          <li key={d.ruleId} className="flex flex-col gap-1 py-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-sm font-medium text-fg" title={d.prevents}>{d.title}</span>
+              <Badge tone={meta.tone}>{meta.label}</Badge>
+            </div>
+            {d.state === 'error' ? (
+              <>
+                <p className="text-xs text-fg-muted">{radarErrorSentence(d.checkedAt, formatRelative)}</p>
+                <details className="text-2xs text-fg-faint">
+                  <summary className="cursor-pointer hover:text-fg-secondary">Show the error</summary>
+                  <p className="mt-1 font-mono wrap-break-word">{d.reason}</p>
+                </details>
+              </>
+            ) : (
+              <p className="text-xs text-fg-muted">{d.reason}</p>
+            )}
+            {d.findings.map((f) => (
+              <div key={f.id} className="flex flex-col gap-1 rounded-md border border-edge-subtle p-2 text-xs sm:flex-row sm:items-start sm:justify-between">
+                <span className="min-w-0 text-fg">{f.message}</span>
+                {f.fix && <CopyButton value={`${f.message}\n\nFix: ${f.fix}`} label="Copy fix prompt" />}
+              </div>
+            ))}
+          </li>
+        )
+      })}
+    </ul>
   )
 }

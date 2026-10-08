@@ -58,6 +58,27 @@ export function platformSaveBody(
   return body
 }
 
+/**
+ * Secret fields whose value this project stores itself — what the card's
+ * "Remove key" clears. A field the resolver tracks counts only when its
+ * source is 'project' (an org default or env var is not this project's to
+ * remove); an untracked one (e.g. a webhook secret) counts when it is set.
+ */
+export function projectStoredSecretFields(
+  def: Pick<PlatformDef, 'fields'>,
+  config: Record<string, unknown>,
+  sourceByField: Record<string, unknown> | undefined,
+): string[] {
+  return def.fields
+    .filter((f) => f.type === 'password')
+    .filter((f) => {
+      if (sourceByField && f.name in sourceByField) return sourceByField[f.name] === 'project'
+      const v = config[f.name]
+      return v != null && v !== ''
+    })
+    .map((f) => f.name)
+}
+
 /** Primary Sentry project slug first, then the extras; deduped. */
 export function sentryProjectsFromConfig(config: Record<string, unknown>): string[] {
   const primary = typeof config.sentry_project_slug === 'string' ? config.sentry_project_slug.trim() : ''

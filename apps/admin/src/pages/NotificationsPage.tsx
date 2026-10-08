@@ -30,8 +30,6 @@ import {
   LogBlock,
   SegmentedControl,
   FreshnessPill,
-  RecommendedAction,
-  RelativeTime,
 } from '../components/ui'
 import {
   ActionPill,
@@ -41,7 +39,7 @@ import {
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
-import { SetupNudge } from '../components/SetupNudge'
+import { NextStep } from '../components/NextStep'
 import { HeroSearch } from '../components/illustrations/HeroIllustrations'
 import { ConfigHelp } from '../components/ConfigHelp'
 import { NotificationsStatusBanner } from '../components/notifications/NotificationsStatusBanner'
@@ -64,7 +62,7 @@ const TABS: Array<{ id: NotificationTabId; label: string; description: string }>
   {
     id: 'overview',
     label: 'Overview',
-    description: 'Reporter loop posture — enabled state, unread backlog, volume, and recommended next steps.',
+    description: 'Messages your bug reporters see in the widget: how many, how recent, and whether updates are on.',
   },
   {
     id: 'inbox',
@@ -186,7 +184,7 @@ export function NotificationsPage() {
     title: `${activeMeta.label} · Notifications`,
     summary: activeMeta.description,
     filters: { tab: activeTab, show: filter, type: type || undefined, project_id: activeProjectId ?? undefined },
-    criticalCount: stats.unread + (stats.notificationsEnabled ? 0 : 1),
+    criticalCount: stats.notificationsEnabled ? 0 : 1,
   })
 
   const tabOptions = useMemo(
@@ -230,7 +228,7 @@ export function NotificationsPage() {
     return (
       <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-notifications">
         <PageHeaderBar
-          title={copy?.title ?? 'Notifications'}
+          title={copy?.title ?? 'Reporter updates'}
 
           helpTitle={copy?.help?.title ?? 'About reporter notifications'}
           helpWhatIsIt={
@@ -241,7 +239,7 @@ export function NotificationsPage() {
             copy?.help?.useCases ?? [
               'Verify the SDK side of the loop — reporters see when their bug was classified or fixed',
               'Audit which reporter tokens received messages for a given report',
-              'Spot stale unread rows that suggest client polling stopped working',
+              'See which updates reporters have not opened yet',
             ]
           }
           helpHowToUse={
@@ -249,7 +247,8 @@ export function NotificationsPage() {
             'Filter by type or unread on Inbox, expand a row for the JSON payload, and mark read once verified. Reporter updates must be on (Setup tab).'
           }
         />
-        <SetupNudge
+        <NextStep
+          variant="inline"
           requires={['project']}
           emptyTitle="Select a project"
           emptyDescription="Reporter notifications are scoped to the active project in the header."
@@ -268,29 +267,25 @@ export function NotificationsPage() {
   const bannerSeverity: 'ok' | 'warn' | 'danger' | 'brand' | 'info' | 'neutral' =
     stats.topPriority === 'disabled'
       ? 'warn'
-      : stats.topPriority === 'unread_backlog'
-        ? 'warn'
-        : stats.topPriority === 'healthy'
+      : stats.topPriority === 'healthy' || stats.topPriority === 'unread_backlog'
           ? 'ok'
           : stats.topPriority === 'no_messages'
             ? 'brand'
             : 'neutral'
 
   const headerBadge =
-    stats.topPriority === 'healthy'
+    stats.topPriority === 'healthy' || stats.topPriority === 'unread_backlog'
       ? 'ACTIVE'
       : stats.topPriority === 'disabled'
         ? 'DISABLED'
-        : stats.topPriority === 'unread_backlog'
-          ? `${stats.unread} UNREAD`
-          : stats.total === 0
+        : stats.total === 0
             ? 'EMPTY'
             : 'SETUP'
 
   return (
     <div className="space-y-4" data-testid="mushi-page-notifications">
       <PageHeaderBar
-        title={copy?.title ?? 'Notifications'}
+        title={copy?.title ?? 'Reporter updates'}
         projectScope={stats.projectName ?? projectName ?? undefined}
 
         helpTitle={copy?.help?.title ?? 'About reporter notifications'}
@@ -302,7 +297,7 @@ export function NotificationsPage() {
           copy?.help?.useCases ?? [
             'Verify the SDK side of the loop — reporters see when their bug was classified or fixed',
             'Audit which reporter tokens received messages for a given report',
-            'Spot stale unread rows that suggest client polling stopped working',
+            'See which updates reporters have not opened yet',
           ]
         }
         helpHowToUse={
@@ -373,8 +368,6 @@ export function NotificationsPage() {
               <NotificationsStatusBanner
                 stats={stats}
                 onTab={setTab}
-                onRefresh={reloadAll}
-                refreshing={validating}
                 plainBanner={ux.plainBanner}
               />
             ),
@@ -412,63 +405,14 @@ export function NotificationsPage() {
       ) : null}
 
       {activeTab === 'overview' && (
-        <div className="space-y-4">
-          {stats.topPriority === 'healthy' && (
-            <RecommendedAction
-              tone="success"
-              title="Reporter loop active"
-              description={stats.topPriorityLabel ?? `${stats.total} messages · all read.`}
-              cta={{ label: 'View inbox', to: '/notifications?tab=inbox' }}
-            />
-          )}
-          {stats.topPriority === 'disabled' && (
-            <RecommendedAction
-              tone="info"
-              title="Turn on reporter updates"
-              description="People who report a bug never hear back in the widget while this is off."
-              cta={{ label: 'Open Setup', to: '/notifications?tab=setup' }}
-            />
-          )}
-          {stats.topPriority === 'unread_backlog' && (
-            <RecommendedAction
-              tone="urgent"
-              title="Review unread messages"
-              description={stats.topPriorityLabel ?? 'Unread rows may mean the reporter SDK stopped polling.'}
-              cta={{ label: 'Filter unread', to: '/notifications?tab=inbox&show=unread' }}
-            />
-          )}
-          {stats.topPriority === 'no_messages' && (
-            <RecommendedAction
-              tone="info"
-              title="Send your first reporter message"
-              description={stats.topPriorityLabel ?? 'Classify or fix a report to populate the inbox.'}
-              cta={{ label: 'Open Setup', to: '/notifications?tab=setup' }}
-            />
-          )}
-          {!ux.hideOverviewChrome && (
-          <div className="grid gap-3 sm:grid-cols-3">
-            <Card className="p-3 border-edge">
-              <p className="text-3xs font-medium uppercase tracking-wide text-fg-faint">Classified</p>
-              <p className="mt-1 text-lg font-semibold tabular-nums text-info">{stats.byType.classified ?? 0}</p>
-              <InlineProof className="mt-1 border-0 bg-transparent px-0 py-0">Triage updates to reporters</InlineProof>
-            </Card>
-            <Card className="p-3 border-edge">
-              <p className="text-3xs font-medium uppercase tracking-wide text-fg-faint">Fixed</p>
-              <p className="mt-1 text-lg font-semibold tabular-nums text-ok">{stats.byType.fixed ?? 0}</p>
-              <InlineProof className="mt-1 border-0 bg-transparent px-0 py-0">Shipped fix notifications</InlineProof>
-            </Card>
-            <Card className="p-3 border-edge">
-              <p className="text-3xs font-medium uppercase tracking-wide text-fg-faint">Last activity</p>
-              <p className="mt-1 text-sm font-semibold text-fg-primary">
-                {stats.lastNotificationAt ? <RelativeTime value={stats.lastNotificationAt} /> : 'Never'}
-              </p>
-              <InlineProof className="mt-1 border-0 bg-transparent px-0 py-0">
-                {stats.notificationsEnabled ? 'SDK polling enabled' : 'Notifications disabled'}
-              </InlineProof>
-            </Card>
-          </div>
-          )}
-        </div>
+        <p className="text-xs text-fg-muted">
+          This page is about messages your bug reporters see in the widget. Team alerts in Slack,
+          Discord or Teams are set under{' '}
+          <Link to="/integrations/config#alerts" className="text-accent-foreground hover:text-accent underline underline-offset-2">
+            Alerts on Integrations
+          </Link>
+          .
+        </p>
       )}
 
       {activeTab === 'inbox' && (
@@ -496,7 +440,8 @@ export function NotificationsPage() {
                   }
                 />
               ) : (
-                <SetupNudge
+                <NextStep
+                  variant="inline"
                   requires={['first_report_received']}
                   emptyTitle={
                     projectName
@@ -528,7 +473,7 @@ export function NotificationsPage() {
                           <p className="text-xs text-fg">{n.message ?? '—'}</p>
                           <InlineProof className="mt-1 flex flex-wrap gap-1 font-mono text-3xs border-0 bg-transparent px-0 py-0">
                             <SignalChip tone="neutral">{new Date(n.created_at).toLocaleString()}</SignalChip>
-                            <SignalChip tone={n.read_at ? 'neutral' : 'brand'}>
+                            <SignalChip tone="neutral">
                               {n.read_at
                                 ? `read ${new Date(n.read_at).toLocaleString()}`
                                 : 'unread'}
@@ -604,9 +549,9 @@ export function NotificationsPage() {
                 <li className="flex items-start gap-2">
                   <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-info" aria-hidden />
                   <span>
-                    Operator routing (Slack, PagerDuty) lives on{' '}
-                    <Link to="/integrations/config" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
-                      Integrations
+                    Team alerts (Slack, Discord, Teams) are set under{' '}
+                    <Link to="/integrations/config#alerts" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
+                      Alerts on Integrations
                     </Link>{' '}
                     — separate from reporter widget messages
                   </span>

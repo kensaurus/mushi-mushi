@@ -181,10 +181,13 @@ export function loadConfig(path = CONFIG_PATH, opts: { profile?: string } = {}):
         // v2 multi-profile file — pick the requested/active profile.
         const name = resolveProfileName(opts.profile, parsed.activeProfile)
         file = parsed.profiles[name] ?? {}
-      } else {
+      } else if (resolveProfileName(opts.profile, undefined) === DEFAULT_PROFILE) {
         // Legacy flat file — the whole object IS the default profile.
         file = (parsed ?? {}) as CliConfig
       }
+      // A flat file holds only the default profile. Any other profile does not
+      // exist yet and starts empty: returning the flat contents here seeded a
+      // new `--profile glot` with the default profile's key and project.
     } catch {
       // malformed rc — fall back to env vars
     }

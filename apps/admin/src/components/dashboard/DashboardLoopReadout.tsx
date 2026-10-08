@@ -3,9 +3,9 @@
  * PURPOSE: PDCA loop provenance on dashboard — ingest endpoint + loop counters.
  */
 
-import { DisclosurePanel, Section } from '../ui'
+import { DisclosurePanel } from '../ui'
 import { DetailRows, type DetailRowItem } from '../ui/fields'
-import { EndpointCodeRow, ReadoutSection } from '../readout'
+import { EndpointCodeRow, ReadoutSection, ReadoutPanel } from '../readout'
 import { RESOLVED_EXTERNAL_API_URL } from '../../lib/env'
 import { IconGlobe, IconHealth } from '../icons'
 import { useAdminMode } from '../../lib/mode'
@@ -68,7 +68,7 @@ export function DashboardLoopReadout({
   ]
 
   return (
-    <Section title="Loop readout" freshness={{ at: fetchedAt, isValidating }}>
+    <ReadoutPanel title="Loop readout" freshness={{ at: fetchedAt, isValidating }}>
       <p className="mb-4 text-xs leading-relaxed text-fg-muted">
         Where reports land and how the active project&apos;s PDCA loop is moving right now.
       </p>
@@ -92,6 +92,6 @@ export function DashboardLoopReadout({
           </DisclosurePanel>
         </div>
       )}
-    </Section>
+    </ReadoutPanel>
   )
 }

@@ -32,7 +32,7 @@ import { failureOfStatus, statusReason } from './http-util.ts'
 import { SUPABASE_PROJECT_REF_RE as REF_RE } from '../supabase-project-ref.ts'
 import { ConnectorError, notConnected, type ConnectorContext, type DriftFinding, type RecipeConnector } from './types.ts'
 import { mcpCallTool } from '../mcp-http-session.ts'
-import { normalizeMcpTables, unwrapUntrusted } from '../supabase-mcp-client.ts'
+import { normalizeMcpEdgeFunctions, normalizeMcpTables, unwrapUntrusted } from '../supabase-mcp-client.ts'
 
 const MCP_URL = 'https://mcp.supabase.com/mcp'
 
@@ -142,7 +142,9 @@ export const supabaseConnector: RecipeConnector = {
     ])
     // `{ tables: [...] }` today; a bare array before. `.length` on the object read 0.
     const tableList = normalizeMcpTables(json<unknown>(tables.text) ?? unwrapUntrusted(tables.text))
-    const fns = json<Array<{ slug?: string; verify_jwt?: boolean }>>(fnsRes.text) ?? null
+    // `{ functions: [...] }` today; a bare array before. `.map` on the object
+    // threw and errored every Supabase radar rule (2026-10-05).
+    const fns = fnsRes.text == null ? null : normalizeMcpEdgeFunctions(json<unknown>(fnsRes.text) ?? fnsRes.text)
     return {
       observedAt: ctx.now().toISOString(),
       elements: {

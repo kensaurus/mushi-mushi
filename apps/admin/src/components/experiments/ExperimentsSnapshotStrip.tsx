@@ -46,7 +46,6 @@ export function ExperimentsSnapshotStrip({
         <StatCard
           label={statLabels?.total ?? 'Total'}
           value={stats.totalExperiments}
-          accent={stats.totalExperiments > 0 ? 'text-brand' : undefined}
           tooltip={totalExperimentsTooltip(stats)}
           detail={totalExperimentsDetail(stats)}
           to={experimentsLinks.total}
@@ -62,7 +61,6 @@ export function ExperimentsSnapshotStrip({
         <StatCard
           label={statLabels?.readyToLaunch ?? 'Ready to launch'}
           value={stats.draftsReadyToLaunch}
-          accent={stats.draftsReadyToLaunch > 0 ? 'text-brand' : undefined}
           tooltip={draftsReadyToLaunchTooltip(stats)}
           detail={draftsReadyToLaunchDetail()}
           to={experimentsLinks.readyToLaunch}
@@ -78,7 +76,6 @@ export function ExperimentsSnapshotStrip({
         <StatCard
           label={statLabels?.assignments ?? 'Assignments'}
           value={stats.totalAssignments}
-          accent={stats.totalAssignments > 0 ? 'text-brand' : undefined}
           tooltip={totalAssignmentsTooltip(stats)}
           detail={totalAssignmentsDetail(stats)}
           to={experimentsLinks.assignments}

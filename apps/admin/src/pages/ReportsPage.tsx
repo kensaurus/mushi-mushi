@@ -35,13 +35,11 @@ import { ReportPreviewDrawer } from '../components/reports/ReportPreviewDrawer'
 import { SavedViewsRow } from '../components/SavedViewsRow'
 import { ReportsKpiStrip } from '../components/reports/ReportsKpiStrip'
 import { ReportsStatusBanner } from '../components/reports/ReportsStatusBanner'
-import { ReportsTriageGuide } from '../components/reports/ReportsTriageGuide'
 import {
   EMPTY_REPORTS_STATS,
   type ReportsStats,
 } from '../components/reports/ReportsStatsTypes'
-import { isReportsBannerVisible } from '../lib/reportsExplainer'
-import { shouldHideGuideWhenBannerActive, COMMON_HEALTHY_PRIORITIES } from '../lib/pagePostureHelpers'
+import { isReportsBannerVisible, TRIAGE_SEVERITY_DEFINITIONS } from '../lib/reportsExplainer'
 import { ReportsTable } from '../components/reports/ReportsTable'
 import { PAGE_SIZE, withLocallySeen, type ReportRow, type SortDir, type SortField } from '../components/reports/types'
 import { pluralize, pluralizeWithCount } from '../lib/format'
@@ -723,16 +721,20 @@ export function ReportsPage() {
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-reports">
       <PageHeaderBar
-        title={copy?.title ?? 'Reports'}
+        title={copy?.title ?? 'Bugs'}
         icon={<IconReports />}
         projectScope={projectName}
         description={copy?.description ?? 'User-felt friction reports waiting for review. Sort by severity, dispatch fixes, or dismiss noise.'}
         helpTitle={copy?.help?.title ?? 'About Reports'}
         helpWhatIsIt={copy?.help?.whatIsIt ?? 'Every bug your end-users flagged, grouped and ranked by how many people are affected. Confirm severity, then send to auto-fix or dismiss noise.'}
-        helpUseCases={copy?.help?.useCases ?? [
-          'Review incoming reports — sort by severity, filter by status',
-          'Bulk-dismiss noise or escalate a batch of regressions in one click',
-          'Drill into a single report for the original payload, screenshots, and timeline',
+        helpUseCases={[
+          ...(copy?.help?.useCases ?? [
+            'Review incoming reports — sort by severity, filter by status',
+            'Bulk-dismiss noise or escalate a batch of regressions in one click',
+            'Drill into a single report for the original payload, screenshots, and timeline',
+          ]),
+          // The severity guide used to be its own panel under the banner.
+          ...TRIAGE_SEVERITY_DEFINITIONS.map((sev) => `${sev.label}: ${sev.plain} ${sev.triageHint}`),
         ]}
         helpHowToUse={copy?.help?.howToUse ?? 'Use j/k to move, x to select, Enter to open, / to search, ? for the full cheat sheet. Click a column header to sort. Select rows to reveal bulk actions.'}
       >
@@ -785,15 +787,6 @@ export function ReportsPage() {
                 }}
               />
             ),
-          },
-          {
-            priority: POSTURE_PRIORITY.guide,
-            show: !shouldHideGuideWhenBannerActive(
-              isReportsBannerVisible(reportsStats),
-              [...COMMON_HEALTHY_PRIORITIES, 'clear'],
-              reportsStats.topPriority ?? 'clear',
-            ),
-            children: <ReportsTriageGuide topPriority={reportsStats.topPriority} stats={reportsStats} />,
           },
         ]}
       />

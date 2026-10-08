@@ -3,7 +3,7 @@
  * PURPOSE: Single-source-of-truth hook for the DB-backed onboarding checklist.
  *          Wraps `usePageData('/v1/admin/setup')` and exposes typed selectors
  *          consumed by:
- *            - DashboardPage (banner mode SetupChecklist + redirect logic)
+ *            - DashboardPage (redirect logic) and the setup checklists
  *            - OnboardingPage (wizard mode)
  *            - per-page EmptyState nudges (e.g. "you need to install the SDK
  *              before reports show up here")

@@ -133,6 +133,17 @@ describe('gates', () => {
     expect(state({ key: 'gates', runs: [run({ completedAt: null })], cadenceDays: 7 })).toBe('unknown')
   })
   it('fresh and clean is ok', () => expect(state({ key: 'gates', runs: [run()], cadenceDays: 7 })).toBe('ok'))
+  it('counts only current results as problems to fix and names the old ones apart', () => {
+    const out = deriveElementState({
+      key: 'gates',
+      runs: [run({ gate: 'schema_drift', status: 'warn', openFindings: 3 }), run({ gate: 'crawl', status: 'fail', completedAt: TEN_DAYS_AGO, openFindings: 10 })],
+      cadenceDays: 7,
+    }, NOW)
+    expect(out.state).toBe('drift')
+    expect(out.reason).toMatch(/^3 problems to fix: /)
+    expect(out.reason).toContain('10 older problems from')
+    expect(out.reason).toContain('run it again before acting on it')
+  })
   it('drift names each check with open problems in plain words, never a raw gate id', () => {
     const r = deriveElementState({ key: 'gates', runs: [run({ gate: 'radar', openFindings: 1 }), run({ gate: 'code_health', openFindings: 9 }), run({ gate: 'crawl' })], cadenceDays: 7 }, NOW)
     expect(r.state).toBe('drift')

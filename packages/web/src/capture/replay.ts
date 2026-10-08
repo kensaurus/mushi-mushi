@@ -161,9 +161,13 @@ async function loadRrweb(loader?: () => Promise<unknown>): Promise<RrwebModule |
     // `const specifier = 'rrweb'` into a literal `import("rrweb")`, which Vite
     // then failed to resolve in every host without rrweb (the-wanting-mind
     // e2e, SDK 1.31.0). A global read cannot be folded.
+    // webpackIgnore: Turbopack (Next 16's default dev bundler) still saw
+    // `<dynamic> | 'rrweb'` and failed the page with "Module not found"
+    // (glot.it, 2026-10-06). Webpack and Turbopack both leave an ignored
+    // import to the runtime, where it throws and is caught below.
     const specifier =
       (globalThis as { __MUSHI_RRWEB_SPECIFIER__?: string }).__MUSHI_RRWEB_SPECIFIER__ || RRWEB_SPECIFIER
-    rrwebModule = asRrweb(await import(/* @vite-ignore */ specifier))
+    rrwebModule = asRrweb(await import(/* webpackIgnore: true */ /* @vite-ignore */ specifier))
     return rrwebModule
   } catch {
     return null

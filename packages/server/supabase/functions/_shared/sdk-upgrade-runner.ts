@@ -30,6 +30,7 @@ import {
   type BumpEntry,
 } from './sdk-upgrade-plan.ts'
 import { UPGRADE_BRANCH_PREFIX, completedJobCockpitFields } from './sdk-upgrade-gates.ts'
+import { pickSdkUpgradeRepo, type SdkUpgradeRepoRow } from './sdk-upgrade-repo.ts'
 import { SDK_UPGRADE_STALE_MS, shouldClaimSdkUpgradeJob } from './sdk-upgrade-reclaim.ts'
 
 const log = rootLog.child('sdk-upgrade-runner')
@@ -134,22 +135,32 @@ export async function runSdkUpgradeJob(jobId: string): Promise<SdkUpgradeRunResu
   }
 
   try {
-    const token = await resolveProjectGithubToken(db, job.project_id)
-    if (!token) {
-      log.warn('sdk-upgrade-runner: no GitHub token', { projectId: job.project_id })
-      await finalize('completed_no_pr', { error: 'No GitHub token configured for this project.' })
+    const [{ data: repoRows }, { data: settings }] = await Promise.all([
+      db
+        .from('project_repos')
+        .select('repo_url, role, is_primary, default_branch, github_app_installation_id')
+        .eq('project_id', job.project_id),
+      db
+        .from('project_settings')
+        .select('github_repo_url')
+        .eq('project_id', job.project_id)
+        .maybeSingle(),
+    ])
+
+    const choice = pickSdkUpgradeRepo(
+      (repoRows ?? []) as SdkUpgradeRepoRow[],
+      settings?.github_repo_url ?? null,
+    )
+    const repoRef = parseGithubRepoUrl(choice?.repoUrl ?? null)
+    if (!choice || !repoRef) {
+      await finalize('completed_no_pr', { error: 'No linked GitHub repo, or its URL is invalid.' })
       return { ok: true, status: 'completed_no_pr' }
     }
 
-    const { data: settings } = await db
-      .from('project_settings')
-      .select('github_repo_url')
-      .eq('project_id', job.project_id)
-      .maybeSingle()
-
-    const repoRef = parseGithubRepoUrl(settings?.github_repo_url ?? null)
-    if (!repoRef) {
-      await finalize('completed_no_pr', { error: 'github_repo_url is missing or invalid.' })
+    const token = await resolveProjectGithubToken(db, job.project_id, choice.installationId)
+    if (!token) {
+      log.warn('sdk-upgrade-runner: no GitHub token', { projectId: job.project_id })
+      await finalize('completed_no_pr', { error: 'No GitHub token configured for this project.' })
       return { ok: true, status: 'completed_no_pr' }
     }
 
@@ -160,15 +171,19 @@ export async function runSdkUpgradeJob(jobId: string): Promise<SdkUpgradeRunResu
       'X-GitHub-Api-Version': '2022-11-28',
     }
 
+    // GitHub is the truth. project_repos.default_branch is NOT NULL DEFAULT
+    // 'main', so a row can say main for a master repo; trusting it first would
+    // scan a missing ref and finish "already up to date" with no PR.
     const repoInfoRes = await ghFetchOptional(
       `https://api.github.com/repos/${owner}/${repo}`,
       { headers: baseHeaders },
     )
-    const defaultBranch =
+    const githubDefault =
       repoInfoRes && typeof repoInfoRes === 'object' &&
-      'default_branch' in (repoInfoRes as Record<string, unknown>)
+      typeof (repoInfoRes as Record<string, unknown>).default_branch === 'string'
         ? ((repoInfoRes as Record<string, unknown>).default_branch as string)
-        : 'main'
+        : null
+    const defaultBranch = githubDefault ?? choice.defaultBranch ?? 'main'
 
     const latestVersions = await fetchAllLatestVersions()
 

@@ -19,27 +19,47 @@ export interface AnalyzeJobResult {
   pathsAnalyzed?: number
 }
 
+/**
+ * A job still 'running' after this long lost its worker (the edge wall clock
+ * is 150-400 s), so the drain puts it back in the queue.
+ */
+const ANALYZE_JOB_STALE_MS = 15 * 60 * 1000
+/** Jobs one drain call starts at most, and the cap a caller may ask for. */
+const ANALYZE_DRAIN_DEFAULT_LIMIT = 5
+const ANALYZE_DRAIN_MAX_LIMIT = 20
+/** A drain stops starting new jobs after this long, inside the edge wall clock. */
+const ANALYZE_DRAIN_BUDGET_MS = 100 * 1000
+
 export async function runCodebaseAnalyzeJob(
   db: SupabaseClient,
   jobId: string,
 ): Promise<AnalyzeJobResult> {
-  const { data: job, error: jobErr } = await db
+  // Claim and read in one conditional update: two callers (a push kick and
+  // the cron drain) can reach the same job, and only the one whose update
+  // matched status = 'queued' runs it.
+  const claimedAt = new Date().toISOString()
+  const { data: job, error: claimErr } = await db
     .from('codebase_analyze_jobs')
-    .select('id, project_id, status, trigger, changed_paths')
+    .update({ status: 'running', started_at: claimedAt, updated_at: claimedAt })
     .eq('id', jobId)
+    .eq('status', 'queued')
+    .select('id, project_id, status, trigger, changed_paths')
     .maybeSingle()
 
-  if (jobErr || !job) {
-    return { ok: false, status: 'failed', error: jobErr?.message ?? 'job not found' }
+  if (claimErr) {
+    return { ok: false, status: 'failed', error: `claim failed: ${claimErr.message}` }
   }
-  if (job.status !== 'queued') {
-    return { ok: true, status: 'skipped', error: `job status ${job.status}` }
+  if (!job) {
+    const { data: existing, error: readErr } = await db
+      .from('codebase_analyze_jobs')
+      .select('status')
+      .eq('id', jobId)
+      .maybeSingle()
+    if (readErr || !existing) {
+      return { ok: false, status: 'failed', error: readErr?.message ?? 'job not found' }
+    }
+    return { ok: true, status: 'skipped', error: `job status ${existing.status}` }
   }
-
-  await db
-    .from('codebase_analyze_jobs')
-    .update({ status: 'running', started_at: new Date().toISOString(), updated_at: new Date().toISOString() })
-    .eq('id', jobId)
 
   try {
     const projectId = job.project_id as string
@@ -52,6 +72,7 @@ export async function runCodebaseAnalyzeJob(
         .from('codebase_analyze_jobs')
         .update({
           status: 'completed',
+          error: null,
           finished_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
           plan: { wiki_sources: wiki.processed, ready: wiki.ready, failed: wiki.failed },
@@ -137,6 +158,7 @@ export async function runCodebaseAnalyzeJob(
       .from('codebase_analyze_jobs')
       .update({
         status: 'completed',
+        error: null,
         finished_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         plan: { node_count: merged.nodes.length, edge_count: merged.edges.length },
@@ -158,6 +180,81 @@ export async function runCodebaseAnalyzeJob(
       .eq('id', jobId)
     return { ok: false, status: 'failed', error: msg }
   }
+}
+
+/** Clamp a caller's `limit` to 1..20; anything unusable means the default. */
+export function analyzeDrainLimit(raw: unknown): number {
+  const n = typeof raw === 'number' ? raw : typeof raw === 'string' ? Number(raw) : NaN
+  if (!Number.isFinite(n) || n < 1) return ANALYZE_DRAIN_DEFAULT_LIMIT
+  return Math.min(Math.floor(n), ANALYZE_DRAIN_MAX_LIMIT)
+}
+
+/**
+ * Put jobs whose worker died (still 'running' after ANALYZE_JOB_STALE_MS)
+ * back in the queue. A job that times out on every attempt is requeued every
+ * time; there is no attempt counter yet.
+ */
+async function requeueStaleAnalyzeJobs(
+  db: SupabaseClient,
+  nowMs: number = Date.now(),
+): Promise<{ requeued: number; error?: string }> {
+  const cutoff = new Date(nowMs - ANALYZE_JOB_STALE_MS).toISOString()
+  const { data, error } = await db
+    .from('codebase_analyze_jobs')
+    .update({
+      status: 'queued',
+      started_at: null,
+      updated_at: new Date(nowMs).toISOString(),
+      error: `Requeued: still running after ${ANALYZE_JOB_STALE_MS / 60000} minutes (the worker stopped).`,
+    })
+    .eq('status', 'running')
+    .lt('started_at', cutoff)
+    .select('id')
+  if (error) return { requeued: 0, error: error.message }
+  return { requeued: data?.length ?? 0 }
+}
+
+interface AnalyzeDrainSummary {
+  requeued: number
+  picked: number
+  results: Array<{ jobId: string; status: AnalyzeJobResult['status']; error?: string }>
+  error?: string
+}
+
+/**
+ * Drain the queue: requeue stale jobs, then run the oldest queued jobs one at
+ * a time. Each run claims its job with a conditional update, so a concurrent
+ * kick or a second drain never runs the same job twice. Stops starting jobs
+ * after ANALYZE_DRAIN_BUDGET_MS so the call ends inside the edge wall clock.
+ */
+export async function drainCodebaseAnalyzeJobs(
+  db: SupabaseClient,
+  opts: { limit?: number; now?: () => number } = {},
+): Promise<AnalyzeDrainSummary> {
+  const now = opts.now ?? Date.now
+  const startedAt = now()
+  const limit = analyzeDrainLimit(opts.limit)
+  const stale = await requeueStaleAnalyzeJobs(db, startedAt)
+  if (stale.error) runnerLog.warn('stale analyze job requeue failed', { err: stale.error })
+
+  const { data: queued, error: pickErr } = await db
+    .from('codebase_analyze_jobs')
+    .select('id')
+    .eq('status', 'queued')
+    .order('created_at', { ascending: true })
+    .limit(limit)
+  if (pickErr) {
+    return { requeued: stale.requeued, picked: 0, results: [], error: `queue read failed: ${pickErr.message}` }
+  }
+
+  const results: AnalyzeDrainSummary['results'] = []
+  for (const row of queued ?? []) {
+    if (now() - startedAt > ANALYZE_DRAIN_BUDGET_MS) break
+    const jobId = row.id as string
+    const result = await runCodebaseAnalyzeJob(db, jobId)
+    results.push({ jobId, status: result.status, ...(result.error ? { error: result.error } : {}) })
+  }
+  return { requeued: stale.requeued, picked: queued?.length ?? 0, results }
 }
 
 export async function enqueueCodebaseAnalyzeJob(

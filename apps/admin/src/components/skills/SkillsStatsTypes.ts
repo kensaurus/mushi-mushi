@@ -18,6 +18,8 @@ export interface SkillsStats {
   activeRuns: number
   failedRuns: number
   awaitingCheckin: number
+  /** Created time of the oldest step awaiting check-in; absent on older APIs. */
+  oldestAwaitingCheckinAt?: string | null
   topPriority: SkillsTopPriority
   topPriorityLabel: string | null
   topPriorityTo: string | null
@@ -31,6 +33,7 @@ export const EMPTY_SKILLS_STATS: SkillsStats = {
   activeRuns: 0,
   failedRuns: 0,
   awaitingCheckin: 0,
+  oldestAwaitingCheckinAt: null,
   topPriority: 'no_project',
   topPriorityLabel: null,
   topPriorityTo: null,

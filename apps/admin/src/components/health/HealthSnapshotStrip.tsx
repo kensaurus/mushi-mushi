@@ -46,7 +46,6 @@ export function HealthSnapshotStrip({
         <StatCard
           label={statLabels?.calls ?? 'LLM calls'}
           value={stats.totalCalls}
-          accent={stats.totalCalls > 0 ? 'text-brand' : undefined}
           tooltip={totalCallsTooltip(stats)}
           detail={totalCallsDetail(stats)}
           to={healthLinks.totalCalls}
@@ -85,7 +84,6 @@ export function HealthSnapshotStrip({
         <StatCard
           label={statLabels?.lastCall ?? 'Last LLM call'}
           value={stats.lastLlmCallAt ? 'Recent' : '—'}
-          accent={stats.lastLlmCallAt ? 'text-ok' : stats.hasAnyProject ? 'text-brand' : undefined}
           tooltip={lastCallTooltip(stats)}
           detail={lastCallDetail(stats)}
           to={healthLinks.lastCall}

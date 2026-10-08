@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { exploreActionLabelFor, exploreTabSearchParams } from './exploreTabNavigation'
+import { defaultTabForPrimary, exploreActionLabelFor, exploreTabSearchParams, resolveExploreTab } from './exploreTabNavigation'
 
 describe('exploreTabSearchParams', () => {
   it('writes tab=graph explicitly so Beginner/Quickstart do not redirect away', () => {
@@ -19,5 +19,13 @@ describe('exploreActionLabelFor', () => {
     expect(exploreActionLabelFor('/explore?tab=ask&project=p1')).toBe('Open Ask')
     expect(exploreActionLabelFor('/explore?tab=graph')).toBe('Open Graph')
     expect(exploreActionLabelFor('/connect')).toBe('Open Connect')
+  })
+})
+
+describe('default map view', () => {
+  it('lands on Layers, not the graph that renders a big repo as a strip', () => {
+    expect(resolveExploreTab(null)).toBe('layers')
+    expect(defaultTabForPrimary('map')).toBe('layers')
+    expect(resolveExploreTab('graph')).toBe('graph')
   })
 })

@@ -248,15 +248,22 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: { code?: string; 
       case 'upsert': {
         const items = Array.isArray(this.payload) ? this.payload : [this.payload as Row]
         const keys = this.onConflict ?? this.db.options.uniques?.[this.table] ?? null
+        // Like PostgREST, `.select()` after an upsert returns the stored rows
+        // (an updated row keeps its id), not the payload.
+        const stored: Row[] = []
         for (const item of items) {
           const existing = keys ? rows.find((r) => keys.every((k) => r[k] === item[k])) : undefined
-          if (existing) Object.assign(existing, item)
-          else {
+          if (existing) {
+            Object.assign(existing, item)
+            stored.push(existing)
+          } else {
             if (this.db.options.autoId && item.id === undefined) item.id = crypto.randomUUID()
-            rows.push({ ...item })
+            const row = { ...item }
+            rows.push(row)
+            stored.push(row)
           }
         }
-        return this.returning ? this.finish(items) : { data: null, error: null }
+        return this.returning ? this.finish(stored) : { data: null, error: null }
       }
       case 'update': {
         const targets = this.matches()

@@ -31,13 +31,19 @@ describe('deriveDashboardInsight', () => {
     expect(i.action?.to).toBe('/fixes?tab=attempts&status=failed')
   })
 
+  it('uses the Inbox wording when every issue is only degraded', () => {
+    const i = deriveDashboardInsight({ ...QUIET, integrationIssues: 2, degradedIntegrations: 2 })
+    expect(i.sentence).toBe('2 probes are degraded — slow but not down.')
+    expect(i.action?.to).toBe('/health?status=amber')
+  })
+
   it('has no action when all is well', () => {
     expect(deriveDashboardInsight(QUIET).action).toBeUndefined()
   })
 })
 
 describe('shouldShowPdcaFlow (QA 169)', () => {
-  const base = { isAdvanced: true, renderFullDashboard: true, hasPdcaStages: true, showFirstReportHero: false }
+  const base = { isAdvanced: true, renderFullDashboard: true, hasPdcaStages: true, showFirstReportHero: false, pipelineStripVisible: false }
   it('shows the live canvas in advanced mode even though the insight banner always has a verdict', () => {
     expect(deriveDashboardInsight(QUIET)).not.toBeNull()
     expect(shouldShowPdcaFlow(base)).toBe(true)
@@ -47,5 +53,8 @@ describe('shouldShowPdcaFlow (QA 169)', () => {
     expect(shouldShowPdcaFlow({ ...base, renderFullDashboard: false })).toBe(false)
     expect(shouldShowPdcaFlow({ ...base, hasPdcaStages: false })).toBe(false)
     expect(shouldShowPdcaFlow({ ...base, showFirstReportHero: true })).toBe(false)
+  })
+  it('hides it while the global pipeline strip shows the same stages', () => {
+    expect(shouldShowPdcaFlow({ ...base, pipelineStripVisible: true })).toBe(false)
   })
 })

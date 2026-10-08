@@ -24,9 +24,11 @@ import { log } from '../_shared/logger.ts'
 import { reportError, withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import {
+  diffSchemaShapes,
   listTables,
   hashSchema,
   resolveSupabasePat,
+  schemaShape,
   type TableInfo,
 } from '../_shared/supabase-mcp-client.ts'
 
@@ -41,32 +43,6 @@ interface ProjectWithSettings {
   id: string
   name: string
   supabase_project_ref: string | null
-}
-
-/**
- * Diff two schema snapshots. Returns a summary of added, removed,
- * and modified tables — enough for a PM to understand what changed.
- */
-function diffSchemas(
-  prev: TableInfo[],
-  curr: TableInfo[],
-): { added: string[]; removed: string[]; modified: string[] } {
-  const prevMap = new Map(prev.map((t) => [t.name, t]))
-  const currMap = new Map(curr.map((t) => [t.name, t]))
-
-  const added = [...currMap.keys()].filter((k) => !prevMap.has(k))
-  const removed = [...prevMap.keys()].filter((k) => !currMap.has(k))
-  const modified: string[] = []
-
-  for (const [name, currTable] of currMap) {
-    const prevTable = prevMap.get(name)
-    if (!prevTable) continue
-    if (JSON.stringify(prevTable) !== JSON.stringify(currTable)) {
-      modified.push(name)
-    }
-  }
-
-  return { added, removed, modified }
 }
 
 async function scanProject(
@@ -91,7 +67,8 @@ async function scanProject(
     throw new Error(`listTables failed for ${project.id}: ${String(err).slice(0, 300)}`)
   }
 
-  const currHash = await hashSchema(currTables)
+  // Hash the schema shape only: row counts change daily without a schema change.
+  const currHash = await hashSchema(schemaShape(currTables))
 
   // Fetch the most recent snapshot for this project.
   const { data: prevSnap } = await db
@@ -107,11 +84,15 @@ async function scanProject(
   let drifted = false
 
   if (prevSnap && prevSnap.schema_hash !== currHash) {
-    drifted = true
+    // A hash from before the shape-only rule differs on row counts alone:
+    // only a real added, removed or changed table is drift.
     const prevTables = (prevSnap.schema_json as TableInfo[] | null) ?? []
-    const diff = diffSchemas(prevTables, currTables)
-    diffSummary = diff as Record<string, unknown>
-    dlog.info('schema drift detected', { projectId: project.id, diff })
+    const diff = diffSchemaShapes(prevTables, currTables)
+    if (diff.added.length + diff.removed.length + diff.modified.length > 0) {
+      drifted = true
+      diffSummary = diff as Record<string, unknown>
+      dlog.info('schema drift detected', { projectId: project.id, diff })
+    }
   }
 
   const { error: snapErr } = await db.from('backend_schema_snapshots').insert({
@@ -123,6 +104,22 @@ async function scanProject(
   if (snapErr) throw new Error(`backend_schema_snapshots insert failed for ${project.id}: ${snapErr.message}`)
 
   if (!drifted || !diffSummary) {
+    // A clean read is a result too: record it as a pass, so last day's
+    // findings stop reading as the current state of the schema.
+    if (prevSnap) {
+      const now = new Date().toISOString()
+      const { error: passErr } = await db.from('gate_runs').insert({
+        project_id: project.id,
+        gate: 'schema_drift',
+        status: 'pass',
+        triggered_by: 'backend-drift-scanner',
+        summary: { added: 0, removed: 0, modified: 0, total_changes: 0 },
+        findings_count: 0,
+        started_at: now,
+        completed_at: now,
+      })
+      if (passErr) throw new Error(`schema_drift pass run insert failed for ${project.id}: ${passErr.message}`)
+    }
     return { scanned: true, drifted: false, findings: 0 }
   }
 

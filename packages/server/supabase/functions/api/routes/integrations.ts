@@ -13,6 +13,7 @@ import {
   validateRoutingConfig,
 } from '../../_shared/integration-validation.ts';
 import { platformCardValues } from '../../_shared/platform-config.ts';
+import { removePlatformKeys, type PlatformKeyStore } from '../../_shared/platform-key-removal.ts';
 import { extractInboundTraceparent } from '../../_shared/trace.ts';
 import { log } from '../../_shared/logger.ts';
 import { vaultRoutingSecrets } from '../../_shared/routing-secrets.ts';
@@ -650,6 +651,79 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
       kind,
     });
     return c.json({ ok: true });
+  });
+
+  // DELETE /v1/admin/integrations/platform/:kind/key — the card's "Remove key".
+  // Clears every secret field this project stores for :kind (the vaulted
+  // ones: tokens, keys, webhook secrets) and deletes the project's own Vault
+  // secrets. Plain settings (repo URL, org slug, model) stay. Org defaults
+  // and env values are not touched, so the card may still read as connected
+  // through them. Same owner/admin gate as the Save that wrote the key:
+  // a member cannot set a key, so a member cannot remove one either.
+  // Linear has its own Disconnect (OAuth + webhook teardown) on its card.
+  const REMOVABLE_KEY_KINDS = ['sentry', 'langfuse', 'github', 'cursor_cloud', 'claude_code_agent'];
+  app.delete('/v1/admin/integrations/platform/:kind/key', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const kind = c.req.param('kind')!;
+    if (!REMOVABLE_KEY_KINDS.includes(kind)) {
+      return c.json({ ok: false, error: { code: 'BAD_KIND', message: `"${kind}" has no removable key here.` } }, 400);
+    }
+    const db = getServiceClient();
+    const resolvedProject = await resolveOwnedProject(c, db, userId);
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
+    const forbidden = requireProjectAdmin(c, project);
+    if (forbidden) return forbidden;
+    const projectId = project.id as string;
+
+    const store: PlatformKeyStore = {
+      readFields: async (fields) => {
+        const { data, error } = await db
+          .from('project_settings')
+          .select(fields.join(', '))
+          .eq('project_id', projectId)
+          .maybeSingle();
+        return { row: (data ?? null) as Record<string, unknown> | null, error: error?.message ?? null };
+      },
+      clearFields: async (fields) => {
+        const patch = Object.fromEntries(fields.map((f) => [f, null]));
+        const { error } = await db.from('project_settings').update(patch).eq('project_id', projectId);
+        return error?.message ?? null;
+      },
+      refUsedElsewhere: async (field, ref) => {
+        const { data, error } = await db
+          .from('project_settings')
+          .select('project_id')
+          .eq(field, ref)
+          .neq('project_id', projectId)
+          .limit(1);
+        // Unknown = shared: never delete a secret we could not prove is ours alone.
+        return Boolean(error) || (data ?? []).length > 0;
+      },
+      deleteVaultSecret: async (name) => {
+        const { error } = await db.rpc('vault_delete_secret', { secret_name: name });
+        if (error) {
+          log.warn('vault_delete_secret failed for integration key (non-fatal)', { kind, err: error.message });
+        }
+        return error?.message ?? null;
+      },
+    };
+
+    const removal = await removePlatformKeys(store, {
+      projectId,
+      kind,
+      fields: VAULTED_FIELDS_BY_KIND[kind] ?? [],
+    });
+    if (removal.error) {
+      return c.json({ ok: false, error: { code: 'DB_ERROR', message: 'Could not remove the key. Nothing was changed; try again.' } }, 500);
+    }
+    await logAudit(db, projectId, userId, 'settings.deleted', 'integration_platform', undefined, {
+      kind,
+      cleared: removal.cleared,
+      vaultSecretsDeleted: removal.deletedSecrets.length,
+      vaultSecretsKept: removal.keptSecrets.length,
+    });
+    return c.json({ ok: true, data: { cleared: removal.cleared } });
   });
 
   // ----- Org-level integration defaults (org owner / admin only) -----------

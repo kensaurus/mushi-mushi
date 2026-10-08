@@ -28,10 +28,75 @@ import {
   hostMatchesAllowlist,
   inventoryAppAllowHosts,
   isPrivateOrSpecialHost,
+  pickCrawlBaseUrl,
   safeFetch,
   stripCredentialsOnCrossHost,
   type ScopeContext,
 } from '../../supabase/functions/_shared/inventory-guards.ts'
+
+// ---------------------------------------------------------------------------
+// pickCrawlBaseUrl — which URL the cloud crawler uses
+// ---------------------------------------------------------------------------
+
+describe('pickCrawlBaseUrl', () => {
+  // glot.it's inventory, 2026-10-07: every crawl went to the developer's machine.
+  const glot = { base_url: 'https://kensaur.us/glot-it', preview_url: 'http://localhost:3000' }
+
+  it('passes over a localhost preview for the production base_url', () => {
+    expect(pickCrawlBaseUrl(null, glot)).toEqual({
+      url: 'https://kensaur.us/glot-it',
+      source: 'base_url',
+      skipped: ['preview_url http://localhost:3000 is a local or private address a cloud crawler cannot reach'],
+    })
+  })
+
+  it('needs https for a preview only; a public http production URL still counts', () => {
+    const choice = pickCrawlBaseUrl(null, { preview_url: 'http://pr-3.preview.example.com', base_url: 'http://legacy.example.com' })
+    expect(choice).toEqual({
+      url: 'http://legacy.example.com',
+      source: 'base_url',
+      skipped: ['preview_url http://pr-3.preview.example.com is not https'],
+    })
+  })
+
+  it('keeps a real https preview ahead of staging and production', () => {
+    const app = { base_url: 'https://app.example.com', staging_url: 'https://staging.example.com', preview_url: 'https://pr-12.preview.example.com' }
+    expect(pickCrawlBaseUrl(null, app)).toMatchObject({ url: 'https://pr-12.preview.example.com', source: 'preview_url', skipped: [] })
+  })
+
+  it.each([
+    'http://127.0.0.1:3000',
+    'https://192.168.1.20',
+    'https://10.0.0.5:8443',
+    'https://myapp.localhost',
+    'https://devbox.local',
+    'http://preview.example.com',
+    'not a url',
+  ])('rejects %s as a preview and falls through to staging', (preview) => {
+    const choice = pickCrawlBaseUrl(null, { preview_url: preview, staging_url: 'https://staging.example.com', base_url: 'https://example.com' })
+    expect(choice).toMatchObject({ url: 'https://staging.example.com', source: 'staging_url' })
+    expect(choice.skipped).toHaveLength(1)
+  })
+
+  it('lets an explicit crawler_base_url win as set', () => {
+    expect(pickCrawlBaseUrl(' https://kensaur.us/glot-it ', glot)).toEqual({
+      url: 'https://kensaur.us/glot-it',
+      source: 'crawler_base_url',
+      skipped: [],
+    })
+  })
+
+  it('returns no URL, with the reasons, when nothing is reachable', () => {
+    expect(pickCrawlBaseUrl('', { preview_url: 'http://localhost:3000', base_url: 'ftp://files.example.com' })).toEqual({
+      url: null,
+      skipped: [
+        'preview_url http://localhost:3000 is a local or private address a cloud crawler cannot reach',
+        'base_url ftp://files.example.com is not an http(s) URL',
+      ],
+    })
+    expect(pickCrawlBaseUrl(null, null)).toEqual({ url: null, skipped: [] })
+  })
+})
 
 // ---------------------------------------------------------------------------
 // assertSafeOutboundUrl + isPrivateOrSpecialHost + hostMatchesAllowlist

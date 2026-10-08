@@ -1,14 +1,13 @@
 /**
  * FILE: apps/admin/src/lib/fixRetry.test.ts
- * PURPOSE: /fixes rules from console QA group C: retry agent (241), tab
- *          resolution for status links (94), Refresh-from-GitHub result (88).
+ * PURPOSE: /fixes rules from console QA group C: retry agent (241) and the
+ *          Refresh-from-GitHub result (88).
  */
 
 import { describe, expect, it } from 'vitest'
 import {
   commonRetryAgent,
   describeCiRefresh,
-  resolveFixesTabParam,
   retryAgentFor,
   retryDispatchBody,
 } from './fixRetry'
@@ -35,15 +34,6 @@ describe('retry agent (QA 241)', () => {
       agentOverride: 'cursor_cloud',
     })
     expect(JSON.parse(retryDispatchBody('r1', 'p1', 'auto'))).toEqual({ reportId: 'r1', projectId: 'p1' })
-  })
-})
-
-describe('resolveFixesTabParam (QA 94)', () => {
-  it('opens Attempts for a status link without a tab', () => {
-    expect(resolveFixesTabParam(null, 'failed')).toBe('attempts')
-    expect(resolveFixesTabParam(null, null)).toBe('overview')
-    expect(resolveFixesTabParam('pipeline', 'failed')).toBe('pipeline')
-    expect(resolveFixesTabParam('bogus', null)).toBe('overview')
   })
 })
 

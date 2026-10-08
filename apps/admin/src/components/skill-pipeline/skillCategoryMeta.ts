@@ -71,6 +71,13 @@ export const SKILL_CATEGORY_META: Record<string, SkillCategoryMeta> = {
     badgeClass: 'bg-rose-muted text-rose',
     accentClass: 'border-l-rose/50',
   },
+  iterate: {
+    label: 'Iterate',
+    hint: 'Ranked fix loops on a live app and agent-harness guards',
+    Icon: IconBolt,
+    badgeClass: 'bg-info-muted text-info-foreground',
+    accentClass: 'border-l-info/50',
+  },
   backend: {
     label: 'Backend',
     hint: 'API design, observability, error handling, and data pipelines',

@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { Btn } from '../ui'
 import { Card } from '../../components/ui'
-import { gateLabel } from '../../lib/gateLabels'
+import { gateLabel, ruleLabel } from '../../lib/gateLabels'
 
 export interface GateFinding {
   id: string
@@ -28,7 +28,9 @@ export function GateFindingCard({
       <div className="flex items-center justify-between gap-2">
         <span className={`font-mono uppercase ${f.severity === 'error' ? 'text-danger' : f.severity === 'info' ? 'text-fg-muted' : 'text-warn'}`}>
           {f.gate ? gateLabel(f.gate) : 'gate'} · {f.severity ?? 'info'}
-          {f.rule_id ? ` · ${f.rule_id}` : ''}
+          {f.rule_id ? (
+            <span className="font-sans normal-case" title={f.rule_id}> · {ruleLabel(f.rule_id)}</span>
+          ) : null}
         </span>
         {f.file_path && onOpenFile && (
           <Btn

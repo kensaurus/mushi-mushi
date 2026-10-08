@@ -46,7 +46,6 @@ import {
   type QaCoverageFilter,
 } from '../lib/qaCoverageFilter'
 import { useActivationStatus, isActivationCockpitV2Enabled } from '../lib/useActivationStatus'
-import { Link } from 'react-router-dom'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { Drawer } from '../components/Drawer'
@@ -850,7 +849,7 @@ interface PendingReviewStory {
 
 export function QaCoveragePage() {
   const projectId = useActiveProjectId()
-  const { has, loading: entLoading, planName, canEditProject } = useEntitlements()
+  const { has, canEditProject } = useEntitlements()
   const inventoryEnabled = has('inventory_v2')
   const qaUx = useQaCoverageUx()
   const activationEnabled = isActivationCockpitV2Enabled()
@@ -995,11 +994,11 @@ export function QaCoveragePage() {
         </Card>
       ) : null}
       <PageHeaderBar
-        title="QA Coverage"
+        title="Scheduled tests"
         icon={<IconQaCoverage />}
         projectScope={null}
         withPageHero={false}
-        helpTitle="About QA Coverage"
+        helpTitle="About Scheduled tests"
         helpWhatIsIt="Automated user-story tests that run on a schedule via Playwright (local), Browserbase (cloud), or Firecrawl. Each story is a natural-language prompt or a full Playwright script. Results appear in the run history with screenshots and console logs."
         helpUseCases={[
           'Catch regressions in critical user flows before a release',
@@ -1036,7 +1035,6 @@ export function QaCoveragePage() {
                   statsFetchedAt={qaStatsFetchedAt}
                   statsValidating={qaStatsValidating}
                   hideLinks={qaUx.hideSnapshotLinks}
-                  compact={qaUx.compactSnapshot}
                 />
               ),
             },
@@ -1051,30 +1049,17 @@ export function QaCoveragePage() {
 
       {error && <ErrorAlert message={error} onRetry={reloadAll} />}
 
-      {/* Pending TDD review queue — always shown so users discover the feature */}
-      <Card className={`p-4 space-y-3 ring-1 ${pendingReview.length > 0 ? 'ring-warn/40 border-warn/30 bg-surface-raised' : 'ring-edge-subtle bg-surface-raised'}`}>
+      {/* Generated tests waiting for a person: shown only when there are some. */}
+      {pendingReview.length > 0 && (
+      <Card className="p-4 space-y-3 ring-1 ring-warn/40 border-warn/30 bg-surface-raised">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-fg">🧪 TDD Tests Pending Review</span>
-          {pendingReview.length > 0 && (
-            <span className={`text-2xs ${CHIP_TONE.warnSubtle} px-1.5 py-0.5 rounded-full`}>{pendingReview.length}</span>
-          )}
+          <IconQaCoverage className="h-4 w-4 text-warn" />
+          <span className="text-sm font-semibold text-fg">Generated tests to review</span>
+          <span className={`text-2xs ${CHIP_TONE.warnSubtle} px-1.5 py-0.5 rounded-full`}>{pendingReview.length}</span>
         </div>
         <p className="text-2xs text-fg-muted">
-          Tests generated from your user stories appear here. Approve to add them to your QA schedule, or reject to discard.
+          Mushi wrote these tests from your user stories or from a failing test. Approve to add one to the schedule, or reject to turn it off.
         </p>
-        {!entLoading && !inventoryEnabled ? (
-          <p className="text-2xs text-fg-muted py-1">
-            TDD review from user stories requires{' '}
-            <Link to="/billing" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
-              Bidirectional inventory
-            </Link>
-            {planName ? ` (not included on ${planName})` : '.'}
-          </p>
-        ) : pendingReview.length === 0 ? (
-          <p className="text-2xs text-fg-faint italic py-1">
-            No tests awaiting review — generate tests from User Stories → Discovery tab, or wait for the PDCA auto-improver to propose new ones.
-          </p>
-        ) : (
           <div className="space-y-2">
             {pendingReview.map((story) => (
               <div key={story.id} className="flex items-center gap-3 p-2.5 rounded-md bg-surface-overlay border border-edge-subtle text-2xs">
@@ -1113,8 +1098,8 @@ export function QaCoveragePage() {
               </div>
             ))}
           </div>
-        )}
       </Card>
+      )}
 
       {/* Story grid */}
       {loading && (

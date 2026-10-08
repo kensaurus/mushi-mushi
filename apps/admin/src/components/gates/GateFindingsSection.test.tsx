@@ -90,6 +90,47 @@ describe('GateFindingsSection', () => {
     expect(text).not.toContain('accepted')
   })
 
+  it('leads with the open totals, names rules in words and folds passing checks into one disclosure', async () => {
+    const runs = [
+      ...payload.runs,
+      { id: 'code-1', gate: 'code_health', status: 'pass', started_at: new Date().toISOString() },
+      { id: 'ci-old', gate: 'ci_drift', status: 'pass', started_at: '2026-01-01T00:00:00Z' },
+    ]
+    apiFetch.mockResolvedValue({ ok: true, data: { ...payload, runs } })
+    render()
+    await flush()
+    expect(container.querySelector('[data-testid="gate-findings-totals"]')?.textContent).toBe('1 error · 1 warning open in 2 checks')
+    const text = container.textContent ?? ''
+    expect(text).toContain('No spend cap or AI budget × 1')
+    expect(text).toContain('Colour off the design tokens × 1')
+    expect(text).not.toContain('spend_cap_unset ×')
+    const passing = container.querySelector('[data-testid="gate-checks-passing"]')
+    expect(passing?.tagName).toBe('DETAILS')
+    expect(passing?.hasAttribute('open')).toBe(false)
+    expect(passing?.querySelector('summary')?.textContent).toBe('1 check passing')
+    expect(container.querySelector('[data-check="code_health"]')?.closest('details')).toBe(passing)
+    // A pass from months ago is not a current pass: it keeps its card and its "run it again" note.
+    const stale = [...container.querySelectorAll('h3')].find((h) => h.textContent === 'CI differs from the recipe')
+    expect(stale).toBeDefined()
+    expect(stale?.closest('details')).toBeNull()
+    expect(passing?.textContent).not.toContain('CI differs from the recipe')
+    expect(text).toContain('run it again before acting on it')
+  })
+
+  it('reads the findings again when refreshKey changes', async () => {
+    apiFetch.mockResolvedValue({ ok: true, data: payload })
+    render()
+    await flush()
+    const before = apiFetch.mock.calls.length
+    act(() =>
+      root.render(
+        createElement(MemoryRouter, null, createElement(GateFindingsSection, { projectId: 'p1', neverRunText: 'Never ran.', refreshKey: 1 })),
+      ),
+    )
+    await flush()
+    expect(apiFetch.mock.calls.length).toBeGreaterThan(before)
+  })
+
   it('says not checked yet, never a pass, when no run finished', async () => {
     apiFetch.mockResolvedValue({ ok: true, data: { runs: [{ id: 'r', gate: 'radar', status: 'running' }], findings: [] } })
     render('radar')
@@ -260,5 +301,100 @@ describe('GateFindingsSection', () => {
     await flush()
     expect(button('Apply suggested caps')).toBeUndefined()
     expect(container.textContent).toContain('Only team owners and admins can set spend caps')
+    // Viewers are read-only on the server: no Dismiss either.
+    expect(button('Dismiss')).toBeUndefined()
+  })
+})
+
+describe('Dismiss a finding', () => {
+  const DISMISS_PATH = '/v1/admin/projects/p1/gate-findings/f-design/dismiss'
+  /** The Dismiss button on the card whose message is the design finding's. */
+  const designDismiss = (): HTMLButtonElement | undefined => {
+    let el: HTMLElement | null = [...document.body.querySelectorAll('p')].find((p) => p.textContent === 'Hex colour off the palette') ?? null
+    while (el) {
+      const btn = [...el.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Dismiss')
+      if (btn) return btn
+      el = el.parentElement
+    }
+    return undefined
+  }
+
+  async function type(value: string) {
+    const input = document.body.querySelector('input') as HTMLInputElement
+    const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
+    await act(async () => {
+      setValue.call(input, value)
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+  }
+
+  it('needs a reason, then posts it to the finding’s project and drops the finding from the list', async () => {
+    let dismissed = false
+    apiFetch.mockImplementation(async (path: string) => {
+      if (path === '/v1/admin/inventory/p1/findings') {
+        return {
+          ok: true,
+          data: { ...payload, findings: payload.findings.map((f) => (f.id === 'f-design' && dismissed ? { ...f, allowlisted: true } : f)) },
+        }
+      }
+      return { ok: true, data: { organizations: [] } }
+    })
+    apiFetchMutate.mockImplementation(async () => {
+      dismissed = true
+      return { ok: true, data: { id: 'f-design', alreadyDismissed: false } }
+    })
+    render()
+    await flush()
+    expect(container.textContent).toContain('Hex colour off the palette')
+
+    await act(async () => {
+      designDismiss()!.click()
+    })
+    await flush()
+    expect(document.body.textContent).toContain('Why is this not a problem?')
+
+    // Too short: refused in the dialog, nothing sent.
+    await type('ab')
+    await act(async () => {
+      button('Dismiss finding')!.click()
+    })
+    await flush()
+    expect(apiFetchMutate).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('at least 3 characters')
+
+    await type('Brand colour, allowed on purpose')
+    await act(async () => {
+      button('Dismiss finding')!.click()
+    })
+    await flush()
+    expect(apiFetchMutate).toHaveBeenCalledTimes(1)
+    expect(apiFetchMutate).toHaveBeenCalledWith(DISMISS_PATH, {
+      method: 'POST',
+      body: JSON.stringify({ reason: 'Brand colour, allowed on purpose' }),
+    })
+    expect(toast.success).toHaveBeenCalled()
+    expect(container.textContent).not.toContain('Hex colour off the palette')
+    expect(button('Dismiss finding')).toBeUndefined()
+  })
+
+  it('keeps the finding and says why when the server refuses', async () => {
+    apiFetch.mockImplementation(async (path: string) =>
+      path === '/v1/admin/inventory/p1/findings' ? { ok: true, data: payload } : { ok: true, data: { organizations: [] } },
+    )
+    apiFetchMutate.mockResolvedValue({ ok: false, error: { code: 'FORBIDDEN', message: 'Viewers have read-only access.' } })
+    render()
+    await flush()
+    await act(async () => {
+      designDismiss()!.click()
+    })
+    await flush()
+    await type('Not a problem here')
+    await act(async () => {
+      button('Dismiss finding')!.click()
+    })
+    await flush()
+    expect(toast.error).toHaveBeenCalled()
+    expect(toast.error.mock.calls[0][0]).toBe('Could not dismiss the finding')
+    expect(container.textContent).toContain('Hex colour off the palette')
   })
 })

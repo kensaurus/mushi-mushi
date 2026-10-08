@@ -70,7 +70,6 @@ export function AnomaliesSnapshotStrip({
         <StatCard
           label={statLabels?.autoReported ?? 'Auto-reported'}
           value={stats.autoReported}
-          accent={stats.autoReported > 0 ? 'text-brand' : undefined}
           tooltip={autoReportedTooltip(stats)}
           detail={autoReportedDetail()}
           to={anomaliesLinks.autoReported}
@@ -78,7 +77,6 @@ export function AnomaliesSnapshotStrip({
         <StatCard
           label={statLabels?.metricPoints ?? 'Metric points'}
           value={stats.metricPointCount}
-          accent={stats.metricPointCount > 0 ? 'text-brand' : undefined}
           tooltip={metricPointsTooltip(stats)}
           detail={metricPointsDetail(stats)}
           to={anomaliesLinks.metricPoints}

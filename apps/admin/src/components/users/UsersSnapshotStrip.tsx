@@ -63,7 +63,6 @@ export function UsersSnapshotStrip({
           <StatCard
             label="Paid users"
             value={stats.paid_users ?? '—'}
-            accent="text-brand"
             tooltip={paidUsersTooltip(stats)}
             detail={paidUsersDetail(stats)}
             to={usersLinks.paidUsers}
@@ -71,7 +70,6 @@ export function UsersSnapshotStrip({
           <StatCard
             label="MRR (USD)"
             value={`$${stats.mrr_usd.toLocaleString()}`}
-            accent="text-brand"
             tooltip={mrrTooltip(stats)}
             detail={mrrDetail()}
             to={usersLinks.mrr}

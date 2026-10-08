@@ -70,7 +70,7 @@ npx --yes @mushi-mushi/inventory-auth-runner refresh
 
 | Var                  | Required | Description                                                                                                |
 | -------------------- | -------- | ---------------------------------------------------------------------------------------------------------- |
-| `MUSHI_API_KEY`      | yes      | Project-scoped API key with the `mcp:write` scope. Mint one with **Mint mcp:write key** on the admin console's MCP page (`/mcp`). |
+| `MUSHI_API_KEY`      | yes      | Project-scoped API key with the `mcp:write` scope. Mint one on the admin console's Connect page (`/connect`, read + write access) or under Projects → keys. |
 | `MUSHI_PROJECT`      | yes      | Mushi project UUID.                                                                                        |
 | `MUSHI_API_ENDPOINT` | no       | API base URL. Defaults to the hosted Supabase functions endpoint.                                          |
 | `TEST_USER_EMAIL` / `TEST_USER_PASSWORD` | usually | Picked up by your `auth.scripted.script`; the runner itself doesn't read them. Add whatever your script needs. |
@@ -161,4 +161,4 @@ See root [LICENSE](../../LICENSE).
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 64 edge functions · 424 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 64 edge functions · 435 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

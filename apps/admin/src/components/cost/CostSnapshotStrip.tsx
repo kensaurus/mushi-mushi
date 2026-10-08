@@ -55,7 +55,6 @@ export function CostSnapshotStrip({
           <StatCard
             label={statLabels?.total ?? 'Total logged'}
             value={fmtSpend(stats.totalSpendUsd)}
-            accent={stats.totalSpendUsd > 0 ? 'text-brand' : undefined}
             tooltip={totalLoggedTooltip(stats)}
             detail={totalLoggedDetail(stats)}
             to={costLinks.totalLogged}
@@ -71,7 +70,6 @@ export function CostSnapshotStrip({
           <StatCard
             label={statLabels?.month ?? 'This month'}
             value={fmtSpend(stats.spendMonthUsd)}
-            accent="text-brand"
             tooltip={spendMonthTooltip(stats)}
             detail={spendMonthDetail(stats)}
             to={costLinks.spendMonth}

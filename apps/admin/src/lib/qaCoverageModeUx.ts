@@ -10,7 +10,6 @@ export interface QaCoverageUxFlags {
   isBeginner: boolean
   isAdvanced: boolean
   hideQaSnapshot: boolean
-  compactSnapshot: boolean
   hideSnapshotLinks: boolean
   /** PagePosture status banner replaces inline PageHero (Wave 5). */
   hideOverviewChrome: boolean
@@ -23,7 +22,6 @@ export function useQaCoverageUx(): QaCoverageUxFlags {
     isBeginner,
     isAdvanced,
     hideQaSnapshot: isQuickstart,
-    compactSnapshot: isQuickstart || isBeginner,
     hideSnapshotLinks: !isAdvanced,
     hideOverviewChrome: true,
   }

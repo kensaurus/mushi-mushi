@@ -42,6 +42,7 @@
 // uses. The cron itself is wired by the `20260427_retention_sweep_cron.sql`
 // migration via mushi_internal_auth_header().
 // ============================================================
+import { UX_CAPTURES_BUCKET } from '../_shared/ux-runs.ts'
 import { getServiceClient } from '../_shared/db.ts'
 import { log } from '../_shared/logger.ts'
 import { startCronRun } from '../_shared/telemetry.ts'
@@ -95,9 +96,10 @@ const handler = async (req: Request): Promise<Response> => {
     const skippedLegalHold = stats.filter((s) => s.legal_hold).length
     const voice = await sweepVoiceIntake(db)
     const traces = await sweepLlmTraces(db)
+    const uxCaptures = await sweepUxCaptures(db)
 
     await cron.finish({
-      rowsAffected: totalDeleted + voice.audio_deleted + voice.sessions_expired + traces.deleted,
+      rowsAffected: totalDeleted + voice.audio_deleted + voice.sessions_expired + traces.deleted + uxCaptures.deleted,
       metadata: {
         llm_traces_deleted: traces.deleted,
         projects_swept: stats.length,
@@ -105,6 +107,7 @@ const handler = async (req: Request): Promise<Response> => {
         skipped_legal_hold: skippedLegalHold,
         voice_audio_deleted: voice.audio_deleted,
         voice_sessions_expired: voice.sessions_expired,
+        ux_captures_deleted: uxCaptures.deleted,
       },
     })
 
@@ -117,6 +120,7 @@ const handler = async (req: Request): Promise<Response> => {
         per_project: stats,
         voice,
         llm_traces: traces,
+        ux_captures: uxCaptures,
       },
     })
   } catch (err) {
@@ -527,6 +531,87 @@ export async function sweepVoiceIntake(db: ReturnType<typeof getServiceClient>):
 
   if (stats.audio_deleted > 0 || stats.sessions_expired > 0) {
     rlog.info('voice_intake_swept', { ...stats })
+  }
+  return stats
+}
+
+// ── UX-loop screenshots (Plan 021) ─────────────────────────────────────────
+//
+// `mushi-ux --sync` uploads small before/after/diff PNGs to the private
+// `ux-captures` bucket. Past project_settings.ux_capture_retention_days
+// (default 30) the files are deleted and the surface rows forget the paths;
+// the run, its scores and its review stay.
+
+const UX_CAPTURE_BATCH = 200
+
+interface UxSettingsRow {
+  project_id: string
+  ux_capture_retention_days: number | null
+}
+
+interface UxThumbRow {
+  id: string
+  thumb_before?: string | null
+  thumb_after?: string | null
+  thumb_diff?: string | null
+  /** Slot → path (before-mobile, iter attempts' after-desktop, …). */
+  thumbs?: Record<string, unknown> | null
+}
+
+/** Every bucket path a row points at. */
+export function uxThumbPaths(row: UxThumbRow): string[] {
+  return [row.thumb_before, row.thumb_after, row.thumb_diff, ...Object.values(row.thumbs ?? {})].filter(
+    (p): p is string => typeof p === 'string' && p.length > 0,
+  )
+}
+
+export async function sweepUxCaptures(db: ReturnType<typeof getServiceClient>): Promise<{ deleted: number }> {
+  const stats = { deleted: 0 }
+  const { data: settings, error: settingsErr } = await db
+    .from('project_settings')
+    .select('project_id, ux_capture_retention_days')
+    .returns<UxSettingsRow[]>()
+  if (settingsErr) {
+    // Migration window (column not yet created) or transient: log, keep going.
+    rlog.warn('ux_capture_settings_failed', { err: settingsErr.message })
+    return stats
+  }
+  for (const row of settings ?? []) {
+    const days = Math.max(1, Number(row.ux_capture_retention_days ?? 30))
+    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
+    // Rows that still hold screenshots, in runs older than the cutoff.
+    // Filtering on the joined run (not "the first N old runs") keeps runs
+    // already cleared from crowding newer expired ones out of the batch.
+    for (const table of ['ux_surfaces', 'ux_iterations'] as const) {
+      const legacy = table === 'ux_surfaces'
+      const { data: rows, error: selErr } = await db
+        .from(table)
+        .select(`id, ${legacy ? 'thumb_before, thumb_after, thumb_diff, ' : ''}thumbs, ux_runs!inner(started_at)`)
+        .eq('project_id', row.project_id)
+        .lt('ux_runs.started_at', cutoff)
+        .or(legacy ? 'thumb_before.not.is.null,thumb_after.not.is.null,thumb_diff.not.is.null,thumbs.neq.{}' : 'thumbs.neq.{}')
+        .limit(UX_CAPTURE_BATCH)
+        .returns<UxThumbRow[]>()
+      if (selErr) {
+        rlog.warn('ux_capture_select_failed', { project_id: row.project_id, table, err: selErr.message })
+        continue
+      }
+      if (!rows?.length) continue
+      const paths = [...new Set(rows.flatMap(uxThumbPaths))]
+      if (paths.length > 0) {
+        const { error: rmErr } = await db.storage.from(UX_CAPTURES_BUCKET).remove(paths)
+        if (rmErr) {
+          rlog.warn('ux_capture_remove_failed', { project_id: row.project_id, count: paths.length, err: rmErr.message })
+          continue
+        }
+      }
+      const { error: clearErr } = await db
+        .from(table)
+        .update(legacy ? { thumb_before: null, thumb_after: null, thumb_diff: null, thumbs: {} } : { thumbs: {} })
+        .in('id', rows.map((s) => s.id))
+      if (clearErr) rlog.warn('ux_capture_clear_failed', { project_id: row.project_id, table, err: clearErr.message })
+      stats.deleted += paths.length
+    }
   }
   return stats
 }

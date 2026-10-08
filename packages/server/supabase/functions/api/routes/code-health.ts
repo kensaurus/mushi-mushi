@@ -131,6 +131,7 @@ export function registerCodeHealthRoutes(app: Hono<{ Variables: Variables }>): v
         .from('gate_findings')
         .select('severity')
         .eq('gate_run_id', latestRun.id)
+        .eq('allowlisted', false) // dismissed findings are not open
 
       for (const row of findingRows ?? []) {
         godFileCount += 1
@@ -275,6 +276,7 @@ export function registerCodeHealthRoutes(app: Hono<{ Variables: Variables }>): v
         .from('gate_findings')
         .select('id, rule_id, severity, file_path, line, message, suggested_fix')
         .eq('gate_run_id', latestRun.id)
+        .eq('allowlisted', false) // dismissed findings are not open
         .limit(200)
 
       if (findErr) {

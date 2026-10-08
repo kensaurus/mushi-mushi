@@ -242,6 +242,7 @@ jobs:
         run: pnpm check:site-urls
 
       - name: Check the release version step
+        timeout-minutes: 8
         # Runs `changeset version` and restores the tree. That command lives
         # only in release.yml, so before this step a PR could pass every gate,
         # merge, deploy to seven channels, and only then fail to publish.

@@ -14,7 +14,7 @@ import { useRealtimeReload } from '../lib/realtime'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useSetupStatus } from '../lib/useSetupStatus'
-import { SetupNudge } from '../components/SetupNudge'
+import { NextStep } from '../components/NextStep'
 import { useToast } from '../lib/toast'
 import { usePageCopy } from '../lib/copy'
 import { useMarketplaceUx, resolveQuickMarketplaceTab } from '../lib/marketplaceModeUx'
@@ -25,21 +25,16 @@ import { UpgradePrompt } from '../components/billing/UpgradePrompt'
 import {
   Btn,
   Badge,
-  Card,
   ErrorAlert,
   EmptyState,
   Input,
   FilterSelect,
   SegmentedControl,
   FreshnessPill,
-  RecommendedAction,
-  RelativeTime,
   Section,
 } from '../components/ui'
 import {
   ContainedBlock,
-  InlineProof,
-  SignalChip,
 } from '../components/report-detail/ReportSurface'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
@@ -62,6 +57,7 @@ import {
   type MarketplaceStats,
   type MarketplaceTabId,
   type ReliabilityStats,
+  INTEGRATIONS_HREF_BY_PLUGIN_SLUG,
 } from '../components/marketplace/types'
 import { CHIP_TONE, HEADER_BADGE_TONE } from '../lib/chipTone'
 
@@ -69,12 +65,12 @@ const TABS: Array<{ id: MarketplaceTabId; label: string; description: string }> 
   {
     id: 'overview',
     label: 'Overview',
-    description: 'Plugin posture — installed count, delivery success rate, and recommended next steps.',
+    description: 'Installed plugins and how their deliveries are doing.',
   },
   {
     id: 'browse',
     label: 'Browse',
-    description: 'Official and community webhook plugins — filter by category or installed state.',
+    description: 'Webhook plugins send Mushi events to your own endpoint or a no-code tool. Sentry, Linear, Jira and PagerDuty have native cards on Integrations.',
   },
   {
     id: 'installed',
@@ -276,7 +272,7 @@ export function MarketplacePage() {
 
   usePublishPageContext({
     route: '/marketplace',
-    title: `${activeMeta.label} · Marketplace`,
+    title: `${activeMeta.label} · Plugins`,
     summary: activeMeta.description,
     filters: { tab: activeTab, project_id: activeProjectId ?? undefined },
     criticalCount: stats.deliveriesFailed + stats.failingPlugins,
@@ -477,18 +473,18 @@ export function MarketplacePage() {
     return (
       <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-marketplace">
         <PageHeaderBar
-          title={copy?.title ?? 'Marketplace'}
+          title={copy?.title ?? 'Plugins'}
 
-          helpTitle={copy?.help?.title ?? 'About the marketplace'}
+          helpTitle={copy?.help?.title ?? 'About plugins'}
           helpWhatIsIt={
             copy?.help?.whatIsIt ??
             'Mushi plugins are HTTPS webhook receivers that subscribe to lifecycle events. Every payload is HMAC-SHA256 signed so your receiver can verify it came from your project.'
           }
           helpUseCases={
             copy?.help?.useCases ?? [
-              'Page on-call via PagerDuty when a critical bug is reported',
-              'Mirror reports to Linear and keep issue status in sync',
               'Fan out any event to a Zapier catch-hook for no-code workflows',
+              'Run your own automation from a signed HTTPS webhook',
+              'For Sentry, Linear, Jira or PagerDuty, use their cards on Integrations instead',
             ]
           }
           helpHowToUse={
@@ -496,7 +492,8 @@ export function MarketplacePage() {
             'Pick a plugin on Browse, paste your HTTPS webhook URL, and Mushi stores the signing secret in Vault. Send a test event from Installed to verify delivery.'
           }
         />
-        <SetupNudge
+        <NextStep
+          variant="inline"
           requires={['project']}
           emptyTitle="Select a project"
           emptyDescription="Plugin installs and delivery logs are scoped to the active project in the header."
@@ -521,6 +518,29 @@ export function MarketplacePage() {
             ? 'brand'
             : 'neutral'
 
+  // Nothing installed: one empty state with the catalog inline replaces the
+  // banner, zero stats, readout and tabs that all said the same thing.
+  const isEmpty = stats.topPriority === 'no_plugins_installed' && installed.length === 0
+
+  const catalogGrid = (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      {visibleCatalog.map((p) => (
+        <PluginCard
+          key={p.slug}
+          plugin={p}
+          installed={installedBySlug.get(p.slug)}
+          stats={reliabilityBySlug.get(p.slug)}
+          busy={installing === p.slug}
+          onInstall={() => beginInstall(p)}
+          onUninstall={() => uninstall(p.slug, p.name)}
+          canManage={canManage}
+          pluginsUnlocked={pluginsUnlocked || entitlements.loading}
+          integrationsHref={INTEGRATIONS_HREF_BY_PLUGIN_SLUG[p.slug]}
+        />
+      ))}
+    </div>
+  )
+
   const headerBadge =
     stats.topPriority === 'healthy'
       ? 'DELIVERING'
@@ -535,19 +555,19 @@ export function MarketplacePage() {
   return (
     <div className="space-y-4" data-testid="mushi-page-marketplace">
       <PageHeaderBar
-        title={copy?.title ?? 'Marketplace'}
+        title={copy?.title ?? 'Plugins'}
         projectScope={stats.projectName ?? projectName ?? undefined}
 
-        helpTitle={copy?.help?.title ?? 'About the marketplace'}
+        helpTitle={copy?.help?.title ?? 'About plugins'}
         helpWhatIsIt={
           copy?.help?.whatIsIt ??
           'Mushi plugins are HTTPS webhook receivers that subscribe to lifecycle events. Every payload is HMAC-SHA256 signed so your receiver can verify it came from your project.'
         }
         helpUseCases={
           copy?.help?.useCases ?? [
-            'Page on-call via PagerDuty when a critical bug is reported',
-            'Mirror reports to Linear and keep issue status in sync',
             'Fan out any event to a Zapier catch-hook for no-code workflows',
+            'Run your own automation from a signed HTTPS webhook',
+            'For Sentry, Linear, Jira or PagerDuty, use their cards on Integrations instead',
           ]
         }
         helpHowToUse={
@@ -557,6 +577,7 @@ export function MarketplacePage() {
       >
         {!ux.hideOverviewChrome && (
           <>
+        {!isEmpty && (
         <Badge
           className={
             bannerSeverity === 'ok'
@@ -572,6 +593,7 @@ export function MarketplacePage() {
         >
           {headerBadge}
         </Badge>
+        )}
         <FreshnessPill at={lastFetchedAt} isValidating={isValidating} />
         <Btn variant="ghost" size="sm" onClick={reloadAll} loading={isValidating}>
           Refresh
@@ -584,6 +606,7 @@ export function MarketplacePage() {
         slots={[
           {
             priority: POSTURE_PRIORITY.status,
+            show: !isEmpty || !pluginsUnlocked,
             children: (
               <MarketplaceStatusBanner
                 stats={stats}
@@ -597,7 +620,7 @@ export function MarketplacePage() {
           },
           {
             priority: POSTURE_PRIORITY.heroOrSnapshot,
-            show: !ux.hideMarketplaceSnapshot,
+            show: !ux.hideMarketplaceSnapshot && !isEmpty,
             children: (
               <MarketplaceSnapshotStrip
                 stats={stats}
@@ -612,7 +635,7 @@ export function MarketplacePage() {
         ]}
       />
 
-      {!ux.hideTabs && (
+      {!ux.hideTabs && !isEmpty && (
       <SegmentedControl
         value={activeTab}
         onChange={setTab}
@@ -642,87 +665,21 @@ export function MarketplacePage() {
         />
       ) : null}
 
-      {activeTab === 'overview' && (
-        <div className="space-y-4">
-          <MarketplaceReadout stats={stats} fetchedAt={lastFetchedAt} isValidating={isValidating} />
-          {stats.topPriority === 'healthy' && (
-            <RecommendedAction
-              tone="success"
-              title="Plugins delivering"
-              description={stats.topPriorityLabel ?? `${stats.installedActive} active plugins with recent deliveries.`}
-              cta={{ label: 'View delivery log', to: '/marketplace?tab=deliveries' }}
-            />
-          )}
-          {stats.topPriority === 'no_plugins_installed' && (
-            <RecommendedAction
-              tone="info"
-              title="Install your first plugin"
-              description={stats.topPriorityLabel ?? `${stats.catalogTotal} plugins available in the catalog.`}
-              cta={{ label: 'Browse catalog', to: '/marketplace?tab=browse' }}
-            />
-          )}
-          {stats.topPriority === 'delivery_failures' && (
-            <RecommendedAction
-              tone="urgent"
-              title="Debug failed webhook deliveries"
-              description={stats.topPriorityLabel ?? 'Check HTTP status and response excerpts in the Deliveries tab.'}
-              cta={{ label: 'Open Deliveries', to: '/marketplace?tab=deliveries' }}
-            />
-          )}
-          {stats.topPriority === 'plugins_paused' && (
-            <RecommendedAction
-              tone="info"
-              title="Resume paused plugins"
-              description={stats.topPriorityLabel ?? 'Paused plugins stop receiving lifecycle events.'}
-              cta={{ label: 'Open Installed', to: '/marketplace?tab=installed' }}
-            />
-          )}
-          {!ux.hideOverviewChrome && (
-          <div className="grid gap-3 sm:grid-cols-3">
-            <Card className="space-y-2 border-edge p-3">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-3xs font-medium uppercase tracking-wide text-fg-faint">Active</p>
-                <SignalChip tone={stats.installedActive > 0 ? 'ok' : 'neutral'}>
-                  {stats.installedActive > 0 ? 'Delivering' : 'None'}
-                </SignalChip>
-              </div>
-              <p className="text-lg font-semibold tabular-nums text-ok">{stats.installedActive}</p>
-              <InlineProof>Receiving lifecycle events</InlineProof>
-            </Card>
-            <Card className="space-y-2 border-edge p-3">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-3xs font-medium uppercase tracking-wide text-fg-faint">Paused</p>
-                <SignalChip tone={stats.installedPaused > 0 ? 'warn' : 'neutral'}>
-                  {stats.installedPaused > 0 ? 'Suppressed' : 'None'}
-                </SignalChip>
-              </div>
-              <p className="text-lg font-semibold tabular-nums text-warn">{stats.installedPaused}</p>
-              <InlineProof>Events suppressed until resumed</InlineProof>
-            </Card>
-            <Card className="space-y-2 border-edge p-3">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-3xs font-medium uppercase tracking-wide text-fg-faint">Last delivery</p>
-                <SignalChip tone={stats.lastDeliveryAt ? 'brand' : 'neutral'}>
-                  {stats.lastDeliveryAt ? 'Recent' : 'Never'}
-                </SignalChip>
-              </div>
-              <p className="text-sm font-semibold text-fg-primary">
-                {stats.lastDeliveryAt ? <RelativeTime value={stats.lastDeliveryAt} /> : 'Never'}
-              </p>
-              <InlineProof>
-                {stats.daysSinceLastDelivery != null && stats.daysSinceLastDelivery > 0
-                  ? `${stats.daysSinceLastDelivery}d ago`
-                  : stats.deliveries7d > 0
-                    ? `${stats.deliverySuccessRatePct}% success (7d)`
-                    : 'Send a test from Installed'}
-              </InlineProof>
-            </Card>
-          </div>
-          )}
+      {isEmpty && (
+        <div className="space-y-3">
+          <EmptyState
+            title="No plugins installed yet"
+            description="A plugin sends Mushi events (new report, fix merged) to your own HTTPS endpoint or a no-code tool like Zapier, signed so you can verify them. Pick one below."
+          />
+          {catalogGrid}
         </div>
       )}
 
-      {activeTab !== 'overview' && (
+      {!isEmpty && activeTab === 'overview' && (
+        <MarketplaceReadout stats={stats} fetchedAt={lastFetchedAt} isValidating={isValidating} />
+      )}
+
+      {!isEmpty && activeTab !== 'overview' && (
         <Section title={activeTab === 'browse' ? 'Plugin catalog' : activeTab === 'installed' ? 'Installed plugins' : 'Delivery log'}>
           <ContainedBlock tone="muted" className="mb-4">
             <p className="text-2xs leading-relaxed text-fg-muted">{activeMeta.description}</p>
@@ -763,21 +720,7 @@ export function MarketplacePage() {
                   }
                 />
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {visibleCatalog.map((p) => (
-                    <PluginCard
-                      key={p.slug}
-                      plugin={p}
-                      installed={installedBySlug.get(p.slug)}
-                      stats={reliabilityBySlug.get(p.slug)}
-                      busy={installing === p.slug}
-                      onInstall={() => beginInstall(p)}
-                      onUninstall={() => uninstall(p.slug, p.name)}
-                      canManage={canManage}
-                      pluginsUnlocked={pluginsUnlocked || entitlements.loading}
-                    />
-                  ))}
-                </div>
+                catalogGrid
               )}
             </div>
           )}

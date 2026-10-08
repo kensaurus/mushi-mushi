@@ -75,6 +75,17 @@ describe('ProjectReposCard', () => {
     expect(document.body.textContent).toContain('Linked repos (2)')
   })
 
+  it('labels each repo with its role so frontend and backend read apart', async () => {
+    mocks.apiFetch.mockResolvedValue({ ok: true, data: REPOS })
+    act(() => root.render(createElement(MemoryRouter, null, createElement(ProjectReposCard, { projectId: P }))))
+    await flush()
+    const text = document.body.textContent ?? ''
+    expect(text).toContain('Frontend')
+    expect(text).toContain('Backend')
+    // Each role chip carries an icon next to its label.
+    expect(document.querySelectorAll('span svg').length).toBeGreaterThanOrEqual(2)
+  })
+
   it('asks before removing a repo', async () => {
     mocks.apiFetch.mockResolvedValue({ ok: true, data: REPOS })
     act(() => root.render(createElement(MemoryRouter, null, createElement(ProjectReposCard, { projectId: P }))))

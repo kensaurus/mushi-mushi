@@ -3,9 +3,8 @@
  * PURPOSE: Inventory atlas readout — proposal API and project ref for QA inventory tab.
  */
 
-import { Section } from '../ui'
 import { DetailRows, type DetailRowItem } from '../ui/fields'
-import { EndpointCodeRow, ReadoutSection } from '../readout'
+import { EndpointCodeRow, ReadoutSection, ReadoutPanel } from '../readout'
 import { RESOLVED_EXTERNAL_API_URL } from '../../lib/env'
 import { IconGlobe, IconHealth } from '../icons'
 
@@ -47,7 +46,7 @@ export function InventoryWorkspaceReadout({
   ]
 
   return (
-    <Section title="Inventory readout">
+    <ReadoutPanel title="Inventory readout">
       <div className="grid gap-4 lg:grid-cols-2">
         <ReadoutSection title="Endpoints" icon={<IconGlobe size={14} aria-hidden />}>
           <EndpointCodeRow label="Inventory API" url={inventoryUrl} />
@@ -56,6 +55,6 @@ export function InventoryWorkspaceReadout({
           <DetailRows items={rows} dense />
         </ReadoutSection>
       </div>
-    </Section>
+    </ReadoutPanel>
   )
 }

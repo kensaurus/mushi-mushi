@@ -262,7 +262,7 @@ Live App URL
 | **Project & deploy** | `mushi project`, `mushi config`, `mushi deploy check`, `mushi selfhost up/doctor`, `mushi index`, `mushi sourcemaps upload`, `mushi audit`, `mushi radar scan/show`, `mushi recipe init/check/show`, `mushi store pull` |
 | **Reports & lessons** | `mushi reports list/show/search/triage/…`, `mushi lessons list/show`, `mushi sync-lessons`, `mushi feedback board` |
 | **Fixes** | `mushi fix`, `mushi fixes tail/refresh-ci/merge`, `mushi console watch <reportId>` |
-| **QA / TDD** | `mushi qa stories/runs/run`, `mushi tdd gen/pending/approve/improve/run`, `mushi stories map` |
+| **QA / TDD** | `mushi qa stories/runs/run`, `mushi tdd gen/pending/approve/improve/run`, `mushi stories map`, `mushi ux discover/login/run/open` (local UX loop, `@mushi-mushi/ux`, ADR 0020) |
 | **Skills / pipeline** | `mushi skills list/show/sync`, `mushi pipeline start/watch/checkin` |
 | **Integrations** | `mushi integrations list/test`, `mushi slack status/test`, `mushi keys list/add` |
 | **Billing** | `mushi usage`, `mushi billing status/cap` |
@@ -850,6 +850,12 @@ Generated manifest: [`docs/API_ROUTE_MANIFEST.generated.md`](docs/API_ROUTE_MANI
 | `GET /v1/sdk/config` | Runtime SDK config pull |
 | `GET /v1/reports/:id/status` | Report status poll |
 | `/v1/sdk/me/*` | Cross-app reporter rewards surface (`rewards.ts`) |
+
+### Host-backend erasure (erase token, no API key)
+
+| Route | Role |
+| --- | --- |
+| `POST /v1/sdk/erase-subject` | Account deletion: deletes one end user's reports (screenshots first) and reporter data in the project; org identity too with `erase_identity`. `X-Mushi-Erase-Token` = HS256 with the project identity secret, `purpose: "erase-subject"`, ≤5 min. ADR 0022, `erase-subject.ts`. |
 
 ### MCP / CLI sync mirror (`adminOrApiKey` or scoped JWT)
 

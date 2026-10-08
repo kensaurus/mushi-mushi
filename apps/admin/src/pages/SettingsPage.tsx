@@ -48,7 +48,7 @@ import {
   resolveSettingsTab,
 } from '../lib/settingsTabs';
 import { useScrollToHash } from '../lib/useScrollToHash';
-import { SetupNudge } from '../components/SetupNudge';
+import { NextStep } from '../components/NextStep';
 import { useActiveProjectId } from '../components/ProjectSwitcher';
 import { useSetupStatus } from '../lib/useSetupStatus';
 import { usePageCopy } from '../lib/copy';
@@ -234,7 +234,8 @@ function SettingsPageBody({
             'Per-project alerts, your AI keys, the bug widget, and developer options for the project you pick.'
           }
         />
-        <SetupNudge
+        <NextStep
+          variant="inline"
           requires={['project']}
           emptyTitle="Select a project"
           emptyDescription="Settings apply to the project in the header. Pick your app first."

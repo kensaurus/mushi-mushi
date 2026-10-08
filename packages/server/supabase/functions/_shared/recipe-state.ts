@@ -192,9 +192,17 @@ export function deriveElementState(input: ElementInput, now: Date = new Date()):
       const errored = input.runs.filter((r) => r.status === 'error')
       if (errored.length > 0) return { state: 'error', reason: `The last run of ${joinGates(errored.map((r) => r.gate))} did not finish. Run it again from Code health.` }
       const stale = input.runs.filter((r) => isStale(r.completedAt, now, input.cadenceDays))
-      const open = input.runs.reduce((n, r) => n + r.openFindings, 0)
+      // A result from a check that has not run within its cadence is not a
+      // current problem: it is named apart, with "run it again" (crawl and
+      // status claims from May read as 13 current problems on 2026-10-07).
+      const current = input.runs.filter((r) => !isStale(r.completedAt, now, input.cadenceDays))
+      const staleOpen = stale.filter((r) => r.openFindings > 0)
+      const staleNote = staleOpen.length
+        ? ` ${plural(staleOpen.reduce((n, r) => n + r.openFindings, 0), 'older problem')} from ${joinGates(staleOpen.map((r) => r.gate))}, which ${staleOpen.length === 1 ? 'has' : 'have'} not run in ${plural(input.cadenceDays, 'day')}: run ${staleOpen.length === 1 ? 'it' : 'them'} again before acting on ${staleOpen.length === 1 ? 'it' : 'them'}.`
+        : ''
+      const open = current.reduce((n, r) => n + r.openFindings, 0)
       if (open > 0) {
-        const openRuns = input.runs.filter((r) => r.openFindings > 0)
+        const openRuns = current.filter((r) => r.openFindings > 0)
         const withOpen = openRuns.map((r) => `${gateLabel(r.gate)} (${r.openFindings})`)
         // Mushi's own setup checks are fixed from the Risk checks section (one-click caps), not from an audit list.
         const setup = openRuns.some((r) => r.gate === MUSHI_SETUP_GATE)
@@ -204,10 +212,10 @@ export function deriveElementState(input: ElementInput, now: Date = new Date()):
           : setup
             ? 'They and their fixes are under Risk checks on the Recipe page.'
             : 'Open Full-stack audit for each one and its fix.'
-        return { state: 'drift', reason: `${plural(open, 'problem')} to fix: ${withOpen.join(', ')}. ${where}` }
+        return { state: 'drift', reason: `${plural(open, 'problem')} to fix: ${withOpen.join(', ')}. ${where}${staleNote}` }
       }
-      if (stale.length === input.runs.length) return { state: 'unknown', reason: `No automated check has run in the last ${plural(input.cadenceDays, 'day')}.` }
-      if (stale.length > 0) return { state: 'unknown', reason: `${joinGates(stale.map((r) => r.gate))} ${stale.length === 1 ? 'has' : 'have'} not run in ${plural(input.cadenceDays, 'day')}.` }
+      if (stale.length === input.runs.length) return { state: 'unknown', reason: `No automated check has run in the last ${plural(input.cadenceDays, 'day')}.${staleNote}` }
+      if (stale.length > 0) return { state: 'unknown', reason: `${joinGates(stale.map((r) => r.gate))} ${stale.length === 1 ? 'has' : 'have'} not run in ${plural(input.cadenceDays, 'day')}.${staleNote}` }
       return { state: 'ok', reason: 'Every automated check passed on its latest run.' }
     }
 

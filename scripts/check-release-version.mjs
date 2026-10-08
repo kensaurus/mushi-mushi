@@ -41,8 +41,13 @@ const ROOT = path.resolve(__dirname, '..')
 const CI = process.env.CI === 'true' || process.env.CI === '1'
 const skipDirty = process.argv.includes('--skip-dirty')
 
+// Bounded: on 2026-10-07 this step sat for the job's whole 25 minutes on
+// two CI runs before printing anything, so every call fails fast instead.
+const GIT_TIMEOUT_MS = 60_000
+const VERSION_TIMEOUT_MS = 5 * 60_000
+
 function git(args) {
-  return execFileSync('git', args, { cwd: ROOT, encoding: 'utf8' }).trim()
+  return execFileSync('git', args, { cwd: ROOT, encoding: 'utf8', timeout: GIT_TIMEOUT_MS }).trim()
 }
 
 // ── 1. Is there anything to version? ────────────────────────────────────────
@@ -55,6 +60,7 @@ if (changesets.length === 0) {
 }
 
 // ── 2. Refuse to touch a dirty tree ─────────────────────────────────────────
+console.error(`   ${changesets.length} pending changeset(s); checking the tree is clean…`)
 const dirty = git(['status', '--porcelain'])
 if (dirty) {
   const msg =
@@ -77,7 +83,9 @@ const run = spawnSync('pnpm', ['exec', 'changeset', 'version'], {
   cwd: ROOT,
   encoding: 'utf8',
   shell: process.platform === 'win32',
+  timeout: VERSION_TIMEOUT_MS,
 })
+if (run.error) console.error(`✗  \`changeset version\` did not finish: ${run.error.message}`)
 
 let restoreError = null
 try {

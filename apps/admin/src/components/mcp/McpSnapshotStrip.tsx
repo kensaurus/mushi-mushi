@@ -46,7 +46,6 @@ export function McpSnapshotStrip({
         <StatCard
           label={statLabels?.activeKeys ?? 'Active keys'}
           value={stats.activeKeyCount}
-          accent={stats.activeKeyCount > 0 ? 'text-brand' : undefined}
           tooltip={activeKeysTooltip(stats)}
           detail={activeKeysDetail()}
           to={mcpLinks.activeKeys}

@@ -13,9 +13,8 @@
  * - Mount on Sources tab with stats from GET /v1/admin/skills/stats
  */
 
-import { Section } from '../ui'
 import { DetailRows, type DetailRowItem } from '../ui/fields'
-import { EndpointCodeRow, ReadoutSection } from '../readout'
+import { EndpointCodeRow, ReadoutSection, ReadoutPanel } from '../readout'
 import { RESOLVED_EXTERNAL_API_URL } from '../../lib/env'
 import type { SkillsStats } from './SkillsStatsTypes'
 import { IconGlobe, IconIntegrations } from '../icons'
@@ -42,7 +41,7 @@ export function SkillsEndpointReadout({ stats, fetchedAt, isValidating }: Props)
   ]
 
   return (
-    <Section title="API endpoints" freshness={{ at: fetchedAt, isValidating }}>
+    <ReadoutPanel title="API endpoints" freshness={{ at: fetchedAt, isValidating }}>
       <div className="grid gap-4 lg:grid-cols-2">
         <ReadoutSection title="Endpoints" icon={<IconGlobe size={14} aria-hidden />}>
           <EndpointCodeRow label="Skills stats API" url={statsApi} />
@@ -54,6 +53,6 @@ export function SkillsEndpointReadout({ stats, fetchedAt, isValidating }: Props)
           <DetailRows items={rows} dense />
         </ReadoutSection>
       </div>
-    </Section>
+    </ReadoutPanel>
   )
 }

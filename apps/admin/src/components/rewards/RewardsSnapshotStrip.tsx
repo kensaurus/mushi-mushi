@@ -68,7 +68,6 @@ export function RewardsSnapshotStrip({
         <StatCard
           label={statLabels?.contributors30d ?? 'Active contributors (30d)'}
           value={stats.activeContributors30d}
-          accent={stats.activeContributors30d > 0 ? 'text-brand' : undefined}
           tooltip={contributors30dTooltip(stats)}
           detail={contributors30dDetail()}
           to={rewardsLinks.contributors30d}

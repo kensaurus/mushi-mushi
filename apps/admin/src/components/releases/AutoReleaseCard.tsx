@@ -90,17 +90,20 @@ export function AutoReleaseCard({ projectId }: { projectId: string }) {
         <div className="min-w-0 flex-1 space-y-1">
           <h3 className="text-sm font-semibold text-fg">Release automatically when you ship</h3>
           <p className="text-2xs text-fg-secondary leading-snug">
-            When a GitHub release is published, a production deploy succeeds, or your CI sends
-            <code className="mx-1 font-mono">release.published</code>to
-            <code className="mx-1 font-mono">/v1/ingest/recipe/events</code>, Mushi drafts a release from the reports
-            fixed since the last one and publishes it. Each reporter hears their bug is live. Nothing happens when
-            no report was fixed.
+            When you ship, Mushi drafts a release from the reports fixed since the last one and publishes it. Each
+            reporter hears their bug is live. Nothing happens when no report was fixed.
           </p>
-          <p className="text-2xs text-fg-faint leading-snug">
-            GitHub events need the Mushi GitHub App on the repo with the Releases and Deployments events. A CI event
-            needs an agent key with <code className="font-mono">mcp:write</code> kept in CI secrets; the public SDK key
-            records the event but never releases.
-          </p>
+          <details className="text-2xs text-fg-faint leading-snug">
+            <summary className="cursor-pointer hover:text-fg-secondary">What counts as shipping</summary>
+            <p className="mt-1">
+              A GitHub release is published, a production deploy succeeds, or your CI sends
+              <code className="mx-1 font-mono">release.published</code>to
+              <code className="mx-1 font-mono">/v1/ingest/recipe/events</code>. GitHub events need the Mushi GitHub
+              App on the repo with the Releases and Deployments events. A CI event needs an agent key with{' '}
+              <code className="font-mono">mcp:write</code> kept in CI secrets; the public SDK key records the event but
+              never releases.
+            </p>
+          </details>
         </div>
         <Toggle
           ariaLabel="Auto-release"

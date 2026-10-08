@@ -267,10 +267,14 @@ export function SlackIntegrationCard({
         : undefined
 
   return (
-    <div id="integrations-slack" className="rounded-xl border border-edge-subtle bg-surface p-5 space-y-4 scroll-mt-chrome">
+    <div
+      id="integrations-slack"
+      // mushi-mushi-allowlist: anchored card (#integrations-slack links land here); Card takes no id
+      className="rounded-xl border border-edge-subtle bg-surface-raised p-5 space-y-4 scroll-mt-chrome"
+    >
       {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex items-center gap-3 min-w-0">
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+        <div className="flex min-w-0 flex-1 basis-40 items-center gap-3">
           <div className="w-9 h-9 rounded-lg bg-accent-muted flex items-center justify-center flex-shrink-0">
             {/* mushi-mushi-allowlist: Slack trademark SVG requires exact brand hex fills */}
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
@@ -287,7 +291,7 @@ export function SlackIntegrationCard({
             ) : null}
           </div>
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           {sparkline.length > 0 && (
             <span
               className="hidden sm:flex"

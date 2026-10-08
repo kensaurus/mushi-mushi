@@ -4,9 +4,8 @@
  *          endpoint, project ref, and key prefix stack (Connect-style readout).
  */
 
-import { Section } from '../ui'
 import { DetailRows, type DetailRowItem } from '../ui/fields'
-import { EndpointCodeRow, ReadoutSection } from '../readout'
+import { EndpointCodeRow, ReadoutSection, ReadoutPanel } from '../readout'
 import { RESOLVED_EXTERNAL_API_URL } from '../../lib/env'
 import { IconGlobe, IconHealth, IconKey } from '../icons'
 
@@ -70,7 +69,7 @@ export function ProjectsSetupReadout({
   ]
 
   return (
-    <Section title="Project setup readout" freshness={{ at: fetchedAt, isValidating: validating }}>
+    <ReadoutPanel title="Project setup readout" freshness={{ at: fetchedAt, isValidating: validating }}>
       <p className="mb-4 text-xs leading-relaxed text-fg-muted">
         Copy the ingest endpoint and project ref into your host app env. Key prefixes help match
         heartbeats to the console.
@@ -101,6 +100,6 @@ export function ProjectsSetupReadout({
           ) : null}
         </ReadoutSection>
       </div>
-    </Section>
+    </ReadoutPanel>
   )
 }

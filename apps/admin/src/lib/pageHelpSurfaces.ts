@@ -3,14 +3,19 @@
  * Calm moss tint — distinct from semantic warn/danger and from flat chrome.
  */
 
-/** Collapsible page-help banner (`PageHelpBanner`, `PageHelp`). */
+/**
+ * Collapsible page-help banner (`PageHelpBanner`, `PageHelp`). Closed, it is a
+ * quiet chrome row: a moss-green bar above every page's header read as an
+ * alert and tinted the top of each page (owner review, 2026-10-08). The green
+ * stays inside the opened guide sections.
+ */
 export const PAGE_HELP_BANNER_SHELL =
-  'border-ok/35 bg-ok-muted/25 open:bg-ok-muted/35'
+  'border-edge-subtle bg-transparent open:bg-surface-raised'
 
 export const PAGE_HELP_BANNER_SUMMARY_HOVER =
-  'hover:bg-ok-muted/40 hover:text-fg'
+  'hover:bg-surface-hover hover:text-fg'
 
-export const PAGE_HELP_BANNER_INNER_BORDER = 'border-ok/25'
+export const PAGE_HELP_BANNER_INNER_BORDER = 'border-edge-subtle'
 
 /** Inner section cards inside an expanded help banner. */
 export const PAGE_HELP_SECTION_SHELL =

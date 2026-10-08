@@ -235,22 +235,15 @@ export async function probeIntegration(
       }
 
     } else if (kind === 'openai') {
-      // 1-token probe via cheapest current-gen model.
+      // Reads the probe model: checks the key and its access to the model, costs
+      // nothing. A 1-token chat call sent max_tokens, which current models refuse
+      // with HTTP 400, so every probe read "degraded" (2026-10-08).
       const key = Deno.env.get('OPENAI_API_KEY') ?? ''
       if (!key) {
         detail = 'OPENAI_API_KEY is not set on the server.'
       } else {
-        const res = await fetch('https://api.openai.com/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${key}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            model: HEALTH_PROBE_OPENAI_MODEL,
-            max_tokens: 1,
-            messages: [{ role: 'user', content: 'ping' }],
-          }),
+        const res = await fetch(`https://api.openai.com/v1/models/${encodeURIComponent(HEALTH_PROBE_OPENAI_MODEL)}`, {
+          headers: { Authorization: `Bearer ${key}` },
           signal: AbortSignal.timeout(5_000),
         })
         httpStatus = res.status
@@ -503,9 +496,9 @@ export async function probeIntegration(
           status = 'ok'
           detail = `Endpoint reachable — ${res.status}`
         } else if (res.status === 401 || res.status === 403) {
-          // Signature mismatch is expected since we don't have the plaintext secret;
-          // treat a 4xx as "reachable but signature rejected" → degraded, not down.
-          status = 'degraded'
+          // The probe is unsigned, so a receiver that checks signatures must refuse
+          // it: that is the healthy answer, not a degraded one.
+          status = 'ok'
           detail = `Endpoint reachable but rejected probe (${res.status}). Signature verification working.`
         } else if (res.status >= 500) {
           status = 'down'

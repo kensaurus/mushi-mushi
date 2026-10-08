@@ -9,57 +9,22 @@ function stats(overrides: Partial<InboxStats>): InboxStats {
 describe('resolveInboxOverviewMode', () => {
   it('returns setup when ingest is incomplete', () => {
     expect(
-      resolveInboxOverviewMode(
-        stats({ setupDone: false, topPriority: 'setup', requiredComplete: 2 }),
-        false,
-      ),
+      resolveInboxOverviewMode(stats({ setupDone: false, topPriority: 'setup', requiredComplete: 2 }), 0),
     ).toBe('setup')
   })
 
-  it('returns handoff when banner is critical with open work', () => {
+  it('lists the actions whenever there is an open card', () => {
+    expect(resolveInboxOverviewMode(stats({ openActions: 2, topPriority: 'actions' }), 2)).toBe('actions')
+    // A non-critical banner no longer swaps the list for a one-card preview.
     expect(
       resolveInboxOverviewMode(
-        stats({ openActions: 2, topPriority: 'actions', topPriorityTitle: 'Triage' }),
-        false,
+        stats({ openActions: 1, topPriority: 'clear', topPriorityTitle: 'Run judge', topPriorityTo: '/judge' }),
+        1,
       ),
-    ).toBe('handoff')
-  })
-
-  it('returns preview for non-critical open work in advanced mode', () => {
-    expect(
-      resolveInboxOverviewMode(
-        stats({
-          openActions: 1,
-          topPriority: 'clear',
-          topPriorityTitle: 'Run judge',
-          topPriorityTo: '/judge',
-        }),
-        false,
-      ),
-    ).toBe('preview')
-  })
-
-  it('defers preview to handoff when snapshot strip is visible', () => {
-    expect(
-      resolveInboxOverviewMode(
-        stats({
-          openActions: 1,
-          topPriority: 'clear',
-          topPriorityTitle: 'Run judge',
-          topPriorityTo: '/judge',
-        }),
-        false,
-        true,
-      ),
-    ).toBe('handoff')
+    ).toBe('actions')
   })
 
   it('returns clear when inbox is zero', () => {
-    expect(
-      resolveInboxOverviewMode(
-        stats({ openActions: 0, topPriority: 'clear', clearStages: 5 }),
-        false,
-      ),
-    ).toBe('clear')
+    expect(resolveInboxOverviewMode(stats({ openActions: 0, topPriority: 'clear', clearStages: 5 }), 0)).toBe('clear')
   })
 })

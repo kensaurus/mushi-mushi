@@ -111,7 +111,7 @@ export function InboxStatusBanner({
           ) : onTab ? (
             <StatusBannerAction
               label={actions.queue ?? 'View queue'}
-              onClick={() => onTab('actions')}
+              onClick={() => onTab('overview')}
               tone="danger"
             />
           ) : null

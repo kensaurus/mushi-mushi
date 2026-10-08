@@ -7,7 +7,7 @@
 import { formatChartCount, formatChartDayLabel, formatChartUsd } from './chartAxis'
 import { clampPlotTopPercent, summarizeSeriesValues, type ChartValueFormat } from './ChartSeriesSummary'
 
-export function formatInlineLabelValue(n: number, format: ChartValueFormat = 'count'): string {
+function formatInlineLabelValue(n: number, format: ChartValueFormat = 'count'): string {
   if (format === 'usd') return formatChartUsd(n)
   if (format === 'percent') return `${(n * 100).toFixed(0)}%`
   if (format === 'count') return formatChartCount(n)
@@ -23,9 +23,6 @@ const KIND_ACCENT: Record<'peak' | 'today' | 'low', string> = {
 const LABEL_CLASS =
   'pointer-events-none absolute z-10 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-sm border border-edge-subtle/70 bg-surface/95 px-1 py-px text-2xs font-mono font-semibold tabular-nums leading-none shadow-sm'
 
-export const INLINE_LABEL_CLASS = LABEL_CLASS
-export const INLINE_LABEL_KIND_ACCENT = KIND_ACCENT
-
 interface LineLabelProps {
   mode: 'line'
   values: number[]
@@ -38,7 +35,7 @@ interface LineLabelProps {
 
 export type ChartInlineDataLabelsProps = LineLabelProps
 
-export function buildInlineLabelPoints(
+function buildInlineLabelPoints(
   values: number[],
   activeIdx: number | null,
 ): Array<{ idx: number; value: number; kind: 'peak' | 'today' | 'low' }> {

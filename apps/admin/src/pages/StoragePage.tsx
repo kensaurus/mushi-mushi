@@ -33,7 +33,7 @@ import {
   SignalChip,
 } from '../components/report-detail/ReportSurface'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
-import { SetupNudge } from '../components/SetupNudge'
+import { NextStep } from '../components/NextStep'
 import { useToast } from '../lib/toast'
 import { CHIP_TONE, runStatusChipTone } from '../lib/chipTone'
 
@@ -653,7 +653,8 @@ export function StoragePage() {
             'Configure tab saves provider + bucket. Health check runs a write probe and shows step-by-step debug output.'
           }
         />
-        <SetupNudge
+        <NextStep
+          variant="inline"
           requires={['project']}
           emptyTitle="Select a project"
           emptyDescription="Storage backends are scoped per project — pick mushi-mushi (or your app) first."
@@ -764,7 +765,8 @@ export function StoragePage() {
           {activeCard ? (
             <div data-dav-anchor="storage:decide">{renderProjectCard(activeCard)}</div>
           ) : cards.length === 0 ? (
-            <SetupNudge
+            <NextStep
+              variant="inline"
               requires={['project_created']}
               emptyTitle="No projects yet"
               emptyDescription="Create a project first — every project gets its own storage backend."
@@ -776,7 +778,8 @@ export function StoragePage() {
       {activeTab === 'configure' && (
         <>
           {cards.length === 0 ? (
-            <SetupNudge
+            <NextStep
+              variant="inline"
               requires={['project_created']}
               emptyTitle="No projects yet"
               emptyDescription="Create a project first — every project gets its own storage backend."

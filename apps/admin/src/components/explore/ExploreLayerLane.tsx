@@ -40,12 +40,17 @@ function approxLineCount(node: ExploreNode): number | null {
   return null
 }
 
+const LAYER_PREVIEW = 12
+
 export function ExploreLayerLane({ nodes, edges, selectedId, highlightIds, onSelect, onClear }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const innerRef = useRef<HTMLDivElement | null>(null)
   const nodeRefs = useRef<Map<string, HTMLButtonElement>>(new Map())
   const [rects, setRects] = useState<Map<string, NodeRect>>(new Map())
   const [innerSize, setInnerSize] = useState({ w: 0, h: 0 })
+  // Layers opened as an 850-file wall (15,000 px). Each column shows its most
+  // imported files first, capped, with "Show all" per layer.
+  const [expanded, setExpanded] = useState<Set<ExploreLayer>>(new Set())
 
   const columns = useMemo(() => {
     const grouped = new Map<ExploreLayer, ExploreNode[]>()
@@ -69,7 +74,8 @@ export function ExploreLayerLane({ nodes, edges, selectedId, highlightIds, onSel
         const db = best ? degree.get(best.id) ?? 0 : -1
         return dn > db ? n : best
       }, null)
-      return { layer: l, label: LAYER_LABELS[l], color: LAYER_COLORS[l], nodes: colNodes, topNode: top }
+      const ranked = [...colNodes].sort((a, b) => (degree.get(b.id) ?? 0) - (degree.get(a.id) ?? 0))
+      return { layer: l, label: LAYER_LABELS[l], color: LAYER_COLORS[l], nodes: ranked, topNode: top }
     })
   }, [nodes, edges])
 
@@ -99,7 +105,7 @@ export function ExploreLayerLane({ nodes, edges, selectedId, highlightIds, onSel
     if (innerRef.current) ro.observe(innerRef.current)
     window.addEventListener('resize', measure)
     return () => { ro.disconnect(); window.removeEventListener('resize', measure) }
-  }, [columns, nodes])
+  }, [columns, nodes, expanded])
 
   const links = useMemo(() => {
     return edges.map((e) => {
@@ -201,9 +207,12 @@ export function ExploreLayerLane({ nodes, edges, selectedId, highlightIds, onSel
                 )}
               </div>
 
-              {/* Node cards */}
+              {/* Node cards: the most imported first; a selected or highlighted file always shows. */}
               <div className="flex flex-col gap-1.5">
-                {col.nodes.map((node) => {
+                {(expanded.has(col.layer)
+                  ? col.nodes
+                  : col.nodes.filter((n, i) => i < LAYER_PREVIEW || n.id === selectedId || highlightIds.has(n.id))
+                ).map((node) => {
                   const isSelected = selectedId === node.id
                   const isHighlighted = highlightIds.size > 0 && highlightIds.has(node.id)
                   const isDimmed = highlightIds.size > 0 && !highlightIds.has(node.id)
@@ -248,6 +257,20 @@ export function ExploreLayerLane({ nodes, edges, selectedId, highlightIds, onSel
                     </button>
                   )
                 })}
+                {col.nodes.length > LAYER_PREVIEW && (
+                  <button
+                    type="button"
+                    onClick={() => setExpanded((prev) => {
+                      const next = new Set(prev)
+                      if (next.has(col.layer)) next.delete(col.layer)
+                      else next.add(col.layer)
+                      return next
+                    })}
+                    className="self-start px-1 text-2xs text-fg-muted underline hover:text-fg"
+                  >
+                    {expanded.has(col.layer) ? 'Show fewer' : `Show all ${col.nodes.length}`}
+                  </button>
+                )}
               </div>
             </div>
           )

@@ -17,6 +17,30 @@ import { relTime } from './types'
 import { usePageData } from '../../lib/usePageData'
 import { useRealtimeReload } from '../../lib/realtime'
 
+/** Audit actions people do most, in words; the raw slug stays in the row's title. */
+const ACTION_PHRASE: Record<string, string> = {
+  'content_quality.bulk_dismissed': 'dismissed content checks',
+  'inventory.ingest': 'loaded the user stories',
+  'inventory.settings.update': 'changed crawler settings',
+  'ux_run.merged': 'merged a UX run',
+  'pull_request.merged': 'merged a pull request',
+  'api_key.created': 'created an API key',
+  'api_key.revoked': 'revoked an API key',
+  'gate_finding.dismissed': 'dismissed a finding',
+  'fix.merge': 'merged a fix',
+  'fix_dispatch.cancelled': 'cancelled a fix',
+  'settings.updated': 'changed settings',
+}
+
+/**
+ * `ux_run.merged` → "merged a UX run"; an unlisted slug reads as words
+ * (`retention.sweep` → "retention sweep").
+ * @internal Exported for tests only.
+ */
+export function auditActionPhrase(action: string): string {
+  return ACTION_PHRASE[action] ?? action.replace(/[._]+/g, ' ').trim()
+}
+
 /** Minimal shape of an audit row — matches AuditPage's AuditEntry / GET /v1/admin/audit. */
 interface AuditEntry {
   id: string
@@ -127,8 +151,8 @@ export function TeamActivityTile({ projectId }: Props) {
                     <span className="min-w-0 shrink truncate text-xs font-medium text-fg group-hover:text-fg">
                       {who}
                     </span>
-                    <span className="min-w-0 flex-1 truncate font-mono text-2xs text-fg-secondary">
-                      {e.action}
+                    <span className="min-w-0 flex-1 truncate text-2xs text-fg-secondary" title={e.action}>
+                      {auditActionPhrase(e.action)}
                     </span>
                     <SignalChip tone="neutral">{relTime(e.created_at)}</SignalChip>
                   </div>

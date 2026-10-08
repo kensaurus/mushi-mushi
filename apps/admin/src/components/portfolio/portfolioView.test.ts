@@ -7,6 +7,8 @@ import {
   needsALook,
   openReportsText,
   radarLabel,
+  groupRadarDetectors,
+  radarErrorSentence,
   radarStateMeta,
   releaseText,
   sdkLabel,
@@ -131,5 +133,24 @@ describe('radarStateMeta', () => {
     expect(budgetText(read)).toBe('Not set')
     expect(releaseText(read)).toBe('None yet')
     expect(openReportsText(read)).toBe('0')
+  })
+})
+
+describe('groupRadarDetectors', () => {
+  it('lists Found then Check failed first and splits off not-checked and passing checks', () => {
+    const d = (ruleId: string, state: string) => ({ ruleId, state })
+    const out = groupRadarDetectors([d('a', 'ok'), d('b', 'error'), d('c', 'unknown'), d('d', 'finding'), d('e', 'weird')])
+    expect(out.problems.map((x) => x.ruleId)).toEqual(['d', 'b'])
+    expect(out.notChecked.map((x) => x.ruleId)).toEqual(['c', 'e'])
+    expect(out.passing.map((x) => x.ruleId)).toEqual(['a'])
+  })
+})
+
+describe('radarErrorSentence', () => {
+  it('says when the last run failed and never echoes the raw error', () => {
+    const text = radarErrorSentence('2026-10-01T00:00:00Z', () => '3 days ago')
+    expect(text).toContain('(3 days ago) could not finish')
+    expect(text).not.toContain('is not a function')
+    expect(radarErrorSentence(null, () => 'x')).toMatch(/^The last run could not finish/)
   })
 })
