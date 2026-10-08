@@ -10,8 +10,12 @@
  * wires CI or files a support ticket (owner review, 2026-10-08).
  */
 
-import type { ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { DisclosurePanel, FreshnessPill, type SectionFreshness } from '../ui'
+
+/** Layout renders an element with this id after the page; readouts portal into it. */
+export const PAGE_FOOT_SLOT_ID = 'page-foot-slot'
 
 export function ReadoutPanel({
   title,
@@ -29,22 +33,27 @@ export function ReadoutPanel({
   action?: ReactNode
   children: ReactNode
 }) {
-  // order-last: in the page's flex stack the panel sits under the page's own content.
-  return (
-    <div className="order-last">
-      <DisclosurePanel
-        title={
-          <span className="text-xs font-medium text-fg-secondary">
-            Developer details{' '}
-            <span className="font-normal text-fg-muted">
-              · {title.replace(/\s*readout$/i, '')} endpoints and raw signals
-            </span>
+  // Portal into Layout's page-foot slot: order-last only moved the panel inside a
+  // flex stack, so on Home it sat mid-page (2026-10-08). Inline when there is no
+  // slot (tests, pages rendered outside Layout).
+  const [slot, setSlot] = useState<HTMLElement | null>(null)
+  useEffect(() => {
+    setSlot(document.getElementById(PAGE_FOOT_SLOT_ID))
+  }, [])
+  const panel = (
+    <DisclosurePanel
+      title={
+        <span className="text-xs font-medium text-fg-secondary">
+          Developer details{' '}
+          <span className="font-normal text-fg-muted">
+            · {title.replace(/\s*readout$/i, '')} endpoints and raw signals
           </span>
-        }
-        trailing={freshness ? <FreshnessPill {...freshness} /> : undefined}
-      >
-        {children}
-      </DisclosurePanel>
-    </div>
+        </span>
+      }
+      trailing={freshness ? <FreshnessPill {...freshness} /> : undefined}
+    >
+      {children}
+    </DisclosurePanel>
   )
+  return slot ? createPortal(panel, slot) : <div className="order-last">{panel}</div>
 }

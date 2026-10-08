@@ -494,7 +494,8 @@ async function runOrphanEndpointGate(
  */
 export function isApiCallPath(path: string): boolean {
   const p = path.split('?')[0] ?? path
-  if (/(^|\/)_next\/|__next\.|\/__nextjs|\.rsc$/i.test(p)) return false
+  const lower = p.toLowerCase()
+  if (lower.startsWith('_next/') || lower.includes('/_next/') || lower.includes('__next.') || lower.includes('/__nextjs') || lower.endsWith('.rsc')) return false
   if (/\.(?:js|mjs|css|map|png|jpe?g|gif|webp|avif|svg|ico|woff2?|ttf|otf|mp3|mp4|webm|wasm|txt|xml|webmanifest)$/i.test(p)) return false
   // A .json file outside an API path is a static file (version.json, manifest.json).
   if (/\.json$/i.test(p) && !API_PATH.test(p)) return false

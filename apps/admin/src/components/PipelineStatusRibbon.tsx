@@ -332,8 +332,9 @@ export function PipelineStatusRibbon({ embedded = false }: { embedded?: boolean 
       !nav.ready
         ? 'Loading…'
         : nav.prsOpen === 0
-          ? 'No PRs awaiting review'
-          : `${nav.prsOpen} PR${nav.prsOpen === 1 ? '' : 's'} awaiting review`,
+          // Fix PRs only: other open PRs are on Pull requests, which this tile links to.
+          ? 'No fix PRs awaiting review'
+          : `${nav.prsOpen} fix PR${nav.prsOpen === 1 ? '' : 's'} awaiting review`,
     // Open PRs are listed on the Branches tab (there is no `prs` tab).
     to: repoLinks.prOpen,
   }

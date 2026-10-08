@@ -17,7 +17,7 @@ import { navSlicesForPaths, renderNavBadge, resolveNavBadge } from '../lib/navBa
 import { NavRailFlyout } from './sidebar/NavRailFlyout'
 import { NavRailLink, railBadgeText, railDescriptionId } from './sidebar/NavRailLink'
 import { workspaceSectionAttention } from '../lib/workspaceNavMeta'
-import { checkSectionAttention, actSectionAttention, doSectionAttention, startSectionAttention, planSectionAttention, workspaceSlicesAttention } from '../lib/extendedNavMeta'
+import { checkSectionAttention, actSectionAttention, doSectionAttention, startSectionAttention, workspaceSlicesAttention } from '../lib/extendedNavMeta'
 import { useProjectSnapshots } from '../lib/useProjectSnapshots'
 import { readJudgeStaleHours } from '../lib/judgeFreshness'
 import { useEntitlements } from '../lib/useEntitlements'
@@ -34,6 +34,7 @@ import { RouteProgress } from './RouteProgress'
 import { NextStep } from './NextStep'
 import { DavChromeCoachmark } from './DavChromeCoachmark'
 import { GlobalStatusStrip } from './GlobalStatusStrip'
+import { PAGE_FOOT_SLOT_ID } from './readout/ReadoutPanel'
 import { ChromeBreadcrumb } from './ChromeBreadcrumb'
 import { FirstRunTour } from './FirstRunTour'
 import { SetupGuide } from './setup-guide/SetupGuide'
@@ -1312,6 +1313,8 @@ export function Layout({ children }: { children: ReactNode }) {
                 />
               )}
               {children}
+              {/* Developer details (components/readout/ReadoutPanel) portal here, so they close every page. */}
+              <div id={PAGE_FOOT_SLOT_ID} className="mt-4 empty:hidden" />
             </div>
           </main>
         </PageHelpProvider>
@@ -1379,34 +1382,10 @@ function computeStaleness(
       }
     }
     case 'plan': {
+      // Bugs coming in: the untriaged backlog only. Content checks and User stories
+      // moved to Quality & health (2026-10-08), and their counts moved with them.
       const backlog = navCounts.untriagedBacklog
-      const reg = navCounts.regressedActions
-      const contentAttention = planSectionAttention(navCounts.slices)
-      if (backlog === 0 && reg === 0 && !contentAttention) return null
-      if (reg > 0) {
-        return {
-          count: reg + (contentAttention?.count ?? 0),
-          tone: 'danger',
-          label: contentAttention
-            ? `${reg} regressed inventory actions · ${contentAttention.label}`
-            : `${reg} regressed inventory action${reg === 1 ? '' : 's'} — check User stories`,
-        }
-      }
-      if (backlog > 0 && contentAttention) {
-        const tone = toneForBacklog(backlog) as SectionStaleness['tone']
-        return {
-          count: backlog + contentAttention.count,
-          tone: contentAttention.tone === 'danger' ? 'danger' : tone,
-          label: `${backlog} untriaged report${backlog === 1 ? '' : 's'} · ${contentAttention.label}`,
-        }
-      }
-      if (contentAttention) {
-        return {
-          count: contentAttention.count,
-          tone: contentAttention.tone,
-          label: contentAttention.label,
-        }
-      }
+      if (backlog === 0) return null
       const tone = toneForBacklog(backlog) as SectionStaleness['tone']
       return {
         count: backlog,
@@ -1437,7 +1416,16 @@ function computeStaleness(
     case 'check': {
       const disagreements = navCounts.judgeDisagreements
       const staleHours = readJudgeStaleHours()
-      const extended = checkSectionAttention(navCounts.slices)
+      const base = checkSectionAttention(navCounts.slices)
+      const reg = navCounts.regressedActions
+      // Regressed User stories actions roll up here, where User stories now lives.
+      const extended = reg > 0
+        ? {
+            count: reg + (base?.count ?? 0),
+            tone: 'danger' as const,
+            label: base ? `${reg} regressed user-story actions · ${base.label}` : `${reg} regressed user-story action${reg === 1 ? '' : 's'}`,
+          }
+        : base
       if (disagreements > 0) {
         return {
           count: disagreements + (extended?.count ?? 0),

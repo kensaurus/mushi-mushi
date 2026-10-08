@@ -240,11 +240,15 @@ export function PageHelpBanner({
   const surfaceClass = PAGE_HELP_BANNER_SHELL
   const iconClass = 'bg-surface-overlay text-fg-muted'
 
+  // Related pages stay visible under the help row: the owner could not find
+  // the cross-links while they sat inside the closed help (2026-10-08).
+  const visibleLinks = resolvedLinks.filter((l) => l.to.split('#')[0] !== pathname)
   return (
+    <div className="mb-3 flex w-full min-w-0 flex-col gap-1">
     <details
       open={open}
       onToggle={handleToggle}
-      className={`group mb-3 w-full min-w-0 rounded-md border motion-safe:transition-opacity motion-safe:duration-150 ${surfaceClass}`}
+      className={`group w-full min-w-0 rounded-md border motion-safe:transition-opacity motion-safe:duration-150 ${surfaceClass}`}
     >
       <summary className={`flex w-full cursor-pointer list-none items-center gap-2 rounded-md px-3 py-2 text-xs text-fg-muted motion-safe:transition-[transform,opacity] motion-safe:duration-150 motion-safe:active:scale-[0.995] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ok/40 ${PAGE_HELP_BANNER_SUMMARY_HOVER}`}>
         <svg
@@ -292,6 +296,17 @@ export function PageHelpBanner({
         </div>
       </div>
     </details>
+    {visibleLinks.length > 0 && (
+      <nav aria-label="Related pages" className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-2xs text-fg-muted">
+        <span>Related:</span>
+        {visibleLinks.map((l) => (
+          <Link key={l.to} to={l.to} title={flowLinkBlurb(l)} className="text-fg-secondary underline decoration-edge underline-offset-2 hover:text-fg">
+            {l.label}
+          </Link>
+        ))}
+      </nav>
+    )}
+    </div>
   )
 }
 
