@@ -352,7 +352,7 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
         // quota) and autofix_blocked stamps were invisible in every list
         // view — you had to open each report to learn the pipeline choked
         // (2026-08-16 audit P2-3). ~0.5 KB per affected row.
-        'id, project_id, description, category, severity, summary, title, area_tag, status, created_at, environment, screenshot_url, user_category, confidence, component, report_group_id, last_reporter_reply_at, last_admin_reply_at, admin_seen_at, awaiting_reporter_at, closed_reason, breadcrumbs, tags, sentry_trace_id, sentry_release, sentry_environment, sentry_event_id, sentry_replay_id, end_user_id, reporter_token_hash, session_id, processing_error, user_intent, stage1_category:stage1_classification->>category, stage2_category:stage2_analysis->>category',
+        'id, project_id, description, category, severity, summary, title, area_tag, status, created_at, environment, screenshot_url, user_category, confidence, component, report_group_id, last_reporter_reply_at, last_admin_reply_at, admin_seen_at, awaiting_reporter_at, closed_reason, breadcrumbs, tags, sentry_trace_id, sentry_release, sentry_environment, sentry_event_id, sentry_replay_id, end_user_id, reporter_token_hash, session_id, processing_error, user_intent, stage1_category:stage1_classification->>category, stage2_category:stage2_analysis->>category, metadata_source:custom_metadata->>source',
         { count: 'exact' },
       )
       .in('project_id', projectIds)
