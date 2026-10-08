@@ -83,10 +83,11 @@ skills
     }
     for (const id of ids) {
       console.log(`Syncing source ${id.slice(0, 8)}…`)
-      const result = await apiCall<{ synced: number; skipped: number; errors: number }>(
+      const result = await apiCall<{ synced?: number; skipped?: number; errors?: number; status?: 'running' }>(
         `/v1/admin/skills/sources/${id}/sync`, config, { method: 'POST' },
       )
       if (!result.ok) { console.error('  Sync failed:', result.error) }
+      else if (result.data?.status === 'running') console.log('  Still running in the background; `mushi skills list` shows the result in a few minutes.')
       else console.log(`  Done: ${result.data?.synced ?? 0} synced, ${result.data?.skipped ?? 0} skipped, ${result.data?.errors ?? 0} errors`)
     }
     console.log()
