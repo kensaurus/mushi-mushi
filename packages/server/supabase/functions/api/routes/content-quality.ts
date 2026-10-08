@@ -27,6 +27,8 @@ import {
   BULK_DISMISS_MAX_ROWS,
   bulkDismissBodySchema,
   contentQualityFilterOps,
+  isRegenStale,
+  regenCallbackOutcome,
   materiallyNewSignals,
   rowFilterFromSearchParams,
   type FilterOp,
@@ -410,8 +412,7 @@ export function registerContentQualityRoutes(app: Hono<{ Variables: Variables }>
     await db
       .from('content_quality_issues')
       .update({
-        regen_status: status === 'completed' ? 'completed' : 'failed',
-        status: status === 'completed' ? 'resolved' : 'open',
+        ...regenCallbackOutcome(status, result),
         regen_completed_at: new Date().toISOString(),
         regen_result: result as Record<string, unknown>,
         updated_at: new Date().toISOString(),
@@ -577,7 +578,12 @@ export function registerContentQualityRoutes(app: Hono<{ Variables: Variables }>
     const viewerDenied = denyViewerWrite(c, loaded.role, 'regenerate content');
     if (viewerDenied) return viewerDenied;
     const issue = loaded.issue;
-    if (issue.regen_status === 'running' || issue.regen_status === 'queued') {
+    // A regeneration whose callback never arrived stays "running" forever, so
+    // one that started REGEN_STALE_MS ago can be requested again.
+    if (
+      (issue.regen_status === 'running' || issue.regen_status === 'queued') &&
+      !isRegenStale(issue.regen_requested_at as string | null, Date.now())
+    ) {
       return c.json({ ok: false, error: { code: 'CONFLICT', message: 'Regeneration already in progress' } }, 409);
     }
 

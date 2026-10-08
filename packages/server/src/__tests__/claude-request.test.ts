@@ -60,10 +60,17 @@ import {
 import { estimateCallCostUsd } from '../../supabase/functions/_shared/pricing.ts'
 
 describe('model registry', () => {
-  it('routes diagnosis, fixes, judge, assistants and the digest to Sonnet 5.5', () => {
-    for (const model of [STAGE2_MODEL, FIX_MODEL, JUDGE_MODEL, ASSIST_MODEL, INTELLIGENCE_MODEL]) {
+  it('routes diagnosis, fixes and the judge to Sonnet 5.5', () => {
+    for (const model of [STAGE2_MODEL, FIX_MODEL, JUDGE_MODEL]) {
       expect(model).toBe('claude-sonnet-5-5')
     }
+  })
+
+  it('runs the assistants and the digest on Haiku 5.5 (owner, 2026-10-08: cost)', () => {
+    for (const model of [ASSIST_MODEL, INTELLIGENCE_MODEL]) {
+      expect(model).toBe('claude-haiku-5-5')
+    }
+    expect(claudeModelTraits('claude-haiku-5-5').acceptsSampling).toBe(false)
   })
 
   it('keeps stage 1 on the Haiku 4.5 alias (no dated suffix)', () => {
