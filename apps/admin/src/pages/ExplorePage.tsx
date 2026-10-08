@@ -69,6 +69,9 @@ import { LAYER_COLORS, LAYER_LABELS, LAYER_ORDER } from '../components/explore/e
 import { ExploreStatusBanner } from '../components/explore/ExploreStatusBanner'
 import { ExploreAtlasGuide } from '../components/explore/ExploreAtlasGuide'
 import { PageLoadError } from '../components/PageLoadError'
+import { apiFetch } from '../lib/supabase'
+import { useToast } from '../lib/toast'
+import { describeApiFailure } from '../lib/humanizeApiError'
 import {
   ActionPill,
   ActionPillRow,
@@ -235,6 +238,23 @@ export function ExplorePage() {
     void reloadStats()
     void exploreQuery.reload()
   }, [reloadStats, exploreQuery])
+
+  // A failed sweep otherwise waits for the daily retry.
+  const toast = useToast()
+  const [retryingIndex, setRetryingIndex] = useState(false)
+  const retryIndexing = useCallback(async () => {
+    if (!projectId) return
+    setRetryingIndex(true)
+    const res = await apiFetch(`/v1/admin/projects/${projectId}/codebase/sweep`, { method: 'POST' })
+    setRetryingIndex(false)
+    if (!res.ok) {
+      const t = describeApiFailure(res.error, 'Could not start indexing')
+      toast.error(t.title, t.description)
+      return
+    }
+    toast.success('Indexing started', 'Files and errors update here as the sweep runs.')
+    void reloadStats()
+  }, [projectId, toast, reloadStats])
 
   useRealtimeReload(
     ['project_codebase_files', 'project_repos', 'project_settings'],
@@ -1056,7 +1076,14 @@ export function ExplorePage() {
             <DetailRows items={buildIndexRows(stats)} />
           </Card>
           <div className="flex flex-wrap gap-2">
-            <Btn to="/settings" size="sm">Open indexing settings</Btn>
+            {stats.lastIndexError && (
+              <Btn size="sm" onClick={() => void retryIndexing()} loading={retryingIndex}>
+                Retry indexing now
+              </Btn>
+            )}
+            <Btn to="/settings" size="sm" variant={stats.lastIndexError ? 'ghost' : undefined}>
+              Open indexing settings
+            </Btn>
             <Btn size="sm" variant="ghost" onClick={reloadAll} loading={statsValidating}>
               Re-fetch stats
             </Btn>

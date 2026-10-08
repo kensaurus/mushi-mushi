@@ -53,6 +53,9 @@ const CATALOG_SCAN_CAP = 5000
 /** Run states a step check-in may still change. */
 const OPEN_RUN_STATUSES = ['pending', 'running']
 
+/** How long "Sync now" waits for skill-sync before answering that it is still running. */
+const SYNC_WAIT_MS = 25_000
+
 function projectIdFromRequest(c: Context<{ Variables: Variables }>): string | null {
   return (
     c.req.query('project_id') ??
@@ -393,11 +396,13 @@ function skillsRoutes() {
 
     const reqBody = await c.req.json().catch(() => ({})) as { force?: boolean }
 
-    // Fire-and-forget the sync function
+    // A full re-sync embeds every skill and outlasts the 150 s gateway limit,
+    // which showed the console a 504. Wait up to SYNC_WAIT_MS for the stats;
+    // past that, answer `status: 'running'` and keep the sync alive.
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     try {
-      const res = await fetch(`${supabaseUrl}/functions/v1/skill-sync`, {
+      const sync = fetch(`${supabaseUrl}/functions/v1/skill-sync`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -405,6 +410,15 @@ function skillsRoutes() {
         },
         body: JSON.stringify({ source_id: sourceId, force: reqBody.force ?? false }),
       })
+      const edgeRuntime = (globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } }).EdgeRuntime
+      edgeRuntime?.waitUntil(sync.catch(() => undefined))
+      const res = await Promise.race([
+        sync,
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), SYNC_WAIT_MS)),
+      ])
+      if (res === null) {
+        return c.json({ ok: true, data: { status: 'running' } }, 202)
+      }
       const json = await res.json().catch(() => null)
       if (!res.ok) {
         // skill-sync answers `{ ok:false, error:'…' }` or `{ error:{code,message} }`;

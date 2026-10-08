@@ -118,7 +118,7 @@ export async function dispatchFixForReport(input: DispatchInput): Promise<Dispat
   // re-categorizes it (Slack card, Linear agent, modernizer all land here).
   const { data: report } = await db
     .from('reports')
-    .select('status, user_category, user_intent, category, stage1_classification, stage2_analysis')
+    .select('status, user_category, user_intent, category, category_confirmed_at, stage1_classification, stage2_analysis')
     .eq('id', input.reportId)
     .eq('project_id', input.projectId)
     .maybeSingle()

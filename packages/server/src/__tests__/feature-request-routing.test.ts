@@ -126,3 +126,22 @@ describe('pipeline wiring', () => {
     expect(worker).toMatch(/stage1_classification, stage2_analysis/)
   })
 })
+
+describe('featureRequestDispatchBlock after a person confirms the category', () => {
+  it('unblocks when the person agrees with the classifier (08d0ecde, the-wanting-mind)', () => {
+    const report = { ...WIDGET_FEATURE, category: 'visual', stage2_analysis: { category: 'visual' } }
+    expect(featureRequestDispatchBlock(report)).toMatch(/feature request/)
+    expect(featureRequestDispatchBlock({ ...report, category_confirmed_at: '2026-10-08T12:00:00Z' })).toBeNull()
+  })
+
+  it('a confirmed "other" still blocks', () => {
+    expect(featureRequestDispatchBlock({ ...WIDGET_FEATURE, category: 'other', category_confirmed_at: '2026-10-08T12:00:00Z' })).toMatch(/feature request/)
+  })
+
+  it('the PATCH route validates the category and stamps who confirmed it', () => {
+    const route = readFileSync(resolve(__dirname, '../../supabase/functions/api/routes/reports.ts'), 'utf8')
+    expect(route).toMatch(/updates\.category_confirmed_at = new Date\(\)\.toISOString\(\)/)
+    expect(route).toMatch(/updates\.category_confirmed_by = userId/)
+    expect(route).toMatch(/CLASSIFIER_REPORT_CATEGORIES as readonly string\[\]\)\.includes\(updates\.category\)/)
+  })
+})

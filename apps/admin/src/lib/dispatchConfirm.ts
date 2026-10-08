@@ -36,14 +36,16 @@ export function featureRequestDispatchBlock(report: {
   category?: string | null
   stage1_classification?: unknown
   stage2_analysis?: unknown
+  category_confirmed_at?: string | null
 }): string | null {
   const isFeature =
     ['feature', 'feature request', 'feature_request'].includes(lower(report.user_category)) ||
     lower(report.user_intent) === 'feature request'
   if (!isFeature) return null
+  if (report.category_confirmed_at && report.category && report.category !== 'other') return null
   const classifierCategory = storedCategory(report.stage2_analysis) ?? storedCategory(report.stage1_classification)
   if (report.category && report.category !== 'other' && report.category !== classifierCategory) return null
-  return 'Feature request: set Category to the bug type first to dispatch a fix.'
+  return 'Feature request: set its Category in triage to dispatch a fix.'
 }
 
 export function dispatchConfirmBody(input: { repoUrl: string | null | undefined; baseBranch: string | null | undefined }): string {

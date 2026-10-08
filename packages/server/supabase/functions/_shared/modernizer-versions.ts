@@ -127,6 +127,17 @@ const NPM_NAME_RE = /^(@[a-z0-9-~][a-z0-9-._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$/
  * when it is a release; if it is a prerelease, the highest release wins.
  */
 export async function npmLatestStable(name: string, fetchImpl: typeof fetch = fetch): Promise<string | null> {
+  return (await npmLatestStableInfo(name, fetchImpl))?.version ?? null
+}
+
+/**
+ * npm's latest stable version of `name` and that release's peerDependencies,
+ * read from the same abbreviated registry document.
+ */
+export async function npmLatestStableInfo(
+  name: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<{ version: string; peers: Record<string, string> } | null> {
   if (!NPM_NAME_RE.test(name)) return null
   let res: Response
   try {
@@ -139,18 +150,59 @@ export async function npmLatestStable(name: string, fetchImpl: typeof fetch = fe
   }
   if (!res.ok) return null
   const body = (await res.json().catch(() => null)) as
-    | { 'dist-tags'?: { latest?: string }; versions?: Record<string, unknown> }
+    | { 'dist-tags'?: { latest?: string }; versions?: Record<string, { peerDependencies?: Record<string, string> }> }
     | null
+  const withPeers = (version: string) => ({ version, peers: body?.versions?.[version]?.peerDependencies ?? {} })
   const tagged = body?.['dist-tags']?.latest
   const taggedSemver = tagged ? parseSemver(tagged) : null
-  if (taggedSemver && taggedSemver.prerelease.length === 0) return tagged!
+  if (taggedSemver && taggedSemver.prerelease.length === 0) return withPeers(tagged!)
   let best: { raw: string; v: SemVer } | null = null
   for (const raw of Object.keys(body?.versions ?? {})) {
     const v = parseSemver(raw)
     if (!v || v.prerelease.length > 0) continue
     if (!best || compareSemver(v, best.v) > 0) best = { raw, v }
   }
-  return best?.raw ?? null
+  return best ? withPeers(best.raw) : null
+}
+
+/** True when `version` satisfies any `||` part of a peer range; unparseable parts never block. */
+function peerRangeAdmits(range: string, version: string): boolean {
+  const v = parseSemver(version)
+  if (!v) return true
+  for (const part of range.split('||')) {
+    const r = parseInstalledRange(part)
+    if (!r || rangeAdmits(r, v)) return true
+  }
+  return false
+}
+
+/**
+ * Split candidates into upgrades that can land now and ones another installed
+ * package forbids: when a dependency's LATEST release still pins the
+ * candidate to a range its target falls outside (@sentry/capacitor 4.4.0
+ * requires @sentry/react 10.69.0, so @sentry/react 11 would break it),
+ * upgrading anything cannot make the target installable yet.
+ */
+export function splitPeerBlocked(
+  candidates: UpgradeCandidate[],
+  peersByName: Map<string, Record<string, string>>,
+): { ready: UpgradeCandidate[]; blocked: Array<UpgradeCandidate & { blockedBy: string; requires: string }> } {
+  const ready: UpgradeCandidate[] = []
+  const blocked: Array<UpgradeCandidate & { blockedBy: string; requires: string }> = []
+  for (const c of candidates) {
+    let hit: { blockedBy: string; requires: string } | null = null
+    for (const [dep, peers] of peersByName) {
+      if (dep === c.name) continue
+      const range = peers[c.name]
+      if (range && !peerRangeAdmits(range, c.latest)) {
+        hit = { blockedBy: dep, requires: range }
+        break
+      }
+    }
+    if (hit) blocked.push({ ...c, ...hit })
+    else ready.push(c)
+  }
+  return { ready, blocked }
 }
 
 export interface UpgradeCandidate {

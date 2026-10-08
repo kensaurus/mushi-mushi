@@ -136,3 +136,36 @@ describe('ReportRowView dispatch gate', () => {
     expect(queue?.title).toBe('The reporter filed this as a feature request.')
   })
 })
+
+describe('ReportRowView sample reports', () => {
+  const renderRow = async (row: ReportRow) => {
+    await act(async () => {
+      root.render(
+        createElement(MemoryRouter, null, createElement('table', null, createElement('tbody', null,
+          createElement(ReportRowView, {
+            row,
+            index: 0,
+            isSelected: false,
+            isCursor: false,
+            onToggleSelect: vi.fn(),
+            onFocus: vi.fn(),
+            onOpen: vi.fn(),
+            onCopyLink: vi.fn(),
+            onDismiss: vi.fn(),
+            onDispatchFix: vi.fn(),
+          }),
+        ))),
+      )
+    })
+  }
+
+  it('labels a "Send a test report" sample so it is not mistaken for a user bug', async () => {
+    await renderRow({ ...ROW, metadata_source: 'admin_test_report' } as ReportRow)
+    expect(container.textContent).toContain('Test report')
+  })
+
+  it('leaves real reports unlabelled', async () => {
+    await renderRow(ROW)
+    expect(container.textContent).not.toContain('Test report')
+  })
+})
