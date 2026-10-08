@@ -24,7 +24,6 @@ import { refreshNavCounts } from '../lib/useNavCounts'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageCopy } from '../lib/copy'
 import { useLessonsUx, resolveQuickLessonsTab } from '../lib/lessonsModeUx'
-import { resolveModeAwareTab } from '../lib/modeAwareTab'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import {
@@ -34,16 +33,7 @@ import {
   ErrorAlert,
   RelativeTime,
   SegmentedControl,
-  FreshnessPill,
-  RecommendedAction,
-  Card,
 } from '../components/ui'
-import {
-  ActionPill,
-  ActionPillRow,
-  ContainedBlock,
-  SignalChip,
-} from '../components/report-detail/ReportSurface'
 import { LessonsStatusBanner } from '../components/lessons/LessonsStatusBanner'
 import { LessonsSnapshotStrip } from '../components/lessons/LessonsSnapshotStrip'
 import { LessonsReadout } from '../components/lessons/LessonsReadout'
@@ -55,7 +45,7 @@ import {
 import { IconIntelligence, IconShield, IconChevronRight } from '../components/icons'
 import { Drawer } from '../components/Drawer'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
-import { CHIP_TONE, HEADER_BADGE_TONE } from '../lib/chipTone'
+import { CHIP_TONE } from '../lib/chipTone'
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -122,8 +112,8 @@ function SeverityBadge({ severity }: { severity: string }) {
 
 // ─── Tab bar (URL-driven) ─────────────────────────────────────
 
+// No Overview tab: the banner states the posture and the readout sits at the page foot.
 const TABS: Array<{ id: LessonsTabId; label: string; description: string }> = [
-  { id: 'overview', label: 'Overview', description: 'Posture banner and how mistake memory feeds PR review.' },
   { id: 'lessons',  label: 'Lessons',   description: 'Promoted learning rules — encoded mistake memory for your codebase.' },
   { id: 'clusters', label: 'Clusters',  description: 'Vector-clustered groups of similar bug reports awaiting promotion.' },
   { id: 'query',    label: 'Query Sim', description: 'Paste a diff and preview which rules would be injected by lessons.query.' },
@@ -596,20 +586,16 @@ export function LessonsPage() {
   }, [reloadStats])
   usePublishPageHeroStats('/lessons', statsData)
   const stats = { ...EMPTY_LESSONS_STATS, ...statsData }
-  const activeTab = resolveModeAwareTab<LessonsTabId>({
-    explicit: explicitLessonsTab(tabParam),
-    isQuickstart: ux.isQuickstart,
-    quickTab: statsData ? resolveQuickLessonsTab(stats) : null,
-    fallback: 'overview',
-  })
+  // Every mode lands on the work tab that matches the posture; the URL wins.
+  const postureTab = resolveQuickLessonsTab(stats)
+  const activeTab: LessonsTabId = explicitLessonsTab(tabParam) ?? (postureTab === 'overview' ? 'lessons' : postureTab)
   const activeTabMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
 
   const setActiveTab = useCallback(
     (tab: LessonsTabId) => {
       setSearchParams((prev) => {
         const next = new URLSearchParams(prev)
-        // Always explicit: with no ?tab= quick mode shows the posture tab,
-        // so clearing it for Overview made Overview unreachable.
+        // Always explicit: with no ?tab= the page shows the posture tab.
         next.set('tab', tab)
         return next
       })
@@ -667,19 +653,6 @@ export function LessonsPage() {
     return <ErrorAlert message={`Failed to load lessons stats: ${statsError}`} onRetry={reloadStats} />
   }
 
-  const bannerSeverity: 'ok' | 'warn' | 'danger' | 'brand' | 'info' | 'neutral' =
-    !stats.hasAnyProject
-      ? 'neutral'
-      : stats.topPriority === 'critical_lessons'
-        ? 'danger'
-        : stats.topPriority === 'candidates_ready' || stats.topPriority === 'no_lessons'
-          ? 'warn'
-          : stats.topPriority === 'no_data'
-            ? 'brand'
-            : stats.topPriority === 'healthy'
-              ? 'ok'
-              : 'info'
-
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-lessons">
       <PageHeaderBar
@@ -696,35 +669,9 @@ export function LessonsPage() {
         helpHowToUse={copy?.help?.howToUse ?? 'Browse promoted lessons, retire obsolete ones, or run mushi sync-lessons to sync to your repo. Clusters auto-promote when coherence ≥ 0.75 and size ≥ 3.'}
       >
         {!ux.hideOverviewChrome && (
-          <>
-        <Badge
-          className={
-            bannerSeverity === 'ok'
-              ? CHIP_TONE.okSubtle
-              : bannerSeverity === 'danger'
-                ? CHIP_TONE.dangerSubtle
-                : bannerSeverity === 'warn'
-                  ? CHIP_TONE.warnSubtle
-                  : bannerSeverity === 'brand'
-                    ? HEADER_BADGE_TONE.brand
-                    : HEADER_BADGE_TONE.neutral
-          }
-        >
-          {!stats.hasAnyProject
-            ? 'NO PROJECT'
-            : stats.topPriority === 'critical_lessons'
-              ? `${stats.criticalLessons} CRIT`
-              : stats.readyToPromote > 0
-                ? `${stats.readyToPromote} READY`
-                : stats.activeLessons === 0 && stats.candidateClusters === 0
-                  ? 'EMPTY'
-                  : `${stats.activeLessons} ACTIVE`}
-        </Badge>
-        <FreshnessPill at={statsFetchedAt} isValidating={statsValidating} />
-        <Btn size="sm" variant="ghost" onClick={reloadStats} loading={statsValidating}>
-          Refresh
-        </Btn>
-          </>
+          <Btn size="sm" variant="ghost" onClick={reloadStats} loading={statsValidating}>
+            Refresh
+          </Btn>
         )}
       </PageHeaderBar>
 
@@ -769,73 +716,11 @@ export function LessonsPage() {
       />
       )}
 
-      {stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
-        <Card
-          className={`space-y-3 border p-4 bg-surface-raised ${
-            stats.topPriority === 'critical_lessons'
-              ? 'border-danger/40'
-              : stats.topPriority === 'no_data'
-                ? 'border-brand/40'
-                : 'border-warn/40'
-          }`}
-        >
-          <SignalChip
-            tone={
-              stats.topPriority === 'critical_lessons'
-                ? 'danger'
-                : stats.topPriority === 'no_data'
-                  ? 'brand'
-                  : 'warn'
-            }
-          >
-            Needs attention
-          </SignalChip>
-          <ContainedBlock tone={stats.topPriority === 'critical_lessons' ? 'warn' : 'info'}>
-            <p className="text-xs font-medium leading-snug text-fg">{stats.topPriorityLabel}</p>
-          </ContainedBlock>
-          <ActionPillRow>
-            <ActionPill to={stats.topPriorityTo} tone="brand">
-              Take action →
-            </ActionPill>
-          </ActionPillRow>
-        </Card>
-      ) : null}
-
-      {activeTab === 'overview' && (
-        <div className="space-y-4">
-          <LessonsReadout
-            stats={stats}
-            fetchedAt={statsFetchedAt}
-            isValidating={statsValidating}
-          />
-          {stats.topPriority === 'healthy' && (
-            <RecommendedAction
-              tone="success"
-              title="Lesson library is active"
-              description={`${stats.activeLessons} promoted rules feeding PR context · ${stats.candidateClusters} clusters still forming.`}
-            />
-          )}
-          {stats.topPriority === 'no_data' && (
-            <RecommendedAction
-              tone="info"
-              title="Seed mistake memory with reports"
-              description="Clusters form automatically as similar bug reports accumulate. Triage and classify reports first — the clusterer runs every 6 hours."
-              cta={{ label: 'Open Reports', to: '/reports' }}
-            />
-          )}
-          {(stats.topPriority === 'candidates_ready' || stats.topPriority === 'no_lessons') && (
-            <RecommendedAction
-              tone="info"
-              title="Promote a cluster to a lesson"
-              description={stats.topPriorityLabel ?? 'Review candidate clusters and promote when coherence ≥ 75%.'}
-            />
-          )}
-        </div>
-      )}
-
       {activeTab === 'lessons' && <LessonsTab onChanged={onLessonsChanged} canEditProject={canEditProject} />}
       {activeTab === 'clusters' && <ClustersTab onChanged={onLessonsChanged} canEditProject={canEditProject} />}
       {activeTab === 'query' && <QuerySimTab />}
+
+      <LessonsReadout stats={stats} fetchedAt={statsFetchedAt} isValidating={statsValidating} />
     </div>
   )
 }

@@ -1,8 +1,9 @@
 /**
  * FILE: apps/admin/src/components/dlq/QueueStageBreakdown.tsx
  * PURPOSE: Per-stage backlog bar — one row per pipeline stage showing the
- *          status mix (pending / running / completed / failed / DLQ).
- *          Click a row to scope the page filter to that stage.
+ *          unfinished mix (pending / running / failed / DLQ). Completed jobs
+ *          are not backlog, so they are left out of the bar and the count
+ *          (the CSV export keeps them). Click a row to scope the page filter.
  */
 
 import { Card } from '../ui'
@@ -16,12 +17,12 @@ interface Props {
 }
 
 const STATUS_ORDER = ['pending', 'running', 'completed', 'failed', 'dead_letter'] as const
+const BACKLOG_STATUSES = ['pending', 'running', 'failed', 'dead_letter'] as const
 
 /** Solid bar fills aligned to CHIP_TONE severity (bg portion only). */
-const STATUS_BAR_CLS: Record<(typeof STATUS_ORDER)[number], string> = {
+const STATUS_BAR_CLS: Record<(typeof BACKLOG_STATUSES)[number], string> = {
   pending: 'bg-info-muted',
   running: 'bg-brand',
-  completed: 'bg-ok-muted',
   failed: 'bg-warn-muted',
   dead_letter: 'bg-danger-muted',
 }
@@ -53,7 +54,7 @@ export function QueueStageBreakdown({ summary, selectedStage, onSelect }: Props)
       <div className="space-y-1.5">
         {summary.stages.map((s) => {
           const breakdown = summary.byStage[s] ?? {}
-          const totalForStage = Object.values(breakdown).reduce((a, b) => a + b, 0)
+          const totalForStage = BACKLOG_STATUSES.reduce((a, st) => a + (breakdown[st] ?? 0), 0)
           return (
             <button
               key={s}
@@ -66,7 +67,7 @@ export function QueueStageBreakdown({ summary, selectedStage, onSelect }: Props)
             >
               <span className="text-xs font-mono text-fg-secondary">{s}</span>
               <div className="flex h-2 rounded-sm overflow-hidden bg-edge-subtle">
-                {STATUS_ORDER.map((st) => {
+                {BACKLOG_STATUSES.map((st) => {
                   const v = breakdown[st] ?? 0
                   if (v === 0) return null
                   return (

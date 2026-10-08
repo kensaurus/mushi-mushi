@@ -10,7 +10,7 @@ import {
   PLATFORM_FILTER_OPTIONS,
   SDK_FILTER_OPTIONS,
   SEVERITY_CHIPS,
-  STATUS_FILTER_OPTIONS,
+  STATUS_CHIPS,
   bulkConfirmCopy,
   defaultSortDir,
   kpiTileFilter,
@@ -25,7 +25,8 @@ const STORED_SEVERITIES = ['critical', 'high', 'medium', 'low']
 describe('quick filter chips', () => {
   it('only offer severities a report can have (#73: "major" matched nothing)', () => {
     for (const chip of SEVERITY_CHIPS) expect(STORED_SEVERITIES).toContain(chip.value)
-    expect(SEVERITY_CHIPS.map((c) => c.value)).toEqual(['critical', 'high'])
+    // The chips are the only severity filter now that the select is gone.
+    expect(SEVERITY_CHIPS.map((c) => c.value)).toEqual(STORED_SEVERITIES)
   })
 
   it('count New the way status=new lists it: new plus queued (item 230)', () => {
@@ -38,10 +39,11 @@ describe('quick filter chips', () => {
   })
 })
 
-describe('Status select (item 229)', () => {
-  it('lists verified and reopened, with readable labels', () => {
-    expect(STATUS_FILTER_OPTIONS).toContain('verified')
-    expect(STATUS_FILTER_OPTIONS).toContain('reopened')
+describe('Status chips (item 229)', () => {
+  it('offer verified and reopened, with readable labels', () => {
+    const values = STATUS_CHIPS.map((c) => c.value)
+    expect(values).toContain('verified')
+    expect(values).toContain('reopened')
     expect(statusFilterLabel('open')).toBe('Open (needs a decision)')
     expect(statusFilterLabel('active')).toBe('Not dismissed')
     expect(statusFilterLabel('reopened')).toBe('Reopened')

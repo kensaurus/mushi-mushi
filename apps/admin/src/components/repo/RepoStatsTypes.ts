@@ -3,7 +3,7 @@
  * PURPOSE: Repo shell stats — banner + REPO SNAPSHOT strip.
  */
 
-export type RepoTabId = 'overview' | 'branches' | 'activity'
+export type RepoTabId = 'branches' | 'activity'
 
 export type RepoTopPriority =
   | 'no_project'

@@ -167,7 +167,11 @@ export function LinearIntegrationCard({
           : undefined
 
   return (
-    <div id="integrations-linear" className="rounded-xl border border-edge-subtle bg-surface p-5 space-y-4 scroll-mt-chrome">
+    <div
+      id="integrations-linear"
+      // mushi-mushi-allowlist: anchored card (#integrations-linear links land here); Card takes no id
+      className="rounded-xl border border-edge-subtle bg-surface-raised p-5 space-y-4 scroll-mt-chrome"
+    >
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-center gap-3 min-w-0">

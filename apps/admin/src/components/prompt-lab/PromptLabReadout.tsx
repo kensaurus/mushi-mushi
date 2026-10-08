@@ -17,6 +17,7 @@ import { DetailRows, type DetailRowItem } from '../ui/fields'
 import { EndpointCodeRow, ReadoutSection, ReadoutPanel } from '../readout'
 import { RESOLVED_EXTERNAL_API_URL } from '../../lib/env'
 import type { PromptLabStats } from './PromptLabStatsTypes'
+import { bestScoreSource } from './types'
 import { IconGlobe, IconHealth } from '../icons'
 
 interface Props {
@@ -49,16 +50,16 @@ export function PromptLabReadout({ stats, fetchedAt, isValidating }: Props) {
     {
       label: 'Best score',
       value: stats.bestScore != null
-        ? `${stats.bestScore.toFixed(3)} · ${stats.bestStage ?? '?'} v${stats.bestVersion ?? '?'}`
+        ? [stats.bestScore.toFixed(3), bestScoreSource(stats)].filter(Boolean).join(' · ')
         : '—',
       tone: stats.bestScore != null ? 'info' : 'muted',
       wrap: true,
     },
     {
-      label: 'Dataset labelled',
+      label: 'Judge evaluations',
       value: stats.datasetTotal > 0
         ? `${stats.datasetLabelled}/${stats.datasetTotal}${stats.datasetLabelPct != null ? ` (${stats.datasetLabelPct.toFixed(0)}%)` : ''}`
-        : 'No dataset',
+        : 'None yet',
       tone: stats.datasetTotal === 0 ? 'warn' : stats.datasetLabelPct != null && stats.datasetLabelPct >= 80 ? 'ok' : 'info',
     },
     {

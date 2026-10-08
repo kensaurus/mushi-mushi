@@ -3,7 +3,7 @@
  * PURPOSE: Firecrawl research posture — BYOK setup, test failures, ready, healthy.
  */
 
-import { Btn, Badge } from '../ui'
+import { Btn } from '../ui'
 import { usePageCopy } from '../../lib/copy'
 import { StatusBannerShell } from '../StatusBannerShell'
 import type { ResearchStats, ResearchTabId } from './ResearchStatsTypes'
@@ -71,7 +71,7 @@ export function ResearchStatusBanner({ stats, onTab, onAttach, onRefresh, refres
   if (stats.topPriority === 'firecrawl_untested') {
     return (
       <StatusBannerShell
-        tone="brand"
+        tone="info"
         title="Firecrawl key saved — test required"
         subtitle={stats.topPriorityLabel}
         action={
@@ -84,7 +84,7 @@ export function ResearchStatusBanner({ stats, onTab, onAttach, onRefresh, refres
   if (stats.topPriority === 'ready_no_sessions') {
     return (
       <StatusBannerShell
-        tone="brand"
+        tone="info"
         title={plainBanner ? 'Ready for your first search' : `Firecrawl ready on ${projectLabel}`}
         subtitle={stats.topPriorityLabel}
         action={
@@ -120,14 +120,7 @@ export function ResearchStatusBanner({ stats, onTab, onAttach, onRefresh, refres
   return (
     <StatusBannerShell
       tone="ok"
-      title={
-        <>
-          {plainBanner ? 'Research pipeline healthy' : `Research pipeline healthy on ${projectLabel}`}
-          {stats.firecrawlKeyHint && !plainBanner ? (
-            <Badge className="ml-2 bg-surface-raised font-mono text-fg-secondary">{stats.firecrawlKeyHint}</Badge>
-          ) : null}
-        </>
-      }
+      title={plainBanner ? 'Research pipeline healthy' : `Research pipeline healthy on ${projectLabel}`}
       subtitle={stats.topPriorityLabel}
       action={
         onRefresh ? (

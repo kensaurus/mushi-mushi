@@ -1,6 +1,6 @@
 /**
  * FILE: apps/admin/src/components/integrations/RoutingProviderCard.tsx
- * PURPOSE: One Jira/Linear/GitHub-Issues/PagerDuty card. Same shape as the
+ * PURPOSE: One Jira/GitHub-Issues/PagerDuty card. Same shape as the
  *          platform card but with pause/resume + disconnect actions and a
  *          Test button that probes the provider's credentials live.
  */
@@ -188,16 +188,17 @@ export function RoutingProviderCard({
               </a>
             </Tooltip>
 
-            {!isEditing && (
-              <Tooltip content={!canManage ? ADMIN_ONLY_HINT : existing ? 'Edit credentials' : 'Connect'}>
+            {/* Not connected: the status row already carries the one Connect button. */}
+            {!isEditing && existing && (
+              <Tooltip content={canManage ? 'Edit credentials' : ADMIN_ONLY_HINT}>
                 <Btn
-                  variant={existing ? 'ghost' : 'primary'}
+                  variant="ghost"
                   onClick={onStartEdit}
                   disabled={!canManage}
-                  aria-label={existing ? 'Edit integration' : 'Connect integration'}
-                  className={existing ? 'px-2' : undefined}
+                  aria-label="Edit integration"
+                  className="px-2"
                 >
-                  {existing ? <IconPencil size={14} /> : 'Connect'}
+                  <IconPencil size={14} />
                 </Btn>
               </Tooltip>
             )}

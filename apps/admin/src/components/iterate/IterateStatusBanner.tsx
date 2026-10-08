@@ -3,7 +3,7 @@
  * PURPOSE: PDCA pipeline posture — active runs, queued waiting trigger, failures, healthy.
  */
 
-import { Btn } from '../ui'
+import { Btn, RelativeTime } from '../ui'
 import { usePageCopy } from '../../lib/copy'
 import { StatusBannerShell } from '../StatusBannerShell'
 import type { IterateStats, IterateTabId } from './IterateStatsTypes'
@@ -119,7 +119,16 @@ export function IterateStatusBanner({ stats, onTab, onRefresh, refreshing, plain
     <StatusBannerShell
       tone="ok"
       title={plainBanner ? 'Improvement pipeline idle' : `PDCA pipeline idle on ${projectLabel}`}
-      subtitle={stats.topPriorityLabel}
+      subtitle={
+        <>
+          {stats.topPriorityLabel}
+          {stats.lastRunAt ? (
+            <>
+              {stats.topPriorityLabel ? ' · ' : ''}Last run queued <RelativeTime value={stats.lastRunAt} />
+            </>
+          ) : null}
+        </>
+      }
       action={
         onRefresh ? (
           <Btn size="sm" variant="ghost" onClick={onRefresh} loading={refreshing} disabled={refreshing}>

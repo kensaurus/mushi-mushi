@@ -3,8 +3,9 @@
  * PURPOSE: Repo-wide branch & PR graph for the connected GitHub repository.
  *          Shows the PDCA pipeline at repo level — every branch the fix
  *          worker has opened, its PR status, CI conclusion, and a rolling
- *          activity log across all fixes. Sister page to /fixes; the
- *          difference is /fixes groups by attempt, /repo groups by branch.
+ *          activity log across all fixes. Sister page to /fixes. Both count
+ *          per fix attempt; "PR open" is every attempt with an open PR,
+ *          whatever CI says (lib/repoBranches), on both pages.
  *
  *          Data flows:
  *            GET /v1/admin/repo/overview?project_id=... — branches + counts
@@ -17,7 +18,6 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useSetupStatus } from '../lib/useSetupStatus'
-import { githubAppInstallUrl } from '../components/integrations/GitHubAppInstallButton'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
@@ -28,18 +28,17 @@ import {
   Card,
   CodeValue,
   DefinitionChips,
-  LogBlock,
+  DisclosurePanel,
   RelativeTime,
   SegmentedControl,
   FreshnessPill,
   type DefinitionChipItem, } from '../components/ui'
 import { usePageCopy } from '../lib/copy'
-import { useRepoUx, resolveQuickRepoTab } from '../lib/repoModeUx'
-import { useQuickstartLandingTab } from '../lib/useQuickstartTab'
+import { useRepoUx } from '../lib/repoModeUx'
 import { FixGitGraph, type FixTimelineEvent } from '../components/FixGitGraph'
 import { useRealtimeReload } from '../lib/realtime'
-import { IconGit } from '../components/icons'
 import { pluralize, pluralizeWithCount } from '../lib/format'
+import { fixDeepLinkPath } from '../lib/fixDeepLink'
 import { CHIP_TONE, LINK_ACCENT } from '../lib/chipTone'
 import { RepoStatusBanner } from '../components/repo/RepoStatusBanner'
 import { RepoSnapshotStrip } from '../components/repo/RepoSnapshotStrip'
@@ -56,7 +55,7 @@ import { EMPTY_REPO_STATS, type RepoStats, type RepoTabId } from '../components/
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { ProjectReposCard } from '../components/repo/ProjectReposCard'
-import { RepoIndexStatus } from '../components/repo/RepoIndexStatus'
+import { OpenPullRequests } from '../components/repo/OpenPullRequests'
 import { ListPager } from '../components/ListPager'
 import {
   REPO_FILTERS,
@@ -138,27 +137,38 @@ const BUCKETS = REPO_FILTERS
 /** Branch cards per page; the server returns the latest 200 attempts. */
 const BRANCHES_PAGE_SIZE = 50
 
+/** Activity rows shown at first, and added per "Show more". */
+const ACTIVITY_PAGE_SIZE = 20
+
 const REPO_TABS: Array<{ id: RepoTabId; label: string; description: string }> = [
   {
-    id: 'overview',
-    label: 'Overview',
-    description: 'Repo connection health, default branch, and GitHub App status.',
-  },
-  {
     id: 'branches',
-    label: 'Branches',
-    description: 'Every auto-fix branch grouped by CI status — click through to the source report.',
+    label: 'Pull requests',
+    description:
+      'Counted per fix attempt. PR open is every attempt with an open PR, whatever CI says: the same rule as Fixes.',
   },
   {
     id: 'activity',
     label: 'Activity',
-    description: 'Chronological log of branch, PR, and CI events across all fixes.',
+    description: 'Branch, PR, and CI events across all fixes, newest first.',
   },
 ]
 
+/** `?tab=overview` (old links) and no tab open the pull requests. */
 function resolveRepoTab(value: string | null): RepoTabId {
-  if (value === 'branches' || value === 'activity') return value
-  return 'overview'
+  return value === 'activity' ? 'activity' : 'branches'
+}
+
+type ActivityKind = RepoActivityEvent['kind']
+
+const ACTIVITY_KIND_LABEL: Record<ActivityKind, string> = {
+  dispatched: 'Dispatched',
+  branch: 'Branch',
+  commit: 'Commit',
+  pr_opened: 'PR opened',
+  ci_resolved: 'CI result',
+  completed: 'Completed',
+  failed: 'Failed',
 }
 
 function ciBadge(b: RepoBranch): { label: string; className: string } {
@@ -233,31 +243,6 @@ function synthesiseEvents(b: RepoBranch): FixTimelineEvent[] {
   return events
 }
 
-function formatActivityLog(events: RepoActivityEvent[]): string {
-  if (events.length === 0) return 'No repo activity yet.'
-  return events
-    .map((e) => {
-      const ts = new Date(e.at).toLocaleString(undefined, {
-        month: 'short',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-      const tag =
-        e.status === 'ok'
-          ? '✓'
-          : e.status === 'fail'
-          ? '✕'
-          : e.status === 'pending'
-          ? '⧗'
-          : '·'
-      const ref = e.branch ? `[${e.branch}]` : e.pr_number ? `[PR #${e.pr_number}]` : ''
-      const detail = e.detail ? ` — ${e.detail}` : ''
-      return `${ts}  ${tag} ${e.label}${ref ? ' ' + ref : ''}${detail}`
-    })
-    .join('\n')
-}
-
 export function RepoPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const activeProjectId = useActiveProjectId()
@@ -266,13 +251,11 @@ export function RepoPage() {
   const copy = usePageCopy('/repo')
   const ux = useRepoUx()
 
-  const tabParam = searchParams.get('tab')
-  const activeTab = resolveRepoTab(tabParam)
+  const activeTab = resolveRepoTab(searchParams.get('tab'))
   const activeTabMeta = REPO_TABS.find((t) => t.id === activeTab) ?? REPO_TABS[0]
 
   const {
     data: statsData,
-    loading: statsLoading,
     reload: reloadStats,
     lastFetchedAt: statsFetchedAt,
     isValidating: statsValidating,
@@ -285,22 +268,12 @@ export function RepoPage() {
   const setActiveTab = useCallback(
     (id: RepoTabId) => {
       const next = new URLSearchParams(searchParams)
-      if (id === 'overview') next.delete('tab')
+      if (id === 'branches') next.delete('tab')
       else next.set('tab', id)
       setSearchParams(next, { replace: true, preventScrollReset: true })
     },
     [searchParams, setSearchParams],
   )
-
-  // Quick mode opens the posture tab once; links and clicks then win.
-  useQuickstartLandingTab({
-    enabled: ux.isQuickstart && Boolean(activeProjectId),
-    ready: !statsLoading,
-    tabParam: tabParam,
-    activeTab: activeTab,
-    quickTab: resolveQuickRepoTab(repoStats),
-    setActiveTab: setActiveTab,
-  })
 
   const [overview, setOverview] = useState<RepoOverview | null>(null)
   const [activity, setActivity] = useState<RepoActivityEvent[] | null>(null)
@@ -311,6 +284,8 @@ export function RepoPage() {
   // land on it (console QA 99).
   const bucket: Bucket = resolveRepoFilter(searchParams.get('status'))
   const [branchPage, setBranchPage] = useState(1)
+  const [activityKind, setActivityKind] = useState<ActivityKind | 'all'>('all')
+  const [activityShown, setActivityShown] = useState(ACTIVITY_PAGE_SIZE)
   const setBucket = useCallback(
     (next: Bucket) => {
       setSearchParams((prev) => {
@@ -396,12 +371,21 @@ export function RepoPage() {
   // so each count equals its header chip and the rows it shows.
   const bucketCounts = useMemo(() => countRepoFilters(overview?.branches ?? []), [overview])
 
+  const activityCounts = useMemo(() => {
+    const counts = new Map<ActivityKind, number>()
+    for (const e of activity ?? []) counts.set(e.kind, (counts.get(e.kind) ?? 0) + 1)
+    return counts
+  }, [activity])
+  const filteredActivity = useMemo(
+    () => (activity ?? []).filter((e) => activityKind === 'all' || e.kind === activityKind),
+    [activity, activityKind],
+  )
+
   const tabOptions = useMemo(
     () => [
-      { id: 'overview' as const, label: copy?.tabLabels?.overview ?? 'Overview' },
       {
         id: 'branches' as const,
-        label: copy?.tabLabels?.branches ?? 'Branches',
+        label: 'Pull requests',
         count: repoStats.totalBranches > 0 ? repoStats.totalBranches : undefined,
       },
       {
@@ -419,21 +403,6 @@ export function RepoPage() {
 
   const { repo, counts, branches } = overview
   const hasRepo = Boolean(repo.repo_url)
-
-  const headerChips: DefinitionChipItem[] = [
-    { label: 'Branches', value: pluralizeWithCount(counts.branches ?? counts.total, 'branch', 'branches') },
-    { label: 'PR open', value: counts.open },
-    { label: 'CI passing', value: <span className="text-ok font-semibold">{counts.ci_passing}</span> },
-    { label: 'CI failing', value: <span className="text-danger font-semibold">{counts.ci_failed}</span> },
-    { label: 'Merged', value: counts.merged },
-  ]
-  if (counts.failed_to_open > 0) {
-    headerChips.push({
-      label: 'Stuck',
-      value: <span className="text-warn font-semibold">{counts.failed_to_open}</span>,
-      hint: 'Dispatched but never opened a PR — likely agent or auth failure.',
-    })
-  }
 
   const activityPanel = (
     <Card className="p-3">
@@ -459,13 +428,37 @@ export function RepoPage() {
               Retry
             </Btn>
           </div>
+        ) : activity.length === 0 ? (
+          <p className="text-2xs text-fg-faint">No repo activity yet.</p>
         ) : (
-          <LogBlock
-            value={formatActivityLog(activity)}
-            tone="neutral"
-            maxHeightClass="max-h-[40rem]"
-            copyable={false}
-          />
+          <div className="space-y-2">
+            <SegmentedControl<ActivityKind | 'all'>
+              size="sm"
+              scrollable
+              ariaLabel="Filter activity by event type"
+              value={activityKind}
+              options={[
+                { id: 'all' as const, label: 'All', count: activity.length },
+                ...(Object.keys(ACTIVITY_KIND_LABEL) as ActivityKind[])
+                  .filter((k) => activityCounts.has(k))
+                  .map((k) => ({ id: k, label: ACTIVITY_KIND_LABEL[k], count: activityCounts.get(k) })),
+              ]}
+              onChange={(k) => {
+                setActivityKind(k)
+                setActivityShown(ACTIVITY_PAGE_SIZE)
+              }}
+            />
+            <ul className="divide-y divide-edge-subtle">
+              {filteredActivity.slice(0, activityShown).map((e, i) => (
+                <ActivityRow key={`${e.fix_attempt_id}-${e.kind}-${e.at}-${i}`} event={e} />
+              ))}
+            </ul>
+            {filteredActivity.length > activityShown && (
+              <Btn size="sm" variant="ghost" onClick={() => setActivityShown((n) => n + ACTIVITY_PAGE_SIZE)}>
+                Show {Math.min(ACTIVITY_PAGE_SIZE, filteredActivity.length - activityShown)} more
+              </Btn>
+            )}
+          </div>
         )
       ) : (
         <p className="text-2xs text-fg-faint">Loading activity…</p>
@@ -475,12 +468,21 @@ export function RepoPage() {
 
   const branchList = (
     <div className="space-y-2 min-w-0">
-      <SegmentedControl<Bucket>
-        ariaLabel="Filter branches by CI status"
-        value={bucket}
-        options={BUCKETS.map((b) => ({ id: b.id, label: b.label, count: bucketCounts[b.id] }))}
-        onChange={setBucket}
-      />
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+        <SegmentedControl<Bucket>
+          ariaLabel="Filter fix attempts by PR and CI status"
+          value={bucket}
+          options={BUCKETS.map((b) => ({ id: b.id, label: b.label, count: bucketCounts[b.id] }))}
+          onChange={setBucket}
+        />
+        <Link
+          to="/fixes"
+          className="text-2xs text-fg-muted underline-offset-2 hover:text-fg hover:underline"
+          title="Counts here are fix attempts. PR open counts every attempt with an open PR, as Fixes does."
+        >
+          See fix attempts →
+        </Link>
+      </div>
       {filteredBranches.length === 0 ? (
         <div className="space-y-3 px-2 py-1">
           <EmptySectionMessage
@@ -502,73 +504,12 @@ export function RepoPage() {
             page={branchPage}
             pageSize={BRANCHES_PAGE_SIZE}
             total={filteredBranches.length}
-            noun="fix attempts"
+            noun="pull requests"
             onPage={setBranchPage}
           />
         </div>
       )}
     </div>
-  )
-
-  const repoHeaderCard = (
-    <Card className="p-3">
-      <div className="space-y-2">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="inline-flex items-center gap-1.5 text-3xs uppercase tracking-wider text-fg-muted font-semibold shrink-0">
-            <IconGit />
-            Repository
-          </span>
-          {hasRepo ? (
-            <div className="min-w-0 flex-1">
-              <CodeValue value={repo.repo_url!} tone="url" />
-            </div>
-          ) : (
-            <p className="text-sm text-fg-faint italic">No GitHub repo is connected yet.</p>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 justify-between">
-          <div className="flex flex-wrap items-center gap-1.5">
-            {repo.default_branch && (
-              <SignalChip tone="neutral">
-                default: {repo.default_branch}
-              </SignalChip>
-            )}
-            {repo.github_app_installation_id ? (
-              <SignalChip tone="ok">GitHub App installed</SignalChip>
-            ) : hasRepo ? (
-              <>
-                <SignalChip tone="warn">No GitHub App installation</SignalChip>
-              </>
-            ) : null}
-            <RepoIndexStatus repo={repo} variant="chip" />
-          </div>
-          <ActionPillRow className="shrink-0">
-            {/* Only render when the App slug is configured. The slug used to
-                be hard-coded as `mushi-mushi`, which 404s on GitHub — the
-                pill looked live but led to an error page. */}
-            {hasRepo && !repo.github_app_installation_id && githubAppInstallUrl(activeProjectId ?? '') && (
-              <ActionPill
-                href={githubAppInstallUrl(activeProjectId ?? '')!}
-                tone="brand"
-              >
-                Install Mushi on GitHub ↗
-              </ActionPill>
-            )}
-            {hasRepo && (
-              <ActionPill href={repo.repo_url!} tone="neutral">
-                Open on GitHub ↗
-              </ActionPill>
-            )}
-            <ActionPill to="/integrations/config" tone="neutral">
-              Manage
-            </ActionPill>
-          </ActionPillRow>
-        </div>
-        <div className="pt-2 border-t border-edge-subtle/60">
-          <DefinitionChips items={headerChips} columns="auto" dense />
-        </div>
-      </div>
-    </Card>
   )
 
   const emptyBranches = (
@@ -590,10 +531,10 @@ export function RepoPage() {
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-repo">
       <PageHeaderBar
-        title={copy?.title ?? 'Repo graph'}
+        title={copy?.title ?? 'Pull requests'}
         projectScope={projectName}
 
-        helpTitle={copy?.help?.title ?? 'About the Repo graph'}
+        helpTitle={copy?.help?.title ?? 'About pull requests'}
         helpWhatIsIt={copy?.help?.whatIsIt ?? "A repo-level view of Mushi's fix pipeline: every draft PR, its branch, and its CI conclusion in one place. Multi-repo projects (e.g. frontend + backend) can have multiple repos linked — each gets its own fix worker run."}
         helpUseCases={copy?.help?.useCases ?? [
           'Spot stuck PRs (dispatched but never opened) so auth or agent issues surface fast',
@@ -602,10 +543,10 @@ export function RepoPage() {
           'Multi-repo: link a backend repo so fix PRs can span both codebases in a single dispatch',
         ]}
         helpHowToUse={copy?.help?.howToUse ?? [
-          'Connect your primary repo: go to Integrations → GitHub, paste the repo URL, then install the Mushi GitHub App (the "Install Mushi on GitHub" button appears here once the URL is set).',
-          'Add a second repo: click Manage → add the backend/frontend repo, set role=backend, and set path_globs (e.g. src/**) so the fix worker knows which files to target (the same globs limit which files are indexed).',
+          'Connect your primary repo: go to Integrations → GitHub, paste the repo URL, then install the Mushi GitHub App ("Install Mushi on GitHub" under Repository settings once the URL is set).',
+          'Add a second repo: open Repository settings → + Add repo, set role=backend, and set path_globs (e.g. src/**) so the fix worker knows which files to target (the same globs limit which files are indexed).',
           'Enable Autofix: Settings → Autofix must be ON and Sandbox must be set to e2b/modal (not local-noop) for PRs to open in production.',
-          'Review: Branches tab lists every fix PR with CI status. Activity tab shows a chronological log of dispatches, commits, and CI conclusions.',
+          'Review: Pull requests lists every fix PR with CI status. Activity lists dispatches, commits, and CI results; filter it by event type.',
         ].join('\n')}
       >
         <FreshnessPill at={statsFetchedAt} isValidating={statsValidating} />
@@ -659,29 +600,28 @@ export function RepoPage() {
       />
       )}
 
-      {activeTab === 'overview' && (
-        <>
-          <RepoProvenanceReadout
-            stats={repoStats}
-            repoUrl={repo.repo_url}
-            fetchedAt={statsFetchedAt}
-            validating={statsValidating}
-          />
-          {repoHeaderCard}
-          {/* Multi-repo management: users can add/edit/remove project_repos rows
-              directly from the overview tab without navigating to Integrations. */}
-          {activeProjectId && (
-            <ProjectReposCard projectId={activeProjectId} />
-          )}
-          {branches.length === 0 ? emptyBranches : null}
-        </>
-      )}
+      {/* Every open PR in the connected repos, fix or not, with Merge once its checks pass. */}
+      {activeTab === 'branches' && activeProjectId && <OpenPullRequests projectId={activeProjectId} />}
 
       {activeTab === 'branches' && (
         branches.length === 0 ? emptyBranches : branchList
       )}
 
       {activeTab === 'activity' && activityPanel}
+
+      {/* Linked repos, default branch, App and index status: setup, not the daily job. */}
+      {activeProjectId && (
+        <DisclosurePanel title="Repository settings">
+          <ProjectReposCard projectId={activeProjectId} />
+        </DisclosurePanel>
+      )}
+
+      <RepoProvenanceReadout
+        stats={repoStats}
+        repoUrl={repo.repo_url}
+        fetchedAt={statsFetchedAt}
+        validating={statsValidating}
+      />
     </div>
   )
 }
@@ -721,8 +661,7 @@ function BranchRow({ branch }: { branch: RepoBranch }) {
           link) on the left, fix mini-graph on the right at sm+. Earlier
           revision used `flex flex-wrap justify-between` which left a
           ~200 px void between the report summary and the FixGitGraph at
-          1024 px — the same "corner-stuck" pattern as the repo header
-          card above. A 1fr / 16rem grid keeps both children reading as
+          1024 px. A 1fr / 16rem grid keeps both children reading as
           attached siblings instead of corner-anchored islands. */}
       {/* mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas) */}
       <div className="grid gap-x-3 gap-y-2 sm:grid-cols-[minmax(0,1fr)_16rem]">
@@ -753,6 +692,10 @@ function BranchRow({ branch }: { branch: RepoBranch }) {
               Report {branch.report_id.slice(0, 8)}
             </Link>
             {' · '}
+            <Link to={fixDeepLinkPath(branch.id)} className="hover:text-fg-secondary underline-offset-2 hover:underline">
+              Fix attempt
+            </Link>
+            {' · '}
             <RelativeTime value={branch.created_at} />
           </InlineProof>
         </div>
@@ -776,5 +719,35 @@ function BranchRow({ branch }: { branch: RepoBranch }) {
         </div>
       )}
     </Card>
+  )
+}
+
+const ACTIVITY_TONE: Record<NonNullable<RepoActivityEvent['status']>, 'ok' | 'danger' | 'info'> = {
+  ok: 'ok',
+  fail: 'danger',
+  pending: 'info',
+}
+
+function ActivityRow({ event: e }: { event: RepoActivityEvent }) {
+  return (
+    <li className="flex flex-wrap items-center gap-x-2 gap-y-0.5 py-1.5 text-2xs">
+      <span className="w-20 shrink-0 tabular-nums text-fg-faint">
+        <RelativeTime value={e.at} />
+      </span>
+      <SignalChip tone={e.status ? ACTIVITY_TONE[e.status] : 'neutral'}>{e.label}</SignalChip>
+      {e.pr_url ? (
+        <a
+          href={e.pr_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="font-mono text-accent-foreground underline-offset-2 hover:text-accent hover:underline"
+        >
+          PR #{e.pr_number ?? '—'} ↗
+        </a>
+      ) : e.branch ? (
+        <span className="font-mono text-fg-muted">{e.branch}</span>
+      ) : null}
+      {e.detail ? <span className="min-w-0 wrap-break-word text-fg-muted">{e.detail}</span> : null}
+    </li>
   )
 }

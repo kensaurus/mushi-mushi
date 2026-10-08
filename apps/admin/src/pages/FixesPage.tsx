@@ -34,12 +34,10 @@ import { InflightDispatches } from '../components/fixes/InflightDispatches'
 import { FixesTable } from '../components/fixes/FixesTable'
 import { FixBulkActionBar } from '../components/fixes/FixBulkActionBar'
 import { canMergeFix, isFixMerged, mergeFixAttempt } from '../lib/mergeFix'
-import { isFixCountedFailed } from '../lib/pdcaAct'
 import { failureCause, fixCauseLabel, fixReportLabel, needsAttention, retryCandidates } from '../lib/fixReportTruth'
 import {
   RETRY_AGENT_OPTIONS,
   commonRetryAgent,
-  resolveFixesTabParam,
   retryAgentFor,
   retryDispatchBody,
   type RetryAgent,
@@ -49,10 +47,10 @@ import { FixesStatusBanner } from '../components/fixes/FixesStatusBanner'
 import { FixesPipelineGuide } from '../components/fixes/FixesPipelineGuide'
 import { FixesSnapshotStrip } from '../components/fixes/FixesSnapshotStrip'
 import { FixesFailedSummary } from '../components/fixes/FixesFailedSummary'
-import { EMPTY_FIXES_STATS, type FixesStats, type FixesTabId } from '../components/fixes/FixesStatsTypes'
+import { EMPTY_FIXES_STATS, type FixesStats } from '../components/fixes/FixesStatsTypes'
 import { usePageCopy } from '../lib/copy'
-import { useFixesUx, resolveQuickFixesTab } from '../lib/fixesModeUx'
-import { useQuickstartLandingTab } from '../lib/useQuickstartTab'
+import { useFixesUx } from '../lib/fixesModeUx'
+import { countRepoFilters, matchesRepoFilter } from '../lib/repoBranches'
 import { fixRowDomId, readFixDeepLinkId } from '../lib/fixDeepLink'
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageHeroStats } from '../lib/heroSnapshots'
@@ -80,23 +78,8 @@ const STATUS_BUCKETS: { id: StatusBucket; label: string }[] = [
   { id: 'failed', label: 'Failed / skipped' },
 ]
 
-const FIXES_TABS: Array<{ id: FixesTabId; label: string; description: string }> = [
-  {
-    id: 'overview',
-    label: 'Overview',
-    description: 'Pipeline posture, summary KPIs, and the next recommended action.',
-  },
-  {
-    id: 'pipeline',
-    label: 'Pipeline',
-    description: 'In-flight dispatches and failure categories before PRs land.',
-  },
-  {
-    id: 'attempts',
-    label: 'Attempts',
-    description: 'Every draft PR — expand a card for rationale, CI status, and retry.',
-  },
-]
+const SNAPSHOT_HINT =
+  'Completed, failed and in flight count reports. Attempts, PRs open and CI passing count fix attempts; the PR counts use the same rule as Pull requests.'
 
 /** Attempts per request; the list route allows up to 200. */
 const FIXES_PAGE_SIZE = 200
@@ -106,6 +89,17 @@ type RetryRequest =
   | { kind: 'all'; agent: RetryAgent }
   | { kind: 'selected'; agent: RetryAgent }
 
+/**
+ * The filter a URL asks for. `?tab=pipeline` (the server's in-flight link and
+ * old bookmarks, from before the tabs were removed) opens In flight.
+ */
+function bucketFromUrl(status: string | null, tab: string | null): StatusBucket {
+  if (status === 'failed' || status === 'inflight' || status === 'pr_open' || status === 'merged') return status
+  if (!status && tab === 'pipeline') return 'inflight'
+  return 'all'
+}
+
+/** The one exclusive bucket of an attempt; PR open is matched separately. */
 function bucketize(fix: FixAttempt): StatusBucket {
   const status = fix.status?.toLowerCase()
   if (status === 'queued' || status === 'running') return 'inflight'
@@ -116,9 +110,15 @@ function bucketize(fix: FixAttempt): StatusBucket {
   // so the filter count equals the banner's per-report count.
   if (needsAttention(fix)) return 'failed'
   if (isFixMerged(fix)) return 'merged'
-  // Open PRs (including CI-green) stay in pr_open — "Shipped" is merged-only.
-  if (fix.report_fix_state === 'pr_open' && fix.pr_url && !isFixCountedFailed(fix)) return 'pr_open'
   return 'all'
+}
+
+function inStatusBucket(fix: FixAttempt, bucket: StatusBucket): boolean {
+  if (bucket === 'all') return true
+  // Every attempt with an open PR, whatever CI says: the rule /repo counts by,
+  // so "PR open" is the same number on both pages. A red-CI PR is also in Failed.
+  if (bucket === 'pr_open') return matchesRepoFilter(fix, 'open')
+  return bucketize(fix) === bucket
 }
 
 interface CodebaseStats {
@@ -135,16 +135,13 @@ export function FixesPage() {
   const ux = useFixesUx()
 
   const tabParam = searchParams.get('tab')
-  // A status filter lives on Attempts, so `/fixes?status=failed` (banners,
-  // alerts, tiles) opens it instead of Overview (console QA 94).
-  const activeTab = resolveFixesTabParam(tabParam, searchParams.get('status'))
   const causeFilter = searchParams.get('cause')
+  // `?report=<id>` (Voice reports, fixesForReportPath) narrows to one report's attempts.
+  const reportFilter = searchParams.get('report')
   const location = useLocation()
-  const activeTabMeta = FIXES_TABS.find((t) => t.id === activeTab) ?? FIXES_TABS[0]
 
   const {
     data: statsData,
-    loading: statsLoading,
     reload: reloadStats,
     lastFetchedAt: statsFetchedAt,
     isValidating: statsValidating,
@@ -154,30 +151,6 @@ export function FixesPage() {
   usePublishPageHeroStats('/fixes', statsData)
   const fixesStats = statsData ?? EMPTY_FIXES_STATS
 
-  const setActiveTab = useCallback(
-    (id: FixesTabId) => {
-      const next = new URLSearchParams(searchParams)
-      if (id === 'overview') next.delete('tab')
-      else next.set('tab', id)
-      // The status and cause filters belong to Attempts.
-      if (id !== 'attempts') {
-        next.delete('status')
-        next.delete('cause')
-      }
-      setSearchParams(next, { replace: true, preventScrollReset: true })
-    },
-    [searchParams, setSearchParams],
-  )
-
-  // Quick mode opens the posture tab once; links and clicks then win.
-  useQuickstartLandingTab({
-    enabled: ux.isQuickstart && Boolean(activeProjectId),
-    ready: !statsLoading,
-    tabParam: tabParam,
-    activeTab: activeTab,
-    quickTab: resolveQuickFixesTab(fixesStats),
-    setActiveTab: setActiveTab,
-  })
   // Latest page (refreshed by realtime) plus older pages loaded on request,
   // so every attempt is reachable instead of the first 50 (console QA 91).
   const [latestFixes, setLatestFixes] = useState<FixAttempt[]>([])
@@ -210,22 +183,13 @@ export function FixesPage() {
   const [bulkProgress, setBulkProgress] = useState<string | null>(null)
   const [bulkMergeConfirm, setBulkMergeConfirm] = useState(false)
   const urlStatus = searchParams.get('status')
-  const initialBucket: StatusBucket =
-    urlStatus === 'failed' ? 'failed' :
-    urlStatus === 'inflight' ? 'inflight' :
-    urlStatus === 'pr_open' ? 'pr_open' :
-    urlStatus === 'merged' ? 'merged' :
-    'all'
-  const [statusBucket, setStatusBucket] = useState<StatusBucket>(initialBucket)
+  const urlBucket = bucketFromUrl(urlStatus, tabParam)
+  const [statusBucket, setStatusBucket] = useState<StatusBucket>(urlBucket)
   const toast = useToast()
 
   useEffect(() => {
-    if (urlStatus === 'failed') setStatusBucket('failed')
-    else if (urlStatus === 'inflight') setStatusBucket('inflight')
-    else if (urlStatus === 'pr_open') setStatusBucket('pr_open')
-    else if (urlStatus === 'merged') setStatusBucket('merged')
-    else if (!urlStatus) setStatusBucket('all')
-  }, [urlStatus])
+    setStatusBucket(urlBucket)
+  }, [urlBucket])
   // Guard refs prevent overlapping polls and post-unmount state writes —
   // both happen often in StrictMode dev because effects mount twice.
   const inFlightRef = useRef(false)
@@ -385,26 +349,54 @@ export function FixesPage() {
   // counts in the segmented control stay in sync without re-scanning the
   // list per render. closes the missing FixesPage status
   // filter finding.
+  // The list's scope: every loaded attempt, or one report's (`?report=`), so
+  // the filter counts always count the rows the list can show.
+  const scopedFixes = useMemo(
+    () => (reportFilter ? fixes.filter((f) => f.report_id === reportFilter) : fixes),
+    [fixes, reportFilter],
+  )
   const bucketCounts = useMemo(() => {
-    const counts: Record<StatusBucket, number> = { all: fixes.length, inflight: 0, pr_open: 0, merged: 0, failed: 0 }
-    for (const f of fixes) {
-      const b = bucketize(f)
-      if (b !== 'all') counts[b] += 1
+    const counts: Record<StatusBucket, number> = { all: 0, inflight: 0, pr_open: 0, merged: 0, failed: 0 }
+    for (const f of scopedFixes) {
+      for (const b of STATUS_BUCKETS) if (inStatusBucket(f, b.id)) counts[b.id] += 1
     }
     return counts
+  }, [scopedFixes])
+
+  // Open PRs and green CI per attempt, by the rule /repo uses, so the snapshot
+  // tiles show the same numbers as Pull requests.
+  const prCounts = useMemo(() => countRepoFilters(fixes), [fixes])
+  const snapshotStats = useMemo(
+    () => ({ ...fixesStats, prsOpen: prCounts.open, prsCiPassing: prCounts.ci_passing }),
+    [fixesStats, prCounts],
+  )
+
+  // "Most common: …" for the failed banner, from the same per-report rows.
+  const causeSummary = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const f of fixes) {
+      if (!needsAttention(f)) continue
+      const cause = failureCause(f)
+      counts.set(cause, (counts.get(cause) ?? 0) + 1)
+    }
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([cause, n]) => `${fixCauseLabel(cause)} (${n})`)
+      .join(', ')
   }, [fixes])
 
   // "Common causes" chips narrow the failed list to one cause (console QA 93).
   const visibleFixes = useMemo(() => {
-    const inBucket = statusBucket === 'all' ? fixes : fixes.filter((f) => bucketize(f) === statusBucket)
+    const inBucket = statusBucket === 'all' ? scopedFixes : scopedFixes.filter((f) => inStatusBucket(f, statusBucket))
     if (!causeFilter || statusBucket !== 'failed') return inBucket
     return inBucket.filter((f) => failureCause(f) === causeFilter)
-  }, [fixes, statusBucket, causeFilter])
+  }, [scopedFixes, statusBucket, causeFilter])
 
   const reviewFailedCause = useCallback(
     (category: string) => {
       const next = new URLSearchParams(searchParams)
-      next.set('tab', 'attempts')
+      next.delete('tab')
       next.set('status', 'failed')
       if (category) next.set('cause', category)
       else next.delete('cause')
@@ -418,9 +410,14 @@ export function FixesPage() {
     next.delete('cause')
     setSearchParams(next, { replace: true, preventScrollReset: true })
   }, [searchParams, setSearchParams])
+  const clearReport = useCallback(() => {
+    const next = new URLSearchParams(searchParams)
+    next.delete('report')
+    setSearchParams(next, { replace: true, preventScrollReset: true })
+  }, [searchParams, setSearchParams])
 
   // A link to one fix (command palette, Activity drawer, Ask Mushi, Slack):
-  // open Attempts, make sure the fix is in the visible filter, expand it and
+  // make sure the fix is in the visible filter, expand it and
   // scroll to it. Once per id, so the user can collapse it afterwards. The
   // hash form `#fix-<id>` (failed-alert previews) lands here too.
   const deepLinkFixId = readFixDeepLinkId(searchParams, location.hash)
@@ -437,8 +434,7 @@ export function FixesPage() {
       )
       return
     }
-    if (activeTab !== 'attempts') setActiveTab('attempts')
-    if (statusBucket !== 'all' && bucketize(target) !== statusBucket) setStatusBucket('all')
+    if (!inStatusBucket(target, statusBucket)) setStatusBucket('all')
     setExpanded(target.id)
     let tries = 0
     const scroll = () => {
@@ -447,7 +443,7 @@ export function FixesPage() {
       else if (++tries < 10) window.setTimeout(scroll, 50)
     }
     window.setTimeout(scroll, 0)
-  }, [deepLinkFixId, loading, error, fixes, activeTab, setActiveTab, statusBucket, toast])
+  }, [deepLinkFixId, loading, error, fixes, statusBucket, toast])
 
   // (Page context publish moved below retryAllFailed so the action
   // closures bind to the live function reference without TDZ issues.)
@@ -777,26 +773,6 @@ export function FixesPage() {
     return ids
   }, [fixes, mergedDispatches])
 
-  const tabOptions = useMemo(
-    () => [
-      { id: 'overview' as const, label: copy?.tabLabels?.overview ?? 'Overview' },
-      {
-        id: 'pipeline' as const,
-        label: copy?.tabLabels?.pipeline ?? 'Pipeline',
-        count:
-          fixesStats.inflightDispatches + fixesStats.inProgress > 0
-            ? fixesStats.inflightDispatches + fixesStats.inProgress
-            : undefined,
-      },
-      {
-        id: 'attempts' as const,
-        label: copy?.tabLabels?.attempts ?? 'Attempts',
-        count: fixesStats.failed > 0 ? fixesStats.failed : fixes.length > 0 ? fixes.length : undefined,
-      },
-    ],
-    [copy?.tabLabels, fixesStats, fixes.length],
-  )
-
   const reloadAll = useCallback(() => {
     reloadStats()
     void loadFixes()
@@ -808,7 +784,7 @@ export function FixesPage() {
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-fixes">
       <PageHeaderBar
-        title={copy?.title ?? 'Fix drafts & PRs'}
+        title={copy?.title ?? 'Fixes'}
         projectScope={projectName}
 
         helpTitle={copy?.help?.title ?? 'About drafted fixes'}
@@ -818,7 +794,7 @@ export function FixesPage() {
           'See model used, token spend, and trace link per attempt',
           'Spot failure patterns before retrying',
         ]}
-        helpHowToUse={copy?.help?.howToUse ?? 'Summary for posture. Pipeline shows runs in flight. Attempts lists every draft PR.'}
+        helpHowToUse={copy?.help?.howToUse ?? 'The list shows every attempt. Filter by status; In flight shows runs still going.'}
       >
         <FreshnessPill at={lastFetchedAt ?? statsFetchedAt} isValidating={isValidating || statsValidating} channel={channelState} />
         <span className="inline-flex items-center rounded-sm border border-edge-subtle bg-surface-overlay/40 px-2 py-0.5 font-mono text-2xs tabular-nums text-fg-muted">
@@ -847,7 +823,7 @@ export function FixesPage() {
             children: (
               <FixesStatusBanner
                 stats={fixesStats}
-                onTab={setActiveTab}
+                causeSummary={causeSummary}
                 onRefresh={reloadAll}
                 refreshing={isValidating || statsValidating}
                 plainBanner={ux.plainBanner}
@@ -859,10 +835,10 @@ export function FixesPage() {
             show: !ux.hideFixesSnapshot,
             children: (
               <FixesSnapshotStrip
-                stats={fixesStats}
+                stats={snapshotStats}
                 statsFetchedAt={statsFetchedAt}
                 statsValidating={statsValidating}
-                description={activeTabMeta.description}
+                description={SNAPSHOT_HINT}
                 sectionTitle={copy?.sections?.snapshot ?? 'FIXES SNAPSHOT'}
                 statLabels={copy?.statLabels}
                 hideLinks={ux.hideSnapshotLinks}
@@ -872,7 +848,9 @@ export function FixesPage() {
           },
           {
             priority: POSTURE_PRIORITY.guide,
-            show: activeTab === 'overview',
+            // A third explainer next to the help row and the banner; only
+            // worth its space before the first attempt.
+            show: fixes.length === 0,
             children: (
               <FixesPipelineGuide
                 topPriority={fixesStats.topPriority}
@@ -883,56 +861,37 @@ export function FixesPage() {
         ]}
       />
 
-      {!ux.hideTabs && (
-      <SegmentedControl<FixesTabId>
-        ariaLabel="Fix sections"
-        value={activeTab}
-        options={tabOptions}
-        onChange={setActiveTab}
-        size="sm"
-      />
+      {codebaseStats &&
+        (!codebaseStats.codebase_index_enabled || codebaseStats.indexed_files === 0) &&
+        fixesStats.topPriority !== 'no_index' &&
+        fixesStats.topPriority !== 'no_github' && (
+          <HelpBanner
+            tone="warn"
+            role="status"
+            data-testid="fixes-codebase-unindexed-banner"
+            icon={<span aria-hidden="true">⚠</span>}
+          >
+            <strong className="font-semibold">Auto-fix will produce stub PRs</strong> —{' '}
+            {codebaseStats.codebase_index_enabled
+              ? 'your codebase index is empty, so the LLM has nothing to read.'
+              : 'codebase indexing is off, so the LLM has nothing to read.'}{' '}
+            <Link to="/integrations/config" className="underline hover:no-underline">Enable it now →</Link>
+          </HelpBanner>
+        )}
+
+      {/* Quick mode has no snapshot strip, so the KPI row stands in for it. */}
+      {summary && ux.hideFixesSnapshot && (
+        <FixSummaryRow summary={{ ...summary, prsOpen: prCounts.open }} successRate={successRate} />
       )}
 
-      {activeTab === 'overview' && (
-        <>
-          {codebaseStats && (!codebaseStats.codebase_index_enabled || codebaseStats.indexed_files === 0) && (
-            <HelpBanner
-              tone="warn"
-              role="status"
-              data-testid="fixes-codebase-unindexed-banner"
-              icon={<span aria-hidden="true">⚠</span>}
-            >
-              <strong className="font-semibold">Auto-fix will produce stub PRs</strong> —{' '}
-              {codebaseStats.codebase_index_enabled
-                ? 'your codebase index is empty, so the LLM has nothing to read.'
-                : 'codebase indexing is off, so the LLM has nothing to read.'}{' '}
-              <Link to="/integrations/config" className="underline hover:no-underline">Enable it now →</Link>
-            </HelpBanner>
-          )}
-
-          {summary && (ux.isAdvanced || ux.hideFixesSnapshot) && (
-            <FixSummaryRow summary={summary} successRate={successRate} />
-          )}
-
-          <FixRecommendation fixes={fixes} dispatches={mergedDispatches} />
-        </>
+      {/* The failed and in-flight banners already say what this would. */}
+      {fixesStats.topPriority !== 'failed' && fixesStats.topPriority !== 'inflight' && (
+        <FixRecommendation fixes={fixes} dispatches={mergedDispatches} />
       )}
 
-      {activeTab === 'pipeline' && (
-        <>
-          {!ux.hideFailureCategories && (
-            <FixesFailedSummary
-              fixes={fixes}
-              projectId={activeProjectId}
-              onReviewCategory={reviewFailedCause}
-            />
-          )}
-          <InflightDispatches dispatches={mergedDispatches} />
-        </>
-      )}
+      <InflightDispatches dispatches={mergedDispatches} />
 
-      {activeTab === 'attempts' && (
-        fixes.length === 0 ? (
+      {fixes.length === 0 ? (
         <NextStep
           variant="inline"
           requires={['github_connected', 'first_report_received', 'byok_anthropic']}
@@ -947,12 +906,24 @@ export function FixesPage() {
         />
       ) : (
         <>
-          <SegmentedControl<StatusBucket>
-            ariaLabel="Filter fixes by status"
-            value={statusBucket}
-            options={STATUS_BUCKETS.map((b) => ({ id: b.id, label: b.label, count: bucketCounts[b.id] }))}
-            onChange={setStatusBucket}
-          />
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+            <SegmentedControl<StatusBucket>
+              ariaLabel="Filter fix attempts by status"
+              value={statusBucket}
+              options={STATUS_BUCKETS.map((b) => ({ id: b.id, label: b.label, count: bucketCounts[b.id] }))}
+              onChange={setStatusBucket}
+            />
+            <Link
+              to="/repo"
+              className="text-2xs text-fg-muted underline-offset-2 hover:text-fg hover:underline"
+              title="Counts here are fix attempts. PR open counts every attempt with an open PR, as Pull requests does."
+            >
+              See pull requests →
+            </Link>
+          </div>
+          {statusBucket === 'failed' && !ux.hideFailureCategories && (
+            <FixesFailedSummary fixes={scopedFixes} onReviewCategory={reviewFailedCause} />
+          )}
           {(() => {
             const activeFilters: ActiveFilter[] = statusBucket !== 'all'
               ? [{
@@ -972,10 +943,23 @@ export function FixesPage() {
                 tone: 'info' as const,
               })
             }
+            if (reportFilter) {
+              const target = fixes.find((f) => f.report_id === reportFilter)
+              activeFilters.push({
+                key: 'report',
+                label: 'Report',
+                value: target ? fixReportLabel(target) : reportFilter.slice(0, 8),
+                onClear: clearReport,
+                tone: 'info' as const,
+              })
+            }
             return (
               <ActiveFiltersRail
                 filters={activeFilters}
-                onClearAll={() => setStatusBucket('all')}
+                onClearAll={() => {
+                  setStatusBucket('all')
+                  if (reportFilter) clearReport()
+                }}
                 ariaLabel="Active fix filters"
               />
             )
@@ -1034,7 +1018,6 @@ export function FixesPage() {
             </>
           )}
         </>
-      )
       )}
 
       {retryRequest ? (() => {

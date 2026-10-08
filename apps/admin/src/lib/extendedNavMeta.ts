@@ -618,12 +618,6 @@ export function exploreNavBadge(stats: NavStatSlices['explore']): WorkspaceNavBa
   if (stats.topPriority === 'indexing') {
     return attentionBadge(1, 'ok', 'Codebase index in progress')
   }
-  if (stats.indexedFiles > 0 && stats.topPriority === 'ready') {
-    return inventoryBadge(
-      stats.indexedFiles,
-      `${stats.indexedFiles.toLocaleString()} indexed file${stats.indexedFiles === 1 ? '' : 's'}`,
-    )
-  }
   return null
 }
 
@@ -697,12 +691,6 @@ export function graphNavBadge(stats: NavStatSlices['graph']): WorkspaceNavBadge 
       stats.fragileComponents,
       'warn',
       `${stats.fragileComponents} fragile graph component${stats.fragileComponents === 1 ? '' : 's'}`,
-    )
-  }
-  if (stats.nodeCount > 0 && stats.topPriority === 'clear') {
-    return inventoryBadge(
-      stats.nodeCount,
-      `${stats.nodeCount.toLocaleString()} graph node${stats.nodeCount === 1 ? '' : 's'}`,
     )
   }
   return null

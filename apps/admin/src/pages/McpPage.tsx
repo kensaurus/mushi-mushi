@@ -190,25 +190,6 @@ export function McpPage() {
     }
   }
 
-  async function mintMcpWriteKey() {
-    if (!activeProjectId) return
-    setMintingKey(true)
-    try {
-      const key = await mintMcpKey(['mcp:read', 'mcp:write'])
-      if (!key) return
-      setRevealedMcpKey({ key, scopes: ['mcp:read', 'mcp:write'] })
-      if (activeTab !== 'setup') setTab('setup')
-      try {
-        await navigator.clipboard.writeText(key)
-        toast.success('mcp:write key copied', 'It is also shown on the Setup tab until you hide it.')
-      } catch {
-        toast.success('mcp:write key minted', 'Copy it from the Setup tab — it will not be shown again after you leave.')
-      }
-    } finally {
-      setMintingKey(false)
-    }
-  }
-
   const projectId = activeProject?.id ?? activeProjectId ?? '<your-project-id>'
   const displayName = activeProject?.name ?? projectName ?? 'project'
   const snippet =
@@ -293,9 +274,9 @@ export function McpPage() {
     return (
       <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-mcp">
         <PageHeaderBar
-          title={copy?.title ?? 'MCP'}
+          title={copy?.title ?? 'Editor agents'}
 
-          helpTitle={copy?.help?.title ?? 'About MCP'}
+          helpTitle={copy?.help?.title ?? 'About editor agents'}
           helpWhatIsIt={
             copy?.help?.whatIsIt ??
             'MCP lets your coding assistant call Mushi tools during a chat — read reports, dispatch fixes, and query production data without copy-pasting IDs.'
@@ -309,7 +290,7 @@ export function McpPage() {
           }
           helpHowToUse={
             copy?.help?.howToUse ??
-            '1. On /projects, pick MCP read-only or read + write scope. 2. Copy the snippet on Setup. 3. Restart your IDE. 4. Ask "list mushi tools".'
+            '1. On Connect, pick your editor and click Connect (it mints the key). 2. Or copy the snippet on Setup. 3. Restart your IDE. 4. Ask "list mushi tools".'
           }
         />
 
@@ -355,10 +336,10 @@ export function McpPage() {
   return (
     <div className="space-y-4" data-testid="mushi-page-mcp">
       <PageHeaderBar
-        title={copy?.title ?? 'MCP'}
+        title={copy?.title ?? 'Editor agents'}
         projectScope={displayName}
 
-        helpTitle={copy?.help?.title ?? 'About MCP'}
+        helpTitle={copy?.help?.title ?? 'About editor agents'}
         helpWhatIsIt={
           copy?.help?.whatIsIt ??
           'MCP lets your coding assistant call Mushi tools during a chat — read reports, dispatch fixes, and query production data without copy-pasting IDs.'
@@ -372,7 +353,7 @@ export function McpPage() {
         }
         helpHowToUse={
           copy?.help?.howToUse ??
-          '1. On /projects, pick MCP read-only or read + write scope. 2. Copy the snippet on Setup. 3. Restart your IDE. 4. Ask "list mushi tools".'
+          '1. On Connect, pick your editor and click Connect (it mints the key). 2. Or copy the snippet on Setup. 3. Restart your IDE. 4. Ask "list mushi tools".'
         }
       >
         {!ux.hideOverviewChrome && (
@@ -396,25 +377,9 @@ export function McpPage() {
         <Btn size="sm" variant="ghost" onClick={reloadAll} loading={isValidating}>
           Refresh
         </Btn>
-        <Btn
-          size="sm"
-          variant="ghost"
-          data-testid="mcp-mint-key-link"
-          loading={mintingKey}
-          disabled={!activeProjectId}
-          onClick={() => void mintMcpReadKey()}
-        >
-          Mint mcp:read key
-        </Btn>
-        <Btn
-          size="sm"
-          variant="ghost"
-          data-testid="mcp-mint-write-key-link"
-          loading={mintingKey}
-          disabled={!activeProjectId}
-          onClick={() => void mintMcpWriteKey()}
-        >
-          Mint mcp:write key
+        {/* /connect mints a key and installs it in the editor in one click. */}
+        <Btn size="sm" variant="ghost" to="/connect" data-testid="mcp-connect-editor-link">
+          Connect an editor
         </Btn>
       </PageHeaderBar>
 
@@ -426,8 +391,6 @@ export function McpPage() {
               <McpStatusBanner
                 stats={stats}
                 onTab={setTab}
-                onRefresh={reloadAll}
-                refreshing={isValidating}
                 plainBanner={ux.plainBanner}
               />
             ),
@@ -448,7 +411,7 @@ export function McpPage() {
           },
           {
             priority: POSTURE_PRIORITY.guide,
-            show: stats.topPriority === 'healthy',
+            show: stats.topPriority !== 'healthy',
             children: <McpConnectGuide topPriority={stats.topPriority} toolCount={stats.toolCount} />,
           },
         ]}
@@ -469,9 +432,7 @@ export function McpPage() {
           stats={stats}
           lastFetchedAt={lastFetchedAt}
           isValidating={isValidating}
-          hideOverviewChrome={ux.hideOverviewChrome}
           onOpenExamples={() => setTab('examples')}
-          onCopySnippet={copySnippet}
         />
       )}
 

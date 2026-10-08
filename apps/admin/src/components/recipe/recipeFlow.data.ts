@@ -18,7 +18,7 @@ import { RECIPE_LANES, elementStateMeta } from './recipeState'
 
 const RECIPE_NODE_WIDTH = 248
 const LANE_GAP = 296
-/** Vertical step between stacked cards: tall enough for a card with a two-sentence reason and three facts. */
+/** Vertical step between stacked cards: taller than a canvas card, which is capped at RECIPE_CARD_MAX_HEIGHT (max-h-65 in RecipeElementCard). */
 const ROW = 280
 
 /** Never zoom out below 100%: card text is at least 12 px (text-2xs) and must render at 12 px or more. */
@@ -28,7 +28,7 @@ export const RECIPE_MAX_ZOOM = 1.25
 export const RECIPE_SMALLEST_FONT_PX = 12
 /** Space above the first card for the lane headings. */
 export const RECIPE_LANE_HEADER_Y = -76
-/** Tallest a card is laid out for (px); ROW leaves room for it. */
+/** Tallest a canvas card renders (px, enforced by max-h-65 on the card); ROW leaves room for it. */
 export const RECIPE_CARD_MAX_HEIGHT = 260
 
 const LANE_X: Record<(typeof RECIPE_LANES)[number]['id'], number> = {

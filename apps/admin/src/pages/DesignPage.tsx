@@ -23,7 +23,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
-import { Btn, Callout, EmptyState, ErrorAlert, Loading, Section, SegmentedControl } from '../components/ui'
+import { Btn, DisclosurePanel, EmptyState, ErrorAlert, Loading, Section, SegmentedControl } from '../components/ui'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageData } from '../lib/usePageData'
 import { apiFetchMutate } from '../lib/supabase'
@@ -239,17 +239,20 @@ function ProjectDesign({ projectId }: { projectId: string }) {
 
         {view === 'tokens' && sets.length > 0 && (
           <div className="flex flex-col gap-1">
-            <SegmentedControl<string>
-              value={shownSet ?? ''}
-              options={sets.map((s) => ({
-                id: s.name,
-                label: s.name === activeSet ? `${s.name} (active)` : s.name,
-                count: s.tokenCount,
-              }))}
-              onChange={(name) => setDirection(name)}
-              ariaLabel="Token set"
-              scrollable
-            />
+            {/* One set needs no chooser; the line below still names it. */}
+            {sets.length > 1 && (
+              <SegmentedControl<string>
+                value={shownSet ?? ''}
+                options={sets.map((s) => ({
+                  id: s.name,
+                  label: s.name === activeSet ? `${s.name} (active)` : s.name,
+                  count: s.tokenCount,
+                }))}
+                onChange={(name) => setDirection(name)}
+                ariaLabel="Token set"
+                scrollable
+              />
+            )}
             {activeSet && (
               <p className="text-2xs text-fg-muted">
                 Active (from mushi.recipe.json): <span className="font-mono">{activeSet}</span>
@@ -262,9 +265,10 @@ function ProjectDesign({ projectId }: { projectId: string }) {
         {view === 'tokens' && loading && !data && <Loading text="Loading design tokens…" />}
 
         {view === 'tokens' && data && !data.editable.enabled && (
-          <Callout tone="neutral" label="Editing is off">
-            <p className="text-xs text-fg-secondary">{data.editable.reason ?? 'Token edits are not available for this project.'}</p>
-          </Callout>
+          <p className="text-xs text-fg-muted">
+            <span className="font-medium text-fg-secondary">Editing is off:</span>{' '}
+            {data.editable.reason ?? 'Token edits are not available for this project.'}
+          </p>
         )}
 
         {view === 'tokens' && (
@@ -279,28 +283,9 @@ function ProjectDesign({ projectId }: { projectId: string }) {
           />
         )}
 
+        {/* The work first (issues, deviance, contrast, actions); the catalogue last, closed. */}
         {view === 'tokens' && data && (
           <>
-            <DesignTokenSections
-              tokens={data.tokens}
-              editable={data.editable}
-              set={data.shownSet}
-              queued={queuedMap}
-              onQueue={queueEdit}
-              locked={changeLocksInputs(tokenChange.state)}
-            />
-
-            <Section title="Contrast" action={<span className="text-2xs text-fg-faint">WCAG ratio per declared pair</span>}>
-              <ContrastTiles pairs={data.contrast} />
-            </Section>
-
-            {/* An older api without scoped CSS sends no cssScopes. */}
-            <CssScopeColumns scopes={data.cssScopes ?? []} />
-
-            <Section title="Components" action={<span className="text-2xs text-fg-faint">{data.components.length} listed</span>}>
-              <ComponentInventory components={data.components} />
-            </Section>
-
             <Section title="Token issues" action={<span className="text-2xs text-fg-faint">{data.issues.length} found</span>}>
               <RecipeIssueList issues={data.issues} empty="No token issues in this set." />
             </Section>
@@ -313,7 +298,33 @@ function ProjectDesign({ projectId }: { projectId: string }) {
               onRun={() => void runDeviance()}
             />
 
+            <Section title="Contrast" action={<span className="text-2xs text-fg-faint">WCAG ratio per declared pair</span>}>
+              <ContrastTiles pairs={data.contrast} />
+            </Section>
+
             <DesignActionsCard projectId={projectId} score={data.deviance.latest?.score ?? null} />
+
+            <DisclosurePanel
+              title="Token catalogue"
+              trailing={<span className="text-2xs font-normal text-fg-faint">{data.tokens.length.toLocaleString()} tokens</span>}
+              defaultOpen={edits.length > 0}
+            >
+              <DesignTokenSections
+                tokens={data.tokens}
+                editable={data.editable}
+                set={data.shownSet}
+                queued={queuedMap}
+                onQueue={queueEdit}
+                locked={changeLocksInputs(tokenChange.state)}
+              />
+            </DisclosurePanel>
+
+            {/* An older api without scoped CSS sends no cssScopes. */}
+            <CssScopeColumns scopes={data.cssScopes ?? []} />
+
+            <Section title="Components" action={<span className="text-2xs text-fg-faint">{data.components.length} listed</span>}>
+              <ComponentInventory components={data.components} />
+            </Section>
 
             <DesignRulesConfig
               rules={data.rules}

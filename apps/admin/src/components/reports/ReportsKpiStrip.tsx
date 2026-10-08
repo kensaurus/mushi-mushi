@@ -151,14 +151,16 @@ export function ReportsKpiStrip({ activeSeverity, onFilter, windowDays = 14 }: P
           >
             <KpiTile
               density="flat"
-              label={tile.label}
+              // The quick-filter chips count all time; these tiles count a
+              // window, so the label says which.
+              label={`${tile.label} · ${windowDays}d`}
               value={loading ? '…' : count}
               sublabel={
                 loading
-                  ? `last ${windowDays}d`
+                  ? `last ${windowDays} days`
                   : total > 0
-                    ? `${sharePct}% of ${total} · last ${windowDays}d${isActive ? ' · filtering' : ''}`
-                    : `last ${windowDays}d${isActive ? ' · filtering' : ''}`
+                    ? `${sharePct}% of ${total} in ${windowDays}d${isActive ? ' · filtering' : ''}`
+                    : `none in ${windowDays}d${isActive ? ' · filtering' : ''}`
               }
               accent={tile.accent}
               meaning={tile.meaning}

@@ -83,7 +83,7 @@ export function succeededRunsTooltip(stats: IterateStats, opts: Opts = {}): Metr
 }
 
 export function succeededRunsDetail(): string {
-  return 'Met exit criteria'
+  return 'finished without error'
 }
 
 export function failedRunsTooltip(stats: IterateStats, opts: Opts = {}): MetricTooltipData {

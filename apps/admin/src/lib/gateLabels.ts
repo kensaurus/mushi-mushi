@@ -79,7 +79,7 @@ const GATE_INFO: Record<GateId, GateInfo> = {
   radar: { checks: 'Mushi setup: spend caps, keys and connections for this project.', page: { label: 'Open settings', to: '/settings' } },
   portfolio_radar: { checks: 'App hole checks, daily (04:05 UTC): store listings, domains, certificates, security headers, provider keys.', page: { label: 'Open the portfolio', to: '/portfolio' } },
   portfolio_radar_ci: { checks: 'App hole checks pushed from your CI (mushi radar scan --push).', page: { label: 'Open the portfolio', to: '/portfolio' } },
-  store_review: { checks: 'The App Store and Play review checklist, read from the repo.', page: { label: 'Open releases', to: '/releases' } },
+  store_review: { checks: 'The App Store and Play review checklist, read from the repo.', page: { label: 'Open the store checks', to: '/releases?tab=store' } },
 }
 
 /** What a check looks at and where its findings are worked on (null for an unknown gate). */
@@ -94,4 +94,32 @@ function isGateId(gate: string): gate is GateId {
 /** The label for a gate; an unknown id is shown as-is rather than hidden. */
 export function gateLabel(gate: string): string {
   return isGateId(gate) ? GATE_LABELS[gate] : gate
+}
+
+/** Rule ids whose plain name is not their words in order. */
+const RULE_LABELS: Record<string, string> = {
+  provider_key_invalid: 'A connected key was rejected',
+  byok_key_invalid: 'An AI key was rejected',
+  spend_cap_unset: 'No spend cap or AI budget',
+  webhook_never_delivered: 'A webhook never delivered',
+  index_stale: 'The code index is out of date',
+  index_branch_mismatch: 'The code index is on another branch',
+  contrast_below_aa: 'Text contrast below WCAG AA',
+  off_token_color: 'Colour off the design tokens',
+}
+
+const RULE_ACRONYMS = new Set(['ai', 'api', 'aa', 'ci', 'ios', 'pitr', 'rls', 'sdk', 'sql', 'url', 'byok'])
+
+/**
+ * A rule id (`provider_key_invalid`, `PROVIDER_KEY_INVALID`) as words a person
+ * reads: a known name, else the id in sentence case with acronyms kept.
+ */
+export function ruleLabel(rule: string): string {
+  const key = rule.trim().toLowerCase()
+  const known = RULE_LABELS[key]
+  if (known) return known
+  const words = key.split(/[_\-\s.]+/).filter(Boolean).map((w) => (RULE_ACRONYMS.has(w) ? w.toUpperCase() : w))
+  if (words.length === 0) return rule
+  const [first, ...rest] = words
+  return [first.charAt(0).toUpperCase() + first.slice(1), ...rest].join(' ')
 }

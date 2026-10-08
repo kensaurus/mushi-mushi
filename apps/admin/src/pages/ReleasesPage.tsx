@@ -1,16 +1,15 @@
 /**
  * FILE: apps/admin/src/pages/ReleasesPage.tsx
  * PURPOSE: Release management — banner + RELEASES SNAPSHOT + tabs:
- *          Overview | Drafts | Published | Draft.
+ *          Drafts | Published | New draft | App stores, readout at the foot.
  */
 
 import { useState, useCallback, useMemo } from 'react'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { apiErrorText } from '../lib/apiErrorText'
 import { publishReleaseRequest } from '../lib/releasePublish'
-import { resolveModeAwareTab } from '../lib/modeAwareTab'
 import { useEntitlements } from '../lib/useEntitlements'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { usePageData } from '../lib/usePageData'
@@ -32,8 +31,6 @@ import {
   ErrorAlert,
   RelativeTime,
   SegmentedControl,
-  FreshnessPill,
-  RecommendedAction,
 } from '../components/ui'
 import { ReleasesStatusBanner } from '../components/releases/ReleasesStatusBanner'
 import { ReleasesSnapshotStrip } from '../components/releases/ReleasesSnapshotStrip'
@@ -55,7 +52,9 @@ import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { ResponsiveTable } from '../components/ResponsiveTable'
 import { FulfilledTicketsPicker } from '../components/support/FulfilledTicketsPicker'
-import { CHIP_TONE, runStatusChipTone, HEADER_BADGE_TONE } from '../lib/chipTone'
+import { LINK_ACCENT, runStatusChipTone } from '../lib/chipTone'
+import { StorePanel } from '../components/portfolio/StorePanel'
+import { StoreReviewsPanel } from '../components/portfolio/StoreReviewsPanel'
 
 function listRows<T>(payload: T[] | { data: T[] } | null | undefined): T[] {
   if (!payload) return []
@@ -101,16 +100,17 @@ function statusBadge(status: Release['status']) {
   return <Badge className={STATUS_CLS[status]}>{STATUS_LABEL[status]}</Badge>
 }
 
+// No Overview tab: the banner states the posture and the readout sits at the page foot.
 const TABS: Array<{ id: ReleasesTabId; label: string; description: string }> = [
-  { id: 'overview', label: 'Overview', description: 'Posture banner and how AI drafting, reporter credits, and publish notifications work.' },
   { id: 'drafts', label: 'Drafts', description: 'Edit changelog Markdown, link feedback tickets, then publish to notify credited reporters.' },
   { id: 'published', label: 'Published', description: 'Shipped changelogs with fix counts, contributor credits, and notification stamps.' },
   { id: 'draft', label: 'Draft', description: 'Generate a new AI changelog from fixed reports in a time window.' },
+  { id: 'store', label: 'App stores', description: 'Store listing checks, the pre-submission checklist, and store reviews filed as reports.' },
 ]
 
-/** The tab named in the URL, or null so quickstart can pick one. */
+/** The tab named in the URL, or null so the posture picks one. */
 function explicitReleasesTab(value: string | null): ReleasesTabId | null {
-  if (value === 'drafts' || value === 'published' || value === 'draft') return value
+  if (value === 'drafts' || value === 'published' || value === 'draft' || value === 'store') return value
   return null
 }
 
@@ -308,6 +308,19 @@ function ReleaseDrawer({
           </span>
         </div>
 
+        {release.fixed_report_ids.length > 0 && (
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-fg-muted">
+            <span>Fixed reports:</span>
+            {release.fixed_report_ids.slice(0, 12).map((id) => (
+              <Link key={id} to={`/reports/${id}`} className={`font-mono ${LINK_ACCENT}`}>
+                {id.slice(0, 8)}
+              </Link>
+            ))}
+            {release.fixed_report_ids.length > 12 && <span>+{release.fixed_report_ids.length - 12} more</span>}
+            <Link to="/fixes" className={LINK_ACCENT}>Open Fixes →</Link>
+          </div>
+        )}
+
         {release.status === 'draft' && release.project_id && (
           <FulfilledTicketsPicker
             projectId={release.project_id}
@@ -501,7 +514,7 @@ function ReleasesList({
                 <td className="max-w-48 truncate px-3 py-2.5 text-fg-secondary">{r.title}</td>
                 <td className="px-3 py-2.5">{statusBadge(r.status)}</td>
                 <td className="hidden px-3 py-2.5 sm:table-cell">
-                  <SignalChip tone={r.fixed_report_ids.length > 0 ? 'brand' : 'neutral'}>
+                  <SignalChip tone={r.fixed_report_ids.length > 0 ? 'info' : 'neutral'}>
                     {r.fixed_report_ids.length} fix{r.fixed_report_ids.length === 1 ? '' : 'es'}
                   </SignalChip>
                 </td>
@@ -562,12 +575,9 @@ export function ReleasesPage() {
   } = usePageData<ReleasesStats>('/v1/admin/releases/stats')
   usePublishPageHeroStats('/releases', statsData)
   const stats = { ...EMPTY_RELEASES_STATS, ...statsData }
-  const activeTab = resolveModeAwareTab<ReleasesTabId>({
-    explicit: explicitReleasesTab(searchParams.get('tab')),
-    isQuickstart: ux.isQuickstart,
-    quickTab: statsData ? resolveQuickReleasesTab(stats) : null,
-    fallback: 'overview',
-  })
+  // Every mode lands on the work tab that matches the posture; the URL wins.
+  const postureTab = resolveQuickReleasesTab(stats)
+  const activeTab: ReleasesTabId = explicitReleasesTab(searchParams.get('tab')) ?? (postureTab === 'overview' ? 'drafts' : postureTab)
   const activeTabMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
 
   const listPath = activeProjectId && (activeTab === 'drafts' || activeTab === 'published')
@@ -596,8 +606,7 @@ export function ReleasesPage() {
     (tab: ReleasesTabId) => {
       setSearchParams((prev) => {
         const next = new URLSearchParams(prev)
-        // Always explicit: with no ?tab= quick mode shows the posture tab,
-        // so clearing it for Overview made Overview unreachable.
+        // Always explicit: with no ?tab= the page shows the posture tab.
         next.set('tab', tab)
         return next
       })
@@ -615,8 +624,8 @@ export function ReleasesPage() {
       TABS.map((t) => ({
         id: t.id,
         label:
-          t.id === 'overview'
-            ? copy?.tabLabels?.overview ?? t.label
+          t.id === 'store'
+            ? t.label
             : t.id === 'drafts'
               ? copy?.tabLabels?.drafts ?? t.label
               : t.id === 'published'
@@ -661,17 +670,6 @@ export function ReleasesPage() {
     return <ErrorAlert message={`Failed to load release stats: ${statsError}`} onRetry={reloadStats} />
   }
 
-  const bannerSeverity: 'ok' | 'warn' | 'danger' | 'brand' | 'info' | 'neutral' =
-    !stats.hasAnyProject
-      ? 'neutral'
-      : stats.topPriority === 'drafts_pending'
-        ? 'warn'
-        : stats.topPriority === 'ready_to_draft' || stats.topPriority === 'no_releases'
-          ? 'brand'
-          : stats.topPriority === 'no_fixes'
-            ? 'brand'
-            : 'ok'
-
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-releases">
       <PageHeaderBar
@@ -687,26 +685,6 @@ export function ReleasesPage() {
         ]}
         helpHowToUse={copy?.help?.howToUse ?? 'Summary for posture. Drafts to review pending changelogs. Published for shipped releases. New draft to generate from fixed bugs.'}
       >
-        <Badge
-          className={
-            bannerSeverity === 'ok'
-              ? CHIP_TONE.okSubtle
-              : bannerSeverity === 'warn'
-                ? CHIP_TONE.warnSubtle
-                : bannerSeverity === 'brand'
-                  ? HEADER_BADGE_TONE.brand
-                  : HEADER_BADGE_TONE.neutral
-          }
-        >
-          {!stats.hasAnyProject
-            ? 'NO PROJECT'
-            : stats.draftCount > 0
-              ? `${stats.draftCount} DRAFT`
-              : stats.totalReleases === 0
-                ? 'EMPTY'
-                : `${stats.publishedCount} SHIPPED`}
-        </Badge>
-        <FreshnessPill at={statsFetchedAt} isValidating={statsValidating} />
         <Btn size="sm" variant="ghost" onClick={reloadAll} loading={statsValidating || listValidating}>
           Refresh
         </Btn>
@@ -757,51 +735,6 @@ export function ReleasesPage() {
       />
       )}
 
-      {activeTab === 'overview' && stats.projectId ? (
-        <ReleasesProvenanceReadout stats={stats} fetchedAt={statsFetchedAt} validating={statsValidating} />
-      ) : null}
-
-      {activeTab === 'overview' && (
-        <>
-          {!ux.hideOverviewChrome && (
-          <>
-          {stats.topPriority === 'healthy' && (
-            <RecommendedAction
-              tone="success"
-              title="Release pipeline healthy"
-              description={stats.topPriorityLabel ?? `${stats.publishedCount} published releases with reporter credits.`}
-            />
-          )}
-          {stats.topPriority === 'drafts_pending' && (
-            <RecommendedAction
-              tone="info"
-              title="Drafts waiting to publish"
-              description={stats.topPriorityLabel ?? 'Review changelog Markdown and publish to notify reporters.'}
-              cta={{ label: 'Open Drafts', to: '/releases?tab=drafts' }}
-            />
-          )}
-          {(stats.topPriority === 'ready_to_draft' || stats.topPriority === 'no_releases') && (
-            <RecommendedAction
-              tone="info"
-              title="Generate a changelog draft"
-              description={stats.topPriorityLabel ?? 'Fixed reports are ready — AI will credit reporters automatically.'}
-              cta={{ label: 'Open Draft tab', to: '/releases?tab=draft' }}
-            />
-          )}
-          {stats.topPriority === 'no_fixes' && (
-            <RecommendedAction
-              tone="info"
-              title="No fixed reports yet"
-              description="Mark bug reports as fixed in Reports before generating a release draft."
-              cta={{ label: 'View fixed reports', to: '/reports?status=fixed' }}
-            />
-          )}
-          </>
-          )}
-          {activeProjectId ? <AutoReleaseCard projectId={activeProjectId} /> : null}
-        </>
-      )}
-
       {activeTab === 'draft' && (
         !activeProjectId ? (
           <NextStep
@@ -835,6 +768,28 @@ export function ReleasesPage() {
           />
         )
       )}
+
+      {activeTab === 'drafts' && activeProjectId ? <AutoReleaseCard projectId={activeProjectId} /> : null}
+
+      {activeTab === 'store' && (
+        !activeProjectId ? (
+          <NextStep
+            variant="inline"
+            requires={['project']}
+            emptyTitle="Select a project"
+            emptyDescription="Store checks are per app. Pick one in the header."
+          />
+        ) : (
+          <>
+            <StorePanel projectId={activeProjectId} />
+            <StoreReviewsPanel projectId={activeProjectId} />
+          </>
+        )
+      )}
+
+      {stats.projectId ? (
+        <ReleasesProvenanceReadout stats={stats} fetchedAt={statsFetchedAt} validating={statsValidating} />
+      ) : null}
     </div>
   )
 }

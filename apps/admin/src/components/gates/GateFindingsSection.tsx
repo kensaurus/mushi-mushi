@@ -9,6 +9,10 @@
  *          that never ran ("not checked yet", never a pass), a run that
  *          errored, and nothing open.
  *
+ *          The open error / warning totals lead (the same numbers the
+ *          Full-stack audit stats count), checks with open findings follow,
+ *          and checks with nothing open collapse into one disclosure.
+ *
  * Data: GET /v1/admin/inventory/:projectId/findings[?gate=]
  */
 
@@ -30,7 +34,7 @@ import {
   type CheckGroup,
   type GateFindingsPayload,
 } from '../../lib/gateFindings'
-import { gateInfo, gateLabel, type GateId } from '../../lib/gateLabels'
+import { gateInfo, gateLabel, ruleLabel, type GateId } from '../../lib/gateLabels'
 
 interface Props {
   projectId: string
@@ -40,11 +44,13 @@ interface Props {
   neverRunText: string
   /** Show at most this many findings (the rest are counted). */
   limit?: number
+  /** Change it to read the findings again, e.g. after "Run audit". */
+  refreshKey?: number
 }
 
-export function GateFindingsSection({ projectId, gate, neverRunText, limit = 50 }: Props) {
+export function GateFindingsSection({ projectId, gate, neverRunText, limit = 50, refreshKey = 0 }: Props) {
   const path = `/v1/admin/inventory/${encodeURIComponent(projectId)}/findings${gate ? `?gate=${gate}` : ''}`
-  const { data, loading, error, errorCode, reload } = usePageData<GateFindingsPayload>(path, { deps: [projectId, gate ?? ''] })
+  const { data, loading, error, errorCode, reload } = usePageData<GateFindingsPayload>(path, { deps: [projectId, gate ?? '', refreshKey] })
 
   if (error) return <PageLoadError error={error} code={errorCode} resource="the findings" endpoint={path} onRetry={reload} />
   if (loading && !data) return <Loading text="Reading the findings…" />
@@ -66,6 +72,14 @@ export function GateFindingsSection({ projectId, gate, neverRunText, limit = 50 
   const findings = latestOpenFindings(data)
   const errored = [...latestByGate.values()].filter((r) => r.status === 'error')
   const groups = groupFindingsByCheck(data)
+  // A failing, errored or stale run stays a card even with nothing open: it is not a pass.
+  const isQuiet = (g: CheckGroup) => g.open === 0 && g.status !== 'error' && g.status !== 'fail' && !g.stale
+  const open = groups.filter((g) => !isQuiet(g))
+  const quiet = groups.filter(isQuiet)
+  const allPass = quiet.every((g) => g.status === 'pass')
+  const errors = findings.filter((f) => f.severity === 'error').length
+  const warnings = findings.filter((f) => f.severity === 'warn').length
+  const withFindings = groups.filter((g) => g.findings.some((f) => f.severity === 'error' || f.severity === 'warn')).length
 
   return (
     <div className="flex flex-col gap-2">
@@ -78,9 +92,32 @@ export function GateFindingsSection({ projectId, gate, neverRunText, limit = 50 
       {findings.length === 0 && errored.length === 0 && !truncated && (
         <p className="text-xs text-fg-muted">The newest run of each check found nothing open.</p>
       )}
-      {groups.map((g) => (
+      {errors + warnings > 0 && (
+        <p className="text-xs text-fg-secondary" data-testid="gate-findings-totals">
+          {/* Past the route's caps the list is cut short, so its totals are a floor. */}
+          {truncated ? 'At least ' : ''}
+          <span className={errors > 0 ? 'font-semibold text-danger' : ''}>{errors.toLocaleString()} error{errors === 1 ? '' : 's'}</span>
+          {' · '}
+          <span className={warnings > 0 ? 'font-semibold text-warn' : ''}>{warnings.toLocaleString()} warning{warnings === 1 ? '' : 's'}</span>
+          {' open in '}
+          {withFindings} check{withFindings === 1 ? '' : 's'}
+        </p>
+      )}
+      {open.map((g) => (
         <CheckGroupCard key={g.gate} projectId={projectId} group={g} limit={limit} onChanged={reload} />
       ))}
+      {quiet.length > 0 && (
+        <details className="rounded-md border border-edge-subtle px-3 py-2" data-testid="gate-checks-passing">
+          <summary className="cursor-pointer text-xs text-fg-muted hover:text-fg">
+            {quiet.length} check{quiet.length === 1 ? '' : 's'} {allPass ? 'passing' : 'with nothing open'}
+          </summary>
+          <ul className="mt-2 flex flex-col gap-1">
+            {quiet.map((g) => (
+              <QuietCheckRow key={g.gate} group={g} />
+            ))}
+          </ul>
+        </details>
+      )}
     </div>
   )
 }
@@ -122,7 +159,7 @@ function CheckGroupCard({ projectId, group: g, limit, onChanged }: { projectId: 
       </p>
       {g.rules.length > 0 && (
         <p className="text-2xs text-fg-secondary">
-          {g.rules.slice(0, 5).map((r) => `${r.rule} × ${r.count}`).join(' · ')}
+          {g.rules.slice(0, 5).map((r) => `${ruleLabel(r.rule)} × ${r.count}`).join(' · ')}
           {g.rules.length > 5 ? ` · ${g.rules.length - 5} more rules` : ''}
         </p>
       )}
@@ -163,5 +200,18 @@ function CheckGroupCard({ projectId, group: g, limit, onChanged }: { projectId: 
         </details>
       )}
     </Card>
+  )
+}
+
+/** A check whose recent newest run has nothing open: one line with when it ran. */
+function QuietCheckRow({ group: g }: { group: CheckGroup }) {
+  const info = gateInfo(g.gate)
+  return (
+    <li className="flex flex-wrap items-baseline justify-between gap-2 text-xs" data-check={g.gate}>
+      <span className="text-fg" title={info?.checks}>{gateLabel(g.gate)}</span>
+      <span className="text-2xs text-fg-muted">
+        {g.ranAt ? <span title={new Date(g.ranAt).toLocaleString()}>{formatRelative(g.ranAt)}</span> : 'Unknown run time'}
+      </span>
+    </li>
   )
 }

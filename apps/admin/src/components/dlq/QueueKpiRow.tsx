@@ -1,9 +1,9 @@
 /**
  * FILE: apps/admin/src/components/dlq/QueueKpiRow.tsx
  * PURPOSE: 5-tile KPI strip: pending / running / completed / failed / DLQ.
- *          Pure presentation. The counts come from the same QueueStats as
- *          QueueSnapshotStrip, so the two rows on /queue can never disagree
- *          ("Completed 0" next to "COMPLETED 2" until 2026-10-04).
+ *          Pure presentation. The counts come from QueueStats, the same
+ *          source as the status banner, so the page never shows two numbers
+ *          for one lane ("Completed 0" next to "COMPLETED 2" until 2026-10-04).
  */
 
 import { useMemo } from 'react'

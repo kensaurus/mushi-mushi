@@ -25,7 +25,7 @@ export interface RepoIndexFields {
 
 export interface RepoIndexView {
   label: 'Indexed' | 'Partly indexed' | 'Index stalled'
-  tone: 'brand' | 'warn'
+  tone: 'ok' | 'warn'
   /** The last sweep, complete or partial. */
   at: string
   /** "300 of 4,714 files", when the sweep measured it. */
@@ -50,7 +50,7 @@ export function repoIndexView(repo: RepoIndexFields): RepoIndexView | null {
     case 'stalled':
       return { label: 'Index stalled', tone: 'warn', at, coverage }
     default:
-      return { label: 'Indexed', tone: 'brand', at, coverage }
+      return { label: 'Indexed', tone: 'ok', at, coverage }
   }
 }
 

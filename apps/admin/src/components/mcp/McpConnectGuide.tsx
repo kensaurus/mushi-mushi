@@ -22,7 +22,7 @@ export function McpConnectGuide({ topPriority, toolCount }: Props) {
     <FeatureExplainPanel
       title="What MCP does and how to connect your IDE"
       summary={MCP_EXPLAINER_SUMMARY}
-      category="security"
+      category="workflow"
       defaultOpen={isMcpGuideExpanded(topPriority)}
     >
       <div className="space-y-2">
@@ -54,11 +54,10 @@ export function McpConnectGuide({ topPriority, toolCount }: Props) {
         </p>
       )}
       <p className="text-2xs text-fg-faint">
-        Keys are minted per project on{' '}
-        <Link to="/projects" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
-          Projects
-        </Link>
-        . report:write keys alone cannot expose MCP tools.
+        <Link to="/connect" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
+          Connect
+        </Link>{' '}
+        mints a key and installs it in your editor in one click. report:write (SDK) keys cannot expose MCP tools.
       </p>
     </FeatureExplainPanel>
   )

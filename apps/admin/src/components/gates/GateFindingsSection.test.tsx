@@ -90,6 +90,47 @@ describe('GateFindingsSection', () => {
     expect(text).not.toContain('accepted')
   })
 
+  it('leads with the open totals, names rules in words and folds passing checks into one disclosure', async () => {
+    const runs = [
+      ...payload.runs,
+      { id: 'code-1', gate: 'code_health', status: 'pass', started_at: new Date().toISOString() },
+      { id: 'ci-old', gate: 'ci_drift', status: 'pass', started_at: '2026-01-01T00:00:00Z' },
+    ]
+    apiFetch.mockResolvedValue({ ok: true, data: { ...payload, runs } })
+    render()
+    await flush()
+    expect(container.querySelector('[data-testid="gate-findings-totals"]')?.textContent).toBe('1 error · 1 warning open in 2 checks')
+    const text = container.textContent ?? ''
+    expect(text).toContain('No spend cap or AI budget × 1')
+    expect(text).toContain('Colour off the design tokens × 1')
+    expect(text).not.toContain('spend_cap_unset ×')
+    const passing = container.querySelector('[data-testid="gate-checks-passing"]')
+    expect(passing?.tagName).toBe('DETAILS')
+    expect(passing?.hasAttribute('open')).toBe(false)
+    expect(passing?.querySelector('summary')?.textContent).toBe('1 check passing')
+    expect(container.querySelector('[data-check="code_health"]')?.closest('details')).toBe(passing)
+    // A pass from months ago is not a current pass: it keeps its card and its "run it again" note.
+    const stale = [...container.querySelectorAll('h3')].find((h) => h.textContent === 'CI differs from the recipe')
+    expect(stale).toBeDefined()
+    expect(stale?.closest('details')).toBeNull()
+    expect(passing?.textContent).not.toContain('CI differs from the recipe')
+    expect(text).toContain('run it again before acting on it')
+  })
+
+  it('reads the findings again when refreshKey changes', async () => {
+    apiFetch.mockResolvedValue({ ok: true, data: payload })
+    render()
+    await flush()
+    const before = apiFetch.mock.calls.length
+    act(() =>
+      root.render(
+        createElement(MemoryRouter, null, createElement(GateFindingsSection, { projectId: 'p1', neverRunText: 'Never ran.', refreshKey: 1 })),
+      ),
+    )
+    await flush()
+    expect(apiFetch.mock.calls.length).toBeGreaterThan(before)
+  })
+
   it('says not checked yet, never a pass, when no run finished', async () => {
     apiFetch.mockResolvedValue({ ok: true, data: { runs: [{ id: 'r', gate: 'radar', status: 'running' }], findings: [] } })
     render('radar')

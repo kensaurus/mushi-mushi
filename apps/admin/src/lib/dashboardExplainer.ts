@@ -27,6 +27,8 @@ export interface DashboardInsightInput {
   integrationIssues: number
   /** Names of the integrations whose last health check was not ok. */
   failingIntegrations?: Array<{ kind: string; label: string }>
+  /** How many of `integrationIssues` are only degraded (slow, not down). */
+  degradedIntegrations?: number
   reports14d: number
 }
 
@@ -77,6 +79,15 @@ export function deriveDashboardInsight(s: DashboardInsightInput): DashboardInsig
       action: { label: 'Triage now', to: '/reports?status=new' },
     }
   }
+  const degraded = Math.min(s.degradedIntegrations ?? 0, s.integrationIssues)
+  if (s.integrationIssues > 0 && degraded === s.integrationIssues) {
+    // Same wording as the Inbox's health card, so the two pages agree.
+    return {
+      tone: 'warn',
+      sentence: `${degraded} ${plural(degraded, 'probe is', 'probes are')} degraded — slow but not down.`,
+      action: { label: 'Review degraded', to: '/health?status=amber' },
+    }
+  }
   if (s.integrationIssues > 0) {
     const named = (s.failingIntegrations ?? []).map((i) => i.label)
     const first = s.failingIntegrations?.[0]
@@ -110,12 +121,21 @@ export function deriveDashboardInsight(s: DashboardInsightInput): DashboardInsig
  * and there are stages to draw; the first-report hero replaces it for a
  * project with no reports yet. The insight banner is NOT a condition: it is
  * one line above the canvas, and gating on it hid the canvas for good (QA 169).
+ * The global pipeline strip already shows the same four stage cards, so the
+ * canvas stays hidden while that strip is on screen.
  */
 export function shouldShowPdcaFlow(input: {
   isAdvanced: boolean
   renderFullDashboard: boolean
   hasPdcaStages: boolean
   showFirstReportHero: boolean
+  pipelineStripVisible: boolean
 }): boolean {
-  return input.isAdvanced && input.renderFullDashboard && input.hasPdcaStages && !input.showFirstReportHero
+  return (
+    input.isAdvanced &&
+    input.renderFullDashboard &&
+    input.hasPdcaStages &&
+    !input.showFirstReportHero &&
+    !input.pipelineStripVisible
+  )
 }

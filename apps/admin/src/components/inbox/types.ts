@@ -3,7 +3,7 @@
  * PURPOSE: Inbox shell stats — banner + KPI strip (separate from dashboard payload).
  */
 
-export type InboxTabId = 'overview' | 'actions' | 'stages' | 'activity'
+export type InboxTabId = 'overview' | 'stages' | 'activity'
 
 export interface InboxStats {
   hasAnyProject: boolean

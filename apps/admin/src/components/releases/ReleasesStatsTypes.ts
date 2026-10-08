@@ -3,7 +3,7 @@
  * PURPOSE: Releases shell stats — banner + RELEASES SNAPSHOT strip.
  */
 
-export type ReleasesTabId = 'overview' | 'drafts' | 'published' | 'draft'
+export type ReleasesTabId = 'overview' | 'drafts' | 'published' | 'draft' | 'store'
 
 export type ReleasesTopPriority =
   | 'no_project'

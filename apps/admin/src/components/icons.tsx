@@ -808,16 +808,6 @@ export function IconJira(p: IconProps) {
   </>)
 }
 
-// Linear: three stacked horizontal bars with decreasing left indentation —
-// evokes the Linear wordmark's "L" and the issue-list metaphor.
-export function IconLinear(p: IconProps) {
-  return wrap(p, <>
-    <circle cx="8" cy="8" r="5.5" />
-    <path d="M5.5 10.5 L10.5 5.5" strokeLinecap="round" />
-    <path d="M5.5 10.5 L8.5 10.5" strokeLinecap="round" />
-  </>)
-}
-
 // PagerDuty: a pager/radio tower — three arcing signal lines above a base,
 // evoking on-call alerting.
 export function IconPagerDuty(p: IconProps) {

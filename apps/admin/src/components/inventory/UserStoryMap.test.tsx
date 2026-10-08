@@ -68,6 +68,29 @@ describe('UserStoryMap story actions', () => {
     expect(onRunGatesForStory).toHaveBeenCalledWith('story-3')
   })
 
+  it('collapses fully verified stories and filters by status', async () => {
+    const mixed: Story[] = [
+      { id: 's-done', label: 'Done', actions: [{ id: 'd1', label: 'app/done#button', status: 'verified' }] },
+      {
+        id: 's-open',
+        label: 'Open',
+        actions: [{ id: 'o1', label: 'app/open#button', status: 'wired', metadata: { intent: 'Send the message' } }],
+      },
+    ]
+    await act(async () => {
+      root.render(createElement(UserStoryMap, { stories: mixed }))
+    })
+    expect(container.textContent).not.toContain('app/done#button')
+    expect(buttonsWithText('Show 1 verified action')).toHaveLength(1)
+    // The intent is the card title; the raw id is on hover.
+    const open = container.querySelector<HTMLElement>('[title="app/open#button"]')
+    expect(open?.textContent).toBe('Send the message')
+
+    await act(async () => buttonsWithText('Not verified')[0].click())
+    expect(container.textContent).not.toContain('Done')
+    expect(container.textContent).toContain('1 of 2 stories')
+  })
+
   it('renders no menu when the page passes no story actions', async () => {
     await act(async () => {
       root.render(createElement(UserStoryMap, { stories }))

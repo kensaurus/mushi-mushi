@@ -273,12 +273,7 @@ export function ConnectPage() {
             priority: POSTURE_PRIORITY.status,
             show: mcpStats.topPriority !== 'healthy' && mcpStats.topPriority !== 'no_project',
             children: (
-              <McpStatusBanner
-                stats={mcpStats}
-                onRefresh={() => { void mcpStatsQuery.reload() }}
-                refreshing={statsValidating}
-                plainBanner
-              />
+              <McpStatusBanner stats={mcpStats} plainBanner />
             ),
           },
           {

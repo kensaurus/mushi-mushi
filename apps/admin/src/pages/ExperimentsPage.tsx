@@ -1,10 +1,10 @@
 /**
  * FILE: apps/admin/src/pages/ExperimentsPage.tsx
  * PURPOSE: A/B experiment console — banner + EXPERIMENTS SNAPSHOT + tabs:
- *          Overview | Experiments | New.
+ *          Experiments | New, readout at the foot.
  */
 
-import { useState, useCallback, useEffect, useMemo } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
@@ -29,8 +29,6 @@ import {
   EmptyState,
   RelativeTime,
   SegmentedControl,
-  FreshnessPill,
-  RecommendedAction,
   Tooltip,
 } from '../components/ui'
 import { IconEye, IconPause } from '../components/icons'
@@ -48,7 +46,7 @@ import {
 } from '../components/experiments/ExperimentsStatsTypes'
 import { Drawer } from '../components/Drawer'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
-import { CHIP_TONE, runStatusChipTone, HEADER_BADGE_TONE } from '../lib/chipTone'
+import { CHIP_TONE, runStatusChipTone } from '../lib/chipTone'
 
 interface ExperimentVariant {
   id: string
@@ -109,15 +107,16 @@ function listRows<T>(payload: T[] | { data: T[] } | null | undefined): T[] {
   return Array.isArray(payload) ? payload : (payload.data ?? [])
 }
 
+// No Overview tab: the banner states the posture and the readout sits at the page foot.
 const TABS: Array<{ id: ExperimentsTabId; label: string; description: string }> = [
-  { id: 'overview', label: 'Overview', description: 'Posture banner and how A/B assignment + mSPRT analysis works.' },
   { id: 'experiments', label: 'Experiments', description: 'Launch, monitor, analyze, and stop live variant tests.' },
   { id: 'new', label: 'New', description: 'Create an experiment with control + treatment variants.' },
 ]
 
-function resolveExperimentsTab(value: string | null): ExperimentsTabId {
+/** The tab named in the URL, or null so the posture picks one. */
+function explicitExperimentsTab(value: string | null): ExperimentsTabId | null {
   if (value === 'experiments' || value === 'new') return value
-  return 'overview'
+  return null
 }
 
 export function ExperimentsPage() {
@@ -128,8 +127,6 @@ export function ExperimentsPage() {
   const setup = useSetupStatus(projectId)
   const projectName = setup.activeProject?.project_name ?? null
   const [searchParams, setSearchParams] = useSearchParams()
-  const activeTab = resolveExperimentsTab(searchParams.get('tab'))
-  const activeTabMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
 
   const [selected, setSelected] = useState<Experiment | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -145,6 +142,10 @@ export function ExperimentsPage() {
   } = usePageData<ExperimentsStats>('/v1/admin/experiments/stats')
   usePublishPageHeroStats('/experiments', statsData)
   const stats = { ...EMPTY_EXPERIMENTS_STATS, ...statsData }
+  // Every mode lands on the work tab that matches the posture (list, or New when empty); the URL wins.
+  const rawTab = searchParams.get('tab')
+  const activeTab: ExperimentsTabId = explicitExperimentsTab(rawTab) ?? resolveQuickExperimentsRedirect(stats, null) ?? 'experiments'
+  const activeTabMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
 
   const {
     data: expData,
@@ -164,8 +165,7 @@ export function ExperimentsPage() {
     (tab: ExperimentsTabId) => {
       setSearchParams((prev) => {
         const next = new URLSearchParams(prev)
-        if (tab === 'overview') next.delete('tab')
-        else next.set('tab', tab)
+        next.set('tab', tab)
         return next
       })
     },
@@ -176,15 +176,6 @@ export function ExperimentsPage() {
     reloadStats()
     reloadExperiments()
   }, [reloadStats, reloadExperiments])
-
-  // Quickstart picks the landing tab once (no ?tab= yet); an explicit tab —
-  // e.g. "New experiment" — is respected, so a second experiment can be made.
-  const rawTab = searchParams.get('tab')
-  useEffect(() => {
-    if (!ux.isQuickstart || statsLoading) return
-    const target = resolveQuickExperimentsRedirect(stats, rawTab)
-    if (target) setActiveTab(target)
-  }, [ux.isQuickstart, statsLoading, stats, rawTab, setActiveTab])
 
   const tabOptions = useMemo(
     () =>
@@ -263,17 +254,6 @@ export function ExperimentsPage() {
     return <PageLoadError error={statsError} code={statsErrorCode} onRetry={reloadStats} />
   }
 
-  const bannerSeverity: 'ok' | 'warn' | 'danger' | 'brand' | 'info' | 'neutral' =
-    !stats.hasAnyProject
-      ? 'neutral'
-      : stats.topPriority === 'running' || stats.topPriority === 'draft_incomplete'
-        ? 'warn'
-        : stats.topPriority === 'no_experiments' || stats.topPriority === 'draft_ready'
-          ? 'brand'
-          : stats.topPriority === 'winners_found' || stats.topPriority === 'healthy'
-            ? 'ok'
-            : 'info'
-
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-experiments">
       <PageHeaderBar
@@ -291,28 +271,6 @@ export function ExperimentsPage() {
       >
         {!ux.hideOverviewChrome && (
           <>
-        <Badge
-          className={
-            bannerSeverity === 'ok'
-              ? CHIP_TONE.okSubtle
-              : bannerSeverity === 'warn'
-                ? CHIP_TONE.warnSubtle
-                : bannerSeverity === 'brand'
-                  ? HEADER_BADGE_TONE.brand
-                  : HEADER_BADGE_TONE.neutral
-          }
-        >
-          {!stats.hasAnyProject
-            ? 'NO PROJECT'
-            : stats.runningCount > 0
-              ? `${stats.runningCount} LIVE`
-              : stats.draftsReadyToLaunch > 0
-                ? `${stats.draftsReadyToLaunch} READY`
-                : stats.totalExperiments === 0
-                  ? 'EMPTY'
-                  : `${stats.totalExperiments} TOTAL`}
-        </Badge>
-        <FreshnessPill at={statsFetchedAt} isValidating={statsValidating} />
         <Btn size="sm" variant="ghost" onClick={reloadAll} loading={statsValidating || experimentsValidating}>
           Refresh
         </Btn>
@@ -363,39 +321,6 @@ export function ExperimentsPage() {
       />
       )}
 
-      {activeTab === 'overview' && (
-        <div className="space-y-4">
-          <ExperimentsReadout
-            stats={stats}
-            fetchedAt={statsFetchedAt}
-            isValidating={statsValidating}
-          />
-          {stats.topPriority === 'healthy' && (
-            <RecommendedAction
-              tone="success"
-              title="Experiment library is idle"
-              description={`${stats.totalExperiments} experiment${stats.totalExperiments === 1 ? '' : 's'} · none running · launch a draft or create a new test.`}
-            />
-          )}
-          {stats.topPriority === 'no_experiments' && (
-            <RecommendedAction
-              tone="info"
-              title="Start your first A/B test"
-              description="Compare two UI variants with SDK assignment and mSPRT significance — no peeking penalty."
-              cta={{ label: 'Create experiment', to: '/experiments?tab=new' }}
-            />
-          )}
-          {stats.topPriority === 'draft_ready' && (
-            <RecommendedAction
-              tone="info"
-              title="Launch a ready draft"
-              description={stats.topPriorityLabel ?? 'Drafts with ≥2 variants can go live immediately.'}
-              cta={{ label: 'Open Experiments', to: '/experiments?tab=experiments' }}
-            />
-          )}
-        </div>
-      )}
-
       {activeTab === 'experiments' && (
         <ExperimentsTab
           experiments={experiments}
@@ -436,6 +361,8 @@ export function ExperimentsPage() {
           }}
         />
       )}
+
+      <ExperimentsReadout stats={stats} fetchedAt={statsFetchedAt} isValidating={statsValidating} />
     </div>
   )
 }

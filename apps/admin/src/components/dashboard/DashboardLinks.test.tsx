@@ -6,8 +6,6 @@
  * Dashboard controls do what they say (console repair group H, 2026-10-04):
  *   QA 286  "Send another" stayed disabled and the chip promised a
  *           navigation that never happened.
- *   QA 173  the LLM sparklines offered drag-to-filter into /reports, which
- *           ignores from/to.
  *   QA 174  the backlog tile said "open > 1h" while opening every report in
  *           the new bucket.
  */
@@ -21,7 +19,6 @@ const send = vi.hoisted(() => ({ fn: vi.fn() }))
 vi.mock('../../lib/useSendTestReport', () => ({ useSendTestReport: () => send.fn }))
 
 import { FirstReportHero } from './FirstReportHero'
-import { ChartsRow } from './ChartsRow'
 
 async function flush(): Promise<void> {
   for (let i = 0; i < 5; i += 1) await Promise.resolve()
@@ -69,30 +66,5 @@ describe('FirstReportHero', () => {
       await flush()
     })
     expect(send.fn).toHaveBeenCalledTimes(2)
-  })
-})
-
-describe('ChartsRow', () => {
-  const days = Array.from({ length: 3 }, (_, i) => `2026-10-0${i + 1}`)
-  const props = {
-    reportsByDay: days.map((day) => ({ day, total: 1, critical: 0, high: 0, medium: 1, low: 0, unscored: 0 })),
-    llmByDay: days.map((day) => ({ day, calls: 2, tokens: 100, latencyMs: 10, failures: 0 })),
-  }
-
-  it('does not offer a date filter that Reports would drop', async () => {
-    await act(async () => {
-      root.render(createElement(MemoryRouter, null, createElement(ChartsRow, props)))
-      await flush()
-    })
-    expect(container.innerHTML).not.toContain('drag to filter')
-    expect(container.textContent).not.toContain('newest 5,000')
-  })
-
-  it('says when the charts are drawn from the newest rows only', async () => {
-    await act(async () => {
-      root.render(createElement(MemoryRouter, null, createElement(ChartsRow, { ...props, sampled: true })))
-      await flush()
-    })
-    expect(container.textContent).toContain('newest 5,000 rows')
   })
 })

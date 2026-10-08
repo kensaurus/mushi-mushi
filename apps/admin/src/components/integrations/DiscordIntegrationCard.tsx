@@ -209,7 +209,11 @@ export function DiscordIntegrationCard({
           : { label: 'Send test', onClick: () => void handleTest() }
 
   return (
-    <div id="integrations-discord" className="rounded-xl border border-edge-subtle bg-surface p-5 space-y-4 scroll-mt-chrome">
+    <div
+      id="integrations-discord"
+      // mushi-mushi-allowlist: anchored card (#integrations-discord links land here); Card takes no id
+      className="rounded-xl border border-edge-subtle bg-surface-raised p-5 space-y-4 scroll-mt-chrome"
+    >
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
         <div className="flex min-w-0 flex-1 basis-40 items-center gap-3">
@@ -305,18 +309,6 @@ export function DiscordIntegrationCard({
           In Discord: <strong>Server Settings → Integrations → Webhooks → New Webhook → Copy Webhook URL</strong>.
         </p>
       </div>
-
-      {/* What you'll receive */}
-      {!connected && (
-        <div className="rounded-lg border border-edge-subtle bg-surface-hover/40 px-3 py-2.5 text-xs text-fg-muted space-y-1">
-          <p className="font-medium text-fg">What you'll receive</p>
-          <ul className="list-inside list-disc space-y-0.5">
-            <li>New report triaged (severity + category)</li>
-            <li>QA story failures with run details</li>
-            <li>Fix merged / deployed events (when plugins enabled)</li>
-          </ul>
-        </div>
-      )}
 
       {confirmRemove && (
         <ConfirmDialog

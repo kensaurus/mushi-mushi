@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { bannerEnterSpring } from '../../lib/motion-tokens'
 import { useMotionTransition } from '../../lib/useMotionTransition'
-import { Badge, Btn } from '../ui'
+import { Badge, Btn, SegmentedControl } from '../ui'
 import { IconDots } from '../icons'
 import { InventoryStatusPill } from './InventoryStatusPill'
 
@@ -68,6 +68,21 @@ function actionTestCount(a: StoryAction): number {
   return Array.isArray(meta.verified_by) ? meta.verified_by.length : 0
 }
 
+type StoryFilter = 'all' | 'open' | 'regressed'
+
+const STORY_FILTERS: Array<{ id: StoryFilter; label: string }> = [
+  { id: 'all', label: 'All' },
+  { id: 'open', label: 'Not verified' },
+  { id: 'regressed', label: 'Regressed' },
+]
+
+/** Actions a filter keeps; `all` keeps every action. */
+function actionsFor(story: Story, filter: StoryFilter): StoryAction[] {
+  if (filter === 'open') return story.actions.filter((a) => a.status !== 'verified')
+  if (filter === 'regressed') return story.actions.filter((a) => a.status === 'regressed')
+  return story.actions
+}
+
 function actionIntent(a: StoryAction): string | null {
   const meta = (a.metadata ?? {}) as ActionMeta
   return meta.intent ?? meta.action ?? null
@@ -131,6 +146,16 @@ function StoryActionsMenu({
 
 export function UserStoryMap({ stories, findingsByNode, onSelectAction, onRunGatesForStory, onRunCrawlerForStory }: Props) {
   const enterTransition = useMotionTransition(bannerEnterSpring)
+  const [filter, setFilter] = useState<StoryFilter>('all')
+  // Fully verified stories start collapsed; ids here are opened by hand.
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const toggleExpanded = (id: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
 
   if (!stories.length) {
     return (
@@ -147,10 +172,30 @@ export function UserStoryMap({ stories, findingsByNode, onSelectAction, onRunGat
     )
   }
 
+  const visibleStories = stories.filter((s) => actionsFor(s, filter).length > 0)
+
   return (
     <div className="space-y-4">
-      {stories.map((story, si) => {
+      <div className="flex flex-wrap items-center gap-2">
+        <SegmentedControl<StoryFilter>
+          size="sm"
+          ariaLabel="Filter stories by status"
+          value={filter}
+          onChange={setFilter}
+          options={STORY_FILTERS}
+        />
+        <span className="text-2xs text-fg-muted">
+          {visibleStories.length} of {stories.length} {stories.length === 1 ? 'story' : 'stories'}
+        </span>
+      </div>
+      {visibleStories.length === 0 && (
+        <p className="rounded-md border border-dashed border-edge-subtle p-4 text-center text-xs text-fg-muted">
+          No stories match this filter.
+        </p>
+      )}
+      {visibleStories.map((story, si) => {
         const { title, persona, goal, description, tags } = getStoryShape(story)
+        const shownActions = actionsFor(story, filter)
         const verifiedCount = story.actions.filter((a) => a.status === 'verified').length
         const regressedCount = story.actions.filter((a) => a.status === 'regressed').length
         const stubCount = story.actions.filter((a) => a.status === 'stub').length
@@ -158,6 +203,8 @@ export function UserStoryMap({ stories, findingsByNode, onSelectAction, onRunGat
           ? story.actions.reduce((acc, a) => acc + (findingsByNode.get(a.id) ?? 0), 0)
           : null
         const totalTests = story.actions.reduce((acc, a) => acc + actionTestCount(a), 0)
+        const allVerified = story.actions.length > 0 && verifiedCount === story.actions.length
+        const collapsed = allVerified && !expanded.has(story.id)
 
         return (
           <motion.section
@@ -165,7 +212,8 @@ export function UserStoryMap({ stories, findingsByNode, onSelectAction, onRunGat
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ ...enterTransition, delay: si * 0.04 }}
-            className="rounded-lg border border-edge-subtle bg-gradient-to-br from-surface-raised/80 to-surface-overlay/30 p-4 shadow-sm"
+            // mushi-mushi-allowlist: motion.article enter animation; Card is not a motion component
+            className="rounded-lg border border-edge-subtle bg-surface-raised p-4 shadow-sm"
           >
             <header className="mb-3 space-y-2">
               <div className="flex items-start justify-between gap-3 flex-wrap">
@@ -200,10 +248,10 @@ export function UserStoryMap({ stories, findingsByNode, onSelectAction, onRunGat
                   )}
                 </div>
               </div>
-              {description && (
+              {description && !collapsed && (
                 <p className="text-2xs text-fg-muted leading-relaxed max-w-prose">{description}</p>
               )}
-              {tags.length > 0 && (
+              {tags.length > 0 && !collapsed && (
                 <div className="flex flex-wrap gap-1">
                   {tags.map((t) => (
                     <Badge
@@ -241,11 +289,23 @@ export function UserStoryMap({ stories, findingsByNode, onSelectAction, onRunGat
                 {findingCount === 0 && (
                   <span className="text-ok">No open findings</span>
                 )}
+                {allVerified && (
+                  <Btn
+                    variant="ghost"
+                    size="sm"
+                    className="ml-auto px-1.5 py-0.5 text-2xs"
+                    aria-expanded={!collapsed}
+                    onClick={() => toggleExpanded(story.id)}
+                  >
+                    {collapsed ? `Show ${story.actions.length} verified action${story.actions.length === 1 ? '' : 's'}` : 'Hide actions'}
+                  </Btn>
+                )}
               </div>
             </header>
 
+            {!collapsed && (
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {story.actions.map((a, ai) => {
+              {shownActions.map((a, ai) => {
                 const intent = actionIntent(a)
                 const tests = actionTestCount(a)
                 const findings = findingsByNode?.get(a.id) ?? 0
@@ -261,20 +321,21 @@ export function UserStoryMap({ stories, findingsByNode, onSelectAction, onRunGat
                     // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
                     className="text-left rounded-md border border-edge-subtle bg-surface-raised/60 p-3 hover:bg-surface-overlay/70 motion-safe:transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
                   >
-                    <div className="flex items-center justify-between gap-2 mb-1">
-                      <span className="text-xs font-medium text-fg truncate">{a.label}</span>
+                    {/* The intent reads as the title; the raw inventory id
+                        (glot/chat/send-chat-turn#button) is on hover. */}
+                    <div className="flex items-start justify-between gap-2 mb-1">
+                      <span className="text-xs font-medium text-fg line-clamp-2" title={a.label}>
+                        {intent ?? a.label}
+                      </span>
                       <InventoryStatusPill status={a.status} />
                     </div>
-                    {intent && (
-                      <p className="text-2xs text-fg-muted line-clamp-2 mb-1.5">{intent}</p>
-                    )}
-                    <div className="flex items-center gap-2 text-2xs text-fg-faint font-mono">
-                      <span title={`${tests} test reference${tests === 1 ? '' : 's'}`}>
-                        🧪 {tests}
+                    <div className="flex items-center gap-2 text-2xs text-fg-faint">
+                      <span>
+                        {tests} test{tests === 1 ? '' : 's'}
                       </span>
                       {findings > 0 && (
-                        <span className="text-danger" title={`${findings} open finding${findings === 1 ? '' : 's'}`}>
-                          ⚠ {findings}
+                        <span className="text-danger">
+                          {findings} open finding{findings === 1 ? '' : 's'}
                         </span>
                       )}
                     </div>
@@ -282,6 +343,7 @@ export function UserStoryMap({ stories, findingsByNode, onSelectAction, onRunGat
                 )
               })}
             </div>
+            )}
           </motion.section>
         )
       })}

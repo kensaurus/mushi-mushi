@@ -85,6 +85,8 @@ export type NavIconKey =
   | 'activity'
   | 'overview'
   | 'mic'
+  | 'sliders'
+  | 'camera'
 
 export interface NavRegistryEntry {
   id: string
@@ -114,8 +116,8 @@ export const CHECK_SUB_GROUPS: Record<
   { title: string; hint: string }
 > = {
   'quality-gates': {
-    title: 'Fix quality',
-    hint: 'How good the automatic fixes are: grading, lessons learned and the prompts behind them.',
+    title: 'AI quality',
+    hint: 'How good the AI’s triage and fixes are: grading, lessons learned and the prompts behind them.',
   },
   'system-health': {
     title: 'App checks',
@@ -375,7 +377,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     label: 'UX runs',
     sectionId: 'do',
     pdcaStage: 'do',
-    iconKey: 'iterate',
+    iconKey: 'camera',
     paletteDescription: 'Your coding agent worked through every screen; see which were improved, rolled back or moved by another fix, with before/after screenshots.',
     paletteKeywords: ['ux', 'ux runs', 'ui', 'screens', 'screenshots', 'before after', 'agent', 'mushi ux', 'visual', 'accessibility'],
     paletteGroup: 'Do',
@@ -406,13 +408,13 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
   {
     id: 'nav:judge',
     path: '/judge',
-    label: 'Fix grading',
+    label: 'Triage grading',
     sectionId: 'check',
     pdcaStage: 'check',
     checkSubGroup: 'quality-gates',
     iconKey: 'judge',
     paletteDescription: 'A second AI grades each automatic fix and flags where it disagrees with the first.',
-    paletteKeywords: ['judge', 'score', 'eval', 'quality', 'grade', 'grading', 'verification', 'llm-as-judge'],
+    paletteKeywords: ['fix grading', 'judge', 'score', 'eval', 'quality', 'grade', 'grading', 'verification', 'llm-as-judge'],
     paletteGroup: 'Check',
   },
   {
@@ -482,7 +484,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     sectionId: 'check',
     pdcaStage: 'check',
     checkSubGroup: 'system-health',
-    iconKey: 'content',
+    iconKey: 'sliders',
     paletteDescription: 'Design tokens, contrast pairs, type scale and the deviance score for off-token code; token and rule edits open a draft PR.',
     paletteKeywords: ['design', 'design system', 'tokens', 'dtcg', 'colors', 'contrast', 'typography', 'spacing', 'radius', 'deviance', 'off-token', 'rules'],
     paletteGroup: 'Check',

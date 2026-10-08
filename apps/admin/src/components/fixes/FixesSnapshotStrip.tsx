@@ -64,7 +64,7 @@ export function FixesSnapshotStrip({
             label={statLabels?.totalAttempts ?? 'Attempts (30d)'}
             value={stats.totalAttempts}
             tooltip={totalAttemptsTooltip(stats, plainOpts)}
-            detail={totalAttemptsDetail(stats)}
+            detail={totalAttemptsDetail()}
             to={fixesLinks.totalAttempts}
           />
         ) : null}
@@ -107,7 +107,7 @@ export function FixesSnapshotStrip({
             value={stats.totalAttempts}
             accent={stats.totalAttempts > 0 ? 'text-fg' : undefined}
             tooltip={totalAttemptsTooltip(stats, plainOpts)}
-            detail={totalAttemptsDetail(stats)}
+            detail={totalAttemptsDetail()}
             to={fixesLinks.totalAttempts}
           />
         ) : (

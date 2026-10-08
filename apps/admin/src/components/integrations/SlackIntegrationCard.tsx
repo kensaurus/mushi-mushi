@@ -267,7 +267,11 @@ export function SlackIntegrationCard({
         : undefined
 
   return (
-    <div id="integrations-slack" className="rounded-xl border border-edge-subtle bg-surface p-5 space-y-4 scroll-mt-chrome">
+    <div
+      id="integrations-slack"
+      // mushi-mushi-allowlist: anchored card (#integrations-slack links land here); Card takes no id
+      className="rounded-xl border border-edge-subtle bg-surface-raised p-5 space-y-4 scroll-mt-chrome"
+    >
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
         <div className="flex min-w-0 flex-1 basis-40 items-center gap-3">

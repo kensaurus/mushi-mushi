@@ -1,6 +1,6 @@
 /**
  * FILE: apps/admin/src/pages/IteratePage.tsx
- * PURPOSE: Banner + PDCA SNAPSHOT + tabs: Overview | Runs | New Run.
+ * PURPOSE: Banner + PDCA SNAPSHOT + tabs: Runs | New Run, then the readout.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -21,19 +21,10 @@ import { NextStep } from '../components/NextStep'
 import { useToast } from '../lib/toast'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
-import { Card,
-  Section,
+import { Section,
   Btn,
-  Badge,
   SegmentedControl,
-  FreshnessPill,
-  RecommendedAction,
-  RelativeTime, } from '../components/ui'
-import {
-  ContainedBlock,
-  InlineProof,
-  SignalChip,
-} from '../components/report-detail/ReportSurface'
+  FreshnessPill, } from '../components/ui'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { PdcaContextHint } from '../components/PdcaContextHint'
 import { IterateStatusBanner } from '../components/iterate/IterateStatusBanner'
@@ -51,14 +42,8 @@ import {
   type IterateStats,
   type IterateTabId,
 } from '../components/iterate/IterateStatsTypes'
-import { CHIP_TONE, HEADER_BADGE_TONE } from '../lib/chipTone'
 
 const TABS: Array<{ id: IterateTabId; label: string; description: string }> = [
-  {
-    id: 'overview',
-    label: 'Overview',
-    description: 'PDCA pipeline posture — what is running, queued, failed, or idle on this project.',
-  },
   {
     id: 'runs',
     label: 'Runs',
@@ -74,9 +59,9 @@ const TABS: Array<{ id: IterateTabId; label: string; description: string }> = [
 /** Runs per page on the Runs tab (the list route allows up to 100). */
 const RUNS_PAGE_SIZE = 50
 
+/** No tab, and `?tab=overview` from old links, open the runs. */
 function resolveIterateTab(value: string | null): IterateTabId {
-  if (value === 'runs' || value === 'new') return value
-  return 'overview'
+  return value === 'new' ? 'new' : 'runs'
 }
 
 export function IteratePage() {
@@ -174,7 +159,7 @@ export function IteratePage() {
     (tab: IterateTabId) => {
       setSearchParams((prev) => {
         const next = new URLSearchParams(prev)
-        if (tab === 'overview') next.delete('tab')
+        if (tab === 'runs') next.delete('tab')
         else next.set('tab', tab)
         return next
       })
@@ -184,7 +169,7 @@ export function IteratePage() {
 
   usePublishPageContext({
     route: '/iterate',
-    title: projectName ? `Iterate · ${projectName}` : 'Iterate',
+    title: projectName ? `Improvement runs · ${projectName}` : 'Improvement runs',
     summary: statsLoading
       ? 'Loading PDCA…'
       : stats.running + stats.queued > 0
@@ -311,34 +296,10 @@ export function IteratePage() {
     return <PageLoadError error={statsError} resource="PDCA runs" onRetry={reloadStats} />
   }
 
-  const bannerSeverity: 'ok' | 'warn' | 'danger' | 'brand' | 'info' | 'neutral' =
-    !stats.hasAnyProject
-      ? 'neutral'
-      : stats.topPriority === 'last_failed'
-        ? 'danger'
-        : stats.topPriority === 'active_runs'
-          ? 'warn'
-          : stats.topPriority === 'queued_waiting' || stats.topPriority === 'no_runs'
-            ? 'brand'
-            : 'ok'
-
-  const headerBadge =
-    !stats.hasAnyProject
-      ? 'NO PROJECT'
-      : stats.running > 0
-        ? `${stats.running} RUNNING`
-        : stats.queued > 0
-          ? `${stats.queued} QUEUED`
-          : stats.total === 0
-            ? 'EMPTY'
-            : stats.failed > 0 && stats.succeeded === 0
-              ? 'FAILED'
-              : 'IDLE'
-
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-iterate">
       <PageHeaderBar
-        title={copy?.title ?? 'Iterate'}
+        title={copy?.title ?? 'Improvement runs'}
         projectScope={stats.projectName ?? projectName ?? undefined}
 
         contextChip={<PdcaContextHint stage="act" />}
@@ -356,39 +317,21 @@ export function IteratePage() {
         }
         helpHowToUse={
           copy?.help?.howToUse ??
-          'Queue a run on New Run. Click Trigger on queued rows (Runs tab). Open a run for score timeline and critique export.'
+          'Queue a run on New Run. Click Trigger on queued rows in Runs. Open a run for score timeline and critique export.'
         }
       >
         {!ux.hideOverviewChrome && (
           <>
-        <Badge
-          className={
-            bannerSeverity === 'ok'
-              ? CHIP_TONE.okSubtle
-              : bannerSeverity === 'danger'
-                ? CHIP_TONE.dangerSubtle
-                : bannerSeverity === 'warn'
-                  ? CHIP_TONE.warnSubtle
-                  : bannerSeverity === 'brand'
-                    ? HEADER_BADGE_TONE.brand
-                    : HEADER_BADGE_TONE.neutral
-          }
-        >
-          {headerBadge}
-        </Badge>
-        <FreshnessPill at={statsFetchedAt} isValidating={statsValidating} />
-        <Btn size="sm" variant="ghost" onClick={reloadAll} loading={statsValidating || runsValidating}>
-          Refresh
-        </Btn>
-        <Btn
-          size="sm"
-          variant="primary"
-          onClick={() => setActiveTab('new')}
-          disabled={!activeProjectId}
-          title={!activeProjectId ? 'Select a project first' : undefined}
-        >
-          + New Run
-        </Btn>
+            <FreshnessPill at={statsFetchedAt} isValidating={statsValidating || runsValidating} />
+            <Btn
+              size="sm"
+              variant="primary"
+              onClick={() => setActiveTab('new')}
+              disabled={!activeProjectId}
+              title={!activeProjectId ? 'Select a project first' : undefined}
+            >
+              + New Run
+            </Btn>
           </>
         )}
       </PageHeaderBar>
@@ -428,7 +371,7 @@ export function IteratePage() {
       <SegmentedControl<IterateTabId>
         size="sm"
         scrollable
-        ariaLabel="Iterate sections"
+        ariaLabel="Improvement run sections"
         value={activeTab}
         options={tabOptions}
         onChange={setActiveTab}
@@ -444,116 +387,6 @@ export function IteratePage() {
         />
       ) : (
         <>
-          {activeTab === 'overview' && (
-            <div className="space-y-4">
-              <IterateReadout
-                stats={stats}
-                fetchedAt={statsFetchedAt}
-                isValidating={statsValidating}
-              />
-              {stats.topPriority === 'healthy' && (
-                <RecommendedAction
-                  tone="success"
-                  title="PDCA pipeline idle"
-                  description={stats.topPriorityLabel ?? `${stats.succeeded} succeeded runs on ${stats.projectName ?? 'project'}.`}
-                  cta={{ label: 'View runs', to: '/iterate?tab=runs' }}
-                />
-              )}
-              {stats.topPriority === 'no_runs' && (
-                <RecommendedAction
-                  tone="info"
-                  title="Queue your first PDCA run"
-                  description={stats.topPriorityLabel ?? 'Pick a target URL and critic persona to start the producer/critic loop.'}
-                  cta={{ label: 'New Run', to: '/iterate?tab=new' }}
-                />
-              )}
-              {stats.topPriority === 'queued_waiting' && (
-                <RecommendedAction
-                  tone="info"
-                  title="Queued runs need Trigger"
-                  description={stats.topPriorityLabel ?? `${stats.queued} run(s) waiting — pdca-runner does not auto-start unless cron picks them up.`}
-                  cta={{ label: 'Open Runs', to: '/iterate?tab=runs' }}
-                />
-              )}
-              {stats.topPriority === 'active_runs' && (
-                <RecommendedAction
-                  tone="info"
-                  title="Runs in progress"
-                  description={stats.topPriorityLabel ?? 'This page auto-refreshes every 4s while runs are active.'}
-                  cta={{ label: 'View progress', to: '/iterate?tab=runs' }}
-                />
-              )}
-              {stats.topPriority === 'last_failed' && (
-                <RecommendedAction
-                  tone="urgent"
-                  title="Inspect the failed run"
-                  description={stats.topPriorityLabel ?? 'Open the run drawer for iteration-level critique, then queue a new run.'}
-                  cta={{ label: 'View runs', to: '/iterate?tab=runs' }}
-                />
-              )}
-
-              <div className="grid gap-3 sm:grid-cols-3">
-                <Card className="space-y-2 border-edge p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-3xs font-medium uppercase tracking-wide text-fg-faint">Queued</p>
-                    <SignalChip tone={stats.queued > 0 ? 'warn' : 'neutral'}>
-                      {stats.queued > 0 ? 'Needs trigger' : 'Clear'}
-                    </SignalChip>
-                  </div>
-                  <p className="text-lg font-semibold tabular-nums text-fg-primary">{stats.queued}</p>
-                  <InlineProof>Needs manual Trigger on Runs tab</InlineProof>
-                </Card>
-                <Card className="space-y-2 border-edge p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-3xs font-medium uppercase tracking-wide text-fg-faint">Running</p>
-                    <SignalChip
-                      tone={stats.running > 0 ? 'brand' : 'neutral'}
-                      className={stats.running > 0 ? 'motion-safe:animate-pulse' : undefined}
-                    >
-                      {stats.running > 0 ? 'In flight' : 'Idle'}
-                    </SignalChip>
-                  </div>
-                  <p className="text-lg font-semibold tabular-nums text-warn">{stats.running}</p>
-                  <InlineProof>Producer → critic loop active</InlineProof>
-                </Card>
-                <Card className="space-y-2 border-edge p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-3xs font-medium uppercase tracking-wide text-fg-faint">Aborted</p>
-                    <SignalChip tone={stats.aborted > 0 ? 'warn' : 'neutral'}>
-                      {stats.aborted > 0 ? 'Stopped' : 'None'}
-                    </SignalChip>
-                  </div>
-                  <p className="text-lg font-semibold tabular-nums text-fg-muted">{stats.aborted}</p>
-                  <InlineProof>Stopped before completion</InlineProof>
-                </Card>
-              </div>
-
-              {stats.lastRunAt && (
-                <ContainedBlock tone="muted">
-                  <p className="text-2xs leading-relaxed text-fg-muted">
-                    Last run queued <RelativeTime value={stats.lastRunAt} />
-                    {stats.daysSinceLastRun != null && stats.daysSinceLastRun > 0
-                      ? ` (${stats.daysSinceLastRun}d ago)`
-                      : null}
-                  </p>
-                </ContainedBlock>
-              )}
-              {stats.lastFailedUrl && (
-                <ContainedBlock tone="warn">
-                  <p className="truncate text-2xs leading-relaxed text-danger" title={stats.lastFailedUrl}>
-                    Latest failure: {stats.lastFailedUrl}
-                    {stats.lastFailedAt ? (
-                      <>
-                        {' '}
-                        · <RelativeTime value={stats.lastFailedAt} />
-                      </>
-                    ) : null}
-                  </p>
-                </ContainedBlock>
-              )}
-            </div>
-          )}
-
           {activeTab === 'runs' && (
             <>
               {runsLoading && (
@@ -599,6 +432,8 @@ export function IteratePage() {
           )}
         </>
       )}
+
+      <IterateReadout stats={stats} fetchedAt={statsFetchedAt} isValidating={statsValidating} />
 
       {drawerOpen && selectedRun && (
         <PdcaRunDrawer

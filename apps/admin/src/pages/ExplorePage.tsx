@@ -44,14 +44,13 @@ import { SnapshotSectionHint,
   Btn,
   Card,
   DetailRows,
+  DisclosurePanel,
   type DetailRowItem, } from '../components/ui'
 import { GraphSkeleton } from '../components/skeletons/GraphSkeleton'
 import { exploreGridLayout, EXPLORE_HEADER_H } from '../components/explore/exploreLayout'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { shouldHideGuideWhenBannerActive, COMMON_HEALTHY_PRIORITIES } from '../lib/pagePostureHelpers'
-import { PageHero } from '../components/PageHero'
-import type { PageAction } from '../components/PageActionBar'
 import { ExploreCanvas } from '../components/explore/ExploreCanvas'
 import { ExploreLayerLane } from '../components/explore/ExploreLayerLane'
 import { ExploreDiagramPanel } from '../components/explore/ExploreDiagramPanel'
@@ -96,7 +95,6 @@ import {
   uiLayerTooltip,
 } from '../lib/statTooltips/explore'
 import { exploreLinks } from '../lib/statCardLinks'
-import { CHIP_TONE, HEADER_BADGE_TONE } from '../lib/chipTone'
 
 type DensityMode = 'files' | 'symbols'
 
@@ -479,42 +477,6 @@ export function ExplorePage() {
     setHighlightIds(new Set())
   }, [])
 
-  const bannerSeverity: 'ok' | 'warn' | 'danger' | 'brand' | 'info' | 'neutral' =
-    !stats.hasAnyProject
-      ? 'neutral'
-      : stats.topPriority === 'error'
-        ? 'danger'
-        : stats.topPriority === 'empty' || stats.topPriority === 'stale'
-          ? 'warn'
-          : stats.topPriority === 'not_enabled' || stats.topPriority === 'indexing'
-            ? 'brand'
-            : stats.topPriority === 'ready'
-              ? 'ok'
-              : 'info'
-
-  const exploreHeroSeverity =
-    bannerSeverity === 'danger' ? 'crit' : bannerSeverity === 'brand' ? 'info' : bannerSeverity
-
-  const exploreAct = useMemo((): PageAction | null => {
-    if (stats.topPriority === 'ready') return null
-    if (stats.topPriorityTo && stats.topPriorityLabel) {
-      const tone =
-        stats.topPriority === 'error'
-          ? 'act'
-          : stats.topPriority === 'empty' || stats.topPriority === 'stale'
-            ? 'check'
-            : 'do'
-      return {
-        tone,
-        title: stats.topPriorityLabel,
-        reason: stats.lastIndexError ?? undefined,
-        primary: { kind: 'link', to: stats.topPriorityTo, label: 'Take action →' },
-        secondary: [{ kind: 'button', label: 'Index debug', onClick: () => setActiveTab('index') }],
-      }
-    }
-    return null
-  }, [stats.topPriority, stats.topPriorityTo, stats.topPriorityLabel, stats.lastIndexError, setActiveTab])
-
   const primaryTabOptions = useMemo(
     () =>
       EXPLORE_PRIMARY_TABS.filter((t) => !(ux.hideIndexTab && t.id === 'index')).map((t) => ({
@@ -560,7 +522,7 @@ export function ExplorePage() {
 
   usePublishPageContext({
     route: '/explore',
-    title: 'Codebase atlas',
+    title: 'Code map',
     summary: `${activeTabMeta.label} · ${stats.indexedFiles} files · ${stats.withEmbeddings} embedded`,
     filters: { tab: activeTab, density },
     criticalCount: stats.topPriority === 'error' ? 1 : 0,
@@ -748,12 +710,18 @@ export function ExplorePage() {
         )}
 
         {projectId && stats.codebaseIndexEnabled && (
-          <ExploreImpactControl
-            projectId={projectId}
-            active={impactActive}
-            onImpact={(ids) => handleImpact(ids)}
-            onClear={clearImpact}
-          />
+          <DisclosurePanel
+            title="Diff impact"
+            defaultOpen={impactActive}
+            trailing={impactActive ? <SignalChip tone="brand">on</SignalChip> : undefined}
+          >
+            <ExploreImpactControl
+              projectId={projectId}
+              active={impactActive}
+              onImpact={(ids) => handleImpact(ids)}
+              onClear={clearImpact}
+            />
+          </DisclosurePanel>
         )}
       </div>
     ) : null
@@ -834,11 +802,10 @@ export function ExplorePage() {
   return (
     <div className="space-y-3 sm:space-y-4 min-w-0" data-testid="mushi-page-explore">
       <PageHeaderBar
-        title={copy?.title ?? 'Explore'}
+        title={copy?.title ?? 'Code map'}
         projectScope={stats.projectName ?? undefined}
-        withPageHero={!ux.hideOverviewChrome}
 
-        helpTitle={copy?.help?.title ?? 'Codebase Atlas'}
+        helpTitle={copy?.help?.title ?? 'About Code map'}
         helpWhatIsIt={
           copy?.help?.whatIsIt ??
           'Visual map of indexed source files grouped by architectural layer.'
@@ -856,104 +823,13 @@ export function ExplorePage() {
         }
       >
         {!ux.hideOverviewChrome && (
-          <>
-            <Badge
-              className={
-                bannerSeverity === 'ok'
-                  ? CHIP_TONE.okSubtle
-                  : bannerSeverity === 'danger'
-                    ? CHIP_TONE.dangerSubtle
-                    : bannerSeverity === 'warn'
-                      ? CHIP_TONE.warnSubtle
-                      : bannerSeverity === 'brand'
-                        ? HEADER_BADGE_TONE.brand
-                        : HEADER_BADGE_TONE.neutral
-              }
-            >
-              {!stats.hasAnyProject
-                ? 'NO PROJECT'
-                : stats.topPriority === 'error'
-                  ? 'ERROR'
-                  : stats.topPriority === 'indexing'
-                    ? 'INDEXING'
-                    : stats.topPriority === 'empty' || stats.topPriority === 'not_enabled'
-                      ? 'EMPTY'
-                      : stats.topPriority === 'stale'
-                        ? 'STALE'
-                        : 'READY'}
-            </Badge>
-            <FreshnessPill
-              at={statsFetchedAt ?? exploreQuery.lastFetchedAt}
-              isValidating={statsValidating || exploreQuery.isValidating}
-            />
-            <Btn size="sm" variant="ghost" onClick={reloadAll} loading={statsValidating || loading}>
-              Refresh
-            </Btn>
-          </>
+          <FreshnessPill
+            at={statsFetchedAt ?? exploreQuery.lastFetchedAt}
+            isValidating={statsValidating || exploreQuery.isValidating}
+          />
         )}
         {projectId && <CopyRepoDigestButton projectId={projectId} />}
       </PageHeaderBar>
-
-      {!ux.hideOverviewChrome ? (
-        <PageHero
-          scope="explore"
-          title={copy?.title ?? 'Codebase atlas'}
-          kicker="Index posture"
-          decide={{
-            label: stats.topPriority === 'ready' ? 'Atlas ready' : stats.topPriorityLabel ?? 'Index posture',
-            metric: `${stats.indexedFiles.toLocaleString()} files · ${stats.withEmbeddings.toLocaleString()} embedded`,
-            summary:
-              stats.topPriority === 'ready'
-                ? `${stats.symbolCount.toLocaleString()} symbols indexed — ask, tour, or search the repo.`
-                : stats.topPriorityLabel ?? 'Connect a repo and enable codebase indexing.',
-            severity: exploreHeroSeverity,
-            anchor: 'explore:decide',
-            evidence: {
-              kind: 'metric-breakdown',
-              whyNow:
-                stats.topPriority === 'error' && stats.lastIndexError
-                  ? stats.lastIndexError
-                  : stats.topPriority === 'ready'
-                    ? `${stats.indexedFiles} files indexed with ${stats.withEmbeddings} embedding vectors for semantic search.`
-                    : stats.topPriorityLabel ?? 'Indexing posture drives whether Ask, Tour, and Search can answer grounded questions.',
-              items: [
-                { label: 'Indexed files', value: stats.indexedFiles, tone: stats.indexedFiles > 0 ? 'ok' : 'warn' },
-                { label: 'Embeddings', value: stats.withEmbeddings, tone: stats.withEmbeddings > 0 ? 'ok' : 'warn' },
-                { label: 'Symbols', value: stats.symbolCount, tone: 'neutral' },
-                {
-                  label: 'Index enabled',
-                  value: stats.codebaseIndexEnabled ? 'Yes' : 'No',
-                  tone: stats.codebaseIndexEnabled ? 'ok' : 'warn',
-                },
-              ],
-            },
-          }}
-          act={exploreAct}
-          actAnchor="explore:act"
-          actEvidence={
-            exploreAct
-              ? { kind: 'rule-trace', why: exploreAct.reason ?? exploreAct.title, threshold: stats.topPriority ?? undefined }
-              : undefined
-          }
-          verify={{
-            label: stats.lastIndexedAt ? 'Last indexed' : 'Awaiting first index',
-            detail: stats.lastIndexedAt ?? stats.lastIndexAttemptAt ?? '—',
-            to: '/explore?tab=index',
-            secondaryTo: '/connect',
-            secondaryLabel: 'Connect repo',
-            anchor: 'explore:verify',
-            evidence: stats.lastIndexedAt
-              ? {
-                  kind: 'last-event',
-                  at: stats.lastIndexedAt,
-                  by: 'codebase indexer',
-                  payloadSummary: `${stats.indexedFiles} files`,
-                  status: stats.topPriority === 'error' ? 'warn' : 'ok',
-                }
-              : undefined,
-          }}
-        />
-      ) : null}
 
       <PagePosture
         slots={[
@@ -1017,7 +893,7 @@ export function ExplorePage() {
         </div>
       )}
 
-      {!ux.hideExploreSnapshot && (
+      {!ux.hideExploreSnapshot && activeTab === 'overview' && (
       <Section
         title={copy?.sections?.snapshot ?? (isWorkbenchTab ? 'At a glance' : 'EXPLORE SNAPSHOT')}
         freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
@@ -1065,27 +941,6 @@ export function ExplorePage() {
         <>
           {!ux.hideOverviewChrome && (
           <>
-          {stats.topPriorityTo && stats.topPriority !== 'ready' ? (
-            <Card
-              className={`p-4 ${
-                stats.topPriority === 'error'
-                  ? 'border-danger/40 bg-surface-raised'
-                  : stats.topPriority === 'empty' || stats.topPriority === 'stale'
-                    ? 'border-warn/40 bg-surface-raised'
-                    : 'border-brand/40 bg-surface-raised'
-              }`}
-            >
-              <p className="text-2xs font-semibold uppercase tracking-wider text-fg-muted">Top priority</p>
-              <p className="mt-1 text-sm font-medium text-fg">{stats.topPriorityLabel}</p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Btn to={stats.topPriorityTo} size="sm" variant="primary">Take action →</Btn>
-                <Btn size="sm" variant="ghost" onClick={() => setActiveTab('index')}>
-                  Index debug
-                </Btn>
-              </div>
-            </Card>
-          ) : null}
-
           {stats.topPriority === 'ready' && stats.indexedFiles > 0 && (
             <Card className="p-4 flex flex-wrap items-center justify-between gap-3">
               <div>

@@ -32,15 +32,17 @@ import {
   voiceStatusTone,
   type VoiceSession,
 } from '../lib/voiceIntake'
-import { Badge, Btn, Card, ErrorAlert, FreshnessPill, Section } from '../components/ui'
+import { Badge, Btn, Card, DisclosurePanel, ErrorAlert, FreshnessPill, Section } from '../components/ui'
 import { ContainedBlock, SignalChip } from '../components/report-detail/ReportSurface'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
+import { StatusBannerShell } from '../components/StatusBannerShell'
 import { NextStep } from '../components/NextStep'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
 import { IconMic } from '../components/icons'
 import { VoiceRecorderCard, type SubmitStage } from '../components/voice/VoiceRecorderCard'
 import { VoiceSessionsList } from '../components/voice/VoiceSessionsList'
+import { fixesForReportPath } from '../lib/fixDeepLink'
 import { PushNotifyCard } from '../components/voice/PushNotifyCard'
 
 const HELP = {
@@ -53,7 +55,7 @@ const HELP = {
     'Share a voice memo from Google Recorder straight into the console (Android)',
   ],
   howToUse:
-    'Tap to talk (max 2 minutes), or upload a clip. Read the transcript, then Confirm or Cancel. Tap "Notify this device" once so the PR link comes back as a push. Turn the feature on under Settings → Voice intake first.',
+    'Turn the feature on under Settings → Voice intake first. Tap to talk (max 2 minutes), or upload a clip. Read the transcript, then Confirm or Cancel. Open Notifications and tap "Notify this device" once so the PR link comes back as a push.',
 }
 
 interface VoiceProjectSettings {
@@ -98,7 +100,7 @@ export function VoicePage() {
 
   usePublishPageContext({
     route: '/voice',
-    title: 'Voice',
+    title: 'Voice reports',
     summary: awaitingCount > 0 ? `${awaitingCount} awaiting confirmation` : undefined,
     filters: { project_id: activeProjectId ?? undefined },
     criticalCount: awaitingCount,
@@ -191,27 +193,29 @@ export function VoicePage() {
   if (!activeProjectId) {
     return (
       <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-voice">
-        <PageHeaderBar title="Voice" helpTitle={HELP.title} helpWhatIsIt={HELP.whatIsIt} helpUseCases={HELP.useCases} helpHowToUse={HELP.howToUse} />
+        <PageHeaderBar title="Voice reports" helpTitle={HELP.title} helpWhatIsIt={HELP.whatIsIt} helpUseCases={HELP.useCases} helpHowToUse={HELP.howToUse} />
         <NextStep variant="inline" requires={['project']} emptyTitle="Select a project" emptyDescription="Voice requests are scoped to the active project in the header." />
       </div>
     )
   }
 
   const statusBanner = settingsKnown && !intakeEnabled ? (
-    <ContainedBlock tone="warn" label="Voice intake is off">
-      <div className="flex flex-wrap items-center gap-2">
-        <span>Recordings will be refused until the project turns it on.</span>
-        <Link to="/settings?tab=voice" className="text-xs font-medium text-brand underline-offset-2 hover:underline">
-          Open Settings → Voice intake
-        </Link>
-      </div>
-    </ContainedBlock>
+    <StatusBannerShell
+      tone="warn"
+      title="Voice intake is off"
+      subtitle="Recordings are refused until the project turns it on."
+      action={
+        <Btn variant="primary" size="sm" to="/settings?tab=voice">
+          Turn on voice intake
+        </Btn>
+      }
+    />
   ) : null
 
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-voice">
       <PageHeaderBar
-        title="Voice"
+        title="Voice reports"
         icon={<IconMic className="h-4 w-4" />}
         projectScope={projectName ?? undefined}
         description="Talk a bug or a fix request; confirm the transcript; the draft PR comes back to this phone."
@@ -230,7 +234,7 @@ export function VoicePage() {
       <PagePosture slots={[{ id: 'intake-off', priority: POSTURE_PRIORITY.status, show: statusBanner != null, children: statusBanner }]} />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-5 items-start">
-        <div className="space-y-4 min-w-0 lg:col-span-3">
+        <div className={`space-y-4 min-w-0 ${intakeEnabled ? 'lg:col-span-3' : 'lg:col-span-5'}`}>
           <VoiceRecorderCard
             onFile={(file) => void submitFile(file)}
             onTranscript={(text) => void submitText(text)}
@@ -241,9 +245,14 @@ export function VoicePage() {
           />
           {current && <VoiceSessionResult session={current} pending={pendingId === current.id} onConfirm={() => void confirm(current)} onCancel={() => void cancel(current)} />}
         </div>
-        <div className="min-w-0 lg:col-span-2">
-          <PushNotifyCard />
-        </div>
+        {/* Pushes only matter once requests can be sent. */}
+        {intakeEnabled && (
+          <div className="min-w-0 lg:col-span-2">
+            <DisclosurePanel title="Notifications">
+              <PushNotifyCard compact />
+            </DisclosurePanel>
+          </div>
+        )}
       </div>
 
       {loading ? (
@@ -251,7 +260,7 @@ export function VoicePage() {
       ) : error ? (
         <ErrorAlert message={`Failed to load voice requests: ${error}`} onRetry={reload} />
       ) : (
-        <VoiceSessionsList sessions={sessions} onConfirm={(s) => void confirm(s)} onCancel={(s) => void cancel(s)} pendingId={pendingId} onRefresh={reload} isValidating={isValidating} />
+        <VoiceSessionsList sessions={sessions} onConfirm={(s) => void confirm(s)} onCancel={(s) => void cancel(s)} pendingId={pendingId} intakeEnabled={!settingsKnown || intakeEnabled} />
       )}
     </div>
   )
@@ -295,6 +304,11 @@ function VoiceSessionResult({ session, pending, onConfirm, onCancel }: { session
         {session.report_id && (
           <Link to={`/reports/${session.report_id}`} className="text-xs font-medium text-brand underline-offset-2 hover:underline">
             Open the report
+          </Link>
+        )}
+        {session.report_id && session.dispatch_id && (
+          <Link to={fixesForReportPath(session.report_id)} className="text-xs font-medium text-brand underline-offset-2 hover:underline">
+            See the fix attempt
           </Link>
         )}
         {session.pr_url && (

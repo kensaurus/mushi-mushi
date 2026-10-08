@@ -10,7 +10,6 @@
 import { useCallback, useMemo, useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { usePageData } from '../lib/usePageData'
-import type { ChartEvent } from '../lib/apiSchemas'
 import { useRealtimeReload } from '../lib/realtime'
 import { usePublishPageContext } from '../lib/pageContext'
 import { usePublishPageHeroStats } from '../lib/heroSnapshots'
@@ -35,7 +34,6 @@ import { PdcaCockpit } from '../components/dashboard/PdcaCockpit'
 import { PdcaFlow } from '../components/pdca-flow/PdcaFlow'
 import { LivePdcaPipeline } from '../components/dashboard/LivePdcaPipeline'
 import { KpiRow } from '../components/dashboard/KpiRow'
-import { ChartsRow } from '../components/dashboard/ChartsRow'
 import { TriageAndFixRow } from '../components/dashboard/TriageAndFixRow'
 import { TeamActivityTile } from '../components/dashboard/TeamActivityTile'
 import { InsightsRow } from '../components/dashboard/InsightsRow'
@@ -50,6 +48,7 @@ import { useDashboardUx } from '../lib/dashboardModeUx'
 import { deriveDashboardInsight, shouldShowPdcaFlow } from '../lib/dashboardExplainer'
 import { PLATFORM_DEFS } from '../components/integrations/types'
 import { semanticBannerTone } from '../lib/tokens'
+import { shouldShowPipelineRibbon } from '../lib/pipelineRibbonVisibility'
 import { IconDashboard } from '../components/icons'
 
 function inferRunningStage(data: DashboardData): PdcaStageId | null {
@@ -72,13 +71,6 @@ function integrationLabel(kind: string): string {
 
 export function DashboardPage() {
   const { data, loading, error, isValidating, lastFetchedAt, reload } = usePageData<DashboardData>('/v1/admin/dashboard')
-  // Wave T.5.8b: chart annotations. Fetched lazily alongside the main
-  // dashboard payload — we swallow errors because annotations are a
-  // garnish, not critical data.
-  const chartEventsQuery = usePageData<{ events: ChartEvent[] }>(
-    '/v1/admin/chart-events?kinds=deploy,cron,byok',
-  )
-  const chartEvents = chartEventsQuery.data?.events ?? []
   const activeProjectId = useActiveProjectId()
   const setup = useSetupStatus(activeProjectId)
   const toast = useToast()
@@ -131,12 +123,14 @@ export function DashboardPage() {
     const failing = (data?.integrations ?? []).filter(
       (i) => i.lastStatus != null && i.lastStatus !== 'ok',
     )
+    const degraded = failing.filter((i) => i.lastStatus === 'amber' || i.lastStatus === 'degraded')
     return {
       openBacklog: dashCounts.openBacklog,
       fixesInProgress: dashFix.inProgress,
       fixesFailed: dashFix.failed,
       openPrs: dashFix.openPrs ?? dashCounts.openPrs,
       integrationIssues: failing.length,
+      degradedIntegrations: degraded.length,
       failingIntegrations: failing.map((i) => ({ kind: i.kind, label: integrationLabel(i.kind) })),
     }
   }, [dashCounts, dashFix, data?.integrations])
@@ -150,7 +144,7 @@ export function DashboardPage() {
         : undefined
   usePublishPageContext({
     route: '/dashboard',
-    title: dashProjectName ? `Dashboard · ${dashProjectName}` : 'Dashboard',
+    title: dashProjectName ? `Home · ${dashProjectName}` : 'Home',
     summary: dashSummary,
     // `openBacklog` is the queue of reports the user still needs to
     // action — treat every untriaged report as deserving the favicon
@@ -211,6 +205,7 @@ export function DashboardPage() {
           fixesInProgress: dashboardHeroStats.fixesInProgress,
           fixesFailed: dashboardHeroStats.fixesFailed,
           integrationIssues: dashboardHeroStats.integrationIssues,
+          degradedIntegrations: dashboardHeroStats.degradedIntegrations,
           failingIntegrations: dashboardHeroStats.failingIntegrations,
           reports14d: counts.reports14d ?? 0,
         })
@@ -218,9 +213,18 @@ export function DashboardPage() {
 
   // The one-line insight banner sits above the canvas and must not hide it
   // (QA 169: the explainer always returns a verdict, so the canvas never rendered).
-  const showPdcaFlow = shouldShowPdcaFlow({ isAdvanced, renderFullDashboard, hasPdcaStages, showFirstReportHero })
+  // The global pipeline strip (Advanced only) already draws the four stage
+  // cards, so neither the canvas nor the stage hero repeats them under it.
+  const pipelineStripVisible = isAdvanced && shouldShowPipelineRibbon('/dashboard')
+  const showPdcaFlow = shouldShowPdcaFlow({
+    isAdvanced,
+    renderFullDashboard,
+    hasPdcaStages,
+    showFirstReportHero,
+    pipelineStripVisible,
+  })
   const showHeroIntro =
-    !hideOverviewChrome && !showFirstReportHero && hasPdcaStages && !showPdcaFlow
+    !hideOverviewChrome && !showFirstReportHero && hasPdcaStages && !showPdcaFlow && !pipelineStripVisible
 
   const pdcaFlowBlock = showPdcaFlow ? (
     <>
@@ -253,7 +257,7 @@ export function DashboardPage() {
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-dashboard">
       <Confetti triggerKey={confettiKey} />
       <PageHeaderBar
-        title={copy?.title ?? 'Dashboard'}
+        title={copy?.title ?? 'Home'}
         icon={<IconDashboard />}
         description={copy?.description ?? (projectName ? `Your loop on ${projectName}` : undefined)}
         helpTitle={copy?.help?.title ?? 'About the Dashboard'}
@@ -413,14 +417,7 @@ export function DashboardPage() {
 
           <QuotaBanner />
 
-          <ChartsRow
-            reportsByDay={reportsByDay}
-            llmByDay={llmByDay}
-            chartEvents={chartEvents}
-            sampled={data.chartsSampled === true}
-          />
-
-          <TriageAndFixRow triageQueue={data.triageQueue ?? []} fixSummary={fixSummary} />
+          <TriageAndFixRow triageQueue={data.triageQueue ?? []} />
 
           <TeamActivityTile projectId={activeProjectId} />
 

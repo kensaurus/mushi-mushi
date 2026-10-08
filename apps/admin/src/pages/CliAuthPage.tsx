@@ -34,7 +34,7 @@ import { describeActionError } from '../lib/actionError'
 import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { CliAuthReadout } from '../components/cli-auth/CliAuthReadout'
-import { Btn, ErrorAlert } from '../components/ui'
+import { Btn, Callout, ErrorAlert } from '../components/ui'
 
 type ApproveState = 'idle' | 'approving' | 'waiting' | 'connected' | 'denied' | 'error'
 
@@ -82,11 +82,16 @@ function ArrowLeftIcon() {
   )
 }
 
-const STEPS = [
-  { n: '1', text: 'Verify the code below matches what your terminal printed' },
-  { n: '2', text: 'Click "Approve CLI connection" below' },
-  { n: '3', text: 'Switch back to your terminal — setup continues automatically' },
-]
+/** With a code in the URL the user only checks it; without one they type it. */
+function cliAuthSteps(hasCodeInUrl: boolean): string[] {
+  return [
+    hasCodeInUrl
+      ? 'Check that the code below matches what your terminal printed'
+      : 'Type the code your terminal shows',
+    'Click "Approve CLI connection"',
+    'Switch back to your terminal. Setup continues automatically',
+  ]
+}
 
 export function CliAuthPage() {
   const [params] = useSearchParams()
@@ -276,29 +281,27 @@ export function CliAuthPage() {
           <TerminalIcon />
           <h1 className="text-xl font-semibold text-fg">Connect your CLI</h1>
           <p className="text-sm text-fg-muted">
-            Your terminal is waiting. Follow the steps below — no typing required.
+            {codeParam
+              ? 'Your terminal is waiting. Check the code and approve. No typing needed.'
+              : 'Your terminal is waiting. Type the code it shows, then approve.'}
           </p>
         </div>
 
-        {/* 3-step guide */}
-        <ol className="mb-6 space-y-2">
-          {STEPS.map((step) => (
-            <li key={step.n} className="flex items-start gap-3 rounded-lg border border-edge-subtle bg-surface-raised px-4 py-3">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand text-xs font-bold text-white">
-                {step.n}
-              </span>
-              <span className="text-sm text-fg">{step.text}</span>
-            </li>
+        <ol className="mb-6 list-decimal space-y-1 pl-5 text-sm text-fg">
+          {cliAuthSteps(Boolean(codeParam)).map((step) => (
+            <li key={step}>{step}</li>
           ))}
         </ol>
 
-        {/* User code display */}
-        <div className="mb-4 rounded-xl border border-edge-subtle bg-surface-overlay px-6 py-5">
+        {/* User code display: only when the CLI put the code in the URL */}
+        {codeParam && (
+        <>
+        <div className="mb-4 rounded-xl border border-edge-subtle bg-surface-raised px-6 py-5">
           <p className="mb-1 text-xs font-medium uppercase tracking-wider text-fg-muted">
             Verification code — confirm it matches your terminal
           </p>
           <p className="font-mono text-3xl font-bold tracking-[0.15em] text-fg select-all">
-            {userCode || <span className="text-fg-muted opacity-40">XXXX-XXXX</span>}
+            {userCode}
           </p>
           <p className="mt-2 text-2xs text-fg-muted">
             Expires in 10 minutes. If it doesn't match, close this tab and run{' '}
@@ -306,20 +309,20 @@ export function CliAuthPage() {
           </p>
         </div>
 
-        {/* Anti-paste warning */}
-        <div className="mb-4 flex items-start gap-2 rounded-lg border border-warn/40 bg-warn-muted/50 px-4 py-3">
-          <span className="mt-0.5 text-warning-foreground" aria-hidden="true">⚠</span>
+        <Callout tone="warn" className="mb-4">
           <p className="text-sm text-fg-muted">
             <strong className="text-fg">Do not paste or type this code into your terminal.</strong>{' '}
             It belongs here in the browser. The terminal waits automatically.
           </p>
-        </div>
+        </Callout>
+        </>
+        )}
 
         {/* Manual code input (if no code in URL) */}
         {!codeParam && (
           <div className="mb-4">
             <label htmlFor="cli-code" className="mb-1 block text-xs font-medium text-fg-muted">
-              Enter the code shown in your terminal
+              Type the code your terminal shows
             </label>
             <input
               id="cli-code"

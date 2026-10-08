@@ -15,6 +15,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { RECIPE_ELEMENT_KEYS, type RecipeElementSummary } from '../../lib/recipeTypes'
 import { RecipeElementList } from './RecipeElementList'
+import { RecipeElementCard } from './RecipeElementCard'
 import { orderedRecipeElements } from './recipeState'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -120,6 +121,19 @@ describe('RecipeElementList', () => {
     const link = [...container.querySelectorAll('a')].find((a) => a.textContent === 'Design system')
     expect(link?.getAttribute('href')).toBe('/design')
     expect(link?.closest('button')).toBeNull()
+  })
+
+  it('a canvas card is trimmed to fit its row: no "How it is checked", no facts, capped height', () => {
+    const element = summary('design', 'drift', { facts: { tokens: 12 }, links: [{ label: 'Design system', to: '/design' }] })
+    act(() => {
+      root.render(createElement(MemoryRouter, null, createElement(RecipeElementCard, { element, layout: 'canvas' })))
+    })
+    const card = container.querySelector<HTMLButtonElement>('button[data-element="design"]')!
+    expect(card.textContent).toContain('design reason')
+    expect(card.textContent).not.toContain('How it is checked')
+    expect(card.textContent).not.toContain('12')
+    expect(card.parentElement?.className).toContain('max-h-65')
+    expect([...container.querySelectorAll('a')].some((a) => a.getAttribute('href') === '/design')).toBe(true)
   })
 
   it('no rendered card ever pairs "Not checked yet" with a "Checked ..." time', () => {

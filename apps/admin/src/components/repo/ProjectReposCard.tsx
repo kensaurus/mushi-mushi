@@ -2,7 +2,8 @@
  * FILE: apps/admin/src/components/repo/ProjectReposCard.tsx
  * PURPOSE: Multi-repo management card for the Repo page.
  *          Lists all project_repos rows, lets users add/edit/remove repos,
- *          and displays repo role + path_globs + GitHub App status.
+ *          and displays repo role, default branch, GitHub App and index
+ *          status, path_globs, and the Open / Install links per repo.
  *
  *          Data: GET /v1/admin/repo/repos?project_id=...
  *          Mutations: POST / PUT / DELETE /v1/admin/repo/repos
@@ -12,6 +13,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { apiFetch } from '../../lib/supabase'
 import { Badge, Btn, Card, CodeValue, ErrorAlert, Tooltip } from '../ui'
 import { ContainedBlock, SignalChip, ActionPill, ActionPillRow } from '../report-detail/ReportSurface'
+import { githubAppInstallUrl } from '../integrations/GitHubAppInstallButton'
 import { IconGit, IconPencil, IconTrash } from '../icons'
 import { REPO_ROLES, repoRoleMeta, type RepoRole } from '../../lib/repoRoles'
 import { RepoIndexStatus } from './RepoIndexStatus'
@@ -168,9 +170,12 @@ export function ProjectReposCard({ projectId }: Props) {
           <IconGit />
           Linked repos ({repos.length})
         </h3>
-        {!showForm && (
-          <Btn size="sm" variant="ghost" onClick={openAdd}>+ Add repo</Btn>
-        )}
+        <ActionPillRow className="shrink-0">
+          <ActionPill to="/integrations/config" tone="neutral">Manage</ActionPill>
+          {!showForm && (
+            <Btn size="sm" variant="ghost" onClick={openAdd}>+ Add repo</Btn>
+          )}
+        </ActionPillRow>
       </div>
 
       {repos.length === 0 && !showForm && (
@@ -193,11 +198,6 @@ export function ProjectReposCard({ projectId }: Props) {
                 </div>
               </div>
               <div className="flex items-center gap-1.5 shrink-0">
-                {repo.github_app_installation_id ? (
-                  <SignalChip tone="ok">App installed</SignalChip>
-                ) : (
-                  <SignalChip tone="warn">No GitHub App</SignalChip>
-                )}
                 {editingId !== repo.id && (
                   <>
                     <Tooltip content="Edit repo">
@@ -226,10 +226,27 @@ export function ProjectReposCard({ projectId }: Props) {
                 )}
               </div>
             </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {repo.default_branch && <SignalChip tone="neutral">default: {repo.default_branch}</SignalChip>}
+              {repo.github_app_installation_id ? (
+                <SignalChip tone="ok">GitHub App installed</SignalChip>
+              ) : (
+                <SignalChip tone="warn">No GitHub App installation</SignalChip>
+              )}
+              <RepoIndexStatus repo={repo} variant="chip" />
+              <ActionPillRow className="ml-auto">
+                {/* Only when the App slug is configured: a hard-coded slug 404s on GitHub. */}
+                {!repo.github_app_installation_id && githubAppInstallUrl(projectId) && (
+                  <ActionPill href={githubAppInstallUrl(projectId)!} tone="brand">
+                    Install Mushi on GitHub ↗
+                  </ActionPill>
+                )}
+                <ActionPill href={repo.repo_url} tone="neutral">Open on GitHub ↗</ActionPill>
+              </ActionPillRow>
+            </div>
             {repo.path_globs && repo.path_globs.length > 0 && (
               <p className="text-2xs text-fg-faint font-mono">globs: {repo.path_globs.join(', ')}</p>
             )}
-            <RepoIndexStatus repo={repo} variant="line" />
 
             {editingId === repo.id && (
               <RepoForm

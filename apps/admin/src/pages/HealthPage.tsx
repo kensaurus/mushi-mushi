@@ -26,7 +26,6 @@ import { Card,
   FilterSelect,
   RelativeTime,
   Pct,
-  FreshnessPill,
   SegmentedControl, } from '../components/ui'
 import { HealthStatusBanner, isHealthStatusBannerCritical } from '../components/health/HealthStatusBanner'
 import { HealthSnapshotStrip } from '../components/health/HealthSnapshotStrip'
@@ -464,19 +463,6 @@ function HealthPageContent() {
       : []),
   ]
 
-  const bannerSeverity: 'ok' | 'warn' | 'danger' | 'brand' | 'info' | 'neutral' =
-    !stats.hasAnyProject
-      ? 'neutral'
-      : stats.topPriority === 'llm_errors' || stats.topPriority === 'cron_error'
-        ? 'danger'
-        : stats.topPriority === 'llm_fallbacks' || stats.topPriority === 'cron_stale' || stats.topPriority === 'cron_warn'
-          ? 'warn'
-          : stats.topPriority === 'idle'
-            ? 'brand'
-            : stats.topPriority === 'healthy'
-              ? 'ok'
-              : 'info'
-
   const recommendedAction = (() => {
     const failingCron = KNOWN_JOBS.filter((j) => cron?.byJob[j]?.lastStatus === 'error')
     if (llm.errorRate > 0.05) {
@@ -503,8 +489,25 @@ function HealthPageContent() {
       return (
         <RecommendedAction
           tone="urgent"
-          title={`${failingCron.length} cron ${failingCron.length === 1 ? 'job is' : 'jobs are'} failing`}
+          title={`${failingCron.length} scheduled ${failingCron.length === 1 ? 'job is' : 'jobs are'} failing`}
           description={`Last ${failingCron.length === 1 ? 'run of' : 'runs of'} ${failingCron.join(', ')} ended in error. Trigger manually to confirm it's reproducible, then open the cron logs.`}
+          cta={{ label: 'Open Scheduled jobs', onClick: () => setActiveTab('cron') }}
+        />
+      )
+    }
+    // An overdue or late job is a problem too: never "All systems nominal" beside it.
+    const overdueCron = KNOWN_JOBS.filter((j) => {
+      const s = cron?.byJob[j]?.staleness
+      return s === 'stale' || s === 'warn'
+    })
+    const lateCount = Math.max(stats.cronStaleCount + stats.cronWarnCount, overdueCron.length)
+    if (lateCount > 0) {
+      return (
+        <RecommendedAction
+          tone="urgent"
+          title={`${lateCount} scheduled ${lateCount === 1 ? 'job is' : 'jobs are'} overdue`}
+          description={`${overdueCron.length > 0 ? overdueCron.join(', ') : 'A job'} missed ${lateCount === 1 ? 'its' : 'their'} expected schedule. Open Scheduled jobs to see when each last ran, then run it by hand.`}
+          cta={{ label: 'Open Scheduled jobs', onClick: () => setActiveTab('cron') }}
         />
       )
     }
@@ -530,11 +533,11 @@ function HealthPageContent() {
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-health">
       <PageHeaderBar
-        title={copy?.title ?? 'System Health'}
+        title={copy?.title ?? 'App health'}
         projectScope={stats.projectName ?? projectName ?? undefined}
         withPageHero={!ux.hideOverviewChrome}
 
-        helpTitle={copy?.help?.title ?? 'About System Health'}
+        helpTitle={copy?.help?.title ?? 'About App health'}
         helpWhatIsIt={copy?.help?.whatIsIt ?? 'Live operational dashboard showing every LLM call routed by Mushi Mushi (Anthropic primary, OpenAI fallback) and every scheduled job (judge, intelligence, retention). Each event is written to a telemetry table and streamed here via Supabase Realtime.'}
         helpUseCases={copy?.help?.useCases ?? [
           'Catch when Anthropic rate-limits cause a fallback storm',
@@ -543,33 +546,6 @@ function HealthPageContent() {
         ]}
         helpHowToUse={copy?.help?.howToUse ?? "No action needed for healthy state. If fallback rate spikes, check Anthropic status. If a cron job hasn't run in its expected window, trigger it manually with the buttons below. Click any LLM call to open its Langfuse trace."}
       >
-        <Badge
-          className={
-            bannerSeverity === 'ok'
-              ? CHIP_TONE.okSubtle
-              : bannerSeverity === 'danger'
-                ? CHIP_TONE.dangerSubtle
-                : bannerSeverity === 'warn'
-                  ? CHIP_TONE.warnSubtle
-                  : bannerSeverity === 'brand'
-                    ? 'bg-brand/12 text-brand border border-brand/28'
-                    : 'bg-surface-overlay text-fg-muted'
-          }
-        >
-          {!stats.hasAnyProject
-            ? 'NO PROJECT'
-            : stats.redCount > 0
-              ? `${stats.redCount} RED`
-              : stats.amberCount > 0
-                ? `${stats.amberCount} WARN`
-                : stats.totalCalls === 0
-                  ? 'IDLE'
-                  : 'OK'}
-        </Badge>
-        <FreshnessPill
-          at={statsFetchedAt ?? llmQuery.lastFetchedAt ?? cronQuery.lastFetchedAt}
-          isValidating={statsValidating || llmQuery.isValidating || cronQuery.isValidating}
-        />
         <SelectField
           label="Window"
           value={window}
@@ -654,7 +630,7 @@ function HealthPageContent() {
         <>
           <PageHero
             scope="health"
-            title={copy?.title ?? 'System Health'}
+            title={copy?.title ?? 'App health'}
             kicker="Pipeline vitals"
             decide={{
               label: stats.redCount > 0

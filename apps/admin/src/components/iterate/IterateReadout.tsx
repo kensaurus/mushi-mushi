@@ -14,6 +14,7 @@
  */
 
 import { DetailRows, type DetailRowItem } from '../ui/fields'
+import { RelativeTime } from '../ui'
 import { EndpointCodeRow, ReadoutSection, ReadoutPanel } from '../readout'
 import { RESOLVED_EXTERNAL_API_URL } from '../../lib/env'
 import type { IterateStats } from './IterateStatsTypes'
@@ -53,7 +54,7 @@ export function IterateReadout({ stats, fetchedAt, isValidating }: Props) {
     },
     {
       label: 'Last run',
-      value: stats.lastRunAt ?? 'Never',
+      value: stats.lastRunAt ? <RelativeTime value={stats.lastRunAt} /> : 'Never',
       tone: stats.lastRunAt ? 'ok' : 'muted',
     },
     {

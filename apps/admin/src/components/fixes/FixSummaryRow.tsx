@@ -19,8 +19,8 @@ function pctDelta(values: number[], opts: { invert?: boolean } = {}): KpiDelta |
   const half = Math.floor(values.length / 2);
   const last = values.slice(-half).reduce((a, n) => a + n, 0);
   const prev = values.slice(0, values.length - half).reduce((a, n) => a + n, 0);
-  if (last === 0 && prev === 0) return null;
-  if (prev === 0) return { value: 'new', direction: 'up', tone: opts.invert ? 'warn' : 'ok' };
+  // Under 5 in the earlier half, a percentage is noise ("↑1500%" on 1 → 16).
+  if (prev < 5) return null;
   const pct = Math.round(((last - prev) / prev) * 100);
   if (pct === 0) return { value: '0%', direction: 'flat', tone: 'muted' };
   return {
@@ -103,8 +103,8 @@ export function FixSummaryRow({ summary, successRate }: Props) {
         label="PRs open"
         value={summary.prsOpen}
         accent={(summary.prsOpen > 0 ? 'brand' : 'muted') as Tone}
-        sublabel={summary.prsOpen > 0 ? 'awaiting review or merge' : 'no open PRs'}
-        meaning="GitHub PRs Mushi has opened that haven't been merged or closed yet. Each one is a closable PDCA loop waiting for a human reviewer."
+        sublabel={summary.prsOpen > 0 ? 'fix attempts with an open PR' : 'no open PRs'}
+        meaning="Fix attempts whose GitHub PR is still open, whatever CI says: the same count as Pull requests. A red-CI PR also counts as auto-fix stopped."
       />
       {showSpec && (
         <KpiTile
