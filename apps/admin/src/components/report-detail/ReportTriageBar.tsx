@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Card } from '../../components/ui'
 import { SelectField, Btn } from '../ui'
-import { STATUS_LABELS, SEVERITY_LABELS } from '../../lib/tokens'
+import { STATUS_LABELS, SEVERITY_LABELS, CATEGORY_LABELS } from '../../lib/tokens'
 import { IconArrowRight, IconExternalLink } from '../icons'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
@@ -9,7 +9,7 @@ import { usePageData } from '../../lib/usePageData'
 import type { DispatchState } from '../../lib/dispatchFix'
 import type { ReportDetail } from './types'
 import { CHIP_TONE } from '../../lib/chipTone'
-import { shortRepoName } from '../../lib/dispatchConfirm'
+import { featureRequestDispatchBlock, shortRepoName } from '../../lib/dispatchConfirm'
 import type { DispatchTargetRepo } from '../../lib/useDispatchTargetRepo'
 
 // One option per label: 'resolved' is the legacy spelling of 'fixed' (both
@@ -23,6 +23,8 @@ function selectableStatus(status: string): string {
   return STATUS_OPTS.find((s) => STATUS_LABELS[s] === label) ?? status
 }
 const SEV_OPTS = ['critical', 'high', 'medium', 'low']
+/** The classifier's categories; setting one here is a person's triage decision. */
+const CATEGORY_OPTS = ['bug', 'slow', 'visual', 'confusing', 'other']
 
 /**
  * Why a report is closed. The reporter sees matching copy ("We couldn't
@@ -213,6 +215,29 @@ export function ReportTriageBar({
         <option value="">Unset</option>
         {SEV_OPTS.map((s) => <option key={s} value={s}>{SEVERITY_LABELS[s] ?? s}</option>)}
       </SelectField>
+
+      <SelectField
+        label="Category"
+        value={report.category ?? 'other'}
+        onChange={(e) => onTriage({ category: e.currentTarget.value, category_confirmed_at: new Date().toISOString() })}
+        disabled={saving}
+        className="!w-auto"
+      >
+        {CATEGORY_OPTS.map((c) => <option key={c} value={c}>{CATEGORY_LABELS[c] ?? c}</option>)}
+      </SelectField>
+      {/* A select cannot "confirm" the value it already shows, so a feature
+          request the classifier already called a defect gets a button. */}
+      {featureRequestDispatchBlock(report) && report.category && report.category !== 'other' && (
+        <Btn
+          size="sm"
+          variant="ghost"
+          onClick={() => void onTriage({ category: report.category, category_confirmed_at: new Date().toISOString() })}
+          disabled={saving}
+          title="The reporter filed this as a feature request. Confirming the category sends it to auto-fix like any bug."
+        >
+          It&apos;s a bug: confirm {CATEGORY_LABELS[report.category] ?? report.category}
+        </Btn>
+      )}
 
       {/* mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas) */}
       <div className="flex items-center gap-1.5 text-2xs h-[26px]" aria-live="polite">

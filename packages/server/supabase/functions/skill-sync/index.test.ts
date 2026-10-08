@@ -1,6 +1,7 @@
 /**
  * FILE: packages/server/supabase/functions/skill-sync/index.test.ts
- * PURPOSE: Deno tests for the pure parsing functions in skill-sync/index.ts.
+ * PURPOSE: Deno tests for the pure parsing functions skill-sync uses
+ *          (_shared/skill-frontmatter.ts), imported, not copied.
  *
  * Run with:
  *   cd packages/server && deno test supabase/functions/skill-sync/index.test.ts --allow-none
@@ -16,72 +17,7 @@
 
 import { scanForSecrets } from '../_shared/secret-scan.ts'
 
-// ── Inline the pure helpers so tests run without Deno runtime deps ────────────
-// IMPORTANT: these copies MUST stay in sync with index.ts by hand whenever
-// the production implementations change. The Copilot review (Jun 2026) flagged
-// that the original copy did not support YAML block scalars (> >- | |-) which
-// are supported by the production parseFrontmatter. This copy now matches.
-
-function parseFrontmatter(raw: string): { frontmatter: Record<string, string>; body: string } | null {
-  const trimmed = raw.trimStart()
-  if (!trimmed.startsWith('---')) return null
-
-  const endIdx = trimmed.indexOf('\n---', 3)
-  if (endIdx === -1) return null
-
-  const fmBlock = trimmed.slice(4, endIdx)
-  const body = trimmed.slice(endIdx + 4).trimStart()
-
-  const frontmatter: Record<string, string> = {}
-  const lines = fmBlock.split('\n')
-  let i = 0
-  while (i < lines.length) {
-    const line = lines[i]
-    const colonIdx = line.indexOf(':')
-    if (colonIdx === -1) { i++; continue }
-
-    const key = line.slice(0, colonIdx).trim()
-    const rawVal = line.slice(colonIdx + 1).trim()
-
-    // Handle YAML block scalars: > >- | |- (fold/literal multi-line values)
-    if (rawVal === '>' || rawVal === '>-' || rawVal === '|' || rawVal === '|-') {
-      const parts: string[] = []
-      i++
-      while (i < lines.length && (lines[i].startsWith(' ') || lines[i].startsWith('\t'))) {
-        parts.push(lines[i].trim())
-        i++
-      }
-      if (key) frontmatter[key] = parts.filter((p) => p !== '').join(' ')
-    } else {
-      const val = rawVal.replace(/^["']|["']$/g, '')
-      if (key) frontmatter[key] = val
-      i++
-    }
-  }
-
-  return { frontmatter, body }
-}
-
-function categoryFromSlug(slug: string): string {
-  const dash = slug.indexOf('-')
-  if (dash === -1) return 'other'
-  const prefix = slug.slice(0, dash)
-  const known = ['workflow', 'debug', 'test', 'audit', 'enhance', 'backend',
-                 'design', 'deploy', 'data', 'mobile', 'docs', 'meta', 'mushi',
-                 'protocol', 'iterate']
-  return known.includes(prefix) ? prefix : 'other'
-}
-
-const CHAIN_RE = /(?:skills?|~\/\.cursor\/skills?)\/([a-z][a-z0-9-]{1,63})\/SKILL\.md/g
-
-function parseChainSlugs(body: string): string[] {
-  const slugs: string[] = []
-  for (const m of body.matchAll(CHAIN_RE)) {
-    const slug = m[1]
-    if (slug && !slugs.includes(slug)) slugs.push(slug)
-  }
-  return slugs
-}
+import { categoryFromSlug, parseChainSlugs, parseFrontmatter } from '../_shared/skill-frontmatter.ts'
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 

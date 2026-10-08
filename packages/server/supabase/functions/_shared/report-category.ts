@@ -132,9 +132,10 @@ function storedCategory(value: unknown): string | null {
  * Why a fix must not be dispatched for this report, or null when it may be.
  * A feature request is only eligible once a human re-categorized it: its
  * category is a non-'other' value that differs from what the classifier
- * stored (stage 2's category, else stage 1's). Classifiers can no longer put
- * a feature request in a defect category, so that difference is a human edit.
- * There is no category audit log, so this is the signal the data has.
+ * stored (stage 2's category, else stage 1's), or a person confirmed a
+ * non-'other' category in triage (`category_confirmed_at`). The confirmation
+ * matters when the person agrees with the classifier: without it, confirming
+ * "yes, it is visual" left the report blocked with no way out.
  */
 export function featureRequestDispatchBlock(report: {
   user_category?: unknown
@@ -142,11 +143,13 @@ export function featureRequestDispatchBlock(report: {
   category?: string | null
   stage1_classification?: unknown
   stage2_analysis?: unknown
+  category_confirmed_at?: string | null
 }): string | null {
   if (!isFeatureRequest(report)) return null
+  if (report.category_confirmed_at && typeof report.category === 'string' && report.category !== 'other') return null
   const classifierCategory = storedCategory(report.stage2_analysis) ?? storedCategory(report.stage1_classification)
   const humanRecategorized =
     typeof report.category === 'string' && report.category !== 'other' && report.category !== classifierCategory
   if (humanRecategorized) return null
-  return 'The reporter filed this as a feature request, so it is not sent to auto-fix. Re-categorize it as a bug in triage to dispatch a fix.'
+  return 'The reporter filed this as a feature request, so it is not sent to auto-fix. Set its Category in triage to dispatch a fix.'
 }

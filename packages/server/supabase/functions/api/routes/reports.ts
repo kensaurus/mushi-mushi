@@ -23,7 +23,7 @@ import { inventoryAnchorOf } from './report-agent-context-helpers.ts';
 import { getStorageAdapter } from '../../_shared/storage.ts';
 import { runInBackground } from '../../_shared/background.ts';
 import { loadReportDeployLive, type MergedFixRow } from '../../_shared/report-deploy-live.ts';
-import { featureRequestDispatchBlock } from '../../_shared/report-category.ts';
+import { CLASSIFIER_REPORT_CATEGORIES, featureRequestDispatchBlock } from '../../_shared/report-category.ts';
 import {
   NEW_BUCKET_STATUSES,
   REPORT_LIST_PLATFORMS,
@@ -352,7 +352,7 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
         // quota) and autofix_blocked stamps were invisible in every list
         // view — you had to open each report to learn the pipeline choked
         // (2026-08-16 audit P2-3). ~0.5 KB per affected row.
-        'id, project_id, description, category, severity, summary, title, area_tag, status, created_at, environment, screenshot_url, user_category, confidence, component, report_group_id, last_reporter_reply_at, last_admin_reply_at, admin_seen_at, awaiting_reporter_at, closed_reason, breadcrumbs, tags, sentry_trace_id, sentry_release, sentry_environment, sentry_event_id, sentry_replay_id, end_user_id, reporter_token_hash, session_id, processing_error, user_intent, stage1_category:stage1_classification->>category, stage2_category:stage2_analysis->>category',
+        'id, project_id, description, category, severity, summary, title, area_tag, status, created_at, environment, screenshot_url, user_category, confidence, component, report_group_id, last_reporter_reply_at, last_admin_reply_at, admin_seen_at, awaiting_reporter_at, closed_reason, breadcrumbs, tags, sentry_trace_id, sentry_release, sentry_environment, sentry_event_id, sentry_replay_id, end_user_id, reporter_token_hash, session_id, processing_error, user_intent, stage1_category:stage1_classification->>category, stage2_category:stage2_analysis->>category, metadata_source:custom_metadata->>source, category_confirmed_at',
         { count: 'exact' },
       )
       .in('project_id', projectIds)
@@ -1028,6 +1028,19 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
         );
       }
       updates.severity = sev.value;
+    }
+
+    // A person setting the category in triage is the decision that lets a
+    // reporter's feature request go to auto-fix (report-category.ts).
+    if (updates.category !== undefined) {
+      if (typeof updates.category !== 'string' || !(CLASSIFIER_REPORT_CATEGORIES as readonly string[]).includes(updates.category)) {
+        return c.json(
+          { ok: false, error: { code: 'VALIDATION_ERROR', message: `category must be one of: ${CLASSIFIER_REPORT_CATEGORIES.join(', ')}` } },
+          400,
+        );
+      }
+      updates.category_confirmed_at = new Date().toISOString();
+      updates.category_confirmed_by = userId;
     }
 
     // Plan 018: why a dismissed report was closed (shown to the reporter) and

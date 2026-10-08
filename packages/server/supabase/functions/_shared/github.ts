@@ -86,7 +86,7 @@ export async function mintInstallationToken(installationId: number): Promise<str
  * The GitHub App installation that owns a fix attempt's repository. Attempts
  * rarely carry repo_id, so without the PR-URL match every console merge fell
  * back to the project's stored token, which cannot run the GraphQL
- * markPullRequestAsReady mutation: a draft PR (glot.it #141) answered 409.
+ * markPullRequestReadyForReview mutation: a draft PR (glot.it #141) answered 409.
  */
 export async function installationIdForAttempt(
   db: ReturnType<typeof getServiceClient>,
@@ -385,14 +385,14 @@ export async function markPullRequestReady(
   }
 
   // REST PATCH { draft: false } does not reliably undraft on GitHub; the
-  // supported path is the GraphQL markPullRequestAsReady mutation (same as
+  // supported path is the GraphQL markPullRequestReadyForReview mutation (same as
   // `gh pr ready`).
   const gqlRes = await fetchWithTimeout('https://api.github.com/graphql', {
     method: 'POST',
     headers: { ...githubAuthHeaders(token), 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      query: `mutation MarkPullRequestReady($id: ID!) {
-        markPullRequestAsReady(input: { pullRequestId: $id }) {
+      query: `mutation MarkPullRequestReadyForReview($id: ID!) {
+        markPullRequestReadyForReview(input: { pullRequestId: $id }) {
           pullRequest { isDraft }
         }
       }`,
@@ -400,7 +400,7 @@ export async function markPullRequestReady(
     }),
   })
   const gqlBody = await gqlRes.json().catch(() => ({})) as {
-    data?: { markPullRequestAsReady?: { pullRequest?: { isDraft?: boolean } } }
+    data?: { markPullRequestReadyForReview?: { pullRequest?: { isDraft?: boolean } } }
     errors?: Array<{ message?: string }>
   }
   if (gqlBody.errors?.length) {
@@ -410,7 +410,7 @@ export async function markPullRequestReady(
       message: gqlBody.errors.map((e) => e.message).filter(Boolean).join('; ') || 'GraphQL ready failed',
     }
   }
-  const stillDraft = gqlBody.data?.markPullRequestAsReady?.pullRequest?.isDraft
+  const stillDraft = gqlBody.data?.markPullRequestReadyForReview?.pullRequest?.isDraft
   if (stillDraft === true) {
     return { ok: false, alreadyReady: false, message: 'Pull request is still a draft after ready mutation' }
   }

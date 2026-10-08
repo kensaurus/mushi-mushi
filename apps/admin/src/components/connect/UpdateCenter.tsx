@@ -104,7 +104,9 @@ export function UpdateCenter({ project, preflight }: UpdateCenterProps) {
   const isInFlight = ['queueing', 'queued', 'running', 'awaiting_lockfile'].includes(state.status)
   const githubCheck = preflight.checks.find((c) => c.key === 'github')
   const hasRepoRow = Boolean(preflight.repoUrl)
-  const hasGithubReady = githubCheck?.ready ?? hasRepoRow
+  // Unknown is not "not ready": while the preflight loads, the banner used to
+  // claim GitHub was disconnected on a project with a working App install.
+  const hasGithubReady = githubCheck ? githubCheck.ready : preflight.loading || hasRepoRow
   const githubHint = githubCheck && !githubCheck.ready ? githubCheck.hint : null
   const prLabel = prNumberFrom(state.prUrl) ?? 'Upgrade PR'
   const ci = CI_CHIP[view.ci]
@@ -185,9 +187,11 @@ export function UpdateCenter({ project, preflight }: UpdateCenterProps) {
         <p className="text-xs text-fg">
           Upgrade PR {prLabel} merged
           {view.prTargetVersion ? ` (to ${view.prTargetVersion})` : ''}.{' '}
-          {view.packages[0]?.current === false
-            ? `Your app still reports ${view.packages[0].installed ?? 'an older version'} — ship a new build to roll it out.`
-            : ''}
+          {view.appBehindPr
+            ? `Your app still reports ${view.packages[0]?.installed ?? 'an older version'} — ship a new build to roll it out.`
+            : view.packages[0]?.installed
+              ? `Your app runs ${view.packages[0].installed}.`
+              : ''}
           {view.newerThanPr ? ` A newer release (${view.packages[0]?.latest}) is out since.` : ''}
         </p>
       )}

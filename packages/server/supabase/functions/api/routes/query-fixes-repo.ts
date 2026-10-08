@@ -70,6 +70,7 @@ import {
   REPO_BRANCH_WINDOW,
   classifyRepoBranch,
   countRepoBranches,
+  markSupersededFailures,
   isProjectRepoRole,
 } from '../../_shared/repo-branch-counts.ts';
 
@@ -1232,7 +1233,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       // Same window and rule as /repo/overview (repo-branch-counts.ts), so the
       // snapshot tiles and the header chips cannot disagree (console QA #243).
       db.from('fix_attempts')
-        .select('id, branch, status, pr_url, pr_state, merged_at, check_run_conclusion, created_at')
+        .select('id, report_id, branch, status, pr_url, pr_state, merged_at, check_run_conclusion, created_at')
         .eq('project_id', pid)
         .order('created_at', { ascending: false })
         .limit(REPO_BRANCH_WINDOW),
@@ -1400,7 +1401,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       }
     }
 
-    const branches = (fixes ?? []).map((f) => {
+    const branches = markSupersededFailures(fixes ?? []).map((f) => {
       const r = reportById.get(f.report_id);
       return {
         id: f.id,

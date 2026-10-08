@@ -298,6 +298,68 @@ function recordEmbeddingCall(
   }
 }
 
+/** Token budget per embedding input; text-embedding-3-* rejects inputs over 8,192. */
+const EMBED_TOKEN_BUDGET = 7_800
+
+/**
+ * Cut text to what the embedding model accepts. A character cap was not
+ * enough: 8,000 characters of Thai, Japanese, emoji or base64 can exceed
+ * 8,192 tokens, and one such input failed its whole batch of 96 every sweep
+ * (the-wanting-mind's index stalled at 581 of 743 files). Each character is
+ * costed conservatively — ASCII 0.8 tokens, other BMP characters 2, astral
+ * characters (emoji) 3 — so the result stays under the limit without a
+ * tokenizer.
+ */
+export function capForEmbedding(text: string, budget = EMBED_TOKEN_BUDGET): string {
+  let cost = 0
+  let i = 0
+  while (i < text.length && i < 8000) {
+    const code = text.codePointAt(i) ?? 0
+    const width = code > 0xffff ? 2 : 1
+    cost += charTokenCost(code)
+    if (cost > budget) break
+    i += width
+  }
+  return text.slice(0, i)
+}
+
+function charTokenCost(code: number): number {
+  return code < 0x80 ? 0.8 : code > 0xffff ? 3 : 2
+}
+
+/** Conservative token estimate for one input as sent (after capForEmbedding). */
+export function estimateEmbeddingTokens(text: string): number {
+  let cost = 0
+  for (const ch of capForEmbedding(text)) cost += charTokenCost(ch.codePointAt(0) ?? 0)
+  return Math.ceil(cost)
+}
+
+/** OpenAI also caps a request at 300,000 tokens across all inputs. */
+const EMBED_REQUEST_TOKEN_BUDGET = 250_000
+
+/**
+ * Split a batch so no request goes over EMBED_REQUEST_TOKEN_BUDGET: 96 inputs
+ * near the per-input cap reached ~750k tokens and the whole batch was
+ * rejected ("maximum request size is 300000 tokens per request").
+ */
+export function splitEmbeddingBatch(inputs: string[], budget = EMBED_REQUEST_TOKEN_BUDGET): string[][] {
+  const groups: string[][] = []
+  let current: string[] = []
+  let used = 0
+  for (const input of inputs) {
+    const cost = estimateEmbeddingTokens(input)
+    if (current.length > 0 && used + cost > budget) {
+      groups.push(current)
+      current = []
+      used = 0
+    }
+    current.push(input)
+    used += cost
+  }
+  if (current.length > 0) groups.push(current)
+  return groups
+}
+
 /**
  * Single embedding HTTP call. Returned separately from the retry wrapper so
  * the loop logic stays compact and the call shape is identical to
@@ -315,9 +377,7 @@ async function fetchEmbedding(
   embeddingModel: string,
   input: string | string[],
 ): Promise<Response> {
-  const truncatedInput = Array.isArray(input)
-    ? input.map((t) => t.slice(0, 8000))
-    : input.slice(0, 8000)
+  const truncatedInput = Array.isArray(input) ? input.map((t) => capForEmbedding(t)) : capForEmbedding(input)
   return await fetch(`${resolved.baseUrl}/v1/embeddings`, {
     method: 'POST',
     headers: {
@@ -476,7 +536,17 @@ export async function createEmbeddingBatch(
   const state = newCallState()
   const startedAt = Date.now()
   try {
-    const embeddings = await createEmbeddingBatchUnrecorded(inputs, opts, embeddingModel, state)
+    const embeddings: number[][] = []
+    const groups = splitEmbeddingBatch(inputs)
+    let promptTokens = 0
+    for (const group of groups) {
+      embeddings.push(...(await createEmbeddingBatchUnrecorded(group, opts, embeddingModel, state)))
+      promptTokens += (state.body as { usage?: { prompt_tokens?: number } } | null)?.usage?.prompt_tokens ?? 0
+    }
+    // The ledger reads one body; give it the whole batch's tokens.
+    if (groups.length > 1 && state.body && typeof state.body === 'object') {
+      state.body = { ...state.body, usage: { prompt_tokens: promptTokens, total_tokens: promptTokens } }
+    }
     recordEmbeddingCall(opts, embeddingModel, state, startedAt)
     return embeddings
   } catch (err) {

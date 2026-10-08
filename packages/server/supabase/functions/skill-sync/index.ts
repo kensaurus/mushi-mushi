@@ -30,6 +30,7 @@ import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { createEmbedding } from '../_shared/embeddings.ts'
 import { scanForSecrets } from '../_shared/secret-scan.ts'
+import { categoryFromSlug, parseChainSlugs, parseFrontmatter } from '../_shared/skill-frontmatter.ts'
 
 declare const Deno: {
   serve(handler: (req: Request) => Response | Promise<Response>): void
@@ -62,75 +63,6 @@ interface SkillSource {
   repo_slug: string
   ref: string
   enabled: boolean
-}
-
-// ── YAML frontmatter parser ───────────────────────────────────────────────────
-// Parses key: value pairs and YAML block scalars (> >- | |-).
-// The Agent Skills spec requires only name + description in frontmatter.
-function parseFrontmatter(raw: string): { frontmatter: Record<string, string>; body: string } | null {
-  const trimmed = raw.trimStart()
-  if (!trimmed.startsWith('---')) return null
-
-  const endIdx = trimmed.indexOf('\n---', 3)
-  if (endIdx === -1) return null
-
-  const fmBlock = trimmed.slice(4, endIdx)
-  const body = trimmed.slice(endIdx + 4).trimStart()
-
-  const frontmatter: Record<string, string> = {}
-  const lines = fmBlock.split('\n')
-  let i = 0
-  while (i < lines.length) {
-    const line = lines[i]
-    const colonIdx = line.indexOf(':')
-    if (colonIdx === -1) { i++; continue }
-
-    const key = line.slice(0, colonIdx).trim()
-    const rawVal = line.slice(colonIdx + 1).trim()
-
-    // Handle YAML block scalars: > >- | |- (fold/literal multi-line values)
-    if (rawVal === '>' || rawVal === '>-' || rawVal === '|' || rawVal === '|-') {
-      const parts: string[] = []
-      i++
-      while (i < lines.length && (lines[i].startsWith(' ') || lines[i].startsWith('\t'))) {
-        parts.push(lines[i].trim())
-        i++
-      }
-      // Fold-style (>) joins non-empty lines with a space; blank lines become paragraph breaks
-      if (key) frontmatter[key] = parts.filter(p => p !== '').join(' ')
-    } else {
-      const val = rawVal.replace(/^["']|["']$/g, '')
-      if (key) frontmatter[key] = val
-      i++
-    }
-  }
-
-  return { frontmatter, body }
-}
-
-// ── Category from slug prefix ─────────────────────────────────────────────────
-function categoryFromSlug(slug: string): string {
-  const dash = slug.indexOf('-')
-  if (dash === -1) return 'other'
-  const prefix = slug.slice(0, dash)
-  const known = ['workflow', 'debug', 'test', 'audit', 'enhance', 'backend',
-                 'design', 'deploy', 'data', 'mobile', 'docs', 'meta', 'mushi',
-                 'protocol', 'iterate']
-  return known.includes(prefix) ? prefix : 'other'
-}
-
-// ── Chain slug parser ─────────────────────────────────────────────────────────
-// Finds lines like: > Read `~/.cursor/skills/<slug>/SKILL.md` and follow it.
-// Also catches: Read skill/<slug>/SKILL.md, skills/<slug>/SKILL.md
-const CHAIN_RE = /(?:skills?|~\/\.cursor\/skills?)\/([a-z][a-z0-9-]{1,63})\/SKILL\.md/g
-
-function parseChainSlugs(body: string): string[] {
-  const slugs: string[] = []
-  for (const m of body.matchAll(CHAIN_RE)) {
-    const slug = m[1]
-    if (slug && !slugs.includes(slug)) slugs.push(slug)
-  }
-  return slugs
 }
 
 // ── SHA-256 content hash ──────────────────────────────────────────────────────
@@ -226,6 +158,7 @@ async function parseSkillFile(
   ref: string,
   path: string,
   blobSha?: string,
+  knownSlugs?: ReadonlySet<string>,
 ): Promise<ParsedSkill | null> {
   // Extract slug from path: skills/<slug>/SKILL.md or skills-cursor/<slug>/SKILL.md
   const pathParts = path.split('/')
@@ -271,7 +204,7 @@ async function parseSkillFile(
   const description = frontmatter.description.slice(0, 1024)
 
   const contentHash = await sha256(rawContent)
-  const chainSlugs = parseChainSlugs(body)
+  const chainSlugs = parseChainSlugs(body, frontmatter, { selfSlug: canonicalSlug, knownSlugs })
 
   return {
     slug: canonicalSlug,
@@ -287,6 +220,9 @@ async function parseSkillFile(
     contentHash,
   }
 }
+
+/** Skills fetched and embedded at once; GitHub and OpenAI both take this easily. */
+const SYNC_CONCURRENCY = 6
 
 // ── Sync one source ───────────────────────────────────────────────────────────
 async function syncSource(
@@ -317,41 +253,60 @@ async function syncSource(
       (item.path.startsWith('skills/') || item.path.startsWith('skills-cursor/')),
   )
 
+  // Every skill in this repo, so a chain only names skills that exist.
+  const knownSlugs = new Set(skillItems.map((item) => item.path.split('/').slice(-2, -1)[0]))
+
   slog.info('Found SKILL.md files', { count: skillItems.length, hasGithubToken: Boolean(Deno.env.get('GITHUB_TOKEN')) })
 
   // Fetch existing content hashes for change detection
   const { data: existingSkills } = await db
     .from('agent_skills')
-    .select('id, slug, content_hash')
+    .select('id, slug, content_hash, description')
     .eq('source_id', source.id)
 
   const existingBySlug = new Map(
-    (existingSkills ?? []).map((s) => [s.slug as string, { id: s.id as string, hash: s.content_hash as string }]),
+    (existingSkills ?? []).map((s) => [
+      s.slug as string,
+      { id: s.id as string, hash: s.content_hash as string, description: s.description as string | null },
+    ]),
   )
+  // Skills stored without a vector still need one even when unchanged.
+  const { data: unembedded } = await db
+    .from('agent_skills')
+    .select('slug')
+    .eq('source_id', source.id)
+    .is('description_embedding', null)
+  const missingEmbedding = new Set((unembedded ?? []).map((s) => s.slug as string))
 
   // Resolve BYOK key for embeddings (uses project's OpenAI key if configured)
   const openaiKey = Deno.env.get('OPENAI_API_KEY') ?? ''
 
-  // Process each SKILL.md (use tree blob SHA to avoid extra contents API round-trips)
-  for (const item of skillItems) {
+  // Process each SKILL.md (use tree blob SHA to avoid extra contents API
+  // round-trips), SYNC_CONCURRENCY at a time: one by one, a full re-sync of
+  // ~170 skills (fetch + embedding each) outlasted the function's time limit
+  // and stopped a third of the way through.
+  const syncOne = async (item: GitHubTreeItem): Promise<void> => {
     const path = item.path
     try {
-      const skill = await parseSkillFile(source.repo_slug, source.ref, path, item.sha)
+      const skill = await parseSkillFile(source.repo_slug, source.ref, path, item.sha, knownSlugs)
       if (!skill) {
         stats.skipped++
-        continue
+        return
       }
 
       const existing = existingBySlug.get(skill.slug)
       if (!force && existing?.hash === skill.contentHash) {
         slog.debug('No change — skipping', { slug: skill.slug })
         stats.skipped++
-        continue
+        return
       }
 
-      // Generate embedding for description
+      // Embed the description only when it changed (or was never embedded);
+      // the upsert below leaves an omitted vector as it was.
+      const needsEmbedding =
+        !existing || existing.description !== skill.frontmatter.description || missingEmbedding.has(skill.slug)
       let embedding: number[] | null = null
-      if (openaiKey) {
+      if (openaiKey && needsEmbedding) {
         try {
           embedding = await createEmbedding(skill.frontmatter.description, { projectId: source.project_id, functionName: 'skill-sync' })
         } catch (embErr) {
@@ -392,6 +347,13 @@ async function syncSource(
       stats.errors++
     }
   }
+
+  const queue = [...skillItems]
+  await Promise.all(
+    Array.from({ length: Math.min(SYNC_CONCURRENCY, queue.length) }, async () => {
+      for (let item = queue.shift(); item; item = queue.shift()) await syncOne(item)
+    }),
+  )
 
   // Catalog size after sync (not just newly-upserted rows — incremental syncs often sync 0)
   const { count: catalogCount } = await db

@@ -118,6 +118,9 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
       .replace(/=+$/, '');
   }
 
+  /** A sweep started this recently is still running; don't stack another. */
+  const SWEEP_RETRY_GAP_MS = 2 * 60 * 1000;
+
   async function kickCodebaseSweep(projectId: string): Promise<void> {
     // The sweep writes to project_codebase_files and updates
     // project_repos.last_indexed_at / last_index_error. It used to run with
@@ -169,6 +172,46 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
     if (edgeRuntime?.waitUntil) edgeRuntime.waitUntil(sweep);
     else await sweep;
   }
+
+  // POST /v1/admin/projects/:id/codebase/sweep — "Retry indexing now". A
+  // failed sweep used to wait for the daily retry; this re-runs it for an
+  // already-enabled index without touching its settings.
+  app.post('/v1/admin/projects/:id/codebase/sweep', jwtAuth, async (c) => {
+    const projectId = c.req.param('id')!;
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    const access = await callerCanAccessProject(c, db, userId, projectId);
+    if (!access.allowed) {
+      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Not found' } }, 404);
+    }
+    if (access.role === 'viewer') {
+      return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Viewers cannot re-run indexing' } }, 403);
+    }
+
+    const { data: repo } = await db
+      .from('project_repos')
+      .select('indexing_enabled, last_index_attempt_at')
+      .eq('project_id', projectId)
+      .eq('is_primary', true)
+      .maybeSingle();
+    if (!repo?.indexing_enabled) {
+      return c.json(
+        { ok: false, error: { code: 'INDEX_OFF', message: 'Codebase indexing is off for this project. Turn it on in Integrations first.' } },
+        409,
+      );
+    }
+    const lastAttempt = repo.last_index_attempt_at ? Date.parse(repo.last_index_attempt_at as string) : 0;
+    if (Date.now() - lastAttempt < SWEEP_RETRY_GAP_MS) {
+      return c.json(
+        { ok: false, error: { code: 'ALREADY_INDEXING', message: 'Indexing started less than 2 minutes ago. Give it a moment, then refresh.' } },
+        409,
+      );
+    }
+
+    await kickCodebaseSweep(projectId);
+    return c.json({ ok: true, data: { status: 'indexing' } }, 202);
+  });
 
   app.post('/v1/admin/projects/:id/codebase/enable', jwtAuth, async (c) => {
     const projectId = c.req.param('id')!;

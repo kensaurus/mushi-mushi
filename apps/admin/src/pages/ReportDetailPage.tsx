@@ -499,6 +499,15 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
         helpHowToUse="Use the Recommended action below for the fastest path. Otherwise set Status / Severity manually, dispatch a fix, push to your tracker, or reply in the triage thread."
       />
 
+      {isSampleReport(report.custom_metadata) && (
+        <Callout tone="neutral" label="Test report" className="mb-3">
+          <p className="text-xs text-fg-secondary">
+            This sample came from "Send a test report", not from a user of your app. It shows what a
+            diagnosis looks like; dismiss it when you're done.
+          </p>
+        </Callout>
+      )}
+
       <PagePosture
         maxRows={1}
         className="mb-3"
@@ -790,6 +799,7 @@ function describeTriageUpdate(updates: Record<string, string>): string | null {
   if (updates.severity !== undefined) {
     parts.push(updates.severity ? `severity \u2192 ${severityLabel(updates.severity)}` : 'severity cleared')
   }
+  if (updates.category) parts.push(`category \u2192 ${categoryLabel(updates.category)}`)
   return parts.length > 0 ? parts.join(' \u00b7 ') : null
 }
 
