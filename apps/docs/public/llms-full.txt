@@ -231,7 +231,7 @@ Add to `.cursor/mcp.json` in your repo root:
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.24.3"],
+      "args": ["-y", "@mushi-mushi/mcp@0.24.4"],
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
@@ -257,7 +257,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.24.3"],
+      "args": ["-y", "@mushi-mushi/mcp@0.24.4"],
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
@@ -5376,9 +5376,9 @@ Published npm packages ship on independent semver tracks (see [npm](https://www.
 | Package | Version |
 | --- | --- |
 | @mushi-mushi/core, @mushi-mushi/web | 1.31.x |
-| @mushi-mushi/react | 1.29.x |
+| @mushi-mushi/react | 1.31.x |
 | @mushi-mushi/react-native | 0.24.x |
-| @mushi-mushi/cli | 0.29.x |
+| @mushi-mushi/cli | 0.30.x |
 | @mushi-mushi/mcp | 0.24.x |
 | @mushi-mushi/capacitor | 1.1.x |
 | @mushi-mushi/node | 1.3.x |
@@ -17231,7 +17231,7 @@ sequenceDiagram
 
   You->>Console: Confirm squash merge
   Console->>API: POST /v1/admin/fixes/:id/merge
-  API->>GitHub: markPullRequestAsReady (if draft)
+  API->>GitHub: markPullRequestReadyForReview (if draft)
   API->>GitHub: PUT /pulls/:n/merge
   API->>DB: merged_at, report → fixed
   API->>DB: reporter notification + fix.applied webhooks
@@ -17239,7 +17239,7 @@ sequenceDiagram
 ```
 
 **Draft PRs:** fix-worker opens PRs as drafts. Before merge, the API calls GitHub's
-GraphQL `markPullRequestAsReady` (same as `gh pr ready`). New fix-worker runs also
+GraphQL `markPullRequestReadyForReview` (same as `gh pr ready`). New fix-worker runs also
 auto-ready immediately after opening the PR.
 
 **Merge methods:** squash (default), merge commit, or rebase — chosen in the confirm
