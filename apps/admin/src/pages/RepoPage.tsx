@@ -134,8 +134,8 @@ interface RepoActivityEvent {
 type Bucket = RepoFilter
 const BUCKETS = REPO_FILTERS
 
-/** Branch cards per page; the server returns the latest 200 attempts. */
-const BRANCHES_PAGE_SIZE = 50
+/** Branch cards per page (each card is ~360 px); the server returns the latest 200 attempts. */
+const BRANCHES_PAGE_SIZE = 8
 
 /** Activity rows shown at first, and added per "Show more". */
 const ACTIVITY_PAGE_SIZE = 20
@@ -603,8 +603,16 @@ export function RepoPage() {
       {/* Every open PR in the connected repos, fix or not, with Merge once its checks pass. */}
       {activeTab === 'branches' && activeProjectId && <OpenPullRequests projectId={activeProjectId} />}
 
+      {/* Open PRs lead; the per-attempt history is a closed panel under them. */}
       {activeTab === 'branches' && (
-        branches.length === 0 ? emptyBranches : branchList
+        branches.length === 0 ? emptyBranches : (
+          <DisclosurePanel
+            title="Fix attempt branches"
+            trailing={<span className="text-2xs font-normal text-fg-faint">{branches.length} attempts</span>}
+          >
+            {branchList}
+          </DisclosurePanel>
+        )
       )}
 
       {activeTab === 'activity' && activityPanel}
