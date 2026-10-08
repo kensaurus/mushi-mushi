@@ -62,6 +62,7 @@ import {
 } from '../_shared/index-coverage.ts';
 import { clearResolvedPushIndexError } from '../_shared/github-push-forward.ts';
 import { resolveProjectPlan } from '../_shared/quota.ts';
+import { syncInventoryFromPush } from '../_shared/inventory-push-sync.ts';
 import {
   framePathsFromStackText,
   matchFramePathsToTree,
@@ -1670,6 +1671,23 @@ async function indexPushForProject(
   }
   const eligibleChanged = [...added].filter(isEligible);
   const eligibleRemoved = [...removed].filter(isEligible);
+
+  // The stored inventory follows the repo's inventory file. Not limited by
+  // the index scope: the inventory is read even when YAML is not indexed.
+  try {
+    const synced = await syncInventoryFromPush(db, {
+      projectId,
+      changed: added,
+      commitSha: ref,
+      readFile: (path) => fetchFileContents(token, owner, repo, path, ref),
+    });
+    if (synced.status !== 'unchanged-path') log.info('push: inventory sync', { projectId, repoFullName, ...synced });
+  } catch (err) {
+    log.warn('push: inventory sync failed (non-fatal)', {
+      projectId,
+      err: err instanceof Error ? err.message : String(err),
+    });
+  }
 
   // Which of these paths the index holds, and how many files it holds: the
   // ceiling check and the coverage update both need them. A read error fails

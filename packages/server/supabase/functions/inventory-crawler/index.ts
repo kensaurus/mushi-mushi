@@ -92,6 +92,26 @@ interface PageDiff {
   error?: string
 }
 
+/** A path with a route parameter (`/lessons/[lessonId]`, `/users/:id`) names no single page to fetch. */
+function isDynamicPath(path: string): boolean {
+  return /\[[^\]]+\]|\/:[A-Za-z_]/.test(path)
+}
+
+/**
+ * Whether the edge crawl could check a page at all. It reads the server's
+ * HTML without running scripts or signing in, so a page that came back with
+ * none of its declared testids was most likely rendered client-side or
+ * behind sign-in: one "unverified" warning, not one error per testid. When
+ * some declared testids did render, the missing ones are real misses.
+ */
+function crawlVerdict(
+  r: Pick<PageDiff, 'declared' | 'discovered' | 'error'>,
+  page: { authRequired: boolean; hasAuth: boolean },
+): 'checked' | 'unverified-auth' | 'unverified-client' {
+  if (r.error || r.declared.length === 0 || r.discovered.length > 0) return 'checked'
+  return page.authRequired && !page.hasAuth ? 'unverified-auth' : 'unverified-client'
+}
+
 async function loadProject(
   db: SupabaseClient,
   projectId: string,
@@ -336,6 +356,7 @@ async function crawlAndPersist(
     id: string
     path: string
     declared: string[]
+    authRequired: boolean
   }
 
   let pages = project.inventory.pages
@@ -346,11 +367,16 @@ async function crawlAndPersist(
     }
   }
 
-  const items: CrawlItem[] = pages.map((p) => ({
-    id: p.id,
-    path: p.path,
-    declared: p.elements.map((el) => el.testid ?? el.id),
-  }))
+  const skippedDynamic = pages.filter((p) => isDynamicPath(p.path)).map((p) => p.path)
+  const items: CrawlItem[] = pages
+    .filter((p) => !isDynamicPath(p.path))
+    .map((p) => ({
+      id: p.id,
+      path: p.path,
+      declared: p.elements.map((el) => el.testid ?? el.id),
+      authRequired: p.auth_required !== false,
+    }))
+  const hasAuth = Boolean(project.authConfig)
 
   if (items.length === 0) {
     const { data: skip } = await db
@@ -400,7 +426,30 @@ async function crawlAndPersist(
 
   // Persist findings.
   let findings = 0
-  for (const r of results) {
+  let unverified = 0
+  for (const [i, r] of results.entries()) {
+    const verdict = crawlVerdict(r, { authRequired: items[i]?.authRequired ?? true, hasAuth })
+    if (verdict !== 'checked') {
+      unverified += 1
+      const why = verdict === 'unverified-auth'
+        ? 'it needs sign-in and no crawler sign-in is set'
+        : 'none of its testids are in the server HTML, so it renders in the browser'
+      const { error } = await db.from('gate_findings').insert({
+        gate_run_id: runId,
+        project_id: projectId,
+        severity: 'warn',
+        rule_id: 'crawl-unverified',
+        message: `Page ${r.path} could not be checked: ${why}. Its ${r.declared.length} declared testid(s) are unverified, not missing.`,
+        file_path: r.path,
+        suggested_fix: {
+          explanation: verdict === 'unverified-auth'
+            ? 'Set a crawler sign-in (Inventory → Settings → crawler auth), or run `mushi-mushi-cli inventory crawl --playwright` signed in.'
+            : 'Run `mushi-mushi-cli inventory crawl --playwright`, which renders the page in a browser.',
+        },
+      })
+      if (!error) findings += 1
+      continue
+    }
     for (const tid of r.missing_in_app) {
       const { error } = await db.from('gate_findings').insert({
         gate_run_id: runId,
@@ -459,15 +508,18 @@ async function crawlAndPersist(
   const summary = {
     pages_crawled: results.length,
     pages_failed: results.filter((r) => r.error).length,
+    pages_unverified: unverified,
+    ...(skippedDynamic.length ? { skipped_dynamic_paths: skippedDynamic } : {}),
     findings,
     discovered_apis: Array.from(discoveredApiSet),
     inventory_stats: computeStats(project.inventory),
     ...(storyNodeId ? { story_node_id: storyNodeId } : {}),
   }
+  const checked = results.filter((r, i) => crawlVerdict(r, { authRequired: items[i]?.authRequired ?? true, hasAuth }) === 'checked')
   const overall: 'pass' | 'fail' | 'warn' =
-    results.some((r) => r.error) || results.some((r) => r.missing_in_app.length > 0)
+    results.some((r) => r.error) || checked.some((r) => r.missing_in_app.length > 0)
       ? 'fail'
-      : results.some((r) => r.missing_in_inventory.length > 0)
+      : unverified > 0 || checked.some((r) => r.missing_in_inventory.length > 0)
         ? 'warn'
         : 'pass'
 
@@ -527,4 +579,4 @@ if (typeof Deno !== 'undefined') {
   Deno.serve(withSentry('inventory-crawler', handler))
 }
 
-export { crawlPage, runWithConcurrency, crawlAndPersist }
+export { crawlPage, runWithConcurrency, crawlAndPersist, crawlVerdict, isDynamicPath }
