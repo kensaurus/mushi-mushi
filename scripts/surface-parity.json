@@ -448,6 +448,7 @@
     "POST /v1/admin/projects/:id/codebase/diagram": {"cli": ["repo diagram generate"]},
     "POST /v1/admin/projects/:id/codebase/diagram/publish": {"cli": ["repo diagram publish"]},
     "POST /v1/admin/projects/:id/codebase/enable": {"allow": "jwt-only"},
+    "POST /v1/admin/projects/:id/codebase/sweep": {"allow": "jwt-only"},
     "POST /v1/admin/projects/:id/codebase/rotate-secret": {"allow": "jwt-only"},
     "POST /v1/admin/projects/:id/codebase/search": {"mcp": ["search_codebase"]},
     "POST /v1/admin/projects/:id/codebase/summary": {"allow": "parity-debt"},
