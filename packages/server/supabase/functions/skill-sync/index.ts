@@ -221,6 +221,9 @@ async function parseSkillFile(
   }
 }
 
+/** Skills fetched and embedded at once; GitHub and OpenAI both take this easily. */
+const SYNC_CONCURRENCY = 6
+
 // ── Sync one source ───────────────────────────────────────────────────────────
 async function syncSource(
   db: ReturnType<typeof getServiceClient>,
@@ -258,36 +261,52 @@ async function syncSource(
   // Fetch existing content hashes for change detection
   const { data: existingSkills } = await db
     .from('agent_skills')
-    .select('id, slug, content_hash')
+    .select('id, slug, content_hash, description')
     .eq('source_id', source.id)
 
   const existingBySlug = new Map(
-    (existingSkills ?? []).map((s) => [s.slug as string, { id: s.id as string, hash: s.content_hash as string }]),
+    (existingSkills ?? []).map((s) => [
+      s.slug as string,
+      { id: s.id as string, hash: s.content_hash as string, description: s.description as string | null },
+    ]),
   )
+  // Skills stored without a vector still need one even when unchanged.
+  const { data: unembedded } = await db
+    .from('agent_skills')
+    .select('slug')
+    .eq('source_id', source.id)
+    .is('description_embedding', null)
+  const missingEmbedding = new Set((unembedded ?? []).map((s) => s.slug as string))
 
   // Resolve BYOK key for embeddings (uses project's OpenAI key if configured)
   const openaiKey = Deno.env.get('OPENAI_API_KEY') ?? ''
 
-  // Process each SKILL.md (use tree blob SHA to avoid extra contents API round-trips)
-  for (const item of skillItems) {
+  // Process each SKILL.md (use tree blob SHA to avoid extra contents API
+  // round-trips), SYNC_CONCURRENCY at a time: one by one, a full re-sync of
+  // ~170 skills (fetch + embedding each) outlasted the function's time limit
+  // and stopped a third of the way through.
+  const syncOne = async (item: GitHubTreeItem): Promise<void> => {
     const path = item.path
     try {
       const skill = await parseSkillFile(source.repo_slug, source.ref, path, item.sha, knownSlugs)
       if (!skill) {
         stats.skipped++
-        continue
+        return
       }
 
       const existing = existingBySlug.get(skill.slug)
       if (!force && existing?.hash === skill.contentHash) {
         slog.debug('No change — skipping', { slug: skill.slug })
         stats.skipped++
-        continue
+        return
       }
 
-      // Generate embedding for description
+      // Embed the description only when it changed (or was never embedded);
+      // the upsert below leaves an omitted vector as it was.
+      const needsEmbedding =
+        !existing || existing.description !== skill.frontmatter.description || missingEmbedding.has(skill.slug)
       let embedding: number[] | null = null
-      if (openaiKey) {
+      if (openaiKey && needsEmbedding) {
         try {
           embedding = await createEmbedding(skill.frontmatter.description, { projectId: source.project_id, functionName: 'skill-sync' })
         } catch (embErr) {
@@ -328,6 +347,13 @@ async function syncSource(
       stats.errors++
     }
   }
+
+  const queue = [...skillItems]
+  await Promise.all(
+    Array.from({ length: Math.min(SYNC_CONCURRENCY, queue.length) }, async () => {
+      for (let item = queue.shift(); item; item = queue.shift()) await syncOne(item)
+    }),
+  )
 
   // Catalog size after sync (not just newly-upserted rows — incremental syncs often sync 0)
   const { count: catalogCount } = await db
