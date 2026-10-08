@@ -45,6 +45,12 @@ export const ANTHROPIC_OPUS = 'claude-opus-4-8'
  *  still accepts `temperature` and forced tool use, so it stays on AI SDK v4. */
 export const ANTHROPIC_HAIKU = 'claude-haiku-4-5'
 
+/** Haiku 5.5 ($0.10 / $0.50 per MTok under 100K-token prompts, 1M context,
+ *  adaptive thinking): the cost-saving default for chat and summaries (owner,
+ *  2026-10-08). Like every 5.x model it rejects temperature/top_p, so callers
+ *  go through `claude-messages.ts`. */
+export const ANTHROPIC_HAIKU_LATEST = 'claude-haiku-5-5'
+
 // --- OpenAI (cross-vendor fallback) -----------------------------------------
 
 /** Latest GPT-5 (released 2026-03-05). Fallback for Stage 2 + judge when
@@ -95,7 +101,7 @@ export const FIX_MODEL = ANTHROPIC_SONNET_LATEST
 export const FIX_FALLBACK = OPENAI_PRIMARY
 
 /** intelligence-report weekly digest. */
-export const INTELLIGENCE_MODEL = ANTHROPIC_SONNET_LATEST
+export const INTELLIGENCE_MODEL = ANTHROPIC_HAIKU_LATEST
 export const INTELLIGENCE_FALLBACK = OPENAI_PRIMARY
 
 /** generate-synthetic report generator. */
@@ -111,7 +117,7 @@ export const PROMPT_TUNE_MODEL = ANTHROPIC_SONNET_LATEST
 export const PROMPT_TUNE_FALLBACK = OPENAI_PRIMARY
 
 /** release-builder: the user-facing changelog draft. */
-export const RELEASE_NOTES_MODEL = ANTHROPIC_SONNET_LATEST
+export const RELEASE_NOTES_MODEL = ANTHROPIC_HAIKU_LATEST
 export const RELEASE_NOTES_FALLBACK = OPENAI_PRIMARY
 
 /** story-mapper: crawled pages → a draft inventory.yaml. */
@@ -121,21 +127,21 @@ export const STORY_MAP_MODEL = ANTHROPIC_SONNET_LATEST
 export const INVENTORY_PROPOSE_MODEL = ANTHROPIC_SONNET_LATEST
 
 /** mistake-clusterer coherence check and mistake-summarizer lessons. */
-export const MISTAKE_MODEL = ANTHROPIC_SONNET_LATEST
+export const MISTAKE_MODEL = ANTHROPIC_HAIKU_LATEST
 
 /** Ask Mushi / `/v1/admin/ask-mushi/messages` and the in-SDK assistant —
- *  scoped chat that answers questions about the current page. Sonnet balances
- *  reasoning with cost; the usage pattern is short sessions, not bulk traffic. */
-export const ASSIST_MODEL = ANTHROPIC_SONNET_LATEST
+ *  scoped chat that answers questions about the current page. Haiku 5.5: these
+ *  are short, page-grounded answers, and it costs a twentieth of Sonnet 5.5. */
+export const ASSIST_MODEL = ANTHROPIC_HAIKU_LATEST
 export const ASSIST_FALLBACK = OPENAI_PRIMARY
 
 /** Store review (Plan 020 §5.3): pull the claims out of a store listing. On
  *  demand, per release, never per push. */
-export const STORE_REVIEW_MODEL = ANTHROPIC_SONNET_LATEST
+export const STORE_REVIEW_MODEL = ANTHROPIC_HAIKU_LATEST
 export const STORE_REVIEW_FALLBACK = OPENAI_PRIMARY
 
 /** Codebase Atlas Q&A (`codebase-understand`). */
-export const CODEBASE_ASSIST_MODEL = ANTHROPIC_SONNET_LATEST
+export const CODEBASE_ASSIST_MODEL = ANTHROPIC_HAIKU_LATEST
 
 /** test-gen-from-story default. */
 export const TEST_GEN_MODEL = ANTHROPIC_SONNET_LATEST
@@ -236,8 +242,8 @@ export function acceptsSamplingKnobs(model: string | null | undefined): boolean 
   // Anthropic Opus 4.7+ — locked-default sampling. Any future Anthropic model
   // family that ships with the same restriction should be added here.
   if (/^claude-opus-(?:[4-9]-[7-9]|[4-9]-\d{2,}|[5-9]-)/i.test(key)) return false
-  // Sonnet 5+, Fable and Mythos ship with the same restriction.
-  if (/^claude-(?:sonnet-(?:[5-9]|\d{2,})|fable-|mythos-)/i.test(key)) return false
+  // Sonnet 5+, Haiku 5+, Fable and Mythos ship with the same restriction.
+  if (/^claude-(?:sonnet-(?:[5-9]|\d{2,})|haiku-(?:[5-9]|\d{2,})|fable-|mythos-)/i.test(key)) return false
   return true
 }
 

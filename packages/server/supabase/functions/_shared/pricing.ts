@@ -15,6 +15,9 @@ export const LLM_PRICING_PER_M_TOKENS: Record<string, { in: number; out: number 
   'claude-sonnet-5':             { in: 2.00, out: 10.00 },
   'claude-opus-5-5':             { in: 4.00, out: 20.00 },
   'claude-opus-5':               { in: 5.00, out: 25.00 },
+  // Haiku 5.5 bills $0.50 / $2.50 on prompts over 100K tokens; assistant
+  // prompts stay well under that, so the base rate is used.
+  'claude-haiku-5-5':            { in: 0.10, out: 0.50 },
   // Anthropic — 4.x generation
   'claude-haiku-4-5':            { in: 1.00, out: 5.00 },
   'claude-haiku-4-5-20251001':   { in: 1.00, out: 5.00 },

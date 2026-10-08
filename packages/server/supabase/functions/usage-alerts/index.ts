@@ -31,6 +31,8 @@ import { log } from '../_shared/logger.ts'
 import { listPlans } from '../_shared/plans.ts'
 import { notifyOperator } from '../_shared/operator-notify.ts'
 import { sendTransactionalEmail } from '../_shared/email.ts'
+import { runLlmBudgetAlerts } from '../_shared/llm-budget-alerts.ts'
+import { sendBotMessage } from '../_shared/slack.ts'
 
 const aLog = log.child('usage-alerts')
 
@@ -117,6 +119,43 @@ Deno.serve(withSentry('usage-alerts', async (req) => {
   if (unauthorized) return unauthorized
 
   const db = getServiceClient()
+
+  // Monthly AI budget alerts first: the diagnosis check below returns early in
+  // a month with no diagnoses, and the budget can still be spent by chat.
+  const budget = await runLlmBudgetAlerts(db, {
+    email: async (to, subject, text) => {
+      const html = `<p>${text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\n\n/g, '</p><p>')}</p>`
+      await sendEmail(to, subject, html)
+    },
+    slack: async (projectId, channel, text) => {
+      const r = await sendBotMessage({ db, projectId, channel, text })
+      if (!r.ok) throw new Error(`slack: ${r.error}`)
+    },
+    operator: async (a, text) => {
+      await notifyOperator({
+        title: a.tier === 100 ? 'AI budget reached' : `AI budget ${a.tier}% alert`,
+        body: text,
+        level: a.tier === 100 ? 'urgent' : 'warn',
+        fields: [
+          { label: 'Project', value: a.projectName },
+          { label: 'Spend', value: `$${a.spendUsd.toFixed(2)} / $${a.budgetUsd.toFixed(0)}` },
+        ],
+        url: a.consoleUrl,
+      })
+    },
+    ownerEmail: async (projectId) => {
+      const { data: owner } = await db.from('project_members').select('user_id').eq('project_id', projectId).eq('role', 'owner').limit(1).maybeSingle()
+      const uid = (owner as { user_id?: string } | null)?.user_id
+      if (!uid) return null
+      const { data } = await db.rpc('get_user_emails_by_ids', { p_user_ids: [uid] })
+      return ((data ?? []) as Array<{ email?: string }>)[0]?.email ?? null
+    },
+  }, { consoleUrl: CONSOLE_URL }).catch((err) => {
+    aLog.error('AI budget alerts failed', { err: err instanceof Error ? err.message : String(err) })
+    return { checked: 0, sent: 0, errors: 1 }
+  })
+  aLog.info('AI budget alerts', budget)
+
   const plans = await listPlans()
 
   // Build plan lookup map.

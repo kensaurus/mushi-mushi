@@ -78,9 +78,12 @@ describe('gap #14b: Sonnet callers use claude-messages.ts', () => {
         else expect(src, `${file} has no Haiku path, so it must not load the AI SDK v4 Anthropic provider`).not.toMatch(/@ai-sdk\/anthropic/)
       })
 
-      it('routes to Sonnet 5.5, which only the claude-messages path can call', () => {
+      // Sonnet 5.5 or Haiku 5.5 (light tasks moved to Haiku 5.5, owner 2026-10-08):
+      // either way a 5.x model that only the claude-messages path can call.
+      it('routes to a 5.x model, which only the claude-messages path can call', () => {
         for (const name of constants) {
-          expect(modelValues[name], name).toBe(models.ANTHROPIC_SONNET_LATEST)
+          expect([models.ANTHROPIC_SONNET_LATEST, models.ANTHROPIC_HAIKU_LATEST], name).toContain(modelValues[name])
+          expect(models.acceptsSamplingKnobs(modelValues[name] as string), name).toBe(false)
           expect(src).toContain(name)
         }
         expect(models.acceptsSamplingKnobs(models.ANTHROPIC_SONNET_LATEST)).toBe(false)
