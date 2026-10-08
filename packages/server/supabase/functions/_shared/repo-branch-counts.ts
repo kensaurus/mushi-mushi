@@ -37,6 +37,9 @@ export const REPO_BRANCH_WINDOW = 200
 const FAILING_CONCLUSIONS = new Set(['failure', 'timed_out', 'startup_failure', 'action_required'])
 
 export interface RepoBranchRowLike {
+  report_id?: string | null
+  /** Set by markSupersededFailures: a later attempt for the report opened a PR. */
+  superseded?: boolean
   branch?: string | null
   status?: string | null
   pr_url?: string | null
@@ -55,7 +58,7 @@ export function isRepoBranchMerged(row: RepoBranchRowLike): boolean {
 export function classifyRepoBranch(row: RepoBranchRowLike): RepoBranchBucket {
   const status = (row.status ?? '').toLowerCase()
   if (isRepoBranchMerged(row)) return 'merged'
-  if (!row.pr_url) return status === 'failed' ? 'failed' : 'other'
+  if (!row.pr_url) return status === 'failed' && !row.superseded ? 'failed' : 'other'
   if ((row.pr_state ?? '').toLowerCase() === 'closed') return 'closed'
   // A PR exists and is open: what matters now is its CI, whatever the
   // attempt's own status says.
@@ -79,7 +82,22 @@ export interface RepoBranchCounts {
   failedToOpen: number
 }
 
-export function countRepoBranches(rows: readonly RepoBranchRowLike[]): RepoBranchCounts {
+/**
+ * Flag failed attempts that never opened a PR when another attempt for the
+ * same report did (or merged). Those are history, not "stuck": the banner
+ * used to tell users to retry reports that a later attempt had already fixed.
+ */
+export function markSupersededFailures<T extends RepoBranchRowLike>(rows: readonly T[]): T[] {
+  const fixedReports = new Set(
+    rows.filter((r) => r.report_id && (r.pr_url || isRepoBranchMerged(r))).map((r) => r.report_id as string),
+  )
+  return rows.map((r) =>
+    !r.pr_url && r.report_id && fixedReports.has(r.report_id) ? { ...r, superseded: true } : r,
+  )
+}
+
+export function countRepoBranches(input: readonly RepoBranchRowLike[]): RepoBranchCounts {
+  const rows = markSupersededFailures(input)
   const branches = new Set<string>()
   const counts: RepoBranchCounts = {
     total: rows.length,
