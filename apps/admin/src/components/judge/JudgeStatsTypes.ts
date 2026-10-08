@@ -21,6 +21,8 @@ export interface JudgeStats {
   projectCount: number
   totalEvaluations: number
   latestWeekScore: number | null
+  /** 'this week', or 'week of Sep 28' when the latest scored week is an earlier one. */
+  latestWeekLabel?: string | null
   latestWeekEvalCount: number
   weekOverWeekDriftPct: number | null
   disagreementCount: number
@@ -57,4 +59,10 @@ export const EMPTY_JUDGE_STATS: JudgeStats = {
   topPriority: 'no_project',
   topPriorityLabel: null,
   topPriorityTo: null,
+}
+
+/** Stat-card title for the latest scored week: 'This week' or 'Week of Sep 28'. */
+export function judgeWeekTitle(label: string | null | undefined): string {
+  const l = label || 'this week'
+  return l.charAt(0).toUpperCase() + l.slice(1)
 }

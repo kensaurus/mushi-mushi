@@ -94,3 +94,17 @@ export function isJudgeStale(input: { judgeStaleHours: number | null; ungradedRe
   if (input.ungradedReports <= 0) return false
   return input.judgeStaleHours == null || input.judgeStaleHours > JUDGE_STALE_AFTER_HOURS
 }
+
+/**
+ * "this week" only when the scored week is the current one. The headline
+ * reads the latest week that has scores, so after a quiet week it read
+ * "61% this week" for scores from the week before. `weekStart` is
+ * `date_trunc('week', …)::date`: an ISO week, starting Monday (UTC).
+ */
+export function judgeWeekLabel(weekStart: string, now: Date = new Date()): string {
+  const monday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+  monday.setUTCDate(monday.getUTCDate() - ((monday.getUTCDay() + 6) % 7))
+  if (weekStart.slice(0, 10) === monday.toISOString().slice(0, 10)) return 'this week'
+  const d = new Date(`${weekStart.slice(0, 10)}T00:00:00Z`)
+  return `week of ${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })}`
+}

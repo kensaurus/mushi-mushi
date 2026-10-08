@@ -16,6 +16,7 @@ import {
   JUDGE_ELIGIBLE_STATUSES,
   isJudgeStale,
   judgeEmptyResult,
+  judgeWeekLabel,
   onlyJudgeable,
 } from '../../supabase/functions/_shared/judge-eligibility.ts'
 
@@ -113,6 +114,21 @@ describe('onlyJudgeable', () => {
     const { q, calls } = recorder()
     onlyJudgeable(q)
     expect(calls.at(-1)).toMatch(/^or custom_metadata->>source\.is\.null,/)
+  })
+})
+
+describe('judgeWeekLabel', () => {
+  // Thursday 2026-10-08; its ISO week starts Monday 2026-10-05.
+  const now = new Date('2026-10-08T15:00:00Z')
+
+  it('says "this week" only for the current ISO week', () => {
+    expect(judgeWeekLabel('2026-10-05', now)).toBe('this week')
+    expect(judgeWeekLabel('2026-10-05', new Date('2026-10-11T23:59:00Z'))).toBe('this week')
+  })
+
+  it('names an earlier week instead of calling it this week', () => {
+    expect(judgeWeekLabel('2026-09-28', now)).toBe('week of Sep 28')
+    expect(judgeWeekLabel('2026-10-05', new Date('2026-10-12T00:00:00Z'))).toBe('week of Oct 5')
   })
 })
 

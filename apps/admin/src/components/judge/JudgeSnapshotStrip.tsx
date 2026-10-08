@@ -5,7 +5,7 @@
 
 import { Section, StatCard, SnapshotSectionHint } from '../ui'
 import { MetricStrip } from '../MetricStrip'
-import type { JudgeStats } from './JudgeStatsTypes'
+import { judgeWeekTitle, type JudgeStats } from './JudgeStatsTypes'
 import {
   classifiedDetail,
   classifiedTooltip,
@@ -44,7 +44,7 @@ export function JudgeSnapshotStrip({
       {hint ? <SnapshotSectionHint text={hint} /> : null}
       <MetricStrip cols={6} ariaLabel="Judge snapshot">
         <StatCard
-          label={statLabels?.week ?? 'This week'}
+          label={statLabels?.week ?? judgeWeekTitle(stats.latestWeekLabel)}
           value={stats.latestWeekScore != null ? `${Math.round(stats.latestWeekScore * 100)}%` : '—'}
           accent={
             stats.latestWeekScore != null && stats.latestWeekScore >= 0.8

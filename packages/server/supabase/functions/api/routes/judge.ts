@@ -3,7 +3,7 @@ import type { Variables } from '../types.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { jwtAuth, adminOrApiKey } from '../../_shared/auth.ts';
 import { dbError, callerProjectIds, resolveOwnedProject } from '../shared.ts';
-import { JUDGE_ELIGIBLE_STATUSES, judgeEmptyResult, onlyJudgeable } from '../../_shared/judge-eligibility.ts';
+import { JUDGE_ELIGIBLE_STATUSES, judgeEmptyResult, judgeWeekLabel, onlyJudgeable } from '../../_shared/judge-eligibility.ts';
 
 /** A valid ISO instant from a query value, or null (never a raw filter string). */
 function isoOrNull(raw: string | undefined): string | null {
@@ -25,6 +25,7 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
       projectCount: 0,
       totalEvaluations: 0,
       latestWeekScore: null as number | null,
+      latestWeekLabel: null as string | null,
       latestWeekEvalCount: 0,
       weekOverWeekDriftPct: null as number | null,
       disagreementCount: 0,
@@ -127,6 +128,7 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
 
     const latestWeekScore = latest?.avg_score != null ? Number(latest.avg_score) : null;
     const latestWeekEvalCount = latest?.eval_count ?? 0;
+    const latestWeekLabel = latest?.week_start ? judgeWeekLabel(latest.week_start) : null;
 
     let weekOverWeekDriftPct: number | null = null;
     if (latest && previous && previous.avg_score > 0) {
@@ -182,7 +184,7 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
       topPriority = 'healthy';
       topPriorityLabel =
         latestWeekScore != null
-          ? `${Math.round(latestWeekScore * 100)}% this week · ${latestWeekEvalCount} evals`
+          ? `${Math.round(latestWeekScore * 100)}% ${latestWeekLabel ?? 'this week'} · ${latestWeekEvalCount} evals`
           : `${totalEvaluations} total evaluations`;
       topPriorityTo = scoped('/judge?tab=trend');
     }
@@ -196,6 +198,7 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
         projectCount: projectIds.length,
         totalEvaluations,
         latestWeekScore,
+        latestWeekLabel,
         latestWeekEvalCount,
         weekOverWeekDriftPct,
         disagreementCount,
