@@ -23,7 +23,8 @@ import { adminOrApiKey, jwtAuth } from '../../_shared/auth.ts'
 import { callerCanAccessProject, dbError, jsonError } from '../shared.ts'
 import { logAudit } from '../../_shared/audit.ts'
 import { mergeGithubPullRequest, parsePrRepoRef } from '../../_shared/fix-merge.ts'
-import { fetchPullRequestDetails, parseGithubRepoUrl, resolveProjectGithubToken, type GithubRepoRef } from '../../_shared/github.ts'
+import { fetchPullRequestDetails, resolveProjectGithubToken, type GithubRepoRef } from '../../_shared/github.ts'
+import { checkRuns, connectedRepoRefs, prTitle, requiredChecks, sameRepo, stripCiSkips } from '../../_shared/github-pr-checks.ts'
 import {
   buildUxLoopReport,
   countStatuses,
@@ -547,52 +548,11 @@ async function prContext(c: Context<{ Variables: Variables }>, opts: { write?: b
   if (!row.pr_url || !row.pr_number || !ref) {
     return { response: jsonError(c, 'NO_PR', 'This run has no pull request yet. Open one from the studio.', 404) }
   }
-  const [{ data: repos }, { data: settings }] = await Promise.all([
-    db.from('project_repos').select('repo_url').eq('project_id', projectId),
-    db.from('project_settings').select('github_repo_url').eq('project_id', projectId).maybeSingle(),
-  ])
-  const own = [...((repos ?? []) as Array<{ repo_url: string | null }>).map((r) => r.repo_url), (settings as { github_repo_url?: string | null } | null)?.github_repo_url]
-    .map((u) => parseGithubRepoUrl(u ?? null))
-    .filter((r): r is GithubRepoRef => r !== null)
-  const same = (a: GithubRepoRef, b: GithubRepoRef) => a.owner.toLowerCase() === b.owner.toLowerCase() && a.repo.toLowerCase() === b.repo.toLowerCase()
-  if (!own.some((r) => same(r, ref))) {
+  const own = await connectedRepoRefs(db, projectId)
+  if (!own.some((r) => sameRepo(r, ref))) {
     return { response: jsonError(c, 'FORBIDDEN', `${ref.owner}/${ref.repo} is not connected to this project.`, 403) }
   }
   const token = await resolveProjectGithubToken(db, projectId, null, { allowEnvFallback: false })
   if (!token) return { response: jsonError(c, 'GITHUB_NOT_CONNECTED', 'Connect GitHub for this project (App or token) to see and merge its pull requests.', 409) }
   return { userId, projectId, run: row, token, ref, number: row.pr_number }
-}
-
-/**
- * Drops CI-skip markers ("[skip ci]", "[ci skip]", "***NO_CI***", …) from text that becomes a commit message.
- * @internal Exported for tests only.
- */
-export function stripCiSkips(text: string): string {
-  return text.replace(/\[(?:skip ci|ci skip|no ci|skip actions|actions skip)\]|\*\*\*NO_CI\*\*\*/gi, '').replace(/\s{2,}/g, ' ').trim()
-}
-
-const gh = (token: string) => ({
-  Authorization: `Bearer ${token}`,
-  Accept: 'application/vnd.github+json',
-  'X-GitHub-Api-Version': '2022-11-28',
-})
-
-async function prTitle(token: string, ref: GithubRepoRef, n: number): Promise<string | null> {
-  const res = await fetch(`https://api.github.com/repos/${ref.owner}/${ref.repo}/issues/${n}`, { headers: gh(token), signal: AbortSignal.timeout(10_000) })
-  if (!res.ok) return null
-  return ((await res.json()) as { title?: string }).title ?? null
-}
-
-/** Status checks the base branch's rules require (rulesets); none when there are no rules. */
-async function requiredChecks(token: string, ref: GithubRepoRef, branch: string): Promise<string[]> {
-  const res = await fetch(`https://api.github.com/repos/${ref.owner}/${ref.repo}/rules/branches/${encodeURIComponent(branch)}`, { headers: gh(token), signal: AbortSignal.timeout(10_000) })
-  if (!res.ok) return []
-  const rules = (await res.json()) as Array<{ type?: string; parameters?: { required_status_checks?: Array<{ context?: string }> } }>
-  return [...new Set(rules.filter((r) => r.type === 'required_status_checks').flatMap((r) => (r.parameters?.required_status_checks ?? []).map((s) => s.context ?? '')).filter(Boolean))]
-}
-
-async function checkRuns(token: string, ref: GithubRepoRef, sha: string): Promise<CheckRunLike[]> {
-  const res = await fetch(`https://api.github.com/repos/${ref.owner}/${ref.repo}/commits/${sha}/check-runs?per_page=100`, { headers: gh(token), signal: AbortSignal.timeout(10_000) })
-  if (!res.ok) return []
-  return ((await res.json()) as { check_runs?: CheckRunLike[] }).check_runs ?? []
 }

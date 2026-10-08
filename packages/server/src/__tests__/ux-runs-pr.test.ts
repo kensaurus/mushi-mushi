@@ -9,6 +9,7 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { makeFakeDb, type FakeDb } from './__stubs__/fake-supabase.ts'
 import { summarizeChecks } from '../../supabase/functions/_shared/ux-runs.ts'
+import { stripCiSkips } from '../../supabase/functions/_shared/github-pr-checks.ts'
 
 const P = '1a000000-0000-4000-8000-000000000000'
 const RUN = '20261007-115031-7po3'
@@ -186,8 +187,8 @@ describe('a UX run pull request', () => {
 // merge, a store release included (glot.it #146, 2026-10-07).
 describe('the squash message a console merge writes', () => {
   it('never carries a CI-skip marker', () => {
-    expect(routes.stripCiSkips('fix(ux): polish screens [skip ci]')).toBe('fix(ux): polish screens')
-    expect(routes.stripCiSkips('chore: [ci skip] regen ***NO_CI***')).toBe('chore: regen')
+    expect(stripCiSkips('fix(ux): polish screens [skip ci]')).toBe('fix(ux): polish screens')
+    expect(stripCiSkips('chore: [ci skip] regen ***NO_CI***')).toBe('chore: regen')
   })
   it('titles the squash with the PR title and its number', async () => {
     const { app } = setup()

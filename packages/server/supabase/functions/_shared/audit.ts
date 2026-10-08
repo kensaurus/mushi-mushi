@@ -25,6 +25,7 @@ export type AuditAction = 'report.created' | 'report.classified' | 'report.triag
   | 'fix_dispatch.cancelled'
   | 'ux_run.cloud_requested'
   | 'ux_run.merged'
+  | 'pull_request.merged'
   | 'mcp.tool_called'
   | 'mcp.tool_failed'
   | 'org.context_switched'
