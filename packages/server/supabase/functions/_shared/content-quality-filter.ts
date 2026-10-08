@@ -165,3 +165,17 @@ export function materiallyNewSignals(prev: SignalSnapshot, next: SignalSnapshot)
   }
   return changes
 }
+
+/**
+ * A regeneration counts as stale after this long without a callback. The
+ * source project's regen takes about a minute; a lost callback must not lock
+ * the item forever.
+ */
+export const REGEN_STALE_MS = 15 * 60 * 1000
+
+/** True when a running or queued regeneration may be requested again. */
+export function isRegenStale(requestedAt: string | null | undefined, nowMs: number): boolean {
+  if (!requestedAt) return true
+  const t = Date.parse(requestedAt)
+  return Number.isNaN(t) || nowMs - t >= REGEN_STALE_MS
+}
