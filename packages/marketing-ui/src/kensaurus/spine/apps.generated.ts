@@ -174,7 +174,6 @@ export const KENSAURUS_MANIFEST = {
         en: 'Practice the hard talk first',
       },
       web: 'https://talk.kensaur.us',
-      github: 'https://github.com/kensaurus/cooler-heads',
       icon: 'https://talk.kensaur.us/pwa-192.png',
       iosAppId: '6799392790',
       android: 'https://play.google.com/store/apps/details?id=us.kensaur.howtotalktogirls',
