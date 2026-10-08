@@ -235,6 +235,12 @@ export async function ingestReport(
      * (the console test report's precomputed diagnosis, demo-report-fixtures.ts).
      */
     skipClassification?: boolean
+    /**
+     * Skip the anti-gaming device checks. Only for a report the server itself
+     * made for an authenticated console user (the console test report): its
+     * reporter token is per admin, not a reporter identity to police.
+     */
+    skipAntiGaming?: boolean
     /** Mushi Bounties: link the ingested report back to the tester and submission row. */
     testerId?: string
     testerSubmissionId?: string
@@ -286,20 +292,23 @@ export async function ingestReport(
       .join('');
   }
 
-  const antiGaming = await checkAntiGaming(
-    db,
-    projectId,
-    tokenHash,
-    deviceFingerprint || report.fingerprintHash
-      ? {
-          // Synthesize a placeholder when only the SDK hash is available so the
-          // legacy multi-account/velocity checks still have something to key on.
-          fingerprint: deviceFingerprint ?? `sdk:${report.fingerprintHash}`,
-          ipAddress: options?.ipAddress,
-          fingerprintHash: report.fingerprintHash,
-        }
-      : null,
-  );
+  const antiGaming = options?.skipAntiGaming
+    ? { allowed: true, flagged: false, reason: undefined as string | undefined }
+    : await checkAntiGaming(
+        db,
+        projectId,
+        tokenHash,
+        deviceFingerprint || report.fingerprintHash
+          ? {
+              // Synthesize a placeholder when only the SDK hash is available so the
+              // legacy multi-account/velocity checks still have something to key on.
+              fingerprint: deviceFingerprint ?? `sdk:${report.fingerprintHash}`,
+              ipAddress: options?.ipAddress,
+              fingerprintHash: report.fingerprintHash,
+              userAgent: options?.userAgent,
+            }
+          : null,
+      );
   if (antiGaming.flagged) {
     log.warn('Anti-gaming flagged report', { reporterToken: tokenHash, reason: antiGaming.reason });
     const eventType = antiGaming.reason?.toLowerCase().startsWith('velocity')

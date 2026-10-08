@@ -3,7 +3,7 @@ import type { Variables } from '../types.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { jwtAuth, adminOrApiKey } from '../../_shared/auth.ts';
 import { dbError, callerProjectIds, resolveOwnedProject } from '../shared.ts';
-import { JUDGE_ELIGIBLE_STATUSES, judgeEmptyResult } from '../../_shared/judge-eligibility.ts';
+import { JUDGE_ELIGIBLE_STATUSES, judgeEmptyResult, onlyJudgeable } from '../../_shared/judge-eligibility.ts';
 
 /** A valid ISO instant from a query value, or null (never a raw filter string). */
 function isoOrNull(raw: string | undefined): string | null {
@@ -99,12 +99,14 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
           .eq('is_active', true),
         // Exactly what judge-batch would pick up — the stale nudge only makes
         // sense while this is > 0, otherwise a re-run grades nothing.
-        db
-          .from('reports')
-          .select('id', { count: 'exact', head: true })
-          .eq('project_id', pid)
-          .in('status', [...JUDGE_ELIGIBLE_STATUSES])
-          .is('judge_evaluated_at', null),
+        onlyJudgeable(
+          db
+            .from('reports')
+            .select('id', { count: 'exact', head: true })
+            .eq('project_id', pid)
+            .in('status', [...JUDGE_ELIGIBLE_STATUSES])
+            .is('judge_evaluated_at', null),
+        ),
       ]);
 
     const weeks = (weekRes.data ?? []) as Array<{
@@ -421,12 +423,14 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
     const runnable: string[] = [];
     let eligibleReports = 0;
     for (const pid of enabledIds) {
-      const { count, error: countErr } = await db
-        .from('reports')
-        .select('id', { count: 'exact', head: true })
-        .eq('project_id', pid)
-        .in('status', [...JUDGE_ELIGIBLE_STATUSES])
-        .is('judge_evaluated_at', null);
+      const { count, error: countErr } = await onlyJudgeable(
+        db
+          .from('reports')
+          .select('id', { count: 'exact', head: true })
+          .eq('project_id', pid)
+          .in('status', [...JUDGE_ELIGIBLE_STATUSES])
+          .is('judge_evaluated_at', null),
+      );
       if (countErr) return dbError(c, countErr);
       if ((count ?? 0) > 0) {
         runnable.push(pid);

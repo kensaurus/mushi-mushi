@@ -39,6 +39,12 @@ interface FakeDbOptions {
 
 type Op = 'select' | 'insert' | 'update' | 'upsert' | 'delete'
 
+/** SQL LIKE (`%` and `_`) as an anchored RegExp. */
+function likePattern(pattern: string): RegExp {
+  const body = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/%/g, '.*').replace(/_/g, '.')
+  return new RegExp(`^${body}$`, 's')
+}
+
 function readPath(row: Row, key: string): unknown {
   const m = /^(\w+)->>(\w+)$/.exec(key)
   if (m) {
@@ -116,6 +122,15 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: { code?: string; 
       })
       return this
     }
+    if (op === 'like' && typeof value === 'string') {
+      // `.not(col, 'like', 'x%')`: a NULL column matches neither LIKE nor NOT LIKE.
+      const re = likePattern(value)
+      this.filters.push((r) => {
+        const v = readPath(r, key)
+        return v !== null && v !== undefined && !re.test(String(v))
+      })
+      return this
+    }
     if (op !== 'in' || value === null) throw new Error(`fake-supabase: not(${op}) unsupported`)
     const values = value.replace(/^\(|\)$/g, '').split(',').map((s) => s.trim().replace(/^"|"$/g, ''))
     this.filters.push((r) => !values.includes(String(readPath(r, key))))
@@ -135,18 +150,29 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: { code?: string; 
    * (`NULL <> 'x'` is NULL), so a filter that forgets `is.null` fails here too.
    */
   or(filters: string): this {
-    const alternatives = filters.split(',').map((part) => {
-      const m = /^([\w>-]+)\.(is|eq|neq)\.(.*)$/.exec(part.trim())
+    // Split on top-level commas only: `col.not.in.(a,b)` keeps its list.
+    const parts = filters.split(/,(?![^(]*\))/)
+    const alternatives = parts.map((part) => {
+      const m = /^([\w>-]+)\.(not\.)?(is|eq|neq|in)\.(.*)$/.exec(part.trim())
       if (!m) throw new Error(`fake-supabase: or(${part}) unsupported`)
-      const [, key, op, raw] = m
+      const [, key, negated, op, raw] = m
       return (r: Row): boolean => {
         const v = readPath(r, key)
         if (op === 'is') {
           if (raw !== 'null') throw new Error(`fake-supabase: or(${part}) unsupported`)
-          return v === null || v === undefined
+          const isNull = v === null || v === undefined
+          return negated ? !isNull : isNull
         }
+        // NULL compares as unknown in Postgres, so it never matches, negated or not.
         if (v === null || v === undefined) return false
-        return op === 'eq' ? String(v) === raw : String(v) !== raw
+        let hit: boolean
+        if (op === 'in') {
+          const values = raw.replace(/^\(|\)$/g, '').split(',').map((s) => s.trim())
+          hit = values.includes(String(v))
+        } else {
+          hit = op === 'eq' ? String(v) === raw : String(v) !== raw
+        }
+        return negated ? !hit : hit
       }
     })
     this.filters.push((r) => alternatives.some((f) => f(r)))
