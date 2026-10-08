@@ -22,6 +22,10 @@
 // inventory and the response is small) and writes a `warn`-severity
 // finding asking the operator to run the deeper crawl.
 //
+// When the project has its own Firecrawl key (BYOK), up to 20 such pages
+// are first re-checked from a Firecrawl browser render (never signed in);
+// `gate_runs.summary.pages_rendered` counts them.
+//
 // API discovery
 // ─────────────
 // The same crawl pass also harvests every fetch-able URL the page
@@ -47,7 +51,9 @@ import { safeErrorResponse } from '../_shared/safe-error.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { computeStats, parseInventoryYaml, type Inventory } from '../_shared/inventory.ts'
 import { resolveStoryExternalId } from '../_shared/inventory-story-scope.ts'
+import { markKeyUsed, resolveLlmKey, type ResolvedKey } from '../_shared/byok.ts'
 import {
+  assertSafeOutboundUrl,
   inventoryAppAllowHosts,
   pickCrawlBaseUrl,
   safeFetch,
@@ -90,7 +96,19 @@ interface PageDiff {
   missing_in_inventory: string[]
   ms: number
   error?: string
+  /** Set when the page was re-checked from a Firecrawl browser render. */
+  rendered?: boolean
+  /** The path Firecrawl ended on when the render redirected away from `path`. */
+  rendered_to?: string
 }
+
+type CrawlResult = PageDiff & { html: string | null; href_paths: string[]; api_paths: string[] }
+
+const FIRECRAWL_SCRAPE_URL = 'https://api.firecrawl.dev/v2/scrape'
+const MAX_FIRECRAWL_RENDERS = 20
+const FIRECRAWL_WAIT_MS = 2_500
+const FIRECRAWL_TIMEOUT_MS = 20_000
+const RENDER_PHASE_BUDGET_MS = 75_000
 
 /** A path with a route parameter (`/lessons/[lessonId]`, `/users/:id`) names no single page to fetch. */
 function isDynamicPath(path: string): boolean {
@@ -108,8 +126,49 @@ function crawlVerdict(
   r: Pick<PageDiff, 'declared' | 'discovered' | 'error'>,
   page: { authRequired: boolean; hasAuth: boolean },
 ): 'checked' | 'unverified-auth' | 'unverified-client' {
-  if (r.error || r.declared.length === 0 || r.discovered.length > 0) return 'checked'
+  if (!noTestidsSeen(r)) return 'checked'
   return page.authRequired && !page.hasAuth ? 'unverified-auth' : 'unverified-client'
+}
+
+/** The page was fetched but showed none of its declared testids. */
+function noTestidsSeen(r: Pick<PageDiff, 'declared' | 'discovered' | 'error'>): boolean {
+  return !r.error && r.declared.length > 0 && r.discovered.length === 0
+}
+
+function diffHtml(html: string, declaredTestids: string[]) {
+  const discovered = new Set<string>()
+  for (const match of html.matchAll(TESTID_REGEX)) {
+    if (match[1]) discovered.add(match[1])
+  }
+
+  const declaredSet = new Set(declaredTestids)
+  const discoveredArr = Array.from(discovered)
+  const declaredArr = Array.from(declaredSet)
+
+  const hrefPaths: string[] = []
+  for (const m of html.matchAll(HREF_REGEX)) {
+    const v = m[1]
+    if (!v) continue
+    if (v.startsWith('/')) hrefPaths.push(v)
+  }
+  for (const m of html.matchAll(SCRIPT_REGEX)) {
+    const v = m[1]
+    if (!v) continue
+    if (v.startsWith('/')) hrefPaths.push(v)
+  }
+  const apiPaths: string[] = []
+  for (const m of html.matchAll(FETCH_API_REGEX)) {
+    if (m[1]) apiPaths.push(m[1])
+  }
+
+  return {
+    declared: declaredArr,
+    discovered: discoveredArr,
+    missing_in_app: declaredArr.filter((t) => !discovered.has(t)),
+    missing_in_inventory: discoveredArr.filter((t) => !declaredSet.has(t)),
+    href_paths: hrefPaths,
+    api_paths: apiPaths,
+  }
 }
 
 async function loadProject(
@@ -200,7 +259,7 @@ async function crawlPage(
   declaredTestids: string[],
   authHeaders: Record<string, string>,
   urlOptions: SafeUrlOptions = {},
-): Promise<PageDiff & { html: string | null; href_paths: string[]; api_paths: string[] }> {
+): Promise<CrawlResult> {
   const url = new URL(page.path, baseUrl).toString()
   const start = Date.now()
   try {
@@ -218,46 +277,13 @@ async function crawlPage(
     )
     const html = await res.text()
 
-    const discovered = new Set<string>()
-    for (const match of html.matchAll(TESTID_REGEX)) {
-      if (match[1]) discovered.add(match[1])
-    }
-
-    const declaredSet = new Set(declaredTestids)
-    const discoveredArr = Array.from(discovered)
-    const declaredArr = Array.from(declaredSet)
-
-    const missingInApp = declaredArr.filter((t) => !discovered.has(t))
-    const missingInInventory = discoveredArr.filter((t) => !declaredSet.has(t))
-
-    const hrefPaths: string[] = []
-    for (const m of html.matchAll(HREF_REGEX)) {
-      const v = m[1]
-      if (!v) continue
-      if (v.startsWith('/')) hrefPaths.push(v)
-    }
-    for (const m of html.matchAll(SCRIPT_REGEX)) {
-      const v = m[1]
-      if (!v) continue
-      if (v.startsWith('/')) hrefPaths.push(v)
-    }
-    const apiPaths: string[] = []
-    for (const m of html.matchAll(FETCH_API_REGEX)) {
-      if (m[1]) apiPaths.push(m[1])
-    }
-
     return {
       page_id: page.id,
       path: page.path,
       status_code: res.status,
-      declared: declaredArr,
-      discovered: discoveredArr,
-      missing_in_app: missingInApp,
-      missing_in_inventory: missingInInventory,
+      ...diffHtml(html, declaredTestids),
       ms: Date.now() - start,
       html,
-      href_paths: hrefPaths,
-      api_paths: apiPaths,
     }
   } catch (err) {
     return {
@@ -298,6 +324,126 @@ async function runWithConcurrency<T, R>(
   }
   await Promise.all(runners)
   return out
+}
+
+/** Only the project's own stored key renders its pages; the platform env key never does. */
+function projectFirecrawlKey(resolved: ResolvedKey | null): { key: string; keyId?: string } | null {
+  if (!resolved || resolved.source !== 'byok' || !resolved.key) return null
+  return { key: resolved.key, keyId: resolved.keyId }
+}
+
+function samePath(a: string, b: string): boolean {
+  const norm = (p: string) => (p.length > 1 ? p.replace(/\/+$/, '') : p)
+  return norm(a) === norm(b)
+}
+
+/**
+ * Render one page in Firecrawl's browser and return its HTML. The URL must
+ * pass the crawl's SSRF allowlist, and so must the URL Firecrawl ended on.
+ * Only the URL is sent: no crawler sign-in headers or cookies.
+ */
+async function renderWithFirecrawl(
+  url: string,
+  apiKey: string,
+  urlOptions: SafeUrlOptions,
+): Promise<{ html: string; finalUrl: URL | null }> {
+  const check = assertSafeOutboundUrl(url, urlOptions)
+  if (!check.ok) throw new Error(`outbound-blocked: ${check.reason}`)
+
+  const res = await fetch(FIRECRAWL_SCRAPE_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({
+      url: check.url.toString(),
+      formats: ['rawHtml'],
+      onlyMainContent: false,
+      waitFor: FIRECRAWL_WAIT_MS,
+      timeout: FIRECRAWL_TIMEOUT_MS,
+      maxAge: 0,
+    }),
+    signal: AbortSignal.timeout(FIRECRAWL_TIMEOUT_MS + 5_000),
+  })
+  if (!res.ok) throw new Error(`firecrawl HTTP ${res.status}`)
+  const json = (await res.json()) as {
+    success?: boolean
+    data?: { rawHtml?: unknown; metadata?: { url?: unknown; sourceURL?: unknown } }
+  }
+  const html = json.data?.rawHtml
+  if (json.success !== true || typeof html !== 'string' || html.length === 0) {
+    throw new Error('firecrawl returned no HTML')
+  }
+
+  const landed = json.data?.metadata?.url ?? json.data?.metadata?.sourceURL
+  if (typeof landed !== 'string') return { html, finalUrl: null }
+  const landedCheck = assertSafeOutboundUrl(landed, urlOptions)
+  if (!landedCheck.ok) throw new Error(`firecrawl landed off the allowlist: ${landedCheck.reason}`)
+  return { html, finalUrl: landedCheck.url }
+}
+
+/**
+ * Re-check pages whose server HTML showed none of their testids against a
+ * Firecrawl browser render. A render that found testids replaces the page's
+ * diff; a render that redirected elsewhere or still found none keeps the page
+ * unverified with `rendered` set. Firecrawl failures leave the page unchanged.
+ */
+async function renderUnverifiedPages(
+  results: CrawlResult[],
+  opts: {
+    baseUrl: string
+    urlOptions: SafeUrlOptions
+    concurrency: number
+    getKey: () => Promise<{ key: string; keyId?: string } | null>
+    maxRenders?: number
+    budgetMs?: number
+  },
+): Promise<{ results: CrawlResult[]; rendered: number; keyId?: string }> {
+  const candidates = results
+    .map((r, i) => ({ r, i }))
+    .filter(({ r }) => noTestidsSeen(r))
+    .slice(0, opts.maxRenders ?? MAX_FIRECRAWL_RENDERS)
+  if (candidates.length === 0) return { results, rendered: 0 }
+
+  let key: { key: string; keyId?: string } | null = null
+  try {
+    key = await opts.getKey()
+  } catch (err) {
+    rlog.warn('crawler: Firecrawl key lookup failed; pages stay unverified', { err: String(err) })
+  }
+  if (!key) return { results, rendered: 0 }
+  const apiKey = key.key
+
+  const out = results.slice()
+  const deadline = Date.now() + (opts.budgetMs ?? RENDER_PHASE_BUDGET_MS)
+  let rendered = 0
+  await runWithConcurrency(
+    candidates,
+    async ({ r, i }) => {
+      if (Date.now() > deadline) return
+      const url = new URL(r.path, opts.baseUrl)
+      try {
+        const { html, finalUrl } = await renderWithFirecrawl(url.toString(), apiKey, opts.urlOptions)
+        rendered += 1
+        if (finalUrl && !samePath(finalUrl.pathname, url.pathname)) {
+          out[i] = { ...r, rendered: true, rendered_to: finalUrl.pathname }
+          return
+        }
+        const diff = diffHtml(html, r.declared)
+        out[i] = {
+          ...r,
+          ...diff,
+          api_paths: Array.from(new Set([...r.api_paths, ...diff.api_paths])),
+          rendered: true,
+        }
+      } catch (err) {
+        rlog.warn('crawler: Firecrawl render failed; page stays unverified', {
+          path: r.path,
+          err: err instanceof Error ? err.message : String(err),
+        })
+      }
+    },
+    opts.concurrency,
+  )
+  return { results: out, rendered, keyId: key.keyId }
 }
 
 async function crawlAndPersist(
@@ -417,12 +563,25 @@ async function crawlAndPersist(
   }
   const urlOptions: SafeUrlOptions = { allowHosts: Array.from(new Set(allowHosts)) }
 
-  const results = await runWithConcurrency(
+  const fetched = await runWithConcurrency(
     items,
     (it: CrawlItem) =>
       crawlPage(project.baseUrl, { id: it.id, path: it.path }, it.declared, headers, urlOptions),
     project.concurrency,
   )
+
+  const { results, rendered, keyId } = await renderUnverifiedPages(fetched, {
+    baseUrl: project.baseUrl,
+    urlOptions,
+    concurrency: project.concurrency,
+    getKey: async () =>
+      projectFirecrawlKey(await resolveLlmKey(db, projectId, 'firecrawl', { purpose: 'probe' })),
+  })
+  if (rendered > 0 && keyId) {
+    await markKeyUsed(db, projectId, 'firecrawl', keyId).catch((err) => {
+      rlog.warn('crawler: Firecrawl usage bookkeeping failed (non-fatal)', { err: String(err) })
+    })
+  }
 
   // Persist findings.
   let findings = 0
@@ -431,9 +590,13 @@ async function crawlAndPersist(
     const verdict = crawlVerdict(r, { authRequired: items[i]?.authRequired ?? true, hasAuth })
     if (verdict !== 'checked') {
       unverified += 1
-      const why = verdict === 'unverified-auth'
-        ? 'it needs sign-in and no crawler sign-in is set'
-        : 'none of its testids are in the server HTML, so it renders in the browser'
+      const why = r.rendered_to
+        ? `rendered with Firecrawl, it redirected to ${r.rendered_to}, so it likely needs sign-in`
+        : r.rendered
+          ? 'rendered with Firecrawl, it still showed none of its testids, so it likely needs sign-in'
+          : verdict === 'unverified-auth'
+            ? 'it needs sign-in and no crawler sign-in is set'
+            : 'none of its testids are in the server HTML, so it renders in the browser'
       const { error } = await db.from('gate_findings').insert({
         gate_run_id: runId,
         project_id: projectId,
@@ -442,9 +605,11 @@ async function crawlAndPersist(
         message: `Page ${r.path} could not be checked: ${why}. Its ${r.declared.length} declared testid(s) are unverified, not missing.`,
         file_path: r.path,
         suggested_fix: {
-          explanation: verdict === 'unverified-auth'
-            ? 'Set a crawler sign-in (Inventory → Settings → crawler auth), or run `mushi-mushi-cli inventory crawl --playwright` signed in.'
-            : 'Run `mushi-mushi-cli inventory crawl --playwright`, which renders the page in a browser.',
+          explanation: r.rendered
+            ? 'The Firecrawl render is never signed in. Run `mushi-mushi-cli inventory crawl --playwright` signed in.'
+            : verdict === 'unverified-auth'
+              ? 'Set a crawler sign-in (Inventory → Settings → crawler auth), or run `mushi-mushi-cli inventory crawl --playwright` signed in.'
+              : 'Run `mushi-mushi-cli inventory crawl --playwright`, which renders the page in a browser.',
         },
       })
       if (!error) findings += 1
@@ -509,6 +674,7 @@ async function crawlAndPersist(
     pages_crawled: results.length,
     pages_failed: results.filter((r) => r.error).length,
     pages_unverified: unverified,
+    pages_rendered: rendered,
     ...(skippedDynamic.length ? { skipped_dynamic_paths: skippedDynamic } : {}),
     findings,
     discovered_apis: Array.from(discoveredApiSet),
@@ -579,4 +745,12 @@ if (typeof Deno !== 'undefined') {
   Deno.serve(withSentry('inventory-crawler', handler))
 }
 
-export { crawlPage, runWithConcurrency, crawlAndPersist, crawlVerdict, isDynamicPath }
+export {
+  crawlPage,
+  runWithConcurrency,
+  crawlAndPersist,
+  crawlVerdict,
+  isDynamicPath,
+  projectFirecrawlKey,
+  renderUnverifiedPages,
+}
