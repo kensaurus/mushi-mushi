@@ -87,7 +87,10 @@ const READ_SKILL_RE = /\bRead the `([a-z][a-z0-9-]{1,63})` skill\b/gi
  * hand-offs and `skills/x/SKILL.md` paths, in the order they appear. Body
  * mentions are kept only when they name a skill in `knownSlugs`, so prose
  * like "Read the `README` skill" or a neighbour from another repo does not
- * become a step. The skill itself is never in its own chain.
+ * become a step. The skill itself is never in its own chain. Only a
+ * `workflow-*` skill falls back to its body: other skills mention neighbours
+ * and guardrails ("Read the `protocol-browser-anti-stall` skill") that are
+ * not steps to run.
  */
 export function parseChainSlugs(
   body: string,
@@ -107,6 +110,8 @@ export function parseChainSlugs(
     for (const slug of declared.split(/[\s,]+/)) add(slug.trim(), true)
     return out
   }
+
+  if (selfSlug && !selfSlug.startsWith('workflow-')) return out
 
   const hits: Array<{ at: number; slug: string }> = []
   for (const m of body.matchAll(PATH_RE)) hits.push({ at: m.index ?? 0, slug: m[1] })

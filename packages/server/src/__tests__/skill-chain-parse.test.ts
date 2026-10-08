@@ -55,3 +55,12 @@ describe('parseChainSlugs', () => {
     expect(parseChainSlugs('Read the `debug-error` skill.', { 'metadata.chain': '' }, { knownSlugs: known })).toEqual([])
   })
 })
+
+describe('parseChainSlugs body fallback', () => {
+  it('is only for workflow-* skills; a guardrail read is not a step', () => {
+    const body = '> Read the `debug-error` skill and follow it.'
+    expect(parseChainSlugs(body, {}, { selfSlug: 'enhance-readme', knownSlugs: known })).toEqual([])
+    expect(parseChainSlugs(body, {}, { selfSlug: 'workflow-x', knownSlugs: known })).toEqual(['debug-error'])
+    expect(parseChainSlugs(body, { 'metadata.chain': 'debug-error' }, { selfSlug: 'enhance-readme', knownSlugs: known })).toEqual(['debug-error'])
+  })
+})
