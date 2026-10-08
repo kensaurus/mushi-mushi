@@ -387,7 +387,7 @@ Deno.serve(
         db
           .from('reports')
           .select(
-            'id, description, summary, category, severity, component, confidence, user_intent, user_category, status, reporter_token_hash, ' +
+            'id, description, summary, category, category_confirmed_at, severity, component, confidence, user_intent, user_category, status, reporter_token_hash, ' +
               'stage1_classification, stage2_analysis, reproduction_steps, environment, console_logs, network_logs, ' +
               'judge_score, custom_metadata',
           )

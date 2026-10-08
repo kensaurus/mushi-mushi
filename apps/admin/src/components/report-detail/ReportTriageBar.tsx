@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Card } from '../../components/ui'
 import { SelectField, Btn } from '../ui'
-import { STATUS_LABELS, SEVERITY_LABELS } from '../../lib/tokens'
+import { STATUS_LABELS, SEVERITY_LABELS, CATEGORY_LABELS } from '../../lib/tokens'
 import { IconArrowRight, IconExternalLink } from '../icons'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
@@ -23,6 +23,8 @@ function selectableStatus(status: string): string {
   return STATUS_OPTS.find((s) => STATUS_LABELS[s] === label) ?? status
 }
 const SEV_OPTS = ['critical', 'high', 'medium', 'low']
+/** The classifier's categories; setting one here is a person's triage decision. */
+const CATEGORY_OPTS = ['bug', 'slow', 'visual', 'confusing', 'other']
 
 /**
  * Why a report is closed. The reporter sees matching copy ("We couldn't
@@ -212,6 +214,16 @@ export function ReportTriageBar({
       >
         <option value="">Unset</option>
         {SEV_OPTS.map((s) => <option key={s} value={s}>{SEVERITY_LABELS[s] ?? s}</option>)}
+      </SelectField>
+
+      <SelectField
+        label="Category"
+        value={report.category ?? 'other'}
+        onChange={(e) => onTriage({ category: e.currentTarget.value, category_confirmed_at: new Date().toISOString() })}
+        disabled={saving}
+        className="!w-auto"
+      >
+        {CATEGORY_OPTS.map((c) => <option key={c} value={c}>{CATEGORY_LABELS[c] ?? c}</option>)}
       </SelectField>
 
       {/* mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas) */}

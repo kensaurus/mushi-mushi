@@ -799,6 +799,7 @@ function describeTriageUpdate(updates: Record<string, string>): string | null {
   if (updates.severity !== undefined) {
     parts.push(updates.severity ? `severity \u2192 ${severityLabel(updates.severity)}` : 'severity cleared')
   }
+  if (updates.category) parts.push(`category \u2192 ${categoryLabel(updates.category)}`)
   return parts.length > 0 ? parts.join(' \u00b7 ') : null
 }
 
