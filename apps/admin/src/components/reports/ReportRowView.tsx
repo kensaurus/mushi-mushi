@@ -110,16 +110,12 @@ function ReportRowViewInner({
   const closedAction = closedRowAction(row.status)
   const reporterReplied = hasUnseenReporterReply(row)
 
-  // "Loud" rows = critical OR significant blast (>=3 distinct users felt it).
-  // These get a slightly tinted background so triagers can scan the page and
-  // see immediately where the real fires are without parsing severity badges.
-  const isLoud = row.severity === 'critical' || blastRadius >= 3
-
+  // No row background tints: the sticky and trailing cells paint their own
+  // background, so a row tint stopped short of the right edge. The severity
+  // stripe marks the row; the cursor is an outline; selection is the checkbox.
   const baseRowCls =
     'group border-t border-edge-subtle hover:bg-surface-overlay/60 motion-safe:transition-opacity cursor-pointer relative motion-safe:animate-mushi-fade-in'
-  const cursorCls = isCursor ? 'bg-surface-overlay/40 outline outline-1 outline-brand/40' : ''
-  const variantBgCls = isVariant ? 'bg-surface-overlay/30' : ''
-  const selectedCls = isSelected ? 'bg-brand/5' : isLoud ? 'bg-danger/5' : variantBgCls
+  const cursorCls = isCursor ? 'outline outline-1 -outline-offset-1 outline-brand/40' : ''
 
   // Wave T.2.5 single-shot background wash when a realtime update flips
   // the status — e.g. triager sees the row go `new → classified` in place.
@@ -160,7 +156,7 @@ function ReportRowViewInner({
       }}
       onMouseEnter={onFocus}
       onAnimationEnd={statusFlash.onAnimationEnd}
-      className={`${baseRowCls} ${cursorCls} ${selectedCls} ${statusFlash.className}`}
+      className={`${baseRowCls} ${cursorCls} ${statusFlash.className}`}
     >
       <td className={`${REPORTS_TABLE_COL.stripe} p-0 align-stretch`}>
         {/* Severity stripe — uses a ::before-style absolute fill so it spans

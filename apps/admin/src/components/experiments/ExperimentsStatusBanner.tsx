@@ -41,7 +41,7 @@ export function ExperimentsStatusBanner({ stats, onTab, onRefresh, refreshing, p
   if (stats.topPriority === 'running') {
     return (
       <StatusBannerShell
-        tone="warn"
+        tone="info"
         title={
           plainBanner
             ? `${stats.runningCount} experiment${stats.runningCount === 1 ? '' : 's'} live`
@@ -62,7 +62,7 @@ export function ExperimentsStatusBanner({ stats, onTab, onRefresh, refreshing, p
   if (stats.topPriority === 'draft_ready') {
     return (
       <StatusBannerShell
-        tone="brand"
+        tone="info"
         title={`${stats.draftsReadyToLaunch} draft${stats.draftsReadyToLaunch === 1 ? '' : 's'} ready to launch`}
         subtitle={stats.topPriorityLabel}
         action={
@@ -79,7 +79,7 @@ export function ExperimentsStatusBanner({ stats, onTab, onRefresh, refreshing, p
   if (stats.topPriority === 'no_experiments') {
     return (
       <StatusBannerShell
-        tone="brand"
+        tone="info"
         title={plainBanner ? 'No experiments yet' : `No experiments on ${projectLabel}`}
         subtitle={stats.topPriorityLabel}
         action={

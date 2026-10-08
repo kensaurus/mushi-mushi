@@ -38,10 +38,46 @@ const FONT_SIZE_HINT = /(^|\.)(font|fontsize|fontsizes|text|type|typography)(\.|
 const RADIUS_HINT = /radius|radii|rounded|corner/i
 const SPACING_HINT = /space|spacing|gap|inset|gutter|size|sizes|padding|margin/i
 
+const SHADOW_HINT = /shadow|elevation/i
+const CSS_COLOR_FN = /^(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\(/i
+const CSS_LENGTH = /^(-?\d*\.?\d+)(px|rem)$/
+
+/**
+ * What a swatch can paint for a token: its hex, else a CSS colour function in
+ * its display (`rgb(…)`, `oklch(…)`), else null. A shadow such as
+ * `0 1px 2px rgb(…)` does not start with a colour function, so it gets none.
+ */
+export function swatchColor(t: Pick<DesignToken, 'hex' | 'display'>): string | null {
+  if (t.hex) return t.hex
+  const d = t.display.trim()
+  return CSS_COLOR_FN.test(d) ? d : null
+}
+
+/** Pixels for a length token: the server's `px`, else a `12px` / `0.75rem` display. */
+export function tokenPx(t: Pick<DesignToken, 'px' | 'display'>): number | null {
+  if (t.px != null) return t.px
+  const m = CSS_LENGTH.exec(t.display.trim())
+  if (!m) return null
+  return m[2] === 'rem' ? Number(m[1]) * 16 : Number(m[1])
+}
+
 /** @internal Exported for tests; the page uses `sectionTokens`. */
 export function tokenSection(t: DesignToken): TokenSection {
   const type = t.type ?? null
-  if (type === 'color' || (type === null && t.hex)) return 'color'
+  if (type === 'color' || type === null) {
+    if (swatchColor(t)) return 'color'
+    // A generated export can type every custom property as colour: a shadow,
+    // a radius or a spacing value then lands by its name and value instead of
+    // as a colour with no swatch.
+    const where = `${t.group}.${t.path}`
+    if (SHADOW_HINT.test(where)) return 'other'
+    if (tokenPx(t) !== null) {
+      if (RADIUS_HINT.test(where)) return 'radius'
+      if (FONT_SIZE_HINT.test(where)) return 'type'
+      return 'spacing'
+    }
+    return 'other'
+  }
   if (type === 'fontFamily' || type === 'fontWeight' || type === 'typography') return 'type'
   if (type === 'duration' || type === 'cubicBezier' || type === 'transition') return 'motion'
   if (type === 'dimension') {

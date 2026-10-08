@@ -22,7 +22,7 @@ import { useActiveProjectSignal } from '../../lib/activeProject'
 import { useRealtimeReload } from '../../lib/realtime'
 import { FilterChip } from '../ui'
 import { FilterChipCell, FilterChipRail } from '../FilterChipRail'
-import { SEVERITY_CHIPS, statusChipCount, type ReportStatusStats } from '../../lib/reportsListFilters'
+import { SEVERITY_CHIPS, STATUS_CHIPS, statusChipCount, type ReportStatusStats } from '../../lib/reportsListFilters'
 
 type StatsResponse = ReportStatusStats
 
@@ -31,18 +31,6 @@ interface Props {
   severity: string
   onSetFilter: (key: string, value: string) => void
 }
-
-const STATUS_BUCKETS: Array<{ value: string; label: string; tone: 'default' | 'warn' | 'info' | 'brand' | 'ok' }> = [
-  { value: '',           label: 'All',         tone: 'default' },
-  // Everything still waiting on a decision — what the dashboard's Bug queue
-  // previews and its "View backlog" link opens.
-  { value: 'open',       label: 'Open',        tone: 'warn' },
-  { value: 'new',        label: 'New',         tone: 'warn' },
-  { value: 'classified', label: 'Classified',  tone: 'brand' },
-  { value: 'fixing',     label: 'Fixing',      tone: 'info' },
-  { value: 'fixed',      label: 'Fixed',       tone: 'ok' },
-  { value: 'dismissed',  label: 'Dismissed',   tone: 'default' },
-]
 
 
 export function ReportsQuickFilters({ status, severity, onSetFilter }: Props) {
@@ -69,7 +57,7 @@ export function ReportsQuickFilters({ status, severity, onSetFilter }: Props) {
       aria-label="Quick filters"
     >
       <FilterChipRail trackId="reports-status" aria-label="Status filters">
-        {STATUS_BUCKETS.map((b) => {
+        {STATUS_CHIPS.map((b) => {
           const count = stats ? statusChipCount(b.value, stats) : 0
           return (
             <FilterChipCell key={b.value || 'all'} active={status === b.value}>

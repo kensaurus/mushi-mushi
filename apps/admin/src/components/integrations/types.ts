@@ -13,9 +13,7 @@ import {
   IconCursorCloud,
   IconClaudeCode,
   IconJira,
-  IconLinear,
   IconPagerDuty,
-  IconGlobe,
 } from '../icons'
 
 /** Narrow union for *platform* integrations — the SDK-feeding services
@@ -136,11 +134,13 @@ export interface PlatformDef {
   webhookPath?: string
 }
 
+/** Linear lives on its own OAuth card (LinearIntegrationCard); Vercel is a
+ *  deploy target shown under Deployment readiness, not a routing destination. */
 export interface RoutingProviderDef {
-  type: 'jira' | 'linear' | 'github' | 'pagerduty' | 'vercel'
+  type: 'jira' | 'github' | 'pagerduty'
   /** The kind key used in integration_health_history. 'github' routing maps to
    *  'github_issues' to avoid colliding with the platform GitHub (code-repo). */
-  healthKind: 'jira' | 'linear' | 'github_issues' | 'pagerduty' | 'vercel'
+  healthKind: 'jira' | 'github_issues' | 'pagerduty'
   label: string
   whyItMatters: string
   capabilitiesOnceConnected: string[]
@@ -186,7 +186,7 @@ export interface IntegrationStats {
   topPriorityTo?: string | null
 }
 
-export type IntegrationTopPriority =
+type IntegrationTopPriority =
   | 'no_project'
   | 'platform_down'
   | 'incomplete'
@@ -424,31 +424,6 @@ export const ROUTING_PROVIDERS: RoutingProviderDef[] = [
     ],
   },
   {
-    type: 'linear',
-    healthKind: 'linear',
-    label: 'Linear',
-    Icon: IconLinear,
-    color: 'text-accent-foreground',
-    domain: 'linear.app',
-    externalUrl: 'https://linear.app',
-    setupSteps: [
-      'Open Linear → Settings → API → Personal API keys → Create key.',
-      'Copy the lin_api_… token.',
-      'Find your Team ID: Linear → Settings → Teams → click the team → copy the ID from the URL.',
-      'Paste token + Team ID below, then Save → Test connection.',
-    ],
-    whyItMatters: 'Mirror reports into Linear with proper labels and priorities. Classification metadata maps to Linear labels.',
-    capabilitiesOnceConnected: [
-      'Mirror reports as Linear issues with severity-mapped priority',
-      'Apply category labels automatically (bug, regression, ux, etc.)',
-      'Link the Linear issue back into the report for round-trip context',
-    ],
-    fields: [
-      { name: 'apiKey', label: 'API key', placeholder: 'lin_api_...', type: 'password', help: 'Personal API key from Linear → Settings → API.', required: true, helpId: 'integrations.routing.linear.api_key', validator: 'token' },
-      { name: 'teamId', label: 'Team ID', placeholder: 'TEAM-uuid', help: 'UUID of the Linear team that should receive issues.', required: true, helpId: 'integrations.routing.linear.team_id', validator: 'token' },
-    ],
-  },
-  {
     type: 'github',
     healthKind: 'github_issues',
     label: 'GitHub Issues',
@@ -496,32 +471,6 @@ export const ROUTING_PROVIDERS: RoutingProviderDef[] = [
     ],
     fields: [
       { name: 'routingKey', label: 'Routing key', placeholder: '32-char integration key', type: 'password', help: 'Events API v2 integration key from PagerDuty service.', required: true, helpId: 'integrations.routing.pagerduty.routing_key', validator: 'pagerdutyRoutingKey' },
-    ],
-  },
-  {
-    type: 'vercel',
-    healthKind: 'vercel',
-    label: 'Vercel',
-    Icon: IconGlobe,
-    color: 'text-fg',
-    domain: 'vercel.com',
-    externalUrl: 'https://vercel.com',
-    setupSteps: [
-      'Open vercel.com/account/tokens → Create token with full access.',
-      'Find your Vercel Project Slug in the project settings URL: vercel.com/{team}/{project}.',
-      'Paste the project slug and token below, then Save.',
-      'Each Mushi fix PR will now receive a Vercel preview URL as a PR comment.',
-    ],
-    whyItMatters: 'Each auto-fix PR gets a Vercel preview deployment so reviewers can verify the fix in a browser before approving. The preview URL surfaces as a comment on the PR.',
-    capabilitiesOnceConnected: [
-      'Vercel preview URL surfaces on every Mushi fix PR',
-      'Deployment readiness card shows "Connected" instead of a setup prompt',
-      'Health probe confirms token + project are still valid',
-    ],
-    fields: [
-      { name: 'project_slug', label: 'Project slug', placeholder: 'my-app', help: 'The project identifier from vercel.com/{team}/{project}. Used to build deep links.', required: true, validator: 'slug' },
-      { name: 'team_slug', label: 'Team slug', placeholder: 'my-team', help: 'Optional — Vercel team the project belongs to (for team accounts).', validator: 'slug' },
-      { name: 'access_token', label: 'Access token', placeholder: 'vercel_…', type: 'password', help: 'Vercel API token with full access. Only used for health probes.', validator: 'token' },
     ],
   },
 ]

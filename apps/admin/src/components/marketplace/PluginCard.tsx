@@ -5,6 +5,7 @@
  *          and an Install/Uninstall action that bubbles up.
  */
 
+import { Link } from 'react-router-dom'
 import { Btn, Card } from '../ui'
 import { CHIP_TONE } from '../../lib/chipTone'
 import { ADMIN_ONLY_HINT } from '../../lib/orgPermissions'
@@ -26,6 +27,8 @@ interface Props {
   canManage?: boolean
   /** False when the plan has no `plugins` entitlement: Install would only end in a 402. */
   pluginsUnlocked?: boolean
+  /** Set when Integrations already has a native card for this service. */
+  integrationsHref?: string
 }
 
 export function PluginCard({
@@ -37,6 +40,7 @@ export function PluginCard({
   onUninstall,
   canManage = true,
   pluginsUnlocked = true,
+  integrationsHref,
 }: Props) {
   const blockedReason = !canManage
     ? ADMIN_ONLY_HINT
@@ -137,6 +141,13 @@ export function PluginCard({
           >
             Uninstall
           </Btn>
+        ) : integrationsHref ? (
+          <Link
+            to={integrationsHref}
+            className="text-2xs text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity"
+          >
+            Already on Integrations →
+          </Link>
         ) : (
           <Btn size="sm" onClick={onInstall} disabled={busy || Boolean(blockedReason)} title={blockedReason}>
             Install

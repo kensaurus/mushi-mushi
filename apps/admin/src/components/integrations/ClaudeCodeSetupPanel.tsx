@@ -5,7 +5,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { apiFetch } from '../../lib/supabase'
-import { Btn, ErrorAlert } from '../ui'
+import { Btn, DisclosurePanel, ErrorAlert } from '../ui'
 import { IconCopy, IconExternalLink } from '../icons'
 
 interface SetupPayload {
@@ -84,67 +84,68 @@ export function ClaudeCodeSetupPanel({ configured, workflowEvent }: Props) {
   if (!data) return null
 
   return (
-    <div className="border-t border-edge-subtle bg-surface-raised/30 px-3 py-3 space-y-3">
-      <div>
-        <h4 className="text-2xs font-semibold text-fg uppercase tracking-wide">Repo setup (BYOK)</h4>
-        <p className="text-2xs text-fg-muted mt-1 leading-snug">
-          Copy the workflow into your GitHub repo and add secrets there. Keys never ship in the
-          public mushi-mushi repo or in workflow YAML committed to git.
-        </p>
-      </div>
+    <div className="border-t border-edge-subtle px-3 py-3">
+      <DisclosurePanel title="Repo setup">
+        <div className="space-y-3">
+          <p className="text-2xs text-fg-muted leading-snug">
+            Add this workflow file and these secrets to your own GitHub repo. Keys stay in your repo&apos;s
+            secrets, never in the workflow file.
+          </p>
 
-      <div className="space-y-1">
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-2xs font-mono text-fg-secondary">{data.workflowPath}</span>
-          <Btn
-            size="sm"
-            variant="ghost"
-            onClick={() => void copyText(data.workflowYaml, 'yaml')}
-            className="shrink-0"
+          <div className="space-y-1">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-2xs font-mono text-fg-secondary">{data.workflowPath}</span>
+              <Btn
+                size="sm"
+                variant="ghost"
+                onClick={() => void copyText(data.workflowYaml, 'yaml')}
+                className="shrink-0"
+              >
+                <IconCopy size={12} />
+                {copied === 'yaml' ? 'Copied' : 'Copy workflow'}
+              </Btn>
+            </div>
+            <pre className="mushi-code-block mushi-code-body max-h-40 overflow-auto rounded-sm border border-code-surface-border p-2 text-2xs font-mono">
+              {data.workflowYaml.slice(0, 1200)}
+              {data.workflowYaml.length > 1200 ? '\n…' : ''}
+            </pre>
+          </div>
+
+          <div>
+            <p className="text-2xs font-medium text-fg mb-1">GitHub Actions secrets (your repo)</p>
+            <ul className="space-y-2">
+              {data.githubSecrets.map((s) => (
+                <li key={s.name} className="text-2xs">
+                  <code className="font-mono text-brand">{s.name}</code>
+                  <span className="text-fg-muted"> — {s.description}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {data.mushiSupabaseUrl && (
+            <div className="flex flex-wrap items-center gap-2 text-2xs">
+              <span className="text-fg-muted">Dispatch callback URL (injected automatically):</span>
+              <code className="font-mono text-fg-secondary truncate max-w-full">{data.mushiSupabaseUrl}</code>
+              <Btn size="sm" variant="ghost" onClick={() => void copyText(data.mushiSupabaseUrl, 'url')}>
+                <IconCopy size={12} />
+                {copied === 'url' ? 'Copied' : 'Copy'}
+              </Btn>
+            </div>
+          )}
+
+          <p className="text-2xs text-fg-faint leading-snug">{data.serviceRoleHint}</p>
+
+          <a
+            href="https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions"
+            target="_blank"
+            rel="noreferrer noopener"
+            className="inline-flex items-center gap-1 text-2xs text-accent-foreground hover:text-accent"
           >
-            <IconCopy size={12} />
-            {copied === 'yaml' ? 'Copied' : 'Copy workflow'}
-          </Btn>
+            GitHub secrets docs <IconExternalLink size={10} />
+          </a>
         </div>
-        <pre className="mushi-code-block mushi-code-body max-h-40 overflow-auto rounded-sm border border-code-surface-border p-2 text-2xs font-mono">
-          {data.workflowYaml.slice(0, 1200)}
-          {data.workflowYaml.length > 1200 ? '\n…' : ''}
-        </pre>
-      </div>
-
-      <div>
-        <p className="text-2xs font-medium text-fg mb-1">GitHub Actions secrets (your repo)</p>
-        <ul className="space-y-2">
-          {data.githubSecrets.map((s) => (
-            <li key={s.name} className="text-2xs">
-              <code className="font-mono text-brand">{s.name}</code>
-              <span className="text-fg-muted"> — {s.description}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      {data.mushiSupabaseUrl && (
-        <div className="flex flex-wrap items-center gap-2 text-2xs">
-          <span className="text-fg-muted">Dispatch callback URL (injected automatically):</span>
-          <code className="font-mono text-fg-secondary truncate max-w-full">{data.mushiSupabaseUrl}</code>
-          <Btn size="sm" variant="ghost" onClick={() => void copyText(data.mushiSupabaseUrl, 'url')}>
-            <IconCopy size={12} />
-            {copied === 'url' ? 'Copied' : 'Copy'}
-          </Btn>
-        </div>
-      )}
-
-      <p className="text-2xs text-fg-faint leading-snug">{data.serviceRoleHint}</p>
-
-      <a
-        href="https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions"
-        target="_blank"
-        rel="noreferrer noopener"
-        className="inline-flex items-center gap-1 text-2xs text-accent-foreground hover:text-accent"
-      >
-        GitHub secrets docs <IconExternalLink size={10} />
-      </a>
+      </DisclosurePanel>
     </div>
   )
 }

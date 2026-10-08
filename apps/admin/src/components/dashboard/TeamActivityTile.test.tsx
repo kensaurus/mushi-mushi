@@ -53,3 +53,11 @@ describe('TeamActivityTile', () => {
     expect(text).toContain('System')
   })
 })
+
+describe('auditActionPhrase', () => {
+  it('names common actions in words and spells out the rest', async () => {
+    const { auditActionPhrase } = await import('./TeamActivityTile')
+    expect(auditActionPhrase('content_quality.bulk_dismissed')).toBe('dismissed content checks')
+    expect(auditActionPhrase('retention.sweep')).toBe('retention sweep')
+  })
+})

@@ -73,7 +73,6 @@ export function DriftSnapshotStrip({
         <StatCard
           label={statLabels?.snapshots ?? 'Snapshots'}
           value={stats.snapshotCount}
-          accent={stats.snapshotCount > 0 ? 'text-brand' : undefined}
           tooltip={snapshotsTooltip(stats)}
           detail={snapshotsDetail(stats)}
           to={driftLinks.snapshots}
@@ -81,7 +80,6 @@ export function DriftSnapshotStrip({
         <StatCard
           label={statLabels?.contractEdges ?? 'Contract edges'}
           value={stats.lastSnapshotEdges}
-          accent={stats.lastSnapshotEdges > 0 ? 'text-brand' : undefined}
           tooltip={contractEdgesTooltip(stats)}
           detail={contractEdgesDetail(stats)}
           to={driftLinks.contractEdges}

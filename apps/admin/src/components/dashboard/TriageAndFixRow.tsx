@@ -1,57 +1,45 @@
 /**
  * FILE: apps/admin/src/components/dashboard/TriageAndFixRow.tsx
- * PURPOSE: 2/3-1/3 split: triage queue (clickable rows into report detail)
- *          plus a visual auto-fix pipeline meter with a single CTA.
+ * PURPOSE: The top three reports waiting for triage, linking on to the To-do
+ *          list. Backlog and auto-fix counts live in the KPI row above.
  */
 
 import { Link } from 'react-router-dom'
 import { Card, PanelHeader } from '../ui'
 import { StatusPill } from '../charts'
 import { SeveritySwatch } from '../charts/SeverityColorLegend'
-import { relTime, type FixSummary, type TriageItem } from './types'
+import { relTime, type TriageItem } from './types'
 import { ActionPill, SignalChip } from '../report-detail/ReportSurface'
 import { EmptySectionMessage } from '../report-detail/ReportClassification'
-import { FixPipelineMeter } from './FixPipelineMeter'
-import { useAdminMode } from '../../lib/mode'
 
 interface Props {
   triageQueue: TriageItem[]
-  fixSummary: FixSummary
 }
 
-export function TriageAndFixRow({ triageQueue, fixSummary }: Props) {
-  const { isAdvanced } = useAdminMode()
-  const hasCritical = triageQueue.some((r) => r.severity === 'critical' || r.severity === 'high')
-  const queueTitle = isAdvanced ? 'Triage queue' : 'Bug queue'
+const TOP_N = 3
+
+export function TriageAndFixRow({ triageQueue }: Props) {
+  const top = triageQueue.slice(0, TOP_N)
 
   return (
-    <div className="mb-3 grid grid-cols-1 gap-2.5 lg:grid-cols-3">
-      <Card className="min-w-0 p-3 lg:col-span-2">
+    <div className="mb-3">
+      <Card className="min-w-0 p-3">
         <PanelHeader
-          title={queueTitle}
+          title={`Top ${TOP_N} to triage`}
           action={
-            <div className="flex min-w-0 items-center gap-2">
-              {hasCritical && (
-                <SignalChip tone="warn" className="motion-safe:animate-pulse">
-                  Needs attention
-                </SignalChip>
-              )}
-              {/* `open` matches the list previewed here; `new` alone lasts only
-                  the second classification takes, so it opened an empty list. */}
-              <ActionPill to="/reports?status=open" tone="brand">
-                View backlog →
-              </ActionPill>
-            </div>
+            <ActionPill to="/inbox" tone="brand">
+              Open To-do →
+            </ActionPill>
           }
         />
-        {triageQueue.length === 0 ? (
+        {top.length === 0 ? (
           <EmptySectionMessage
             text="All caught up — no bugs waiting for review."
             hint="New bugs land here within seconds of the SDK sending a report."
           />
         ) : (
           <div className="space-y-1.5">
-            {triageQueue.map((r) => (
+            {top.map((r) => (
               <Link
                 key={r.id}
                 to={`/reports/${r.id}`}
@@ -69,18 +57,6 @@ export function TriageAndFixRow({ triageQueue, fixSummary }: Props) {
             ))}
           </div>
         )}
-      </Card>
-
-      <Card className="min-w-0 p-3">
-        <PanelHeader
-          title="Auto-fix"
-          action={
-            <ActionPill to="/fixes" tone="brand">
-              All →
-            </ActionPill>
-          }
-        />
-        <FixPipelineMeter fixSummary={fixSummary} />
       </Card>
     </div>
   )

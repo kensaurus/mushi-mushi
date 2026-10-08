@@ -105,7 +105,6 @@ export function BillingSnapshotStrip({
           <StatCard
             label="Spend cap · month"
             value={`$${monthlySpendCapUsd}`}
-            accent="text-brand"
             tooltip="Hard monthly spend cap. Diagnoses pause when overage cost hits this limit — no surprise charges."
             detail="Anti-surprise guard"
             to={billingLinks.plan}
@@ -114,7 +113,6 @@ export function BillingSnapshotStrip({
           <StatCard
             label={statLabels?.llmCogs ?? 'LLM COGS · month'}
             value={stats.llmCostUsdMonth > 0 ? formatLlmCost(stats.llmCostUsdMonth) : '$0'}
-            accent={stats.llmCostUsdMonth > 0 ? 'text-brand' : undefined}
             tooltip={llmCogsTooltip(stats)}
             detail={llmCogsDetail(stats)}
             to={billingLinks.llmCogs}

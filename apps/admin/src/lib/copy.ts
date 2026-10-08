@@ -1533,35 +1533,35 @@ export const COPY: CopyRegistry = {
   // flat makes it obvious what beginner mode adds rather than what it strips.
   advanced: {
     '/inbox': {
-      title: 'Inbox',
-      description: 'Cross-stage action queue — INBOX SNAPSHOT KPIs, then Overview | Actions | Stages | Activity tabs.',
+      title: 'To-do',
+      description: 'Everything that needs a decision from you, across bugs, fixes, checks and releases, oldest first.',
     },
     '/feedback': {
-      title: 'Support',
-      description: 'Support ticket inbox — FEEDBACK SNAPSHOT KPIs, then Overview | Active | Shipped | All tabs.',
+      title: 'Help & support',
+      description: 'Support tickets and feature requests from your users, and what shipped for them.',
     },
     '/projects': {
-      title: 'Projects',
+      title: 'Manage apps',
       description: 'Multi-tenant project registry — API keys, SDK heartbeat, per-project deep links.',
     },
     '/queue': {
-      title: 'Processing queue',
+      title: 'Processing jobs',
       description: 'DLQ + stuck pipeline items. Retry, inspect failure stage, flush backlog.',
     },
     '/inventory': {
-      title: 'Inventory',
-      description: 'Banner + INVENTORY SNAPSHOT — Overview | User stories | Tree | Gates | Discovery | Yaml tabs.',
+      title: 'User stories',
+      description: 'Your app’s user stories and actions, and whether each one is verified, stubbed or broken.',
     },
     '/query': {
-      title: 'Ask Your Data',
+      title: 'SQL query',
       description: 'NL + raw SQL analytics — saved history, team pins, 24h error/latency stats.',
     },
     '/research': {
       title: 'Research',
-      description: 'Banner + RESEARCH SNAPSHOT — Overview for posture, Search to query Firecrawl, History for sessions.',
+      description: 'Search the web for evidence about a bug and pin what you find to its report.',
     },
     '/repo': {
-      title: 'Repo',
+      title: 'Pull requests',
       description: 'GitHub OAuth, default branch, fix-worker target repo health.',
     },
     '/sso': {
@@ -1573,12 +1573,12 @@ export const COPY: CopyRegistry = {
       description: 'Append-only mutation trail — human + agent actors, filter stack, CSV export.',
     },
     '/prompt-lab': {
-      title: 'Prompt lab',
+      title: 'AI prompts',
       description: 'Versioned classifier/fix prompts with shadow tests on live reports.',
     },
     '/intelligence': {
       title: 'Intelligence',
-      description: 'Banner + INTELLIGENCE SNAPSHOT — Overview for posture, Reports for digests, Pipeline for jobs and findings.',
+      description: 'Weekly digests of what changed in your bug and fix numbers, and why.',
     },
     '/compliance': {
       title: 'Compliance',
@@ -1589,55 +1589,55 @@ export const COPY: CopyRegistry = {
       description: 'Per-project BYO bucket config — health probes, Vault refs, usage counts.',
     },
     '/marketplace': {
-      title: 'Marketplace',
+      title: 'Plugins',
       description: 'Webhook plugin catalog, installs, and signed delivery log per project.',
     },
     '/mcp': {
-      title: 'MCP',
-      description: 'Banner + MCP SNAPSHOT — Overview for key posture, Setup for IDE snippet, Catalog for tools.',
+      title: 'Editor agents',
+      description: 'Connect your editor’s agent to this app and check that it is talking to Mushi.',
     },
     '/qa-coverage': {
-      title: 'QA coverage',
-      description: 'Banner + QA SNAPSHOT — Overview for posture, Stories for all tests, Failing for sub-80% pass rate.',
+      title: 'Scheduled tests',
+      description: 'User-flow tests that run on a schedule, and which of them are failing.',
     },
     '/anti-gaming': {
-      title: 'Anti-gaming',
+      title: 'Spam & abuse',
       description: 'Heuristics for synthetic / duplicate / low-signal report abuse.',
     },
     '/rewards': {
-      title: 'Rewards',
-      description: 'Banner + REWARDS SNAPSHOT — Overview for 24h SDK feed, Rules/Tiers to configure, Settings for webhooks.',
+      title: 'Tester rewards',
+      description: 'Points and tiers for the testers who report bugs, and the webhooks that grant them.',
     },
     '/lessons': {
       title: 'Lessons',
-      description: 'Banner + LESSONS SNAPSHOT — Overview for posture, Lessons for rules, Clusters to promote, Query Sim to preview injection.',
+      description: 'Rules learned from repeated bugs that every new fix follows.',
     },
     '/releases': {
       title: 'Releases',
-      description: 'Banner + RELEASES SNAPSHOT — Overview for posture, Drafts/Published to manage, Draft to generate with AI.',
+      description: 'Changelogs that tell each reporter their bug shipped.',
     },
     '/iterate': {
-      title: 'Iterate',
+      title: 'Improvement runs',
       description: 'PDCA producer/critic loops on target URLs — queue, trigger, inspect critiques.',
     },
     '/drift': {
       title: 'Drift',
-      description: 'Banner + DRIFT SNAPSHOT — Overview for posture, Findings to triage, Snapshots for history, Scanner to run walker.',
+      description: 'Where the live app no longer matches its declared routes and API.',
     },
     '/experiments': {
       title: 'Experiments',
-      description: 'Banner + EXPERIMENTS SNAPSHOT — Overview for posture, Experiments to launch/monitor, New to create variants.',
+      description: 'A/B tests of a change, and which variant won.',
     },
     '/anomalies': {
       title: 'Anomalies',
-      description: 'Banner + ANOMALIES SNAPSHOT — Overview for posture, Anomalies to triage, Metrics to ingest, Detect to run analysis.',
+      description: 'Unusual spikes in reports, errors or AI spend, and what caused them.',
     },
     '/cost': {
       title: 'LLM Cost',
       description: 'Per-project llm_invocations telemetry — spend rollups, breakdown, and raw log.',
     },
     '/notifications': {
-      title: 'Reporter notifications',
+      title: 'Reporter updates',
       description: 'SDK widget inbox — classify, fix, and reward messages scoped per project.',
     },
     '/billing': {
@@ -1649,40 +1649,40 @@ export const COPY: CopyRegistry = {
       description: 'Org roster, roles (viewer → owner), invite lifecycle.',
     },
     '/explore': {
-      title: 'Codebase atlas',
-      description: 'Summary | Understand (Ask/Tour/Domains/Knowledge) | Map (Graph/Layers) | Search | Index.',
+      title: 'Code map',
+      description: 'Ask about your codebase, map it, and see where a bug lives in the code.',
     },
     '/connect': {
-      title: 'Connect & Update',
+      title: 'Connect',
       description: 'GitHub connect, SDK install, MCP deeplinks, and one-click upgrade PRs.',
     },
     '/users': {
-      title: 'Users',
+      title: 'All users',
       description: 'Operator directory — signups, plans, last-seen activity.',
     },
     '/dashboard': {
-      title: 'PDCA cockpit',
-      description: 'Plan → Do → Check → Act — banner + LOOP SNAPSHOT KPIs, then Overview | Loop | Metrics | Health tabs.',
+      title: 'Home',
+      description: 'Where your bug-fix loop is stuck today, and the next thing to do.',
     },
     '/reports': {
-      title: 'Triage queue',
-      description: 'Banner + TRIAGE SNAPSHOT — Overview | Queue | Severity tabs. Fingerprinted, severity-classified, blast-radius-ranked.',
+      title: 'Bugs',
+      description: 'Every bug your users and monitors sent, with its diagnosis and a fix to start.',
     },
     '/graph': {
-      title: 'Bug graph',
-      description: 'Banner + GRAPH SNAPSHOT — Overview | Explore | Backend. Component/page adjacency with bug-incidence weighting.',
+      title: 'Bug clusters',
+      description: 'Which bugs share a cause, grouped by the page or component they hit.',
     },
     '/fixes': {
-      title: 'Auto-fix pipeline',
+      title: 'Fixes',
       description: 'Draft PRs from the agent. Judge score + screenshot-diff per attempt.',
     },
     '/judge': {
-      title: 'Judge scores',
-      description: 'Banner + JUDGE SNAPSHOT — Overview for posture, Trend for 12w chart, Evaluations for per-report grades.',
+      title: 'Triage grading',
+      description: 'How well the AI triages bugs (severity, category, diagnosis), graded over time.',
     },
     '/health': {
-      title: 'LLM health',
-      description: 'Banner + HEALTH SNAPSHOT — Overview for posture, LLM for breakdowns, Cron for jobs, Activity for traces.',
+      title: 'App health',
+      description: 'Whether the AI calls and scheduled jobs this app relies on are working.',
     },
     '/integrations': {
       title: 'Integrations',
@@ -1697,7 +1697,7 @@ export const COPY: CopyRegistry = {
       description: 'Alerts, AI keys, web tools, voice reports, and the SDK connection.',
     },
     '/onboarding': {
-      title: 'Setup wizard',
+      title: 'Set up',
       description: 'Project → SDK → first report → key rotation.',
     },
   },

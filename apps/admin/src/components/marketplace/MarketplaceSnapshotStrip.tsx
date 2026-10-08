@@ -32,7 +32,6 @@ export function MarketplaceSnapshotStrip({
         <StatCard
           label={statLabels?.catalog ?? 'Catalog'}
           value={stats.catalogTotal}
-          accent={stats.catalogTotal > 0 ? 'text-brand' : undefined}
           hint="Listed plugins"
           to={marketplaceLinks.catalog}
         />

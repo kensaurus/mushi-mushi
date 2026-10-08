@@ -59,7 +59,7 @@ export function JudgeStatusBanner({
   if (stats.topPriority === 'no_evals') {
     return (
       <StatusBannerShell
-        tone="brand"
+        tone="info"
         title={plainBanner ? `No grades yet on ${projectLabel}` : `No judge evaluations on ${projectLabel}`}
         subtitle={
           stats.topPriorityLabel ??
@@ -74,19 +74,19 @@ export function JudgeStatusBanner({
               onClick={onRunJudge}
               loading={running}
               disabled={running}
-              tone="brand"
+              tone="info"
             />
           ) : stats.classifiedReports > 0 ? (
             <StatusBannerAction
               label={actions.run ?? 'Run judge now'}
               to={scopedHref('/judge?action=run', pid)}
-              tone="brand"
+              tone="info"
             />
           ) : (
             <StatusBannerAction
               label={actions.reports ?? 'Open Reports'}
               to={scopedHref('/reports?status=new', pid)}
-              tone="brand"
+              tone="info"
             />
           )
         }

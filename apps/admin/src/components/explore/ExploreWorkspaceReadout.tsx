@@ -3,9 +3,8 @@
  * PURPOSE: Lightweight atlas readout — codebase API endpoints for index scope panel.
  */
 
-import { Section } from '../ui'
 import { DetailRows, type DetailRowItem } from '../ui/fields'
-import { EndpointCodeRow, ReadoutSection } from '../readout'
+import { EndpointCodeRow, ReadoutSection, ReadoutPanel } from '../readout'
 import { RESOLVED_EXTERNAL_API_URL } from '../../lib/env'
 import { IconGlobe, IconHealth } from '../icons'
 
@@ -40,7 +39,7 @@ export function ExploreWorkspaceReadout({ projectId, scopePaths }: ExploreWorksp
   ]
 
   return (
-    <Section title="Atlas readout">
+    <ReadoutPanel title="Atlas readout">
       <p className="mb-4 text-xs leading-relaxed text-fg-muted">
         Codebase index API paths for this project — use when wiring MCP or debugging stale graph data.
       </p>
@@ -55,6 +54,6 @@ export function ExploreWorkspaceReadout({ projectId, scopePaths }: ExploreWorksp
           <DetailRows items={rows} dense />
         </ReadoutSection>
       </div>
-    </Section>
+    </ReadoutPanel>
   )
 }

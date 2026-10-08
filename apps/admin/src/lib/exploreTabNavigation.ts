@@ -17,7 +17,7 @@ const MAP_VIEWS: ExploreMapView[] = ['graph', 'layers', 'diagram']
 export function resolveExploreTab(value: string | null): ExploreTabId {
   if (
     value === 'overview' ||
-    value === 'layers' ||
+    value === 'graph' ||
     value === 'diagram' ||
     value === 'search' ||
     value === 'index' ||
@@ -28,7 +28,9 @@ export function resolveExploreTab(value: string | null): ExploreTabId {
   ) {
     return value
   }
-  return 'graph'
+  // Layers is the default map: hundreds of files drawn as a graph and fit to
+  // the canvas render as a thin strip with an empty minimap.
+  return 'layers'
 }
 
 /**
@@ -47,6 +49,7 @@ const TAB_ACTION_LABELS: Partial<Record<ExploreTabId, string>> = {
   index: 'Open Index',
   ask: 'Open Ask',
   graph: 'Open Graph',
+  layers: 'Open Layers',
   overview: 'Open Summary',
   search: 'Open Search',
 }
@@ -79,7 +82,7 @@ export function defaultTabForPrimary(primary: ExplorePrimaryTabId): ExploreTabId
     case 'understand':
       return 'ask'
     case 'map':
-      return 'graph'
+      return 'layers'
     case 'search':
       return 'search'
     case 'index':
@@ -135,7 +138,7 @@ export const EXPLORE_UNDERSTAND_VIEWS: Array<{ id: ExploreUnderstandView; label:
 ]
 
 export const EXPLORE_MAP_VIEWS: Array<{ id: ExploreMapView; label: string }> = [
-  { id: 'graph', label: 'Graph' },
   { id: 'layers', label: 'Layers' },
+  { id: 'graph', label: 'Graph' },
   { id: 'diagram', label: 'Diagram' },
 ]

@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from 'vitest'
 import type { DesignEditability, DesignRuleConfig, DesignToken } from '../../lib/recipeTypes'
-import { diffRuleDraft, parseEditValue, ruleToDraft, tokenEditBlocker, tokenSection } from './designTokens'
+import { diffRuleDraft, parseEditValue, ruleToDraft, swatchColor, tokenEditBlocker, tokenPx, tokenSection } from './designTokens'
 
 function token(overrides: Partial<DesignToken>): DesignToken {
   return {
@@ -99,5 +99,29 @@ describe('tokenSection', () => {
     expect(tokenSection(token({}))).toBe('spacing')
     expect(tokenSection(token({ type: 'duration', group: 'motion' }))).toBe('motion')
     expect(tokenSection(token({ type: 'shadow', group: 'elevation' }))).toBe('other')
+  })
+
+  it('never files a generated export\'s shadow, radius or spacing under Colour', () => {
+    const exported = (path: string, display: string) =>
+      token({ path, group: path.split('.')[0], type: 'color', display, hex: null, px: null, role: 'export' })
+    expect(tokenSection(exported('shadow.card', '0 1px 2px rgb(0 0 0 / 0.1)'))).toBe('other')
+    expect(tokenSection(exported('radius.md', '8px'))).toBe('radius')
+    expect(tokenSection(exported('space.lg', '1.5rem'))).toBe('spacing')
+    expect(tokenSection(exported('color.brand', 'oklch(0.6 0.2 25)'))).toBe('color')
+    expect(tokenSection(exported('color.alias', 'var(--brand)'))).toBe('other')
+  })
+})
+
+describe('swatchColor / tokenPx', () => {
+  it('paints a hex or a CSS colour function, never a shadow', () => {
+    expect(swatchColor({ hex: '#' + 'AABBCC', display: 'x' })).toBe('#' + 'AABBCC')
+    expect(swatchColor({ hex: null, display: 'rgb(1 2 3)' })).toBe('rgb(1 2 3)')
+    expect(swatchColor({ hex: null, display: '0 1px 2px rgb(0 0 0)' })).toBeNull()
+  })
+  it('reads px from the server or from a px / rem display', () => {
+    expect(tokenPx({ px: 4, display: '' })).toBe(4)
+    expect(tokenPx({ px: null, display: '0.5rem' })).toBe(8)
+    expect(tokenPx({ px: null, display: '12px' })).toBe(12)
+    expect(tokenPx({ px: null, display: 'auto' })).toBeNull()
   })
 })

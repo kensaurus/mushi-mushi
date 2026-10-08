@@ -28,7 +28,7 @@ export function nodesTooltip(stats: GraphStats): MetricTooltipData {
 }
 
 export function nodesDetail(stats: GraphStats): string {
-  return stats.reportNodes > 0 ? `${stats.reportNodes} report groups` : 'Seeds from reports'
+  return stats.nodeCount > 0 ? `of ${stats.nodeCount.toLocaleString()} map nodes` : 'Seeds from reports'
 }
 
 export function edgesTooltip(stats: GraphStats): MetricTooltipData {

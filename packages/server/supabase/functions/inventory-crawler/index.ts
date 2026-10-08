@@ -49,6 +49,7 @@ import { computeStats, parseInventoryYaml, type Inventory } from '../_shared/inv
 import { resolveStoryExternalId } from '../_shared/inventory-story-scope.ts'
 import {
   inventoryAppAllowHosts,
+  pickCrawlBaseUrl,
   safeFetch,
   type SafeUrlOptions,
 } from '../_shared/inventory-guards.ts'
@@ -91,7 +92,30 @@ interface PageDiff {
   error?: string
 }
 
-async function loadProject(db: SupabaseClient, projectId: string): Promise<CrawlerProject | null> {
+/** A path with a route parameter (`/lessons/[lessonId]`, `/users/:id`) names no single page to fetch. */
+function isDynamicPath(path: string): boolean {
+  return /\[[^\]]+\]|\/:[A-Za-z_]/.test(path)
+}
+
+/**
+ * Whether the edge crawl could check a page at all. It reads the server's
+ * HTML without running scripts or signing in, so a page that came back with
+ * none of its declared testids was most likely rendered client-side or
+ * behind sign-in: one "unverified" warning, not one error per testid. When
+ * some declared testids did render, the missing ones are real misses.
+ */
+function crawlVerdict(
+  r: Pick<PageDiff, 'declared' | 'discovered' | 'error'>,
+  page: { authRequired: boolean; hasAuth: boolean },
+): 'checked' | 'unverified-auth' | 'unverified-client' {
+  if (r.error || r.declared.length === 0 || r.discovered.length > 0) return 'checked'
+  return page.authRequired && !page.hasAuth ? 'unverified-auth' : 'unverified-client'
+}
+
+async function loadProject(
+  db: SupabaseClient,
+  projectId: string,
+): Promise<{ ok: true; project: CrawlerProject & { inventory: Inventory } } | { ok: false; reason: string }> {
   const { data: settings } = await db
     .from('project_settings')
     .select('crawler_base_url, crawler_auth_config')
@@ -113,22 +137,40 @@ async function loadProject(db: SupabaseClient, projectId: string): Promise<Crawl
     inventory = parsed.inventory ?? null
   }
 
-  const baseUrl =
-    (settings?.crawler_base_url as string | null) ??
-    inventory?.app.preview_url ??
-    inventory?.app.staging_url ??
-    inventory?.app.base_url ??
-    null
-  if (!baseUrl) return null
+  if (!inventory) {
+    return { ok: false, reason: 'no current inventory; ingest inventory.yaml first' }
+  }
+
+  // A localhost / private preview_url is skipped for the production URL: a
+  // cloud crawler cannot reach the developer's machine (glot.it's inventory
+  // pointed every crawl at http://localhost:3000).
+  const choice = pickCrawlBaseUrl(settings?.crawler_base_url as string | null, inventory.app)
+  if (!choice.url) {
+    const why = choice.skipped.length ? `: ${choice.skipped.join('; ')}` : ''
+    return {
+      ok: false,
+      reason: `no crawlable URL; set crawler_base_url in project settings${why}`,
+    }
+  }
+  if (choice.skipped.length) {
+    rlog.info('crawler: passed over unreachable inventory URLs', {
+      project_id: projectId,
+      using: choice.source,
+      skipped: choice.skipped,
+    })
+  }
 
   const authConfig = (settings?.crawler_auth_config as AuthConfig | null) ?? null
 
   return {
-    id: projectId,
-    inventory,
-    baseUrl,
-    authConfig,
-    concurrency: 4,
+    ok: true,
+    project: {
+      id: projectId,
+      inventory,
+      baseUrl: choice.url,
+      authConfig,
+      concurrency: 4,
+    },
   }
 }
 
@@ -270,16 +312,16 @@ async function crawlAndPersist(
   findings: number
   discoveredApis: number
 }> {
-  const project = await loadProject(db, projectId)
-  if (!project || !project.inventory) {
-    rlog.warn('crawler: no inventory or base_url; skipping', { project_id: projectId })
+  const loaded = await loadProject(db, projectId)
+  if (!loaded.ok) {
+    rlog.warn('crawler: skipping', { project_id: projectId, reason: loaded.reason })
     const { data: skip } = await db
       .from('gate_runs')
       .insert({
         project_id: projectId,
         gate: 'crawl',
         status: 'skipped',
-        summary: { reason: 'no inventory or crawler_base_url' },
+        summary: { reason: loaded.reason },
         triggered_by: triggeredBy ?? 'crawler',
         completed_at: new Date().toISOString(),
       })
@@ -293,6 +335,7 @@ async function crawlAndPersist(
       discoveredApis: 0,
     }
   }
+  const project = loaded.project
 
   const { data: run, error: runErr } = await db
     .from('gate_runs')
@@ -313,6 +356,7 @@ async function crawlAndPersist(
     id: string
     path: string
     declared: string[]
+    authRequired: boolean
   }
 
   let pages = project.inventory.pages
@@ -323,11 +367,16 @@ async function crawlAndPersist(
     }
   }
 
-  const items: CrawlItem[] = pages.map((p) => ({
-    id: p.id,
-    path: p.path,
-    declared: p.elements.map((el) => el.testid ?? el.id),
-  }))
+  const skippedDynamic = pages.filter((p) => isDynamicPath(p.path)).map((p) => p.path)
+  const items: CrawlItem[] = pages
+    .filter((p) => !isDynamicPath(p.path))
+    .map((p) => ({
+      id: p.id,
+      path: p.path,
+      declared: p.elements.map((el) => el.testid ?? el.id),
+      authRequired: p.auth_required !== false,
+    }))
+  const hasAuth = Boolean(project.authConfig)
 
   if (items.length === 0) {
     const { data: skip } = await db
@@ -377,7 +426,30 @@ async function crawlAndPersist(
 
   // Persist findings.
   let findings = 0
-  for (const r of results) {
+  let unverified = 0
+  for (const [i, r] of results.entries()) {
+    const verdict = crawlVerdict(r, { authRequired: items[i]?.authRequired ?? true, hasAuth })
+    if (verdict !== 'checked') {
+      unverified += 1
+      const why = verdict === 'unverified-auth'
+        ? 'it needs sign-in and no crawler sign-in is set'
+        : 'none of its testids are in the server HTML, so it renders in the browser'
+      const { error } = await db.from('gate_findings').insert({
+        gate_run_id: runId,
+        project_id: projectId,
+        severity: 'warn',
+        rule_id: 'crawl-unverified',
+        message: `Page ${r.path} could not be checked: ${why}. Its ${r.declared.length} declared testid(s) are unverified, not missing.`,
+        file_path: r.path,
+        suggested_fix: {
+          explanation: verdict === 'unverified-auth'
+            ? 'Set a crawler sign-in (Inventory → Settings → crawler auth), or run `mushi-mushi-cli inventory crawl --playwright` signed in.'
+            : 'Run `mushi-mushi-cli inventory crawl --playwright`, which renders the page in a browser.',
+        },
+      })
+      if (!error) findings += 1
+      continue
+    }
     for (const tid of r.missing_in_app) {
       const { error } = await db.from('gate_findings').insert({
         gate_run_id: runId,
@@ -436,15 +508,18 @@ async function crawlAndPersist(
   const summary = {
     pages_crawled: results.length,
     pages_failed: results.filter((r) => r.error).length,
+    pages_unverified: unverified,
+    ...(skippedDynamic.length ? { skipped_dynamic_paths: skippedDynamic } : {}),
     findings,
     discovered_apis: Array.from(discoveredApiSet),
     inventory_stats: computeStats(project.inventory),
     ...(storyNodeId ? { story_node_id: storyNodeId } : {}),
   }
+  const checked = results.filter((r, i) => crawlVerdict(r, { authRequired: items[i]?.authRequired ?? true, hasAuth }) === 'checked')
   const overall: 'pass' | 'fail' | 'warn' =
-    results.some((r) => r.error) || results.some((r) => r.missing_in_app.length > 0)
+    results.some((r) => r.error) || checked.some((r) => r.missing_in_app.length > 0)
       ? 'fail'
-      : results.some((r) => r.missing_in_inventory.length > 0)
+      : unverified > 0 || checked.some((r) => r.missing_in_inventory.length > 0)
         ? 'warn'
         : 'pass'
 
@@ -504,4 +579,4 @@ if (typeof Deno !== 'undefined') {
   Deno.serve(withSentry('inventory-crawler', handler))
 }
 
-export { crawlPage, runWithConcurrency, crawlAndPersist }
+export { crawlPage, runWithConcurrency, crawlAndPersist, crawlVerdict, isDynamicPath }

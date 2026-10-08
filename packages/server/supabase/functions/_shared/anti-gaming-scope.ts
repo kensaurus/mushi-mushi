@@ -21,11 +21,16 @@ export function requestedOwnedProject(
 }
 
 /**
- * Projects a device / event list should read: just the requested project
- * when it is one of the caller's, else all of them (the sidebar badge and
- * older clients send no project).
+ * Projects a device / event list or count should read: just the requested
+ * project (`?project_id=` first, then the X-Mushi-Project-Id header) when it
+ * is one of the caller's, else all of them (older clients send no project).
+ * The sidebar badge sends the project only in the header; reading the query
+ * alone made it count every owned project ("16 flagged" over a page of 4).
  */
-export function antiGamingListScope(ownedIds: readonly string[], requested: string | null | undefined): string[] {
-  const one = requestedOwnedProject(ownedIds, requested)
+export function antiGamingListScope(
+  ownedIds: readonly string[],
+  ...requested: Array<string | null | undefined>
+): string[] {
+  const one = requestedOwnedProject(ownedIds, ...requested)
   return one ? [one] : [...ownedIds]
 }

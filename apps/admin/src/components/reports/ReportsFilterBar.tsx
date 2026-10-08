@@ -11,7 +11,6 @@ import { FILTER_OPTIONS, severityLabel } from '../../lib/tokens'
 import {
   PLATFORM_FILTER_OPTIONS,
   SDK_FILTER_OPTIONS,
-  STATUS_FILTER_OPTIONS,
   optionLabel,
   statusFilterLabel,
 } from '../../lib/reportsListFilters'
@@ -132,24 +131,12 @@ export function ReportsFilterBar({
           aria-label="Search reports"
           className="w-64"
         />
-        <FilterSelect
-          label="Status"
-          value={status}
-          options={STATUS_FILTER_OPTIONS}
-          optionLabel={statusFilterLabel}
-          onChange={(e) => onSetFilter('status', e.currentTarget.value)}
-        />
+        {/* Status and severity are filtered by the quick-filter chips above. */}
         <FilterSelect
           label="Category"
           value={category}
           options={FILTER_OPTIONS.categories}
           onChange={(e) => onSetFilter('category', e.currentTarget.value)}
-        />
-        <FilterSelect
-          label="Severity"
-          value={severity}
-          options={FILTER_OPTIONS.severities}
-          onChange={(e) => onSetFilter('severity', e.currentTarget.value)}
         />
         <label className="inline-flex flex-col gap-0.5">
           <span className="sr-only">Platform</span>

@@ -31,7 +31,7 @@ function docUrl(route: string): string {
   return route === '/' ? MUSHI_DOCS_BASE : MUSHI_DOCS_BASE + route
 }
 
-/** 207 pages, generated from llms.txt. */
+/** 209 pages, generated from llms.txt. */
 export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
   {
     title: "Mushi Mushi — know why your AI-built app broke, with the fix ready",
@@ -291,7 +291,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/admin/inventory",
     markdown: "admin/inventory.md",
     keywords: ["admin", "inventory", "user", "stories"],
-    headings: ["What you see", "Run gates / Run crawler from a row", "SDK-driven discovery", "Surface mode in the graph", "Five gates", "Synthetic monitor", "Spec traceability — every fix carries the originating Action", "See also"],
+    headings: ["What you see", "Run gates / Run crawler", "SDK-driven discovery", "Surface mode in the graph", "Five gates", "Synthetic monitor", "Spec traceability — every fix carries the originating Action", "See also"],
     excerpt: "The User stories page manages your inventory.yaml — every page, action and story your app should have — and shows which of them the gates cover.",
   },
   {
@@ -547,6 +547,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     excerpt: "The Storage page chooses where Mushi keeps report attachments and recordings — managed storage, or your own bucket for residency or cost.",
   },
   {
+    title: "Team",
+    url: docUrl("/admin/team"),
+    route: "/admin/team",
+    markdown: "admin/team.md",
+    keywords: ["admin", "team"],
+    headings: [],
+    excerpt: "The Team page in the Mushi console brings members, billing, AI spend, audit log, single sign-on, compliance and storage together as views of one page.",
+  },
+  {
     title: "Teams and Members",
     url: docUrl("/admin/teams"),
     route: "/admin/teams",
@@ -563,6 +572,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     keywords: ["admin", "users"],
     headings: ["Metrics row", "User directory", "User detail drawer", "API", "Related pages"],
     excerpt: "The Users page is an operator-only directory of every Mushi account with plan, MRR and churn; other visitors see a not-found page instead.",
+  },
+  {
+    title: "UX runs",
+    url: docUrl("/admin/ux-runs"),
+    route: "/admin/ux-runs",
+    markdown: "admin/ux-runs.md",
+    keywords: ["admin", "ux-runs", "runs", "ux"],
+    headings: ["Run in the cloud", "What you see", "File as bug", "Where the changes are"],
+    excerpt: "Each screen your coding agent worked on in a mushi ux run, with its plan, every attempt, before and after screenshots, and what was kept.",
   },
   {
     title: "Voice intake",

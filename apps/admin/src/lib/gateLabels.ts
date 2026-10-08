@@ -52,6 +52,41 @@ const GATE_LABELS: Record<GateId, string> = {
   store_review: 'Store review checklist',
 }
 
+interface GateInfo {
+  /** What the check looks at and what runs it, in one line. */
+  checks: string
+  /** Where its findings are worked on, when a page owns them. */
+  page: { label: string; to: string } | null
+}
+
+const INVENTORY_PAGE = { label: 'Open the app map', to: '/inventory' }
+
+const GATE_INFO: Record<GateId, GateInfo> = {
+  dead_handler: { checks: 'Buttons and links whose handler does nothing. Runs with "Run audit".', page: INVENTORY_PAGE },
+  mock_leak: { checks: 'Mock or sample data that reaches production code. Runs with "Run audit".', page: INVENTORY_PAGE },
+  api_contract: { checks: 'Frontend calls whose request or response does not match the API. Runs with "Run audit".', page: INVENTORY_PAGE },
+  crawl: { checks: 'Every page in the app map is loaded live; failures and pages missing from the map are listed. Runs with "Run audit".', page: INVENTORY_PAGE },
+  status_claim: { checks: 'Pages marked done in the app map whose checks fail. Runs with "Run audit".', page: INVENTORY_PAGE },
+  spec_drift: { checks: 'The OpenAPI spec compared with the routes in code. Runs with "Run audit".', page: INVENTORY_PAGE },
+  orphan_endpoint: { checks: 'Backend endpoints nothing calls. Runs with "Run audit".', page: INVENTORY_PAGE },
+  unknown_call: { checks: 'Frontend calls to endpoints the backend does not have. Runs with "Run audit".', page: INVENTORY_PAGE },
+  schema_drift: { checks: 'Your Supabase schema, read daily (03:05 UTC) and compared with the previous read: each changed table is listed to check against the frontend.', page: { label: 'Open schema changes', to: '/health?view=schema' } },
+  code_health: { checks: 'Bundle size and very large files, pushed from your CI.', page: { label: 'Open code size', to: '/health?view=code' } },
+  design_drift: { checks: 'Hard-coded colours, spacing and type that bypass your design tokens, scanned daily (03:35 UTC) from the repo.', page: { label: 'Open the design system', to: '/design' } },
+  ci_drift: { checks: 'Your CI workflows compared with mushi.recipe.json.', page: { label: 'Open the app blueprint', to: '/recipe' } },
+  deploy_drift: { checks: 'Merged commits that never reached a declared deploy target.', page: { label: 'Open releases', to: '/releases' } },
+  env_drift: { checks: 'Env var names in GitHub compared with mushi.recipe.json.', page: { label: 'Open the app blueprint', to: '/recipe' } },
+  radar: { checks: 'Mushi setup: spend caps, keys and connections for this project.', page: { label: 'Open settings', to: '/settings' } },
+  portfolio_radar: { checks: 'App hole checks, daily (04:05 UTC): store listings, domains, certificates, security headers, provider keys.', page: { label: 'Open the portfolio', to: '/portfolio' } },
+  portfolio_radar_ci: { checks: 'App hole checks pushed from your CI (mushi radar scan --push).', page: { label: 'Open the portfolio', to: '/portfolio' } },
+  store_review: { checks: 'The App Store and Play review checklist, read from the repo.', page: { label: 'Open the store checks', to: '/releases?tab=store' } },
+}
+
+/** What a check looks at and where its findings are worked on (null for an unknown gate). */
+export function gateInfo(gate: string): GateInfo | null {
+  return isGateId(gate) ? GATE_INFO[gate] : null
+}
+
 function isGateId(gate: string): gate is GateId {
   return (GATE_IDS as readonly string[]).includes(gate)
 }
@@ -59,4 +94,32 @@ function isGateId(gate: string): gate is GateId {
 /** The label for a gate; an unknown id is shown as-is rather than hidden. */
 export function gateLabel(gate: string): string {
   return isGateId(gate) ? GATE_LABELS[gate] : gate
+}
+
+/** Rule ids whose plain name is not their words in order. */
+const RULE_LABELS: Record<string, string> = {
+  provider_key_invalid: 'A connected key was rejected',
+  byok_key_invalid: 'An AI key was rejected',
+  spend_cap_unset: 'No spend cap or AI budget',
+  webhook_never_delivered: 'A webhook never delivered',
+  index_stale: 'The code index is out of date',
+  index_branch_mismatch: 'The code index is on another branch',
+  contrast_below_aa: 'Text contrast below WCAG AA',
+  off_token_color: 'Colour off the design tokens',
+}
+
+const RULE_ACRONYMS = new Set(['ai', 'api', 'aa', 'ci', 'ios', 'pitr', 'rls', 'sdk', 'sql', 'url', 'byok'])
+
+/**
+ * A rule id (`provider_key_invalid`, `PROVIDER_KEY_INVALID`) as words a person
+ * reads: a known name, else the id in sentence case with acronyms kept.
+ */
+export function ruleLabel(rule: string): string {
+  const key = rule.trim().toLowerCase()
+  const known = RULE_LABELS[key]
+  if (known) return known
+  const words = key.split(/[_\-\s.]+/).filter(Boolean).map((w) => (RULE_ACRONYMS.has(w) ? w.toUpperCase() : w))
+  if (words.length === 0) return rule
+  const [first, ...rest] = words
+  return [first.charAt(0).toUpperCase() + first.slice(1), ...rest].join(' ')
 }

@@ -613,7 +613,9 @@ export function Toggle({ label, ariaLabel, checked, onChange, disabled, tooltip,
         className={`relative inline-flex h-5 w-9 shrink-0 rounded-full border motion-safe:transition-[transform,opacity] motion-safe:duration-[var(--duration-fast)] motion-safe:ease-[var(--ease-stamp)] motion-safe:active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 focus-visible:ring-offset-2 focus-visible:ring-offset-surface ${checked ? 'bg-brand border-brand/60 shadow-brand-glow-sm' : 'bg-surface-raised border-edge hover:border-edge'}`}
       >
         <span
-          className={`pointer-events-none inline-flex items-center justify-center h-4 w-4 rounded-full bg-fg shadow-card motion-safe:transition-transform motion-safe:duration-[var(--duration-fast)] motion-safe:ease-[var(--ease-stamp)] ${checked ? 'translate-x-4' : 'translate-x-0.5'}`}
+          // On: the brand's own foreground on the brand track. A dark knob on
+          // brand red read as an error state rather than "on" (2026-10-06).
+          className={`pointer-events-none inline-flex items-center justify-center h-4 w-4 rounded-full shadow-card motion-safe:transition-transform motion-safe:duration-[var(--duration-fast)] motion-safe:ease-[var(--ease-stamp)] ${checked ? 'translate-x-4 bg-brand-fg' : 'translate-x-0.5 bg-fg'}`}
           aria-hidden="true"
         />
       </button>

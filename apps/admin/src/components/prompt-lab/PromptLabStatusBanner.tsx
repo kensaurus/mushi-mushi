@@ -34,14 +34,14 @@ export function PromptLabStatusBanner({ stats, onTab, onRefresh, refreshing }: P
     return (
       <StatusBannerShell
         tone="warn"
-        title={`Thin eval dataset on ${projectLabel}`}
+        title={`The judge hasn't scored ${projectLabel}'s reports yet`}
         subtitle={stats.topPriorityLabel}
         action={
           stats.topPriorityTo ? (
-            <Btn to={stats.topPriorityTo} size="sm" variant="ghost">Build dataset</Btn>
+            <Btn to={stats.topPriorityTo} size="sm" variant="ghost">Run the judge</Btn>
           ) : onTab ? (
             <Btn size="sm" variant="ghost" onClick={() => onTab('dataset')}>
-              Build dataset
+              Run the judge
             </Btn>
           ) : null
         }

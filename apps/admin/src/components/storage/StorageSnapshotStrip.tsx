@@ -56,7 +56,6 @@ export function StorageSnapshotStrip({
         <StatCard
           label={statLabels?.screenshots ?? 'Screenshots'}
           value={stats.activeProjectObjects.toLocaleString()}
-          accent={stats.activeProjectObjects > 0 ? 'text-brand' : undefined}
           tooltip={screenshotsTooltip(stats)}
           detail={screenshotsDetail(stats)}
           to={storageLinks.screenshots}

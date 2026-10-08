@@ -53,19 +53,6 @@ export const ACT_BLOCKER_LINK_LABEL: Record<ActBlocker, string> = {
   needs_review: 'Review PR',
 }
 
-/**
- * The /fixes "Failed / skipped" bucket. Mirrors `isFixCountedFailed` in
- * packages/server/supabase/functions/_shared/fix-loop-status.ts, which feeds
- * the status banner's `failed` count, so the filter, the header and the
- * card's Check stamp agree.
- */
-export function isFixCountedFailed(fix: ActFixSignals): boolean {
-  const status = (fix.status ?? '').toLowerCase()
-  if (status === 'failed' || status.startsWith('skipped')) return true
-  const blocker = actBlocker(fix)
-  return blocker === 'pr_closed' || blocker === 'ci_failed'
-}
-
 /** Breakdown key for a counted failure. Mirrors `fixFailureBucket` on the server. */
 export function fixFailureBucket(fix: ActFixSignals & { failure_category?: string | null }): string {
   if (fix.failure_category) return fix.failure_category

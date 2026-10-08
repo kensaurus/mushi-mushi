@@ -42,7 +42,6 @@ export function QuerySnapshotStrip({
         <StatCard
           label={statLabels?.runs24h ?? 'Runs 24h'}
           value={stats.runs24h}
-          accent={stats.runs24h > 0 ? 'text-brand' : undefined}
           tooltip={runs24hTooltip(stats)}
           detail={runs24hDetail(stats)}
           to={queryLinks.runs24h}

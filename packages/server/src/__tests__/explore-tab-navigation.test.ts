@@ -11,7 +11,8 @@ describe('exploreTabNavigation', () => {
     expect(defaultTabForPrimary('understand')).toBe('ask')
   })
 
-  it('falls back unknown tabs to graph', () => {
-    expect(resolveExploreTab('bogus')).toBe('graph')
+  // Layers is the default map view: the force graph drew 850 files as a strip (2026-10-08 review).
+  it('falls back unknown tabs to layers', () => {
+    expect(resolveExploreTab('bogus')).toBe('layers')
   })
 })

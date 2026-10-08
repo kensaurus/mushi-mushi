@@ -51,16 +51,6 @@ export function retryDispatchBody(reportId: string, projectId: string | null, ag
   return JSON.stringify({ reportId, projectId, ...(agent !== 'auto' ? { agentOverride: agent } : {}) })
 }
 
-/** The /fixes tab a URL opens: a status filter lives on Attempts. */
-export function resolveFixesTabParam(
-  tab: string | null,
-  status: string | null,
-): 'overview' | 'pipeline' | 'attempts' {
-  if (tab === 'pipeline' || tab === 'attempts') return tab
-  if (tab === null && status) return 'attempts'
-  return 'overview'
-}
-
 export interface CiRefreshResult {
   check_run_status?: string | null
   check_run_conclusion?: string | null

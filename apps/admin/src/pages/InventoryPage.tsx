@@ -22,12 +22,13 @@ import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { PageHero } from '../components/PageHero'
 import { ActionPill, ActionPillRow } from '../components/report-detail/ReportSurface'
-import { SetupNudge } from '../components/SetupNudge'
+import { NextStep } from '../components/NextStep'
 import { HeroGraphNodes } from '../components/illustrations/HeroIllustrations'
 import { UpgradePrompt } from '../components/billing/UpgradePrompt'
 import { UserStoryMap } from '../components/inventory/UserStoryMap'
 import { InventoryTree, type TreeRow } from '../components/inventory/InventoryTree'
 import { GateFindingCard, type GateFinding } from '../components/inventory/GateFindingCard'
+import { DismissFindingButton } from '../components/gates/DismissFindingButton'
 import { ActionDetailDrawer } from '../components/inventory/ActionDetailDrawer'
 import { InventoryYamlDropzone } from '../components/inventory/InventoryYamlDropzone'
 import { CrawlerSettingsCard } from '../components/inventory/CrawlerSettingsCard'
@@ -39,24 +40,18 @@ import { INVENTORY_HELP } from '../components/inventory/inventoryCopy'
 import { useNextBestAction } from '../lib/useNextBestAction'
 
 type Tab = 'stories' | 'tree' | 'gates' | 'synthetic' | 'drift' | 'discovery' | 'yaml'
-type InventoryTabGroup = 'primary' | 'advanced'
 
-const PRIMARY_TABS: Array<{ id: Tab; label: string }> = [
+// One tab row: the page is already Advanced-only, so a second
+// "Primary / Advanced" toggle above it only hid half the tabs.
+const INVENTORY_TABS: Array<{ id: Tab; label: string }> = [
   { id: 'stories', label: 'User stories' },
   { id: 'tree', label: 'Tree' },
   { id: 'gates', label: 'Gates' },
-]
-
-const ADVANCED_TABS: Array<{ id: Tab; label: string }> = [
   { id: 'synthetic', label: 'Synthetic' },
   { id: 'drift', label: 'Drift' },
   { id: 'discovery', label: 'Discovery' },
   { id: 'yaml', label: 'Yaml' },
 ]
-
-function isPrimaryTab(tab: Tab): tab is (typeof PRIMARY_TABS)[number]['id'] {
-  return PRIMARY_TABS.some((t) => t.id === tab)
-}
 
 interface Summary {
   total?: number
@@ -100,7 +95,8 @@ interface FindingsPayload {
     commit_sha?: string | null
     started_at?: string
   }>
-  findings: Array<GateFinding & { gate_run_id?: string }>
+  /** Dismissed (allowlisted) findings come back too; the page filters them out. */
+  findings: Array<GateFinding & { gate_run_id?: string; allowlisted?: boolean | null }>
 }
 
 /**
@@ -168,11 +164,6 @@ export function InventoryPage() {
   const { has, loading: entLoading, planName } = useEntitlements()
   const copy = usePageCopy('/inventory')
   const [tab, setTab] = useState<Tab>('stories')
-  const tabGroup: InventoryTabGroup = isPrimaryTab(tab) ? 'primary' : 'advanced'
-
-  const setTabGroup = useCallback((group: InventoryTabGroup) => {
-    setTab(group === 'primary' ? 'stories' : 'synthetic')
-  }, [])
   const [yamlDraft, setYamlDraft] = useState<string | null>(null)
   const [drawer, setDrawer] = useState<{
     id: string
@@ -324,15 +315,31 @@ export function InventoryPage() {
   // render "X open findings" against each story. The reconciler/gates
   // pin findings to whichever graph_node they affect (action, element,
   // page) so this same map serves the per-action chip on each card.
+  // Dismissed (allowlisted) findings are not open: never listed or counted.
+  const allFindings = findingsQuery.data?.findings
+  const findings = useMemo(() => (allFindings ?? []).filter((f) => !f.allowlisted), [allFindings])
+  const dismissedPerRun = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const f of allFindings ?? []) {
+      if (f.allowlisted && f.gate_run_id) m.set(f.gate_run_id, (m.get(f.gate_run_id) ?? 0) + 1)
+    }
+    return m
+  }, [allFindings])
   const findingsByNode = useMemo(() => {
     const m = new Map<string, number>()
-    for (const f of findingsQuery.data?.findings ?? []) {
+    for (const f of findings) {
       const nid = (f as { node_id?: string | null }).node_id
       if (!nid) continue
       m.set(nid, (m.get(nid) ?? 0) + 1)
     }
     return m
-  }, [findingsQuery.data?.findings])
+  }, [findings])
+  // Findings with no node can't show on a story card, yet the sidebar badge
+  // counts them, so the Stories tab says where they are.
+  const unattachedFindings = useMemo(
+    () => findings.filter((f) => !(f as { node_id?: string | null }).node_id).length,
+    [findings],
+  )
 
   const synthActions = useMemo(
     () =>
@@ -348,7 +355,6 @@ export function InventoryPage() {
 
   const gateCards = ['dead_handler', 'mock_leak', 'api_contract', 'crawl', 'status_claim'] as const
   const runs = findingsQuery.data?.runs ?? []
-  const findings = findingsQuery.data?.findings ?? []
 
   const driftFromFindings = useMemo(() => {
     const crawl = findings.filter(
@@ -375,7 +381,7 @@ export function InventoryPage() {
   if (!entLoading && !has('inventory_v2')) {
     return (
       <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-inventory">
-        <PageHeaderBar title="User stories & inventory" projectScope={null} />
+        <PageHeaderBar title="User stories" projectScope={null} />
         <UpgradePrompt flag="inventory_v2" currentPlan={planName} />
       </div>
     )
@@ -403,7 +409,7 @@ export function InventoryPage() {
   return (
     <div className="space-y-3" data-testid="mushi-page-inventory">
       <PageHeaderBar
-        title={copy?.title ?? 'User stories · Inventory'}
+        title={copy?.title ?? 'User stories'}
         projectScope={null}
         withPageHero={isAdvanced}
 
@@ -428,42 +434,6 @@ export function InventoryPage() {
           },
         ]}
       />
-
-      <div className="space-y-2 min-w-0">
-        <SegmentedControl<InventoryTabGroup>
-          size="sm"
-          scrollable
-          ariaLabel="Inventory section group"
-          value={tabGroup}
-          onChange={setTabGroup}
-          options={[
-            { id: 'primary', label: 'Primary' },
-            { id: 'advanced', label: 'Advanced' },
-          ]}
-          className="w-full sm:w-auto"
-        />
-        {tabGroup === 'primary' ? (
-          <SegmentedControl<Tab>
-            size="sm"
-            scrollable
-            ariaLabel="Inventory primary sections"
-            value={tab}
-            onChange={setTab}
-            options={PRIMARY_TABS}
-            className="w-full sm:w-auto"
-          />
-        ) : (
-          <SegmentedControl<Tab>
-            size="sm"
-            scrollable
-            ariaLabel="Inventory advanced sections"
-            value={tab}
-            onChange={setTab}
-            options={ADVANCED_TABS}
-            className="w-full sm:w-auto"
-          />
-        )}
-      </div>
 
       {isAdvanced ? (
       <PageHero
@@ -511,6 +481,15 @@ export function InventoryPage() {
         }}
       />
       ) : null}
+      <SegmentedControl<Tab>
+        size="sm"
+        scrollable
+        ariaLabel="Inventory sections"
+        value={tab}
+        onChange={setTab}
+        options={INVENTORY_TABS}
+        className="w-full sm:w-auto"
+      />
       <ActionPillRow className="mb-2" data-dav-anchor="inventory:act">
         <ActionPill tone="neutral" onClick={() => void runGates()}>
           Run gates
@@ -523,7 +502,8 @@ export function InventoryPage() {
 {/* PageHelp migrated to PageHeaderBar above */}
 
       {!snapshot && (
-        <SetupNudge
+        <NextStep
+          variant="inline"
           requires={['github_connected']}
           emptyTitle="No inventory yet"
           emptyDescription="Either install @mushi-mushi/web with discoverInventory: true and let the SDK observe your app — Claude will draft an inventory.yaml — or hand-author one and paste it from the Yaml tab."
@@ -548,7 +528,15 @@ export function InventoryPage() {
       )}
 
       {tab === 'stories' && (
-        <div data-dav-anchor="inventory:decide">
+        <div data-dav-anchor="inventory:decide" className="space-y-3">
+          {unattachedFindings > 0 && (
+            <p className="flex flex-wrap items-center gap-2 text-xs text-fg-muted">
+              {unattachedFindings} open finding{unattachedFindings === 1 ? ' is' : 's are'} not tied to a story action.
+              <Btn size="sm" variant="ghost" onClick={() => setTab('gates')}>
+                Open Gates →
+              </Btn>
+            </p>
+          )}
           <UserStoryMap
             stories={stories}
             findingsByNode={findingsByNode}
@@ -566,11 +554,13 @@ export function InventoryPage() {
           <div className="grid gap-2 md:grid-cols-5" data-dav-anchor="inventory:verify">
             {gateCards.map((g) => {
               const latest = runs.find((r) => r.gate === g)
+              // findings_count is stored when the run ends; a dismissal never lowers it.
+              const open = latest ? Math.max(0, (latest.findings_count ?? 0) - (dismissedPerRun.get(latest.id) ?? 0)) : 0
               return (
                 <Card key={g} className="p-3">
                   <p className="text-2xs uppercase text-fg-faint">{g.replace(/_/g, ' ')}</p>
                   <p className="text-sm font-semibold">{latest?.status ?? '—'}</p>
-                  <p className="text-2xs text-fg-muted">{latest?.findings_count ?? 0} findings</p>
+                  <p className="text-2xs text-fg-muted">{open} open findings</p>
                 </Card>
               )
             })}
@@ -587,6 +577,11 @@ export function InventoryPage() {
                   const q = encodeURIComponent(`${path}${line ? ` line ${line}` : ''}`)
                   window.open(`https://github.com/search?q=${q}&type=code`, '_blank', 'noopener,noreferrer')
                 }}
+                action={
+                  projectId ? (
+                    <DismissFindingButton projectId={projectId} findingId={f.id} onDismissed={findingsQuery.reload} />
+                  ) : undefined
+                }
               />
             ))}
           </div>
@@ -610,7 +605,6 @@ export function InventoryPage() {
           missingInInventory={driftFromFindings.missingInv}
           missingInApp={driftFromFindings.missingApp}
           mismatches={driftFromFindings.mismatch}
-          onReconcile={reconcile}
         />
       )}
 

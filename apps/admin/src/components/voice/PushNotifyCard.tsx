@@ -146,7 +146,7 @@ export function PushNotifyCard({ compact }: PushNotifyCardProps) {
 
   if (compact) return body
   return (
-    <Section title="Push to this phone" icon={<IconBell className="h-4 w-4" />}>
+    <Section title="Notifications" icon={<IconBell className="h-4 w-4" />}>
       {body}
     </Section>
   )

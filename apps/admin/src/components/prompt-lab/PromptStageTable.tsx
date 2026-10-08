@@ -167,7 +167,7 @@ export function PromptStageTable({
                           disabled={busy === p.id}
                           onClick={() => onClone(p)}
                           title="Clone — create an editable copy"
-                          aria-label="Clone prompt"
+                          aria-label={`Clone prompt ${p.version}`}
                         >
                           <IconCopy />
                         </Btn>
@@ -188,7 +188,7 @@ export function PromptStageTable({
                             disabled={busy === p.id}
                             onClick={() => onEdit(p)}
                             title="Edit prompt template"
-                            aria-label="Edit prompt"
+                            aria-label={`Edit prompt ${p.version}`}
                           >
                             <IconPencil />
                           </Btn>
@@ -200,7 +200,7 @@ export function PromptStageTable({
                               disabled={busy === p.id}
                               onClick={() => onDiff(p)}
                               title="Diff against parent prompt"
-                              aria-label="Diff against parent prompt"
+                              aria-label={`Diff prompt ${p.version} against its parent`}
                             >
                               <IconDiff />
                             </Btn>
@@ -228,7 +228,7 @@ export function PromptStageTable({
                               disabled={busy === p.id}
                               onClick={() => onTraffic(p)}
                               title="Set A/B traffic share"
-                              aria-label="Set A/B traffic share"
+                              aria-label={`Set A/B traffic share for ${p.version}`}
                             >
                               <IconSliders />
                             </Btn>
@@ -240,7 +240,7 @@ export function PromptStageTable({
                             disabled={busy === p.id || p.is_active}
                             onClick={() => onDelete(p)}
                             title="Delete prompt"
-                            aria-label="Delete prompt"
+                            aria-label={`Delete prompt ${p.version}`}
                           >
                             <IconTrash />
                           </Btn>

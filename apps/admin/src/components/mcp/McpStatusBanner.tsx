@@ -19,8 +19,6 @@ export const MINT_MCP_KEY_HREF = '/projects?tab=list&keyScope=mcp-write'
 interface Props {
   stats: McpStats
   onTab?: (tab: McpTabId) => void
-  onRefresh?: () => void
-  refreshing?: boolean
   plainBanner?: boolean
 }
 
@@ -31,7 +29,7 @@ function tabFromPath(path: string | null): McpTabId | null {
   return null
 }
 
-export function McpStatusBanner({ stats, onTab, onRefresh, refreshing, plainBanner = false }: Props) {
+export function McpStatusBanner({ stats, onTab, plainBanner = false }: Props) {
   const copy = usePageCopy('/mcp')
   const actions = copy?.actionLabels ?? {}
   const projectLabel = stats.projectName ?? 'active project'
@@ -119,11 +117,7 @@ export function McpStatusBanner({ stats, onTab, onRefresh, refreshing, plainBann
       title={plainBanner ? 'Your editor can talk to Mushi' : `Agent access live on ${projectLabel}`}
       subtitle={label}
       action={
-        onRefresh ? (
-          <Btn size="sm" variant="ghost" onClick={onRefresh} loading={refreshing} disabled={refreshing}>
-            {actions.refresh ?? 'Refresh'}
-          </Btn>
-        ) : onTab ? (
+        onTab ? (
           <Btn size="sm" variant="ghost" onClick={() => onTab('catalog')}>{actions.catalog ?? 'View catalog'}</Btn>
         ) : null
       }

@@ -20,7 +20,6 @@ import {
   EmptyState,
   ErrorAlert,
   RecommendedAction,
-  Card,
 } from '../components/ui'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
@@ -29,7 +28,6 @@ import { useToast } from '../lib/toast'
 import { usePageData } from '../lib/usePageData'
 import { QueueKpiRow } from '../components/dlq/QueueKpiRow'
 import { QueueStatusBanner } from '../components/dlq/QueueStatusBanner'
-import { QueueSnapshotStrip } from '../components/dlq/QueueSnapshotStrip'
 import { QueueReadout } from '../components/dlq/QueueReadout'
 import { EMPTY_QUEUE_STATS, type QueueStats } from '../components/dlq/QueueStatsTypes'
 import { QueueThroughputChart } from '../components/dlq/QueueThroughputChart'
@@ -48,7 +46,6 @@ import {
   ContainedBlock,
   SignalChip,
 } from '../components/report-detail/ReportSurface'
-import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
 
 export function DLQPage() {
   const [items, setItems] = useState<QueueItem[]>([])
@@ -63,9 +60,8 @@ export function DLQPage() {
   const [flushing, setFlushing] = useState(false)
   const [flushingQueued, setFlushingQueued] = useState(false)
   // Start with `dead_letter` so urgent failures lead. Once the summary loads
-  // we fall back to the first non-empty status (in priority order) so a
-  // healthy pipeline lands the user on the populated `completed` lane
-  // instead of an empty page.
+  // we fall back to the first non-empty unfinished lane; a healthy pipeline
+  // shows the empty state rather than a list of finished jobs.
   // The lane lives in the URL (`?status=`), so banner, chart-menu and
   // cross-page links open the lane they name. Without one, the page picks
   // the first non-empty lane once the summary loads.
@@ -138,12 +134,12 @@ export function DLQPage() {
   }, [filter, stage])
 
   // First time the summary loads, if the default `dead_letter` lane is empty,
-  // pivot to the first non-empty status in priority order so a healthy
-  // pipeline doesn't show an empty page.
+  // pivot to the first non-empty unfinished lane. Completed is never picked:
+  // finished jobs are not work, and an empty lane says the queue is healthy.
   useEffect(() => {
     if (!summary || laneFromUrl) return
     if ((summary.byStatus.dead_letter ?? 0) > 0) return
-    const priority: StatusFilter[] = ['failed', 'pending', 'running', 'completed']
+    const priority: StatusFilter[] = ['failed', 'pending', 'running']
     const next = priority.find((s) => (summary.byStatus[s] ?? 0) > 0)
     if (next) setAutoLane(next)
   }, [summary, laneFromUrl])
@@ -239,15 +235,12 @@ export function DLQPage() {
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
 
-  const deadLetter = summary?.byStatus?.dead_letter ?? 0
-  const failedCount = summary?.byStatus?.failed ?? 0
-
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-dlq">
       <PageHeaderBar
-        title="Processing Queue"
+        title="Processing jobs"
 
-        helpTitle="About the Processing Queue"
+        helpTitle="About Processing jobs"
         helpWhatIsIt="Every report passes through fast-filter, classify, and (optionally) judge + fix stages. This page is the operator view of that pipeline — backlog by status, throughput trend, and any item stuck in dead letter."
         helpUseCases={[
           'Spot a stuck stage at a glance via the Backlog by status row',
@@ -319,17 +312,6 @@ export function DLQPage() {
               />
             ),
           },
-          {
-            priority: POSTURE_PRIORITY.heroOrSnapshot,
-            children: (
-              <QueueSnapshotStrip
-                stats={stats}
-                statsFetchedAt={statsFetchedAt}
-                statsValidating={statsValidating || loading}
-                hint="Pipeline lanes — pending through dead-letter for the active project."
-              />
-            ),
-          },
         ]}
       />
 
@@ -339,64 +321,9 @@ export function DLQPage() {
         isValidating={statsValidating || loading}
       />
 
-      {(deadLetter > 0 || failedCount > 0) && (
-        <Card
-          className={`space-y-3 border p-4 bg-surface-raised ${
-            deadLetter > 0 ? 'border-danger/40' : 'border-warn/40'
-          }`}
-        >
-          <SignalChip tone={deadLetter > 0 ? 'danger' : 'warn'}>
-            Needs attention
-          </SignalChip>
-          <ContainedBlock tone="warn">
-            <p className="text-xs font-medium leading-snug text-fg">
-              {deadLetter > 0
-                ? `${deadLetter} job${deadLetter === 1 ? '' : 's'} in dead-letter — manual retry after fixing the root cause.`
-                : `${failedCount} job${failedCount === 1 ? '' : 's'} failing — investigate before retries exhaust.`}
-            </p>
-          </ContainedBlock>
-          <ActionPillRow>
-            <ActionPill
-              onClick={() => {
-                setFilter(deadLetter > 0 ? 'dead_letter' : 'failed')
-                setPage(1)
-              }}
-              tone="brand"
-            >
-              Open {deadLetter > 0 ? 'dead-letter' : 'failed'} lane →
-            </ActionPill>
-            {stats.recoverable > 0 && canEditProject ? (
-              <ActionPill onClick={() => void recoverStranded()} tone="neutral">
-                Recover stranded ({stats.recoverable})
-              </ActionPill>
-            ) : null}
-          </ActionPillRow>
-        </Card>
-      )}
-
       {summary && (
-        <div className="space-y-1.5">
-          {/* Plain-language reading guide. The five KPI tiles use technical
-              terms (pending / running / completed / failed / dead letter)
-              that map cleanly to the worker state machine but are opaque
-              to operators who haven't read the queue runbook. The tooltip
-              behind each tile already explains it ("hover for meaning"),
-              but discovery via hover is silent — see NN/g #6 (Recognition
-              over Recall). This sub-caption surfaces the mental model
-              up-front: lanes flow left→right, the sparkline mirrors the
-              same lane in the 14d throughput chart below, and dead-letter
-              is the only lane that needs human action. */}
-          <ContainedBlock tone="muted" label="How to read this row">
-            <p className="text-2xs leading-relaxed text-fg-muted">
-              Jobs move <span className="font-medium text-fg-secondary">left → right</span> through the worker
-              (waiting → running → completed). Failed jobs are still inside the retry budget;{' '}
-              <span className="font-medium text-warn">dead-letter</span> jobs gave up and need a manual look.
-              Each sparkline shows the last 14 days for that lane — hover any tile for the full meaning.
-            </p>
-          </ContainedBlock>
-          <div data-dav-anchor="dlq:decide">
-            <QueueKpiRow stats={stats} throughput={throughput} />
-          </div>
+        <div data-dav-anchor="dlq:decide">
+          <QueueKpiRow stats={stats} throughput={throughput} />
         </div>
       )}
 
@@ -445,12 +372,8 @@ export function DLQPage() {
             description={
               filter === 'completed'
                 ? 'Once jobs finish they move out of view; pick another status to see backlog.'
-                : 'Nothing here means the pipeline is healthy — change the status filter to inspect other lanes.'
+                : 'Nothing here means the pipeline is healthy — change the status filter to inspect other lanes. Dead-letter is the only lane that needs you after retries run out.'
             }
-          />
-          <EmptySectionMessage
-            text="Switch status or stage filters to inspect other pipeline lanes."
-            hint="Dead-letter is the only lane that requires operator action after retries exhaust."
           />
         </div>
       ) : (

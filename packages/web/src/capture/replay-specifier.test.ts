@@ -32,4 +32,18 @@ describe('replay rrweb specifier', () => {
     const out = result.outputFiles[0].text
     expect(out).not.toMatch(/await\s*import\(\s*(\/\*[^*]*\*\/\s*)?["']rrweb["']\s*\)/)
   })
+
+  it('keeps the bundler-ignore comment, so Turbopack and webpack leave the import alone', async () => {
+    // Turbopack failed glot.it's pages with "Module not found: (<dynamic> | 'rrweb')"
+    // on SDK 1.31.0; both bundlers skip an import marked webpackIgnore.
+    const result = await esbuild.build({
+      entryPoints: [fileURLToPath(new URL('./replay.ts', import.meta.url))],
+      bundle: true,
+      format: 'esm',
+      write: false,
+      external: ['@mushi-mushi/core'],
+      logLevel: 'silent',
+    })
+    expect(result.outputFiles[0].text).toMatch(/import\(\s*\/\*\s*webpackIgnore:\s*true\s*\*\//)
+  })
 })

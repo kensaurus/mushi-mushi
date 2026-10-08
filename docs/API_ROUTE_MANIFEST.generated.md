@@ -2,17 +2,17 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-10-04 · **663** routes.
+> Generated: 2026-10-08 · **682** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
 | Auth | Count |
 | --- | ---: |
-| `adminOrApiKey` | 164 |
+| `adminOrApiKey` | 171 |
 | `apiKeyAuth` | 58 |
-| `jwtAuth` | 340 |
+| `jwtAuth` | 346 |
 | `jwtOrApiKey` | 3 |
-| `unknown` | 98 |
+| `unknown` | 104 |
 
 ## Routes by path
 
@@ -167,6 +167,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/integrations/platform` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/integrations.ts` |
 | PUT | `/v1/admin/integrations/platform/:kind` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/integrations.ts` |
 | POST | `/v1/admin/integrations/platform/:kind/apply` | `jwtAuth` | `packages/server/supabase/functions/api/routes/integrations.ts` |
+| DELETE | `/v1/admin/integrations/platform/:kind/key` | `jwtAuth` | `packages/server/supabase/functions/api/routes/integrations.ts` |
 | GET | `/v1/admin/integrations/slack/channels` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | GET | `/v1/admin/integrations/slack/install` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | GET | `/v1/admin/integrations/stats` | `jwtAuth` | `packages/server/supabase/functions/api/routes/integrations.ts` |
@@ -259,6 +260,11 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | POST | `/v1/admin/orgs/:orgId/portfolio/changes` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/recipe-changes.ts` |
 | GET | `/v1/admin/orgs/:orgId/portfolio/findings` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/portfolio.ts` |
 | GET | `/v1/admin/orgs/:orgId/portfolio/resources` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/recipe-ingest.ts` |
+| GET | `/v1/admin/orgs/:orgId/project-groups` | `unknown` | `packages/server/supabase/functions/api/routes/project-groups.ts` |
+| POST | `/v1/admin/orgs/:orgId/project-groups` | `unknown` | `packages/server/supabase/functions/api/routes/project-groups.ts` |
+| DELETE | `/v1/admin/orgs/:orgId/project-groups/:gid` | `unknown` | `packages/server/supabase/functions/api/routes/project-groups.ts` |
+| PATCH | `/v1/admin/orgs/:orgId/project-groups/:gid` | `unknown` | `packages/server/supabase/functions/api/routes/project-groups.ts` |
+| PUT | `/v1/admin/orgs/:orgId/project-groups/:gid/projects` | `unknown` | `packages/server/supabase/functions/api/routes/project-groups.ts` |
 | GET | `/v1/admin/orgs/:orgId/radar` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/radar.ts` |
 | GET | `/v1/admin/orgs/:orgId/releases` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/recipe-changes.ts` |
 | GET | `/v1/admin/orgs/:orgId/spend` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/spend-ledger.ts` |
@@ -358,12 +364,16 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | PUT | `/v1/admin/projects/:id/store/reviews/settings` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/store-review-intake.ts` |
 | POST | `/v1/admin/projects/:id/sync-ci-secrets` | `jwtAuth` | `packages/server/supabase/functions/api/routes/project-ci-secrets.ts` |
 | POST | `/v1/admin/projects/:id/test-report` | `jwtAuth` | `packages/server/supabase/functions/api/routes/project-integrations.ts` |
+| POST | `/v1/admin/projects/:pid/content-quality/dismiss` | `jwtAuth` | `packages/server/supabase/functions/api/routes/content-quality.ts` |
+| POST | `/v1/admin/projects/:pid/gate-findings/:id/dismiss` | `jwtAuth` | `packages/server/supabase/functions/api/routes/gate-finding-dismiss.ts` |
 | GET | `/v1/admin/projects/:pid/integrations` | `unknown` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | POST | `/v1/admin/projects/:pid/integrations/discord/test` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | POST | `/v1/admin/projects/:pid/integrations/probe/:kind` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | POST | `/v1/admin/projects/:pid/integrations/slack/test` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | POST | `/v1/admin/projects/:pid/integrations/teams/test` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | GET | `/v1/admin/projects/:pid/platform-rollup` | `jwtAuth` | `packages/server/supabase/functions/api/routes/qa-coverage.ts` |
+| GET | `/v1/admin/projects/:pid/pull-requests` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/pull-requests.ts` |
+| POST | `/v1/admin/projects/:pid/pull-requests/:owner/:repo/:number/merge` | `jwtAuth` | `packages/server/supabase/functions/api/routes/pull-requests.ts` |
 | GET | `/v1/admin/projects/:pid/qa-coverage` | `jwtOrApiKey` | `packages/server/supabase/functions/api/routes/qa-coverage.ts` |
 | GET | `/v1/admin/projects/:pid/qa-coverage-summary` | `jwtAuth` | `packages/server/supabase/functions/api/routes/qa-coverage.ts` |
 | GET | `/v1/admin/projects/:pid/qa-coverage/stats` | `jwtAuth` | `packages/server/supabase/functions/api/routes/qa-coverage.ts` |
@@ -381,6 +391,14 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/projects/:pid/sdk-upgrade/:id/stream` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/sdk-upgrade.ts` |
 | POST | `/v1/admin/projects/:pid/sdk-upgrade/:id/sync` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/sdk-upgrade.ts` |
 | GET | `/v1/admin/projects/:pid/sdk-upgrade/in-flight` | `jwtAuth` | `packages/server/supabase/functions/api/routes/sdk-upgrade.ts` |
+| GET | `/v1/admin/projects/:pid/ux-runs` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ux-runs.ts` |
+| GET | `/v1/admin/projects/:pid/ux-runs/:runId` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ux-runs.ts` |
+| PUT | `/v1/admin/projects/:pid/ux-runs/:runId` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ux-runs.ts` |
+| POST | `/v1/admin/projects/:pid/ux-runs/:runId/merge` | `jwtAuth` | `packages/server/supabase/functions/api/routes/ux-runs.ts` |
+| GET | `/v1/admin/projects/:pid/ux-runs/:runId/pull-request` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ux-runs.ts` |
+| POST | `/v1/admin/projects/:pid/ux-runs/:runId/surfaces/:key/report` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ux-runs.ts` |
+| POST | `/v1/admin/projects/:pid/ux-runs/:runId/uploads` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ux-runs.ts` |
+| POST | `/v1/admin/projects/:pid/ux-runs/cloud` | `jwtAuth` | `packages/server/supabase/functions/api/routes/ux-cloud.ts` |
 | GET | `/v1/admin/projects/:projectId/support-tickets/linkable` | `jwtAuth` | `packages/server/supabase/functions/api/routes/admin-ops.ts` |
 | GET | `/v1/admin/projects/stats` | `jwtAuth` | `packages/server/supabase/functions/api/routes/projects-crud.ts` |
 | GET | `/v1/admin/prompt-lab` | `jwtAuth` | `packages/server/supabase/functions/api/routes/prompt-lab.ts` |
@@ -620,6 +638,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | POST | `/v1/sdk/assistant` | `apiKeyAuth` | `packages/server/supabase/functions/api/routes/sdk-assistant.ts` |
 | GET | `/v1/sdk/config` | `apiKeyAuth` | `packages/server/supabase/functions/api/routes/public.ts` |
 | POST | `/v1/sdk/discovery` | `apiKeyAuth` | `packages/server/supabase/functions/api/routes/public.ts` |
+| POST | `/v1/sdk/erase-subject` | `unknown` | `packages/server/supabase/functions/api/routes/erase-subject.ts` |
 | POST | `/v1/sdk/events` | `apiKeyAuth` | `packages/server/supabase/functions/api/routes/events.ts` |
 | GET | `/v1/sdk/hall-of-fame` | `apiKeyAuth` | `packages/server/supabase/functions/api/routes/rewards.ts` |
 | GET | `/v1/sdk/latest-version` | `unknown` | `packages/server/supabase/functions/api/routes/public.ts` |

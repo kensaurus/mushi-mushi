@@ -168,8 +168,10 @@ export function registerHealthRoutes(app: Hono<{ Variables: Variables }>): void 
 
     const since = new Date(Date.now() - ms).toISOString();
     const KNOWN_JOBS = ['judge-batch', 'intelligence-report', 'data-retention'] as const;
+    // Minutes between runs, matching cron.job. judge-batch runs nightly (14 3 * * *);
+    // at 60 it read as overdue every day from 06:14 UTC.
     const EXPECTED_CADENCE_MIN: Record<string, number> = {
-      'judge-batch': 60,
+      'judge-batch': 60 * 24,
       'intelligence-report': 60 * 24 * 7,
       'data-retention': 60 * 24,
     };
@@ -488,8 +490,9 @@ export function registerHealthRoutes(app: Hono<{ Variables: Variables }>): void 
 
     // Expected cadences in minutes. Any job we don't know about defaults to
     // 24h (day-scale), which keeps the probe conservative for new crons.
+    // Minutes between runs; judge-batch is nightly (see the stats route above).
     const EXPECTED_CADENCE_MIN: Record<string, number> = {
-      'judge-batch': 60,
+      'judge-batch': 60 * 24,
       'intelligence-report': 60 * 24 * 7,
       'data-retention': 60 * 24,
       'pipeline-recovery': 5,

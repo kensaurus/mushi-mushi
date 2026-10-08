@@ -1,6 +1,6 @@
 /**
  * FILE: apps/admin/src/pages/ResearchPage.tsx
- * PURPOSE: Banner + RESEARCH SNAPSHOT + tabs: Overview | Search | History.
+ * PURPOSE: Banner + RESEARCH SNAPSHOT + tabs: Search | History, readout at the foot.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -15,18 +15,14 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { usePageCopy } from '../lib/copy'
 import { useResearchUx, resolveQuickResearchTab } from '../lib/researchModeUx'
-import { useQuickstartLandingTab } from '../lib/useQuickstartTab'
-import { SetupNudge } from '../components/SetupNudge'
+import { NextStep } from '../components/NextStep'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { Btn,
-  Badge,
   Input,
   SegmentedControl,
   EmptyState,
-  RelativeTime,
-  FreshnessPill,
-  RecommendedAction, } from '../components/ui'
+  RelativeTime, } from '../components/ui'
 import {
   ActionPill,
   ActionPillRow,
@@ -48,17 +44,20 @@ import {
 import { ResearchSnippetCard } from '../components/research/ResearchSnippetCard'
 import { ResearchSessionTable } from '../components/research/ResearchSessionTable'
 import type { SearchResponse, SessionRow } from '../components/research/types'
-import { CHIP_TONE, HEADER_BADGE_TONE, LINK_ACCENT } from '../lib/chipTone'
+
+const REPORT_OPTIONS_ID = 'research-recent-reports'
+
+interface RecentReport {
+  id: string
+  summary?: string | null
+  description?: string | null
+}
 
 type SessionMode = 'all' | 'search' | 'scrape'
 type SessionAge = 'all' | '24h' | '7d'
 
+// No Overview tab: the banner states the Firecrawl posture and the readout sits at the page foot.
 const TABS: Array<{ id: ResearchTabId; label: string; description: string }> = [
-  {
-    id: 'overview',
-    label: 'Overview',
-    description: 'Firecrawl posture, how web research fits triage, and recommended next steps.',
-  },
   {
     id: 'search',
     label: 'Search',
@@ -79,17 +78,16 @@ const SUGGESTIONS = [
   'cloudflare workers fetch ECONNRESET intermittent',
 ]
 
-function resolveResearchTab(value: string | null): ResearchTabId {
+/** The tab named in the URL, or null so the posture picks one. */
+function explicitResearchTab(value: string | null): ResearchTabId | null {
   if (value === 'search' || value === 'history') return value
-  return 'overview'
+  return null
 }
 
 export function ResearchPage() {
   const copy = usePageCopy('/research')
   const ux = useResearchUx()
   const [searchParams, setSearchParams] = useSearchParams()
-  const activeTab = resolveResearchTab(searchParams.get('tab'))
-  const activeTabMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
 
   const activeProjectId = useActiveProjectId()
   const setup = useSetupStatus(activeProjectId)
@@ -114,6 +112,10 @@ export function ResearchPage() {
   } = usePageData<ResearchStats>('/v1/admin/research/stats')
   usePublishPageHeroStats('/research', statsData)
   const stats = { ...EMPTY_RESEARCH_STATS, ...statsData }
+  // Every mode lands on the work tab that matches the posture; the URL wins.
+  const postureTab = resolveQuickResearchTab(stats)
+  const activeTab: ResearchTabId = explicitResearchTab(searchParams.get('tab')) ?? (postureTab === 'overview' ? 'search' : postureTab)
+  const activeTabMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
 
   const sessionsPath = activeProjectId && activeTab === 'history' ? '/v1/admin/research/sessions?limit=50' : null
 
@@ -128,6 +130,14 @@ export function ResearchPage() {
 
   const sessions = historyData?.sessions ?? []
 
+  // Recent reports for the attach picker, read only while a snippet can be attached.
+  const needsReportPicker = activeTab === 'search' && (active?.results.some((r) => !r.attached_to_report_id) ?? false)
+  const { data: recentReportsData } = usePageData<{ reports: RecentReport[] }>(
+    activeProjectId && needsReportPicker ? '/v1/admin/reports?limit=25&sort=created_at&dir=desc' : null,
+    { deps: [activeProjectId] },
+  )
+  const recentReports = recentReportsData?.reports ?? []
+
   const reloadAll = useCallback(() => {
     reloadStats()
     loadHistory()
@@ -139,8 +149,7 @@ export function ResearchPage() {
     (tab: ResearchTabId) => {
       setSearchParams((prev) => {
         const next = new URLSearchParams(prev)
-        if (tab === 'overview') next.delete('tab')
-        else next.set('tab', tab)
+        next.set('tab', tab)
         return next
       })
     },
@@ -172,16 +181,6 @@ export function ResearchPage() {
       })),
     [copy?.tabLabels, stats.sessions, stats.unattachedSnippets],
   )
-
-  // Quick mode opens the posture tab once; links and clicks then win.
-  useQuickstartLandingTab({
-    enabled: ux.isQuickstart,
-    ready: !statsLoading,
-    tabParam: searchParams.get('tab'),
-    activeTab: activeTab,
-    quickTab: resolveQuickResearchTab(stats),
-    setActiveTab: setActiveTab,
-  })
 
   const runSearch = useCallback(async (q: string) => {
     if (!activeProjectId) {
@@ -258,7 +257,7 @@ export function ResearchPage() {
   const attach = useCallback(async (snippetId: string) => {
     const reportId = (attachInput[snippetId] ?? '').trim()
     if (!reportId) {
-      toast.error('Paste the report UUID from the Reports page.')
+      toast.error('Pick a report or paste its id first.')
       return
     }
     const res = await apiFetch(`/v1/admin/research/snippets/${snippetId}/attach`, {
@@ -303,19 +302,6 @@ export function ResearchPage() {
     return <PageLoadError error={statsError} code={statsErrorCode} onRetry={reloadStats} />
   }
 
-  const bannerSeverity: 'ok' | 'warn' | 'danger' | 'brand' | 'info' | 'neutral' =
-    !stats.hasAnyProject
-      ? 'neutral'
-      : stats.topPriority === 'firecrawl_auth_failed' || stats.topPriority === 'firecrawl_error'
-        ? 'danger'
-        : stats.topPriority === 'firecrawl_not_configured' || stats.topPriority === 'unattached_snippets'
-          ? 'warn'
-          : stats.topPriority === 'ready_no_sessions' || stats.topPriority === 'firecrawl_untested'
-            ? 'brand'
-            : stats.firecrawlReady
-              ? 'ok'
-              : 'info'
-
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-research">
       <PageHeaderBar
@@ -329,34 +315,10 @@ export function ResearchPage() {
           'Find a Stack Overflow thread to attach as review evidence',
           'Check if a third-party library shipped a fix in the last 24 hours',
         ]}
-        helpHowToUse={copy?.help?.howToUse ?? 'Press Enter to search. Paste a report UUID on any snippet and click Attach evidence.'}
+        helpHowToUse={copy?.help?.howToUse ?? 'Press Enter to search. Pick a recent report (or paste its id) on any snippet and click Attach evidence.'}
       >
         {!ux.hideOverviewChrome && (
           <>
-        <Badge
-          className={
-            bannerSeverity === 'ok'
-              ? CHIP_TONE.okSubtle
-              : bannerSeverity === 'danger'
-                ? CHIP_TONE.dangerSubtle
-                : bannerSeverity === 'warn'
-                  ? CHIP_TONE.warnSubtle
-                  : bannerSeverity === 'brand'
-                    ? HEADER_BADGE_TONE.brand
-                    : HEADER_BADGE_TONE.neutral
-          }
-        >
-          {!stats.hasAnyProject
-            ? 'NO PROJECT'
-            : !stats.firecrawlConfigured
-              ? 'NO KEY'
-              : !stats.firecrawlReady
-                ? 'NOT READY'
-                : stats.sessions === 0
-                  ? 'READY'
-                  : `${stats.attached} ATTACHED`}
-        </Badge>
-        <FreshnessPill at={statsFetchedAt} isValidating={statsValidating} />
         <Btn size="sm" variant="ghost" onClick={reloadAll} loading={statsValidating || historyValidating}>
           Refresh
         </Btn>
@@ -426,77 +388,14 @@ export function ResearchPage() {
       )}
 
       {!activeProjectId ? (
-        <SetupNudge
+        <NextStep
+          variant="inline"
           requires={['project']}
           emptyTitle="Select a project"
           emptyDescription="Research sessions and Firecrawl settings are scoped to the active project in the header."
         />
       ) : (
         <>
-          {activeTab === 'overview' && (
-            <div className="space-y-4">
-              <ResearchReadout
-                stats={stats}
-                fetchedAt={statsFetchedAt}
-                isValidating={statsValidating}
-              />
-              {stats.topPriority === 'healthy' && (
-                <RecommendedAction
-                  tone="success"
-                  title="Research pipeline healthy"
-                  description={stats.topPriorityLabel ?? `${stats.sessions} sessions with Firecrawl ready.`}
-                />
-              )}
-              {(stats.topPriority === 'firecrawl_not_configured' || stats.topPriority === 'firecrawl_untested') && (
-                <RecommendedAction
-                  tone="info"
-                  title="Configure Firecrawl first"
-                  description={stats.topPriorityLabel ?? 'Web search requires a BYOK Firecrawl key.'}
-                  cta={{ label: 'Open Firecrawl key', to: '/settings?tab=byok#key-firecrawl' }}
-                />
-              )}
-              {(stats.topPriority === 'firecrawl_auth_failed' || stats.topPriority === 'firecrawl_error') && (
-                <RecommendedAction
-                  tone="urgent"
-                  title="Fix Firecrawl before searching"
-                  description={stats.topPriorityLabel ?? 'Re-test the API key in Settings.'}
-                  cta={{ label: 'Fix in Settings', to: '/settings?tab=byok#key-firecrawl' }}
-                />
-              )}
-              {stats.topPriority === 'ready_no_sessions' && (
-                <RecommendedAction
-                  tone="info"
-                  title="Run your first search"
-                  description={stats.topPriorityLabel ?? 'Firecrawl is ready — try an example query on the Search tab.'}
-                  cta={{ label: 'Open Search', to: '/research?tab=search' }}
-                />
-              )}
-              {stats.topPriority === 'unattached_snippets' && (
-                <RecommendedAction
-                  tone="info"
-                  title="Attach snippets to reports"
-                  description={stats.topPriorityLabel ?? 'Paste report UUIDs from the Reports page.'}
-                  cta={{ label: 'Open Search', to: '/research?tab=search' }}
-                />
-              )}
-              {stats.lastSessionAt && (
-                <InlineProof>
-                  Last search <RelativeTime value={stats.lastSessionAt} />
-                  {' · '}
-                  <Btn
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className={`!px-0 !py-0 !border-0 !bg-transparent hover:!bg-transparent ${LINK_ACCENT}`}
-                    onClick={() => setActiveTab('history')}
-                  >
-                    View history
-                  </Btn>
-                </InlineProof>
-              )}
-            </div>
-          )}
-
           {activeTab === 'search' && (
             <div className="space-y-4">
               <form
@@ -586,6 +485,13 @@ export function ResearchPage() {
                     />
                   ) : (
                     <div className="space-y-3">
+                      <datalist id={REPORT_OPTIONS_ID}>
+                        {recentReports.map((r) => (
+                          <option key={r.id} value={r.id}>
+                            {(r.summary ?? r.description ?? 'Untitled report').slice(0, 80)}
+                          </option>
+                        ))}
+                      </datalist>
                       {active.results.map((r) => (
                         <ResearchSnippetCard
                           key={r.id}
@@ -595,6 +501,7 @@ export function ResearchPage() {
                             setAttachInput((s) => ({ ...s, [r.id]: v }))
                           }
                           onAttach={() => void attach(r.id)}
+                          reportListId={REPORT_OPTIONS_ID}
                         />
                       ))}
                     </div>
@@ -628,6 +535,8 @@ export function ResearchPage() {
           )}
         </>
       )}
+
+      {activeProjectId && <ResearchReadout stats={stats} fetchedAt={statsFetchedAt} isValidating={statsValidating} />}
     </div>
   )
 }

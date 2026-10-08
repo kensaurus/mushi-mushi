@@ -113,7 +113,7 @@ export const PDCA_ORDER: PdcaStageId[] = ['plan', 'do', 'check', 'act']
  *
  * Adding a new beginner-facing surface? Read from this map instead of
  * coining a new sentence — drift between PdcaCockpit, GettingStartedEmpty,
- * LivePdcaPipeline, and NextBestAction is a recurring audit finding.
+ * LivePdcaPipeline, and NextStep is a recurring audit finding.
  */
 export const PDCA_STAGE_OUTCOMES: Record<PdcaStageId, {
   /** Verb-led headline ("Capture your first user-felt bug"). */

@@ -51,7 +51,7 @@ export function QaCoverageStatusBanner({
   if (stats.topPriority === 'no_stories') {
     return (
       <StatusBannerShell
-        tone="brand"
+        tone="info"
         title={plainBanner ? 'No automated tests yet' : `No QA stories on ${projectLabel}`}
         subtitle={
           stats.topPriorityLabel ??
@@ -62,13 +62,13 @@ export function QaCoverageStatusBanner({
             <StatusBannerAction
               label={actions.newStory ?? '+ New story'}
               onClick={onCreateStory}
-              tone="brand"
+              tone="info"
             />
           ) : (
             <StatusBannerAction
               label={actions.create ?? 'Create story'}
               to={scopedHref('/qa-coverage?tab=overview', pid)}
-              tone="brand"
+              tone="info"
             />
           )
         }
@@ -114,7 +114,7 @@ export function QaCoverageStatusBanner({
   if (stats.topPriority === 'pending') {
     return (
       <StatusBannerShell
-        tone="brand"
+        tone="info"
         pulseDot
         title={
           plainBanner
@@ -130,13 +130,13 @@ export function QaCoverageStatusBanner({
             <StatusBannerAction
               label={actions.stories ?? 'View stories'}
               onClick={() => onTab('stories')}
-              tone="brand"
+              tone="info"
             />
           ) : (
             <StatusBannerAction
               label={actions.stories ?? 'View stories'}
               to={scopedHref('/qa-coverage?tab=stories', pid)}
-              tone="brand"
+              tone="info"
             />
           )
         }

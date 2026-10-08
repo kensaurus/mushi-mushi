@@ -837,7 +837,7 @@ export function SdkHealthSummary({
           <span aria-hidden="true" className="ml-1.5">{open ? '▴' : '▾'}</span>
         </Btn>
         <Link
-          to={isExpoReporterProject(projectSlug) ? '/setup-copilot' : '/onboarding'}
+          to={isExpoReporterProject(projectSlug) ? '/onboarding?tab=copilot' : '/onboarding'}
           className="text-2xs text-fg-muted hover:text-fg underline-offset-2 hover:underline ml-auto"
         >
           {isExpoReporterProject(projectSlug) ? 'Setup Copilot →' : 'Setup guide →'}

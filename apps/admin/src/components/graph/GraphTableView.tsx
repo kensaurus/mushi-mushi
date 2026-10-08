@@ -27,7 +27,17 @@ export function GraphTableView({ nodes, edges, selectedNodeId, blastRadiusIds, o
   const [nodeLimit, setNodeLimit] = useState(PAGE_SIZE)
   const [edgeLimit, setEdgeLimit] = useState(PAGE_SIZE)
 
-  const visibleNodes = useMemo(() => nodes.slice(0, nodeLimit), [nodes, nodeLimit])
+  // Largest clusters first: occurrence count descending, unknown last.
+  const rankedNodes = useMemo(
+    () =>
+      [...nodes].sort(
+        (a, b) =>
+          (Number(nodeMetadataValue(b, 'occurrence_count')) || 0) -
+          (Number(nodeMetadataValue(a, 'occurrence_count')) || 0),
+      ),
+    [nodes],
+  )
+  const visibleNodes = useMemo(() => rankedNodes.slice(0, nodeLimit), [rankedNodes, nodeLimit])
   const visibleEdges = useMemo(() => edges.slice(0, edgeLimit), [edges, edgeLimit])
 
   const nodeOverflow = nodes.length - visibleNodes.length

@@ -5,7 +5,6 @@
  */
 
 import type { DashboardStats } from '../components/dashboard/DashboardStatsTypes'
-import type { InboxStats } from '../components/inbox/types'
 
 /* ── Dashboard ─────────────────────────────────────────────────────────── */
 
@@ -90,18 +89,6 @@ export const repoLinks = {
   ciFailed: '/repo?tab=branches&status=ci_failed',
   merged: '/repo?tab=branches&status=merged',
   stuck: '/fixes?tab=attempts&status=failed',
-} as const
-
-/* ── Inbox ───────────────────────────────────────────────────────────── */
-
-export const inboxLinks = {
-  // No top priority means nothing is open: the Actions tab says so.
-  open: (stats: InboxStats) => stats.topPriorityTo ?? '/inbox?tab=actions',
-  clear: '/dashboard',
-  // Backlog = New reports waiting over an hour: oldest first.
-  backlog: '/reports?status=new&sort=created_at&dir=asc',
-  // Same predicate as criticalReports14d (dashboard.ts inbox stats).
-  critical: '/reports?status=open&severity=critical&days=14',
 } as const
 
 /* ── Judge ─────────────────────────────────────────────────────────────── */
@@ -342,14 +329,6 @@ export const notificationsLinks = {
   fixFailed: '/notifications?tab=inbox',
   lastMessage: '/notifications?tab=inbox',
 } as const
-
-/** Resolve a static or stats-aware link target. */
-export function statLink<T>(
-  target: string | ((stats: T) => string),
-  stats?: T,
-): string {
-  return typeof target === 'function' ? target(stats as T) : target
-}
 
 const PAGE_LABELS: Record<string, string> = {
   dashboard: 'Dashboard',

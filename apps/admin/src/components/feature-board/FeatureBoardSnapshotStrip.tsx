@@ -39,7 +39,6 @@ export function FeatureBoardSnapshotStrip({
         <StatCard
           label="Requests"
           value={stats.totalTickets}
-          accent={stats.totalTickets > 0 ? 'text-brand' : undefined}
           detail={stats.projectId ? 'All feature-category tickets' : 'Select a project'}
         />
         <StatCard

@@ -159,13 +159,18 @@ function skillsRoutes() {
     const catalogTotal = new Set((slugRows ?? []).map((r) => r.slug as string)).size
 
     let awaitingCheckin = 0
+    // Oldest waiting step, so the console can say how stale the backlog is.
+    let oldestAwaitingCheckinAt: string | null = null
     if (activeRunIds.length > 0) {
-      const { count } = await db()
+      const { count, data: oldest } = await db()
         .from('skill_pipeline_step_runs')
-        .select('id', { count: 'exact', head: true })
+        .select('created_at', { count: 'exact' })
         .in('run_id', activeRunIds)
         .eq('status', 'pending')
+        .order('created_at', { ascending: true })
+        .limit(1)
       awaitingCheckin = count ?? 0
+      oldestAwaitingCheckinAt = (oldest?.[0]?.created_at as string | undefined) ?? null
     }
 
     const scoped = (path: string) =>
@@ -208,6 +213,7 @@ function skillsRoutes() {
         activeRuns,
         failedRuns,
         awaitingCheckin,
+        oldestAwaitingCheckinAt,
         topPriority,
         topPriorityLabel,
         topPriorityTo,

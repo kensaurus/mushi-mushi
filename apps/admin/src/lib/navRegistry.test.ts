@@ -25,18 +25,19 @@ describe('navigation names', () => {
   it('keeps every former name findable as a search alias', () => {
     const formerNames: Record<string, string> = {
       '/judge': 'judge',
-      '/drift': 'drift',
+      // Plan 021: these pages are hub views now; their palette entries keep the former names.
+      '/health?view=schema': 'drift',
       '/recipe': 'recipe',
       '/anti-gaming': 'anti-gaming',
       '/iterate': 'iterate',
-      '/intelligence': 'intelligence',
-      '/anomalies': 'anomalies',
+      '/dashboard?view=insights': 'intelligence',
+      '/health?view=spikes': 'anomalies',
       '/prompt-lab': 'prompt lab',
       '/inbox': 'action inbox',
       '/queue': 'failed events',
       '/reports': 'reports',
       '/portfolio': 'portfolio',
-      '/overview': 'overview',
+      '/dashboard?view=apps': 'overview',
     }
     for (const [path, alias] of Object.entries(formerNames)) {
       const entry = NAV_REGISTRY.find((e) => e.path === path)
@@ -79,7 +80,7 @@ describe('palette ranking', () => {
 
   it('finds a page by its former name', () => {
     expect(top('judge')).toBe('/judge')
-    expect(top('drift')).toBe('/drift')
+    expect(top('drift')).toBe('/health?view=schema')
     expect(top('iterate')).toBe('/iterate')
     expect(top('action inbox')).toBe('/inbox')
     expect(top('prompt lab')).toBe('/prompt-lab')
@@ -87,7 +88,7 @@ describe('palette ranking', () => {
 
   it('ranks an exact label above partial matches', () => {
     expect(top('bugs')).toBe('/reports')
-    expect(top('billing')).toBe('/billing')
+    expect(top('billing')).toBe('/team?view=billing')
   })
 
   it('returns nothing for text that is not a page (reports search takes over)', () => {
@@ -111,13 +112,13 @@ describe('palette role gating (QA #72)', () => {
 
   it('leaves operator and super-admin pages out for a normal user', () => {
     const visible = paths({ isSuperAdmin: false, isOperator: false })
-    expect(visible).not.toContain('/growth')
+    expect(visible).not.toContain('/dashboard?view=growth')
     expect(visible).not.toContain('/users')
     expect(visible).toContain('/settings')
   })
 
   it('keeps each page for the role that can open it', () => {
-    expect(paths({ isSuperAdmin: false, isOperator: true })).toContain('/growth')
+    expect(paths({ isSuperAdmin: false, isOperator: true })).toContain('/dashboard?view=growth')
     expect(paths({ isSuperAdmin: true, isOperator: false })).toContain('/users')
   })
 })

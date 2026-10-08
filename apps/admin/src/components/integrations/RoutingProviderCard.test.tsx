@@ -76,6 +76,15 @@ describe('RoutingProviderCard', () => {
     expect(container.querySelector<HTMLButtonElement>('button[aria-label="Disconnect integration"]')?.disabled).toBe(false)
   })
 
+  it('shows one Connect button when the provider is not connected', async () => {
+    await act(async () => {
+      root.render(createElement(RoutingProviderCard, baseProps({ existing: undefined })))
+    })
+    const connects = [...container.querySelectorAll('button')].filter((b) => b.textContent?.trim() === 'Connect')
+    expect(connects).toHaveLength(1)
+    expect(container.querySelector('button[aria-label="Edit integration"]')).toBeNull()
+  })
+
   it('renders the API token as a masked text field, not a password field', async () => {
     await act(async () => {
       root.render(createElement(RoutingProviderCard, baseProps({ isEditing: true })))

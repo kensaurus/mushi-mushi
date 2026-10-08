@@ -1,5 +1,6 @@
 /**
  * QA COVERAGE SNAPSHOT — posture strip backed by /v1/admin/projects/:id/qa-coverage/stats.
+ * Passing / Failing / No-runs counts live on the story filter chips, not here.
  */
 
 import { Link } from 'react-router-dom'
@@ -9,12 +10,6 @@ import type { QaCoverageStats } from './QaCoverageStatsTypes'
 import {
   avgPassRateDetail,
   avgPassRateTooltip,
-  failingStoriesDetail,
-  failingStoriesTooltip,
-  noDataStoriesDetail,
-  noDataStoriesTooltip,
-  passingStoriesDetail,
-  passingStoriesTooltip,
   runs24hDetail,
   runs24hTooltip,
   totalStoriesDetail,
@@ -30,8 +25,6 @@ interface Props {
   sectionTitle?: string
   statLabels?: Record<string, string>
   hideLinks?: boolean
-  /** Quick mode: 4 headline stats instead of 6. */
-  compact?: boolean
 }
 
 export function QaCoverageSnapshotStrip({
@@ -42,7 +35,6 @@ export function QaCoverageSnapshotStrip({
   sectionTitle = 'QA SNAPSHOT',
   statLabels,
   hideLinks = false,
-  compact = false,
 }: Props) {
   const avgPassValue =
     stats.avgPassRatePct != null ? `${stats.avgPassRatePct}%` : '—'
@@ -53,36 +45,13 @@ export function QaCoverageSnapshotStrip({
       freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
     >
       <SnapshotSectionHint text={description} />
-      <MetricStrip
-        cols={compact ? 4 : 6}
-        ariaLabel="QA coverage snapshot"
-        className={compact ? '' : 'sm:grid-cols-3'}
-      >
+      <MetricStrip cols={3} ariaLabel="QA coverage snapshot">
         <StatCard
           label={statLabels?.stories ?? 'Stories'}
           value={stats.totalStories}
-          accent={stats.totalStories > 0 ? 'text-brand' : undefined}
           tooltip={totalStoriesTooltip(stats)}
           detail={totalStoriesDetail(stats)}
           to={qaCoverageLinks.stories}
-        />
-        {!compact ? (
-          <StatCard
-            label={statLabels?.passing ?? 'Passing'}
-            value={stats.passingStories}
-            accent={stats.passingStories > 0 ? 'text-ok' : undefined}
-            tooltip={passingStoriesTooltip(stats)}
-            detail={passingStoriesDetail()}
-            to={qaCoverageLinks.passing}
-          />
-        ) : null}
-        <StatCard
-          label={statLabels?.failing ?? 'Failing'}
-          value={stats.failingStories}
-          accent={stats.failingStories > 0 ? 'text-danger' : 'text-ok'}
-          tooltip={failingStoriesTooltip(stats)}
-          detail={failingStoriesDetail()}
-          to={qaCoverageLinks.failing}
         />
         <StatCard
           label={statLabels?.avgPassRate ?? 'Avg pass rate'}
@@ -106,16 +75,6 @@ export function QaCoverageSnapshotStrip({
           detail={runs24hDetail(stats)}
           to={qaCoverageLinks.runs24h}
         />
-        {!compact ? (
-          <StatCard
-            label={statLabels?.noData ?? 'No data'}
-            value={stats.noDataStories}
-            accent={stats.noDataStories > 0 ? 'text-warn' : undefined}
-            tooltip={noDataStoriesTooltip(stats)}
-            detail={noDataStoriesDetail()}
-            to={qaCoverageLinks.noData}
-          />
-        ) : null}
       </MetricStrip>
       {!hideLinks ? (
         <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-2xs text-fg-muted">

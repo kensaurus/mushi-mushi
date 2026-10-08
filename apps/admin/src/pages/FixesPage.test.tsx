@@ -5,13 +5,14 @@
 /**
  * FILE: apps/admin/src/pages/FixesPage.test.tsx
  * PURPOSE: /fixes console QA group C, on the real page.
- *   94   `/fixes?status=failed` (banner, alert, tile) opens the failed list
- *        on Attempts, not Overview.
+ *   94   `/fixes?status=failed` (banner, alert, tile) opens the failed list.
+ *        `?tab=pipeline` (server link, old bookmarks) opens In flight.
  *   96   A single-row Retry asks first; it spends LLM budget.
  *   241  The retry dialog defaults to the failed attempt's own agent and
  *        sends it as `agentOverride`.
  *   92   Each row has its own selection checkbox.
- *   93   A "Common causes" chip opens the failed list narrowed to that cause.
+ *   93   A "Common causes" chip narrows the failed list to that cause.
+ *        PR open counts attempts with an open PR whatever CI says, as /repo does.
  *   91   The header counts every attempt, and older ones can be loaded.
  */
 
@@ -65,14 +66,12 @@ vi.mock('../lib/fixesModeUx', () => ({
     isBeginner: false,
     isAdvanced: true,
     compactTable: false,
-    hideTabs: false,
     plainBanner: false,
     hideTableChrome: false,
     hideFailureCategories: false,
     hideSnapshotLinks: false,
     hideFixesSnapshot: true,
   }),
-  resolveQuickFixesTab: () => 'attempts',
 }))
 vi.mock('../components/PagePosture', () => ({ PagePosture: () => null, POSTURE_PRIORITY: {} }))
 vi.mock('../components/PageHeaderBar', () => ({
@@ -164,7 +163,7 @@ describe('FixesPage', () => {
   it('QA 96 + 241: row Retry asks first and sends the failed attempt’s agent', async () => {
     mocks.fixes = [fix({})]
     mocks.total = 1
-    await render('/fixes?tab=attempts')
+    await render('/fixes')
     const rowRetry = buttons('Retry').find((b) => b.closest('tr'))
     click(rowRetry)
     expect(document.body.textContent).toContain('Retry this fix?')
@@ -181,23 +180,48 @@ describe('FixesPage', () => {
   it('QA 92: each row can be selected on its own', async () => {
     mocks.fixes = [fix({ id: 'a', report_id: 'r1' }), fix({ id: 'b', report_id: 'r2', report_title: 'Login loops' })]
     mocks.total = 2
-    await render('/fixes?tab=attempts')
+    await render('/fixes')
     const box = document.querySelector('input[aria-label="Select the fix for Login loops"]') as HTMLInputElement
     click(box)
     expect(document.body.textContent).toContain('1 selected')
   })
 
-  it('QA 93: a cause chip on Pipeline opens the failed list narrowed to it', async () => {
+  it('QA 94: the old pipeline tab link opens the In flight filter', async () => {
+    mocks.fixes = [fix({ id: 'a', status: 'running', report_fix_state: 'in_flight' }), fix({ id: 'b', report_id: 'r2', report_title: 'Login loops' })]
+    mocks.total = 2
+    await render('/fixes?tab=pipeline')
+    const inflight = document.querySelector('[role="radiogroup"][aria-label="Filter fix attempts by status"] [aria-checked="true"]')
+    expect(inflight?.textContent).toContain('In flight')
+    expect(document.body.textContent).not.toContain('Login loops')
+  })
+
+  it('PR open counts an open PR with red CI, like Pull requests', async () => {
+    mocks.fixes = [fix({ id: 'a', status: 'completed', pr_url: 'https://github.com/o/r/pull/1', pr_state: 'open', check_run_conclusion: 'failure', report_fix_state: 'failed' })]
+    mocks.total = 1
+    await render('/fixes')
+    const segments = [...document.querySelectorAll('[aria-label="Filter fix attempts by status"] [role="radio"]')]
+    expect(segments.find((b) => b.textContent?.startsWith('PR open'))?.textContent).toBe('PR open1')
+    expect(segments.find((b) => b.textContent?.startsWith('Failed'))?.textContent).toBe('Failed / skipped1')
+  })
+
+  it('?report= (Voice reports link) narrows the list to that report', async () => {
+    mocks.fixes = [fix({ id: 'a', report_id: 'r1' }), fix({ id: 'b', report_id: 'r2', report_title: 'Login loops' })]
+    mocks.total = 2
+    await render('/fixes?report=r2')
+    expect(document.body.textContent).toContain('Login loops')
+    expect(document.body.textContent).not.toContain('Checkout button does nothing')
+  })
+
+  it('QA 93: a cause chip narrows the failed list to it', async () => {
     mocks.fixes = [
       fix({ id: 'a', report_id: 'r1', failure_category: 'ci_failed' } as Partial<FixAttempt>),
       fix({ id: 'b', report_id: 'r2', report_title: 'Login loops', error: 'Embedding API error: 401', failure_category: 'credential' } as Partial<FixAttempt>),
     ]
     mocks.total = 2
-    await render('/fixes?tab=pipeline')
+    await render('/fixes?status=failed')
     const chip = [...document.querySelectorAll('button')].find((b) => b.getAttribute('title')?.startsWith('Show the 1 failed fix'))
     click(chip)
     await flush()
-    expect(new URLSearchParams(currentSearch).get('tab')).toBe('attempts')
     expect(new URLSearchParams(currentSearch).get('status')).toBe('failed')
     expect(new URLSearchParams(currentSearch).get('cause')).not.toBeNull()
     expect(document.body.textContent).toContain('Cause')
@@ -206,7 +230,7 @@ describe('FixesPage', () => {
   it('QA 91: counts every attempt and loads older ones', async () => {
     mocks.fixes = [fix({})]
     mocks.total = 2
-    await render('/fixes?tab=attempts')
+    await render('/fixes')
     expect(document.querySelector('[data-testid="header"]')?.textContent).toContain('1 of 2 attempts')
     click(buttons('Load 1 older')[0])
     await flush()
