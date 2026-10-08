@@ -70,7 +70,7 @@ npx --yes @mushi-mushi/inventory-auth-runner refresh
 
 | Var                  | Required | Description                                                                                                |
 | -------------------- | -------- | ---------------------------------------------------------------------------------------------------------- |
-| `MUSHI_API_KEY`      | yes      | Project-scoped API key with the `mcp:write` scope. Mint one with **Mint mcp:write key** on the admin console's MCP page (`/mcp`). |
+| `MUSHI_API_KEY`      | yes      | Project-scoped API key with the `mcp:write` scope. Mint one on the admin console's Connect page (`/connect`, read + write access) or under Projects → keys. |
 | `MUSHI_PROJECT`      | yes      | Mushi project UUID.                                                                                        |
 | `MUSHI_API_ENDPOINT` | no       | API base URL. Defaults to the hosted Supabase functions endpoint.                                          |
 | `TEST_USER_EMAIL` / `TEST_USER_PASSWORD` | usually | Picked up by your `auth.scripted.script`; the runner itself doesn't read them. Add whatever your script needs. |

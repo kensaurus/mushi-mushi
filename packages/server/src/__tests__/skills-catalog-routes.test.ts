@@ -185,6 +185,20 @@ describe('#23 duplicate slugs across sources', () => {
     expect(stats.json.data.catalogTotal).toBe(2)
   })
 
+  it('reports the oldest step waiting for check-in', async () => {
+    seed({
+      skill_pipeline_runs: [{ id: RUN, project_id: P, mode: 'handoff', status: 'running', root_skill_slug: 'debug-error' }],
+      skill_pipeline_step_runs: [
+        { id: 's2', run_id: RUN, step_index: 1, status: 'pending', created_at: '2026-10-05T00:00:00Z' },
+        { id: 's1', run_id: RUN, step_index: 0, status: 'pending', created_at: '2026-10-01T00:00:00Z' },
+        { id: 's0', run_id: RUN, step_index: 2, status: 'passed', created_at: '2026-09-01T00:00:00Z' },
+      ],
+    })
+    const stats = await call('GET', `/v1/admin/skills/stats?project_id=${P}`)
+    expect(stats.json.data.awaitingCheckin).toBe(2)
+    expect(stats.json.data.oldestAwaitingCheckinAt).toBe('2026-10-01T00:00:00Z')
+  })
+
   it('opens the skill detail instead of a 404', async () => {
     const res = await call('GET', '/v1/admin/skills/workflow-fix-and-ship')
     expect(res.status).toBe(200)

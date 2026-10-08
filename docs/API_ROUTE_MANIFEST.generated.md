@@ -2,15 +2,15 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-10-07 · **680** routes.
+> Generated: 2026-10-08 · **682** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
 | Auth | Count |
 | --- | ---: |
-| `adminOrApiKey` | 170 |
+| `adminOrApiKey` | 171 |
 | `apiKeyAuth` | 58 |
-| `jwtAuth` | 345 |
+| `jwtAuth` | 346 |
 | `jwtOrApiKey` | 3 |
 | `unknown` | 104 |
 
@@ -372,6 +372,8 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | POST | `/v1/admin/projects/:pid/integrations/slack/test` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | POST | `/v1/admin/projects/:pid/integrations/teams/test` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | GET | `/v1/admin/projects/:pid/platform-rollup` | `jwtAuth` | `packages/server/supabase/functions/api/routes/qa-coverage.ts` |
+| GET | `/v1/admin/projects/:pid/pull-requests` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/pull-requests.ts` |
+| POST | `/v1/admin/projects/:pid/pull-requests/:owner/:repo/:number/merge` | `jwtAuth` | `packages/server/supabase/functions/api/routes/pull-requests.ts` |
 | GET | `/v1/admin/projects/:pid/qa-coverage` | `jwtOrApiKey` | `packages/server/supabase/functions/api/routes/qa-coverage.ts` |
 | GET | `/v1/admin/projects/:pid/qa-coverage-summary` | `jwtAuth` | `packages/server/supabase/functions/api/routes/qa-coverage.ts` |
 | GET | `/v1/admin/projects/:pid/qa-coverage/stats` | `jwtAuth` | `packages/server/supabase/functions/api/routes/qa-coverage.ts` |

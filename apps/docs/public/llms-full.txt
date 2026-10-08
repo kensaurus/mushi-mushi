@@ -3,7 +3,7 @@
 > The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor.
 
 Canonical docs: https://kensaur.us/mushi-mushi/docs
-Generated: 2026-10-07
+Generated: 2026-10-08
 Pages: 209
 
 This file contains the full prose of every documentation page, stripped of

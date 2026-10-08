@@ -9,7 +9,8 @@
  *   - `api/routes/recipe-compose.ts` throws when the gate runs or settings
  *     cannot be read, instead of composing "never checked / not connected".
  *   - Reads past the server's 1,000-row cap count every row, or say they
- *     could not (audit stats `unknown`), never a silently low number.
+ *     could not, never a silently low number. Audit stats read only the newest
+ *     run of each gate, as the findings list does.
  */
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { makeFakeDb } from './__stubs__/fake-supabase.ts'
@@ -104,25 +105,6 @@ describe('readAllPages', () => {
 describe('reads past the server row cap (1,000 rows per response)', () => {
   const capped = { maxRows: 1_000 }
 
-  it('audit stats count every failed run, not the first 1,000', async () => {
-    const runs = Array.from({ length: 1_500 }, (_, i) => ({
-      id: `run-${String(i).padStart(5, '0')}`, project_id: P, gate: 'api_contract', status: 'fail',
-      completed_at: '2026-10-02T00:00:00Z', started_at: '2026-10-02T00:00:00Z',
-    }))
-    const stats = await audit.readFullstackAuditStats(makeFakeDb({ gate_runs: runs, gate_findings: [] }, capped) as never, P, NOW)
-    expect(stats).toEqual({ errorCount: 0, warnCount: 0, failedGateCount: 1_500, topPriority: 'failures', readError: null })
-  })
-
-  it('audit stats past their run ceiling are unknown, never a partial count', async () => {
-    const runs = Array.from({ length: 10_001 }, (_, i) => ({
-      id: `run-${String(i).padStart(5, '0')}`, project_id: P, gate: 'api_contract', status: 'pass',
-      completed_at: '2026-10-02T00:00:00Z', started_at: '2026-10-02T00:00:00Z',
-    }))
-    const stats = await audit.readFullstackAuditStats(makeFakeDb({ gate_runs: runs, gate_findings: [] }, capped) as never, P, NOW)
-    expect(stats.topPriority).toBe('unknown')
-    expect(stats.readError).toMatch(/More than 10,000 check runs/)
-  })
-
   it('recipe finding counts include every open error and warn, never info or allowlisted', async () => {
     const findings = [
       ...Array.from({ length: 1_400 }, (_, i) => ({ id: `a${String(i).padStart(5, '0')}`, gate_run_id: 'run-a', severity: i % 2 ? 'error' : 'warn', allowlisted: false })),
@@ -160,18 +142,45 @@ describe('full-stack audit stats', () => {
   }, options)
 
   it('counts open findings from the newest radar run only', async () => {
-    const stats = await audit.readFullstackAuditStats(seed() as never, P, NOW)
+    const stats = await audit.readFullstackAuditStats(seed() as never, P)
     expect(stats).toEqual({ errorCount: 1, warnCount: 1, failedGateCount: 1, topPriority: 'failures', readError: null })
   })
 
+  it('counts the newest run of every gate once, as the findings list does: 1,500 failed runs of one gate are one failing check', async () => {
+    const runs = Array.from({ length: 1_500 }, (_, i) => ({
+      id: `run-${String(i).padStart(5, '0')}`, project_id: P, gate: 'api_contract', status: 'fail',
+      completed_at: '2026-10-02T00:00:00Z', started_at: new Date(Date.parse('2026-10-01T00:00:00Z') + i * 60_000).toISOString(),
+    }))
+    const findings = runs.map((r, i) => ({ id: `f${i}`, gate_run_id: r.id, severity: 'warn', allowlisted: false }))
+    const stats = await audit.readFullstackAuditStats(makeFakeDb({ gate_runs: runs, gate_findings: findings }) as never, P)
+    expect(stats).toEqual({ errorCount: 0, warnCount: 1, failedGateCount: 1, topPriority: 'failures', readError: null })
+  })
+
+  it('only a deviance scan is the latest design_drift result, and a running run is skipped', async () => {
+    const db = makeFakeDb({
+      gate_runs: [
+        { id: 'scan', project_id: P, gate: 'design_drift', status: 'warn', summary: { phase: 'scan' }, started_at: '2026-10-01T00:00:00Z', completed_at: '2026-10-01T00:01:00Z' },
+        { id: 'refresh', project_id: P, gate: 'design_drift', status: 'pass', summary: { phase: 'refresh' }, started_at: '2026-10-02T00:00:00Z', completed_at: '2026-10-02T00:01:00Z' },
+        { id: 'busy', project_id: P, gate: 'schema_drift', status: 'running', started_at: '2026-10-02T00:00:00Z', completed_at: null },
+      ],
+      gate_findings: [
+        { id: 's1', gate_run_id: 'scan', severity: 'warn', allowlisted: false },
+        { id: 's2', gate_run_id: 'scan', severity: 'warn', allowlisted: false },
+        { id: 'b1', gate_run_id: 'busy', severity: 'error', allowlisted: false },
+      ],
+    })
+    const stats = await audit.readFullstackAuditStats(db as never, P)
+    expect(stats).toEqual({ errorCount: 0, warnCount: 2, failedGateCount: 0, topPriority: 'warnings', readError: null })
+  })
+
   it('a failed gate-run read is unknown, never healthy', async () => {
-    const stats = await audit.readFullstackAuditStats(seed(failing('gate_runs')) as never, P, NOW)
+    const stats = await audit.readFullstackAuditStats(seed(failing('gate_runs')) as never, P)
     expect(stats.topPriority).toBe('unknown')
     expect(stats.readError).toMatch(/could not be read/)
   })
 
   it('a failed finding count is unknown, never healthy', async () => {
-    const stats = await audit.readFullstackAuditStats(seed(failing('gate_findings')) as never, P, NOW)
+    const stats = await audit.readFullstackAuditStats(seed(failing('gate_findings')) as never, P)
     expect(stats.topPriority).toBe('unknown')
     expect(stats.readError).toMatch(/could not be counted/)
   })

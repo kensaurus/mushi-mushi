@@ -22,7 +22,9 @@
 import { Hono } from 'npm:hono@4'
 import { adminOrApiKey, keyGrantsAnyScope } from '../../_shared/auth.ts'
 import { getServiceClient } from '../../_shared/db.ts'
-import { readAllPages, type PageCount } from '../../_shared/paged-read.ts'
+import { readAllPages } from '../../_shared/paged-read.ts'
+import { GATE_IDS } from '../../_shared/gate-ids.ts'
+import { loadLatestGateRuns } from './recipe-compose.ts'
 import { resolveSupabasePat, getSupabaseAdvisors, getLogs, listTables } from '../../_shared/supabase-mcp-client.ts'
 import { resolveOwnedProject } from '../shared.ts'
 import { log } from '../../_shared/logger.ts'
@@ -109,13 +111,8 @@ const GATE_TITLES: Record<string, string> = {
   store_review: 'Store review checklist',
 }
 
-/** Gates whose every run restates the current state: only the newest counts. */
-const RESTATING_GATES = ['radar', 'portfolio_radar', 'portfolio_radar_ci']
-const STATS_WINDOW_MS = 14 * 24 * 60 * 60 * 1000
 const AUDIT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
-const COUNT_CHUNK = 100
 const MAX_AUDIT_RUNS = 2_000
-const MAX_STATS_RUNS = 10_000
 
 type StatsCounts = Pick<FullstackAuditStats, 'errorCount' | 'warnCount' | 'failedGateCount' | 'topPriority' | 'readError'>
 
@@ -124,67 +121,34 @@ function unknownStats(readError: string): StatsCounts {
 }
 
 /**
- * Counts for the sidebar badge and the readout: failed gate runs and open
- * (not allowlisted) error / warn findings over 14 days. Restating gates count
- * their newest run only, so one problem is not counted once a day. Any failed
- * read returns `unknown`, never `healthy`.
+ * Counts for the sidebar badge and the readout, by the rule the page body
+ * uses (GateFindingsSection, GET /v1/admin/inventory/:id/findings): the newest
+ * finished run of each gate (for design_drift the newest deviance scan),
+ * failing runs and their open (not allowlisted) error / warn findings.
+ * Summing every run of 14 days counted one problem once per run (740 warnings
+ * beside about 57 open findings, 2026-10-08). Any failed read returns
+ * `unknown`, never `healthy`.
  */
-export async function readFullstackAuditStats(db: Db, projectId: string, nowMs: number): Promise<StatsCounts> {
-  const since = new Date(nowMs - STATS_WINDOW_MS).toISOString()
-  type StatsRun = { id: string; status: string }
-  const pageRuns = (from: number, to: number, count: PageCount) => {
-    let q = db
-      .from('gate_runs')
-      .select('id, status', { count })
-      .eq('project_id', projectId)
-      .gte('completed_at', since)
-      .neq('gate', 'code_health')
-    for (const g of RESTATING_GATES) q = q.neq('gate', g)
-    return q.order('completed_at', { ascending: false }).order('id', { ascending: true }).range(from, to)
+export async function readFullstackAuditStats(db: Db, projectId: string): Promise<StatsCounts> {
+  let latest: Array<{ id: string; status: string }>
+  try {
+    latest = await loadLatestGateRuns(db, projectId, GATE_IDS)
+  } catch (err) {
+    alog.warn('audit stats: gate_runs read failed', { projectId, err: err instanceof Error ? err.message : String(err) })
+    return unknownStats('The recent check runs could not be read.')
   }
-  const [runsRead, ...restatingRes] = await Promise.all([
-    readAllPages<StatsRun>(pageRuns, { what: 'gate_runs', maxRows: MAX_STATS_RUNS }).catch((err: unknown) => {
-      alog.warn('audit stats: gate_runs read failed', { projectId, err: err instanceof Error ? err.message : String(err) })
-      return null
-    }),
-    ...RESTATING_GATES.map((gate) =>
-      db
-        .from('gate_runs')
-        .select('id, status')
-        .eq('project_id', projectId)
-        .eq('gate', gate)
-        .gte('completed_at', since)
-        .order('completed_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()),
-  ])
-  const failedRead = restatingRes.find((r) => r.error)
-  if (failedRead?.error) {
-    alog.warn('audit stats: gate_runs read failed', { projectId, err: failedRead.error.message })
-  }
-  if (!runsRead || failedRead?.error) return unknownStats('The recent check runs could not be read.')
-  // Counts over a cut-short list would read low (or "healthy"): unknown instead.
-  if (runsRead.truncated) {
-    alog.warn('audit stats: gate_runs read truncated', { projectId, total: runsRead.total })
-    return unknownStats(`More than ${MAX_STATS_RUNS.toLocaleString('en-US')} check runs in 14 days, so the counts are not known.`)
-  }
-  const recentRuns = [
-    ...runsRead.rows,
-    ...restatingRes.map((r) => r.data as StatsRun | null).filter((r): r is StatsRun => r !== null),
-  ]
-  const failedGateCount = recentRuns.filter((r) => r.status === 'fail').length
+  const failedGateCount = latest.filter((r) => r.status === 'fail').length
+  const runIds = latest.map((r) => r.id)
 
   let errorCount = 0
   let warnCount = 0
-  const runIds = recentRuns.map((r) => r.id)
-  for (let i = 0; i < runIds.length; i += COUNT_CHUNK) {
-    const chunk = runIds.slice(i, i + COUNT_CHUNK)
+  if (runIds.length > 0) {
     const [errRes, warnRes] = await Promise.all(
       (['error', 'warn'] as const).map((severity) =>
         db
           .from('gate_findings')
           .select('id', { count: 'exact', head: true })
-          .in('gate_run_id', chunk)
+          .in('gate_run_id', runIds)
           .eq('severity', severity)
           .eq('allowlisted', false)),
     )
@@ -193,8 +157,8 @@ export async function readFullstackAuditStats(db: Db, projectId: string, nowMs: 
       alog.warn('audit stats: gate_findings count failed', { projectId, err: bad?.message ?? 'no count returned' })
       return unknownStats('The open findings could not be counted.')
     }
-    errorCount += errRes.count
-    warnCount += warnRes.count
+    errorCount = errRes.count
+    warnCount = warnRes.count
   }
 
   const topPriority: StatsCounts['topPriority'] = failedGateCount > 0 || errorCount > 0 ? 'failures' : warnCount > 0 ? 'warnings' : 'healthy'
@@ -483,7 +447,7 @@ export function registerFullstackAuditRoutes(parent: Hono<{ Variables: Variables
     const projectId = project.id as string
     const projectName = (project.name as string | null) ?? null
 
-    const counts = await readFullstackAuditStats(db, projectId, Date.now())
+    const counts = await readFullstackAuditStats(db, projectId)
     return c.json({
       ok: true,
       data: { hasAnyProject: true, projectId, projectName, ...counts } satisfies FullstackAuditStats,
