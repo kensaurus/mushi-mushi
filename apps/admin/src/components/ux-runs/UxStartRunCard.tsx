@@ -6,9 +6,17 @@
  *          steps, minutes) and the app's dev command. Says plainly what a run
  *          costs and why Mushi shows no credit balance and never switches
  *          accounts on its own (Cursor's usage policy, read 2026-10-07).
+ *
+ *          It opens with where each step happens. The studio runs on the
+ *          developer's own computer (127.0.0.1) and the console cannot reach
+ *          it; the run mirrors here and the merge happens here. Owners looked
+ *          for the studio inside the console (2026-10-08). Local and cloud
+ *          runs are two options of this one card.
  */
 
-import { CodeValue, DisclosurePanel } from '../ui'
+import { useState } from 'react'
+import { CodeValue, DisclosurePanel, SegmentedControl } from '../ui'
+import { UxCloudRunCard } from './UxCloudRunCard'
 
 const STUDIO_COMMAND = 'mushi ux ui'
 
@@ -19,10 +27,40 @@ const CHOICES: Array<{ title: string; body: string }> = [
   { title: 'Your app', body: 'The dev command (the one that worked last time comes first) and the branch to start from. Your checkout is never touched.' },
 ]
 
-export function UxStartRunCard({ hasRuns }: { hasRuns: boolean }) {
+const WHERE: Array<{ where: string; what: string }> = [
+  { where: 'Local studio · this computer', what: 'Run mushi ux ui in your app’s repo. The agent edits one screen at a time, a second model checks each change, and you watch before and after. It ends with Open draft PR.' },
+  { where: 'Console · this page', what: 'The run shows here while it goes, from any device. Open a screen to see what changed, or file it as a bug.' },
+  { where: 'Merge · this page', what: 'When the PR’s required checks pass, merge it here. Your repo’s release workflow takes it from there.' },
+]
+
+export function UxStartRunCard({ hasRuns, projectId }: { hasRuns: boolean; projectId: string }) {
+  const [where, setWhere] = useState<'local' | 'cloud'>('local')
   return (
     <DisclosurePanel title={hasRuns ? 'Start another run' : 'Start your first run'} defaultOpen={!hasRuns}>
       <div className="flex flex-col gap-3 p-3 text-xs">
+        <ol className="grid gap-2 sm:grid-cols-3" aria-label="Where each step happens">
+          {WHERE.map((w, i) => (
+            <li key={w.where} className="rounded-md border border-edge-subtle p-2">
+              <p className="font-medium text-fg">
+                {i + 1}. {w.where}
+              </p>
+              <p className="mt-0.5 text-fg-secondary">{w.what}</p>
+            </li>
+          ))}
+        </ol>
+        <SegmentedControl
+          ariaLabel="Where the run happens"
+          value={where}
+          onChange={setWhere}
+          options={[
+            { id: 'local', label: 'On this computer' },
+            { id: 'cloud', label: 'In the cloud' },
+          ]}
+        />
+        {where === 'cloud' ? (
+          <UxCloudRunCard projectId={projectId} embedded />
+        ) : (
+        <>
         <div className="flex flex-col gap-1">
           <p className="text-fg-secondary">In your app’s repo, open the studio. It runs on your machine with your own agent sign-in:</p>
           <CodeValue value={STUDIO_COMMAND} />
@@ -51,6 +89,8 @@ export function UxStartRunCard({ hasRuns }: { hasRuns: boolean }) {
             usage policy forbids getting around its limits.
           </p>
         </div>
+        </>
+        )}
       </div>
     </DisclosurePanel>
   )

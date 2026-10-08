@@ -11,13 +11,13 @@
  */
 
 import { useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { Badge, EmptyState, Loading, StatCard } from '../components/ui'
 import { formatRelative } from '../components/ui/metrics'
 import { PageLoadError } from '../components/PageLoadError'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
-import { UxCloudRunCard } from '../components/ux-runs/UxCloudRunCard'
 import { UxStartRunCard } from '../components/ux-runs/UxStartRunCard'
 import { UxRunProgress } from '../components/ux-runs/UxRunProgress'
 import { UxRunPullRequest } from '../components/ux-runs/UxRunPullRequest'
@@ -44,8 +44,17 @@ function ProjectUxRuns({ projectId }: { projectId: string }) {
   const listPath = `/v1/admin/projects/${projectId}/ux-runs`
   const list = usePageData<{ runs: UxRunListItem[] }>(listPath)
   const runs = list.data?.runs ?? []
-  const [chosen, setChosen] = useState<string | null>(null)
+  // ?run=<local run id> opens that run; the studio links here with it.
+  const [params, setParams] = useSearchParams()
+  const chosen = params.get('run')
+  const setChosen = (id: string) => {
+    const next = new URLSearchParams(params)
+    next.set('run', id)
+    setParams(next, { replace: true })
+  }
+  const [showOlder, setShowOlder] = useState(false)
   const runId = chosen ?? runs[0]?.local_run_id ?? null
+  const shownRuns = showOlder ? runs : runs.slice(0, RUN_LIST_LIMIT)
   const detail = usePageData<UxRunDetail>(runId ? `${listPath}/${runId}` : null)
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
 
@@ -75,7 +84,7 @@ function ProjectUxRuns({ projectId }: { projectId: string }) {
         title="UX runs"
         helpTitle="What is a UX run?"
         helpWhatIsIt="Your coding agent (Claude Code, Cursor, Codex) works through every page, tab and dialog of your app on your machine, or on your repo's GitHub Actions with a Cursor Cloud agent, one screen at a time, in a separate git branch. An edit is kept only if accessibility, layout and console measurements did not get worse. Screens a kept change moved elsewhere are flagged."
-        helpHowToUse="Open the studio with mushi ux ui in your repo (see Start a run below), or start a cloud run. Start with screens marked Moved by another fix or Rolled back. File anything you want fixed as a bug. Review the branch, open it as a draft PR from the studio, and merge it here once its required checks pass. Nothing merges until you confirm."
+        helpHowToUse="Start a run from the card at the top: the studio (mushi ux ui) runs on your own computer, or start a cloud run. This page mirrors the run and merges its PR; it cannot open the studio for you. Start with screens marked Moved by another fix or Rolled back. File anything you want fixed as a bug. Review the branch, open it as a draft PR from the studio, and merge it here once its required checks pass. Nothing merges until you confirm."
         helpFlowPath="/ux-runs"
       />
 
@@ -103,7 +112,7 @@ function ProjectUxRuns({ projectId }: { projectId: string }) {
       {list.error && <PageLoadError error={list.error} resource="UX runs" endpoint={listPath} onRetry={list.reload} />}
       {list.loading && !list.data && <Loading text="Loading UX runs…" />}
 
-      {list.data && <UxStartRunCard hasRuns={runs.length > 0} />}
+      {list.data && <UxStartRunCard hasRuns={runs.length > 0} projectId={projectId} />}
       {list.data && runs.length === 0 && (
         <p className="text-2xs text-fg-muted">
           Exploring your app never sends a write request. Sign-in screens: run <code>mushi ux login --url http://localhost:5173</code> first.
@@ -113,7 +122,7 @@ function ProjectUxRuns({ projectId }: { projectId: string }) {
       {runs.length > 0 && (
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
           <nav aria-label="Runs" className="flex shrink-0 flex-col gap-1 lg:w-64">
-            {runs.map((r) => (
+            {shownRuns.map((r) => (
               <button
                 key={r.id}
                 type="button"
@@ -131,11 +140,13 @@ function ProjectUxRuns({ projectId }: { projectId: string }) {
                   </Badge>
                 </span>
                 <span className="mt-0.5 block text-2xs text-fg-secondary">{runSummary(r)}</span>
-                <span className="mt-0.5 block truncate font-mono text-2xs text-fg-muted">
-                  {r.agent}{r.model ? ` · ${r.model}` : ''}{r.skill ? ` · ${r.skill}` : ''}
-                </span>
               </button>
             ))}
+            {runs.length > RUN_LIST_LIMIT && (
+              <button type="button" onClick={() => setShowOlder((v) => !v)} className="px-3 py-1 text-left text-2xs text-fg-muted underline">
+                {showOlder ? 'Show fewer' : `Show ${runs.length - RUN_LIST_LIMIT} older`}
+              </button>
+            )}
           </nav>
 
           <div className="flex min-w-0 flex-1 flex-col gap-3">
@@ -205,15 +216,16 @@ function ProjectUxRuns({ projectId }: { projectId: string }) {
         </div>
       )}
 
-      {/* Starting a run comes after the results: on a phone the form would otherwise fill the first screen. */}
-      <UxCloudRunCard projectId={projectId} />
     </div>
   )
 }
 
-/** "3 screens · 2 improved" from a run's per-status counts. */
+const RUN_LIST_LIMIT = 8
+
+/** "3 screens · 2 improved" from a run's per-status counts; a run that reached no screen says so. */
 function runSummary(r: UxRunListItem): string {
   const screens = Object.values(r.counts ?? {}).reduce((n, c) => n + (c ?? 0), 0)
   const improved = r.counts?.accepted ?? 0
+  if (screens === 0) return r.status === 'failed' ? 'Stopped before any screen' : r.status === 'running' ? 'Starting' : 'No screens to work on'
   return `${screens} screen${screens === 1 ? '' : 's'} · ${improved} improved`
 }

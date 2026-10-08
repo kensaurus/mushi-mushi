@@ -35,7 +35,7 @@ interface CatalogSkill {
 
 const OTHER = '__other'
 
-export function UxCloudRunCard({ projectId }: { projectId: string }) {
+export function UxCloudRunCard({ projectId, embedded = false }: { projectId: string; embedded?: boolean }) {
   const models = usePageData<{ models: CursorModel[] }>('/v1/admin/integrations/cursor/models')
   const catalog = usePageData<{ data: CatalogSkill[] }>('/v1/admin/skills?limit=200')
   const [modelId, setModelId] = useState('')
@@ -78,10 +78,12 @@ export function UxCloudRunCard({ projectId }: { projectId: string }) {
     else setError({ message: res.error?.message ?? 'Could not start the run.', fallback: res.data?.fallback ?? null })
   }
 
+  // Embedded inside the start card it drops its own card chrome and heading.
+  const Shell = embedded ? 'div' : Card
   return (
-    <Card className="flex flex-col gap-3 p-4">
+    <Shell className={embedded ? 'flex flex-col gap-3' : 'flex flex-col gap-3 p-4'}>
       <div>
-        <h2 className="text-sm font-semibold text-fg">Run in the cloud</h2>
+        {!embedded && <h2 className="text-sm font-semibold text-fg">Run in the cloud</h2>}
         <p className="text-xs text-fg-secondary">
           Runs on your repo’s GitHub Actions with a Cursor Cloud agent and opens one draft PR. It sees your app signed
           out. Needs <code className="font-mono">.github/workflows/mushi-ux.yml</code>.
@@ -149,6 +151,6 @@ export function UxCloudRunCard({ projectId }: { projectId: string }) {
           )}
         </Callout>
       )}
-    </Card>
+    </Shell>
   )
 }

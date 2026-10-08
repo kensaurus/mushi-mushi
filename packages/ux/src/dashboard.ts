@@ -96,6 +96,8 @@ export interface StudioOptions {
   account?: (agent: string) => Promise<AgentAccount | null>
   /** Launcher defaults: agents found, dev command guesses, refs, page suggestions. */
   options?: () => Promise<Record<string, unknown>>
+  /** The Mushi console's base URL, for "Review in console" on mirrored runs. */
+  consoleUrl?: string
   port?: number
 }
 
@@ -173,7 +175,7 @@ export async function startStudio(opts: StudioOptions): Promise<Dashboard> {
         return res.end(STUDIO_PAGE)
       }
       if (req.method === 'GET' && url.pathname === '/api/meta') {
-        return json(res, 200, { launcher: Boolean(opts.launch), canStop: Boolean(opts.stop), canResume: Boolean(opts.resume), canOpenPr: Boolean(opts.openPr), active: active?.runId ?? null, initial: opts.runId ?? null, repo: basename(opts.repoRoot) })
+        return json(res, 200, { launcher: Boolean(opts.launch), canStop: Boolean(opts.stop), canResume: Boolean(opts.resume), canOpenPr: Boolean(opts.openPr), consoleUrl: opts.consoleUrl ?? null, active: active?.runId ?? null, initial: opts.runId ?? null, repo: basename(opts.repoRoot) })
       }
       if (req.method === 'GET' && url.pathname === '/api/runs') {
         const ids = existsSync(uxDir) ? readdirSync(uxDir).filter((d) => RUN_ID_RE.test(d)) : []

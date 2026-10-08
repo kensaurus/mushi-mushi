@@ -98,7 +98,7 @@ details.log{border-top:1px solid var(--line);background:var(--panel)}details.log
   <button class="btn primary" id="newBtn" hidden>＋ New run</button>
 </header>
 <div class="status" id="status" hidden>
-  <div class="top"><span id="phase" class="chip"></span><span id="phaseDetail" class="sub"></span><span class="grow"></span><span id="clock" class="sub mono"></span><button class="btn" id="stopBtn" hidden>■ Stop</button><button class="btn primary" id="resumeBtn" hidden>▶ Resume</button><button class="btn primary" id="prBtn" hidden>Open draft PR</button><a class="btn" id="prLink" hidden target="_blank" rel="noopener"></a></div>
+  <div class="top"><span id="phase" class="chip"></span><span id="phaseDetail" class="sub"></span><span class="grow"></span><span id="clock" class="sub mono"></span><button class="btn" id="stopBtn" hidden>■ Stop</button><button class="btn primary" id="resumeBtn" hidden>▶ Resume</button><button class="btn primary" id="prBtn" hidden>Open draft PR</button><a class="btn" id="prLink" hidden target="_blank" rel="noopener"></a><a class="btn" id="consoleLink" hidden target="_blank" rel="noopener" title="The run, its screens and the merge button in the Mushi console">Review in console ↗</a></div>
   <div class="meter" id="meter" role="img"></div>
   <div class="sub" id="who"></div>
 </div>
@@ -167,6 +167,10 @@ function renderStatus() {
   prBtn.textContent = (state.baseRef || '').startsWith('origin/mushi-ux/') ? 'Add to its pull request' : 'Open draft PR'
   prLink.hidden = !state.pr
   if (state.pr) { prLink.href = state.pr.url; prLink.textContent = 'PR #' + state.pr.number + (state.pr.added ? ' (added) ↗' : ' ↗'); prLink.title = 'Merge it from the Mushi console once its checks pass' }
+  // A mirrored run is reviewed and merged in the console; link straight to it.
+  const consoleLink = document.getElementById('consoleLink')
+  consoleLink.hidden = !(meta && meta.consoleUrl && state.options && state.options.sync)
+  if (!consoleLink.hidden) consoleLink.href = meta.consoleUrl + '/ux-runs?run=' + encodeURIComponent(state.runId)
   tick()
 }
 /** Minutes since the run last saved its state (it does every 30 s while alive); 0 while it is fresh. */

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 import { describe, expect, it } from 'vitest'
 import type { RunState } from './state.js'
-import { syncableStep, syncConfigFromEnv, toSnapshot } from './sync.js'
+import { consoleBaseUrl, syncConfigFromEnv, syncableStep, toSnapshot } from './sync.js'
 
 const probes = { axe: [{ id: 'color-contrast', impact: 'serious', help: 'Contrast', count: 3, targets: ['.a'] }], overflowX: false, smallTargets: 1, consoleErrors: ['boom'], cls: 0 }
 
@@ -204,5 +204,12 @@ describe('syncProjectMismatch', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
+  })
+})
+
+describe('consoleBaseUrl', () => {
+  it('links to the hosted console unless MUSHI_CONSOLE_URL says otherwise', () => {
+    expect(consoleBaseUrl({})).toBe('https://kensaur.us/mushi-mushi/admin')
+    expect(consoleBaseUrl({ MUSHI_CONSOLE_URL: ' http://127.0.0.1:6465/ ' })).toBe('http://127.0.0.1:6465')
   })
 })

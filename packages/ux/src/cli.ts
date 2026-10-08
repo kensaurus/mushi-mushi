@@ -34,7 +34,7 @@ import { resumeSettings, type ResumeSettings } from './resume.js'
 import { loadState, runDir, saveState } from './state.js'
 import { openRunPullRequest } from './pr.js'
 import { run } from './proc.js'
-import { startSync, syncConfigFromEnv, syncProjectMismatch } from './sync.js'
+import { consoleBaseUrl, startSync, syncConfigFromEnv, syncProjectMismatch } from './sync.js'
 import { repoRootOf } from './worktree.js'
 
 /** Open a URL in the default browser, best effort. */
@@ -389,6 +389,7 @@ program
     const studio = await startStudio({
       repoRoot,
       port: Number(o.port),
+      consoleUrl: consoleBaseUrl(),
       launch,
       resume,
       openPr,

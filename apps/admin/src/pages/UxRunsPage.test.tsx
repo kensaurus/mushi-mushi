@@ -24,6 +24,12 @@ vi.mock('../components/PageHeaderBar', () => ({ PageHeaderBar: ({ title }: { tit
 
 import { UxRunsPage } from './UxRunsPage'
 
+/** Local and cloud runs are two options of the start card; pick the cloud one. */
+function openCloud() {
+  const option = [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'In the cloud')
+  act(() => option?.click())
+}
+
 const RUN = {
   id: 'r1',
   local_run_id: '20261006-011207-qafu',
@@ -85,7 +91,7 @@ const MODELS = {
 }
 const SKILLS = { data: [{ slug: 'enhance-mobile-native-feel', title: 'Native feel', category: 'enhance' }] }
 
-function render(list: unknown, detail: unknown = null) {
+function render(list: unknown, detail: unknown = null, url = '/ux-runs') {
   const reload = vi.fn()
   mocks.usePageData.mockImplementation((path: string | null) => {
     if (path === null) return { data: null, loading: false, error: null, reload }
@@ -94,7 +100,7 @@ function render(list: unknown, detail: unknown = null) {
     if (path.startsWith('/v1/admin/skills')) return { data: SKILLS, loading: false, error: null, reload }
     return { data: detail, loading: false, error: null, reload }
   })
-  act(() => root.render(createElement(MemoryRouter, null, createElement(UxRunsPage))))
+  act(() => root.render(createElement(MemoryRouter, { initialEntries: [url] }, createElement(UxRunsPage))))
   return { reload }
 }
 
@@ -107,6 +113,16 @@ describe('UxRunsPage', () => {
     // Cost is stated plainly, with no invented balance and no automatic account switching.
     expect(host.textContent).toContain('No agent reports how much credit is left')
     expect(host.textContent).toContain('never switches accounts for you')
+    // It says where each step happens: the studio is local, review and merge are here.
+    expect(host.textContent).toContain('Local studio · this computer')
+    expect(host.textContent).toContain('Merge · this page')
+  })
+
+  it('opens the run named in ?run=, which the studio links to', () => {
+    const older = { ...RUN, id: 'r0', local_run_id: '20261005-090000-aaaa' }
+    render({ runs: [RUN, older] }, null, `/ux-runs?run=${older.local_run_id}`)
+    const paths = mocks.usePageData.mock.calls.map((c) => c[0] as string | null)
+    expect(paths).toContain(`/v1/admin/projects/${P}/ux-runs/${older.local_run_id}`)
   })
 
   it('lists screens that need a human first and files one as a bug', async () => {
@@ -137,6 +153,7 @@ describe('UxRunsPage', () => {
 
   it('starts a cloud run, and shows the command when the workflow is missing', async () => {
     render({ runs: [] })
+    openCloud()
     const start = () => [...host.querySelectorAll('button')].find((b) => b.textContent?.includes('Start a cloud run'))
     mocks.apiFetchMutate.mockResolvedValueOnce({
       ok: false,
@@ -256,6 +273,7 @@ describe('UxRunsPage, live progress and choices', () => {
 
   it('starts a cloud run with a model from the account, its settings, and a skill', async () => {
     render({ runs: [] })
+    openCloud()
     const selects = () => [...host.querySelectorAll('select')] as HTMLSelectElement[]
     change(selects()[0], 'grok-4.7')
     // The model's own settings appear once it is chosen.

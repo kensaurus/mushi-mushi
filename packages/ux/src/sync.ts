@@ -26,6 +26,12 @@ import { loadState, type RunState, type SurfaceState } from './state.js'
 import type { ProbeResult } from './types.js'
 
 const CLOUD_API_ENDPOINT = 'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api'
+const HOSTED_CONSOLE_URL = 'https://kensaur.us/mushi-mushi/admin'
+
+/** The Mushi console a mirrored run is reviewed and merged in: MUSHI_CONSOLE_URL, else the hosted console. */
+export function consoleBaseUrl(env: NodeJS.ProcessEnv = process.env): string {
+  return trimTrailingSlashes(env.MUSHI_CONSOLE_URL?.trim() || HOSTED_CONSOLE_URL)
+}
 const VIEWPORT_NAMES = ['desktop', 'mobile'] as const
 /** Screenshots per upload request (the api caps one request at 60 names). */
 const UPLOAD_BATCH = 40
