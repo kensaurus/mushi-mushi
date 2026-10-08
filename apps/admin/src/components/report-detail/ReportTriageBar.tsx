@@ -9,7 +9,7 @@ import { usePageData } from '../../lib/usePageData'
 import type { DispatchState } from '../../lib/dispatchFix'
 import type { ReportDetail } from './types'
 import { CHIP_TONE } from '../../lib/chipTone'
-import { shortRepoName } from '../../lib/dispatchConfirm'
+import { featureRequestDispatchBlock, shortRepoName } from '../../lib/dispatchConfirm'
 import type { DispatchTargetRepo } from '../../lib/useDispatchTargetRepo'
 
 // One option per label: 'resolved' is the legacy spelling of 'fixed' (both
@@ -225,6 +225,19 @@ export function ReportTriageBar({
       >
         {CATEGORY_OPTS.map((c) => <option key={c} value={c}>{CATEGORY_LABELS[c] ?? c}</option>)}
       </SelectField>
+      {/* A select cannot "confirm" the value it already shows, so a feature
+          request the classifier already called a defect gets a button. */}
+      {featureRequestDispatchBlock(report) && report.category && report.category !== 'other' && (
+        <Btn
+          size="sm"
+          variant="ghost"
+          onClick={() => void onTriage({ category: report.category, category_confirmed_at: new Date().toISOString() })}
+          disabled={saving}
+          title="The reporter filed this as a feature request. Confirming the category sends it to auto-fix like any bug."
+        >
+          It&apos;s a bug: confirm {CATEGORY_LABELS[report.category] ?? report.category}
+        </Btn>
+      )}
 
       {/* mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas) */}
       <div className="flex items-center gap-1.5 text-2xs h-[26px]" aria-live="polite">
