@@ -54,13 +54,13 @@ describe('apiDepServed', () => {
 
 describe('isApiCallPath', () => {
   it('ignores page prefetches, Next.js payloads and assets', () => {
-    for (const p of ['/glot-it/', '/glot-it/chat/', '/glot-it/chat/__next._tree.txt', '/_next/static/chunks/a.js', '/icons/logo.svg']) {
+    for (const p of ['/glot-it/', '/glot-it/chat/', '/glot-it/chat/__next._tree.txt', '/_next/static/chunks/a.js', '/icons/logo.svg', '/version.json', '/glot-it/images/manifest.json', '/__nextjs_original-stack-frames']) {
       expect(isApiCallPath(p)).toBe(false)
     }
   })
 
   it('keeps real calls, including a trailing-slash API path', () => {
-    for (const p of ['/functions/v1/glot-ai-chat', '/api/drills', '/rest/v1/lessons?select=*', '/api/users/']) {
+    for (const p of ['/functions/v1/glot-ai-chat', '/api/drills', '/rest/v1/lessons?select=*', '/api/users/', '/api/export.json']) {
       expect(isApiCallPath(p)).toBe(true)
     }
   })

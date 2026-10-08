@@ -425,9 +425,11 @@ async function runOrphanEndpointGate(
 
   let inserted = 0
   const orphans: string[] = []
+  const supabaseObservable = [...observedSet].some((o) => SUPABASE_PATH.test(o))
   for (const route of discovered) {
-    // Normalise the declared route for comparison.
-    const normRoute = route.split('?')[0]?.replace(/\/$/, '') ?? route
+    // Normalise the declared route for comparison; declared deps carry a method (POST:/x).
+    const normRoute = declaredPath(route).split('?')[0]?.replace(/\/$/, '') ?? route
+    if (!supabaseObservable && SUPABASE_PATH.test(normRoute)) continue
     // Check for fuzzy path match (allow for route params like /api/users/:id).
     const isObserved = [...observedSet].some((obs) => {
       if (obs === normRoute) return true
@@ -492,12 +494,23 @@ async function runOrphanEndpointGate(
  */
 export function isApiCallPath(path: string): boolean {
   const p = path.split('?')[0] ?? path
-  if (/(^|\/)_next\/|__next\.|\.rsc$/i.test(p)) return false
+  if (/(^|\/)_next\/|__next\.|\/__nextjs|\.rsc$/i.test(p)) return false
   if (/\.(?:js|mjs|css|map|png|jpe?g|gif|webp|avif|svg|ico|woff2?|ttf|otf|mp3|mp4|webm|wasm|txt|xml|webmanifest)$/i.test(p)) return false
+  // A .json file outside an API path is a static file (version.json, manifest.json).
+  if (/\.json$/i.test(p) && !API_PATH.test(p)) return false
   // A trailing slash is a page in a static export (a prefetch of the document), not an endpoint.
-  if (p.length > 1 && p.endsWith('/') && !/\/(?:api|functions\/v1|rest\/v1|rpc)\//i.test(p)) return false
+  if (p.length > 1 && p.endsWith('/') && !API_PATH.test(p)) return false
   return true
 }
+
+const API_PATH = /\/(?:api|functions\/v1|rest\/v1|rpc)\//i
+
+/**
+ * Supabase serves these from its own origin, and the SDK records same-origin
+ * paths only (packages/web/src/mushi.ts), so a call to one is never observed
+ * unless the app proxies it through its own host.
+ */
+const SUPABASE_PATH = /^\/(?:functions|rest|auth|storage|realtime)\/v1\//
 
 /** `POST:/functions/v1/x` → `/functions/v1/x`: declared deps carry a method, observed paths do not. */
 function declaredPath(label: string): string {
