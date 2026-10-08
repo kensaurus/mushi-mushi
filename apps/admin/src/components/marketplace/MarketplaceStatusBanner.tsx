@@ -102,7 +102,7 @@ export function MarketplaceStatusBanner({
   if (priority === 'no_plugins_installed') {
     return (
       <StatusBannerShell
-        tone="brand"
+        tone="info"
         title={plainBanner ? 'No plugins installed yet' : `No plugins installed on ${projectLabel}`}
         subtitle={label}
         action={

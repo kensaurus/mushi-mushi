@@ -25,7 +25,7 @@ import {
   type QueryTabId,
   type TeamRow,
 } from '../components/query/types'
-import { SetupNudge } from '../components/SetupNudge'
+import { NextStep } from '../components/NextStep'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import {
@@ -376,7 +376,8 @@ export function QueryPage() {
           helpUseCases={copy?.help?.useCases ?? []}
           helpHowToUse={copy?.help?.howToUse ?? 'Use the Ask tab to run queries. History pins favorites. Schema lists approved tables.'}
         />
-        <SetupNudge
+        <NextStep
+          variant="inline"
           requires={['project']}
           emptyTitle="Select a project"
           emptyDescription="Queries are scoped per project — pick mushi-mushi (or your app) first."

@@ -106,7 +106,8 @@ export function firecrawlTooltip(stats: ResearchStats): MetricTooltipData {
 }
 
 export function firecrawlDetail(stats: ResearchStats): string {
-  return stats.firecrawlKeyHint ?? 'BYOK in Settings'
+  if (stats.firecrawlReady) return 'Key ready'
+  return stats.firecrawlConfigured ? 'Key set, not tested' : 'Key not set'
 }
 
 export function domainsTooltip(stats: ResearchStats): MetricTooltipData {

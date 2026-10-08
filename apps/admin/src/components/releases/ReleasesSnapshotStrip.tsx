@@ -62,7 +62,6 @@ export function ReleasesSnapshotStrip({
         <StatCard
           label={statLabels?.fixesLinked ?? 'Fixes linked'}
           value={stats.totalFixesLinked}
-          accent={stats.totalFixesLinked > 0 ? 'text-brand' : undefined}
           tooltip={fixesLinkedTooltip(stats)}
           detail={fixesLinkedDetail()}
           to={releasesLinks.fixesLinked}
@@ -70,7 +69,6 @@ export function ReleasesSnapshotStrip({
         <StatCard
           label={statLabels?.contributors ?? 'Contributors'}
           value={stats.totalContributors}
-          accent={stats.totalContributors > 0 ? 'text-brand' : undefined}
           tooltip={contributorsTooltip(stats)}
           detail={contributorsDetail(stats)}
           to={releasesLinks.contributors}
@@ -78,7 +76,6 @@ export function ReleasesSnapshotStrip({
         <StatCard
           label={statLabels?.fixedReports ?? 'Fixed reports'}
           value={stats.fixedReportsCount}
-          accent={stats.fixedReportsCount > 0 ? 'text-brand' : undefined}
           tooltip={fixedReportsTooltip(stats)}
           detail={fixedReportsDetail()}
           to={releasesLinks.fixedReports}

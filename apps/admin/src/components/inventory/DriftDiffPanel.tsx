@@ -1,5 +1,3 @@
-import { Btn } from '../ui'
-
 export interface DriftBucketItem {
   label: string
   detail?: string
@@ -9,10 +7,14 @@ interface Props {
   missingInInventory: DriftBucketItem[]
   missingInApp: DriftBucketItem[]
   mismatches: DriftBucketItem[]
-  onReconcile?: () => void
 }
 
-export function DriftDiffPanel({ missingInInventory, missingInApp, mismatches, onReconcile }: Props) {
+/**
+ * Crawl results by bucket. The crawl itself is started from the page's one
+ * "Run crawler" action (the action row above every inventory tab), so this
+ * panel no longer repeats its own crawler button.
+ */
+export function DriftDiffPanel({ missingInInventory, missingInApp, mismatches }: Props) {
   const col = (title: string, items: DriftBucketItem[], tone: string) => (
     <div className={`rounded-md border p-3 ${tone}`}>
       <h4 className="text-2xs font-semibold uppercase tracking-wider mb-2">{title}</h4>
@@ -33,11 +35,6 @@ export function DriftDiffPanel({ missingInInventory, missingInApp, mismatches, o
 
   return (
     <div className="space-y-3">
-      <div className="flex justify-end">
-        <Btn type="button" size="sm" variant="ghost" onClick={() => onReconcile?.()}>
-          Run crawler reconcile
-        </Btn>
-      </div>
       <div className="grid gap-3 md:grid-cols-3">
         {col(
           'Missing in inventory',

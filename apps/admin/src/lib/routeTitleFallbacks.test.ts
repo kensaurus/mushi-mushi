@@ -10,7 +10,7 @@ describe('routeFallbackTitle', () => {
   it('uses IA nav labels from the registry', () => {
     expect(routeFallbackTitle('/inbox')).toBe('To-do')
     expect(routeFallbackTitle('/queue')).toBe('Processing jobs')
-    expect(routeFallbackTitle('/notifications')).toBe('Alert routing')
+    expect(routeFallbackTitle('/notifications')).toBe('Reporter updates')
     expect(routeFallbackTitle('/setup-copilot')).toBe('Setup copilot')
   })
 

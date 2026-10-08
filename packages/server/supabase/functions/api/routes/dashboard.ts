@@ -741,7 +741,7 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
     } else if (integrationIssues > 0) {
       focusStage = 'act';
       focusLabel = 'Act';
-      bottleneck = `${integrationIssues} integration${integrationIssues === 1 ? '' : 's'} failing health checks`;
+      bottleneck = `${integrationIssues} integration${integrationIssues === 1 ? '' : 's'} need${integrationIssues === 1 ? 's' : ''} attention`;
     } else if (llmFailures14d > 0) {
       focusStage = 'check';
       focusLabel = 'Check';
@@ -1316,7 +1316,7 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
       countLabel: liveIntegrations === 1 ? 'destination live' : 'destinations live',
       bottleneck:
         failingIntegrations > 0
-          ? `${failingIntegrations} ${failingIntegrations === 1 ? 'integration is' : 'integrations are'} failing health checks`
+          ? `${failingIntegrations} ${failingIntegrations === 1 ? 'integration needs' : 'integrations need'} attention`
           : liveIntegrations === 0
             ? 'No destinations connected — fixes have nowhere to land'
             : null,

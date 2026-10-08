@@ -140,6 +140,17 @@ async function sha256(text: string): Promise<string> {
 }
 
 // ── GitHub API helpers ────────────────────────────────────────────────────────
+
+/**
+ * Decode GitHub's base64 file content as UTF-8. `atob` alone yields one char
+ * per byte (Latin-1), which stored "—" as mojibake ("â" plus control chars).
+ * @internal Exported for tests only.
+ */
+export function decodeBase64Utf8(content: string): string {
+  const binary = atob(content.replace(/\n/g, ''))
+  return new TextDecoder().decode(Uint8Array.from(binary, (c) => c.charCodeAt(0)))
+}
+
 function githubHeaders(): Record<string, string> {
   const token = Deno.env.get('GITHUB_TOKEN')
   const h: Record<string, string> = {
@@ -187,7 +198,7 @@ async function fetchBlobContent(repoSlug: string, sha: string): Promise<string> 
   if (data.encoding !== 'base64' || !data.content) {
     throw new Error(`Unexpected blob encoding for ${sha}: ${data.encoding}`)
   }
-  return atob(data.content.replace(/\n/g, ''))
+  return decodeBase64Utf8(data.content)
 }
 
 async function fetchFileContent(repoSlug: string, ref: string, path: string, blobSha?: string): Promise<string> {
@@ -206,7 +217,7 @@ async function fetchFileContent(repoSlug: string, ref: string, path: string, blo
   if (data.encoding !== 'base64' || !data.content) {
     throw new Error(`Unexpected encoding for ${path}: ${data.encoding}`)
   }
-  return atob(data.content.replace(/\n/g, ''))
+  return decodeBase64Utf8(data.content)
 }
 
 // ── Parse a single SKILL.md file ──────────────────────────────────────────────

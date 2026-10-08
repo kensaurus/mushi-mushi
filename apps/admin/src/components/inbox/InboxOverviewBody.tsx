@@ -1,43 +1,21 @@
 /**
  * FILE: apps/admin/src/components/inbox/InboxOverviewBody.tsx
- * PURPOSE: Overview tab primary work zone — never blank; modes derived from live stats + cards.
- * Uses the same compact primitives as Actions/Activity tabs (EmptySectionMessage, ActionPill).
+ * PURPOSE: Overview tab — the ordered action list itself, or setup / inbox-zero
+ *          when there is nothing to act on.
  */
 
-import { HelpBanner } from '../ui/layout'
 import type { InboxCard, InboxCardGroup } from '../../lib/actionInboxFromDashboard'
 import type { InboxStats, InboxTabId } from './types'
-import { isInboxStatusBannerCritical } from './InboxStatusBanner'
-import { ClearChip, GROUP_LABEL, OpenInboxCard } from './inbox-card-parts'
+import { ClearChip, OpenInboxCard } from './inbox-card-parts'
 import { EmptySectionMessage } from '../report-detail/ReportClassification'
 import { ActionPill, ActionPillRow } from '../report-detail/ReportSurface'
 import { scopedHref } from '../../lib/humanPageHints'
 
-export type InboxOverviewMode = 'setup' | 'handoff' | 'preview' | 'clear'
+export type InboxOverviewMode = 'setup' | 'actions' | 'clear'
 
-export function resolveInboxOverviewMode(
-  stats: InboxStats,
-  hideOverviewChrome: boolean,
-  snapshotVisible = false,
-): InboxOverviewMode {
+export function resolveInboxOverviewMode(stats: InboxStats, openCardCount: number): InboxOverviewMode {
   if (!stats.setupDone || stats.topPriority === 'setup') return 'setup'
-  if (stats.openActions > 0 && isInboxStatusBannerCritical(stats)) return 'handoff'
-  if (
-    snapshotVisible &&
-    stats.openActions > 0 &&
-    stats.topPriorityTo
-  ) {
-    return 'handoff'
-  }
-  if (
-    !hideOverviewChrome &&
-    stats.openActions > 0 &&
-    stats.topPriorityTitle &&
-    stats.topPriorityTo &&
-    !isInboxStatusBannerCritical(stats)
-  ) {
-    return 'preview'
-  }
+  if (openCardCount > 0) return 'actions'
   return 'clear'
 }
 
@@ -45,14 +23,9 @@ interface Props {
   stats: InboxStats
   openCards: InboxCard[]
   clearCards: InboxCard[]
-  hideOverviewChrome: boolean
-  /** When the posture snapshot strip is visible, avoid duplicating metrics in overview. */
-  snapshotVisible?: boolean
   onTab: (tab: InboxTabId) => void
   copy?: {
     actionLabels?: {
-      takeAction?: string
-      queue?: string
       setup?: string
     }
   }
@@ -63,13 +36,11 @@ export function InboxOverviewBody({
   stats,
   openCards,
   clearCards,
-  hideOverviewChrome,
-  snapshotVisible = false,
   onTab,
   copy,
   activityAtByGroup,
 }: Props) {
-  const mode = resolveInboxOverviewMode(stats, hideOverviewChrome, snapshotVisible)
+  const mode = resolveInboxOverviewMode(stats, openCards.length)
   const actions = copy?.actionLabels ?? {}
 
   return (
@@ -91,68 +62,41 @@ export function InboxOverviewBody({
         </>
       ) : null}
 
-      {mode === 'handoff' ? (
-        <>
-          <EmptySectionMessage
-            text={`${stats.openActions} open action${stats.openActions === 1 ? '' : 's'}`}
-            hint="Summarized in the status banner above — use the Actions tab for the full priority queue."
-          />
-          {/* The banner above already carries the one "do the top action"
-              button; repeating it here made three equal CTAs to one place. */}
-          <ActionPillRow>
-            <ActionPill tone="neutral" onClick={() => onTab('actions')}>
-              {actions.queue ?? 'View full queue'} →
-            </ActionPill>
-          </ActionPillRow>
-          {openCards.length > 0 ? (
-            <section aria-label="Open actions preview" className="space-y-2 pt-1">
-              <h2 className="text-sm font-semibold text-fg-secondary">Next in queue</h2>
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                {openCards.slice(0, 2).map((card, index) => (
-                  <OpenInboxCard
-                    key={card.id}
-                    card={card}
-                    priority={index + 1}
-                    isFirst={index === 0}
-                    activityAt={activityAtByGroup[card.group]}
-                  />
-                ))}
-              </div>
-            </section>
-          ) : null}
-        </>
-      ) : null}
-
-      {mode === 'preview' ? (
-        <>
-          <HelpBanner
-            tone="warn"
-            title={stats.topPriorityTitle ?? 'Top priority'}
-            role="status"
-          >
-            {stats.topPriorityLabel ??
-              (stats.topPriorityStage
-                ? `${GROUP_LABEL[stats.topPriorityStage as InboxCardGroup] ?? stats.topPriorityStage} stage needs attention.`
-                : 'Highest-severity open action on this project.')}
-          </HelpBanner>
-          <ActionPillRow>
-            <ActionPill to={stats.topPriorityTo!} tone="brand">
-              {actions.takeAction ?? 'Take action'} →
-            </ActionPill>
-            <ActionPill tone="neutral" onClick={() => onTab('actions')}>
-              {actions.queue ?? 'View full queue'}
-            </ActionPill>
-          </ActionPillRow>
-        </>
+      {mode === 'actions' ? (
+        <section aria-labelledby="inbox-open">
+          <header className="mb-2 flex items-center gap-2">
+            <h2 id="inbox-open" className="text-sm font-semibold text-fg">
+              Awaiting action
+            </h2>
+            {openCards.length > 1 ? (
+              <span className="ml-auto text-2xs text-fg-muted">Work top to bottom</span>
+            ) : null}
+          </header>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            {openCards.map((card, index) => (
+              <OpenInboxCard
+                key={card.id}
+                card={card}
+                priority={index + 1}
+                isFirst={index === 0}
+                activityAt={activityAtByGroup[card.group]}
+              />
+            ))}
+          </div>
+        </section>
       ) : null}
 
       {mode === 'clear' ? (
         <>
           <EmptySectionMessage
-            text="Inbox zero"
+            // The banner counts from /inbox/stats and the list from the
+            // dashboard payload; while they disagree, don't claim inbox zero.
+            text={stats.openActions > 0 ? 'Nothing to list yet' : 'Inbox zero'}
             hint={
-              stats.topPriorityLabel ??
-              `All ${stats.totalSurfaces} PDCA stages clear — new bugs and failed fixes will appear here automatically.`
+              stats.openActions > 0
+                ? 'The status above still counts open work; the list catches up on the next refresh.'
+                : stats.topPriorityLabel ??
+                  `All ${stats.totalSurfaces} PDCA stages clear — new bugs and failed fixes will appear here automatically.`
             }
           />
           {clearCards.length > 0 ? (

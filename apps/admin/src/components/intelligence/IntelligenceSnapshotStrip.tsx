@@ -54,7 +54,6 @@ export function IntelligenceSnapshotStrip({
         <StatCard
           label={statLabels?.activeJobs ?? 'Active jobs'}
           value={stats.activeJobCount}
-          accent={stats.activeJobCount > 0 ? 'text-brand' : undefined}
           tooltip={activeJobsTooltip(stats)}
           detail={activeJobsDetail(stats)}
           to={intelligenceLinks.activeJobs}
@@ -78,7 +77,6 @@ export function IntelligenceSnapshotStrip({
         <StatCard
           label={statLabels?.fixAttempts ?? 'Fix attempts'}
           value={stats.totalFixAttempts}
-          accent={stats.totalFixAttempts > 0 ? 'text-brand' : undefined}
           tooltip={fixAttemptsTooltip(stats)}
           detail={fixAttemptsDetail(stats)}
           to={intelligenceLinks.fixAttempts}

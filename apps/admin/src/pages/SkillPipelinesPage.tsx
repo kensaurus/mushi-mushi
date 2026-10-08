@@ -35,7 +35,7 @@ import { usePageData } from '../lib/usePageData'
 import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { useToast } from '../lib/toast'
 import { apiFetch } from '../lib/supabase'
-import { Card, SurfacePanel, HelpBanner, SegmentedControl, FreshnessPill, Btn } from '../components/ui'
+import { Card, SurfacePanel, HelpBanner, SegmentedControl, FreshnessPill, Btn, FilterChip } from '../components/ui'
 import { LINK_ACCENT } from '../lib/chipTone'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
@@ -135,9 +135,24 @@ const NODE_TYPES = { skillStep: SkillStepNode }
 const EDGE_TYPES = { pdcaGradient: PdcaGradientEdge }
 
 const CATEGORY_ORDER = [
-  'workflow', 'debug', 'test', 'audit', 'enhance', 'backend',
+  'workflow', 'debug', 'test', 'audit', 'enhance', 'iterate', 'backend',
   'design', 'deploy', 'data', 'mobile', 'docs', 'mushi', 'meta', 'protocol', 'other',
 ]
+
+/** Cards shown per category before "Show all N". */
+const CATEGORY_PREVIEW_COUNT = 6
+const DEFAULT_OPEN_CATEGORIES = ['workflow', 'debug', 'test']
+
+/** Workflows, Debug and Test start open; if none exist, the first category does. */
+function defaultOpenCategories(present: string[]): Set<string> {
+  const open = present.filter((c) => DEFAULT_OPEN_CATEGORIES.includes(c))
+  return new Set(open.length > 0 ? open : present.slice(0, 1))
+}
+
+/** Synced titles often equal the slug; show the slug only when it adds something. */
+function slugDiffersFromTitle(skill: { slug: string; title: string }): boolean {
+  return skill.slug.trim().toLowerCase() !== skill.title.trim().toLowerCase()
+}
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 
@@ -232,9 +247,9 @@ export function SkillPipelinesPage() {
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-skills">
       <PageHeaderBar
-        title="Skill Pipelines"
+        title="Agent skills"
 
-        helpTitle="About Skill Pipelines"
+        helpTitle="About agent skills"
         helpWhatIsIt="Browse the kenji skills catalog, attach skills to bug reports, and run handoff or cloud pipeline steps with live status."
         helpUseCases={[
           'Run audit-uiux-design-system or other skills against a report',
@@ -383,7 +398,9 @@ function SkillDetailPanel({
         <div className="min-w-0 flex-1">
           <p className="text-2xs font-medium text-fg-muted">{meta.label}</p>
           <h2 className="text-sm font-bold text-fg">{selected.title}</h2>
-          <p className="text-2xs font-mono text-fg-muted">{selected.slug}</p>
+          {slugDiffersFromTitle(selected) ? (
+            <p className="text-2xs font-mono text-fg-muted">{selected.slug}</p>
+          ) : null}
         </div>
         {!embedded ? (
           <Btn
@@ -464,13 +481,13 @@ function SkillDetailPanel({
         {mode === 'cloud' && cloudReadiness && !cloudReadiness.cloudReady ? (
           <HelpBanner tone="neutral" className="rounded-lg">
             Cloud mode needs a Cursor API key and GitHub repo URL.{' '}
-            <Link to="/integrations/config#cursor_cloud" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
+            <Link to="/integrations/config#platform-card-cursor_cloud" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
               Open Integrations → Cursor Cloud
             </Link>
             {!cloudReadiness.githubRepoConfigured ? (
               <>
                 {' '}and{' '}
-                <Link to="/integrations/config#github" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
+                <Link to="/integrations/config#platform-card-github" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
                   GitHub repo
                 </Link>
               </>
@@ -562,6 +579,14 @@ function CatalogTab({
 
   const orderedCategories = CATEGORY_ORDER.filter((c) => grouped[c]?.length)
   const otherCategories = Object.keys(grouped).filter((c) => !CATEGORY_ORDER.includes(c) && grouped[c]?.length)
+  const allCategories = [...orderedCategories, ...otherCategories]
+
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null)
+  const [openOverrides, setOpenOverrides] = useState<Record<string, boolean>>({})
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(() => new Set())
+  const activeCategory = categoryFilter && allCategories.includes(categoryFilter) ? categoryFilter : null
+  const visibleCategories = activeCategory ? [activeCategory] : allCategories
+  const defaultOpen = defaultOpenCategories(allCategories)
 
   const isLgUp = useMediaMin(1024)
 
@@ -696,47 +721,99 @@ function CatalogTab({
           <EmptySearchResults query={debouncedSearch} onClear={() => setSearchInput('')} />
         ) : null}
 
-        {listState === 'list' && [...orderedCategories, ...otherCategories].map((cat) => {
+        {listState === 'list' && allCategories.length > 1 ? (
+          <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter skills by category">
+            <FilterChip
+              label="All"
+              count={skills.length}
+              active={activeCategory === null}
+              onClick={() => setCategoryFilter(null)}
+            />
+            {allCategories.map((cat) => (
+              <FilterChip
+                key={cat}
+                label={getSkillCategoryMeta(cat).label}
+                count={grouped[cat]?.length ?? 0}
+                active={activeCategory === cat}
+                onClick={() => setCategoryFilter(activeCategory === cat ? null : cat)}
+              />
+            ))}
+          </div>
+        ) : null}
+
+        {listState === 'list' && visibleCategories.map((cat) => {
           const meta = getSkillCategoryMeta(cat)
           const catSkills = grouped[cat] ?? []
+          // Searching or picking one category opens it; otherwise the user's
+          // toggle wins over the default (Workflows, Debug, Test).
+          const open = Boolean(debouncedSearch) || activeCategory === cat || (openOverrides[cat] ?? defaultOpen.has(cat))
+          const showAll = Boolean(debouncedSearch) || expandedCategories.has(cat)
+          const shown = showAll ? catSkills : catSkills.slice(0, CATEGORY_PREVIEW_COUNT)
           return (
             <section
               key={cat}
               // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
               className={`rounded-lg border border-edge-subtle bg-surface-raised p-3 shadow-card border-l-[3px] ${meta.accentClass}`}
             >
-              <SkillCategoryHeader meta={meta} count={catSkills.length} />
-              <div className={`grid grid-cols-1 sm:grid-cols-2 gap-2 ${selected ? 'xl:grid-cols-2' : 'lg:grid-cols-3'}`}>
-                {catSkills.map((skill) => (
-                  <Btn
-                    key={skill.slug}
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => selectSkill(skill)}
-                    className={[
-                      '!justify-start !items-start !text-left !p-3 !rounded-lg !w-full !h-auto transition-opacity',
-                      selected?.slug === skill.slug
-                        ? '!border-brand !bg-surface-raised ring-1 ring-brand/30'
-                        : '!border-edge-subtle !bg-surface-raised hover:!border-brand/40 hover:!bg-surface-overlay',
-                    ].join(' ')}
-                  >
-                    <div className="flex items-start gap-2">
-                      <span className={`mt-0.5 flex-shrink-0 flex items-center justify-center w-6 h-6 rounded-md ${meta.badgeClass}`}>
-                        <meta.Icon size={12} />
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-semibold text-fg line-clamp-1">{skill.title}</p>
-                        <p className="text-2xs text-fg-muted font-mono mt-0.5">{skill.slug}</p>
-                        <p className="text-2xs text-fg-muted mt-1 line-clamp-2">{skill.description}</p>
-                        {skill.chain_slugs?.length > 0 && (
-                          <p className="text-2xs text-brand mt-1">Chain: {skill.chain_slugs.length} steps</p>
-                        )}
-                      </div>
-                    </div>
-                  </Btn>
-                ))}
-              </div>
+              <h3>
+                <button
+                  type="button"
+                  aria-expanded={open}
+                  onClick={() => setOpenOverrides((prev) => ({ ...prev, [cat]: !open }))}
+                  className="flex w-full items-center justify-between gap-2 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                >
+                  <SkillCategoryHeader meta={meta} count={catSkills.length} />
+                  <span className="shrink-0 text-2xs font-normal text-fg-muted">{open ? 'Hide' : 'Show'}</span>
+                </button>
+              </h3>
+              {open ? (
+                <>
+                  <div className={`mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2 ${selected ? 'xl:grid-cols-2' : 'lg:grid-cols-3'}`}>
+                    {shown.map((skill) => (
+                      <Btn
+                        key={skill.slug}
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => selectSkill(skill)}
+                        className={[
+                          '!justify-start !items-start !text-left !p-3 !rounded-lg !w-full !h-auto transition-opacity',
+                          selected?.slug === skill.slug
+                            ? '!border-brand !bg-surface-raised ring-1 ring-brand/30'
+                            : '!border-edge-subtle !bg-surface-raised hover:!border-brand/40 hover:!bg-surface-overlay',
+                        ].join(' ')}
+                      >
+                        <div className="flex items-start gap-2">
+                          <span className={`mt-0.5 flex-shrink-0 flex items-center justify-center w-6 h-6 rounded-md ${meta.badgeClass}`}>
+                            <meta.Icon size={12} />
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-semibold text-fg line-clamp-1">{skill.title}</p>
+                            {slugDiffersFromTitle(skill) ? (
+                              <p className="text-2xs text-fg-muted font-mono mt-0.5">{skill.slug}</p>
+                            ) : null}
+                            <p className="text-2xs text-fg-muted mt-1 line-clamp-2">{skill.description}</p>
+                            {skill.chain_slugs?.length > 0 && (
+                              <p className="text-2xs text-fg-muted mt-1">Chain: {skill.chain_slugs.length} steps</p>
+                            )}
+                          </div>
+                        </div>
+                      </Btn>
+                    ))}
+                  </div>
+                  {catSkills.length > shown.length ? (
+                    <Btn
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="mt-2"
+                      onClick={() => setExpandedCategories((prev) => new Set(prev).add(cat))}
+                    >
+                      Show all {catSkills.length}
+                    </Btn>
+                  ) : null}
+                </>
+              ) : null}
             </section>
           )
         })}
@@ -1579,17 +1656,17 @@ function SkillCategoryHeader({
   count: number
 }) {
   return (
-    <div className="flex items-center gap-2.5 mb-3">
+    <span className="flex items-center gap-2.5">
       <span className={`flex items-center justify-center w-8 h-8 rounded-lg flex-shrink-0 ${meta.badgeClass}`}>
         <meta.Icon size={15} />
       </span>
-      <div className="min-w-0">
-        <h3 className="text-sm font-semibold text-fg">{meta.label}</h3>
-        <p className="text-2xs text-fg-muted">
+      <span className="block min-w-0">
+        <span className="block text-sm font-semibold text-fg">{meta.label}</span>
+        <span className="block text-2xs font-normal text-fg-muted">
           {count} skill{count === 1 ? '' : 's'} · {meta.hint}
-        </p>
-      </div>
-    </div>
+        </span>
+      </span>
+    </span>
   )
 }
 

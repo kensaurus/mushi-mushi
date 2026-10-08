@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { describeSpendCaps, findingsReadTruncated, latestOpenFindings, planSpendCaps, spendCapSuggestion } from './gateFindings'
-import { gateLabel } from './gateLabels'
+import { describeSpendCaps, findingsReadTruncated, groupFindingsByCheck, latestOpenFindings, planSpendCaps, spendCapSuggestion } from './gateFindings'
+import { gateInfo, gateLabel } from './gateLabels'
 
 describe('latestOpenFindings', () => {
   it('keeps the newest finished run per gate, drops allowlisted, most severe first', () => {
@@ -90,5 +90,40 @@ describe('gate labels', () => {
     expect(gateLabel('radar')).toBe('Mushi setup checks')
     expect(gateLabel('store_review')).toBe('Store review checklist')
     expect(gateLabel('not_a_gate')).toBe('not_a_gate')
+  })
+})
+
+describe('groupFindingsByCheck', () => {
+  const NOW = Date.parse('2026-10-07T12:00:00Z')
+  const payload = {
+    runs: [
+      { id: 's1', gate: 'schema_drift', status: 'warn', started_at: '2026-10-07T03:05:00Z', completed_at: '2026-10-07T03:06:00Z', commit_sha: null },
+      { id: 'd1', gate: 'design_drift', status: 'warn', summary: { phase: 'scan' }, started_at: '2026-10-05T03:35:00Z', completed_at: '2026-10-05T03:36:00Z', commit_sha: '3ea709ba6' },
+      { id: 'c1', gate: 'crawl', status: 'fail', started_at: '2026-05-04T00:00:00Z', completed_at: '2026-05-04T00:10:00Z' },
+      { id: 'e1', gate: 'env_drift', status: 'pass', started_at: '2026-10-05T00:00:00Z', completed_at: '2026-10-05T00:00:00Z' },
+    ],
+    findings: [
+      { id: 'a', gate_run_id: 's1', severity: 'warn', rule_id: 'schema-drift-table-modified', message: 't1' },
+      { id: 'b', gate_run_id: 's1', severity: 'warn', rule_id: 'schema-drift-table-modified', message: 't2' },
+      { id: 'c', gate_run_id: 'd1', severity: 'warn', rule_id: 'off_token_color', message: 'white off the palette' },
+      { id: 'd', gate_run_id: 'c1', severity: 'error', rule_id: 'crawl-fetch-failed', message: '/x' },
+    ],
+  }
+
+  it('gives each check its run time, commit, rule counts and an old-result flag', () => {
+    const groups = groupFindingsByCheck(payload, NOW)
+    expect(groups.map((g) => g.gate)).toEqual(['schema_drift', 'design_drift', 'crawl', 'env_drift'])
+    const schema = groups.find((g) => g.gate === 'schema_drift')!
+    expect(schema).toMatchObject({ open: 2, stale: false, rules: [{ rule: 'schema-drift-table-modified', count: 2 }] })
+    expect(groups.find((g) => g.gate === 'design_drift')).toMatchObject({ commitSha: '3ea709ba6', open: 1 })
+    // A May result is still listed, after current problems, and flagged as old.
+    expect(groups.find((g) => g.gate === 'crawl')).toMatchObject({ stale: true, open: 1 })
+    expect(groups.find((g) => g.gate === 'env_drift')).toMatchObject({ open: 0 })
+  })
+
+  it('names what every check looks at and where to work on it', () => {
+    expect(gateInfo('design_drift')?.page?.to).toBe('/design')
+    expect(gateInfo('schema_drift')?.checks).toMatch(/Supabase schema/)
+    expect(gateInfo('not_a_gate')).toBeNull()
   })
 })

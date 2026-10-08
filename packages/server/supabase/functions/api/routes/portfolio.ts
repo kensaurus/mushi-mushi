@@ -45,6 +45,7 @@ import type {
   SdkSkewEntry,
 } from '../../_shared/portfolio-types.ts'
 import { readAllPages } from '../../_shared/paged-read.ts'
+import { filterToGroup } from '../../_shared/project-groups.ts'
 import { RECIPE_ELEMENT_KEYS, type ElementState, type RecipeElementKey } from '../../_shared/recipe-types.ts'
 import { DESIGN_GATE } from '../../_shared/design-plane.ts'
 import { RADAR_CI_GATE, RADAR_GATE } from '../../_shared/radar/run.ts'
@@ -611,14 +612,26 @@ export async function buildPortfolioFindings(db: Db, deps: PortfolioRouteDeps, o
   }
 }
 
+/** `?group=<id|slug>` narrows the portfolio to one project group (Plan 021). */
+async function scopeToGroup(c: Context, db: Db, orgId: string, projectIds: string[]): Promise<string[] | Response> {
+  const group = c.req.query('group')?.trim()
+  if (!group) return projectIds
+  const res = await filterToGroup(db, orgId, projectIds, group)
+  if (res.ok) return res.projectIds
+  if (res.error === 'not_found') return jsonError(c, 'NOT_FOUND', 'No such project group in this organization.', 404)
+  return jsonError(c, 'DB_ERROR', 'Could not read the project group.', 500)
+}
+
 export function registerPortfolioRoutes(app: Hono<{ Variables: Variables }>, deps: PortfolioRouteDeps = defaultPortfolioDeps): void {
   app.get('/v1/admin/orgs/:orgId/portfolio', deps.adminOrApiKeyRead, async (c) => {
     const db = deps.getServiceClient()
     const access = await portfolioAccess(c, db, c.req.param('orgId') ?? '')
     if (!access.ok) return access.response
     const page = Math.max(1, Math.min(1000, Number.parseInt(c.req.query('page') ?? '1', 10) || 1))
+    const scoped = await scopeToGroup(c, db, access.orgId, access.projectIds)
+    if (scoped instanceof Response) return scoped
     try {
-      const data = await buildPortfolio(db, deps, access.orgId, access.orgName, access.projectIds, page)
+      const data = await buildPortfolio(db, deps, access.orgId, access.orgName, scoped, page)
       return c.json({ ok: true, data })
     } catch (err) {
       plog.error('portfolio failed', { orgId: access.orgId, err: (err as Error)?.message ?? String(err) })
@@ -630,8 +643,10 @@ export function registerPortfolioRoutes(app: Hono<{ Variables: Variables }>, dep
     const db = deps.getServiceClient()
     const access = await portfolioAccess(c, db, c.req.param('orgId') ?? '')
     if (!access.ok) return access.response
+    const scoped = await scopeToGroup(c, db, access.orgId, access.projectIds)
+    if (scoped instanceof Response) return scoped
     try {
-      const data = await buildPortfolioFindings(db, deps, access.orgId, access.projectIds)
+      const data = await buildPortfolioFindings(db, deps, access.orgId, scoped)
       return c.json({ ok: true, data })
     } catch (err) {
       plog.error('portfolio findings failed', { orgId: access.orgId, err: (err as Error)?.message ?? String(err) })

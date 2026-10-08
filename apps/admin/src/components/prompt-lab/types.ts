@@ -1,3 +1,5 @@
+import type { PromptLabStats } from './PromptLabStatsTypes'
+
 export interface AutoGenerationMetadata {
   parentVersion?: string
   failureCount?: number
@@ -94,6 +96,13 @@ export const STAGE_LABELS: Record<string, string> = {
   prompt_tune: 'Prompt auto-tune',
   'inventory-propose': 'Inventory proposer',
   sentinel: 'Sentinel audit',
+}
+
+/** "stage1/v3", or the stage's name when the version is unknown. */
+export function bestScoreSource(stats: Pick<PromptLabStats, 'bestStage' | 'bestVersion'>): string | null {
+  if (!stats.bestStage) return null
+  if (stats.bestVersion) return `${stats.bestStage}/${stats.bestVersion}`
+  return STAGE_LABELS[stats.bestStage] ?? stats.bestStage
 }
 
 /**

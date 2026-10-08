@@ -339,9 +339,7 @@ export function CodebaseIndexCard({ projectId, canManage = true }: Props) {
 
       <p className="text-2xs text-fg-secondary pl-2 border-l-2 border-brand/30 leading-snug">
         Pulls your repo&apos;s source tree into Mushi&apos;s RAG so the auto-fix agent can read real files
-        instead of guessing. Without this the worker emits{' '}
-        <code className="font-mono bg-surface-overlay px-0.5 rounded-sm text-fg-secondary">INVESTIGATION_NEEDED.md</code>{' '}
-        stubs.
+        instead of guessing. Without it, a fix attempt can only leave notes on what to investigate.
       </p>
 
       {/* What gets indexed disclosure */}
@@ -563,9 +561,8 @@ function AutofixToggleRow({
           </Badge>
         </div>
         <p className="text-2xs text-fg-secondary leading-snug mt-0.5">
-          Controls whether <span className="font-mono">/v1/admin/fixes/dispatch</span> will
-          queue a fix-worker for triaged reports. Turn off to pause every dispatch button
-          without removing your GitHub or BYOK credentials.
+          Controls whether Mushi starts fix attempts for triaged reports. Turn off to pause every
+          dispatch button without removing your GitHub or AI keys.
         </p>
         {enabled != null && !canToggle && (
           <p className="text-2xs text-fg-muted mt-0.5">

@@ -2,7 +2,7 @@
  * FILE: apps/admin/src/pages/IntegrationsPage.tsx
  * PURPOSE: V5.3 §2.18 — one-stop hub for the platform integrations the
  *          LLM pipeline + fix-worker depend on (Sentry, Langfuse, GitHub)
- *          plus the routing destinations (Jira / Linear / GitHub Issues /
+ *          plus alert channels and issue trackers (Linear, Jira, GitHub Issues,
  *          PagerDuty). Page-level orchestration only — data loading, draft
  *          state, and the network handlers. The cards themselves live in
  *          components/integrations/* so each provider can evolve in isolation.
@@ -12,14 +12,15 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ADMIN_ONLY_HINT } from '../lib/orgPermissions'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { apiFetch } from '../lib/supabase'
-import { ErrorAlert, Panel, PanelSectionLabel } from '../components/ui'
+import { Link } from 'react-router-dom'
+import { DisclosurePanel, ErrorAlert, Panel, PanelSectionLabel } from '../components/ui'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
 import { usePageData } from '../lib/usePageData'
 import { useMergedErrors } from '../lib/useMergedErrors'
 import { useToast } from '../lib/toast'
-import { SetupNudge } from '../components/SetupNudge'
+import { NextStep } from '../components/NextStep'
 import { HeroPlugIntegration } from '../components/illustrations/HeroIllustrations'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
@@ -35,6 +36,7 @@ import { TeamsIntegrationCard } from '../components/integrations/TeamsIntegratio
 import { LinearIntegrationCard } from '../components/integrations/LinearIntegrationCard'
 import { NotificationPrefsMatrix } from '../components/integrations/NotificationPrefsMatrix'
 import { ConfirmDialog } from '../components/ConfirmDialog'
+import { refreshNavCounts } from '../lib/useNavCounts'
 import {
   PLATFORM_DEFS,
   ROUTING_PROVIDERS,
@@ -48,7 +50,6 @@ import {
 } from '../components/integrations/types'
 import { IntegrationStatusBanner } from '../components/integrations/IntegrationStatusBanner'
 import { IntegrationsProvenanceReadout } from '../components/integrations/IntegrationsProvenanceReadout'
-import { IntegrationsPageIntro } from '../components/integrations/IntegrationsPageIntro'
 import { isIntegrationsBannerVisible } from '../lib/integrationsExplainer'
 import { usePageCopy } from '../lib/copy'
 import { draftFromSaved, platformSaveBody } from '../lib/platformIntegrationForm'
@@ -153,31 +154,6 @@ export function IntegrationsPage() {
     return Boolean(lp?.linear_workspace_name || lp?.linear_access_token_ref || lp?.linear_api_key_ref)
   }, [platform])
 
-  const platformConnected = useCallback(
-    (kind: Kind) => {
-      const def = PLATFORM_DEFS.find((d) => d.kind === kind)
-      if (!def) return false
-      return def.fields
-        .filter((f) => f.required)
-        .every((f) => {
-          if (platform?.[kind]?.[f.name] != null) return true
-          const src = sourceByField[f.name]
-          return src === 'org' || src === 'env'
-        })
-    },
-    [platform, sourceByField],
-  )
-
-  const integrationIntroFlags = useMemo(
-    () => ({
-      githubOk: githubConnected,
-      sentryOk: platformConnected('sentry'),
-      langfuseOk: platformConnected('langfuse'),
-      slackOk: Boolean(settingsQuery.data?.slackConfigured),
-    }),
-    [githubConnected, platformConnected, settingsQuery.data?.slackConfigured],
-  )
-
   const confirmApplyToAll = async () => {
     if (!pendingApplyKind) return
     const kind = pendingApplyKind
@@ -204,6 +180,7 @@ export function IntegrationsPage() {
         `Copied to ${count} project${count !== 1 ? 's' : ''}`,
         detail || undefined,
       )
+      refreshNavCounts()
     }
   }
 
@@ -231,6 +208,29 @@ export function IntegrationsPage() {
   // Bulk-apply: pending confirmation + in-flight state
   const [pendingApplyKind, setPendingApplyKind] = useState<Kind | null>(null)
   const [applyingKind, setApplyingKind] = useState<Kind | null>(null)
+
+  // Remove key: pending confirmation + in-flight state
+  const [pendingRemoveKeyKind, setPendingRemoveKeyKind] = useState<Kind | null>(null)
+  const [removingKeyKind, setRemovingKeyKind] = useState<Kind | null>(null)
+
+  const confirmRemoveKey = async () => {
+    if (!pendingRemoveKeyKind) return
+    const kind = pendingRemoveKeyKind
+    setRemovingKeyKind(kind)
+    const res = await apiFetch<{ cleared: string[] }>(`/v1/admin/integrations/platform/${kind}/key`, {
+      method: 'DELETE',
+    })
+    setRemovingKeyKind(null)
+    setPendingRemoveKeyKind(null)
+    if (!res.ok) {
+      const t = describeApiFailure(res.error, `Could not remove the ${kindLabel(kind)} key`)
+      toast.error(t.title, t.description)
+      return
+    }
+    toast.success(`${kindLabel(kind)} key removed`)
+    reloadAll()
+    refreshNavCounts()
+  }
 
   const latestByKind = useMemo(() => {
     const map: Partial<Record<string, HealthRow>> = {}
@@ -299,6 +299,9 @@ export function IntegrationsPage() {
     toast.success(`${kindLabel(kind)} saved`)
     setEditing(null)
     reloadAll()
+    // project_settings is not in the realtime publication: move the sidebar
+    // Integrations badge now, not on the next reload.
+    refreshNavCounts()
   }
 
   /** One plain sentence per probe outcome; `unknown` means nothing to test yet. */
@@ -447,10 +450,9 @@ export function IntegrationsPage() {
           copy?.help?.howToUse ?? [
             'Step 1 — GitHub: paste your repo URL (e.g. https://github.com/org/repo) and install the Mushi GitHub App so fix-worker can push draft PRs. No App = fix generated but never pushed.',
             'Step 2 — Second repo: if your project has a frontend + backend (e.g. solo-boss-cloud), go to Repo → + Add repo and set role=backend with path_globs so fixes target the right codebase.',
-            'Step 3 — Sandbox: set Sandbox to e2b, modal, or cloudflare in Settings → Autofix. local-noop generates code but skips the PR in production.',
-            'Step 4 — Verified identity: in your app call Mushi.identify({ userId, name, email }) and pass a signed JWT if you want the ✓ verified badge on reports.',
-            'Step 5 — Sentry: paste your DSN and auth token. Mushi links Sentry issues to reports and surfaces them on the fix PR.',
-            'Step 6 — Test each card with the "Test" button — the health sparkline should turn green within a few seconds.',
+            'Step 3 — Verified identity: in your app call Mushi.identify({ userId, name, email }) and pass a signed JWT if you want the ✓ verified badge on reports.',
+            'Step 4 — Sentry: paste your DSN and auth token. Mushi links Sentry issues to reports and surfaces them on the fix PR.',
+            'Step 5 — Test each card with the "Test" button — the health sparkline should turn green within a few seconds.',
           ].join('\n')
         }
       />
@@ -489,22 +491,123 @@ export function IntegrationsPage() {
         ]}
       />
 
-      <IntegrationsPageIntro topPriority={stats.topPriority} flags={integrationIntroFlags} />
-
       {!setup.hasAnyProject && (
-        <SetupNudge
+        <NextStep
+          variant="inline"
           requires={['project_created']}
           emptyTitle="Create a project before wiring integrations"
-          emptyDescription="Integrations are scoped to a project. Once you have one, you can wire Sentry, Langfuse, GitHub, and your routing destinations."
+          emptyDescription="Integrations are scoped to a project. Once you have one, you can wire Sentry, Langfuse, GitHub, and your issue trackers."
           emptyIcon={<HeroPlugIntegration />}
           blockedIcon={<HeroPlugIntegration accent="text-fg-faint" />}
         />
       )}
 
-      <PanelSectionLabel>Notification channels</PanelSectionLabel>
+      <PanelSectionLabel>Core platform</PanelSectionLabel>
+      <Panel className="mb-6" data-dav-anchor="integrations:decide">
+        <div className="p-4">
+          <p className="text-2xs text-fg-muted mb-2 pl-2 border-l-2 border-brand/30 leading-snug">
+            Connect all three to close the full loop: Sentry surfaces error context, Langfuse traces every LLM call, and GitHub lets the fix-worker open draft PRs.
+          </p>
+          <div className="space-y-2" id="integrations-required">
+            {PLATFORM_DEFS.filter((d) => d.group === 'required').map((def) => (
+              <div key={def.kind} id={`platform-card-${def.kind}`}>
+                <PlatformIntegrationCard
+                  def={def}
+                  config={platform?.[def.kind] ?? {}}
+                  sourceByField={sourceByField}
+                  latestProbe={latestByKind[def.kind]}
+                  sparkline={sparklineByKind[def.kind] ?? []}
+                  isEditing={editing === def.kind}
+                  draft={drafts[def.kind] ?? {}}
+                  saving={saving === def.kind}
+                  testing={testing === def.kind}
+                  onStartEdit={() => startEdit(def.kind)}
+                  onCancelEdit={cancelEdit}
+                  onChangeField={(name, value) => {
+                    setDrafts((d) => ({ ...d, [def.kind]: { ...d[def.kind], [name]: value } }))
+                    clearInlineError(def.kind)
+                  }}
+                  inlineError={inlineErrors[def.kind] ?? null}
+                  onSave={() => void saveKind(def.kind)}
+                  onTest={() => void testKind(def.kind)}
+                  onApplyToAll={organizationId ? () => setPendingApplyKind(def.kind) : undefined}
+                  applyingToAll={applyingKind === def.kind}
+                  onRemoveKey={() => setPendingRemoveKeyKind(def.kind)}
+                  removingKey={removingKeyKind === def.kind}
+                  canManage={canManage}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      </Panel>
+
+      <PanelSectionLabel>Fix agent</PanelSectionLabel>
+      <Panel className="mb-6 divide-y divide-panel-border">
+        <div className="p-4">
+          <p className="text-2xs text-fg-muted mb-2 pl-2 border-l-2 border-brand/30 leading-snug">
+            Connect the cloud agent that should write fixes and open the PR. To fix with an agent in
+            your own editor instead, see{' '}
+            <Link to="/mcp" className="text-accent-foreground hover:text-accent underline-offset-2 hover:underline">Editor agents</Link>.
+          </p>
+          <div className="space-y-2" id="integrations-fix-agent">
+            {PLATFORM_DEFS.filter((d) => d.group === 'fix-agent').map((def) => (
+              <div key={def.kind} id={`platform-card-${def.kind}`}>
+                <PlatformIntegrationCard
+                  def={def}
+                  config={platform?.[def.kind] ?? {}}
+                  sourceByField={sourceByField}
+                  latestProbe={latestByKind[def.kind]}
+                  sparkline={sparklineByKind[def.kind] ?? []}
+                  isEditing={editing === def.kind}
+                  draft={drafts[def.kind] ?? {}}
+                  saving={saving === def.kind}
+                  testing={testing === def.kind}
+                  onStartEdit={() => startEdit(def.kind)}
+                  onCancelEdit={cancelEdit}
+                  onChangeField={(name, value) => {
+                    setDrafts((d) => ({ ...d, [def.kind]: { ...d[def.kind], [name]: value } }))
+                    clearInlineError(def.kind)
+                  }}
+                  inlineError={inlineErrors[def.kind] ?? null}
+                  onSave={() => void saveKind(def.kind)}
+                  onTest={() => void testKind(def.kind)}
+                  dependencyOk={githubConnected}
+                  dependencyLabel="GitHub (code repo)"
+                  dependencyAnchorId="platform-card-github"
+                  onApplyToAll={organizationId ? () => setPendingApplyKind(def.kind) : undefined}
+                  applyingToAll={applyingKind === def.kind}
+                  onRemoveKey={() => setPendingRemoveKeyKind(def.kind)}
+                  removingKey={removingKeyKind === def.kind}
+                  canManage={canManage}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {activeProjectId && (
+          <div id="integrations-codebase" className="p-4 scroll-mt-chrome" data-dav-anchor="integrations:verify">
+            <CodebaseIndexCard projectId={activeProjectId} canManage={canManage} />
+            <DryRunPanel projectId={activeProjectId} />
+          </div>
+        )}
+
+        <div className="p-4">
+          <DisclosurePanel title="Deployment readiness">
+            <DeploymentReadinessCard
+              projectId={activeProjectId ?? null}
+              githubAppInstalled={githubConnected}
+              vercelProjectSlug={vercelSlug}
+            />
+          </DisclosurePanel>
+        </div>
+      </Panel>
+
+      <PanelSectionLabel>Alerts</PanelSectionLabel>
       <Panel className="mb-6">
         <p className="px-4 pt-3 pb-2 text-xs text-fg-muted border-b border-panel-border">
-          Connect one or more channels to receive real-time alerts when a report is triaged, a QA story fails, or a fix is merged.
+          Connect one or more channels to get an alert when a report is triaged, a QA story fails, or a fix is merged.
         </p>
         {!canManage && (
           <p className="px-4 py-2 text-xs text-fg-muted border-b border-panel-border">{ADMIN_ONLY_HINT}</p>
@@ -512,7 +615,7 @@ export function IntegrationsPage() {
         {/* Where alerts go is owner/admin only on the server; a disabled
             fieldset locks every field and button in the three cards. */}
         <fieldset disabled={!canManage} className="contents">
-        <div className="grid gap-0 sm:grid-cols-1 lg:grid-cols-3 divide-y lg:divide-y-0 lg:divide-x divide-panel-border">
+        <div className="grid gap-4 p-4 md:grid-cols-2 2xl:grid-cols-3">
           <SlackIntegrationCard
             projectId={activeProjectId ?? null}
             slackConfigured={Boolean(settingsQuery.data?.slackConfigured)}
@@ -540,125 +643,23 @@ export function IntegrationsPage() {
         </fieldset>
 
         {activeProjectId && (
-          <div className="border-t border-panel-border px-4 py-4">
+          <div id="alerts" className="border-t border-panel-border px-4 py-4 scroll-mt-chrome">
             <h4 className="text-xs font-semibold uppercase tracking-wider text-fg-muted mb-1">
-              Notification events
+              Alert events
             </h4>
             <p className="text-2xs text-fg-muted mb-3 leading-snug">
-              Choose which events trigger an alert across all connected channels for this project.
+              Choose which events send an alert to every connected channel for this project.
             </p>
             <NotificationPrefsMatrix projectId={activeProjectId} />
           </div>
         )}
       </Panel>
 
-      <PanelSectionLabel>Core platform</PanelSectionLabel>
-      <Panel className="mb-6 divide-y divide-panel-border" data-dav-anchor="integrations:decide">
-          {/* Required sub-group — connect all three */}
-          <div className="p-4">
-            <p className="text-2xs text-fg-muted mb-2 pl-2 border-l-2 border-brand/30 leading-snug">
-              Connect all three to close the full loop: Sentry surfaces error context, Langfuse traces every LLM call, and GitHub lets the fix-worker open draft PRs.
-            </p>
-            <div className="space-y-2" id="integrations-required">
-              {PLATFORM_DEFS.filter((d) => d.group === 'required').map((def) => (
-                <div key={def.kind} id={`platform-card-${def.kind}`}>
-                  <PlatformIntegrationCard
-                    def={def}
-                    config={platform?.[def.kind] ?? {}}
-                    sourceByField={sourceByField}
-                    latestProbe={latestByKind[def.kind]}
-                    sparkline={sparklineByKind[def.kind] ?? []}
-                    isEditing={editing === def.kind}
-                    draft={drafts[def.kind] ?? {}}
-                    saving={saving === def.kind}
-                    testing={testing === def.kind}
-                    onStartEdit={() => startEdit(def.kind)}
-                    onCancelEdit={cancelEdit}
-                    onChangeField={(name, value) => {
-                      setDrafts((d) => ({ ...d, [def.kind]: { ...d[def.kind], [name]: value } }))
-                      clearInlineError(def.kind)
-                    }}
-                    inlineError={inlineErrors[def.kind] ?? null}
-                    onSave={() => void saveKind(def.kind)}
-                    onTest={() => void testKind(def.kind)}
-                    onApplyToAll={organizationId ? () => setPendingApplyKind(def.kind) : undefined}
-                    applyingToAll={applyingKind === def.kind}
-                    canManage={canManage}
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Fix-agent sub-group — pick one */}
-          <div className="p-4 border-t border-panel-border">
-            <p className="text-2xs text-fg-muted mb-2 pl-2 border-l-2 border-brand/30 leading-snug">
-              Pick one AI fix agent. Both can be configured — Mushi will use the one set in Settings → Autofix.
-            </p>
-            <div className="space-y-2" id="integrations-fix-agent">
-              {PLATFORM_DEFS.filter((d) => d.group === 'fix-agent').map((def) => (
-                <div key={def.kind} id={`platform-card-${def.kind}`}>
-                  <PlatformIntegrationCard
-                    def={def}
-                    config={platform?.[def.kind] ?? {}}
-                    sourceByField={sourceByField}
-                    latestProbe={latestByKind[def.kind]}
-                    sparkline={sparklineByKind[def.kind] ?? []}
-                    isEditing={editing === def.kind}
-                    draft={drafts[def.kind] ?? {}}
-                    saving={saving === def.kind}
-                    testing={testing === def.kind}
-                    onStartEdit={() => startEdit(def.kind)}
-                    onCancelEdit={cancelEdit}
-                    onChangeField={(name, value) => {
-                      setDrafts((d) => ({ ...d, [def.kind]: { ...d[def.kind], [name]: value } }))
-                      clearInlineError(def.kind)
-                    }}
-                    inlineError={inlineErrors[def.kind] ?? null}
-                    onSave={() => void saveKind(def.kind)}
-                    onTest={() => void testKind(def.kind)}
-                    dependencyOk={githubConnected}
-                    dependencyLabel="GitHub (code repo)"
-                    dependencyAnchorId="platform-card-github"
-                    onApplyToAll={organizationId ? () => setPendingApplyKind(def.kind) : undefined}
-                    applyingToAll={applyingKind === def.kind}
-                    canManage={canManage}
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {activeProjectId && (
-            <div id="integrations-codebase" className="p-4 border-t border-panel-border scroll-mt-chrome" data-dav-anchor="integrations:verify">
-              <CodebaseIndexCard projectId={activeProjectId} canManage={canManage} />
-              <DryRunPanel projectId={activeProjectId} />
-            </div>
-          )}
-      </Panel>
-
-      <PanelSectionLabel>Deployment readiness</PanelSectionLabel>
-      <Panel className="mb-6">
-        <p className="px-4 pt-3 pb-2 text-2xs text-fg-secondary border-b border-panel-border leading-snug">
-          Close the loop between &ldquo;Mushi just dispatched a fix&rdquo; and
-          &ldquo;the fix shipped safely&rdquo;. Each item below is a one-click
-          deep link into the host platform settings so your branch-protection
-          rules, preview deploys, and production gates stay aligned with the
-          auto-fix workflow.
-        </p>
-        <div className="p-4">
-        <DeploymentReadinessCard
-          projectId={activeProjectId ?? null}
-          githubAppInstalled={githubConnected}
-          vercelProjectSlug={vercelSlug}
-        />
-        </div>
-      </Panel>
-
       <PanelSectionLabel>Issue trackers</PanelSectionLabel>
       <Panel className="mb-6">
         <p className="px-4 pt-3 pb-2 text-2xs text-fg-secondary border-b border-panel-border leading-snug">
-          Connect Linear to auto-create issues from triaged bug reports, sync status back when issues are resolved, and use Mushi as an AI agent directly within Linear.
+          Send triaged reports to the tracker or pager your team already uses. Linear also syncs status
+          back and can run Mushi as an agent inside Linear.
         </p>
         <div className="p-4">
           <LinearIntegrationCard
@@ -680,15 +681,7 @@ export function IntegrationsPage() {
             canManage={canManage}
           />
         </div>
-      </Panel>
-
-      <PanelSectionLabel>Routing destinations</PanelSectionLabel>
-      <Panel className="mb-6">
-        <p className="px-4 pt-3 pb-2 text-2xs text-fg-secondary border-b border-panel-border leading-snug">
-          Forward triaged reports to your ticketing or paging system. Each provider has its own
-          credentials; severity + category routing lives in Settings → Routing.
-        </p>
-        <div id="integrations-routing" className="divide-y divide-panel-border scroll-mt-chrome" data-dav-anchor="integrations:act">
+        <div id="integrations-routing" className="divide-y divide-panel-border border-t border-panel-border scroll-mt-chrome" data-dav-anchor="integrations:act">
           {ROUTING_PROVIDERS.map((provider) => {
             const existing = routing.find((r) => r.integration_type === provider.type)
             return (
@@ -721,6 +714,17 @@ export function IntegrationsPage() {
         </div>
       </Panel>
 
+      <p className="text-2xs text-fg-muted">
+        Related:{' '}
+        <Link to="/mcp" className="text-accent-foreground hover:underline">Editor agents</Link>
+        {' · '}
+        <Link to="/skills" className="text-accent-foreground hover:underline">Agent skills</Link>
+        {' · '}
+        <Link to="/notifications" className="text-accent-foreground hover:underline">Reporter updates</Link>
+        {' · '}
+        <Link to="/marketplace" className="text-accent-foreground hover:underline">Plugins</Link>
+      </p>
+
       {pendingDeleteRouting && (
         <ConfirmDialog
           title={`Disconnect ${pendingDeleteRouting.label}?`}
@@ -746,6 +750,21 @@ export function IntegrationsPage() {
           loading={false}
           onConfirm={() => void confirmApplyToAll()}
           onCancel={() => setPendingApplyKind(null)}
+        />
+      )}
+
+      {pendingRemoveKeyKind && (
+        <ConfirmDialog
+          title={`Remove the ${kindLabel(pendingRemoveKeyKind)} key?`}
+          body={`The keys, tokens and webhook secrets this project stores for ${kindLabel(pendingRemoveKeyKind)} are deleted. Other settings on the card stay. If your team or the server also has a ${kindLabel(pendingRemoveKeyKind)} key, the card keeps using that one; otherwise it stops working until you add a key again.`}
+          confirmLabel="Remove key"
+          cancelLabel="Keep key"
+          tone="danger"
+          loading={removingKeyKind === pendingRemoveKeyKind}
+          onConfirm={() => void confirmRemoveKey()}
+          onCancel={() => {
+            if (!removingKeyKind) setPendingRemoveKeyKind(null)
+          }}
         />
       )}
     </div>

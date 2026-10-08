@@ -5,7 +5,6 @@
  */
 
 import { useAdminMode } from './mode'
-import type { FixesStats, FixesTabId } from '../components/fixes/FixesStatsTypes'
 
 export interface FixesUxFlags {
   isQuickstart: boolean
@@ -13,8 +12,6 @@ export interface FixesUxFlags {
   isAdvanced: boolean
   /** Hide Pipeline + CI/Agent columns in the attempts table. */
   compactTable: boolean
-  /** Hide Overview / Pipeline tabs — attempts list only. */
-  hideTabs: boolean
   /** Use plain-language status banner CTAs. */
   plainBanner: boolean
   /** Hide table density toggle + PDCA jargon in table chrome. */
@@ -34,20 +31,10 @@ export function useFixesUx(): FixesUxFlags {
     isBeginner,
     isAdvanced,
     compactTable: !isAdvanced,
-    hideTabs: isQuickstart,
     plainBanner: !isAdvanced,
     hideTableChrome: !isAdvanced,
     hideFailureCategories: isQuickstart,
     hideSnapshotLinks: !isAdvanced,
     hideFixesSnapshot: isQuickstart,
   }
-}
-
-/** Quick mode: jump to the panel that matches pipeline posture. */
-export function resolveQuickFixesTab(stats: FixesStats): FixesTabId {
-  if (stats.topPriority === 'failed') return 'attempts'
-  if (stats.topPriority === 'inflight') return 'pipeline'
-  if (stats.topPriority === 'no_github' || stats.topPriority === 'no_index') return 'overview'
-  if (stats.topPriority === 'waiting') return 'attempts'
-  return 'attempts'
 }

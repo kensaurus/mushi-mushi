@@ -30,8 +30,6 @@ import { RecipeSidePanel } from '../components/recipe/RecipeSidePanel'
 import { RecipeHeaderSummary } from '../components/recipe/RecipeHeaderSummary'
 import { usePrefersRecipeList } from '../components/recipe/useMediaQuery'
 import { RadarPanel } from '../components/portfolio/RadarPanel'
-import { StorePanel } from '../components/portfolio/StorePanel'
-import { StoreReviewsPanel } from '../components/portfolio/StoreReviewsPanel'
 
 const RecipeFlow = lazy(() =>
   import('../components/recipe/RecipeFlow').then((m) => ({ default: m.RecipeFlow })),
@@ -53,11 +51,11 @@ export function RecipePage() {
   if (!projectId) {
     return (
       <div className="flex flex-1 flex-col">
-        <PageHeaderBar title="Recipe" />
+        <PageHeaderBar title="App blueprint" />
         <div className="flex flex-1 items-center justify-center">
           <EmptyState
             title="No project selected"
-            description="Switch to a project using the selector at the top to see its recipe."
+            description="Switch to a project using the selector at the top to see its blueprint."
           />
         </div>
       </div>
@@ -111,8 +109,8 @@ function ProjectRecipe({ projectId }: { projectId: string }) {
   return (
     <div className={PAGE_CONTENT_STACK}>
       <PageHeaderBar
-        title="Recipe"
-        helpTitle="What is the recipe?"
+        title="App blueprint"
+        helpTitle="What is the app blueprint?"
         helpWhatIsIt="What this app is made of — database, design system, pages, automated checks, CI builds, what is live, environment variables and connected tools — and whether each one works. Mushi hands this to every diagnosis so a fix respects your own design and database."
         helpHowToUse="Start with the card marked Needs attention or Check failed: its text says what is wrong and what to do. Not checked yet is never a pass. Not set up is optional. To declare design tokens, deploy targets and budgets, add a file named mushi.recipe.json at your repo root."
         helpFlowPath="/recipe"
@@ -184,8 +182,6 @@ function ProjectRecipe({ projectId }: { projectId: string }) {
           </>
         )}
         <RadarPanel projectId={projectId} />
-        <StorePanel projectId={projectId} />
-        <StoreReviewsPanel projectId={projectId} />
       </div>
     </div>
   )

@@ -13,6 +13,7 @@ import { z } from 'npm:zod@3'
 
 import { getServiceClient } from '../../_shared/db.ts'
 import { log } from '../../_shared/logger.ts'
+import { runInBackground } from '../../_shared/background.ts'
 import { adminOrApiKey } from '../../_shared/auth.ts'
 import { toSseEvent } from '../../_shared/sse.ts'
 import { createTrace } from '../../_shared/observability.ts'
@@ -50,24 +51,32 @@ import { dbError, callerCanAccessProject } from '../shared.ts'
 const routeLog = log.child('codebase-understand')
 
 /**
- * Start a queued analyze job now (fire-and-forget), like the push indexer
- * does. No cron drains `codebase_analyze_jobs`, so a job nobody kicks stays
- * queued forever.
+ * Start a queued analyze job now, like the push indexer does. The kick is
+ * kept alive past the response (runInBackground) and a non-2xx answer is
+ * logged; the pg_cron drain (every 10 minutes) picks up any job a kick missed.
  */
 function kickAnalyzeWorker(db: ReturnType<typeof getServiceClient>, jobId: string): void {
   const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
   if (supabaseUrl && serviceKey) {
-    fetch(`${supabaseUrl}/functions/v1/codebase-analyze-worker`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${serviceKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ jobId }),
-    }).catch((err) => routeLog.warn('analyze worker invoke failed', { err: String(err) }))
+    runInBackground(
+      fetch(`${supabaseUrl}/functions/v1/codebase-analyze-worker`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${serviceKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ jobId }),
+      }).then(async (res) => {
+        if (!res.ok) {
+          routeLog.warn('analyze worker refused the kick', { jobId, status: res.status })
+        }
+        await res.body?.cancel()
+      }),
+      'codebase-analyze-kick',
+    )
   } else {
-    void runCodebaseAnalyzeJob(db, jobId)
+    runInBackground(runCodebaseAnalyzeJob(db, jobId), 'codebase-analyze-inline')
   }
 }
 

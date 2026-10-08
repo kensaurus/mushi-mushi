@@ -164,6 +164,22 @@ export const ELEMENT_LANE: Record<RecipeElementKey, RecipeLane> = {
   integrations: 'runtime',
 }
 
+/**
+ * What produces each card's state, in one line, so "Needs attention" always
+ * says which check said so and when it runs (the times are the pg_cron
+ * schedules in the migrations).
+ */
+export const ELEMENT_CHECKED_BY: Record<RecipeElementKey, string> = {
+  schema: 'The schema scanner reads your Supabase schema daily (03:05 UTC) and compares it with the previous read.',
+  design: 'The design scan reads your repo daily (03:35 UTC) and compares its styles with the tokens in mushi.recipe.json.',
+  routes: 'The app map and its route checks, run with "Run audit" on the Full-stack audit page.',
+  gates: 'Every automated check of the full-stack audit, each on its own schedule.',
+  ci: 'Your latest GitHub Actions run on the default branch, read live.',
+  deploy: 'Probes of the deploy targets declared in mushi.recipe.json.',
+  env: 'The env var names set in your GitHub repo (names only), read live.',
+  integrations: 'A health check of each connected tool, every 15 minutes.',
+}
+
 const FALLBACK_LABEL: Record<RecipeElementKey, string> = {
   schema: 'Database schema',
   design: 'Design system',

@@ -66,7 +66,6 @@ export function FeedbackSnapshotStrip({
         <StatCard
           label={statLabels?.mix ?? 'Mix'}
           value={`${stats.bugTickets}/${stats.featureTickets}`}
-          accent="text-brand"
           tooltip={ticketMixTooltip(stats)}
           detail={ticketMixDetail()}
           to={feedbackLinks.mix}

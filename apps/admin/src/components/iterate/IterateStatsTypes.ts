@@ -3,7 +3,7 @@
  * PURPOSE: Iterate shell stats — banner + PDCA SNAPSHOT strip.
  */
 
-export type IterateTabId = 'overview' | 'runs' | 'new'
+export type IterateTabId = 'runs' | 'new'
 
 export type IterateTopPriority =
   | 'no_project'

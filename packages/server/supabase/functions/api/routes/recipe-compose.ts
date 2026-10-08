@@ -10,7 +10,7 @@
  */
 
 import type { getServiceClient } from '../../_shared/db.ts'
-import { cadenceDays, deriveElementState, ELEMENT_META, guardNeverChecked, worstState, type ElementInput } from '../../_shared/recipe-state.ts'
+import { cadenceDays, deriveElementState, ELEMENT_META, guardNeverChecked, isStale, worstState, type ElementInput } from '../../_shared/recipe-state.ts'
 import { judgingSet, toSetSummary, type StoredTokens } from '../../_shared/design-sets.ts'
 import { effectiveDesignRules, isWritablePath, RECIPE_MANIFEST_PATH, type RecipeManifest } from '../../_shared/recipe-schema.ts'
 import { evaluateContrast } from '../../_shared/design-deviance.ts'
@@ -554,7 +554,9 @@ export async function composeRecipe(db: Db, deps: ComposeDeps, projectId: string
     routes: summary('routes', routesState, invLast, { graphNodes, inventory: invRow ? 'present' : 'none', validationErrors: Array.isArray(invRow?.validation_errors) ? invRow!.validation_errors!.length : 0 }, invOpen,
       [{ label: 'Inventory', to: '/inventory' }]),
     gates: summary('gates', gatesState, latest.map((r) => r.completed_at).filter(Boolean).sort().pop() ?? null,
-      { gates: latest.length, cadenceDays: cadence, bundleKb: latestMetrics.get('bundle.web.gzip_kb')?.value ?? null }, gateInputs.reduce((n, g) => n + g.openFindings, 0),
+      { gates: latest.length, cadenceDays: cadence, bundleKb: latestMetrics.get('bundle.web.gzip_kb')?.value ?? null },
+      // Only checks that ran within their cadence count; older results are named in the reason.
+      gateInputs.filter((g) => !isStale(g.completedAt, now, cadence)).reduce((n, g) => n + g.openFindings, 0),
       [{ label: 'Full-stack audit (every check result)', to: '/fullstack-audit' }, { label: 'Code health', to: '/code-health' }]),
     ci: summary('ci', ciState, ciInput.key === 'ci' && !ciInput.fetchError ? ciReadAt : null,
       { branch: (ciDetail.branch as string | undefined) ?? null, conclusion: ciInput.key === 'ci' ? ciInput.run?.conclusion ?? null : null }, 0,

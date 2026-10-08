@@ -25,6 +25,8 @@ interface FullStackAuditData {
   gate_runs: Array<{ gate: string; status: string; findings_count: number }>;
   backend_linked: boolean;
   audit_at: string;
+  /** Absent on servers older than 2026-10-07. */
+  gate_refresh?: { triggered: string[]; skipped: Array<{ gate: string; reason: string }> };
 }
 
 interface GateFindingRow {
@@ -184,6 +186,14 @@ Examples:
         const g = run.status === 'pass' ? 'OK' : run.status === 'fail' ? 'FAIL' : 'SKIP';
         console.log(`  ${g} ${run.gate.padEnd(22)} ${run.status}  (${run.findings_count} finding${run.findings_count !== 1 ? 's' : ''})`);
       }
+    }
+    const refresh = data.gate_refresh;
+    if (refresh && (refresh.triggered.length > 0 || refresh.skipped.length > 0)) {
+      console.log('\nGate re-runs:');
+      if (refresh.triggered.length > 0) {
+        console.log(`  Started: ${refresh.triggered.join(', ')} (results show in the next audit)`);
+      }
+      for (const s of refresh.skipped) console.log(`  Not re-run: ${s.gate.padEnd(16)} ${oneLine(s.reason, 110)}`);
     }
     console.log('\nEach gate finding with its file and line: mushi audit findings');
 

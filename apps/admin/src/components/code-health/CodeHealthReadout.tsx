@@ -3,9 +3,8 @@
  * PURPOSE: Code health ingest provenance — CI metrics endpoint and gate posture.
  */
 
-import { Section } from '../ui'
 import { DetailRows, type DetailRowItem } from '../ui/fields'
-import { EndpointCodeRow, ReadoutSection } from '../readout'
+import { EndpointCodeRow, ReadoutSection, ReadoutPanel } from '../readout'
 import { RESOLVED_EXTERNAL_API_URL } from '../../lib/env'
 import type { CodeHealthStats } from './CodeHealthStatsTypes'
 import { IconGlobe, IconHealth } from '../icons'
@@ -47,7 +46,7 @@ export function CodeHealthReadout({ stats, fetchedAt, validating }: CodeHealthRe
   ]
 
   return (
-    <Section title="Code health readout" freshness={{ at: fetchedAt ?? null, isValidating: validating }}>
+    <ReadoutPanel title="Code health readout" freshness={{ at: fetchedAt ?? null, isValidating: validating }}>
       <p className="mb-4 text-xs leading-relaxed text-fg-muted">
         Host CI posts bundle KB and god-file findings here via{' '}
         <code className="font-mono text-2xs">MUSHI_INGEST_KEY</code>. Separate from the in-app reporter SDK.
@@ -61,6 +60,6 @@ export function CodeHealthReadout({ stats, fetchedAt, validating }: CodeHealthRe
           <DetailRows items={rows} dense />
         </ReadoutSection>
       </div>
-    </Section>
+    </ReadoutPanel>
   )
 }

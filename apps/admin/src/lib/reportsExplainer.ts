@@ -36,9 +36,6 @@ export const TRIAGE_SEVERITY_DEFINITIONS: SeverityDefinition[] = [
   },
 ]
 
-export const REPORTS_TRIAGE_SUMMARY =
-  'Every bug lands here after the SDK sends it. The classifier assigns severity automatically — your job is to confirm, dismiss noise, or dispatch a fix. Critical and high items should not sit untriaged for more than an hour.'
-
 export function severityDefinition(id: string): SeverityDefinition | undefined {
   return TRIAGE_SEVERITY_DEFINITIONS.find((s) => s.id === id)
 }

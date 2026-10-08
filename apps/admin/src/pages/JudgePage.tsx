@@ -15,7 +15,7 @@ import { ErrorAlert,
   Tooltip,
   ResultChip,
   type ResultChipTone,
-  FreshnessPill,
+  DisclosurePanel,
   SegmentedControl, } from '../components/ui'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
@@ -38,11 +38,8 @@ import {
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { ResponsiveTable } from '../components/ResponsiveTable'
 import {
-  KpiTile,
-  KpiRow,
   LineSparkline,
   Histogram,
-  formatPct,
 } from '../components/charts'
 import { SCORE_COLORS } from '../lib/tokens'
 import { useToast } from '../lib/toast'
@@ -58,7 +55,7 @@ import { useNextBestAction } from '../lib/useNextBestAction'
 import { ChartActionsMenu } from '../components/ChartActionsMenu'
 import { ChartAnnotations } from '../components/charts/ChartAnnotations'
 import type { ChartEvent } from '../lib/apiSchemas'
-import { CHIP_TONE } from '../lib/chipTone'
+import { CHIP_TONE, LINK_ACCENT } from '../lib/chipTone'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { ListPager } from '../components/ListPager'
 import { judgeEvaluationsPath, judgeRunConfirmBody } from '../lib/judgeFilters'
@@ -352,7 +349,6 @@ export function JudgePage() {
   // Run judge spends LLM budget: it goes through a confirm (QA 248).
   const [runConfirmOpen, setRunConfirmOpen] = useState(false)
   const [running, setRunning] = useState(false)
-  const [heroCollapsed, setHeroCollapsed] = useState(true)
   // Sticky inline receipt for "Run judge now" — toast disappears, this stays
   // on screen until the next run so the user can see the pending refresh
   // countdown and the dispatched count without scrolling back up.
@@ -560,19 +556,6 @@ export function JudgePage() {
           : 'crit'
   const lastEval = evals[0]
 
-  const bannerSeverity: 'ok' | 'warn' | 'danger' | 'brand' | 'info' | 'neutral' =
-    !stats.hasAnyProject
-      ? 'neutral'
-      : stats.topPriority === 'no_evals'
-        ? 'brand'
-        : stats.topPriority === 'low_score' || stats.topPriority === 'drifting'
-          ? 'danger'
-          : stats.topPriority === 'disagreements' || stats.topPriority === 'stale'
-            ? 'warn'
-            : stats.topPriority === 'healthy'
-              ? 'ok'
-              : 'info'
-
   const trendPanel = (
     <>
       {/* mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas) */}
@@ -725,11 +708,11 @@ export function JudgePage() {
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-judge">
       <PageHeaderBar
-        title={copy?.title ?? 'Judge'}
+        title={copy?.title ?? 'Triage grading'}
         projectScope={stats.projectName ?? projectName ?? undefined}
         withPageHero={!ux.hideOverviewChrome}
 
-        helpTitle={copy?.help?.title ?? 'About the Judge'}
+        helpTitle={copy?.help?.title ?? 'About Fix grading'}
         helpWhatIsIt={copy?.help?.whatIsIt ?? "A second LLM that grades the classifier's output on every report — accuracy, severity, component, and reproduction quality. Scores feed both the weekly aggregate and the per-prompt leaderboard."}
         helpUseCases={copy?.help?.useCases ?? [
           'Detect when the classifier silently degrades after a model or prompt change',
@@ -738,35 +721,6 @@ export function JudgePage() {
         ]}
         helpHowToUse={copy?.help?.howToUse ?? 'Click "Run judge now" to score recent unjudged reports immediately. The leaderboard ranks prompt versions by mean judge score; click a row to see the evaluations that drove it.'}
       >
-        <Badge
-          className={
-            bannerSeverity === 'ok'
-              ? CHIP_TONE.okSubtle
-              : bannerSeverity === 'danger'
-                ? CHIP_TONE.dangerSubtle
-                : bannerSeverity === 'warn'
-                  ? CHIP_TONE.warnSubtle
-                  : bannerSeverity === 'brand'
-                    ? 'bg-brand/12 text-brand border border-brand/28'
-                    : 'bg-surface-overlay text-fg-muted'
-          }
-        >
-          {!stats.hasAnyProject
-            ? 'NO PROJECT'
-            : stats.totalEvaluations === 0
-              ? 'NO EVALS'
-              : stats.topPriority === 'low_score' || stats.topPriority === 'drifting'
-                ? 'DRIFT'
-                : stats.disagreementCount > 0
-                  ? `${stats.disagreementCount} DISAGREE`
-                  : stats.latestWeekScore != null
-                    ? `${Math.round(stats.latestWeekScore * 100)}%`
-                    : 'OK'}
-        </Badge>
-        <FreshnessPill
-          at={statsFetchedAt ?? evalsQuery.lastFetchedAt ?? weeksQuery.lastFetchedAt}
-          isValidating={statsValidating || evalsQuery.isValidating || weeksQuery.isValidating || promptsQuery.isValidating || distQuery.isValidating}
-        />
         <Btn size="sm" variant="ghost" onClick={loadAll} loading={statsValidating || evalsQuery.isValidating || weeksQuery.isValidating}>
           Refresh
         </Btn>
@@ -853,13 +807,13 @@ export function JudgePage() {
       />
       )}
 
+      {/* The score summary repeats the banner and snapshot, so it stays closed until asked for. */}
       {activeTab === 'overview' && !ux.hideOverviewChrome && (
-        <>
+        <DisclosurePanel title="Score summary: decide, act, verify">
       <PageHero
         scope="judge"
-        title={copy?.title ?? 'Judge'}
+        title={copy?.title ?? 'Triage grading'}
         kicker="Independent grading"
-        onCollapsedChange={setHeroCollapsed}
         decide={{
           label: overallScore == null ? 'No evaluations yet' : `Overall score ${Math.round(overallScore * 100)}%`,
           metric: overallScore == null ? '—' : `${Math.round(overallScore * 100)}%`,
@@ -901,67 +855,13 @@ export function JudgePage() {
           } : undefined,
         }}
       />
-        </>
+        </DisclosurePanel>
       )}
 
-      {activeTab === 'overview' && !ux.hideOverviewChrome && heroCollapsed && ux.hideJudgeSnapshot && (
-        <>
-      <div data-dav-anchor="judge:decide">
-      <KpiRow cols={4}>
-        <KpiTile
-          label="Latest week"
-          value={latest ? formatPct(latest.avg_score) : '—'}
-          sublabel={latest ? `${latest.eval_count} evals` : 'No evals yet'}
-          accent={latest && latest.avg_score >= 0.8 ? 'ok' : latest && latest.avg_score >= 0.6 ? 'warn' : 'danger'}
-          meaning="Mean judge score this week. ≥80% is healthy; <60% means the classifier is drifting and the prompt likely needs a tune."
-          delta={
-            previous
-              ? {
-                  value: `${(Math.abs(drift) * 100).toFixed(1)}%`,
-                  direction: drift > 0.01 ? 'down' : drift < -0.01 ? 'up' : 'flat',
-                  tone: drift > 0.10 ? 'danger' : drift > 0.01 ? 'warn' : drift < -0.01 ? 'ok' : 'muted',
-                }
-              : null
-          }
-        />
-        <KpiTile
-          label="Total evaluations"
-          value={totalEvals}
-          sublabel="Last 12 weeks"
-          meaning="How many fix attempts the independent LLM judge has graded over the last 12 weeks. More evals = more confidence in the trend."
-        />
-        <KpiTile
-          label="Prompt versions"
-          value={prompts.length}
-          sublabel={`${prompts.filter((p) => p.is_active).length} active · ${prompts.filter((p) => p.is_candidate).length} candidate`}
-          meaning="Distinct classifier prompts in your library. Candidates are A/B'd against the active prompt; promote a winner from the leaderboard."
-        />
-        <KpiTile
-          label="Mean score (overall)"
-          value={
-            dist && dist.total > 0
-              ? formatPct(
-                  dist.buckets.reduce((s, n, i) => s + n * (i + 0.5) * 0.1, 0) /
-                    dist.total,
-                )
-              : '—'
-          }
-          sublabel={dist ? `${dist.total} scored evals` : ''}
-          meaning="All-time mean judge score across every evaluation. Useful as a long-term health signal — a sliding 12w mean is on the chart to its right."
-        />
-      </KpiRow>
-      </div>
-
-      {weeks.length === 0 && evals.length === 0 && prompts.length === 0 && (
-        <ContainedBlock tone="info">
-          <InlineProof>
-            Tip: judge runs nightly via cron. Use <strong>Run judge now</strong> to seed
-            evaluations immediately on a fresh project.
-          </InlineProof>
-        </ContainedBlock>
-      )}
-        </>
-      )}
+      <p className="text-xs text-fg-muted">
+        Grading scores one report at a time. A bug pattern that keeps coming back across reports becomes a rule under{' '}
+        <Link to="/lessons" className={LINK_ACCENT}>Lessons</Link>.
+      </p>
 
       {activeTab === 'trend' && trendPanel}
 

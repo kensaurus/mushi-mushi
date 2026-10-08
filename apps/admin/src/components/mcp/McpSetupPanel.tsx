@@ -1,4 +1,5 @@
 import { useRef } from 'react'
+import { Link } from 'react-router-dom'
 import { Badge, Btn, Card, CopyButton, SegmentedControl } from '../ui'
 import { IconIntegrations, IconArrowRight } from '../icons'
 import { ConfigHelp } from '../ConfigHelp'
@@ -184,6 +185,13 @@ export function McpSetupPanel({
               </Btn>
             </div>
           )}
+          <p className="text-2xs text-fg-muted">
+            Faster:{' '}
+            <Link to="/connect" className="text-accent-foreground hover:text-accent underline underline-offset-2">
+              Connect
+            </Link>{' '}
+            mints a key and installs it in your editor in one click.
+          </p>
           <div className="flex flex-wrap items-center gap-2">
             {activeProjectId ? (
               <>

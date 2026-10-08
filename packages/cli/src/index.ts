@@ -47,6 +47,8 @@ import { registerRepoCommands } from './commands/repo.js'
 import { registerAccountsCommands } from './commands/accounts.js'
 import { registerSpendCommands } from './commands/spend.js'
 import { registerDesignCommands } from './commands/design.js'
+import { registerUxCommands } from './commands/ux.js'
+import { registerUxRunsCommands } from './commands/ux-runs.js'
 import { setGlobalOutputFormat } from './cli-shared.js'
 import { printAndExit } from './errors.js'
 
@@ -139,6 +141,8 @@ registerRepoCommands(program)
 registerAccountsCommands(program)
 registerSpendCommands(program)
 registerDesignCommands(program)
+registerUxCommands(program)
+registerUxRunsCommands(program)
 // Registered last so buildCommandTree() sees every command above when the
 // action runs (Commander builds the tree during these synchronous calls;
 // the action itself only executes later, at parseAsync() time).

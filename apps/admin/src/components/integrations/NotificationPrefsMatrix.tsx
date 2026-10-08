@@ -220,7 +220,7 @@ export function NotificationPrefsMatrix({ projectId }: Props) {
         ))}
 
         {prefs['report.classified'] && (
-          <div className="flex flex-col gap-2 px-3 py-3 bg-surface-overlay sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+          <div className="flex flex-col gap-2 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
             <div className="min-w-0 flex-1">
               <p className="text-xs font-semibold text-fg">Minimum severity for report alerts</p>
               <p className="text-2xs text-fg-muted leading-snug mt-0.5">

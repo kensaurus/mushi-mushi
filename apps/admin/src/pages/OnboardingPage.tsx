@@ -10,7 +10,7 @@
  *          admin sees.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
@@ -19,7 +19,7 @@ import { usePageData } from '../lib/usePageData'
 import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
-import { SnapshotSectionHint,Card, Btn, Input, ErrorAlert, ResultChip, type ResultChipTone, CopyButton, Section, StatCard, SegmentedControl, Badge, HelpBanner } from '../components/ui'
+import { SnapshotSectionHint,Card, Btn, Input, ErrorAlert, ResultChip, type ResultChipTone, CopyButton, Section, StatCard, SegmentedControl, Badge, HelpBanner, Loading } from '../components/ui'
 import { OnboardingStatusBanner } from '../components/onboarding/OnboardingStatusBanner'
 import { OnboardingStepsGuide } from '../components/onboarding/OnboardingStepsGuide'
 import { OnboardingSetupReadout } from '../components/onboarding/OnboardingSetupReadout'
@@ -70,6 +70,8 @@ import { clearStoredInstanceConfig } from '../lib/env'
 import { IconChat, IconBolt } from '../components/icons'
 import { askMushiPanel } from '../lib/useAskMushiPanel'
 
+const SetupCopilotPage = lazy(() => import('./SetupCopilotPage').then((m) => ({ default: m.SetupCopilotPage })))
+
 interface ApiKey {
   key: string
   prefix: string
@@ -95,6 +97,11 @@ const ONBOARDING_TABS: Array<{ id: OnboardingTabId; label: string; description: 
     id: 'sdk',
     label: 'SDK',
     description: 'Install snippet and init copy — bookmark this tab after setup completes.',
+  },
+  {
+    id: 'copilot',
+    label: 'Diagnose',
+    description: 'Something not working? Check the SDK heartbeat, version and fix dispatch for one project, with copy-paste commands.',
   },
 ]
 
@@ -749,13 +756,6 @@ export function OnboardingPage() {
               >
                 Continue to Connect hub →
               </Link>
-              <span className="text-fg-faint text-xs" aria-hidden="true">·</span>
-              <Link
-                to="/setup-copilot"
-                className="flex items-center gap-1 rounded px-2 py-0.5 text-2xs font-medium text-fg-muted hover:text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity"
-              >
-                Setup copilot
-              </Link>
             </span>
           )}
         </nav>
@@ -792,7 +792,6 @@ export function OnboardingPage() {
           project={project ?? null}
           stats={stats}
           preflight={activation.preflight}
-          topPriority={activation.topPriority}
           className="mb-4"
         />
       )}
@@ -1187,6 +1186,12 @@ export function OnboardingPage() {
         </Card>
       )}
         </>
+      )}
+
+      {effectiveTab === 'copilot' && (
+        <Suspense fallback={<Loading text="Loading…" />}>
+          <SetupCopilotPage embedded />
+        </Suspense>
       )}
 
       {effectiveTab === 'sdk' && (

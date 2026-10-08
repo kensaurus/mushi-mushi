@@ -35,12 +35,12 @@ function SafeLink({ to, children }: { to: string; children: React.ReactNode }) {
   )
 }
 
-export function RecipeLinkList({ links, empty }: { links: RecipeLink[]; empty?: string }) {
+export function RecipeLinkList({ links, empty, layout = 'column' }: { links: RecipeLink[]; empty?: string; layout?: 'column' | 'row' }) {
   if (links.length === 0) {
     return empty ? <p className="text-xs text-fg-muted">{empty}</p> : null
   }
   return (
-    <ul className="flex flex-col gap-1">
+    <ul className={layout === 'row' ? 'flex flex-wrap gap-x-3 gap-y-1' : 'flex flex-col gap-1'}>
       {links.map((l) => (
         <li key={`${l.label}:${l.to}`}>
           <SafeLink to={l.to}>{l.label}</SafeLink>

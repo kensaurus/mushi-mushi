@@ -54,7 +54,11 @@ interface ProjectRow {
   sdk_latest_version?: string | null
 }
 
-export function SetupCopilotPage() {
+/**
+ * `embedded`: rendered as the Diagnose tab of /onboarding (Plan 021: one setup
+ * path), under that page's header, so this one skips its own.
+ */
+export function SetupCopilotPage({ embedded = false }: { embedded?: boolean } = {}) {
   const [params] = useSearchParams()
   const activeId = useActiveProjectId()
   const projectParam = params.get('project')
@@ -111,7 +115,7 @@ export function SetupCopilotPage() {
 
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-setup-copilot">
-      <PageHeaderBar
+      {!embedded && <PageHeaderBar
         title="Setup Copilot"
 
         helpTitle="About Setup Copilot"
@@ -124,7 +128,7 @@ export function SetupCopilotPage() {
         helpHowToUse="Select a project, paste connect credentials, open the SDK wizard, then run Verify Setup for both ingest and dispatch tracks."
       >
         <Btn to="/projects" variant="ghost" size="sm">← Projects</Btn>
-      </PageHeaderBar>
+      </PageHeaderBar>}
 
       <nav
         aria-label="Setup funnel"

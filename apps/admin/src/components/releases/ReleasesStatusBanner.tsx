@@ -75,7 +75,7 @@ export function ReleasesStatusBanner({
   if (stats.topPriority === 'ready_to_draft') {
     return (
       <StatusBannerShell
-        tone="brand"
+        tone="info"
         title={
           plainBanner
             ? `${stats.fixedReportsCount} fixed bug${stats.fixedReportsCount === 1 ? '' : 's'} ready to ship`
@@ -100,7 +100,7 @@ export function ReleasesStatusBanner({
   if (stats.topPriority === 'no_releases') {
     return (
       <StatusBannerShell
-        tone="brand"
+        tone="info"
         title={plainBanner ? 'No releases yet' : `No releases on ${projectLabel} yet`}
         subtitle={stats.topPriorityLabel}
         action={
@@ -121,7 +121,7 @@ export function ReleasesStatusBanner({
   if (stats.topPriority === 'no_fixes') {
     return (
       <StatusBannerShell
-        tone="brand"
+        tone="info"
         title={plainBanner ? 'No fixed bugs to draft from' : 'No fixed reports to draft from'}
         subtitle={stats.topPriorityLabel}
         action={

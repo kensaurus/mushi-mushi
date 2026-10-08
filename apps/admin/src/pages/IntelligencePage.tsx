@@ -16,7 +16,7 @@ import { useSetupStatus } from '../lib/useSetupStatus'
 import { usePageCopy } from '../lib/copy'
 import { useIntelligenceUx, resolveQuickIntelligenceTab } from '../lib/intelligenceModeUx'
 import { useQuickstartLandingTab } from '../lib/useQuickstartTab'
-import { SetupNudge } from '../components/SetupNudge'
+import { NextStep } from '../components/NextStep'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { Card,
@@ -508,7 +508,8 @@ export function IntelligencePage() {
       )}
 
       {!activeProjectId ? (
-        <SetupNudge
+        <NextStep
+          variant="inline"
           requires={['project']}
           emptyTitle="Select a project"
           emptyDescription="Intelligence digests, jobs, and modernization findings are scoped to the active project. Pick one in the header."

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ACT_BLOCKER_COPY, ACT_BLOCKER_STAMP, actBlocker, isFixCountedFailed } from './pdcaAct'
+import { ACT_BLOCKER_COPY, ACT_BLOCKER_STAMP, actBlocker } from './pdcaAct'
 import { STAMP_VISUAL } from './pdcaStamp'
 import { getMergeBlockerReason, pickPrimaryFixAttempt } from './mergeFix'
 
@@ -46,20 +46,6 @@ describe('stamp vocabulary', () => {
   it('blocked never reads "In flight" and does not pulse', () => {
     expect(STAMP_VISUAL.blocked.label).toBe('Blocked')
     expect(STAMP_VISUAL.blocked.pulse).toBe(false)
-  })
-})
-
-describe('isFixCountedFailed (the /fixes "Failed / skipped" bucket)', () => {
-  it('counts the CI-red PR the card shows as Check = Failed', () => {
-    expect(isFixCountedFailed(PR_424)).toBe(true)
-  })
-
-  it('counts failed, skipped and closed-unmerged; not a green or merged PR', () => {
-    expect(isFixCountedFailed({ status: 'failed' })).toBe(true)
-    expect(isFixCountedFailed({ status: 'skipped_no_context' })).toBe(true)
-    expect(isFixCountedFailed({ ...PR_424, check_run_conclusion: null, pr_state: 'closed' })).toBe(true)
-    expect(isFixCountedFailed({ ...PR_424, check_run_conclusion: 'success' })).toBe(false)
-    expect(isFixCountedFailed({ ...PR_424, pr_state: 'merged' })).toBe(false)
   })
 })
 

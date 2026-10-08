@@ -12,7 +12,7 @@ import { usePageCopy } from '../lib/copy'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useRealtimeReload } from '../lib/realtime'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
-import { SetupNudge } from '../components/SetupNudge'
+import { NextStep } from '../components/NextStep'
 import { AuditStatusBanner, isAuditStatusBannerCritical } from '../components/audit/AuditStatusBanner'
 import { AuditGuide } from '../components/audit/AuditGuide'
 import { AuditSnapshotStrip } from '../components/audit/AuditSnapshotStrip'
@@ -680,7 +680,8 @@ export function AuditPage() {
             'Stack filters on the Log tab; expand any row for metadata JSON. Export CSV for compliance bundles.'
           }
         />
-        <SetupNudge
+        <NextStep
+          variant="inline"
           requires={['project']}
           emptyTitle="Select a project"
           emptyDescription="Audit entries are scoped to the active project — pick mushi-mushi (or your app) first."

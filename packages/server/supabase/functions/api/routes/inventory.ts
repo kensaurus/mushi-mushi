@@ -41,6 +41,8 @@ import {
 } from '../../_shared/inventory.ts'
 import { logAudit } from '../../_shared/audit.ts'
 import { dbError } from '../shared.ts'
+import { GATE_IDS } from '../../_shared/gate-ids.ts'
+import { loadLatestGateRuns } from './recipe-compose.ts'
 import {
   assertProjectScope,
   assertSafeOutboundUrl,
@@ -115,6 +117,34 @@ async function assertProjectWriteScope(
   return denied ? { ok: false, response: denied } : scope
 }
 
+/**
+ * Open (not allowlisted) findings of the newest finished run of each gate,
+ * the same runs the findings route and the Full-stack audit read. Counting
+ * every finding ever recorded showed glot.it 747 findings across 18 runs
+ * when its latest runs held about 105 (2026-10-07). All severities count, as
+ * before. A failed read is an error, never 0.
+ */
+async function countLatestOpenFindings(
+  db: ReturnType<typeof getServiceClient>,
+  projectId: string,
+): Promise<{ count: number } | { error: string }> {
+  let runIds: string[]
+  try {
+    runIds = (await loadLatestGateRuns(db, projectId, GATE_IDS)).map((r) => r.id)
+  } catch (err) {
+    return { error: (err as Error).message }
+  }
+  if (runIds.length === 0) return { count: 0 }
+  const { count, error } = await db
+    .from('gate_findings')
+    .select('id', { count: 'exact', head: true })
+    .in('gate_run_id', runIds)
+    .eq('allowlisted', false)
+  if (error) return { error: `gate_findings: ${error.message}` }
+  if (typeof count !== 'number') return { error: 'gate_findings: no count returned' }
+  return { count }
+}
+
 export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): void {
   // ============================================================
   // GET /v1/admin/inventory/stats — shell banner + INVENTORY SNAPSHOT
@@ -176,7 +206,7 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
       summaryRpc,
       discoveryRes,
       proposalsRes,
-      findingsRes,
+      openFindingsRead,
       gateRunRes,
       projectRes,
     ] = await Promise.all([
@@ -196,11 +226,7 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
         .select('id', { count: 'exact', head: true })
         .eq('project_id', activeProject.id)
         .eq('status', 'draft'),
-      db
-        .from('gate_findings')
-        .select('id', { count: 'exact', head: true })
-        .eq('project_id', activeProject.id)
-        .eq('allowlisted', false),
+      countLatestOpenFindings(db, activeProject.id),
       db
         .from('gate_runs')
         .select('started_at')
@@ -235,7 +261,9 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
     const hasInventory = Boolean(snapshot)
     const discoveryEvents = discoveryRes.count ?? 0
     const draftProposals = proposalsRes.count ?? 0
-    const openFindings = findingsRes.count ?? 0
+    // A failed count must not read as "no open findings" (topPriority 'clear').
+    if ('error' in openFindingsRead) return dbError(c, { message: openFindingsRead.error })
+    const openFindings = openFindingsRead.count
     const hasGithub = Boolean(projectRes.data?.github_app_installation_id)
 
     let topPriority: typeof empty.topPriority = 'no_inventory'
@@ -703,10 +731,28 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
       .order('started_at', { ascending: false })
       .limit(50)
     if (gate) runsQuery = runsQuery.eq('gate', gate)
-    const { data: runs, error: runsErr } = await runsQuery
+    const { data: recent, error: runsErr } = await runsQuery
     if (runsErr) return dbError(c, runsErr)
 
-    const runIds = (runs ?? []).map((r) => r.id)
+    // The newest finished run of EVERY check, read per check: a check that
+    // runs often (the schema scanner) filled the newest 50 on its own and hid
+    // design drift's 82 findings from the Full-stack audit (glot.it, 2026-10-07).
+    let latest: Array<{ id: string }> = []
+    if (!gate) {
+      try {
+        latest = await loadLatestGateRuns(db, projectId, GATE_IDS)
+      } catch (err) {
+        return dbError(c, { message: (err as Error).message })
+      }
+    }
+    const recentRows = (recent ?? []) as Array<{ id: string; started_at?: string | null }>
+    const seen = new Set(recentRows.map((r) => r.id))
+    const runs = [...recentRows, ...(latest as typeof recentRows).filter((r) => !seen.has(r.id))]
+      .sort((a, b) => (b.started_at ?? '').localeCompare(a.started_at ?? ''))
+
+    // Findings of each check's newest run first, so the 500 cap is never
+    // spent on runs a newer one replaced.
+    const runIds = gate ? runs.map((r) => r.id) : latest.map((r) => r.id)
     let findings: unknown[] = []
     if (runIds.length > 0) {
       let findingsQuery = db

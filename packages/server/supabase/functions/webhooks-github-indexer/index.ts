@@ -42,6 +42,7 @@ import {
   type StoredChunk,
 } from '../_shared/codebase-index-plan.ts';
 import { envInt } from '../_shared/env-int.ts';
+import { runInBackground } from '../_shared/background.ts';
 import {
   DEFAULT_SWEEP_RUN_FILES,
   INDEX_FILE_CAP_ENV,
@@ -61,6 +62,7 @@ import {
 } from '../_shared/index-coverage.ts';
 import { clearResolvedPushIndexError } from '../_shared/github-push-forward.ts';
 import { resolveProjectPlan } from '../_shared/quota.ts';
+import { syncInventoryFromPush } from '../_shared/inventory-push-sync.ts';
 import {
   framePathsFromStackText,
   matchFramePathsToTree,
@@ -1670,6 +1672,23 @@ async function indexPushForProject(
   const eligibleChanged = [...added].filter(isEligible);
   const eligibleRemoved = [...removed].filter(isEligible);
 
+  // The stored inventory follows the repo's inventory file. Not limited by
+  // the index scope: the inventory is read even when YAML is not indexed.
+  try {
+    const synced = await syncInventoryFromPush(db, {
+      projectId,
+      changed: added,
+      commitSha: ref,
+      readFile: (path) => fetchFileContents(token, owner, repo, path, ref),
+    });
+    if (synced.status !== 'unchanged-path') log.info('push: inventory sync', { projectId, repoFullName, ...synced });
+  } catch (err) {
+    log.warn('push: inventory sync failed (non-fatal)', {
+      projectId,
+      err: err instanceof Error ? err.message : String(err),
+    });
+  }
+
   // Which of these paths the index holds, and how many files it holds: the
   // ceiling check and the coverage update both need them. A read error fails
   // the push (500, recorded by the caller) instead of indexing past the cap.
@@ -1844,14 +1863,22 @@ async function indexPushForProject(
       const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
       const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
       if (supabaseUrl && serviceKey) {
-        fetch(`${supabaseUrl}/functions/v1/codebase-analyze-worker`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${serviceKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ jobId }),
-        }).catch((err) => log.warn('analyze worker invoke failed', { err: String(err) }))
+        // Kept alive past the webhook's response; a refused kick is logged and
+        // the pg_cron drain (every 10 minutes) runs the job instead.
+        runInBackground(
+          fetch(`${supabaseUrl}/functions/v1/codebase-analyze-worker`, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${serviceKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ jobId }),
+          }).then(async (res) => {
+            if (!res.ok) log.warn('analyze worker refused the kick', { jobId, status: res.status })
+            await res.body?.cancel()
+          }),
+          'codebase-analyze-kick',
+        )
       }
     }
   } catch (err) {

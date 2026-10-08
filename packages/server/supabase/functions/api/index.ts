@@ -35,6 +35,7 @@ import { registerOpenApiRoute } from './routes/openapi.ts';
 import { registerSchemaRoutes } from './routes/schemas.ts';
 import { registerQaCoverageRoutes } from './routes/qa-coverage.ts';
 import { registerRewardsRoutes } from './routes/rewards.ts';
+import { registerEraseSubjectRoutes } from './routes/erase-subject.ts';
 import { registerCliAuthRoutes } from './routes/cli-auth.ts';
 import { registerMcpOauthRoutes } from './routes/mcp-oauth.ts';
 // ---------------------------------------------------------------------------
@@ -71,12 +72,17 @@ import { registerAccountsRegisterRoutes } from './routes/accounts-register.ts';
 import { registerRecipeChangeRoutes } from './routes/recipe-changes.ts';
 import { registerStoreOpsRoutes } from './routes/store-ops.ts';
 import { registerFindingExplainRoutes } from './routes/finding-explain.ts';
+import { registerGateFindingDismissRoutes } from './routes/gate-finding-dismiss.ts';
 import { registerPortfolioFunnelRoutes } from './routes/portfolio-funnel.ts';
 import { registerSpendLedgerRoutes } from './routes/spend-ledger.ts';
 import { registerStoreReviewIntakeRoutes } from './routes/store-review-intake.ts';
 import { registerWorkspaceNavMetaRoutes } from './routes/workspace-nav-meta.ts';
 import { registerActivationRoutes } from './routes/activation.ts';
 import { registerSdkUpgradeRoutes } from './routes/sdk-upgrade.ts';
+import { registerUxRunsRoutes } from './routes/ux-runs.ts';
+import { registerPullRequestRoutes } from './routes/pull-requests.ts';
+import { registerUxCloudRoutes } from './routes/ux-cloud.ts';
+import { registerProjectGroupRoutes } from './routes/project-groups.ts';
 import { registerBootstrapRoutes } from './routes/bootstrap.ts';
 import { registerIdentitySecretRoutes } from './routes/identity-secret.ts';
 import { registerSessionRoutes } from './routes/sessions.ts';
@@ -614,6 +620,10 @@ registerQaCoverageRoutes(app);
 
 registerRewardsRoutes(app);
 
+// Host-backend account deletion: erase one end user's reports + reporter data.
+// Erase-token auth (identity secret), not the SDK key. Not CORS-exposed.
+registerEraseSubjectRoutes(app);
+
 // RFC 8628 device-auth (CLI login) + CLI-authenticated project endpoints.
 registerCliAuthRoutes(app);
 
@@ -653,12 +663,17 @@ registerAccountsRegisterRoutes(app);
 registerRecipeChangeRoutes(app);
 registerStoreOpsRoutes(app);
 registerFindingExplainRoutes(app);
+registerGateFindingDismissRoutes(app);
 registerPortfolioFunnelRoutes(app);
 registerSpendLedgerRoutes(app);
 registerStoreReviewIntakeRoutes(app);
 registerWorkspaceNavMetaRoutes(app);
 registerSkillsRoutes(app);
 registerSdkUpgradeRoutes(app);
+registerUxCloudRoutes(app);
+registerUxRunsRoutes(app);
+registerPullRequestRoutes(app);
+registerProjectGroupRoutes(app);
 registerBootstrapRoutes(app);
 registerIdentitySecretRoutes(app);
 registerSessionRoutes(app);

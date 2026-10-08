@@ -13,9 +13,8 @@
  * - Mount on OrganizationSettingsPage with stats from GET /v1/org/:orgId/members/stats
  */
 
-import { Section } from '../ui'
 import { DetailRows, type DetailRowItem } from '../ui/fields'
-import { EndpointCodeRow, ReadoutSection } from '../readout'
+import { EndpointCodeRow, ReadoutSection, ReadoutPanel } from '../readout'
 import { RESOLVED_EXTERNAL_API_URL } from '../../lib/env'
 import type { MembersStats } from './types'
 import { IconGlobe, IconHealth } from '../icons'
@@ -69,7 +68,7 @@ export function MembersReadout({ stats, orgId, fetchedAt, isValidating }: Props)
   ]
 
   return (
-    <Section title="Members readout" freshness={{ at: fetchedAt, isValidating }}>
+    <ReadoutPanel title="Members readout" freshness={{ at: fetchedAt, isValidating }}>
       <div className="grid gap-4 lg:grid-cols-2">
         <ReadoutSection title="Endpoints" icon={<IconGlobe size={14} aria-hidden />}>
           <EndpointCodeRow label="Org members stats API" url={statsApi} />
@@ -81,6 +80,6 @@ export function MembersReadout({ stats, orgId, fetchedAt, isValidating }: Props)
           <DetailRows items={rows} dense />
         </ReadoutSection>
       </div>
-    </Section>
+    </ReadoutPanel>
   )
 }

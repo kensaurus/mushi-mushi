@@ -4,9 +4,8 @@
  *          host alignment using live onboarding stats (mirrors ConnectProvenanceBand).
  */
 
-import { Section } from '../ui'
 import { DetailRows, type DetailRowItem } from '../ui/fields'
-import { EndpointCodeRow, ReadoutSection } from '../readout'
+import { EndpointCodeRow, ReadoutSection, ReadoutPanel } from '../readout'
 import { RESOLVED_EXTERNAL_API_URL } from '../../lib/env'
 import type { OnboardingStats } from './types'
 import { IconCheck, IconGlobe, IconHealth, IconNetwork } from '../icons'
@@ -66,7 +65,7 @@ export function OnboardingSetupReadout({
   ]
 
   return (
-    <Section
+    <ReadoutPanel
       title="Setup provenance"
       freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
     >
@@ -99,6 +98,6 @@ export function OnboardingSetupReadout({
           </div>
         </ReadoutSection>
       </div>
-    </Section>
+    </ReadoutPanel>
   )
 }

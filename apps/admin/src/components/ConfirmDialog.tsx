@@ -24,6 +24,8 @@ interface ConfirmDialogProps {
   cancelLabel?: string
   tone?: ConfirmTone
   loading?: boolean
+  /** Keep the confirm button disabled (e.g. until a count has loaded). */
+  confirmDisabled?: boolean
   onConfirm: () => void | Promise<void>
   onCancel: () => void
   /** Extra controls between the body and the buttons (e.g. a choice to confirm with). */
@@ -38,6 +40,7 @@ export function ConfirmDialog({
   cancelLabel = 'Cancel',
   tone = 'default',
   loading = false,
+  confirmDisabled = false,
   onCancel,
   onConfirm,
   children,
@@ -58,6 +61,7 @@ export function ConfirmDialog({
           variant={tone === 'danger' ? 'danger' : 'primary'}
           onClick={() => void onConfirm()}
           loading={loading}
+          disabled={confirmDisabled}
         >
           {confirmLabel}
         </Btn>

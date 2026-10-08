@@ -10,7 +10,6 @@ import type { InboxCard, InboxCardGroup } from '../../lib/actionInboxFromDashboa
 import {
   ActionPill,
   ActionPillRow,
-  ContainedBlock,
   MetaChip,
   SignalChip,
 } from '../report-detail/ReportSurface'
@@ -49,12 +48,13 @@ export const GROUP_TONE: Record<InboxCardGroup, { chipClass: string; ring: strin
   ops: { chipClass: CHIP_TONE.neutral, ring: 'border-edge' },
 }
 
-export const TONE_RING: Record<PageAction['tone'], string> = {
-  plan: 'border-info/40 bg-info-muted',
-  do: 'border-brand/40 bg-brand-subtle',
-  check: 'border-info/40 bg-info-muted',
-  act: 'border-ok/40 bg-ok-muted',
-  idle: 'border-edge bg-surface-overlay',
+/** One bordered card per action: the tone shows only on the left edge. */
+const TONE_EDGE: Record<PageAction['tone'], string> = {
+  plan: 'border-l-info',
+  do: 'border-l-brand',
+  check: 'border-l-info',
+  act: 'border-l-ok',
+  idle: 'border-l-edge',
 }
 
 export function ClearChip({ card }: { card: InboxCard }) {
@@ -98,7 +98,8 @@ export function OpenInboxCard({
     <article
       data-inbox-card={card.id}
       data-inbox-state="open"
-      className={`rounded-lg border p-4 ${TONE_RING[action.tone]}${isFirst ? ' md:col-span-2' : ''}`}
+      // mushi-mushi-allowlist: tone-edged action card (border-l-4 per tone); Card has no edge tone
+      className={`rounded-lg border border-edge border-l-4 bg-surface-raised p-4 ${TONE_EDGE[action.tone]}${isFirst ? ' md:col-span-2' : ''}`}
     >
       <header className="mb-2 flex flex-wrap items-center gap-1.5">
         <SignalChip tone="neutral">#{priority}</SignalChip>
@@ -110,14 +111,8 @@ export function OpenInboxCard({
         <MetaChip label="Page">{card.pageLabel}</MetaChip>
         {activityAt ? <AgeChip at={activityAt} title="Last activity in this stage" /> : null}
       </header>
-      <ContainedBlock tone="info" label="Action">
-        <p className="text-sm font-medium leading-snug text-fg">{action.title}</p>
-      </ContainedBlock>
-      {action.reason ? (
-        <ContainedBlock tone="muted" className="mt-2">
-          <p className="text-xs leading-snug text-fg-muted">{action.reason}</p>
-        </ContainedBlock>
-      ) : null}
+      <p className="text-sm font-medium leading-snug text-fg">{action.title}</p>
+      {action.reason ? <p className="mt-1 text-xs leading-snug text-fg-muted">{action.reason}</p> : null}
       <ActionPillRow className="mt-3">
         {action.primary && action.primary.kind === 'link' ? (
           <ActionPill to={href(action.primary.to)} tone="brand" className="px-3 py-1.5 text-xs">

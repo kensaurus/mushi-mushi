@@ -214,7 +214,7 @@ export function HealthStatusBanner({
   if (stats.topPriority === 'idle') {
     return (
       <StatusBannerShell
-        tone="brand"
+        tone="info"
         title={plainBanner ? `No AI activity on ${projectLabel} yet` : `No LLM activity on ${projectLabel}`}
         subtitle={
           stats.topPriorityLabel ??
@@ -224,7 +224,7 @@ export function HealthStatusBanner({
           <StatusBannerAction
             label={actions.verify ?? 'Send test report'}
             to={scopedHref('/onboarding?tab=verify', pid)}
-            tone="brand"
+            tone="info"
           />
         }
       />

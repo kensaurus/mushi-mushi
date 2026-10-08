@@ -128,6 +128,56 @@ describe('SkillPipelinesPage catalog search (QA 22)', () => {
   })
 })
 
+describe('SkillPipelinesPage catalog layout', () => {
+  const workflows = Array.from({ length: 8 }, (_, i) => ({
+    id: `w${i}`,
+    slug: `workflow-${i}`,
+    category: 'workflow',
+    title: i === 0 ? 'workflow-0' : `Workflow ${i}`,
+    description: 'd',
+    chain_slugs: [],
+    updated_at: '',
+  }))
+  const audits = [{ id: 'a1', slug: 'audit-ux', category: 'audit', title: 'Audit UX', description: 'd', chain_slugs: [], updated_at: '' }]
+  const all = [...workflows, ...audits]
+
+  function buttonByText(text: string): HTMLButtonElement | undefined {
+    return [...host.querySelectorAll('button')].find((b) => b.textContent?.trim().startsWith(text))
+  }
+
+  beforeEach(() => {
+    state.catalog = () => ({
+      data: { data: all, grouped: { workflow: workflows, audit: audits }, total: all.length },
+      loading: false,
+      error: null,
+      isValidating: false,
+    })
+  })
+
+  it('opens Workflows with 6 cards, keeps other categories closed, and expands on Show all', () => {
+    render()
+    expect(host.textContent).toContain('Workflow 5')
+    expect(host.textContent).not.toContain('Workflow 6')
+    expect(host.textContent).not.toContain('Audit UX')
+    act(() => buttonByText('Show all 8')!.click())
+    expect(host.textContent).toContain('Workflow 7')
+  })
+
+  it('filters to one category from its chip', () => {
+    render()
+    act(() => buttonByText('Audit')!.click())
+    expect(host.textContent).toContain('Audit UX')
+    expect(host.textContent).not.toContain('Workflow 1')
+  })
+
+  it('shows the slug only when it differs from the title', () => {
+    render()
+    const monoTexts = [...host.querySelectorAll('p.font-mono')].map((p) => p.textContent)
+    expect(monoTexts).toContain('workflow-1')
+    expect(monoTexts).not.toContain('workflow-0')
+  })
+})
+
 describe('SkillPipelinesPage tab guard (QA 245)', () => {
   it('renders the catalog for an unknown ?tab instead of crashing', () => {
     state.catalog = () => ({ data: { data: SKILLS, grouped: { audit: SKILLS }, total: 1 }, loading: false, error: null, isValidating: false })

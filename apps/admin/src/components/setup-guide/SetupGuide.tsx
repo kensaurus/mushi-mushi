@@ -3,18 +3,20 @@
  * PURPOSE: The persistent, dismissible setup guide docked into the app shell.
  *
  *          WHY THIS EXISTS. Every setup surface in the console was route-gated:
- *          <SetupChecklist mode="banner"> only renders on /dashboard,
- *          mode="wizard" only on /onboarding, the four components/onboarding/*
- *          panels only on /onboarding, and <NextBestAction> returns null unless
- *          the user is in beginner/quickstart mode (and null again on / and
- *          /onboarding). <FirstRunTour> is a one-shot product tour, not a
- *          tracker. So the moment a user navigated away from those two routes,
- *          nothing in the console told them what was still missing or what was
- *          already connected. This mounts once in the shell and follows them.
+ *          <SetupChecklist> only renders on the empty dashboard and
+ *          /onboarding, the components/onboarding/* panels only on
+ *          /onboarding, and the <NextStep> banner names one step at a time
+ *          and only in Quick/Beginner mode. <FirstRunTour> is a one-shot
+ *          product tour, not a tracker. So the moment a user navigated away
+ *          from those routes, nothing in the console told them what was still
+ *          missing or what was already connected. This mounts once in the
+ *          shell and follows them.
  *
- *          It is a surfacing layer, not a fourth checklist: the steps, labels,
+ *          It is a surfacing layer, not another checklist: the steps, labels,
  *          required flags and CTAs are the server-built ones from
- *          /v1/admin/setup (activation-setup-builder.ts).
+ *          /v1/admin/setup (activation-setup-builder.ts), and its "Do this
+ *          next" step is nextSetupStepId, the rule every setup list shares.
+ *          While it is open the NextStep banner names real work only.
  *
  *          Self-contained by design — it reads its own hooks exactly like
  *          <FirstRunTour> does, so the mount in Layout.tsx is a bare element

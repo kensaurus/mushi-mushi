@@ -189,6 +189,11 @@ minimumReleaseAgeExclude:
   # vuln is in every <4.0.6 release and CI runs npm audit + provenance as
   # compensating controls. Enforced tree-wide via pnpm.overrides.
   - 'form-data'
+  # source-map-js 1.2.2 fixes GHSA-68fv-2mgg-jv7q (HIGH: event-loop DoS via
+  # indexed source-map section offsets), pulled in by @tailwindcss/node and
+  # postcss. Published 2026-09-30, inside the cooldown when the advisory turned
+  # the audit gate red on 2026-10-07. Enforced via pnpm.overrides.
+  - 'source-map-js'
   # undici 7.29.0 / 8.9.0 include the current fixes for TLS validation bypass,
   # WebSocket DoS, and private-cache cross-user disclosure. Dev/test-only in
   # this tree (pulled via jsdom for the admin vitest DOM env). Patches shipped

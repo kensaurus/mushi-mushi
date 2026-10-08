@@ -41,12 +41,23 @@ export function LessonsStatusBanner({ stats, onTab, onRefresh, refreshing, plain
   if (stats.topPriority === 'no_data') {
     return (
       <StatusBannerShell
-        tone="brand"
+        tone="info"
         title={plainBanner ? 'No lesson memory yet' : `No lesson memory on ${projectLabel}`}
         subtitle={stats.topPriorityLabel}
         action={
           <Btn to="/reports" size="sm" variant="ghost">{actions.reports ?? 'Open Reports'}</Btn>
         }
+      />
+    )
+  }
+
+  // Clusters are forming but none qualifies yet: there is nothing to act on.
+  if (stats.topPriority === 'no_lessons' && stats.readyToPromote === 0) {
+    return (
+      <StatusBannerShell
+        tone="info"
+        title={`${stats.candidateClusters} cluster${stats.candidateClusters === 1 ? '' : 's'} forming, nothing to promote yet`}
+        subtitle="A cluster can be promoted once it has 3 or more reports and a coherence of 75% or higher."
       />
     )
   }

@@ -31,45 +31,6 @@ export function totalStoriesDetail(stats: QaCoverageStats): string {
   return `${stats.enabledStories} enabled`
 }
 
-export function passingStoriesTooltip(stats: QaCoverageStats): MetricTooltipData {
-  const takeaway =
-    stats.passingStories > 0
-      ? `${stats.passingStories} stor${stats.passingStories === 1 ? 'y' : 'ies'} at ≥80% pass rate in the last 24h — healthy coverage.`
-      : stats.totalStories > 0
-        ? 'No stories at ≥80% pass rate in 24h — check Failing tab for regressions.'
-        : 'Passing count appears after stories run at least once.'
-
-  return metricTip(
-    'Enabled QA stories whose 24-hour pass rate is at or above 80%.',
-    'Reads qa_story_coverage_24h materialized view — passing when pass_rate_pct ≥ 80 for enabled stories.',
-    takeaway,
-  )
-}
-
-export function passingStoriesDetail(): string {
-  return '≥80% in 24h'
-}
-
-export function failingStoriesTooltip(stats: QaCoverageStats): MetricTooltipData {
-  const takeaway =
-    stats.failingStories > 0
-      ? `${stats.failingStories} stor${stats.failingStories === 1 ? 'y' : 'ies'} below 80% pass rate in 24h${stats.topFailingStoryName ? ` — worst: ${stats.topFailingStoryName}.` : '.'}`
-      : 'No failing stories in the 24h window — coverage is green.'
-
-  return metricTip(
-    'Enabled QA stories whose 24-hour pass rate is below 80%.',
-    'qa_story_coverage_24h where pass_rate_pct < 80 for enabled stories in the rolling 24h window.',
-    takeaway,
-    stats.failingStories > 0
-      ? { tone: 'warn', text: `${stats.failingStories} failing stor${stats.failingStories === 1 ? 'y' : 'ies'} — open Failing tab for evidence.` }
-      : undefined,
-  )
-}
-
-export function failingStoriesDetail(): string {
-  return '<80% in 24h'
-}
-
 export function avgPassRateTooltip(stats: QaCoverageStats): MetricTooltipData {
   const takeaway =
     stats.avgPassRatePct != null
@@ -112,22 +73,3 @@ export function runs24hDetail(stats: QaCoverageStats): string {
   return `${stats.pendingRuns} in flight`
 }
 
-export function noDataStoriesTooltip(stats: QaCoverageStats): MetricTooltipData {
-  const takeaway =
-    stats.noDataStories > 0
-      ? `${stats.noDataStories} enabled stor${stats.noDataStories === 1 ? 'y has' : 'ies have'} no run data in 24h — schedule or trigger manually.`
-      : 'Every enabled story has 24h run data.'
-
-  return metricTip(
-    'Enabled stories that have never run or have no executions in the last 24 hours.',
-    'Enabled qa_stories with no matching qa_story_runs in the 24h window (or never executed).',
-    takeaway,
-    stats.noDataStories > 0
-      ? { tone: 'info', text: `${stats.noDataStories} stor${stats.noDataStories === 1 ? 'y' : 'ies'} without 24h data — run or enable cron.` }
-      : undefined,
-  )
-}
-
-export function noDataStoriesDetail(): string {
-  return 'Never run / 24h'
-}

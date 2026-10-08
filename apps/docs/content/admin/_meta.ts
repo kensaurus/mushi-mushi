@@ -39,6 +39,7 @@ export default {
   portfolio: 'Portfolio (all apps)',
   health: 'Integration health',
   'qa-coverage': 'QA Coverage',
+  'ux-runs': 'UX runs',
   intelligence: 'Intelligence reports',
   research: 'Research',
   anomalies: 'Anomaly detection',
@@ -51,6 +52,7 @@ export default {
 
   // Workspace
   settings: 'Settings',
+  team: 'Team',
   storage: 'Storage',
   integrations: 'Integrations',
   marketplace: 'Plugin marketplace',

@@ -47,6 +47,19 @@ describe('flat-format backward compatibility', () => {
     expect(loadConfig(TEST_PATH).apiKey).toBe('flat-key')
     expect(loadConfig(TEST_PATH, { profile: 'default' }).apiKey).toBe('flat-key')
   })
+
+  it('a new profile on a flat file starts empty, never with the default key', () => {
+    // `mushi --profile glot login` seeded glot with the default profile's key
+    // and project, so the new profile acted on the wrong app (2026-10-06).
+    saveConfig({ apiKey: 'default-key', projectId: 'p-default' }, TEST_PATH)
+    expect(loadConfig(TEST_PATH, { profile: 'glot' })).not.toHaveProperty('apiKey')
+    process.env['MUSHI_PROFILE'] = 'glot'
+    expect(loadConfig(TEST_PATH).projectId).toBeUndefined()
+    saveConfig({ ...loadConfig(TEST_PATH), clientId: 'cli_x' }, TEST_PATH)
+    const raw = JSON.parse(readFileSync(TEST_PATH, 'utf-8'))
+    expect(raw.profiles.default).toEqual({ apiKey: 'default-key', projectId: 'p-default' })
+    expect(raw.profiles.glot).toEqual({ clientId: 'cli_x' })
+  })
 })
 
 // ─── resolveProfileName precedence ─────────────────────────────────────────────

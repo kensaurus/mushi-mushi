@@ -3,6 +3,7 @@ import {
   draftFromSaved,
   parseListInput,
   platformSaveBody,
+  projectStoredSecretFields,
   sentryProjectsFromConfig,
 } from './platformIntegrationForm'
 import { PLATFORM_DEFS } from '../components/integrations/types'
@@ -82,5 +83,25 @@ describe('helpers', () => {
       'api',
     ])
     expect(sentryProjectsFromConfig({ sentry_project_slug: null })).toEqual([])
+  })
+})
+
+describe('projectStoredSecretFields (Remove key)', () => {
+  it('lists secrets the project stores itself, tracked or not', () => {
+    const fields = projectStoredSecretFields(
+      sentry,
+      { sentry_auth_token_ref: '…abcd', sentry_webhook_secret: '…wxyz', sentry_org_slug: 'acme' },
+      { sentry_auth_token_ref: 'project' },
+    )
+    expect(fields).toEqual(['sentry_auth_token_ref', 'sentry_webhook_secret'])
+  })
+
+  it('skips a tracked secret inherited from the org or env', () => {
+    expect(projectStoredSecretFields(sentry, { sentry_auth_token_ref: '…abcd' }, { sentry_auth_token_ref: 'org' })).toEqual([])
+    expect(projectStoredSecretFields(sentry, {}, { sentry_auth_token_ref: 'env' })).toEqual([])
+  })
+
+  it('never lists a non-secret field', () => {
+    expect(projectStoredSecretFields(sentry, { sentry_org_slug: 'acme' }, {})).toEqual([])
   })
 })

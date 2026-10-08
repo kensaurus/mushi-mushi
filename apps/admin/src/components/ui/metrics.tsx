@@ -296,9 +296,16 @@ export function RecommendedAction({
   return (
     <div className={`flex items-start gap-3 rounded-md border p-3 mb-3 ${RECOMMENDED_TONES[tone]}`}>
       <div className={`mt-0.5 shrink-0 ${RECOMMENDED_ACCENTS[tone]}`}>
+        {/* The icon follows the tone: a success card used to carry the same (!) as an alert. */}
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
           <circle cx="8" cy="8" r="6" />
-          <path d="M8 5v3.5M8 11h.01" strokeLinecap="round" />
+          {tone === 'success' ? (
+            <path d="M5.5 8.2l1.7 1.7 3.3-3.6" strokeLinecap="round" strokeLinejoin="round" />
+          ) : tone === 'urgent' ? (
+            <path d="M8 5v3.5M8 11h.01" strokeLinecap="round" />
+          ) : (
+            <path d="M8 7.5V11M8 5h.01" strokeLinecap="round" />
+          )}
         </svg>
       </div>
       <div className="flex-1 min-w-0">

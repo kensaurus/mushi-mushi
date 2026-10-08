@@ -1,7 +1,7 @@
 /**
  * FILE: apps/admin/src/lib/nextBestAction.ts
  * PURPOSE: The single "what should I do next?" decision behind the
- *          NextBestAction strip.
+ *          <NextStep> banner and dashboard card (lib/useNextStep.ts).
  *
  * REGRESSION (2026-10-04 console audit): the strip decided from setup steps
  * only. On glot.it it said "IDLE — You're green across the loop" next to
@@ -48,7 +48,16 @@ export interface NbaSetup {
 
 const plural = (n: number, one: string, many: string) => (n === 1 ? one : many)
 
-export function computeNextAction(setup: NbaSetup, work: NbaWork, pathname: string): NbaAction | null {
+export interface NbaOptions {
+  /**
+   * The setup checklist dock is open on screen. It already lists every setup
+   * step, so the strip shows only real work (Plan 021: one "what next" voice
+   * at a time) and stays quiet about setup.
+   */
+  setupGuideOpen?: boolean
+}
+
+export function computeNextAction(setup: NbaSetup, work: NbaWork, pathname: string, opts: NbaOptions = {}): NbaAction | null {
   // Pages with their own dominant first-action surface: don't double up.
   if (pathname === '/' || pathname.startsWith('/onboarding')) return null
 
@@ -94,6 +103,8 @@ export function computeNextAction(setup: NbaSetup, work: NbaWork, pathname: stri
       }
     }
   }
+
+  if (opts.setupGuideOpen) return null
 
   if (setup.isStepIncomplete('sdk_installed')) {
     return {

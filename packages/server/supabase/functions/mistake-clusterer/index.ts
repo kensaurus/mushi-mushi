@@ -1,7 +1,9 @@
 /**
  * mistake-clusterer — BIRCH-style incremental streaming clusterer
  *
- * Schedule: every 15 minutes (cron) + manual trigger via POST.
+ * Schedule: hourly at :43 (pg_cron, migration 20261007142000) + manual POST.
+ * Hourly runs the coherence judge once per 6-hour window (see
+ * isCoherenceWindow); a faster cadence would re-judge the same candidates.
  *
  * Algorithm (per plan §1a):
  *   For each new report_embedding not yet in report_cluster_membership:
@@ -59,6 +61,14 @@ const coherenceSchema = z.object({
   ),
 })
 
+/** A row of public.mistake_clusterer_unclustered() (migration 20261007142000). */
+interface UnclusteredRow {
+  report_id: string
+  embedding: string
+  project_id: string
+  severity: string | null
+}
+
 /** Running centroid update: avg = avg + (new - avg) / n */
 function updateCentroid(currentCentroid: number[], newVector: number[], newSize: number): number[] {
   return currentCentroid.map((v, i) => v + (newVector[i] - v) / newSize)
@@ -96,14 +106,11 @@ Deno.serve(
 
     // ─── Step 1: Incremental clustering of new embeddings ───────────────────
 
-    // Find unprocessed embeddings (not yet in report_cluster_membership)
+    // Find unprocessed embeddings (not yet in report_cluster_membership).
+    // A NOT EXISTS in SQL: passing a query builder to .not('report_id', 'in', …)
+    // sent the filter `not.in.[object Object]` and failed every run.
     const { data: unprocessed, error: fetchErr } = await db
-      .from('report_embeddings')
-      .select('report_id, embedding, reports!inner(project_id, severity)')
-      .not('report_id', 'in',
-        db.from('report_cluster_membership').select('report_id'),
-      )
-      .limit(MAX_REPORTS_PER_RUN)
+      .rpc('mistake_clusterer_unclustered', { p_limit: MAX_REPORTS_PER_RUN })
 
     if (fetchErr) {
       log.error('fetch error', { scope: 'mistake-clusterer', err: fetchErr.message })
@@ -113,10 +120,11 @@ Deno.serve(
     let assigned = 0
     let created = 0
 
-    for (const row of (unprocessed ?? [])) {
-      const reportId = row.report_id as string
-      const projectId = (row.reports as unknown as { project_id: string }).project_id
-      const severity = (row.reports as unknown as { severity: string }).severity ?? 'warn'
+    const rows = (unprocessed ?? []) as UnclusteredRow[]
+    for (const row of rows) {
+      const reportId = row.report_id
+      const projectId = row.project_id
+      const severity = row.severity ?? 'warn'
       const embedding = parseVector(row.embedding)
 
       // Load existing candidate clusters for this project
@@ -326,7 +334,7 @@ Rate the semantic coherence of this cluster and suggest how to name and summaris
     return new Response(
       JSON.stringify({
         ok: true,
-        processed: (unprocessed ?? []).length,
+        processed: rows.length,
         assigned,
         created,
         promoted,

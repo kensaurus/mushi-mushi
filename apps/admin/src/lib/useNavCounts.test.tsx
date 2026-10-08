@@ -75,7 +75,8 @@ const seen: Record<string, NavCounts> = {}
 /** Fresh module per test: the store is module-level by design. */
 async function renderReaders(ids: string[], slices: string[] | null = null) {
   vi.resetModules()
-  const { useNavCounts } = await import('./useNavCounts')
+  const mod = await import('./useNavCounts')
+  const { useNavCounts } = mod
   function Reader({ id }: { id: string }) {
     seen[id] = useNavCounts(id === 'layout' ? { live: true, slices } : {})
     return null
@@ -83,6 +84,7 @@ async function renderReaders(ids: string[], slices: string[] | null = null) {
   await act(async () => {
     root.render(createElement('div', null, ...ids.map((id) => createElement(Reader, { key: id, id }))))
   })
+  return mod
 }
 
 beforeEach(() => {
@@ -181,5 +183,29 @@ describe('useNavCounts', () => {
     await renderReaders(['layout'])
     expect(fallback.fetchNavSlicesFallback).toHaveBeenCalledTimes(1)
     expect(seen.layout.projectCount).toBe(2)
+  })
+
+  it('refreshNavCounts re-reads the live context fresh after a page mutation', async () => {
+    // e.g. retiring a lesson: lessons is not in the realtime publication, so
+    // the page asks for new numbers. fresh=1 skips the server's 15 s cache.
+    api.apiFetch.mockResolvedValue({ ok: true, data: navMeta() })
+    const { refreshNavCounts } = await renderReaders(['layout'], ['lessons'])
+    expect(api.apiFetch).toHaveBeenCalledTimes(1)
+    api.apiFetch.mockResolvedValue({ ok: true, data: navMeta({ counts: { ...navMeta().counts!, flaggedDevices: 4 } }) })
+    await act(async () => {
+      refreshNavCounts()
+    })
+    expect(api.apiFetch).toHaveBeenCalledTimes(2)
+    expect(api.apiFetch.mock.calls[1][0]).toBe(
+      '/v1/admin/workspace/nav-meta?include=counts&slices=lessons&fresh=1',
+    )
+    expect(seen.layout.flaggedDevices).toBe(4)
+  })
+
+  it('refreshNavCounts does nothing before the sidebar has loaded', async () => {
+    vi.resetModules()
+    const { refreshNavCounts } = await import('./useNavCounts')
+    refreshNavCounts()
+    expect(api.apiFetch).not.toHaveBeenCalled()
   })
 })

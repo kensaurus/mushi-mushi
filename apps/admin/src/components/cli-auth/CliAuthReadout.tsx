@@ -3,9 +3,8 @@
  * PURPOSE: Device-auth flow endpoints and verification URLs for CLI login approval.
  */
 
-import { Section } from '../ui'
 import { DetailRows, type DetailRowItem } from '../ui/fields'
-import { EndpointCodeRow, ReadoutSection } from '../readout'
+import { EndpointCodeRow, ReadoutSection, ReadoutPanel } from '../readout'
 import { RESOLVED_EXTERNAL_API_URL } from '../../lib/env'
 import { IconGlobe, IconTerminal } from '../icons'
 
@@ -44,7 +43,7 @@ export function CliAuthReadout({ userCode, fetchedAt }: Props) {
   ]
 
   return (
-    <Section title="CLI device auth" freshness={{ at: fetchedAt ?? null }}>
+    <ReadoutPanel title="CLI device auth" freshness={{ at: fetchedAt ?? null }}>
       <p className="mb-4 text-xs leading-relaxed text-fg-muted">
         RFC 8628 device flow — the CLI polls the token endpoint while you approve here. Do not paste
         the user code into your terminal.
@@ -58,6 +57,6 @@ export function CliAuthReadout({ userCode, fetchedAt }: Props) {
           <DetailRows items={rows} dense />
         </ReadoutSection>
       </div>
-    </Section>
+    </ReadoutPanel>
   )
 }

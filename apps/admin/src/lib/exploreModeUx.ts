@@ -53,6 +53,6 @@ export function resolveQuickExploreTab(stats: ExploreStats): ExploreTabId {
     return 'index'
   }
   if (stats.topPriority === 'ready' && stats.withEmbeddings > 0) return 'search'
-  if (stats.topPriority === 'ready' || stats.topPriority === 'stale') return 'graph'
+  if (stats.topPriority === 'ready' || stats.topPriority === 'stale') return 'layers'
   return 'overview'
 }

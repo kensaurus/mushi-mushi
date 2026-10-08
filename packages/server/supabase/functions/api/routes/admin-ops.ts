@@ -226,11 +226,19 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
         : c.json({ ok: true, data: { devices: [] } });
     }
 
+    // The active project only, the same scope as the page's list and tiles.
+    // nav-meta sends it in the X-Mushi-Project-Id header, not the query.
+    const scope = antiGamingListScope(
+      projectIds,
+      c.req.query('project_id'),
+      c.req.header('x-mushi-project-id'),
+    );
+
     if (countOnly) {
       let cq = db
         .from('reporter_devices')
         .select('id', { count: 'exact', head: true })
-        .in('project_id', projectIds);
+        .in('project_id', scope);
       if (flagged) cq = cq.eq('flagged_as_suspicious', true);
       const { count, error: countErr } = await cq;
       if (countErr) return dbError(c, countErr);
@@ -241,7 +249,7 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
     let q = db
       .from('reporter_devices')
       .select('*')
-      .in('project_id', antiGamingListScope(projectIds, c.req.query('project_id')))
+      .in('project_id', scope)
       .order('updated_at', { ascending: false })
       .limit(200);
     if (flagged) q = q.eq('flagged_as_suspicious', true);
@@ -262,7 +270,7 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
     let query = db
       .from('anti_gaming_events')
       .select('*')
-      .in('project_id', antiGamingListScope(projectIds, c.req.query('project_id')))
+      .in('project_id', antiGamingListScope(projectIds, c.req.query('project_id'), c.req.header('x-mushi-project-id')))
       .order('created_at', { ascending: false })
       .limit(limit);
     if (eventType) query = query.eq('event_type', eventType);

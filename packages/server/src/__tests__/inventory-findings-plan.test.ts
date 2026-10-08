@@ -97,6 +97,35 @@ describe('inventory findings on a plan without inventory_v2', () => {
     expect(res.body.data?.findings.map((f) => f.rule_id)).toEqual(['spend_cap_unset'])
   })
 
+  it('keeps every check when one check fills the newest 50 runs', async () => {
+    // glot.it, 2026-10-07: the schema scanner's runs hid design drift's 82 findings.
+    const schemaRuns = Array.from({ length: 60 }, (_, i) => ({
+      id: `schema-${i}`, project_id: P, gate: 'schema_drift', status: 'warn',
+      started_at: `2026-10-06T${String(10 + Math.floor(i / 6)).padStart(2, '0')}:${String((i % 6) * 10).padStart(2, '0')}:00Z`,
+      completed_at: null,
+    }))
+    db = makeFakeDb({
+      projects: [{ id: P, owner_id: 'user-a', organization_id: null }],
+      organization_members: [],
+      project_members: [],
+      gate_runs: [
+        ...schemaRuns,
+        { id: 'design-1', project_id: P, gate: 'design_drift', status: 'warn', summary: { phase: 'scan' }, started_at: '2026-10-05T00:00:00Z', completed_at: '2026-10-05T00:01:00Z' },
+      ],
+      gate_findings: [
+        { id: 'f-d', gate_run_id: 'design-1', severity: 'warn', rule_id: 'off_token_color', message: '#fff', file_path: 'a.css', created_at: '2026-10-05T00:01:00Z' },
+        { id: 'f-old', gate_run_id: 'schema-0', severity: 'warn', rule_id: 'schema-drift-table-modified', message: 'old', file_path: null, created_at: '2026-10-06T10:00:00Z' },
+        { id: 'f-new', gate_run_id: 'schema-59', severity: 'warn', rule_id: 'schema-drift-table-modified', message: 'new', file_path: null, created_at: '2026-10-06T19:50:00Z' },
+      ],
+    })
+    const res = await app.call('GET', `/v1/admin/inventory/${P}/findings`)
+    expect(res.status).toBe(200)
+    expect(res.body.data?.runs.map((r) => r.gate)).toContain('design_drift')
+    // Only each check's newest run contributes findings.
+    expect(res.body.data?.findings.map((f) => f.rule_id).sort()).toEqual(['off_token_color', 'schema-drift-table-modified'])
+    expect(res.body.data?.findings.find((f) => f.rule_id === 'schema-drift-table-modified')).toMatchObject({ file_path: null })
+  })
+
   it('still refuses a project the caller cannot reach', async () => {
     seed()
     const res = await app.call('GET', `/v1/admin/inventory/20000002-0000-4000-8000-000000000000/findings`)
@@ -113,6 +142,54 @@ describe('inventory findings on a plan without inventory_v2', () => {
       const res = await app.call(method, path)
       expect(res.status, `${method} ${path}`).toBe(402)
     }
+  })
+})
+
+describe('GET /v1/admin/inventory/stats openFindings', () => {
+  type Stats = { openFindings: number; topPriority: string }
+  const base = () => ({
+    projects: [{ id: P, name: 'glot.it', owner_id: 'user-a', organization_id: null, created_at: '2026-01-01T00:00:00Z' }],
+    organization_members: [],
+    project_members: [],
+    inventories: [{ id: 'inv-1', project_id: P, is_current: true, commit_sha: 'abc', ingested_at: '2026-05-04T00:00:00Z' }],
+  })
+
+  it('counts only the open findings of each gate’s newest run', async () => {
+    // glot.it, 2026-10-07: 747 findings ever recorded vs about 105 in the latest runs.
+    const oldFindings = Array.from({ length: 40 }, (_, i) => ({
+      id: `old-${i}`, gate_run_id: 'crawl-old', project_id: P, severity: 'error', allowlisted: false, rule_id: 'crawl-fetch-failed', message: 'x',
+    }))
+    db = makeFakeDb({
+      ...base(),
+      gate_runs: [
+        { id: 'crawl-old', project_id: P, gate: 'crawl', status: 'fail', started_at: '2026-05-03T00:00:00Z' },
+        { id: 'crawl-new', project_id: P, gate: 'crawl', status: 'fail', started_at: '2026-05-04T00:00:00Z' },
+        { id: 'radar-1', project_id: P, gate: 'radar', status: 'warn', started_at: '2026-10-07T00:00:00Z' },
+        { id: 'radar-run', project_id: P, gate: 'radar', status: 'running', started_at: '2026-10-07T01:00:00Z' },
+      ],
+      gate_findings: [
+        ...oldFindings,
+        { id: 'n-1', gate_run_id: 'crawl-new', project_id: P, severity: 'error', allowlisted: false, rule_id: 'crawl-fetch-failed', message: 'x' },
+        { id: 'n-2', gate_run_id: 'crawl-new', project_id: P, severity: 'info', allowlisted: false, rule_id: 'crawl-missing-in-app', message: 'x' },
+        { id: 'n-dismissed', gate_run_id: 'crawl-new', project_id: P, severity: 'error', allowlisted: true, rule_id: 'crawl-fetch-failed', message: 'x' },
+        { id: 'r-1', gate_run_id: 'radar-1', project_id: P, severity: 'warn', allowlisted: false, rule_id: 'spend_cap_unset', message: 'x' },
+        { id: 'r-running', gate_run_id: 'radar-run', project_id: P, severity: 'warn', allowlisted: false, rule_id: 'spend_cap_unset', message: 'x' },
+      ],
+    })
+    const res = await app.call('GET', '/v1/admin/inventory/stats') as unknown as { status: number; body: { ok: boolean; data: Stats } }
+    expect(res.status).toBe(200)
+    expect(res.body.data.openFindings).toBe(3)
+    expect(res.body.data.topPriority).toBe('open_findings')
+  })
+
+  it('a failed findings read is an error, never "no open findings"', async () => {
+    db = makeFakeDb(
+      { ...base(), gate_runs: [{ id: 'radar-1', project_id: P, gate: 'radar', status: 'warn', started_at: '2026-10-07T00:00:00Z' }] },
+      { failRead: (t) => (t === 'gate_findings' ? 'boom' : null) },
+    )
+    const res = await app.call('GET', '/v1/admin/inventory/stats') as unknown as { status: number; body: { ok: boolean } }
+    expect(res.status).toBe(500)
+    expect(res.body.ok).toBe(false)
   })
 })
 

@@ -80,7 +80,6 @@ export function ComplianceSnapshotStrip({
         <StatCard
           label={statLabels?.cluster ?? 'Cluster'}
           value={(stats.activeProjectRegion ?? stats.currentRegion).toUpperCase()}
-          accent="text-brand"
           tooltip={clusterRegionTooltip(stats)}
           detail={clusterRegionDetail(stats)}
           to={complianceLinks.cluster}

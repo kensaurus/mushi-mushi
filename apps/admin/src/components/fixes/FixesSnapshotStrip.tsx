@@ -63,9 +63,8 @@ export function FixesSnapshotStrip({
           <StatCard
             label={statLabels?.totalAttempts ?? 'Attempts (30d)'}
             value={stats.totalAttempts}
-            accent={stats.totalAttempts > 0 ? 'text-brand' : undefined}
             tooltip={totalAttemptsTooltip(stats, plainOpts)}
-            detail={totalAttemptsDetail(stats)}
+            detail={totalAttemptsDetail()}
             to={fixesLinks.totalAttempts}
           />
         ) : null}
@@ -98,7 +97,6 @@ export function FixesSnapshotStrip({
         <StatCard
           label={statLabels?.prsOpen ?? 'PRs open'}
           value={stats.prsOpen}
-          accent={stats.prsOpen > 0 ? 'text-brand' : undefined}
           tooltip={prsOpenTooltip(stats)}
           detail={prsOpenDetail()}
           to={fixesLinks.prsOpen}
@@ -109,7 +107,7 @@ export function FixesSnapshotStrip({
             value={stats.totalAttempts}
             accent={stats.totalAttempts > 0 ? 'text-fg' : undefined}
             tooltip={totalAttemptsTooltip(stats, plainOpts)}
-            detail={totalAttemptsDetail(stats)}
+            detail={totalAttemptsDetail()}
             to={fixesLinks.totalAttempts}
           />
         ) : (
