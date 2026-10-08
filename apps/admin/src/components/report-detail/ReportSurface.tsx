@@ -106,7 +106,7 @@ interface InlineProofProps {
 export function InlineProof({ children, className = '' }: InlineProofProps) {
   return (
     <span
-      className={`inline-flex items-center rounded bg-surface-overlay px-1.5 py-0.5 text-2xs font-medium text-fg-muted shrink-0 ${className}`}
+      className={`inline-block rounded bg-surface-overlay px-1.5 py-0.5 text-2xs font-medium text-fg-muted shrink-0 ${className}`}
     >
       {children}
     </span>
