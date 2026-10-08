@@ -74,6 +74,40 @@ export async function readDeclaredApiDeps(
   return (nodes ?? []).filter((n) => declared.has(n.label))
 }
 
+/**
+ * Edge functions the linked Supabase project has deployed, from the current
+ * Supabase connector snapshot. A crawl reads HTML and never sees a client's
+ * call to `/functions/v1/<slug>`, so without this every declared edge
+ * function failed the API contract. Empty when Supabase is not connected.
+ */
+async function readDeployedEdgeFunctions(db: SupabaseClient, projectId: string): Promise<Set<string>> {
+  const { data } = await db
+    .from('connector_snapshots')
+    .select('snapshot')
+    .eq('project_id', projectId)
+    .eq('kind', 'supabase')
+    .eq('is_current', true)
+    .eq('ok', true)
+    .order('observed_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  const fns = (data?.snapshot as { facts?: { functions?: Array<{ slug?: string }> | null } } | null)?.facts?.functions
+  return new Set((fns ?? []).map((f) => f.slug ?? '').filter(Boolean))
+}
+
+/**
+ * Whether a declared API dep is served: discovered by the crawl, or a call to
+ * an edge function the linked Supabase project has deployed (any method).
+ *
+ * @internal Exported for inventory-gates-api-deps.test.ts.
+ */
+export function apiDepServed(label: string, discovered: ReadonlySet<string>, edgeFunctions: ReadonlySet<string>): boolean {
+  if (discovered.has(label)) return true
+  const path = label.slice(label.indexOf(':') + 1)
+  const m = /^\/functions\/v1\/([A-Za-z0-9_-]+)(?:\/|\?|$)/.exec(path)
+  return Boolean(m && edgeFunctions.has(m[1]!))
+}
+
 type GateName =
   | 'dead_handler'
   | 'mock_leak'
@@ -304,10 +338,11 @@ async function runApiContractGate(
   }
 
   const discoveredSet = new Set(discovered)
+  const edgeFunctions = await readDeployedEdgeFunctions(db, body.project_id!)
   let inserted = 0
   const missing: string[] = []
   for (const dep of apiDeps ?? []) {
-    if (!discoveredSet.has(dep.label)) {
+    if (!apiDepServed(dep.label, discoveredSet, edgeFunctions)) {
       missing.push(dep.label)
       const { error } = await db.from('gate_findings').insert({
         gate_run_id: runId,

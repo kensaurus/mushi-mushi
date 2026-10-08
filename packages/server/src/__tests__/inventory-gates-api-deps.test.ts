@@ -4,7 +4,7 @@
  * snapshot left in the graph.
  */
 import { describe, expect, it } from 'vitest'
-import { readDeclaredApiDeps } from '../../supabase/functions/inventory-gates/index.ts'
+import { apiDepServed, readDeclaredApiDeps } from '../../supabase/functions/inventory-gates/index.ts'
 
 function fakeDb(nodes: Array<{ id: string; label: string }>, parsed: unknown) {
   return {
@@ -34,5 +34,20 @@ describe('readDeclaredApiDeps', () => {
 
   it('keeps every node when the current inventory cannot be read', async () => {
     expect(await readDeclaredApiDeps(fakeDb(nodes, undefined), 'p1')).toEqual(nodes)
+  })
+})
+
+describe('apiDepServed', () => {
+  const none = new Set<string>()
+  it('counts a call to a deployed edge function as served, for any method', () => {
+    const fns = new Set(['glot-ai-chat'])
+    expect(apiDepServed('POST:/functions/v1/glot-ai-chat', none, fns)).toBe(true)
+    expect(apiDepServed('GET:/functions/v1/glot-ai-chat/history?x=1', none, fns)).toBe(true)
+    expect(apiDepServed('POST:/functions/v1/glot-ai-chat-v2', none, fns)).toBe(false)
+  })
+
+  it('still fails an API nobody serves', () => {
+    expect(apiDepServed('GET:/api/drills', none, new Set(['glot-ai-chat']))).toBe(false)
+    expect(apiDepServed('GET:/api/drills', new Set(['GET:/api/drills']), none)).toBe(true)
   })
 })
