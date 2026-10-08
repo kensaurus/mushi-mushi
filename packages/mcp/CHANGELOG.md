@@ -1,5 +1,14 @@
 # @mushi-mushi/mcp
 
+## 0.24.4
+
+### Patch Changes
+
+- 6f389a3: `add_byok_key` and `mushi keys add --provider` accept `openrouter`: OpenRouter keys are their own BYOK provider instead of an OpenAI key with an openrouter.ai base URL.
+- 9556ab2: Shorter READMEs with a diagram of how the package fits, a copy-paste quick start and a table of what is inside. Fixes three wrong examples: the Node handlers and `attachUnhandledHook` take `{ client }` (Hono's handler also takes `next`), and `useMushi()` has no `open`, `close` or `setUser`.
+- Updated dependencies [9556ab2]
+  - @mushi-mushi/core@1.31.2
+
 ## 0.24.3
 
 ### Patch Changes

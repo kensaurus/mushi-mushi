@@ -1,17 +1,10 @@
 [
   {
-    "majorMinor": "next",
-    "headline": "Unreleased",
-    "pending": true,
-    "versions": [],
-    "highlights": [],
-    "packages": []
-  },
-  {
     "majorMinor": "1.31",
     "headline": null,
     "pending": false,
     "versions": [
+      "1.31.2",
       "1.31.1",
       "1.31.0"
     ],
@@ -52,11 +45,15 @@
     "packages": [
       {
         "name": "@mushi-mushi/core",
-        "version": "1.31.0"
+        "version": "1.31.2"
+      },
+      {
+        "name": "@mushi-mushi/react",
+        "version": "1.31.2"
       },
       {
         "name": "@mushi-mushi/web",
-        "version": "1.31.1"
+        "version": "1.31.2"
       }
     ]
   },
@@ -966,13 +963,14 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "1.3.1",
       "1.3.0"
     ],
     "highlights": [],
     "packages": [
       {
         "name": "@mushi-mushi/node",
-        "version": "1.3.0"
+        "version": "1.3.1"
       },
       {
         "name": "@mushi-mushi/web",
@@ -1143,6 +1141,21 @@
     ]
   },
   {
+    "majorMinor": "0.30",
+    "headline": null,
+    "pending": false,
+    "versions": [
+      "0.30.0"
+    ],
+    "highlights": [],
+    "packages": [
+      {
+        "name": "@mushi-mushi/cli",
+        "version": "0.30.0"
+      }
+    ]
+  },
+  {
     "majorMinor": "0.29",
     "headline": null,
     "pending": false,
@@ -1251,6 +1264,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.24.4",
       "0.24.3",
       "0.24.2",
       "0.24.1",
@@ -1293,7 +1307,7 @@
       },
       {
         "name": "@mushi-mushi/mcp",
-        "version": "0.24.3"
+        "version": "0.24.4"
       },
       {
         "name": "@mushi-mushi/react-native",
@@ -2263,7 +2277,7 @@
       },
       {
         "name": "mushi-mushi",
-        "version": "0.8.3"
+        "version": "0.8.4"
       }
     ]
   },
@@ -2485,7 +2499,7 @@
       },
       {
         "name": "create-mushi-mushi",
-        "version": "0.6.3"
+        "version": "0.6.4"
       },
       {
         "name": "mushi-mushi",
@@ -3106,6 +3120,10 @@
       },
       {
         "name": "@mushi-mushi/svelte",
+        "version": "0.1.0"
+      },
+      {
+        "name": "@mushi-mushi/ux",
         "version": "0.1.0"
       },
       {

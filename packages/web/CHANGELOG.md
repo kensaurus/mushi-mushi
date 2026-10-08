@@ -1,5 +1,14 @@
 # @mushi-mushi/web
 
+## 1.31.2
+
+### Patch Changes
+
+- 9556ab2: Shorter READMEs with a diagram of how the package fits, a copy-paste quick start and a table of what is inside. Fixes three wrong examples: the Node handlers and `attachUnhandledHook` take `{ client }` (Hono's handler also takes `next`), and `useMushi()` has no `open`, `close` or `setUser`.
+- 2b66be6: Pages using the widget no longer fail to build under Turbopack (Next 16's default dev bundler) with "Module not found: Can't resolve 'rrweb'". The optional session-replay import is now marked `webpackIgnore`, which both webpack and Turbopack leave to the runtime, so apps without `rrweb` installed load normally and replay stays off.
+- Updated dependencies [9556ab2]
+  - @mushi-mushi/core@1.31.2
+
 ## 1.31.1
 
 ### Patch Changes

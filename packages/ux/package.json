@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/ux",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "license": "MIT",
   "description": "Local visual UX loop: maps a running app's pages, tabs and dialogs, runs your coding agent on each one against screenshot baselines, and shows before/after diffs, regressions and a pairwise judge.",
   "type": "module",
