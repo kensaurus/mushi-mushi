@@ -349,6 +349,19 @@ export interface CandidateSources {
  * unknown ownership are kept without their index previews, so they appear
  * only if the read from the target repo finds them.
  */
+/**
+ * Tests, specs and docs repeat the strings a report quotes, but the fix
+ * belongs in the source that renders them: the-wanting-mind's AppNudge.tsx
+ * lost its context slot to a unit test, a Playwright spec and a README that
+ * contain "Read on the app". They rank below source with the same evidence.
+ */
+const TEST_OR_DOC_PENALTY = 2.5
+const TEST_OR_DOC = /(^|\/)(__tests__|__mocks__|tests?|e2e|specs?|docs?)\/|\.(test|spec|stories)\.[cm]?[jt]sx?$|\.(md|mdx)$/i
+
+export function isTestOrDocPath(path: string): boolean {
+  return TEST_OR_DOC.test(path)
+}
+
 export function rankContextCandidates(sources: CandidateSources): ContextCandidate[] {
   const attribute = sources.attribute ?? (() => 'target' as const)
   const byPath = new Map<string, ContextCandidate>()
@@ -384,7 +397,8 @@ export function rankContextCandidates(sources: CandidateSources): ContextCandida
     }
   }
   const score = (c: ContextCandidate) =>
-    3 * Math.min(c.literals.length, 3) + (c.inStack ? 2 : 0) + (c.ragSimilarity ?? 0)
+    3 * Math.min(c.literals.length, 3) + (c.inStack ? 2 : 0) + (c.ragSimilarity ?? 0) -
+    (isTestOrDocPath(c.path) ? TEST_OR_DOC_PENALTY : 0)
   return [...byPath.values()]
     .map((c, i) => ({ c, i, s: score(c) }))
     .sort((a, b) => b.s - a.s || a.i - b.i)

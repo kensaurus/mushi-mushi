@@ -14,6 +14,7 @@ import {
   globRoot,
   isBundledPath,
   isLocaleFile,
+  isTestOrDocPath,
   localeKeysForText,
   literalSearchTerms,
   rankContextCandidates,
@@ -325,5 +326,25 @@ describe('i18n hop (the-wanting-mind 08d0ecde)', () => {
       description: 'On desktop the "Read on the app" card and the audio player bar cover the first paragraphs.',
     } as never)
     expect(literals).toContain('Read on the app')
+  })
+})
+
+describe('ranking source above tests and docs with the same evidence', () => {
+  it('puts AppNudge.tsx ahead of a test, a spec and a README that quote the same text', () => {
+    const literalHits = new Map<string, string[]>([
+      ['src/lib/document-seo.test.ts', ['Read on the app']],
+      ['tests/free-use.spec.ts', ['Read on the app']],
+      ['src/locales/@_locales-README.md', ['Read on the app']],
+      ['src/components/AppNudge.tsx', ['readOnApp']],
+    ])
+    const ranked = rankContextCandidates({ literalHits, framePaths: [], rag: [] })
+    expect(ranked[0].path).toBe('src/components/AppNudge.tsx')
+  })
+
+  it('classifies test and doc paths', () => {
+    for (const p of ['a/__tests__/x.ts', 'tests/free-use.spec.ts', 'src/x.test.tsx', 'docs/a.md', 'src/README.md', 'e2e/flow.ts'])
+      expect(isTestOrDocPath(p)).toBe(true)
+    for (const p of ['src/components/AppNudge.tsx', 'src/testing-utils.ts', 'supabase/functions/x/index.ts'])
+      expect(isTestOrDocPath(p)).toBe(false)
   })
 })
