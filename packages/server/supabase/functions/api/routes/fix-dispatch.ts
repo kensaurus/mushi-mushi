@@ -151,7 +151,7 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
       // into a PR on the caller's repo and flip its status.
       const { data: ownReport, error: reportErr } = await db
         .from('reports')
-        .select('id, status, user_category, user_intent, category, stage1_classification, stage2_analysis')
+        .select('id, status, user_category, user_intent, category, category_confirmed_at, stage1_classification, stage2_analysis')
         .eq('id', body.reportId)
         .eq('project_id', body.projectId)
         .maybeSingle();

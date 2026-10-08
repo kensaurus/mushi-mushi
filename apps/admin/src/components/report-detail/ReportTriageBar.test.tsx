@@ -12,7 +12,7 @@
  *          destinations" counts the server's syncDestinations (#84).
  */
 
-import { act, createElement } from 'react'
+import { act, createElement, useState } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DispatchTargetRepo } from '../../lib/useDispatchTargetRepo'
@@ -197,5 +197,47 @@ describe('Sync to destinations (#84)', () => {
     await act(async () => buttonByText('Sync to 1 destination')?.click())
     expect(apiFetch).toHaveBeenCalledWith('/v1/admin/integrations/sync/report-1', { method: 'POST' })
     expect(toast.info).not.toHaveBeenCalled()
+  })
+})
+
+describe('ReportTriageBar feature-request confirmation', () => {
+  /** The page's triage loop: updates merge into the report, the gate re-reads it. */
+  function StatefulHarness({ initial }: { initial: ReportDetail }) {
+    const [report, setReport] = useState(initial)
+    const confirmed = useConfirmedDispatch({
+      report,
+      repoChoice: { repos: [FRONTEND], targetRepoId: FRONTEND.id, setTargetRepoId: () => {}, loading: false } as unknown as DispatchTargetRepo,
+      busy: false,
+      dispatch: () => {},
+    })
+    return createElement(ReportTriageBar, {
+      report,
+      onTriage: async (updates: Record<string, string>) => setReport((r) => ({ ...r, ...updates })),
+      saving: false,
+      savedAt: null,
+      dispatchState: { status: 'idle' },
+      onRequestDispatch: confirmed.request,
+      dispatchBlock: confirmed.block,
+      isDispatchBusy: false,
+      repoChoice: { repos: [FRONTEND], targetRepoId: FRONTEND.id, setTargetRepoId: () => {}, loading: false } as unknown as DispatchTargetRepo,
+    })
+  }
+
+  it('confirming the classifier category unblocks Dispatch fix without a reload', async () => {
+    const feature = {
+      ...REPORT,
+      status: 'classified',
+      category: 'visual',
+      user_category: 'other',
+      user_intent: 'Feature request',
+      stage2_analysis: { category: 'visual' },
+    } as unknown as ReportDetail
+    await act(async () => root.render(createElement(StatefulHarness, { initial: feature })))
+    expect(buttonByText('Dispatch fix')?.disabled).toBe(true)
+    const confirm = buttonByText("It's a bug: confirm Visual")
+    expect(confirm).toBeDefined()
+    await act(async () => confirm!.click())
+    expect(buttonByText('Dispatch fix')?.disabled).toBe(false)
+    expect(buttonByText("It's a bug: confirm Visual")).toBeUndefined()
   })
 })

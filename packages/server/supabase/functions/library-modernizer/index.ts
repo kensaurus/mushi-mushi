@@ -40,7 +40,8 @@ import { withLlmUsage } from '../_shared/llm-usage.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import {
   bindFindingsToRegistry,
-  npmLatestStable,
+  npmLatestStableInfo,
+  splitPeerBlocked,
   upgradeCandidates,
 } from '../_shared/modernizer-versions.ts'
 
@@ -243,12 +244,26 @@ async function processRepo(
   if (allDeps.length === 0) return { scanned: 0, created: 0, skipped: 'empty_manifest' }
 
   const latestByName = new Map<string, string | null>()
+  const peersByName = new Map<string, Record<string, string>>()
   for (let i = 0; i < allDeps.length; i += 8) {
     const batch = allDeps.slice(i, i + 8)
-    const latest = await Promise.all(batch.map((d) => npmLatestStable(d.name)))
-    batch.forEach((d, j) => latestByName.set(d.name, latest[j]))
+    const latest = await Promise.all(batch.map((d) => npmLatestStableInfo(d.name)))
+    batch.forEach((d, j) => {
+      latestByName.set(d.name, latest[j]?.version ?? null)
+      if (latest[j]) peersByName.set(d.name, latest[j]!.peers)
+    })
   }
-  const candidates = upgradeCandidates(allDeps, latestByName).slice(0, 10)
+  // An upgrade another installed package's latest release still forbids is
+  // not actionable (it proposed @sentry/react 11 next to @sentry/capacitor,
+  // which pins @sentry/react 10.69.0).
+  const { ready, blocked } = splitPeerBlocked(upgradeCandidates(allDeps, latestByName), peersByName)
+  if (blocked.length > 0) {
+    log.info('upgrades held by a peer pin', {
+      projectId: row.project_id,
+      blocked: blocked.map((b) => `${b.name}@${b.latest} (${b.blockedBy} needs ${b.requires})`),
+    })
+  }
+  const candidates = ready.slice(0, 10)
   if (candidates.length === 0) return { scanned: allDeps.length, created: 0, skipped: null }
   const deps = candidates.map((c) => ({ name: c.name, version: c.installed }))
 

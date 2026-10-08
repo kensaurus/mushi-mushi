@@ -56,6 +56,8 @@ export interface UpdateCenterView {
   upgradeLabel: string | null
   /** A merged PR whose target is still behind the latest release. */
   newerThanPr: boolean
+  /** The app reports a version older than the PR moved it to (not shipped yet). */
+  appBehindPr: boolean
   ci: 'passing' | 'failing' | 'running' | 'not_checked'
 }
 
@@ -103,9 +105,10 @@ export function deriveUpdateCenterView(
     state.plan?.find((b) => b.package === pkg)?.to ?? state.plan?.[0]?.to ?? null
   const prTargetVersion = normalizeVersion(planTo)
   const newerThanPr = Boolean(prTargetVersion && latest && cmpSemver(latest, prTargetVersion) > 0)
+  const appBehindPr = Boolean(prTargetVersion && installed && cmpSemver(installed, prTargetVersion) < 0)
   const upgradeTo = latest ? `Upgrade to ${latest}` : 'Upgrade SDK'
 
-  const base = { packages, prTargetVersion, newerThanPr, ci: ciFrom(state) }
+  const base = { packages, prTargetVersion, newerThanPr, appBehindPr, ci: ciFrom(state) }
 
   if (state.status === 'queueing' || state.status === 'queued' || state.status === 'running') {
     return { ...base, mode: 'working', upgradeLabel: null }

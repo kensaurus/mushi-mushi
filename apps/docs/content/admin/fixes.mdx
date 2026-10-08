@@ -201,7 +201,7 @@ sequenceDiagram
 
   You->>Console: Confirm squash merge
   Console->>API: POST /v1/admin/fixes/:id/merge
-  API->>GitHub: markPullRequestAsReady (if draft)
+  API->>GitHub: markPullRequestReadyForReview (if draft)
   API->>GitHub: PUT /pulls/:n/merge
   API->>DB: merged_at, report → fixed
   API->>DB: reporter notification + fix.applied webhooks
@@ -209,7 +209,7 @@ sequenceDiagram
 ```
 
 **Draft PRs:** fix-worker opens PRs as drafts. Before merge, the API calls GitHub's
-GraphQL `markPullRequestAsReady` (same as `gh pr ready`). New fix-worker runs also
+GraphQL `markPullRequestReadyForReview` (same as `gh pr ready`). New fix-worker runs also
 auto-ready immediately after opening the PR.
 
 **Merge methods:** squash (default), merge commit, or rebase — chosen in the confirm

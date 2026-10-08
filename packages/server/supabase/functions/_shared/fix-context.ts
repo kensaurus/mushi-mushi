@@ -349,6 +349,19 @@ export interface CandidateSources {
  * unknown ownership are kept without their index previews, so they appear
  * only if the read from the target repo finds them.
  */
+/**
+ * Tests, specs and docs repeat the strings a report quotes, but the fix
+ * belongs in the source that renders them: the-wanting-mind's AppNudge.tsx
+ * lost its context slot to a unit test, a Playwright spec and a README that
+ * contain "Read on the app". They rank below source with the same evidence.
+ */
+const TEST_OR_DOC_PENALTY = 2.5
+const TEST_OR_DOC = /(^|\/)(__tests__|__mocks__|tests?|e2e|specs?|docs?)\/|\.(test|spec|stories)\.[cm]?[jt]sx?$|\.(md|mdx)$/i
+
+export function isTestOrDocPath(path: string): boolean {
+  return TEST_OR_DOC.test(path)
+}
+
 export function rankContextCandidates(sources: CandidateSources): ContextCandidate[] {
   const attribute = sources.attribute ?? (() => 'target' as const)
   const byPath = new Map<string, ContextCandidate>()
@@ -384,7 +397,8 @@ export function rankContextCandidates(sources: CandidateSources): ContextCandida
     }
   }
   const score = (c: ContextCandidate) =>
-    3 * Math.min(c.literals.length, 3) + (c.inStack ? 2 : 0) + (c.ragSimilarity ?? 0)
+    3 * Math.min(c.literals.length, 3) + (c.inStack ? 2 : 0) + (c.ragSimilarity ?? 0) -
+    (isTestOrDocPath(c.path) ? TEST_OR_DOC_PENALTY : 0)
   return [...byPath.values()]
     .map((c, i) => ({ c, i, s: score(c) }))
     .sort((a, b) => b.s - a.s || a.i - b.i)
@@ -608,4 +622,54 @@ export async function buildFullFileContext(
     shownCount: outcomes.filter((o) => o.shown !== 'omitted').length,
     states,
   }
+}
+
+// ---------------------------------------------------------------------------
+// i18n hop. A report quotes on-screen text ("Read on the app"); in a
+// translated app that text lives only in a locale file, and the component
+// says t("readOnApp"). Searching the text finds the locale file, never the
+// code that renders it (the-wanting-mind 08d0ecde: the fix agent got the
+// locale strings but not AppNudge.tsx, twice). These helpers find the key so
+// the worker can search for its use.
+// ---------------------------------------------------------------------------
+
+const LOCALE_DIR = /(^|\/)(locales?|i18n|lang|langs|translations?|messages)\//i
+
+/** A JSON translation file: under a locales/i18n/lang/messages folder. */
+export function isLocaleFile(path: string): boolean {
+  return path.toLowerCase().endsWith('.json') && LOCALE_DIR.test(path)
+}
+
+/**
+ * Keys in a translation file whose string value contains `text`
+ * (case-insensitive): each as its dotted path and, when nested, its leaf
+ * name too, since code calls either `t("a.b")` or `t("b", { ns })`.
+ */
+export function localeKeysForText(json: string, text: string, max = 3): string[] {
+  let data: unknown
+  try {
+    data = JSON.parse(json)
+  } catch {
+    return []
+  }
+  const needle = text.trim().toLowerCase()
+  if (needle.length < 4) return []
+  const out: string[] = []
+  const walk = (node: unknown, path: string[]) => {
+    if (out.length >= max * 2) return
+    if (typeof node === 'string') {
+      if (node.toLowerCase().includes(needle) && path.length > 0) {
+        const dotted = path.join('.')
+        if (!out.includes(dotted)) out.push(dotted)
+        const leaf = path[path.length - 1]
+        if (path.length > 1 && /^[A-Za-z_][\w-]{2,}$/.test(leaf) && !out.includes(leaf)) out.push(leaf)
+      }
+      return
+    }
+    if (node && typeof node === 'object' && !Array.isArray(node)) {
+      for (const [k, v] of Object.entries(node as Record<string, unknown>)) walk(v, [...path, k])
+    }
+  }
+  walk(data, [])
+  return out.slice(0, max)
 }

@@ -195,6 +195,8 @@ export interface ReportDetail {
   /** Column copy of the Stage-2 reproduction steps. */
   reproduction_steps?: unknown
   category: string
+  /** When a console user set the category in triage; unblocks a feature request for dispatch. */
+  category_confirmed_at?: string | null
   severity: string | null
   summary: string | null
   /** Friendly, non-engineer headline from Stage 2 (falls back to summary). */

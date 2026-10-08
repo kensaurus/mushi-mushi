@@ -4,6 +4,8 @@ import {
   bindFindingsToRegistry,
   compareSemver,
   npmLatestStable,
+  npmLatestStableInfo,
+  splitPeerBlocked,
   parseSemver,
   upgradeCandidates,
   upgradeTarget,
@@ -100,4 +102,33 @@ Deno.test('npm latest stable: a scoped name is one registry path segment, and an
   assertEquals(urls, ['https://registry.npmjs.org/@sentry%2freact'])
   assertEquals(await npmLatestStable('@a/b/c', recording), null)
   assertEquals(urls.length, 1)
+})
+
+Deno.test('splitPeerBlocked holds an upgrade another package still pins', () => {
+  const candidates = [
+    { name: '@sentry/react', installed: '10.69.0', latest: '11.4.0' },
+    { name: 'motion', installed: '^12.43.0', latest: '14.0.0' },
+  ]
+  const peers = new Map<string, Record<string, string>>([
+    ['@sentry/capacitor', { '@sentry/react': '10.69.0', '@capacitor/core': '>=3.0.0' }],
+    ['motion', { react: '^18.0.0 || ^19.0.0' }],
+  ])
+  const { ready, blocked } = splitPeerBlocked(candidates, peers)
+  assertEquals(ready.map((c) => c.name), ['motion'])
+  assertEquals(blocked.map((b) => [b.name, b.blockedBy, b.requires]), [['@sentry/react', '@sentry/capacitor', '10.69.0']])
+})
+
+Deno.test('splitPeerBlocked keeps an upgrade any || part admits, and ignores unparseable ranges', () => {
+  const candidates = [{ name: 'react', installed: '~18.3.0', latest: '19.2.8' }]
+  assertEquals(splitPeerBlocked(candidates, new Map([['motion', { react: '^18.0.0 || ^19.0.0' }]])).ready.length, 1)
+  assertEquals(splitPeerBlocked(candidates, new Map([['x', { react: '18.x' }]])).ready.length, 1)
+})
+
+Deno.test('npmLatestStableInfo returns the latest release and its peers', async () => {
+  const fake = (async () =>
+    new Response(JSON.stringify({
+      'dist-tags': { latest: '4.4.0' },
+      versions: { '4.4.0': { peerDependencies: { '@sentry/react': '10.69.0' } } },
+    }))) as unknown as typeof fetch
+  assertEquals(await npmLatestStableInfo('@sentry/capacitor', fake), { version: '4.4.0', peers: { '@sentry/react': '10.69.0' } })
 })

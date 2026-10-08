@@ -17,6 +17,12 @@ describe('featureRequestDispatchBlock (console mirror of the server gate)', () =
     ).toBeNull()
     expect(featureRequestDispatchBlock({ user_category: 'bug', category: 'bug' })).toBeNull()
   })
+
+  it("enables it once a person confirms a category, even the classifier's own", () => {
+    expect(
+      featureRequestDispatchBlock({ ...widgetFeature, category: 'visual', stage2_analysis: { category: 'visual' }, category_confirmed_at: '2026-10-08T12:00:00Z' }),
+    ).toBeNull()
+  })
 })
 
 describe('dispatchConfirmBody', () => {

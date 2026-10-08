@@ -78,6 +78,16 @@ describe('deriveUpdateCenterView', () => {
     expect(caughtUp.upgradeLabel).toBeNull()
   })
 
+  it('only says "ship a new build" when the app is behind the merged PR (the-wanting-mind)', () => {
+    const merged = { status: 'completed' as const, prUrl: 'https://github.com/kensaurus/x/pull/157', plan: PLAN_142, prState: 'merged' }
+    // PR moved it to 1.31.0; the app already runs 1.31.1 and 1.31.2 is out.
+    const ahead = deriveUpdateCenterView({ ...GLOT, sdk_version: '1.31.1', sdk_latest_version: '1.31.2' }, merged)
+    expect(ahead.appBehindPr).toBe(false)
+    expect(ahead.upgradeLabel).toBe('Upgrade to 1.31.2')
+    const behind = deriveUpdateCenterView({ ...GLOT, sdk_version: '1.30.0', sdk_latest_version: '1.31.0' }, merged)
+    expect(behind.appBehindPr).toBe(true)
+  })
+
   it('shows the lockfile wait as its own state with no button', () => {
     const v = deriveUpdateCenterView(GLOT, { status: 'awaiting_lockfile', jobId: 'j' })
     expect(v.mode).toBe('awaiting_lockfile')
