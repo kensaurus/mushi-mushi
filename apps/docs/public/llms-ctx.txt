@@ -174,7 +174,7 @@ Add to `.cursor/mcp.json` in your repo root:
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.24.3"],
+      "args": ["-y", "@mushi-mushi/mcp@0.24.4"],
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
@@ -200,7 +200,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.24.3"],
+      "args": ["-y", "@mushi-mushi/mcp@0.24.4"],
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
@@ -689,13 +689,13 @@ Pro:    $49 + max(0, diagnoses − 2,000) × $0.025 (capped at $200/mo total)
 | 100 | $15.00 | $49.00 |
 | 500 | $15.00 | $49.00 |
 | 1,000 | $30.00 | $49.00 |
-| 2,000 | $45.00 | $49.00 |
+| 2,000 | $50.00 *(cap)* | $49.00 |
 | 3,000 | $50.00 *(cap)* | $74.00 |
 | 5,000 | $50.00 *(cap)* | $124.00 |
 | 8,000 | $50.00 *(cap)* | $199.00 |
 | 10,000 | $50.00 *(cap)* | $200.00 *(cap)* |
 
-A typical vibe-coder project on Indie runs **200–400 diagnoses / month** → **$15–$15** (within included quota).
+A typical vibe-coder project on Indie runs **200–400 diagnoses / month** → **$15 / mo** (inside the 500 included diagnoses).
 
 ## Why diagnoses, not events
 
