@@ -1,5 +1,11 @@
 # @mushi-mushi/cli
 
+## 0.30.1
+
+### Patch Changes
+
+- 3417560: `mushi skills sync` says a long sync is still running in the background instead of reporting "0 synced".
+
 ## 0.30.0
 
 ### Minor Changes
