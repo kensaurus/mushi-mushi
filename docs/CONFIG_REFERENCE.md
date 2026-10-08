@@ -3,13 +3,13 @@
 > Auto-generated from [`apps/admin/src/lib/configDocs.ts`](../apps/admin/src/lib/configDocs.ts).
 > Do not edit by hand — run `pnpm gen:config-docs` instead.
 
-_111 configuration knobs across 19 sections · last regenerated 2026-10-04._
+_113 configuration knobs across 19 sections · last regenerated 2026-10-08._
 
 Every knob in the admin console has an in-app `i` icon next to it that opens a longer-form explanation. The same content is mirrored here so you can search, link, and review configuration choices outside the app.
 
 ## Contents
 
-- [Settings → General](#settings-general) (10)
+- [Settings → General](#settings-general) (12)
 - [Settings → AI keys (BYOK)](#settings-ai-keys-byok-) (4)
 - [Settings → Web tools (Firecrawl)](#settings-web-tools-firecrawl-) (3)
 - [Settings → SDK & connection (debug logging)](#settings-sdk-connection-debug-logging-) (1)
@@ -121,7 +121,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Summary** — Which LLM writes the plain-English read on each report after noise is filtered out.
 
-**How it works** — Stage 2 is the deep classifier — it labels severity, category, intent, dedup hints, and reproduction steps. The choice trades cost vs depth: Sonnet 5.5 is the recommended default; Opus is slow but catches subtle cases; Haiku is cheap but rougher. The selected model is read on every report, so changes apply immediately to new traffic.
+**How it works** — Stage 2 is the deep classifier — it labels severity, category, intent, dedup hints, and reproduction steps. The choice trades cost vs depth: Sonnet 5.5 is the recommended default; Opus is slow but catches subtle cases; Haiku 5.5 costs about a twentieth of Sonnet 5.5 but is rougher. The selected model is read on every report, so changes apply immediately to new traffic.
 
 **Default** — `claude-sonnet-5-5`
 
@@ -131,6 +131,42 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Learn more** — [Architecture overview](https://kensaur.us/mushi-mushi/docs/concepts/architecture)
 
+### Quick check model
+
+<a id="settings-general-stage1-model"></a>
+
+`settings.general.stage1_model`
+
+**Summary** — Which Claude model runs the fast first pass on every report.
+
+**How it works** — Stage 1 reads each new report, filters spam and test noise, and sorts the easy bugs. Only reports it is unsure about go on to the triage model. Haiku 4.5 is the default; Haiku 5.5 costs a tenth as much per token. Only Claude models are accepted, because Stage 1 calls Claude first and OpenAI only as a fallback.
+
+**Default** — `claude-haiku-4-5-20251001`
+
+**Where it lives** — table `project_settings.stage1_model` · endpoint `PATCH /v1/admin/settings` · read by `fast-filter edge function`
+
+**When to change** — Pick Haiku 5.5 to cut the cost of every report. Check the Judge page after a week to see whether triage quality held.
+
+**Learn more** — [Architecture overview](https://kensaur.us/mushi-mushi/docs/concepts/architecture)
+
+### Judge model
+
+<a id="settings-general-judge-model"></a>
+
+`settings.general.judge_model`
+
+**Summary** — Which Claude model grades a sample of triage results on the Judge page.
+
+**How it works** — The judge re-reads classified reports and scores the triage for accuracy, severity, component and reproduction steps. Sonnet 5.5 is the default. Haiku 5.5 is much cheaper, but a judge on the same model as the triage tends to agree with it, so scores read more generously.
+
+**Default** — `claude-sonnet-5-5`
+
+**Where it lives** — table `project_settings.judge_model` · endpoint `PATCH /v1/admin/settings` · read by `judge-batch edge function`
+
+**When to change** — Pick Haiku 5.5 when cost matters more than an independent second opinion.
+
+**Learn more** — [About the AI judge](https://kensaur.us/mushi-mushi/docs/concepts/architecture)
+
 ### Noise filter confidence
 
 <a id="settings-general-stage1-confidence-threshold"></a>
@@ -139,7 +175,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Summary** — How confident Mushi must be that a report is spam or test noise before dropping it.
 
-**How it works** — Every inbound report runs through Stage 1 (Haiku 4.5). If the model says "this is spam/test/noise" with confidence ≥ this threshold, the report is dropped before Stage 2 spends tokens on it. Higher = more strict (more reports survive to Stage 2, fewer false drops); lower = more aggressive culling (cheaper, slightly more false drops).
+**How it works** — Every inbound report runs through Stage 1 (the quick check model, Haiku 4.5 by default). If the model says "this is spam/test/noise" with confidence ≥ this threshold, the report is dropped before Stage 2 spends tokens on it. Higher = more strict (more reports survive to Stage 2, fewer false drops); lower = more aggressive culling (cheaper, slightly more false drops).
 
 **Default** — `0.85` · range `0.50 – 0.99`
 

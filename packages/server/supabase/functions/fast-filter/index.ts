@@ -22,7 +22,9 @@ import { HEURISTIC_STAGE1_MODEL, heuristicStage1Classification } from '../_share
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { parseBody, FastFilterBodySchema } from '../_shared/validate.ts'
 import { summarizeReplayEvents } from '../_shared/replay-evidence.ts'
-import { STAGE1_MODEL, STAGE1_FALLBACK } from '../_shared/models.ts'
+import { STAGE1_FALLBACK } from '../_shared/models.ts'
+import { resolveStage1Model } from '../_shared/stage1-model.ts'
+import { claudeGenerateObject } from '../_shared/claude-messages.ts'
 import { safeErrorResponse } from '../_shared/safe-error.ts'
 import { isEarlyRealReport, type OldestReportRow } from '../_shared/first-report.ts'
 import { clipAtWord } from '../_shared/text-clip.ts'
@@ -172,7 +174,7 @@ Deno.serve(withSentry('fast-filter', async (req) => {
 
     const { data: settings } = await db
       .from('project_settings')
-      .select('stage2_model, stage1_confidence_threshold, slack_webhook_url, slack_channel_id, discord_webhook_url, teams_webhook_url, reporter_notifications_enabled, notification_prefs')
+      .select('stage1_model, stage2_model, stage1_confidence_threshold, slack_webhook_url, slack_channel_id, discord_webhook_url, teams_webhook_url, reporter_notifications_enabled, notification_prefs')
       .eq('project_id', projectId)
       .single()
 
@@ -220,7 +222,9 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
     const startTime = Date.now()
     let classification: Stage1Result
     const llmSpan = trace.span('stage1.classify')
-    const PRIMARY_MODEL = STAGE1_MODEL
+    // Per-project override (project_settings.stage1_model); unset keeps Haiku 4.5.
+    const stage1Choice = resolveStage1Model(settings?.stage1_model)
+    const PRIMARY_MODEL = stage1Choice.model
     const FALLBACK_MODEL = STAGE1_FALLBACK
     let usedModel = PRIMARY_MODEL
     let fallbackUsed = false
@@ -240,20 +244,36 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
         projectId,
         async (key) => {
           keySource = key.source
+          const messages = [
+            {
+              role: 'system' as const,
+              content: activeSystemPrompt,
+              experimental_providerMetadata: {
+                anthropic: { cacheControl: { type: 'ephemeral' as const } },
+              },
+            },
+            { role: 'user' as const, content: userPrompt },
+          ]
+          if (stage1Choice.messagesApi) {
+            // 5.x models reject the AI SDK v4 call shape. Stage 1 is a quick
+            // sort, so low effort keeps adaptive thinking (billed as output)
+            // small.
+            const r = await claudeGenerateObject({
+              apiKey: key.key,
+              model: PRIMARY_MODEL,
+              schema: stage1Schema,
+              effort: 'low',
+              messages,
+            })
+            // Parsed by stage1Schema already; the helper types it by the
+            // schema's input side (emotion has a .catch).
+            return { ...r, object: r.object as Stage1Result }
+          }
           const anthropic = createAnthropic({ apiKey: key.key })
           return generateObject({
             model: anthropic(PRIMARY_MODEL),
             schema: stage1Schema,
-            messages: [
-              {
-                role: 'system',
-                content: activeSystemPrompt,
-                experimental_providerMetadata: {
-                  anthropic: { cacheControl: { type: 'ephemeral' } },
-                },
-              },
-              { role: 'user', content: userPrompt },
-            ],
+            messages,
           })
         },
         async (key) => {

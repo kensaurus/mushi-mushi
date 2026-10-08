@@ -68,6 +68,10 @@ interface ProjectSettings {
   slack_webhook_url_set?: boolean
   sentry_consume_user_feedback?: boolean
   stage2_model?: string
+  /** Quick check (Stage 1) model. Claude ids only; the server rejects others. */
+  stage1_model?: string
+  /** Model that grades the triage on /judge. Claude ids only. */
+  judge_model?: string
   stage1_confidence_threshold?: number
   dedup_threshold?: number
   embedding_model?: string
@@ -86,6 +90,9 @@ interface ProjectSettings {
 /** Where a scoped Supabase access token is created. */
 const SUPABASE_TOKENS_URL = 'https://supabase.com/dashboard/account/tokens'
 const DEFAULT_BRANCH_TEMPLATE = 'bugfix/MUSHI-{reportId}-{category}'
+/** Column defaults of project_settings.stage1_model / judge_model. */
+const STAGE1_DEFAULT = 'claude-haiku-4-5-20251001'
+const JUDGE_DEFAULT = 'claude-sonnet-5-5'
 
 export function GeneralPanel() {
   const toast = useToast()
@@ -125,6 +132,8 @@ export function GeneralPanel() {
         { current: settings.sentry_webhook_secret ?? '', saved: saved.sentry_webhook_secret ?? '' },
         { current: settings.sentry_consume_user_feedback ?? true, saved: saved.sentry_consume_user_feedback ?? true },
         { current: settings.stage2_model ?? 'claude-sonnet-5-5', saved: saved.stage2_model ?? 'claude-sonnet-5-5' },
+        { current: settings.stage1_model ?? STAGE1_DEFAULT, saved: saved.stage1_model ?? STAGE1_DEFAULT },
+        { current: settings.judge_model ?? JUDGE_DEFAULT, saved: saved.judge_model ?? JUDGE_DEFAULT },
         { current: settings.stage1_confidence_threshold ?? 0.85, saved: saved.stage1_confidence_threshold ?? 0.85 },
         { current: settings.dedup_threshold ?? 0.82, saved: saved.dedup_threshold ?? 0.82 },
         { current: settings.crawl_max_pages_per_day ?? 150, saved: saved.crawl_max_pages_per_day ?? 150 },
@@ -370,6 +379,7 @@ export function GeneralPanel() {
           >
             <optgroup label="Anthropic (current generation)">
               <option value="claude-sonnet-5-5">Claude Sonnet 5.5 — recommended default</option>
+              <option value="claude-haiku-5-5">Claude Haiku 5.5 — lowest cost</option>
               <option value="claude-opus-4-7">Claude Opus 4.7 — frontier reasoning (2026-Q2)</option>
               <option value="claude-sonnet-4-6">Claude Sonnet 4.6 — previous default</option>
               <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 — fast / cheap</option>
@@ -387,6 +397,38 @@ export function GeneralPanel() {
             current={settings.stage2_model ?? 'claude-sonnet-5-5'}
             saved={saved.stage2_model ?? 'claude-sonnet-5-5'}
           />
+        </SettingsRow>
+        <SettingsRow
+          icon={<IconCost size={16} />}
+          title="Quick check model"
+          purpose="The fast first pass that sorts easy bugs and filters noise before the triage model."
+        >
+          <SelectField
+            label="Model"
+            helpId="settings.general.stage1_model"
+            value={settings.stage1_model ?? STAGE1_DEFAULT}
+            onChange={(e) => update({ stage1_model: e.target.value })}
+          >
+            <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 — default</option>
+            <option value="claude-haiku-5-5">Claude Haiku 5.5 — lowest cost</option>
+          </SelectField>
+          <SettingsChangeHint current={settings.stage1_model ?? STAGE1_DEFAULT} saved={saved.stage1_model ?? STAGE1_DEFAULT} />
+        </SettingsRow>
+        <SettingsRow
+          icon={<IconJudge size={16} />}
+          title="Judge model"
+          purpose="The model that double-checks a sample of triage results on the Judge page."
+        >
+          <SelectField
+            label="Model"
+            helpId="settings.general.judge_model"
+            value={settings.judge_model ?? JUDGE_DEFAULT}
+            onChange={(e) => update({ judge_model: e.target.value })}
+          >
+            <option value="claude-sonnet-5-5">Claude Sonnet 5.5 — default</option>
+            <option value="claude-haiku-5-5">Claude Haiku 5.5 — lowest cost</option>
+          </SelectField>
+          <SettingsChangeHint current={settings.judge_model ?? JUDGE_DEFAULT} saved={saved.judge_model ?? JUDGE_DEFAULT} />
         </SettingsRow>
         <SettingsRow
           icon={<IconGauge size={16} />}

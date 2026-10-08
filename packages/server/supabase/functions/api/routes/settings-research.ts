@@ -51,6 +51,7 @@ import { isOperatorProject } from '../../_shared/operator-gate.ts';
 import { fetchProviderCredits, isOpenRouterBaseUrl } from '../../_shared/provider-credits.ts';
 import { providerFromModel } from '../../_shared/hosted-llm-billing.ts';
 import { loadIntegrationSignals } from '../../_shared/setup-signals.ts';
+import { parseClaudeModelSetting } from '../../_shared/stage1-model.ts';
 import {
   BYOK_PROVIDERS as POOLED_BYOK_PROVIDERS,
   byokKeyIdSchema,
@@ -468,6 +469,9 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       'sentry_webhook_secret',
       'sentry_consume_user_feedback',
       'stage2_model',
+      // The quick-check and judge models call Claude first: Claude ids only.
+      'stage1_model',
+      'judge_model',
       'stage1_confidence_threshold',
       'dedup_threshold',
       'embedding_model',
@@ -610,6 +614,14 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         const forbidden = requireProjectAdmin(c, project);
         if (forbidden) return forbidden;
         const verdict = parseSupabaseProjectRefSetting(value);
+        if (!verdict.ok) {
+          return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: verdict.message } }, 400);
+        }
+        updates[key] = verdict.value;
+        continue;
+      }
+      if (key === 'stage1_model' || key === 'judge_model') {
+        const verdict = parseClaudeModelSetting(value);
         if (!verdict.ok) {
           return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: verdict.message } }, 400);
         }
