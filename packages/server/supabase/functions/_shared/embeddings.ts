@@ -298,6 +298,31 @@ function recordEmbeddingCall(
   }
 }
 
+/** Token budget per embedding input; text-embedding-3-* rejects inputs over 8,192. */
+const EMBED_TOKEN_BUDGET = 7_800
+
+/**
+ * Cut text to what the embedding model accepts. A character cap was not
+ * enough: 8,000 characters of Thai, Japanese, emoji or base64 can exceed
+ * 8,192 tokens, and one such input failed its whole batch of 96 every sweep
+ * (the-wanting-mind's index stalled at 581 of 743 files). Each character is
+ * costed conservatively — ASCII 0.8 tokens, other BMP characters 2, astral
+ * characters (emoji) 3 — so the result stays under the limit without a
+ * tokenizer.
+ */
+export function capForEmbedding(text: string, budget = EMBED_TOKEN_BUDGET): string {
+  let cost = 0
+  let i = 0
+  while (i < text.length && i < 8000) {
+    const code = text.codePointAt(i) ?? 0
+    const width = code > 0xffff ? 2 : 1
+    cost += code < 0x80 ? 0.8 : code > 0xffff ? 3 : 2
+    if (cost > budget) break
+    i += width
+  }
+  return text.slice(0, i)
+}
+
 /**
  * Single embedding HTTP call. Returned separately from the retry wrapper so
  * the loop logic stays compact and the call shape is identical to
@@ -315,9 +340,7 @@ async function fetchEmbedding(
   embeddingModel: string,
   input: string | string[],
 ): Promise<Response> {
-  const truncatedInput = Array.isArray(input)
-    ? input.map((t) => t.slice(0, 8000))
-    : input.slice(0, 8000)
+  const truncatedInput = Array.isArray(input) ? input.map((t) => capForEmbedding(t)) : capForEmbedding(input)
   return await fetch(`${resolved.baseUrl}/v1/embeddings`, {
     method: 'POST',
     headers: {
