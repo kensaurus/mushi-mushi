@@ -356,4 +356,35 @@ describe('reporter inbox requests', () => {
     await fresh.createApiClient(opts).replyToReporterReport('r1', 'tok', 'still broken');
     expect(fresh.flushLastOutboundOnUnload()).toBe(false);
   });
+
+  it('does not replay a report that was already delivered', async () => {
+    vi.resetModules();
+    const fresh = await import('./api-client');
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ ok: true, data: { reportId: 'rpt_ok' } }), { status: 200 }),
+    );
+    const report = { id: 'r', projectId: 'proj_test', category: 'bug', description: 'Save button does nothing at all' } as never;
+    expect(await fresh.createApiClient(opts).submitReport(report)).toMatchObject({ ok: true });
+    expect(fresh.flushLastOutboundOnUnload()).toBe(false);
+  });
+
+  it('replays an in-flight report once on pagehide', async () => {
+    vi.resetModules();
+    const fresh = await import('./api-client');
+    let respond: (r: Response) => void = () => {};
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+      .mockImplementationOnce(() => new Promise<Response>((resolve) => { respond = resolve; }))
+      .mockResolvedValue(new Response(null, { status: 200 }));
+    const report = { id: 'r', projectId: 'proj_test', category: 'bug', description: 'Save button does nothing at all' } as never;
+    const pending = fresh.createApiClient(opts).submitReport(report);
+    await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+
+    expect(fresh.flushLastOutboundOnUnload()).toBe(true);
+    expect(fresh.flushLastOutboundOnUnload()).toBe(false);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect((fetchSpy.mock.calls[1][1] as RequestInit).keepalive).toBe(true);
+
+    respond(new Response(JSON.stringify({ ok: true, data: { reportId: 'rpt_ok' } }), { status: 200 }));
+    await pending;
+  });
 });

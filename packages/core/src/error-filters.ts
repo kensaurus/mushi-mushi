@@ -29,6 +29,9 @@ export function matchesErrorFilter(
       continue;
     }
     try {
+      // A /g or /y regex carries lastIndex between test() calls, so the same
+      // filter would miss every other error. Start each test from 0.
+      filter.lastIndex = 0;
       if (filter.test(value)) return true;
     } catch {
       // malformed caller regex — skip

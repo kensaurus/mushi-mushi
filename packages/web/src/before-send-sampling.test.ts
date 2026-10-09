@@ -265,4 +265,30 @@ describe('ignoreErrors config', () => {
     const id = await sdk.captureException(new Error('ResizeObserver loop limit exceeded'))
     expect(id).toBeNull()
   })
+
+  function browserError(url: string): Error {
+    const err = new Error('Checkout failed')
+    err.stack = `Error: Checkout failed
+    at pay (${url}:10:5)`
+    return err
+  }
+
+  it('captureException honours allowUrls against the throw site', async () => {
+    const beforeSendFeedback = vi.fn().mockReturnValue(null)
+    const sdk = Mushi.init({ ...BASE_CONFIG, allowUrls: [/app\.example\.com/], beforeSendFeedback })
+
+    expect(await sdk.captureException(browserError('https://cdn.vendor.net/lib.js'))).toBeNull()
+    expect(beforeSendFeedback).not.toHaveBeenCalled()
+
+    await sdk.captureException(browserError('https://app.example.com/assets/app.js'))
+    expect(beforeSendFeedback).toHaveBeenCalledOnce()
+  })
+
+  it('captureException honours denyUrls against the throw site', async () => {
+    const beforeSendFeedback = vi.fn().mockReturnValue(null)
+    const sdk = Mushi.init({ ...BASE_CONFIG, denyUrls: [/chrome-extension:/], beforeSendFeedback })
+
+    expect(await sdk.captureException(browserError('chrome-extension://abc/content.js'))).toBeNull()
+    expect(beforeSendFeedback).not.toHaveBeenCalled()
+  })
 })
