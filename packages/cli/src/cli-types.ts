@@ -6,6 +6,8 @@
 export interface WhoamiData {
   project_id: string
   project_name: string
+  /** The key's scopes; absent on servers older than 2026-10-09. */
+  scopes?: string[]
   stats: { total_reports: number; open_reports: number }
 }
 
