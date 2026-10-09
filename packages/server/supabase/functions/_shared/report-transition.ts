@@ -19,6 +19,7 @@ import { notifyReportStatusTransition } from './report-status-notify.ts';
 import { resolveExternalIssue } from './integrations.ts';
 import { resolveLinkedSentryIssues } from './sentry-resolve-back.ts';
 import { dispatchPluginEventDetached } from './plugins.ts';
+import { closeReportPipelines, closesPipelines } from './report-pipelines-close.ts';
 
 const transitionLog = log.child('report-transition');
 
@@ -90,6 +91,15 @@ export function runStatusTransitionSideEffects(
         if (r.failed.length) transitionLog.error('Sentry resolve on fixed failed', { reportId: input.reportId, failed: r.failed })
       })
       .catch((e: unknown) => transitionLog.error('Sentry resolve on fixed threw', { reportId: input.reportId, err: String(e) }));
+  }
+  if (closesPipelines(input.newStatus)) {
+    closeReportPipelines(db, {
+      reportId: input.reportId,
+      projectId: input.projectId,
+      reportStatus: input.newStatus,
+    }).catch((e: unknown) =>
+      transitionLog.warn('Closing the report pipelines failed', { reportId: input.reportId, err: String(e) }),
+    );
   }
   if (input.reporterTokenHash && input.notifyReporter !== false) {
     notifyReportStatusTransition(db, {

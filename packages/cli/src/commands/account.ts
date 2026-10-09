@@ -106,6 +106,13 @@ Useful after 'mushi login' to confirm credentials are correct.`)
       console.log(`  Project:  ${d.project_name} (${d.project_id})`)
       console.log(`  Endpoint: ${config.endpoint}`)
       console.log(`  Reports:  ${d.stats.total_reports} total · ${d.stats.open_reports} open`)
+      if (d.scopes) {
+        console.log(`  Scopes:   ${d.scopes.length > 0 ? d.scopes.join(', ') : 'none'}`)
+        if (!d.scopes.includes('mcp:read') && !d.scopes.includes('mcp:write')) {
+          console.log('  ⚠ This is an SDK key: it can send reports but not read them. The CLI and MCP need mcp:read.')
+          console.log('    Mint one on the console MCP page, or run `mushi login`.')
+        }
+      }
     }
   })
 
