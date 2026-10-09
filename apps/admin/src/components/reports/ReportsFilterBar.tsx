@@ -122,13 +122,13 @@ export function ReportsFilterBar({
           type="search"
           // Was "Search summary or description… (/)" — 38 chars in a w-64
           // field, so it rendered clipped as "Search summary or des". The
-          // aria-label below still carries the full meaning.
-          placeholder="Search bugs…  (/)"
+          // aria-label below carries the fields searched instead.
+          placeholder="Search bugs… (/)"
           value={searchInput}
           onChange={(e) => onSearchInputChange(e.target.value)}
           name="reports-search"
           autoComplete="off"
-          aria-label="Search reports"
+          aria-label="Search reports by summary or description"
           className="w-64"
         />
         {/* Status and severity are filtered by the quick-filter chips above. */}

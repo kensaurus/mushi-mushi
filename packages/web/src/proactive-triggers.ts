@@ -45,6 +45,27 @@ const DEFAULT_EXCLUDE_ROUTES: readonly string[] = [
   '/auth/*',
 ]
 
+/**
+ * One stack frame's script URL, without the `:line:col` suffix. Matches the
+ * V8 shapes (`at fn (url:1:2)`, `at url:1:2`) and the Firefox/Safari shape
+ * (`fn@url:1:2`). Frames with no URL (`<anonymous>`, `native`) don't match.
+ */
+const STACK_FRAME_URL = /(?:^\s*at\s+(?:.*?\()?|@)([a-z][a-z0-9+.-]*:\/\/[^\s()]*?)(?::\d+){1,2}\)?\s*$/i
+
+/**
+ * The script URL of the innermost frame in `stack`, or undefined when no frame
+ * carries one. An unhandled rejection has no `filename` the way an ErrorEvent
+ * does, so this is what `denyUrls` / `allowUrls` match against for it.
+ */
+export function scriptUrlFromStack(stack: unknown): string | undefined {
+  if (typeof stack !== 'string' || stack.length === 0) return undefined
+  for (const line of stack.split('\n')) {
+    const match = STACK_FRAME_URL.exec(line)
+    if (match) return match[1]
+  }
+  return undefined
+}
+
 export interface ProactiveTriggerCallbacks {
   onTrigger: (type: string, context: Record<string, unknown>) => void
 }
@@ -248,6 +269,7 @@ export function setupProactiveTriggers(
       if (
         shouldDropCapturedError({
           message,
+          filename: event.reason instanceof Error ? scriptUrlFromStack(event.reason.stack) : undefined,
           ignoreErrors: config.ignoreErrors,
           denyUrls: config.denyUrls,
           allowUrls: config.allowUrls,
