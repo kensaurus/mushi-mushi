@@ -55,3 +55,20 @@ export async function reporterKey(presented: string): Promise<string> {
 export async function reporterKeyOrNull(presented: string | null | undefined): Promise<string | null> {
   return presented ? reporterKey(presented) : null
 }
+
+/**
+ * Reporter key for a Sentry user-feedback report (api/routes/public.ts).
+ *
+ * Until 2026-09-22 this column held the reporter's raw email address: PII in a
+ * column documented as a one-way key, shown in the console as the reporter's
+ * identity. Hashing it like an SDK token would be worse — an email is
+ * guessable, so it would become a credential for that person's threads.
+ * Instead: a `sentry:`-prefixed digest, which keeps one person's feedback
+ * grouped, matches no SDK-presented value (those resolve to `rk1_…`), and
+ * follows the sentinel convention (`tester:<id>`, `cron:<job>`). The address
+ * itself stays in custom_metadata.userEmail, where the console reads it.
+ */
+export async function sentryReporterKey(email: unknown): Promise<string> {
+  if (typeof email !== 'string' || !email.trim()) return 'sentry-webhook'
+  return `sentry:${await sha256Hex(email.trim().toLowerCase())}`
+}

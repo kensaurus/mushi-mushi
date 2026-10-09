@@ -29,7 +29,9 @@ function declaredConfigKeys(): string[] {
   const src = fs.readFileSync(path.join(DIR, 'types.ts'), 'utf8');
   const start = src.indexOf('interface MushiConfig');
   expect(start, 'MushiConfig interface not found in types.ts').toBeGreaterThan(-1);
-  const body = src.slice(start, src.indexOf('\n}', start));
+  const end = src.indexOf('\n}', start);
+  expect(end, 'closing brace of MushiConfig not found in types.ts').toBeGreaterThan(-1);
+  const body = src.slice(start, end);
   // Top-level members only: exactly two spaces of indentation.
   return [...body.matchAll(/^ {2}(\w+)\??:/gm)].map((m) => m[1] as string);
 }
@@ -38,7 +40,9 @@ function allowlistedConfigKeys(): string[] {
   const src = fs.readFileSync(path.join(DIR, 'presets.ts'), 'utf8');
   const start = src.indexOf('const KNOWN_CONFIG_KEYS');
   expect(start, 'KNOWN_CONFIG_KEYS not found in presets.ts').toBeGreaterThan(-1);
-  const body = src.slice(start, src.indexOf('];', start));
+  const end = src.indexOf('];', start);
+  expect(end, 'closing `];` of KNOWN_CONFIG_KEYS not found in presets.ts').toBeGreaterThan(-1);
+  const body = src.slice(start, end);
   return [...body.matchAll(/'([^']+)'/g)].map((m) => m[1] as string);
 }
 
@@ -51,7 +55,11 @@ describe('KNOWN_CONFIG_KEYS stays in sync with MushiConfig', () => {
   });
 
   it('warns about no key that MushiConfig actually declares', () => {
-    const missing = declaredConfigKeys().filter((k) => !allowlistedConfigKeys().includes(k));
+    // Parse each source once per test, not once per key. Kept inside the test
+    // because the parsers call expect(): at collection time a parser failure
+    // would surface as a suite error rather than a failed assertion.
+    const allowlisted = new Set(allowlistedConfigKeys());
+    const missing = declaredConfigKeys().filter((k) => !allowlisted.has(k));
     expect(
       missing,
       `Declared on MushiConfig but absent from KNOWN_CONFIG_KEYS, so setting ` +
@@ -63,7 +71,8 @@ describe('KNOWN_CONFIG_KEYS stays in sync with MushiConfig', () => {
   it('allowlists no key that MushiConfig does not declare', () => {
     // The other direction matters too: an allowlisted-but-undeclared key
     // suppresses a warning that should fire, hiding a real typo from consumers.
-    const extra = allowlistedConfigKeys().filter((k) => !declaredConfigKeys().includes(k));
+    const declared = new Set(declaredConfigKeys());
+    const extra = allowlistedConfigKeys().filter((k) => !declared.has(k));
     expect(
       extra,
       `In KNOWN_CONFIG_KEYS but not declared on MushiConfig, so a genuine typo ` +

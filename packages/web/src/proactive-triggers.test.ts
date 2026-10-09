@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MUSHI_INTERNAL_INIT_MARKER } from '@mushi-mushi/core';
-import { setupProactiveTriggers } from './proactive-triggers';
+import { scriptUrlFromStack, setupProactiveTriggers } from './proactive-triggers';
 
 // ── pageDwell ─────────────────────────────────────────────────────────────────
 
@@ -338,5 +338,71 @@ describe('setupProactiveTriggers errorBoundary filters', () => {
       expect.objectContaining({ message: 'Checkout crashed' }),
     );
     cleanup.destroy();
+  });
+
+  // An unhandled rejection has no `filename`, so the URL filters have to read
+  // the script URL out of the reason's stack. Before they did, allowUrls
+  // dropped every rejection and denyUrls never matched one.
+  function rejectionFrom(stack: string): Event {
+    const reason = new Error('Checkout promise failed');
+    reason.stack = stack;
+    const event = new Event('unhandledrejection');
+    Object.defineProperty(event, 'reason', { value: reason });
+    return event;
+  }
+
+  function setupWithUrlFilters(onTrigger: ReturnType<typeof vi.fn>, filters: {
+    allowUrls?: string[];
+    denyUrls?: string[];
+  }) {
+    return setupProactiveTriggers(
+      { onTrigger },
+      { rageClick: false, longTask: false, apiCascade: false, errorBoundary: true, ...filters },
+    );
+  }
+
+  it('fires for a rejection whose stack points at an allowed script', () => {
+    const onTrigger = vi.fn();
+    const cleanup = setupWithUrlFilters(onTrigger, { allowUrls: ['https://app.example.com/'] });
+    window.dispatchEvent(
+      rejectionFrom(
+        'Error: Checkout promise failed\n    at pay (https://app.example.com/assets/app.js:10:5)',
+      ),
+    );
+    expect(onTrigger).toHaveBeenCalledWith(
+      'error_boundary',
+      expect.objectContaining({ type: 'unhandled_rejection' }),
+    );
+    cleanup.destroy();
+  });
+
+  it('drops a rejection whose stack points at a denied script', () => {
+    const onTrigger = vi.fn();
+    const cleanup = setupWithUrlFilters(onTrigger, { denyUrls: ['chrome-extension://'] });
+    window.dispatchEvent(rejectionFrom('pay@chrome-extension://abc/inject.js:3:9'));
+    expect(onTrigger).not.toHaveBeenCalled();
+    cleanup.destroy();
+  });
+});
+
+describe('scriptUrlFromStack', () => {
+  it('reads the innermost frame in V8 and Firefox/Safari shapes', () => {
+    expect(
+      scriptUrlFromStack(
+        'TypeError: boom\n    at pay (https://cdn.example.com:8443/app.js:10:5)\n    at https://other.example.com/vendor.js:1:1',
+      ),
+    ).toBe('https://cdn.example.com:8443/app.js');
+    expect(scriptUrlFromStack('    at https://cdn.example.com/app.js:10:5')).toBe(
+      'https://cdn.example.com/app.js',
+    );
+    expect(scriptUrlFromStack('pay@https://cdn.example.com/app.js:10:5\n@https://x.example.com/y.js:1:1')).toBe(
+      'https://cdn.example.com/app.js',
+    );
+  });
+
+  it('returns undefined when no frame carries a URL', () => {
+    expect(scriptUrlFromStack('Error: boom\n    at <anonymous>\n    at Array.map (native)')).toBeUndefined();
+    expect(scriptUrlFromStack(undefined)).toBeUndefined();
+    expect(scriptUrlFromStack('')).toBeUndefined();
   });
 });

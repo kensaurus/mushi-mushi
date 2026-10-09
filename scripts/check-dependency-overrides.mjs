@@ -28,7 +28,9 @@
  *   "~3.1.4"             tilde — bounded by its minor
  *   "1.2.3"              exact
  *   ">=3.15.2 <4"        explicit floor and ceiling
+ *   ">=3.15.2 <=3.99"    inclusive ceiling
  *   ">=0.9.12 <0.10"     0.x, where each minor may break
+ *   "3.x"  "3.1.*"       wildcard — bounded by the next major / minor
  *   "npm:pkg@^1.2.3"     aliased, bounded
  *
  * WHAT FAILS
@@ -36,22 +38,19 @@
  *   ">4"  "*"  "latest"  no ceiling
  *
  * Usage: node scripts/check-dependency-overrides.mjs
+ * Tests: scripts/check-dependency-overrides.test.mjs
  */
 
-import { readFileSync } from 'node:fs'
+import { readFileSync, realpathSync } from 'node:fs'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '..')
 const PKG = path.join(ROOT, 'package.json')
 
-const pkg = JSON.parse(readFileSync(PKG, 'utf8'))
-const overrides = pkg.pnpm?.overrides ?? {}
-const entries = Object.entries(overrides)
-
 /** A range is bounded when some comparator caps it from above. */
-function isBounded(rawRange) {
+export function isBounded(rawRange) {
   // `npm:name@range` aliases — judge the range half.
   const range = rawRange.startsWith('npm:')
     ? rawRange.slice(rawRange.lastIndexOf('@') + 1)
@@ -60,39 +59,23 @@ function isBounded(rawRange) {
   const trimmed = range.trim()
   if (trimmed === '' || trimmed === '*' || trimmed === 'latest' || trimmed === 'x') return false
 
-  // An upper comparator anywhere is an explicit ceiling.
-  if (/<\s*\d/.test(trimmed)) return true
+  // An upper comparator anywhere is an explicit ceiling: `<N` or `<=N`.
+  if (/<=?\s*\d/.test(trimmed)) return true
 
-  // Caret, tilde, exact, and hyphen ranges all carry an implicit ceiling.
-  // A leading `>=` or `>` with nothing above it does not.
+  // Caret, tilde, exact, wildcard, and hyphen ranges all carry an implicit
+  // ceiling. A leading `>=` or `>` with nothing above it does not.
   if (/^[~^]\s*\d/.test(trimmed)) return true
-  if (/^\d+(\.\d+)*$/.test(trimmed)) return true
+  // "1.2.3" exact; "3.x" / "3.*" / "3.1.x" — a wildcard after a fixed major
+  // is bounded by the next major (or minor). A bare "x" / "*" was rejected above.
+  if (/^\d+(\.(\d+|[xX*]))*$/.test(trimmed)) return true
   if (/^=\s*\d/.test(trimmed)) return true
   if (/\s+-\s+\d/.test(trimmed)) return true // "1.2.3 - 2.3.4"
 
   return false
 }
 
-const unbounded = entries.filter(([, range]) => !isBounded(String(range)))
-
-if (unbounded.length > 0) {
-  console.error('✗  pnpm.overrides entries with no upper bound:\n')
-  for (const [name, range] of unbounded) {
-    const suggestion = suggestBound(String(range))
-    console.error(`   "${name}": "${range}"`)
-    if (suggestion) console.error(`       try: "${suggestion}"`)
-  }
-  console.error(
-    `\n   An override that patches an advisory should raise the floor, not lift\n` +
-      `   the ceiling. ">=X" alone lets every consumer cross the next major —\n` +
-      `   that is how read-yaml-file@1.1.0 lost js-yaml's safeLoad and broke the\n` +
-      `   Release workflow. Add an upper bound.\n`,
-  )
-  process.exit(1)
-}
-
 /** Suggest "<nextMajor" (or "<nextMinor" for 0.x, where minors may break). */
-function suggestBound(range) {
+export function suggestBound(range) {
   const m = range.match(/>=?\s*(\d+)\.(\d+)(?:\.\d+)?/)
   if (!m) return null
   const [, major, minor] = m
@@ -100,6 +83,42 @@ function suggestBound(range) {
   return `${range.trim()} <${Number(major) + 1}`
 }
 
-console.log(
-  `✓  pnpm.overrides: all ${entries.length} entr${entries.length === 1 ? 'y is' : 'ies are'} bounded.`,
-)
+function main() {
+  const pkg = JSON.parse(readFileSync(PKG, 'utf8'))
+  const overrides = pkg.pnpm?.overrides ?? {}
+  const entries = Object.entries(overrides)
+
+  const unbounded = entries.filter(([, range]) => !isBounded(String(range)))
+
+  if (unbounded.length > 0) {
+    console.error('✗  pnpm.overrides entries with no upper bound:\n')
+    for (const [name, range] of unbounded) {
+      const suggestion = suggestBound(String(range))
+      console.error(`   "${name}": "${range}"`)
+      if (suggestion) console.error(`       try: "${suggestion}"`)
+    }
+    console.error(
+      `\n   An override that patches an advisory should raise the floor, not lift\n` +
+        `   the ceiling. ">=X" alone lets every consumer cross the next major —\n` +
+        `   that is how read-yaml-file@1.1.0 lost js-yaml's safeLoad and broke the\n` +
+        `   Release workflow. Add an upper bound.\n`,
+    )
+    return 1
+  }
+
+  console.log(
+    `✓  pnpm.overrides: all ${entries.length} entr${entries.length === 1 ? 'y is' : 'ies are'} bounded.`,
+  )
+  return 0
+}
+
+function isEntryScript() {
+  if (!process.argv[1]) return false
+  try {
+    return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))
+  } catch {
+    return import.meta.url === pathToFileURL(process.argv[1]).href
+  }
+}
+
+if (isEntryScript()) process.exitCode = main()

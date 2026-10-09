@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest'
 import {
   dispatchEventStatus,
   mergeStoredFixTimeline,
+  pendingDispatchEvents,
   synthesizeFixTimeline,
   type TimelineDispatchRow,
   type TimelineFixRow,
@@ -106,12 +107,56 @@ describe('mergeStoredFixTimeline', () => {
   })
 })
 
+describe('pendingDispatchEvents (job id polled before the attempt exists)', () => {
+  const job = (status: string, over: Partial<TimelineDispatchRow> = {}): TimelineDispatchRow => ({
+    status,
+    created_at: '2026-10-02T01:40:40Z',
+    started_at: null,
+    finished_at: null,
+    error: null,
+    ...over,
+  })
+
+  it('reads queued as pending, before any worker', () => {
+    expect(pendingDispatchEvents(job('queued'))).toEqual([
+      { kind: 'dispatched', at: '2026-10-02T01:40:40Z', label: 'Dispatch queued — worker not started yet', status: 'pending' },
+    ])
+  })
+
+  it('never calls a running job "worker not started"', () => {
+    const events = pendingDispatchEvents(job('running', { started_at: '2026-10-02T01:40:44Z' }))
+    expect(events.map((e) => e.label).join(' ')).not.toMatch(/not started/)
+    expect(events[0]).toMatchObject({ kind: 'dispatched', status: 'ok' })
+    expect(events[1]).toMatchObject({ kind: 'started', at: '2026-10-02T01:40:44Z', status: 'pending' })
+  })
+
+  it('ends every terminal status instead of leaving it pending', () => {
+    // Every value fix_dispatch_jobs_status_check allows besides queued/running.
+    const expected: Record<string, 'ok' | 'fail'> = {
+      failed: 'fail',
+      cancelled: 'fail',
+      skipped: 'ok',
+      skipped_no_sandbox: 'ok',
+      completed: 'ok',
+      completed_no_pr: 'ok',
+    }
+    for (const [status, outcome] of Object.entries(expected)) {
+      const events = pendingDispatchEvents(job(status, { error: 'boom' }))
+      expect(events, status).toHaveLength(1)
+      expect(events[0].status, status).toBe(outcome)
+      expect(events[0].detail, status).toBe('boom')
+      expect(events[0].label, status).not.toMatch(/queued/)
+    }
+  })
+})
+
 describe('timeline route wiring', () => {
   const src = readFileSync(resolve(__dirname, '../../supabase/functions/api/routes/query-fixes-repo.ts'), 'utf8')
 
   it('builds both streams through the shared module', () => {
     expect(src).toMatch(/mergeStoredFixTimeline\(/)
     expect(src).toMatch(/synthesizeFixTimeline\(/)
+    expect(src).toMatch(/pendingDispatchEvents\(job\)/)
     expect(src).not.toMatch(/label: 'Worker started'/)
   })
 

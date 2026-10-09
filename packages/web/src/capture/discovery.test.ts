@@ -67,7 +67,9 @@ describe('createDiscoveryCapture (hashchange subscription)', () => {
    * loaded machine: the timer fires late, the assertion runs against an empty
    * array, and the suite fails perhaps one run in three. Polling removes the
    * race without weakening a single assertion — every expect() below is
-   * unchanged, and a genuine regression still fails, just via the timeout.
+   * unchanged, and a genuine regression still fails: the timeout throws, so
+   * the failure names the condition that never held rather than surfacing as
+   * a later assertion against an unready state.
    */
   const waitFor = async (predicate: () => boolean, timeoutMs = 3000) => {
     const deadline = Date.now() + timeoutMs;
@@ -75,6 +77,8 @@ describe('createDiscoveryCapture (hashchange subscription)', () => {
       if (predicate()) return;
       await wait(10);
     }
+    if (predicate()) return;
+    throw new Error(`waitFor timed out after ${timeoutMs}ms: ${predicate.toString()}`);
   };
 
   it('emits a new inventory event when the hash route changes', async () => {
