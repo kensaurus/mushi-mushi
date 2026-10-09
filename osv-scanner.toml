@@ -24,3 +24,18 @@ reason = "image-size ICNS parser infinite loop; no fixed release exists. Only re
 id = "GHSA-5p2g-fcmc-qvqq"
 ignoreUntil = 2026-12-31
 reason = "image-size JXL/HEIF parser infinite loop; no fixed release exists. Same build-time-only path as GHSA-w3rx-r6r6-pgpr."
+
+[[IgnoredVulns]]
+id = "GHSA-86w9-cpqp-85rv"
+ignoreUntil = 2026-12-31
+reason = "node-forge, no fixed release exists. Only reachable through @expo/cli, pulled in by the React Native SDK's optional expo peers that pnpm auto-installs for development; nothing that ships imports it. Owner decision 2026-10-02."
+
+[[IgnoredVulns]]
+id = "GHSA-vfj7-8cjw-p6xm"
+ignoreUntil = 2026-12-31
+reason = "braces, no fixed release exists. Only reachable through @changesets/cli, a release-time dev tool that globs this repository's own package names; never in a published package or an edge function."
+
+[[IgnoredVulns]]
+id = "GHSA-866g-f22w-33x8"
+ignoreUntil = 2026-12-31
+reason = "@ai-sdk/provider-utils 2.2.8 unbounded response-body reads. Pulled in by ai@4 / @ai-sdk/ui-utils@1 (a packages/server test devDependency here; the edge functions resolve the same version through deno.lock). Bodies are read only from the AI provider hosts allowlisted in byok-validation.ts, and the blast radius is one edge invocation. The fix is the ai@5 migration."
