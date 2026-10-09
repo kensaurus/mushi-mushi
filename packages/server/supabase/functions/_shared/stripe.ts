@@ -169,7 +169,16 @@ export const createCheckoutSession = (
     'subscription_data[metadata][project_id]': args.projectId,
     'subscription_data[metadata][plan_id]': args.planId,
     'subscription_data[metadata][source]': 'mushi-mushi',
-    automatic_tax: 'true',
+    // `automatic_tax` is an object. The flat `automatic_tax=true` form made
+    // Stripe reject every session with `400 Invalid object` (live probe
+    // 2026-10-09), so no checkout ever reached the payment page.
+    'automatic_tax[enabled]': 'true',
+    // Automatic tax needs an address on the Customer, and we create the
+    // Customer with an email only. `auto` saves the billing address (and
+    // name) entered in Checkout back to the Customer; without it Stripe
+    // refuses the session ("requires a valid address on the Customer").
+    'customer_update[address]': 'auto',
+    'customer_update[name]': 'auto',
     payment_method_collection: 'always',
     allow_promotion_codes: 'true',
     billing_address_collection: 'auto',
