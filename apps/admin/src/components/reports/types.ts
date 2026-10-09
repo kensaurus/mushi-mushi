@@ -11,6 +11,8 @@ export interface ReportRow {
   id: string
   /** custom_metadata.source; 'admin_test_report' marks a sample from "Send a test report". */
   metadata_source?: string | null
+  /** Where the report came from: widget, sentry, library_modernizer, store_review, … */
+  source?: string | null
   project_id: string
   description: string
   category: string
@@ -68,10 +70,11 @@ export interface ReportRow {
   /** Stable opaque user identifier passed by the host app via
    *  `Mushi.identify()` — null when the reporter is anonymous. */
   reporter_user_id?: string | null
-  /** SHA256 of the device fingerprint. Used only as a fallback "who"
-   *  identifier when reporter_user_id is unset; we display the first
-   *  6 hex chars as a stable monogram so two reports from the same
-   *  anonymous device are visibly co-attributed. */
+  /** One-way reporter key, `rk1_<64 hex>` (sha256 of the token digest; see
+   *  lib/reporterKey.ts). A verifier, not a credential. Used only as a
+   *  fallback "who" identifier when reporter_user_id is unset; we display
+   *  the first 6 hex chars as a stable monogram so two reports from the
+   *  same anonymous device are visibly co-attributed. */
   reporter_token_hash?: string | null
   /** Mushi auto-trigger that prompted the report (`window-error`,
    *  `unhandled-rejection`, `shake`, `dev-cli`, …). NULL = the user

@@ -30,7 +30,8 @@ const KNOWN_PRESETS: readonly NonNullable<MushiConfig['preset']>[] = [
 
 // Keep in sync with the top-level keys of `MushiConfig` in `types.ts`.
 // `presets.config-keys.test.ts` enforces that automatically — the comment alone
-// did not hold, and `replaySampleRate` sat here undeclared long enough to ship.
+// did not hold: `replaySampleRate` was declared on `MushiConfig` but missing
+// from this list long enough to ship, so setting it logged "Unknown config key".
 const KNOWN_CONFIG_KEYS: readonly string[] = [
   'projectId',
   'apiKey',

@@ -41,6 +41,7 @@ import {
 } from '../../_shared/fix-merge.ts';
 import {
   mergeStoredFixTimeline,
+  pendingDispatchEvents,
   synthesizeFixTimeline,
   type FixTimelineEvent,
 } from '../../_shared/fix-timeline.ts';
@@ -1114,15 +1115,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
           .maybeSingle());
       }
       if (!fix) {
-        const events = [
-          {
-            kind: 'dispatched',
-            at: job.created_at,
-            label: job.status === 'failed' ? 'Dispatch failed' : 'Dispatch queued — worker not started yet',
-            detail: job.error ?? undefined,
-            status: job.status === 'failed' ? 'fail' : 'pending',
-          },
-        ];
+        const events = pendingDispatchEvents(job);
         return c.json({ ok: true, data: { fix: null, dispatch: job, events, source: 'synthesized' } });
       }
     }

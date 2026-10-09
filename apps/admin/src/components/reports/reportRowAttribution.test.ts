@@ -17,6 +17,12 @@ describe('reports a Mushi job filed itself', () => {
     expect(reporterWho(row('cron:new-job')).label).toBe('new-job')
   })
 
+  // 22 Sentry reports read "user · User opened the widget" (2026-10-09).
+  it('labels a Sentry report as sentry, not a widget user', () => {
+    const r = { reporter_token_hash: 'rk1_abc', source: 'sentry' } as unknown as ReportRow
+    expect(captureMode(null, r).label).toBe('sentry')
+  })
+
   it('leaves people and SDK reports alone', () => {
     const r = row('rk1_abcdef0123456789')
     expect(captureMode(null, r).label).toBe('user')

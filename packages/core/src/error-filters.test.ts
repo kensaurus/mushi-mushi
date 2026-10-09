@@ -64,40 +64,6 @@ describe('shouldDropCapturedError', () => {
     ).toBe(false);
   });
 
-  const V8_STACK = [
-    'Error: boom',
-    '    at chargeCard (https://app.soloboss.cloud/assets/app.js:12:34)',
-    '    at https://cdn.example/vendor.js:1:2',
-  ].join('\n');
-  const GECKO_STACK = 'chargeCard@chrome-extension://abc/content.js:3:9\n@https://app.soloboss.cloud/assets/app.js:1:1';
-
-  it('reads the throw-site URL from the stack when there is no filename', () => {
-    expect(shouldDropCapturedError({ message: 'boom', stack: V8_STACK, allowUrls: [/soloboss/] })).toBe(false);
-    expect(shouldDropCapturedError({ message: 'boom', stack: V8_STACK, allowUrls: [/localhost/] })).toBe(true);
-    expect(shouldDropCapturedError({ message: 'boom', stack: GECKO_STACK, denyUrls: [/chrome-extension:/] })).toBe(true);
-  });
-
-  it('prefers an explicit filename over the stack', () => {
-    expect(
-      shouldDropCapturedError({
-        message: 'boom',
-        filename: 'https://cdn.example/vendor.js',
-        stack: V8_STACK,
-        allowUrls: [/soloboss/],
-      }),
-    ).toBe(true);
-  });
-
-  it('ignores a URL in the V8 message header', () => {
-    const stack = 'Error: fetch failed for http://localhost:3000\n    at load (https://cdn.example/vendor.js:4:2)';
-    expect(shouldDropCapturedError({ message: 'fetch failed', stack, allowUrls: [/localhost/] })).toBe(true);
-  });
-
-  it('with no known URL, allowUrls drops and denyUrls keeps', () => {
-    expect(shouldDropCapturedError({ message: 'Script error.', allowUrls: [/soloboss/] })).toBe(true);
-    expect(shouldDropCapturedError({ message: 'boom', stack: 'Error: boom', denyUrls: [/vendor/] })).toBe(false);
-  });
-
   it('does not drop user-looking messages without filters', () => {
     expect(shouldDropCapturedError({ message: 'Checkout button did nothing' })).toBe(false);
   });

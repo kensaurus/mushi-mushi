@@ -14,7 +14,7 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
-import { reporterKey } from '../../supabase/functions/_shared/reporter-token.ts'
+import { reporterKey, sentryReporterKey } from '../../supabase/functions/_shared/reporter-token.ts'
 
 const src = readFileSync(
   resolve(dirname(fileURLToPath(import.meta.url)), '../../supabase/functions/api/routes/public.ts'),
@@ -31,13 +31,32 @@ describe('sentry feedback reporter key', () => {
 
   it('produces a key no SDK credential can collide with', async () => {
     const email = 'reporter@example.com'
-    // What the reporter-thread routes derive from anything a client presents.
-    const fromClient = await reporterKey(email)
-    expect(fromClient.startsWith('rk1_')).toBe(true)
-    expect(fromClient.startsWith('sentry:')).toBe(false)
+    const key = await sentryReporterKey(email)
+    expect(key).toMatch(/^sentry:[0-9a-f]{64}$/)
+    // What the reporter-thread routes derive from anything a client presents,
+    // including the email itself or the hex part of this key.
+    for (const presented of [email, key, key.slice('sentry:'.length)]) {
+      const fromClient = await reporterKey(presented)
+      expect(fromClient.startsWith('rk1_')).toBe(true)
+      expect(fromClient).not.toBe(key)
+    }
   })
 
-  it('falls back to the sentinel when Sentry sends no email', () => {
-    expect(src).toMatch(/return 'sentry-webhook'/)
+  it('groups one reporter: same address, same key', async () => {
+    const key = await sentryReporterKey('reporter@example.com')
+    expect(await sentryReporterKey('reporter@example.com')).toBe(key)
+    // Case and surrounding whitespace do not split a reporter in two.
+    expect(await sentryReporterKey('  Reporter@Example.COM ')).toBe(key)
+    expect(await sentryReporterKey('other@example.com')).not.toBe(key)
+  })
+
+  it('never contains the address', async () => {
+    expect(await sentryReporterKey('reporter@example.com')).not.toContain('reporter')
+  })
+
+  it('falls back to the sentinel when Sentry sends no email', async () => {
+    expect(await sentryReporterKey(undefined)).toBe('sentry-webhook')
+    expect(await sentryReporterKey('   ')).toBe('sentry-webhook')
+    expect(await sentryReporterKey(42)).toBe('sentry-webhook')
   })
 })

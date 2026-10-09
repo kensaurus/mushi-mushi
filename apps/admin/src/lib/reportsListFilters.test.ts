@@ -106,15 +106,17 @@ describe('sanitizeListFilters (stale bookmarks)', () => {
   })
 
   it('drops values the list cannot apply instead of failing the page', () => {
-    expect(sanitizeListFilters({ platform: 'playstation', sdkPackage: 'left-pad', days: '400' })).toEqual({
+    expect(sanitizeListFilters({ platform: 'playstation', sdkPackage: 'left-pad', days: '400', origin: 'moon' })).toEqual({
       platform: '',
       sdkPackage: '',
       days: '',
+      origin: '',
     })
-    expect(sanitizeListFilters({ platform: 'ios', sdkPackage: '@mushi-mushi/react-native', days: '14' })).toEqual({
+    expect(sanitizeListFilters({ platform: 'ios', sdkPackage: '@mushi-mushi/react-native', days: '14', origin: 'local' })).toEqual({
       platform: 'ios',
       sdkPackage: '@mushi-mushi/react-native',
       days: '14',
+      origin: 'local',
     })
   })
 })

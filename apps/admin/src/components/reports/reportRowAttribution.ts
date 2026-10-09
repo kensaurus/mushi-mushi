@@ -96,7 +96,7 @@ function mushiJobFiler(row: Pick<ReportRow, 'reporter_token_hash'>): { job: stri
 
 export function captureMode(
   trigger: string | null | undefined,
-  row?: Pick<ReportRow, 'reporter_token_hash'>,
+  row?: Pick<ReportRow, 'reporter_token_hash' | 'source'>,
 ): CaptureMode {
   const job = row ? mushiJobFiler(row) : null
   if (job) {
@@ -104,6 +104,13 @@ export function captureMode(
       label: 'mushi',
       tone: 'bg-surface-overlay text-fg-muted border border-edge-subtle',
       tooltip: `Filed by Mushi's scheduled ${job.label} (${job.job}), not by a user.`,
+    }
+  }
+  if (row?.source === 'sentry') {
+    return {
+      label: 'sentry',
+      tone: 'bg-surface-overlay text-fg-muted border border-edge-subtle',
+      tooltip: 'Sent by your Sentry project (an error alert or Sentry user feedback), not the in-app widget.',
     }
   }
   if (!trigger) {
@@ -162,7 +169,7 @@ export function reporterWho(row: ReportRow): { label: string; tooltip: string; v
     const hex = shortReporterKey(row.reporter_token_hash, 6)
     return {
       label: `anon·${hex}`,
-      tooltip: `Anonymous device fingerprint ·${hex}`,
+      tooltip: `Anonymous reporter key ·${hex} (one-way, not a credential)`,
     }
   }
   return { label: 'anon', tooltip: 'Anonymous reporter' }

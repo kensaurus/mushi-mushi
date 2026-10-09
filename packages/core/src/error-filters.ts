@@ -14,9 +14,6 @@
  * NOTES:
  * - String matchers are case-sensitive substrings (Sentry JS semantics)
  * - Invalid RegExp sources are treated as non-matches, not throws
- * - URL filters match the throw site: the script filename, else the first
- *   stack frame. With allowUrls set, an error with no known URL is dropped
- *   (that is how cross-origin "Script error." arrives)
  */
 
 export type MushiErrorFilter = string | RegExp;
@@ -46,16 +43,13 @@ export function matchesErrorFilter(
 export function shouldDropCapturedError(input: {
   message: string;
   filename?: string | null;
-  /** Used for the URL filters when there is no filename. */
-  stack?: string | null;
   ignoreErrors?: readonly MushiErrorFilter[];
   denyUrls?: readonly MushiErrorFilter[];
   allowUrls?: readonly MushiErrorFilter[];
 }): boolean {
   if (matchesErrorFilter(input.message, input.ignoreErrors)) return true;
 
-  // No filename: the URL of the stack's first frame, i.e. where it threw.
-  const filename = input.filename?.trim() || (input.stack && STACK_FRAME_URL.exec(input.stack)?.[1]) || '';
+  const filename = input.filename?.trim() || '';
   if (filename && matchesErrorFilter(filename, input.denyUrls)) return true;
 
   if (input.allowUrls && input.allowUrls.length > 0) {
@@ -65,8 +59,3 @@ export function shouldDropCapturedError(input: {
 
   return false;
 }
-
-// The URL in a frame line, `at fn (https://x/a.js:1:2)` (V8) or
-// `fn@https://x/a.js:1:2` (Gecko/WebKit), without the :line:col. Anchored to
-// the frame prefix so V8's `TypeError: <message>` header never matches.
-const STACK_FRAME_URL = /^\s*(?:at .*?\(?|\S*@)([^\s(]+?:\/\/[^\s()]+?)(?::\d+){1,2}\)?$/m;

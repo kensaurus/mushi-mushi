@@ -64,32 +64,10 @@ import {
   routePatPushWebhook,
 } from '../../_shared/github-push-forward.ts';
 import { resolveReporterAuth } from './reporter-auth.ts';
-import { reporterKey } from '../../_shared/reporter-token.ts';
+import { reporterKey, sentryReporterKey } from '../../_shared/reporter-token.ts';
 import { claimIpRateLimit, extractClientIp } from './cli-auth.ts';
 import { unsubscribeSecret, verifyUnsubscribeToken } from '../../_shared/lifecycle-unsubscribe.ts';
 import { brandFooterDefaultForProject } from '../../_shared/brand-footer.ts';
-
-/**
- * Reporter key for a Sentry user-feedback report.
- *
- * Until 2026-09-22 this column held the reporter's raw email address: PII in a
- * column documented as a one-way key, shown in the console as the reporter's
- * identity. Hashing it like an SDK token would be worse — an email is
- * guessable, so it would become a credential for that person's threads.
- * Instead: a `sentry:`-prefixed digest, which keeps one person's feedback
- * grouped, matches no SDK-presented value (those resolve to `rk1_…`), and
- * follows the sentinel convention (`tester:<id>`, `cron:<job>`). The address
- * itself stays in custom_metadata.userEmail, where the console reads it.
- */
-async function sentryReporterKey(email: unknown): Promise<string> {
-  if (typeof email !== 'string' || !email.trim()) return 'sentry-webhook';
-  const digest = await crypto.subtle.digest(
-    'SHA-256',
-    new TextEncoder().encode(email.trim().toLowerCase()),
-  );
-  const hex = Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
-  return `sentry:${hex}`;
-}
 
 // Upper bound for reporter-supplied notes that feed `mushi_apply_reporter_feedback`
 // (these can seed a reopened child report's description). Keeps a hostile or
@@ -671,6 +649,7 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
       await db.from('reports').insert({
         id: reportId,
         project_id: projectId,
+        source: 'sentry',
         description: (feedback.message as string) ?? '',
         user_category: 'other',
         category: 'other',

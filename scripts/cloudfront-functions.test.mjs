@@ -142,6 +142,19 @@ describe('cloudfront-mushi-apex-redirect', () => {
     assert.equal(out.headers.location.value, '/mushi-mushi/docs/integrations/cursor');
   });
 
+  it('redirects /use-cases and its child pages to docs (regression, #373)', () => {
+    assert.equal(apex(req('/use-cases')).headers.location.value, '/mushi-mushi/docs/use-cases');
+    assert.equal(
+      apex(req('/use-cases/ai-code-bug-fixing')).headers.location.value,
+      '/mushi-mushi/docs/use-cases/ai-code-bug-fixing',
+    );
+  });
+
+  it('redirects the /analytics and /growth console routes to admin (regression, #394)', () => {
+    assert.equal(apex(req('/analytics')).headers.location.value, '/mushi-mushi/admin/analytics');
+    assert.equal(apex(req('/growth')).headers.location.value, '/mushi-mushi/admin/growth');
+  });
+
   it('passes through static assets', () => {
     const event = req('/quickstart/app.js');
     const out = apex(event);
@@ -205,6 +218,15 @@ describe('cloudfront-mushi-spa-router', () => {
   it('preserves query string on mis-prefixed docs redirect (regression)', () => {
     const out = spa(reqWithQs('/mushi-mushi/quickstart/mcp', { utm_source: 'test' }));
     assert.equal(out.headers.location.value, '/mushi-mushi/docs/quickstart/mcp?utm_source=test');
+  });
+
+  it('301 mis-prefixed /use-cases paths to docs (regression, #373)', () => {
+    const root = spa(req('/mushi-mushi/use-cases'));
+    assert.equal(root.statusCode, 301);
+    assert.equal(root.headers.location.value, '/mushi-mushi/docs/use-cases');
+    const child = spa(req('/mushi-mushi/use-cases/ai-code-bug-fixing'));
+    assert.equal(child.statusCode, 301);
+    assert.equal(child.headers.location.value, '/mushi-mushi/docs/use-cases/ai-code-bug-fixing');
   });
 
   it('rewrites canonical docs path to .html', () => {

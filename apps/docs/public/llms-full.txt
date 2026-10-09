@@ -3,7 +3,7 @@
 > The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor.
 
 Canonical docs: https://kensaur.us/mushi-mushi/docs
-Generated: 2026-10-08
+Generated: 2026-10-09
 Pages: 209
 
 This file contains the full prose of every documentation page, stripped of
@@ -231,7 +231,7 @@ Add to `.cursor/mcp.json` in your repo root:
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.24.4"],
+      "args": ["-y", "@mushi-mushi/mcp@0.24.5"],
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
@@ -257,7 +257,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.24.4"],
+      "args": ["-y", "@mushi-mushi/mcp@0.24.5"],
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
@@ -5375,7 +5375,7 @@ Published npm packages ship on independent semver tracks (see [npm](https://www.
 
 | Package | Version |
 | --- | --- |
-| @mushi-mushi/core, @mushi-mushi/web | 1.31.x |
+| @mushi-mushi/core, @mushi-mushi/web | 1.32.x |
 | @mushi-mushi/react | 1.31.x |
 | @mushi-mushi/react-native | 0.24.x |
 | @mushi-mushi/cli | 0.30.x |
@@ -10634,10 +10634,15 @@ Both **must use the same `projectId` and `apiKey`**. Reports from each
 land in the same inbox; the SDK tag on the report (`ios`, `android`,
 `capacitor`, `react-native`) lets you tell them apart on the dashboard.
 
-```ts
+```swift
 // Native iOS — stays as-is during the migration
-import Mushi from "MushiMushi"
-Mushi.shared.configure(projectId: "YOUR_PROJECT_ID", apiKey: "YOUR_PUBLIC_KEY")
+import MushiMushi
+
+Mushi.shared.configure(with: MushiConfig(
+    projectId: "YOUR_PROJECT_ID",
+    apiKey: "YOUR_PUBLIC_KEY",
+    endpoint: "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api"
+))
 ```
 
 ```ts

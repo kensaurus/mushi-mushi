@@ -72,16 +72,17 @@ const ReactRouterLinkAdapter: MarketingLink = ({
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
 /**
- * Real brand logo for an integration, from the same favicon CDN the console's
- * `ServiceFavicon` already uses. Previously this page rendered a coloured
- * square containing the service's first letter — so Datadog was a red "D",
- * Sentry a red "S", Bugsnag a red "B". Twenty-three identical squares reads as
+ * Real brand logo for an integration: a bundled monochrome SVG at
+ * `/brand/platforms/<mark>.svg` (apps/admin/public), used as a CSS mask so it
+ * takes the editorial ink colour. No third-party CDN is involved, so the page
+ * renders the same offline. Previously this page rendered a coloured square
+ * containing the service's first letter — so Datadog was a red "D", Sentry a
+ * red "S", Bugsnag a red "B". Twenty-three identical squares reads as
  * placeholder art and made a page whose entire job is to prove "we really do
  * integrate with these" look mocked-up.
  *
- * Falls back to the Mushi mark (never a letter) when a logo can't load or the
- * entry is first-party, so an offline viewer sees a deliberate brand element
- * rather than a broken image.
+ * Entries without a `mark` (first-party ones) get the Mushi mark, never a
+ * letter.
  */
 function IntegrationLogo({ mark }: { name: string; mark?: string }) {
   const url = mark ? `/brand/platforms/${mark}.svg` : null

@@ -32,7 +32,7 @@ describe('shell chrome static contract', () => {
     // Density is now carried by a constant-width icon rather than a kicker
     // word that had to be hidden below `lg` — strictly narrower at every
     // breakpoint, so the responsive-hide prop is no longer the mechanism.
-    expect(org).toContain('icon={<IconMembers />}')
+    expect(org).toMatch(/icon=\{\s*<IconMembers\s*\/>\s*\}/)
     expect(org).toContain('badgeHiddenBelowXl')
   })
 

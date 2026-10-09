@@ -39,7 +39,8 @@ import { installStdoutGuard } from './stdout-guard.js'
 installStdoutGuard()
 import { ALL_SCOPES, type McpScope } from './catalog.js'
 import { DEFAULT_FEATURE_GROUPS, parseFeaturesCsv } from './feature-groups.js'
-import { createMushiServer, createSetupModeServer } from './server.js'
+import { createMushiServer, createSetupModeServer, MUSHI_CONSOLE_URL } from './server.js'
+import { decideScopes, fetchKeyScopes, sdkKeyReport } from './key-scopes.js'
 import { startInventoryPoll } from './inventory-poll.js'
 import { initOptionalSentry } from './optional-sentry.js'
 import {
@@ -230,6 +231,27 @@ async function main() {
       )
     }
   }
+  // Ask what the key may do, unless MUSHI_SCOPES already says. An SDK key
+  // (report:write) gets setup mode with the fix instead of a list of tools
+  // that would all answer INSUFFICIENT_SCOPE; a read-only key loses the write
+  // tools. A failed check (offline, older server) changes nothing.
+  let scopes: readonly McpScope[] = SCOPES
+  if (!SCOPES_RAW) {
+    const keyScopes = await fetchKeyScopes({ apiEndpoint: API_ENDPOINT, apiKey: API_KEY, projectId: PROJECT_ID || undefined })
+    const decision = decideScopes(keyScopes, SCOPES)
+    if (decision.kind === 'sdk-key') {
+      const report = sdkKeyReport(decision.keyScopes, MUSHI_CONSOLE_URL)
+      process.stderr.write(report)
+      log.warn('The API key has no MCP scope (mcp:read / mcp:write) — serving setup mode.', {
+        keyScopes: decision.keyScopes.join(','),
+      })
+      serveUntilClosed(serveStdio(() => createSetupModeServer({ version: VERSION, missingKeyReport: report, reason: 'sdk-key' }), {
+        onerror: (err) => log.error('stdio transport error', { err: String(err) }),
+      }))
+      return
+    }
+    scopes = decision.scopes
+  }
   const mode = PROJECT_ID ? 'single-project' : 'account'
   if (!PROJECT_ID) {
     // Account mode: no fixed project — the key resolves projects dynamically.
@@ -247,7 +269,7 @@ async function main() {
     mode,
     endpoint: API_ENDPOINT,
     hasProjectId: !!PROJECT_ID,
-    scopes: SCOPES.join(','),
+    scopes: scopes.join(','),
   })
 
   // serveStdio calls the factory lazily, once the client's opening message
@@ -263,7 +285,7 @@ async function main() {
         apiEndpoint: API_ENDPOINT,
         apiKey: API_KEY,
         projectId: PROJECT_ID || undefined,
-        scopes: SCOPES,
+        scopes,
         features: FEATURES,
       })
       log.debug('[mushi-mcp] server instance created', { era: ctx.era })
