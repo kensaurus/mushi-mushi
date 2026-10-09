@@ -9,12 +9,10 @@ description: Wire Mushi's evolution loop into Cursor with one command — get fi
 
 # Cursor integration
 
-{CURSOR_INTEGRATION_LEDE}
-
 **The three-line setup:**
 
 ```bash
-npx mushi-mushi login --api-key mushi_xxx --endpoint https://.supabase.co/functions/v1/api
+npx mushi-mushi login --api-key mushi_xxx --endpoint https://<ref>.supabase.co/functions/v1/api
 npx mushi-mushi setup --ide cursor
 # Restart Cursor
 ```
@@ -26,11 +24,11 @@ npx mushi-mushi setup --ide cursor
 ```bash
 npx mushi-mushi login \
   --api-key mushi_xxx \
-  --endpoint https://.supabase.co/functions/v1/api \
+  --endpoint https://<ref>.supabase.co/functions/v1/api \
   --project-id xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 ```
 
-Find your credentials in the admin console → **Settings → API Keys**.
+Find your credentials in the admin console → **Settings → AI keys**.
 
 ### Wire Cursor
 
@@ -100,7 +98,7 @@ the installation token automatically.
 `.cursor/mcp.json` exists. Run `mushi whoami` to verify credentials.
 
 **`[INSUFFICIENT_SCOPE]` error:** Your key needs `mcp:write` scope to
-dispatch fixes. Rotate to a key with the right scope in Settings → API Keys.
+dispatch fixes. Rotate to a key with the right scope in Settings → AI keys.
 
 **Stale lessons:** Run `mushi sync-lessons` to pull the latest rules.
 

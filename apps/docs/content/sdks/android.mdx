@@ -1,46 +1,64 @@
 ---
 title: 'dev.mushimushi:mushi-android (Android)'
+description: API reference for Mushi's native Kotlin SDK — init, report, captureError, showWidget, breadcrumbs and the Sentry bridge. A preview built from source.
 ---
+
+import { Callout } from 'nextra/components'
 
 # `dev.mushimushi:mushi-android` (Android)
 
-Native Kotlin SDK on Maven Central. Uses `SensorManager` for shake detection, Jetpack Compose for the report UI, and `WorkManager` for a resilient offline queue.
+Native Kotlin SDK: `SensorManager` shake detection, an `AppCompatDialogFragment`
+bottom-sheet report UI, rage-tap and slow-screen detection, PII scrubbing, and a
+file-backed offline queue.
 
-```gradle
-// build.gradle.kts (app module)
+<Callout type="warning">
+  **Preview — not on Maven Central yet.** Build it from
+  [`packages/android`](https://github.com/kensaurus/mushi-mushi/tree/master/packages/android)
+  with `gradle publishToMavenLocal` and add `mavenLocal()` to your repositories;
+  [Quickstart → Android](/quickstart/android) has the steps.
+</Callout>
+
+```kotlin
+// app/build.gradle.kts — resolves from mavenLocal() after a local build
 dependencies {
     implementation("dev.mushimushi:mushi-android:0.4.0")
 }
 ```
 
-See [Quickstart → Android](/quickstart/android) for the full setup walkthrough.
-
 ## API surface
 
 | Method | Purpose |
 | --- | --- |
-| `Mushi.configure(context, projectId, apiKey, ...)` | Boot the SDK — call once in `Application.onCreate()` |
-| `Mushi.identify(userId, traits)` | Link reports to a user |
-| `Mushi.submitReport(description, severity)` | Programmatic report submission |
-| `Mushi.showReportSheet()` | Show the bottom-sheet capture UI imperatively |
-| `Mushi.submitActivity(events)` | Rewards-program activity events |
-| `MushiReportFab` | Jetpack Compose FAB that triggers the report sheet |
+| `Mushi.init(application, MushiConfig(...))` | Boot the SDK — call once in `Application.onCreate()` |
+| `Mushi.report(description, category, metadata)` | Submit a report from code, no UI |
+| `Mushi.captureError(throwable, metadata)` | Report a caught `Throwable` with its name, message and stack |
+| `Mushi.showWidget(category, metadata)` | Present the bottom-sheet widget (needs a `FragmentActivity`) |
+| `Mushi.setUser(map)` | Attach app user identity to subsequent reports |
+| `Mushi.setMetadata(key, value)` | Attach or clear a metadata key on subsequent reports |
+| `Mushi.addBreadcrumb(...)` | Add to the 50-entry breadcrumb ring buffer |
+| `Mushi.attachTo(view)` | Open the widget when a `View` is clicked |
 
 ## Setup
 
+`MushiConfig` requires `projectId`, `apiKey` and `endpoint`. Everything else
+has a default.
+
 ```kotlin
 // MyApplication.kt
-import dev.mushimushi.Mushi
+import android.app.Application
+import dev.mushimushi.sdk.Mushi
+import dev.mushimushi.sdk.config.MushiConfig
+import dev.mushimushi.sdk.config.TriggerMode
 
 class MyApplication : Application() {
     override fun onCreate() {
         super.onCreate()
-        Mushi.configure(
-            context = this,
+        Mushi.init(this, MushiConfig(
             projectId = "YOUR_PROJECT_ID",
-            apiKey = "YOUR_PUBLIC_API_KEY",
-            enableShakeToReport = true,
-        )
+            apiKey = "mushi_...",
+            endpoint = "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api",
+            triggerMode = TriggerMode.SHAKE, // SHAKE | BUTTON | BOTH | NONE
+        ))
     }
 }
 ```
@@ -49,20 +67,23 @@ class MyApplication : Application() {
 
 ```kotlin
 // After sign-in
-Mushi.identify(
-    userId = user.id,
-    traits = mapOf("email" to user.email, "name" to user.displayName),
-)
+Mushi.setUser(mapOf("id" to user.id, "email" to user.email))
 ```
 
 ## Offline queue
 
-Reports created without network access are persisted via `WorkManager` with exponential backoff. The queue cap is 50 reports — oldest entries are dropped if exceeded.
+Reports that fail to send are appended to `filesDir/mushi/queue.ndjson`,
+capped by `offlineQueueMaxBytes` (default 2 MB), and flushed on a timer and
+when the network comes back.
 
 ## Sentry bridge
 
 ```kotlin
-Mushi.attachSentryBridge()
+import dev.mushimushi.sdk.sentry.MushiSentryBridge
+
+MushiSentryBridge.install()
 ```
 
-Forwards each Mushi report as a Sentry breadcrumb and tags the active Sentry scope with the `report_id` so a single Sentry issue links back to the Mushi report.
+Call it after initialising Sentry. The bridge finds Sentry by reflection, so
+apps without `io.sentry:sentry-android` pay nothing and it silently does
+nothing.

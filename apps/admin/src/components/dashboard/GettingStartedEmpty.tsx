@@ -17,14 +17,14 @@
 
 import { useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
-import { apiFetch } from '../../lib/supabase'
-import { useToast } from '../../lib/toast'
+import { useSendTestReport } from '../../lib/useSendTestReport'
 import { useSetupStatus, type SetupProject } from '../../lib/useSetupStatus'
 import { pluralize } from '../../lib/format'
 import { PDCA_STAGES, PDCA_ORDER, PDCA_STAGE_OUTCOMES, type PdcaStageId } from '../../lib/pdca'
 import { PageHeader, Card, Btn, Skeleton } from '../ui'
 import { ConnectionStatus } from '../ConnectionStatus'
 import { SetupChecklist } from '../SetupChecklist'
+import { startFirstRunTour } from '../FirstRunTour'
 import { useActiveProjectId } from '../ProjectSwitcher'
 import { FeedbackHubStrip } from '../support/FeedbackHubStrip'
 import { ActionPill, ContainedBlock, InlineProof, SignalChip } from '../report-detail/ReportSurface'
@@ -39,7 +39,7 @@ interface LoopStage {
 
 export function GettingStartedEmpty({ embedded = false }: { embedded?: boolean }) {
   const navigate = useNavigate()
-  const toast = useToast()
+  const sendTestReport = useSendTestReport()
   const activeProjectId = useActiveProjectId()
   const setup = useSetupStatus(activeProjectId)
   const [testStatus, setTestStatus] = useState<'idle' | 'running' | 'pass' | 'fail'>('idle')
@@ -58,16 +58,8 @@ export function GettingStartedEmpty({ embedded = false }: { embedded?: boolean }
   async function submitTest() {
     if (!project) return
     setTestStatus('running')
-    const res = await apiFetch(`/v1/admin/projects/${project.project_id}/test-report`, {
-      method: 'POST',
-    })
+    const res = await sendTestReport(project.project_id)
     setTestStatus(res.ok ? 'pass' : 'fail')
-    if (res.ok) {
-      toast.success('Test report queued', 'Watch it land in Reports within a few seconds.')
-      setup.reload()
-    } else {
-      toast.error('Test report failed', res.error?.message ?? 'Check your project keys and try again.')
-    }
   }
 
   const stages: LoopStage[] = buildStages({
@@ -113,6 +105,15 @@ export function GettingStartedEmpty({ embedded = false }: { embedded?: boolean }
           {project.report_count} {pluralize(project.report_count, 'report')} · {project.fix_count} {pluralize(project.fix_count, 'fix', 'fixes')} dispatched
         </span>
         <Link to="/projects" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">Switch project →</Link>
+        {/* Click-triggered tour (no auto-launch) — see FirstRunTour.tsx. */}
+        <Btn
+          size="sm"
+          variant="ghost"
+          onClick={() => startFirstRunTour()}
+          className="border-0 bg-transparent shadow-none px-0 py-0 text-2xs text-accent-foreground hover:text-accent underline underline-offset-2"
+        >
+          Take the 2-minute tour
+        </Btn>
       </InlineProof>
     </div>
   )

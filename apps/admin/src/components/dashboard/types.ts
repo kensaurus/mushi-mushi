@@ -33,9 +33,13 @@ export interface FixSummary {
 
 export interface IntegrationStatus {
   kind: string
+  /** Worst latest probe status across the projects in scope. */
   lastStatus: string | null
   lastAt: string | null
+  /** ok / total probes over the window; null when not counted. */
   uptime: number | null
+  /** Server classification (_shared/integration-health-rollup.ts): down = red, anything not ok = amber. */
+  severity?: 'ok' | 'red' | 'amber'
 }
 
 export interface ActivityItem {
@@ -58,6 +62,8 @@ export interface TriageItem {
 export interface DashboardCounts {
   reports14d: number
   openBacklog: number
+  /** Critical reports from the 14-day window still needing a decision. */
+  openCritical14d?: number
   fixesTotal: number
   openPrs: number
   llmCalls14d: number
@@ -100,6 +106,8 @@ export interface DashboardData {
   integrations?: IntegrationStatus[]
   pdcaStages?: PdcaStage[]
   focusStage?: PdcaStageId | null
+  /** True when a 14-day chart had more rows than the server reads; KPI counts stay exact. */
+  chartsSampled?: boolean
 }
 
 export function relTime(iso: string): string {

@@ -16,7 +16,9 @@ import {
 import {
   ACTIVE_PROJECT_QUERY_PARAM,
   ACTIVE_PROJECT_STORAGE_KEY,
+  getActiveProjectIdFromUrl,
 } from '../lib/activeProject'
+import { knownProjectTeam } from '../lib/crossTeamProject'
 import { useCreateOrganization } from '../lib/useCreateOrganization'
 import { headerDropdownPanelClass } from '../lib/appChrome'
 import { HeaderContextChip, HeaderContextChipSkeleton } from './ui/chrome'
@@ -40,12 +42,14 @@ export interface OrganizationSummary {
 
 /**
  * Render the right-hand chip on each org row. Complimentary orgs get a
- * distinct "admin" label that overrides the raw `plan_id` so a comp Pro org
- * never reads as "Pro" in the header. Returned as a plain string so the
- * caller stays in control of layout / wrapping.
+ * distinct "comp" label that overrides the raw `plan_id` so a comp Pro org
+ * never reads as "Pro" in the header. It used to say "admin", which next to
+ * the team name read as the user's role and made the team switcher look like
+ * a user menu. Returned as a plain string so the caller stays in control of
+ * layout / wrapping.
  */
 function orgPillLabel(org: OrganizationSummary): string {
-  return org.billing_mode === 'complimentary' ? 'admin' : org.plan_id
+  return org.billing_mode === 'complimentary' ? 'comp' : org.plan_id
 }
 
 export function OrgSwitcher() {
@@ -83,10 +87,23 @@ export function OrgSwitcher() {
       // through with the stale `fromUrl` (same shape as ProjectSwitcher).
       return
     }
-    const candidate = (fromUrl && isValidOrgId(fromUrl) ? fromUrl : null) ?? fromStorage
+    // A `?project=` known to live in one of the user's teams decides the
+    // team: a link that carries both an old `?org=` and another team's
+    // project would otherwise pull the team back and 404 every panel.
+    const urlProject = getActiveProjectIdFromUrl()
+    const projectTeam = urlProject ? knownProjectTeam(urlProject) : null
+    const projectTeamKnown =
+      projectTeam && data.organizations.some((o) => o.id === projectTeam) ? projectTeam : null
+    const candidate =
+      projectTeamKnown ?? (fromUrl && isValidOrgId(fromUrl) ? fromUrl : null) ?? fromStorage
     const known = data.organizations.find((o) => o.id === candidate)
     if (known) {
       if (fromStorage !== known.id) setActiveOrgIdSnapshot(known.id)
+      if (fromUrl && fromUrl !== known.id) {
+        const next = new URLSearchParams(searchParams)
+        next.set(ACTIVE_ORG_QUERY_PARAM, known.id)
+        setSearchParams(next, { replace: true })
+      }
       return
     }
     setActiveOrgIdSnapshot(data.organizations[0].id)
@@ -216,8 +233,23 @@ export function OrgSwitcher() {
         badgeTone={active.billing_mode === 'complimentary' ? 'brand' : 'neutral'}
         title={
           active.billing_mode === 'complimentary'
-            ? `Admin / complimentary org — feature set tracks the ${active.plan_id} tier`
-            : undefined
+            ? `Team: ${active.name} (complimentary, feature set tracks the ${active.plan_id} tier)`
+            : `Team: ${active.name}`
+        }
+        aria-label={`Team: ${active.name} — switch team`}
+        trailing={
+          <svg
+            width="9"
+            height="9"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            aria-hidden
+            className="shrink-0"
+          >
+            <path d="M4 6l4 4 4-4" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
         }
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="listbox"
@@ -261,6 +293,14 @@ export function OrgSwitcher() {
               className="flex w-full items-center justify-between gap-1.5 border-b border-edge-subtle px-2.5 py-1.5 text-left text-xs text-fg-secondary hover:bg-surface-overlay hover:text-fg motion-safe:transition-opacity focus-visible:outline-none focus-visible:bg-surface-overlay"
             >
               <span>View team page</span>
+              <span aria-hidden className="text-fg-faint">→</span>
+            </Link>
+            <Link
+              to="/portfolio"
+              onClick={() => setOpen(false)}
+              className="flex w-full items-center justify-between gap-1.5 border-b border-edge-subtle px-2.5 py-1.5 text-left text-xs text-fg-secondary hover:bg-surface-overlay hover:text-fg motion-safe:transition-opacity focus-visible:outline-none focus-visible:bg-surface-overlay"
+            >
+              <span>All this team's apps</span>
               <span aria-hidden className="text-fg-faint">→</span>
             </Link>
             {creating ? (

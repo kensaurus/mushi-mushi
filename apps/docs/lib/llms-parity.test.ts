@@ -105,6 +105,8 @@ describe('llms-full.txt', () => {
     const links = extractLlmsLinks(llmsTxt)
     const missing: string[] = []
     for (const slug of links) {
+      // App routes (app/connect/page.tsx) have no MDX, so no full-text section.
+      if (existsSync(join(DOCS_ROOT, 'app', ...slug.split('/').filter(Boolean), 'page.tsx'))) continue
       // The llms-full.txt contains "Source: https://…/docs<slug>"
       const expected = `kensaur.us/mushi-mushi/docs${slug === '/' ? '' : slug}`
       if (!fullTxt.includes(expected)) missing.push(slug)

@@ -11,6 +11,11 @@ on:
 permissions:
   issues: write
 
+# Label sync is idempotent; the newest labels.yml wins.
+concurrency:
+  group: labels-sync
+  cancel-in-progress: true
+
 jobs:
   sync:
     runs-on: ubuntu-latest

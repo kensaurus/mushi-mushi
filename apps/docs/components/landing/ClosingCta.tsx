@@ -4,16 +4,17 @@
  * Closing CTA — solo primary path + team operators link (no scroll hijack).
  */
 import Link from 'next/link'
-import { motion, useReducedMotion } from 'motion/react'
-import { LANDING_OPERATOR } from '@/lib/landing-copy'
+import { motion } from 'motion/react'
+import { LANDING_COMMUNITY, LANDING_OPERATOR } from '@/lib/landing-copy'
 import {
   LandingStagger,
   LandingStaggerItem,
   landingStampVariants,
 } from './landing-stagger'
+import { usePrefersReducedMotion } from './use-prefers-reduced-motion'
 
 export function ClosingCta() {
-  const reduced = useReducedMotion()
+  const reduced = usePrefersReducedMotion()
 
   return (
     <LandingStagger
@@ -42,9 +43,26 @@ export function ClosingCta() {
         </LandingStaggerItem>
         <LandingStaggerItem>
           <p className="landing-closing-cta">
-            <Link className="landing-closing-link" href={LANDING_OPERATOR.soloHref}>
-              {LANDING_OPERATOR.soloCta}
-            </Link>
+            {/* Console signup is another app — plain <a>, same tab, tracked. */}
+            {LANDING_OPERATOR.soloHref.startsWith('http') ? (
+              <a
+                className="landing-closing-link"
+                href={LANDING_OPERATOR.soloHref}
+                data-mushi-cta={LANDING_OPERATOR.soloCtaId}
+                data-mushi-location="closing"
+              >
+                {LANDING_OPERATOR.soloCta}
+              </a>
+            ) : (
+              <Link
+                className="landing-closing-link"
+                href={LANDING_OPERATOR.soloHref}
+                data-mushi-cta={LANDING_OPERATOR.soloCtaId}
+                data-mushi-location="closing"
+              >
+                {LANDING_OPERATOR.soloCta}
+              </Link>
+            )}
           </p>
         </LandingStaggerItem>
         <LandingStaggerItem>
@@ -56,6 +74,20 @@ export function ClosingCta() {
               rel="noopener noreferrer"
             >
               {LANDING_OPERATOR.teamCta}
+            </a>
+          </p>
+        </LandingStaggerItem>
+        <LandingStaggerItem>
+          <p className="landing-section-lead landing-closing-team">
+            {LANDING_COMMUNITY.lead}{' '}
+            <a
+              href={LANDING_COMMUNITY.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              data-mushi-cta="landing-discussions"
+              data-mushi-location="closing"
+            >
+              {LANDING_COMMUNITY.label}
             </a>
           </p>
         </LandingStaggerItem>

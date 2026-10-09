@@ -18,15 +18,15 @@ Investigate a Mushi bug report and dispatch an automated fix attempt, with human
 4. The response includes a `prUrl` (GitHub pull request). Share it with the user.
 5. Monitor progress (optional):
    ```
-   get_recent_fixes { reportId: "<id>", limit: 1 }
+   get_report_timeline { reportId: "<id>" }
    ```
    Then:
    ```
    get_fix_context { reportId: "<id>" }
    ```
-6. Once the fix is reviewed and merged, the report moves to `fixed`. To close it manually:
+6. Once the fix is reviewed and merged, the report moves to `fixed` (`merge_fix` does this for a merged PR). To move it manually, e.g. dismiss a duplicate:
    ```
-   close_report { reportId: "<id>" }
+   transition_status { reportId: "<id>", status: "dismissed" }
    ```
    Only with explicit user confirmation.
 

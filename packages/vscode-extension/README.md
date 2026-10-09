@@ -8,9 +8,18 @@ for any user-felt bug — plus evidence (screenshots, console, network), blast
 radius, and fix dispatch — without leaving the editor and **without a second
 LLM key**.
 
-## Install
+> **Status: deferred (2026-09-21).** This extension is **not published** to the
+> VS Code Marketplace or Open VSX, and will not be until the hosted MCP sign-in
+> it defaults to is fixed. You do not need it to use Mushi in VS Code: open
+> [Connect your editor](https://kensaur.us/mushi-mushi/docs/connect), pick
+> **VS Code** and open its one-click install dialog, which adds the Mushi MCP
+> server with VS Code's built-in MCP support.
 
-1. Install this extension from the VS Code Marketplace or [Open VSX](https://open-vsx.org/).
+## Install (from source)
+
+1. Build the package from a clone of this repository:
+   `pnpm --filter mushi-mushi-vscode package`, then in VS Code run
+   **Extensions: Install from VSIX…** and pick the generated `.vsix`.
 2. Open the **Chat** view → **Agent** mode. Mushi registers itself as an MCP
    server automatically.
 3. The first time the agent uses a Mushi tool you'll be prompted for an API key.

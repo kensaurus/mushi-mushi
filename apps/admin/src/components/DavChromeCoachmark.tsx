@@ -8,6 +8,7 @@ import { useLocation } from 'react-router-dom'
 import { Btn } from './ui'
 import { useAdminMode } from '../lib/mode'
 import { shouldShowDavCoachmark } from '../lib/chromeLayers'
+import { shouldShowPipelineRibbonChrome } from '../lib/chromePosture'
 
 const DISMISS_KEY = 'mushi:davChromeCoachmark:dismissed:v1'
 
@@ -31,7 +32,10 @@ export function DavChromeCoachmark() {
   const [visible, setVisible] = useState(false)
 
   useEffect(() => {
-    setVisible(isAdvanced && shouldShowDavCoachmark(pathname) && !isDismissed())
+    // Same predicate GlobalStatusStrip uses, so the "two strips" copy only
+    // appears where the pipeline strip is actually on screen.
+    const ribbonVisible = shouldShowPipelineRibbonChrome(isAdvanced, pathname)
+    setVisible(shouldShowDavCoachmark(pathname, ribbonVisible) && !isDismissed())
   }, [isAdvanced, pathname])
 
   if (!visible) return null

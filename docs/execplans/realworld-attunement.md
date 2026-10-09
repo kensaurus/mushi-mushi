@@ -59,7 +59,7 @@ Tests: `packages/core/src/pii-scrubber.test.ts` (scrubUrl matrix + `Token
 Verified 2026-07-23: `pnpm --filter @mushi-mushi/core test` 192 passed ·
 `pnpm --filter @mushi-mushi/web test` 225 passed · `pnpm typecheck` 47/47.
 
-## Phase 2 — Conduit fixture matrix + dogfood harness `PENDING`
+## Phase 2 — Conduit fixture matrix + dogfood harness `COMPLETE` (CI gate deferred to Plan 017)
 
 Vendor reference Conduit apps under `examples/realworld/` (MIT attribution):
 `backend-express` (+`@mushi-mushi/node`), `frontend-react-vite` (path router,

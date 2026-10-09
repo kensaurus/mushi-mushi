@@ -157,7 +157,7 @@ function HeroSnapshotMeta({ metric, kicker }: { metric?: string; kicker?: string
 
 /**
  * Render the 3-tile hero. Beginners collapse it to a single friendlier
- * pill (they still get the global NextBestAction strip above the layout
+ * pill (they still get the global NextStep banner above the layout
  * — stacking a second tile hero for them is noisy).
  */
 export function PageHero({

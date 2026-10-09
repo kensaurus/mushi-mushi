@@ -4,18 +4,19 @@
  *          URL-driven tabs (Overview / Breakdown / Raw log).
  */
 
-import { useCallback, useEffect, useMemo } from 'react'
+import { useCallback, useMemo } from 'react'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
-import { Link } from 'react-router-dom'
 import { useSearchParams } from 'react-router-dom'
 import { usePageCopy } from '../lib/copy'
 import { useCostUx, resolveQuickCostTab } from '../lib/costModeUx'
+import { useQuickstartLandingTab } from '../lib/useQuickstartTab'
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useRealtimeReload } from '../lib/realtime'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
-import { SetupNudge } from '../components/SetupNudge'
+import { NextStep } from '../components/NextStep'
+import { PageLoadError } from '../components/PageLoadError'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { ResponsiveTable } from '../components/ResponsiveTable'
@@ -25,7 +26,6 @@ import {
   SegmentedControl,
   Badge,
   Btn,
-  ErrorAlert,
 } from '../components/ui'
 import {
   ActionPill,
@@ -103,6 +103,7 @@ export function CostPage() {
     data: statsData,
     loading: statsLoading,
     error: statsError,
+    errorCode: statsErrorCode,
     reload: reloadStats,
     lastFetchedAt,
     isValidating,
@@ -135,11 +136,25 @@ export function CostPage() {
     [searchParams, setSearchParams],
   )
 
-  useEffect(() => {
-    if (!ux.isQuickstart || !activeProjectId || statsLoading) return
-    const quickTab = resolveQuickCostTab(stats)
-    if (active !== quickTab) setActive(quickTab)
-  }, [ux.isQuickstart, activeProjectId, statsLoading, stats, active, setActive])
+  // "N failed calls in 24h → View failures" lands on exactly those rows.
+  const viewFailures = useCallback(() => {
+    const next = new URLSearchParams(searchParams)
+    next.set('tab', 'log')
+    next.set('log_status', 'failed')
+    next.set('log_since', '24h')
+    next.delete('log_page')
+    setSearchParams(next, { replace: true, preventScrollReset: true })
+  }, [searchParams, setSearchParams])
+
+  // Quick mode opens the posture tab once; links and clicks then win.
+  useQuickstartLandingTab({
+    enabled: ux.isQuickstart && Boolean(activeProjectId),
+    ready: !statsLoading,
+    tabParam: param,
+    activeTab: active,
+    quickTab: resolveQuickCostTab(stats),
+    setActiveTab: setActive,
+  })
 
   const { byOp, byModel, dailySeries } = useMemo(() => {
     const op: Record<string, number> = {}
@@ -225,7 +240,8 @@ export function CostPage() {
             'Overview shows trend + health. Breakdown groups by operation/model. Raw log lets you search individual calls. Add BYOK in Settings to bill your own Anthropic key.'
           }
         />
-        <SetupNudge
+        <NextStep
+          variant="inline"
           requires={['project']}
           emptyTitle="Select a project"
           emptyDescription="LLM spend is scoped to the active project — pick mushi-mushi (or your app) in the header switcher."
@@ -238,7 +254,7 @@ export function CostPage() {
     return <PanelSkeleton rows={6} label="Loading LLM cost" />
   }
   if (statsError) {
-    return <ErrorAlert message={`Failed to load cost stats: ${statsError}`} onRetry={reloadAll} />
+    return <PageLoadError error={statsError} code={statsErrorCode} onRetry={reloadAll} />
   }
 
   return (
@@ -279,7 +295,14 @@ export function CostPage() {
         slots={[
           {
             priority: POSTURE_PRIORITY.status,
-            children: <CostStatusBanner stats={stats} onTab={setActive} plainBanner={ux.plainBanner} />,
+            children: (
+              <CostStatusBanner
+                stats={stats}
+                onTab={setActive}
+                onViewFailures={viewFailures}
+                plainBanner={ux.plainBanner}
+              />
+            ),
           },
           {
             priority: POSTURE_PRIORITY.heroOrSnapshot,
@@ -331,9 +354,7 @@ export function CostPage() {
                   <SignalChip tone="neutral" className="uppercase tracking-wide font-medium">
                     Daily spend
                   </SignalChip>
-                  <Link to="/billing">
-                    <Btn size="sm" variant="ghost">Compare to plan usage</Btn>
-                  </Link>
+                  <Btn to="/billing" size="sm" variant="ghost">Compare to plan usage</Btn>
                 </div>
                 <DailySpendChart
                   series={dailySeries}

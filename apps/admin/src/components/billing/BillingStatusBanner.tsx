@@ -3,7 +3,6 @@
  * PURPOSE: Plan + usage health — quota, Stripe posture, complimentary accounts.
  */
 
-import { Link } from 'react-router-dom'
 import { Btn, RelativeTime } from '../ui'
 import { usePageCopy } from '../../lib/copy'
 import { fmtBillingLimit } from '../../lib/billingUsageForecast'
@@ -55,9 +54,7 @@ export function BillingStatusBanner({ stats, onManage, onUpgrade, onTab, plainBa
             : 'Billing is per-project — create an app first, then usage and invoices appear here.'
         }
         action={
-          <Link to="/projects">
-            <Btn size="sm" variant="ghost">{actions.projects ?? 'Create project'}</Btn>
-          </Link>
+          <Btn to="/projects" size="sm" variant="ghost">{actions.projects ?? 'Create project'}</Btn>
         }
       />
     )
@@ -156,9 +153,7 @@ export function BillingStatusBanner({ stats, onManage, onUpgrade, onTab, plainBa
         title={plainBanner ? 'Admin account — no charges' : 'Admin account — complimentary billing'}
         subtitle={`${stats.planDisplayName} entitlements for ${projectLabel} · no Stripe charges · ${limitLine} this period`}
         action={
-          <Link to="/cost">
-            <Btn size="sm" variant="ghost">{actions.cost ?? 'View LLM cost'}</Btn>
-          </Link>
+          <Btn to="/cost" size="sm" variant="ghost">{actions.cost ?? 'View LLM cost'}</Btn>
         }
       />
     )
@@ -188,9 +183,7 @@ export function BillingStatusBanner({ stats, onManage, onUpgrade, onTab, plainBa
         title={plainBanner ? 'Hobby plan — no usage yet' : 'Hobby plan — no usage this period yet'}
         subtitle={`${stats.freeLimitReports.toLocaleString()} free reports/mo included. Send a test report from Health or wire the SDK widget.`}
         action={
-          <Link to="/health">
-            <Btn size="sm" variant="ghost">{actions.health ?? 'Run Health test'}</Btn>
-          </Link>
+          <Btn to="/health" size="sm" variant="ghost">{actions.health ?? 'Run Health test'}</Btn>
         }
       />
     )

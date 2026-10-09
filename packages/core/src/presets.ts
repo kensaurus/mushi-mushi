@@ -29,17 +29,23 @@ const KNOWN_PRESETS: readonly NonNullable<MushiConfig['preset']>[] = [
 ];
 
 // Keep in sync with the top-level keys of `MushiConfig` in `types.ts`.
+// `presets.config-keys.test.ts` enforces that automatically — the comment alone
+// did not hold, and `replaySampleRate` sat here undeclared long enough to ship.
 const KNOWN_CONFIG_KEYS: readonly string[] = [
   'projectId',
   'apiKey',
   'apiEndpoint',
+  'tunnel',
   'timeout',
   'maxRetries',
   'circuitBreaker',
   'preset',
   'runtimeConfig',
+  'analytics',
+  'trackSessions',
   'sentry',
   'widget',
+  'notifications',
   'capture',
   'privacy',
   'proactive',
@@ -52,8 +58,13 @@ const KNOWN_CONFIG_KEYS: readonly string[] = [
   'enabled',
   'appVersion',
   'sampleRate',
+  'replaySampleRate',
+  'replaysOnErrorSampleRate',
   'beforeSend',
   'beforeSendFeedback',
+  'ignoreErrors',
+  'denyUrls',
+  'allowUrls',
   'onCrashedLastRun',
 ];
 

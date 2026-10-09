@@ -11,8 +11,7 @@
  */
 
 import { useState } from 'react'
-import { apiFetch } from '../../lib/supabase'
-import { useToast } from '../../lib/toast'
+import { useSendTestReport } from '../../lib/useSendTestReport'
 import { Btn, ResultChip, type ResultChipTone } from '../ui'
 import { ActionPill, ContainedBlock, SignalChip } from '../report-detail/ReportSurface'
 
@@ -38,7 +37,7 @@ function statusToTone(status: SendStatus): ResultChipTone {
 }
 
 export function FirstReportHero({ projectId, projectName, onReportSent }: Props) {
-  const toast = useToast()
+  const sendTestReport = useSendTestReport()
   const [status, setStatus] = useState<SendStatus>('idle')
   const [sentAt, setSentAt] = useState<string | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -46,17 +45,14 @@ export function FirstReportHero({ projectId, projectName, onReportSent }: Props)
   async function send() {
     setStatus('running')
     setErrorMessage(null)
-    const res = await apiFetch(`/v1/admin/projects/${projectId}/test-report`, { method: 'POST' })
+    const res = await sendTestReport(projectId)
     if (res.ok) {
       setStatus('pass')
       setSentAt(new Date().toISOString())
-      toast.success('Test report queued', 'Watch it land in /reports within a few seconds.')
       onReportSent?.()
     } else {
-      const msg = res.error?.message ?? 'Check your project keys and try again.'
       setStatus('fail')
-      setErrorMessage(msg)
-      toast.error('Test report failed', msg)
+      setErrorMessage(res.message)
     }
   }
 
@@ -86,20 +82,21 @@ export function FirstReportHero({ projectId, projectName, onReportSent }: Props)
               variant={status === 'pass' ? 'ghost' : 'primary'}
               onClick={send}
               loading={status === 'running'}
-              disabled={status === 'running' || status === 'pass'}
+              // "Send another" must stay clickable (QA 286): only a send in flight blocks it.
+              disabled={status === 'running'}
             >
               {status === 'pass' ? 'Send another' : 'Send test report'}
             </Btn>
             {status !== 'idle' && (
               <ResultChip tone={statusToTone(status)} at={status === 'pass' ? sentAt : null}>
                 {status === 'running' && 'Submitting test report…'}
-                {status === 'pass' && 'Queued — opening /reports'}
+                {status === 'pass' && 'Test report sent. It shows in Reports in a few seconds.'}
                 {status === 'fail' && (errorMessage ?? 'Submission failed')}
               </ResultChip>
             )}
             {status === 'pass' && (
               <ActionPill to="/reports" tone="brand">
-                Open /reports →
+                Open Reports →
               </ActionPill>
             )}
             <ActionPill to="/onboarding" tone="neutral">

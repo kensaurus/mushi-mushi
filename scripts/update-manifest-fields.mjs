@@ -1,13 +1,18 @@
 #!/usr/bin/env node
-// Backfill missing attribution/funding fields across packages/*/package.json.
-// Fields: author, bugs, repository.directory, homepage (/tree/main → master), funding.
+// Backfill missing attribution fields across packages/*/package.json.
+// Fields: author, bugs, repository.directory, homepage (/tree/main → master).
+//
+// No `funding` field: GitHub Sponsors is not enabled for kensaurus
+// (github.com/sponsors/kensaurus redirects to the profile), so the field only
+// gave `npm fund` and the npm sidebar a dead link. When Sponsors is live,
+// restore it here as { type: 'github', url: 'https://github.com/sponsors/kensaurus' }
+// and backfill it with `if (!pkg.funding)`.
 import { readFileSync, writeFileSync, readdirSync, existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const PACKAGES = join(ROOT, 'packages')
-const FUNDING = { type: 'github', url: 'https://github.com/sponsors/kensaurus' }
 
 let patched = 0
 
@@ -46,11 +51,6 @@ for (const name of readdirSync(PACKAGES)) {
   // Fix stale /tree/main/ homepage references
   if (pkg.homepage && pkg.homepage.includes('/tree/main/')) {
     pkg.homepage = pkg.homepage.replace('/tree/main/', '/tree/master/')
-    changed = true
-  }
-
-  if (!pkg.funding) {
-    pkg.funding = FUNDING
     changed = true
   }
 

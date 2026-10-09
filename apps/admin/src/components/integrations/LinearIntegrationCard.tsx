@@ -13,12 +13,16 @@
  */
 
 import { useState } from 'react'
-import { Btn, Input } from '../ui'
+import { Btn, Input, SecretInput } from '../ui'
 import { apiFetch } from '../../lib/supabase'
+import { ConnectionStatus } from '../ui/ConnectionStatus'
+import { connectionFromProbe } from '../../lib/integrationConnection'
 import { useToast } from '../../lib/toast'
 import { HealthSparkline } from './HealthSparkline'
+import { ConfirmDialog } from '../ConfirmDialog'
+import { describeApiFailure } from '../../lib/humanizeApiError'
+import { ADMIN_ONLY_HINT } from '../../lib/orgPermissions'
 import type { HealthRow } from './types'
-import { CHIP_TONE } from '../../lib/chipTone'
 
 // ── Linear wordmark SVG (brand color, see allowlist below) ───────────────────
 function LinearLogo({ size = 20 }: { size?: number }) {
@@ -52,6 +56,11 @@ interface Props {
   latestProbe?: HealthRow
   sparkline?: HealthRow[]
   onReload?: () => void
+  /** Runs the live Linear probe (records a health row). */
+  onTest?: () => void
+  testing?: boolean
+  /** False for members and viewers: connect, save and disconnect are owner/admin only. */
+  canManage?: boolean
 }
 
 export function LinearIntegrationCard({
@@ -62,6 +71,9 @@ export function LinearIntegrationCard({
   latestProbe,
   sparkline = [],
   onReload,
+  onTest,
+  testing = false,
+  canManage = true,
 }: Props) {
   const toast = useToast()
 
@@ -91,7 +103,8 @@ export function LinearIntegrationCard({
       if (res.ok && res.data?.url) {
         window.location.href = res.data.url
       } else {
-        toast.error('Could not start Linear connection', res.error?.message)
+        const t = describeApiFailure(res.error, 'Could not start Linear connection')
+        toast.error(t.title, t.description)
         setConnecting(false)
       }
     } catch {
@@ -116,7 +129,8 @@ export function LinearIntegrationCard({
         setApiKey('')
         onReload?.()
       } else {
-        toast.error('Could not save Linear API key', res.error?.message)
+        const t = describeApiFailure(res.error, 'Could not save the Linear API key')
+        toast.error(t.title, t.description)
       }
     } finally {
       setSavingApiKey(false)
@@ -133,15 +147,31 @@ export function LinearIntegrationCard({
         setConfirmDisconnect(false)
         onReload?.()
       } else {
-        toast.error('Could not disconnect Linear', res.error?.message)
+        const t = describeApiFailure(res.error, 'Could not disconnect Linear')
+        toast.error(t.title, t.description)
       }
     } finally {
       setDisconnecting(false)
     }
   }
 
+  const connection = connectionFromProbe({ configured: linearConnected, probe: latestProbe })
+  const probeFailing = latestProbe?.status === 'down' || latestProbe?.status === 'degraded'
+  const connectionAction =
+    connection.state === 'not_connected'
+      ? canManage ? { label: 'Connect workspace', onClick: () => void handleOAuthConnect() } : undefined
+      : connection.state === 'attention' && probeFailing
+        ? canManage ? { label: 'Reconnect', onClick: () => void handleOAuthConnect() } : undefined
+        : connection.state !== 'working' && onTest
+          ? { label: connection.state === 'checking' ? 'Test now' : 'Test again', onClick: onTest }
+          : undefined
+
   return (
-    <div className="rounded-xl border border-edge-subtle bg-surface p-5 space-y-4">
+    <div
+      id="integrations-linear"
+      // mushi-mushi-allowlist: anchored card (#integrations-linear links land here); Card takes no id
+      className="rounded-xl border border-edge-subtle bg-surface-raised p-5 space-y-4 scroll-mt-chrome"
+    >
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-center gap-3 min-w-0">
@@ -150,15 +180,9 @@ export function LinearIntegrationCard({
           </div>
           <div className="min-w-0">
             <h3 className="font-semibold text-sm text-fg truncate">Linear</h3>
-            {linearConnected ? (
-              <p className="text-xs text-ok truncate">
-                {workspaceName ? `Connected to ${workspaceName}` : 'Connected'}
-              </p>
-            ) : (
-              <p className="text-xs text-fg-secondary truncate">
-                Not connected — link your workspace to create issues and sync status
-              </p>
-            )}
+            {linearConnected && workspaceName ? (
+              <p className="text-xs text-fg-secondary truncate">Workspace: {workspaceName}</p>
+            ) : null}
           </div>
         </div>
 
@@ -172,58 +196,49 @@ export function LinearIntegrationCard({
             </span>
           )}
 
-          {linearConnected && !confirmDisconnect && (
+          {linearConnected && (
             <Btn
               type="button"
               variant="ghost"
               size="sm"
               onClick={() => setConfirmDisconnect(true)}
+              disabled={!canManage}
+              title={canManage ? undefined : ADMIN_ONLY_HINT}
             >
               Disconnect
             </Btn>
           )}
 
-          {confirmDisconnect && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-warn">Disconnect Linear?</span>
-              <Btn
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => setConfirmDisconnect(false)}
-              >
-                Cancel
-              </Btn>
-              <Btn
-                type="button"
-                variant="danger"
-                size="sm"
-                loading={disconnecting}
-                onClick={() => void handleDisconnect()}
-              >
-                {disconnecting ? 'Disconnecting…' : 'Yes, disconnect'}
-              </Btn>
-            </div>
-          )}
-
+          {/* Not repeated when the status line already offers it. */}
+          {linearConnected && connectionAction?.label !== 'Reconnect' && (
           <Btn
             type="button"
-            variant={linearConnected ? 'ghost' : 'accent'}
+            variant="ghost"
             size="sm"
             onClick={() => void handleOAuthConnect()}
-            disabled={!projectId || connecting}
+            disabled={!projectId || connecting || !canManage}
             loading={connecting}
-            title={linearConnected ? 'Reconnect to refresh permissions' : 'Connect your Linear workspace via OAuth'}
+            title={canManage ? 'Reconnect to refresh permissions' : ADMIN_ONLY_HINT}
           >
-            {connecting ? 'Connecting…' : linearConnected ? 'Reconnect' : 'Connect workspace'}
+            {connecting ? 'Connecting…' : 'Reconnect'}
           </Btn>
+          )}
         </div>
+      </div>
+
+      <div title={connection.raw && connection.raw !== connection.detail ? connection.raw : undefined}>
+        <ConnectionStatus
+          state={testing || connecting ? 'checking' : connection.state}
+          label={connecting ? 'Connecting…' : testing ? 'Testing…' : undefined}
+          detail={testing || connecting ? undefined : connection.detail}
+          action={testing || connecting ? undefined : connectionAction}
+        />
       </div>
 
       {/* Connected features summary */}
       {linearConnected && (
-        <div className={`rounded-lg px-3 py-2 text-xs space-y-1 ${CHIP_TONE.okSubtle}`}>
-          <p className="font-medium">Active features</p>
+        <div className="rounded-lg border border-edge-subtle px-3 py-2 text-xs space-y-1">
+          <p className="font-medium text-fg">What Linear does for this project</p>
           <ul className="text-fg-secondary leading-relaxed space-y-0.5 ml-2">
             <li>✓ Auto-create issues for triaged bugs</li>
             <li>✓ Two-way status sync (issue resolved → report resolved)</li>
@@ -255,13 +270,11 @@ export function LinearIntegrationCard({
           <div className="flex gap-2 items-end">
             <div className="flex-1 min-w-0">
               <label className="block text-xs text-fg-secondary mb-1">API key</label>
-              <Input
-                type="password"
+              <SecretInput
                 placeholder="lin_api_…"
-                className="font-mono text-xs"
+                className="text-xs"
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
-                autoComplete="off"
               />
             </div>
             <div className="w-32 shrink-0">
@@ -278,7 +291,8 @@ export function LinearIntegrationCard({
               type="button"
               variant="ghost"
               size="sm"
-              disabled={!apiKey.trim()}
+              disabled={!apiKey.trim() || !canManage}
+              title={canManage ? undefined : ADMIN_ONLY_HINT}
               loading={savingApiKey}
               onClick={() => void handleSaveApiKey()}
               className="shrink-0 self-end"
@@ -288,6 +302,21 @@ export function LinearIntegrationCard({
           </div>
         </div>
       </details>
+
+      {confirmDisconnect && (
+        <ConfirmDialog
+          title="Disconnect Linear?"
+          body="Mushi forgets this project's Linear credentials. New reports stop creating Linear issues and status sync stops until you reconnect. Issues already in Linear stay there."
+          confirmLabel="Disconnect"
+          cancelLabel="Keep connected"
+          tone="danger"
+          loading={disconnecting}
+          onConfirm={() => void handleDisconnect()}
+          onCancel={() => {
+            if (!disconnecting) setConfirmDisconnect(false)
+          }}
+        />
+      )}
     </div>
   )
 }

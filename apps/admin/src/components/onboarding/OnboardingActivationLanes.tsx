@@ -1,5 +1,10 @@
 /**
  * Five-lane activation cockpit — SDK, Repo/CI, Observability, Agent access, Community.
+ *
+ * A status grid, not a nudge: the lane marked "Next" holds the step
+ * useNextStep names (the same one the checklist and the setup guide mark).
+ * The server's `top_priority` link used to sit in the header as a fourth
+ * "what next" voice on /onboarding; the status banner above names it.
  */
 
 import type { ReactNode } from 'react'
@@ -10,9 +15,10 @@ import { IconBolt, IconGithub, IconHealth, IconMcp, IconChat } from '../icons'
 import { ContainedBlock } from '../report-detail/ReportSurface'
 import type { SetupProject } from '../../lib/useSetupStatus'
 import type { OnboardingStats } from './types'
-import type { ActivationPreflight, ActivationTopPriority } from '../../lib/useActivationStatus'
+import type { ActivationPreflight } from '../../lib/useActivationStatus'
+import { useNextStep } from '../../lib/useNextStep'
 
-export type LaneStatus = 'done' | 'blocked' | 'next' | 'optional'
+type LaneStatus = 'done' | 'blocked' | 'next' | 'optional'
 
 export interface ActivationLane {
   id: string
@@ -43,6 +49,7 @@ function deriveLanes(
   project: SetupProject | null,
   stats: OnboardingStats | null,
   preflight: ActivationPreflight | null,
+  nextId: string | null,
 ): ActivationLane[] {
   const step = (id: string) => project?.steps.find((s) => s.id === id)
   const sdk = step('sdk_installed')
@@ -59,8 +66,6 @@ function deriveLanes(
   const obsDone = Boolean(sentry?.complete) || Boolean(qa?.complete)
   const agentReady = Boolean(preflight?.ready) || (stats?.hasApiKey && sdkDone)
   const communityDone = (stats?.reportCount ?? 0) > 0
-
-  const nextId = stats?.nextStepId ?? null
 
   const laneStatus = (done: boolean, stepIds: string[]): LaneStatus => {
     if (done) return 'done'
@@ -88,7 +93,7 @@ function deriveLanes(
       id: 'repo',
       label: 'Repo & CI',
       description: 'Connect GitHub so auto-fix PRs and code grounding work.',
-      to: '/integrations',
+      to: '/integrations/config#platform-card-github',
       status: laneStatus(repoDone, ['github_connected']),
       receipt: repoDone ? 'GitHub connected' : fix?.complete ? 'Fix dispatched — link repo for merges' : undefined,
     },
@@ -96,7 +101,7 @@ function deriveLanes(
       id: 'observability',
       label: 'Observability',
       description: 'Wire Sentry or QA stories so regressions surface before users do.',
-      to: sentry?.complete ? '/qa-coverage' : '/integrations',
+      to: sentry?.complete ? '/qa-coverage' : '/integrations/config#platform-card-sentry',
       status: laneStatus(obsDone, ['sentry_connected', 'first_qa_story_passing']),
       receipt: obsDone ? 'Signal wired' : 'Optional — add when ready',
     },
@@ -123,16 +128,15 @@ export function OnboardingActivationLanes({
   project,
   stats,
   preflight,
-  topPriority,
   className = '',
 }: {
   project: SetupProject | null
   stats: OnboardingStats | null
   preflight: ActivationPreflight | null
-  topPriority: ActivationTopPriority | null
   className?: string
 }) {
-  const lanes = deriveLanes(project, stats, preflight)
+  const { stepId } = useNextStep({ kind: 'setup', project })
+  const lanes = deriveLanes(project, stats, preflight, stepId)
 
   return (
     <Card className={`p-4 space-y-3 ${className}`} data-testid="activation-lanes">
@@ -145,11 +149,6 @@ export function OnboardingActivationLanes({
             </p>
           </ContainedBlock>
         </div>
-        {topPriority ? (
-          <Link to={topPriority.to} className="shrink-0 text-2xs font-medium text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
-            {topPriority.label} →
-          </Link>
-        ) : null}
       </div>
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {lanes.map((lane) => (

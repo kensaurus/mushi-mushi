@@ -235,6 +235,14 @@ verify_jwt = false
 [functions.usage-alerts]
 verify_jwt = false
 
+# lifecycle-emails runs hourly via pg_cron at :37 (`dispatch_lifecycle_emails`,
+# 20260921000005). Day-0 / day-2 / day-7 activation emails for new accounts.
+# The SQL dispatcher and the handler both return early unless
+# mushi_runtime_config.lifecycle_emails_enabled = 'true'. Auth
+# (requireServiceRoleAuth) is enforced inside the handler.
+[functions.lifecycle-emails]
+verify_jwt = false
+
 # intelligence-report runs weekly via pg_cron. It writes a narrative LLM summary
 # of KPI trends into `intelligence_reports`. Auth is enforced inside the handler.
 [functions.intelligence-report]
@@ -272,8 +280,10 @@ verify_jwt = false
 verify_jwt = false
 
 # sdk-versions-cron runs daily at 02:30 UTC (pg_cron) to reconcile the
-# sdk_versions catalogue against the npm registry. Auth inside via
-# requireServiceRoleAuth; the pg_cron job sends the service-role bearer.
+# sdk_versions catalogue against the npm registry, and release.yml's
+# catalog-sync job calls it after a publish. Auth inside: the service-role
+# bearer (pg_cron) or a GitHub Actions OIDC token (_shared/github-oidc.ts).
+# verify_jwt must stay false: the gateway would reject a GitHub-issued JWT.
 [functions.sdk-versions-cron]
 verify_jwt = false
 
@@ -317,4 +327,93 @@ verify_jwt = false
 # from Linear's servers — no Supabase JWT. Auth inside via HMAC signature
 # verification.
 [functions.webhooks-linear-agent]
+verify_jwt = false
+
+# telegram-webhook receives Telegram Bot API updates (voice notes, /start
+# bindings, inline-keyboard confirmations) from Telegram's servers — no
+# Supabase JWT. Auth inside via the X-Telegram-Bot-Api-Secret-Token header
+# (sha256 compared against project_settings.telegram_webhook_secret_hash).
+[functions.telegram-webhook]
+verify_jwt = false
+
+# cursor-webhook receives Cursor Cloud Agent v0 statusChange callbacks — no
+# Supabase JWT. Auth inside via X-Webhook-Signature (sha256= HMAC over the raw
+# body with the per-project secret derived from MUSHI_INTERNAL_CALLER_SECRET).
+[functions.cursor-webhook]
+verify_jwt = false
+
+# agent-status-poll is invoked by pg_cron (mushi-agent-status-poll, 5-55/5)
+# through the internal caller token; requireServiceRoleAuth inside.
+[functions.agent-status-poll]
+verify_jwt = false
+
+# 2026-09-22: the thirteen internal functions below were still deployed with
+# the platform default verify_jwt = true, so the gateway rejected the internal
+# caller token before requireServiceRoleAuth ran: anomaly-detector 401'd on
+# every hourly cron run, pdca-runner every 6 h, backend-drift-scanner daily.
+# Each authenticates inside the handler with requireServiceRoleAuth alone
+# (no header bypass; see internal-auth-contract.test.ts, which now also fails
+# when an internal function is missing from this file).
+# Cron-invoked: anomaly-detector, pdca-runner, backend-drift-scanner.
+[functions.anomaly-detector]
+verify_jwt = false
+
+[functions.pdca-runner]
+verify_jwt = false
+
+[functions.backend-drift-scanner]
+verify_jwt = false
+
+# Cron-invoked daily (mushi-recipe-collector-daily, 03:35 UTC); Plan 019.
+[functions.recipe-collector]
+verify_jwt = false
+
+# Cron-invoked daily (mushi-radar-scan-daily, 04:05 UTC); Plan 020 hole checks.
+[functions.radar-scan]
+verify_jwt = false
+
+# Cron-invoked hourly (mushi-operator-digest-hourly, :20); Plan 020 operator digest.
+[functions.operator-digest]
+verify_jwt = false
+
+# Cron-invoked every 6 hours (mushi-store-review-intake, :45); opt-in store reviews → reports.
+[functions.store-review-intake]
+verify_jwt = false
+
+# Invoked by the api function or by another internal function.
+[functions.contract-graph-builder]
+verify_jwt = false
+
+[functions.drift-walker]
+verify_jwt = false
+
+[functions.experiment-analyzer]
+verify_jwt = false
+
+[functions.mistake-clusterer]
+verify_jwt = false
+
+[functions.mistake-summarizer]
+verify_jwt = false
+
+[functions.release-builder]
+verify_jwt = false
+
+[functions.skill-sync]
+verify_jwt = false
+
+[functions.story-mapper]
+verify_jwt = false
+
+[functions.test-gen-from-story]
+verify_jwt = false
+
+[functions.tremendous-redemption-worker]
+verify_jwt = false
+
+# reporter-notify-fanout is enqueued by the report_comments trigger through
+# mushi.edge_function_post (migration 20261002120200) with the internal caller
+# secret as bearer, so the gateway must not verify it as a JWT. Auth is
+# requireServiceRoleAuth inside the handler.
+[functions.reporter-notify-fanout]
 verify_jwt = false

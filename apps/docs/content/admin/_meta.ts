@@ -19,6 +19,7 @@ export default {
 
   // Do — make the fix
   connect: 'Connect hub (console)',
+  'sdk-upgrade-lockfile': 'SDK upgrade lockfile helper',
   'cli-auth': 'CLI device auth',
   'mcp-auth': 'MCP OAuth consent',
   'setup-copilot': 'Setup Copilot',
@@ -28,14 +29,17 @@ export default {
   'prompt-lab': 'Prompt lab',
   releases: 'Releases',
   feedback: 'Feedback hub',
+  voice: 'Voice intake',
   'feature-board': 'Feature board',
   content: 'Content quality',
 
   // Check — measure quality
   judge: 'Judge dashboard',
   'code-health': 'Code health',
+  portfolio: 'Portfolio (all apps)',
   health: 'Integration health',
   'qa-coverage': 'QA Coverage',
+  'ux-runs': 'UX runs',
   intelligence: 'Intelligence reports',
   research: 'Research',
   anomalies: 'Anomaly detection',
@@ -48,6 +52,7 @@ export default {
 
   // Workspace
   settings: 'Settings',
+  team: 'Team',
   storage: 'Storage',
   integrations: 'Integrations',
   marketplace: 'Plugin marketplace',

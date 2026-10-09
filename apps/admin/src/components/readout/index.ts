@@ -5,3 +5,4 @@
 
 export { ReadoutSection } from './ReadoutSection'
 export { EndpointCodeRow } from './EndpointCodeRow'
+export { ReadoutPanel } from './ReadoutPanel'

@@ -1,5 +1,140 @@
 # @mushi-mushi/web
 
+## 1.32.0
+
+### Minor Changes
+
+- ead9f42: The bug widget and reporter updates now speak Simplified Chinese. `locale: 'zh'` (or a `zh-*` browser language) used to fall back to English, so a Chinese-language app showed English buttons around its own Chinese categories.
+
+### Patch Changes
+
+- Updated dependencies [ead9f42]
+  - @mushi-mushi/core@1.32.0
+
+## 1.31.2
+
+### Patch Changes
+
+- 9556ab2: Shorter READMEs with a diagram of how the package fits, a copy-paste quick start and a table of what is inside. Fixes three wrong examples: the Node handlers and `attachUnhandledHook` take `{ client }` (Hono's handler also takes `next`), and `useMushi()` has no `open`, `close` or `setUser`.
+- 2b66be6: Pages using the widget no longer fail to build under Turbopack (Next 16's default dev bundler) with "Module not found: Can't resolve 'rrweb'". The optional session-replay import is now marked `webpackIgnore`, which both webpack and Turbopack leave to the runtime, so apps without `rrweb` installed load normally and replay stays off.
+- Updated dependencies [9556ab2]
+  - @mushi-mushi/core@1.31.2
+
+## 1.31.1
+
+### Patch Changes
+
+- 90d0603: Vite apps without `rrweb` installed no longer fail to load the SDK. Vite's dependency pre-bundle folded the SDK's optional rrweb lookup into a literal `import("rrweb")`, so the dev server answered "Failed to resolve import \"rrweb\"" on 1.31.0. The lookup now stays a runtime import, and replay falls back to click capture as documented.
+
+## 1.31.0
+
+### Minor Changes
+
+- 5ad0800: New reporter-loop methods on the Mushi instance: `getReporterUpdates()`, `markReportRead(id)`, `onReporterUpdate(cb)` (draw your own unread badge; it refreshes with the inbox), `getNotificationPrefs()` / `setNotificationPrefs({ email })` (email updates with double opt-in — a confirmation email goes out first, every email has one-click unsubscribe) and `subscribeReporterPush()` (call it from a "Notify me" click; needs `notifications: { webPush: { serviceWorkerPath } }` and push turned on for the project). Nothing is opted in by default; offer email or push only when `/v1/sdk/config` says the project has them.
+- 5ad0800: The widget is now one screen, looks like part of your app, and keeps reporters in the loop (Plan 018, Phase 1).
+
+  - **One-screen report.** The 3-step category → intent → details flow is gone. Reporters type first, optionally pick a type chip (Bug, Slow, Looks wrong, Confusing, Idea, plus your own categories under "More…"), optionally narrow it with a sub-chip, attach a screenshot or point at an element, and press Send. `minDescriptionLength` now defaults to 8 (halved for Japanese, Chinese and Korean); an element the reporter picked, or a screenshot they asked for, also enables Send. With no chip picked the report is sent as `category: 'other'` and the classifier assigns the type.
+  - **Looks like your app.** The panel uses your page's font and system light/dark colours. The accent comes from `widget.accent`, then your `--mushi-accent`, `accent-color` or `<meta name="theme-color">` (a page colour that would vanish against the panel is ignored). Every colour is a `--mushi-*` CSS token you can set on `:root` or `#mushi-mushi-widget`, and CSS wins over JS config. The banner now defaults to the `subtle` variant; `brand` and `neon` are opt-in.
+  - **Your reports.** A header pill opens the list with an unread badge. Rows show a plain-English status ("Looking into it", "Waiting on you", "Fixed in v1.4"), the reporter's own type and page, and the news: the developer's words or "Update to v1.4. Does it work for you now?". Internal statuses, categories and severities are never shown. The detail view shows the report, a timeline, developer replies, "Yes / Not yet" on fixes, and a composer whose replies appear at once ("Sending…", then sent, or "Failed · Retry"). Opening a report marks its updates read.
+  - **Toast on the next visit.** When a device's reports have unread updates, one toast appears near the launcher ("The developer replied to your report"), at most once per session and per 24 hours, wherever the launcher is allowed. Turn it off with `notifications: { toast: false }`.
+  - **Email and push, opt-in only.** The receipt and the report view offer "Get updates by email" (never pre-ticked; the address is prefilled from `identify()` only with `notifications.emailFromIdentity`) and, when you pass `notifications.webPush: { serviceWorkerPath }`, a "Notify me" button that asks for browser permission from the click. Each appears only when your project offers that channel (`/v1/sdk/config` → `reporter`); `notifications.email: false` hides the email box.
+  - **Uses the new reporter routes, works with old servers.** Report detail, mark-read and the toast feed use `GET /v1/reporter/reports/:id`, `POST …/:id/read` and `GET /v1/reporter/updates`; against a server without them the widget falls back to the comments call and the in-app notification routes.
+  - **Less polling.** The reporter list is checked every 5 minutes while the page is visible (was 60 s), plus when the tab becomes visible, and never from a device that has not filed a report.
+  - **Smoother and more accessible.** The panel is built once and patched region by region, so a poll or a config update no longer rebuilds what the reporter is typing. Focus moves into the dialog, Tab stays inside, Escape closes (or goes back from a report), focus returns to the launcher, chips are a roving radio group, and "Sent" / reply status / errors are announced. All motion respects `prefers-reduced-motion`.
+  - New on the `Mushi` instance, for hosts that draw their own badge or controls: `getReporterUpdates()`, `markReportRead(id)`, `onReporterUpdate(cb)` (returns an unsubscribe), `getNotificationPrefs()`, `setNotificationPrefs({ email, channels })` and `subscribeReporterPush()` (call it from a click). Config gains `notifications: { toast, email, emailFromIdentity, webPush }`.
+  - `MushiLocale` gains a `panel` section; keys used only by the retired steps are now optional and deprecated.
+
+### Patch Changes
+
+- 5ad0800: Screenshots no longer come out blank on pages with entrance animations. CSS animations never run inside the SVG image the capture draws, so elements with fade-in keyframes stayed at opacity 0 and the whole capture was transparent ("This browser can't capture the page"). The capture now freezes animations and transitions after every page style, so it shows the settled page the reporter sees. The capture canvas also asks for `willReadFrequently`, which silences Chrome's Canvas2D readback warning. Short pages no longer come out half black: the page background now fills the whole capture, as it does on screen.
+- Updated dependencies [5ad0800]
+- Updated dependencies [5ad0800]
+  - @mushi-mushi/core@1.31.0
+
+## 1.30.0
+
+### Patch Changes
+
+- f48d15b: Widget polish from live QA on Windows Chrome:
+
+  - Screenshots work in Chrome again. Chrome taints the canvas when a foreignObject SVG is loaded from a `blob:` URL, so every capture failed; the capture now uses a `data:` URL, which also passes CSPs whose `img-src` allows `data:` but not `blob:`. When the host's CSP blocks `data:` too, the reason reads "This site's security policy blocks screenshots."
+  - After a failed capture the reporter can choose "Share this tab instead": a user-consented `getDisplayMedia` tab capture that grabs one frame and stops the share at once. It loads on demand, as does screenshot markup: the ESM build now code-splits those two into `dist/chunks/`.
+  - Screenshots always black out `input[type="password"]`, `input[autocomplete^="cc-"]`, `[data-private]` and `[data-mushi-mask]` before any pixel exists, in both the DOM capture and the tab share. `privacy.redactSelectors` now adds to that baseline, replacing only the `[data-mushi-redact]` default; previously a host's own list silently dropped password redaction.
+  - The "Mushi SDK x · latest is y · Update @mushi-mushi/web" notice no longer appears to end users. Under the default `outdatedBanner: 'auto'` it shows only on a dev host (localhost, loopback, `*.localhost`, `*.local`, `file:`) or with `debug: true`. `'banner'` still shows it everywhere, and `'console-only'` keeps it out of the widget; the console warning is unchanged.
+  - Report threads no longer sit on "Loading thread…" forever. Core's reporter-inbox requests go through the same client path as every other call, with a timeout and retries, and resolve `{ ok: false }` instead of hanging or rejecting. They stay outside the circuit breaker in both directions, so a flaky inbox can never push report submissions into the offline queue. Reporter replies are no longer replayed on `pagehide`.
+  - The thread paints its summary at once and shows comment placeholders while the comments load. A load failure shows an error with "Try again". Replies, fix confirmations and reopens keep the conversation on screen and stay on the thread; their errors appear beside the composer. The composer is pinned in a footer, so Reply can't be clipped.
+  - A background re-render (runtime config, rewards, inbox poll) no longer swallows a click: renders are deferred while a pointer is down inside the panel.
+  - Feature requests now send `userCategory: 'feature'`, so they land as `reports.user_category = 'feature'` instead of a generic `other`, whether they come from the ✨ card or from Other → Feature request. A host's custom category id still wins. The details step's placeholder and starter chips follow the mode: feature, bug or other.
+  - The shortcut hint reads "Ctrl + Enter" outside Apple platforms and is localized.
+  - The description counter shows "N more characters" until the minimum is met, then `length/4000`. It used to show length over the minimum, such as "397/12".
+  - A failed screenshot shows why: permission blocked, browser unsupported, blocked by another site's content, blocked by the site's security policy, timed out, or generic. The button becomes "Try again". The `mushi:screenshot_failed` document event can now carry `timeout`, `unsupported` and `csp`; these used to arrive as `error`.
+  - The success step is titled "Thanks — report received". A rate-limited, queued or failed send gets its own title instead. The step shows the receipt id and a localized date-time with time zone, has a Done button and no Back button, and no longer closes itself after 2.8 s.
+  - "Track this report" opens that report's thread in My Reports. It is hidden when there is no reporter inbox, or no report id yet.
+  - The stylesheet's comments and insignificant whitespace, and the HTML templates' indentation, are stripped at build time; they used to ship inside string literals that no minifier touches.
+
+- Updated dependencies [f48d15b]
+- Updated dependencies [f48d15b]
+- Updated dependencies [f48d15b]
+- Updated dependencies [f48d15b]
+  - @mushi-mushi/core@1.30.0
+
+## 1.29.0
+
+### Minor Changes
+
+- f5e94ce: Add product analytics: `Mushi.track(event, properties)`, `setConsent()`, `getAnonymousId()` and the `analytics` config block (consent mode, per-person sampling, DNT/GPC, PII key filter). Events batch to the new `POST /v1/sdk/events` route and back the console's Users & Funnels page. `@mushi-mushi/react` gains `useMushiTrack()`; `@mushi-mushi/react-native` gains `useMushi().track()` / `setConsent()` (batched, AsyncStorage spill, flush on app background) and `@mushi-mushi/node` gains `client.track(event, { distinctId, properties })` (one `POST /v1/sdk/events` per call, `surface: 'server'`). The shared vocabulary lives in `@mushi-mushi/core` (`MUSHI_EVENTS`, `sanitizeEventProperties`).
+
+  The web widget's `brandFooter` becomes the "Bug reports by Mushi" mark: a new-tab link to the Mushi site carrying `utm_source=widget&utm_medium=powered-by&ref=<hashed project id>` that emits `loop_impression` (once per page) and `loop_click` through the tracker. It is on by default only for Free Cloud projects via the runtime config; an explicit `widget.brandFooter: false` in `Mushi.init` always wins over the remote value.
+
+### Patch Changes
+
+- f5e94ce: Product analytics no longer travel with the reporter token.
+
+  - **Own analytics id.** `Mushi.track()` events are keyed on a random per-project id the tracker creates, stored only once analytics consent is granted. They used to reuse the reporter token, a credential for the end user's report threads. Visitors get a new analytics id once; nothing else changes.
+  - **Refused batches are not replayed forever.** A batch the server rejects with a 4xx (bad shape, wrong key, too large) is dropped. Network errors, 429 and 5xx are still kept and resent on the next page.
+  - **`page_view`.** `analytics.autoPageviews` now emits `page_view`, the taxonomy name (it emitted `pageview`).
+  - **`error.status`.** Failed API calls now include the HTTP status in `MushiApiResponse.error.status` when the server answered.
+  - `initSessionTracker`'s `reporterTokenHash` option is renamed `reporterToken` (it always carried the raw token); the old name still works.
+
+- f5e94ce: npm metadata. Each entry package's description is now a short role followed by one shared pitch — "The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor." — so the `mushi-mushi` card no longer stops mid-word at npm's 255-character cut. The author link points at the maintainer's GitHub account (the Bluesky handle it used to name was never registered), the Node floor is `>=20.19.0` everywhere to match `@mushi-mushi/core`, and the `sentry-alternative` keyword is gone (Mushi runs alongside Sentry). The `funding` field is gone too, because it pointed at a GitHub Sponsors page that is not enabled. `@mushi-mushi/react-native` no longer packs its 60 KB CHANGELOG.
+- b1f5b88: Record SPA page views. The session tracker's history patch decided push-vs-replace with `original === history.pushState` _inside_ the wrapper — always false once the wrapper is installed — so no `page_view` was ever emitted from a `pushState` navigation. In `@mushi-mushi/web` it was doubly dead: the shared history patch captures the native `History.prototype.pushState` and replaces `history.pushState`, discarding core's wrapper entirely. Two of five live projects had zero `session_page_views` across more than a thousand sessions each.
+
+  - `@mushi-mushi/core`: the navigation kind is fixed at wrap time; new `patchHistory: false` option for hosts that own the history patch and call `trackPageView()` themselves.
+  - `@mushi-mushi/web`: initialises the tracker with `patchHistory: false` and reports `pushState` / `popstate` through its own shared history subscriber, torn down on `destroy()`.
+
+  No API change for hosts. Apps that already call `trackPageView()` from a router hook are unaffected: the web layer only reports history navigations, and a router hook that fires on the same navigation would now double-count — pass `trackSessions: false` or drop the hook.
+
+- f5e94ce: Smaller install. The package no longer ships the repository's `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md` and `SECURITY.md` — 32 KB in every tarball, more than the code in some packages. They are still in the GitHub repository the npm page links to.
+- f5e94ce: Session replay with rrweb works in bundled apps, and rrweb is no longer installed for everyone.
+
+  - **New `capture.rrweb` loader.** Pass `capture: { replay: 'rrweb', rrweb: () => import('rrweb') }`. The SDK used to load rrweb with a runtime import that no bundler can see, so in a bundled app replay quietly fell back to recording clicks only. Your own dynamic import is code-split like any other. A global `rrweb` from the UMD script tag still works without a loader, and when `replay: 'rrweb'` cannot load rrweb the SDK now warns once in the console.
+  - **Rendered text is masked.** rrweb 2.x ignores the `maskAllText` option the SDK passed, so page text would have been recorded in clear. Replay now masks every text node and every input, and blocks `privacy.redactSelectors` (plus password fields and `[data-mushi-redact]`) from the recording.
+  - **`rrweb` is an optional peer dependency.** As an optional dependency it was downloaded with every install of `@mushi-mushi/web`, about 8 MB of replay code most apps never load. Apps that use `replay: 'rrweb'` now install it themselves: `npm install rrweb`.
+
+- f5e94ce: `unpkg` and `jsdelivr` now point at `dist/mushi.loader.global.js`, so `https://cdn.jsdelivr.net/npm/@mushi-mushi/web@1` and `https://unpkg.com/@mushi-mushi/web@1` serve the self-initialising script-tag loader instead of the CommonJS bundle, which throws inside a `<script>` tag.
+
+  The exports map nests `types` under `import` and `require`, so CommonJS consumers get the `.d.cts` declarations instead of ESM types (the "masquerading as ESM" resolution error), and `typesVersions` resolves the `test-utils`, `i18n`, `otel` and `headless` subpaths under `moduleResolution: "node"`. The loader's 1.2 MB source map is no longer packed.
+
+- Updated dependencies [f5e94ce]
+- Updated dependencies [f5e94ce]
+- Updated dependencies [f5e94ce]
+- Updated dependencies [f5e94ce]
+- Updated dependencies [b1f5b88]
+- Updated dependencies [f5e94ce]
+- Updated dependencies [f5e94ce]
+- Updated dependencies [f5e94ce]
+  - @mushi-mushi/core@1.29.0
+
+## 1.28.0
+
+### Patch Changes
+
+- bb64f3c: Localize the last hardcoded-English widget strings: the "More issue types / {n} more" progressive-disclosure toggle, the beta strip's default message + "Reports go to {email}" contact hint + aria-label, and the "What's new in {version}" changelog summary now come from the widget locale (en/ja/es/th). A Japanese-locale widget no longer shows a mixed-language category step.
+- Updated dependencies [4af54f0]
+- Updated dependencies [73d4c89]
+- Updated dependencies [4af54f0]
+  - @mushi-mushi/core@1.28.0
+
 ## 1.27.0
 
 ### Minor Changes

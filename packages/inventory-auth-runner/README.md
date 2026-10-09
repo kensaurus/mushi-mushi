@@ -57,7 +57,8 @@ works once it's installed.
 
 ## Use
 
-Set the four required env vars and run `refresh`:
+Set the two required env vars, plus whatever your login script reads, and
+run `refresh`:
 
 ```bash
 MUSHI_API_KEY=mushi_xxx \
@@ -69,7 +70,7 @@ npx --yes @mushi-mushi/inventory-auth-runner refresh
 
 | Var                  | Required | Description                                                                                                |
 | -------------------- | -------- | ---------------------------------------------------------------------------------------------------------- |
-| `MUSHI_API_KEY`      | yes      | Project-scoped API key with the `inventory:write` scope. Mint one in `/settings/keys` in the admin console. |
+| `MUSHI_API_KEY`      | yes      | Project-scoped API key with the `mcp:write` scope. Mint one on the admin console's Connect page (`/connect`, read + write access) or under Projects → keys. |
 | `MUSHI_PROJECT`      | yes      | Mushi project UUID.                                                                                        |
 | `MUSHI_API_ENDPOINT` | no       | API base URL. Defaults to the hosted Supabase functions endpoint.                                          |
 | `TEST_USER_EMAIL` / `TEST_USER_PASSWORD` | usually | Picked up by your `auth.scripted.script`; the runner itself doesn't read them. Add whatever your script needs. |
@@ -115,7 +116,7 @@ The [`mushi-mushi-gates`](../mcp-ci) GitHub Action exposes an
 `auth-bootstrap` command that shells out to this runner:
 
 ```yaml
-- uses: mushi-mushi/mushi-mushi/packages/mcp-ci@v1
+- uses: kensaurus/mushi-mushi/packages/mcp-ci@master
   with:
     api-key: ${{ secrets.MUSHI_API_KEY }}
     project-id: ${{ secrets.MUSHI_PROJECT_ID }}
@@ -132,8 +133,9 @@ nightly schedule so the cookie stays fresh.
 
 - Cookies land in `project_settings.crawler_auth_config.value`, which
   RLS-gates on project membership.
-- The runner refuses to run if `MUSHI_API_KEY` is missing the
-  `inventory:write` scope.
+- The cookie write (`PATCH /v1/admin/inventory/:projectId/settings`)
+  requires the `mcp:write` scope; a key without it is rejected by the
+  server and the refresh fails.
 - Cookies have a soft TTL via `last_refreshed_at`; re-run on a daily
   cron or after every CI deploy.
 - The runner shells out to a fresh headless Chromium per invocation —
@@ -142,12 +144,14 @@ nightly schedule so the cookie stays fresh.
 ## Scripts
 
 ```bash
-pnpm auth         # tsx src/run.ts (local dev)
+pnpm auth         # tsx src/run.ts (run the CLI from source)
+pnpm build        # tsup → dist/run.js (the bin) + dist/index.{js,cjs,d.ts}
+pnpm test         # vitest run
 pnpm typecheck    # tsc --noEmit
 ```
 
-There is no build step — the package ships TypeScript directly and runs
-via `tsx`.
+The published package ships the built `dist/` only; `pnpm auth` runs the
+TypeScript source through `tsx` for local development.
 
 ## License
 
@@ -157,4 +161,4 @@ See root [LICENSE](../../LICENSE).
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 55 edge functions · 337 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 64 edge functions · 439 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

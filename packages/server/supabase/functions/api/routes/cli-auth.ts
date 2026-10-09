@@ -48,7 +48,7 @@ import { jwtAuth } from '../../_shared/auth.ts'
 import { getServiceClient } from '../../_shared/db.ts'
 import { logAudit } from '../../_shared/audit.ts'
 import { log } from '../../_shared/logger.ts'
-import { userCanAccessProject, dbError } from '../shared.ts'
+import { dbError, callerCanAccessProject } from '../shared.ts'
 import { emitFunnelEvent } from '../../_shared/setup-funnel.ts'
 import {
   evaluateTokenDelivery,
@@ -769,7 +769,7 @@ export function registerCliAuthRoutes(app: Hono<{ Variables: Variables }>): void
     }
 
     // Minting keys is owner/admin-only — same gate as the admin endpoint.
-    const access = await userCanAccessProject(db, userId, projectId)
+    const access = await callerCanAccessProject(c, db, userId, projectId)
     if (!access.allowed) {
       return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404)
     }
@@ -904,7 +904,7 @@ export function registerCliAuthRoutes(app: Hono<{ Variables: Variables }>): void
     }
 
     // Auth gate: caller must be project owner or admin.
-    const access = await userCanAccessProject(db, userId, projectId)
+    const access = await callerCanAccessProject(c, db, userId, projectId)
     if (!access.allowed) {
       return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404)
     }

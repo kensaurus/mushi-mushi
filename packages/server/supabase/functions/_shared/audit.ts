@@ -18,9 +18,14 @@ export type AuditAction = 'report.created' | 'report.classified' | 'report.triag
   | 'inventory.test_gen' | 'inventory.status_changed'
   | 'inventory.proposal.edit' | 'inventory.proposal.accept' | 'inventory.proposal.discard'
   | 'inventory.settings.update'
+  | 'gate_finding.dismissed'
   | 'report.bulk_undone'
+  | 'content_quality.bulk_dismissed'
   | 'settings.deleted'
   | 'fix_dispatch.cancelled'
+  | 'ux_run.cloud_requested'
+  | 'ux_run.merged'
+  | 'pull_request.merged'
   | 'mcp.tool_called'
   | 'mcp.tool_failed'
   | 'org.context_switched'
@@ -30,6 +35,7 @@ export type AuditAction = 'report.created' | 'report.classified' | 'report.triag
   | 'org.invite_revoked'
   | 'project.created'
   | 'project.deleted'
+  | 'report.reporter_replied'
 
 export async function logAudit(
   db: SupabaseClient,

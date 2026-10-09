@@ -39,6 +39,9 @@ function pctDelta(last: number, prev: number, opts: { invert?: boolean } = {}): 
   const tone = opts.invert
     ? (pct > 0 ? 'warn' : 'ok')
     : (pct > 0 ? 'ok' : 'warn')
+  // A near-zero prior week turns a normal week into "↑502383%"; past 10× the
+  // percentage carries no information.
+  if (last >= prev * 10) return { value: '>10×', direction, tone }
   return { value: `${Math.abs(pct)}%`, direction, tone }
 }
 
@@ -66,21 +69,12 @@ export function KpiRow({ counts, fixSummary, reportsByDay, llmByDay = [], pdcaSt
 
   const stage7d = useMemo(() => {
     const days = last7UtcDays()
-    const plan = pdcaStages.find((s) => s.id === 'plan')
     const doStage = pdcaStages.find((s) => s.id === 'do')
     return {
       days,
-      triage: plan?.series?.length === 7 ? plan.series : null,
       fixes: doStage?.series?.length === 7 ? doStage.series : null,
     }
   }, [pdcaStages])
-
-  const triageDelta = useMemo(() => {
-    if (!stage7d.triage) return null
-    const last3 = stage7d.triage.slice(-3).reduce((a, v) => a + v, 0)
-    const prev3 = stage7d.triage.slice(0, 3).reduce((a, v) => a + v, 0)
-    return pctDelta(last3, prev3, { invert: true })
-  }, [stage7d.triage])
 
   const fixDelta = useMemo(() => {
     if (!stage7d.fixes) return null
@@ -97,14 +91,10 @@ export function KpiRow({ counts, fixSummary, reportsByDay, llmByDay = [], pdcaSt
         density="flat"
         label="Triage backlog"
         value={counts.openBacklog}
-        sublabel="open > 1h"
+        sublabel="waiting to triage"
         to="/reports?status=new"
         accent={counts.openBacklog > 0 ? 'warn' : 'ok'}
-        delta={triageDelta}
-        series={stage7d.triage ?? undefined}
-        seriesDays={stage7d.triage ? stage7d.days : undefined}
-        seriesAriaLabel="New reports per day, last 7 days"
-        meaning="Reports that have sat untriaged for more than an hour. The sparkline tracks daily inbound volume — spikes usually precede backlog growth."
+        meaning="Reports still waiting for triage, any age: the same list the tile opens. Daily intake is on the Reports (14d) tile."
         variant={heroIsBacklog ? 'primary' : 'default'}
       />
       <KpiTile
@@ -125,14 +115,14 @@ export function KpiRow({ counts, fixSummary, reportsByDay, llmByDay = [], pdcaSt
         density="flat"
         label="Auto-fix PRs"
         value={counts.openPrs}
-        sublabel={`${fixSummary.inProgress} in progress · ${fixSummary.failed} failed`}
-        to="/fixes"
+        sublabel={`${fixSummary.inProgress} in progress · ${fixSummary.failed} stopped`}
+        to="/fixes?tab=attempts&status=pr_open"
         accent={fixSummary.failed > 0 ? 'danger' : counts.openPrs > 0 ? 'ok' : 'muted'}
         delta={fixDelta}
         series={stage7d.fixes ?? undefined}
         seriesDays={stage7d.fixes ? stage7d.days : undefined}
         seriesAriaLabel="Fix dispatches per day, last 7 days"
-        meaning="Open PRs Mushi has dispatched on your behalf. The sparkline shows how many fixes were dispatched each day."
+        meaning="Reports with a fix PR waiting for your review or merge: the list the tile opens. The sparkline shows how many fixes were dispatched each day."
       />
       <KpiTile
         density="flat"

@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/connect
 
 ---
 title: Connect & Update
+description: Connect & Update wires GitHub, the SDK, MCP, the CLI and your editor to a Mushi project, and shows when your installed SDK is out of date.
 ---
 
 # Connect & Update
@@ -84,6 +85,11 @@ When a package is outdated or deprecated:
    `@mushi-mushi/*` in `package.json` files only (never `workspace:` / `file:`).
 3. Draft PR opens on GitHub, auto-readied, status streams via SSE.
 
+The bump edits `package.json` only. Add the
+[lockfile helper workflow](/admin/sdk-upgrade-lockfile) to your repo and the PR
+opens after your own package manager has refreshed the lockfile, so
+`npm ci` / `pnpm install --frozen-lockfile` pass.
+
 CLI equivalent: see [SDK reference → CLI](/sdks/cli) (`mushi upgrade` for local bumps).
 
 ---
@@ -98,14 +104,14 @@ with Contents + PR + Actions secrets if you need CI auto-write).
 Copy the framework snippet → paste into your app → deploy or run locally.
 
 ### Wire MCP
-Click **Add to Cursor** → restart IDE → `mushi doctor --server`.
+Click **Add to Cursor** → restart IDE → `mushi doctor`.
 
 ### Wire CLI (SDK + env + MCP)
 Copy **Connect SDK + MCP** from the CLI section:
 
 ```bash
 MUSHI_API_KEY=mushi_xxx mushi connect \
-  --project-id  \
+  --project-id <uuid> \
   --endpoint https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api \
   --write-env --wire-ide --wait
 ```

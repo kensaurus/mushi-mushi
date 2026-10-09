@@ -8,15 +8,15 @@ import { buildRouteTitleMatchers, routeFallbackTitle } from './navRegistry'
 
 describe('routeFallbackTitle', () => {
   it('uses IA nav labels from the registry', () => {
-    expect(routeFallbackTitle('/inbox')).toBe('Action Inbox')
-    expect(routeFallbackTitle('/queue')).toBe('Failed events')
-    expect(routeFallbackTitle('/notifications')).toBe('Alert routing')
+    expect(routeFallbackTitle('/inbox')).toBe('To-do')
+    expect(routeFallbackTitle('/queue')).toBe('Processing jobs')
+    expect(routeFallbackTitle('/notifications')).toBe('Reporter updates')
     expect(routeFallbackTitle('/setup-copilot')).toBe('Setup copilot')
   })
 
   it('resolves dynamic App.tsx segments via extra matchers', () => {
     expect(routeFallbackTitle('/reports/abc-123')).toBe('Report')
-    expect(routeFallbackTitle('/content/asset-1')).toBe('Content QA')
+    expect(routeFallbackTitle('/content/asset-1')).toBe('Content checks')
     expect(routeFallbackTitle('/integrations')).toBe('Integrations')
     expect(routeFallbackTitle('/integrations/config')).toBe('Integrations')
   })

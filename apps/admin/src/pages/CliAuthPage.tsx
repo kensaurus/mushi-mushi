@@ -29,11 +29,12 @@
  */
 
 import { useEffect, useState } from 'react'
+import { interpretClaimPoll } from '../lib/cliAuthPoll'
+import { describeActionError } from '../lib/actionError'
 import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
-import { humanizeApiError } from '../lib/humanizeApiError'
 import { CliAuthReadout } from '../components/cli-auth/CliAuthReadout'
-import { Btn, ErrorAlert } from '../components/ui'
+import { Btn, Callout, ErrorAlert } from '../components/ui'
 
 type ApproveState = 'idle' | 'approving' | 'waiting' | 'connected' | 'denied' | 'error'
 
@@ -81,11 +82,16 @@ function ArrowLeftIcon() {
   )
 }
 
-const STEPS = [
-  { n: '1', text: 'Verify the code below matches what your terminal printed' },
-  { n: '2', text: 'Click "Approve CLI connection" below' },
-  { n: '3', text: 'Switch back to your terminal — setup continues automatically' },
-]
+/** With a code in the URL the user only checks it; without one they type it. */
+function cliAuthSteps(hasCodeInUrl: boolean): string[] {
+  return [
+    hasCodeInUrl
+      ? 'Check that the code below matches what your terminal printed'
+      : 'Type the code your terminal shows',
+    'Click "Approve CLI connection"',
+    'Switch back to your terminal. Setup continues automatically',
+  ]
+}
 
 export function CliAuthPage() {
   const [params] = useSearchParams()
@@ -94,6 +100,12 @@ export function CliAuthPage() {
   const [approveState, setApproveState] = useState<ApproveState>('idle')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [waitingSlow, setWaitingSlow] = useState(false)
+  // Approval succeeded but the terminal never confirmed (expired / denied /
+  // gone). Approving again cannot help, so the page says so instead of
+  // offering "Retry approve" (QA bug 268).
+  const [confirmEnded, setConfirmEnded] = useState(false)
+  // Last confirm poll failed for a transient reason; still waiting.
+  const [pollTrouble, setPollTrouble] = useState(false)
 
   // Use code from URL (CLI opens the page with ?code=XXXX-XXXX) or
   // fall back to the manual input (user typed it themselves).
@@ -115,35 +127,18 @@ export function CliAuthPage() {
         { cache: 'no-store', scope: 'none' },
       ).catch(() => null)
       if (cancelled) return
-      if (res?.ok && res.data?.claimed) {
+      const outcome = interpretClaimPoll(res)
+      if (outcome.kind === 'connected') {
         setApproveState('connected')
         return
       }
-      if (res?.ok && res.data?.status === 'expired') {
+      if (outcome.kind === 'ended') {
+        setConfirmEnded(true)
         setApproveState('error')
-        setErrorMessage(
-          'This request expired before your terminal picked it up. Re-run the command and approve the newest tab.',
-        )
+        setErrorMessage(outcome.message)
         return
       }
-      // Defensive terminal states: 'rejected' should be unreachable for a row
-      // this tab just approved (reject only flips still-pending rows), but a
-      // future change or edge race must not leave the spinner running
-      // forever. NOT_FOUND means the polled request no longer exists.
-      if (res?.ok && res.data?.status === 'rejected') {
-        setApproveState('error')
-        setErrorMessage('This request was denied. Run the command again to get a fresh code.')
-        return
-      }
-      if (res && !res.ok) {
-        setApproveState('error')
-        setErrorMessage(
-          res.error?.code === 'NOT_FOUND'
-            ? 'This request could not be found — it may have expired. Re-run the command and try again.'
-            : (res.error?.message ?? 'Something went wrong while checking your terminal — please try again.'),
-        )
-        return
-      }
+      setPollTrouble(outcome.transient)
       if (Date.now() - startedAt >= CLAIM_SLOW_AFTER_MS) {
         setWaitingSlow(true)
       }
@@ -162,6 +157,7 @@ export function CliAuthPage() {
     setApproveState('approving')
     setErrorMessage(null)
     setWaitingSlow(false)
+    setPollTrouble(false)
 
     // Device approve is account-scoped — no active project required. Avoid
     // sending a stale/missing project header that can confuse gate middleware.
@@ -176,12 +172,9 @@ export function CliAuthPage() {
       setApproveState('waiting')
     } else {
       setApproveState('error')
-      const humanized = humanizeApiError(res.error?.message, res.error?.code)
-      setErrorMessage(
-        humanized
-          ? `${humanized.title}${humanized.hint ? ` ${humanized.hint}` : ''}`
-          : (res.error?.message ?? 'Something went wrong — please try again.'),
-      )
+      // humanizeApiError's catch-all reads "Could not load this page", wrong
+      // for a button; this keeps the server's sentence when it is readable.
+      setErrorMessage(describeActionError(res.error, 'Something went wrong — please try again.'))
     }
   }
 
@@ -215,6 +208,11 @@ export function CliAuthPage() {
             Keep this tab open for a moment. It will confirm as soon as your
             terminal picks up the connection (usually within a few seconds).
           </p>
+          {pollTrouble && (
+            <p className="mt-2 text-xs text-fg-muted" role="status">
+              Can&apos;t reach Mushi to confirm right now. Your approval stands; still checking.
+            </p>
+          )}
         </div>
         {waitingSlow && (
           <div className="max-w-md rounded-xl border border-warn/40 bg-warn-muted/50 px-5 py-4 text-left">
@@ -283,29 +281,27 @@ export function CliAuthPage() {
           <TerminalIcon />
           <h1 className="text-xl font-semibold text-fg">Connect your CLI</h1>
           <p className="text-sm text-fg-muted">
-            Your terminal is waiting. Follow the steps below — no typing required.
+            {codeParam
+              ? 'Your terminal is waiting. Check the code and approve. No typing needed.'
+              : 'Your terminal is waiting. Type the code it shows, then approve.'}
           </p>
         </div>
 
-        {/* 3-step guide */}
-        <ol className="mb-6 space-y-2">
-          {STEPS.map((step) => (
-            <li key={step.n} className="flex items-start gap-3 rounded-lg border border-edge-subtle bg-surface-raised px-4 py-3">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand text-xs font-bold text-white">
-                {step.n}
-              </span>
-              <span className="text-sm text-fg">{step.text}</span>
-            </li>
+        <ol className="mb-6 list-decimal space-y-1 pl-5 text-sm text-fg">
+          {cliAuthSteps(Boolean(codeParam)).map((step) => (
+            <li key={step}>{step}</li>
           ))}
         </ol>
 
-        {/* User code display */}
-        <div className="mb-4 rounded-xl border border-edge-subtle bg-surface-overlay px-6 py-5">
+        {/* User code display: only when the CLI put the code in the URL */}
+        {codeParam && (
+        <>
+        <div className="mb-4 rounded-xl border border-edge-subtle bg-surface-raised px-6 py-5">
           <p className="mb-1 text-xs font-medium uppercase tracking-wider text-fg-muted">
             Verification code — confirm it matches your terminal
           </p>
           <p className="font-mono text-3xl font-bold tracking-[0.15em] text-fg select-all">
-            {userCode || <span className="text-fg-muted opacity-40">XXXX-XXXX</span>}
+            {userCode}
           </p>
           <p className="mt-2 text-2xs text-fg-muted">
             Expires in 10 minutes. If it doesn't match, close this tab and run{' '}
@@ -313,20 +309,20 @@ export function CliAuthPage() {
           </p>
         </div>
 
-        {/* Anti-paste warning */}
-        <div className="mb-4 flex items-start gap-2 rounded-lg border border-warn/40 bg-warn-muted/50 px-4 py-3">
-          <span className="mt-0.5 text-warning-foreground" aria-hidden="true">⚠</span>
+        <Callout tone="warn" className="mb-4">
           <p className="text-sm text-fg-muted">
             <strong className="text-fg">Do not paste or type this code into your terminal.</strong>{' '}
             It belongs here in the browser. The terminal waits automatically.
           </p>
-        </div>
+        </Callout>
+        </>
+        )}
 
         {/* Manual code input (if no code in URL) */}
         {!codeParam && (
           <div className="mb-4">
             <label htmlFor="cli-code" className="mb-1 block text-xs font-medium text-fg-muted">
-              Enter the code shown in your terminal
+              Type the code your terminal shows
             </label>
             <input
               id="cli-code"
@@ -345,12 +341,16 @@ export function CliAuthPage() {
         {/* Error */}
         {approveState === 'error' && errorMessage && (
           <div className="mb-4">
-            <ErrorAlert
-              title="Couldn't approve CLI connection"
-              message={errorMessage}
-              endpoint="/v1/cli/auth/device/approve"
-              onRetry={() => void handleApprove()}
-            />
+            {confirmEnded ? (
+              <ErrorAlert title="Your terminal did not finish connecting" message={errorMessage} />
+            ) : (
+              <ErrorAlert
+                title="Couldn't approve CLI connection"
+                message={errorMessage}
+                endpoint="/v1/cli/auth/device/approve"
+                onRetry={() => void handleApprove()}
+              />
+            )}
           </div>
         )}
 
@@ -363,6 +363,7 @@ export function CliAuthPage() {
           >
             Deny
           </Btn>
+          {!confirmEnded && (
           <Btn
             onClick={handleApprove}
             disabled={!userCode || approveState === 'approving'}
@@ -374,6 +375,7 @@ export function CliAuthPage() {
                 ? 'Retry approve'
                 : 'Approve CLI connection'}
           </Btn>
+          )}
         </div>
 
         {/* Security note */}

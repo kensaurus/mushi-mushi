@@ -10,6 +10,7 @@ import { Navigate } from 'react-router-dom'
 import { Input, Btn, PageHelpBanner, Loading } from '../components/ui'
 import { ContainedBlock, InlineProof, SignalChip } from '../components/report-detail/ReportSurface'
 import { detectRecoveryFromUrl } from '../lib/authRedirect'
+import { hardNavigate } from '../lib/appPath'
 import { CHIP_TONE } from '../lib/chipTone'
 
 export function ResetPasswordPage() {
@@ -109,7 +110,7 @@ export function ResetPasswordPage() {
             <div className="pt-1">
               <Btn
                 type="button"
-                onClick={() => window.location.replace(`${import.meta.env.BASE_URL}dashboard`)}
+                onClick={() => hardNavigate('/dashboard', { replace: true })}
                 className="w-full justify-center"
               >
                 Go to Dashboard

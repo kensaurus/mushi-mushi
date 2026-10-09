@@ -41,6 +41,7 @@ import { BILLING_CTA_LINK_CLASS } from '../../lib/tokens'
 import type { FeatureFlag, UpgradeTarget } from '../../lib/useEntitlements'
 import { useEntitlements } from '../../lib/useEntitlements'
 import { Tooltip } from '../ui'
+import { trackUpgradeClicked } from './UpgradePrompt'
 
 // Re-export here so callers don't have to chase imports across modules
 // — `<UpgradePill flag="teams" />` should just need this file.
@@ -184,6 +185,7 @@ export function UpgradeBanner({
       <Link
         to={billingHref(flag)}
         className={BILLING_CTA_LINK_CLASS}
+        onClick={() => trackUpgradeClicked(upgradeTo, flag, 'upgrade_banner')}
       >
         {ctaCopy(upgradeTo)}
       </Link>
@@ -229,6 +231,7 @@ export function UpgradePill({ flag, alwaysShow, className = '', as = 'auto' }: P
           to={billingHref(flag)}
           aria-label={`${copy.pillLabel} feature — view plans`}
           className={`${PILL_BASE} ${className}`}
+          onClick={() => trackUpgradeClicked(null, flag, 'upgrade_pill')}
         >
           {copy.pillLabel}
         </Link>
@@ -315,6 +318,7 @@ export function UpgradeLockOverlay({
           <Link
             to={billingHref(flag)}
             className={`mt-1 ${BILLING_CTA_LINK_CLASS}`}
+            onClick={() => trackUpgradeClicked(upgradeTo, flag, 'upgrade_lock_overlay')}
           >
             {ctaCopy(upgradeTo)}
           </Link>

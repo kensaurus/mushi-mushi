@@ -9,15 +9,18 @@
  *     Query Sim    — paste a diff, see what rules would be injected (lessons.query)
  */
 
-import { useState, useCallback, useMemo, useEffect } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
+import { apiErrorText } from '../lib/apiErrorText'
+import { useEntitlements } from '../lib/useEntitlements'
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { useToast } from '../lib/toast'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useSetupStatus } from '../lib/useSetupStatus'
+import { refreshNavCounts } from '../lib/useNavCounts'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageCopy } from '../lib/copy'
 import { useLessonsUx, resolveQuickLessonsTab } from '../lib/lessonsModeUx'
@@ -30,16 +33,7 @@ import {
   ErrorAlert,
   RelativeTime,
   SegmentedControl,
-  FreshnessPill,
-  RecommendedAction,
-  Card,
 } from '../components/ui'
-import {
-  ActionPill,
-  ActionPillRow,
-  ContainedBlock,
-  SignalChip,
-} from '../components/report-detail/ReportSurface'
 import { LessonsStatusBanner } from '../components/lessons/LessonsStatusBanner'
 import { LessonsSnapshotStrip } from '../components/lessons/LessonsSnapshotStrip'
 import { LessonsReadout } from '../components/lessons/LessonsReadout'
@@ -51,7 +45,7 @@ import {
 import { IconIntelligence, IconShield, IconChevronRight } from '../components/icons'
 import { Drawer } from '../components/Drawer'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
-import { CHIP_TONE, HEADER_BADGE_TONE } from '../lib/chipTone'
+import { CHIP_TONE } from '../lib/chipTone'
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -118,21 +112,22 @@ function SeverityBadge({ severity }: { severity: string }) {
 
 // ─── Tab bar (URL-driven) ─────────────────────────────────────
 
+// No Overview tab: the banner states the posture and the readout sits at the page foot.
 const TABS: Array<{ id: LessonsTabId; label: string; description: string }> = [
-  { id: 'overview', label: 'Overview', description: 'Posture banner and how mistake memory feeds PR review.' },
   { id: 'lessons',  label: 'Lessons',   description: 'Promoted learning rules — encoded mistake memory for your codebase.' },
   { id: 'clusters', label: 'Clusters',  description: 'Vector-clustered groups of similar bug reports awaiting promotion.' },
   { id: 'query',    label: 'Query Sim', description: 'Paste a diff and preview which rules would be injected by lessons.query.' },
 ]
 
-function resolveLessonsTab(value: string | null): LessonsTabId {
+/** The tab named in the URL, or null so quickstart can pick one. */
+function explicitLessonsTab(value: string | null): LessonsTabId | null {
   if (value === 'lessons' || value === 'clusters' || value === 'query') return value
-  return 'overview'
+  return null
 }
 
 // ─── Lessons tab ─────────────────────────────────────────────
 
-function LessonsTab() {
+function LessonsTab({ onChanged, canEditProject }: { onChanged: () => void; canEditProject: boolean }) {
   const { data, loading, error, reload } = usePageData<{ data: Lesson[]; meta: { total: number } }>(
     '/v1/admin/lessons?limit=100',
   )
@@ -141,7 +136,7 @@ function LessonsTab() {
   const toast = useToast()
   const [showRetired, setShowRetired] = useState<'active' | 'retired'>('active')
 
-  const { data: retiredData } = usePageData<{ data: Lesson[] }>(
+  const { data: retiredData, reload: reloadRetired } = usePageData<{ data: Lesson[] }>(
     showRetired === 'retired' ? '/v1/admin/lessons?limit=100&retired=true' : null,
   )
 
@@ -155,16 +150,25 @@ function LessonsTab() {
       const res = await apiFetch(`/v1/admin/lessons/${id}`, {
         method: 'PATCH',
         body: JSON.stringify({ retired: !currentlyRetired }),
-      }) as { ok: boolean; error?: string }
-      if (!res.ok) throw new Error(res.error ?? 'Failed')
+      })
+      if (!res.ok) {
+        toast.error(
+          currentlyRetired ? 'Could not restore lesson' : 'Could not retire lesson',
+          apiErrorText(res.error, 'Try again in a moment.'),
+        )
+        return
+      }
       toast.success(currentlyRetired ? 'Lesson restored' : 'Lesson retired')
-      reload?.()
-    } catch (err) {
-      toast.error((err as Error).message)
+      // Both lists change: the row leaves one view and joins the other.
+      reload()
+      reloadRetired()
+      onChanged()
+    } catch {
+      toast.error('Could not update lesson', 'Check your connection and try again.')
     } finally {
       setRetiring(null)
     }
-  }, [reload])
+  }, [reload, reloadRetired, onChanged, toast])
 
   if (error) return <ErrorAlert message={error} />
 
@@ -241,7 +245,8 @@ function LessonsTab() {
                     e.stopPropagation()
                     handleRetire(lesson.id, !!lesson.retired_at)
                   }}
-                  disabled={retiring === lesson.id}
+                  disabled={retiring === lesson.id || !canEditProject}
+                  title={canEditProject ? undefined : 'Viewers can read lessons but cannot change them.'}
                 >
                   {lesson.retired_at ? 'Restore' : 'Retire'}
                 </Btn>
@@ -297,6 +302,8 @@ function LessonsTab() {
               <Btn
                 size="sm"
                 variant={selectedLesson.retired_at ? 'ghost' : 'danger'}
+                disabled={!canEditProject}
+                title={canEditProject ? undefined : 'Viewers can read lessons but cannot change them.'}
                 onClick={() => {
                   handleRetire(selectedLesson.id, !!selectedLesson.retired_at)
                   setSelectedLesson(null)
@@ -314,9 +321,9 @@ function LessonsTab() {
 
 // ─── Clusters tab ─────────────────────────────────────────────
 
-function ClustersTab() {
+function ClustersTab({ onChanged, canEditProject }: { onChanged: () => void; canEditProject: boolean }) {
   const [statusFilter, setStatusFilter] = useState<'all' | 'candidate' | 'promoted'>('candidate')
-  const { data, loading, error } = usePageData<{ data: Cluster[]; meta: { total: number } }>(
+  const { data, loading, error, reload } = usePageData<{ data: Cluster[]; meta: { total: number } }>(
     `/v1/admin/clusters?limit=100${statusFilter !== 'all' ? `&status=${statusFilter}` : ''}`,
   )
   const [promoting, setPromoting] = useState<string | null>(null)
@@ -334,15 +341,22 @@ function ClustersTab() {
       const res = await apiFetch(`/v1/admin/clusters/${cluster.id}/promote`, {
         method: 'POST',
         body: JSON.stringify({ rule_text: cluster.suggested_rule }),
-      }) as { ok: boolean; error?: string }
-      if (!res.ok) throw new Error(res.error ?? 'Failed')
+      })
+      if (!res.ok) {
+        toast.error('Could not promote cluster', apiErrorText(res.error, 'Try again in a moment.'))
+        // ALREADY_PROMOTED means the list is stale: refresh it either way.
+        reload()
+        return
+      }
       toast.success('Cluster promoted to lesson')
-    } catch (err) {
-      toast.error((err as Error).message)
+      reload()
+      onChanged()
+    } catch {
+      toast.error('Could not promote cluster', 'Check your connection and try again.')
     } finally {
       setPromoting(null)
     }
-  }, [toast])
+  }, [toast, reload, onChanged])
 
   if (error) return <ErrorAlert message={error} />
 
@@ -412,6 +426,8 @@ function ClustersTab() {
                   size="sm"
                   variant="ghost"
                   loading={promoting === cluster.id}
+                  disabled={promoting !== null || !canEditProject}
+                  title={canEditProject ? undefined : 'Viewers can read clusters but cannot promote them.'}
                   onClick={() => handlePromote(cluster)}
                 >
                   Promote
@@ -428,6 +444,7 @@ function ClustersTab() {
 // ─── Query Simulator tab ──────────────────────────────────────
 
 function QuerySimTab() {
+  const projectId = useActiveProjectId()
   const [diffText, setDiffText] = useState('')
   const [maxTokens, setMaxTokens] = useState(3000)
   const [loading, setLoading] = useState(false)
@@ -440,21 +457,28 @@ function QuerySimTab() {
       toast.error('Paste a code diff or description first')
       return
     }
+    if (!projectId) {
+      setError('Pick a project in the header switcher, then query again.')
+      return
+    }
     setLoading(true)
     setError(null)
     try {
-      const res = await apiFetch('/v1/admin/lessons/query', {
+      const res = await apiFetch<QueryResult>('/v1/admin/lessons/query', {
         method: 'POST',
-        body: JSON.stringify({ diff_text: diffText, max_tokens: maxTokens, top_k: 15 }),
-      }) as { ok: boolean; data?: QueryResult; error?: string }
-      if (!res.ok) throw new Error(res.error ?? 'Query failed')
+        body: JSON.stringify({ diff_text: diffText, max_tokens: maxTokens, top_k: 15, project_id: projectId }),
+      })
+      if (!res.ok) {
+        setError(apiErrorText(res.error, 'The query did not run. Try again in a moment.'))
+        return
+      }
       setResult(res.data ?? null)
-    } catch (err) {
-      setError((err as Error).message)
+    } catch {
+      setError('Could not reach the server. Check your connection and try again.')
     } finally {
       setLoading(false)
     }
-  }, [diffText, maxTokens])
+  }, [diffText, maxTokens, projectId, toast])
 
   return (
     <div className="space-y-4">
@@ -538,13 +562,12 @@ function QuerySimTab() {
 export function LessonsPage() {
   const copy = usePageCopy('/lessons')
   const ux = useLessonsUx()
+  const { canEditProject } = useEntitlements()
   const projectId = useActiveProjectId()
   const setup = useSetupStatus(projectId)
   const projectName = setup.activeProject?.project_name ?? null
   const [searchParams, setSearchParams] = useSearchParams()
   const tabParam = searchParams.get('tab')
-  const activeTab = resolveLessonsTab(tabParam)
-  const activeTabMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
 
   const {
     data: statsData,
@@ -554,26 +577,31 @@ export function LessonsPage() {
     lastFetchedAt: statsFetchedAt,
     isValidating: statsValidating,
   } = usePageData<LessonsStats>('/v1/admin/lessons/stats')
+  // Retire / restore / promote change the sidebar's "N active lessons" too.
+  // lessons and mistake_clusters are not in the realtime publication, so the
+  // badge is refreshed here instead of waiting for a full reload.
+  const onLessonsChanged = useCallback(() => {
+    reloadStats()
+    refreshNavCounts()
+  }, [reloadStats])
   usePublishPageHeroStats('/lessons', statsData)
   const stats = { ...EMPTY_LESSONS_STATS, ...statsData }
+  // Every mode lands on the work tab that matches the posture; the URL wins.
+  const postureTab = resolveQuickLessonsTab(stats)
+  const activeTab: LessonsTabId = explicitLessonsTab(tabParam) ?? (postureTab === 'overview' ? 'lessons' : postureTab)
+  const activeTabMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
 
   const setActiveTab = useCallback(
     (tab: LessonsTabId) => {
       setSearchParams((prev) => {
         const next = new URLSearchParams(prev)
-        if (tab === 'overview') next.delete('tab')
-        else next.set('tab', tab)
+        // Always explicit: with no ?tab= the page shows the posture tab.
+        next.set('tab', tab)
         return next
       })
     },
     [setSearchParams],
   )
-
-  useEffect(() => {
-    if (!ux.isQuickstart || statsLoading) return
-    const quickTab = resolveQuickLessonsTab(stats)
-    if (activeTab !== quickTab) setActiveTab(quickTab)
-  }, [ux.isQuickstart, statsLoading, stats, activeTab, setActiveTab])
 
   const tabOptions = useMemo(
     () =>
@@ -625,19 +653,6 @@ export function LessonsPage() {
     return <ErrorAlert message={`Failed to load lessons stats: ${statsError}`} onRetry={reloadStats} />
   }
 
-  const bannerSeverity: 'ok' | 'warn' | 'danger' | 'brand' | 'info' | 'neutral' =
-    !stats.hasAnyProject
-      ? 'neutral'
-      : stats.topPriority === 'critical_lessons'
-        ? 'danger'
-        : stats.topPriority === 'candidates_ready' || stats.topPriority === 'no_lessons'
-          ? 'warn'
-          : stats.topPriority === 'no_data'
-            ? 'brand'
-            : stats.topPriority === 'healthy'
-              ? 'ok'
-              : 'info'
-
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-lessons">
       <PageHeaderBar
@@ -654,35 +669,9 @@ export function LessonsPage() {
         helpHowToUse={copy?.help?.howToUse ?? 'Browse promoted lessons, retire obsolete ones, or run mushi sync-lessons to sync to your repo. Clusters auto-promote when coherence ≥ 0.75 and size ≥ 3.'}
       >
         {!ux.hideOverviewChrome && (
-          <>
-        <Badge
-          className={
-            bannerSeverity === 'ok'
-              ? CHIP_TONE.okSubtle
-              : bannerSeverity === 'danger'
-                ? CHIP_TONE.dangerSubtle
-                : bannerSeverity === 'warn'
-                  ? CHIP_TONE.warnSubtle
-                  : bannerSeverity === 'brand'
-                    ? HEADER_BADGE_TONE.brand
-                    : HEADER_BADGE_TONE.neutral
-          }
-        >
-          {!stats.hasAnyProject
-            ? 'NO PROJECT'
-            : stats.topPriority === 'critical_lessons'
-              ? `${stats.criticalLessons} CRIT`
-              : stats.readyToPromote > 0
-                ? `${stats.readyToPromote} READY`
-                : stats.activeLessons === 0 && stats.candidateClusters === 0
-                  ? 'EMPTY'
-                  : `${stats.activeLessons} ACTIVE`}
-        </Badge>
-        <FreshnessPill at={statsFetchedAt} isValidating={statsValidating} />
-        <Btn size="sm" variant="ghost" onClick={reloadStats} loading={statsValidating}>
-          Refresh
-        </Btn>
-          </>
+          <Btn size="sm" variant="ghost" onClick={reloadStats} loading={statsValidating}>
+            Refresh
+          </Btn>
         )}
       </PageHeaderBar>
 
@@ -727,73 +716,11 @@ export function LessonsPage() {
       />
       )}
 
-      {stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
-        <Card
-          className={`space-y-3 border p-4 bg-surface-raised ${
-            stats.topPriority === 'critical_lessons'
-              ? 'border-danger/40'
-              : stats.topPriority === 'no_data'
-                ? 'border-brand/40'
-                : 'border-warn/40'
-          }`}
-        >
-          <SignalChip
-            tone={
-              stats.topPriority === 'critical_lessons'
-                ? 'danger'
-                : stats.topPriority === 'no_data'
-                  ? 'brand'
-                  : 'warn'
-            }
-          >
-            Needs attention
-          </SignalChip>
-          <ContainedBlock tone={stats.topPriority === 'critical_lessons' ? 'warn' : 'info'}>
-            <p className="text-xs font-medium leading-snug text-fg">{stats.topPriorityLabel}</p>
-          </ContainedBlock>
-          <ActionPillRow>
-            <ActionPill to={stats.topPriorityTo} tone="brand">
-              Take action →
-            </ActionPill>
-          </ActionPillRow>
-        </Card>
-      ) : null}
-
-      {activeTab === 'overview' && (
-        <div className="space-y-4">
-          <LessonsReadout
-            stats={stats}
-            fetchedAt={statsFetchedAt}
-            isValidating={statsValidating}
-          />
-          {stats.topPriority === 'healthy' && (
-            <RecommendedAction
-              tone="success"
-              title="Lesson library is active"
-              description={`${stats.activeLessons} promoted rules feeding PR context · ${stats.candidateClusters} clusters still forming.`}
-            />
-          )}
-          {stats.topPriority === 'no_data' && (
-            <RecommendedAction
-              tone="info"
-              title="Seed mistake memory with reports"
-              description="Clusters form automatically as similar bug reports accumulate. Triage and classify reports first — the clusterer runs every 6 hours."
-              cta={{ label: 'Open Reports', to: '/reports' }}
-            />
-          )}
-          {(stats.topPriority === 'candidates_ready' || stats.topPriority === 'no_lessons') && (
-            <RecommendedAction
-              tone="info"
-              title="Promote a cluster to a lesson"
-              description={stats.topPriorityLabel ?? 'Review candidate clusters and promote when coherence ≥ 75%.'}
-            />
-          )}
-        </div>
-      )}
-
-      {activeTab === 'lessons' && <LessonsTab />}
-      {activeTab === 'clusters' && <ClustersTab />}
+      {activeTab === 'lessons' && <LessonsTab onChanged={onLessonsChanged} canEditProject={canEditProject} />}
+      {activeTab === 'clusters' && <ClustersTab onChanged={onLessonsChanged} canEditProject={canEditProject} />}
       {activeTab === 'query' && <QuerySimTab />}
+
+      <LessonsReadout stats={stats} fetchedAt={statsFetchedAt} isValidating={statsValidating} />
     </div>
   )
 }

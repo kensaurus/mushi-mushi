@@ -9,7 +9,9 @@
  */
 
 import { markPullRequestReady } from './github.ts'
+import { fetchWithTimeout } from './http.ts'
 import { log } from './logger.ts'
+import { parseContentsResponse, type BaseFileState } from './fix-file-guard.ts'
 
 const ghLog = log.child('github-pr')
 
@@ -156,6 +158,21 @@ export interface CreatePrOptions {
   reportId?: string
   /** Report category for commit type prefix mapping. */
   category?: string | null
+  /** Lines appended to the last commit's message body, e.g. `Fixes WEB-12`
+   *  so Sentry's GitHub integration resolves the issue when it lands. */
+  commitTrailers?: string[]
+  /**
+   * Lift the draft gate after opening the PR (default true, which is what
+   * fix-worker and sdk-upgrade-worker rely on). Recipe PRs pass false so the
+   * PR stays a draft and the host's CI does not run until the owner chooses.
+   */
+  markReady?: boolean
+  /**
+   * Branch from exactly this commit of `defaultBranch` instead of its current
+   * tip. fix-worker patches files it read at this SHA; branching from a newer
+   * tip would silently overwrite whatever landed in between.
+   */
+  baseSha?: string
 }
 
 export interface PrResult {
@@ -175,9 +192,118 @@ const noopLog: SimpleLogger = {
   warn: () => {},
 }
 
+const ghHeaders = (token: string) => ({
+  Authorization: `Bearer ${token}`,
+  Accept: 'application/vnd.github+json',
+  'X-GitHub-Api-Version': '2022-11-28',
+  'Content-Type': 'application/json',
+  'User-Agent': 'mushi-mushi/1.0',
+})
+
+/**
+ * Resolve the branch a PR should be based on, and its tip SHA.
+ *
+ * If the stored defaultBranch doesn't exist (stale DB value or repo renamed
+ * from 'master' → 'main'), resolve the live default branch from the GitHub
+ * API and use that instead. This prevents silent branch-from-wrong-base errors.
+ */
+export async function resolveBaseBranch(
+  token: string,
+  owner: string,
+  repo: string,
+  defaultBranch: string,
+  log: SimpleLogger = noopLog,
+): Promise<{ branch: string; sha: string }> {
+  const baseHeaders = ghHeaders(token)
+  try {
+    const refRes = await ghFetch(
+      `https://api.github.com/repos/${owner}/${repo}/git/refs/heads/${defaultBranch}`,
+      { headers: baseHeaders },
+    )
+    return { branch: defaultBranch, sha: (refRes as { object: { sha: string } }).object.sha }
+  } catch {
+    log.warn('github-pr: stored defaultBranch not found, resolving from GitHub API', {
+      storedBranch: defaultBranch,
+    })
+    const repoInfo = await ghFetch(`https://api.github.com/repos/${owner}/${repo}`, {
+      headers: baseHeaders,
+    })
+    const resolvedBase = (repoInfo as { default_branch: string }).default_branch
+    const refRes = await ghFetch(
+      `https://api.github.com/repos/${owner}/${repo}/git/refs/heads/${resolvedBase}`,
+      { headers: baseHeaders },
+    )
+    log.info('github-pr: resolved live default branch', { resolvedBase })
+    return { branch: resolvedBase, sha: (refRes as { object: { sha: string } }).object.sha }
+  }
+}
+
+/**
+ * Read one file's current contents on `ref` so the fix-worker never writes a
+ * file it has not seen (see fix-file-guard.ts). Same contents URL form the
+ * commit loop below uses. A network failure is `unreadable`, never `absent`.
+ */
+export async function fetchBaseFileState(
+  token: string,
+  owner: string,
+  repo: string,
+  ref: string,
+  path: string,
+): Promise<BaseFileState> {
+  try {
+    const res = await fetchGhWithRetry(
+      `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}?ref=${encodeURIComponent(ref)}`,
+      { headers: ghHeaders(token) },
+    )
+    const body = await res.json().catch(() => null)
+    return parseContentsResponse(res.status, body)
+  } catch (err) {
+    return { kind: 'unreadable', detail: `GitHub request failed: ${String(err).slice(0, 120)}` }
+  }
+}
+
+/**
+ * Files in the repo whose text contains `literal`, from GitHub code search
+ * (`GET /search/code`, default branch only). One attempt with a timeout, no
+ * retry: the endpoint is rate limited (about 10 calls a minute) and the fix
+ * must not stall on it. Returns null when search is unavailable (no access,
+ * rate limited, timeout), so the caller can fall back to the index.
+ *
+ * Hits are approximate: the search tokenizes punctuation, so the caller
+ * checks the literal against the full file text before trusting a hit.
+ */
+export async function searchRepoCode(
+  token: string,
+  owner: string,
+  repo: string,
+  literal: string,
+  timeoutMs = 8_000,
+): Promise<{ paths: string[]; totalCount: number } | null> {
+  const phrase = literal.replace(/["\\]/g, ' ').trim()
+  if (!phrase) return { paths: [], totalCount: 0 }
+  const q = `"${phrase}" repo:${owner}/${repo}`
+  try {
+    const res = await fetchWithTimeout(
+      `https://api.github.com/search/code?per_page=10&q=${encodeURIComponent(q)}`,
+      { headers: ghHeaders(token) },
+      timeoutMs,
+    )
+    if (!res.ok) return null
+    const body = (await res.json().catch(() => null)) as {
+      total_count?: number
+      items?: Array<{ path?: string }>
+    } | null
+    if (!body) return null
+    const paths = (body.items ?? []).map((i) => i.path).filter((p): p is string => typeof p === 'string')
+    return { paths, totalCount: typeof body.total_count === 'number' ? body.total_count : paths.length }
+  } catch {
+    return null
+  }
+}
+
 /**
  * Create a GitHub branch, commit the given files, open a draft PR, and
- * immediately mark it ready-for-review so CI can run.
+ * (unless `markReady: false`) immediately mark it ready-for-review so CI can run.
  *
  * Returns the PR URL, number, branch, and last commit SHA.
  */
@@ -197,6 +323,9 @@ export async function createPrFromFiles(
     labels = [],
     reportId,
     category,
+    commitTrailers = [],
+    markReady = true,
+    baseSha: pinnedBaseSha,
   } = opts
 
   const baseHeaders = {
@@ -207,34 +336,11 @@ export async function createPrFromFiles(
     'User-Agent': 'mushi-mushi/1.0',
   }
 
-  // Fetch the SHA of the default branch tip so we can branch from it.
-  // If the stored defaultBranch doesn't exist (stale DB value or repo renamed
-  // from 'master' → 'main'), resolve the live default branch from the GitHub
-  // API and use that instead. This prevents silent branch-from-wrong-base errors.
-  let resolvedBase = defaultBranch
-  let baseSha: string
-  try {
-    const refRes = await ghFetch(
-      `https://api.github.com/repos/${owner}/${repo}/git/refs/heads/${defaultBranch}`,
-      { headers: baseHeaders },
-    )
-    baseSha = (refRes as { object: { sha: string } }).object.sha
-  } catch {
-    // Stored defaultBranch not found — resolve live from GitHub API.
-    log.warn('github-pr: stored defaultBranch not found, resolving from GitHub API', {
-      storedBranch: defaultBranch,
-    })
-    const repoInfo = await ghFetch(`https://api.github.com/repos/${owner}/${repo}`, {
-      headers: baseHeaders,
-    })
-    resolvedBase = (repoInfo as { default_branch: string }).default_branch
-    const refRes = await ghFetch(
-      `https://api.github.com/repos/${owner}/${repo}/git/refs/heads/${resolvedBase}`,
-      { headers: baseHeaders },
-    )
-    baseSha = (refRes as { object: { sha: string } }).object.sha
-    log.info('github-pr: resolved live default branch', { resolvedBase })
-  }
+  // Fetch the SHA of the default branch tip so we can branch from it,
+  // unless the caller pinned the commit its file contents were read at.
+  const { branch: resolvedBase, sha: baseSha } = pinnedBaseSha
+    ? { branch: defaultBranch, sha: pinnedBaseSha }
+    : await resolveBaseBranch(token, owner, repo, defaultBranch, log)
 
   // Create the new branch (idempotent — retry-safe).
   try {
@@ -252,7 +358,7 @@ export async function createPrFromFiles(
   // Commit each file sequentially. Sequential is intentional: keeps the
   // git log readable and avoids racing the GitHub rate limit.
   let lastCommitSha = baseSha
-  for (const file of files) {
+  for (const [index, file] of files.entries()) {
     const existing = await ghFetchOptional(
       `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(file.path)}?ref=${encodeURIComponent(branch)}`,
       { headers: baseHeaders },
@@ -268,7 +374,12 @@ export async function createPrFromFiles(
         method: 'PUT',
         headers: baseHeaders,
         body: JSON.stringify({
-          message: formatFixCommitMessage(file.reason, reportId, category),
+          message: formatFixCommitMessage(
+            file.reason,
+            reportId,
+            category,
+            index === files.length - 1 ? commitTrailers : [],
+          ),
           content: btoa(unescape(encodeURIComponent(file.contents))),
           branch,
           ...(existingSha ? { sha: existingSha } : {}),
@@ -278,22 +389,64 @@ export async function createPrFromFiles(
     lastCommitSha = putRes.commit.sha
   }
 
+  const pr = await openPullRequestForBranch(
+    { token, owner, repo, base: resolvedBase, branch, title, body, labels, markReady },
+    log,
+  )
+
+  return {
+    url: pr.url,
+    number: pr.number,
+    branch,
+    commitSha: lastCommitSha,
+  }
+}
+
+export interface OpenPullRequestOptions {
+  token: string
+  owner: string
+  repo: string
+  /** Branch the PR merges into. */
+  base: string
+  /** Branch that already holds the commits. */
+  branch: string
+  title: string
+  body: string
+  labels?: string[]
+  markReady?: boolean
+}
+
+/**
+ * Open a draft PR for a branch that already exists, mark it ready (unless
+ * `markReady: false`) and add labels. {@link createPrFromFiles} ends with this;
+ * the SDK upgrade flow also calls it on its own once the host's lockfile
+ * workflow has pushed to the branch.
+ */
+export async function openPullRequestForBranch(
+  opts: OpenPullRequestOptions,
+  log: SimpleLogger = noopLog,
+): Promise<{ url: string; number: number }> {
+  const { token, owner, repo, base, branch, title, body, labels = [], markReady = true } = opts
+  const baseHeaders = ghHeaders(token)
+
   // Open the draft PR targeting the resolved base (may differ from stored defaultBranch).
   const prRes = (await ghFetch(`https://api.github.com/repos/${owner}/${repo}/pulls`, {
     method: 'POST',
     headers: baseHeaders,
-    body: JSON.stringify({ title, head: branch, base: resolvedBase, draft: true, body }),
+    body: JSON.stringify({ title, head: branch, base, draft: true, body }),
   })) as { number: number; html_url: string }
 
   // Lift draft gate so CI runs and the console merge API works.
-  const readyResult = await markPullRequestReady(token, { owner, repo }, prRes.number)
-  if (!readyResult.ok) {
-    log.warn('github-pr: could not mark PR ready for review', {
-      prNumber: prRes.number,
-      message: readyResult.message,
-    })
-  } else if (!readyResult.alreadyReady) {
-    log.info('github-pr: marked draft PR ready for review', { prNumber: prRes.number })
+  if (markReady) {
+    const readyResult = await markPullRequestReady(token, { owner, repo }, prRes.number)
+    if (!readyResult.ok) {
+      log.warn('github-pr: could not mark PR ready for review', {
+        prNumber: prRes.number,
+        message: readyResult.message,
+      })
+    } else if (!readyResult.alreadyReady) {
+      log.info('github-pr: marked draft PR ready for review', { prNumber: prRes.number })
+    }
   }
 
   // Best-effort labels.
@@ -308,21 +461,70 @@ export async function createPrFromFiles(
     )
   }
 
-  return {
-    url: prRes.html_url,
-    number: prRes.number,
-    branch,
-    commitSha: lastCommitSha,
-  }
+  return { url: prRes.html_url, number: prRes.number }
 }
 
-const ghHeaders = (token: string) => ({
-  Authorization: `Bearer ${token}`,
-  Accept: 'application/vnd.github+json',
-  'X-GitHub-Api-Version': '2022-11-28',
-  'Content-Type': 'application/json',
-  'User-Agent': 'mushi-mushi/1.0',
-})
+/**
+ * Create `branch` from `baseSha` holding ONE commit that writes every file,
+ * via the Git Data API (tree → commit → ref). Needs only `Contents: write`.
+ *
+ * One commit means one push, so a host workflow triggered by the push sees
+ * every changed file in `HEAD~1..HEAD` (the per-file Contents API loop in
+ * {@link commitFilesToBranch} makes one push per file, and a workflow that
+ * cancels in-progress runs would only see the last file).
+ *
+ * Returns the new commit SHA.
+ */
+export async function createBranchWithSingleCommit(
+  opts: {
+    token: string
+    owner: string
+    repo: string
+    branch: string
+    baseSha: string
+    message: string
+    files: FileChange[]
+  },
+): Promise<string> {
+  const { token, owner, repo, branch, baseSha, message, files } = opts
+  const headers = ghHeaders(token)
+  const api = `https://api.github.com/repos/${owner}/${repo}`
+
+  const baseCommit = (await ghFetch(`${api}/git/commits/${baseSha}`, { headers })) as {
+    tree: { sha: string }
+  }
+  const tree = (await ghFetch(`${api}/git/trees`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      base_tree: baseCommit.tree.sha,
+      tree: files.map((f) => ({ path: f.path, mode: '100644', type: 'blob', content: f.contents })),
+    }),
+  })) as { sha: string }
+  const commit = (await ghFetch(`${api}/git/commits`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ message, tree: tree.sha, parents: [baseSha] }),
+  })) as { sha: string }
+
+  try {
+    await ghFetch(`${api}/git/refs`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ ref: `refs/heads/${branch}`, sha: commit.sha }),
+    })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    if (!msg.includes('Reference already exists')) throw err
+    // A retried run reuses its branch name: move it to the new commit.
+    await ghFetch(`${api}/git/refs/heads/${branch}`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ sha: commit.sha, force: true }),
+    })
+  }
+  return commit.sha
+}
 
 export interface OpenPrRef {
   number: number
@@ -487,11 +689,30 @@ export function formatFixCommitMessage(
   reason: string,
   reportId?: string,
   category?: string | null,
+  trailers: readonly string[] = [],
 ): string {
-  const scope = reportId ? `MUSHI-${reportId}` : 'mushi'
-  const prefix = categoryToBranchPrefix(category)
-  const trimmed = reason.trim().slice(0, 200)
-  return `${prefix}(${scope}): ${trimmed}`
+  // Host repos run commitlint (config-conventional): a standard type, a
+  // lower-case scope and subject, a header within 100 characters. The branch
+  // prefix (`bugfix/`) is not a commit type, so the type is mapped here, and
+  // the report id moves to a trailer where its length and case are free.
+  const type = conventionalCommitType(category)
+  const head = `${type}(mushi): `
+  let subject = reason.trim().replace(/\s+/g, ' ').replace(/[.。]+$/, '')
+  subject = subject.charAt(0).toLowerCase() + subject.slice(1)
+  const room = 72 - head.length
+  if (subject.length > room) subject = subject.slice(0, room).replace(/\s+\S*$/, '') || subject.slice(0, room)
+  const footer = [...trailers, ...(reportId ? [`Mushi-Report: ${reportId}`] : [])]
+  return footer.length > 0 ? `${head}${subject}\n\n${footer.join('\n')}` : `${head}${subject}`
+}
+
+/** The conventional-commit type for a report category (what commitlint accepts). */
+export function conventionalCommitType(category?: string | null): string {
+  const c = (category ?? 'bug').toLowerCase()
+  if (c === 'slow') return 'perf'
+  if (c === 'feature') return 'feat'
+  if (c === 'docs' || c === 'test' || c === 'ci' || c === 'refactor' || c === 'chore') return c
+  if (c === 'other') return 'chore'
+  return 'fix'
 }
 
 export function formatFixPrTitle(summary: string, reportId: string): string {

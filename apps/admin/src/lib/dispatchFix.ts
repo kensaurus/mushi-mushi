@@ -10,6 +10,8 @@ import { apiFetch, supabase } from './supabase'
 import { RESOLVED_API_URL } from './env'
 import { openSseStream } from './sseClient'
 import { withAguiHandler } from './agui'
+import { trackSelf } from './track'
+import { dispatchErrorText } from './dispatchConfirm'
 
 export type DispatchStatus =
   | 'idle'
@@ -212,7 +214,7 @@ export function useDispatchFix(reportId: string, projectId: string) {
     }
   }, [poll])
 
-  const dispatch = useCallback(async (options?: { agentOverride?: string }) => {
+  const dispatch = useCallback(async (options?: { agentOverride?: string; targetRepoId?: string }) => {
     cancelled.current = false
     reachedTerminal.current = false
     setState({ status: 'queueing' })
@@ -224,16 +226,20 @@ export function useDispatchFix(reportId: string, projectId: string) {
           reportId,
           projectId,
           ...(options?.agentOverride ? { agentOverride: options.agentOverride } : {}),
+          // project_repos.id of the repo the PR opens against; omitted, the
+          // server uses the project's primary repo.
+          ...(options?.targetRepoId ? { targetRepoId: options.targetRepoId } : {}),
         }),
       },
     )
     if (!res.ok || !res.data) {
-      const code = (res as { error?: { code?: string; message?: string } }).error?.code ?? 'DISPATCH_FAILED'
-      const message = (res as { error?: { code?: string; message?: string } }).error?.message ?? 'Could not dispatch fix'
-      setState({ status: 'failed', error: `${code}: ${message}` })
+      // Plain English for the chip; the code used to lead it
+      // ("AUTOFIX_DISABLED: Enable Autofix in project settings first").
+      setState({ status: 'failed', error: dispatchErrorText((res as { error?: { code?: string; message?: string } }).error) })
       return
     }
     const { dispatchId } = res.data
+    trackSelf('fix_dispatched', { report_id: reportId, agent: options?.agentOverride ?? 'default' })
     setState({ status: 'queued', dispatchId })
     void subscribeStream(dispatchId)
   }, [reportId, projectId, subscribeStream])

@@ -1,10 +1,10 @@
 /**
  * FILE: apps/admin/src/pages/ExperimentsPage.tsx
  * PURPOSE: A/B experiment console — banner + EXPERIMENTS SNAPSHOT + tabs:
- *          Overview | Experiments | New.
+ *          Experiments | New, readout at the foot.
  */
 
-import { useState, useCallback, useMemo, useEffect } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
@@ -14,7 +14,10 @@ import { usePublishPageContext } from '../lib/pageContext'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageCopy } from '../lib/copy'
-import { useExperimentsUx, resolveQuickExperimentsTab } from '../lib/experimentsModeUx'
+import { useExperimentsUx, resolveQuickExperimentsRedirect, parseVariantWeight } from '../lib/experimentsModeUx'
+import { describeApiError } from '../lib/humanizeApiError'
+import { PageLoadError } from '../components/PageLoadError'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 import { useToast } from '../lib/toast'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
@@ -24,11 +27,8 @@ import {
   Btn,
   Input,
   EmptyState,
-  ErrorAlert,
   RelativeTime,
   SegmentedControl,
-  FreshnessPill,
-  RecommendedAction,
   Tooltip,
 } from '../components/ui'
 import { IconEye, IconPause } from '../components/icons'
@@ -46,7 +46,7 @@ import {
 } from '../components/experiments/ExperimentsStatsTypes'
 import { Drawer } from '../components/Drawer'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
-import { CHIP_TONE, runStatusChipTone, HEADER_BADGE_TONE } from '../lib/chipTone'
+import { CHIP_TONE, runStatusChipTone } from '../lib/chipTone'
 
 interface ExperimentVariant {
   id: string
@@ -107,15 +107,16 @@ function listRows<T>(payload: T[] | { data: T[] } | null | undefined): T[] {
   return Array.isArray(payload) ? payload : (payload.data ?? [])
 }
 
+// No Overview tab: the banner states the posture and the readout sits at the page foot.
 const TABS: Array<{ id: ExperimentsTabId; label: string; description: string }> = [
-  { id: 'overview', label: 'Overview', description: 'Posture banner and how A/B assignment + mSPRT analysis works.' },
   { id: 'experiments', label: 'Experiments', description: 'Launch, monitor, analyze, and stop live variant tests.' },
   { id: 'new', label: 'New', description: 'Create an experiment with control + treatment variants.' },
 ]
 
-function resolveExperimentsTab(value: string | null): ExperimentsTabId {
+/** The tab named in the URL, or null so the posture picks one. */
+function explicitExperimentsTab(value: string | null): ExperimentsTabId | null {
   if (value === 'experiments' || value === 'new') return value
-  return 'overview'
+  return null
 }
 
 export function ExperimentsPage() {
@@ -126,8 +127,6 @@ export function ExperimentsPage() {
   const setup = useSetupStatus(projectId)
   const projectName = setup.activeProject?.project_name ?? null
   const [searchParams, setSearchParams] = useSearchParams()
-  const activeTab = resolveExperimentsTab(searchParams.get('tab'))
-  const activeTabMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
 
   const [selected, setSelected] = useState<Experiment | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -136,17 +135,23 @@ export function ExperimentsPage() {
     data: statsData,
     loading: statsLoading,
     error: statsError,
+    errorCode: statsErrorCode,
     reload: reloadStats,
     lastFetchedAt: statsFetchedAt,
     isValidating: statsValidating,
   } = usePageData<ExperimentsStats>('/v1/admin/experiments/stats')
   usePublishPageHeroStats('/experiments', statsData)
   const stats = { ...EMPTY_EXPERIMENTS_STATS, ...statsData }
+  // Every mode lands on the work tab that matches the posture (list, or New when empty); the URL wins.
+  const rawTab = searchParams.get('tab')
+  const activeTab: ExperimentsTabId = explicitExperimentsTab(rawTab) ?? resolveQuickExperimentsRedirect(stats, null) ?? 'experiments'
+  const activeTabMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
 
   const {
     data: expData,
     loading,
     error,
+    errorCode,
     reload: reloadExperiments,
     isValidating: experimentsValidating,
   } = usePageData<{ data: Experiment[]; total: number }>(
@@ -160,8 +165,7 @@ export function ExperimentsPage() {
     (tab: ExperimentsTabId) => {
       setSearchParams((prev) => {
         const next = new URLSearchParams(prev)
-        if (tab === 'overview') next.delete('tab')
-        else next.set('tab', tab)
+        next.set('tab', tab)
         return next
       })
     },
@@ -172,12 +176,6 @@ export function ExperimentsPage() {
     reloadStats()
     reloadExperiments()
   }, [reloadStats, reloadExperiments])
-
-  useEffect(() => {
-    if (!ux.isQuickstart || statsLoading) return
-    const quickTab = resolveQuickExperimentsTab(stats)
-    if (activeTab !== quickTab) setActiveTab(quickTab)
-  }, [ux.isQuickstart, statsLoading, stats, activeTab, setActiveTab])
 
   const tabOptions = useMemo(
     () =>
@@ -205,23 +203,36 @@ export function ExperimentsPage() {
     criticalCount: stats.runningCount,
   })
 
-  const launch = useCallback(async (id: string) => {
-    const res = await apiFetch(`/v1/admin/experiments/${id}/launch`, { method: 'POST' })
-    if (!res.ok) { toast.error(res.error?.message ?? 'Launch failed'); return }
+  // Both return the updated experiment (with variants) so the drawer can show
+  // the new status at once, or null when the server refused.
+  const launch = useCallback(async (id: string): Promise<Experiment | null> => {
+    const res = await apiFetch<Experiment>(`/v1/admin/experiments/${id}/launch`, { method: 'POST' })
+    if (!res.ok) {
+      const e = describeApiError(res.error, 'Could not launch the experiment')
+      toast.error(e.title, e.hint)
+      return null
+    }
     toast.success('Experiment launched')
     reloadAll()
+    return res.data ?? null
   }, [reloadAll, toast])
 
-  const stop = useCallback(async (id: string) => {
-    const res = await apiFetch(`/v1/admin/experiments/${id}/stop`, { method: 'POST' })
-    if (!res.ok) { toast.error(res.error?.message ?? 'Stop failed'); return }
+  const stop = useCallback(async (id: string): Promise<Experiment | null> => {
+    const res = await apiFetch<Experiment>(`/v1/admin/experiments/${id}/stop`, { method: 'POST' })
+    if (!res.ok) {
+      const e = describeApiError(res.error, 'Could not stop the experiment')
+      toast.error(e.title, e.hint)
+      return null
+    }
     toast.success('Experiment stopped')
     reloadAll()
+    return res.data ?? null
   }, [reloadAll, toast])
 
   const openDetail = useCallback(async (exp: Experiment) => {
-    const res = await apiFetch<{ data: Experiment }>(`/v1/admin/experiments/${exp.id}`)
-    setSelected(res.data?.data ?? exp)
+    // apiFetch already unwraps the `{ ok, data }` envelope.
+    const res = await apiFetch<Experiment>(`/v1/admin/experiments/${exp.id}`)
+    setSelected(res.ok && res.data ? res.data : exp)
     setDrawerOpen(true)
   }, [])
 
@@ -240,19 +251,8 @@ export function ExperimentsPage() {
   }
 
   if (statsError) {
-    return <ErrorAlert message={`Failed to load experiment stats: ${statsError}`} onRetry={reloadStats} />
+    return <PageLoadError error={statsError} code={statsErrorCode} onRetry={reloadStats} />
   }
-
-  const bannerSeverity: 'ok' | 'warn' | 'danger' | 'brand' | 'info' | 'neutral' =
-    !stats.hasAnyProject
-      ? 'neutral'
-      : stats.topPriority === 'running' || stats.topPriority === 'draft_incomplete'
-        ? 'warn'
-        : stats.topPriority === 'no_experiments' || stats.topPriority === 'draft_ready'
-          ? 'brand'
-          : stats.topPriority === 'winners_found' || stats.topPriority === 'healthy'
-            ? 'ok'
-            : 'info'
 
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-experiments">
@@ -271,28 +271,6 @@ export function ExperimentsPage() {
       >
         {!ux.hideOverviewChrome && (
           <>
-        <Badge
-          className={
-            bannerSeverity === 'ok'
-              ? CHIP_TONE.okSubtle
-              : bannerSeverity === 'warn'
-                ? CHIP_TONE.warnSubtle
-                : bannerSeverity === 'brand'
-                  ? HEADER_BADGE_TONE.brand
-                  : HEADER_BADGE_TONE.neutral
-          }
-        >
-          {!stats.hasAnyProject
-            ? 'NO PROJECT'
-            : stats.runningCount > 0
-              ? `${stats.runningCount} LIVE`
-              : stats.draftsReadyToLaunch > 0
-                ? `${stats.draftsReadyToLaunch} READY`
-                : stats.totalExperiments === 0
-                  ? 'EMPTY'
-                  : `${stats.totalExperiments} TOTAL`}
-        </Badge>
-        <FreshnessPill at={statsFetchedAt} isValidating={statsValidating} />
         <Btn size="sm" variant="ghost" onClick={reloadAll} loading={statsValidating || experimentsValidating}>
           Refresh
         </Btn>
@@ -343,54 +321,28 @@ export function ExperimentsPage() {
       />
       )}
 
-      {activeTab === 'overview' && (
-        <div className="space-y-4">
-          <ExperimentsReadout
-            stats={stats}
-            fetchedAt={statsFetchedAt}
-            isValidating={statsValidating}
-          />
-          {stats.topPriority === 'healthy' && (
-            <RecommendedAction
-              tone="success"
-              title="Experiment library is idle"
-              description={`${stats.totalExperiments} experiment${stats.totalExperiments === 1 ? '' : 's'} · none running · launch a draft or create a new test.`}
-            />
-          )}
-          {stats.topPriority === 'no_experiments' && (
-            <RecommendedAction
-              tone="info"
-              title="Start your first A/B test"
-              description="Compare two UI variants with SDK assignment and mSPRT significance — no peeking penalty."
-              cta={{ label: 'Create experiment', to: '/experiments?tab=new' }}
-            />
-          )}
-          {stats.topPriority === 'draft_ready' && (
-            <RecommendedAction
-              tone="info"
-              title="Launch a ready draft"
-              description={stats.topPriorityLabel ?? 'Drafts with ≥2 variants can go live immediately.'}
-              cta={{ label: 'Open Experiments', to: '/experiments?tab=experiments' }}
-            />
-          )}
-        </div>
-      )}
-
       {activeTab === 'experiments' && (
         <ExperimentsTab
           experiments={experiments}
           loading={loading}
           error={error}
+          errorCode={errorCode}
+          onRetry={reloadExperiments}
           onOpen={openDetail}
           onLaunch={launch}
           onStop={stop}
           projectId={projectId ?? ''}
           onCreate={() => setActiveTab('new')}
+          showNewButton={ux.hideOverviewChrome}
         />
       )}
 
       {activeTab === 'new' && (
-        <NewExperimentForm projectId={projectId ?? ''} onCreated={() => { setActiveTab('experiments'); reloadAll() }} />
+        <NewExperimentForm
+          projectId={projectId ?? ''}
+          onCreated={() => { setActiveTab('experiments'); reloadAll() }}
+          onCancel={ux.hideTabs && stats.totalExperiments > 0 ? () => setActiveTab('experiments') : undefined}
+        />
       )}
 
       {drawerOpen && selected && (
@@ -400,29 +352,38 @@ export function ExperimentsPage() {
           onClose={() => { setDrawerOpen(false); setSelected(null) }}
           onLaunch={launch}
           onStop={stop}
+          onUpdated={setSelected}
+          onDeleted={() => { setDrawerOpen(false); setSelected(null); reloadAll() }}
           onRefresh={async () => {
-            const res = await apiFetch<{ data: Experiment }>(`/v1/admin/experiments/${selected.id}`)
-            if (res.ok && res.data) setSelected((res.data as { data: Experiment }).data ?? selected)
+            const res = await apiFetch<Experiment>(`/v1/admin/experiments/${selected.id}`)
+            if (res.ok && res.data) setSelected(res.data)
+            reloadAll()
           }}
         />
       )}
+
+      <ExperimentsReadout stats={stats} fetchedAt={statsFetchedAt} isValidating={statsValidating} />
     </div>
   )
 }
 
-function ExperimentsTab({ experiments, loading, error, onOpen, onLaunch, onStop, projectId, onCreate }: {
+function ExperimentsTab({ experiments, loading, error, errorCode, onRetry, onOpen, onLaunch, onStop, projectId, onCreate, showNewButton }: {
   experiments: Experiment[]
   loading: boolean
   error: string | null
+  errorCode: string | null
+  onRetry: () => void
   onOpen: (e: Experiment) => void
-  onLaunch: (id: string) => void
-  onStop: (id: string) => void
+  onLaunch: (id: string) => Promise<unknown>
+  onStop: (id: string) => Promise<unknown>
   projectId: string
   onCreate: () => void
+  /** Quickstart / beginner hide the header "+ New", so the list carries it. */
+  showNewButton: boolean
 }) {
   if (!projectId) return <EmptyState title="Select a project" description="Pick a project from the switcher to manage experiments." />
   if (loading) return <TableSkeleton rows={5} />
-  if (error) return <ErrorAlert message={error} />
+  if (error) return <PageLoadError error={error} code={errorCode} resource="experiments" onRetry={onRetry} />
   if (!experiments.length) {
     return (
       <EmptyState
@@ -434,6 +395,12 @@ function ExperimentsTab({ experiments, loading, error, onOpen, onLaunch, onStop,
   }
 
   return (
+    <div className="space-y-2">
+    {showNewButton && (
+      <div className="flex justify-end">
+        <Btn size="sm" variant="primary" onClick={onCreate}>+ New experiment</Btn>
+      </div>
+    )}
     <Card className="overflow-hidden">
       <table className="w-full text-sm">
         <thead>
@@ -497,16 +464,19 @@ function ExperimentsTab({ experiments, loading, error, onOpen, onLaunch, onStop,
         </tbody>
       </table>
     </Card>
+    </div>
   )
 }
 
-function NewExperimentForm({ projectId, onCreated }: { projectId: string; onCreated: () => void }) {
+function NewExperimentForm({ projectId, onCreated, onCancel }: { projectId: string; onCreated: () => void; onCancel?: () => void }) {
   const toast = useToast()
   const [loading, setLoading] = useState(false)
   const [form, setForm] = useState({ name: '', description: '', hypothesis: '', bandit_enabled: false })
+  // Weights stay as typed text; parseVariantWeight validates on submit so an
+  // empty field never reaches the API as NaN → null.
   const [variants, setVariants] = useState([
-    { name: 'Control', description: '', traffic_weight: 0.5 },
-    { name: 'Treatment A', description: '', traffic_weight: 0.5 },
+    { name: 'Control', description: '', traffic_weight: '0.5' },
+    { name: 'Treatment A', description: '', traffic_weight: '0.5' },
   ])
 
   const set = (k: string, v: unknown) => setForm((f) => ({ ...f, [k]: v }))
@@ -514,7 +484,14 @@ function NewExperimentForm({ projectId, onCreated }: { projectId: string; onCrea
   const submit = async () => {
     if (!form.name.trim()) { toast.error('Name required'); return }
     if (!projectId) { toast.error('Select a project'); return }
+    const parsedVariants = variants.map((v) => ({ ...v, name: v.name.trim(), traffic_weight: parseVariantWeight(v.traffic_weight) }))
+    const badVariant = parsedVariants.find((v) => !v.name || v.traffic_weight == null)
+    if (badVariant) {
+      toast.error('Check the variants', 'Every variant needs a name and a weight between 0 and 1.')
+      return
+    }
     setLoading(true)
+    let createdId: string | null = null
     try {
       const expRes = await apiFetch<{ id: string }>('/v1/admin/experiments', {
         method: 'POST',
@@ -526,19 +503,35 @@ function NewExperimentForm({ projectId, onCreated }: { projectId: string; onCrea
           bandit_enabled: form.bandit_enabled,
         }),
       })
-      if (!expRes.ok) throw new Error(expRes.error?.message ?? 'Create failed')
+      if (!expRes.ok) {
+        const e = describeApiError(expRes.error, 'Could not create the experiment')
+        toast.error(e.title, e.hint)
+        return
+      }
       const expId = (expRes.data as { id: string }).id
-      for (const v of variants) {
+      createdId = expId
+      for (const v of parsedVariants) {
         const variantRes = await apiFetch(`/v1/admin/experiments/${expId}/variants`, {
           method: 'POST',
           body: JSON.stringify(v),
         })
-        if (!variantRes.ok) throw new Error(variantRes.error?.message ?? 'Variant create failed')
+        if (!variantRes.ok) {
+          // The experiment row already exists; say so instead of implying
+          // nothing was saved, and point at where it can be finished.
+          const e = describeApiError(variantRes.error, `Variant "${v.name}" was not saved`)
+          toast.error(e.title, `${e.hint} The experiment was saved as a draft: open it from the list to add the missing variant or delete it.`)
+          onCreated()
+          return
+        }
       }
       toast.success('Experiment created')
       onCreated()
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : 'Error')
+    } catch {
+      toast.error(
+        createdId ? 'The experiment was only partly saved' : 'Could not create the experiment',
+        createdId ? 'Open the draft from the list to finish it.' : 'Try again in a moment.',
+      )
+      if (createdId) onCreated()
     } finally { setLoading(false) }
   }
 
@@ -575,48 +568,107 @@ function NewExperimentForm({ projectId, onCreated }: { projectId: string; onCrea
             <label className="block space-y-1">
               {i === 0 && <span className="text-xs text-fg-muted">Weight (0–1)</span>}
               <Input type="number" step={0.1} min={0} max={1} value={v.traffic_weight}
-                onChange={(e) => setVariants((vs) => vs.map((x, j) => j === i ? { ...x, traffic_weight: parseFloat(e.target.value) } : x))} />
+                onChange={(e) => setVariants((vs) => vs.map((x, j) => j === i ? { ...x, traffic_weight: e.target.value } : x))} />
             </label>
             {i >= 2 && (
               <Btn size="sm" variant="ghost" onClick={() => setVariants((vs) => vs.filter((_, j) => j !== i))}>✕</Btn>
             )}
           </div>
         ))}
-        <Btn size="sm" variant="ghost" onClick={() => setVariants((vs) => [...vs, { name: `Treatment ${String.fromCharCode(64 + vs.length)}`, description: '', traffic_weight: 0.33 }])}>
+        <Btn size="sm" variant="ghost" onClick={() => setVariants((vs) => [...vs, { name: `Treatment ${String.fromCharCode(64 + vs.length)}`, description: '', traffic_weight: '0.33' }])}>
           + Add variant
         </Btn>
       </div>
 
-      <Btn variant="primary" onClick={submit} loading={loading} disabled={!projectId}>Create experiment</Btn>
+      <div className="flex gap-2">
+        <Btn variant="primary" onClick={submit} loading={loading} disabled={!projectId}>Create experiment</Btn>
+        {onCancel && <Btn variant="ghost" onClick={onCancel} disabled={loading}>Back to experiments</Btn>}
+      </div>
     </Card>
   )
 }
 
-function ExperimentDrawer({ experiment, open, onClose, onLaunch, onStop, onRefresh }: {
+function ExperimentDrawer({ experiment, open, onClose, onLaunch, onStop, onRefresh, onUpdated, onDeleted }: {
   experiment: Experiment
   open: boolean
   onClose: () => void
-  onLaunch: (id: string) => void
-  onStop: (id: string) => void
-  onRefresh: () => void
+  onLaunch: (id: string) => Promise<Experiment | null>
+  onStop: (id: string) => Promise<Experiment | null>
+  onRefresh: () => Promise<void>
+  onUpdated: (e: Experiment) => void
+  onDeleted: () => void
 }) {
   const toast = useToast()
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null)
   const [analyzing, setAnalyzing] = useState(false)
+  const [transition, setTransition] = useState<'launch' | 'stop' | null>(null)
+  const [variantDraft, setVariantDraft] = useState({ name: '', weight: '0.5' })
+  const [addingVariant, setAddingVariant] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   const analyze = async () => {
     setAnalyzing(true)
     try {
       const res = await apiFetch<AnalysisResult>(`/v1/admin/experiments/${experiment.id}/analyze`, { method: 'POST' })
-      if (!res.ok) throw new Error(res.error?.message ?? 'Analysis failed')
+      if (!res.ok) {
+        const e = describeApiError(res.error, 'Could not analyze the experiment')
+        toast.error(e.title, e.hint)
+        return
+      }
       setAnalysis(res.data ?? null)
-      onRefresh()
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : 'Analysis failed')
+      // Analyze can declare a winner and move bandit weights: show them.
+      await onRefresh()
     } finally { setAnalyzing(false) }
   }
 
+  const runTransition = async (kind: 'launch' | 'stop') => {
+    setTransition(kind)
+    try {
+      const updated = kind === 'launch' ? await onLaunch(experiment.id) : await onStop(experiment.id)
+      if (updated) onUpdated(updated)
+    } finally { setTransition(null) }
+  }
+
+  const addVariant = async () => {
+    const name = variantDraft.name.trim()
+    const weight = parseVariantWeight(variantDraft.weight)
+    if (!name || weight == null) {
+      toast.error('Check the variant', 'Give it a name and a weight between 0 and 1.')
+      return
+    }
+    setAddingVariant(true)
+    const res = await apiFetch(`/v1/admin/experiments/${experiment.id}/variants`, {
+      method: 'POST',
+      body: JSON.stringify({ name, traffic_weight: weight }),
+    })
+    setAddingVariant(false)
+    if (!res.ok) {
+      const e = describeApiError(res.error, 'Could not add the variant')
+      toast.error(e.title, e.hint)
+      return
+    }
+    toast.success(`Variant "${name}" added`)
+    setVariantDraft({ name: '', weight: '0.5' })
+    await onRefresh()
+  }
+
+  const deleteDraft = async () => {
+    setDeleting(true)
+    const res = await apiFetch(`/v1/admin/experiments/${experiment.id}`, { method: 'DELETE' })
+    setDeleting(false)
+    setConfirmDelete(false)
+    if (!res.ok) {
+      const e = describeApiError(res.error, 'Could not delete the draft')
+      toast.error(e.title, e.hint)
+      return
+    }
+    toast.success('Draft deleted')
+    onDeleted()
+  }
+
   const variants = experiment.experiment_variants ?? []
+  const missingVariants = Math.max(0, 2 - variants.length)
 
   return (
     <Drawer open={open} onClose={onClose} title={experiment.name} width="lg">
@@ -631,14 +683,46 @@ function ExperimentDrawer({ experiment, open, onClose, onLaunch, onStop, onRefre
           )}
           <div className="ml-auto flex gap-2">
             {experiment.status === 'draft' && variants.length >= 2 && (
-              <Btn size="sm" variant="primary" onClick={() => { onLaunch(experiment.id); onRefresh() }}>Launch</Btn>
+              <Btn size="sm" variant="primary" loading={transition === 'launch'} disabled={transition != null} onClick={() => void runTransition('launch')}>Launch</Btn>
             )}
             {experiment.status === 'running' && (
-              <Btn size="sm" variant="ghost" onClick={() => { onStop(experiment.id); onRefresh() }}>Stop</Btn>
+              <Btn size="sm" variant="ghost" loading={transition === 'stop'} disabled={transition != null} onClick={() => void runTransition('stop')}>Stop</Btn>
             )}
             <Btn size="sm" variant="ghost" onClick={analyze} loading={analyzing}>Analyze</Btn>
+            {experiment.status === 'draft' && (
+              <Btn size="sm" variant="danger" onClick={() => setConfirmDelete(true)}>Delete draft</Btn>
+            )}
           </div>
         </div>
+
+        {experiment.status === 'draft' && (
+          <ContainedBlock tone="muted" label="Variants">
+            <p className="mb-2 text-xs text-fg-muted">
+              {missingVariants > 0
+                ? `Add ${missingVariants} more variant${missingVariants === 1 ? '' : 's'} to launch: a test needs a control and at least one treatment.`
+                : 'Ready to launch. You can still add more variants first.'}
+            </p>
+            {/* mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas) */}
+            <div className="grid grid-cols-[1fr_6rem_auto] items-end gap-2">
+              <Input
+                label="Name"
+                value={variantDraft.name}
+                onChange={(e) => setVariantDraft((d) => ({ ...d, name: e.target.value }))}
+                placeholder={variants.length === 0 ? 'Control' : 'Treatment A'}
+              />
+              <Input
+                label="Weight (0–1)"
+                type="number"
+                step={0.1}
+                min={0}
+                max={1}
+                value={variantDraft.weight}
+                onChange={(e) => setVariantDraft((d) => ({ ...d, weight: e.target.value }))}
+              />
+              <Btn size="sm" onClick={addVariant} loading={addingVariant}>Add variant</Btn>
+            </div>
+          </ContainedBlock>
+        )}
 
         {experiment.hypothesis && (
           <div className="rounded-md bg-surface-overlay px-4 py-3 text-sm italic text-fg-primary">{experiment.hypothesis}</div>
@@ -703,6 +787,18 @@ function ExperimentDrawer({ experiment, open, onClose, onLaunch, onStop, onRefre
               </tbody>
             </table>
           </div>
+        )}
+
+        {confirmDelete && (
+          <ConfirmDialog
+            title={`Delete the draft "${experiment.name}"?`}
+            body="The draft and its variants are removed. It never ran, so no assignments or results are lost."
+            confirmLabel="Delete draft"
+            tone="danger"
+            loading={deleting}
+            onConfirm={deleteDraft}
+            onCancel={() => (deleting ? undefined : setConfirmDelete(false))}
+          />
         )}
 
         <ContainedBlock tone="muted" label="Timeline">

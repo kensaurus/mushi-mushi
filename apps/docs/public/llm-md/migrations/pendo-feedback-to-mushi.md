@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/migrations/pendo-feedback-to-mushi
 
 ---
 title: 'Pendo Feedback → Mushi'
+description: Swap Pendo's feedback module for Mushi while keeping Pendo for analytics, guides and NPS — both share user identity through one identify call.
 ---
 
 # Pendo Feedback → Mushi
@@ -44,6 +45,7 @@ guides, NPS) — the two tools share user identity via a single
 ## Recipe: keep Pendo for analytics + guides; use Mushi for feedback
 
 ```ts
+import { Mushi } from '@mushi-mushi/web'
 
 // 1. Initialise both
 window.pendo.initialize({
@@ -85,7 +87,7 @@ Mushi.init({ projectId: '...', apiKey: '...' })`} },
     { id: 'export-old', label: 'Export historical Pendo Feedback ideas (optional)', content: <>If you want continuity, export your existing feedback as CSV from Pendo's UI and import into Mushi as one-off reports. Most teams skip this — historical feedback rarely gets re-triaged.</> },
     { id: 'update-runbooks', label: 'Update internal runbooks', content: <>"Where do feedback requests live?" → Mushi admin console. Send a 1-line note to PMs / CS / engineering.</> },
     { id: 'verify', label: 'Submit a test report and verify pipeline', content: <>Click the Mushi widget, submit a report, verify it appears in the admin console with the right user identity attached.</> },
-  ]}
+
 />
 
 ## Feature parity

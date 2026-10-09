@@ -552,6 +552,10 @@ export function fullstackAuditNavBadge(
   stats: NavStatSlices['fullstackAudit'],
 ): WorkspaceNavBadge | null {
   if (!stats) return null
+  // A failed read is never "nothing to see": flag it so the page gets opened.
+  if (stats.topPriority === 'unknown') {
+    return attentionBadge(1, 'warn', 'Full-stack audit could not read its checks')
+  }
   if (stats.errorCount > 0 || stats.failedGateCount > 0) {
     const count = Math.max(stats.errorCount, stats.failedGateCount)
     return attentionBadge(
@@ -613,12 +617,6 @@ export function exploreNavBadge(stats: NavStatSlices['explore']): WorkspaceNavBa
   }
   if (stats.topPriority === 'indexing') {
     return attentionBadge(1, 'ok', 'Codebase index in progress')
-  }
-  if (stats.indexedFiles > 0 && stats.topPriority === 'ready') {
-    return inventoryBadge(
-      stats.indexedFiles,
-      `${stats.indexedFiles.toLocaleString()} indexed file${stats.indexedFiles === 1 ? '' : 's'}`,
-    )
   }
   return null
 }
@@ -693,12 +691,6 @@ export function graphNavBadge(stats: NavStatSlices['graph']): WorkspaceNavBadge 
       stats.fragileComponents,
       'warn',
       `${stats.fragileComponents} fragile graph component${stats.fragileComponents === 1 ? '' : 's'}`,
-    )
-  }
-  if (stats.nodeCount > 0 && stats.topPriority === 'clear') {
-    return inventoryBadge(
-      stats.nodeCount,
-      `${stats.nodeCount.toLocaleString()} graph node${stats.nodeCount === 1 ? '' : 's'}`,
     )
   }
   return null
@@ -1136,20 +1128,6 @@ export function startSectionAttention(slices: NavStatSlices): {
   return { count, tone, label: parts.join(' · ') }
 }
 
-export function planSectionAttention(slices: NavStatSlices): {
-  count: number
-  tone: 'warn' | 'danger'
-  label: string
-} | null {
-  const content = contentQualityNavBadge(slices.contentQuality)
-  if (!content || content.mode !== 'attention' || content.tone === 'ok') return null
-  return {
-    count: content.count,
-    tone: content.tone === 'danger' ? 'danger' : 'warn',
-    label: content.label,
-  }
-}
-
 export function checkSectionAttention(slices: NavStatSlices): {
   count: number
   tone: 'warn' | 'danger'
@@ -1197,11 +1175,6 @@ export function checkSectionAttention(slices: NavStatSlices): {
     count += releases.count
     parts.push(`${releases.count} releases`)
   }
-  const explore = exploreNavBadge(slices.explore)
-  if (explore?.mode === 'attention' && explore.tone !== 'ok') {
-    count += explore.count
-    parts.push(`${explore.count} explore`)
-  }
   const research = researchNavBadge(slices.research)
   if (research?.mode === 'attention' && research.tone !== 'ok') {
     count += research.count
@@ -1212,8 +1185,19 @@ export function checkSectionAttention(slices: NavStatSlices): {
     count += health.count
     parts.push(`${health.count} health`)
   }
+  // Content checks and AI prompts sit under Quality & health since the 2026-10-08 regroup.
+  const content = contentQualityNavBadge(slices.contentQuality)
+  if (content?.mode === 'attention' && content.tone !== 'ok') {
+    count += content.count
+    parts.push(content.label)
+  }
+  const promptLab = promptLabNavBadge(slices.promptLab)
+  if (promptLab?.mode === 'attention' && promptLab.tone !== 'ok') {
+    count += promptLab.count
+    parts.push(`${promptLab.count} prompt lab`)
+  }
   if (count === 0) return null
-  const tone = [codeHealth, fullstack, qa, lessons, drift, anomalies, intelligence, releases, explore, research, health].some(
+  const tone = [codeHealth, fullstack, qa, lessons, drift, anomalies, intelligence, releases, research, health, content, promptLab].some(
     (b) => b?.tone === 'danger',
   )
     ? 'danger'
@@ -1238,13 +1222,19 @@ export function doSectionAttention(slices: NavStatSlices): {
     count += repo.count
     parts.push(`${repo.count} repo`)
   }
-  const promptLab = promptLabNavBadge(slices.promptLab)
-  if (promptLab?.mode === 'attention' && promptLab.tone !== 'ok') {
-    count += promptLab.count
-    parts.push(`${promptLab.count} prompt lab`)
+  // Improvement runs and Code map sit under Fixing since the 2026-10-08 regroup.
+  const iterate = iterateNavBadge(slices.iterate)
+  if (iterate?.mode === 'attention' && iterate.tone !== 'ok') {
+    count += iterate.count
+    parts.push(`${iterate.count} improvement runs`)
+  }
+  const explore = exploreNavBadge(slices.explore)
+  if (explore?.mode === 'attention' && explore.tone !== 'ok') {
+    count += explore.count
+    parts.push(`${explore.count} code map`)
   }
   if (count === 0) return null
-  const tone = [fixes, repo, promptLab].some((b) => b?.tone === 'danger') ? 'danger' : 'warn'
+  const tone = [fixes, repo, iterate, explore].some((b) => b?.tone === 'danger') ? 'danger' : 'warn'
   return { count, tone, label: parts.join(' · ') }
 }
 
@@ -1259,11 +1249,6 @@ export function actSectionAttention(slices: NavStatSlices): {
   if (rewards?.mode === 'attention') {
     count += rewards.count
     parts.push(`${rewards.count} rewards`)
-  }
-  const iterate = iterateNavBadge(slices.iterate)
-  if (iterate?.mode === 'attention' && iterate.tone !== 'ok') {
-    count += iterate.count
-    parts.push(`${iterate.count} PDCA`)
   }
   const mcp = mcpNavBadge(slices.mcp)
   if (mcp?.mode === 'attention' && mcp.tone !== 'ok') {
@@ -1286,7 +1271,7 @@ export function actSectionAttention(slices: NavStatSlices): {
     parts.push(`${skills.count} skills`)
   }
   if (count === 0) return null
-  const tone = [rewards, iterate, mcp, marketplace, integrations, skills].some(
+  const tone = [rewards, mcp, marketplace, integrations, skills].some(
     (b) => b?.tone === 'danger',
   )
     ? 'danger'

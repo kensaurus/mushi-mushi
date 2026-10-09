@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/migrations/logrocket-feedback-to-mus
 
 ---
 title: 'LogRocket Feedback → Mushi'
+description: Move LogRocket's feedback widget to Mushi while keeping LogRocket for session replay — both SDKs run side by side, with a step-by-step checklist.
 ---
 
 # LogRocket Feedback → Mushi
@@ -53,6 +54,8 @@ This is the killer recipe — every Mushi report includes a one-click
 without leaving the Mushi dashboard.
 
 ```ts
+import LogRocket from 'logrocket'
+import { Mushi } from '@mushi-mushi/web'
 
 LogRocket.init('your-app/id')
 Mushi.init({ projectId: 'YOUR_PROJECT_ID', apiKey: 'YOUR_PUBLIC_KEY' })
@@ -87,7 +90,7 @@ Mushi.init({ projectId: 'YOUR_PROJECT_ID', apiKey: 'YOUR_PUBLIC_KEY' })`} },
     { id: 'disable-lr-feedback', label: 'Disable the LogRocket feedback widget', content: <>If you used LogRocket&apos;s feedback button or modal, remove that integration. Keep LogRocket&apos;s core SDK for the replay; just stop calling its feedback APIs.</> },
     { id: 'update-runbooks', label: 'Update internal runbooks', content: <>Triagers now open Mushi for the report and click the LogRocket session link inline. Document the workflow.</> },
     { id: 'verify', label: 'Submit a test report and verify the LogRocket link works', content: <>Open a Mushi report; click the logrocketSession metadata link; confirm LogRocket opens the right session.</> },
-  ]}
+
 />
 
 ## Feature parity (feedback only — replay is its own product)

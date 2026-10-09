@@ -3,14 +3,18 @@
  * PURPOSE: BYO bucket health — probe status, defaults, and upload risk.
  */
 
-import { Link } from 'react-router-dom'
-import { Btn, RelativeTime } from '../ui'
+import { Btn } from '../ui'
 import { StatusBannerShell } from '../StatusBannerShell'
 import type { StorageStats, StorageTabId } from './types'
 
-/** Healthy / default posture is covered by the page hero + snapshot. */
+/**
+ * Whether the status banner shows. A healthy bucket is covered by the page
+ * hero + snapshot. The cluster-default state is shown: it says where
+ * screenshots go and how to change it (that branch used to be unreachable).
+ */
 export function isStorageStatusBannerCritical(stats: StorageStats): boolean {
   if (!stats.projectId) return true
+  if (!stats.activeProjectConfigured) return true
   if (stats.activeProjectHealthStatus === 'failing') return true
   if (stats.activeProjectHealthStatus === 'degraded') return true
   if (!stats.lastHealthCheckAt && stats.activeProjectConfigured) return true
@@ -35,9 +39,7 @@ export function StorageStatusBanner({ stats, onTab, onHealthCheck, checking }: P
         title="No project selected"
         subtitle="Storage backends are per-project — pick an app in the header switcher before configuring a bucket."
         action={
-          <Link to="/projects">
-            <Btn size="sm" variant="ghost">Go to Projects</Btn>
-          </Link>
+          <Btn to="/projects" size="sm" variant="ghost">Go to Projects</Btn>
         }
       />
     )
@@ -136,25 +138,7 @@ export function StorageStatusBanner({ stats, onTab, onHealthCheck, checking }: P
     )
   }
 
-  return (
-    <StatusBannerShell
-      tone="ok"
-      title={`${stats.activeProjectProvider} bucket healthy for ${projectLabel}`}
-      subtitle={
-        <>
-          {stats.activeProjectObjects.toLocaleString()} screenshot{stats.activeProjectObjects === 1 ? '' : 's'}
-          {stats.lastHealthCheckAt ? (
-            <> · probed <RelativeTime value={stats.lastHealthCheckAt} /></>
-          ) : null}
-        </>
-      }
-      action={
-        onTab ? (
-          <Btn size="sm" variant="ghost" onClick={() => onTab('usage')}>
-            View usage
-          </Btn>
-        ) : null
-      }
-    />
-  )
+  // Healthy: the page hero and snapshot already say so
+  // (isStorageStatusBannerCritical keeps the banner hidden).
+  return null
 }

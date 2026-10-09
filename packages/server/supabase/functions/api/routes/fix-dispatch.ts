@@ -28,13 +28,17 @@ import { getBlastRadius } from '../../_shared/knowledge-graph.ts';
 import { logAudit } from '../../_shared/audit.ts';
 import { createExternalIssue } from '../../_shared/integrations.ts';
 import { getActivePlugins, dispatchPluginEvent } from '../../_shared/plugins.ts';
+import { cancelCloudAgentAttempt, validateAgentOverride } from '../../_shared/agent-adapters.ts';
+import { checkAutofixBudget } from '../../_shared/autofix-budget.ts';
 import { getAvailableTags } from '../../_shared/ontology.ts';
 import { executeNaturalLanguageQuery } from '../../_shared/nl-query.ts';
 import { withIdempotency } from '../../_shared/idempotency.ts';
 import { getPlan, listPlans } from '../../_shared/plans.ts';
 import { estimateCallCostUsd } from '../../_shared/pricing.ts';
 import { ANTHROPIC_SONNET } from '../../_shared/models.ts';
-import { dbError, ownedProjectIds, callerProjectIds, userCanAccessProject } from '../shared.ts';
+import { dbError, ownedProjectIds, callerProjectIds, callerCanAccessProject } from '../shared.ts';
+import { featureRequestDispatchBlock } from '../../_shared/report-category.ts';
+import { fixDispatchResolvedBlock } from '../../_shared/fix-report-truth.ts';
 import {
   canManageProjectSdkConfig,
   coerceSdkConfigUpdate,
@@ -68,9 +72,15 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
         // by classify-report (e.g. a freshly ingested inventory).
         inventoryActionNodeId?: string;
         // Agent override: allow callers to specify which agent to use
-        // (e.g. 'claude_code', 'codex'). Validated against the allowed
-        // set; unknown values are treated as 'auto'.
+        // (e.g. 'claude_code', 'cursor_cloud', 'github_cloud_agent').
+        // Validated against ALLOWED_AGENT_OVERRIDES; unknown values are a
+        // 400 UNSUPPORTED_AGENT, 'auto' means the project default.
         agentOverride?: string;
+        // Which linked repo (project_repos.id) the fix goes to. Omitted or
+        // null => fix-worker picks the project's primary repo, as before.
+        // Path-glob routing cannot tell two repos apart when both own
+        // `src/**`, or when a bundled backend's frames are `dist/*.mjs`.
+        targetRepoId?: string | null;
       };
       if (!body.reportId || !body.projectId) {
         return c.json(
@@ -102,6 +112,20 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
           400,
         );
       }
+      const targetRepoId = body.targetRepoId ?? null;
+      if (
+        targetRepoId !== null &&
+        (typeof targetRepoId !== 'string' ||
+          !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetRepoId))
+      ) {
+        return c.json(
+          {
+            ok: false,
+            error: { code: 'INVALID_TARGET_REPO_ID', message: 'targetRepoId must be a UUID' },
+          },
+          400,
+        );
+      }
 
       const db = getServiceClient();
 
@@ -110,14 +134,55 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
       //   2. Org-scoped membership (any role can dispatch — same gate as
       //      legacy project_members which didn't role-check either).
       //   3. Per-project membership (legacy multi-collaborator projects).
-      // Centralised in userCanAccessProject so we don't drift from the
-      // other dispatch / read endpoints.
-      const access = await userCanAccessProject(db, userId, body.projectId);
+      // Centralised in callerCanAccessProject so we don't drift from the
+      // other dispatch / read endpoints; a project-bound API key is also held
+      // to its own project there.
+      const access = await callerCanAccessProject(c, db, userId, body.projectId);
       if (!access.allowed) {
         return c.json(
           { ok: false, error: { code: 'FORBIDDEN', message: 'Not a member of this project' } },
           403,
         );
+      }
+
+      // The report must belong to the project being dispatched for. Without
+      // this, a member of one project could queue a fix for another tenant's
+      // report: fix-worker loads the report by id and would feed its contents
+      // into a PR on the caller's repo and flip its status.
+      const { data: ownReport, error: reportErr } = await db
+        .from('reports')
+        .select('id, status, user_category, user_intent, category, category_confirmed_at, stage1_classification, stage2_analysis')
+        .eq('id', body.reportId)
+        .eq('project_id', body.projectId)
+        .maybeSingle();
+      if (reportErr) return dbError(c, reportErr);
+      if (!ownReport) {
+        return c.json(
+          { ok: false, error: { code: 'REPORT_NOT_FOUND', message: 'Report not found in this project' } },
+          404,
+        );
+      }
+
+      // The reporter filed a feature request: no auto-fix until a human
+      // re-categorizes it as a bug (featureRequestDispatchBlock).
+      const featureBlock = featureRequestDispatchBlock(ownReport);
+      if (featureBlock) {
+        return c.json({ ok: false, error: { code: 'FEATURE_REQUEST', message: featureBlock } }, 409);
+      }
+
+      // Never re-dispatch a report a merged PR already fixed, or one a human
+      // dismissed: the console's bulk "Retry failed" posts here once per
+      // report, so this one check guards every retry path (glot.it
+      // 2026-10-04 would have re-run 4 fixed bugs).
+      const { data: mergedAttempts, error: mergedErr } = await db
+        .from('fix_attempts')
+        .select('id, report_id, pr_number, pr_state, merged_at, created_at')
+        .eq('report_id', body.reportId)
+        .limit(50);
+      if (mergedErr) return dbError(c, mergedErr);
+      const resolvedBlock = fixDispatchResolvedBlock(ownReport, mergedAttempts ?? []);
+      if (resolvedBlock) {
+        return c.json({ ok: false, error: resolvedBlock }, 409);
       }
 
       const { data: settings, error: settingsErr } = await db
@@ -163,33 +228,55 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
         );
       }
 
-      // Validate the agent override to a known set; unknown values are
-      // coerced to null so the worker falls back to the project-level
-      // default. Accept BOTH body keys: the MCP servers send `agent`, the
-      // console sends `agentOverride` — reading only the latter silently
-      // dropped every MCP agent selection (2026-08-16 audit P1-1). The set
-      // is the union of runnable ('claude_code', 'rest_worker'/'rest_fix_
-      // worker', 'llm') and orchestrator-only values ('codex', 'mcp') —
-      // fix-worker normalizes/rejects with an actionable skip reason and
-      // now stamps the report, so an unsupported choice is visible instead
-      // of silently swapped.
-      const ALLOWED_AGENTS = [
-        'claude_code',
-        'codex',
-        'auto',
-        'rest_worker',
-        'rest_fix_worker',
-        'llm',
-        'mcp',
-      ] as const;
+      // Validate the agent override against the shared allow-list
+      // (_shared/agent-adapters.ts ALLOWED_AGENT_OVERRIDES). Accept BOTH body
+      // keys: the MCP servers send `agent`, the console sends `agentOverride`
+      // — reading only the latter silently dropped every MCP agent selection
+      // (2026-08-16 audit P1-1). Unknown values are now a 400
+      // UNSUPPORTED_AGENT instead of a silent null: the old coercion
+      // downgraded `mushi fix --agent cursor_cloud` to the project default
+      // without a word (2026-09-12 audit row 34). 'auto' still means "project
+      // default"; runnable cloud agents (cursor_cloud, github_cloud_agent)
+      // are dispatched by fix-worker through _shared/agent-adapters.ts.
       const rawAgent =
         (typeof body.agentOverride === 'string' && body.agentOverride) ||
         (typeof body.agent === 'string' && body.agent) ||
         null;
-      const agentOverride =
-        rawAgent && ALLOWED_AGENTS.includes(rawAgent as (typeof ALLOWED_AGENTS)[number])
-          ? rawAgent
-          : null;
+      const agentValidation = validateAgentOverride(rawAgent);
+      if (!agentValidation.ok) {
+        return c.json(
+          { ok: false, error: { code: agentValidation.code, message: agentValidation.message } },
+          400,
+        );
+      }
+      const agentOverride = agentValidation.agent;
+
+      // The chosen repo must be linked to this project. Checked after the
+      // membership gate so a non-member cannot probe other projects' repo
+      // ids. fix-worker re-checks project_id when it resolves the repo.
+      let targetRepo: { id: string; repo_url: string } | null = null;
+      if (targetRepoId) {
+        const { data: repoRow, error: repoErr } = await db
+          .from('project_repos')
+          .select('id, repo_url')
+          .eq('id', targetRepoId)
+          .eq('project_id', body.projectId)
+          .maybeSingle();
+        if (repoErr) return dbError(c, repoErr);
+        if (!repoRow) {
+          return c.json(
+            {
+              ok: false,
+              error: {
+                code: 'TARGET_REPO_NOT_IN_PROJECT',
+                message: 'targetRepoId is not a repo linked to this project',
+              },
+            },
+            400,
+          );
+        }
+        targetRepo = repoRow as { id: string; repo_url: string };
+      }
 
       const { data: job, error: insertErr } = await db
         .from('fix_dispatch_jobs')
@@ -204,7 +291,16 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
           inventory_action_node_id: body.inventoryActionNodeId ?? null,
           // Agent override persisted into dispatch_metadata so the worker
           // can honour the caller's preference without a separate round-trip.
-          dispatch_metadata: agentOverride ? { agent_override: agentOverride } : undefined,
+          // A person asked for this fix (console, CLI, MCP), so the auto-fix
+          // caps do not block it — fix-worker reads `trigger`.
+          // `target_repo_id` is the key fix-worker's resolveRepo() reads.
+          dispatch_metadata: {
+            trigger: 'manual',
+            ...(agentOverride ? { agent_override: agentOverride } : {}),
+            ...(targetRepo
+              ? { target_repo_id: targetRepo.id, target_repo_url: targetRepo.repo_url }
+              : {}),
+          },
         })
         .select('id, status, created_at')
         .single();
@@ -232,9 +328,49 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
         });
       });
 
+      // Show the person what auto-fix has spent: a manual dispatch runs past
+      // the caps, so the caller should see the 30-day spend and whether a cap
+      // is already reached. A failed read is reported, not shown as $0.
+      let budget: Record<string, unknown>;
+      try {
+        const { data: capSettings, error: capErr } = await db
+          .from('project_settings')
+          .select('autofix_max_spend_usd, autofix_max_dispatches_per_day, autofix_approval_cost_threshold_usd')
+          .eq('project_id', body.projectId)
+          .maybeSingle();
+        if (capErr) throw new Error(capErr.message);
+        const check = await checkAutofixBudget(
+          db,
+          body.projectId,
+          {
+            autofix_max_spend_usd: (capSettings?.autofix_max_spend_usd as number | null) ?? null,
+            autofix_max_dispatches_per_day: (capSettings?.autofix_max_dispatches_per_day as number | null) ?? null,
+            autofix_approval_cost_threshold_usd:
+              (capSettings?.autofix_approval_cost_threshold_usd as number | null) ?? null,
+          },
+          { trigger: 'manual', excludeDispatchId: job.id },
+        );
+        budget = {
+          spendUsd30d: Math.round(check.spendUsd30d * 10_000) / 10_000,
+          maxSpendUsd: check.maxSpendUsd,
+          dispatchesToday: check.dispatchesToday,
+          maxDispatchesPerDay: check.maxDispatchesPerDay,
+          capExceeded: check.capExceeded,
+        };
+      } catch (err) {
+        log.warn('fix-dispatch budget summary unavailable', { err: String(err) });
+        budget = { error: 'Auto-fix spend could not be read' };
+      }
+
       return c.json({
         ok: true,
-        data: { dispatchId: job.id, status: job.status, createdAt: job.created_at },
+        data: {
+          dispatchId: job.id,
+          status: job.status,
+          createdAt: job.created_at,
+          targetRepoId: targetRepo?.id ?? null,
+          budget,
+        },
       });
     } catch (err) {
       // Temporary: the dispatch endpoint was returning 500 via the Hono
@@ -267,7 +403,7 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
     return c.json({ ok: true, data: { dispatches: dispatches ?? [] } });
   });
 
-  app.get('/v1/admin/fixes/dispatch/:id', jwtAuth, async (c) => {
+  app.get('/v1/admin/fixes/dispatch/:id', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
     const userId = c.get('userId') as string;
     const dispatchId = c.req.param('id')!;
     const db = getServiceClient();
@@ -278,7 +414,7 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
       .single();
     if (!job) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
     // Teams v1: owner / org-member / project-member can all read & cancel.
-    const access = await userCanAccessProject(db, userId, job.project_id);
+    const access = await callerCanAccessProject(c, db, userId, job.project_id);
     if (!access.allowed) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
     return c.json({ ok: true, data: job });
   });
@@ -302,13 +438,13 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
 
     const { data: job } = await db
       .from('fix_dispatch_jobs')
-      .select('id, project_id, status, fix_attempt_id')
+      .select('id, project_id, status, fix_attempt_id, dispatch_metadata')
       .eq('id', dispatchId)
       .single();
     if (!job) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
 
     // Teams v1: owner / org-member / project-member can all read & cancel.
-    const access = await userCanAccessProject(db, userId, job.project_id);
+    const access = await callerCanAccessProject(c, db, userId, job.project_id);
     if (!access.allowed) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
 
     // Terminal states can't be cancelled — return 409 so the UI can show a
@@ -364,6 +500,25 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
       );
     }
 
+    // Cloud agents (cursor_cloud / github_cloud_agent): the job row above is
+    // what stops the poller from re-opening it, but the vendor run keeps
+    // going unless we say otherwise. Best-effort vendor cancel + close the
+    // attempt (no team notification — the operator asked for this).
+    const cloudAgent = (
+      (job as { dispatch_metadata?: Record<string, unknown> | null }).dispatch_metadata?.cloud_agent ?? null
+    ) as { kind?: string; externalAgentId?: string; externalRunId?: string | null } | null;
+    if (cloudAgent?.kind && updated.fix_attempt_id) {
+      void cancelCloudAgentAttempt(db, {
+        attemptId: updated.fix_attempt_id as string,
+        projectId: job.project_id,
+        kind: cloudAgent.kind,
+        externalAgentId: cloudAgent.externalAgentId ?? null,
+        externalRunId: cloudAgent.externalRunId ?? null,
+      }).catch((err) =>
+        log.warn('cloud agent cancel failed (non-fatal)', { dispatchId, err: String(err) }),
+      );
+    }
+
     // Best-effort audit log. Failures here don't abort the cancel — the user
     // needs their cancel confirmed even if audit pipeline is having a bad day.
     void logAudit(
@@ -395,8 +550,8 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
   // gate locked out third-party orchestrators (LangGraph, OpenAI Agents,
   // CrewAI) that have a valid API key but no Supabase session — see the
   // 2026-05-09 spec-traceability audit. The API-key path still hits
-  // userCanAccessProject below, so a key holder cannot subscribe to a
-  // dispatch from a project they don't own.
+  // callerCanAccessProject below, so a key holder cannot subscribe to a
+  // dispatch outside the key's project.
   // ------------------------------------------------------------
   app.get('/v1/admin/fixes/dispatch/:id/stream', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
     const userId = c.get('userId') as string;
@@ -411,7 +566,7 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
     if (!job) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
 
     // Teams v1: owner / org-member / project-member can all read & cancel.
-    const access = await userCanAccessProject(db, userId, job.project_id);
+    const access = await callerCanAccessProject(c, db, userId, job.project_id);
     if (!access.allowed) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
 
     // RFC 7231 / WHATWG EventSource: the browser sends `Last-Event-ID` (note

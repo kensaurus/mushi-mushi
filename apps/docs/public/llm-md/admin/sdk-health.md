@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/sdk-health
 
 ---
 title: 'SDK health'
+description: The SDK health card shows the live heartbeat of every Mushi SDK that reported in the last 24 hours, so an SDK that never shipped is obvious.
 ---
 
 # SDK health

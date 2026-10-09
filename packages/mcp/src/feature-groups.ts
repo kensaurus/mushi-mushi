@@ -1,8 +1,13 @@
 /**
  * Feature groups for MCP tool filtering — mirrors Supabase MCP `?features=` pattern.
  *
- * When `features` is omitted → all tools (backward compatible).
- * New installs default to DEFAULT_FEATURE_GROUPS via deeplink / docs.
+ * Both transports expose DEFAULT_FEATURE_GROUPS when the caller names none:
+ * stdio when MUSHI_FEATURES is unset, the hosted server when `?features=` is
+ * absent. `features=all` opts into every group.
+ *
+ * This file is kept byte-identical with
+ * packages/server/supabase/functions/mcp/feature-groups.ts (checked by
+ * packages/mcp/scripts/check-catalog-sync.mjs).
  */
 
 export const FEATURE_GROUPS = [
@@ -24,7 +29,7 @@ export const FEATURE_GROUPS = [
 
 export type FeatureGroup = (typeof FEATURE_GROUPS)[number]
 
-/** Lean default for new Cursor installs (~45 tools vs 70 full). */
+/** Lean default for new installs — a focused subset of the full catalog. */
 export const DEFAULT_FEATURE_GROUPS: readonly FeatureGroup[] = [
   'triage',
   'fixes',
@@ -37,9 +42,15 @@ export const ALL_FEATURE_GROUPS: readonly FeatureGroup[] = FEATURE_GROUPS.filter
   (g) => g !== 'legacy',
 )
 
-/** Map every tool/resource name → feature group. */
+/**
+ * Map every tool name → feature group. A tool with no entry is listed under
+ * no filter but `all`, so every registered tool needs one (enforced by the
+ * catalog-parity test and check-catalog-sync.mjs). Resources are not tools and
+ * are not filtered by feature group, so they have no entry.
+ */
 export const TOOL_FEATURE_MAP: Record<string, FeatureGroup> = {
   // triage
+  triage_next_steps: 'triage',
   get_recent_reports: 'triage',
   get_report_detail: 'triage',
   get_report_timeline: 'triage',
@@ -52,6 +63,7 @@ export const TOOL_FEATURE_MAP: Record<string, FeatureGroup> = {
   run_nl_query: 'triage',
   get_report_evidence: 'triage',
   triage_issue: 'triage',
+  import_sentry_issues: 'triage',
   query_lessons: 'triage',
   list_lessons: 'triage',
   suggest_fix: 'triage',
@@ -62,14 +74,40 @@ export const TOOL_FEATURE_MAP: Record<string, FeatureGroup> = {
   get_inventory: 'inventory',
   diff_inventory: 'inventory',
   list_gate_findings: 'inventory',
-  inventory_current: 'admin',
+  // App Recipe + design plane (Plan 019) — default-on with the inventory tools
+  get_app_recipe: 'inventory',
+  get_design_tokens: 'inventory',
+  get_portfolio: 'inventory',
+  list_portfolio_findings: 'inventory',
+  get_radar: 'inventory',
+  get_recipe_drift: 'inventory',
+  list_connectors: 'inventory',
+  propose_recipe_change: 'inventory',
+  propose_portfolio_change: 'inventory',
+  request_connector_action: 'inventory',
+  get_store_status: 'inventory',
+  get_design_deviance: 'inventory',
+  // Run-now triggers + the by-id finding explanation
+  run_radar: 'inventory',
+  refresh_recipe: 'inventory',
+  run_design_deviance: 'inventory',
+  run_store_review: 'inventory',
+  get_release_calendar: 'inventory',
+  explain_finding: 'inventory',
+  // Console parity for the recipe, design and store panels (reads and settings)
+  get_auto_release_status: 'inventory',
+  get_design_settings: 'inventory',
+  set_design_settings: 'inventory',
+  get_recipe_sources: 'inventory',
+  get_recipe_change: 'inventory',
+  get_store_reviews: 'inventory',
+  pull_store_reviews: 'inventory',
+  set_store_review_intake: 'inventory',
 
   // setup
   diagnose_setup: 'setup',
   check_sdk_version: 'setup',
   activation_status: 'setup',
-  project_integration_health: 'setup',
-  setup_repo_for_mushi: 'setup',
   get_two_way_comms_health: 'setup',
 
   // fixes
@@ -82,6 +120,9 @@ export const TOOL_FEATURE_MAP: Record<string, FeatureGroup> = {
   refresh_ci: 'fixes',
   reopen_report: 'fixes',
   reply_to_reporter: 'fixes',
+  request_reporter_info: 'fixes',
+  list_reporter_outbox: 'fixes',
+  release_reporter_update: 'fixes',
 
   // rewards
   list_top_contributors: 'rewards',
@@ -93,14 +134,22 @@ export const TOOL_FEATURE_MAP: Record<string, FeatureGroup> = {
   get_account_overview: 'admin',
   get_project_context: 'admin',
   get_pipeline_logs: 'admin',
-  project_dashboard: 'admin',
-  project_stats: 'admin',
-  project_settings: 'admin',
-  privacy_status: 'admin',
-  evolution_history: 'admin',
+  // Portfolio operator records (ADR 0017): the accounts register, the spend
+  // ledger and shared resources. Off the lean default; account-level key.
+  get_accounts_register: 'admin',
+  save_register_account: 'admin',
+  remove_register_account: 'admin',
+  set_domain_auto_renew: 'admin',
+  get_spend_ledger: 'admin',
+  import_spend_bill: 'admin',
+  remove_spend_import: 'admin',
+  import_portfolio_resources: 'admin',
 
-  // usage / billing
+  // usage / billing / product analytics (Mushi.track() funnels)
   get_usage: 'usage',
+  query_funnel: 'usage',
+  get_product_events_summary: 'usage',
+  get_user_paths: 'usage',
 
   // qa / tdd
   map_user_stories: 'qa',
@@ -128,6 +177,7 @@ export const TOOL_FEATURE_MAP: Record<string, FeatureGroup> = {
   // audit
   run_fullstack_audit: 'audit',
   get_backend_health: 'audit',
+  get_code_health: 'audit',
 
   // codebase understand
   ask_codebase: 'codebase',
@@ -137,9 +187,15 @@ export const TOOL_FEATURE_MAP: Record<string, FeatureGroup> = {
   get_codebase_domains: 'codebase',
   analyze_codebase_impact: 'codebase',
   analyze_wiki_knowledge: 'codebase',
+  // The digest needs no index, so it ships on the default surface (Plan 020 §10.3.1).
+  get_repo_digest: 'fixes',
+  // The diagram reads the stored drawing, so it needs no index either.
+  get_repo_diagram: 'fixes',
 
-  // docs
+  // docs / orientation
   search_mushi_docs: 'docs',
+  get_mushi_doc: 'docs',
+  use_mushi: 'docs',
 }
 
 /**
@@ -196,12 +252,15 @@ export function parseFeaturesCsv(raw: string | undefined): FeatureFilter {
 
 export function toolMatchesFeatures(toolName: string, filter: FeatureFilter): boolean {
   if (filter === 'all') return true
-  const group = TOOL_FEATURE_MAP[toolName]
-  if (!group) return true // unknown tools stay visible (codegen drift guard)
-  if (group === 'legacy') {
+  // Deprecated aliases belong to the `legacy` group.
+  if (Object.prototype.hasOwnProperty.call(DEPRECATED_TOOL_ALIASES, toolName)) {
     return filter.includes('legacy')
   }
-  return filter.includes(group)
+  // An unmapped name matches no group. It used to match every filter, which
+  // put all the deprecated aliases (and any tool nobody mapped) on the lean
+  // default surface.
+  const group = TOOL_FEATURE_MAP[toolName]
+  return group !== undefined && filter.includes(group)
 }
 
 export function featuresQueryString(groups: readonly FeatureGroup[]): string {

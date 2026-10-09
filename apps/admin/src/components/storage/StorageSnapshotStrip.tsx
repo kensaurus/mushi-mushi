@@ -40,7 +40,7 @@ export function StorageSnapshotStrip({
       {hint ? <SnapshotSectionHint text={hint} /> : null}
       <MetricStrip cols={4} ariaLabel="Storage snapshot">
         <StatCard
-          label={statLabels?.healthy ?? 'Healthy'}
+          label={statLabels?.healthy ?? 'Healthy buckets'}
           value={`${stats.healthyCount}/${stats.configuredCount}`}
           accent={
             stats.failingCount > 0
@@ -56,7 +56,6 @@ export function StorageSnapshotStrip({
         <StatCard
           label={statLabels?.screenshots ?? 'Screenshots'}
           value={stats.activeProjectObjects.toLocaleString()}
-          accent={stats.activeProjectObjects > 0 ? 'text-brand' : undefined}
           tooltip={screenshotsTooltip(stats)}
           detail={screenshotsDetail(stats)}
           to={storageLinks.screenshots}

@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/audit
 
 ---
 title: Audit log
+description: The Audit log records every admin action and agent run in Mushi — who minted API keys, who dispatched a fix, and what triggered a pull request.
 ---
 
 # Audit log

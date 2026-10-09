@@ -21,11 +21,14 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { Card, Btn, Tooltip, CopyButton } from './ui'
 import { IconAlertTriangle, IconCheck, IconGit, IconKey, IconRefresh } from './icons'
 import { apiFetch } from '../lib/supabase'
 import { useCiSecretSync } from '../lib/useCiSecretSync'
+import { ConfirmDialog } from './ConfirmDialog'
+import { RESOLVED_EXTERNAL_API_URL } from '../lib/env'
+import { docsUrl } from '../lib/docsUrl'
+import { describeActionError } from '../lib/actionError'
 import { sdkCiStatusMeta, type SdkDiagnosticsResult, type SdkDiagnosticStatus } from '../lib/sdkCiSecrets'
 import { mushiEnvVarsForProjectSlug } from '../lib/projectMushiEnv'
 import { CHIP_TONE, runStatusChipTone } from '../lib/chipTone'
@@ -66,6 +69,8 @@ export function SdkNativeConnectivityCard({ projectId, projectSlug }: SdkNativeC
   const [showFallback, setShowFallback] = useState(false)
   const [showRawKey, setShowRawKey] = useState(false)
   const [showPlaybook, setShowPlaybook] = useState(false)
+  // Sync writes GitHub and then revokes the previous CI key: confirm first (QA bug 30).
+  const [confirmSync, setConfirmSync] = useState(false)
   const diagRef = useRef(false)
 
   const { state: syncState, sync, reset } = useCiSecretSync(projectId)
@@ -84,7 +89,7 @@ export function SdkNativeConnectivityCard({ projectId, projectSlug }: SdkNativeC
       if (res.ok && res.data) {
         setDiag(res.data)
       } else {
-        setFetchError(res.error?.message ?? 'Failed to load diagnostics.')
+        setFetchError(describeActionError(res.error, 'Could not check this project\u2019s native build setup. Retry in a moment.'))
       }
       setLoading(false)
     }
@@ -146,7 +151,7 @@ export function SdkNativeConnectivityCard({ projectId, projectSlug }: SdkNativeC
                   Verifying GitHub Actions secrets for{' '}
                   <span className="font-medium">{envVars.stackLabel}</span> builds.{' '}
                   <a
-                    href="https://docs.mushi-mushi.dev/sdks"
+                    href={docsUrl(envVars.stackLabel.startsWith('Expo') ? '/sdks/react-native' : '/sdks/capacitor')}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="underline underline-offset-2 hover:text-fg focus-visible:ring-2 focus-visible:ring-focus"
@@ -238,6 +243,20 @@ export function SdkNativeConnectivityCard({ projectId, projectSlug }: SdkNativeC
                 Use the copy commands below.
               </p>
             )}
+            {syncState.priorKeysRevoked === null ? (
+              <p className="text-warning-foreground">
+                The previous CI key could not be revoked and still works. Revoke it under Projects → Your
+                projects → Keys once your new store build ships.
+              </p>
+            ) : syncState.priorKeysRevoked && syncState.priorKeysRevoked.length > 0 ? (
+              <p>
+                Revoked the previous CI key{syncState.priorKeysRevoked.length === 1 ? '' : 's'}{' '}
+                {syncState.priorKeysRevoked.map((p) => `${p}…`).join(', ')}. Ship a new store build so
+                installed apps pick up the new key.
+              </p>
+            ) : (
+              <p>The previous CI key was left active because the new key was not written to GitHub.</p>
+            )}
           </div>
         )}
 
@@ -304,7 +323,7 @@ export function SdkNativeConnectivityCard({ projectId, projectSlug }: SdkNativeC
         )}
 
         {/* Fallback commands */}
-        {(fallback || (syncFailed && diag)) && (
+        {(fallback || (syncFailed && diag) || (showFallback && diag)) && (
           <div className="space-y-2">
             <button
               type="button"
@@ -360,14 +379,16 @@ export function SdkNativeConnectivityCard({ projectId, projectSlug }: SdkNativeC
               </Card>
             )}
 
-            {showFallback && !fallback && diag?.repoUrl && (
+            {showFallback && !fallback && diag && (
               <FallbackCommandsFromDiag
-                repoUrl={diag.repoUrl}
+                repoUrl={diag.repoUrl ?? null}
                 projectId={projectId}
                 projectSlug={projectSlug}
                 requiredVars={diag.requiredVars}
                 missingVars={diag.missingVars ?? diag.requiredVars}
-                endpoint={`https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api`}
+                // The endpoint this console talks to, so a self-hosted install
+                // never points native builds at Mushi Cloud (QA bug 139).
+                endpoint={RESOLVED_EXTERNAL_API_URL}
               />
             )}
           </div>
@@ -376,11 +397,9 @@ export function SdkNativeConnectivityCard({ projectId, projectSlug }: SdkNativeC
         {/* CTAs */}
         <div className="flex flex-wrap items-center gap-2 pt-1">
           {status === 'banner-disabled' ? (
-            <Link to="/projects">
-              <Btn size="sm" variant="primary">
+            <Btn to="/projects" size="sm" variant="primary">
                 {meta.cta}
               </Btn>
-            </Link>
           ) : (
             <Tooltip
               content={
@@ -394,12 +413,15 @@ export function SdkNativeConnectivityCard({ projectId, projectSlug }: SdkNativeC
                 size="sm"
                 variant="primary"
                 loading={isSyncing}
-                disabled={!diag || (!diag.hasGithubToken && !loading)}
+                disabled={!diag}
                 onClick={() => {
-                  reset()
-                  setShowFallback(false)
-                  setShowRawKey(false)
-                  void sync()
+                  // Without a GitHub token the button says "Copy setup commands":
+                  // open them instead of sitting disabled (QA bug 141).
+                  if (!diag?.hasGithubToken) {
+                    setShowFallback(true)
+                    return
+                  }
+                  setConfirmSync(true)
                 }}
               >
                 {syncDone ? (
@@ -414,7 +436,7 @@ export function SdkNativeConnectivityCard({ projectId, projectSlug }: SdkNativeC
             </Tooltip>
           )}
 
-          {(diag?.repoUrl || fallback) && !showFallback && status !== 'banner-disabled' && (
+          {diag?.hasGithubToken && (diag?.repoUrl || fallback) && !showFallback && status !== 'banner-disabled' && (
             <Btn
               size="sm"
               variant="ghost"
@@ -424,6 +446,38 @@ export function SdkNativeConnectivityCard({ projectId, projectSlug }: SdkNativeC
             </Btn>
           )}
         </div>
+
+        {confirmSync && diag && (
+          <ConfirmDialog
+            title="Write new CI secrets to GitHub?"
+            body={
+              'Mushi creates a new SDK key and writes it to GitHub Actions. Only after GitHub accepts it does Mushi ' +
+              'revoke the previous CI key. Store builds already installed with the old key stop sending bug reports ' +
+              'until you ship a new build.'
+            }
+            details={
+              <ul className="list-disc space-y-0.5 pl-4">
+                <li>
+                  Repo: <span className="font-mono">{repoLabel(diag.repoUrl)}</span>
+                </li>
+                <li>
+                  Writes: <span className="font-mono">{diag.requiredVars.join(', ')}</span>
+                </li>
+                <li>Revokes: older keys labelled ci-auto, once the new key is in GitHub</li>
+              </ul>
+            }
+            confirmLabel="Write secrets"
+            tone="danger"
+            onCancel={() => setConfirmSync(false)}
+            onConfirm={() => {
+              setConfirmSync(false)
+              reset()
+              setShowFallback(false)
+              setShowRawKey(false)
+              void sync()
+            }}
+          />
+        )}
 
         {/* Required env vars hint */}
         {diag && (
@@ -447,6 +501,12 @@ export function SdkNativeConnectivityCard({ projectId, projectSlug }: SdkNativeC
 // Inline fallback commands when no sync has been run yet
 // ---------------------------------------------------------------------------
 
+function repoLabel(repoUrl: string | null | undefined): string {
+  if (!repoUrl) return 'no repo linked'
+  const match = /github\.com\/([^/]+\/[^/]+?)(?:\.git)?$/.exec(repoUrl)
+  return match ? match[1]! : repoUrl
+}
+
 function hasGithubTokenFallbackLabel(hasToken: boolean): string {
   return hasToken ? 'Show manual commands' : 'Copy setup commands'
 }
@@ -459,15 +519,15 @@ function FallbackCommandsFromDiag({
   projectSlug: _slug,
   endpoint,
 }: {
-  repoUrl: string
+  repoUrl: string | null
   requiredVars: string[]
   missingVars: string[]
   projectId: string
   projectSlug?: string | null
   endpoint: string
 }) {
-  const match = /github\.com\/([^/]+\/[^/]+?)(?:\.git)?$/.exec(repoUrl)
-  const repo = match ? match[1] : repoUrl
+  const match = repoUrl ? /github\.com\/([^/]+\/[^/]+?)(?:\.git)?$/.exec(repoUrl) : null
+  const repo = match ? match[1] : (repoUrl ?? 'your-org/your-repo')
   const relevant = missingVars.length > 0 ? missingVars : requiredVars
 
   // Build simple commands — user must supply the API key value manually here
@@ -485,6 +545,12 @@ function FallbackCommandsFromDiag({
   return (
     <Card  className="space-y-2 p-3">
       <p className="text-xs font-medium text-fg-secondary">Manual setup commands (no API key pre-filled):</p>
+      {!repoUrl && (
+        <p className="text-2xs text-fg-muted">
+          No GitHub repo is linked yet, so replace <span className="font-mono">your-org/your-repo</span> with
+          your repo, or link it in the GitHub section above.
+        </p>
+      )}
       <div className="space-y-1.5">
         {commands.map((cmd) => (
           <div key={cmd} className="flex items-center gap-2">
@@ -496,8 +562,8 @@ function FallbackCommandsFromDiag({
         ))}
       </div>
       <p className="text-2xs text-fg-faint">
-        Click "Sync CI secrets" above to have Mushi mint a key and write it automatically.
-        That's the recommended flow — these are the manual fallback commands.
+        With a GitHub token stored, "Sync CI secrets" mints a key and writes these for you.
+        Until then, run these commands yourself.
       </p>
     </Card>
   )

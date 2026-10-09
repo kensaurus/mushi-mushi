@@ -9,8 +9,6 @@ description: Set up the Mushi MCP server with npx mushi-mushi setup — read bug
 
 # MCP server
 
-{MCP_QUICKSTART_LEDE}
-
 **Model Context Protocol (MCP)** is how your editor talks to Mushi tools — reports, fix briefs, and optional dispatch without leaving the chat.
 
 [![Add to Cursor](https://img.shields.io/badge/Add%20to-Cursor-0098FF)](https://kensaur.us/mushi-mushi/docs/connect)
@@ -29,7 +27,7 @@ credentials**:
 
 ```bash
 # Claude Code
-claude mcp add --transport http mushi "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/mcp"
+claude mcp add --transport http mushi "https://kensaur.us/mushi-mushi/hosted-mcp/"
 claude mcp login mushi   # or run /mcp inside a session and pick "mushi"
 ```
 
@@ -40,6 +38,12 @@ connect, and click **Approve**. That mints a project API key (label
 hosted URL as a remote MCP server; do **not** configure an `Authorization`
 header if you want the login flow — a static header tells the client that
 OAuth isn't needed.
+
+Use the `kensaur.us/mushi-mushi/hosted-mcp/` URL for the login flow. Clients
+look for the OAuth metadata at the root of the server's host
+(`/.well-known/oauth-protected-resource/…`), and only that host serves it; on
+the `supabase.co` URL the lookup fails with an HTTP 404. With an API key
+header (below), either URL works.
 
 ## One-liner setup (recommended)
 
@@ -54,7 +58,7 @@ share with your team, and each teammate signs in from the IDE on first use.
 Pass `--stdio` (or `--ci` in headless environments) for the previous local
 subprocess entry with a key.
 
-It reads CLI config at **`~/.config/mushi/config.json`** (written by `mushi login`; legacy `~/.mushirc` auto-migrates on first load), detects the IDE config path, and writes the `mcpServers` block for you. Restart the IDE and ask the agent: **"list mushi tools"**.
+It reads CLI config at **`~/.config/mushi/config.json`**, or **`%APPDATA%\mushi\config.json`** on Windows ([full order](/sdks/cli#config-file); written by `mushi login`; legacy `~/.mushirc` auto-migrates on first load), detects the IDE config path, and writes the `mcpServers` block for you. Restart the IDE and ask the agent: **"list mushi tools"**.
 
 ## Claude Code plugin
 
@@ -89,11 +93,11 @@ Add to `.cursor/mcp.json` in your repo root:
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.19.0"],
+      "args": ["-y", "@mushi-mushi/mcp@0.24.4"],
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
-        "MUSHI_API_KEY": "mushi_live_..."
+        "MUSHI_API_KEY": "mushi_..."
       }
     }
   }
@@ -115,11 +119,11 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.19.0"],
+      "args": ["-y", "@mushi-mushi/mcp@0.24.4"],
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
-        "MUSHI_API_KEY": "mushi_live_..."
+        "MUSHI_API_KEY": "mushi_..."
       }
     }
   }
@@ -139,7 +143,7 @@ one place a static API key header is the right tool:
     "mushi-hosted": {
       "url": "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/mcp",
       "headers": {
-        "X-Mushi-Api-Key": "mushi_live_…",
+        "X-Mushi-Api-Key": "mushi_…",
         "X-Mushi-Project-Id": "proj_…"
       }
     }

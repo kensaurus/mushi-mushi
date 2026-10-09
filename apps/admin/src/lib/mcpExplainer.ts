@@ -39,8 +39,8 @@ export const MCP_EXPLAINER_SUMMARY =
   'MCP (Model Context Protocol) lets Cursor, Claude Code, or other agents call Mushi tools directly — triage bugs, fetch fix context, and dispatch fixes without leaving the IDE. You need an mcp:read or mcp:write API key and a .cursor/mcp.json snippet.'
 
 export const MCP_SETUP_STEPS = [
-  'Mint an mcp:read key on Projects (or mcp:write if the agent should dispatch fixes).',
-  'Copy the MCP snippet from this page into .cursor/mcp.json in your repo.',
+  'Open Connect, pick your editor and click Connect. It mints the key (choose write access if the agent should dispatch fixes).',
+  'Or copy the MCP snippet from the Setup tab into .cursor/mcp.json in your repo.',
   'Restart the IDE, then ask the agent: "list mushi tools".',
   'A green Connected chip means the key heartbeat reached this backend.',
 ]

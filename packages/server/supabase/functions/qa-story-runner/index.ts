@@ -48,6 +48,7 @@ import { startCronRun } from '../_shared/telemetry.ts'
 import { resolveLlmKey } from '../_shared/byok.ts'
 import { sendBotMessage, sendSlackText, buildQaStoryRunBlocks, sendDiscordNotification } from '../_shared/slack.ts'
 import { dispatchPluginEventDetached } from '../_shared/plugins.ts'
+import { safeFetch } from '../_shared/inventory-guards.ts'
 
 declare const Deno: {
   serve(handler: (req: Request) => Response | Promise<Response>): void
@@ -236,15 +237,16 @@ async function runDirectFetch(story: QaStory, targetUrl: string): Promise<RunRes
         ? [...(story.prompt.matchAll(/["']([^"']{2,50})["']/g))].map((m) => m[1]).slice(0, 8)
         : []
 
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), 20_000)
-
   try {
-    const res = await fetch(targetUrl, {
-      signal: controller.signal,
-      headers: { 'User-Agent': 'MushiQARunner/1.0 (directFetch)' },
-    })
-    clearTimeout(timer)
+    // The target comes from a tenant-authored story (target_url or a URL in
+    // its prompt), so it goes through safeFetch: public hosts only, each
+    // redirect re-checked. Without it the pass/fail result was an oracle for
+    // internal addresses.
+    const res = await safeFetch(
+      targetUrl,
+      { headers: { 'User-Agent': 'MushiQARunner/1.0 (directFetch)' } },
+      { timeoutMs: 20_000, url: { allowHttp: true } },
+    )
 
     if (!res.ok) {
       return {
@@ -282,7 +284,6 @@ async function runDirectFetch(story: QaStory, targetUrl: string): Promise<RunRes
       evidence: [],
     }
   } catch (err) {
-    clearTimeout(timer)
     const isAbort = err instanceof Error && err.name === 'AbortError'
     return {
       status: isAbort ? 'timeout' : 'error',

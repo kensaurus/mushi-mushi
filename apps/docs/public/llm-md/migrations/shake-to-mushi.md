@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/migrations/shake-to-mushi
 
 ---
 title: 'Shake → Mushi'
+description: Replace the Shake bug-reporting SDK with Mushi and keep the same shake-to-report experience — config mapping, identity, and a cut-over checklist.
 ---
 
 # Shake → Mushi
@@ -46,7 +47,7 @@ the same trigger UX.
 
 ```ts
 // BEFORE — Shake
-
+import Shake from '@shakebugs/react-native-shake'
 Shake.start('YOUR_API_KEY')
 Shake.setEnableBlackBox(true)
 Shake.setUserMetadata({ tier: 'pro' })
@@ -54,16 +55,25 @@ Shake.setUserMetadata({ tier: 'pro' })
 
 ```tsx
 // AFTER — Mushi
+import { MushiProvider } from '@mushi-mushi/react-native'
 
+export default function App() {
   return (
-    
-      
-    
+    <MushiProvider
+      projectId="YOUR_PROJECT_ID"
+      apiKey="YOUR_PUBLIC_KEY"
+      config={{
+        widget:  { trigger: 'shake' },
+        capture: { console: true, network: true },
+      }}
+    >
+      <RootNavigator />
+    </MushiProvider>
   )
 }
 
 // Inside any screen:
-
+import { useMushi } from '@mushi-mushi/react-native'
 const mushi = useMushi()
 mushi.setMetadata({ tier: 'pro' })
 ```
@@ -72,14 +82,14 @@ mushi.setMetadata({ tier: 'pro' })
 
 ```ts
 // BEFORE — Shake JS
-
+import Shake from '@softnoesis/shakebug-js'
 Shake.start('YOUR_API_KEY')
 Shake.setUser('user-42', 'jane@example.com', 'Jane Doe')
 ```
 
 ```ts
 // AFTER — Mushi web
-
+import { Mushi } from '@mushi-mushi/web'
 Mushi.init({
   projectId: 'YOUR_PROJECT_ID',
   apiKey:    'YOUR_PUBLIC_KEY',
@@ -102,7 +112,7 @@ Sign in to the Mushi admin console; copy projectId + apiKey.</> },
     { id: 'remove-shake', label: 'Uninstall the Shake SDK', content: {`npm uninstall @shakebugs/react-native-shake @softnoesis/shakebug-js
 # For React Native: cd ios && pod deintegrate && pod install`} },
     { id: 'rotate-key', label: 'Revoke your Shake API key', content: <>In the Shake dashboard, rotate the production key so the now-removed SDK can't accidentally re-attach.</> },
-  ]}
+
 />
 
 ## Feature parity

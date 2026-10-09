@@ -2,17 +2,20 @@
  * FILE: apps/admin/src/components/settings/types.ts
  */
 
-export type SettingsTabId = 'general' | 'byok' | 'firecrawl' | 'browserbase' | 'health' | 'dev'
+/**
+ * The Settings tabs, in strip order. Old ids that links and browsers may
+ * still carry (`firecrawl`, `health`, …) are not tabs: lib/settingsTabs.ts
+ * maps them onto these.
+ */
+export const SETTINGS_TAB_IDS = ['general', 'byok', 'tools', 'voice', 'sdk'] as const
 
-export type SettingsTopPriority =
-  | 'no_project'
-  | 'byok_failing'
-  | 'no_anthropic'
-  | 'sdk_off'
-  | 'untested'
-  | 'routing_optional'
-  | 'healthy'
+export type SettingsTabId = (typeof SETTINGS_TAB_IDS)[number]
 
+/**
+ * GET /v1/admin/settings/stats. It has no `topPriority`: what to do next is
+ * worked out on the client by `settingsBannerPriority`, from these counts and
+ * the saved-keys list.
+ */
 export interface SettingsStats {
   hasAnyProject?: boolean
   projectId: string | null
@@ -31,11 +34,10 @@ export interface SettingsStats {
   byokKeysPassing: number
   byokKeysFailing: number
   byokKeysUntested: number
+  /** Keys that stop working within 7 days (servers before 2026-10-04 omit it). */
+  byokKeysExpiring?: number
   githubRepoConfigured: boolean
   autofixEnabled: boolean
-  topPriority?: SettingsTopPriority
-  topPriorityLabel?: string | null
-  topPriorityTo?: string | null
 }
 
 export const EMPTY_SETTINGS_STATS: SettingsStats = {
@@ -56,9 +58,7 @@ export const EMPTY_SETTINGS_STATS: SettingsStats = {
   byokKeysPassing: 0,
   byokKeysFailing: 0,
   byokKeysUntested: 0,
+  byokKeysExpiring: 0,
   githubRepoConfigured: false,
   autofixEnabled: false,
-  topPriority: 'no_project',
-  topPriorityLabel: null,
-  topPriorityTo: null,
 }

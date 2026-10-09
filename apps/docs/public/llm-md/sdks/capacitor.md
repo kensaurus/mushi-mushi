@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/capacitor
 
 ---
 title: '@mushi-mushi/capacitor'
+description: API reference for @mushi-mushi/capacitor — configure, report, listeners, setUser and widget options for Ionic and Capacitor apps on iOS, Android and web.
 ---
 
 # `@mushi-mushi/capacitor`
@@ -23,6 +24,7 @@ npx cap sync
 ## Configure
 
 ```ts
+import { Mushi } from '@mushi-mushi/capacitor'
 
 await Mushi.configure({
   projectId: 'YOUR_PROJECT_ID',

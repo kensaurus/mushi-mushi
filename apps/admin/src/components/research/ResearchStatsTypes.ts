@@ -24,6 +24,8 @@ export interface ResearchStats {
   snippets: number
   attached: number
   unattachedSnippets: number
+  /** Session with the newest unattached snippet (opened by "Attach evidence"). */
+  latestUnattachedSessionId?: string | null
   lastSessionAt: string | null
   daysSinceLastSearch: number | null
   firecrawlConfigured: boolean

@@ -7,7 +7,7 @@ export type PoolKeyStatus =
 
 export type PoolTestStatus = 'ok' | 'error_auth' | 'error_network' | 'error_quota' | null;
 
-export type PoolProvider = 'anthropic' | 'openai' | 'cursor' | 'firecrawl' | 'browserbase';
+export type PoolProvider = 'anthropic' | 'openai' | 'cursor' | 'firecrawl' | 'browserbase' | 'supabase';
 
 export interface PoolKey {
   id: string;
@@ -22,6 +22,8 @@ export interface PoolKey {
   last_used_at: string | null;
   cooldown_until: string | null;
   created_at: string;
+  /** Owner-entered date the key stops working; null when unknown. */
+  expires_at?: string | null;
 }
 
 export function isRuntimeEligiblePoolKey(key: PoolKey, nowMs = Date.now()): boolean {

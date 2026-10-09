@@ -15,6 +15,7 @@ import { Link } from 'react-router-dom'
 import { CopyButton } from './ui'
 import { CodeInline } from './CodePanel'
 import { buildMushiConnectCommand } from '../lib/cliSetupCommands'
+import { RESOLVED_EXTERNAL_API_URL } from '../lib/env'
 
 interface Props {
   projectId?: string | null
@@ -45,7 +46,7 @@ const STEPS = [
 
 export function CliSetupGuide({ projectId, sdkInstalled = false, className = '' }: Props) {
   const connectCmd = projectId
-    ? buildMushiConnectCommand(projectId)
+    ? buildMushiConnectCommand(projectId, RESOLVED_EXTERNAL_API_URL)
     : 'npx mushi-mushi   # run in your app repo'
 
   const step3Link = sdkInstalled ? '/connect' : '/onboarding?tab=sdk'

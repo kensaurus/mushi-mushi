@@ -6,16 +6,20 @@
  *          item card) can be reasoned about in isolation.
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { apiFetch } from '../lib/supabase'
+import { apiErrorText } from '../lib/apiErrorText'
+import { useEntitlements } from '../lib/useEntitlements'
+import { ConfirmDialog } from '../components/ConfirmDialog'
+import { isQueueItemRetryable, parseQueueLaneParam } from '../components/dlq/queueRetry'
 import {
   Btn,
   FilterSelect,
   EmptyState,
   ErrorAlert,
   RecommendedAction,
-  Card,
 } from '../components/ui'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
@@ -24,7 +28,6 @@ import { useToast } from '../lib/toast'
 import { usePageData } from '../lib/usePageData'
 import { QueueKpiRow } from '../components/dlq/QueueKpiRow'
 import { QueueStatusBanner } from '../components/dlq/QueueStatusBanner'
-import { QueueSnapshotStrip } from '../components/dlq/QueueSnapshotStrip'
 import { QueueReadout } from '../components/dlq/QueueReadout'
 import { EMPTY_QUEUE_STATS, type QueueStats } from '../components/dlq/QueueStatsTypes'
 import { QueueThroughputChart } from '../components/dlq/QueueThroughputChart'
@@ -43,7 +46,6 @@ import {
   ContainedBlock,
   SignalChip,
 } from '../components/report-detail/ReportSurface'
-import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
 
 export function DLQPage() {
   const [items, setItems] = useState<QueueItem[]>([])
@@ -58,11 +60,33 @@ export function DLQPage() {
   const [flushing, setFlushing] = useState(false)
   const [flushingQueued, setFlushingQueued] = useState(false)
   // Start with `dead_letter` so urgent failures lead. Once the summary loads
-  // we fall back to the first non-empty status (in priority order) so a
-  // healthy pipeline lands the user on the populated `completed` lane
-  // instead of an empty page.
-  const [filter, setFilter] = useState<StatusFilter>('dead_letter')
-  const [filterTouched, setFilterTouched] = useState(false)
+  // we fall back to the first non-empty unfinished lane; a healthy pipeline
+  // shows the empty state rather than a list of finished jobs.
+  // The lane lives in the URL (`?status=`), so banner, chart-menu and
+  // cross-page links open the lane they name. Without one, the page picks
+  // the first non-empty lane once the summary loads.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const laneFromUrl = parseQueueLaneParam(searchParams)
+  const [autoLane, setAutoLane] = useState<StatusFilter>('dead_letter')
+  const filter: StatusFilter = laneFromUrl ?? autoLane
+  const setFilter = useCallback(
+    (next: StatusFilter) => {
+      setSearchParams(
+        (prev) => {
+          const params = new URLSearchParams(prev)
+          params.set('status', next)
+          params.delete('filter')
+          params.delete('tab')
+          return params
+        },
+        { replace: true },
+      )
+    },
+    [setSearchParams],
+  )
+  const [confirmRetryPage, setConfirmRetryPage] = useState(false)
+  const [retryingPage, setRetryingPage] = useState(false)
+  const { canEditProject } = useEntitlements()
   const [stage, setStage] = useState<string>('')
   const toast = useToast()
   const {
@@ -110,20 +134,27 @@ export function DLQPage() {
   }, [filter, stage])
 
   // First time the summary loads, if the default `dead_letter` lane is empty,
-  // pivot to the first non-empty status in priority order so a healthy
-  // pipeline doesn't show an empty page.
+  // pivot to the first non-empty unfinished lane. Completed is never picked:
+  // finished jobs are not work, and an empty lane says the queue is healthy.
   useEffect(() => {
-    if (!summary || filterTouched) return
+    if (!summary || laneFromUrl) return
     if ((summary.byStatus.dead_letter ?? 0) > 0) return
-    const priority: StatusFilter[] = ['failed', 'pending', 'running', 'completed']
+    const priority: StatusFilter[] = ['failed', 'pending', 'running']
     const next = priority.find((s) => (summary.byStatus[s] ?? 0) > 0)
-    if (next) setFilter(next)
-  }, [summary, filterTouched])
+    if (next) setAutoLane(next)
+  }, [summary, laneFromUrl])
 
   const onFilterChange = (next: StatusFilter) => {
-    setFilterTouched(true)
     setFilter(next)
   }
+
+  // Only failed, dead-letter and stuck jobs can be retried (the API refuses
+  // the rest). Bulk retry acts on exactly these.
+  const retryableItems = useMemo(() => {
+    const now = Date.now()
+    return items.filter((item) => isQueueItemRetryable(item, now))
+  }, [items])
+  const retryableIds = useMemo(() => new Set(retryableItems.map((i) => i.id)), [retryableItems])
 
   async function retryItem(id: string) {
     setRetrying((r) => ({ ...r, [id]: true }))
@@ -133,7 +164,7 @@ export function DLQPage() {
       toast.push({ tone: 'success', message: 'Retry scheduled' })
       await loadAll()
     } else {
-      toast.push({ tone: 'error', message: res.error?.message ?? 'Retry failed' })
+      toast.push({ tone: 'error', message: apiErrorText(res.error, 'The job was not retried. Try again in a moment.') })
     }
   }
 
@@ -154,7 +185,7 @@ export function DLQPage() {
       })
       await loadAll()
     } else {
-      toast.push({ tone: 'error', message: res.error?.message ?? 'Flush failed' })
+      toast.push({ tone: 'error', message: apiErrorText(res.error, 'Nothing was flushed. Try again in a moment.') })
     }
   }
 
@@ -176,17 +207,20 @@ export function DLQPage() {
       })
       await loadAll()
     } else {
-      toast.push({ tone: 'error', message: res.error?.message ?? 'Recovery failed' })
+      toast.push({ tone: 'error', message: apiErrorText(res.error, 'Recovery did not run. Try again in a moment.') })
     }
   }
 
   async function retryAll() {
-    if (items.length === 0) return
+    if (retryableItems.length === 0) return
+    setRetryingPage(true)
     const results = await Promise.allSettled(
-      items.map((item) =>
+      retryableItems.map((item) =>
         apiFetch(`/v1/admin/queue/${item.id}/retry`, { method: 'POST' }),
       ),
     )
+    setRetryingPage(false)
+    setConfirmRetryPage(false)
     const ok = results.filter(
       (r) => r.status === 'fulfilled' && (r.value as { ok: boolean }).ok,
     ).length
@@ -201,15 +235,12 @@ export function DLQPage() {
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
 
-  const deadLetter = summary?.byStatus?.dead_letter ?? 0
-  const failedCount = summary?.byStatus?.failed ?? 0
-
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-dlq">
       <PageHeaderBar
-        title="Processing Queue"
+        title="Processing jobs"
 
-        helpTitle="About the Processing Queue"
+        helpTitle="About Processing jobs"
         helpWhatIsIt="Every report passes through fast-filter, classify, and (optionally) judge + fix stages. This page is the operator view of that pipeline — backlog by status, throughput trend, and any item stuck in dead letter."
         helpUseCases={[
           'Spot a stuck stage at a glance via the Backlog by status row',
@@ -232,11 +263,12 @@ export function DLQPage() {
             onChange={(e) => setStage(e.currentTarget.value)}
           />
         )}
-        {items.length > 0 && (
-          <Btn size="sm" variant="success" onClick={retryAll}>
-            Retry page ({items.length})
+        {retryableItems.length > 0 && canEditProject && (
+          <Btn size="sm" variant="success" onClick={() => setConfirmRetryPage(true)}>
+            Retry page ({retryableItems.length})
           </Btn>
         )}
+        {canEditProject ? (
         <Btn
           size="sm"
           variant="ghost"
@@ -247,6 +279,8 @@ export function DLQPage() {
         >
           Flush queued
         </Btn>
+        ) : null}
+        {stats.recoverable > 0 && canEditProject ? (
         <Btn
           size="sm"
           variant="primary"
@@ -257,8 +291,9 @@ export function DLQPage() {
           title="Re-fires fast-filter for any report stuck older than 5 minutes plus pending queue items past their SLA."
           data-dav-anchor="dlq:act"
         >
-          Recover stranded
+          Recover stranded ({stats.recoverable})
         </Btn>
+        ) : null}
       </PageHeaderBar>
 
       <PagePosture
@@ -270,21 +305,10 @@ export function DLQPage() {
                 stats={stats}
                 onRefresh={() => void loadAll()}
                 refreshing={loading}
-                onRecover={recoverStranded}
-                onFlush={flushCircuitBreakerQueue}
+                onRecover={stats.recoverable > 0 && canEditProject ? recoverStranded : undefined}
+                onFlush={canEditProject ? flushCircuitBreakerQueue : undefined}
                 recovering={flushing}
                 flushing={flushingQueued}
-              />
-            ),
-          },
-          {
-            priority: POSTURE_PRIORITY.heroOrSnapshot,
-            children: (
-              <QueueSnapshotStrip
-                stats={stats}
-                statsFetchedAt={statsFetchedAt}
-                statsValidating={statsValidating || loading}
-                hint="Pipeline lanes — pending through dead-letter for the active project."
               />
             ),
           },
@@ -297,62 +321,9 @@ export function DLQPage() {
         isValidating={statsValidating || loading}
       />
 
-      {(deadLetter > 0 || failedCount > 0) && (
-        <Card
-          className={`space-y-3 border p-4 bg-surface-raised ${
-            deadLetter > 0 ? 'border-danger/40' : 'border-warn/40'
-          }`}
-        >
-          <SignalChip tone={deadLetter > 0 ? 'danger' : 'warn'}>
-            Needs attention
-          </SignalChip>
-          <ContainedBlock tone="warn">
-            <p className="text-xs font-medium leading-snug text-fg">
-              {deadLetter > 0
-                ? `${deadLetter} job${deadLetter === 1 ? '' : 's'} in dead-letter — manual retry after fixing the root cause.`
-                : `${failedCount} job${failedCount === 1 ? '' : 's'} failing — investigate before retries exhaust.`}
-            </p>
-          </ContainedBlock>
-          <ActionPillRow>
-            <ActionPill
-              onClick={() => {
-                setFilter(deadLetter > 0 ? 'dead_letter' : 'failed')
-                setPage(1)
-              }}
-              tone="brand"
-            >
-              Open {deadLetter > 0 ? 'dead-letter' : 'failed'} lane →
-            </ActionPill>
-            <ActionPill onClick={() => void recoverStranded()} tone="neutral">
-              Recover stranded
-            </ActionPill>
-          </ActionPillRow>
-        </Card>
-      )}
-
       {summary && (
-        <div className="space-y-1.5">
-          {/* Plain-language reading guide. The five KPI tiles use technical
-              terms (pending / running / completed / failed / dead letter)
-              that map cleanly to the worker state machine but are opaque
-              to operators who haven't read the queue runbook. The tooltip
-              behind each tile already explains it ("hover for meaning"),
-              but discovery via hover is silent — see NN/g #6 (Recognition
-              over Recall). This sub-caption surfaces the mental model
-              up-front: lanes flow left→right, the sparkline mirrors the
-              same lane in the 14d throughput chart below, and dead-letter
-              is the only lane that needs human action. */}
-          <ContainedBlock tone="muted" label="How to read this row">
-            <p className="text-2xs leading-relaxed text-fg-muted">
-              Jobs move <span className="font-medium text-fg-secondary">left → right</span> through the worker
-              (waiting → running → completed). Failed jobs are still inside the retry budget;{' '}
-              <span className="font-medium text-warn">dead-letter</span> jobs gave up and need a manual look.
-              Each sparkline shows the last 14 days for that lane — hover any tile for the full meaning.
-            </p>
-          </ContainedBlock>
-          <div data-dav-anchor="dlq:decide">
-            <QueueKpiRow summary={summary} throughput={throughput} />
-          </div>
+        <div data-dav-anchor="dlq:decide">
+          <QueueKpiRow stats={stats} throughput={throughput} />
         </div>
       )}
 
@@ -381,7 +352,11 @@ export function DLQPage() {
                   : `${total} ${total === 1 ? 'job is' : 'jobs are'} retrying — investigate before they exhaust`
               }
               description={`Inspect the last error to understand the root cause, fix it, then retry in bulk.${stageHint}`}
-              cta={{ label: `Retry page (${items.length})`, onClick: retryAll }}
+              cta={
+                retryableItems.length > 0 && canEditProject
+                  ? { label: `Retry page (${retryableItems.length})`, onClick: () => setConfirmRetryPage(true) }
+                  : undefined
+              }
             />
           )
         })()}
@@ -397,12 +372,8 @@ export function DLQPage() {
             description={
               filter === 'completed'
                 ? 'Once jobs finish they move out of view; pick another status to see backlog.'
-                : 'Nothing here means the pipeline is healthy — change the status filter to inspect other lanes.'
+                : 'Nothing here means the pipeline is healthy — change the status filter to inspect other lanes. Dead-letter is the only lane that needs you after retries run out.'
             }
-          />
-          <EmptySectionMessage
-            text="Switch status or stage filters to inspect other pipeline lanes."
-            hint="Dead-letter is the only lane that requires operator action after retries exhaust."
           />
         </div>
       ) : (
@@ -413,6 +384,7 @@ export function DLQPage() {
                 key={item.id}
                 item={item}
                 retrying={!!retrying[item.id]}
+                canRetry={canEditProject && retryableIds.has(item.id)}
                 onRetry={() => retryItem(item.id)}
               />
             ))}
@@ -443,7 +415,45 @@ export function DLQPage() {
           )}
         </>
       )}
+
+      {confirmRetryPage && (
+        <RetryPageDialog
+          count={retryableItems.length}
+          lane={filter}
+          loading={retryingPage}
+          onConfirm={() => void retryAll()}
+          onCancel={() => {
+            if (!retryingPage) setConfirmRetryPage(false)
+          }}
+        />
+      )}
     </div>
+  )
+}
+
+function RetryPageDialog({
+  count,
+  lane,
+  loading,
+  onConfirm,
+  onCancel,
+}: {
+  count: number
+  lane: string
+  loading: boolean
+  onConfirm: () => void
+  onCancel: () => void
+}) {
+  return (
+    <ConfirmDialog
+      title={`Retry ${count} job${count === 1 ? '' : 's'}?`}
+      body={`Each ${lane.replace(/_/g, ' ')} job on this page runs again from the start, which diagnoses its report again. Fix the cause of the failure first, or they will fail again.`}
+      confirmLabel={`Retry ${count}`}
+      cancelLabel="Cancel"
+      loading={loading}
+      onConfirm={onConfirm}
+      onCancel={onCancel}
+    />
   )
 }
 

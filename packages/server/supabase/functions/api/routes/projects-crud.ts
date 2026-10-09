@@ -1,3 +1,4 @@
+import { readPublicPageStoreConfig, regeneratePublicSitemap, removeProjectPublicPage } from '../../_shared/public-page-store.ts';
 import type { Hono } from 'npm:hono@4';
 import type { Variables } from '../types.ts';
 import { getServiceClient } from '../../_shared/db.ts';
@@ -13,7 +14,32 @@ import {
 import { ensureRepoDeclaredSdkObservation } from '../../_shared/sdk-repo-scan.ts';
 import { apiKeyAuth, jwtAuth } from '../../_shared/auth.ts';
 import { logAudit } from '../../_shared/audit.ts';
+import { emitProductEvent } from '../../_shared/product-events.ts';
 import { dbError, enumerateAccessibleProjectIds } from '../shared.ts';
+import { failedFixPreviews, loadRecentFixTruths } from '../../_shared/fix-report-truth-load.ts';
+import { projectCapabilities } from '../../_shared/project-capabilities.ts';
+
+/**
+ * Exact report count per project, one `head: true` count query each. Never
+ * reads report rows, so PostgREST's max-rows cap cannot truncate the
+ * answer. Throws on the first query error.
+ */
+async function countReportsPerProject(
+  db: ReturnType<typeof getServiceClient>,
+  projectIds: string[],
+): Promise<Record<string, number>> {
+  const entries = await Promise.all(
+    projectIds.map(async (id) => {
+      const { count, error } = await db
+        .from('reports')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', id);
+      if (error) throw error;
+      return [id, count ?? 0] as const;
+    }),
+  );
+  return Object.fromEntries(entries);
+}
 
 export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>): void {
   // Lenient UUID matcher (any 8-4-4-4-12 hex). The strict v1–v5 form in
@@ -54,7 +80,7 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
         // ProjectsPage had no way to show "this project is on Pro, EU".
         // Boost shipped 2026-05-07 along with the repo + codebase joins
         // below.
-        .select('id, name, slug, created_at, organization_id, plan_tier, data_residency_region')
+        .select('id, name, slug, created_at, organization_id, owner_id, plan_tier, data_residency_region')
         .in('id', accessibleIds)
         .order('created_at', { ascending: false }),
       db
@@ -65,6 +91,12 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
 
     const roleByOrg = new Map<string, string>();
     for (const m of memberships ?? []) roleByOrg.set(m.organization_id, m.role);
+
+    // owner_id stays server-side; it only feeds projectCapabilities below.
+    const ownerById = new Map<string, string | null>();
+    for (const p of projectRows ?? []) {
+      ownerById.set(p.id, (p as { owner_id?: string | null }).owner_id ?? null);
+    }
 
     const projects = (projectRows ?? []).map((p) => ({
       id: p.id,
@@ -111,17 +143,15 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
       stampedSdkReports,
       sdkObservations,
       planBacklogs,
-      doFlights,
       checkPending,
       repos,
       codebaseFileRows,
       severityRows,
       projectSettingsRows,
     ] = await Promise.all([
-        db
-          .from('reports')
-          .select('project_id', { count: 'exact', head: false })
-          .in('project_id', projectIds),
+        // One exact head count per project: reading the rows and counting
+        // them in JS stopped at PostgREST's row cap (QA #136).
+        countReportsPerProject(db, projectIds),
         // Pull `last_seen_*` per-key alongside the existing identity columns so
         // ProjectsPage's SdkHealthSummary can render per-key connectivity
         // status without a second round-trip. The same heartbeat columns power
@@ -149,11 +179,6 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
           .eq('status', 'new')
           .lt('created_at', oneHourAgo),
         db
-          .from('fix_attempts')
-          .select('id, project_id, status, report_id, error, finished_at')
-          .in('project_id', projectIds)
-          .in('status', ['pending', 'running', 'pr_open', 'failed']),
-        db
           .from('classification_evaluations')
           .select('report_id, project_id, classification_agreed, created_at')
           .in('project_id', projectIds)
@@ -170,7 +195,7 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
         db
           .from('project_repos')
           .select(
-            'id, project_id, repo_url, role, default_branch, is_primary, indexing_enabled, last_indexed_at, last_index_attempt_at, last_index_error, github_app_installation_id, created_at',
+            'id, project_id, repo_url, role, default_branch, is_primary, indexing_enabled, last_indexed_at, last_index_attempt_at, last_index_error, github_app_installation_id, created_at, index_swept_at, index_coverage_state, index_files_indexed, index_files_eligible',
           )
           .in('project_id', projectIds)
           .order('is_primary', { ascending: false })
@@ -209,9 +234,7 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
         (s as { github_repo_url?: string | null }).github_repo_url ?? null;
     }
 
-    const countMap: Record<string, number> = {};
-    for (const r of reportCounts.data ?? [])
-      countMap[r.project_id] = (countMap[r.project_id] ?? 0) + 1;
+    const countMap: Record<string, number> = reportCounts;
 
     const keyMap: Record<string, Array<Record<string, unknown>>> = {};
     for (const k of allKeys.data ?? []) {
@@ -303,62 +326,17 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
       planBacklogMap[r.project_id] = (planBacklogMap[r.project_id] ?? 0) + 1;
     }
 
+    // Per REPORT from its current state (fix-report-truth.ts): a report a
+    // merged PR fixed never counts as failed, however many earlier attempts
+    // failed. Same 30-day report window as the dashboard and /fixes.
+    const projectFixTruths = await loadRecentFixTruths(db as unknown as Parameters<typeof loadRecentFixTruths>[0], projectIds);
     const fixInflightMap: Record<string, number> = {};
     const fixFailedMap: Record<string, number> = {};
-    interface FailedFixPreviewRow {
-      id: string;
-      report_id: string;
-      error_head: string | null;
-      finished_at: string | null;
-    }
-    const failedFixPreviewByProject: Record<string, FailedFixPreviewRow[]> = {};
-    for (const f of doFlights.data ?? []) {
-      if (f.status === 'failed') {
-        fixFailedMap[f.project_id] = (fixFailedMap[f.project_id] ?? 0) + 1;
-        const err = (f as { error?: string | null }).error ?? null;
-        const row: FailedFixPreviewRow = {
-          id: (f as { id: string }).id,
-          report_id: (f as { report_id: string }).report_id,
-          error_head: err ? err.split('\n')[0].slice(0, 160) : null,
-          finished_at: (f as { finished_at?: string | null }).finished_at ?? null,
-        };
-        if (!failedFixPreviewByProject[f.project_id]) {
-          failedFixPreviewByProject[f.project_id] = [];
-        }
-        failedFixPreviewByProject[f.project_id].push(row);
-      } else {
-        fixInflightMap[f.project_id] = (fixInflightMap[f.project_id] ?? 0) + 1;
-      }
-    }
-    for (const pid of Object.keys(failedFixPreviewByProject)) {
-      failedFixPreviewByProject[pid].sort((a, b) => {
-        const ta = a.finished_at ? new Date(a.finished_at).getTime() : 0;
-        const tb = b.finished_at ? new Date(b.finished_at).getTime() : 0;
-        return tb - ta;
-      });
-      failedFixPreviewByProject[pid] = failedFixPreviewByProject[pid].slice(0, 3);
-    }
-
-    const failedReportIds = [
-      ...new Set(
-        Object.values(failedFixPreviewByProject)
-          .flat()
-          .map((r) => r.report_id),
-      ),
-    ];
-    const reportTitleById: Record<string, string | null> = {};
-    if (failedReportIds.length > 0) {
-      const { data: titleRows } = await db
-        .from('reports')
-        .select('id, summary, description')
-        .in('id', failedReportIds);
-      for (const r of titleRows ?? []) {
-        const summary = (r as { summary?: string | null }).summary?.trim();
-        const desc = (r as { description?: string | null }).description?.trim();
-        reportTitleById[r.id] =
-          summary ||
-          (desc ? desc.slice(0, 80) + (desc.length > 80 ? '…' : '') : null);
-      }
+    for (const t of projectFixTruths.truths.values()) {
+      const pid = projectFixTruths.reports.get(t.reportId)?.project_id;
+      if (!pid) continue;
+      if (t.state === 'failed') fixFailedMap[pid] = (fixFailedMap[pid] ?? 0) + 1;
+      else if (t.state === 'in_flight') fixInflightMap[pid] = (fixInflightMap[pid] ?? 0) + 1;
     }
 
     const checkDisagreeMap: Record<string, number> = {};
@@ -386,6 +364,11 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
       last_index_error: string | null;
       github_app_installation_id: number | null;
       created_at: string;
+      /** Since 20261003160000: last sweep (complete or partial) and its coverage. */
+      index_swept_at?: string | null;
+      index_coverage_state?: string | null;
+      index_files_indexed?: number | null;
+      index_files_eligible?: number | null;
     }
     const reposByProject: Record<string, RepoRow[]> = {};
     for (const r of (repos.data ?? []) as RepoRow[]) {
@@ -488,7 +471,7 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
       if (doFailed > 0) {
         bottleneckStage = 'do';
         bottleneckCount = doFailed;
-        bottleneckLabel = `${doFailed} ${doFailed === 1 ? 'fix needs' : 'fixes need'} retry`;
+        bottleneckLabel = `${doFailed} ${doFailed === 1 ? 'report' : 'reports'} still unfixed after an auto-fix attempt`;
       } else if (planCount > 5) {
         bottleneckStage = 'plan';
         bottleneckCount = planCount;
@@ -542,6 +525,10 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
         last_index_attempt_at: r.last_index_attempt_at,
         last_index_error: r.last_index_error,
         github_app_connected: r.github_app_installation_id != null,
+        index_swept_at: r.index_swept_at ?? null,
+        index_coverage_state: r.index_coverage_state ?? null,
+        index_files_indexed: r.index_files_indexed ?? null,
+        index_files_eligible: r.index_files_eligible ?? null,
       }));
       const settingsGithubUrl = settingsGithubByProject[p.id] ?? null;
       const primaryRepo =
@@ -558,6 +545,10 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
               last_index_attempt_at: null,
               last_index_error: null,
               github_app_connected: true,
+              index_swept_at: null,
+              index_coverage_state: null,
+              index_files_indexed: null,
+              index_files_eligible: null,
             }
           : null);
 
@@ -597,8 +588,17 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
         trendDirection = 'down';
       }
       const sentryReports = sentryConnectedCount[p.id] ?? 0;
+      const capabilities = projectCapabilities({
+        userId,
+        ownerId: ownerById.get(p.id) ?? null,
+        organizationId: p.organization_id ?? null,
+        orgRole: p.organization_role,
+        projectRole:
+          (memberMap[p.id] ?? []).find((m) => m.user_id === userId)?.role ?? null,
+      });
       return {
         ...p,
+        ...capabilities,
         report_count: countMap[p.id] ?? 0,
         api_keys: keys,
         active_key_count: keys.filter((k) => k.is_active).length,
@@ -608,12 +608,7 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
         pdca_bottleneck: bottleneckStage,
         pdca_bottleneck_label: bottleneckLabel,
         pdca_bottleneck_count: bottleneckCount,
-        failed_fixes_preview: (failedFixPreviewByProject[p.id] ?? []).map((row) => ({
-          id: row.id,
-          report_id: row.report_id,
-          error_head: row.error_head,
-          report_title: reportTitleById[row.report_id] ?? null,
-        })),
+        failed_fixes_preview: failedFixPreviews(projectFixTruths, { projectId: p.id, limit: 3 }),
         sdk_package: sdkPackage,
         sdk_version: sdkVersion,
         sdk_observation_source: resolvedSdk.sdk_observation_source,
@@ -711,7 +706,13 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
         .from('project_api_keys')
         .select('project_id, is_active, last_seen_at')
         .in('project_id', accessibleIds),
-      db.from('reports').select('project_id').in('project_id', accessibleIds),
+      // Which projects have at least one report: one exact head count per
+      // project. Reading every report row stopped at PostgREST's row cap, so
+      // a busy project could push the others into "never ingested" (QA #136).
+      countReportsPerProject(db, accessibleIds).then(
+        (counts) => ({ data: Object.keys(counts).filter((id) => counts[id] > 0), error: null }),
+        (error: unknown) => ({ data: null, error: error as { message: string } }),
+      ),
       db
         .from('reports')
         .select('id', { count: 'exact', head: true })
@@ -743,10 +744,7 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
         staleKeyCount += 1;
       }
     }
-    const projectsWithReportsSet = new Set<string>();
-    for (const r of reportProjectRows ?? []) {
-      projectsWithReportsSet.add(r.project_id as string);
-    }
+    const projectsWithReportsSet = new Set<string>(reportProjectRows ?? []);
 
     const projectCount = accessibleIds.length;
     const projectsWithReports = projectsWithReportsSet.size;
@@ -976,6 +974,15 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
 
     if (error) return dbError(c, error);
 
+    // Company funnel (mushi-self): fire-and-forget, never on the response path.
+    void emitProductEvent(db, {
+      userId,
+      eventName: 'project_created',
+      surface: 'server',
+      properties: { project_id: data.id, source: 'console' },
+      dedupKey: `project_created:${data.id}`,
+    });
+
     await db.from('project_settings').insert({ project_id: data.id });
     // Membership is the source-of-truth for "can this user dispatch fixes /
     // see traces / etc". Without this row the owner can read via owner_id but
@@ -992,6 +999,7 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
     // The raw key is returned exactly once and never stored in plain text.
     let autoKey: string | null = null;
     let autoKeyPrefix: string | null = null;
+    let autoKeyId: string | null = null;
     try {
       const rawKey = `mushi_${crypto.randomUUID().replace(/-/g, '')}`;
       const prefix = rawKey.slice(0, 12);
@@ -1013,6 +1021,14 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
       if (!keyInsertErr) {
         autoKey = rawKey;
         autoKeyPrefix = prefix;
+        autoKeyId = keyId;
+        void emitProductEvent(db, {
+          userId,
+          eventName: 'key_minted',
+          surface: 'server',
+          properties: { project_id: data.id, label: 'sdk-ingest', scopes: 'report:write' },
+          dedupKey: `key_minted:${keyId}`,
+        });
         void logAudit(
           db,
           data.id,
@@ -1028,7 +1044,11 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
       // Non-fatal: key mint failure should not block project creation.
     }
 
-    return c.json({ ok: true, data: { id: data.id, slug, apiKey: autoKey, keyPrefix: autoKeyPrefix } }, 201);
+    // apiKeyId lets the success panel rotate exactly this key (QA #31).
+    return c.json(
+      { ok: true, data: { id: data.id, slug, apiKey: autoKey, keyPrefix: autoKeyPrefix, apiKeyId: autoKeyId } },
+      201,
+    );
   });
 
   // Rename a project. Owner and admin in the project's org can change the
@@ -1201,8 +1221,41 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
       );
     }
 
+    // A published diagram page lives in S3, outside the cascade: remove it
+    // while the publication row still names it. If that fails, stop: deleting
+    // the project would drop the only record of a page that stays public.
+    const pageRemoval = await removeProjectPublicPage(
+      db,
+      projectId,
+      readPublicPageStoreConfig((name) => Deno.env.get(name)),
+      (err) => log.error('project delete: public diagram page removal failed', { project_id: projectId, error: String(err) }),
+    );
+    if (pageRemoval === 'failed') {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'PUBLIC_PAGE_REMOVAL_FAILED',
+            message: "Could not remove this project's public diagram page. Try again in a minute, or unpublish it first.",
+          },
+        },
+        503,
+      );
+    }
+
     const { error: deleteErr } = await db.from('projects').delete().eq('id', projectId);
     if (deleteErr) return dbError(c, deleteErr);
+
+    // The cascade dropped the publication row; drop its URL from the /r/
+    // sitemap too. Best-effort: a failure leaves one dead URL until the next
+    // publish or unpublish rewrites the file.
+    if (pageRemoval === 'deleted') {
+      await regeneratePublicSitemap(
+        db,
+        readPublicPageStoreConfig((name) => Deno.env.get(name)),
+        (err) => log.warn('project delete: /r/ sitemap regeneration failed', { project_id: projectId, error: String(err) }),
+      );
+    }
 
     // Sentry breadcrumb-style log. Real monitoring hook: filter by
     // `category:project.deleted` to spot accidental mass-deletions.

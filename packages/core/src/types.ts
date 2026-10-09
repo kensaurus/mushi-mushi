@@ -1,3 +1,9 @@
+import type {
+  MushiReporterNotificationPrefs,
+  MushiReporterPrefsUpdate,
+  MushiReporterUpdates,
+} from './reporter-channels';
+
 // ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
@@ -26,9 +32,27 @@ export interface MushiConfig {
    * host apps. Set false for fully static/offline deployments.
    */
   runtimeConfig?: boolean | 'auto';
+  /**
+   * Product analytics (`Mushi.track()`, Users & Funnels). Enabled by default
+   * and keyed on the same opaque per-project reporter token as sessions;
+   * honours DNT / GPC. Set `enabled: false` to opt out, or
+   * `consent: 'required'` to buffer until `setConsent('granted')`.
+   * Session tracking passes the same gate: `enabled`, DNT / GPC, bot
+   * exclusion and consent all apply to it too.
+   */
+  analytics?: MushiAnalyticsConfig;
+  /**
+   * Session lifecycle tracking for the console's Activity and Users views
+   * (session start / heartbeat / end, page views). Default true. Runs only
+   * while the `analytics` gate allows tracking; `false` turns it off even
+   * then.
+   */
+  trackSessions?: boolean;
 
   sentry?: MushiSentryConfig;
   widget?: MushiWidgetConfig;
+  /** Reporter updates beyond the in-app badge (Plan 018 §4). */
+  notifications?: MushiNotificationsConfig;
   capture?: MushiCaptureConfig;
   privacy?: MushiPrivacyConfig;
   proactive?: MushiProactiveConfig;
@@ -198,9 +222,29 @@ export interface MushiWidgetConfig {
    *   - `axis`        constrain movement to one axis (`'x'`, `'y'`, or `'both'` default).
    */
   draggable?: boolean | { persist?: boolean; snapToEdge?: boolean; axis?: 'both' | 'x' | 'y' };
-  /** Show the tiny "Powered by Mushi vX" footer inside the widget panel. */
+  /**
+   * Show the "Bug reports by Mushi" mark at the bottom of the widget panel.
+   * It links to the Mushi site (`utm_source=widget&utm_medium=powered-by` plus
+   * an anonymous `ref` derived from a SHA-256 prefix of the project id) and
+   * feeds the `loop_impression` / `loop_click` analytics events.
+   *
+   * Precedence (most specific wins):
+   * 1. An explicit value here — the MIT SDK config is a hard override and
+   *    beats anything the runtime config sends.
+   * 2. `widget.brandFooter` from the runtime config (`GET /v1/sdk/config`):
+   *    Mushi Cloud sends `true` for Free Cloud projects and `false` for paid
+   *    plans; self-hosted servers send nothing. Opt out with one toggle in the
+   *    console project settings.
+   * 3. Default `false`.
+   */
   brandFooter?: boolean;
-  /** How the widget should surface SDK freshness warnings. Defaults to auto. */
+  /**
+   * How the widget surfaces the "update @mushi-mushi/web" notice. It is a
+   * developer instruction, so `'auto'` (default) shows it in the widget only on
+   * a dev host (localhost, loopback, `*.localhost`, `*.local`, `file:`) or with
+   * `debug: true` — never to an app's end users. `'banner'` always shows it;
+   * `'console-only'` and `'off'` never render it in the widget.
+   */
   outdatedBanner?: 'auto' | 'banner' | 'console-only' | 'off';
   /**
    * Privacy nudge shown beside an attached screenshot preview, reminding the
@@ -218,8 +262,8 @@ export interface MushiWidgetConfig {
   screenshotSensitiveHint?: boolean | string;
   /**
    * Beta mode: injects discreet "early access" messaging into the widget panel.
-   * Shows a beta strip on the category step and a contact footer on the success
-   * step. Designed to reduce user frustration with in-progress apps while
+   * Shows a beta strip on the report screen and a contact footer on the
+   * receipt. Designed to reduce user frustration with in-progress apps while
    * actively inviting feedback.
    */
   betaMode?: MushiBetaModeConfig;
@@ -242,18 +286,24 @@ export interface MushiWidgetConfig {
    */
   responseSlaLabel?: string;
   /**
-   * Show a first-class "Feature request" card at the top of the category
-   * step. Defaults to true. Set to false for production-only deployments
-   * where you don't want to invite feature ideas through the widget.
-   * Internally this maps to `category='other'` with
-   * `user_category='Feature request'` so no DB migration is needed.
+   * Show the "Idea" chip on the report screen. Defaults to true. Set to false
+   * for production-only deployments where you don't want to invite feature
+   * ideas through the widget. An idea is sent as `category='other'` with
+   * `user_category='feature'`, so triage never files it as a defect.
    */
   featureRequestCard?: boolean;
-  /** Override the localised label for the feature-request card. */
+  /** Override the localised label of the Idea chip. */
   featureRequestLabel?: string;
-  /** Override the helper text shown under the feature-request card. */
+  /**
+   * @deprecated The one-screen report (Plan 018) has no helper text under the
+   * Idea chip; the web widget ignores this.
+   */
   featureRequestDescription?: string;
-  /** Minimum description character count before the submit button enables. */
+  /**
+   * Minimum description character count before Send enables. Default 8
+   * (Plan 018 §1.1), halved for CJK text on web; an attached screenshot or
+   * element lowers it to 0.
+   */
   minDescriptionLength?: number;
   /**
    * CSS selectors of host-app elements that the widget trigger and panel must
@@ -268,9 +318,9 @@ export interface MushiWidgetConfig {
    */
   avoidSelectors?: string[];
   /**
-   * Override the default five-category picker with a custom category list.
-   * When set, the widget renders these categories instead of the built-in
-   * `bug / slow / visual / confusing / other` set.
+   * Add host-specific categories. The report screen shows them under the
+   * "More…" chip, after the built-in Bug / Slow / Looks wrong / Confusing /
+   * Idea chips.
    *
    * Each custom category maps onto one of the five built-in `MushiReportCategory`
    * values via `baseCategory` (defaults to `'other'`). The custom id is
@@ -292,14 +342,13 @@ export interface MushiWidgetConfig {
 export interface MushiCustomCategory {
   /** Unique identifier used in `openWith(id)` / `report({ category: id })`. */
   id: string;
-  /** Human-readable label shown in the category picker step. */
+  /** Human-readable label shown under the "More…" chip. */
   label: string;
   /** Optional helper text shown beneath the label. */
   description?: string;
   /**
-   * Localised intent options displayed on the second step ("What happened?").
-   * When omitted, the widget skips the intent step and goes straight to
-   * the description.
+   * Optional sub-chips shown after this category is picked (e.g. "Crash",
+   * "Wrong result"). Picking one is never required.
    */
   intents?: string[];
   /**
@@ -339,7 +388,7 @@ export interface MushiBannerLink {
  * `subtle` — near-invisible hairline with muted text (least disruptive).
  */
 export interface MushiBannerConfig {
-  /** Visual style of the banner strip. Defaults to `'brand'`. */
+  /** Visual style of the banner strip. Defaults to `'subtle'` (Plan 018 §1.4); `neon` is opt-in. */
   variant?: 'neon' | 'brand' | 'subtle';
   /** 'top' pins the banner below any existing sticky headers; 'bottom' pins above bottom navs. Defaults to 'top'. */
   position?: 'top' | 'bottom';
@@ -459,6 +508,22 @@ export interface MushiCaptureConfig {
   elementSelector?: boolean;
   replay?: 'sentry' | 'rrweb' | 'lite' | 'off';
   /**
+   * How to load rrweb for `replay: 'rrweb'`. A published SDK cannot import
+   * rrweb itself: its bare `import('rrweb')` is invisible to your bundler, so
+   * rrweb never makes it into your build. Hand the import over and your
+   * bundler code-splits it like any other dynamic import. Install `rrweb`
+   * yourself; the chunk loads only for sessions sampled into replay.
+   *
+   * Without a loader the SDK uses a global `rrweb` (the UMD build from a
+   * script tag) when one exists, and otherwise records lite replay (clicks)
+   * and warns once in the console. Recording masks every input and every
+   * text node.
+   *
+   * @example
+   * capture: { replay: 'rrweb', rrweb: () => import('rrweb') }
+   */
+  rrweb?: () => Promise<{ record?: unknown }>;
+  /**
    * Mushi Mushi v2.1 (whitepaper §6 hybrid mode): passive inventory
    * discovery. When enabled the SDK observes navigations and emits a
    * tiny payload — `(route, title, testids[], outbound api paths[],
@@ -569,9 +634,10 @@ export interface MushiPrivacyConfig {
    * sensitive fields that should never appear in any form — passwords, PII,
    * financial data. Applied in addition to `maskSelectors`.
    *
-   * Default: `['input[type="password"]', '[data-mushi-redact]']`
-   *
-   * To disable the default redaction, pass an empty array.
+   * Always redacted, whatever this is set to: `input[type="password"]`,
+   * `input[autocomplete^="cc-"]`, `[data-private]`, `[data-mushi-mask]`.
+   * This list is added on top; it defaults to `['[data-mushi-redact]']`,
+   * and an empty array drops only that default.
    */
   redactSelectors?: string[];
   /** Let reporters remove an attached screenshot before submitting. Defaults to true. */
@@ -648,6 +714,29 @@ export interface MushiCooldownConfig {
    * governs instead, so this never blocks a legitimate second trigger.
    */
   reshowCooldownMinutes?: number;
+}
+
+/**
+ * How a reporter hears back outside the widget (Plan 018 §4). Email and push
+ * are opt-in by the reporter AND need the project switch in the console;
+ * `/v1/sdk/config` → `reporter` says what the project offers.
+ */
+export interface MushiNotificationsConfig {
+  /** Show one "the developer replied" / "fixed in vX" toast on the next visit. Default true. */
+  toast?: boolean;
+  /** Offer "Get updates by email" on the receipt and report detail. Default true (when the project offers email). */
+  email?: boolean;
+  /**
+   * Prefill the email box from `identify({ email })`. Default false. The box
+   * is never pre-ticked either way.
+   */
+  emailFromIdentity?: boolean;
+  /**
+   * Browser push: a service worker on YOUR origin that shows the push
+   * payload `{ title, body, tag, url? }`; required for
+   * `subscribeReporterPush()`. Off by default.
+   */
+  webPush?: false | { serviceWorkerPath: string };
 }
 
 export interface MushiPreFilterConfig {
@@ -1481,8 +1570,26 @@ export interface MushiSDKInstance {
    * Manually record a host-defined activity event (e.g. 'lesson_completed').
    * The SDK batches these and flushes to POST /v1/sdk/activity.
    * No-op when rewards are disabled or the user has not opted in.
+   * For product analytics (funnels, paths, people) use `track()` instead.
    */
   recordActivity(action: string, metadata?: Record<string, unknown>): void;
+
+  // ─── Product analytics (Users & Funnels) ──────────────────────────
+
+  /**
+   * Record a product-analytics event, e.g. `track('checkout_started', { plan: 'pro' })`.
+   * Names must match `^[a-z][a-z0-9_]{1,63}$`; properties are flat
+   * (string | number | boolean | null), PII-looking keys are dropped, and
+   * every string value runs through the PII scrubber. Batched to
+   * POST /v1/sdk/events. No-op under DNT/GPC, `analytics.enabled: false`,
+   * or before consent when `analytics.consent === 'required'`.
+   * Returns true when the event was queued.
+   */
+  track(event: string, properties?: Record<string, MushiPropertyValue>): boolean;
+  /** Grant or deny analytics consent (persisted per project in localStorage). */
+  setConsent(state: 'granted' | 'denied'): void;
+  /** The anonymous id analytics events are keyed on, or null when tracking is off. */
+  getAnonymousId(): string | null;
 
   /**
    * Briefly animate the bug-report trigger button to draw the user's
@@ -1527,6 +1634,40 @@ export interface MushiSDKInstance {
    * Open the reporter inbox ("my reports") view in the widget.
    */
   openMyReports(): void;
+
+  /** Unread count and the newest unread updates on this device's reports (null on failure). */
+  getReporterUpdates(): Promise<MushiReporterUpdates | null>;
+
+  /** Mark one report's updates read; resolves the new unread total (null on failure). */
+  markReportRead(reportId: string): Promise<number | null>;
+
+  /**
+   * Fires with the unread count and newest updates whenever the SDK checks
+   * for updates, so a host can draw its own badge: right away on subscribe,
+   * then every 5 minutes while the page is visible and on tab focus, and
+   * only from a device that has filed a report (Plan 018 §4.4). Returns an
+   * unsubscribe function.
+   */
+  onReporterUpdate(cb: (updates: MushiReporterUpdates) => void): () => void;
+
+  /** This reporter's email / push choices; the address comes back masked. */
+  getNotificationPrefs(): Promise<MushiReporterNotificationPrefs | null>;
+
+  /**
+   * Ask for email updates (`{ email }` sends a confirmation email first —
+   * nothing else is mailed until it is clicked) or change channels. Show this
+   * only when the reporter asked: never pre-tick an opt-in. Resolves the
+   * server's answer, including `EMAIL_NOT_AVAILABLE` when this app does not
+   * offer email.
+   */
+  setNotificationPrefs(update: MushiReporterPrefsUpdate): Promise<MushiApiResponse<MushiReporterNotificationPrefs>>;
+
+  /**
+   * Turn on browser push for this reporter. Call it from a click ("Notify
+   * me"): it asks the browser for permission. Needs
+   * `notifications.webPush.serviceWorkerPath` and the project's push switch.
+   */
+  subscribeReporterPush(): Promise<{ ok: true } | { ok: false; reason: string }>;
 
   /**
    * Returns the global contributor hall-of-fame ranked by total points.
@@ -1597,7 +1738,14 @@ export interface MushiApiClient {
   postDiscoveryEvent(event: MushiDiscoveryEventPayload): Promise<MushiApiResponse<{ accepted: boolean }>>;
   /** POST /v1/sdk/session — lightweight session lifecycle event (best-effort). */
   postSessionEvent(payload: MushiSessionEventPayload): Promise<MushiApiResponse<{ accepted: boolean }>>;
+  /** POST /v1/sdk/events — batched product-analytics events (Mushi.track()). */
+  postProductEvents(payload: MushiProductEventPayload): Promise<MushiApiResponse<{ accepted: number; dropped: number }>>;
   listReporterReports(reporterToken: string): Promise<MushiApiResponse<{ reports: MushiReporterReport[] }>>;
+  /**
+   * A signed reporter call (digest headers, timeout, one retry; never rejects).
+   * The typed reporter-loop v2 calls are in `@mushi-mushi/core/reporter-channels`.
+   */
+  reporterRequest<T>(method: string, path: string, reporterToken: string, body?: unknown): Promise<MushiApiResponse<T>>;
   listReporterComments(
     reportId: string,
     reporterToken: string,
@@ -1749,10 +1897,56 @@ export interface MushiSessionEventPayload {
   sdk_version?: string;
 }
 
+export type MushiPropertyValue = string | number | boolean | null;
+
+/** Configuration for `Mushi.track()` product analytics. */
+export interface MushiAnalyticsConfig {
+  /** Master switch (default true). */
+  enabled?: boolean;
+  /** 'implied' (default) sends immediately; 'required' buffers until setConsent('granted'). */
+  consent?: 'implied' | 'required';
+  /** 0..1, decided once per person (default 1). */
+  sampleRate?: number;
+  /** Honour navigator.doNotTrack / globalPrivacyControl (default true). */
+  respectDoNotTrack?: boolean;
+  /**
+   * Skip tracking in WebDriver-controlled browsers (Playwright, Puppeteer,
+   * Selenium), headless Chrome, Lighthouse and crawler user agents, so test
+   * runs and bots never count as users (default true). Set false to exercise
+   * analytics from an end-to-end test.
+   */
+  excludeBots?: boolean;
+  /** Emit `pageview` on history navigation (default false; sessions already record page views). */
+  autoPageviews?: boolean;
+  /** Flush cadence in ms (default 5000, min 1000). */
+  flushIntervalMs?: number;
+  /** Property keys allowed through the PII key filter. */
+  propertyAllowlist?: string[];
+  /** Which surface these events come from (default 'web'). */
+  surface?: 'web' | 'console' | 'docs' | 'cli' | 'mcp' | 'server' | 'mobile';
+}
+
+/** Wire shape for POST /v1/sdk/events. */
+export interface MushiProductEventPayload {
+  anon_id?: string | null;
+  user_id?: string | null;
+  user_traits?: Record<string, unknown> | null;
+  session_id?: string | null;
+  sdk_version?: string | null;
+  surface?: MushiAnalyticsConfig['surface'];
+  events: Array<{
+    name: string;
+    ts?: string;
+    properties?: Record<string, MushiPropertyValue>;
+    dedup_key?: string;
+  }>;
+}
+
 export interface MushiApiResponse<T> {
   ok: boolean;
   data?: T;
-  error?: { code: string; message: string };
+  /** `status` is the HTTP status when the server answered; absent for network errors. */
+  error?: { code: string; message: string; status?: number };
 }
 
 export interface MushiRuntimeSdkConfig {
@@ -1766,6 +1960,11 @@ export interface MushiRuntimeSdkConfig {
   };
   /** When false, the widget skips background reporter-inbox polling. Default true. */
   reporterNotificationsEnabled?: boolean;
+  /**
+   * Opt-in reporter channels this project offers (Plan 018 §4.1). Each is
+   * true only when the project turned it on AND the server can send it.
+   */
+  reporter?: { emailEnabled: boolean; pushEnabled: boolean; vapidPublicKey: string | null };
 }
 
 export interface MushiSdkVersionInfo {
@@ -1780,8 +1979,30 @@ export interface MushiSdkVersionInfo {
 export interface MushiReporterReport {
   id: string;
   status: string;
-  category: string;
+  /** @deprecated No longer sent to reporters (Plan 018); internal triage only. */
+  category?: string;
+  /** @deprecated No longer sent to reporters (Plan 018); internal triage only. */
   severity?: string | null;
+  /** Reporter-safe title (the summary, or the first line of the description). */
+  title?: string | null;
+  /** The type the reporter picked (`user_category`), if any. */
+  user_category?: string | null;
+  /** Page path the report was filed on. */
+  page?: string | null;
+  app_version?: string | null;
+  /** Signed, short-lived thumbnail URL; null without a screenshot. */
+  screenshot_thumb_url?: string | null;
+  /** Bucketed duplicate count: never a raw number. */
+  group_bucket?: 'none' | 'few' | 'many';
+  closed_reason?: string | null;
+  fixed_in_version?: string | null;
+  /** The developer asked a question and is waiting on the reporter. */
+  awaiting_reporter?: boolean;
+  /** True when this row is a report the reporter follows (theirs was a duplicate of it). */
+  followed?: boolean;
+  last_event_at?: string | null;
+  /** Template-rendered (or verbatim developer) text of the latest event. */
+  last_event_preview?: string | null;
   summary?: string | null;
   description?: string | null;
   created_at: string;

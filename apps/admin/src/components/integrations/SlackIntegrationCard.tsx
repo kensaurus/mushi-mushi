@@ -13,9 +13,16 @@ import { useState, useEffect } from 'react'
 import { Btn, Input, SelectField } from '../ui'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
+import { describeApiFailure } from '../../lib/humanizeApiError'
+import { isNotificationWebhookHost } from '../../lib/notificationWebhookHosts'
 import { HealthSparkline } from './HealthSparkline'
 import type { HealthRow } from './types'
 import { CHIP_TONE } from '../../lib/chipTone'
+import { ConnectionStatus } from '../ui/ConnectionStatus'
+import { connectionFromProbe, newestProbe, probeFromTestSend, type ProbeLike } from '../../lib/integrationConnection'
+
+/** Slack is only verified by a test send, so a check stays good for 30 days. */
+const SLACK_VERIFIED_FRESH_MS = 30 * 24 * 60 * 60 * 1000
 
 interface Props {
   projectId: string | null
@@ -25,6 +32,14 @@ interface Props {
   sparkline?: HealthRow[]
   /** Currently saved channel ID from project_settings (for informational display). */
   channelId?: string | null
+  /** A webhook, or a channel plus a bot token: something can actually post. */
+  canPost?: boolean
+  /**
+   * Re-read the settings stats after a save. The card's status line comes
+   * from those props, so without this a saved channel or webhook kept showing
+   * the old state until a full page reload.
+   */
+  onChanged?: () => void
 }
 
 interface SlackChannel {
@@ -45,7 +60,16 @@ function slackErrorToMessage(errorCode: string | undefined, rawMessage: string):
   return 'Failed to load channels. Check your Slack connection or click "Re-add to Slack".'
 }
 
-export function SlackIntegrationCard({ projectId, slackConfigured, teamName, latestProbe, sparkline = [], channelId }: Props) {
+export function SlackIntegrationCard({
+  projectId,
+  slackConfigured,
+  teamName,
+  latestProbe,
+  sparkline = [],
+  channelId: savedChannelId,
+  canPost = false,
+  onChanged,
+}: Props) {
   const toast = useToast()
   const [channels, setChannels] = useState<SlackChannel[]>([])
   const [loadingChannels, setLoadingChannels] = useState(false)
@@ -58,6 +82,15 @@ export function SlackIntegrationCard({ projectId, slackConfigured, teamName, lat
   const [manualChannelId, setManualChannelId] = useState('')
   const [savingManual, setSavingManual] = useState(false)
   const [webhookUrl, setWebhookUrl] = useState('')
+  const [savingWebhook, setSavingWebhook] = useState(false)
+  // The channel just saved here, so the card reflects it before the page reloads.
+  const [justSavedChannelId, setJustSavedChannelId] = useState<string | null>(null)
+  const [localProbe, setLocalProbe] = useState<ProbeLike | undefined>(undefined)
+  const channelId = justSavedChannelId ?? savedChannelId ?? null
+  // Name from the same conversations.list the picker uses. Slack has no
+  // stored name for the channel, and a raw "C0B82A322RW" means nothing.
+  const channelName = channelId ? channels.find((ch) => ch.id === channelId)?.name ?? null : null
+  const channelPrivate = channelId ? channels.find((ch) => ch.id === channelId)?.private ?? false : false
 
   const probeStatus = latestProbe?.status
 
@@ -103,7 +136,8 @@ export function SlackIntegrationCard({ projectId, slackConfigured, teamName, lat
       if (res.ok && res.data?.url) {
         window.location.href = res.data.url
       } else {
-        toast.error('Could not start Slack connection', res.error?.message)
+        const t = describeApiFailure(res.error, 'Could not start the Slack connection')
+        toast.error(t.title, t.description)
         setConnectingSlack(false)
       }
     } catch {
@@ -121,9 +155,12 @@ export function SlackIntegrationCard({ projectId, slackConfigured, teamName, lat
         body: JSON.stringify({ slack_channel_id: selectedChannel }),
       })
       if (res.ok) {
+        setJustSavedChannelId(selectedChannel)
         toast.success('Channel saved — Slack notifications will go here.')
+        onChanged?.()
       } else {
-        toast.error('Could not save channel.')
+        const t = describeApiFailure(res.error, 'Could not save the Slack channel')
+        toast.error(t.title, t.description)
       }
     } finally {
       setSavingChannel(false)
@@ -140,10 +177,13 @@ export function SlackIntegrationCard({ projectId, slackConfigured, teamName, lat
         body: JSON.stringify({ slack_channel_id: id }),
       })
       if (res.ok) {
+        setJustSavedChannelId(id)
         toast.success('Channel ID saved — Slack notifications will go here.')
         setManualChannelId('')
+        onChanged?.()
       } else {
-        toast.error('Could not save channel ID.')
+        const t = describeApiFailure(res.error, 'Could not save the Slack channel ID')
+        toast.error(t.title, t.description)
       }
     } finally {
       setSavingManual(false)
@@ -154,8 +194,12 @@ export function SlackIntegrationCard({ projectId, slackConfigured, teamName, lat
     setTestingSlack(true)
     try {
       const res = await apiFetch('/v1/admin/settings/test-slack', { method: 'POST' })
+      setLocalProbe(probeFromTestSend(res.ok, res.ok ? null : res.error?.message ?? 'Slack test failed.'))
       if (res.ok) toast.success('Test message sent to Slack!')
-      else toast.error(res.error?.message ?? 'Slack test failed.')
+      else {
+        const t = describeApiFailure(res.error, 'Slack test failed')
+        toast.error(t.title, t.description)
+      }
     } catch {
       toast.error('Could not reach Slack.')
     } finally {
@@ -163,21 +207,74 @@ export function SlackIntegrationCard({ projectId, slackConfigured, teamName, lat
     }
   }
 
+  // Same host rule the settings PATCH enforces, checked before saving.
+  const webhookError = (() => {
+    const v = webhookUrl.trim()
+    if (!v) return null
+    try {
+      const u = new URL(v)
+      if (u.protocol !== 'https:') return 'Slack webhook URLs start with https://'
+      if (!isNotificationWebhookHost('slack_webhook_url', u.hostname)) {
+        return 'That is not a Slack webhook URL. It starts with https://hooks.slack.com/services/'
+      }
+      return null
+    } catch {
+      return 'Paste the whole webhook URL, starting with https://'
+    }
+  })()
+
   const handleSaveWebhook = async () => {
-    if (!webhookUrl) return
-    const res = await apiFetch('/v1/admin/settings', {
-      method: 'PATCH',
-      body: JSON.stringify({ slack_webhook_url: webhookUrl }),
-    })
-    if (res.ok) toast.success('Webhook URL saved.')
-    else toast.error('Could not save webhook URL.')
+    const value = webhookUrl.trim()
+    if (!value || webhookError) return
+    setSavingWebhook(true)
+    try {
+      const res = await apiFetch('/v1/admin/settings', {
+        method: 'PATCH',
+        body: JSON.stringify({ slack_webhook_url: value }),
+      })
+      if (res.ok) {
+        toast.success('Webhook URL saved.')
+        setWebhookUrl('')
+        onChanged?.()
+      } else {
+        const t = describeApiFailure(res.error, 'Could not save the Slack webhook URL')
+        toast.error(t.title, t.description)
+      }
+    } finally {
+      setSavingWebhook(false)
+    }
   }
 
+  const probed = connectionFromProbe({
+    configured: true,
+    probe: newestProbe(latestProbe, localProbe),
+    staleAfterMs: SLACK_VERIFIED_FRESH_MS,
+  })
+  const connection = !slackConfigured
+    ? { state: 'not_connected' as const, detail: 'Add Mushi to a Slack workspace to get alerts.' }
+    : !canPost && !channelId
+      ? { state: 'attention' as const, detail: 'Pick a channel below so Mushi knows where to post.' }
+      : !canPost
+        ? { state: 'attention' as const, detail: 'No Slack bot can post to this channel yet.' }
+        : probed.state === 'checking'
+          ? { state: 'checking' as const, detail: 'Connected, but no test message sent yet.' }
+          : probed
+  const connectionAction =
+    connection.state === 'not_connected' || (connection.state === 'attention' && channelId && !canPost)
+      ? { label: 'Add to Slack', onClick: () => void handleAddToSlack() }
+      : connection.state === 'checking' || (connection.state === 'attention' && canPost)
+        ? { label: 'Send test', onClick: () => void handleTest() }
+        : undefined
+
   return (
-    <div className="rounded-xl border border-edge-subtle bg-surface p-5 space-y-4">
+    <div
+      id="integrations-slack"
+      // mushi-mushi-allowlist: anchored card (#integrations-slack links land here); Card takes no id
+      className="rounded-xl border border-edge-subtle bg-surface-raised p-5 space-y-4 scroll-mt-chrome"
+    >
       {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex items-center gap-3 min-w-0">
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+        <div className="flex min-w-0 flex-1 basis-40 items-center gap-3">
           <div className="w-9 h-9 rounded-lg bg-accent-muted flex items-center justify-center flex-shrink-0">
             {/* mushi-mushi-allowlist: Slack trademark SVG requires exact brand hex fills */}
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
@@ -189,14 +286,12 @@ export function SlackIntegrationCard({ projectId, slackConfigured, teamName, lat
           </div>
           <div className="min-w-0">
             <h3 className="font-semibold text-sm text-fg truncate">Slack</h3>
-            {slackConfigured ? (
-              <p className="text-xs text-ok truncate">{teamName ? `Connected to ${teamName}` : 'Connected'}</p>
-            ) : (
-              <p className="text-xs text-fg-secondary truncate">Not connected — add to a workspace to receive notifications</p>
-            )}
+            {slackConfigured && teamName ? (
+              <p className="text-xs text-fg-secondary truncate">Workspace: {teamName}</p>
+            ) : null}
           </div>
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           {sparkline.length > 0 && (
             <span
               className="hidden sm:flex"
@@ -205,7 +300,9 @@ export function SlackIntegrationCard({ projectId, slackConfigured, teamName, lat
               <HealthSparkline rows={sparkline} />
             </span>
           )}
-          {slackConfigured && (
+          {/* Header buttons stay for the always-available actions; when the
+              status line already offers the same one, it is not repeated. */}
+          {slackConfigured && connectionAction?.label !== 'Send test' && (
             <Btn
               type="button"
               variant="ghost"
@@ -216,7 +313,7 @@ export function SlackIntegrationCard({ projectId, slackConfigured, teamName, lat
               {testingSlack ? 'Sending…' : 'Send test'}
             </Btn>
           )}
-          {/* Always show the Add/Re-add button so the user can refresh scopes */}
+          {connectionAction?.label !== 'Add to Slack' && (
           <Btn
             type="button"
             variant={slackConfigured ? 'ghost' : 'accent'}
@@ -232,24 +329,39 @@ export function SlackIntegrationCard({ projectId, slackConfigured, teamName, lat
           >
             {slackConfigured ? 'Re-add to Slack' : 'Add to Slack'}
           </Btn>
+          )}
         </div>
+      </div>
+
+      <div title={probed.raw && probed.raw !== connection.detail ? probed.raw : undefined}>
+        <ConnectionStatus
+          state={testingSlack ? 'checking' : connection.state}
+          label={testingSlack ? 'Sending a test…' : undefined}
+          detail={testingSlack ? undefined : connection.detail}
+          action={testingSlack ? undefined : connectionAction}
+        />
       </div>
 
       {/* Channel picker (shown when connected) */}
       {slackConfigured && (
         <div className="pt-1 space-y-3">
-          {/* Active channel status — shown prominently when a channel is configured */}
           {channelId ? (
-            <div className={`flex items-center gap-2 rounded-lg px-3 py-2 ${CHIP_TONE.okSubtle}`}>
-              <span className="shrink-0 text-sm" aria-hidden="true">✓</span>
-              <div className="min-w-0">
-                <p className="text-xs font-medium leading-tight">Notifications active</p>
-                <p className="text-2xs text-fg-secondary leading-snug mt-0.5">
-                  Sending to channel <code className="font-mono bg-surface-hover rounded px-1">{channelId}</code>
-                  {' — '}use "Send test" above to verify.
-                </p>
-              </div>
-            </div>
+            <p className="text-xs text-fg-secondary">
+              Posts to{' '}
+              {channelName ? (
+                <strong className="font-medium text-fg" title={`Channel ID ${channelId}`}>
+                  {channelPrivate ? '🔒 ' : '#'}
+                  {channelName}
+                </strong>
+              ) : loadingChannels ? (
+                <span className="text-fg-muted">your saved channel…</span>
+              ) : (
+                <span title={`Channel ID ${channelId}`}>
+                  a channel Mushi can&apos;t list (private, or the bot isn&apos;t in it){' '}
+                  <code className="font-mono text-2xs text-fg-faint">{channelId}</code>
+                </span>
+              )}
+            </p>
           ) : null}
 
           <div>
@@ -367,14 +479,16 @@ export function SlackIntegrationCard({ projectId, slackConfigured, teamName, lat
               className="font-mono text-xs"
               value={webhookUrl}
               onChange={(e) => setWebhookUrl(e.target.value)}
+              error={webhookError ?? undefined}
             />
           </div>
           <Btn
             type="button"
             variant="ghost"
             size="sm"
-            disabled={!webhookUrl}
-            onClick={handleSaveWebhook}
+            disabled={!webhookUrl.trim() || Boolean(webhookError)}
+            loading={savingWebhook}
+            onClick={() => void handleSaveWebhook()}
             className="shrink-0"
           >
             Save

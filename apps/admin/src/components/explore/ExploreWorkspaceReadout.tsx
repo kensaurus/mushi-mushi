@@ -3,18 +3,18 @@
  * PURPOSE: Lightweight atlas readout — codebase API endpoints for index scope panel.
  */
 
-import { Section } from '../ui'
 import { DetailRows, type DetailRowItem } from '../ui/fields'
-import { EndpointCodeRow, ReadoutSection } from '../readout'
+import { EndpointCodeRow, ReadoutSection, ReadoutPanel } from '../readout'
 import { RESOLVED_EXTERNAL_API_URL } from '../../lib/env'
 import { IconGlobe, IconHealth } from '../icons'
 
 export interface ExploreWorkspaceReadoutProps {
   projectId: string
-  scopePaths?: string[]
+  /** Saved scope; null = not loaded yet (never shown as "Full repo"). */
+  scopePaths: string[] | null
 }
 
-export function ExploreWorkspaceReadout({ projectId, scopePaths = [] }: ExploreWorkspaceReadoutProps) {
+export function ExploreWorkspaceReadout({ projectId, scopePaths }: ExploreWorkspaceReadoutProps) {
   const settingsUrl = `${RESOLVED_EXTERNAL_API_URL}/v1/admin/projects/${projectId}/codebase/settings`
   const analyzeUrl = `${RESOLVED_EXTERNAL_API_URL}/v1/admin/projects/${projectId}/codebase/analyze`
 
@@ -28,13 +28,18 @@ export function ExploreWorkspaceReadout({ projectId, scopePaths = [] }: ExploreW
     },
     {
       label: 'Index scope paths',
-      value: scopePaths.length > 0 ? scopePaths.join(', ') : 'Full repo (default)',
+      value:
+        scopePaths == null
+          ? 'Not loaded yet'
+          : scopePaths.length > 0
+            ? scopePaths.join(', ')
+            : 'Full repo (default)',
       wrap: true,
     },
   ]
 
   return (
-    <Section title="Atlas readout">
+    <ReadoutPanel title="Atlas readout">
       <p className="mb-4 text-xs leading-relaxed text-fg-muted">
         Codebase index API paths for this project — use when wiring MCP or debugging stale graph data.
       </p>
@@ -49,6 +54,6 @@ export function ExploreWorkspaceReadout({ projectId, scopePaths = [] }: ExploreW
           <DetailRows items={rows} dense />
         </ReadoutSection>
       </div>
-    </Section>
+    </ReadoutPanel>
   )
 }

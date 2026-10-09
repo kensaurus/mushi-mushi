@@ -3,7 +3,6 @@
  * PURPOSE: Setup wizard health — next step, SDK mismatch, pipeline proof.
  */
 
-import { Link } from 'react-router-dom'
 import { Btn } from '../ui'
 import { StatusBannerShell } from '../StatusBannerShell'
 import type { OnboardingStats, OnboardingTabId } from './types'
@@ -38,9 +37,7 @@ export function OnboardingStatusBanner({
         }
         action={
           stats.nextStepTo ? (
-            <Link to={stats.nextStepTo}>
-              <Btn size="sm" variant="ghost">{plainLanguage ? 'Name your app' : 'Open create form'}</Btn>
-            </Link>
+            <Btn to={stats.nextStepTo} size="sm" variant="ghost">{plainLanguage ? 'Name your app' : 'Open create form'}</Btn>
           ) : onTab ? (
             <Btn size="sm" variant="ghost" onClick={() => onTab('steps')}>
               {plainLanguage ? 'Name your app' : 'Open create form'}
@@ -62,9 +59,8 @@ export function OnboardingStatusBanner({
             : `${stats.reportCount} report${stats.reportCount === 1 ? '' : 's'} ingested${stats.fixCount > 0 ? ` · ${stats.fixCount} fix${stats.fixCount === 1 ? '' : 'es'} dispatched` : ''} — SDK tab stays handy for new environments.`
         }
         action={
-          <Link to="/reports">
-            <Btn size="sm" variant="ghost">{plainLanguage ? 'See bugs' : 'Open dashboard'}</Btn>
-          </Link>
+          // The label says where it goes: Reports (QA bug 263).
+          <Btn to="/reports" size="sm" variant="ghost">{plainLanguage ? 'See bugs' : 'Open reports'}</Btn>
         }
       />
     )
@@ -83,9 +79,7 @@ export function OnboardingStatusBanner({
         }
         action={
           stats.nextStepTo ? (
-            <Link to={stats.nextStepTo}>
-              <Btn size="sm" variant="ghost">{plainLanguage ? 'Fix widget URL' : 'Fix SDK URL'}</Btn>
-            </Link>
+            <Btn to={stats.nextStepTo} size="sm" variant="ghost">{plainLanguage ? 'Fix widget URL' : 'Fix SDK URL'}</Btn>
           ) : onTab ? (
             <Btn size="sm" variant="ghost" onClick={() => onTab('sdk')}>
               {plainLanguage ? 'Fix widget URL' : 'Fix SDK URL'}
@@ -112,9 +106,7 @@ export function OnboardingStatusBanner({
               {plainLanguage ? 'Send test bug' : 'Send test report'}
             </Btn>
           ) : stats.nextStepTo ? (
-            <Link to={stats.nextStepTo}>
-              <Btn size="sm" variant="ghost">{plainLanguage ? 'Test connection' : 'Verify connection'}</Btn>
-            </Link>
+            <Btn to={stats.nextStepTo} size="sm" variant="ghost">{plainLanguage ? 'Test connection' : 'Verify connection'}</Btn>
           ) : onTab ? (
             <Btn size="sm" variant="ghost" onClick={() => onTab('verify')}>
               {plainLanguage ? 'Test connection' : 'Verify connection'}
@@ -137,9 +129,7 @@ export function OnboardingStatusBanner({
         }
         action={
           stats.nextStepTo ? (
-            <Link to={stats.nextStepTo}>
-              <Btn size="sm" variant="ghost">{plainLanguage ? 'Get snippet' : 'View SDK snippet'}</Btn>
-            </Link>
+            <Btn to={stats.nextStepTo} size="sm" variant="ghost">{plainLanguage ? 'Get snippet' : 'View SDK snippet'}</Btn>
           ) : onTab ? (
             <Btn size="sm" variant="ghost" onClick={() => onTab('sdk')}>
               {plainLanguage ? 'Get snippet' : 'View SDK snippet'}
@@ -165,9 +155,7 @@ export function OnboardingStatusBanner({
       }
       action={
         stats.nextStepTo ? (
-          <Link to={stats.nextStepTo}>
-            <Btn size="sm" variant="ghost">{plainLanguage ? 'Continue' : 'Continue setup'}</Btn>
-          </Link>
+          <Btn to={stats.nextStepTo} size="sm" variant="ghost">{plainLanguage ? 'Continue' : 'Continue setup'}</Btn>
         ) : onTab ? (
           <Btn size="sm" variant="ghost" onClick={() => onTab('steps')}>
             {plainLanguage ? 'Continue' : 'Continue setup'}

@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/migrations/instabug-to-mushi
 
 ---
 title: 'Instabug (Luciq) → Mushi'
+description: Replace Instabug (Luciq) with Mushi for in-app bug reporting — config mapping, shake-to-report parity, a beta validation pass, and a checklist.
 ---
 
 # Instabug (Luciq) → Mushi
@@ -46,14 +47,14 @@ title: 'Instabug (Luciq) → Mushi'
 
 ```ts
 // BEFORE — Instabug Web
-
+import * as Instabug from 'instabug'
 Instabug.start('YOUR_TOKEN', { invocationEvents: ['shake', 'floatingButton'] })
 Instabug.identifyUser('user@example.com', 'Jane Doe')
 ```
 
 ```ts
 // AFTER — Mushi
-
+import { Mushi } from '@mushi-mushi/web'
 Mushi.init({
   projectId: 'YOUR_PROJECT_ID',
   apiKey:    'YOUR_PUBLIC_KEY',
@@ -66,7 +67,7 @@ Mushi.setUser({ id: 'user-42', email: 'user@example.com', name: 'Jane Doe' })
 
 ```ts
 // BEFORE — Luciq React Native
-
+import Luciq, { LogLevel } from 'luciq-reactnative-sdk'
 Luciq.init({
   token: 'YOUR_TOKEN',
   invocationEvents: [Luciq.invocationEvent.shake],
@@ -77,16 +78,22 @@ Luciq.identifyUser('user@example.com', 'Jane Doe', 'user-42')
 
 ```tsx
 // AFTER — Mushi React Native
+import { MushiProvider } from '@mushi-mushi/react-native'
 
+export default function App() {
   return (
-    
-      
-    
+    <MushiProvider
+      projectId="YOUR_PROJECT_ID"
+      apiKey="YOUR_PUBLIC_KEY"
+      config={{ widget: { trigger: 'shake' } }}
+    >
+      <RootNavigator />
+    </MushiProvider>
   )
 }
 
 // Inside any screen:
-
+import { useMushi } from '@mushi-mushi/react-native'
 function ProfileScreen() {
   const mushi = useMushi()
   useEffect(() => {
@@ -119,7 +126,7 @@ npm install @mushi-mushi/capacitor && npx cap sync`} },
 # (Whichever ones you had)
 # For React Native, also: cd ios && pod deintegrate && pod install`} },
     { id: 'rotate-token', label: 'Revoke the Instabug/Luciq token in their dashboard', content: <>Don't leave an unused production token live; revoke it once dual-ship is over.</> },
-  ]}
+
 />
 
 ## Feature parity at a glance

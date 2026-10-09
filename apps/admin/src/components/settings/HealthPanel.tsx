@@ -1,18 +1,25 @@
 /**
  * FILE: apps/admin/src/components/settings/HealthPanel.tsx
- * PURPOSE: Live connection health, SDK endpoint reference, and a one-click
- *          pipeline smoke test that submits a synthetic report to verify the
- *          ingest path works end-to-end.
+ * PURPOSE: Settings → SDK & connection (the debug-logging list under it is
+ *          DevToolsPanel). Rows:
+ *            Send a test bug        the whole path, end to end
+ *            Connection to Mushi    can this browser reach the backend
+ *            Where your data lives  Mushi Cloud or your own Supabase
+ *            Install the widget     per-framework install snippet
+ *            API address            the URL your SDK sends reports to
  */
 
 import { useState } from 'react'
-import { apiFetch } from '../../lib/supabase'
-import { Section, Btn, ResultChip, type ResultChipTone } from '../ui'
+import { useSendTestReport } from '../../lib/useSendTestReport'
+import { Btn, CopyButton } from '../ui'
+import { IconBolt, IconGlobe, IconHealth, IconStorage, IconTerminal } from '../icons'
 import { RESOLVED_API_URL } from '../../lib/env'
+import { relativeTime } from '../../lib/setupGuideSteps'
+import { usePersistentState } from '../../lib/usePersistentState'
 import { SdkInstallCard } from '../SdkInstallCard'
-import { SettingsPanelLayout } from './SettingsPanelLayout'
-import { ContainedBlock } from '../report-detail/ReportSurface'
-import { BackendModePanel } from './BackendModePanel'
+import { ConnectionStatus as BackendDiagnostics } from '../ConnectionStatus'
+import { BackendModePanel, currentBackendLabel } from './BackendModePanel'
+import { SettingsList, SettingsRow, type RowStatusValue } from './SettingsRow'
 
 interface HealthPanelProps {
   projectId: string
@@ -21,93 +28,107 @@ interface HealthPanelProps {
 }
 
 export function HealthPanel({ projectId, projectName, projectSlug }: HealthPanelProps) {
-  const project = { id: projectId, name: projectName ?? projectId }
+  const project = { id: projectId, name: projectName ?? 'this project' }
+  const [showChecks, setShowChecks] = usePersistentState('settings:health:checks-open', false, {
+    projectId,
+    validate: (v): v is boolean => typeof v === 'boolean',
+  })
+  const [showBackend, setShowBackend] = usePersistentState('settings:health:backend-open', false, {
+    projectId,
+    validate: (v): v is boolean => typeof v === 'boolean',
+  })
 
   return (
-    <SettingsPanelLayout
-      fullWidth={<BackendModePanel />}
-    >
-      <Section title="SDK Configuration Reference">
-        <ContainedBlock tone="muted" className="mb-2">
-          <p className="text-2xs leading-relaxed text-fg-muted">Use these values when configuring the Mushi SDK in your app:</p>
-        </ContainedBlock>
-        <div className="space-y-1.5">
-          <div>
-            <span className="text-xs text-fg-muted font-medium">API Endpoint</span>
-            <code className="block text-xs font-mono text-fg-secondary bg-surface-raised px-2 py-1 rounded-sm mt-0.5 select-all break-all">
-              {RESOLVED_API_URL}
-            </code>
-          </div>
-        </div>
-      </Section>
+    <>
+      <SettingsList
+        title="Check the connection"
+        description={`Check that bug reports from ${project.name} reach Mushi and come out the other end.`}
+      >
+        <QuickTestRow project={project} />
 
-      <QuickTestSection project={project} />
+        <SettingsRow
+          icon={<IconHealth size={16} />}
+          title="Connection to Mushi"
+          purpose="Checks that this browser can reach the database, sign-in and report services."
+          status={<BackendDiagnostics compact />}
+          action={
+            <Btn size="sm" variant="ghost" aria-expanded={showChecks} onClick={() => setShowChecks(!showChecks)}>
+              {showChecks ? 'Hide each check' : 'Show each check'}
+            </Btn>
+          }
+        >
+          {showChecks ? <BackendDiagnostics /> : null}
+        </SettingsRow>
 
-      <Section title="Install the SDK" className="lg:col-span-2">
-        <ContainedBlock tone="muted" className="mb-2">
-          <p className="text-2xs leading-relaxed text-fg-muted">
-            Per-framework <code className="font-mono">npm install</code> command and init snippet,
-            pre-filled with this project&apos;s id.
-          </p>
-        </ContainedBlock>
-        <SdkInstallCard projectId={project.id} projectSlug={projectSlug} />
-      </Section>
-    </SettingsPanelLayout>
+        <SettingsRow
+          icon={<IconStorage size={16} />}
+          title="Where your data lives"
+          purpose={`Now: ${currentBackendLabel()}. Change it only if you run your own Mushi backend.`}
+          action={
+            <Btn size="sm" variant="ghost" aria-expanded={showBackend} onClick={() => setShowBackend(!showBackend)}>
+              {showBackend ? 'Cancel' : 'Change'}
+            </Btn>
+          }
+        >
+          {showBackend ? <BackendModePanel /> : null}
+        </SettingsRow>
+      </SettingsList>
+
+      <SettingsList title="Install the bug widget" description="Add the Mushi SDK to your app so people can report bugs.">
+        <SettingsRow
+          icon={<IconTerminal size={16} />}
+          title="Install command and setup code"
+          purpose="Pick your framework and copy the two snippets. They already contain this project's id."
+        >
+          <SdkInstallCard projectId={project.id} projectSlug={projectSlug} embedded />
+        </SettingsRow>
+        <SettingsRow
+          icon={<IconGlobe size={16} />}
+          title="API address"
+          purpose="Where the SDK sends reports. Only needed if you configure the SDK by hand."
+          status={<code className="break-all font-mono text-sm text-fg-secondary">{RESOLVED_API_URL}</code>}
+          action={<CopyButton value={RESOLVED_API_URL} label="Copy address" />}
+        />
+      </SettingsList>
+    </>
   )
 }
 
-interface QuickTestSectionProps {
-  project: { id: string; name: string }
-}
-
-function QuickTestSection({ project }: QuickTestSectionProps) {
-  const [status, setStatus] = useState<'idle' | 'running' | 'pass' | 'fail'>('idle')
-  const [detail, setDetail] = useState('')
-  const [lastRunAt, setLastRunAt] = useState<string | null>(null)
+function QuickTestRow({ project }: { project: { id: string; name: string } }) {
+  const sendTestReport = useSendTestReport()
+  const [running, setRunning] = useState(false)
+  const [result, setResult] = useState<{ ok: boolean; detail: string; at: string } | null>(null)
 
   async function runTest() {
-    setStatus('running')
-    setDetail('')
-    const res = await apiFetch<{ reportId: string; projectName: string }>(
-      `/v1/admin/projects/${project.id}/test-report`,
-      { method: 'POST' },
+    setRunning(true)
+    const res = await sendTestReport(project.id)
+    setRunning(false)
+    setResult(
+      res.ok
+        ? { ok: true, detail: `A test report reached ${res.projectName}.`, at: new Date().toISOString() }
+        : { ok: false, detail: res.message, at: new Date().toISOString() },
     )
-    if (res.ok && res.data) {
-      setStatus('pass')
-      setDetail(`Report ${res.data.reportId} submitted to ${res.data.projectName}`)
-    } else {
-      setStatus('fail')
-      setDetail(res.error?.message ?? 'Submission failed')
-    }
-    setLastRunAt(new Date().toISOString())
   }
 
-  const chipTone: ResultChipTone =
-    status === 'running' ? 'running' : status === 'pass' ? 'success' : status === 'fail' ? 'error' : 'idle'
+  const status: RowStatusValue = running
+    ? { state: 'checking', label: 'Sending…', detail: 'Sending a test report.' }
+    : !result
+      ? { state: 'checking', detail: 'Send one to see the whole path work.' }
+      : result.ok
+        ? { state: 'working', detail: `${result.detail} Checked ${relativeTime(result.at) ?? 'just now'}.` }
+        : { state: 'attention', detail: result.detail }
 
   return (
-    <Section title="Pipeline Quick Test">
-      <ContainedBlock tone="muted" className="mb-2">
-        <p className="text-2xs leading-relaxed text-fg-muted">
-          Submit a test report to verify the ingest pipeline works end-to-end.
-          Tests the project <span className="font-mono text-fg-secondary">{project.name}</span>.
-        </p>
-      </ContainedBlock>
-      <div className="flex flex-wrap items-center gap-2">
-        <Btn
-          size="sm"
-          variant="primary"
-          onClick={runTest}
-          loading={status === 'running'}
-        >
-          Send test report
+    <SettingsRow
+      icon={<IconBolt size={16} />}
+      title="Send a test bug"
+      purpose="Sends a test report through the same path your users' reports take, including triage and your alerts."
+      status={status}
+      action={
+        <Btn size="sm" variant="primary" onClick={() => void runTest()} loading={running}>
+          {result ? 'Send another' : 'Send test bug'}
         </Btn>
-        {status !== 'idle' && (
-          <ResultChip tone={chipTone} at={lastRunAt}>
-            {detail || (status === 'running' ? 'Sending…' : 'Done')}
-          </ResultChip>
-        )}
-      </div>
-    </Section>
+      }
+    />
   )
 }

@@ -79,6 +79,23 @@ function TopComponentsCard({ topComponents }: { topComponents: Props['topCompone
   )
 }
 
+/** Probe kinds as people name them; an unknown kind reads as words, not snake_case. */
+const INTEGRATION_NAMES: Record<string, string> = {
+  claude_code_agent: 'Claude Code agent',
+  cursor_cloud: 'Cursor Cloud',
+  reward_webhook: 'Reward webhook',
+  openai: 'OpenAI',
+  openrouter: 'OpenRouter',
+  github: 'GitHub',
+}
+
+function integrationName(kind: string): string {
+  const known = INTEGRATION_NAMES[kind]
+  if (known) return known
+  const words = kind.replace(/_/g, ' ')
+  return words.charAt(0).toUpperCase() + words.slice(1)
+}
+
 /** P3 — colour-code the uptime figure so "0% up" screams without the user
  *  reading it; "Unknown" gets a distinct muted treatment separate from "Healthy". */
 function uptimeTone(uptime: number | null): string {
@@ -112,7 +129,7 @@ function IntegrationsCard({ integrations }: { integrations: IntegrationStatus[] 
               to="/integrations/config"
               className="flex items-center justify-between gap-2 py-1.5 first:pt-0 last:pb-0 motion-safe:transition-opacity hover:opacity-80"
             >
-              <span className="text-xs capitalize text-fg-secondary">{it.kind}</span>
+              <span className="text-xs text-fg-secondary">{integrationName(it.kind)}</span>
               <div className="flex items-center gap-2">
                 {it.uptime != null && (
                   <span className={`font-mono text-3xs ${uptimeTone(it.uptime)}`}>

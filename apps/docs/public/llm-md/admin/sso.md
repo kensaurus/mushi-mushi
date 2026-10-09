@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/sso
 
 ---
 title: SSO
+description: Set up SAML 2.0 or OIDC single sign-on for your Mushi organization so teammates log in with your company's identity provider.
 ---
 
 # SSO — Single Sign-On

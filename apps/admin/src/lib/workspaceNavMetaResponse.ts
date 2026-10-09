@@ -4,9 +4,36 @@
 
 import type { NavStatSlices } from './extendedNavMeta'
 
+interface NavMetaCounts {
+  fixesInFlight: number | null
+  fixesFailed: number | null
+  /** T1 fix truth: subset of fixesFailed a retry can clear now. */
+  fixesRetryable: number | null
+  prsOpen: number | null
+  /** Critical/high reports still waiting on a decision (inbox/stats). */
+  urgentOpenReports: number | null
+  untriagedBacklog: number | null
+  notificationsUnread: number | null
+  queueFailed: number | null
+  flaggedDevices: number | null
+  feedbackWithReply: number | null
+  judgeDisagreements: number | null
+  inboxOpenActions: number | null
+  regressedActions: number | null
+  superAdminSignups7d: number | null
+  superAdminChurn30d: number | null
+}
+
 export interface WorkspaceNavMetaResponse {
   generatedAt: string
   slices: NavStatSlices
+  /**
+   * Per-item sidebar counters (present when the request sent include=counts).
+   * Each value is null when its route failed — show no badge, never a zero.
+   */
+  counts?: NavMetaCounts | null
+  /** Stats routes that failed in this round trip — their slice is null for a reason, not "zero". */
+  failedSlices?: Array<{ path: string; error: string }>
   projects: {
     projectCount: number
     neverIngestedCount: number

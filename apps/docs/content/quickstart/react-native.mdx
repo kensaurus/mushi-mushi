@@ -1,5 +1,6 @@
 ---
 title: React Native quickstart
+description: Add shake-to-report bug capture to a React Native or Expo app with @mushi-mushi/react-native — install, mount the provider, and verify the first report.
 ---
 
 import { Callout } from 'nextra/components'
@@ -68,6 +69,46 @@ set `trigger: 'manual'`), opens the bottom-sheet report form on tap or
 shake, and attaches the last 100 console logs and last 50 network requests
 to every report.
 
+### Optional native modules
+
+Three packages are optional. The SDK picks each one up when it is installed:
+
+| Package | What it adds |
+| --- | --- |
+| `expo-sensors` | Shake to report |
+| `react-native-view-shot` | A screenshot attached to the report |
+| `@react-native-community/netinfo` | Queued reports resend as soon as the network is back |
+
+The SDK loads them with a plain `require()` inside `try/catch`, which Metro
+treats as optional (`transformer.allowOptionalDependencies`, on in Expo and
+React Native's default Metro config). If your Metro config turns that off, or
+you would rather the SDK never load anything itself, pass the modules in:
+
+```tsx filename="App.tsx"
+import type { ReactNode } from 'react'
+import { MushiProvider } from '@mushi-mushi/react-native'
+import NetInfo from '@react-native-community/netinfo'
+import * as ViewShot from 'react-native-view-shot'
+import * as ExpoSensors from 'expo-sensors'
+
+export function AppWithMushi({ children }: { children: ReactNode }) {
+  return (
+    <MushiProvider
+      projectId="YOUR_PROJECT_ID"
+      apiKey="YOUR_PUBLIC_API_KEY"
+      netInfo={NetInfo}
+      viewShot={ViewShot}
+      expoSensors={ExpoSensors}
+    >
+      {children}
+    </MushiProvider>
+  )
+}
+```
+
+A module you pass in always wins. Versions 0.21–0.23 needed a postinstall
+patch for these (`__require` errors in Metro); releases with this fix need none.
+
 ## 3. Verify
 
 Run your app on a simulator or a device, tap the bug button, type a
@@ -76,8 +117,8 @@ within a couple of seconds, tagged `sdk:react-native@<version>`.
 
 If nothing arrives:
 
-- Confirm `apiKey` is the **public** ingest key (`mushi_pk_...`) — not the
-  Supabase service-role key.
+- Confirm `apiKey` is a Mushi project key (it starts with `mushi_`, like every
+  Mushi key) with the `report:write` scope — not the Supabase service-role key.
 - Confirm `<MushiProvider>` is at the **root** of the component tree, above
   any `NavigationContainer`.
 - iOS release builds must use HTTPS for the Mushi endpoint (the default).

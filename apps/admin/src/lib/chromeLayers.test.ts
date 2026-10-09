@@ -31,7 +31,16 @@ describe('chromeLayers', () => {
 
   it('hides DAV coachmark on dashboard', () => {
     expect(shouldShowDavCoachmark('/dashboard')).toBe(false)
-    expect(shouldShowDavCoachmark('/projects')).toBe(true)
     expect(shouldShowDavCoachmark('/inbox')).toBe(true)
+  })
+
+  it('hides DAV coachmark where no pipeline ribbon renders', () => {
+    // These routes own a hero but carry no workspace pipeline strip, so the
+    // "Two strips, two jobs" copy would describe something that isn't there.
+    expect(shouldShowDavCoachmark('/onboarding')).toBe(false)
+    expect(shouldShowDavCoachmark('/feedback')).toBe(false)
+    expect(shouldShowDavCoachmark('/feature-board')).toBe(false)
+    expect(shouldShowDavCoachmark('/projects')).toBe(false)
+    expect(shouldShowDavCoachmark('/inbox', false)).toBe(false)
   })
 })

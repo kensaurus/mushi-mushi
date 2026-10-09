@@ -30,25 +30,27 @@ export interface ParsedArgs {
 
 /**
  * The flags block shared by both shims' help text. Ends with the Node
- * requirement line and the docs footer. Each shim prepends its own
- * bin-specific header and usage section.
+ * requirement line and the docs footer — the shims must not repeat that
+ * footer. Each shim prepends its own bin-specific header and usage section.
  */
 export const FLAGS_HELP = `Flags (forwarded to the wizard):
   --project-id <uuid>           skip the project ID prompt (UUID from the Projects page)
-  --api-key <key>               skip the API key prompt (CI only — leaks into \`ps\`)
+  --api-key <key>               skip the API key prompt with an ingest-only key (CI only — leaks into \`ps\`)
   --framework <id>              force a framework (${FRAMEWORK_IDS.join(', ')})
   --skip-install                print the install command instead of running it
   --skip-test-report            don't offer to send a test report at the end
   --audit                       health-check an existing install (doctor checks) instead of re-running the wizard
   --cwd <path>                  run in a different directory
   --endpoint <url>              override the Mushi API endpoint (self-hosted)
-  -y, --yes                     accept the detected framework without prompting
+  -y, --yes                     take the defaults: detected framework, saved credentials, browser sign-in
+                                (required in non-interactive shells such as an AI agent's terminal, where
+                                the sign-in URL is printed and the project is picked by the app's name)
   -v, --version                 print the version and exit
   -h, --help                    show this help
 
 Requires Node.js ${MIN_NODE_MAJOR} or newer.
 
-Docs:    https://github.com/kensaurus/mushi-mushi
+Docs:    https://kensaur.us/mushi-mushi/docs/
 Console: https://kensaur.us/mushi-mushi/`
 
 /**

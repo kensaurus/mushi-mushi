@@ -1,0 +1,33 @@
+# Team
+
+Source: https://kensaur.us/mushi-mushi/docs/admin/team
+
+---
+title: Team
+description: The Team page in the Mushi console brings members, billing, AI spend, audit log, single sign-on, compliance and storage together as views of one page.
+---
+
+# Team
+
+**Route:** `/team`
+
+> **Scenario:** You want to invite someone, check the bill, see what AI calls cost,
+> or change how your team signs in — without hunting through the sidebar.
+
+Everything about your team is one page. Pick a view at the top; the link keeps it
+(`/team?view=billing`), so you can bookmark or share it.
+
+| View | What it is for | Where it used to be |
+|------|----------------|---------------------|
+| **Members** | Invite teammates and set roles. Teams plan. | `/organization/members` |
+| **Billing** | Plan, invoices and the spend cap. | `/billing` |
+| **AI spend** | What diagnoses and fixes cost, by project and model. | `/cost` |
+| **Audit log** | Who changed what, when. Audit-log plan. | `/audit` |
+| **Single sign-on** | SAML / OIDC for your team. SSO plan. | `/sso` |
+| **Compliance** | SOC 2 evidence, data requests. Compliance plan. | `/compliance` |
+| **Storage** | Where screenshots and attachments are kept. | `/storage` |
+
+Views your plan does not include are hidden. Old links still work: each former route
+opens its view here with the rest of the link kept.
+
+Project settings (keys, SDK, integrations for one app) stay on [Settings](/admin/settings).

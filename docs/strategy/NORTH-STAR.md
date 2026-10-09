@@ -60,5 +60,13 @@ Sentry enrichment is the upgrade reveal, never the hero.
 
 ## Phase-1 GTM metric
 
-**Time-to-first-diagnosis after install** — target under ~2 minutes before
-scaling reach.
+**North-star (2026-09-20): activated external projects per week** — a project
+outside the founder's org receives its first SDK-originated report and the
+owner sees the diagnosis. Measured by `company_funnel_weekly` → `/growth` in
+the console, split by `signup_source`. Baseline on 2026-09-20: 0 (0 of 4
+external projects ever). Plan: `docs/plan-gtm.md`; weekly rows:
+`docs/marketing/scorecard.md`.
+
+**Input metric: time-to-first-diagnosis after install** — target under
+~2 minutes (top-quartile time-to-value is < 5 minutes; over 24 h collapses
+activation) before scaling reach.

@@ -1,7 +1,7 @@
 {
   "name": "mushi-debugger",
   "description": "Triage and fix Mushi Mushi bug reports from inside Claude Code — reports, plain-English diagnosis, paste-ready fix context, optional fix dispatch",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": {
     "name": "kensaurus",
     "url": "https://github.com/kensaurus/mushi-mushi"

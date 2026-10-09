@@ -152,7 +152,7 @@ test.describe('Cursor Cloud Agent — Mocked tier', () => {
 
   test('1. migration — project_settings accepts cursor_cloud autofix_agent', async ({ request }) => {
     // Use Supabase REST to verify the constraint was applied.
-    const res = await request.post(
+    await request.post(
       `${SUPABASE_URL}/rest/v1/rpc/check_cursor_constraint`,
       {
         headers: {

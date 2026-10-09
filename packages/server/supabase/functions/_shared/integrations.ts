@@ -3,6 +3,7 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { log } from './logger.ts'
 import { attachTraceparent } from './trace.ts'
 import { linearGql } from './linear.ts'
+import { resolveRoutingSecrets } from './routing-secrets.ts'
 
 const intLog = log.child('integrations')
 
@@ -21,14 +22,20 @@ interface ExternalIssue {
   provider: string
 }
 
-export async function createExternalIssue(
-  db: SupabaseClient,
-  projectId: string,
-  report: IntegrationReport,
-  /** Optional W3C traceparent to propagate into BYOK API calls so the
-   *  issue creation shows up in the same distributed trace. */
-  traceparent?: string,
-): Promise<ExternalIssue[]> {
+interface SyncTargets {
+  integrations: Array<{ id: string; integration_type: string; config: unknown }>
+  /** Linear connected from the console (OAuth or pasted key) with no
+   *  legacy project_integrations row. */
+  vaultLinearEnabled: boolean
+}
+
+/**
+ * Every destination "Sync to destinations" pushes a report to: active
+ * project_integrations rows plus vault-backed Linear. One loader for the sync
+ * itself and for the count the console shows on the button, so the button
+ * never reads "Sync to 0 destinations" while the sync would reach Linear.
+ */
+async function loadSyncTargets(db: SupabaseClient, projectId: string): Promise<SyncTargets> {
   const { data: integrations } = await db
     .from('project_integrations')
     .select('id, integration_type, config')
@@ -39,9 +46,6 @@ export async function createExternalIssue(
   // so we don't create a duplicate when Linear is also in vault-backed settings.
   const existingRoutingTypes = new Set((integrations ?? []).map((i) => i.integration_type))
 
-  // Check for vault-backed Linear settings — add a synthetic "integration" if
-  // the user connected via OAuth or API key paste in the console (platform settings)
-  // but has no legacy project_integrations row.
   let vaultLinearEnabled = false
   if (!existingRoutingTypes.has('linear')) {
     const { data: ps } = await db
@@ -51,6 +55,25 @@ export async function createExternalIssue(
       .maybeSingle()
     vaultLinearEnabled = !!(ps?.linear_access_token_ref || ps?.linear_api_key_ref)
   }
+  return { integrations: integrations ?? [], vaultLinearEnabled }
+}
+
+/** Provider ids a sync would push this project's reports to, e.g. ['jira', 'linear']. */
+export async function listSyncDestinations(db: SupabaseClient, projectId: string): Promise<string[]> {
+  const { integrations, vaultLinearEnabled } = await loadSyncTargets(db, projectId)
+  const types = integrations.map((i) => i.integration_type)
+  return vaultLinearEnabled ? [...types, 'linear'] : types
+}
+
+export async function createExternalIssue(
+  db: SupabaseClient,
+  projectId: string,
+  report: IntegrationReport,
+  /** Optional W3C traceparent to propagate into BYOK API calls so the
+   *  issue creation shows up in the same distributed trace. */
+  traceparent?: string,
+): Promise<ExternalIssue[]> {
+  const { integrations, vaultLinearEnabled } = await loadSyncTargets(db, projectId)
 
   const tasks = [
     ...(integrations ?? []).map(async (integration) => {
@@ -85,19 +108,26 @@ export async function resolveExternalIssue(
   projectId: string,
   db: SupabaseClient,
 ): Promise<void> {
+  // Scoped to projectId: the provider configs below come from that project,
+  // so a report from another project must never be resolved with them.
   const { data: openIssues, error } = await db
     .from('report_external_issues')
     .select('id, system, external_id')
     .eq('report_id', reportId)
+    .eq('project_id', projectId)
     .is('resolved_at', null)
 
   if (error) {
     intLog.error('resolveExternalIssue: query failed', { reportId, err: String(error) })
     return
   }
-  if (!openIssues || openIssues.length === 0) return
+  // Sentry links by numeric issue id came from Sentry itself and are resolved
+  // by sentry-resolve-back.ts with the project's Sentry token; only the legacy
+  // outbound-plugin links are this function's job.
+  const legacy = (openIssues ?? []).filter((r: { system: string; external_id: string }) => !(r.system === 'sentry' && /^\d+$/.test(r.external_id)))
+  if (legacy.length === 0) return
 
-  const systems = [...new Set(openIssues.map((r: { system: string }) => r.system))]
+  const systems = [...new Set(legacy.map((r: { system: string }) => r.system))]
 
   const { data: integrations } = await db
     .from('project_integrations')
@@ -108,13 +138,14 @@ export async function resolveExternalIssue(
 
   const configBySystem = new Map<string, Record<string, unknown>>()
   for (const intg of integrations ?? []) {
+    // Tokens live in Vault as `vault://` refs; the provider needs the value.
     configBySystem.set(
       intg.integration_type as string,
-      intg.config as Record<string, unknown>,
+      await resolveRoutingSecrets(db, intg.config as Record<string, unknown>),
     )
   }
 
-  for (const issue of openIssues) {
+  for (const issue of legacy) {
     const config = configBySystem.get(issue.system as string)
     if (!config) {
       intLog.warn('resolveExternalIssue: no active integration config', {
@@ -339,6 +370,8 @@ async function dispatchToProvider(
   db: SupabaseClient,
   projectId: string,
 ): Promise<ExternalIssue | null> {
+  // Tokens live in Vault as `vault://` refs; the provider needs the value.
+  config = await resolveRoutingSecrets(db, config)
   switch (type) {
     case 'jira': return createJiraIssue(config, report, traceparent)
     case 'linear': return createLinearIssue(db, projectId, config, report, traceparent)

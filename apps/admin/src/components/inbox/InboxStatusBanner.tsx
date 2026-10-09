@@ -93,11 +93,12 @@ export function InboxStatusBanner({
         title={
           plainBanner
             ? `${stats.openActions} thing${stats.openActions === 1 ? ' needs' : 's need'} you`
-            : `${stats.openActions} open action${stats.openActions === 1 ? '' : 's'} — start with ${stats.topPriorityStage ?? 'Plan'}`
+            : `${stats.openActions} open action${stats.openActions === 1 ? '' : 's'} — start with: ${stats.topPriorityTitle ?? stats.topPriorityStage ?? 'Plan'}`
         }
         subtitle={
           stats.topPriorityLabel ??
-          stats.topPriorityTitle ??
+          // The advanced title already names the action; don't repeat it.
+          (plainBanner ? stats.topPriorityTitle : null) ??
           'Work the queue top to bottom — each item links to the page that clears it.'
         }
         action={
@@ -110,7 +111,7 @@ export function InboxStatusBanner({
           ) : onTab ? (
             <StatusBannerAction
               label={actions.queue ?? 'View queue'}
-              onClick={() => onTab('actions')}
+              onClick={() => onTab('overview')}
               tone="danger"
             />
           ) : null

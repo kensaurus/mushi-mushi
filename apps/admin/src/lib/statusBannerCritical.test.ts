@@ -54,4 +54,29 @@ describe('isStorageStatusBannerCritical', () => {
       } as Parameters<typeof isStorageStatusBannerCritical>[0]),
     ).toBe(true)
   })
+
+  it('shows the cluster-default prompt (that branch used to be unreachable)', () => {
+    expect(
+      isStorageStatusBannerCritical({
+        projectId: 'p1',
+        activeProjectHealthStatus: 'unknown',
+        activeProjectConfigured: false,
+        lastHealthCheckAt: null,
+        failingCount: 0,
+      } as Parameters<typeof isStorageStatusBannerCritical>[0]),
+    ).toBe(true)
+  })
+
+  it('leaves a healthy bucket to the page hero', () => {
+    expect(
+      isStorageStatusBannerCritical({
+        projectId: 'p1',
+        activeProjectHealthStatus: 'healthy',
+        activeProjectConfigured: true,
+        lastHealthCheckAt: '2026-10-01',
+        failingCount: 0,
+      } as Parameters<typeof isStorageStatusBannerCritical>[0]),
+    ).toBe(false)
+  })
 })
+

@@ -1,39 +1,54 @@
 import { describe, expect, it } from 'vitest';
-import { shouldHideSettingsSnapshot, shouldResolveQuickSettingsTab } from './settingsModeUx';
-
-describe('shouldHideSettingsSnapshot', () => {
-  it('hides for quickstart always', () => {
-    expect(
-      shouldHideSettingsSnapshot(
-        { hideSettingsSnapshot: true, isBeginner: false },
-        { topPriority: 'healthy' },
-      ),
-    ).toBe(true);
-  });
-
-  it('hides for beginner when banner is not healthy', () => {
-    expect(
-      shouldHideSettingsSnapshot(
-        { hideSettingsSnapshot: false, isBeginner: true },
-        { topPriority: 'no_anthropic' },
-      ),
-    ).toBe(true);
-  });
-
-  it('shows snapshot for beginner when healthy', () => {
-    expect(
-      shouldHideSettingsSnapshot(
-        { hideSettingsSnapshot: false, isBeginner: true },
-        { topPriority: 'healthy' },
-      ),
-    ).toBe(false);
-  });
-});
+import { resolveQuickSettingsTab, shouldResolveQuickSettingsTab } from './settingsModeUx';
+import { EMPTY_SETTINGS_STATS, type SettingsStats } from '../components/settings/types';
+import type { KeySummary } from '../components/settings/keyStatus';
 
 describe('shouldResolveQuickSettingsTab', () => {
   it('only auto-selects a posture tab when the URL has no explicit tab', () => {
     expect(shouldResolveQuickSettingsTab(null)).toBe(true);
     expect(shouldResolveQuickSettingsTab('byok')).toBe(false);
+    expect(shouldResolveQuickSettingsTab('tools')).toBe(false);
+    // An old id in a link is still an explicit choice.
     expect(shouldResolveQuickSettingsTab('firecrawl')).toBe(false);
+  });
+});
+
+// Quick mode always opened General: it read stats.topPriority, which the
+// server never sends (suspected-bugs entry 112). It now follows the banner.
+describe('resolveQuickSettingsTab', () => {
+  const ready: SettingsStats = {
+    ...EMPTY_SETTINGS_STATS,
+    projectId: 'p',
+    sdkConfigEnabled: true,
+    slackConfigured: true,
+    byokAnthropicConfigured: true,
+  };
+  const summary = (over: Partial<KeySummary>): KeySummary =>
+    ({ working: 1, attention: 0, expiring: 0, checking: 0, off: 0, total: 1, ...over });
+
+  it('opens AI keys when a key is failing (from the saved-keys list)', () => {
+    expect(resolveQuickSettingsTab(ready, summary({ attention: 1 }), true, true)).toBe('byok');
+  });
+
+  it('falls back to the server counts when the key list is unavailable', () => {
+    expect(resolveQuickSettingsTab({ ...ready, byokKeysFailing: 1 }, null, true, true)).toBe('byok');
+    expect(resolveQuickSettingsTab({ ...ready, byokKeysUntested: 2 }, null, true, true)).toBe('byok');
+  });
+
+  it('opens SDK & connection when the bug widget is off', () => {
+    expect(resolveQuickSettingsTab({ ...ready, sdkConfigEnabled: false }, summary({}), true, true)).toBe('sdk');
+  });
+
+  it('opens SDK & connection when everything is ready', () => {
+    expect(resolveQuickSettingsTab(ready, summary({}), true, true)).toBe('sdk');
+  });
+
+  it('opens General for the optional alerts step', () => {
+    expect(resolveQuickSettingsTab({ ...ready, slackConfigured: false }, summary({}), true, true)).toBe('general');
+  });
+
+  it('skips the optional own-key step on a plan without own keys', () => {
+    expect(resolveQuickSettingsTab(ready, null, false, true)).toBe('byok');
+    expect(resolveQuickSettingsTab(ready, null, false, false)).toBe('sdk');
   });
 });

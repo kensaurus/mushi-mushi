@@ -124,11 +124,11 @@ pnpm check:sdk-version-matrix  # apps/docs/content/sdks/index.mdx versions
 pnpm check:internal-doc-links  # dead /foo links in MDX
 pnpm check:onboarding-drift    # phantom MCP env vars / stale tool names / native install coords
 pnpm check:catalog-sync        # MCP catalog ↔ admin counts ↔ prose "N tools"
-pnpm check:mcp-tools-doc       # mcp-tools.generated.mdx stale check
+pnpm check:mcp-tools-doc       # sdks/mcp-tools.mdx stale check
 pnpm check:bundle-docs         # @mushi-mushi/web size-limit vs README
 pnpm check:docs-drift          # versions + public docs links
 pnpm gen:llms-txt              # regenerate apps/docs/public/llms.txt after nav changes
-pnpm gen:mcp-tools-doc         # regenerate sdks/mcp-tools.generated.mdx from catalog.ts
+pnpm gen:mcp-tools-doc         # regenerate apps/docs/content/sdks/mcp-tools.mdx from catalog.ts
 ```
 
 **Same-PR rule:** if behavior, env vars, CLI commands, MCP tools, or install
@@ -223,4 +223,6 @@ chore: bump dependencies
 
 ## Questions?
 
-Open an issue or start a discussion. We're happy to help.
+Questions, ideas and show-and-tell go in [GitHub Discussions](https://github.com/kensaurus/mushi-mushi/discussions). Bugs go in Issues.
+
+**Issue SLA:** first reply within 24 hours on weekdays (48 hours at weekends). "Looking at this" counts as a reply; the full investigation follows. Nothing is closed without a stated reason.

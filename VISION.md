@@ -48,6 +48,7 @@ it.
 | | |
 |---|---|
 | **Primary buyer** | The solo / indie **vibe coder** — builds fast with AI (Cursor, Claude Code, Lovable, Bolt), ships to real users, then loses whole afternoons when something breaks because they don't fully grasp the generated code. |
+| **The same buyer, later** | The vibe coder who now runs several apps, sites and services alone — a **portfolio operator**. Same person, same editor, same diagnosis; Mushi also checks every app they connect for holes that never throw. Never a separate hero. |
 | **Secondary** | Small teams and agencies who feel the same pain at slightly larger scale. |
 | **Explicitly NOT (for now)** | The enterprise SRE running Sentry + Datadog + Firebase who wants a fourth integration hub. We may serve them later via the Enterprise tier — but **we do not lead with them, market to them, or shape the README around them.** That audience pulled the product off its wedge once already. |
 
@@ -65,6 +66,14 @@ bug, with the fix dispatched from wherever you already are. Underneath, we are
 still the layer that makes a bug *understandable* — the mediator is where that
 layer lives. That is the word: **understandable.**
 
+**The recipe.** Mushi keeps each app's recipe — its schema, design tokens,
+routes, gates, CI, deploy targets and which env vars exist — so a diagnosis
+can point at what changed, and a fix lands as a reviewed PR that respects the
+app's own system. For someone running several apps, the recipes roll up into
+one portfolio that shows what the apps share and where they disagree. The
+recipe is optional context: every part of it is a "connect when you want"
+on-ramp, never a prerequisite.
+
 ### 1.6 The wedge against Sentry — exact, current, defensible
 
 Sentry owns "errors your code throws." We do not fight there. We sit where
@@ -72,8 +81,10 @@ Sentry is weak for *our* buyer:
 
 - Sentry's free tier caps at **5,000 errors/month**; bill-shock above it is the
   #1 complaint.
-- Sentry's AI root-cause (Seer) sits behind the **$80/mo Business plan + ~$40 per
-  active contributor** — out of reach for the solo builder.
+- Sentry's AI root-cause (Seer) is a paid add-on to the Team, Business or
+  Enterprise plan at **$40 per active contributor per month**, on top of the
+  plan (Team is $26/mo), and it is not available in self-hosted Sentry
+  (sentry.io/pricing, checked 2026-09-21).
 - Sentry's whole shape is team-and-ops. It assumes you can read the trace.
 
 **Mushi's wedge:** plain-English diagnosis + a ready-to-apply fix, editor-native,
@@ -81,9 +92,10 @@ that works **standalone with no Sentry required** — and becomes strictly bette
 when Sentry (or Crashlytics, Rollbar, Bugsnag) feeds it. The canonical answer to
 "why Mushi and not just Sentry?" — used verbatim wherever the question comes up:
 
-> **Sentry tells you what threw. Mushi ingests that — plus the bugs that never
-> throw — explains each one in plain English, and closes the loop with a fix
-> your agent can ship. One queue, one audit trail, with or without Sentry.**
+> **Sentry is built around what the code threw, with a User Feedback widget and
+> replay alongside. Mushi starts from what the user reported, ingests Sentry's
+> errors too, explains each one in plain English, and hands your agent a fix
+> prompt to start from. One queue, with or without Sentry.**
 
 Sentry error alerts route straight into the queue (`/v1/webhooks/sentry`), a
 Mushi fix resolves the linked Sentry issue, and a Sentry-side resolve closes the
@@ -118,7 +130,7 @@ routing, Helm) — that remains operator-page material.
 | Bucket | What's in it | Where it appears |
 |---|---|---|
 | **A. The Wedge** (lead with this) | Capture a bug → AI diagnoses it in plain English → ready-to-apply fix → editor-native (MCP) → optional draft PR. Standalone, no Sentry. | README hero, landing hero, npm first paragraph, the GIF, the 60-second quickstart |
-| **B. The Depth** (earns trust, shown second) | Multi-framework SDKs, dedup via knowledge graph, "where it stops" honesty table, self-host, BYOK, Sentry enrichment. | README mid-body, landing second screen, `docs/` |
+| **B. The Depth** (earns trust, shown second) | Multi-framework SDKs, dedup via knowledge graph, the app recipe (schema, tokens, routes, gates, CI, deploy, env presence) and its drift, "where it stops" honesty table, self-host, BYOK, Sentry enrichment. | README mid-body, landing second screen, `docs/` |
 | **C. The Mediator Fabric** (the on-ramps and off-ramps — shown as "works with everything you already run") | Sentry error ingest + 11 adapters, 13 plugins, Slack act-from-channel, Linear agent sessions, A2A/AG-UI, coding-agent dispatch. Enterprise plumbing (SSO/audit/retention/region, Helm) stays operator-only. | Landing "one queue" section + README integrations strip; enterprise plumbing in `docs/operators/`. |
 
 ### The naming of the wedge feature
@@ -152,6 +164,9 @@ Before building or featuring anything, ask: **"Does this help a solo vibe-coder
 understand and fix a bug faster, without leaving their editor?"**
 
 - **Yes →** it's Bucket A or B. Can lead.
+  A hole found before a user hits it is a bug fixed in zero minutes: a check
+  that prevents or explains a bug in at least one app passes. Cost and CI
+  minutes on their own still do not.
 - **No, but operators need it →** Bucket C. Build it if you want, but it goes in
   `docs/operators/`, never the hero.
 - **It only matters to enterprise buyers →** Enterprise tier, gated, never the

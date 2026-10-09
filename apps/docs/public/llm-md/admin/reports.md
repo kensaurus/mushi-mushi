@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/reports
 
 ---
 title: Reports & triage
+description: The Reports list is Mushi's bug inbox — filter by status, severity, category and component, and start with the recommended action at the top.
 ---
 
 # Reports
@@ -20,8 +21,14 @@ diagnosis + a paste-ready fix* — as a single block:
 1. **"Here's why it broke"** — a 1–3 sentence plain-English diagnosis (the
    Stage-2 `summary`) with severity, category, and a **confidence chip**
    (`NN% sure`), plus the likely component.
-2. **"Here's the fix"** — the paste-ready Cursor prompt and Open-in-Cursor
-   deeplink (the same `CursorAgentLaunch` brief exposed to MCP as `fixPrompt`).
+2. **"Fix it with your coding agent"** — **Copy fix prompt** copies one
+   self-contained prompt: what broke, why, the suggested fix, how to reproduce,
+   the page, browser and OS, the most relevant console and network lines, the
+   likely files, what "done" means, and a last step to open a PR that
+   references the report. It works pasted into any agent (Claude Code, Cursor,
+   Codex, Windsurf) with no MCP setup. **Use with Claude Code**, **Use with
+   Cursor** (IDE deeplink or cloud agent) and **Use MCP** (the tool-driven
+   prompt for agents with Mushi MCP connected) sit underneath.
 
 **Fail-graceful, by design.** Accuracy matters most for this audience — a
 confident-but-wrong diagnosis is worse than none — so when classifier
@@ -78,8 +85,8 @@ resolution notification, and `fix.applied` webhooks fire.
 Equivalent CLI:
 
 ```bash
-mushi fixes refresh-ci 
-mushi fixes merge 
+mushi fixes refresh-ci <fixId>
+mushi fixes merge <fixId>
 ```
 
 See [Fix orchestrator → Merging from the console](/admin/fixes#merging-from-the-console)

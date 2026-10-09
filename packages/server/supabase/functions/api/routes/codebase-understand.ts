@@ -7,17 +7,23 @@
 import type { Context, Hono } from 'npm:hono@4'
 import type { Variables } from '../types.ts'
 import { streamSSE } from 'npm:hono@4/streaming'
-import { createAnthropic } from 'npm:@ai-sdk/anthropic@1'
-import { createOpenAI } from 'npm:@ai-sdk/openai@1'
+import { openAiProvider } from '../../_shared/openai-compat.ts'
 import { generateText, streamText } from 'npm:ai@4'
 import { z } from 'npm:zod@3'
 
 import { getServiceClient } from '../../_shared/db.ts'
 import { log } from '../../_shared/logger.ts'
+import { runInBackground } from '../../_shared/background.ts'
 import { adminOrApiKey } from '../../_shared/auth.ts'
 import { toSseEvent } from '../../_shared/sse.ts'
 import { createTrace } from '../../_shared/observability.ts'
-import { ASSIST_MODEL, ASSIST_FALLBACK } from '../../_shared/models.ts'
+import {
+  CODEBASE_ASSIST_EFFORT,
+  CODEBASE_ASSIST_MODEL,
+  ASSIST_FALLBACK,
+  THINKING_HEADROOM_TOKENS,
+} from '../../_shared/models.ts'
+import { claudeGenerateText, claudeStreamText } from '../../_shared/claude-messages.ts'
 import { estimateCallCostUsd } from '../../_shared/pricing.ts'
 import { logLlmInvocation, extractAnthropicCacheUsage } from '../../_shared/telemetry.ts'
 import { withAnthropicOrOpenAi, LlmFailoverError } from '../../_shared/llm-failover.ts'
@@ -39,9 +45,61 @@ import {
 } from '../../_shared/codebase-understand.ts'
 import { resolveImpactChangedPaths } from '../../_shared/codebase-impact-resolve.ts'
 import { enqueueCodebaseAnalyzeJob, runCodebaseAnalyzeJob } from '../../_shared/codebase-analyze-runner.ts'
-import { dbError, userCanAccessProject } from '../shared.ts'
+import { normalizeWikiRoot, WIKI_STALE_MS } from '../../_shared/wiki-ingest.ts'
+import { dbError, callerCanAccessProject } from '../shared.ts'
 
 const routeLog = log.child('codebase-understand')
+
+/**
+ * Start a queued analyze job now, like the push indexer does. The kick is
+ * kept alive past the response (runInBackground) and a non-2xx answer is
+ * logged; the pg_cron drain (every 10 minutes) picks up any job a kick missed.
+ */
+function kickAnalyzeWorker(db: ReturnType<typeof getServiceClient>, jobId: string): void {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+  if (supabaseUrl && serviceKey) {
+    runInBackground(
+      fetch(`${supabaseUrl}/functions/v1/codebase-analyze-worker`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${serviceKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ jobId }),
+      }).then(async (res) => {
+        if (!res.ok) {
+          routeLog.warn('analyze worker refused the kick', { jobId, status: res.status })
+        }
+        await res.body?.cancel()
+      }),
+      'codebase-analyze-kick',
+    )
+  } else {
+    runInBackground(runCodebaseAnalyzeJob(db, jobId), 'codebase-analyze-inline')
+  }
+}
+
+/** What every Atlas text call reads back, whichever provider served it. */
+interface AssistTextResult {
+  text: string
+  usage: { promptTokens: number; completionTokens: number }
+  experimental_providerMetadata: unknown
+}
+
+function assistText(r: {
+  text: string
+  usage: { promptTokens: number; completionTokens: number }
+  experimental_providerMetadata?: unknown
+}): AssistTextResult {
+  return { text: r.text, usage: r.usage, experimental_providerMetadata: r.experimental_providerMetadata ?? null }
+}
+
+/** The streamed Atlas chat, whichever provider served it. */
+interface AssistStream {
+  textStream: AsyncIterable<string>
+  usage: Promise<{ promptTokens: number; completionTokens: number }>
+}
 
 function deriveThreadTitle(firstUserMessage: string): string {
   const t = firstUserMessage.replace(/\s+/g, ' ').trim()
@@ -73,7 +131,7 @@ async function upsertCodebaseChatThread(
 
 async function assertProjectAccess(c: Context, projectId: string, userId: string) {
   const db = getServiceClient()
-  const access = await userCanAccessProject(db, userId, projectId)
+  const access = await callerCanAccessProject(c, db, userId, projectId)
   if (!access.allowed) {
     return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Not a member of this project' } }, 403)
   }
@@ -231,7 +289,7 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
     const trace = createTrace('codebase-chat', { projectId, threadId })
     const llmSpan = trace.span('codebase-chat.generate')
     const started = Date.now()
-    let usedModel = ASSIST_MODEL
+    let usedModel = CODEBASE_ASSIST_MODEL
     let keySource: 'byok' | 'env' = 'env'
     let inputTokens: number | undefined
     let outputTokens: number | undefined
@@ -242,38 +300,43 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
         projectId,
         async (key) => {
           keySource = key.source
-          const anthropic = createAnthropic({ apiKey: key.key })
-          return generateText({
-            model: anthropic(ASSIST_MODEL),
-            messages: [
-              {
-                role: 'system',
-                content: systemPrompt,
-                experimental_providerMetadata: {
-                  anthropic: { cacheControl: { type: 'ephemeral' } },
+          return assistText(
+            await claudeGenerateText({
+              apiKey: key.key,
+              model: CODEBASE_ASSIST_MODEL,
+              effort: CODEBASE_ASSIST_EFFORT,
+              messages: [
+                {
+                  role: 'system',
+                  content: systemPrompt,
+                  experimental_providerMetadata: {
+                    anthropic: { cacheControl: { type: 'ephemeral' } },
+                  },
                 },
-              },
-              ...body.messages!.slice(-10).map((m) => ({ role: m.role, content: m.content })),
-            ],
-            maxTokens: 900,
-          })
+                ...body.messages!.slice(-10).map((m) => ({ role: m.role, content: m.content })),
+              ],
+              maxTokens: 900 + THINKING_HEADROOM_TOKENS,
+            }),
+          )
         },
         async (key) => {
           keySource = key.source
-          const openai = createOpenAI({
+          const openai = openAiProvider({
             apiKey: key.key,
             ...(key.baseUrl ? { baseURL: key.baseUrl } : {}),
           })
           usedModel = ASSIST_FALLBACK
-          return generateText({
-            model: openai(ASSIST_FALLBACK),
-            system: systemPrompt,
-            messages: body.messages!.slice(-10).map((m) => ({ role: m.role, content: m.content })),
-            maxTokens: 900,
-          })
+          return assistText(
+            await generateText({
+              model: openai(ASSIST_FALLBACK),
+              system: systemPrompt,
+              messages: body.messages!.slice(-10).map((m) => ({ role: m.role, content: m.content })),
+              maxTokens: 900,
+            }),
+          )
         },
       )
-      usedModel = usedProvider === 'openai' ? ASSIST_FALLBACK : ASSIST_MODEL
+      usedModel = usedProvider === 'openai' ? ASSIST_FALLBACK : CODEBASE_ASSIST_MODEL
       inputTokens = result.usage?.promptTokens
       outputTokens = result.usage?.completionTokens
       const cache = extractAnthropicCacheUsage(result.experimental_providerMetadata)
@@ -322,7 +385,7 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
         projectId,
         functionName: 'codebase-chat',
         stage: 'codebase-chat',
-        primaryModel: ASSIST_MODEL,
+        primaryModel: CODEBASE_ASSIST_MODEL,
         usedModel,
         fallbackUsed: usedProvider === 'openai',
         status: 'success',
@@ -411,7 +474,7 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
       const trace = createTrace('codebase-chat-stream', { projectId, threadId })
       const started = Date.now()
       let acc = ''
-      let usedModel = ASSIST_MODEL
+      let usedModel = CODEBASE_ASSIST_MODEL
       let keySource: 'byok' | 'env' = 'env'
       let inputTokens: number | undefined
       let outputTokens: number | undefined
@@ -422,11 +485,12 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
         const { result, usedProvider } = await withAnthropicOrOpenAi(
           db,
           projectId,
-          async (key) => {
+          async (key): Promise<AssistStream> => {
             keySource = key.source
-            const anthropic = createAnthropic({ apiKey: key.key })
-            return streamText({
-              model: anthropic(ASSIST_MODEL),
+            const streamed = claudeStreamText({
+              apiKey: key.key,
+              model: CODEBASE_ASSIST_MODEL,
+              effort: CODEBASE_ASSIST_EFFORT,
               messages: [
                 {
                   role: 'system',
@@ -437,25 +501,27 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
                 },
                 ...body.messages!.slice(-10).map((m) => ({ role: m.role, content: m.content })),
               ],
-              maxTokens: 900,
+              maxTokens: 900 + THINKING_HEADROOM_TOKENS,
             })
+            return { textStream: streamed.textStream, usage: streamed.usage }
           },
-          async (key) => {
+          async (key): Promise<AssistStream> => {
             keySource = key.source
             usedModel = ASSIST_FALLBACK
-            const openai = createOpenAI({
+            const openai = openAiProvider({
               apiKey: key.key,
               ...(key.baseUrl ? { baseURL: key.baseUrl } : {}),
             })
-            return streamText({
+            const streamed = streamText({
               model: openai(ASSIST_FALLBACK),
               system: systemPrompt,
               messages: body.messages!.slice(-10).map((m) => ({ role: m.role, content: m.content })),
               maxTokens: 900,
             })
+            return { textStream: streamed.textStream, usage: streamed.usage }
           },
         )
-        usedModel = usedProvider === 'openai' ? ASSIST_FALLBACK : ASSIST_MODEL
+        usedModel = usedProvider === 'openai' ? ASSIST_FALLBACK : CODEBASE_ASSIST_MODEL
         for await (const delta of result.textStream) {
           acc += delta
           await stream.write(toSseEvent({ delta }, { event: 'delta' }))
@@ -495,7 +561,7 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
           projectId,
           functionName: 'codebase-chat',
           stage: 'codebase-chat-stream',
-          primaryModel: ASSIST_MODEL,
+          primaryModel: CODEBASE_ASSIST_MODEL,
           usedModel,
           fallbackUsed: usedProvider === 'openai',
           status: 'success',
@@ -601,7 +667,7 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
 
     const trace = createTrace('codebase-summary', { projectId, filePath })
     const started = Date.now()
-    let usedModel = ASSIST_MODEL
+    let usedModel = CODEBASE_ASSIST_MODEL
     let keySource: 'byok' | 'env' = 'env'
 
     try {
@@ -610,28 +676,33 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
         projectId,
         async (key) => {
           keySource = key.source
-          const anthropic = createAnthropic({ apiKey: key.key })
-          return generateText({
-            model: anthropic(ASSIST_MODEL),
-            prompt,
-            maxTokens: 400,
-          })
+          return assistText(
+            await claudeGenerateText({
+              apiKey: key.key,
+              model: CODEBASE_ASSIST_MODEL,
+              effort: CODEBASE_ASSIST_EFFORT,
+              prompt,
+              maxTokens: 400 + THINKING_HEADROOM_TOKENS,
+            }),
+          )
         },
         async (key) => {
           keySource = key.source
           usedModel = ASSIST_FALLBACK
-          const openai = createOpenAI({
+          const openai = openAiProvider({
             apiKey: key.key,
             ...(key.baseUrl ? { baseURL: key.baseUrl } : {}),
           })
-          return generateText({
-            model: openai(ASSIST_FALLBACK),
-            prompt,
-            maxTokens: 400,
-          })
+          return assistText(
+            await generateText({
+              model: openai(ASSIST_FALLBACK),
+              prompt,
+              maxTokens: 400,
+            }),
+          )
         },
       )
-      usedModel = usedProvider === 'openai' ? ASSIST_FALLBACK : ASSIST_MODEL
+      usedModel = usedProvider === 'openai' ? ASSIST_FALLBACK : CODEBASE_ASSIST_MODEL
       const summary = result.text.trim()
       const latencyMs = Date.now() - started
 
@@ -652,7 +723,7 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
         projectId,
         functionName: 'codebase-summary',
         stage: 'summary',
-        primaryModel: ASSIST_MODEL,
+        primaryModel: CODEBASE_ASSIST_MODEL,
         usedModel,
         fallbackUsed: usedProvider === 'openai',
         status: 'success',
@@ -730,7 +801,7 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
       try {
         const trace = createTrace('codebase-tour', { projectId })
         const started = Date.now()
-        let usedModel = ASSIST_MODEL
+        let usedModel = CODEBASE_ASSIST_MODEL
         let keySource: 'byok' | 'env' = 'env'
         const tourContext = stops
           .map((s) => `${s.order}. ${s.title} (${s.layer}): ${s.file_paths.join(', ')}`)
@@ -740,31 +811,36 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
           projectId,
           async (key) => {
             keySource = key.source
-            const anthropic = createAnthropic({ apiKey: key.key })
-            return generateText({
-              model: anthropic(ASSIST_MODEL),
-              prompt: `Improve these guided-tour stop rationales for onboarding a new developer. Keep the same order. Return JSON array of {order, rationale} only.\n\n${tourContext}`,
-              maxTokens: 800,
-            })
+            return assistText(
+              await claudeGenerateText({
+                apiKey: key.key,
+                model: CODEBASE_ASSIST_MODEL,
+                effort: CODEBASE_ASSIST_EFFORT,
+                prompt: `Improve these guided-tour stop rationales for onboarding a new developer. Keep the same order. Return JSON array of {order, rationale} only.\n\n${tourContext}`,
+                maxTokens: 800 + THINKING_HEADROOM_TOKENS,
+              }),
+            )
           },
           async (key) => {
             keySource = key.source
             usedModel = ASSIST_FALLBACK
-            const openai = createOpenAI({ apiKey: key.key, ...(key.baseUrl ? { baseURL: key.baseUrl } : {}) })
-            return generateText({
-              model: openai(ASSIST_FALLBACK),
-              prompt: `Improve these guided-tour stop rationales for onboarding a new developer. Keep the same order. Return JSON array of {order, rationale} only.\n\n${tourContext}`,
-              maxTokens: 800,
-            })
+            const openai = openAiProvider({ apiKey: key.key, ...(key.baseUrl ? { baseURL: key.baseUrl } : {}) })
+            return assistText(
+              await generateText({
+                model: openai(ASSIST_FALLBACK),
+                prompt: `Improve these guided-tour stop rationales for onboarding a new developer. Keep the same order. Return JSON array of {order, rationale} only.\n\n${tourContext}`,
+                maxTokens: 800,
+              }),
+            )
           },
         )
-        usedModel = usedProvider === 'openai' ? ASSIST_FALLBACK : ASSIST_MODEL
+        usedModel = usedProvider === 'openai' ? ASSIST_FALLBACK : CODEBASE_ASSIST_MODEL
         const latencyMs = Date.now() - started
         void logLlmInvocation(db, {
           projectId,
           functionName: 'codebase-tour',
           stage: 'tour',
-          primaryModel: ASSIST_MODEL,
+          primaryModel: CODEBASE_ASSIST_MODEL,
           usedModel,
           fallbackUsed: usedProvider === 'openai',
           status: 'success',
@@ -853,38 +929,43 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
     try {
       const trace = createTrace('codebase-domains', { projectId })
       const started = Date.now()
-      let usedModel = ASSIST_MODEL
+      let usedModel = CODEBASE_ASSIST_MODEL
       let keySource: 'byok' | 'env' = 'env'
       const { result, usedProvider } = await withAnthropicOrOpenAi(
         db,
         projectId,
         async (key) => {
           keySource = key.source
-          const anthropic = createAnthropic({ apiKey: key.key })
-          return generateText({
-            model: anthropic(ASSIST_MODEL),
-            prompt: `From this indexed file list, extract business domains, user flows, and steps. Return JSON matching {domains:[{id,name,description,flows:[{id,name,description,steps:[{id,name,description,file_paths[]}]}]}]}.\n\nFiles:\n${fileList}`,
-            maxTokens: 1200,
-          })
+          return assistText(
+            await claudeGenerateText({
+              apiKey: key.key,
+              model: CODEBASE_ASSIST_MODEL,
+              effort: CODEBASE_ASSIST_EFFORT,
+              prompt: `From this indexed file list, extract business domains, user flows, and steps. Return JSON matching {domains:[{id,name,description,flows:[{id,name,description,steps:[{id,name,description,file_paths[]}]}]}]}.\n\nFiles:\n${fileList}`,
+              maxTokens: 1200 + THINKING_HEADROOM_TOKENS,
+            }),
+          )
         },
         async (key) => {
           keySource = key.source
           usedModel = ASSIST_FALLBACK
-          const openai = createOpenAI({ apiKey: key.key, ...(key.baseUrl ? { baseURL: key.baseUrl } : {}) })
-          return generateText({
-            model: openai(ASSIST_FALLBACK),
-            prompt: `From this indexed file list, extract business domains, user flows, and steps. Return JSON matching {domains:[{id,name,description,flows:[{id,name,description,steps:[{id,name,description,file_paths[]}]}]}]}.\n\nFiles:\n${fileList}`,
-            maxTokens: 1200,
-          })
+          const openai = openAiProvider({ apiKey: key.key, ...(key.baseUrl ? { baseURL: key.baseUrl } : {}) })
+          return assistText(
+            await generateText({
+              model: openai(ASSIST_FALLBACK),
+              prompt: `From this indexed file list, extract business domains, user flows, and steps. Return JSON matching {domains:[{id,name,description,flows:[{id,name,description,steps:[{id,name,description,file_paths[]}]}]}]}.\n\nFiles:\n${fileList}`,
+              maxTokens: 1200,
+            }),
+          )
         },
       )
-      usedModel = usedProvider === 'openai' ? ASSIST_FALLBACK : ASSIST_MODEL
+      usedModel = usedProvider === 'openai' ? ASSIST_FALLBACK : CODEBASE_ASSIST_MODEL
       const latencyMs = Date.now() - started
       void logLlmInvocation(db, {
         projectId,
         functionName: 'codebase-domains',
         stage: 'domains',
-        primaryModel: ASSIST_MODEL,
+        primaryModel: CODEBASE_ASSIST_MODEL,
         usedModel,
         fallbackUsed: usedProvider === 'openai',
         status: 'success',
@@ -946,20 +1027,7 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
       changedPaths: body.changed_paths,
     })
 
-    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
-    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    if (supabaseUrl && serviceKey) {
-      fetch(`${supabaseUrl}/functions/v1/codebase-analyze-worker`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${serviceKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ jobId }),
-      }).catch((err) => routeLog.warn('analyze worker invoke failed', { err: String(err) }))
-    } else {
-      void runCodebaseAnalyzeJob(db, jobId)
-    }
+    kickAnalyzeWorker(db, jobId)
 
     return c.json({ ok: true, data: { job_id: jobId, status: 'queued' } })
   })
@@ -1044,7 +1112,7 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
     const db = getServiceClient()
     const { data, error } = await db
       .from('project_codebase_wiki_sources')
-      .select('id, kind, root_path, label, status, error, created_at, updated_at')
+      .select('id, kind, root_path, label, status, error, config, created_at, updated_at')
       .eq('project_id', projectId)
       .order('created_at', { ascending: false })
     if (error) return dbError(c, error)
@@ -1063,8 +1131,14 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
       label?: string
     } | null
     if (!body?.kind || !body.root_path?.trim()) {
-      return c.json({ ok: false, error: { code: 'BAD_REQUEST', message: 'kind and root_path required' } }, 400)
+      return c.json({ ok: false, error: { code: 'BAD_REQUEST', message: 'Enter the folder that holds your docs, for example docs/.' } }, 400)
     }
+    // Only repo folders have an ingest path. Accepting the other kinds would
+    // leave a row that can never leave `pending`.
+    if (body.kind !== 'repo_subpath') {
+      return c.json({ ok: false, error: { code: 'UNSUPPORTED_KIND', message: 'Only a folder in the connected repo can be added as knowledge right now.' } }, 400)
+    }
+    const rootPath = normalizeWikiRoot(body.root_path) || '/'
 
     const db = getServiceClient()
     const { data, error } = await db
@@ -1072,11 +1146,11 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
       .insert({
         project_id: projectId,
         kind: body.kind,
-        root_path: body.root_path.trim(),
-        label: body.label?.trim() ?? null,
+        root_path: rootPath,
+        label: body.label?.trim() || null,
         status: 'pending',
       })
-      .select('id, kind, root_path, label, status')
+      .select('id, kind, root_path, label, status, error')
       .single()
     if (error) return dbError(c, error)
 
@@ -1084,9 +1158,44 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
       projectId,
       requestedBy: userId,
       trigger: 'wiki_ingest',
-      changedPaths: [body.root_path.trim()],
+      changedPaths: [rootPath],
     })
+    kickAnalyzeWorker(db, jobId)
 
+    return c.json({ ok: true, data: { source: data, analyze_job_id: jobId } })
+  })
+
+  app.post('/v1/admin/projects/:id/codebase/wiki/sources/:sourceId/retry', writeAuth, async (c) => {
+    const projectId = c.req.param('id')!
+    const sourceId = c.req.param('sourceId')!
+    const userId = c.get('userId') as string
+    const forbidden = await assertProjectAccess(c, projectId, userId)
+    if (forbidden) return forbidden
+
+    const db = getServiceClient()
+    // Finished rows, plus pending/indexing rows nobody has touched for
+    // WIKI_STALE_MS (never picked up, or the worker died mid-read). A row
+    // being read right now is left alone.
+    const staleBefore = new Date(Date.now() - WIKI_STALE_MS).toISOString()
+    const { data, error } = await db
+      .from('project_codebase_wiki_sources')
+      .update({ status: 'pending', error: null, updated_at: new Date().toISOString() })
+      .eq('id', sourceId)
+      .eq('project_id', projectId)
+      .or(`status.in.(failed,ready),updated_at.lt.${staleBefore}`)
+      .select('id, kind, root_path, label, status, error, updated_at')
+      .maybeSingle()
+    if (error) return dbError(c, error)
+    if (!data) {
+      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'That knowledge source is gone or already being read.' } }, 404)
+    }
+    const { jobId } = await enqueueCodebaseAnalyzeJob(db, {
+      projectId,
+      requestedBy: userId,
+      trigger: 'wiki_ingest',
+      changedPaths: [data.root_path as string],
+    })
+    kickAnalyzeWorker(db, jobId)
     return c.json({ ok: true, data: { source: data, analyze_job_id: jobId } })
   })
 

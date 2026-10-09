@@ -52,6 +52,11 @@ const PUBLIC_BY_DESIGN: Record<string, string> = {
   'stripe-webhooks': 'Stripe signature verified in handler',
   'webhooks-github-indexer': 'GitHub HMAC verified in handler',
   'slack-interactions': 'Slack signing secret verified in handler',
+  // Telegram Bot API webhook for the voice inbox — Telegram cannot carry a
+  // Supabase JWT. Each update carries X-Telegram-Bot-Api-Secret-Token (set via
+  // setWebhook) which handler.ts compares (sha256, constant-time) against
+  // project_settings.telegram_webhook_secret_hash before any work.
+  'telegram-webhook': 'Telegram setWebhook secret_token verified in handler',
   // Linear integration — public endpoints authenticated in-handler.
   // linear-oauth-callback: OAuth2 redirect target from Linear (user browser,
   //   no Supabase JWT); CSRF enforced via state nonce in linear_oauth_states.
@@ -62,18 +67,37 @@ const PUBLIC_BY_DESIGN: Record<string, string> = {
   'linear-oauth-callback': 'OAuth2 redirect — state nonce CSRF + Linear token exchange',
   'webhooks-linear': 'Linear HMAC-SHA256 webhook signature verified in handler',
   'webhooks-linear-agent': 'Linear HMAC-SHA256 agent webhook signature verified in handler',
+  // cursor-webhook: Cursor Cloud Agents v0 statusChange receiver. Cursor
+  //   cannot send a Supabase JWT; the handler verifies X-Webhook-Signature
+  //   (HMAC-SHA256 over the raw body with the per-project derived secret)
+  //   constant-time before reading anything from the payload.
+  'cursor-webhook': 'Cursor v0 webhook HMAC (X-Webhook-Signature) verified in handler',
   // Deliberately unauthenticated liveness/readiness surface. It returns only
   // process/DB health and a version, never tenant data.
   healthz: 'Public liveness probe — exposes only status, DB health, and version',
-  // Intelligence report is called by the admin UI via JWT and by internal
-  // callers via service role — handler branches on the caller.
-  'intelligence-report': 'Dual JWT/service-role handled in handler',
   // MCP Streamable HTTP transport — public by design (external orchestrators
   // like Cursor remote MCP / Claude Agent SDK / OpenAI Agents SDK must
   // connect). The transport itself authenticates with the same dual JWT /
   // X-Mushi-Api-Key surface as `api`, validated per tool call rather than
   // at the transport boundary.
   mcp: 'Per-tool JWT / X-Mushi-Api-Key auth — see MCP transport docstring',
+}
+
+/**
+ * Internal functions that accept exactly one more credential besides the
+ * service-role bearer: a cryptographically verified token, never a header
+ * flag. They still import requireServiceRoleAuth and hand it to a combined
+ * gate whose 401 is returned unconditionally. Each entry is the exact gate
+ * the source must contain.
+ */
+const SECOND_CREDENTIAL_BY_DESIGN: Record<string, { why: string; gate: RegExp }> = {
+  // release.yml's catalog-sync job holds no Supabase key; it sends a GitHub
+  // Actions OIDC token pinned to release.yml on master in this repo by
+  // numeric repository/owner id, audience and event (_shared/github-oidc.ts).
+  'sdk-versions-cron': {
+    why: 'GitHub Actions OIDC token verified (RS256 + pinned claims) in _shared/github-oidc.ts',
+    gate: /authorizeServiceRoleOrGithubOidc\(\s*c\.req\.raw,\s*\{\s*serviceRoleCheck:\s*requireServiceRoleAuth,?\s*\}\s*\)\s*\n\s*if \(!auth\.ok\) \{[\s\S]{0,200}?return auth\.response\s*\}/,
+  },
 }
 
 function listFunctionDirs(): string[] {
@@ -95,6 +119,16 @@ function listFunctionDirs(): string[] {
 
 function readIndex(fn: string): string {
   return readFileSync(join(functionsRoot, fn, 'index.ts'), 'utf-8')
+}
+
+/** `[functions.<name>] verify_jwt = …` from supabase/config.toml. */
+function verifyJwtByFunction(): Map<string, boolean> {
+  const toml = readFileSync(resolve(functionsRoot, '../config.toml'), 'utf-8')
+  const out = new Map<string, boolean>()
+  for (const [, name, value] of toml.matchAll(/^\[functions\.([a-z0-9-]+)\]\s*\n\s*verify_jwt\s*=\s*(true|false)/gm)) {
+    out.set(name, value === 'true')
+  }
+  return out
 }
 
 describe('internal-auth contract', () => {
@@ -129,11 +163,15 @@ describe('internal-auth contract', () => {
       ).toMatch(/requireServiceRoleAuth[^\n]*from\s+['"]\.\.\/\_shared\/auth\.ts['"]/)
 
       // Helper must be *called* before doing work. We look for the usage
-      // pattern `requireServiceRoleAuth(` anywhere after the import.
+      // pattern `requireServiceRoleAuth(` anywhere after the import or, for a
+      // documented second-credential function, its exact combined gate.
+      const secondCredential = SECOND_CREDENTIAL_BY_DESIGN[fn]
       expect(
         source,
-        `expected ${fn}/index.ts to call requireServiceRoleAuth(req) before handler work`,
-      ).toMatch(/requireServiceRoleAuth\s*\(/)
+        secondCredential
+          ? `expected ${fn}/index.ts to gate with the combined call (${secondCredential.why}) and return its 401`
+          : `expected ${fn}/index.ts to call requireServiceRoleAuth(req) before handler work`,
+      ).toMatch(secondCredential ? secondCredential.gate : /requireServiceRoleAuth\s*\(/)
 
       // Hand-rolled `authorized()` that only accepts SUPABASE_SERVICE_ROLE_KEY
       // is banned — it rejects pg_cron callers that must use
@@ -142,6 +180,42 @@ describe('internal-auth contract', () => {
         source,
         `${fn}/index.ts uses a hand-rolled auth check; replace with requireServiceRoleAuth`,
       ).not.toMatch(/function\s+authorized\s*\(\s*req\s*:\s*Request\s*\)\s*:\s*boolean/)
+
+      // Calling the helper is not enough: its 401 must be returned
+      // unconditionally. Until 2026-09-21 eight functions did
+      // `if (authErr && req.headers.get('x-mushi-admin') !== '1') return authErr`,
+      // so anyone holding the public anon key could skip auth by sending one
+      // header, and this test still passed because the helper was called.
+      for (const [, name] of source.matchAll(/const\s+(\w+)\s*=\s*requireServiceRoleAuth\s*\(/g)) {
+        expect(
+          source,
+          `${fn}/index.ts lets a condition waive requireServiceRoleAuth (\`${name} && …\`); return ${name} unconditionally`,
+        ).not.toMatch(new RegExp(`\\b${name}\\s*&&|&&\\s*${name}\\b`))
+      }
+
+      // No request header may carry trust into an internal function. The same
+      // day's audit found two more bypass shapes the rule above cannot see:
+      // `if (authErr && req.headers.get('x-mushi-trigger') !== 'manual')` and
+      // `if (!isManual) { requireServiceRoleAuth(...) }` keyed on that header.
+      // Any header a caller sets, an attacker sets too; the Authorization
+      // bearer checked by requireServiceRoleAuth is the only credential.
+      expect(
+        source,
+        `${fn}/index.ts reads an x-mushi-* request header; internal functions must authenticate with requireServiceRoleAuth alone`,
+      ).not.toMatch(/headers\.get\(\s*['"`]x-mushi-/i)
+    })
+
+    // pg_cron and the api call internal functions with the internal caller
+    // token, which is not a JWT. With the platform default verify_jwt = true
+    // the gateway 401s before requireServiceRoleAuth runs, and pg_cron still
+    // records 'succeeded' because net.http_post only enqueues. Until
+    // 2026-09-22 thirteen functions were deployed that way, including three
+    // cron jobs that never once reached their handler.
+    it(`${fn} is pinned to verify_jwt = false in config.toml`, () => {
+      expect(
+        verifyJwtByFunction().get(fn),
+        `add [functions.${fn}] verify_jwt = false to packages/server/supabase/config.toml (auth is requireServiceRoleAuth inside the handler)`,
+      ).toBe(false)
     })
   }
 })

@@ -46,7 +46,7 @@ Identify the report you want to investigate. Note the `id`.
 ### Step 4 — Deep evidence pull
 
 ```
-get_report_evidence { report_id: "<id>" }
+get_report_evidence { reportId: "<id>" }
 ```
 
 Read screenshot URL, console logs, network requests, and user comments. Form a working hypothesis.
@@ -54,7 +54,7 @@ Read screenshot URL, console logs, network requests, and user comments. Form a w
 ### Step 5 — Full triage orchestration
 
 ```
-triage_issue { report_id: "<id>", project_id: "<id>", include_logs: true }
+triage_issue { reportId: "<id>", projectId: "<id>", includeLogs: true }
 ```
 
 This combines report detail, similar bugs, fix context, blast radius, and recent pipeline logs into one packet. Read `recommended_actions` carefully.
@@ -86,6 +86,6 @@ dispatch_fix { reportId: "<id>", autoReadyPr: false }
 ## Safety rules
 
 - All steps above Step 8 are **read-only** — no data is mutated.
-- Never call `dispatch_fix`, `close_report`, `reopen_report`, or `reply_to_reporter` without explicit user confirmation.
+- Never call `dispatch_fix`, `transition_status`, `reopen_report`, or `reply_to_reporter` without explicit user confirmation.
 - If the report is `severity: critical`, also check blast radius before dispatching.
 - Never expose the raw `MUSHI_API_KEY` value in chat or commits.

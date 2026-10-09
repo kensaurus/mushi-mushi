@@ -3,7 +3,6 @@
  * PURPOSE: Prompt Lab posture — thin dataset, A/B untested, promote ready, healthy.
  */
 
-import { Link } from 'react-router-dom'
 import { Btn } from '../ui'
 import { StatusBannerShell } from '../StatusBannerShell'
 import type { PromptLabStats, PromptLabTabId } from './PromptLabStatsTypes'
@@ -25,9 +24,7 @@ export function PromptLabStatusBanner({ stats, onTab, onRefresh, refreshing }: P
         title="No projects — prompt lab idle"
         subtitle="Create a project before authoring prompt candidates."
         action={
-          <Link to="/onboarding">
-            <Btn size="sm" variant="ghost">Go to Setup</Btn>
-          </Link>
+          <Btn to="/onboarding" size="sm" variant="ghost">Go to Setup</Btn>
         }
       />
     )
@@ -37,16 +34,14 @@ export function PromptLabStatusBanner({ stats, onTab, onRefresh, refreshing }: P
     return (
       <StatusBannerShell
         tone="warn"
-        title={`Thin eval dataset on ${projectLabel}`}
+        title={`The judge hasn't scored ${projectLabel}'s reports yet`}
         subtitle={stats.topPriorityLabel}
         action={
           stats.topPriorityTo ? (
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">Build dataset</Btn>
-            </Link>
+            <Btn to={stats.topPriorityTo} size="sm" variant="ghost">Run the judge</Btn>
           ) : onTab ? (
             <Btn size="sm" variant="ghost" onClick={() => onTab('dataset')}>
-              Build dataset
+              Run the judge
             </Btn>
           ) : null
         }
@@ -63,9 +58,7 @@ export function PromptLabStatusBanner({ stats, onTab, onRefresh, refreshing }: P
         subtitle={stats.topPriorityLabel}
         action={
           stats.topPriorityTo ? (
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">Open prompts</Btn>
-            </Link>
+            <Btn to={stats.topPriorityTo} size="sm" variant="ghost">Open prompts</Btn>
           ) : onTab ? (
             <Btn size="sm" variant="ghost" onClick={() => onTab('prompts')}>
               Open prompts
@@ -84,9 +77,7 @@ export function PromptLabStatusBanner({ stats, onTab, onRefresh, refreshing }: P
         subtitle={stats.topPriorityLabel}
         action={
           stats.topPriorityTo ? (
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">Review & promote</Btn>
-            </Link>
+            <Btn to={stats.topPriorityTo} size="sm" variant="ghost">Review & promote</Btn>
           ) : onTab ? (
             <Btn size="sm" variant="ghost" onClick={() => onTab('prompts')}>
               Review & promote
@@ -105,9 +96,7 @@ export function PromptLabStatusBanner({ stats, onTab, onRefresh, refreshing }: P
         subtitle={stats.topPriorityLabel}
         action={
           stats.topPriorityTo ? (
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">Set traffic %</Btn>
-            </Link>
+            <Btn to={stats.topPriorityTo} size="sm" variant="ghost">Set traffic %</Btn>
           ) : onTab ? (
             <Btn size="sm" variant="ghost" onClick={() => onTab('prompts')}>
               Set traffic %
@@ -127,9 +116,7 @@ export function PromptLabStatusBanner({ stats, onTab, onRefresh, refreshing }: P
         subtitle={stats.topPriorityLabel}
         action={
           stats.topPriorityTo ? (
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">Monitor scores</Btn>
-            </Link>
+            <Btn to={stats.topPriorityTo} size="sm" variant="ghost">Monitor scores</Btn>
           ) : onTab ? (
             <Btn size="sm" variant="ghost" onClick={() => onTab('prompts')}>
               Monitor scores
@@ -151,9 +138,7 @@ export function PromptLabStatusBanner({ stats, onTab, onRefresh, refreshing }: P
             Refresh
           </Btn>
         ) : stats.topPriorityTo ? (
-          <Link to={stats.topPriorityTo}>
-            <Btn size="sm" variant="ghost">View overview</Btn>
-          </Link>
+          <Btn to={stats.topPriorityTo} size="sm" variant="ghost">View overview</Btn>
         ) : null
       }
     />

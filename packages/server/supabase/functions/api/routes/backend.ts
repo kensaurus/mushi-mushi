@@ -39,7 +39,7 @@ const NO_PAT_RESPONSE = {
   data: null,
   reason: 'no_supabase_pat',
   hint:
-    'Add your Supabase Personal Access Token in Settings → API Keys (slug: supabase) ' +
+    'Add a scoped, read-only Supabase access token in Settings → AI keys → Supabase ' +
     'to enable live backend analysis.',
 } as const
 
@@ -47,7 +47,7 @@ const NO_REF_RESPONSE = {
   ok: true,
   data: null,
   reason: 'no_project_ref',
-  hint: 'Set `supabase_project_ref` in project settings to enable backend analysis.',
+  hint: 'Set the Supabase project ref in Settings → General → Supabase project to enable backend analysis.',
 } as const
 
 async function resolveBackendCreds(

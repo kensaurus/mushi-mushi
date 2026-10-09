@@ -25,6 +25,14 @@ window.addEventListener('load', () => {
     .catch(() => {
       /* non-fatal: vitals collection is best-effort */
     })
+  // PWA service worker (share target, push, app-shell cache). Registered
+  // after load so it never competes with first paint; the module is tiny
+  // and guards itself when the browser has no SW support.
+  import('./lib/pwaRegister')
+    .then(({ registerServiceWorker }) => registerServiceWorker())
+    .catch(() => {
+      /* non-fatal: the console works without a service worker */
+    })
 })
 
 createRoot(document.getElementById('root')!).render(

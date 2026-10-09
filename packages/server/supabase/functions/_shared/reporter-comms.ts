@@ -9,16 +9,17 @@
 // ============================================================
 
 import { getServiceClient } from './db.ts'
-import { createNotification, buildNotificationMessage } from './notifications.ts'
 
 type Db = ReturnType<typeof getServiceClient>
 
 /** HTTP statuses the reply helper can resolve to (subset of Hono's StatusCode). */
-type ReplyStatus = 201 | 404 | 500
+type ReplyStatus = 201 | 404 | 409 | 500
 
 export interface PostReplyResult {
   status: ReplyStatus
   body: Record<string, unknown>
+  /** On 201: the Mushi user the comment is attributed to (the project owner). Never in `body`. */
+  authorUserId?: string
 }
 
 /**
@@ -82,22 +83,85 @@ export async function postReporterReply(
     return { status: 500, body: { ok: false, error: { code: 'DB_ERROR', message: insertErr.message } } }
   }
 
-  // Best-effort: stamp last_admin_reply_at so two-way health reflects the reply.
-  db.from('reports')
-    .update({ last_admin_reply_at: new Date().toISOString() })
+  // The report_comments trigger (20261002120200) stamps last_admin_reply_at /
+  // admin_seen_at, writes the reporter's one in-app row (dedupe_key = comment
+  // id) and enqueues reporter-notify-fanout for email / push. Writing a
+  // second comment_reply row here would double the reporter's badge.
+
+  return { status: 201, body: { ok: true, data: { comment } }, authorUserId: project.owner_id as string }
+}
+
+/**
+ * "Ask for more info": post the question as a visible comment and set
+ * `awaiting_reporter_at` in one transaction (mushi_request_reporter_info).
+ * The comment trigger writes exactly one `info_requested` row for it; the
+ * reporter's next reply clears the waiting state.
+ */
+export async function requestReporterInfo(
+  db: Db,
+  params: { projectId: string; reportId: string; question: string; authorName: string; authorUserId?: string | null },
+): Promise<PostReplyResult> {
+  const { projectId, reportId, question, authorName } = params
+
+  const { data: report, error: fetchErr } = await db
+    .from('reports')
+    .select('id, reporter_token_hash')
     .eq('id', reportId)
     .eq('project_id', projectId)
-    .then(() => null, () => null)
-
-  // Notify the reporter widget so they see the unread badge.
-  if (report.reporter_token_hash) {
-    createNotification(db, projectId, reportId, report.reporter_token_hash, 'comment_reply', {
-      message: buildNotificationMessage('comment_reply', {}),
-      reportId,
-    }).catch(() => null)
+    .maybeSingle()
+  if (fetchErr) {
+    return { status: 500, body: { ok: false, error: { code: 'DB_ERROR', message: fetchErr.message } } }
+  }
+  if (!report) {
+    return { status: 404, body: { ok: false, error: { code: 'NOT_FOUND', message: `Report ${reportId} not found` } } }
+  }
+  if (!report.reporter_token_hash) {
+    return {
+      status: 409,
+      body: {
+        ok: false,
+        error: { code: 'NO_REPORTER', message: 'This report has no in-app reporter to ask (it came from an integration).' },
+      },
+    }
   }
 
-  return { status: 201, body: { ok: true, data: { comment } } }
+  let authorUserId = params.authorUserId ?? null
+  if (!authorUserId) {
+    const { data: project, error: projectErr } = await db
+      .from('projects')
+      .select('owner_id')
+      .eq('id', projectId)
+      .maybeSingle()
+    if (projectErr) {
+      return { status: 500, body: { ok: false, error: { code: 'DB_ERROR', message: projectErr.message } } }
+    }
+    authorUserId = (project?.owner_id as string | undefined) ?? null
+  }
+  if (!authorUserId) {
+    return {
+      status: 500,
+      body: { ok: false, error: { code: 'MISCONFIGURED', message: 'Project has no owner_id — cannot post as admin' } },
+    }
+  }
+
+  const { data, error } = await db.rpc('mushi_request_reporter_info', {
+    p_report_id: reportId,
+    p_project_id: projectId,
+    p_author_user_id: authorUserId,
+    p_author_name: authorName,
+    p_body: question,
+  })
+  if (error) {
+    return { status: 500, body: { ok: false, error: { code: 'DB_ERROR', message: error.message } } }
+  }
+  const row = (data ?? {}) as { comment_id?: number; created_at?: string }
+  return {
+    status: 201,
+    body: {
+      ok: true,
+      data: { comment_id: row.comment_id ?? null, created_at: row.created_at ?? null, awaiting_reporter: true },
+    },
+  }
 }
 
 export interface TwoWayHealth {
@@ -128,6 +192,7 @@ export async function computeTwoWayHealth(db: Db, projectId: string): Promise<Tw
       .from('reporter_notifications')
       .select('id', { count: 'exact', head: true })
       .eq('project_id', projectId)
+      .eq('status', 'sent')
       .is('read_at', null),
     db
       .from('report_comments')

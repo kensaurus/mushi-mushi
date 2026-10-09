@@ -4,44 +4,43 @@ Source: https://kensaur.us/mushi-mushi/docs
 
 ---
 title: Mushi Mushi — know why your AI-built app broke, with the fix ready
-description: Your AI shipped it. Mushi tells you why it broke — a plain-English diagnosis and a ready-to-apply fix, right in your editor. Standalone, open source, Sentry optional.
+description: "Your AI shipped it. Mushi tells you why it broke: a plain-English diagnosis and a ready fix in your editor. Open source, Sentry optional."
 ---
-
-import {
-  LANDING_HERO,
-  LANDING_MEDIA_INTRO,
-  LANDING_WHAT_THIS_IS,
-  LANDING_WHERE_TO_START_INTRO,
-  LANDING_QUICKSTART_INTRO,
-  LANDING_COMPARISON_ROWS,
-} from '@/lib/landing-copy'
-
-{/* Native scroll + component-scoped Motion reveals (docs/MOTION.md).
-    No Lenis / ScrollTrigger — sticky nav, anchors, and nested code scroll stay intact. */}
 
 Your AI wrote it. Mushi tells you why it broke.</>}
   lead={LANDING_HERO.lead}
 />
 
-## See it in action
+## This is what a diagnosis looks like
 
-{LANDING_MEDIA_INTRO}
+A user writes one or two sentences about what went wrong. Mushi reads them with
+the screenshot, console and network tail, and writes back a plain-English title,
+a severity, the likely cause and a suggested fix. Below is a real one.
+
+  
+
+## See it in action
 
   
 
 ## What this is (and is not)
 
-{LANDING_WHAT_THIS_IS.who} {LANDING_WHAT_THIS_IS.boundary}
+Mushi Mushi is the bug mediator for AI-built apps, an open-source bug-reporting SDK and queue: plain-English diagnosis + a ready fix, in your editor.
 
 ## Get started with the SDK
 
-{LANDING_WHERE_TO_START_INTRO}
-
 ## Install in your framework
 
-{LANDING_QUICKSTART_INTRO}
+## One queue. Sentry flows in, fixes flow out.
 
-## Where Sentry stops, this picks up.
+Sentry is built around what the code threw, with a User Feedback widget and
+replay alongside. Mushi starts from what the user reported, ingests Sentry's
+errors too, explains each one in plain English, and hands your agent a fix
+prompt to start from. With or without Sentry.
+
+Sentry is one on-ramp of several. Bugs come in from your users, your
+monitoring and your voice; fixes and status go out to your editor, your coding
+agents, your tracker and your chat. Nothing has to be ripped out.
 
   
 

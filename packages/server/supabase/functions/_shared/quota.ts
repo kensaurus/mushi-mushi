@@ -54,9 +54,65 @@ function periodWindow(): { start: Date; end: Date } {
   return { start, end }
 }
 
+/** Plans a complimentary org's plan replaces, per gate. */
+const COMP_OVERRIDES_HOBBY: ReadonlyArray<string> = ['hobby']
+const COMP_OVERRIDES_FREE: ReadonlyArray<string> = ['free_cloud', 'hobby']
+
 export function invalidateQuotaCache(projectId?: string): void {
   if (projectId) cache.delete(projectId)
   else cache.clear()
+}
+
+/**
+ * The plan a project bills under, from its subscription row and its
+ * `projects → organizations(billing_mode, plan_id)` row. Subscription wins;
+ * a complimentary org's plan applies when there is no active sub or the
+ * sub resolved to one of `compOverrides`. The ingest gate passes Hobby only
+ * (its rule since 2026-05-08); the diagnosis gate and the codebase index
+ * cap pass the free plans.
+ */
+export async function planFromProjectRows(
+  sub: { status?: string | null; plan_id?: string | null } | null,
+  projectRow: unknown,
+  compOverrides: ReadonlyArray<string> = COMP_OVERRIDES_HOBBY,
+): Promise<PricingPlan> {
+  let plan = await resolvePlanFromSubscription(sub)
+  const orgRow =
+    (projectRow as { organizations?: { billing_mode: string | null; plan_id: string | null } | null } | null)
+      ?.organizations ?? null
+  if (orgRow && (!sub || compOverrides.includes(plan.id)) && orgRow.billing_mode === 'complimentary') {
+    plan = await getPlan(orgRow.plan_id)
+  }
+  return plan
+}
+
+/**
+ * Resolve a project's plan with the same two reads checkIngestQuota uses
+ * (active subscription; project → organization). A read error throws so a
+ * caller never mistakes "could not read" for the free plan.
+ */
+export async function resolveProjectPlan(
+  db: ReturnType<typeof getServiceClient>,
+  projectId: string,
+): Promise<PricingPlan> {
+  const [subRes, projectRes] = await Promise.all([
+    db
+      .from('billing_subscriptions')
+      .select('status, plan_id, current_period_end')
+      .eq('project_id', projectId)
+      .in('status', ['active', 'trialing', 'past_due'])
+      .order('current_period_end', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    db
+      .from('projects')
+      .select('organization_id, organizations(billing_mode, plan_id)')
+      .eq('id', projectId)
+      .maybeSingle(),
+  ])
+  if (subRes.error) throw new Error(`billing_subscriptions read failed: ${subRes.error.message}`)
+  if (projectRes.error) throw new Error(`projects read failed: ${projectRes.error.message}`)
+  return planFromProjectRows(subRes.data, projectRes.data, COMP_OVERRIDES_FREE)
 }
 
 export async function checkIngestQuota(
@@ -125,17 +181,7 @@ export async function checkIngestQuota(
       .lt('occurred_at', end.toISOString()),
   ])
 
-  // Resolve plan: subscription wins; complimentary org overrides Hobby
-  // when there's no active sub or the sub resolved to Hobby (mirrors
-  // the pre-2026-05-08 logic exactly — same set of comp-honouring
-  // conditions, just one round trip instead of three).
-  let plan = await resolvePlanFromSubscription(sub)
-  const orgRow =
-    (projectRow as { organizations?: { billing_mode: string | null; plan_id: string | null } | null } | null)
-      ?.organizations ?? null
-  if (orgRow && (!sub || plan.id === 'hobby') && orgRow.billing_mode === 'complimentary') {
-    plan = await getPlan(orgRow.plan_id)
-  }
+  const plan = await planFromProjectRows(sub, projectRow)
   const periodResetsActual = sub?.current_period_end ?? periodResetsAt
 
   // Unlimited plan (e.g. enterprise) → fast path. The usage count we
@@ -393,8 +439,21 @@ export async function checkDiagnosisQuota(
   const { start, end } = periodWindow()
   const periodResetsAt = end.toISOString()
 
-  const [{ data: sub }, { data: projectRow }, { count: diagCount, error: diagErr }] =
-    await Promise.all([
+  const diagnosesInPeriod = () =>
+    db
+      .from('usage_events')
+      .select('id', { count: 'exact', head: true })
+      .eq('project_id', projectId)
+      .eq('event_name', 'diagnoses')
+      .gte('occurred_at', start.toISOString())
+      .lt('occurred_at', end.toISOString())
+
+  const [
+    { data: sub },
+    { data: projectRow },
+    { count: allCount, error: allErr },
+    { count: shadowCount, error: shadowErr },
+  ] = await Promise.all([
       db
         .from('billing_subscriptions')
         .select('status, plan_id, current_period_end, monthly_spend_cap_usd_override')
@@ -408,26 +467,18 @@ export async function checkDiagnosisQuota(
         .select('organization_id, organizations(billing_mode, plan_id)')
         .eq('id', projectId)
         .maybeSingle(),
-      // Count real diagnoses only (exclude Phase-1 shadow rows).
-      // The shadow flag is stored in metadata->>'shadow'. We use a filter
-      // expression that treats absent key as non-shadow.
-      db
-        .from('usage_events')
-        .select('id', { count: 'exact', head: true })
-        .eq('project_id', projectId)
-        .eq('event_name', 'diagnoses')
-        .not('metadata->>shadow', 'eq', 'true')
-        .gte('occurred_at', start.toISOString())
-        .lt('occurred_at', end.toISOString()),
+      // Real diagnoses = all − Phase-1 shadow rows. A single
+      // `.not('metadata->>shadow','eq','true')` dropped every row WITHOUT a
+      // shadow key (NULL <> 'true' is NULL in SQL), so it counted 0 of 116
+      // real diagnoses and the quota and spend cap never applied. Same rule
+      // as billing-usage-counts.ts, so the gate and Billing agree.
+      diagnosesInPeriod(),
+      diagnosesInPeriod().eq('metadata->>shadow', 'true'),
     ])
+  const diagErr = allErr ?? shadowErr
+  const diagCount = Math.max(0, (allCount ?? 0) - (shadowCount ?? 0))
 
-  let plan = await resolvePlanFromSubscription(sub)
-  const orgRow =
-    (projectRow as { organizations?: { billing_mode: string | null; plan_id: string | null } | null } | null)
-      ?.organizations ?? null
-  if (orgRow && (!sub || plan.id === 'free_cloud' || plan.id === 'hobby') && orgRow.billing_mode === 'complimentary') {
-    plan = await getPlan(orgRow.plan_id)
-  }
+  const plan = await planFromProjectRows(sub, projectRow, COMP_OVERRIDES_FREE)
 
   const periodResetsActual =
     (sub as { current_period_end?: string | null } | null)?.current_period_end ?? periodResetsAt

@@ -2,9 +2,42 @@
 
 import { generateStaticParamsFor, importPage } from 'nextra/pages'
 import { useMDXComponents as getMDXComponents } from '../../mdx-components'
-import { DOCS_SITE, PRODUCT_ROOT } from '../../lib/structured-data'
+import { JsonLd } from '../../components/JsonLd'
+import { dateFromFrontMatter } from '../../lib/sitemap-dates'
+import {
+  BLOG_AUTHOR_NAME,
+  BLOG_FEED_URL,
+  DOCS_SITE,
+  LANDING_META,
+  OG_CARD_IMAGE,
+  PRODUCT_ROOT,
+  blogPostingJsonLd,
+  type BlogPostMeta,
+} from '../../lib/structured-data'
 
 export const generateStaticParams = generateStaticParamsFor('mdxPath')
+
+/** The front-matter fields this file reads from Nextra's page metadata. */
+interface PageFrontMatter {
+  title?: unknown
+  description?: unknown
+  date?: unknown
+  alternates?: Record<string, unknown>
+}
+
+const isBlogPost = (mdxPath: string[] | undefined): boolean => mdxPath?.length === 2 && mdxPath[0] === 'blog'
+
+/** Title, description, URL and publish date of a /blog/<slug> page. */
+function blogPostMeta(mdxPath: string[], metadata: PageFrontMatter): BlogPostMeta {
+  const url = `${DOCS_SITE}/${mdxPath.join('/')}`
+  const datePublished = dateFromFrontMatter(metadata.date)
+  return {
+    title: typeof metadata.title === 'string' ? metadata.title : mdxPath[1] ?? url,
+    ...(typeof metadata.description === 'string' ? { description: metadata.description } : {}),
+    url,
+    ...(datePublished ? { datePublished } : {}),
+  }
+}
 
 export async function generateMetadata(props: { params: Promise<{ mdxPath?: string[] }> }) {
   const params = await props.params
@@ -16,45 +49,59 @@ export async function generateMetadata(props: { params: Promise<{ mdxPath?: stri
   if (!params.mdxPath || params.mdxPath.length === 0) {
     return {
       ...metadata,
-      title: 'Mushi Mushi — know why your AI-built app broke, with the fix ready',
-      description:
-        'Your AI shipped it. Mushi tells you why it broke — a plain-English diagnosis and a ready-to-apply fix, right in your editor. Standalone, open source, Sentry optional.',
+      // `absolute` skips the root layout's '%s · Mushi Mushi' template, which
+      // pushed the landing title past 80 characters.
+      title: { absolute: LANDING_META.title },
+      description: LANDING_META.description,
       openGraph: {
-        title: 'Mushi Mushi — know why your AI-built app broke, with the fix ready',
-        description:
-          'Your AI shipped it. Mushi tells you why it broke — a plain-English diagnosis and a ready-to-apply fix, right in your editor. Standalone, open source, Sentry optional.',
-        url: 'https://kensaur.us/mushi-mushi/',
+        title: LANDING_META.title,
+        description: LANDING_META.description,
+        url: PRODUCT_ROOT,
         siteName: 'Mushi Mushi',
         type: 'website',
-        images: [
-          {
-            url: 'https://kensaur.us/mushi-mushi/docs/social-preview/og-card.png',
-            width: 1200,
-            height: 630,
-          },
-        ],
+        images: [OG_CARD_IMAGE],
       },
       twitter: {
         card: 'summary_large_image',
-        title: 'Mushi Mushi — know why your AI-built app broke, with the fix ready',
-        description:
-          'Plain-English diagnosis + a ready-to-apply fix, right in Cursor. Standalone, open source, Sentry optional.',
+        title: LANDING_META.title,
+        description: LANDING_META.description,
+        images: [OG_CARD_IMAGE.url],
       },
       robots: { index: true, follow: true },
       alternates: {
-        ...(metadata as { alternates?: Record<string, unknown> })?.alternates,
+        ...(metadata as PageFrontMatter)?.alternates,
         canonical: PRODUCT_ROOT,
       },
     }
   }
   // Every other docs page canonicalises to its own /docs URL. Frontmatter may
   // override by shipping its own `alternates.canonical` (spread wins below).
-  const existingAlternates = (metadata as { alternates?: Record<string, unknown> })?.alternates
+  // The blog index and posts also advertise the RSS feed.
+  const existingAlternates = (metadata as PageFrontMatter)?.alternates
+  const onBlog = params.mdxPath[0] === 'blog'
+  const alternates = {
+    canonical: `${DOCS_SITE}/${params.mdxPath.join('/')}`,
+    ...(onBlog ? { types: { 'application/rss+xml': BLOG_FEED_URL } } : {}),
+    ...existingAlternates,
+  }
+  if (!isBlogPost(params.mdxPath)) return { ...metadata, alternates }
+
+  // A post is an article, not the site's generic `website` card. Declaring
+  // openGraph here replaces the root layout's block, so the image and site
+  // name are repeated.
+  const post = blogPostMeta(params.mdxPath, metadata as PageFrontMatter)
   return {
     ...metadata,
-    alternates: {
-      canonical: `${DOCS_SITE}/${params.mdxPath.join('/')}`,
-      ...existingAlternates,
+    alternates,
+    openGraph: {
+      type: 'article',
+      title: post.title,
+      ...(post.description ? { description: post.description } : {}),
+      url: post.url,
+      siteName: 'Mushi Mushi',
+      images: [OG_CARD_IMAGE],
+      authors: [BLOG_AUTHOR_NAME],
+      ...(post.datePublished ? { publishedTime: post.datePublished.toISOString() } : {}),
     },
   }
 }
@@ -69,12 +116,16 @@ export default async function Page(props: { params: Promise<{ mdxPath?: string[]
   const MDXContent = result.default as (innerProps: {
     params: { mdxPath?: string[] }
   }) => React.ReactNode
+  const metadata = (result as { metadata: unknown }).metadata
   return (
     <Wrapper
       toc={(result as { toc: unknown }).toc as never}
-      metadata={(result as { metadata: unknown }).metadata as never}
+      metadata={metadata as never}
       sourceCode={(result as { sourceCode: string }).sourceCode}
     >
+      {params.mdxPath && isBlogPost(params.mdxPath) ? (
+        <JsonLd data={blogPostingJsonLd(blogPostMeta(params.mdxPath, metadata as PageFrontMatter))} />
+      ) : null}
       <MDXContent params={params} />
     </Wrapper>
   )

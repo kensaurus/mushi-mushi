@@ -3,7 +3,6 @@
  * PURPOSE: LLM spend health — telemetry gaps, spikes, BYOK, failed calls.
  */
 
-import { Link } from 'react-router-dom'
 import { Btn, RelativeTime } from '../ui'
 import { usePageCopy } from '../../lib/copy'
 import { OperationChip } from '../OperationChip'
@@ -13,6 +12,8 @@ import type { CostStats, CostTabId } from './types'
 interface Props {
   stats: CostStats
   onTab?: (tab: CostTabId) => void
+  /** Opens the raw log filtered to the failed calls the banner counts. */
+  onViewFailures?: () => void
   plainBanner?: boolean
 }
 
@@ -22,7 +23,7 @@ function fmtUsd(n: number): string {
   return `$${n.toFixed(6)}`
 }
 
-export function CostStatusBanner({ stats, onTab, plainBanner = false }: Props) {
+export function CostStatusBanner({ stats, onTab, onViewFailures, plainBanner = false }: Props) {
   const copy = usePageCopy('/cost')
   const actions = copy?.actionLabels ?? {}
   const projectLabel = stats.projectName ?? 'this project'
@@ -52,9 +53,7 @@ export function CostStatusBanner({ stats, onTab, plainBanner = false }: Props) {
             : 'Ingest a report or run classify/fix — each edge function writes to llm_invocations with token counts and cost_usd.'
         }
         action={
-          <Link to="/health">
-            <Btn size="sm" variant="ghost">{actions.health ?? 'Run Health test'}</Btn>
-          </Link>
+          <Btn to="/health" size="sm" variant="ghost">{actions.health ?? 'Run Health test'}</Btn>
         }
       />
     )
@@ -104,8 +103,8 @@ export function CostStatusBanner({ stats, onTab, plainBanner = false }: Props) {
             : 'Failed invocations may still incur partial token cost — filter Raw log by operation and check Langfuse traces.'
         }
         action={
-          onTab ? (
-            <Btn size="sm" variant="ghost" onClick={() => onTab('log')}>
+          onViewFailures || onTab ? (
+            <Btn size="sm" variant="ghost" onClick={() => (onViewFailures ? onViewFailures() : onTab?.('log'))}>
               {actions.failures ?? 'View failures'}
             </Btn>
           ) : null
@@ -125,9 +124,7 @@ export function CostStatusBanner({ stats, onTab, plainBanner = false }: Props) {
         }
         subtitle={`${fmtUsd(stats.spend24hUsd)} in 24h on platform keys — add your own Anthropic key in Settings to control billing.`}
         action={
-          <Link to="/settings?tab=byok">
-            <Btn size="sm" variant="ghost">{actions.byok ?? 'Add BYOK'}</Btn>
-          </Link>
+          <Btn to="/settings?tab=byok" size="sm" variant="ghost">{actions.byok ?? 'Add BYOK'}</Btn>
         }
       />
     )
@@ -151,7 +148,7 @@ export function CostStatusBanner({ stats, onTab, plainBanner = false }: Props) {
         <>
           {fmtUsd(stats.spend24hUsd)} in 24h · {stats.calls24h} calls
           {stats.lastCallAt ? (
-            <> · last call <RelativeTime value={stats.lastCallAt} /></>
+            <> · last call&nbsp;<RelativeTime value={stats.lastCallAt} /></>
           ) : null}
           {stats.byokCalls24h > 0 ? ` · ${stats.byokCalls24h} BYOK` : ''}
         </>

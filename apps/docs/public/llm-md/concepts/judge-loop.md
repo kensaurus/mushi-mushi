@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/concepts/judge-loop
 
 ---
 title: Judge & self-improvement
+description: How Mushi's classifier improves itself — a nightly judge scores yesterday's reads, prompts are A/B tested, and drift is caught before it reaches you.
 ---
 
 # Judge & self-improvement

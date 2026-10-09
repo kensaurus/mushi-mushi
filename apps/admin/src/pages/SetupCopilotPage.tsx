@@ -5,6 +5,7 @@
 import { useMemo } from 'react'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { Link, useSearchParams } from 'react-router-dom'
+import { humanizeApiError } from '../lib/humanizeApiError'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { Section, Card, Btn } from '../components/ui'
@@ -22,13 +23,20 @@ import { SetupCopilotReadout } from '../components/setup-copilot/SetupCopilotRea
 import { ContainedBlock } from '../components/report-detail/ReportSurface'
 import { usePublishPageContext } from '../lib/pageContext'
 
+/**
+ * One row of GET /v1/admin/projects. The API returns the admin host once at
+ * `data.admin_host`, and the SDK fields flat on each row (`sdk_status`,
+ * `sdk_package`, `sdk_version` string, `sdk_latest_version`). This page read
+ * a per-row `admin_host` and an object-shaped `sdk_version`, so endpoint
+ * mismatches were never detected and the upgrade CTA never rendered
+ * (QA bug 123).
+ */
 interface ProjectRow {
   id: string
   name: string
   slug: string
   report_count: number
   last_report_at: string | null
-  admin_host: string | null
   api_keys: Array<{
     id: string
     key_prefix: string
@@ -40,15 +48,17 @@ interface ProjectRow {
     last_seen_user_agent?: string | null
     last_seen_endpoint_host?: string | null
   }>
-  sdk_version?: {
-    status: SdkStatus
-    package: string | null
-    observed_version: string | null
-    latest_version: string | null
-  } | null
+  sdk_status?: SdkStatus
+  sdk_package?: string | null
+  sdk_version?: string | null
+  sdk_latest_version?: string | null
 }
 
-export function SetupCopilotPage() {
+/**
+ * `embedded`: rendered as the Diagnose tab of /onboarding (Plan 021: one setup
+ * path), under that page's header, so this one skips its own.
+ */
+export function SetupCopilotPage({ embedded = false }: { embedded?: boolean } = {}) {
   const [params] = useSearchParams()
   const activeId = useActiveProjectId()
   const projectParam = params.get('project')
@@ -60,7 +70,12 @@ export function SetupCopilotPage() {
     data: projectsPayload,
     error: projectsError,
     reload,
-  } = usePageData<{ projects: ProjectRow[] }>('/v1/admin/projects')
+  } = usePageData<{ projects: ProjectRow[]; admin_host?: string | null }>('/v1/admin/projects')
+  const adminHost = projectsPayload?.admin_host ?? null
+  const projectsErrorText = useMemo(() => {
+    const h = humanizeApiError(projectsError)
+    return h ? `${h.title} ${h.hint}` : null
+  }, [projectsError])
 
   const projectRow = useMemo(
     () => projectsPayload?.projects?.find((p) => p.id === projectId) ?? null,
@@ -100,7 +115,7 @@ export function SetupCopilotPage() {
 
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-setup-copilot">
-      <PageHeaderBar
+      {!embedded && <PageHeaderBar
         title="Setup Copilot"
 
         helpTitle="About Setup Copilot"
@@ -112,10 +127,8 @@ export function SetupCopilotPage() {
         ]}
         helpHowToUse="Select a project, paste connect credentials, open the SDK wizard, then run Verify Setup for both ingest and dispatch tracks."
       >
-        <Link to="/projects">
-          <Btn variant="ghost" size="sm">← Projects</Btn>
-        </Link>
-      </PageHeaderBar>
+        <Btn to="/projects" variant="ghost" size="sm">← Projects</Btn>
+      </PageHeaderBar>}
 
       <nav
         aria-label="Setup funnel"
@@ -149,7 +162,7 @@ export function SetupCopilotPage() {
 
       {projectId && !projectRow && !projectsPayload && projectsError && (
         <Card className="p-5">
-          <p className="text-sm text-fg-muted">Could not load projects: {projectsError}</p>
+          <p className="text-sm text-fg-muted">Could not load projects. {projectsErrorText}</p>
           <Btn
             type="button"
             variant="ghost"
@@ -226,9 +239,9 @@ export function SetupCopilotPage() {
             </p>
             {/* A Card around a single button was pure chrome — the Section
                 already frames this step. */}
-            <Link to={`/onboarding?tab=sdk&project=${projectId}`}>
-              <Btn variant="primary" size="sm">Open SDK install wizard →</Btn>
-            </Link>
+            <Btn variant="primary" size="sm" to={`/onboarding?tab=sdk&project=${projectId}`}>
+              Open SDK install wizard →
+            </Btn>
           </Section>
 
           <Section title="2b · CI &amp; store builds">
@@ -296,23 +309,23 @@ export function SetupCopilotPage() {
               projectSlug={projectRow.slug}
               apiKeys={projectRow.api_keys}
               lastReportAt={projectRow.last_report_at}
-              adminHost={projectRow.admin_host}
+              adminHost={adminHost}
               reportCount={projectRow.report_count}
               onTestReportSent={() => void reload()}
             />
-            {projectRow.sdk_version && (
+            {projectRow.sdk_status && projectRow.sdk_version && (
               <div className="flex flex-wrap items-center gap-2 mt-3">
                 <SdkVersionBadge
-                  status={projectRow.sdk_version.status}
-                  package_={projectRow.sdk_version.package}
-                  observedVersion={projectRow.sdk_version.observed_version}
-                  latestVersion={projectRow.sdk_version.latest_version}
+                  status={projectRow.sdk_status}
+                  package_={projectRow.sdk_package ?? null}
+                  observedVersion={projectRow.sdk_version}
+                  latestVersion={projectRow.sdk_latest_version ?? null}
                 />
                 <SdkUpgradeCTA
-                  status={projectRow.sdk_version.status}
-                  package_={projectRow.sdk_version.package}
-                  observedVersion={projectRow.sdk_version.observed_version}
-                  latestVersion={projectRow.sdk_version.latest_version}
+                  status={projectRow.sdk_status}
+                  package_={projectRow.sdk_package ?? null}
+                  observedVersion={projectRow.sdk_version}
+                  latestVersion={projectRow.sdk_latest_version ?? null}
                   stackLabel={env.stackLabel}
                   compact
                   projectId={projectId}
@@ -326,7 +339,7 @@ export function SetupCopilotPage() {
             <VerifySetupPanel
               projectId={projectId}
               projectName={projectRow.name}
-              adminHost={projectRow.admin_host}
+              adminHost={adminHost}
             />
           </Section>
         </>

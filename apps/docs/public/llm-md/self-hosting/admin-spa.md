@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/self-hosting/admin-spa
 
 ---
 title: Admin SPA deploy
+description: Build and deploy the Mushi admin console yourself — a static Vite and React app that talks to your Supabase project, and the env vars it needs.
 ---
 
 # Admin SPA deploy

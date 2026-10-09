@@ -111,7 +111,7 @@ export function registerCodeHealthRoutes(app: Hono<{ Variables: Variables }>): v
     if ('response' in resolved) return resolved.response
     const { project } = resolved
     const projectId = project.id as string
-    const projectName = (project.project_name as string | null) ?? null
+    const projectName = (project.name as string | null) ?? null
 
     const { data: latestRun } = await db
       .from('gate_runs')
@@ -131,6 +131,7 @@ export function registerCodeHealthRoutes(app: Hono<{ Variables: Variables }>): v
         .from('gate_findings')
         .select('severity')
         .eq('gate_run_id', latestRun.id)
+        .eq('allowlisted', false) // dismissed findings are not open
 
       for (const row of findingRows ?? []) {
         godFileCount += 1
@@ -144,6 +145,10 @@ export function registerCodeHealthRoutes(app: Hono<{ Variables: Variables }>): v
     let topPriorityLabel: string | null = null
     let topPriorityTo: string | null = `/code-health?project=${projectId}`
 
+    if (errorCount > 0 || warnCount > 0) {
+      // Land on the findings list, not the top of the page you are on.
+      topPriorityTo = `/code-health?project=${projectId}#god-files`
+    }
     if (errorCount > 0) {
       topPriority = 'errors'
       topPriorityLabel = `${errorCount} file${errorCount === 1 ? '' : 's'} over the 2,000 LOC budget — split before the next release.`
@@ -271,6 +276,7 @@ export function registerCodeHealthRoutes(app: Hono<{ Variables: Variables }>): v
         .from('gate_findings')
         .select('id, rule_id, severity, file_path, line, message, suggested_fix')
         .eq('gate_run_id', latestRun.id)
+        .eq('allowlisted', false) // dismissed findings are not open
         .limit(200)
 
       if (findErr) {

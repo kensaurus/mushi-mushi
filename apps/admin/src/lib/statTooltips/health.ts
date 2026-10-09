@@ -82,12 +82,12 @@ export function fallbackRateDetail(): string {
 export function latencyTooltip(stats: HealthStats): MetricTooltipData {
   const takeaway =
     stats.totalCalls > 0
-      ? `Median ${stats.avgLatencyMs}ms, 95th percentile ${stats.p95LatencyMs}ms in ${stats.window}. Spikes often correlate with large prompts or slow provider tiers.`
+      ? `Average ${stats.avgLatencyMs}ms, 95th percentile ${stats.p95LatencyMs}ms in ${stats.window}${stats.latencyExact === false ? ' (from the newest calls only)' : ''}. Spikes often correlate with large prompts or slow provider tiers.`
       : 'Latency percentiles appear after the first LLM invocation is logged.'
 
   return metricTip(
-    'Median (p50) and 95th-percentile LLM response latency in milliseconds.',
-    'Computed from latency_ms on llm_invocations rows in the window. avgLatencyMs is the mean; p95LatencyMs is the 95th percentile of sorted latencies.',
+    'Average and 95th-percentile LLM response latency in milliseconds.',
+    'Computed from latency_ms on every llm_invocations row in the window: the mean and the 95th percentile.',
     takeaway,
     stats.p95LatencyMs > 30000 && stats.totalCalls > 0
       ? { tone: 'warn', text: `p95 latency ${stats.p95LatencyMs}ms is very high — check for timeout retries or oversized prompts.` }
@@ -96,7 +96,7 @@ export function latencyTooltip(stats: HealthStats): MetricTooltipData {
 }
 
 export function latencyDetail(): string {
-  return 'Median / 95th percentile'
+  return 'Average / 95th percentile'
 }
 
 export function cronTooltip(stats: HealthStats): MetricTooltipData {

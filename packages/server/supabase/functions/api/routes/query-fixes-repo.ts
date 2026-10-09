@@ -40,9 +40,22 @@ import {
   type MergeMethod,
 } from '../../_shared/fix-merge.ts';
 import {
+  mergeStoredFixTimeline,
+  synthesizeFixTimeline,
+  type FixTimelineEvent,
+} from '../../_shared/fix-timeline.ts';
+import { isFixCountedFailed } from '../../_shared/fix-loop-status.ts';
+import { summarizeFixTruths } from '../../_shared/fix-report-truth.ts';
+import { loadRecentFixTruths, loadReportFixTruths, reportTitle } from '../../_shared/fix-report-truth-load.ts';
+import { resolveUserDisplays } from '../../_shared/user-display.ts';
+import {
+  installationIdForAttempt,
+  parseGithubRepoUrl,
   resolveProjectGithubToken,
 } from '../../_shared/github.ts';
-import { dbError, ownedProjectIds, callerProjectIds, resolveOwnedProject, scopedOwnedProjectIds, userCanAccessProject } from '../shared.ts';
+import { resolveBranchForConnect } from '../../_shared/github-branch.ts';
+import { canMergeReportGroups, mergeReportGroups } from '../../_shared/report-groups.ts';
+import { dbError, ownedProjectIds, callerProjectIds, resolveOwnedProject, scopedOwnedProjectIds, callerCanAccessProject } from '../shared.ts';
 import {
   canManageProjectSdkConfig,
   coerceSdkConfigUpdate,
@@ -52,6 +65,44 @@ import {
   triggerClassification,
   type SdkConfigRow,
 } from '../helpers.ts';
+import {
+  PROJECT_REPO_ROLES,
+  REPO_BRANCH_WINDOW,
+  classifyRepoBranch,
+  countRepoBranches,
+  markSupersededFailures,
+  isProjectRepoRole,
+} from '../../_shared/repo-branch-counts.ts';
+
+function repoRoleMessage(role: unknown): string {
+  return `"${String(role).slice(0, 32)}" is not a repo role. Use one of: ${PROJECT_REPO_ROLES.join(', ')}.`;
+}
+
+/**
+ * Make `repoId` the project's primary repo. The unique partial index allows
+ * one primary per project, so setting a second one without unsetting the
+ * first always failed (console QA #20). Callers run this only AFTER their own
+ * write succeeded, so a failed save never leaves the project without one.
+ */
+async function movePrimaryRepo(
+  db: ReturnType<typeof getServiceClient>,
+  projectId: string,
+  repoId: string,
+): Promise<{ message: string; code?: string } | null> {
+  const { error: clearErr } = await db
+    .from('project_repos')
+    .update({ is_primary: false })
+    .eq('project_id', projectId)
+    .eq('is_primary', true)
+    .neq('id', repoId);
+  if (clearErr) return clearErr;
+  const { error } = await db
+    .from('project_repos')
+    .update({ is_primary: true })
+    .eq('id', repoId)
+    .eq('project_id', projectId);
+  return error ?? null;
+}
 
 export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>): void {
   app.get('/v1/admin/query/stats', jwtAuth, async (c) => {
@@ -298,39 +349,9 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     // because a single power user often owns 5+ saved prompts and we
     // don't want N admin.getUserById calls when 1 would do (mirrors the
     // organizations.ts inviter-email pattern).
-    const authorIds = Array.from(
-      new Set(rows.map((r) => r.user_id).filter((id): id is string => Boolean(id))),
-    );
-    const authorById = new Map<string, { email: string | null; name: string | null }>();
-    await Promise.all(
-      authorIds.map(async (id) => {
-        try {
-          const { data: row } = await db.auth.admin.getUserById(id);
-          const u = row.user;
-          if (!u) {
-            authorById.set(id, { email: null, name: null });
-            return;
-          }
-          const meta = (u.user_metadata ?? {}) as Record<string, unknown>;
-          const pick = (key: string): string | null => {
-            const v = meta[key];
-            return typeof v === 'string' && v.trim() ? v.trim() : null;
-          };
-          let name = pick('full_name') ?? pick('name') ?? pick('display_name');
-          if (!name && u.email) {
-            const local = u.email.split('@')[0] ?? '';
-            name =
-              local
-                .split(/[._-]+/)
-                .filter(Boolean)
-                .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
-                .join(' ') || null;
-          }
-          authorById.set(id, { email: u.email ?? null, name });
-        } catch {
-          authorById.set(id, { email: null, name: null });
-        }
-      }),
+    const authorById = await resolveUserDisplays(
+      db as unknown as Parameters<typeof resolveUserDisplays>[0],
+      rows.map((r) => r.user_id),
     );
 
     const decorated = rows.map((r) => {
@@ -366,7 +387,11 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
 
   app.post('/v1/admin/groups/:id/merge', jwtAuth, async (c) => {
     const groupId = c.req.param('id')!;
-    const { targetGroupId } = await c.req.json();
+    const body = (await c.req.json().catch(() => null)) as { targetGroupId?: unknown } | null;
+    const targetGroupId = typeof body?.targetGroupId === 'string' ? body.targetGroupId : '';
+    if (!targetGroupId || targetGroupId === groupId) {
+      return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: 'Pick a different group to merge into.' } }, 400);
+    }
     const userId = c.get('userId') as string;
     const db = getServiceClient();
     const projectIds = await callerProjectIds(c, db, userId);
@@ -393,22 +418,25 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
         },
         400,
       );
+    // Merging deletes the source group: viewers are read-only.
+    const access = await callerCanAccessProject(c, db, userId, sourceGroup.project_id as string);
+    if (!access.allowed || !canMergeReportGroups(access.role)) {
+      return c.json(
+        { ok: false, error: { code: 'FORBIDDEN', message: 'Viewers cannot merge groups. Ask a member or admin.' } },
+        403,
+      );
+    }
 
-    await db
-      .from('reports')
-      .update({ report_group_id: targetGroupId })
-      .eq('report_group_id', groupId);
-    const { count } = await db
-      .from('reports')
-      .select('id', { count: 'exact', head: true })
-      .eq('report_group_id', targetGroupId);
-    await db
-      .from('report_groups')
-      .update({ report_count: count ?? 0 })
-      .eq('id', targetGroupId);
-    await db.from('report_groups').delete().eq('id', groupId);
+    const result = await mergeReportGroups(db, groupId, targetGroupId, sourceGroup.project_id as string);
+    if (!result.ok) {
+      log.error('report group merge failed', { groupId, targetGroupId, step: result.step, error: result.message });
+      return c.json(
+        { ok: false, error: { code: 'MERGE_FAILED', message: 'The merge stopped part way. No group was deleted; retry the merge.' } },
+        500,
+      );
+    }
 
-    return c.json({ ok: true });
+    return c.json({ ok: true, data: { moved: result.moved, report_count: result.reportCount } });
   });
 
   // ============================================================
@@ -450,6 +478,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       indexedFiles: 0,
       totalAttempts: 0,
       failed: 0,
+      retryable: 0,
       inProgress: 0,
       completed: 0,
       prsOpen: 0,
@@ -483,7 +512,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
 
     const [attemptsRes, integrationRes, codebaseRes, inflightRes] = await Promise.all([
       db.from('fix_attempts')
-        .select('id, status, pr_url, check_run_conclusion, failure_category, spec_validation_warnings')
+        .select('id, report_id, check_run_conclusion, spec_validation_warnings')
         .eq('project_id', pid)
         .gte('created_at', since.toISOString())
         .limit(500),
@@ -497,34 +526,41 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       db.from('project_codebase_files')
         .select('id', { count: 'exact', head: true })
         .eq('project_id', pid),
-      db.from('fix_attempts')
-        .select('id', { count: 'exact', head: true })
+      db.from('fix_dispatch_jobs')
+        .select('report_id')
         .eq('project_id', pid)
-        .in('status', ['queued', 'running', 'pending']),
+        .in('status', ['queued', 'running'])
+        .limit(200),
     ])
 
     const attempts = attemptsRes.data ?? []
-    const failed = attempts.filter((a) => a.status === 'failed').length
-    const inProgress = attempts.filter((a) => ['queued', 'running', 'pending'].includes(a.status)).length
-    const completed = attempts.filter((a) => a.status === 'completed').length
-    const prsOpen = attempts.filter((a) => a.pr_url && a.status === 'completed').length
+    // Counts are per REPORT and from its current state (fix-report-truth.ts):
+    // a report fixed by a merged PR never counts as failed or open, however
+    // many earlier attempts failed (glot.it 2026-10-04).
+    const { truths } = await loadRecentFixTruths(db as unknown as Parameters<typeof loadRecentFixTruths>[0], [pid])
+    const truth = summarizeFixTruths(truths.values())
+    const failed = truth.failed
+    const retryable = truth.retryable
+    const inProgress = truth.inFlight
+    const completed = truth.fixed
+    const prsOpen = truth.prOpen
     const prsCiPassing = attempts.filter((a) => a.check_run_conclusion === 'success').length
     const specWarnings = attempts.filter((a) => {
       const w = a.spec_validation_warnings as unknown
       return Array.isArray(w) && w.length > 0
     }).length
 
-    const failureBuckets = new Map<string, number>()
-    for (const a of attempts) {
-      if (a.status !== 'failed') continue
-      const cat = typeof a.failure_category === 'string' && a.failure_category ? a.failure_category : 'unknown'
-      failureBuckets.set(cat, (failureBuckets.get(cat) ?? 0) + 1)
-    }
-    const topEntry = [...failureBuckets.entries()].sort((a, b) => b[1] - a[1])[0]
+    const topEntry = truth.failureBreakdown[0]
 
     const hasGithub = !!(integrationRes.data?.github_repo_url) || !!(integrationRes.data?.github_installation_token_ref)
     const indexedFiles = codebaseRes.count ?? 0
-    const inflightDispatches = inflightRes.count ?? inProgress
+    // Dispatches queued before their attempt row exists. A report already
+    // counted in `inProgress` is not counted twice (the strip adds both).
+    const inflightDispatches = new Set(
+      (inflightRes.data ?? [])
+        .map((d) => d.report_id as string)
+        .filter((rid) => truths.get(rid)?.state !== 'in_flight'),
+    ).size
     const successRatePct = completed + failed > 0
       ? Math.round((completed / (completed + failed)) * 100)
       : null
@@ -543,18 +579,22 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       topPriorityTo = '/integrations/config'
     } else if (failed > 0) {
       topPriority = 'failed'
-      topPriorityLabel = `${failed} fix attempt${failed === 1 ? '' : 's'} failed — open each one to read the error, then retry or hand off to Cursor.`
-      topPriorityTo = `/fixes?status=failed&project=${encodeURIComponent(pid)}`
-    } else if (inflightDispatches > 0) {
+      topPriorityLabel =
+        retryable > 0
+          ? `${failed} report${failed === 1 ? '' : 's'} still unfixed after the last attempt — ${retryable} can be retried now; open the rest to read why.`
+          : `${failed} report${failed === 1 ? '' : 's'} still unfixed after the last attempt — open ${failed === 1 ? 'it' : 'each one'} to read why and what to do.`
+      // tab=attempts: the failed list lives there, not on Overview (QA #94).
+      topPriorityTo = `/fixes?tab=attempts&status=failed&project=${encodeURIComponent(pid)}`
+    } else if (inflightDispatches + inProgress > 0) {
       topPriority = 'inflight'
-      topPriorityLabel = `${inflightDispatches} fix${inflightDispatches === 1 ? '' : 'es'} dispatching — check back shortly.`
-      topPriorityTo = '/fixes?status=running'
+      topPriorityLabel = `${inflightDispatches + inProgress} fix${inflightDispatches + inProgress === 1 ? '' : 'es'} dispatching — check back shortly.`
+      topPriorityTo = '/fixes?tab=pipeline'
     } else if (prsOpen > 0) {
       topPriority = 'waiting'
       topPriorityLabel = `${prsOpen} PR${prsOpen === 1 ? '' : 's'} open — merge or close to advance the loop.`
-      topPriorityTo = '/repo?tab=prs'
+      topPriorityTo = '/repo?tab=branches&status=open'
     } else {
-      topPriorityLabel = `${completed} fix${completed === 1 ? '' : 'es'} completed in the last 30 days.`
+      topPriorityLabel = `${completed} report${completed === 1 ? '' : 's'} fixed in the last 30 days.`
       topPriorityTo = '/fixes'
     }
 
@@ -563,21 +603,22 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       data: {
         hasAnyProject: true,
         projectId: pid,
-        projectName: activeProject.project_name,
+        projectName: activeProject.name ?? null,
         projectCount: projectIds.length,
         hasGithub,
         codebaseIndexEnabled: indexedFiles > 0,
         indexedFiles,
         totalAttempts: attempts.length,
         failed,
+        retryable,
         inProgress,
         completed,
         prsOpen,
         prsCiPassing,
         specWarnings,
         inflightDispatches,
-        topFailureCategory: topEntry?.[0] ?? null,
-        topFailureCount: topEntry?.[1] ?? 0,
+        topFailureCategory: topEntry?.category ?? null,
+        topFailureCount: topEntry?.count ?? 0,
         successRatePct,
         topPriority,
         topPriorityLabel,
@@ -595,23 +636,37 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     // pipeline. The previous project_members-only filter showed "0 fixes"
     // to invited org members.
     const projectIds = await callerProjectIds(c, db, userId);
-    if (projectIds.length === 0) return c.json({ ok: true, data: { fixes: [] } });
+    if (projectIds.length === 0) return c.json({ ok: true, data: { fixes: [], total: 0 } });
 
     // Optional `q` substring search — the admin command palette needs fast
     // alias-matching against summary/rationale/branch, otherwise live search
     // never surfaces in-flight or completed fixes by their change text.
     const search = c.req.query('q')?.trim();
     const queryLimit = Math.min(Number(c.req.query('limit')) || 50, 200);
+    // One report's attempts (the report page's progress panel). Without it
+    // the panel searched the 50 newest fixes client-side and showed nothing
+    // for a report whose fix was older.
+    const reportIdParam = c.req.query('report_id')?.trim();
+    if (reportIdParam && !/^[0-9a-f-]{36}$/i.test(reportIdParam)) {
+      return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: 'report_id must be a report id' } }, 400);
+    }
+    // `offset` + the exact `total` let /fixes load older attempts instead of
+    // stopping at the first page (console QA #91).
+    const queryOffset = Math.max(Math.floor(Number(c.req.query('offset')) || 0), 0);
 
     let query = db
       .from('fix_attempts')
       .select(
-        'id, report_id, project_id, agent, branch, pr_url, pr_number, commit_sha, status, files_changed, lines_changed, summary, rationale, review_passed, started_at, completed_at, created_at, langfuse_trace_id, llm_model, llm_input_tokens, llm_output_tokens, check_run_status, check_run_conclusion, pr_state, merged_at, error, spec_validation_warnings, inventory_action_node_id, failure_category',
+        // cursor_* / claude_workflow_run_url / check_run_updated_at feed the
+        // agent badges, links, artifacts gallery and "CI synced" (QA #89).
+        'id, report_id, project_id, agent, branch, pr_url, pr_number, commit_sha, status, files_changed, lines_changed, summary, rationale, review_passed, started_at, completed_at, created_at, langfuse_trace_id, llm_model, llm_input_tokens, llm_output_tokens, check_run_status, check_run_conclusion, check_run_updated_at, pr_state, merged_at, error, spec_validation_warnings, inventory_action_node_id, failure_category, cursor_agent_id, cursor_artifacts, claude_workflow_run_url',
+        { count: 'exact' },
       )
       .in('project_id', projectIds)
       .order('started_at', { ascending: false })
-      .limit(queryLimit);
+      .range(queryOffset, queryOffset + queryLimit - 1);
 
+    if (reportIdParam) query = query.eq('report_id', reportIdParam);
     if (search) {
       const escaped = search.replace(/[%,]/g, '');
       query = query.or(
@@ -619,9 +674,33 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       );
     }
 
-    const { data } = await query;
+    const { data, error: listErr, count } = await query;
+    if (listErr) return dbError(c, listErr);
+    const fixes = data ?? [];
 
-    return c.json({ ok: true, data: { fixes: data ?? [] } });
+    // Every row carries its report's CURRENT fix state, so the console can
+    // show "Superseded — fixed by PR #N" instead of a red failure, and only
+    // offer Retry on reports that are still unfixed (fix-report-truth.ts).
+    const loaded = await loadReportFixTruths(
+      db as unknown as Parameters<typeof loadReportFixTruths>[0],
+      fixes.map((f) => f.report_id as string),
+    );
+    const enriched = fixes.map((f) => {
+      const t = loaded.truths.get(f.report_id as string);
+      const report = loaded.reports.get(f.report_id as string);
+      return {
+        ...f,
+        report_title: reportTitle(report),
+        report_status: report?.status ?? null,
+        report_fix_state: t?.state ?? null,
+        report_fixed_by_pr: t?.mergedPrNumber ?? null,
+        is_latest_attempt: t ? t.latestAttemptId === f.id : null,
+        retryable: t ? t.retryable && t.latestAttemptId === f.id : false,
+        credential_block: t && t.latestAttemptId === f.id ? t.credential : null,
+      };
+    });
+
+    return c.json({ ok: true, data: { fixes: enriched, total: count ?? enriched.length, offset: queryOffset } });
   });
 
   app.post('/v1/admin/fixes', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {
@@ -677,6 +756,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
           total: 0,
           completed: 0,
           failed: 0,
+          retryable: 0,
           inProgress: 0,
           prsOpen: 0,
           prsCiPassing: 0,
@@ -694,7 +774,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     const { data: rows } = await db
       .from('fix_attempts')
       .select(
-        'id, status, pr_url, pr_number, check_run_conclusion, started_at, completed_at, created_at, spec_validation_warnings, failure_category',
+        'id, report_id, status, pr_url, pr_number, pr_state, merged_at, check_run_conclusion, started_at, completed_at, created_at, spec_validation_warnings, failure_category',
       )
       .in('project_id', projectIds)
       .gte('created_at', since.toISOString())
@@ -702,16 +782,15 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       .limit(500);
 
     const list = rows ?? [];
-    const completed = list.filter((r) => r.status === 'completed').length;
-    const failed = list.filter((r) => r.status === 'failed').length;
-    const inProgress = list.filter(
-      (r) => r.status === 'queued' || r.status === 'running' || r.status === 'pending',
-    ).length;
-    // GitHub's `check_run.conclusion` enum is success | failure | neutral |
-    // cancelled | skipped | timed_out | action_required | stale — there is no
-    // `merged` value, so the old `!== 'merged'` filter was a no-op. Use the
-    // attempt's own status as the "open" gate; merge state lives elsewhere.
-    const prsOpen = list.filter((r) => r.pr_url && r.status === 'completed').length;
+    // Headline counts are per REPORT from its current state, the same rule
+    // as /fixes/stats (fix-report-truth.ts). The per-day series below stays
+    // per attempt: it is the history of runs, not the current state.
+    const { truths } = await loadRecentFixTruths(db as unknown as Parameters<typeof loadRecentFixTruths>[0], projectIds);
+    const truth = summarizeFixTruths(truths.values());
+    const completed = truth.fixed;
+    const failed = truth.failed;
+    const inProgress = truth.inFlight;
+    const prsOpen = truth.prOpen;
     const prsCiPassing = list.filter((r) => r.check_run_conclusion === 'success').length;
     // Loop-closure: count fix_attempts whose validateAgainstSpec gate raised
     // at least one soft warning over the trailing 30d. Surfaced as a tile
@@ -723,22 +802,9 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       return Array.isArray(w) && w.length > 0;
     }).length;
 
-    // Loop-closure: bucket the 30d failures by failure_category so the
-    // Fixes summary tile can render "12 sandbox_timeout / 4 scope_blocked /
-    // 2 spec_violation" instead of a single opaque "16 failed" number.
-    // Sorted desc by count so the dominant cause is always first.
-    const failureBucketMap = new Map<string, number>();
-    for (const r of list) {
-      if (r.status !== 'failed') continue;
-      const cat =
-        typeof r.failure_category === 'string' && r.failure_category.length > 0
-          ? r.failure_category
-          : 'unknown';
-      failureBucketMap.set(cat, (failureBucketMap.get(cat) ?? 0) + 1);
-    }
-    const failureBreakdown = [...failureBucketMap.entries()]
-      .map(([category, count]) => ({ category, count }))
-      .sort((a, b) => b.count - a.count);
+    // Why the still-unfixed reports failed, by the cause of their latest
+    // attempt, most common first.
+    const failureBreakdown = truth.failureBreakdown;
 
     const days: { day: string; total: number; completed: number; failed: number }[] = [];
     for (let i = 0; i < 30; i++) {
@@ -752,8 +818,8 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       const bucket = byDay.get(k);
       if (!bucket) continue;
       bucket.total++;
-      if (r.status === 'completed') bucket.completed++;
-      if (r.status === 'failed') bucket.failed++;
+      if (isFixCountedFailed(r)) bucket.failed++;
+      else if (r.status === 'completed') bucket.completed++;
     }
 
     return c.json({
@@ -762,6 +828,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
         total: list.length,
         completed,
         failed,
+        retryable: truth.retryable,
         inProgress,
         prsOpen,
         prsCiPassing,
@@ -812,7 +879,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       .maybeSingle();
     if (!attempt) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
 
-    const access = await userCanAccessProject(db, userId, attempt.project_id);
+    const access = await callerCanAccessProject(c, db, userId, attempt.project_id);
     if (!access.allowed) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
@@ -848,7 +915,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
 
       const { data: refreshed } = await db
         .from('fix_attempts')
-        .select('check_run_status, check_run_conclusion, check_run_updated_at')
+        .select('check_run_status, check_run_conclusion, check_run_updated_at, pr_state, merged_at')
         .eq('id', fixId)
         .maybeSingle();
 
@@ -890,7 +957,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Fix not found' } }, 404);
     }
 
-    const access = await userCanAccessProject(db, userId, attempt.project_id);
+    const access = await callerCanAccessProject(c, db, userId, attempt.project_id);
     if (!access.allowed) {
       return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Not a member of this project' } }, 403);
     }
@@ -925,18 +992,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       );
     }
 
-    let installationId: number | null = null;
-    if (attempt.repo_id) {
-      const { data: repo } = await db
-        .from('project_repos')
-        .select('github_app_installation_id')
-        .eq('id', attempt.repo_id)
-        .maybeSingle();
-      if (repo?.github_app_installation_id) {
-        installationId = Number(repo.github_app_installation_id);
-      }
-    }
-
+    const installationId = await installationIdForAttempt(db, attempt);
     const token = await resolveProjectGithubToken(db, attempt.project_id, installationId);
     if (!token) {
       return c.json(
@@ -982,6 +1038,8 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       prNumber: attempt.pr_number,
       repository: `${ref.owner}/${ref.repo}`,
       actorUserId: userId,
+      // A fresh merge happened just now; an already-merged PR keeps GitHub's time.
+      mergedAt: mergeResult.alreadyMerged ? mergeResult.mergedAt ?? null : null,
     });
 
     await logAudit(
@@ -1019,7 +1077,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Fix not found' } }, 404);
 
     const FIX_ATTEMPT_COLUMNS =
-      'id, report_id, project_id, agent, branch, pr_url, pr_number, commit_sha, status, lines_changed, files_changed, llm_model, started_at, completed_at, created_at, check_run_status, check_run_conclusion, check_run_updated_at, error';
+      'id, report_id, project_id, repo_id, agent, branch, pr_url, pr_number, pr_state, merged_at, commit_sha, status, lines_changed, files_changed, llm_model, started_at, completed_at, created_at, check_run_status, check_run_conclusion, check_run_updated_at, error';
     let { data: fix } = await db
       .from('fix_attempts')
       .select(FIX_ATTEMPT_COLUMNS)
@@ -1077,178 +1135,42 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
           .eq('fix_attempt_id', fix.id)
           .maybeSingle();
 
-    type EventKind =
-      | 'dispatched'
-      | 'started'
-      | 'branch'
-      | 'commit'
-      | 'pr_opened'
-      | 'ci_started'
-      | 'ci_resolved'
-      | 'pr_state_changed'
-      | 'completed'
-      | 'failed';
-    interface TimelineEvent {
-      kind: EventKind;
-      at: string;
-      label: string;
-      detail?: string | null;
-      status?: 'ok' | 'fail' | 'pending' | null;
-    }
-
     // Preferred source: the append-only `fix_events` stream written by the
-    // GitHub webhook handler (push / pull_request / check_run). When we have
-    // any rows for this attempt we use them verbatim so multi-commit /
-    // multi-CI timelines render faithfully. Falls back to the synthesised
-    // stream below for pre-`fix_events` attempts.
+    // GitHub webhook handler (push / pull_request / check_run) and ci-sync.
+    // Stored rows win per kind; stages they lack are filled from the attempt
+    // columns (see _shared/fix-timeline.ts).
     const { data: storedEvents } = await db
       .from('fix_events')
       .select('kind, status, label, detail, at')
-      .eq('fix_attempt_id', fixId)
+      .eq('fix_attempt_id', fix.id)
       .order('at', { ascending: true })
       .limit(200);
 
+    // The graph's base lane: the repo the attempt targeted, else the
+    // project's primary repo. Never a hard-coded 'main' — this repo is 'master'.
+    const repoQuery = db.from('project_repos').select('default_branch');
+    const { data: repoRow } = fix.repo_id
+      ? await repoQuery.eq('id', fix.repo_id).maybeSingle()
+      : await repoQuery.eq('project_id', fix.project_id).eq('is_primary', true).limit(1).maybeSingle();
+    const baseBranch = (repoRow?.default_branch as string | null | undefined) ?? null;
+
     if (storedEvents && storedEvents.length > 0) {
-      const events = storedEvents.map((e) => ({
-        kind: e.kind as EventKind,
-        at: e.at,
-        label: e.label,
-        detail: e.detail ?? undefined,
-        status: (e.status ?? undefined) as 'ok' | 'fail' | 'pending' | undefined,
-      }));
-      // Always prepend the dispatch/start events so the graph's top always
-      // shows the "how we got here" context even if the webhook stream starts
-      // mid-way through (e.g. feature was enabled after the fix ran).
-      const leading: TimelineEvent[] = [];
-      if (dispatch) {
-        leading.push({
-          kind: 'dispatched',
-          at: dispatch.created_at,
-          label: 'Dispatch requested',
-          status: 'pending',
-        });
-        if (dispatch.started_at) {
-          leading.push({
-            kind: 'started',
-            at: dispatch.started_at,
-            label: 'Worker started',
-            status: 'pending',
-          });
-        }
-      } else if (fix.created_at) {
-        leading.push({
-          kind: 'dispatched',
-          at: fix.created_at,
-          label: 'Fix attempt created',
-          status: 'pending',
-        });
-      }
-      const combined = [...leading, ...events].sort(
-        (a, b) => new Date(a.at).getTime() - new Date(b.at).getTime(),
+      const events = mergeStoredFixTimeline(
+        dispatch ?? null,
+        fix,
+        storedEvents.map((e) => ({
+          kind: e.kind as FixTimelineEvent['kind'],
+          at: e.at,
+          label: e.label,
+          detail: e.detail ?? undefined,
+          status: (e.status ?? undefined) as FixTimelineEvent['status'],
+        })),
       );
-      return c.json({ ok: true, data: { fix, dispatch, events: combined, source: 'fix_events' } });
+      return c.json({ ok: true, data: { fix, dispatch, events, base_branch: baseBranch, source: 'fix_events' } });
     }
 
-    const events: TimelineEvent[] = [];
-
-    if (dispatch) {
-      events.push({
-        kind: 'dispatched',
-        at: dispatch.created_at,
-        label: 'Dispatch requested',
-        status: 'pending',
-      });
-      if (dispatch.started_at) {
-        events.push({
-          kind: 'started',
-          at: dispatch.started_at,
-          label: 'Worker started',
-          status: 'pending',
-        });
-      }
-    } else if (fix.created_at) {
-      events.push({
-        kind: 'dispatched',
-        at: fix.created_at,
-        label: 'Fix attempt created',
-        status: 'pending',
-      });
-    }
-
-    if (fix.started_at) {
-      events.push({
-        kind: 'started',
-        at: fix.started_at,
-        label: 'Agent started',
-        detail: fix.llm_model,
-        status: 'pending',
-      });
-    }
-    if (fix.branch) {
-      events.push({
-        kind: 'branch',
-        at: fix.started_at ?? fix.created_at,
-        label: 'Branch created',
-        detail: fix.branch,
-        status: 'ok',
-      });
-    }
-    if (fix.commit_sha) {
-      events.push({
-        kind: 'commit',
-        at: fix.completed_at ?? fix.started_at ?? fix.created_at,
-        label: `Commit ${fix.commit_sha.slice(0, 7)}`,
-        detail: `${fix.files_changed?.length ?? 0} files · ${fix.lines_changed ?? 0} lines`,
-        status: 'ok',
-      });
-    }
-    if (fix.pr_url) {
-      events.push({
-        kind: 'pr_opened',
-        at: fix.completed_at ?? fix.started_at ?? fix.created_at,
-        label: `PR opened${fix.pr_number ? ` #${fix.pr_number}` : ''}`,
-        detail: fix.pr_url,
-        status: 'ok',
-      });
-    }
-    if (fix.check_run_status || fix.check_run_conclusion) {
-      const conclusion = (fix.check_run_conclusion ?? '').toLowerCase();
-      const ciStatus: 'ok' | 'fail' | 'pending' =
-        conclusion === 'success'
-          ? 'ok'
-          : conclusion === 'failure' || conclusion === 'cancelled'
-            ? 'fail'
-            : 'pending';
-      events.push({
-        kind: ciStatus === 'pending' ? 'ci_started' : 'ci_resolved',
-        at: fix.check_run_updated_at ?? fix.completed_at ?? fix.started_at ?? fix.created_at,
-        label:
-          ciStatus === 'pending'
-            ? `CI ${fix.check_run_status?.replace(/_/g, ' ') ?? 'running'}`
-            : `CI ${conclusion}`,
-        status: ciStatus,
-      });
-    }
-    if (fix.status === 'completed') {
-      events.push({
-        kind: 'completed',
-        at: fix.completed_at ?? new Date().toISOString(),
-        label: 'Fix completed',
-        status: 'ok',
-      });
-    } else if (fix.status === 'failed') {
-      events.push({
-        kind: 'failed',
-        at: fix.completed_at ?? new Date().toISOString(),
-        label: 'Fix failed',
-        detail: fix.error,
-        status: 'fail',
-      });
-    }
-
-    events.sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
-
-    return c.json({ ok: true, data: { fix, dispatch, events, source: 'synthesized' } });
+    const events = synthesizeFixTimeline(dispatch ?? null, fix);
+    return c.json({ ok: true, data: { fix, dispatch, events, base_branch: baseBranch, source: 'synthesized' } });
   });
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -1308,12 +1230,13 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
         .eq('project_id', pid)
         .eq('provider', 'github')
         .maybeSingle(),
+      // Same window and rule as /repo/overview (repo-branch-counts.ts), so the
+      // snapshot tiles and the header chips cannot disagree (console QA #243).
       db.from('fix_attempts')
-        .select('id, status, pr_url, check_run_conclusion, created_at')
+        .select('id, report_id, branch, status, pr_url, pr_state, merged_at, check_run_conclusion, created_at')
         .eq('project_id', pid)
-        .not('pr_url', 'is', null)
         .order('created_at', { ascending: false })
-        .limit(200),
+        .limit(REPO_BRANCH_WINDOW),
       db.from('project_codebase_files')
         .select('id, updated_at', { count: 'exact', head: false })
         .eq('project_id', pid)
@@ -1353,14 +1276,9 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     const indexedFiles = codebaseRes.count ?? 0
     const lastIndexedAt = codebaseRes.data?.[0]?.updated_at ?? null
 
-    const attempts = attemptsRes.data ?? []
-    const prOpen = attempts.filter((a) => a.pr_url && a.status === 'completed').length
-    const ciPassing = attempts.filter((a) => a.check_run_conclusion === 'success').length
-    const ciFailed = attempts.filter((a) =>
-      a.check_run_conclusion && a.check_run_conclusion !== 'success' && a.check_run_conclusion !== 'neutral'
-    ).length
-    const merged = 0
-    const failedToOpen = attempts.filter((a) => a.status === 'failed').length
+    const { totalBranches, prOpen, ciPassing, ciFailed, merged, failedToOpen } = countRepoBranches(
+      attemptsRes.data ?? [],
+    )
 
     let topPriority: typeof empty.topPriority = 'healthy'
     let topPriorityLabel: string | null = null
@@ -1376,16 +1294,17 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       topPriorityTo = '/integrations/config'
     } else if (ciFailed > 0) {
       topPriority = 'ci_failing'
-      topPriorityLabel = `${ciFailed} PR${ciFailed === 1 ? '' : 's'} have failing CI — review before merging.`
-      topPriorityTo = '/repo?tab=prs'
+      topPriorityLabel = `${ciFailed} open PR${ciFailed === 1 ? ' has' : 's have'} failing CI — review before merging.`
+      // /repo has no "prs" tab: open the branch list on its CI-failing filter (QA #99).
+      topPriorityTo = '/repo?tab=branches&status=ci_failed'
     } else if (failedToOpen > 0) {
       topPriority = 'stuck'
       topPriorityLabel = `${failedToOpen} fix${failedToOpen === 1 ? '' : 'es'} failed to open a PR — retry from Fixes.`
-      topPriorityTo = '/fixes?status=failed'
+      topPriorityTo = '/fixes?tab=attempts&status=failed'
     } else if (prOpen > 0) {
       topPriority = 'waiting'
       topPriorityLabel = `${prOpen} PR${prOpen === 1 ? '' : 's'} open and awaiting review.`
-      topPriorityTo = '/repo?tab=prs'
+      topPriorityTo = '/repo?tab=branches&status=open'
     } else {
       topPriorityLabel = `${ciPassing} PR${ciPassing === 1 ? '' : 's'} passing CI.`
       topPriorityTo = '/repo'
@@ -1396,7 +1315,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       data: {
         hasAnyProject: true,
         projectId: pid,
-        projectName: activeProject.project_name,
+        projectName: activeProject.name ?? null,
         projectCount: projectIds.length,
         hasRepo,
         repoUrl,
@@ -1405,7 +1324,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
         indexingEnabled: indexedFiles > 0,
         lastIndexedAt,
         indexedFiles,
-        totalBranches: 0,
+        totalBranches,
         prOpen,
         ciPassing,
         ciFailed,
@@ -1432,7 +1351,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     // Authz: owner OR org-member OR project-member — single helper covers
     // all three (Teams v1 collaborators don't always have project_members
     // rows because membership is granted at the org level).
-    const access = await userCanAccessProject(db, userId, projectId);
+    const access = await callerCanAccessProject(c, db, userId, projectId);
     if (!access.allowed) {
       return c.json(
         { ok: false, error: { code: 'FORBIDDEN', message: 'Not a member of this project' } },
@@ -1443,8 +1362,10 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     const [{ data: primaryRepo }, { data: settings }, { data: fixes }] = await Promise.all([
       db
         .from('project_repos')
+        // Coverage (gap 16a): a capped repo never sets last_indexed_at, so the
+        // Repo page reads the last sweep of either kind.
         .select(
-          'repo_url, default_branch, github_app_installation_id, last_indexed_at, indexing_enabled',
+          'repo_url, default_branch, github_app_installation_id, last_indexed_at, indexing_enabled, index_swept_at, index_coverage_state, index_files_indexed, index_files_eligible',
         )
         .eq('project_id', projectId)
         .eq('is_primary', true)
@@ -1457,11 +1378,11 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       db
         .from('fix_attempts')
         .select(
-          'id, report_id, branch, pr_url, pr_number, commit_sha, pr_state, agent, llm_model, status, check_run_status, check_run_conclusion, files_changed, lines_changed, started_at, completed_at, created_at, summary',
+          'id, report_id, branch, pr_url, pr_number, commit_sha, pr_state, merged_at, agent, llm_model, status, check_run_status, check_run_conclusion, files_changed, lines_changed, started_at, completed_at, created_at, summary',
         )
         .eq('project_id', projectId)
         .order('created_at', { ascending: false })
-        .limit(50),
+        .limit(REPO_BRANCH_WINDOW),
     ]);
 
     // Pull the human-readable summary off the linked reports in one batch
@@ -1480,7 +1401,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       }
     }
 
-    const branches = (fixes ?? []).map((f) => {
+    const branches = markSupersededFailures(fixes ?? []).map((f) => {
       const r = reportById.get(f.report_id);
       return {
         id: f.id,
@@ -1490,6 +1411,9 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
         pr_number: f.pr_number,
         commit_sha: f.commit_sha,
         pr_state: f.pr_state,
+        merged_at: f.merged_at ?? null,
+        // The page filters on this, so its tabs use the same rule as the counts.
+        bucket: classifyRepoBranch(f),
         agent: f.agent,
         llm_model: f.llm_model,
         status: f.status,
@@ -1506,22 +1430,9 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       };
     });
 
-    // Counts are cheap to derive FE-side but computing them here means the
-    // header chips never disagree with the branch list rendered below.
-    let open = 0;
-    let ci_passing = 0;
-    let ci_failed = 0;
-    let merged = 0;
-    let failed_to_open = 0;
-    for (const b of branches) {
-      const st = (b.status ?? '').toLowerCase();
-      const concl = (b.check_run_conclusion ?? '').toLowerCase();
-      if (st === 'failed' && !b.pr_url) failed_to_open += 1;
-      if (b.pr_url && st !== 'failed') open += 1;
-      if (concl === 'success') ci_passing += 1;
-      if (concl === 'failure' || concl === 'timed_out') ci_failed += 1;
-      if (st === 'completed' && concl === 'success' && b.pr_url) merged += 1;
-    }
+    // One rule with /repo/stats (repo-branch-counts.ts), so the header chips,
+    // the snapshot tiles and the branch filter never disagree.
+    const tally = countRepoBranches(branches);
 
     const repoUrl =
       primaryRepo?.repo_url ?? settings?.github_repo_url ?? settings?.codebase_repo_url ?? null;
@@ -1535,8 +1446,20 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
           github_app_installation_id: primaryRepo?.github_app_installation_id ?? null,
           last_indexed_at: primaryRepo?.last_indexed_at ?? null,
           indexing_enabled: primaryRepo?.indexing_enabled ?? null,
+          index_swept_at: primaryRepo?.index_swept_at ?? null,
+          index_coverage_state: primaryRepo?.index_coverage_state ?? null,
+          index_files_indexed: primaryRepo?.index_files_indexed ?? null,
+          index_files_eligible: primaryRepo?.index_files_eligible ?? null,
         },
-        counts: { open, ci_passing, ci_failed, merged, failed_to_open, total: branches.length },
+        counts: {
+          open: tally.prOpen,
+          ci_passing: tally.ciPassing,
+          ci_failed: tally.ciFailed,
+          merged: tally.merged,
+          failed_to_open: tally.failedToOpen,
+          total: tally.total,
+          branches: tally.totalBranches,
+        },
         branches,
       },
     });
@@ -1554,7 +1477,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       );
     }
     // Authz: owner OR org-member OR project-member.
-    const access = await userCanAccessProject(db, userId, projectId);
+    const access = await callerCanAccessProject(c, db, userId, projectId);
     if (!access.allowed) {
       return c.json(
         { ok: false, error: { code: 'FORBIDDEN', message: 'Not a member of this project' } },
@@ -1795,21 +1718,25 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
   // POST — add a new repo (role + path_globs + repo_url)
   // PUT  — update an existing repo by id
   // DELETE — remove a repo by id
+  //
+  // GET also takes an API key (mcp:read): `mushi fix --repo owner/name`
+  // resolves the name to a project_repos.id here. A project-bound key only
+  // reads its own project (callerCanAccessProject).
 
-  app.get('/v1/admin/repo/repos', jwtAuth, async (c) => {
+  app.get('/v1/admin/repo/repos', adminOrApiKey(), async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
     const projectId = c.req.query('project_id');
     if (!projectId) {
       return c.json({ ok: false, error: { code: 'BAD_REQUEST', message: 'project_id required' } }, 400);
     }
-    const access = await userCanAccessProject(db, userId, projectId);
+    const access = await callerCanAccessProject(c, db, userId, projectId);
     if (!access.allowed) {
       return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Not a member' } }, 403);
     }
     const { data, error } = await db
       .from('project_repos')
-      .select('id, repo_url, default_branch, github_app_installation_id, indexing_enabled, last_indexed_at, role, path_globs, is_primary, created_at, updated_at')
+      .select('id, repo_url, default_branch, github_app_installation_id, indexing_enabled, last_indexed_at, index_swept_at, index_coverage_state, index_files_indexed, index_files_eligible, role, path_globs, is_primary, created_at, updated_at')
       .eq('project_id', projectId)
       .order('is_primary', { ascending: false })
       .order('created_at', { ascending: true });
@@ -1831,14 +1758,30 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     if (!body.projectId || !body.repoUrl) {
       return c.json({ ok: false, error: { code: 'BAD_REQUEST', message: 'projectId and repoUrl required' } }, 400);
     }
-    const access = await userCanAccessProject(db, userId, body.projectId);
+    const access = await callerCanAccessProject(c, db, userId, body.projectId);
     if (!access.allowed) {
       return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Not a member' } }, 403);
     }
     // Normalize repo URL (strip trailing .git, trailing slash)
     const repoUrl = body.repoUrl.trim().replace(/\.git$/, '').replace(/\/$/, '');
-    const validRoles = ['frontend', 'backend', 'monorepo', 'library', 'docs', 'other'];
-    const role = validRoles.includes(body.role ?? '') ? body.role : 'monorepo';
+    // The roles the project_repos CHECK allows; anything else is refused
+    // instead of saved as "monorepo" without a word (console QA #97).
+    if (body.role !== undefined && !isProjectRepoRole(body.role)) {
+      return c.json({ ok: false, error: { code: 'BAD_REQUEST', message: repoRoleMessage(body.role) } }, 400);
+    }
+    const role = body.role ?? 'monorepo';
+    // The repo form pre-fills "main"; store the branch GitHub really has.
+    const parsedRepo = parseGithubRepoUrl(repoUrl);
+    const { branch: defaultBranch } = parsedRepo
+      ? await resolveBranchForConnect({
+          token: await resolveProjectGithubToken(db, body.projectId),
+          owner: parsedRepo.owner,
+          repo: parsedRepo.repo,
+          requested: body.defaultBranch,
+        })
+      : { branch: body.defaultBranch?.trim() || 'main' };
+    // Insert as non-primary, then move "primary" only once the row exists, so
+    // a duplicate URL never costs the project its current primary (QA #20).
     const { data, error } = await db
       .from('project_repos')
       .insert({
@@ -1846,13 +1789,26 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
         repo_url: repoUrl,
         role,
         path_globs: body.pathGlobs ?? null,
-        default_branch: body.defaultBranch ?? 'main',
-        is_primary: body.isPrimary ?? false,
+        default_branch: defaultBranch,
+        is_primary: false,
         indexing_enabled: true,
       })
       .select('id, repo_url, role, path_globs, default_branch, is_primary, created_at')
       .single();
-    if (error) return dbError(c, error);
+    if (error) {
+      if (error.code === '23505') {
+        return c.json(
+          { ok: false, error: { code: 'DUPLICATE', message: 'That repo is already linked to this project.' } },
+          409,
+        );
+      }
+      return dbError(c, error);
+    }
+    if (body.isPrimary && data) {
+      const moved = await movePrimaryRepo(db, body.projectId, data.id as string);
+      if (moved) return dbError(c, moved);
+      return c.json({ ok: true, data: { ...data, is_primary: true } });
+    }
     return c.json({ ok: true, data });
   });
 
@@ -1872,17 +1828,20 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     if (!body.projectId) {
       return c.json({ ok: false, error: { code: 'BAD_REQUEST', message: 'projectId required' } }, 400);
     }
-    const access = await userCanAccessProject(db, userId, body.projectId);
+    const access = await callerCanAccessProject(c, db, userId, body.projectId);
     if (!access.allowed) {
       return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Not a member' } }, 403);
     }
-    const validRoles = ['frontend', 'backend', 'monorepo', 'library', 'docs', 'other'];
+    if (body.role !== undefined && !isProjectRepoRole(body.role)) {
+      return c.json({ ok: false, error: { code: 'BAD_REQUEST', message: repoRoleMessage(body.role) } }, 400);
+    }
     const updates: Record<string, unknown> = {};
     if (body.repoUrl !== undefined) updates.repo_url = body.repoUrl.trim().replace(/\.git$/, '').replace(/\/$/, '');
-    if (body.role !== undefined && validRoles.includes(body.role)) updates.role = body.role;
+    if (body.role !== undefined) updates.role = body.role;
     if (body.pathGlobs !== undefined) updates.path_globs = body.pathGlobs;
     if (body.defaultBranch !== undefined) updates.default_branch = body.defaultBranch;
-    if (body.isPrimary !== undefined) updates.is_primary = body.isPrimary;
+    // Turning "primary" ON is applied after the update succeeds (movePrimaryRepo).
+    if (body.isPrimary === false) updates.is_primary = false;
     if (body.indexingEnabled !== undefined) updates.indexing_enabled = body.indexingEnabled;
     const { data, error } = await db
       .from('project_repos')
@@ -1892,6 +1851,14 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       .select('id, repo_url, role, path_globs, default_branch, is_primary, indexing_enabled, updated_at')
       .single();
     if (error) return dbError(c, error);
+    if (!data) {
+      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'That repo is no longer linked to this project.' } }, 404);
+    }
+    if (body.isPrimary === true && !data.is_primary) {
+      const moved = await movePrimaryRepo(db, body.projectId, repoId);
+      if (moved) return dbError(c, moved);
+      return c.json({ ok: true, data: { ...data, is_primary: true } });
+    }
     return c.json({ ok: true, data });
   });
 
@@ -1903,7 +1870,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     if (!projectId) {
       return c.json({ ok: false, error: { code: 'BAD_REQUEST', message: 'project_id required' } }, 400);
     }
-    const access = await userCanAccessProject(db, userId, projectId);
+    const access = await callerCanAccessProject(c, db, userId, projectId);
     if (!access.allowed) {
       return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Not a member' } }, 403);
     }

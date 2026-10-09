@@ -22,12 +22,9 @@ import { useActiveProjectSignal } from '../../lib/activeProject'
 import { useRealtimeReload } from '../../lib/realtime'
 import { FilterChip } from '../ui'
 import { FilterChipCell, FilterChipRail } from '../FilterChipRail'
+import { SEVERITY_CHIPS, STATUS_CHIPS, statusChipCount, type ReportStatusStats } from '../../lib/reportsListFilters'
 
-interface StatsResponse {
-  total?: number
-  byStatus?: Record<string, number>
-  bySeverity?: Record<string, number>
-}
+type StatsResponse = ReportStatusStats
 
 interface Props {
   status: string
@@ -35,19 +32,6 @@ interface Props {
   onSetFilter: (key: string, value: string) => void
 }
 
-const STATUS_BUCKETS: Array<{ value: string; label: string; tone: 'default' | 'warn' | 'info' | 'brand' | 'ok' }> = [
-  { value: '',           label: 'All',         tone: 'default' },
-  { value: 'new',        label: 'New',         tone: 'warn' },
-  { value: 'classified', label: 'Classified',  tone: 'brand' },
-  { value: 'fixing',     label: 'Fixing',      tone: 'info' },
-  { value: 'fixed',      label: 'Fixed',       tone: 'ok' },
-  { value: 'dismissed',  label: 'Dismissed',   tone: 'default' },
-]
-
-const SEVERITY_BUCKETS: Array<{ value: string; label: string; tone: 'default' | 'warn' | 'danger' }> = [
-  { value: 'critical', label: 'Critical', tone: 'danger' },
-  { value: 'major',    label: 'Major',    tone: 'warn' },
-]
 
 export function ReportsQuickFilters({ status, severity, onSetFilter }: Props) {
   const [stats, setStats] = useState<StatsResponse | null>(null)
@@ -64,9 +48,7 @@ export function ReportsQuickFilters({ status, severity, onSetFilter }: Props) {
 
   useRealtimeReload(['reports'], load, { debounceMs: 1000 })
 
-  const byStatus = stats?.byStatus ?? {}
   const bySeverity = stats?.bySeverity ?? {}
-  const total = stats?.total ?? 0
 
   return (
     <div
@@ -75,8 +57,8 @@ export function ReportsQuickFilters({ status, severity, onSetFilter }: Props) {
       aria-label="Quick filters"
     >
       <FilterChipRail trackId="reports-status" aria-label="Status filters">
-        {STATUS_BUCKETS.map((b) => {
-          const count = b.value === '' ? total : (byStatus[b.value] ?? 0)
+        {STATUS_CHIPS.map((b) => {
+          const count = stats ? statusChipCount(b.value, stats) : 0
           return (
             <FilterChipCell key={b.value || 'all'} active={status === b.value}>
               <FilterChip
@@ -85,14 +67,20 @@ export function ReportsQuickFilters({ status, severity, onSetFilter }: Props) {
                 active={status === b.value}
                 onClick={() => onSetFilter('status', status === b.value ? '' : b.value)}
                 tone={b.tone}
-                hint={b.value === '' ? 'Show every report regardless of status' : `Show reports with status "${b.value}"`}
+                hint={
+                  b.value === ''
+                    ? 'Show every report regardless of status'
+                    : b.value === 'open'
+                      ? 'Show every report still waiting on a decision — anything not yet fixing, fixed or dismissed'
+                      : `Show reports with status "${b.value}"`
+                }
               />
             </FilterChipCell>
           )
         })}
       </FilterChipRail>
       <span aria-hidden className="mx-1 h-4 w-px bg-edge/60" />
-      {SEVERITY_BUCKETS.map((b) => (
+      {SEVERITY_CHIPS.map((b) => (
         <FilterChip
           key={b.value}
           label={b.label}

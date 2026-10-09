@@ -5,11 +5,10 @@
  *          on the MushiWidget class (DOM structure, state, lifecycle).
  *
  * OVERVIEW:
- * - Pure functions: reporter-status copy mappers, relative-time formatting,
- *   the step-number padder, the submit-shortcut detector, and HTML escaping.
- * - Constants: category icon map, the feature-request intent wire string, the
- *   total step count, and the per-step ledger number.
- * - Shared types: WidgetStep, the reporter status tone union, and the public
+ * - Pure functions: relative-time formatting, the submit-shortcut detector,
+ *   HTML escaping, the reporter timeline builder.
+ * - Constants: the feature-request intent wire string, read deadlines.
+ * - Shared types: WidgetStep, PendingReply, and the public
  *   WidgetRewardsState / WidgetSubmitOutcome / WidgetCallbacks contracts (these
  *   three are re-exported from widget.ts so existing `./widget` import sites and
  *   the package barrel keep working unchanged).
@@ -29,6 +28,7 @@ import type {
   MushiReportCategory,
   MushiReporterComment,
   MushiReporterReport,
+  MushiReporterTimelineItem,
 } from '@mushi-mushi/core';
 import {
   isLikelyGenericFavicon,
@@ -36,6 +36,7 @@ import {
   projectInitials,
   resolveProjectDomain,
 } from '@mushi-mushi/core';
+import type { ScreenshotFailureReason } from './capture/screenshot';
 
 /** One rendered turn in the in-widget assistant thread. */
 export interface AssistantTurn {
@@ -115,9 +116,7 @@ export function clearAssistantSession(): void {
 }
 
 export type WidgetStep =
-  | 'category'
-  | 'intent'
-  | 'details'
+  | 'report'
   | 'success'
   | 'reports'
   | 'report-detail'
@@ -127,109 +126,21 @@ export type WidgetStep =
   | 'cross-app-reports'
   | 'assistant';
 
-export const CATEGORY_ICONS: Record<MushiReportCategory, string> = {
-  bug: '\u26A0\uFE0F',
-  slow: '\uD83D\uDC0C',
-  visual: '\uD83C\uDFA8',
-  confusing: '\uD83D\uDE15',
-  other: '\uD83D\uDCDD',
-};
-
 /**
- * Wire-format "feature request" intent string. Always written into the
- * report's `user_category` field (not `category`) so we don't have to
- * widen the DB CHECK constraint on `reports.category`. The widget UI
- * presents it as a first-class card alongside the five real categories
- * because beta apps live or die by how easy it is to file a feature
- * request — burying it as an intent under "Other" suppresses signal.
+ * Wire-format "feature request" intent string. The Idea chip sends it with
+ * `user_category: 'feature'` so the report never reads as an "other" bug
+ * and the DB CHECK constraint on `reports.category` stays untouched.
  */
 export const FEATURE_REQUEST_INTENT = 'Feature request';
 
-export type ReporterStatusTone = 'sent' | 'review' | 'fixing' | 'fixed' | 'closed' | 'unknown';
+/** One timeline row from GET /v1/reporter/reports/:id (core's shape). */
+export type WidgetTimelineEvent = MushiReporterTimelineItem;
 
-/** Compact status pill copy for list rows. */
-export function reporterStatusShort(status: string): string {
-  switch (status) {
-    case 'new':
-    case 'queued':
-    case 'pending':
-    case 'submitted':
-      return 'Sent';
-    case 'classified':
-    case 'triaged':
-    case 'grouped':
-    case 'dispatched':
-      return 'Review';
-    case 'fixing':
-      return 'Fixing';
-    case 'fixed':
-    case 'resolved':
-    case 'completed':
-      return 'Fixed';
-    case 'dismissed':
-      return 'Closed';
-    default:
-      return status.replace(/_/g, ' ').slice(0, 12);
-  }
-}
-
-/** Map raw DB status to reporter-facing copy (detail views). */
-export function reporterStatusLabel(status: string): string {
-  switch (status) {
-    case 'new':
-    case 'queued':
-    case 'pending':
-    case 'submitted':
-      return 'Submitted';
-    case 'classified':
-    case 'triaged':
-    case 'grouped':
-    case 'dispatched':
-      return 'In review';
-    case 'fixing':
-      return 'Fix in progress';
-    case 'fixed':
-    case 'resolved':
-    case 'completed':
-      return 'Fixed — confirm?';
-    case 'verified':
-      return 'Verified';
-    case 'reopened':
-      return 'Reopened';
-    case 'dismissed':
-      return 'Closed';
-    default:
-      return status.replace(/_/g, ' ');
-  }
-}
-
-export function reporterStatusTone(status: string): ReporterStatusTone {
-  switch (status) {
-    case 'new':
-    case 'queued':
-    case 'pending':
-    case 'submitted':
-      return 'sent';
-    case 'classified':
-    case 'triaged':
-    case 'grouped':
-    case 'dispatched':
-      return 'review';
-    case 'fixing':
-      return 'fixing';
-    case 'fixed':
-    case 'resolved':
-    case 'completed':
-      return 'fixed';
-    case 'verified':
-      return 'fixed';
-    case 'reopened':
-      return 'fixing';
-    case 'dismissed':
-      return 'closed';
-    default:
-      return 'unknown';
-  }
+/** One reply the reporter sent from this tab, shown before the server echoes it. */
+export interface PendingReply {
+  id: number;
+  body: string;
+  state: 'sending' | 'failed';
 }
 
 /** Human-readable relative time, e.g. "2h ago". */
@@ -251,29 +162,91 @@ export function formatRelativeTime(iso: string): string {
   return new Date(then).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
-/** The two-digit padded step number used in the header ledger ("01 / 03"). */
-export function pad2(n: number): string {
-  return n < 10 ? `0${n}` : String(n);
-}
+/** "Bug reports by Mushi" mark: landing URL + channel UTM; `ref` = SHA-256 prefix of the project id. */
+const BRAND_FOOTER_URL = 'https://kensaur.us/mushi-mushi/';
+const BRAND_FOOTER_UTM = 'utm_source=widget&utm_medium=powered-by';
 
-export const TOTAL_STEPS = 3;
-export const STEP_NUMBER: Record<Exclude<WidgetStep, 'success'>, number> = {
-  category: 1,
-  intent: 2,
-  details: 3,
-  reports: 1,
-  'report-detail': 1,
-  leaderboard: 1,
-  roadmap: 1,
-  account: 1,
-  'cross-app-reports': 1,
-  assistant: 1,
-};
+/** Build the brand-footer href. `ref` is omitted until the hash resolves. */
+export function buildBrandFooterHref(ref: string | null): string {
+  const base = `${BRAND_FOOTER_URL}?${BRAND_FOOTER_UTM}`;
+  return ref && /^[0-9a-f]{6,64}$/.test(ref) ? `${base}&ref=${ref}` : base;
+}
 
 /** Detects modifier-key presses for the Ctrl/Cmd+Enter submit shortcut.
  *  metaKey covers macOS, ctrlKey covers Windows/Linux/ChromeOS. */
 export function isSubmitShortcut(e: KeyboardEvent): boolean {
   return (e.metaKey || e.ctrlKey) && e.key === 'Enter';
+}
+
+/** Modifier shown in the shortcut hint: ⌘ on Apple platforms (iPadOS reports
+ *  "MacIntel"), Ctrl everywhere else. Pure so tests can pass the platform. */
+export function submitShortcutKey(platform: string): string {
+  return /Mac|iPhone|iPad|iPod/i.test(platform) ? '⌘' : 'Ctrl';
+}
+
+export function readPlatform(): string {
+  if (typeof navigator === 'undefined') return '';
+  const uaData = (navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData;
+  return uaData?.platform || navigator.platform || navigator.userAgent || '';
+}
+
+/**
+ * Whether the "Mushi SDK x · latest is y" notice may render in the widget.
+ * It is a developer instruction ("update @mushi-mushi/web"), so under the
+ * default 'auto' it only shows on a dev host or with `debug: true` — never to
+ * an app's end users. 'banner' is an explicit host opt-in; 'console-only' and
+ * 'off' never render it.
+ */
+export function shouldShowSdkFreshness(
+  mode: 'auto' | 'banner' | 'console-only' | 'off' | undefined,
+  debug: boolean,
+  loc: Pick<Location, 'hostname' | 'protocol'> | undefined,
+): boolean {
+  if (mode === 'banner') return true;
+  if (mode === 'console-only' || mode === 'off') return false;
+  if (debug) return true;
+  if (!loc) return false;
+  const host = loc.hostname.replace(/^\[|\]$/g, '');
+  return loc.protocol === 'file:'
+    || host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '0.0.0.0'
+    || host.endsWith('.localhost') || host.endsWith('.local');
+}
+
+/** Rejects with a "timed out" error when `promise` hasn't settled within `ms`. */
+export function withDeadline<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('Timed out')), ms);
+    promise.then(
+      (v) => { clearTimeout(timer); resolve(v); },
+      (e: unknown) => { clearTimeout(timer); reject(e); },
+    );
+  });
+}
+
+/** Reporter inbox reads that never settle must not leave a spinner up forever. */
+export const REPORTER_READ_DEADLINE_MS = 15_000;
+
+/** Mirrors the description textarea's maxlength. */
+export const DESCRIPTION_MAX_LENGTH = 4000;
+
+/** Capture failure reasons plus 'permission' (a host screenshotProvider was denied). */
+export type ScreenshotErrorReason = ScreenshotFailureReason | 'permission';
+
+/** Locale-aware short date-time with zone, e.g. "Oct 2, 10:37 GMT+9". */
+export function formatReceiptTime(date: Date, locale?: string): string {
+  const opts: Intl.DateTimeFormatOptions = {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZoneName: 'short',
+  };
+  try {
+    return date.toLocaleString(locale, opts);
+  } catch {
+    // An invalid host locale tag throws RangeError — fall back to the runtime's.
+    return date.toLocaleString(undefined, opts);
+  }
 }
 
 export function escapeHtml(value: string): string {
@@ -335,7 +308,15 @@ export interface WidgetCallbacks {
   ): void | Promise<WidgetSubmitOutcome | void>;
   onOpen(): void;
   onClose(): void;
+  /** "Bug reports by Mushi" mark: impression once per widget instance, click per activation → loop_* events. */
+  onBrandFooterImpression?(): void;
+  onBrandFooterClick?(): void;
   onScreenshotRequest(): void;
+  /**
+   * Present only when the browser supports getDisplayMedia. Must start the
+   * capture synchronously (the picker needs the click's user activation).
+   */
+  onScreenshotShareTabRequest?(): void;
   onScreenshotRemove?(): void;
   /** Optional markup pass (highlight / blur / arrow) before submit. */
   onScreenshotAnnotateRequest?(container: HTMLElement): void | Promise<void>;
@@ -345,6 +326,14 @@ export interface WidgetCallbacks {
   onReporterReply?(reportId: string, body: string): Promise<void>;
   onReporterFeedback?(reportId: string, signal: string, note?: string): Promise<Record<string, unknown> | null>;
   onReporterReopen?(reportId: string, note?: string): Promise<Record<string, unknown> | null>;
+  /** Header card + merged timeline for one report (newer servers); falls back to the comments call. */
+  onReporterReportRequest?(reportId: string): Promise<{ report?: Partial<MushiReporterReport>; timeline?: WidgetTimelineEvent[] | null } | null>;
+  /** Mark a report's updates read when its thread opens; resolves with the new unread total when known. */
+  onReporterMarkRead?(reportId: string): Promise<number | null | void>;
+  /** Save an email for status updates on this device's reports (explicit opt-in). */
+  onReporterEmailOptIn?(email: string): Promise<void>;
+  /** Ask for browser notification permission and register a push subscription. */
+  onReporterPushSubscribe?(): Promise<void>;
   onFeatureBoardRequest?(): Promise<Array<Record<string, unknown>>>;
   onFeatureBoardVote?(requestId: string): Promise<{ voted: boolean; action: string }>;
   onLeaderboardOpen?(): void;

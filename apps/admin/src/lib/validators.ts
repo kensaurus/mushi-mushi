@@ -349,6 +349,27 @@ export function slug(opts?: ValidatorOptions): Validator {
   })
 }
 
+/** Sentry project slug rule — mirrors SENTRY_PROJECT_SLUG_RE on the server
+ *  (_shared/integration-validation.ts). */
+const SENTRY_PROJECT_SLUG_RE = /^[a-z0-9][a-z0-9_-]{0,49}$/
+const MAX_SENTRY_EXTRA_PROJECTS = 10
+
+/**
+ * Comma- or space-separated Sentry project slugs (the extra projects one
+ * Mushi project imports from). Lowercase, at most 10.
+ */
+function sentrySlugList(opts?: ValidatorOptions): Validator {
+  return withOptional(opts, (value) => {
+    const slugs = [...new Set(value.split(/[\s,]+/).filter(Boolean))]
+    const bad = slugs.find((s) => !SENTRY_PROJECT_SLUG_RE.test(s))
+    if (bad) return { message: `"${bad}" is not a Sentry project slug (lowercase letters, digits, - or _)` }
+    if (slugs.length > MAX_SENTRY_EXTRA_PROJECTS) {
+      return { message: `At most ${MAX_SENTRY_EXTRA_PROJECTS} extra Sentry projects` }
+    }
+    return null
+  })
+}
+
 /* ── Platform-specific composites ─────────────────────────────────────── */
 
 /**
@@ -379,6 +400,66 @@ export function pagerdutyRoutingKey(opts?: ValidatorOptions): Validator {
     if (!/^[a-zA-Z0-9]{20,40}$/.test(value)) {
       return {
         message: 'Expected a 20-40 character alphanumeric integration key',
+      }
+    }
+    return null
+  })
+}
+
+/**
+ * Fix branch names. Mirrors `validateFixBranchTemplate` in the server's
+ * `_shared/github-pr.ts`: the template is filled with the same sample values
+ * (first occurrence of each token, like String.replace) and must then match
+ * `<type>/MUSHI-<reportId>-<slug>`.
+ */
+const FIX_BRANCH_RE = /^(feature|bugfix|hotfix|refactor|chore|docs|test|ci)\/MUSHI-[a-f0-9-]+-[a-z0-9][a-z0-9-]*$/
+
+function fillBranchTemplate(
+  template: string,
+  values: { date: string; category: string; shortId: string; reportId: string },
+): string {
+  return template
+    .replace('{date}', values.date)
+    .replace('{category}', values.category)
+    .replace('{shortId}', values.shortId)
+    .replace('{reportId}', values.reportId)
+}
+
+const FIX_BRANCH_TEMPLATE_RULE =
+  'Start with a type (bugfix/, feature/, hotfix/, refactor/, chore/, docs/, test/ or ci/), then MUSHI-{reportId}-, then lowercase words, {category}, {date} or {shortId}.'
+
+export function fixBranchTemplate(opts?: ValidatorOptions): Validator {
+  return withOptional(opts, (value) => {
+    const sample = fillBranchTemplate(value.trim(), {
+      date: '2026-06-23',
+      category: 'ui-bug',
+      shortId: 'abc12345',
+      reportId: '00000000-0000-4000-8000-000000000001',
+    })
+    return FIX_BRANCH_RE.test(sample) ? null : { message: FIX_BRANCH_TEMPLATE_RULE }
+  })
+}
+
+/** What a template turns into for a real-looking report, for the "Example" line. */
+export function fixBranchExample(template: string, now: Date = new Date()): string {
+  return fillBranchTemplate(template, {
+    date: now.toISOString().slice(0, 10),
+    category: 'bug',
+    shortId: '3f2a9c1e',
+    reportId: '3f2a9c1e-7b4d-4e8a-9c21-5d6e7f8a9b0c',
+  })
+}
+
+/**
+ * Supabase project ref: the 20 lowercase letters/digits in
+ * `https://<ref>.supabase.co`. Mirrors `parseSupabaseProjectRefSetting` in
+ * the server's `_shared/supabase-project-ref.ts`, which rejects anything else.
+ */
+export function supabaseProjectRef(opts?: ValidatorOptions): Validator {
+  return withOptional(opts, (value) => {
+    if (!/^[a-z0-9]{20}$/.test(value)) {
+      return {
+        message: 'Expected the 20-character project ref (lowercase letters and digits), as in https://<ref>.supabase.co',
       }
     }
     return null
@@ -441,6 +522,7 @@ const NAMED_VALIDATORS: Record<string, Validator> = {
   email: email(),
   sentryDsn: sentryDsn(),
   slug: slug(),
+  sentrySlugList: sentrySlugList(),
   token: token({ minLength: 16 }),
   tokenLong: token({ minLength: 24 }),
   jiraProjectKey: jiraProjectKey(),

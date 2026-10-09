@@ -4,9 +4,8 @@
  *          connection counts from live integration stats.
  */
 
-import { Section } from '../ui'
 import { DetailRows, type DetailRowItem } from '../ui/fields'
-import { EndpointCodeRow, ReadoutSection } from '../readout'
+import { EndpointCodeRow, ReadoutSection, ReadoutPanel } from '../readout'
 import { RESOLVED_EXTERNAL_API_URL } from '../../lib/env'
 import type { IntegrationStats } from './types'
 import { IconGit, IconGlobe, IconHealth } from '../icons'
@@ -36,8 +35,15 @@ export function IntegrationsProvenanceReadout({
     },
     {
       label: 'Platform health',
-      value: `${stats.platformHealthy} healthy · ${stats.platformDown} down`,
-      tone: stats.platformDown > 0 ? 'danger' : stats.platformHealthy > 0 ? 'ok' : 'muted',
+      value: `${stats.platformHealthy} working · ${(stats.platformAttention ?? 0)} need attention · ${stats.platformDown} failing`,
+      tone:
+        stats.platformDown > 0
+          ? 'danger'
+          : (stats.platformAttention ?? 0) > 0
+            ? 'warn'
+            : stats.platformHealthy > 0
+              ? 'ok'
+              : 'muted',
     },
     {
       label: 'Routing rules',
@@ -60,7 +66,7 @@ export function IntegrationsProvenanceReadout({
   ]
 
   return (
-    <Section title="Integration provenance" freshness={{ at: fetchedAt, isValidating: validating }}>
+    <ReadoutPanel title="Integration provenance" freshness={{ at: fetchedAt, isValidating: validating }}>
       <p className="mb-4 text-xs leading-relaxed text-fg-muted">
         Where platform credentials land and how probe health maps to the cards below.
         Paste the GitHub repo URL into the GitHub card if it differs from your primary repo.
@@ -85,6 +91,6 @@ export function IntegrationsProvenanceReadout({
           <DetailRows items={signalRows} dense />
         </ReadoutSection>
       </div>
-    </Section>
+    </ReadoutPanel>
   )
 }

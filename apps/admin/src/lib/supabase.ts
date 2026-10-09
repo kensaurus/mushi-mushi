@@ -12,10 +12,12 @@ import { debugLog, debugWarn, debugError } from './debug'
 import { RESOLVED_SUPABASE_URL, RESOLVED_SUPABASE_ANON_KEY, RESOLVED_API_URL } from './env'
 import {
   getActiveProjectIdForApi,
+  getActiveProjectIdFromUrl,
   isValidProjectId,
 } from './activeProject'
 import { getActiveOrgIdSnapshot, isValidOrgId } from './activeOrg'
-import { coerceApiResult, type ApiResult } from './apiEnvelope'
+import { coerceApiResult, errorFromBody, type ApiResult } from './apiEnvelope'
+import type * as CrossTeamProject from './crossTeamProject'
 
 const authOptions = {
   // Web defaults are true today, but making them explicit documents the
@@ -81,8 +83,8 @@ export type { ApiResult } from './apiEnvelope'
 // ─── Request dedup + micro-cache ────────────────────────────────────────────
 //
 // The admin console mounts ~17 components that each call `useSetupStatus()`
-// (DashboardPage, FixesPage, NextBestAction, QuickstartMegaCta, FirstRunTour,
-// SetupNudge, ProjectSwitcher, GettingStartedEmpty, etc). Without dedup,
+// (DashboardPage, FixesPage, FirstRunTour,
+// NextStep, ProjectSwitcher, GettingStartedEmpty, etc). Without dedup,
 // every page load fires GET /v1/admin/setup 12+ times in parallel — wasted
 // bandwidth, wasted Supabase function invocations, and duplicated render-time
 // loading flickers. Same problem with /v1/admin/dashboard and /v1/admin/billing.
@@ -100,11 +102,32 @@ export type { ApiResult } from './apiEnvelope'
 //     can't grow the map without bound.
 const COALESCE_TTL_MS = 200
 const MAX_CACHE_ENTRIES = 64
+/**
+ * Shell reads that the header, switchers and the page all ask for. A lazily
+ * loaded page mounts 250-500 ms after the shell, past the 200 ms window, so
+ * each was fetched twice on most pages. They change only through this
+ * console's own writes (which clear the cache, below) or a team/project
+ * switch (which changes the key), so holding them a few seconds is safe.
+ * `reload()` paths still bypass with `cache: 'no-store'`.
+ */
+const SHELL_READ_TTL_MS = 5_000
+const SHELL_READ_PATHS = new Set([
+  '/v1/admin/setup',
+  '/v1/admin/projects',
+  '/v1/admin/entitlements',
+  '/v1/org',
+])
 const inFlight = new Map<string, Promise<ApiResult<unknown>>>()
 const recent = new Map<string, { value: ApiResult<unknown>; expiresAt: number }>()
 
-function rememberRecent(key: string, value: ApiResult<unknown>): void {
-  recent.set(key, { value, expiresAt: Date.now() + COALESCE_TTL_MS })
+function ttlForPath(path: string): number {
+  return SHELL_READ_PATHS.has(path.split('?')[0] ?? path) ? SHELL_READ_TTL_MS : COALESCE_TTL_MS
+}
+
+function rememberRecent(key: string, path: string, value: ApiResult<unknown>): void {
+  // Never hold on to a failure: the next caller should retry, not inherit it.
+  if (!value.ok) return
+  recent.set(key, { value, expiresAt: Date.now() + ttlForPath(path) })
   if (recent.size > MAX_CACHE_ENTRIES) {
     // Map iteration order is insertion order, so the first key is the oldest.
     const oldest = recent.keys().next().value
@@ -112,14 +135,82 @@ function rememberRecent(key: string, value: ApiResult<unknown>): void {
   }
 }
 
+/**
+ * The key must name every header that changes the answer. `scope` decides
+ * which tenant headers are sent, so a `scope: 'none'` read (all teams) must
+ * never be served to a `scope: 'project'` caller of the same path, or vice
+ * versa — the key carries exactly the ids that will be sent.
+ */
 function coalesceKey(
   method: string,
   path: string,
   body: BodyInit | null | undefined,
+  scope: 'enumeration' | 'project' | 'none' = 'project',
 ): string | null {
   if (method !== 'GET' && method !== 'HEAD') return null
   if (body != null) return null
-  return `${method}:${getActiveOrgIdSnapshot() ?? 'no-org'}:${getActiveProjectIdForApi() ?? 'no-project'}:${path}`
+  // The team's project list ignores X-Mushi-Project-Id server-side
+  // (enumerateAccessibleProjectIds), so a `project`-scoped and an
+  // `enumeration`-scoped read of it are the same answer: share one key.
+  const effective = scope === 'project' && PROJECT_BLIND_PATHS.has(path) ? 'enumeration' : scope
+  const org = effective === 'none' ? 'no-org' : getActiveOrgIdSnapshot() ?? 'no-org'
+  const project = effective === 'project' ? getActiveProjectIdForApi() ?? 'no-project' : 'no-project'
+  return `${method}:${effective}:${org}:${project}:${path}`
+}
+
+const PROJECT_BLIND_PATHS: ReadonlySet<string> = new Set(['/v1/admin/projects'])
+
+// ─── Team gate for deep links (A4) ─────────────────────────────────────────
+//
+// A Slack or email link can name `?project=` in a team other than the stored
+// active team. Sending the first requests with the stored team's
+// X-Mushi-Org-Id 404s every panel (PROJECT_NOT_FOUND) until something
+// notices. So before the first team-scoped request, when the URL's project is
+// not known to be in the active team, resolve its team (one read of the
+// cross-team directory) and switch to it. Requests wait for that, up to
+// TENANT_GATE_TIMEOUT_MS, then go out regardless (fail open).
+const TENANT_GATE_TIMEOUT_MS = 3_000
+let tenantGate: { projectId: string; promise: Promise<void> } | null = null
+type CrossTeamModule = typeof CrossTeamProject
+let crossTeamModule: CrossTeamModule | null = null
+
+async function loadCrossTeam(): Promise<CrossTeamModule> {
+  // Dynamic: crossTeamProject imports apiFetch from this module.
+  crossTeamModule ??= await import('./crossTeamProject')
+  return crossTeamModule
+}
+
+function settleWithin(promise: Promise<void>): Promise<void> {
+  return Promise.race([
+    promise,
+    new Promise<void>((resolve) => setTimeout(resolve, TENANT_GATE_TIMEOUT_MS)),
+  ])
+}
+
+/** Wait until the URL's project and the active team agree (or give up). */
+async function waitForTenant(scope: 'enumeration' | 'project' | 'none'): Promise<void> {
+  if (scope === 'none') return
+  const projectId = getActiveProjectIdFromUrl()
+  if (!projectId) return
+  if (tenantGate?.projectId === projectId) return settleWithin(tenantGate.promise)
+  const crossTeam = await loadCrossTeam()
+  if (tenantGate?.projectId === projectId) return settleWithin(tenantGate.promise)
+  if (!crossTeam.urlProjectNeedsTeamCheck(projectId, getActiveOrgIdSnapshot())) return
+  // Signed out: nothing to resolve yet. Leave the gate unset so the check
+  // runs again after sign-in instead of being spent on a 401.
+  if (!(await getAccessToken())) return
+  if (tenantGate?.projectId === projectId) return settleWithin(tenantGate.promise)
+  const gate = {
+    projectId,
+    promise: crossTeam.resolveTeamForProject(projectId).then(
+      (outcome) => {
+        if (outcome === 'retry' && tenantGate === gate) tenantGate = null
+      },
+      () => {},
+    ),
+  }
+  tenantGate = gate
+  return settleWithin(gate.promise)
 }
 
 export function invalidateApiCache(pathPrefix?: string): void {
@@ -160,7 +251,14 @@ export async function apiFetch<T>(
   options?: ApiFetchOptions<T>,
 ): Promise<ApiResult<T>> {
   const method = (options?.method ?? 'GET').toUpperCase()
-  const cacheKey = options?.cache === 'no-store' ? null : coalesceKey(method, path, options?.body)
+  const scope = options?.scope ?? 'project'
+  // Before the cache key and headers are read: both depend on the team.
+  await waitForTenant(scope)
+  const cacheKey =
+    options?.cache === 'no-store' ? null : coalesceKey(method, path, options?.body, scope)
+  // A write may change any cached read (a new project, a saved setting), so
+  // drop the held answers before it goes out.
+  if (method !== 'GET' && method !== 'HEAD') recent.clear()
 
   if (cacheKey) {
     const cached = recent.get(cacheKey)
@@ -181,7 +279,7 @@ export async function apiFetch<T>(
     inFlight.set(cacheKey, promise as Promise<ApiResult<unknown>>)
     promise
       .then((value) => {
-        rememberRecent(cacheKey, value as ApiResult<unknown>)
+        rememberRecent(cacheKey, path, value as ApiResult<unknown>)
       })
       .catch(() => {})
       .finally(() => {
@@ -388,13 +486,18 @@ async function doFetch<T>(
         }
       }
       try {
-        const coerced = coerceApiResult<T>(JSON.parse(body))
+        const parsedBody: unknown = JSON.parse(body)
+        const coerced = coerceApiResult<T>(parsedBody)
         // A non-2xx body without an explicit error envelope (e.g. a proxy's
-        // `{ "message": "..." }`) must never coerce into a success.
+        // `{ "message": "..." }`) must never coerce into a success. When it
+        // still carries an `error` object (a route returning zod's
+        // `{ error: flatten() }`), keep its readable text instead of raw JSON.
         if (coerced.ok) {
+          // 5xx keeps the `HTTP_ERROR "5xx:"` form that retry logic reads.
+          const bodyError = res.status < 500 ? errorFromBody(parsedBody) : null
           return attachRequestId({
             ok: false,
-            error: { code: 'HTTP_ERROR', message: `${res.status}: ${body.slice(0, 200)}` },
+            error: bodyError ?? { code: 'HTTP_ERROR', message: `${res.status}: ${body.slice(0, 200)}` },
           })
         }
         return attachRequestId(coerced)
@@ -501,6 +604,20 @@ async function doFetch<T>(
   }
 }
 
+/**
+ * The active team and project as request headers, the same ones apiFetch
+ * sends. For callers that must use `fetch` directly (SSE streams); without
+ * them the server falls back to the caller's oldest project.
+ */
+export function activeTenantHeaders(): Record<string, string> {
+  const projectId = getActiveProjectIdForApi()
+  const orgId = getActiveOrgIdSnapshot()
+  return {
+    ...(projectId && isValidProjectId(projectId) ? { 'X-Mushi-Project-Id': projectId } : {}),
+    ...(orgId && isValidOrgId(orgId) ? { 'X-Mushi-Org-Id': orgId, 'x-org-id': orgId } : {}),
+  }
+}
+
 // Same auth + base URL handling as apiFetch but returns the raw Response so
 // callers can stream non-JSON payloads (HTML, CSV, blobs) without parsing.
 // Unlike apiFetch, network failures reject/throw rather than returning
@@ -513,16 +630,11 @@ export async function apiFetchRaw(path: string, options?: RequestInit): Promise<
   const t0 = performance.now()
   try {
     const token = await getAccessToken()
-    const activeProjectId = getActiveProjectIdForApi()
-    const activeOrgId = getActiveOrgIdSnapshot()
     const res = await fetch(`${API_BASE}${path}`, {
       ...options,
       headers: {
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...(activeProjectId ? { 'X-Mushi-Project-Id': activeProjectId } : {}),
-        ...(activeOrgId
-          ? { 'X-Mushi-Org-Id': activeOrgId, 'x-org-id': activeOrgId }
-          : {}),
+        ...activeTenantHeaders(),
         ...options?.headers,
       },
     })

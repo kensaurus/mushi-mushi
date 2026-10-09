@@ -32,6 +32,23 @@ import { registerBillingCommands } from './commands/billing.js'
 import { registerCompletionCommand } from './commands/completion-cli.js'
 import { registerSelfhostCommands } from './commands/selfhost.js'
 import { registerProfileCommands } from './commands/profile.js'
+import { registerRadarCommands } from './commands/radar.js'
+import { registerRecipeCommands } from './commands/recipe.js'
+import { registerStoreCommands } from './commands/store.js'
+import { registerPortfolioCommands } from './commands/portfolio.js'
+import { registerConnectorsCommands } from './commands/connectors.js'
+import { registerFunnelCommands } from './commands/funnel.js'
+import { registerCodeHealthCommands } from './commands/code-health.js'
+import { registerReleasesCommands } from './commands/releases.js'
+import { registerSentryCommands } from './commands/sentry.js'
+import { registerOutboxCommands } from './commands/outbox.js'
+import { registerBudgetsCommands } from './commands/budgets.js'
+import { registerRepoCommands } from './commands/repo.js'
+import { registerAccountsCommands } from './commands/accounts.js'
+import { registerSpendCommands } from './commands/spend.js'
+import { registerDesignCommands } from './commands/design.js'
+import { registerUxCommands } from './commands/ux.js'
+import { registerUxRunsCommands } from './commands/ux-runs.js'
 import { setGlobalOutputFormat } from './cli-shared.js'
 import { printAndExit } from './errors.js'
 
@@ -109,6 +126,23 @@ registerSkillsCommands(program)
 registerBillingCommands(program)
 registerSelfhostCommands(program)
 registerProfileCommands(program)
+registerRadarCommands(program)
+registerRecipeCommands(program)
+registerStoreCommands(program)
+registerPortfolioCommands(program)
+registerConnectorsCommands(program)
+registerFunnelCommands(program)
+registerCodeHealthCommands(program)
+registerReleasesCommands(program)
+registerSentryCommands(program)
+registerOutboxCommands(program)
+registerBudgetsCommands(program)
+registerRepoCommands(program)
+registerAccountsCommands(program)
+registerSpendCommands(program)
+registerDesignCommands(program)
+registerUxCommands(program)
+registerUxRunsCommands(program)
 // Registered last so buildCommandTree() sees every command above when the
 // action runs (Commander builds the tree during these synchronous calls;
 // the action itself only executes later, at parseAsync() time).

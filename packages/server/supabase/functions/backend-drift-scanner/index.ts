@@ -21,12 +21,14 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { getServiceClient } from '../_shared/db.ts'
 import { log } from '../_shared/logger.ts'
-import { withSentry } from '../_shared/sentry.ts'
+import { reportError, withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import {
+  diffSchemaShapes,
   listTables,
   hashSchema,
   resolveSupabasePat,
+  schemaShape,
   type TableInfo,
 } from '../_shared/supabase-mcp-client.ts'
 
@@ -43,40 +45,17 @@ interface ProjectWithSettings {
   supabase_project_ref: string | null
 }
 
-/**
- * Diff two schema snapshots. Returns a summary of added, removed,
- * and modified tables — enough for a PM to understand what changed.
- */
-function diffSchemas(
-  prev: TableInfo[],
-  curr: TableInfo[],
-): { added: string[]; removed: string[]; modified: string[] } {
-  const prevMap = new Map(prev.map((t) => [t.name, t]))
-  const currMap = new Map(curr.map((t) => [t.name, t]))
-
-  const added = [...currMap.keys()].filter((k) => !prevMap.has(k))
-  const removed = [...prevMap.keys()].filter((k) => !currMap.has(k))
-  const modified: string[] = []
-
-  for (const [name, currTable] of currMap) {
-    const prevTable = prevMap.get(name)
-    if (!prevTable) continue
-    if (JSON.stringify(prevTable) !== JSON.stringify(currTable)) {
-      modified.push(name)
-    }
-  }
-
-  return { added, removed, modified }
-}
-
 async function scanProject(
   db: SupabaseClient,
   project: ProjectWithSettings,
-): Promise<{ scanned: boolean; drifted: boolean; findings: number }> {
+): Promise<{ scanned: boolean; drifted: boolean; findings: number; notConfigured?: boolean }> {
+  // Not configured is a state, not an error: the console shows the schema
+  // element as not connected. Everything below that fails THROWS, so the run
+  // counts it as an error instead of a quiet "scanned: false".
   const pat = await resolveSupabasePat(db, project.id)
   if (!pat || !project.supabase_project_ref) {
     dlog.info('skip project — no PAT or ref', { projectId: project.id })
-    return { scanned: false, drifted: false, findings: 0 }
+    return { scanned: false, drifted: false, findings: 0, notConfigured: true }
   }
 
   const opts = { projectRef: project.supabase_project_ref, pat }
@@ -85,11 +64,11 @@ async function scanProject(
   try {
     currTables = await listTables(opts)
   } catch (err) {
-    dlog.warn('listTables failed', { projectId: project.id, err: String(err) })
-    return { scanned: false, drifted: false, findings: 0 }
+    throw new Error(`listTables failed for ${project.id}: ${String(err).slice(0, 300)}`)
   }
 
-  const currHash = await hashSchema(currTables)
+  // Hash the schema shape only: row counts change daily without a schema change.
+  const currHash = await hashSchema(schemaShape(currTables))
 
   // Fetch the most recent snapshot for this project.
   const { data: prevSnap } = await db
@@ -105,21 +84,42 @@ async function scanProject(
   let drifted = false
 
   if (prevSnap && prevSnap.schema_hash !== currHash) {
-    drifted = true
+    // A hash from before the shape-only rule differs on row counts alone:
+    // only a real added, removed or changed table is drift.
     const prevTables = (prevSnap.schema_json as TableInfo[] | null) ?? []
-    const diff = diffSchemas(prevTables, currTables)
-    diffSummary = diff as Record<string, unknown>
-    dlog.info('schema drift detected', { projectId: project.id, diff })
+    const diff = diffSchemaShapes(prevTables, currTables)
+    if (diff.added.length + diff.removed.length + diff.modified.length > 0) {
+      drifted = true
+      diffSummary = diff as Record<string, unknown>
+      dlog.info('schema drift detected', { projectId: project.id, diff })
+    }
   }
 
-  await db.from('backend_schema_snapshots').insert({
+  const { error: snapErr } = await db.from('backend_schema_snapshots').insert({
     project_id: project.id,
     schema_json: currTables,
     schema_hash: currHash,
     diff_summary: diffSummary,
   })
+  if (snapErr) throw new Error(`backend_schema_snapshots insert failed for ${project.id}: ${snapErr.message}`)
 
   if (!drifted || !diffSummary) {
+    // A clean read is a result too: record it as a pass, so last day's
+    // findings stop reading as the current state of the schema.
+    if (prevSnap) {
+      const now = new Date().toISOString()
+      const { error: passErr } = await db.from('gate_runs').insert({
+        project_id: project.id,
+        gate: 'schema_drift',
+        status: 'pass',
+        triggered_by: 'backend-drift-scanner',
+        summary: { added: 0, removed: 0, modified: 0, total_changes: 0 },
+        findings_count: 0,
+        started_at: now,
+        completed_at: now,
+      })
+      if (passErr) throw new Error(`schema_drift pass run insert failed for ${project.id}: ${passErr.message}`)
+    }
     return { scanned: true, drifted: false, findings: 0 }
   }
 
@@ -136,13 +136,13 @@ async function scanProject(
     .single()
 
   if (runErr || !runData) {
-    dlog.warn('gate_runs insert failed', { projectId: project.id, err: runErr?.message })
-    return { scanned: true, drifted: true, findings: 0 }
+    throw new Error(`schema_drift gate_runs insert failed for ${project.id}: ${runErr?.message ?? 'no row'}`)
   }
   const runId = runData.id as string
 
   const diff = diffSummary as { added: string[]; removed: string[]; modified: string[] }
   let inserted = 0
+  const insertErrors: string[] = []
 
   // Removed tables are critical — data loss risk.
   for (const tableName of diff.removed ?? []) {
@@ -153,7 +153,8 @@ async function scanProject(
       rule_id: 'schema-drift-table-removed',
       message: `Table "${tableName}" was removed from the linked Supabase project. If any frontend code still references it, you will get runtime errors.`,
     })
-    if (!error) inserted++
+    if (error) insertErrors.push(error.message)
+    else inserted++
   }
 
   // Added tables are informational — but flag if no RLS.
@@ -167,7 +168,8 @@ async function scanProject(
         rule_id: 'schema-drift-table-added-no-rls',
         message: `New table "${tableName}" was added without Row Level Security. Enable RLS to prevent unintentional data exposure.`,
       })
-      if (!error) inserted++
+      if (error) insertErrors.push(error.message)
+      else inserted++
     } else {
       const { error } = await db.from('gate_findings').insert({
         gate_run_id: runId,
@@ -176,7 +178,8 @@ async function scanProject(
         rule_id: 'schema-drift-table-added',
         message: `New table "${tableName}" was added to the linked Supabase project.`,
       })
-      if (!error) inserted++
+      if (error) insertErrors.push(error.message)
+      else inserted++
     }
   }
 
@@ -189,11 +192,12 @@ async function scanProject(
       rule_id: 'schema-drift-table-modified',
       message: `Table "${tableName}" schema changed (columns or RLS policy). Verify the frontend and API contracts are compatible with the new schema.`,
     })
-    if (!error) inserted++
+    if (error) insertErrors.push(error.message)
+    else inserted++
   }
 
   await db.from('gate_runs').update({
-    status: inserted > 0 ? 'fail' : 'warn',
+    status: insertErrors.length > 0 ? 'error' : inserted > 0 ? 'fail' : 'warn',
     summary: {
       added: diff.added.length,
       removed: diff.removed.length,
@@ -204,6 +208,9 @@ async function scanProject(
     completed_at: new Date().toISOString(),
   }).eq('id', runId)
 
+  if (insertErrors.length > 0) {
+    throw new Error(`schema_drift findings insert failed for ${project.id}: ${insertErrors[0]}`)
+  }
   return { scanned: true, drifted: true, findings: inserted }
 }
 
@@ -245,6 +252,7 @@ async function handler(req: Request): Promise<Response> {
   const summary = results.reduce(
     (acc, r, i) => {
       if (r.status === 'fulfilled') {
+        acc.notConfigured += r.value.notConfigured ? 1 : 0
         acc.scanned += r.value.scanned ? 1 : 0
         acc.drifted += r.value.drifted ? 1 : 0
         acc.totalFindings += r.value.findings
@@ -254,10 +262,22 @@ async function handler(req: Request): Promise<Response> {
       }
       return acc
     },
-    { scanned: 0, drifted: 0, totalFindings: 0, errors: 0 },
+    { scanned: 0, drifted: 0, totalFindings: 0, errors: 0, notConfigured: 0 },
   )
 
   dlog.info('drift scan complete', summary)
+
+  if (summary.errors > 0) {
+    const firstErr = results.find((r) => r.status === 'rejected') as PromiseRejectedResult | undefined
+    reportError(new Error(`backend-drift-scanner: ${summary.errors} project(s) failed: ${String(firstErr?.reason).slice(0, 300)}`), {
+      tags: { function: 'backend-drift-scanner' },
+      extra: summary,
+    })
+    return new Response(
+      JSON.stringify({ ok: false, error: { code: 'SCAN_FAILED', message: `${summary.errors} project(s) failed` }, data: { total: toScan.length, ...summary } }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } },
+    )
+  }
 
   return new Response(
     JSON.stringify({ ok: true, data: { total: toScan.length, ...summary } }),

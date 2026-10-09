@@ -41,9 +41,16 @@ code, the fix agent cannot assemble context for the failing location.
    scope.
 3. Click **Enable indexing**.
 
-The indexer respects a 300-file cap (`MUSHI_REPO_INDEX_SWEEP_FILE_CAP`).  If
-your project has more than 300 eligible files the card shows a warning — use
-path filters to focus on the relevant subset.
+How many files the index may hold depends on your plan (300 on the free
+plan, more on paid plans). Each sweep fetches a batch of files and the hourly
+sweep keeps going until the repo or that limit is covered. The card shows the
+coverage in files (for example "1,500 of 4,700 files"), and says whether it is
+still filling or has hit the plan limit. Use path filters to choose which
+files count.
+
+Connected with a Personal Access Token instead of the GitHub App? Add a repo
+webhook so pushes re-index changed files. The card shows the URL; use the
+webhook secret it revealed, and tick the **Pushes** and **Check runs** events.
 
 After indexing, the card shows `Indexed N of M eligible files` and a language
 distribution sparkline so you can confirm the right files were picked up.
@@ -81,7 +88,7 @@ page where autofix is the suggested next action.
 ### CLI
 
 ```bash
-mushi doctor --server
+mushi doctor --no-ingest
 ```
 
 Reports the same four checks via the terminal.  Add `--json` for

@@ -65,6 +65,8 @@
   --color-ok-fg: oklch(0.16 0.04 155);
   --color-ok-muted: oklch(0.30 0.06 155);
   --color-warn: oklch(0.80 0.15 80);
+  /* Medium severity: yellow, between high's amber (warn) and low's green. */
+  --color-sev-medium: oklch(0.88 0.17 100);
   --color-warn-fg: oklch(0.18 0.04 80);
   --color-warn-muted: oklch(0.30 0.05 80);
   --color-danger: oklch(0.65 0.22 25);

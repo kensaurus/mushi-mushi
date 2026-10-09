@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/self-hosting/supabase
 
 ---
 title: Supabase setup
+description: Set up a Supabase project for self-hosted Mushi — link the CLI, push every migration, and enable the Postgres extensions the server needs.
 ---
 
 # Supabase setup

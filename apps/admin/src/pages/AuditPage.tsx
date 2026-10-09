@@ -12,12 +12,20 @@ import { usePageCopy } from '../lib/copy'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useRealtimeReload } from '../lib/realtime'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
-import { SetupNudge } from '../components/SetupNudge'
+import { NextStep } from '../components/NextStep'
 import { AuditStatusBanner, isAuditStatusBannerCritical } from '../components/audit/AuditStatusBanner'
 import { AuditGuide } from '../components/audit/AuditGuide'
 import { AuditSnapshotStrip } from '../components/audit/AuditSnapshotStrip'
 import { AuditReadout } from '../components/audit/AuditReadout'
-import { EMPTY_AUDIT_STATS, type AuditStats, type AuditTabId } from '../components/audit/types'
+import {
+  EMPTY_AUDIT_STATS,
+  parseAuditOutcome,
+  topActionLabel,
+  type AuditOutcome,
+  type AuditStats,
+  type AuditTabId,
+} from '../components/audit/types'
+import { PageLoadError } from '../components/PageLoadError'
 import {
   agentActorsDetail,
   agentActorsTooltip,
@@ -37,7 +45,6 @@ import {
   FilterSelect,
   Input,
   SelectField,
-  ErrorAlert,
   EmptyState,
   LogBlock,
   CodeValue,
@@ -63,6 +70,9 @@ interface AuditEntry {
   project_id: string
   actor_id: string | null
   actor_email: string | null
+  /** Member name / email the server looked up from actor_id (display only). */
+  actor_name?: string | null
+  actor_display_email?: string | null
   action: string
   resource_type: string
   resource_id: string | null
@@ -203,6 +213,7 @@ export function AuditPage() {
     data: statsData,
     loading: statsLoading,
     error: statsError,
+    errorCode: statsErrorCode,
     reload: reloadStats,
     lastFetchedAt: statsFetchedAt,
     isValidating: statsValidating,
@@ -213,6 +224,7 @@ export function AuditPage() {
   const resourceType = searchParams.get('resource_type') ?? ''
   const actor = searchParams.get('actor') ?? ''
   const actorType = searchParams.get('actor_type') ?? ''
+  const outcome = parseAuditOutcome(searchParams.get('outcome'))
   const since = searchParams.get('since') ?? ''
   const q = searchParams.get('q') ?? ''
   const page = Math.max(Number(searchParams.get('page') ?? '1'), 1)
@@ -224,18 +236,20 @@ export function AuditPage() {
     if (resourceType) params.set('resource_type', resourceType)
     if (actor) params.set('actor', actor)
     if (actorType) params.set('actor_type', actorType)
+    if (outcome) params.set('outcome', outcome)
     const sinceIso = sinceToIso(since)
     if (sinceIso) params.set('since', sinceIso)
     if (q) params.set('q', q)
     params.set('limit', String(PAGE_SIZE))
     params.set('offset', String(offset))
     return params.toString()
-  }, [action, resourceType, actor, actorType, since, q, offset])
+  }, [action, resourceType, actor, actorType, outcome, since, q, offset])
 
   const {
     data,
     loading,
     error,
+    errorCode,
     isValidating,
     lastFetchedAt,
     reload: reloadLogs,
@@ -261,7 +275,7 @@ export function AuditPage() {
   )
 
   const applyPreset = useCallback(
-    (preset: { action?: string; since?: string; tab?: AuditTabId; actor_type?: string }) => {
+    (preset: { action?: string; outcome?: AuditOutcome; since?: string; tab?: AuditTabId; actor_type?: string }) => {
       const next = new URLSearchParams(searchParams)
       if (preset.tab) next.set('tab', preset.tab)
       else next.delete('tab')
@@ -271,6 +285,8 @@ export function AuditPage() {
       else next.delete('since')
       if (preset.actor_type) next.set('actor_type', preset.actor_type)
       else next.delete('actor_type')
+      if (preset.outcome) next.set('outcome', preset.outcome)
+      else next.delete('outcome')
       next.delete('page')
       setSearchParams(next, { replace: true })
     },
@@ -295,7 +311,7 @@ export function AuditPage() {
 
   const clearFilters = () => {
     const next = new URLSearchParams(searchParams)
-    for (const key of ['action', 'resource_type', 'actor', 'actor_type', 'since', 'q', 'page']) {
+    for (const key of ['action', 'resource_type', 'actor', 'actor_type', 'outcome', 'since', 'q', 'page']) {
       next.delete(key)
     }
     setSearchParams(next, { replace: true })
@@ -327,7 +343,7 @@ export function AuditPage() {
     toast.success(`Exported ${logs.length} entries`)
   }
 
-  const activeFilterCount = [action, resourceType, actor, actorType, since, q].filter(Boolean).length
+  const activeFilterCount = [action, resourceType, actor, actorType, outcome, since, q].filter(Boolean).length
 
   const columns = useMemo<ColumnDef<AuditEntry, unknown>[]>(
     () => [
@@ -355,10 +371,14 @@ export function AuditPage() {
         id: 'actor',
         header: 'Actor',
         enableSorting: true,
-        accessorFn: (e) => e.actor_email ?? e.actor_id ?? 'system',
+        accessorFn: (e) => e.actor_name ?? e.actor_display_email ?? e.actor_email ?? (e.actor_id ? 'Unnamed actor' : 'system'),
+        // A name or email, never a raw id; the id stays in the tooltip.
         cell: ({ row }) => (
-          <span className="truncate text-xs text-fg-muted block max-w-56">
-            {row.original.actor_email ?? row.original.actor_id ?? 'system'}
+          <span
+            className="truncate text-xs text-fg-muted block max-w-56"
+            title={row.original.actor_id ?? undefined}
+          >
+            {row.original.actor_name ?? row.original.actor_display_email ?? row.original.actor_email ?? (row.original.actor_id ? 'Unnamed actor' : 'system')}
           </span>
         ),
       },
@@ -504,6 +524,17 @@ export function AuditPage() {
                   onClear: () => updateParam('action', ''),
                   tone: 'info',
                 })
+              if (outcome)
+                arr.push({
+                  key: 'outcome',
+                  label: 'Outcome',
+                  value:
+                    outcome === 'failure'
+                      ? `Failures (${(stats.failActions ?? []).join(', ') || 'failure actions'})`
+                      : `Warnings (${(stats.warnActions ?? []).join(', ') || 'warning actions'})`,
+                  onClear: () => updateParam('outcome', ''),
+                  tone: outcome === 'failure' ? 'danger' : 'warn',
+                })
               if (resourceType)
                 arr.push({
                   key: 'resource_type',
@@ -560,7 +591,7 @@ export function AuditPage() {
   const logTable = loading ? (
     <TableSkeleton rows={10} columns={5} showFilters={false} label="Loading audit logs" />
   ) : error ? (
-    <ErrorAlert message={`Failed to load audit logs: ${error}`} onRetry={reloadAll} />
+    <PageLoadError error={error} code={errorCode} resource="audit log" onRetry={reloadAll} />
   ) : logs.length === 0 ? (
     <EmptyState
       icon={<HeroSearch accent={activeFilterCount > 0 ? 'text-fg-faint' : 'text-info'} />}
@@ -649,7 +680,8 @@ export function AuditPage() {
             'Stack filters on the Log tab; expand any row for metadata JSON. Export CSV for compliance bundles.'
           }
         />
-        <SetupNudge
+        <NextStep
+          variant="inline"
           requires={['project']}
           emptyTitle="Select a project"
           emptyDescription="Audit entries are scoped to the active project — pick mushi-mushi (or your app) first."
@@ -662,7 +694,7 @@ export function AuditPage() {
     return <TableSkeleton rows={6} columns={5} showFilters={false} label="Loading audit console" />
   }
   if (statsError) {
-    return <ErrorAlert message={`Failed to load audit stats: ${statsError}`} onRetry={reloadAll} />
+    return <PageLoadError error={statsError} code={statsErrorCode} onRetry={reloadAll} />
   }
 
   return (
@@ -707,8 +739,8 @@ export function AuditPage() {
               <AuditStatusBanner
                 stats={stats}
                 onTab={setActiveTab}
-                onFilterFailures={() => applyPreset({ tab: 'log', action: 'fix.failed', since: '24h' })}
-                onFilterWarns={() => applyPreset({ tab: 'log', action: 'api_key.revoked', since: '24h' })}
+                onFilterFailures={() => applyPreset({ tab: 'log', outcome: 'failure', since: '24h' })}
+                onFilterWarns={() => applyPreset({ tab: 'log', outcome: 'warning', since: '24h' })}
               />
             ),
           },
@@ -761,7 +793,10 @@ export function AuditPage() {
 
       {activeTab === 'breakdown' && (
         <Card className="p-5 space-y-4">
-          <div className="text-xs font-medium uppercase tracking-wider">7-day action mix</div>
+          {/* 24h, not 7-day: every card below renders a *Count24h value, and
+              this tab's own description says "24h actor mix". The heading was
+              the outlier and made a week of activity read ~7x under-reported. */}
+          <div className="text-xs font-medium uppercase tracking-wider">24h actor mix</div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <StatCard
               label="Human actors"
@@ -794,7 +829,7 @@ export function AuditPage() {
                 <SignalChip tone="brand">Most frequent (7d)</SignalChip>
                 <Badge className={`${actionTone(stats.topAction7d)} font-mono`}>{stats.topAction7d}</Badge>
               </div>
-              <InlineProof>{stats.topAction7dCount} occurrences across owned projects</InlineProof>
+              <InlineProof>{topActionLabel(stats)}</InlineProof>
               <ActionPill
                 tone="neutral"
                 onClick={() => applyPreset({ tab: 'log', action: stats.topAction7d ?? '', since: '7d' })}
@@ -809,11 +844,11 @@ export function AuditPage() {
             />
           )}
           <ActionPillRow className="pt-1">
-            <ActionPill tone="danger" onClick={() => applyPreset({ tab: 'log', since: '24h', action: 'fix.failed' })}>
-              Failures (24h)
+            <ActionPill tone="danger" onClick={() => applyPreset({ tab: 'log', since: '24h', outcome: 'failure' })}>
+              Failures (24h): {stats.failCount24h.toLocaleString()}
             </ActionPill>
-            <ActionPill tone="warn" onClick={() => applyPreset({ tab: 'log', since: '24h', action: 'api_key.revoked' })}>
-              Revoked keys (24h)
+            <ActionPill tone="warn" onClick={() => applyPreset({ tab: 'log', since: '24h', outcome: 'warning' })}>
+              Warnings (24h): {stats.warnCount24h.toLocaleString()}
             </ActionPill>
             <ActionPill tone="neutral" onClick={() => applyPreset({ tab: 'log', actor_type: 'system', since: '24h' })}>
               System events (24h)

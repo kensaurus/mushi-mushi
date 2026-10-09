@@ -16,7 +16,9 @@ const MARKETPLACE_URL = '/mushi-mushi/testers/'
 
 export function TesterWelcomeEnroll() {
   const toast = useToast()
-  const { enroll, reload } = useTesterStatus()
+  // enroll() refreshes every useTesterStatus() on success, so the portal
+  // gate swaps this form for the portal without a manual reload.
+  const { enroll } = useTesterStatus()
   const [termsAccepted, setTermsAccepted] = useState(false)
   const [marketing, setMarketing] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -31,7 +33,6 @@ export function TesterWelcomeEnroll() {
       const ok = await enroll({ marketingOptIn: marketing, acceptedTerms: true })
       if (ok) {
         toast.success('Welcome to Mushi Bounties — pick an app and start testing.')
-        reload()
       } else {
         toast.error('Could not activate your tester account. Try again in a moment.')
       }
@@ -68,7 +69,7 @@ export function TesterWelcomeEnroll() {
           />
           <span>
             I agree to the{' '}
-            <a href="/mushi-mushi/testers/terms" target="_blank" rel="noreferrer" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
+            <a href="https://kensaur.us/mushi-mushi/docs/legal/terms#15-mushi-bounties-tester-program" target="_blank" rel="noreferrer" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
               Mushi Bounties tester terms
             </a>
           </span>

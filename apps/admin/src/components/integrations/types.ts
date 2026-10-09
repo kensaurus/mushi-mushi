@@ -13,9 +13,7 @@ import {
   IconCursorCloud,
   IconClaudeCode,
   IconJira,
-  IconLinear,
   IconPagerDuty,
-  IconGlobe,
 } from '../icons'
 
 /** Narrow union for *platform* integrations — the SDK-feeding services
@@ -38,6 +36,8 @@ export interface PlatformResponse {
   sourceByField?: Record<string, FieldSource>
   /** The organization the project belongs to (for bulk-apply). */
   organizationId?: string | null
+  /** False for members and viewers: credential writes are owner/admin only. */
+  canManage?: boolean
 }
 
 export interface HealthRow {
@@ -60,6 +60,7 @@ export type FieldValidatorName =
   | 'email'
   | 'sentryDsn'
   | 'slug'
+  | 'sentrySlugList'
   | 'token'
   | 'tokenLong'
   | 'jiraProjectKey'
@@ -80,6 +81,9 @@ export interface PlatformFieldDef {
   /** Named validator from `lib/validators.ts`. Card resolves this to a
    *  real validator function. Empty / undefined = no validation. */
   validator?: FieldValidatorName
+  /** Comma-separated in the form, a string array on the wire
+   *  (see lib/platformIntegrationForm.ts). */
+  list?: boolean
 }
 
 export interface PlatformDef {
@@ -130,11 +134,13 @@ export interface PlatformDef {
   webhookPath?: string
 }
 
+/** Linear lives on its own OAuth card (LinearIntegrationCard); Vercel is a
+ *  deploy target shown under Deployment readiness, not a routing destination. */
 export interface RoutingProviderDef {
-  type: 'jira' | 'linear' | 'github' | 'pagerduty' | 'vercel'
+  type: 'jira' | 'github' | 'pagerduty'
   /** The kind key used in integration_health_history. 'github' routing maps to
    *  'github_issues' to avoid colliding with the platform GitHub (code-repo). */
-  healthKind: 'jira' | 'linear' | 'github_issues' | 'pagerduty' | 'vercel'
+  healthKind: 'jira' | 'github_issues' | 'pagerduty'
   label: string
   whyItMatters: string
   capabilitiesOnceConnected: string[]
@@ -169,6 +175,8 @@ export interface IntegrationStats {
   platformConnected: number
   platformHealthy: number
   platformDown: number
+  /** Connected, not failing, but not proven working (never tested, stale, or no inbound event yet). */
+  platformAttention?: number
   routingActive: number
   routingPaused: number
   routingTotal: number
@@ -178,10 +186,11 @@ export interface IntegrationStats {
   topPriorityTo?: string | null
 }
 
-export type IntegrationTopPriority =
+type IntegrationTopPriority =
   | 'no_project'
   | 'platform_down'
   | 'incomplete'
+  | 'attention'
   | 'empty'
   | 'healthy'
 
@@ -200,13 +209,6 @@ export const EMPTY_INTEGRATION_STATS: IntegrationStats = {
   topPriority: 'no_project',
   topPriorityLabel: null,
   topPriorityTo: null,
-}
-
-export const PLATFORM_STATUS_MAP: Record<HealthRow['status'], string | null | undefined> = {
-  ok: 'ok',
-  degraded: 'degraded',
-  down: 'down',
-  unknown: undefined,
 }
 
 /**
@@ -231,10 +233,10 @@ export const PLATFORM_DEFS: PlatformDef[] = [
     consoleLabel: 'Create Sentry auth token',
     setupSteps: [
       'Open Sentry → Settings → Account → Auth Tokens → Create New Token.',
-      'Grant at least project:read and event:read scopes.',
+      'Grant project:read, event:read and event:write (event:write lets a merged Mushi fix resolve the Sentry issue).',
       'Copy the org slug from your Sentry URL: sentry.io/organizations/{org-slug}/.',
       'Paste org slug + token below, then Save → Test connection.',
-      'To route errors INTO Mushi: Sentry → Alerts → create an issue-alert rule with a webhook action pointed at the receive URL below, and set the same webhook secret in both places.',
+      'To route errors INTO Mushi: Sentry → Settings → Developer Settings → create an internal integration with the receive URL below as its webhook URL (resources: issue, event_alert), then paste its Client Secret as the webhook secret here. Existing issues: use Import below.',
     ],
     whyItMatters: 'Sentry errors become Mushi reports: an alert firing lands in your queue with plain-English triage and a dispatchable fix, deduped per Sentry issue, and the loop closes both ways — Mushi fix → Sentry resolve, Sentry resolve → Mushi resolved. Seer analysis and event context enrich classification.',
     capabilitiesOnceConnected: [
@@ -248,9 +250,10 @@ export const PLATFORM_DEFS: PlatformDef[] = [
     fields: [
       { name: 'sentry_org_slug', label: 'Org slug', placeholder: 'my-company', help: 'The segment after sentry.io/organizations/ in your Sentry URL.', required: true, helpId: 'integrations.sentry.org_slug', validator: 'slug' },
       { name: 'sentry_project_slug', label: 'Project slug', placeholder: 'web-app', help: 'Optional — narrows event search to one project (faster enrichment).', helpId: 'integrations.sentry.project_slug', validator: 'slug' },
-      { name: 'sentry_auth_token_ref', label: 'Auth token', placeholder: 'sntrys_… or sntryu_… (or vault://id)', type: 'password', help: 'User auth token with project:read + event:read. Create at sentry.io/settings/account/api/auth-tokens/.', required: true, helpId: 'integrations.sentry.auth_token', validator: 'token' },
+      { name: 'sentry_extra_project_slugs', label: 'More Sentry projects', placeholder: 'api, worker', help: 'Optional — other Sentry projects this app reports to (say a backend), comma-separated, up to 10. Import can pull from any of them.', validator: 'sentrySlugList', list: true },
+      { name: 'sentry_auth_token_ref', label: 'Auth token', placeholder: 'sntrys_… or sntryu_…', type: 'password', help: 'Auth token with project:read + event:read (import, enrichment) and event:write (resolve on merge). Create at sentry.io/settings/account/api/auth-tokens/.', required: true, helpId: 'integrations.sentry.auth_token', validator: 'token' },
       { name: 'sentry_dsn', label: 'DSN (optional)', placeholder: 'https://abc@o0.ingest.sentry.io/0', help: 'DSN for the SDK to send events. Only needed if you want Mushi reports forwarded as Sentry events.', helpId: 'settings.general.sentry_dsn', validator: 'sentryDsn' },
-      { name: 'sentry_webhook_secret', label: 'Webhook secret', placeholder: 'shared-secret', type: 'password', help: 'HMAC secret. Set the same value on the Sentry webhook (alert rules and user feedback) that targets the receive URL shown on this card.', helpId: 'settings.general.sentry_webhook_secret', validator: 'token' },
+      { name: 'sentry_webhook_secret', label: 'Webhook secret', placeholder: 'shared-secret', type: 'password', help: 'The Client Secret of the Sentry internal integration whose webhook URL is the receive URL on this card. Sentry signs every delivery with it.', helpId: 'settings.general.sentry_webhook_secret', validator: 'token' },
     ],
   },
   {
@@ -278,8 +281,8 @@ export const PLATFORM_DEFS: PlatformDef[] = [
     ],
     fields: [
       { name: 'langfuse_host', label: 'Host', placeholder: 'https://us.cloud.langfuse.com', type: 'url', help: 'Langfuse base URL — US cloud: https://us.cloud.langfuse.com, EU: https://cloud.langfuse.com', required: true, helpId: 'integrations.langfuse.host', validator: 'httpsUrl' },
-      { name: 'langfuse_public_key_ref', label: 'Public key', placeholder: 'pk-lf-… (or vault://id)', type: 'password', help: 'From Langfuse → Project Settings → API Keys.', required: true, helpId: 'integrations.langfuse.public_key', validator: 'token' },
-      { name: 'langfuse_secret_key_ref', label: 'Secret key', placeholder: 'sk-lf-… (or vault://id)', type: 'password', help: 'Secret half of the API key pair — never share publicly.', required: true, helpId: 'integrations.langfuse.secret_key', validator: 'token' },
+      { name: 'langfuse_public_key_ref', label: 'Public key', placeholder: 'pk-lf-…', type: 'password', help: 'From Langfuse → Project Settings → API Keys.', required: true, helpId: 'integrations.langfuse.public_key', validator: 'token' },
+      { name: 'langfuse_secret_key_ref', label: 'Secret key', placeholder: 'sk-lf-…', type: 'password', help: 'Secret half of the API key pair — never share publicly.', required: true, helpId: 'integrations.langfuse.secret_key', validator: 'token' },
     ],
   },
   {
@@ -308,7 +311,7 @@ export const PLATFORM_DEFS: PlatformDef[] = [
     fields: [
       { name: 'github_repo_url', label: 'Repo URL', placeholder: 'https://github.com/owner/repo', type: 'url', help: 'Full HTTPS URL to the repo Mushi should patch. SSH URLs are normalized server-side.', required: true, helpId: 'integrations.github.repo_url', validator: 'githubRepoUrl' },
       { name: 'github_default_branch', label: 'Default branch', placeholder: 'main', help: 'Defaults to "main" if blank. Change for repos that branch from "master" or "develop".', helpId: 'integrations.github.default_branch' },
-      { name: 'github_installation_token_ref', label: 'Installation token', placeholder: 'ghs_… or ghp_… (or vault://id)', type: 'password', help: 'GitHub App installation token (preferred) or fine-grained PAT. Needs Contents:write + Pull requests:write.', required: true, helpId: 'integrations.github.installation_token', validator: 'token' },
+      { name: 'github_installation_token_ref', label: 'Installation token', placeholder: 'ghs_… or ghp_…', type: 'password', help: 'GitHub App installation token (preferred) or fine-grained PAT. Needs Contents:write + Pull requests:write.', required: true, helpId: 'integrations.github.installation_token', validator: 'token' },
       { name: 'github_webhook_secret', label: 'Webhook secret', placeholder: 'shared-secret', type: 'password', help: 'HMAC secret. Set the same value in GitHub repo Settings → Webhooks (events: Check runs, Check suites).', helpId: 'integrations.github.webhook_secret', validator: 'token' },
     ],
   },
@@ -338,10 +341,9 @@ export const PLATFORM_DEFS: PlatformDef[] = [
       'Use "Send to Cursor" from any report to trigger on-demand',
     ],
     fields: [
-      { name: 'cursor_api_key_ref', label: 'API Key', placeholder: 'crsr_… (or vault://id)', type: 'password', help: 'Create at cursor.com/dashboard/integrations → API Keys.', required: true, helpId: 'integrations.cursor_cloud.api_key', validator: 'token' },
-      { name: 'cursor_default_model', label: 'Default model', placeholder: 'composer-2.5', help: 'Optional Cursor model slug. Leave blank to use your account default.', helpId: 'integrations.cursor_cloud.default_model' },
+      { name: 'cursor_api_key_ref', label: 'API Key', placeholder: 'crsr_…', type: 'password', help: 'Create at cursor.com/dashboard/integrations → API Keys.', required: true, helpId: 'integrations.cursor_cloud.api_key', validator: 'token' },
+      { name: 'cursor_default_model', label: 'Default model', placeholder: 'composer-2.5', help: 'Optional Cursor model id. Add settings after a ?, e.g. grok-4.7?reasoning_effort=xhigh&context=500k. Leave blank to use your Cursor account default.', helpId: 'integrations.cursor_cloud.default_model' },
       { name: 'cursor_auto_create_pr', label: 'Auto-create PRs', placeholder: 'true', help: 'When enabled (default), Cursor automatically opens a signed draft PR when the agent finishes. Disable to review the branch first.', helpId: 'integrations.cursor_cloud.auto_create_pr' },
-      { name: 'cursor_max_iterations', label: 'Max iterations', placeholder: '1', help: 'How many agent iterations Cursor runs per dispatch (1–10). Higher values cost more API credit but can recover from a first-pass miss.', helpId: 'integrations.cursor_cloud.max_iterations' },
     ],
   },
   {
@@ -360,21 +362,20 @@ export const PLATFORM_DEFS: PlatformDef[] = [
       'Save an Anthropic API key below (used for Mushi health probes only).',
       'Copy the mushi-claude-fix workflow into your repo via the checklist below.',
       'Add ANTHROPIC_API_KEY as a GitHub Actions secret in your repo.',
-      'Dispatch a fix from Reports → Send to Claude, or set autofix_agent = claude_code_agent.',
+      'Run the workflow yourself with a repository_dispatch event. Mushi does not send it yet: to have Mushi open fix PRs, use Cursor Cloud or the GitHub cloud agent.',
     ],
     whyItMatters:
-      'Dispatches a GitHub Actions workflow in your repo that runs Claude Code CLI, commits a fix branch, and opens a draft PR. Keys stay in your GitHub secrets (BYOK) — nothing is baked into your public repository.',
+      'A GitHub Actions workflow for your repo that runs the Claude Code CLI on a fix prompt, commits a fix branch and opens a draft PR. Keys stay in your GitHub secrets (BYOK). Mushi checks the key and hands you the workflow; it does not trigger the workflow yet.',
     capabilitiesOnceConnected: [
-      'Fire-and-forget fix runs via repository_dispatch',
-      'Draft PRs tagged with mushi-fix-id for status sync',
-      'Workflow run link on the Fix card while CI is pending',
-      'Use "Send to Claude" on any report for one-off dispatches',
+      'A health check on your Anthropic key',
+      'A ready-made workflow file that listens for your repository_dispatch event',
+      'Draft PRs the workflow opens are tagged with the Mushi fix id',
     ],
     fields: [
       {
         name: 'claude_api_key_ref',
         label: 'Anthropic API key',
-        placeholder: 'sk-ant-… (or vault://id)',
+        placeholder: 'sk-ant-…',
         type: 'password',
         help:
           'Stored in Mushi vault for health probes only. The actual fix run uses ANTHROPIC_API_KEY in your GitHub repo secrets.',
@@ -383,25 +384,11 @@ export const PLATFORM_DEFS: PlatformDef[] = [
         validator: 'token',
       },
       {
-        name: 'claude_default_model',
-        label: 'Default model',
-        placeholder: 'claude-opus-4-1',
-        help: 'Model slug passed in the dispatch payload (your workflow may ignore this if Claude Code picks its own default).',
-        helpId: 'integrations.claude_code_agent.default_model',
-      },
-      {
         name: 'claude_workflow_event',
         label: 'Workflow event',
         placeholder: 'mushi_claude_fix',
         help: 'repository_dispatch event type. Must match `on.repository_dispatch.types` in your workflow YAML.',
         helpId: 'integrations.claude_code_agent.workflow_event',
-      },
-      {
-        name: 'claude_default_branch',
-        label: 'Base branch',
-        placeholder: 'main',
-        help: 'Branch checked out before Claude applies the fix.',
-        helpId: 'integrations.claude_code_agent.default_branch',
       },
     ],
   },
@@ -434,31 +421,6 @@ export const ROUTING_PROVIDERS: RoutingProviderDef[] = [
       { name: 'email', label: 'User email', placeholder: 'bot@acme.com', help: 'Email of the Jira user owning the API token.', required: true, helpId: 'integrations.routing.jira.email', validator: 'email' },
       { name: 'apiToken', label: 'API token', placeholder: 'ATATT3xFf...', type: 'password', help: 'Create at id.atlassian.com → Security → API tokens.', required: true, helpId: 'integrations.routing.jira.api_token', validator: 'tokenLong' },
       { name: 'projectKey', label: 'Project key', placeholder: 'BUG', help: 'Short uppercase code prefixing every issue (e.g. BUG-123).', required: true, helpId: 'integrations.routing.jira.project_key', validator: 'jiraProjectKey' },
-    ],
-  },
-  {
-    type: 'linear',
-    healthKind: 'linear',
-    label: 'Linear',
-    Icon: IconLinear,
-    color: 'text-accent-foreground',
-    domain: 'linear.app',
-    externalUrl: 'https://linear.app',
-    setupSteps: [
-      'Open Linear → Settings → API → Personal API keys → Create key.',
-      'Copy the lin_api_… token.',
-      'Find your Team ID: Linear → Settings → Teams → click the team → copy the ID from the URL.',
-      'Paste token + Team ID below, then Save → Test connection.',
-    ],
-    whyItMatters: 'Mirror reports into Linear with proper labels and priorities. Classification metadata maps to Linear labels.',
-    capabilitiesOnceConnected: [
-      'Mirror reports as Linear issues with severity-mapped priority',
-      'Apply category labels automatically (bug, regression, ux, etc.)',
-      'Link the Linear issue back into the report for round-trip context',
-    ],
-    fields: [
-      { name: 'apiKey', label: 'API key', placeholder: 'lin_api_...', type: 'password', help: 'Personal API key from Linear → Settings → API.', required: true, helpId: 'integrations.routing.linear.api_key', validator: 'token' },
-      { name: 'teamId', label: 'Team ID', placeholder: 'TEAM-uuid', help: 'UUID of the Linear team that should receive issues.', required: true, helpId: 'integrations.routing.linear.team_id', validator: 'token' },
     ],
   },
   {
@@ -509,32 +471,6 @@ export const ROUTING_PROVIDERS: RoutingProviderDef[] = [
     ],
     fields: [
       { name: 'routingKey', label: 'Routing key', placeholder: '32-char integration key', type: 'password', help: 'Events API v2 integration key from PagerDuty service.', required: true, helpId: 'integrations.routing.pagerduty.routing_key', validator: 'pagerdutyRoutingKey' },
-    ],
-  },
-  {
-    type: 'vercel',
-    healthKind: 'vercel',
-    label: 'Vercel',
-    Icon: IconGlobe,
-    color: 'text-fg',
-    domain: 'vercel.com',
-    externalUrl: 'https://vercel.com',
-    setupSteps: [
-      'Open vercel.com/account/tokens → Create token with full access.',
-      'Find your Vercel Project Slug in the project settings URL: vercel.com/{team}/{project}.',
-      'Paste the project slug and token below, then Save.',
-      'Each Mushi fix PR will now receive a Vercel preview URL as a PR comment.',
-    ],
-    whyItMatters: 'Each auto-fix PR gets a Vercel preview deployment so reviewers can verify the fix in a browser before approving. The preview URL surfaces as a comment on the PR.',
-    capabilitiesOnceConnected: [
-      'Vercel preview URL surfaces on every Mushi fix PR',
-      'Deployment readiness card shows "Connected" instead of a setup prompt',
-      'Health probe confirms token + project are still valid',
-    ],
-    fields: [
-      { name: 'project_slug', label: 'Project slug', placeholder: 'my-app', help: 'The project identifier from vercel.com/{team}/{project}. Used to build deep links.', required: true, validator: 'slug' },
-      { name: 'team_slug', label: 'Team slug', placeholder: 'my-team', help: 'Optional — Vercel team the project belongs to (for team accounts).', validator: 'slug' },
-      { name: 'access_token', label: 'Access token', placeholder: 'vercel_…', type: 'password', help: 'Vercel API token with full access. Only used for health probes.', validator: 'token' },
     ],
   },
 ]

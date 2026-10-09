@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/security/byo-storage
 
 ---
 title: BYO storage
+description: Keep Mushi screenshots and crash dumps in your own storage bucket instead of Mushi's — credentials in Vault, signed URLs, and the same console view.
 ---
 
 # Bring-your-own storage
@@ -42,7 +43,7 @@ In the admin console: **Settings → Storage**.
 
 ## Health check
 
-**Settings → Health** runs a probe against your configured bucket (a zero-byte `PUT` + `DELETE` to `mushi-health-probe`) and shows `ok` / `degraded` / `error`. If the probe fails, screenshots will fall back to the Mushi-managed bucket and a warning chip appears on the Storage card.
+**Settings → SDK & connection** runs a probe against your configured bucket (a zero-byte `PUT` + `DELETE` to `mushi-health-probe`) and shows `ok` / `degraded` / `error`. If the probe fails, screenshots will fall back to the Mushi-managed bucket and a warning chip appears on the Storage card.
 
 ## Permissions required
 

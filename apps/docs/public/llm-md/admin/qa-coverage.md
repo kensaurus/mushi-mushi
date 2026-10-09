@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/qa-coverage
 
 ---
 title: QA Coverage
+description: QA Coverage turns user flows written in plain English into scheduled browser tests, so you find out when login or checkout breaks.
 ---
 
 # QA Coverage

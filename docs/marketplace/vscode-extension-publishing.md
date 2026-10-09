@@ -6,7 +6,14 @@ extension marketplaces via `vsce` / `ovsx`, run through `pnpm dlx` so the heavy
 publishing tools never enter the workspace lockfile.
 
 > Publisher: **`mushimushi`** (set in `package.json`). The display name is
-> **Mushi Mushi**. Version tracks `@mushi-mushi/mcp` (currently `0.17.0`).
+> **Mushi Mushi**. Version is meant to track `@mushi-mushi/mcp`; it is still
+> `0.17.0` and has fallen behind.
+
+> **Status: deferred (2026-09-21) — do not publish yet.** Publishing is on hold
+> until the hosted MCP sign-in the extension defaults to works end to end. The
+> reasons and the un-defer checklist live in
+> [`GTM-DISTRIBUTION.md` → VS Code extension](../marketing/GTM-DISTRIBUTION.md#vs-code-extension).
+> The steps below are the procedure for when that lands.
 
 ---
 

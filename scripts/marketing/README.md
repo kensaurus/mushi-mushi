@@ -21,7 +21,7 @@ The split is:
 | [`setup-github.mjs`](./setup-github.mjs) | Sets repo About + 20 topics + opens the awesome-list contributor good-first-issue. Idempotent — safe to re-run any time. | already-authed `gh` CLI |
 | [`seed-demo.mjs`](./seed-demo.mjs) | Fires 5 realistic, plausible bug reports into the live admin so first-time visitors land on a dashboard that looks alive. Tags every report with a `seed_batch` so you can identify them later. | `MUSHI_API_KEY` + `MUSHI_PROJECT_ID` |
 | [`post-devto.mjs <slug>`](./post-devto.mjs) | Publishes [`docs/marketing/posts/<slug>.md`](../../docs/marketing/posts/) to dev.to. Drafts by default (`--publish` to go live). Re-runs update the existing post in place. | `DEVTO_API_KEY` (free at [dev.to/settings/extensions](https://dev.to/settings/extensions)) |
-| [`post-bluesky.mjs`](./post-bluesky.mjs) | Posts the next due item from [`docs/marketing/social/queue.json`](../../docs/marketing/social/queue.json) via the AT Protocol. Self-labels as a bot, persists session in `.cache/bluesky-session.json`, respects rate limits. Flags: `--all` (drain queue), `--text "…"` (ad-hoc post), `--image=path --alt="…"` (attach image to ad-hoc post — JPEG/PNG/WebP/GIF, ≤1 MB), `--delete <at-uri>` (retract a post; auto-clears the matching queue entry so it can be re-posted). | `BLUESKY_HANDLE` (**full** ATProto identifier — `<name>.bsky.social` for the default suffix, or your custom domain like `mushimushi.dev`; *not* just the username) + `BLUESKY_APP_PASSWORD` (or `BSKY_API_KEY`). App password from [bsky.app → Settings → App passwords](https://bsky.app/settings/app-passwords). |
+| [`post-bluesky.mjs`](./post-bluesky.mjs) | Posts the next due item from [`docs/marketing/social/queue.json`](../../docs/marketing/social/queue.json) via the AT Protocol. Self-labels as a bot, persists session in `.cache/bluesky-session.json`, respects rate limits. Never posts an item marked `"disabled": true` (give it a `"disabled_reason"`), and refuses items scheduled more than 3 days ago — rules in [`queue-policy.mjs`](./queue-policy.mjs). Flags: `--all` (drain queue), `--allow-stale` (post overdue items anyway), `--text "…"` (ad-hoc post), `--image=path --alt="…"` (attach image to ad-hoc post — JPEG/PNG/WebP/GIF, ≤1 MB), `--delete <at-uri>` (retract a post; auto-clears the matching queue entry so it can be re-posted). | `BLUESKY_HANDLE` (**full** ATProto identifier — `<name>.bsky.social` for the default suffix, or your custom domain like `mushimushi.dev`; *not* just the username) + `BLUESKY_APP_PASSWORD` (or `BSKY_API_KEY`). App password from [bsky.app → Settings → App passwords](https://bsky.app/settings/app-passwords). |
 | [`propose-awesome-pr.mjs`](./propose-awesome-pr.mjs) | One-PR-at-a-time: forks an awesome-list, alphabetically inserts the Mushi entry into a named section, opens the PR. Reviews the diff before pushing. | already-authed `gh` CLI |
 | [`record-readme-gif.mjs`](./record-readme-gif.mjs) | Playwright walks the live demo end-to-end (dashboard → reports → detail → fixes) and outputs `docs/screenshots/hero.{webm,gif,webp}`. | Playwright (already in `examples/e2e-dogfood`) + `ffmpeg` on PATH |
 | [`capture-admin-screenshots.mjs`](./capture-admin-screenshots.mjs) | Authenticated static PNG capture for README/docs (`docs/screenshots/{slug}-dark.png` at 1600×1000). | enhance-readme skill Playwright + `TEST_USER_EMAIL` / `TEST_USER_PASSWORD` in `.env.local` |
@@ -44,6 +44,13 @@ rest 1–3 days apart. Re-run `node scripts/marketing/post-bluesky.mjs`
 (no flags) on each subsequent day; it picks the next due/unposted item,
 posts it, and stamps `posted_at` + `uri` back into the queue so re-runs
 are idempotent.
+
+A day missed is not a problem; a month missed is. Items more than 3 days
+overdue are refused (pass `--allow-stale` if you really mean it), because
+the queue is run by hand and a post written for a past moment should not
+fire late. To retire an item without losing it, set `"disabled": true` and
+say why in `"disabled_reason"` — the April 2026 soft-launch items are kept
+that way as history.
 
 ### Bluesky image attachments
 

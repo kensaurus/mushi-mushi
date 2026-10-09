@@ -8,6 +8,51 @@ import type { OpenPrRef } from './github-pr.ts'
 /** Branch family for machine-generated SDK upgrade PRs (must match sdk-upgrade-runner). */
 export const UPGRADE_BRANCH_PREFIX = 'mushi/sdk-upgrade'
 
+/**
+ * Statuses that hold the project's one upgrade slot. `awaiting_lockfile`
+ * (ADR 0019) has pushed its branch and waits for the host lockfile workflow;
+ * sdk-release-sync opens its PR, so a second run must not start meanwhile.
+ */
+export const SDK_UPGRADE_ACTIVE_STATUSES = ['queued', 'running', 'awaiting_lockfile'] as const
+
+/** Statuses after which the console stops streaming a job. */
+export const SDK_UPGRADE_SETTLED_STATUSES = [
+  'completed',
+  'completed_no_pr',
+  'failed',
+  'cancelled',
+  'awaiting_lockfile',
+] as const
+
+/**
+ * Release-cockpit columns a finished job starts with. A job that ends with a
+ * PR enters the cockpit as an open PR; without this, release_status stayed
+ * NULL, sdk-release-sync (which polls pr_opened/ready_to_merge/…) never looked
+ * at the PR again, and the console could not tell an open upgrade PR from a
+ * merged one (glot.it#142, merged on GitHub, still NULL in the job row).
+ */
+export function completedJobCockpitFields(
+  status: string,
+  prUrl: string | null | undefined,
+): { release_status: 'pr_opened'; pr_state: 'open' } | Record<string, never> {
+  return status === 'completed' && prUrl ? { release_status: 'pr_opened', pr_state: 'open' } : {}
+}
+
+/**
+ * Whether a finished upgrade job is still worth showing on the Update center:
+ * its PR is open (or not yet synced) or merged. A PR closed without merging is
+ * history, and showing it would hide the "Upgrade" action behind a dead PR.
+ */
+export function isUpgradePrStillRelevant(job: {
+  status: string
+  pr_url?: string | null
+  pr_state?: string | null
+  merged_at?: string | null
+}): boolean {
+  if (job.status !== 'completed' || !job.pr_url) return false
+  return !(job.pr_state === 'closed' && !job.merged_at)
+}
+
 export interface SdkUpgradeProjectSettings {
   github_repo_url: string | null
   github_installation_token_ref: string | null
@@ -64,7 +109,9 @@ export function evaluateSdkUpgradePostGate(
       code: 'ALREADY_IN_PROGRESS',
       status: 409,
       jobId: inFlight[0].id,
-      message: 'An SDK upgrade is already in progress for this project.',
+      message: inFlight[0].status === 'awaiting_lockfile'
+        ? 'The upgrade branch is pushed and your lockfile workflow is refreshing it. The PR opens on its own within about 30 minutes.'
+        : 'An SDK upgrade is already in progress for this project.',
     }
   }
 

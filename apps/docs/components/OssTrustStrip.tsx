@@ -2,6 +2,7 @@
  * Open-source trust strip — linked chips (license, self-host, repo, dogfood).
  */
 import { MUSHI_OSS } from '@mushi-mushi/brand'
+import Link from 'next/link'
 import { LANDING_TRUST_LINKS } from '@/lib/landing-copy'
 
 export function OssTrustStrip() {
@@ -11,18 +12,31 @@ export function OssTrustStrip() {
       <ul className="landing-trust__list">
         {LANDING_TRUST_LINKS.map((item) => {
           const external = item.href.startsWith('http')
+          const inner = (
+            <>
+              <span className="landing-trust__label">{item.label}</span>
+              <span className="landing-trust__text">{item.text}</span>
+            </>
+          )
           return (
             <li key={item.label}>
-              <a
-                className="landing-trust__chip"
-                href={item.href}
-                {...(external
-                  ? { target: '_blank', rel: 'noopener noreferrer' }
-                  : {})}
-              >
-                <span className="landing-trust__label">{item.label}</span>
-                <span className="landing-trust__text">{item.text}</span>
-              </a>
+              {external ? (
+                <a
+                  className="landing-trust__chip"
+                  href={item.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {inner}
+                </a>
+              ) : (
+                /* next/link so the docs basePath is prepended — a raw <a>
+                   ships a literal "/security" that only works via the apex
+                   redirect function. */
+                <Link className="landing-trust__chip" href={item.href}>
+                  {inner}
+                </Link>
+              )}
             </li>
           )
         })}

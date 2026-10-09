@@ -117,4 +117,38 @@ export const CATEGORY_LABEL: Record<string, string> = {
   analytics: 'Analytics',
 }
 
+/**
+ * Catalog plugins that duplicate a native card on Integrations. Their card
+ * links there instead of offering a second, webhook-based install.
+ */
+export const INTEGRATIONS_HREF_BY_PLUGIN_SLUG: Record<string, string> = {
+  sentry: '/integrations/config#platform-card-sentry',
+  linear: '/integrations/config#integrations-linear',
+  jira: '/integrations/config#integrations-routing',
+  pagerduty: '/integrations/config#integrations-routing',
+  'cursor-cloud-agent': '/integrations/config#platform-card-cursor_cloud',
+  'claude-code-agent': '/integrations/config#platform-card-claude_code_agent',
+}
+
+/**
+ * Minimum signing-secret length for a webhook plugin. One number for the
+ * install form's field check and the submit guard (they used to say 32 and
+ * 16). The generated secret is 64 hex characters.
+ */
+export const PLUGIN_SECRET_MIN_LENGTH = 32
+
+/** True for a URL the plugin PATCH / install will accept (public https). */
+export function pluginWebhookUrlError(raw: string): string | null {
+  const v = raw.trim()
+  if (!v) return 'Paste the HTTPS URL of your webhook receiver.'
+  let url: URL
+  try {
+    url = new URL(v)
+  } catch {
+    return 'That is not a valid URL. Paste the full https:// address of your receiver.'
+  }
+  if (url.protocol !== 'https:') return 'Webhook URLs must start with https:// so deliveries are encrypted.'
+  return null
+}
+
 export const STATUS_FILTER_OPTIONS = ['', 'ok', 'error', 'timeout', 'skipped', 'pending']

@@ -15,15 +15,19 @@
 //        a. project_retention_policies.reports_retention_days (explicit
 //           per-tenant override; SOC 2 customers set this).
 //        b. pricing_plans.retention_days for the active subscription
-//           (the implicit plan-level promise).
-//        c. Falls back to the Hobby default (7 days) when the project
-//           has no active subscription at all.
+//           (the implicit plan-level promise), then for the
+//           organization's own plan_id.
+//        c. Falls back to the free window when neither exists.
+//      The resolution lives in _shared/retention-policy.ts so the
+//      console's retention-status endpoint shows the same window.
 //      Legal-hold rows in project_retention_policies are skipped — the
 //      legal_hold flag means "do not delete, regardless of plan".
 //   2. Deletes `reports` rows older than the cutoff in batches of 1000.
 //      The CASCADE on reports deletes report-attached rows
 //      automatically (report_events, dispatch_jobs); no need to walk
-//      them manually.
+//      them manually. On free plans (no explicit override) the project's
+//      first real report is kept, so a returning new user still sees
+//      their first diagnosis (keepsFirstReport / firstRealReportId).
 //   3. Writes ONE audit_logs row per project per sweep with
 //      { deleted_count, retention_days, plan_id, source }, so the
 //      operator UI can render "last sweep on X projects, deleted N rows".
@@ -38,12 +42,15 @@
 // uses. The cron itself is wired by the `20260427_retention_sweep_cron.sql`
 // migration via mushi_internal_auth_header().
 // ============================================================
+import { UX_CAPTURES_BUCKET } from '../_shared/ux-runs.ts'
 import { getServiceClient } from '../_shared/db.ts'
 import { log } from '../_shared/logger.ts'
 import { startCronRun } from '../_shared/telemetry.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
-import { listPlans, resolvePlanFromSubscription, type PricingPlan } from '../_shared/plans.ts'
+import { listPlans, type PricingPlan } from '../_shared/plans.ts'
+import { resolveProjectRetention } from '../_shared/retention-policy.ts'
+import { firstRealReportId, type OldestReportRow } from '../_shared/first-report.ts'
 
 // Ambient `Deno` so the file type-checks under both Deno (real Edge Function
 // runtime) and Node/Vitest (the unit tests for `deleteOldReportsBatch`).
@@ -58,7 +65,6 @@ declare const Deno: {
 const rlog = log.child('retention-sweep')
 
 const BATCH_SIZE = 1000
-const HOBBY_FALLBACK_DAYS = 7
 
 interface ProjectRow {
   id: string
@@ -66,18 +72,6 @@ interface ProjectRow {
 
 interface ReportIdRow {
   id: string
-}
-
-interface SubscriptionRow {
-  project_id: string
-  status: string
-  plan_id: string | null
-}
-
-interface RetentionPolicyRow {
-  project_id: string
-  reports_retention_days: number
-  legal_hold: boolean
 }
 
 interface SweepStat {
@@ -100,13 +94,20 @@ const handler = async (req: Request): Promise<Response> => {
     const stats = await runSweep(db)
     const totalDeleted = stats.reduce((sum, s) => sum + s.deleted_count, 0)
     const skippedLegalHold = stats.filter((s) => s.legal_hold).length
+    const voice = await sweepVoiceIntake(db)
+    const traces = await sweepLlmTraces(db)
+    const uxCaptures = await sweepUxCaptures(db)
 
     await cron.finish({
-      rowsAffected: totalDeleted,
+      rowsAffected: totalDeleted + voice.audio_deleted + voice.sessions_expired + traces.deleted + uxCaptures.deleted,
       metadata: {
+        llm_traces_deleted: traces.deleted,
         projects_swept: stats.length,
         total_deleted: totalDeleted,
         skipped_legal_hold: skippedLegalHold,
+        voice_audio_deleted: voice.audio_deleted,
+        voice_sessions_expired: voice.sessions_expired,
+        ux_captures_deleted: uxCaptures.deleted,
       },
     })
 
@@ -117,6 +118,9 @@ const handler = async (req: Request): Promise<Response> => {
         total_deleted: totalDeleted,
         skipped_legal_hold: skippedLegalHold,
         per_project: stats,
+        voice,
+        llm_traces: traces,
+        ux_captures: uxCaptures,
       },
     })
   } catch (err) {
@@ -125,56 +129,6 @@ const handler = async (req: Request): Promise<Response> => {
     })
     await cron.fail(err)
     throw err
-  }
-}
-
-// Exported so the GET /v1/admin/retention-status endpoint can reuse the
-// same plan-resolution logic when computing "what would the next sweep
-// delete?" without duplicating the precedence rules.
-export async function resolveProjectRetention(
-  db: ReturnType<typeof getServiceClient>,
-  projectId: string,
-): Promise<{ retention_days: number; plan_id: string; source: SweepStat['source']; legal_hold: boolean }> {
-  const { data: policy } = await db
-    .from('project_retention_policies')
-    .select('project_id, reports_retention_days, legal_hold')
-    .eq('project_id', projectId)
-    .maybeSingle<RetentionPolicyRow>()
-
-  if (policy?.legal_hold) {
-    return {
-      retention_days: policy.reports_retention_days ?? HOBBY_FALLBACK_DAYS,
-      plan_id: 'legal_hold',
-      source: 'override',
-      legal_hold: true,
-    }
-  }
-
-  if (policy && policy.reports_retention_days) {
-    return {
-      retention_days: policy.reports_retention_days,
-      plan_id: 'override',
-      source: 'override',
-      legal_hold: false,
-    }
-  }
-
-  const { data: sub } = await db
-    .from('billing_subscriptions')
-    .select('project_id, status, plan_id')
-    .eq('project_id', projectId)
-    .in('status', ['active', 'trialing', 'past_due'])
-    .order('current_period_end', { ascending: false })
-    .limit(1)
-    .maybeSingle<SubscriptionRow>()
-
-  const plan = await resolvePlanFromSubscription(sub)
-
-  return {
-    retention_days: plan.retention_days ?? HOBBY_FALLBACK_DAYS,
-    plan_id: plan.id,
-    source: sub ? 'plan' : 'fallback',
-    legal_hold: false,
   }
 }
 
@@ -216,12 +170,34 @@ async function runSweep(db: ReturnType<typeof getServiceClient>): Promise<SweepS
 
     const cutoff = new Date(Date.now() - retention_days * 24 * 60 * 60 * 1000).toISOString()
 
+    // Free plans keep the project's first real report past the window, so a
+    // new user who comes back after a week still finds their first diagnosis
+    // instead of an empty project. Explicit retention overrides are honoured
+    // to the letter. If the lookup fails, skip this project for today rather
+    // than delete the report we meant to keep; tomorrow's run catches up.
+    let keepReportId: string | null = null
+    if (keepsFirstReport(source, plan_id, plans)) {
+      const { data: oldest, error: oldestErr } = await db
+        .from('reports')
+        .select('id, custom_metadata')
+        .eq('project_id', proj.id)
+        .order('created_at', { ascending: true })
+        .order('id', { ascending: true })
+        .limit(50)
+        .returns<OldestReportRow[]>()
+      if (oldestErr) {
+        rlog.error('first_report_lookup_failed', { project_id: proj.id, err: oldestErr.message })
+        continue
+      }
+      keepReportId = firstRealReportId(oldest ?? [])
+    }
+
     let totalDeleted = 0
     // Iterate batches until we drain the over-cutoff backlog. Bound the
     // outer loop at 50 batches (50,000 rows / project / day) so a
     // pathological backlog can't burn a function execution budget.
     for (let i = 0; i < 50; i++) {
-      const { deleted, error: delErr } = await deleteOldReportsBatch(db, proj.id, cutoff)
+      const { deleted, error: delErr } = await deleteOldReportsBatch(db, proj.id, cutoff, BATCH_SIZE, keepReportId)
       if (delErr) {
         rlog.error('delete_batch_failed', {
           project_id: proj.id,
@@ -273,6 +249,21 @@ async function runSweep(db: ReturnType<typeof getServiceClient>): Promise<SweepS
 }
 
 /**
+ * True when the sweep should spare the project's first real report: a free
+ * plan (monthly price 0, or a plan id the catalog does not know) reached
+ * through the plan or the fallback, never an explicit override.
+ */
+export function keepsFirstReport(
+  source: SweepStat['source'],
+  planId: string,
+  plans: readonly Pick<PricingPlan, 'id' | 'monthly_price_usd'>[],
+): boolean {
+  if (source === 'override') return false
+  const plan = plans.find((p) => p.id === planId)
+  return !plan || Number(plan.monthly_price_usd ?? 0) === 0
+}
+
+/**
  * PostgREST surfaces transient schema-cache misses as
  * `column "<table>.<col>" does not exist` immediately after an `ALTER
  * TABLE` migration runs (the schema cache is populated lazily over the
@@ -314,16 +305,19 @@ export async function deleteOldReportsBatch(
   projectId: string,
   cutoff: string,
   batchSize = BATCH_SIZE,
+  keepReportId: string | null = null,
 ): Promise<{ deleted: number; error: string | null }> {
-  const runSelect = () =>
-    db
+  const runSelect = () => {
+    const query = db
       .from('reports')
       .select('id')
       .eq('project_id', projectId)
       .lt('created_at', cutoff)
+    return (keepReportId ? query.neq('id', keepReportId) : query)
       .order('created_at', { ascending: true })
       .limit(batchSize)
       .returns<ReportIdRow[]>()
+  }
 
   let { data: candidates, error: selectErr } = await runSelect()
 
@@ -352,6 +346,274 @@ export async function deleteOldReportsBatch(
   if (deleteErr) return { deleted: 0, error: deleteErr.message }
 
   return { deleted: deletedRows?.length ?? ids.length, error: null }
+}
+
+// ── LLM traces ─────────────────────────────────────────────────────────────
+//
+// project_retention_policies.llm_traces_retention_days, set on the Compliance
+// page. Only projects that saved a policy are swept: with no row the console
+// shows the default, but nothing was chosen, so their history is kept. A
+// legal hold keeps everything. llm_invocations is also the spend ledger (AI
+// budget, auto-fix cap, billing counts read the last 30 days), so the sweep
+// never deletes anything younger than MIN_TRACE_RETENTION_DAYS.
+
+export const MIN_TRACE_RETENTION_DAYS = 35
+const TRACE_BATCH = 1000
+
+/** Days of llm_invocations the sweep keeps for a saved setting. */
+export function traceRetentionDays(saved: number | null | undefined): number {
+  const days = typeof saved === 'number' && Number.isFinite(saved) ? Math.trunc(saved) : 0
+  return Math.max(days, MIN_TRACE_RETENTION_DAYS)
+}
+
+interface TracePolicyRow {
+  project_id: string
+  llm_traces_retention_days: number | null
+  legal_hold: boolean | null
+}
+
+export async function sweepLlmTraces(
+  db: ReturnType<typeof getServiceClient>,
+): Promise<{ projects: number; deleted: number; errors: number }> {
+  const { data: policies, error } = await db
+    .from('project_retention_policies')
+    .select('project_id, llm_traces_retention_days, legal_hold')
+    .returns<TracePolicyRow[]>()
+  if (error) {
+    rlog.error('llm_trace_policies_failed', { err: error.message })
+    return { projects: 0, deleted: 0, errors: 1 }
+  }
+
+  let deleted = 0
+  let errors = 0
+  let projects = 0
+  for (const p of policies ?? []) {
+    if (p.legal_hold) continue
+    projects++
+    const days = traceRetentionDays(p.llm_traces_retention_days)
+    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
+    for (let i = 0; i < 50; i++) {
+      const { data: rows, error: selErr } = await db
+        .from('llm_invocations')
+        .select('id')
+        .eq('project_id', p.project_id)
+        .lt('created_at', cutoff)
+        .order('created_at', { ascending: true })
+        .limit(TRACE_BATCH)
+        .returns<Array<{ id: string }>>()
+      if (selErr) {
+        rlog.error('llm_trace_select_failed', { project_id: p.project_id, err: selErr.message })
+        errors++
+        break
+      }
+      const ids = (rows ?? []).map((r) => r.id)
+      if (ids.length === 0) break
+      const { error: delErr } = await db.from('llm_invocations').delete().in('id', ids)
+      if (delErr) {
+        rlog.error('llm_trace_delete_failed', { project_id: p.project_id, err: delErr.message })
+        errors++
+        break
+      }
+      deleted += ids.length
+      if (ids.length < TRACE_BATCH) break
+    }
+  }
+  if (deleted > 0) rlog.info('llm_traces_swept', { projects, deleted })
+  return { projects, deleted, errors }
+}
+
+// ── Voice intake (plan C6) ─────────────────────────────────────────────────
+//
+// Two jobs the report sweep above does not cover:
+//   1. Audio objects in the `voice-intake` bucket. Projects with
+//      voice_audio_retention_days = 0 never keep audio past transcription, so
+//      any object still referenced is a crash leftover — reap it after a day.
+//      Projects with a positive window keep objects that many days.
+//   2. `awaiting_confirm` sessions whose 10-minute confirm window passed
+//      without a confirm/cancel → `expired`, so the console and the return
+//      path stop treating them as live.
+
+export const VOICE_INTAKE_BUCKET = 'voice-intake'
+const VOICE_AUDIO_BATCH = 200
+
+interface VoiceSweepStats {
+  audio_deleted: number
+  sessions_expired: number
+  projects_with_audio: number
+}
+
+interface VoiceSettingsRow {
+  project_id: string
+  voice_audio_retention_days: number | null
+}
+
+interface VoiceAudioRow {
+  id: string
+  audio_path: string
+  report_id: string | null
+}
+
+export async function sweepVoiceIntake(db: ReturnType<typeof getServiceClient>): Promise<VoiceSweepStats> {
+  const stats: VoiceSweepStats = { audio_deleted: 0, sessions_expired: 0, projects_with_audio: 0 }
+  const nowIso = new Date().toISOString()
+
+  // 1. Expire stale confirmation gates.
+  const { data: expired, error: expireErr } = await db
+    .from('voice_intake_sessions')
+    .update({ status: 'expired', confirm_token_hash: null })
+    .eq('status', 'awaiting_confirm')
+    .lt('expires_at', nowIso)
+    .select('id')
+    .returns<Array<{ id: string }>>()
+  if (expireErr) {
+    // Migration window (table not yet created) or transient — log, keep sweeping.
+    rlog.warn('voice_sessions_expire_failed', { err: expireErr.message })
+  } else {
+    stats.sessions_expired = expired?.length ?? 0
+  }
+
+  // 2. Retained audio past each project's window.
+  const { data: settings, error: settingsErr } = await db
+    .from('project_settings')
+    .select('project_id, voice_audio_retention_days')
+    .returns<VoiceSettingsRow[]>()
+  if (settingsErr) {
+    rlog.warn('voice_settings_list_failed', { err: settingsErr.message })
+    return stats
+  }
+
+  for (const row of settings ?? []) {
+    const days = Math.max(0, Number(row.voice_audio_retention_days ?? 0))
+    // 0 = delete-after-transcription; anything still referenced after a day is a leftover.
+    const windowDays = days > 0 ? days : 1
+    const cutoff = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000).toISOString()
+
+    const { data: candidates, error: candErr } = await db
+      .from('voice_intake_sessions')
+      .select('id, audio_path, report_id')
+      .eq('project_id', row.project_id)
+      .not('audio_path', 'is', null)
+      .lt('created_at', cutoff)
+      .limit(VOICE_AUDIO_BATCH)
+      .returns<VoiceAudioRow[]>()
+    if (candErr) {
+      rlog.warn('voice_audio_candidates_failed', { project_id: row.project_id, err: candErr.message })
+      continue
+    }
+    if (!candidates || candidates.length === 0) continue
+    stats.projects_with_audio += 1
+
+    const paths = candidates.map((c) => c.audio_path).filter(Boolean)
+    const { error: rmErr } = await db.storage.from(VOICE_INTAKE_BUCKET).remove(paths)
+    if (rmErr) {
+      rlog.warn('voice_audio_remove_failed', { project_id: row.project_id, count: paths.length, err: rmErr.message })
+      continue
+    }
+
+    const ids = candidates.map((c) => c.id)
+    const { error: clearErr } = await db
+      .from('voice_intake_sessions')
+      .update({ audio_path: null })
+      .in('id', ids)
+    if (clearErr) rlog.warn('voice_audio_clear_failed', { project_id: row.project_id, err: clearErr.message })
+
+    const reportIds = candidates.map((c) => c.report_id).filter((r): r is string => typeof r === 'string')
+    if (reportIds.length > 0) {
+      const { error: repErr } = await db
+        .from('reports')
+        .update({ voice_audio_path: null })
+        .in('id', reportIds)
+      if (repErr) rlog.warn('voice_audio_report_clear_failed', { project_id: row.project_id, err: repErr.message })
+    }
+
+    stats.audio_deleted += paths.length
+  }
+
+  if (stats.audio_deleted > 0 || stats.sessions_expired > 0) {
+    rlog.info('voice_intake_swept', { ...stats })
+  }
+  return stats
+}
+
+// ── UX-loop screenshots (Plan 021) ─────────────────────────────────────────
+//
+// `mushi-ux --sync` uploads small before/after/diff PNGs to the private
+// `ux-captures` bucket. Past project_settings.ux_capture_retention_days
+// (default 30) the files are deleted and the surface rows forget the paths;
+// the run, its scores and its review stay.
+
+const UX_CAPTURE_BATCH = 200
+
+interface UxSettingsRow {
+  project_id: string
+  ux_capture_retention_days: number | null
+}
+
+interface UxThumbRow {
+  id: string
+  thumb_before?: string | null
+  thumb_after?: string | null
+  thumb_diff?: string | null
+  /** Slot → path (before-mobile, iter attempts' after-desktop, …). */
+  thumbs?: Record<string, unknown> | null
+}
+
+/** Every bucket path a row points at. */
+export function uxThumbPaths(row: UxThumbRow): string[] {
+  return [row.thumb_before, row.thumb_after, row.thumb_diff, ...Object.values(row.thumbs ?? {})].filter(
+    (p): p is string => typeof p === 'string' && p.length > 0,
+  )
+}
+
+export async function sweepUxCaptures(db: ReturnType<typeof getServiceClient>): Promise<{ deleted: number }> {
+  const stats = { deleted: 0 }
+  const { data: settings, error: settingsErr } = await db
+    .from('project_settings')
+    .select('project_id, ux_capture_retention_days')
+    .returns<UxSettingsRow[]>()
+  if (settingsErr) {
+    // Migration window (column not yet created) or transient: log, keep going.
+    rlog.warn('ux_capture_settings_failed', { err: settingsErr.message })
+    return stats
+  }
+  for (const row of settings ?? []) {
+    const days = Math.max(1, Number(row.ux_capture_retention_days ?? 30))
+    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
+    // Rows that still hold screenshots, in runs older than the cutoff.
+    // Filtering on the joined run (not "the first N old runs") keeps runs
+    // already cleared from crowding newer expired ones out of the batch.
+    for (const table of ['ux_surfaces', 'ux_iterations'] as const) {
+      const legacy = table === 'ux_surfaces'
+      const { data: rows, error: selErr } = await db
+        .from(table)
+        .select(`id, ${legacy ? 'thumb_before, thumb_after, thumb_diff, ' : ''}thumbs, ux_runs!inner(started_at)`)
+        .eq('project_id', row.project_id)
+        .lt('ux_runs.started_at', cutoff)
+        .or(legacy ? 'thumb_before.not.is.null,thumb_after.not.is.null,thumb_diff.not.is.null,thumbs.neq.{}' : 'thumbs.neq.{}')
+        .limit(UX_CAPTURE_BATCH)
+        .returns<UxThumbRow[]>()
+      if (selErr) {
+        rlog.warn('ux_capture_select_failed', { project_id: row.project_id, table, err: selErr.message })
+        continue
+      }
+      if (!rows?.length) continue
+      const paths = [...new Set(rows.flatMap(uxThumbPaths))]
+      if (paths.length > 0) {
+        const { error: rmErr } = await db.storage.from(UX_CAPTURES_BUCKET).remove(paths)
+        if (rmErr) {
+          rlog.warn('ux_capture_remove_failed', { project_id: row.project_id, count: paths.length, err: rmErr.message })
+          continue
+        }
+      }
+      const { error: clearErr } = await db
+        .from(table)
+        .update(legacy ? { thumb_before: null, thumb_after: null, thumb_diff: null, thumbs: {} } : { thumbs: {} })
+        .in('id', rows.map((s) => s.id))
+      if (clearErr) rlog.warn('ux_capture_clear_failed', { project_id: row.project_id, table, err: clearErr.message })
+      stats.deleted += paths.length
+    }
+  }
+  return stats
 }
 
 if (typeof Deno !== 'undefined') {

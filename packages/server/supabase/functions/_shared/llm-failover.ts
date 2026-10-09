@@ -18,14 +18,15 @@
  *
  * Usage:
  *   const result = await withLlmFailover(db, projectId, 'anthropic', async (key) => {
- *     const anthropic = createAnthropic({ apiKey: key.key })
- *     return generateObject({ model: anthropic('claude-sonnet-4-6'), … })
+ *     return claudeGenerateObject({ apiKey: key.key, model: STAGE2_MODEL, … })
  *   })
  */
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { NoObjectGeneratedError } from 'npm:ai@4';
+import { isClaudeRefusal } from './claude-request.ts';
 import {
+  enforceLlmBudget,
   resolveLlmKeys,
   markKeyStatus,
   markKeyUsed,
@@ -39,31 +40,18 @@ import {
   scheduleHostedLlmCharge,
   WalletDeniedError,
 } from './hosted-llm-billing.ts';
+import { LlmBudgetExceededError } from './llm-budget.ts';
+import { sanitizeLlmError } from './llm-error-sanitize.ts';
 
 const log = rootLog.child('llm-failover');
 
 // Re-exported so call sites that must let a wallet refusal escape their retry
 // loop can `instanceof`-check it without importing the billing module.
 export { WalletDeniedError };
+export { LlmBudgetExceededError };
 
-const LLM_API_KEY_RX = /\bsk-[A-Za-z0-9_*=-]{8,}/gi;
-const BEARER_TOKEN_RX = /\bBearer\s+[A-Za-z0-9._~+/=-]{8,}/gi;
-const CURSOR_API_KEY_RX = /\bcrsr_[A-Za-z0-9._~+/=-]{8,}/gi;
-const FIRECRAWL_API_KEY_RX = /\bfc-[A-Za-z0-9._~+/=-]{8,}/gi;
-const BROWSERBASE_API_KEY_RX = /\bbb_[A-Za-z0-9._~+/=-]{8,}/gi;
-const SECRET_ASSIGNMENT_RX =
-  /((?:api[_-]?key|x-api-key|authorization)\s*["']?\s*[:=]\s*["']?)(?!\[redacted\])([A-Za-z0-9._~+/=-]{8,})/gi;
-
-/** Remove provider credentials before errors reach logs, DB status, or Sentry. */
-export function sanitizeLlmError(value: unknown): string {
-  return String(value)
-    .replace(LLM_API_KEY_RX, 'sk-[redacted]')
-    .replace(BEARER_TOKEN_RX, 'Bearer [redacted]')
-    .replace(CURSOR_API_KEY_RX, 'crsr_[redacted]')
-    .replace(FIRECRAWL_API_KEY_RX, 'fc-[redacted]')
-    .replace(BROWSERBASE_API_KEY_RX, 'bb_[redacted]')
-    .replace(SECRET_ASSIGNMENT_RX, '$1[redacted]');
-}
+// Lives in its own Deno-free module so `llm-usage.ts` can use it from vitest.
+export { sanitizeLlmError };
 
 export class LlmFailoverError extends Error {
   code: 'ALL_KEYS_EXHAUSTED' | 'NO_KEYS_CONFIGURED';
@@ -96,6 +84,8 @@ export class LlmFailoverError extends Error {
  */
 export function isStage1LlmUnavailable(err: unknown): boolean {
   if (err instanceof WalletDeniedError) return true;
+  // Over budget: Stage 1 falls back to heuristic triage instead of going dark.
+  if (err instanceof LlmBudgetExceededError) return true;
   if (err instanceof LlmFailoverError) return true;
   return classifyLlmError(err) === 'auth';
 }
@@ -299,8 +289,11 @@ export async function withLlmFailover<T>(
   provider: LlmProvider,
   fn: (key: ResolvedKey) => Promise<T>,
   meter?: LlmFailoverMeterOptions<T>,
+  /** `openAiOnly`: leave OpenRouter keys out (speech-to-text, fine-tuning). */
+  opts: { openAiOnly?: boolean } = {},
 ): Promise<T> {
-  const candidates = await resolveLlmKeys(db, projectId, provider);
+  await enforceLlmBudget(db, projectId, provider);
+  const candidates = await resolveLlmKeys(db, projectId, provider, { openAiOnly: opts.openAiOnly });
 
   if (candidates.length === 0) {
     throw new LlmFailoverError({
@@ -420,6 +413,9 @@ export async function withAnthropicOrOpenAi<T>(
     const result = await withLlmFailover(db, projectId, 'anthropic', anthropicFn);
     return { result, usedProvider: 'anthropic' };
   } catch (err) {
+    // Over budget is a project state, not an Anthropic problem: OpenAI is
+    // under the same budget, so never fall through to it.
+    if (err instanceof LlmBudgetExceededError) throw err;
     if (
       err instanceof LlmFailoverError &&
       (err.code === 'NO_KEYS_CONFIGURED' || err.code === 'ALL_KEYS_EXHAUSTED')
@@ -431,6 +427,12 @@ export async function withAnthropicOrOpenAi<T>(
       // OpenAI often handles complex structured-output schemas more reliably —
       // try it as a fallback before giving up.
       log.warn('Anthropic NoObjectGeneratedError; falling back to OpenAI', { projectId });
+    } else if (isClaudeRefusal(err)) {
+      // Claude (and its server-side fallback chain, which only covers the
+      // cyber / frontier_llm categories) declined. Not the key's fault and not
+      // transient — `withLlmFailover` re-threw it as fatal without marking the
+      // key. OpenAI runs different safety policies, so hand it over.
+      log.warn('Claude refusal; falling back to OpenAI', { projectId, category: err.category });
     } else {
       throw err;
     }

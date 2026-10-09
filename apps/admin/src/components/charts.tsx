@@ -2,7 +2,7 @@
  * FILE: apps/admin/src/components/charts.tsx
  * PURPOSE: Shared visual primitives used across Dashboard, Judge, Queue,
  *          Fixes, and Prompt Lab. Extracted so every page speaks the same
- *          visual language — Kpi tiles, sparklines, stacked bars, status pills.
+ *          visual language — Kpi tiles, sparklines, status pills.
  */
 
 import { Link } from 'react-router-dom'
@@ -26,16 +26,13 @@ import {
   ChartAccessibleSummary,
   sparklineSummaryRows,
 } from './charts/ChartAccessibleSummary'
-import { ChartInlineDataLabels, buildInlineLabelPoints, formatInlineLabelValue, INLINE_LABEL_CLASS, INLINE_LABEL_KIND_ACCENT } from './charts/ChartInlineDataLabels'
-import { SeverityColorLegend } from './charts/SeverityColorLegend'
-import { SEVERITY_TRAFFIC } from '../lib/severityTraffic'
+import { ChartInlineDataLabels } from './charts/ChartInlineDataLabels'
 import {
   buildYTickValues,
   formatChartCount,
   formatChartDayLabel,
   formatChartUsd,
   resolveChartMax,
-  shortDay,
 } from './charts/chartAxis'
 import { CHIP_TONE, runStatusChipTone } from '../lib/chipTone'
 
@@ -167,8 +164,12 @@ export function KpiTile({
         </div>
       </div>
       <div className="flex items-center gap-1.5 mt-1 min-w-0">
+        {/* Display numerals stay in the sans face with plain tabular figures:
+            the system monospace (Consolas, SF Mono) and the compact density's
+            `slashed-zero` both draw 0 as a struck-through glyph that reads as
+            "∅ / null" at KPI size. Mono + slashed zero is for small IDs. */}
         <div
-          className={`flex-1 min-w-0 font-semibold font-mono truncate ${
+          className={`flex-1 min-w-0 font-semibold font-sans tabular-nums truncate ${
             isPrimary ? 'text-2xl sm:text-3xl' : 'text-lg'
           } ${accent ? TONE_TEXT[accent] : 'text-fg'}`}
         >
@@ -200,6 +201,7 @@ export function KpiTile({
             valueFormat="count"
             showRangeSummary={showSparkAxes}
             seriesLabel={label}
+            maxXTicks={2}
             height={showSparkAxes ? (isPrimary ? 56 : 44) : 18}
           />
           <ChartAccessibleSummary
@@ -296,6 +298,7 @@ export function LineSparkline({
   showRangeSummary = false,
   seriesLabel: _seriesLabel,
   onRangeSelect,
+  maxXTicks,
 }: {
   values: number[]
   accent?: string
@@ -317,6 +320,8 @@ export function LineSparkline({
   /** Label for summary chips + aria (e.g. "Tokens"). */
   seriesLabel?: string
   onRangeSelect?: (range: { fromIso: string; toIso: string }) => void
+  /** Cap on X-axis labels (narrow KPI tiles pass 2). */
+  maxXTicks?: number
 }) {
   const brush = useBrushSelection({
     dataLength: values.length,
@@ -495,6 +500,7 @@ export function LineSparkline({
         height={plotHeight}
         yTickLabels={yTicks}
         xLabels={axisXIso.length > 0 ? axisXIso : undefined}
+        maxXTicks={maxXTicks}
         yAxisCaption={yAxisCaption}
         xAxisCaption={xAxisCaption}
       >
@@ -690,226 +696,6 @@ export function BarSparkline({
       >
         {bars}
       </ChartFrame>
-    </div>
-  )
-}
-
-/* ── SeverityStackedBars ────────────────────────────────────────────────── */
-
-export interface SeverityDay {
-  day: string
-  total: number
-  critical: number
-  high: number
-  medium: number
-  low: number
-  unscored?: number
-}
-
-export function SeverityStackedBars({ data }: { data: SeverityDay[] }) {
-  const max = Math.max(1, ...data.map((d) => d.total))
-  const totalReports = data.reduce((sum, d) => sum + d.total, 0)
-  /* plotHeight is intentionally tall so the Report Intake card fills the
-     same grid-row height as the LLM Activity card (which stacks two 72px
-     sparklines + subheaders ≈ 256px of chart content). */
-  const plotHeight = 196
-  const yTicks = buildYTickValues(max, 0, 4).map((v) => formatChartCount(v))
-  const showUnscored = data.some((d) => d.unscored != null)
-  const leadingQuiet = (() => {
-    const firstActive = data.findIndex((d) => d.total > 0)
-    return firstActive > 0 ? firstActive : 0
-  })()
-  const chartDays = leadingQuiet > 2 ? data.slice(leadingQuiet - 1) : data
-  const quietOmitted = leadingQuiet > 2 ? leadingQuiet - 1 : 0
-
-  const { hoverIdx, onMouseMove, onMouseLeave } = useSeriesHover(chartDays.length, chartDays.length > 0)
-  const inlineLabels = buildInlineLabelPoints(
-    chartDays.map((d) => d.total),
-    hoverIdx,
-  )
-  const inlineByIdx = new Map(inlineLabels.map((p) => [p.idx, p]))
-
-  const accessibleRows = chartDays.map((d) => ({
-    day: shortDay(d.day),
-    total: d.total,
-    critical: d.critical,
-    high: d.high,
-    medium: d.medium,
-    low: d.low,
-    ...(showUnscored ? { unscored: d.unscored ?? 0 } : {}),
-  }))
-  const accessibleColumns = [
-    { key: 'day', label: 'Day' },
-    { key: 'total', label: 'Total' },
-    { key: 'critical', label: 'Critical' },
-    { key: 'high', label: 'High' },
-    { key: 'medium', label: 'Medium' },
-    { key: 'low', label: 'Low' },
-    ...(showUnscored ? [{ key: 'unscored', label: 'Unscored' }] : []),
-  ]
-
-  return (
-    <div className="w-full min-w-0">
-      <ChartFrame
-        height={plotHeight}
-        yTickLabels={yTicks}
-        xLabels={chartDays.map((d) => d.day)}
-        xBucketCount={chartDays.length}
-        accessibleCaption={`Report intake by severity over ${chartDays.length} days — ${totalReports} reports total`}
-        accessibleColumns={accessibleColumns}
-        accessibleRows={accessibleRows}
-      >
-        <div
-          className="relative h-full w-full min-w-0"
-          onMouseMove={onMouseMove}
-          onMouseLeave={onMouseLeave}
-        >
-          <div
-            className="grid h-full w-full items-stretch gap-0.5"
-            style={{ gridTemplateColumns: `repeat(${chartDays.length}, minmax(0, 1fr))` }}
-            role="group"
-            aria-label={`Daily severity breakdown · ${totalReports} reports across ${chartDays.length} days`}
-          >
-            {chartDays.map((d, i) => {
-              const totalH = (d.total / max) * 100
-              const inline = inlineByIdx.get(i)
-              return (
-                <SeverityBarColumn
-                  key={d.day}
-                  day={d}
-                  plotHeight={plotHeight}
-                  totalH={totalH}
-                  isHovered={hoverIdx === i}
-                  inlineLabel={inline}
-                />
-              )
-            })}
-          </div>
-        </div>
-      </ChartFrame>
-
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <SeverityColorLegend showUnscored={showUnscored} />
-          {quietOmitted > 0 && (
-            <span className="text-3xs text-fg-faint">
-              {quietOmitted} earlier {quietOmitted === 1 ? 'day' : 'days'} with 0 reports hidden
-            </span>
-          )}
-        </div>
-        <span className="shrink-0 text-2xs tabular-nums text-fg-faint/70">{totalReports} total · 14d</span>
-      </div>
-    </div>
-  )
-}
-
-function SeverityBarColumn({
-  day,
-  plotHeight,
-  totalH,
-  isHovered,
-  inlineLabel,
-}: {
-  day: SeverityDay
-  plotHeight: number
-  totalH: number
-  isHovered: boolean
-  inlineLabel?: { value: number; kind: 'peak' | 'today' | 'low' }
-}) {
-  const ariaSummary = `${shortDay(day.day)}: ${day.total} reports — ${day.critical} critical, ${day.high} high, ${day.medium} medium, ${day.low} low${
-    day.unscored != null ? `, ${day.unscored} unscored` : ''
-  }`
-  const barPx = day.total > 0 ? Math.max(4, Math.round((totalH / 100) * plotHeight)) : 0
-  const segPx = (n: number) =>
-    day.total > 0 && n > 0 ? Math.max(2, Math.round((n / day.total) * barPx)) : 0
-
-  return (
-    <div className="relative h-full min-w-0">
-      <button
-        type="button"
-        tabIndex={0}
-        aria-label={ariaSummary}
-        className={[
-          // overflow-hidden is load-bearing: each non-zero severity segment
-          // floors at 2px (segPx) while the bar itself floors at 4px (barPx),
-          // so on a low-volume day with several severities present the stacked
-          // segments can sum taller than the bar. With `justify-end` the excess
-          // would otherwise spill past the TOP edge into the inline label and
-          // the neighbouring column; clipping keeps the most-severe (bottom)
-          // segments visible within the bar boundary.
-          'absolute inset-x-0 bottom-0 flex flex-col justify-end overflow-hidden rounded-sm',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60',
-          'motion-safe:transition-[transform,opacity] duration-150',
-          /* Zero-day: keep full-height for hover target but NO visual fill —
-             only the 6px baseline stub signals "day with 0 reports", avoiding
-             the tall grey box that makes bars appear clustered to the right. */
-          day.total === 0
-            ? 'h-full cursor-default'
-            : isHovered
-              ? 'brightness-110 z-10'
-              : '',
-        ].join(' ')}
-        style={day.total > 0 ? { height: `${barPx}px` } : undefined}
-      >
-        {day.total === 0 ? (
-          <span
-            className="mx-auto mb-0.5 block w-3/5 rounded-full bg-edge-subtle/70"
-            style={{ height: '4px' }}
-            aria-hidden="true"
-          />
-        ) : (
-          <>
-            <span aria-hidden="true" className={`block w-full rounded-t-sm ${SEVERITY_TRAFFIC.low.bg}`} style={{ height: `${segPx(day.low)}px` }} />
-            <span aria-hidden="true" className={`block w-full ${SEVERITY_TRAFFIC.medium.bg}`} style={{ height: `${segPx(day.medium)}px` }} />
-            <span aria-hidden="true" className={`block w-full ${SEVERITY_TRAFFIC.high.bg}`} style={{ height: `${segPx(day.high)}px` }} />
-            <span
-              aria-hidden="true"
-              className={`block w-full ${day.unscored == null || day.unscored <= 0 ? 'rounded-b-sm' : ''} ${SEVERITY_TRAFFIC.critical.bg}`}
-              style={{ height: `${segPx(day.critical)}px` }}
-            />
-            {day.unscored != null && day.unscored > 0 && (
-              <span aria-hidden="true" className={`block w-full rounded-b-sm ${SEVERITY_TRAFFIC.unscored.bg}`} style={{ height: `${segPx(day.unscored)}px` }} />
-            )}
-          </>
-        )}
-      </button>
-
-      {inlineLabel && day.total > 0 && !isHovered && (
-        <span
-          className={`${INLINE_LABEL_CLASS} ${INLINE_LABEL_KIND_ACCENT[inlineLabel.kind]}`}
-          style={{ bottom: `${barPx + 4}px`, transform: 'translate(-50%, 0)' }}
-          title={inlineLabel.kind}
-          aria-hidden="true"
-        >
-          {formatInlineLabelValue(inlineLabel.value, 'count')}
-        </span>
-      )}
-      <ChartHoverPopover
-        dayLabel={shortDay(day.day)}
-        valueLabel={day.total > 0 ? `${day.total} total` : '0'}
-        visible={isHovered}
-        style={{ left: '50%', bottom: `${Math.max(8, barPx + 4)}px` }}
-      >
-        {day.total > 0 ? (
-          <ul className="mt-1 space-y-0.5 font-mono text-3xs">
-            {day.critical > 0 && (
-              <li className="flex justify-between gap-3"><span className={SEVERITY_TRAFFIC.critical.text}>●</span><span>{day.critical}</span></li>
-            )}
-            {day.high > 0 && (
-              <li className="flex justify-between gap-3"><span className={SEVERITY_TRAFFIC.high.text}>●</span><span>{day.high}</span></li>
-            )}
-            {day.medium > 0 && (
-              <li className="flex justify-between gap-3"><span className={SEVERITY_TRAFFIC.medium.text}>●</span><span>{day.medium}</span></li>
-            )}
-            {day.low > 0 && (
-              <li className="flex justify-between gap-3"><span className={SEVERITY_TRAFFIC.low.text}>●</span><span>{day.low}</span></li>
-            )}
-            {day.unscored != null && day.unscored > 0 && (
-              <li className="flex justify-between gap-3"><span className={SEVERITY_TRAFFIC.unscored.text}>●</span><span>{day.unscored}</span></li>
-            )}
-          </ul>
-        ) : null}
-      </ChartHoverPopover>
     </div>
   )
 }

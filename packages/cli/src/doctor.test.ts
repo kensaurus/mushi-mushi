@@ -4,11 +4,15 @@
  *          Covers all 4 check branches and --json exit-code semantics.
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import {
   checkCliAuthPath,
   checkCliConfig,
   checkEndpointReachability,
+  checkMcpConfig,
   checkPipelineDoctor,
   checkServerPreflight,
   runDoctor,
@@ -49,25 +53,29 @@ describe('checkCliConfig', () => {
     expect(checks.every((c) => c.ok)).toBe(true);
   });
 
-  it('endpoint check fails when endpoint is missing', () => {
+  // A missing endpoint used to FAIL first with its own hint, although every
+  // command falls back to Mushi Cloud. It now passes and names the default.
+  it('endpoint check passes with the cloud default when endpoint is missing', () => {
     const checks = checkCliConfig(makeConfig({ endpoint: undefined }));
     const endpointCheck = checks.find((c) => c.name === 'CLI config file');
-    expect(endpointCheck?.ok).toBe(false);
+    expect(endpointCheck?.ok).toBe(true);
+    expect(endpointCheck?.detail).toContain('Mushi Cloud default');
     expect(endpointCheck?.detail).toContain('MUSHI_API_ENDPOINT');
   });
 
-  it('apiKey check fails when apiKey is missing', () => {
+  it('apiKey check fails when apiKey is missing, and its fix is the wizard sign-in', () => {
     const checks = checkCliConfig(makeConfig({ apiKey: undefined }));
     const keyCheck = checks.find((c) => c.name === 'API key configured');
     expect(keyCheck?.ok).toBe(false);
-    expect(keyCheck?.detail).toContain('mushi login');
+    expect(keyCheck?.detail).toContain('No API key');
+    expect(fixHintForCheck('API key configured')).toContain('npx mushi-mushi');
   });
 
-  it('projectId check fails when projectId is missing', () => {
+  it('projectId check fails when projectId is missing, with the same single fix', () => {
     const checks = checkCliConfig(makeConfig({ projectId: undefined }));
     const projCheck = checks.find((c) => c.name === 'Project ID configured');
     expect(projCheck?.ok).toBe(false);
-    expect(projCheck?.detail).toContain('mushi config');
+    expect(fixHintForCheck('Project ID configured')).toBe(fixHintForCheck('API key configured'));
   });
 
   it('truncates the API key in the detail string', () => {
@@ -218,11 +226,14 @@ describe('runDoctor', () => {
 // ── checkCliAuthPath (doctor --auth) ─────────────────────────────────────────
 
 describe('checkCliAuthPath', () => {
-  it('fails with guidance when no endpoint is configured', async () => {
-    const checks = await checkCliAuthPath(makeConfig({ endpoint: undefined }), mockFetch(200));
-    expect(checks).toHaveLength(1);
-    expect(checks[0].ok).toBe(false);
-    expect(checks[0].detail).toContain('No endpoint configured');
+  // Previously this failed with "No endpoint configured", although the sign-in
+  // being diagnosed used the Mushi Cloud default.
+  it('probes the Mushi Cloud sign-in route when no endpoint is saved', async () => {
+    const doFetch = mockFetch(400, { ok: false });
+    const checks = await checkCliAuthPath(makeConfig({ endpoint: undefined, apiKey: undefined }), doFetch);
+    expect(checks.find((c) => c.name === 'Sign-in route reachable')?.ok).toBe(true);
+    const [url] = (doFetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0] as [string];
+    expect(url).toContain('dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api/v1/cli/auth/device/token');
   });
 
   it('treats HTTP 400 from the device-token route as reachable', async () => {
@@ -412,8 +423,124 @@ describe('checkPipelineDoctor', () => {
 
 describe('fixHintForCheck', () => {
   it('returns a hint for known checks and prefixed categories', () => {
-    expect(fixHintForCheck('API key configured')).toContain('mushi login');
+    expect(fixHintForCheck('API key configured')).toContain('npx mushi-mushi');
     expect(fixHintForCheck('[ingest] anything')).toBeTruthy();
     expect(fixHintForCheck('totally unknown check')).toBeUndefined();
+  });
+});
+
+describe('runDoctor on a folder with nothing set up', () => {
+  it('reports one actionable line instead of a wall of failures', async () => {
+    const doFetch = vi.fn() as unknown as typeof fetch;
+    const result = await runDoctor({}, { cwd: '/nonexistent-path', fetch: doFetch, hostApp: true, mcp: true });
+    expect(result.ready).toBe(false);
+    expect(result.checks).toHaveLength(1);
+    expect(result.checks[0].name).toBe('Mushi set up here');
+    expect(fixHintForCheck('Mushi set up here')).toContain('npx mushi-mushi');
+    expect(doFetch).not.toHaveBeenCalled();
+  });
+
+  it('--full still runs every check', async () => {
+    const result = await runDoctor(
+      {},
+      { cwd: '/nonexistent-path', fetch: mockFetch(400, { ok: false }), full: true },
+    );
+    expect(result.checks.some((c) => c.name === 'Mushi set up here')).toBe(false);
+    expect(result.checks.some((c) => c.name === 'API key configured')).toBe(true);
+  });
+
+  it('still runs the sign-in diagnostics with --auth', async () => {
+    const result = await runDoctor(
+      {},
+      { cwd: '/nonexistent-path', fetch: mockFetch(400, { ok: false }), auth: true, server: false, ingest: false },
+    );
+    expect(result.checks.some((c) => c.name === 'Sign-in route reachable')).toBe(true);
+  });
+});
+
+describe('formatDoctorResult hint de-duplication', () => {
+  it('prints a shared fix once', () => {
+    const out = formatDoctorResult({
+      ready: false,
+      checks: [
+        { name: 'API key configured', ok: false, detail: 'No API key saved.' },
+        { name: 'Project ID configured', ok: false, detail: 'No default project saved.' },
+      ],
+    });
+    expect(out.match(/→ Fix:/g)).toHaveLength(1);
+  });
+});
+
+describe('checkMcpConfig', () => {
+  let root: string;
+  let home: string;
+
+  beforeEach(async () => {
+    root = await mkdtemp(join(tmpdir(), 'mushi-doctor-root-'));
+    home = await mkdtemp(join(tmpdir(), 'mushi-doctor-home-'));
+  });
+
+  afterEach(async () => {
+    await rm(root, { recursive: true, force: true });
+    await rm(home, { recursive: true, force: true });
+  });
+
+  const noFetch = vi.fn() as unknown as typeof fetch;
+
+  it('finds a hosted Claude Code entry in the repo-root .mcp.json and accepts it without a key', async () => {
+    await writeFile(
+      join(root, '.mcp.json'),
+      JSON.stringify({ mcpServers: { 'mushi-app': { type: 'http', url: 'https://x.supabase.co/functions/v1/mcp' } } }),
+    );
+    const checks = await checkMcpConfig(makeConfig({ apiKey: undefined }), root, noFetch, home);
+    expect(checks.every((c) => c.ok)).toBe(true);
+    expect(checks.find((c) => c.name === '[mcp] mushi entries usable')?.detail).toContain('hosted OAuth');
+  });
+
+  it('flags a url entry without "type" in .mcp.json — Claude Code skips it', async () => {
+    await writeFile(
+      join(root, '.mcp.json'),
+      JSON.stringify({ mcpServers: { mushi: { url: 'https://x.supabase.co/functions/v1/mcp' } } }),
+    );
+    const checks = await checkMcpConfig(makeConfig(), root, noFetch, home);
+    const usable = checks.find((c) => c.name === '[mcp] mushi entries usable');
+    expect(usable?.ok).toBe(false);
+    expect(usable?.detail).toContain('no "type"');
+  });
+
+  it('accepts a Cursor stdio placeholder entry when the CLI config holds a key', async () => {
+    await mkdir(join(root, '.cursor'));
+    await writeFile(
+      join(root, '.cursor', 'mcp.json'),
+      JSON.stringify({
+        mcpServers: {
+          'mushi-app': {
+            command: 'npx',
+            args: ['-y', '@mushi-mushi/mcp@1.0.0'],
+            env: { MUSHI_API_KEY: '${env:MUSHI_API_KEY}', MUSHI_API_ENDPOINT: 'https://mushi.example.com/api' },
+          },
+        },
+      }),
+    );
+    const checks = await checkMcpConfig(makeConfig(), root, mockFetch(200, { data: { total: 1 } }), home);
+    expect(checks.find((c) => c.name === '[mcp] mushi entries usable')?.ok).toBe(true);
+    expect(checks.find((c) => c.name === '[mcp] account-overview reachable')?.ok).toBe(true);
+  });
+
+  it("reads Claude Code's per-project servers from ~/.claude.json", async () => {
+    await writeFile(
+      join(home, '.claude.json'),
+      JSON.stringify({
+        projects: { [root.replace(/\\/g, '/')]: { mcpServers: { mushi: { type: 'http', url: 'https://x/mcp' } } } },
+      }),
+    );
+    const checks = await checkMcpConfig(makeConfig(), root, noFetch, home);
+    expect(checks.find((c) => c.name === '[mcp] mushi server entry')?.ok).toBe(true);
+  });
+
+  it('fails with one check when no MCP config exists anywhere', async () => {
+    const checks = await checkMcpConfig(makeConfig(), root, noFetch, home);
+    expect(checks).toEqual([expect.objectContaining({ name: '[mcp] MCP config present', ok: false })]);
+    expect(fixHintForCheck('[mcp] MCP config present')).toContain('--ide claude');
   });
 });

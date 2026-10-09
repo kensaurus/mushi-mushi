@@ -1,5 +1,6 @@
 ---
 title: Architecture
+description: How Mushi is built — a Hono gateway in front of Supabase, the edge functions behind it, and the relational, vector and graph stores that hold each report.
 ---
 
 # Architecture
@@ -25,7 +26,7 @@ device to a merged PR.
 | `@mushi-mushi/mcp` *(stdio + Streamable HTTP)* | `fix-worker` *(sandbox PR + LLM agent)* | Supabase Vault *(BYOK + plugin secrets)* | Marketplace plugins *(PagerDuty, Linear, …)* |
 | `@mushi-mushi/cli` *(init / connect / upgrade)* | `sdk-upgrade-worker` *(semver bump PR)* | `sdk_upgrade_jobs` | GitHub *(upgrade PRs)* |
 | Admin **Connect & Update** (`/connect`) | `sdk-versions-cron` *(daily npm sync)* | `sdk_versions` | npm registry |
-|  | `skill-sync` *(skills.sh ingest)* | `agent_skills` + pipeline runs | cursor-kenji / skills.sh |
+|  | `skill-sync` *(skills.sh ingest)* | `agent_skills` + pipeline runs | kenji skills / skills.sh |
 |  | `intelligence-report` *(weekly digest)* | `contract_snapshots` *(drift baseline)* | Firecrawl *(research + crawl)* |
 |  | `drift-walker` *(live crawl diff)* | `pdca_runs` + `fix_attempts` | Browserbase *(QA story execution)* |
 |  | `contract-graph-builder` *(snapshot builder)* | `qa_stories` + `qa_story_runs` |  |
@@ -88,7 +89,7 @@ device to a merged PR.
   (daily pg_cron + post-publish sync) into `sdk_versions` so freshness chips stay
   accurate between releases.
 - **`skill-sync`** ingests allowlisted `SKILL.md` files (default:
-  `kensaurus/cursor-kenji`), embeds descriptions, and powers **Skill Pipelines**
+  `kensaurus/skills`), embeds descriptions, and powers **Skill Pipelines**
   (`/skills`) — attach a skill chain to a report and stream step status over Realtime.
 
 ## MCP surface (2026)

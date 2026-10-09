@@ -3,10 +3,77 @@ import type { Variables } from '../types.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { adminOrApiKey, jwtAuth } from '../../_shared/auth.ts';
 import { logAudit } from '../../_shared/audit.ts';
-import { dbError, callerProjectIds, resolveOwnedProject, userCanAccessProject } from '../shared.ts';
+import { dbError, callerProjectIds, resolveOwnedProject, callerCanAccessProject } from '../shared.ts';
 import { buildImportEdges, detectExploreLayer, getProjectCodebaseScope } from '../../_shared/codebase-understand.ts';
 import { pathMatchesScope } from '../../_shared/codebase-scope.ts';
+import { unverifiedGithubInstallsAllowed } from '../../_shared/github-install-trust.ts';
+import { resolveProjectGithubToken } from '../../_shared/github.ts';
+import { resolveBranchForConnect } from '../../_shared/github-branch.ts';
+import { dereferenceMaybeVault, storeSettingsSecret } from '../../_shared/settings-secrets.ts';
+import { isVaultRef } from '../../_shared/vault-ref.ts';
 import type { KnowledgeGraph } from '../../_shared/codebase-graph-build.ts';
+import {
+  DEFAULT_INDEX_FILE_CAP,
+  INDEX_FILE_CAP_ENV,
+  describeIndexCoverage,
+  indexFileCapForPlan,
+  latestIso,
+  isIndexCoverageState,
+  type IndexCoverageState,
+} from '../../_shared/index-coverage.ts';
+import { resolveProjectPlan } from '../../_shared/quota.ts';
+
+/** The project_repos columns the codebase stats read. */
+interface CodebaseRepoRow {
+  repo_url: string | null
+  default_branch: string | null
+  path_globs: string[] | null
+  last_indexed_at: string | null
+  last_index_error: string | null
+  last_index_attempt_at: string | null
+  github_app_installation_id: number | null
+  indexing_enabled: boolean | null
+  index_swept_at: string | null
+  index_files_indexed: number | null
+  index_files_eligible: number | null
+  index_file_cap: number | null
+  index_tree_truncated: boolean | null
+  index_coverage_state: string | null
+}
+
+/** Coverage as the console shows it; null until a sweep has measured it. */
+export function codebaseCoverageView(repo: Pick<
+  CodebaseRepoRow,
+  'index_files_indexed' | 'index_files_eligible' | 'index_file_cap' | 'index_tree_truncated' | 'index_coverage_state' | 'index_swept_at' | 'last_indexed_at'
+> | null): {
+  indexed_files: number
+  eligible_files: number
+  file_cap: number | null
+  truncated: boolean
+  state: IndexCoverageState
+  summary: string | null
+  measured_at: string | null
+} | null {
+  const state = repo?.index_coverage_state
+  if (!repo || repo.index_files_indexed == null || repo.index_files_eligible == null) return null
+  if (!isIndexCoverageState(state)) return null
+  const truncated = repo.index_tree_truncated === true
+  return {
+    indexed_files: repo.index_files_indexed,
+    eligible_files: repo.index_files_eligible,
+    file_cap: repo.index_file_cap,
+    truncated,
+    state,
+    summary: describeIndexCoverage({
+      indexed: repo.index_files_indexed,
+      eligible: repo.index_files_eligible,
+      cap: repo.index_file_cap,
+      truncated,
+      state,
+    }),
+    measured_at: latestIso(repo.index_swept_at, repo.last_indexed_at),
+  }
+}
 
 export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }>): void {
   // ---------------------------------------------------------------------------
@@ -50,6 +117,9 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
       .replace(/\//g, '_')
       .replace(/=+$/, '');
   }
+
+  /** A sweep started this recently is still running; don't stack another. */
+  const SWEEP_RETRY_GAP_MS = 2 * 60 * 1000;
 
   async function kickCodebaseSweep(projectId: string): Promise<void> {
     // The sweep writes to project_codebase_files and updates
@@ -103,6 +173,46 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
     else await sweep;
   }
 
+  // POST /v1/admin/projects/:id/codebase/sweep — "Retry indexing now". A
+  // failed sweep used to wait for the daily retry; this re-runs it for an
+  // already-enabled index without touching its settings.
+  app.post('/v1/admin/projects/:id/codebase/sweep', jwtAuth, async (c) => {
+    const projectId = c.req.param('id')!;
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    const access = await callerCanAccessProject(c, db, userId, projectId);
+    if (!access.allowed) {
+      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Not found' } }, 404);
+    }
+    if (access.role === 'viewer') {
+      return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Viewers cannot re-run indexing' } }, 403);
+    }
+
+    const { data: repo } = await db
+      .from('project_repos')
+      .select('indexing_enabled, last_index_attempt_at')
+      .eq('project_id', projectId)
+      .eq('is_primary', true)
+      .maybeSingle();
+    if (!repo?.indexing_enabled) {
+      return c.json(
+        { ok: false, error: { code: 'INDEX_OFF', message: 'Codebase indexing is off for this project. Turn it on in Integrations first.' } },
+        409,
+      );
+    }
+    const lastAttempt = repo.last_index_attempt_at ? Date.parse(repo.last_index_attempt_at as string) : 0;
+    if (Date.now() - lastAttempt < SWEEP_RETRY_GAP_MS) {
+      return c.json(
+        { ok: false, error: { code: 'ALREADY_INDEXING', message: 'Indexing started less than 2 minutes ago. Give it a moment, then refresh.' } },
+        409,
+      );
+    }
+
+    await kickCodebaseSweep(projectId);
+    return c.json({ ok: true, data: { status: 'indexing' } }, 202);
+  });
+
   app.post('/v1/admin/projects/:id/codebase/enable', jwtAuth, async (c) => {
     const projectId = c.req.param('id')!;
     const userId = c.get('userId') as string;
@@ -110,7 +220,7 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
 
     // Enabling codebase indexing wires GitHub webhooks + secrets — restrict
     // to owner/admin (Teams v1 includes org owner/admin).
-    const access = await userCanAccessProject(db, userId, projectId);
+    const access = await callerCanAccessProject(c, db, userId, projectId);
     if (!access.allowed || (access.role !== 'owner' && access.role !== 'admin')) {
       return c.json(
         { ok: false, error: { code: 'FORBIDDEN', message: 'Owner or admin access required' } },
@@ -147,7 +257,6 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
       );
     }
     const repoUrl = `https://github.com/${parsed.owner}/${parsed.repo}`;
-    const defaultBranch = (body.default_branch ?? 'main').trim() || 'main';
     let installationId =
       body.installation_id != null && String(body.installation_id).trim() !== ''
         ? Number(body.installation_id)
@@ -164,6 +273,22 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
         400,
       );
     }
+    // A client-supplied installation id is not proof the caller owns that
+    // installation (see _shared/github-install-trust.ts).
+    if (installationId !== null && !unverifiedGithubInstallsAllowed()) {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'INSTALLATION_UNVERIFIED',
+            message:
+              'GitHub App installation ids cannot be bound from a request yet. Use a Personal Access Token ' +
+              '(Integrations → GitHub) for codebase indexing.',
+          },
+        },
+        400,
+      );
+    }
     const pathGlobs = Array.isArray(body.path_globs)
       ? body.path_globs.filter((g) => typeof g === 'string')
       : [];
@@ -171,7 +296,7 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
     // Promote a pending GitHub App installation (user installed the App before
     // registering a repo — the install callback parked the id on project_settings).
     let promotedPendingInstallation = false;
-    if (installationId === null) {
+    if (installationId === null && unverifiedGithubInstallsAllowed()) {
       const { data: pendingRow, error: pendingReadError } = await db
         .from('project_settings')
         .select('github_app_installation_id_pending')
@@ -251,6 +376,15 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
       }
     }
 
+    // The console pre-fills "main"; ask GitHub which branch really exists
+    // (kensaurus/mushi-mushi is 'master' and indexed nothing for 3 months).
+    const { branch: defaultBranch } = await resolveBranchForConnect({
+      token: await resolveProjectGithubToken(db, projectId, installationId),
+      owner: parsed.owner,
+      repo: parsed.repo,
+      requested: body.default_branch,
+    });
+
     const { data: existingRepo } = await db
       .from('project_repos')
       .select('id')
@@ -280,13 +414,34 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
       .eq('project_id', projectId)
       .maybeSingle();
 
-    const webhookSecret = currentSettings?.github_webhook_secret ?? (await generateWebhookSecret());
+    // Keep a readable existing secret (the GitHub side already has it). A
+    // missing or unreadable one is replaced, and `webhook_secret_issued` makes
+    // the card reveal the new value. The column only ever stores a Vault ref.
+    const storedSecret = (currentSettings?.github_webhook_secret as string | null | undefined) ?? null;
+    const existingSecret = await dereferenceMaybeVault(db, storedSecret);
+    const webhookSecretIssued = !existingSecret;
+    const webhookSecret = existingSecret ?? (await generateWebhookSecret());
+    let webhookSecretRef: string | null = null;
+    if (webhookSecretIssued || !isVaultRef(storedSecret)) {
+      try {
+        webhookSecretRef = await storeSettingsSecret(db, projectId, 'github', 'github_webhook_secret', webhookSecret);
+      } catch (err) {
+        console.error('[project-codebase] could not store webhook secret in Vault', {
+          projectId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        return c.json(
+          { ok: false, error: { code: 'VAULT_WRITE_FAILED', message: 'Could not store the webhook secret securely. Retry in a moment.' } },
+          500,
+        );
+      }
+    }
     const { error: settingsErr } = await db
       .from('project_settings')
       .update({
         codebase_index_enabled: true,
         codebase_repo_url: repoUrl,
-        github_webhook_secret: webhookSecret,
+        ...(webhookSecretRef ? { github_webhook_secret: webhookSecretRef } : {}),
         ...(promotedPendingInstallation ? { github_app_installation_id_pending: null } : {}),
       })
       .eq('project_id', projectId);
@@ -298,7 +453,7 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
       repo_url: repoUrl,
       default_branch: defaultBranch,
       installation_id: installationId,
-      issued_webhook_secret: !currentSettings?.github_webhook_secret,
+      issued_webhook_secret: webhookSecretIssued,
     }).catch(() => {});
 
     return c.json({
@@ -307,10 +462,86 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
         repo_url: repoUrl,
         default_branch: defaultBranch,
         webhook_secret: webhookSecret,
-        webhook_secret_issued: !currentSettings?.github_webhook_secret,
+        webhook_secret_issued: webhookSecretIssued,
         indexed_files_eta_seconds: 90,
       },
     });
+  });
+
+  // ---------------------------------------------------------------------------
+  // POST /v1/admin/projects/:id/codebase/rotate-secret
+  //
+  // Regenerates the GitHub webhook secret without re-enabling indexing.
+  // CodebaseIndexCard's "Rotate secret" button has POSTed here since the card
+  // shipped, but the route never existed: a leaked-secret rotation got a
+  // plain-text 404 and a "Rotate failed" toast. Same owner/admin gate as
+  // `enable` (rotating a webhook credential must not be looser than issuing
+  // one) and the same `{ ok, data: { webhook_secret } }` envelope the card's
+  // one-time reveal reads.
+  // ---------------------------------------------------------------------------
+  app.post('/v1/admin/projects/:id/codebase/rotate-secret', jwtAuth, async (c) => {
+    const projectId = c.req.param('id')!;
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    const access = await callerCanAccessProject(c, db, userId, projectId);
+    if (!access.allowed || (access.role !== 'owner' && access.role !== 'admin')) {
+      return c.json(
+        { ok: false, error: { code: 'FORBIDDEN', message: 'Owner or admin access required' } },
+        403,
+      );
+    }
+
+    const { data: settings, error: readErr } = await db
+      .from('project_settings')
+      .select('codebase_index_enabled, github_webhook_secret')
+      .eq('project_id', projectId)
+      .maybeSingle();
+    if (readErr) return dbError(c, readErr);
+
+    // A secret nothing consumes would only mislead: the webhook handler skips
+    // repos whose indexing is off, and the card hides the button in that
+    // state. 409 so a direct API caller learns why instead of getting a
+    // secret that never takes effect.
+    if (!settings?.codebase_index_enabled) {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'CODEBASE_NOT_ENABLED',
+            message: 'Enable codebase indexing before rotating its webhook secret.',
+          },
+        },
+        409,
+      );
+    }
+
+    const webhookSecret = await generateWebhookSecret();
+    let webhookSecretRef: string;
+    try {
+      webhookSecretRef = await storeSettingsSecret(db, projectId, 'github', 'github_webhook_secret', webhookSecret);
+    } catch (err) {
+      console.error('[project-codebase] could not store rotated webhook secret in Vault', {
+        projectId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return c.json(
+        { ok: false, error: { code: 'VAULT_WRITE_FAILED', message: 'Could not store the webhook secret securely. Retry in a moment.' } },
+        500,
+      );
+    }
+    const { error: writeErr } = await db
+      .from('project_settings')
+      .update({ github_webhook_secret: webhookSecretRef })
+      .eq('project_id', projectId);
+    if (writeErr) return dbError(c, writeErr);
+
+    await logAudit(db, projectId, userId, 'settings.updated', 'codebase_index', projectId, {
+      action: 'rotate_webhook_secret',
+      had_previous_secret: Boolean(settings.github_webhook_secret),
+    }).catch(() => {});
+
+    return c.json({ ok: true, data: { webhook_secret: webhookSecret } });
   });
 
   app.get('/v1/admin/projects/:id/codebase/stats', jwtAuth, async (c) => {
@@ -320,7 +551,7 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
 
     // Read-only stats — any role on the project (Teams v1 includes
     // org-members) can view.
-    const access = await userCanAccessProject(db, userId, projectId);
+    const access = await callerCanAccessProject(c, db, userId, projectId);
     if (!access.allowed) {
       return c.json(
         { ok: false, error: { code: 'FORBIDDEN', message: 'Not a member of this project' } },
@@ -328,7 +559,7 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
       );
     }
 
-    const [{ data: settings }, { data: primaryRepo }, { count: indexedFiles }] = await Promise.all([
+    const [{ data: settings }, { data: primaryRepo }, { count: indexedChunks }, fileCap, { data: languageRows }] = await Promise.all([
       db
         .from('project_settings')
         .select('codebase_index_enabled, codebase_repo_url, github_webhook_secret')
@@ -337,7 +568,7 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
       db
         .from('project_repos')
         .select(
-          'repo_url, default_branch, last_indexed_at, last_index_error, last_index_attempt_at, github_app_installation_id, indexing_enabled',
+          'repo_url, default_branch, path_globs, last_indexed_at, last_index_error, last_index_attempt_at, github_app_installation_id, indexing_enabled, index_swept_at, index_files_indexed, index_files_eligible, index_file_cap, index_tree_truncated, index_coverage_state',
         )
         .eq('project_id', projectId)
         .eq('is_primary', true)
@@ -347,21 +578,53 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
         .select('*', { count: 'exact', head: true })
         .eq('project_id', projectId)
         .is('tombstoned_at', null),
+      // The plan's coverage ceiling, live, so an upgrade shows at once (the
+      // next sweep uses it). A plan read error says so instead of guessing.
+      resolveProjectPlan(db, projectId)
+        .then((plan) => indexFileCapForPlan(plan, Deno.env.get(INDEX_FILE_CAP_ENV)))
+        .catch(() => null),
+      // One whole-file row per indexed file (same sample the Explore stats use).
+      db
+        .from('project_codebase_files')
+        .select('language')
+        .eq('project_id', projectId)
+        .is('tombstoned_at', null)
+        .is('symbol_name', null)
+        .limit(5000),
     ]);
 
+    const repo = primaryRepo as CodebaseRepoRow | null;
+    const coverage = codebaseCoverageView(repo);
+    const languageDistribution: Record<string, number> = {};
+    for (const row of (languageRows ?? []) as Array<{ language: string | null }>) {
+      if (row.language) languageDistribution[row.language] = (languageDistribution[row.language] ?? 0) + 1;
+    }
     return c.json({
       ok: true,
       data: {
         codebase_index_enabled: !!settings?.codebase_index_enabled,
-        repo_url: primaryRepo?.repo_url ?? settings?.codebase_repo_url ?? null,
-        default_branch: primaryRepo?.default_branch ?? null,
-        installation_id: primaryRepo?.github_app_installation_id ?? null,
-        indexing_enabled: primaryRepo?.indexing_enabled ?? null,
-        indexed_files: indexedFiles ?? 0,
-        last_indexed_at: primaryRepo?.last_indexed_at ?? null,
-        last_index_attempt_at: primaryRepo?.last_index_attempt_at ?? null,
-        last_index_error: primaryRepo?.last_index_error ?? null,
+        repo_url: repo?.repo_url ?? settings?.codebase_repo_url ?? null,
+        default_branch: repo?.default_branch ?? null,
+        installation_id: repo?.github_app_installation_id ?? null,
+        indexing_enabled: repo?.indexing_enabled ?? null,
+        path_globs: repo?.path_globs && repo.path_globs.length > 0 ? repo.path_globs : null,
+        // Chunk rows (a file is split into several); coverage below is in files.
+        indexed_files: indexedChunks ?? 0,
+        indexed_chunks: indexedChunks ?? 0,
+        file_cap: fileCap?.cap ?? repo?.index_file_cap ?? DEFAULT_INDEX_FILE_CAP,
+        file_cap_source: fileCap?.source ?? 'unavailable',
+        plan_id: fileCap?.planId ?? null,
+        at_file_cap: coverage?.state === 'capped',
+        coverage,
+        language_distribution: languageDistribution,
+        // Last sweep that covered every eligible file; a partial one sets index_swept_at only.
+        last_indexed_at: repo?.last_indexed_at ?? null,
+        index_swept_at: repo?.index_swept_at ?? null,
+        last_index_attempt_at: repo?.last_index_attempt_at ?? null,
+        last_index_error: repo?.last_index_error ?? null,
         has_webhook_secret: !!settings?.github_webhook_secret,
+        // PAT-connected repos get push indexing through the api's repo webhook.
+        push_webhook_path: repo && !repo.github_app_installation_id ? '/v1/webhooks/github' : null,
       },
     });
   });
@@ -399,6 +662,7 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
       layers: emptyLayers,
       topLanguages: [] as string[],
       lastIndexedAt: null as string | null,
+      indexCoverage: null as ReturnType<typeof codebaseCoverageView>,
       lastIndexAttemptAt: null as string | null,
       lastIndexError: null as string | null,
       topPriority: 'no_project' as
@@ -445,7 +709,7 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
       db
         .from('project_repos')
         .select(
-          'repo_url, default_branch, last_indexed_at, last_index_error, last_index_attempt_at, indexing_enabled',
+          'repo_url, default_branch, last_indexed_at, last_index_error, last_index_attempt_at, indexing_enabled, index_swept_at, index_files_indexed, index_files_eligible, index_file_cap, index_tree_truncated, index_coverage_state',
         )
         .eq('project_id', pid)
         .eq('is_primary', true)
@@ -485,7 +749,9 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
     const codebaseIndexEnabled = !!settings?.codebase_index_enabled
     const indexingEnabled = primaryRepo?.indexing_enabled ?? null
     const repoUrl = primaryRepo?.repo_url ?? settings?.codebase_repo_url ?? null
-    const lastIndexedAt = primaryRepo?.last_indexed_at ?? null
+    // The last successful sweep, complete or partial (coverage says which).
+    const lastIndexedAt = latestIso(primaryRepo?.last_indexed_at ?? null, primaryRepo?.index_swept_at ?? null)
+    const indexCoverage = codebaseCoverageView(primaryRepo as CodebaseRepoRow | null)
     const lastIndexAttemptAt = primaryRepo?.last_index_attempt_at ?? null
     const lastIndexError = primaryRepo?.last_index_error ?? null
 
@@ -534,7 +800,9 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
       topPriorityTo = scoped('/explore?tab=index')
     } else {
       topPriority = 'ready'
-      topPriorityLabel = `${indexedFiles.toLocaleString()} files ready · ${withEmbeddings.toLocaleString()} embedded for semantic search.`
+      topPriorityLabel = indexCoverage && indexCoverage.state !== 'complete' && indexCoverage.summary
+        ? `Partly indexed: ${indexCoverage.summary}. Answers only see those files.`
+        : `${indexedFiles.toLocaleString()} files ready · ${withEmbeddings.toLocaleString()} search chunks embedded.`
       topPriorityTo = scoped('/explore?tab=ask')
     }
 
@@ -557,6 +825,7 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
         lastIndexedAt,
         lastIndexAttemptAt,
         lastIndexError,
+        indexCoverage,
         topPriority,
         topPriorityLabel,
         topPriorityTo,
@@ -569,7 +838,7 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
     const userId = c.get('userId') as string
     const db = getServiceClient()
 
-    const access = await userCanAccessProject(db, userId, projectId)
+    const access = await callerCanAccessProject(c, db, userId, projectId)
     if (!access.allowed) {
       return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Not a member of this project' } }, 403)
     }
@@ -758,7 +1027,7 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
       )
     }
 
-    const access = await userCanAccessProject(db, userId, projectId)
+    const access = await callerCanAccessProject(c, db, userId, projectId)
     if (!access.allowed) {
       return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Not a member of this project' } }, 403)
     }
@@ -813,7 +1082,7 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
     }
 
     const { createEmbedding } = await import('../../_shared/embeddings.ts')
-    const embedding = await createEmbedding(body.query.trim(), { projectId })
+    const embedding = await createEmbedding(body.query.trim(), { projectId, functionName: 'codebase-search' })
 
     const { data: hits, error: rpcErr } = await db.rpc('match_codebase_files', {
       query_embedding: embedding,

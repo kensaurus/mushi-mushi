@@ -1,7 +1,9 @@
 /**
  * mistake-clusterer — BIRCH-style incremental streaming clusterer
  *
- * Schedule: every 15 minutes (cron) + manual trigger via POST.
+ * Schedule: hourly at :43 (pg_cron, migration 20261007142000) + manual POST.
+ * Hourly runs the coherence judge once per 6-hour window (see
+ * isCoherenceWindow); a faster cadence would re-judge the same candidates.
  *
  * Algorithm (per plan §1a):
  *   For each new report_embedding not yet in report_cluster_membership:
@@ -15,18 +17,20 @@
  *       - LLM judge rates semantic coherence 0-1
  *       - if coherence ≥ 0.75 → promote to lessons (calls mistake-summarizer)
  *
- * Cost discipline: every LLM call logged to llm_cost_usd.
+ * Cost discipline: every LLM call writes an llm_invocations row (recordLlmUsage).
  */
 
-import { createAnthropic } from 'npm:@ai-sdk/anthropic@1'
-import { createOpenAI } from 'npm:@ai-sdk/openai@1'
+import { openAiProvider } from '../_shared/openai-compat.ts'
 import { generateObject } from 'npm:ai@4'
 import { z } from 'npm:zod@3'
 import { getServiceClient } from '../_shared/db.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { log } from '../_shared/logger.ts'
-import { ANTHROPIC_SONNET, OPENAI_PRIMARY } from '../_shared/models.ts'
+import { MISTAKE_EFFORT, MISTAKE_MODEL, OPENAI_PRIMARY } from '../_shared/models.ts'
+import { claudeGenerateObject } from '../_shared/claude-messages.ts'
+import { recordLlmUsage } from '../_shared/llm-usage.ts'
+import { projectLlmKey } from '../_shared/project-llm-key.ts'
 
 // Cosine distance threshold for cluster assignment (≤ = assign, > = new cluster)
 const ASSIGN_DISTANCE = 0.18
@@ -57,23 +61,12 @@ const coherenceSchema = z.object({
   ),
 })
 
-async function logLlmCost(
-  db: ReturnType<typeof getServiceClient>,
-  projectId: string | null,
-  operation: string,
-  model: string,
-  inputTokens: number,
-  outputTokens: number,
-  costUsd: number,
-) {
-  await db.from('llm_cost_usd').insert({
-    project_id: projectId,
-    operation,
-    model,
-    input_tokens: inputTokens,
-    output_tokens: outputTokens,
-    cost_usd: costUsd,
-  })
+/** A row of public.mistake_clusterer_unclustered() (migration 20261007142000). */
+interface UnclusteredRow {
+  report_id: string
+  embedding: string
+  project_id: string
+  severity: string | null
 }
 
 /** Running centroid update: avg = avg + (new - avg) / n */
@@ -106,24 +99,18 @@ Deno.serve(
       return new Response('Method Not Allowed', { status: 405 })
     }
 
-    const isManual = req.headers.get('x-mushi-trigger') === 'manual'
-    if (!isManual) {
-      const authErr = requireServiceRoleAuth(req)
-      if (authErr) return authErr
-    }
+    const authErr = requireServiceRoleAuth(req)
+    if (authErr) return authErr
 
     const db = getServiceClient()
 
     // ─── Step 1: Incremental clustering of new embeddings ───────────────────
 
-    // Find unprocessed embeddings (not yet in report_cluster_membership)
+    // Find unprocessed embeddings (not yet in report_cluster_membership).
+    // A NOT EXISTS in SQL: passing a query builder to .not('report_id', 'in', …)
+    // sent the filter `not.in.[object Object]` and failed every run.
     const { data: unprocessed, error: fetchErr } = await db
-      .from('report_embeddings')
-      .select('report_id, embedding, reports!inner(project_id, severity)')
-      .not('report_id', 'in',
-        db.from('report_cluster_membership').select('report_id'),
-      )
-      .limit(MAX_REPORTS_PER_RUN)
+      .rpc('mistake_clusterer_unclustered', { p_limit: MAX_REPORTS_PER_RUN })
 
     if (fetchErr) {
       log.error('fetch error', { scope: 'mistake-clusterer', err: fetchErr.message })
@@ -133,10 +120,11 @@ Deno.serve(
     let assigned = 0
     let created = 0
 
-    for (const row of (unprocessed ?? [])) {
-      const reportId = row.report_id as string
-      const projectId = (row.reports as unknown as { project_id: string }).project_id
-      const severity = (row.reports as unknown as { severity: string }).severity ?? 'warn'
+    const rows = (unprocessed ?? []) as UnclusteredRow[]
+    for (const row of rows) {
+      const reportId = row.report_id
+      const projectId = row.project_id
+      const severity = row.severity ?? 'warn'
       const embedding = parseVector(row.embedding)
 
       // Load existing candidate clusters for this project
@@ -255,31 +243,57 @@ Rate the semantic coherence of this cluster and suggest how to name and summaris
 
         try {
           let result: z.infer<typeof coherenceSchema>
-          let usageTokens = { promptTokens: 0, completionTokens: 0 }
-          const anthropic = createAnthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY') })
+          // The project's own key first, the platform key otherwise.
+          const anthropicResolved = await projectLlmKey(db, projectId, 'anthropic')
+          const anthropicKey = anthropicResolved?.key
+          const usageCtx = {
+            functionName: 'mistake-clusterer',
+            stage: 'cluster-coherence',
+            projectId,
+            primaryModel: MISTAKE_MODEL,
+          }
 
+          const claudeStart = Date.now()
           try {
-            const { object, usage } = await generateObject({
-              model: anthropic(ANTHROPIC_SONNET),
+            if (!anthropicKey) throw new Error('No Anthropic key for this project')
+            const generation = await claudeGenerateObject({
+              apiKey: anthropicKey,
+              model: MISTAKE_MODEL,
+              effort: MISTAKE_EFFORT,
               schema: coherenceSchema,
               prompt,
             })
-            result = object
-            usageTokens = { promptTokens: usage.promptTokens, completionTokens: usage.completionTokens }
-          } catch {
-            const openai = createOpenAI({ apiKey: Deno.env.get('OPENAI_API_KEY') })
-            const { object, usage } = await generateObject({
+            void recordLlmUsage(db, { ...usageCtx, keySource: anthropicResolved?.source, model: MISTAKE_MODEL, startedAt: claudeStart }, { result: generation })
+            result = generation.object
+          } catch (claudeErr) {
+            // No key means no paid call, so no row.
+            if (anthropicKey) {
+              void recordLlmUsage(db, { ...usageCtx, keySource: anthropicResolved?.source, model: MISTAKE_MODEL, startedAt: claudeStart }, { error: claudeErr })
+            }
+            const openaiResolved = await projectLlmKey(db, projectId, 'openai')
+            if (!openaiResolved) throw claudeErr
+            const openaiUsage = {
+              ...usageCtx,
+              keySource: openaiResolved.source,
+              model: OPENAI_PRIMARY,
+              startedAt: Date.now(),
+              fallbackReason: anthropicKey ? 'anthropic_failed' : 'no_anthropic_key',
+            }
+            const openai = openAiProvider({
+              apiKey: openaiResolved.key,
+              ...(openaiResolved.baseUrl ? { baseURL: openaiResolved.baseUrl } : {}),
+            })
+            const generation = await generateObject({
               model: openai(OPENAI_PRIMARY),
               schema: coherenceSchema,
               prompt,
+            }).catch((err: unknown) => {
+              void recordLlmUsage(db, openaiUsage, { error: err })
+              throw err
             })
-            result = object
-            usageTokens = { promptTokens: usage.promptTokens, completionTokens: usage.completionTokens }
+            void recordLlmUsage(db, openaiUsage, { result: generation })
+            result = generation.object
           }
-
-          // Log cost
-          const costUsd = (usageTokens.promptTokens / 1_000_000) * 3 + (usageTokens.completionTokens / 1_000_000) * 15
-          await logLlmCost(db, projectId, 'cluster-coherence', ANTHROPIC_SONNET, usageTokens.promptTokens, usageTokens.completionTokens, costUsd)
 
           // Update cluster with judge result
           const updatePayload: Record<string, unknown> = {
@@ -320,7 +334,7 @@ Rate the semantic coherence of this cluster and suggest how to name and summaris
     return new Response(
       JSON.stringify({
         ok: true,
-        processed: (unprocessed ?? []).length,
+        processed: rows.length,
         assigned,
         created,
         promoted,

@@ -287,6 +287,15 @@ describe('fast-filter (Stage 1)', () => {
       expect(src).toContain('heuristicStage1Classification')
     })
 
+    it("forwards the project's first real report to Stage 2 even at high confidence", () => {
+      // 31% of reports stopped at stage1_final with no root cause; a new
+      // user's first report must get the full diagnosis.
+      expect(src).toContain('isEarlyRealReport(')
+      expect(src).toMatch(/\(classification\.confidence > confidenceThreshold && !forceStage2\) \|\| usedHeuristic/)
+      // A failed lookup keeps the old path, but loudly (fail-open pattern).
+      expect(src).toContain("log.error('First-report lookup failed; keeping the Stage 1 result'")
+    })
+
     it('finalizes heuristic classification so recovery cron cannot retry-storm', () => {
       expect(src).toContain('usedHeuristic')
       expect(src).toContain('stage1_llm_unavailable')

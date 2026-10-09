@@ -17,6 +17,10 @@ export interface ReportsStats {
   totalAllTime: number
   total14d: number
   critical14d: number
+  /** Critical reports from the last 14 days still in the New bucket — what
+   *  the critical banner's link (status=new&severity=critical&days=14) lists. */
+  /** Optional until every API deploy sends it. */
+  criticalUntriaged14d?: number
   high14d: number
   newUntriaged: number
   openBacklog: number
@@ -37,6 +41,7 @@ export const EMPTY_REPORTS_STATS: ReportsStats = {
   totalAllTime: 0,
   total14d: 0,
   critical14d: 0,
+  criticalUntriaged14d: 0,
   high14d: 0,
   newUntriaged: 0,
   openBacklog: 0,

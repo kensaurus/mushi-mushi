@@ -27,7 +27,7 @@ export const REGION_ENDPOINTS: Record<Exclude<MushiRegion, 'self'>, string> = {
   jp: DEFAULT_API_ENDPOINT,
 };
 
-const ROUTING_CACHE_KEY = 'mushi_region_v1';
+const ROUTING_CACHE_KEY = 'mushi_region_v1'; // gitleaks:allow
 const ROUTING_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 interface RegionCacheEntry {

@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/migrations/cordova-to-capacitor
 
 ---
 title: 'Cordova → Capacitor'
+description: Migrate a Cordova app to Capacitor in place — same web code, a new native shell — and re-mount Mushi bug reporting with @mushi-mushi/capacitor.
 ---
 
 # Cordova → Capacitor
@@ -64,43 +65,37 @@ catalog or the [Capawesome community plugins](https://capawesome.io/plugins/).
 ## Migration checklist
 
 Capacitor edits a lot of files (`package.json`, native projects). Branch off so you can roll back cleanly.</>,
-    },
-    {
+
       id: 'install',
       label: 'Install Capacitor in the existing project',
       content: {`npm install @capacitor/cli @capacitor/core
 npx cap init "" ""
 # Use the App Name + Bundle ID from your Cordova config.xml
 `},
-    },
-    {
+
       id: 'build',
       label: 'Build your web bundle once before adding platforms',
       content: {`npm run build
 # Capacitor reads capacitor.config.json -> webDir to copy your web assets
 # into the native projects on \`npx cap sync\`. Set webDir to "www", "dist",
 # or whatever your build outputs.`},
-    },
-    {
+
       id: 'platforms',
       label: 'Add native platforms',
       content: {`npm install @capacitor/ios @capacitor/android
 npx cap add ios
 npx cap add android`},
-    },
-    {
+
       id: 'assets',
       label: 'Regenerate splash screens and icons',
       content: {`npm install -D @capacitor/assets
 npx @capacitor/assets generate --ios --android
 # Replaces the old Cordova \`config.xml\` icon/splash declarations`},
-    },
-    {
+
       id: 'plugins',
       label: 'Replace Cordova plugins with Capacitor equivalents',
       content: <>Use the table above. After replacing each, run npx cap sync.</>,
-    },
-    {
+
       id: 'mushi',
       label: 'Swap the Mushi Cordova SDK for @mushi-mushi/capacitor',
       content: {`npm uninstall mushi-cordova-plugin
@@ -114,31 +109,26 @@ await Mushi.configure({
   apiKey:    'YOUR_PUBLIC_KEY',  // same as before
   triggerMode: 'shake',
 })`},
-    },
-    {
+
       id: 'permissions',
       label: 'Audit native permissions (`Info.plist`, `AndroidManifest.xml`)',
       content: <>Cordova merged permissions from config.xml at build time. Capacitor expects you to edit the native files directly. The iOS and Android docs list the keys for camera, location, push, etc.</>,
-    },
-    {
+
       id: 'deep-links',
       label: 'Re-wire deep links and custom URL schemes',
       content: <>Move from cordova-plugin-customurlscheme to @capacitor/app's App.addListener('appUrlOpen', ...) and Capacitor's native scheme config.</>,
-    },
-    {
+
       id: 'remove-cordova',
       label: 'Remove Cordova',
       content: {`# Once everything works on both platforms:
 npm uninstall cordova cordova-android cordova-ios
 rm -rf platforms plugins config.xml`},
-    },
-    {
+
       id: 'verify',
       label: 'Smoke-test on a device, including a Mushi report',
       optional: false,
       content: <>Open the app, trigger the Mushi widget (shake or tap), submit a test report, and confirm it appears in Project → Reports on the Mushi admin console within ~5s. Tagged sdk:capacitor.</>,
-    },
-  ]}
+
 />
 
 ## Common gotchas

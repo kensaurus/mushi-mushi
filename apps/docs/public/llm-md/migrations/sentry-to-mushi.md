@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/migrations/sentry-to-mushi
 
 ---
 title: 'Sentry + Mushi (enrich or standalone)'
+description: Add Mushi alongside Sentry or run it on its own — three setups, the Sentry webhook for errors, and user bug reports with plain-English diagnoses.
 ---
 
 # Sentry + Mushi (enrich or standalone)
@@ -15,10 +16,18 @@ performance monitoring, and release health — keep it. Mushi adds what Sentry
 doesn't do: user-triggered bug reports with plain-English AI diagnosis and a
 paste-ready fix you can hand to your editor's agent via MCP.
 
-  **Two ways to run Mushi with Sentry:**
-  1. **Enrich** — keep Sentry as-is; Mushi captures user bug reports and links
+  **Three ways to run Mushi with Sentry:**
+  1. **Route errors in (recommended)** — point a Sentry internal integration's
+     webhook at `/v1/webhooks/sentry?projectId=<your-project>` (and import
+     the issues you already have) and Sentry errors land
+     in the same Mushi queue as user reports: deduped per issue, diagnosed in
+     plain English, fix-dispatchable. Merging the fix resolves the Sentry issue;
+     resolving in Sentry resolves the report; a repeat alert on a fixed report
+     reopens it as a regression. See [the Sentry plugin page](/plugins/sentry)
+     for the setup.
+  2. **Enrich** — keep Sentry as-is; Mushi captures user bug reports and links
      each one to the matching Sentry event via `@mushi-mushi/plugin-sentry`.
-  2. **Standalone** — use Mushi on its own for capture + diagnosis + fix. You
+  3. **Standalone** — use Mushi on its own for capture + diagnosis + fix. You
      can add Sentry later (or never); nothing in Mushi assumes it.
 
 ## What each tool is for
@@ -28,8 +37,8 @@ paste-ready fix you can hand to your editor's agent via MCP.
 | Unhandled exception capture | ✅ best-in-class | ✅ (basic) |
 | Performance / tracing / release health | ✅ | ❌ — keep Sentry |
 | User-triggered bug reports (widget, shake) | ✅ (User Feedback) | ✅ feedback-first |
-| Plain-English AI diagnosis per report | Seer ($40/contributor add-on) | ✅ included, BYOK on self-host |
-| Paste-ready fix prompt via MCP | read-only MCP | ✅ full fix-dispatch loop |
+| Plain-English AI diagnosis per report | Seer (add-on, $40 per active contributor/mo; not in self-hosted) | ✅ included, BYOK on self-host |
+| Paste-ready fix prompt via MCP | Sentry MCP: issue lookup, status updates, and Seer root cause + suggested fix (Seer add-on) | ✅ full fix-dispatch loop |
 | Self-host | complex (Sentry self-hosted) | ✅ Supabase / Docker / Helm |
 | Open source | FSL | MIT SDKs / AGPLv3 server |
 
@@ -39,6 +48,8 @@ Install Mushi alongside Sentry. Neither SDK interferes with the other —
 Mushi's widget is Shadow-DOM isolated and captures on user trigger only.
 
 ```ts
+import * as Sentry from '@sentry/react'
+import { Mushi } from '@mushi-mushi/web'
 
 Sentry.init({ dsn: 'YOUR_DSN' })
 Mushi.init({ projectId: 'YOUR_PROJECT_ID', apiKey: 'YOUR_PUBLIC_KEY' })
@@ -96,7 +107,7 @@ if (eventId) Mushi.setMetadata({ sentryEventId: eventId })`} },
 }`} },
     { id: 'wire-mcp', label: 'Wire the Mushi MCP server into your editor', content: <>Run npx mushi-mushi setup --ide cursor (or claude / continue / zed). Now get_fix_context returns a paste-ready fix for every diagnosed report.</> },
     { id: 'verify', label: 'Submit a test report and check the Sentry link', content: <>Trigger an error, submit a Mushi report, and confirm the sentryEventId metadata opens the right Sentry event.</> },
-  ]}
+
 />
 
 ## When would you actually drop Sentry?

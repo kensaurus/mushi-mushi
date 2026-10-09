@@ -218,6 +218,9 @@ Deno.serve(async (req: Request) => {
     }
 
     verifiedProjects++
+    // One audit row per delivery: stamp the first project it authenticated
+    // for, so the radar can count accepted deliveries per project.
+    if (verifiedProjects === 1) await auditRow.setProject(projectId)
     try {
       await handleEvent(dbAny, projectId, eventType ?? '', payload, deliveryId)
     } catch (err) {
@@ -226,6 +229,9 @@ Deno.serve(async (req: Request) => {
   }
 
   if (verifiedProjects === 0) {
+    // With a single candidate project the failure is attributable: the
+    // radar reports a secret mismatch instead of "never delivered".
+    if (projectRows.length === 1) await auditRow.setProject(projectRows[0].project_id)
     await auditRow.resolve('rejected_signature', 200, Date.now() - t0, 'No project matched the signature')
   } else {
     await auditRow.resolve('accepted', 200, Date.now() - t0)
@@ -269,7 +275,7 @@ async function handleEvent(db: any, projectId: string, eventType: string, payloa
   const stateType = (issueData.state as Record<string, unknown> | undefined)?.type as string | undefined
 
   // Dispatch plugin event for all issue changes (so plugin-sdk subscribers can react)
-  await dispatchPluginEvent(db, projectId, 'linear.issue.updated' as never, {
+  await dispatchPluginEvent(db, projectId, 'linear.issue.updated', {
     linearIssueIdentifier: identifier,
     action,
     stateType,
@@ -285,10 +291,15 @@ async function handleEvent(db: any, projectId: string, eventType: string, payloa
       return
     }
 
-    // Find the linked Mushi report
+    // Find the linked Mushi report — in the project whose webhook secret
+    // verified this delivery, and only Linear links. Issue keys like "ENG-5"
+    // repeat across workspaces (and match Jira keys), so an unscoped lookup
+    // resolved other tenants' reports.
     const { data: extIssues } = await db
       .from('report_external_issues')
       .select('report_id')
+      .eq('project_id', projectId)
+      .eq('system', 'linear')
       .eq('external_id', identifier)
       .is('resolved_at', null)
       .limit(10)

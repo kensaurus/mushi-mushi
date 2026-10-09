@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/activity
 
 ---
 title: Activity
+description: The Activity page in the Mushi console shows end-user sessions, top routes, and identified versus anonymous users for a project over the last 30 days.
 ---
 
 # Activity

@@ -19,14 +19,14 @@ export interface FeatureExplainBurndownItem {
 
 export const FEATURE_EXPLAIN_BURNDOWN: FeatureExplainBurndownItem[] = [
   { route: '/organization/members', label: 'Members', status: 'done', liveData: 'done', notes: 'Role guide + Callout seat FAQ + semantic icons' },
-  { route: '/settings', label: 'Settings', status: 'done', liveData: 'done', notes: 'SettingsTabIntro + settingsTabOverlay from tab-local probe flags' },
+  { route: '/settings', label: 'Settings', status: 'done', liveData: 'done', notes: 'Each tab is a SettingsList with a one-line description; rows carry live status from keyStatus' },
   { route: '/dashboard', label: 'Dashboard', status: 'done', liveData: 'done', notes: 'DashboardPdcaGuide with live stage counts' },
   { route: '/projects', label: 'Projects', status: 'done', liveData: 'done', notes: 'ProjectsHubGuide + projectsHealthOverlay' },
-  { route: '/reports', label: 'Reports', status: 'done', liveData: 'done', notes: 'ReportsTriageGuide + reportsSeverityOverlay' },
+  { route: '/reports', label: 'Reports', status: 'done', liveData: 'done', notes: 'Severity guide in the header help' },
   { route: '/fixes', label: 'Fixes', status: 'done', liveData: 'done', notes: 'FixesPipelineGuide + live fix stats overlays' },
   { route: '/connect', label: 'Connect', status: 'done', liveData: 'done', notes: 'ConnectStudio operator surface + SectionAnchorNav + JobStatusPill' },
   { route: '/billing', label: 'Billing', status: 'done', liveData: 'done', notes: 'BillingSeatFaqCallout + Callout unlimited seats' },
-  { route: '/integrations', label: 'Integrations', status: 'done', liveData: 'done', notes: 'IntegrationsPageIntro + integrationsStepOverlay' },
+  { route: '/integrations', label: 'Integrations', status: 'done', liveData: 'done', notes: 'IntegrationStatusBanner + per-card ConnectionStatus' },
   { route: '/health', label: 'Health', status: 'done', liveData: 'done', notes: 'HealthProbesGuide + healthProbeOverlay' },
   { route: '/judge', label: 'Judge', status: 'done', liveData: 'done', notes: 'JudgePipelineGuide + judgeStageOverlay' },
   { route: '/qa-coverage', label: 'QA Coverage', status: 'done', liveData: 'done', notes: 'QaProviderGuideCard + qaProviderOverlay' },
@@ -43,5 +43,5 @@ export const FEATURE_EXPLAIN_BURNDOWN: FeatureExplainBurndownItem[] = [
   { route: '/code-health', label: 'Code Health', status: 'done', liveData: 'done', notes: 'CodeHealthGuide + codeHealthMetricOverlay' },
   { route: '/prompt-lab', label: 'Prompt Lab', status: 'done', liveData: 'done', notes: 'PromptLabGuide + promptLabStageOverlay' },
   { route: '/skills', label: 'Skills', status: 'done', liveData: 'done', notes: 'SkillsPipelineGuide + skillsModeOverlay' },
-  { route: '/dlq', label: 'Processing Queue', status: 'done', liveData: 'done', notes: 'QueueStatusBanner wired; KPI row explains lanes' },
+  { route: '/queue', label: 'Processing Queue', status: 'done', liveData: 'done', notes: 'QueueStatusBanner wired; KPI row explains lanes' },
 ]

@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/plugin-rollbar",
-  "version": "0.1.4",
+  "version": "0.1.7",
   "description": "Mushi Mushi plugin for Rollbar — mirrors classified reports as Rollbar items and resolves them when Mushi applies a fix.",
   "license": "MIT",
   "type": "module",
@@ -21,6 +21,7 @@
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
+    "lint": "eslint src/",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
@@ -28,13 +29,15 @@
     "@mushi-mushi/plugin-sdk": "workspace:^"
   },
   "devDependencies": {
+    "@mushi-mushi/eslint-config": "workspace:*",
     "@types/node": "^22.20.0",
+    "eslint": "^10.6.0",
     "tsup": "^8.5.1",
     "typescript": "^6.0.3",
     "vitest": "^4.1.9"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=20.19.0"
   },
   "repository": {
     "type": "git",
@@ -45,27 +48,25 @@
     "mushi-mushi",
     "rollbar",
     "plugin",
-    "error-tracking"
+    "error-tracking",
+    "bug-reporting",
+    "integration",
+    "error-monitoring",
+    "exception-tracking",
+    "observability"
   ],
   "files": [
     "dist",
     "README.md",
-    "LICENSE",
-    "CONTRIBUTING.md",
-    "CODE_OF_CONDUCT.md",
-    "SECURITY.md"
+    "LICENSE"
   ],
   "publishConfig": {
     "access": "public",
     "provenance": true
   },
-  "author": "Kenji Sakuramoto (https://bsky.app/profile/mushimushi.dev)",
+  "author": "Kenji Sakuramoto <kensaurus@gmail.com> (https://github.com/kensaurus)",
   "bugs": {
     "url": "https://github.com/kensaurus/mushi-mushi/issues"
-  },
-  "funding": {
-    "type": "github",
-    "url": "https://github.com/sponsors/kensaurus"
   },
   "homepage": "https://kensaur.us/mushi-mushi"
 }

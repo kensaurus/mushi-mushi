@@ -54,7 +54,7 @@ describe('sanitizeCliCredentials', () => {
   it('returns all three fields when valid', () => {
     const creds = sanitizeCliCredentials({
       endpoint: 'https://xyz.supabase.co/functions/v1/api',
-      apiKey: 'mushi_abcdef1234567890',
+      apiKey: 'mushi_abcdef1234567890', // gitleaks:allow
       projectId: 'bdafa28d-b153-482f-bd4f-42981f3fd3a4',
     })
     expect(creds.endpoint).toContain('https://xyz.supabase.co')

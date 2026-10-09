@@ -10,7 +10,7 @@
  *
  * Must keep working: portfolio fetch, project switch via footer links,
  * loading / error / empty states, health tones
- * (critical / not-connected / silent / warn / ok).
+ * (critical / not-connected / silent / warn / quiet / ok).
  *
  * Health tone reads `last_seen_at` (added to the RPC by migration
  * 20260816130000). Until that migration is applied the field is absent and the
@@ -34,6 +34,13 @@ import { IconGauge } from '../components/icons'
 import { HEARTBEAT_HINT, heartbeatStateFromTimestamp } from '../lib/heartbeat'
 import { SpringChromeEnter } from '../components/motion/SpringChromeEnter'
 import { useAdminMode } from '../lib/mode'
+import { useSetupStatus } from '../lib/useSetupStatus'
+import { useActiveProjectId } from '../components/ProjectSwitcher'
+import { FirstDiagnosisInline } from '../components/onboarding/FirstDiagnosisScreen'
+import { useActiveOrgId } from '../components/OrgSwitcher'
+import { RecipeStateChip } from '../components/recipe/RecipeStateChip'
+import type { ElementState } from '../lib/recipeTypes'
+import type { PortfolioResponse } from '../lib/portfolioTypes'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -62,7 +69,7 @@ interface ProjectCard {
   dau_spark: DauPoint[]
 }
 
-type HealthTone = 'critical' | 'not-connected' | 'silent' | 'warn' | 'ok'
+type HealthTone = 'critical' | 'not-connected' | 'silent' | 'warn' | 'quiet' | 'ok'
 
 /**
  * A project with no heartbeat used to fall through to `ok` and render a green
@@ -81,7 +88,15 @@ function healthToneFor(card: ProjectCard): HealthTone {
   if (heartbeat === 'dead') return 'silent'
 
   if (card.open_reports > 5) return 'warn'
+  // No user sessions this week is not evidence of health: a project nobody
+  // used for 7 days rendered the same green "Healthy" as a busy one.
+  if (card.sessions_7d === 0) return 'quiet'
   return 'ok'
+}
+
+/** Tones that need nothing from the user right now. */
+function isCalmTone(tone: HealthTone): boolean {
+  return tone === 'ok' || tone === 'quiet'
 }
 
 const HEALTH_RANK: Record<HealthTone, number> = {
@@ -89,7 +104,8 @@ const HEALTH_RANK: Record<HealthTone, number> = {
   'not-connected': 1,
   silent: 2,
   warn: 3,
-  ok: 4,
+  quiet: 4,
+  ok: 5,
 }
 
 const HEALTH_BADGE_TONE: Record<HealthTone, BadgeTone> = {
@@ -97,6 +113,7 @@ const HEALTH_BADGE_TONE: Record<HealthTone, BadgeTone> = {
   'not-connected': 'neutral',
   silent: 'warnSubtle',
   warn: 'warnSubtle',
+  quiet: 'neutral',
   ok: 'okSubtle',
 }
 
@@ -110,6 +127,8 @@ function healthBadgeLabel(card: ProjectCard, tone: HealthTone): string {
       return 'Silent'
     case 'warn':
       return `${card.open_reports} open`
+    case 'quiet':
+      return 'Quiet'
     case 'ok':
       return 'Healthy'
   }
@@ -119,7 +138,8 @@ const HEALTH_BADGE_HINT: Record<HealthTone, string | undefined> = {
   critical: undefined,
   'not-connected': HEARTBEAT_HINT.never,
   silent: HEARTBEAT_HINT.dead,
-  warn: undefined,
+  warn: 'Open reports: waiting for triage or a decision (new, classified, grouped or reopened).',
+  quiet: 'No user sessions in the last 7 days.',
   ok: undefined,
 }
 
@@ -140,7 +160,23 @@ export function OverviewPage() {
     reload,
   } = usePageData<ProjectCard[]>('/v1/admin/portfolio')
 
+  // Only read when the portfolio is empty: decides between "send your
+  // first test report here" (project exists) and "create a project".
+  const activeProjectId = useActiveProjectId()
+  const setup = useSetupStatus(activeProjectId)
+  const emptyStateProject = data && data.length === 0 && !setup.loading ? setup.activeProject : null
+
   const portfolioTotals = data && data.length > 0 ? summarizePortfolio(data) : null
+
+  // Recipe chip per card (Plan 019 §3): the worst recipe state, read from the
+  // portfolio rollup. Loaded only once there are cards; a failure just hides
+  // the chips — the activity cards never depend on it.
+  const orgId = useActiveOrgId()
+  const recipe = usePageData<PortfolioResponse>(orgId && data && data.length > 0 ? `/v1/admin/orgs/${orgId}/portfolio` : null)
+  const worstByProject = useMemo(
+    () => new Map((recipe.data?.cards ?? []).map((c) => [c.projectId, c.worst] as const)),
+    [recipe.data],
+  )
 
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-overview">
@@ -184,7 +220,7 @@ export function OverviewPage() {
                 <StatCard label="Projects" value={fmt(portfolioTotals.projectCount)} />
                 <StatCard label="Sessions (7d)" value={fmt(portfolioTotals.totalSessions)} />
                 <StatCard label="Users (7d)" value={fmt(portfolioTotals.totalUsers)} />
-                <StatCard label="Open tickets" value={fmt(portfolioTotals.totalOpen)} />
+                <StatCard label="Open reports" value={fmt(portfolioTotals.totalOpen)} />
                 {portfolioTotals.totalCritical > 0 && (
                   <StatCard
                     label="Critical"
@@ -212,16 +248,30 @@ export function OverviewPage() {
         />
       )}
       {data && data.length === 0 && (
-        <Card className="px-4 py-8 text-center text-sm text-fg-faint">
-          <p className="font-medium text-fg-muted">No projects connected yet</p>
-          <p className="mt-1 text-xs">
-            <Link to="/connect" className="text-brand hover:underline">Connect your first project →</Link>
-          </p>
-        </Card>
+        // A project with no traffic yet gets the one-click first diagnosis
+        // right here; a brand-new org with no project gets the wizard link.
+        emptyStateProject ? (
+          <FirstDiagnosisInline
+            surface="overview"
+            projectId={emptyStateProject.project_id}
+            projectName={emptyStateProject.project_name}
+            onDiagnosed={() => {
+              setup.reload()
+              reload()
+            }}
+          />
+        ) : (
+          <Card className="px-4 py-8 text-center text-sm text-fg-faint">
+            <p className="font-medium text-fg-muted">No projects connected yet</p>
+            <p className="mt-1 text-xs">
+              <Link to="/onboarding" className="text-brand hover:underline">Create your first project →</Link>
+            </p>
+          </Card>
+        )
       )}
       {data && data.length > 0 && (
         <PanelErrorBoundary label="Portfolio">
-          <PortfolioGrid cards={data} />
+          <PortfolioGrid cards={data} recipeWorst={worstByProject} />
         </PanelErrorBoundary>
       )}
     </div>
@@ -230,7 +280,7 @@ export function OverviewPage() {
 
 // ─── Portfolio grid ───────────────────────────────────────────────────────────
 
-function PortfolioGrid({ cards }: { cards: ProjectCard[] }) {
+function PortfolioGrid({ cards, recipeWorst }: { cards: ProjectCard[]; recipeWorst: ReadonlyMap<string, ElementState> }) {
   const { isAdvanced } = useAdminMode()
 
   const sorted = useMemo(
@@ -243,8 +293,8 @@ function PortfolioGrid({ cards }: { cards: ProjectCard[] }) {
     [cards],
   )
 
-  const attention = sorted.filter((c) => healthToneFor(c) !== 'ok')
-  const healthy = sorted.filter((c) => healthToneFor(c) === 'ok')
+  const attention = sorted.filter((c) => !isCalmTone(healthToneFor(c)))
+  const healthy = sorted.filter((c) => isCalmTone(healthToneFor(c)))
   const showGroups = isAdvanced && attention.length > 0 && healthy.length > 0
 
   if (!showGroups) {
@@ -252,7 +302,7 @@ function PortfolioGrid({ cards }: { cards: ProjectCard[] }) {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {sorted.map((card, i) => (
           <SpringChromeEnter key={card.project_id} delay={i * 0.03}>
-            <ProjectHealthCard card={card} />
+            <ProjectHealthCard card={card} recipeWorst={recipeWorst.get(card.project_id) ?? null} />
           </SpringChromeEnter>
         ))}
       </div>
@@ -271,7 +321,7 @@ function PortfolioGrid({ cards }: { cards: ProjectCard[] }) {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {attention.map((card, i) => (
             <SpringChromeEnter key={card.project_id} delay={i * 0.03}>
-              <ProjectHealthCard card={card} />
+              <ProjectHealthCard card={card} recipeWorst={recipeWorst.get(card.project_id) ?? null} />
             </SpringChromeEnter>
           ))}
         </div>
@@ -281,12 +331,12 @@ function PortfolioGrid({ cards }: { cards: ProjectCard[] }) {
           id="overview-healthy"
           className="mb-3 text-2xs font-medium uppercase tracking-wider text-fg-faint"
         >
-          Healthy ({healthy.length})
+          Nothing needed ({healthy.length})
         </h3>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {healthy.map((card, i) => (
             <SpringChromeEnter key={card.project_id} delay={(attention.length + i) * 0.03}>
-              <ProjectHealthCard card={card} />
+              <ProjectHealthCard card={card} recipeWorst={recipeWorst.get(card.project_id) ?? null} />
             </SpringChromeEnter>
           ))}
         </div>
@@ -297,7 +347,7 @@ function PortfolioGrid({ cards }: { cards: ProjectCard[] }) {
 
 // ─── Project health card ──────────────────────────────────────────────────────
 
-function ProjectHealthCard({ card }: { card: ProjectCard }) {
+function ProjectHealthCard({ card, recipeWorst }: { card: ProjectCard; recipeWorst: ElementState | null }) {
   const dauValues = (card.dau_spark ?? []).map((p) => p.dau)
   const healthTone = healthToneFor(card)
 
@@ -379,8 +429,9 @@ function ProjectHealthCard({ card }: { card: ProjectCard }) {
         >
           Activity →
         </Link>
+        {/* The count is the open-status list (QA 175), so the link opens that list. */}
         <Link
-          to="/reports"
+          to={card.open_reports > 0 ? '/reports?status=open' : '/reports'}
           onClick={handleSwitchProject}
           className="inline-flex min-h-6 items-center text-2xs text-fg-muted hover:text-fg hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 rounded-sm"
         >
@@ -393,6 +444,17 @@ function ProjectHealthCard({ card }: { card: ProjectCard }) {
         >
           Dashboard
         </Link>
+        {recipeWorst && (
+          <Link
+            to="/recipe"
+            onClick={handleSwitchProject}
+            className="ml-auto inline-flex min-h-6 items-center gap-1 rounded-sm text-2xs text-fg-muted hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+            aria-label="Open this project's recipe"
+          >
+            <span>Recipe</span>
+            <RecipeStateChip state={recipeWorst} />
+          </Link>
+        )}
       </div>
     </Card>
   )

@@ -4,11 +4,11 @@
  *          Overview | LLM | Cron | Activity.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, lazy } from 'react'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { Link, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
-import { useRealtime } from '../lib/realtime'
+import { useRealtime, useRealtimeReload } from '../lib/realtime'
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { usePublishPageContext } from '../lib/pageContext'
@@ -26,7 +26,6 @@ import { Card,
   FilterSelect,
   RelativeTime,
   Pct,
-  FreshnessPill,
   SegmentedControl, } from '../components/ui'
 import { HealthStatusBanner, isHealthStatusBannerCritical } from '../components/health/HealthStatusBanner'
 import { HealthSnapshotStrip } from '../components/health/HealthSnapshotStrip'
@@ -48,6 +47,9 @@ import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageCopy } from '../lib/copy'
 import { useHealthUx, resolveQuickHealthTab } from '../lib/healthModeUx'
+import { useQuickstartLandingTab } from '../lib/useQuickstartTab'
+import { describeApiFailure } from '../lib/humanizeApiError'
+import { ADMIN_ONLY_HINT } from '../lib/orgPermissions'
 import {
   errorRateDetail,
   errorRateTooltip,
@@ -68,6 +70,12 @@ import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { shouldHideGuideWhenBannerActive } from '../lib/pagePostureHelpers'
 import { CheckVerificationHub } from '../components/check/CheckVerificationHub'
 import { CHIP_TONE } from '../lib/chipTone'
+import { PageHubView } from '../components/PageHubView'
+import { HEALTH_HUB } from '../lib/pageHubs'
+
+const CodeHealthPage = lazy(() => import('./CodeHealthPage').then((m) => ({ default: m.CodeHealthPage })))
+const DriftPage = lazy(() => import('./DriftPage').then((m) => ({ default: m.DriftPage })))
+const AnomaliesPage = lazy(() => import('./AnomaliesPage').then((m) => ({ default: m.AnomaliesPage })))
 
 interface LlmRecent {
   function_name: string
@@ -93,6 +101,10 @@ interface LlmHealth {
   errorRate: number
   avgLatencyMs: number
   p95LatencyMs?: number
+  /** False while latency comes from the newest calls only. */
+  latencyExact?: boolean
+  /** The breakdowns below cover the newest `breakdownCalls` of `totalCalls`. */
+  breakdownCalls?: number
   byModel: Record<string, { calls: number; errors: number; tokens: number }>
   byFunction: Record<string, {
     calls: number
@@ -172,7 +184,18 @@ export function HealthPage() {
   if (hubParams.get('hub') === 'check') {
     return <CheckVerificationHub />
   }
-  return <HealthPageContent />
+  // App health (Plan 021): Code size, Schema changes and Unusual spikes are views here now.
+  return (
+    <PageHubView
+      hub={HEALTH_HUB}
+      render={{
+        integrations: () => <HealthPageContent />,
+        code: () => <CodeHealthPage />,
+        schema: () => <DriftPage />,
+        spikes: () => <AnomaliesPage />,
+      }}
+    />
+  )
 }
 
 function HealthPageContent() {
@@ -213,11 +236,16 @@ function HealthPageContent() {
     [setSearchParams],
   )
 
-  useEffect(() => {
-    if (!ux.isQuickstart || statsLoading) return
-    const quickTab = resolveQuickHealthTab(stats)
-    if (activeTab !== quickTab) setActiveTab(quickTab)
-  }, [ux.isQuickstart, statsLoading, stats, activeTab, setActiveTab])
+  // Quick mode opens the posture tab once; links and clicks then win.
+  useQuickstartLandingTab({
+    enabled: ux.isQuickstart,
+    ready: !statsLoading,
+    // A status shortcut (?status=) picks a tab too, so it counts as a deep link.
+    tabParam: tabParam ?? searchParams.get('status'),
+    activeTab: activeTab,
+    quickTab: resolveQuickHealthTab(stats),
+    setActiveTab: setActiveTab,
+  })
 
   const llmQuery = usePageData<LlmHealth>(`/v1/admin/health/llm?window=${window}`, { deps: [window] })
   const cronQuery = usePageData<CronHealth>('/v1/admin/health/cron')
@@ -235,7 +263,10 @@ function HealthPageContent() {
   }, [reloadStats, llmQuery, cronQuery])
 
   useRealtime({ table: 'llm_invocations' }, reloadAll)
-  useRealtime({ table: 'cron_runs' }, reloadAll)
+  // Debounced: the daily cron_runs retention job deletes a few thousand rows
+  // in one statement, and Realtime delivers DELETE events without RLS. An
+  // undebounced subscription would fire reloadAll once per deleted row.
+  useRealtimeReload(['cron_runs'], reloadAll)
 
   useEffect(() => {
     const lastRun = cron?.byJob['judge-batch']?.lastRun
@@ -282,7 +313,8 @@ function HealthPageContent() {
         { method: 'POST' },
       )
       if (!res.ok || !res.data) {
-        toast.error(`Probe failed for ${kind}`, res.error?.message)
+        const t = describeApiFailure(res.error, `Could not test ${kind === 'anthropic' ? 'Anthropic' : 'OpenAI'}`)
+        toast.error(t.title, t.description)
         setProbeResults((prev) => ({
           ...prev,
           [kind]: { status: 'down', latencyMs: 0, detail: res.error?.message, at: new Date().toISOString() },
@@ -304,11 +336,15 @@ function HealthPageContent() {
     setTriggering(job)
     try {
       const res = await apiFetch(`/v1/admin/health/cron/${job}/trigger`, { method: 'POST' })
-      if (!res.ok) throw new Error(res.error?.message ?? 'Trigger failed')
-      toast.success(`Triggered ${job}`)
+      if (!res.ok) {
+        const t = describeApiFailure(res.error, `Could not run ${job}`)
+        toast.error(t.title, t.description)
+        return
+      }
+      toast.success(`Ran ${job}`, 'Its result shows in the job card below.')
       reloadAll()
-    } catch (err) {
-      toast.error(`Could not trigger ${job}`, err instanceof Error ? err.message : String(err))
+    } catch {
+      toast.error(`Could not run ${job}`, 'Could not reach Mushi. Check your connection and retry.')
     } finally {
       setTriggering(null)
     }
@@ -409,6 +445,7 @@ function HealthPageContent() {
     fallbackRatePct: Math.round((llm.fallbackRate ?? 0) * 1000) / 10,
     avgLatencyMs: llm.avgLatencyMs ?? 0,
     p95LatencyMs: llm.p95LatencyMs ?? 0,
+    latencyExact: llm.latencyExact,
   }
   const byFunction = llm.byFunction ?? {}
   const byModel = llm.byModel ?? {}
@@ -425,19 +462,6 @@ function HealthPageContent() {
       ? [{ level: 'info' as const, source: 'llm.last', message: `${lastLlmCall.function_name} · ${lastLlmCall.used_model}`, ts: lastLlmCall.created_at }]
       : []),
   ]
-
-  const bannerSeverity: 'ok' | 'warn' | 'danger' | 'brand' | 'info' | 'neutral' =
-    !stats.hasAnyProject
-      ? 'neutral'
-      : stats.topPriority === 'llm_errors' || stats.topPriority === 'cron_error'
-        ? 'danger'
-        : stats.topPriority === 'llm_fallbacks' || stats.topPriority === 'cron_stale' || stats.topPriority === 'cron_warn'
-          ? 'warn'
-          : stats.topPriority === 'idle'
-            ? 'brand'
-            : stats.topPriority === 'healthy'
-              ? 'ok'
-              : 'info'
 
   const recommendedAction = (() => {
     const failingCron = KNOWN_JOBS.filter((j) => cron?.byJob[j]?.lastStatus === 'error')
@@ -465,8 +489,25 @@ function HealthPageContent() {
       return (
         <RecommendedAction
           tone="urgent"
-          title={`${failingCron.length} cron ${failingCron.length === 1 ? 'job is' : 'jobs are'} failing`}
+          title={`${failingCron.length} scheduled ${failingCron.length === 1 ? 'job is' : 'jobs are'} failing`}
           description={`Last ${failingCron.length === 1 ? 'run of' : 'runs of'} ${failingCron.join(', ')} ended in error. Trigger manually to confirm it's reproducible, then open the cron logs.`}
+          cta={{ label: 'Open Scheduled jobs', onClick: () => setActiveTab('cron') }}
+        />
+      )
+    }
+    // An overdue or late job is a problem too: never "All systems nominal" beside it.
+    const overdueCron = KNOWN_JOBS.filter((j) => {
+      const s = cron?.byJob[j]?.staleness
+      return s === 'stale' || s === 'warn'
+    })
+    const lateCount = Math.max(stats.cronStaleCount + stats.cronWarnCount, overdueCron.length)
+    if (lateCount > 0) {
+      return (
+        <RecommendedAction
+          tone="urgent"
+          title={`${lateCount} scheduled ${lateCount === 1 ? 'job is' : 'jobs are'} overdue`}
+          description={`${overdueCron.length > 0 ? overdueCron.join(', ') : 'A job'} missed ${lateCount === 1 ? 'its' : 'their'} expected schedule. Open Scheduled jobs to see when each last ran, then run it by hand.`}
+          cta={{ label: 'Open Scheduled jobs', onClick: () => setActiveTab('cron') }}
         />
       )
     }
@@ -492,11 +533,11 @@ function HealthPageContent() {
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-health">
       <PageHeaderBar
-        title={copy?.title ?? 'System Health'}
+        title={copy?.title ?? 'App health'}
         projectScope={stats.projectName ?? projectName ?? undefined}
         withPageHero={!ux.hideOverviewChrome}
 
-        helpTitle={copy?.help?.title ?? 'About System Health'}
+        helpTitle={copy?.help?.title ?? 'About App health'}
         helpWhatIsIt={copy?.help?.whatIsIt ?? 'Live operational dashboard showing every LLM call routed by Mushi Mushi (Anthropic primary, OpenAI fallback) and every scheduled job (judge, intelligence, retention). Each event is written to a telemetry table and streamed here via Supabase Realtime.'}
         helpUseCases={copy?.help?.useCases ?? [
           'Catch when Anthropic rate-limits cause a fallback storm',
@@ -505,33 +546,6 @@ function HealthPageContent() {
         ]}
         helpHowToUse={copy?.help?.howToUse ?? "No action needed for healthy state. If fallback rate spikes, check Anthropic status. If a cron job hasn't run in its expected window, trigger it manually with the buttons below. Click any LLM call to open its Langfuse trace."}
       >
-        <Badge
-          className={
-            bannerSeverity === 'ok'
-              ? CHIP_TONE.okSubtle
-              : bannerSeverity === 'danger'
-                ? CHIP_TONE.dangerSubtle
-                : bannerSeverity === 'warn'
-                  ? CHIP_TONE.warnSubtle
-                  : bannerSeverity === 'brand'
-                    ? 'bg-brand/12 text-brand border border-brand/28'
-                    : 'bg-surface-overlay text-fg-muted'
-          }
-        >
-          {!stats.hasAnyProject
-            ? 'NO PROJECT'
-            : stats.redCount > 0
-              ? `${stats.redCount} RED`
-              : stats.amberCount > 0
-                ? `${stats.amberCount} WARN`
-                : stats.totalCalls === 0
-                  ? 'IDLE'
-                  : 'OK'}
-        </Badge>
-        <FreshnessPill
-          at={statsFetchedAt ?? llmQuery.lastFetchedAt ?? cronQuery.lastFetchedAt}
-          isValidating={statsValidating || llmQuery.isValidating || cronQuery.isValidating}
-        />
         <SelectField
           label="Window"
           value={window}
@@ -616,7 +630,7 @@ function HealthPageContent() {
         <>
           <PageHero
             scope="health"
-            title={copy?.title ?? 'System Health'}
+            title={copy?.title ?? 'App health'}
             kicker="Pipeline vitals"
             decide={{
               label: stats.redCount > 0
@@ -696,16 +710,22 @@ function HealthPageContent() {
                 to={healthLinks.errorRate}
               />
               <StatCard
-                label="Latency p50 / p95"
+                label="Latency avg / p95"
                 value={`${llm.avgLatencyMs}ms / ${llm.p95LatencyMs ?? 0}ms`}
                 tooltip={latencyTooltip(llmTabStats)}
-                detail={latencyDetail()}
+                detail={llm.latencyExact === false ? 'From the newest calls only' : latencyDetail()}
                 to={healthLinks.latency}
               />
             </div>
           </Section>
 
           <Section title="Per-function breakdown">
+            {llm.breakdownCalls != null && llm.breakdownCalls < llm.totalCalls && (
+              <InlineProof className="mb-2">
+                Covers the newest {llm.breakdownCalls.toLocaleString()} of {llm.totalCalls.toLocaleString()} calls in
+                this window. The totals above count every call.
+              </InlineProof>
+            )}
             {fnNames.length === 0 ? (
               <EmptyState
                 icon={<HeroPulseHealth />}
@@ -844,6 +864,8 @@ function HealthPageContent() {
                         variant="ghost"
                         onClick={() => triggerJob(job as 'judge-batch' | 'intelligence-report')}
                         loading={triggering === job}
+                        disabled={stats.canRunJobs === false}
+                        title={stats.canRunJobs === false ? ADMIN_ONLY_HINT : 'Runs this job now; it spends AI budget.'}
                       >
                         Trigger now
                       </Btn>

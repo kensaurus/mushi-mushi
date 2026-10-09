@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/dashboard
 
 ---
 title: Dashboard
+description: The Mushi dashboard answers whether anything broke since your last release — new reports, overnight fix runs and pipeline health on one screen.
 ---
 
 # Dashboard

@@ -13,9 +13,11 @@ interface Props {
   attachValue: string
   onAttachValueChange: (value: string) => void
   onAttach: () => void
+  /** id of a <datalist> of recent reports, so a report can be picked instead of pasted. */
+  reportListId?: string
 }
 
-export function ResearchSnippetCard({ snippet, attachValue, onAttachValueChange, onAttach }: Props) {
+export function ResearchSnippetCard({ snippet, attachValue, onAttachValueChange, onAttach, reportListId }: Props) {
   return (
     <Card className="p-4">
       <div className="mb-2 flex items-start justify-between gap-2">
@@ -57,7 +59,8 @@ export function ResearchSnippetCard({ snippet, attachValue, onAttachValueChange,
             type="text"
             value={attachValue}
             onChange={(e) => onAttachValueChange(e.target.value)}
-            placeholder="Report UUID from Reports page"
+            list={reportListId}
+            placeholder="Pick a recent report or paste its id"
             className="flex-1 font-mono text-2xs"
             label="Attach to report"
           />

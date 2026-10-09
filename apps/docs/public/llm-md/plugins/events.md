@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/plugins/events
 
 ---
 title: Webhook events
+description: Reference for every webhook event Mushi plugins receive — the shared envelope, each event's payload, and how to subscribe to only the events you need.
 ---
 
 # Webhook events
@@ -11,7 +12,7 @@ title: Webhook events
 Every event ships with this envelope:
 
 ```ts
-interface MushiEvent {
+interface MushiEvent<TName extends MushiEventName, TData> {
   event: TName
   project_id: string
   occurred_at: string  // ISO 8601 UTC
@@ -28,6 +29,7 @@ interface MushiEvent {
 | `report.status_changed`   | Status updated via API or admin                                              | `{ report_id, from, to, actor_id }`                        |
 | `report.commented`        | A comment is added to a report                                               | `{ report_id, comment_id, body, visible_to_reporter }`     |
 | `report.dedup_grouped`    | Report is grouped into a dedup cluster                                       | `{ report_id, group_id, peers }`                           |
+| `report.reporter_replied` | The reporter answered in the report's thread (widget reply)                  | `{ report: { id }, comment: { id, body, author_kind } }`   |
 | `fix.requested`           | A fix dispatch has been requested (pre-agent launch)                         | `{ report_id, fix_id }`                                    |
 | `fix.proposed`            | Orchestrator opens a draft PR (standard agent or Cursor Cloud Agent)         | `{ report_id, attempt_id, pr_url }`                        |
 | `fix.applied`             | Draft PR merged                                                              | `{ report_id, attempt_id, pr_url, sha }`                   |

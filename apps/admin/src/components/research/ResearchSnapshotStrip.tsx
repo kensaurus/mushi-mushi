@@ -46,7 +46,6 @@ export function ResearchSnapshotStrip({
         <StatCard
           label={statLabels?.sessions ?? 'Sessions'}
           value={stats.sessions}
-          accent={stats.sessions > 0 ? 'text-brand' : undefined}
           tooltip={sessionsTooltip(stats)}
           detail={sessionsDetail()}
           to={researchLinks.sessions}
@@ -54,7 +53,6 @@ export function ResearchSnapshotStrip({
         <StatCard
           label={statLabels?.snippets ?? 'Snippets'}
           value={stats.snippets}
-          accent={stats.snippets > 0 ? 'text-brand' : undefined}
           tooltip={snippetsTooltip(stats)}
           detail={snippetsDetail()}
           to={researchLinks.snippets}

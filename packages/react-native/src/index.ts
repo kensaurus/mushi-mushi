@@ -2,6 +2,7 @@
 // Copyright (c) 2024–2026 Kenji Sakuramoto (kensaurus) — Mushi Mushi
 export { MushiProvider } from './provider'
 export type { MushiRNConfig, MushiRNInstance } from './provider'
+export type { RNAnalyticsConfig } from './analytics/event-tracker'
 
 export { useMushi } from './hooks/useMushi'
 export { useMushiReport } from './hooks/useMushiReport'
@@ -36,3 +37,6 @@ export { AsyncStorageQueue } from './storage/async-storage-queue'
 
 // Re-export shared types that host apps commonly need
 export type { MushiReporterReport, MushiReporterComment, MushiHallOfFameEntry } from '@mushi-mushi/core'
+
+// Optional native modules a host can pass in config (netInfo, viewShot, expoSensors).
+export type { MushiNetInfoModule, MushiViewShotModule, MushiExpoSensorsModule } from './optional-modules'

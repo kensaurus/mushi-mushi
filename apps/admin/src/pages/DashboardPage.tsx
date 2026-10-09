@@ -10,7 +10,6 @@
 import { useCallback, useMemo, useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { usePageData } from '../lib/usePageData'
-import type { ChartEvent } from '../lib/apiSchemas'
 import { useRealtimeReload } from '../lib/realtime'
 import { usePublishPageContext } from '../lib/pageContext'
 import { usePublishPageHeroStats } from '../lib/heroSnapshots'
@@ -19,12 +18,14 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useToast } from '../lib/toast'
 import { useMilestoneCelebration } from '../lib/useMilestoneCelebration'
 import { Confetti } from '../components/Confetti'
-import { Btn, ErrorAlert, FreshnessPill, RefreshIconButton, Card } from '../components/ui'
+import { Btn, FreshnessPill, RefreshIconButton, Card } from '../components/ui'
+import { PageLoadError } from '../components/PageLoadError'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { DashboardSkeleton } from '../components/skeletons/DashboardSkeleton'
-import { SetupChecklist } from '../components/SetupChecklist'
+import { NextStep } from '../components/NextStep'
+import { openSetupGuide } from '../lib/setupGuidePrefs'
 import { GettingStartedEmpty } from '../components/dashboard/GettingStartedEmpty'
 import { FirstReportHero } from '../components/dashboard/FirstReportHero'
 import { QuotaBanner } from '../components/dashboard/QuotaBanner'
@@ -33,7 +34,6 @@ import { PdcaCockpit } from '../components/dashboard/PdcaCockpit'
 import { PdcaFlow } from '../components/pdca-flow/PdcaFlow'
 import { LivePdcaPipeline } from '../components/dashboard/LivePdcaPipeline'
 import { KpiRow } from '../components/dashboard/KpiRow'
-import { ChartsRow } from '../components/dashboard/ChartsRow'
 import { TriageAndFixRow } from '../components/dashboard/TriageAndFixRow'
 import { TeamActivityTile } from '../components/dashboard/TeamActivityTile'
 import { InsightsRow } from '../components/dashboard/InsightsRow'
@@ -45,8 +45,10 @@ import type { DashboardData } from '../components/dashboard/types'
 import type { PdcaStageId } from '../lib/pdca'
 import { usePageCopy } from '../lib/copy'
 import { useDashboardUx } from '../lib/dashboardModeUx'
-import { deriveDashboardInsight } from '../lib/dashboardExplainer'
+import { deriveDashboardInsight, shouldShowPdcaFlow } from '../lib/dashboardExplainer'
+import { PLATFORM_DEFS } from '../components/integrations/types'
 import { semanticBannerTone } from '../lib/tokens'
+import { shouldShowPipelineRibbon } from '../lib/pipelineRibbonVisibility'
 import { IconDashboard } from '../components/icons'
 
 function inferRunningStage(data: DashboardData): PdcaStageId | null {
@@ -60,15 +62,15 @@ function inferRunningStage(data: DashboardData): PdcaStageId | null {
   return null
 }
 
+/** Plain name for an integration health kind ("sentry" → "Sentry"). */
+function integrationLabel(kind: string): string {
+  const def = PLATFORM_DEFS.find((d) => d.kind === kind)
+  if (def) return def.label
+  return kind.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase())
+}
+
 export function DashboardPage() {
   const { data, loading, error, isValidating, lastFetchedAt, reload } = usePageData<DashboardData>('/v1/admin/dashboard')
-  // Wave T.5.8b: chart annotations. Fetched lazily alongside the main
-  // dashboard payload — we swallow errors because annotations are a
-  // garnish, not critical data.
-  const chartEventsQuery = usePageData<{ events: ChartEvent[] }>(
-    '/v1/admin/chart-events?kinds=deploy,cron,byok',
-  )
-  const chartEvents = chartEventsQuery.data?.events ?? []
   const activeProjectId = useActiveProjectId()
   const setup = useSetupStatus(activeProjectId)
   const toast = useToast()
@@ -118,15 +120,18 @@ export function DashboardPage() {
   const dashFix = data?.fixSummary
   const dashboardHeroStats = useMemo(() => {
     if (!dashCounts || !dashFix) return null
-    const integrationIssues = (data?.integrations ?? []).filter(
+    const failing = (data?.integrations ?? []).filter(
       (i) => i.lastStatus != null && i.lastStatus !== 'ok',
-    ).length
+    )
+    const degraded = failing.filter((i) => i.lastStatus === 'amber' || i.lastStatus === 'degraded')
     return {
       openBacklog: dashCounts.openBacklog,
       fixesInProgress: dashFix.inProgress,
       fixesFailed: dashFix.failed,
       openPrs: dashFix.openPrs ?? dashCounts.openPrs,
-      integrationIssues,
+      integrationIssues: failing.length,
+      degradedIntegrations: degraded.length,
+      failingIntegrations: failing.map((i) => ({ kind: i.kind, label: integrationLabel(i.kind) })),
     }
   }, [dashCounts, dashFix, data?.integrations])
   usePublishPageHeroStats('/dashboard', dashboardHeroStats)
@@ -139,7 +144,7 @@ export function DashboardPage() {
         : undefined
   usePublishPageContext({
     route: '/dashboard',
-    title: dashProjectName ? `Dashboard · ${dashProjectName}` : 'Dashboard',
+    title: dashProjectName ? `Home · ${dashProjectName}` : 'Home',
     summary: dashSummary,
     // `openBacklog` is the queue of reports the user still needs to
     // action — treat every untriaged report as deserving the favicon
@@ -171,7 +176,7 @@ export function DashboardPage() {
   // redirected prematurely.
   if (!setup.loading && !setup.hasAnyProject) return <Navigate to="/onboarding" replace />
   if (loading || setup.loading) return <DashboardSkeleton />
-  if (error) return <ErrorAlert message={error} onRetry={reload} />
+  if (error) return <PageLoadError error={error} onRetry={reload} resource="the dashboard" endpoint="/v1/admin/dashboard" />
   if (!data || data.empty) return <GettingStartedEmpty />
 
   const counts = data.counts!
@@ -200,14 +205,26 @@ export function DashboardPage() {
           fixesInProgress: dashboardHeroStats.fixesInProgress,
           fixesFailed: dashboardHeroStats.fixesFailed,
           integrationIssues: dashboardHeroStats.integrationIssues,
+          degradedIntegrations: dashboardHeroStats.degradedIntegrations,
+          failingIntegrations: dashboardHeroStats.failingIntegrations,
           reports14d: counts.reports14d ?? 0,
         })
       : null
 
-  const showPdcaFlow =
-    isAdvanced && renderFullDashboard && hasPdcaStages && !showFirstReportHero && !dashboardInsight
+  // The one-line insight banner sits above the canvas and must not hide it
+  // (QA 169: the explainer always returns a verdict, so the canvas never rendered).
+  // The global pipeline strip (Advanced only) already draws the four stage
+  // cards, so neither the canvas nor the stage hero repeats them under it.
+  const pipelineStripVisible = isAdvanced && shouldShowPipelineRibbon('/dashboard')
+  const showPdcaFlow = shouldShowPdcaFlow({
+    isAdvanced,
+    renderFullDashboard,
+    hasPdcaStages,
+    showFirstReportHero,
+    pipelineStripVisible,
+  })
   const showHeroIntro =
-    !hideOverviewChrome && !showFirstReportHero && hasPdcaStages && !showPdcaFlow
+    !hideOverviewChrome && !showFirstReportHero && hasPdcaStages && !showPdcaFlow && !pipelineStripVisible
 
   const pdcaFlowBlock = showPdcaFlow ? (
     <>
@@ -218,6 +235,7 @@ export function DashboardPage() {
           focusStage={data.focusStage}
           runningStage={inferRunningStage(data)}
           activity={activity}
+          integrations={data.integrations ?? []}
           interactive
           showActionPanel
           ariaLabel="Live PDCA loop — live counts per stage with the current bottleneck highlighted. Click a stage to inspect it."
@@ -239,7 +257,7 @@ export function DashboardPage() {
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-dashboard">
       <Confetti triggerKey={confettiKey} />
       <PageHeaderBar
-        title={copy?.title ?? 'Dashboard'}
+        title={copy?.title ?? 'Home'}
         icon={<IconDashboard />}
         description={copy?.description ?? (projectName ? `Your loop on ${projectName}` : undefined)}
         helpTitle={copy?.help?.title ?? 'About the Dashboard'}
@@ -293,6 +311,14 @@ export function DashboardPage() {
                         : 'OK: '}
                   </span>
                   {dashboardInsight.sentence}
+                  {dashboardInsight.action ? (
+                    <>
+                      {' '}
+                      <Link to={dashboardInsight.action.to} className="font-medium underline underline-offset-2 hover:no-underline">
+                        {dashboardInsight.action.label} →
+                      </Link>
+                    </>
+                  ) : null}
                 </span>
               </div>
             ) : null,
@@ -326,14 +352,9 @@ export function DashboardPage() {
       />
 
       <div className="space-y-4 border-b border-edge-subtle pb-4">
-      {setup.activeProject && (
-        <SetupChecklist
-          project={setup.activeProject}
-          mode="banner"
-          onRefresh={setup.reload}
-          adminEndpointHost={setup.data?.admin_endpoint_host ?? null}
-        />
-      )}
+      {/* The dashboard's one next step. The setup list itself lives in the
+          docked setup guide, so it is not repeated here. */}
+      <NextStep variant="card" />
 
       {setup.activeProject && (
         <SdkUpgradeBanner projectId={setup.activeProject.project_id} />
@@ -342,11 +363,18 @@ export function DashboardPage() {
       {setupIncomplete && !showFullDashboard && (
         <Card  className="flex items-center justify-between px-3 py-2.5">
           <p className="text-xs text-fg-muted">
-            Finish setup above to unlock the full dashboard. You can peek now if you like.
+            Finish setup to unlock the full dashboard. You can peek now if you like.
           </p>
-          <Btn size="sm" variant="ghost" onClick={() => setShowFullDashboard(true)}>
-            Show full dashboard
-          </Btn>
+          <div className="flex shrink-0 items-center gap-2">
+            {/* The setup list lives in the docked guide; bring it back if the
+                user dismissed it (and in Advanced, where no card shows). */}
+            <Btn size="sm" variant="ghost" onClick={openSetupGuide}>
+              Show setup guide
+            </Btn>
+            <Btn size="sm" variant="ghost" onClick={() => setShowFullDashboard(true)}>
+              Show full dashboard
+            </Btn>
+          </div>
         </Card>
       )}
       </div>
@@ -389,13 +417,7 @@ export function DashboardPage() {
 
           <QuotaBanner />
 
-          <ChartsRow
-            reportsByDay={reportsByDay}
-            llmByDay={llmByDay}
-            chartEvents={chartEvents}
-          />
-
-          <TriageAndFixRow triageQueue={data.triageQueue ?? []} fixSummary={fixSummary} />
+          <TriageAndFixRow triageQueue={data.triageQueue ?? []} />
 
           <TeamActivityTile projectId={activeProjectId} />
 

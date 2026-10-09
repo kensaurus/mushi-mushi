@@ -21,10 +21,15 @@
  *   If it doesn't (403 from GitHub), returns a guided fallback with the
  *   `gh secret set` commands the developer can run locally.
  *
- * IDEMPOTENCY
- * ───────────
- *   - sync-ci-secrets deactivates any prior `ci-auto:*` labelled key before
- *     minting a fresh one, so repeated calls don't accumulate stale keys.
+ * KEY ORDER (QA #30)
+ * ──────────────────
+ *   - sync-ci-secrets mints the new `ci-auto:*` key first and leaves every
+ *     older one alone. Only after GitHub accepts the secret that carries the
+ *     NEW key does it revoke the older `ci-auto:*` keys. A store build that
+ *     baked in the old key keeps reporting whenever the GitHub write fails
+ *     (403, no repo, no token). The console confirms before calling this.
+ *   - If that revoke fails, the response says so (`priorKeysRevoked: null`,
+ *     `revokeError`) instead of reporting a clean sync.
  *   - GitHub PUT /actions/secrets/{name} is already idempotent (upsert).
  *
  * SECURITY
@@ -38,76 +43,22 @@ import type { Variables } from '../types.ts'
 import { getServiceClient } from '../../_shared/db.ts'
 import { jwtAuth } from '../../_shared/auth.ts'
 import { logAudit } from '../../_shared/audit.ts'
-import { dbError, userCanAccessProject } from '../shared.ts'
+import { dbError, callerCanAccessProject } from '../shared.ts'
 import { resolveProjectGithubToken, parseGithubRepoUrl } from '../../_shared/github.ts'
 import { ghFetch, ghFetchOptional } from '../../_shared/github-pr.ts'
-
-// ---------------------------------------------------------------------------
-// Per-stack env-var maps (mirrors apps/admin/src/lib/projectMushiEnv.ts)
-// Keys that should go into GitHub SECRETS vs VARIABLES.
-// ---------------------------------------------------------------------------
-
-interface CiVar {
-  name: string
-  /** Deterministic value — set before calling sync. Undefined means the freshly-minted API key. */
-  value?: string
-  ghKind: 'secret' | 'variable'
-}
-
-/**
- * Build the list of required Mushi CI vars for a given project.
- * projectId and endpoint are deterministic; apiKey is the freshly-minted key
- * (passed as `mintedKey`).
- */
-function buildCiVars(params: {
-  stack: 'nextjs' | 'expo' | 'vite'
-  projectId: string
-  endpoint: string
-  mintedKey: string
-}): CiVar[] {
-  const { stack, projectId, endpoint, mintedKey } = params
-
-  if (stack === 'expo') {
-    return [
-      { name: 'EXPO_PUBLIC_MUSHI_PROJECT_ID', value: projectId, ghKind: 'variable' },
-      { name: 'EXPO_PUBLIC_MUSHI_API_KEY', value: mintedKey, ghKind: 'secret' },
-      { name: 'EXPO_PUBLIC_MUSHI_API_ENDPOINT', value: endpoint, ghKind: 'variable' },
-    ]
-  }
-
-  if (stack === 'vite') {
-    return [
-      { name: 'VITE_MUSHI_PROJECT_ID', value: projectId, ghKind: 'variable' },
-      { name: 'VITE_MUSHI_API_KEY', value: mintedKey, ghKind: 'secret' },
-      { name: 'VITE_MUSHI_API_ENDPOINT', value: endpoint, ghKind: 'variable' },
-    ]
-  }
-
-  // Default: Next.js (NEXT_PUBLIC_*)
-  return [
-    { name: 'NEXT_PUBLIC_MUSHI_PROJECT_ID', value: projectId, ghKind: 'variable' },
-    { name: 'NEXT_PUBLIC_MUSHI_API_KEY', value: mintedKey, ghKind: 'secret' },
-    { name: 'NEXT_PUBLIC_MUSHI_API_ENDPOINT', value: endpoint, ghKind: 'variable' },
-  ]
-}
-
-/** Required names (no values) for diagnosis/comparison. */
-function requiredCiVarNames(stack: 'nextjs' | 'expo' | 'vite'): Array<{ name: string; ghKind: 'secret' | 'variable' }> {
-  return buildCiVars({ stack, projectId: '', endpoint: '', mintedKey: '' })
-    .map(({ name, ghKind }) => ({ name, ghKind }))
-}
-
-// ---------------------------------------------------------------------------
-// Detect stack from project slug / known config (simple heuristic for now)
-// ---------------------------------------------------------------------------
-
-function inferStack(slug: string | null): 'nextjs' | 'expo' | 'vite' {
-  if (!slug) return 'nextjs'
-  const s = slug.toLowerCase()
-  if (s === 'yen-yen') return 'expo'
-  if (s === 'mushi-mushi' || s === 'solo-boss-cloud' || s === 'atpeak') return 'vite'
-  return 'nextjs'
-}
+import {
+  buildCiVars,
+  buildGuidedFallback,
+  inferStack,
+  lastHeartbeatAt,
+  missingCiVars,
+  nativeEverSeen as anyNativeHeartbeat,
+  requiredCiVarNames,
+  sdkDiagnosticVerdict,
+  type KeyHeartbeat,
+  type SdkDiagnosticsResult,
+} from '../../_shared/sdk-diagnostics.ts'
+import { mayRevokePriorCiKeys } from '../../_shared/api-key-rotation.ts'
 
 // ---------------------------------------------------------------------------
 // GitHub secrets / variables REST helpers
@@ -228,55 +179,16 @@ async function putRepoVariable(
 }
 
 // ---------------------------------------------------------------------------
-// Build guided fallback commands (used when GitHub write is unavailable)
-// ---------------------------------------------------------------------------
-
-function buildGuidedFallback(params: {
-  owner: string
-  repo: string
-  ciVarTemplates: Array<{ name: string; ghKind: 'secret' | 'variable' }>
-  projectId: string
-  endpoint: string
-}): { commands: string[]; envBlock: string } {
-  const { owner, repo, ciVarTemplates, projectId, endpoint } = params
-  const repoFlag = `--repo ${owner}/${repo}`
-
-  const commands: string[] = []
-  const envLines: string[] = []
-
-  for (const v of ciVarTemplates) {
-    if (v.ghKind === 'secret') {
-      // API key — user must supply their project-scoped key; we can't print it here
-      commands.push(`gh secret set ${v.name} --body "<your-mushi-project-api-key>" ${repoFlag}`)
-    } else {
-      const val = v.name.toLowerCase().includes('endpoint') ? endpoint : projectId
-      commands.push(`gh variable set ${v.name} --body "${val}" ${repoFlag}`)
-    }
-    envLines.push(`          ${v.name}: \${{ ${v.ghKind === 'secret' ? 'secrets' : 'vars'}.${v.name} }}`)
-  }
-
-  const envBlock = `        env:\n${envLines.join('\n')}`
-
-  return { commands, envBlock }
-}
-
-// ---------------------------------------------------------------------------
-// Mint a project-scoped report:write API key (deactivates prior ci-auto keys)
+// Mint a project-scoped report:write API key. Older ci-auto keys stay active
+// here; revokePriorCiKeys runs only after GitHub accepted the new one.
 // ---------------------------------------------------------------------------
 
 async function mintCiApiKey(
   db: ReturnType<typeof getServiceClient>,
   projectId: string,
   repoSlug: string,
-): Promise<{ rawKey: string; prefix: string }> {
+): Promise<{ rawKey: string; prefix: string; id: string }> {
   const ciLabel = `ci-auto:${repoSlug}`
-
-  // Deactivate prior ci-auto keys for this project (idempotent across retries).
-  await db
-    .from('project_api_keys')
-    .update({ is_active: false })
-    .eq('project_id', projectId)
-    .like('label', 'ci-auto:%')
 
   const rawKey = `mushi_${crypto.randomUUID().replace(/-/g, '')}`
   const prefix = rawKey.slice(0, 12)
@@ -287,43 +199,49 @@ async function mintCiApiKey(
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('')
 
-  const { error } = await db.from('project_api_keys').insert({
-    project_id: projectId,
-    key_hash: keyHash,
-    key_prefix: prefix,
-    label: ciLabel,
-    scopes: ['report:write'],
-    is_active: true,
-  })
+  const { data, error } = await db
+    .from('project_api_keys')
+    .insert({
+      project_id: projectId,
+      key_hash: keyHash,
+      key_prefix: prefix,
+      label: ciLabel,
+      scopes: ['report:write'],
+      is_active: true,
+    })
+    .select('id')
+    .single()
 
-  if (error) throw new Error(`Failed to mint CI API key: ${error.message}`)
+  if (error || !data) throw new Error(`Failed to mint CI API key: ${error?.message ?? 'no row returned'}`)
 
-  return { rawKey, prefix }
+  return { rawKey, prefix, id: (data as { id: string }).id }
+}
+
+/**
+ * Revoke every older `ci-auto:*` key except the one just written to GitHub.
+ * Returns the revoked prefixes, or the error so the caller can say the old
+ * key is still live.
+ */
+async function revokePriorCiKeys(
+  db: ReturnType<typeof getServiceClient>,
+  projectId: string,
+  keepKeyId: string,
+): Promise<{ prefixes: string[]; error: string | null }> {
+  const { data, error } = await db
+    .from('project_api_keys')
+    .update({ is_active: false, revoked_at: new Date().toISOString() })
+    .eq('project_id', projectId)
+    .eq('is_active', true)
+    .like('label', 'ci-auto:%')
+    .neq('id', keepKeyId)
+    .select('key_prefix')
+  if (error) return { prefixes: [], error: error.message }
+  return { prefixes: (data ?? []).map((r: { key_prefix: string }) => r.key_prefix), error: null }
 }
 
 // ---------------------------------------------------------------------------
 // Route exports
 // ---------------------------------------------------------------------------
-
-export interface SdkDiagnosticsResult {
-  status: 'healthy' | 'ci-secret-missing' | 'native-never-seen' | 'banner-disabled' | 'unknown'
-  bannerEnabled: boolean
-  launcherMode: string | null
-  hasGithubToken: boolean
-  repoUrl: string | null
-  /** Names present in CI (secrets + variables combined). Null when no GitHub token. */
-  presentVars: string[] | null
-  /** Names required for the inferred stack. */
-  requiredVars: string[]
-  /** Names from requiredVars that are absent. Null when no GitHub token. */
-  missingVars: string[] | null
-  /** Last heartbeat across all active keys. */
-  lastSeenAt: string | null
-  /** True when any key has been seen from a native origin (capacitor:// / okhttp / CFNetwork). */
-  nativeEverSeen: boolean
-  stack: 'nextjs' | 'expo' | 'vite'
-  recommendedFix: string
-}
 
 export function registerProjectCiSecretsRoutes(app: Hono<{ Variables: Variables }>): void {
   // ──────────────────────────────────────────────────────────────
@@ -334,7 +252,7 @@ export function registerProjectCiSecretsRoutes(app: Hono<{ Variables: Variables 
     const userId = c.get('userId') as string
     const db = getServiceClient()
 
-    const access = await userCanAccessProject(db, userId, projectId)
+    const access = await callerCanAccessProject(c, db, userId, projectId)
     if (!access.allowed) {
       return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404)
     }
@@ -367,26 +285,9 @@ export function registerProjectCiSecretsRoutes(app: Hono<{ Variables: Variables 
       .eq('is_active', true)
       .order('last_seen_at', { ascending: false, nullsFirst: false })
 
-    const keyRows = (keys ?? []) as Array<{
-      last_seen_at: string | null
-      last_seen_origin: string | null
-      last_seen_user_agent: string | null
-    }>
-
-    const lastSeenAt = keyRows.find((r) => r.last_seen_at)?.last_seen_at ?? null
-
-    const nativePatterns = [
-      /^capacitor:/i,
-      /okhttp/i,
-      /cfnetwork/i,
-      /darwin.*like.*mac/i, // iOS sim
-      /testflight/i,
-    ]
-    const nativeEverSeen = keyRows.some((r) => {
-      const origin = r.last_seen_origin ?? ''
-      const ua = r.last_seen_user_agent ?? ''
-      return nativePatterns.some((re) => re.test(origin) || re.test(ua))
-    })
+    const keyRows = (keys ?? []) as KeyHeartbeat[]
+    const lastSeenAt = lastHeartbeatAt(keyRows)
+    const nativeEverSeen = anyNativeHeartbeat(keyRows)
 
     // 3. GitHub CI-secret presence check.
     const { data: repoRow } = await db
@@ -416,9 +317,7 @@ export function registerProjectCiSecretsRoutes(app: Hono<{ Variables: Variables 
             listRepoVariableNames(repoRef.owner, repoRef.repo, token),
           ])
           presentVars = [...secretNames, ...varNames]
-          missingVars = required
-            .filter((v) => !presentVars!.includes(v.name))
-            .map((v) => v.name)
+          missingVars = missingCiVars(required, presentVars)
         }
       } catch {
         // Token resolution or GitHub call failed — fall through to telemetry-only.
@@ -426,32 +325,13 @@ export function registerProjectCiSecretsRoutes(app: Hono<{ Variables: Variables 
     }
 
     // 4. Compute status verdict.
-    let status: SdkDiagnosticsResult['status'] = 'unknown'
-    let recommendedFix = ''
-
-    if (!bannerEnabled || launcherMode === 'hidden' || launcherMode === 'manual') {
-      status = 'banner-disabled'
-      recommendedFix = 'Enable the banner in SDK Config → Launcher mode → Banner.'
-    } else if (missingVars && missingVars.length > 0) {
-      status = 'ci-secret-missing'
-      recommendedFix =
-        `The CI secrets/variables ${missingVars.join(', ')} are missing on the repo. ` +
-        'Click "Sync CI secrets" to write them automatically, or copy the commands below.'
-    } else if (!nativeEverSeen && lastSeenAt) {
-      status = 'native-never-seen'
-      recommendedFix =
-        'The SDK has been seen from web/server origins but never from a native Capacitor ' +
-        'build. Ensure the Mushi env vars are in the native build and that you have ' +
-        'installed the app from the store after the last CI build.'
-    } else if (missingVars !== null && missingVars.length === 0 && (nativeEverSeen || lastSeenAt)) {
-      status = 'healthy'
-      recommendedFix = 'All CI secrets present and SDK has reported from expected origins.'
-    } else if (!lastSeenAt) {
-      status = 'ci-secret-missing'
-      recommendedFix =
-        'SDK has never sent a heartbeat. Check that the Mushi env vars are set and the ' +
-        'build:native step includes them.'
-    }
+    const { status, recommendedFix } = sdkDiagnosticVerdict({
+      bannerEnabled,
+      launcherMode,
+      missingVars,
+      nativeEverSeen,
+      lastSeenAt,
+    })
 
     const result: SdkDiagnosticsResult = {
       status,
@@ -480,7 +360,7 @@ export function registerProjectCiSecretsRoutes(app: Hono<{ Variables: Variables 
     const db = getServiceClient()
 
     // Owner or admin only — minting keys + writing secrets is privileged.
-    const access = await userCanAccessProject(db, userId, projectId)
+    const access = await callerCanAccessProject(c, db, userId, projectId)
     if (!access.allowed) {
       return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404)
     }
@@ -521,9 +401,10 @@ export function registerProjectCiSecretsRoutes(app: Hono<{ Variables: Variables 
     const installationId = (repoRow as { github_app_installation_id?: number | null } | null)
       ?.github_app_installation_id ?? null
 
-    // 3. Mint a project-scoped report:write key (deactivates prior ci-auto keys).
+    // 3. Mint a project-scoped report:write key. Older ci-auto keys stay
+    //    active until GitHub accepts this one (step 8).
     const repoSlug = repoRef ? `${repoRef.owner}/${repoRef.repo}` : (slug ?? projectId)
-    const { rawKey, prefix } = await mintCiApiKey(db, projectId, repoSlug)
+    const { rawKey, prefix, id: newKeyId } = await mintCiApiKey(db, projectId, repoSlug)
 
     // 4. Build the vars list.
     const ciVars = buildCiVars({
@@ -602,7 +483,18 @@ export function registerProjectCiSecretsRoutes(app: Hono<{ Variables: Variables 
       }
     }
 
-    // 8. Log audit (never log the raw key value — only prefix).
+    // 8. Revoke the older CI keys only now, and only if GitHub took the
+    //    secret that carries the new key (QA #30).
+    const apiKeyVar = ciVars.find((v) => v.ghKind === 'secret')?.name ?? ''
+    let priorKeysRevoked: string[] | null = []
+    let revokeError: string | null = null
+    if (mayRevokePriorCiKeys(written, apiKeyVar)) {
+      const revoked = await revokePriorCiKeys(db, projectId, newKeyId)
+      priorKeysRevoked = revoked.error ? null : revoked.prefixes
+      revokeError = revoked.error
+    }
+
+    // 9. Log audit (never log the raw key value — only prefix).
     await logAudit(
       db,
       projectId,
@@ -610,10 +502,16 @@ export function registerProjectCiSecretsRoutes(app: Hono<{ Variables: Variables 
       'settings.updated',
       'ci_secrets',
       projectId,
-      { written, failed: failed.map((f) => f.name), keyPrefix: prefix },
+      {
+        written,
+        failed: failed.map((f) => f.name),
+        keyPrefix: prefix,
+        revokedPrefixes: priorKeysRevoked ?? [],
+        revokeError,
+      },
     ).catch(() => {})
 
-    // 9. Build guided fallback (always included so the UI can show the raw key
+    // 10. Build guided fallback (always included so the UI can show the raw key
     //    to the user regardless of write success — the user needs it for manual setup).
     const fallback = buildGuidedFallback({
       owner: repoRef.owner,
@@ -635,7 +533,7 @@ export function registerProjectCiSecretsRoutes(app: Hono<{ Variables: Variables 
             'or store a fine-grained PAT with those permissions in project settings. ' +
             'Use the guided fallback commands below to set secrets manually.',
         },
-        data: { minted: { prefix, rawKey }, written, failed, fallback },
+        data: { minted: { prefix, rawKey }, written, failed, fallback, priorKeysRevoked: [] },
       }, 200) // 200 so the UI can render the key + copy commands
     }
 
@@ -646,6 +544,8 @@ export function registerProjectCiSecretsRoutes(app: Hono<{ Variables: Variables 
         written,
         failed,
         fallback,
+        priorKeysRevoked,
+        revokeError,
       },
     })
   })

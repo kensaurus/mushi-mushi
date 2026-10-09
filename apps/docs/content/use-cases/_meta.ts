@@ -4,4 +4,5 @@ export default {
   'debug-claude-code-apps': 'Debug Claude Code apps',
   'ai-code-bug-fixing': 'AI code bug fixing',
   'mcp-bug-fixing-server': 'MCP bug-fixing server',
+  'lovable-app-broke-in-production': 'Lovable app broke in production',
 }

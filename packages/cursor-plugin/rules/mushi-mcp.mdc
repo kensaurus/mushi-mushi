@@ -9,7 +9,7 @@ alwaysApply: true
 ## Scope discipline
 
 - Always start with **read-only** tools: `list_projects`, `get_recent_reports`, `get_report_detail`, `get_report_evidence`, `get_project_context`, `triage_issue`.
-- **Never call write tools** (`dispatch_fix`, `close_report`, `reopen_report`, `set_report_status`, `reply_to_reporter`, `dispatch_test_run`, `start_skill_pipeline`, `add_byok_key`, `award_bonus_points`, `set_tier`) without explicit user confirmation in the same turn.
+- **Never call write tools** (`dispatch_fix`, `transition_status`, `merge_fix`, `reopen_report`, `reply_to_reporter`, `test_gen_from_report`, `run_qa_story`, `start_skill_pipeline`, `add_byok_key`, `award_bonus_points`, `set_tier`) without explicit user confirmation in the same turn.
 - `dispatch_fix` must always use `autoReadyPr: false` by default so the PR stays a draft. Only set `autoReadyPr: true` if the user explicitly requests it.
 
 ## Credential safety

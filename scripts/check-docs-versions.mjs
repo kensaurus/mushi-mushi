@@ -22,9 +22,22 @@
  * install instruction and fails here.
  */
 
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs"
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+
+/**
+ * `--write` repairs the ONE claim here that mechanically follows a version
+ * bump: AGENTS.md's "current: **x.y.z**" SDK line. `changeset version` moves
+ * core/web, nothing moved that line, and the release PR failed this check
+ * every time a minor landed — the same shape as server.json before
+ * `sync:server-json`. Run from `version-packages`.
+ *
+ * Deliberately NOT applied to the docs install snippets: those pins are
+ * authored examples, and rewriting them automatically would paper over a
+ * genuinely broken install instruction instead of reporting it.
+ */
+const WRITE = process.argv.includes("--write")
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, "..")
@@ -172,9 +185,22 @@ for (const file of files) {
         majorMinor(claimed) !== majorMinor(coreVer) &&
         majorMinor(claimed) !== majorMinor(webVer)
       ) {
-        findings.push(
-          `AGENTS.md: current SDK claim ${claimed} matches neither core@${coreVer} nor web@${webVer}`
-        )
+        if (WRITE) {
+          // Replace only the captured version inside the canon sentence, so
+          // the surrounding "Introduced in" text and formatting are untouched.
+          const updated = agents.replace(m[0], m[0].replace(claimed, coreVer))
+          if (updated === agents) {
+            findings.push(`AGENTS.md: could not rewrite the current SDK claim ${claimed}`)
+          } else {
+            writeFileSync(agentsPath, updated, "utf8")
+            console.log(`✓  AGENTS.md: current SDK claim ${claimed} → ${coreVer}`)
+          }
+        } else {
+          findings.push(
+            `AGENTS.md: current SDK claim ${claimed} matches neither core@${coreVer} nor web@${webVer}` +
+              ` — run \`pnpm sync:docs-versions\``
+          )
+        }
       }
     }
   }

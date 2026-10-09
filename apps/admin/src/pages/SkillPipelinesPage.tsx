@@ -4,11 +4,11 @@
  *          live pipeline flow visualiser (React Flow).
  *
  * TABS:
- *   Catalog   — browse all 73+ skills from cursor-kenji, grouped by category.
+ *   Catalog   — browse all 73+ skills from kenji skills, grouped by category.
  *               Clicking a skill opens a detail drawer with the full SKILL.md.
  *   Pipelines — list of all pipeline runs for the project with status chips.
  *               Clicking a run opens the live React Flow pipeline visualiser.
- *   Sources   — manage skill source repos (add kensaurus/cursor-kenji or any
+ *   Sources   — manage skill source repos (add kensaurus/skills or any
  *               skills.sh-compatible repo; trigger manual sync).
  *
  * REALTIME:
@@ -35,7 +35,7 @@ import { usePageData } from '../lib/usePageData'
 import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { useToast } from '../lib/toast'
 import { apiFetch } from '../lib/supabase'
-import { Card, SurfacePanel, HelpBanner, SegmentedControl, FreshnessPill, Btn } from '../components/ui'
+import { Card, SurfacePanel, HelpBanner, SegmentedControl, FreshnessPill, Btn, FilterChip } from '../components/ui'
 import { LINK_ACCENT } from '../lib/chipTone'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
@@ -43,6 +43,7 @@ import { shouldHideGuideWhenBannerActive, COMMON_HEALTHY_PRIORITIES } from '../l
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { Drawer } from '../components/Drawer'
 import { useSkillsUx, resolveQuickSkillsTab } from '../lib/skillsModeUx'
+import { useQuickstartLandingTab } from '../lib/useQuickstartTab'
 import { useRealtime } from '../lib/realtime'
 import { SkillStepNode } from '../components/skill-pipeline/SkillStepNode'
 import { PdcaGradientEdge } from '../components/pdca-flow/PdcaGradientEdge'
@@ -65,6 +66,17 @@ import {
   EMPTY_SKILLS_STATS,
   type SkillsStats,
 } from '../components/skills/SkillsStatsTypes'
+import { ConfirmDialog } from '../components/ConfirmDialog'
+import { PageLoadError } from '../components/PageLoadError'
+import {
+  describePipelineCancel,
+  nextCheckinStep,
+  parseReportIdInput,
+  pipelineCancelBody,
+  resolveSkillsTab,
+  type PipelineCancelResult,
+  type SkillsTab,
+} from '../lib/skillPipelines'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -111,7 +123,7 @@ interface PipelineRun {
   steps?: PipelineStep[]
 }
 
-type Tab = 'catalog' | 'pipelines' | 'sources'
+type Tab = SkillsTab
 
 const TAB_META: Record<Tab, { label: string; Icon: typeof IconSkills }> = {
   catalog: { label: 'Skill Catalog', Icon: IconSkills },
@@ -123,15 +135,32 @@ const NODE_TYPES = { skillStep: SkillStepNode }
 const EDGE_TYPES = { pdcaGradient: PdcaGradientEdge }
 
 const CATEGORY_ORDER = [
-  'workflow', 'debug', 'test', 'audit', 'enhance', 'backend',
+  'workflow', 'debug', 'test', 'audit', 'enhance', 'iterate', 'backend',
   'design', 'deploy', 'data', 'mobile', 'docs', 'mushi', 'meta', 'protocol', 'other',
 ]
+
+/** Cards shown per category before "Show all N". */
+const CATEGORY_PREVIEW_COUNT = 6
+const DEFAULT_OPEN_CATEGORIES = ['workflow', 'debug', 'test']
+
+/** Workflows, Debug and Test start open; if none exist, the first category does. */
+function defaultOpenCategories(present: string[]): Set<string> {
+  const open = present.filter((c) => DEFAULT_OPEN_CATEGORIES.includes(c))
+  return new Set(open.length > 0 ? open : present.slice(0, 1))
+}
+
+/** Synced titles often equal the slug; show the slug only when it adds something. */
+function slugDiffersFromTitle(skill: { slug: string; title: string }): boolean {
+  return skill.slug.trim().toLowerCase() !== skill.title.trim().toLowerCase()
+}
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export function SkillPipelinesPage() {
   const [searchParams, setSearchParams] = useSearchParams()
-  const tab = (searchParams.get('tab') as Tab | null) ?? 'catalog'
+  // Unknown `?tab=` values fall back to the catalog instead of indexing
+  // TAB_META with `undefined` and crashing the page.
+  const tab = resolveSkillsTab(searchParams.get('tab'))
   const projectId = useActiveProjectId()
   const ux = useSkillsUx()
   const { push } = useToast()
@@ -163,18 +192,22 @@ export function SkillPipelinesPage() {
   usePublishPageHeroStats('/skills', skillsStatsData)
   const skillsStats = skillsStatsData ?? EMPTY_SKILLS_STATS
 
-  useEffect(() => {
-    if (!ux.isQuickstart || !projectId || statsValidating) return
-    const quickTab = resolveQuickSkillsTab(skillsStats)
-    if (tab !== quickTab) setTab(quickTab)
-  }, [ux.isQuickstart, projectId, statsValidating, skillsStats, tab, setTab])
+  // Quick mode opens the posture tab once; links and clicks then win.
+  useQuickstartLandingTab({
+    enabled: ux.isQuickstart && Boolean(projectId),
+    ready: !statsValidating,
+    tabParam: searchParams.get('tab'),
+    activeTab: tab,
+    quickTab: resolveQuickSkillsTab(skillsStats),
+    setActiveTab: setTab,
+  })
 
   usePublishPageContext({
     route: '/skills',
     title: TAB_META[tab].label,
     summary:
       tab === 'catalog'
-        ? 'Browse cursor-kenji agent skills by category'
+        ? 'Browse agent skills from kenji skills by category'
         : tab === 'pipelines'
           ? 'Track handoff and cloud pipeline runs'
           : 'Sync SKILL.md repos into the catalog',
@@ -205,7 +238,7 @@ export function SkillPipelinesPage() {
       {
         id: 'open-sources',
         label: 'Manage skill sources',
-        hint: 'Add or sync GitHub repos like kensaurus/cursor-kenji',
+        hint: 'Add or sync GitHub repos like kensaurus/skills',
         run: () => setTab('sources'),
       },
     ],
@@ -214,14 +247,14 @@ export function SkillPipelinesPage() {
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-skills">
       <PageHeaderBar
-        title="Skill Pipelines"
+        title="Agent skills"
 
-        helpTitle="About Skill Pipelines"
-        helpWhatIsIt="Browse the cursor-kenji skill catalog, attach skills to bug reports, and run handoff or cloud pipeline steps with live status."
+        helpTitle="About agent skills"
+        helpWhatIsIt="Browse the kenji skills catalog, attach skills to bug reports, and run handoff or cloud pipeline steps with live status."
         helpUseCases={[
           'Run audit-uiux-design-system or other skills against a report',
           'Track pipeline step runs in real time via React Flow',
-          'Sync skill sources from GitHub repos like kensaurus/cursor-kenji',
+          'Sync skill sources from GitHub repos like kensaurus/skills',
         ]}
         helpHowToUse="Pick Catalog to browse skills, Pipelines to watch runs, or Sources to sync repos. Start a handoff run from a skill card with a report ID."
       >
@@ -247,7 +280,7 @@ export function SkillPipelinesPage() {
                 stats={skillsStats}
                 statsFetchedAt={statsFetchedAt}
                 statsValidating={statsValidating}
-                hint="Catalog size, active pipeline runs, and sync posture for cursor-kenji skills."
+                hint="Catalog size, active pipeline runs, and sync posture for kenji skills."
               />
             ),
           },
@@ -281,7 +314,7 @@ export function SkillPipelinesPage() {
         <Card className="p-6 border-dashed border-edge">
           <h2 className="text-sm font-semibold text-fg">Pick a project first</h2>
           <p className="mt-1 text-xs text-fg-muted">
-            Skill pipelines attach cursor-kenji workflows to bug reports. Select a project in the header, then sync skill sources or start a handoff run.
+            Skill pipelines attach kenji skills workflows to bug reports. Select a project in the header, then sync skill sources or start a handoff run.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             <Link to="/onboarding" className="text-xs text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">Open setup cockpit</Link>
@@ -306,7 +339,7 @@ export function SkillPipelinesPage() {
               addToast={addToast}
               initialRunId={pipelineRunId}
               onOpenSkill={(slug) => setTab('catalog', { skill: slug })}
-              onGoToCatalog={() => setTab('catalog', { skill: 'audit-uiux-design-system' })}
+              onGoToCatalog={() => setTab('catalog', { skill: 'workflow-fix-and-ship' })}
             />
           )}
           {tab === 'sources' && (
@@ -354,6 +387,8 @@ function SkillDetailPanel({
   embedded?: boolean
 }) {
   const meta = getSkillCategoryMeta(selected.category)
+  const reportIdCheck = parseReportIdInput(reportId)
+  const reportIdHelpId = embedded ? 'skill-report-id-drawer-help' : 'skill-report-id-help'
   const body = (
     <>
       <div className="flex items-start gap-2.5">
@@ -363,7 +398,9 @@ function SkillDetailPanel({
         <div className="min-w-0 flex-1">
           <p className="text-2xs font-medium text-fg-muted">{meta.label}</p>
           <h2 className="text-sm font-bold text-fg">{selected.title}</h2>
-          <p className="text-2xs font-mono text-fg-muted">{selected.slug}</p>
+          {slugDiffersFromTitle(selected) ? (
+            <p className="text-2xs font-mono text-fg-muted">{selected.slug}</p>
+          ) : null}
         </div>
         {!embedded ? (
           <Btn
@@ -415,11 +452,16 @@ function SkillDetailPanel({
           <input
             id={embedded ? 'skill-report-id-drawer' : 'skill-report-id'}
             type="text"
-            placeholder="Paste report ID from a report URL, e.g. abc123de"
+            placeholder="Paste the report link or its full ID"
             value={reportId}
             onChange={(e) => setReportId(e.target.value)}
+            aria-invalid={reportIdCheck.kind === 'invalid'}
+            aria-describedby={reportIdCheck.kind === 'invalid' ? reportIdHelpId : undefined}
             className="input text-xs"
           />
+          {reportIdCheck.kind === 'invalid' ? (
+            <p id={reportIdHelpId} className="text-2xs text-danger">{reportIdCheck.message}</p>
+          ) : null}
         </div>
         <div className="space-y-1">
           <label className="text-2xs text-fg-muted" htmlFor={embedded ? 'skill-mode-drawer' : 'skill-mode'}>Mode</label>
@@ -439,13 +481,13 @@ function SkillDetailPanel({
         {mode === 'cloud' && cloudReadiness && !cloudReadiness.cloudReady ? (
           <HelpBanner tone="neutral" className="rounded-lg">
             Cloud mode needs a Cursor API key and GitHub repo URL.{' '}
-            <Link to="/integrations/config#cursor_cloud" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
+            <Link to="/integrations/config#platform-card-cursor_cloud" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
               Open Integrations → Cursor Cloud
             </Link>
             {!cloudReadiness.githubRepoConfigured ? (
               <>
                 {' '}and{' '}
-                <Link to="/integrations/config#github" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
+                <Link to="/integrations/config#platform-card-github" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
                   GitHub repo
                 </Link>
               </>
@@ -460,6 +502,7 @@ function SkillDetailPanel({
           disabled={
             startingSlug === selected.slug ||
             !projectId ||
+            reportIdCheck.kind === 'invalid' ||
             (mode === 'cloud' && !cloudReadiness?.cloudReady)
           }
         >
@@ -524,7 +567,7 @@ function CatalogTab({
     return `/v1/admin/skills?${qs}`
   })()
 
-  const { data, loading, error } = usePageData<{
+  const { data, loading, error, reload, isValidating } = usePageData<{
     data: AgentSkill[]
     grouped: Record<string, AgentSkill[]>
     total: number
@@ -536,6 +579,14 @@ function CatalogTab({
 
   const orderedCategories = CATEGORY_ORDER.filter((c) => grouped[c]?.length)
   const otherCategories = Object.keys(grouped).filter((c) => !CATEGORY_ORDER.includes(c) && grouped[c]?.length)
+  const allCategories = [...orderedCategories, ...otherCategories]
+
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null)
+  const [openOverrides, setOpenOverrides] = useState<Record<string, boolean>>({})
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(() => new Set())
+  const activeCategory = categoryFilter && allCategories.includes(categoryFilter) ? categoryFilter : null
+  const visibleCategories = activeCategory ? [activeCategory] : allCategories
+  const defaultOpen = defaultOpenCategories(allCategories)
 
   const isLgUp = useMediaMin(1024)
 
@@ -574,11 +625,21 @@ function CatalogTab({
       return
     }
     if (startingSlug) return
+    const parsedReport = parseReportIdInput(reportId)
+    if (parsedReport.kind === 'invalid') {
+      addToast({ type: 'error', message: parsedReport.message })
+      return
+    }
     setStartingSlug(slug)
     try {
       const res = await apiFetch(`/v1/admin/skills/pipelines`, {
         method: 'POST',
-        body: JSON.stringify({ project_id: projectId, root_skill_slug: slug, report_id: reportId || null, mode }),
+        body: JSON.stringify({
+          project_id: projectId,
+          root_skill_slug: slug,
+          report_id: parsedReport.kind === 'ok' ? parsedReport.id : null,
+          mode,
+        }),
       })
       if (!res.ok) {
         addToast({ type: 'error', message: res.error?.message ?? "Couldn't start the pipeline — try again" })
@@ -605,76 +666,154 @@ function CatalogTab({
   }, [projectId, reportId, mode, addToast, startingSlug, onPipelineStarted])
 
   const searchPending = searchInput.trim() !== debouncedSearch
+  const searching = searchPending || isValidating
 
-  if (loading || searchPending) return <SkeletonRows count={8} />
-  if (error) return <ErrorState message={error} />
-  if (skills.length === 0) {
-    return debouncedSearch
-      ? <EmptySearchResults query={debouncedSearch} onClear={() => setSearchInput('')} />
-      : <EmptySkills onGoToSources={onGoToSources} />
-  }
+  // The search box stays mounted through every state below — a skeleton or
+  // empty state that replaced it dropped focus on each keystroke and left a
+  // no-match query with nothing to edit (console QA 22).
+  const searchBar = (
+    <div className="flex gap-2 items-center">
+      <input
+        type="search"
+        placeholder="Search by name, slug, or category…"
+        value={searchInput}
+        onChange={(e) => setSearchInput(e.target.value)}
+        className="input flex-1 max-w-sm"
+        aria-label="Search skills"
+      />
+      <span className="text-xs text-fg-muted" aria-live="polite">
+        {searching
+          ? 'Searching…'
+          : !data
+            ? null
+            : skills.length === catalogTotal
+            ? `${catalogTotal} skills`
+            : `${skills.length} of ${catalogTotal} skills`}
+      </span>
+    </div>
+  )
+
+  // A new query is a new URL, so usePageData drops the old rows while it
+  // loads: show the skeleton under the search box, never instead of it.
+  const listState: 'loading' | 'error' | 'empty' | 'no-match' | 'list' =
+    loading && !data
+      ? 'loading'
+      : error && !data
+        ? 'error'
+        : skills.length === 0
+          ? debouncedSearch
+            ? 'no-match'
+            : 'empty'
+          : 'list'
 
   return (
     <div className="flex flex-col lg:flex-row gap-4 min-w-0">
       {/* Skill list */}
       <div className="flex-1 flex flex-col gap-4 min-w-0">
-        <div className="flex gap-2 items-center">
-          <input
-            type="search"
-            placeholder="Search by name, slug, or category…"
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            className="input flex-1 max-w-sm"
-            aria-label="Search skills"
-          />
-          <span className="text-xs text-fg-muted">
-            {skills.length === catalogTotal
-              ? `${catalogTotal} skills`
-              : `${skills.length} of ${catalogTotal} skills`}
-          </span>
-        </div>
+        {searchBar}
 
-        {[...orderedCategories, ...otherCategories].map((cat) => {
+        {listState === 'loading' ? <SkeletonRows count={8} /> : null}
+        {listState === 'error' ? (
+          <PageLoadError error={error} resource="the skill catalog" onRetry={reload} />
+        ) : null}
+        {listState === 'empty' ? <EmptySkills onGoToSources={onGoToSources} /> : null}
+        {listState === 'no-match' ? (
+          <EmptySearchResults query={debouncedSearch} onClear={() => setSearchInput('')} />
+        ) : null}
+
+        {listState === 'list' && allCategories.length > 1 ? (
+          <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter skills by category">
+            <FilterChip
+              label="All"
+              count={skills.length}
+              active={activeCategory === null}
+              onClick={() => setCategoryFilter(null)}
+            />
+            {allCategories.map((cat) => (
+              <FilterChip
+                key={cat}
+                label={getSkillCategoryMeta(cat).label}
+                count={grouped[cat]?.length ?? 0}
+                active={activeCategory === cat}
+                onClick={() => setCategoryFilter(activeCategory === cat ? null : cat)}
+              />
+            ))}
+          </div>
+        ) : null}
+
+        {listState === 'list' && visibleCategories.map((cat) => {
           const meta = getSkillCategoryMeta(cat)
           const catSkills = grouped[cat] ?? []
+          // Searching or picking one category opens it; otherwise the user's
+          // toggle wins over the default (Workflows, Debug, Test).
+          const open = Boolean(debouncedSearch) || activeCategory === cat || (openOverrides[cat] ?? defaultOpen.has(cat))
+          const showAll = Boolean(debouncedSearch) || expandedCategories.has(cat)
+          const shown = showAll ? catSkills : catSkills.slice(0, CATEGORY_PREVIEW_COUNT)
           return (
             <section
               key={cat}
               // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
               className={`rounded-lg border border-edge-subtle bg-surface-raised p-3 shadow-card border-l-[3px] ${meta.accentClass}`}
             >
-              <SkillCategoryHeader meta={meta} count={catSkills.length} />
-              <div className={`grid grid-cols-1 sm:grid-cols-2 gap-2 ${selected ? 'xl:grid-cols-2' : 'lg:grid-cols-3'}`}>
-                {catSkills.map((skill) => (
-                  <Btn
-                    key={skill.slug}
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => selectSkill(skill)}
-                    className={[
-                      '!justify-start !items-start !text-left !p-3 !rounded-lg !w-full !h-auto transition-opacity',
-                      selected?.slug === skill.slug
-                        ? '!border-brand !bg-surface-raised ring-1 ring-brand/30'
-                        : '!border-edge-subtle !bg-surface-raised hover:!border-brand/40 hover:!bg-surface-overlay',
-                    ].join(' ')}
-                  >
-                    <div className="flex items-start gap-2">
-                      <span className={`mt-0.5 flex-shrink-0 flex items-center justify-center w-6 h-6 rounded-md ${meta.badgeClass}`}>
-                        <meta.Icon size={12} />
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-semibold text-fg line-clamp-1">{skill.title}</p>
-                        <p className="text-2xs text-fg-muted font-mono mt-0.5">{skill.slug}</p>
-                        <p className="text-2xs text-fg-muted mt-1 line-clamp-2">{skill.description}</p>
-                        {skill.chain_slugs?.length > 0 && (
-                          <p className="text-2xs text-brand mt-1">Chain: {skill.chain_slugs.length} steps</p>
-                        )}
-                      </div>
-                    </div>
-                  </Btn>
-                ))}
-              </div>
+              <h3>
+                <button
+                  type="button"
+                  aria-expanded={open}
+                  onClick={() => setOpenOverrides((prev) => ({ ...prev, [cat]: !open }))}
+                  className="flex w-full items-center justify-between gap-2 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                >
+                  <SkillCategoryHeader meta={meta} count={catSkills.length} />
+                  <span className="shrink-0 text-2xs font-normal text-fg-muted">{open ? 'Hide' : 'Show'}</span>
+                </button>
+              </h3>
+              {open ? (
+                <>
+                  <div className={`mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2 ${selected ? 'xl:grid-cols-2' : 'lg:grid-cols-3'}`}>
+                    {shown.map((skill) => (
+                      <Btn
+                        key={skill.slug}
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => selectSkill(skill)}
+                        className={[
+                          '!justify-start !items-start !text-left !p-3 !rounded-lg !w-full !h-auto transition-opacity',
+                          selected?.slug === skill.slug
+                            ? '!border-brand !bg-surface-raised ring-1 ring-brand/30'
+                            : '!border-edge-subtle !bg-surface-raised hover:!border-brand/40 hover:!bg-surface-overlay',
+                        ].join(' ')}
+                      >
+                        <div className="flex items-start gap-2">
+                          <span className={`mt-0.5 flex-shrink-0 flex items-center justify-center w-6 h-6 rounded-md ${meta.badgeClass}`}>
+                            <meta.Icon size={12} />
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-semibold text-fg line-clamp-1">{skill.title}</p>
+                            {slugDiffersFromTitle(skill) ? (
+                              <p className="text-2xs text-fg-muted font-mono mt-0.5">{skill.slug}</p>
+                            ) : null}
+                            <p className="text-2xs text-fg-muted mt-1 line-clamp-2">{skill.description}</p>
+                            {skill.chain_slugs?.length > 0 && (
+                              <p className="text-2xs text-fg-muted mt-1">Chain: {skill.chain_slugs.length} steps</p>
+                            )}
+                          </div>
+                        </div>
+                      </Btn>
+                    ))}
+                  </div>
+                  {catSkills.length > shown.length ? (
+                    <Btn
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="mt-2"
+                      onClick={() => setExpandedCategories((prev) => new Set(prev).add(cat))}
+                    >
+                      Show all {catSkills.length}
+                    </Btn>
+                  ) : null}
+                </>
+              ) : null}
             </section>
           )
         })}
@@ -801,23 +940,70 @@ function PipelinesTab({
     }
   }, [initialRunId, loading, runs, loadRunDetail])
 
+  const refetchSelected = useCallback(async (runId: string) => {
+    const res = await apiFetch<PipelineRun>(`/v1/admin/skills/pipelines/${runId}`)
+    if (res.ok && res.data) setSelectedRun((cur) => (cur?.id === runId ? res.data! : cur))
+  }, [])
+
+  // Cancel is irreversible and, for cloud runs, reaches out to Cursor Cloud,
+  // so it goes through a confirm dialog (console QA 24).
+  const [cancelTarget, setCancelTarget] = useState<PipelineRun | null>(null)
+
   const abortRun = useCallback(async (runId: string) => {
     setAbortingId(runId)
     try {
-      const res = await apiFetch(`/v1/admin/skills/pipelines/${runId}`, { method: 'DELETE' })
+      const res = await apiFetch<PipelineCancelResult>(`/v1/admin/skills/pipelines/${runId}`, { method: 'DELETE' })
       if (!res.ok) {
         addToast({ type: 'error', message: res.error?.message ?? "Couldn't cancel this pipeline — try again" })
         return
       }
-      addToast({ type: 'success', message: 'Pipeline cancelled' })
-      if (selectedRun?.id === runId) setSelectedRun(null)
+      const outcome = describePipelineCancel(res.data)
+      addToast({ type: outcome.tone, message: outcome.message })
       reload()
+      await refetchSelected(runId)
     } catch (err) {
       addToast({ type: 'error', message: String(err) })
     } finally {
       setAbortingId(null)
+      setCancelTarget(null)
     }
-  }, [addToast, selectedRun, reload])
+  }, [addToast, reload, refetchSelected])
+
+  const requestCancel = useCallback(
+    (runId: string) => {
+      const run = runs.find((r) => r.id === runId) ?? (selectedRun?.id === runId ? selectedRun : null)
+      if (run) setCancelTarget(run)
+    },
+    [runs, selectedRun],
+  )
+
+  // Manual check-in for the current step (console QA 105). Handoff runs
+  // have no agent to report back, so the console needs its own control.
+  const [checkingIn, setCheckingIn] = useState(false)
+  const checkinStep = useCallback(
+    async (runId: string, stepIndex: number, status: 'passed' | 'failed' | 'skipped') => {
+      setCheckingIn(true)
+      try {
+        const res = await apiFetch(`/v1/admin/skills/pipelines/${runId}/steps/${stepIndex}/checkin`, {
+          method: 'POST',
+          body: JSON.stringify({ status, notes: 'Checked in from the console.' }),
+        })
+        if (!res.ok) {
+          addToast({ type: 'error', message: res.error?.message ?? "Couldn't update this step — try again" })
+          return
+        }
+        addToast({
+          type: 'success',
+          message: `Step ${stepIndex + 1} marked ${status}.`,
+        })
+        reload()
+        await refetchSelected(runId)
+      } finally {
+        setCheckingIn(false)
+      }
+    },
+    [addToast, reload, refetchSelected],
+  )
 
   // Also realtime-reload the selected run detail
   useRealtime(
@@ -834,10 +1020,24 @@ function PipelinesTab({
   )
 
   if (loading) return <SkeletonRows count={5} />
-  if (error) return <ErrorState message={error} />
+  if (error) return <PageLoadError error={error} resource="pipeline runs" onRetry={reload} />
 
   return (
     <div className="flex flex-col lg:flex-row gap-4 min-w-0">
+      {cancelTarget ? (
+        <ConfirmDialog
+          title={`Cancel the ${cancelTarget.root_skill_slug} pipeline?`}
+          body={pipelineCancelBody(cancelTarget.mode)}
+          confirmLabel="Cancel pipeline"
+          cancelLabel="Keep running"
+          tone="danger"
+          loading={abortingId === cancelTarget.id}
+          onConfirm={() => abortRun(cancelTarget.id)}
+          onCancel={() => {
+            if (abortingId !== cancelTarget.id) setCancelTarget(null)
+          }}
+        />
+      ) : null}
       {/* Run list */}
       <div className="flex-1 flex flex-col gap-2 min-w-0">
         {runs.length > 0 && (
@@ -861,9 +1061,7 @@ function PipelinesTab({
               <Btn type="button" variant="primary" size="sm" onClick={onGoToCatalog}>
                 Browse Catalog →
               </Btn>
-              <Link to="/reports">
-                <Btn size="sm" variant="ghost">Open Reports</Btn>
-              </Link>
+              <Btn to="/reports" size="sm" variant="ghost">Open Reports</Btn>
             </div>
           </div>
         ) : (
@@ -908,7 +1106,7 @@ function PipelinesTab({
                     type="button"
                     variant="ghost"
                     size="sm"
-                    onClick={() => abortRun(run.id)}
+                    onClick={() => requestCancel(run.id)}
                     disabled={abortingId === run.id}
                     className="text-fg-muted hover:text-danger"
                     title="Cancel pipeline run"
@@ -929,8 +1127,10 @@ function PipelinesTab({
           skillTitleMap={skillTitleMap}
           onClose={() => setSelectedRun(null)}
           onOpenSkill={onOpenSkill}
-          onAbort={abortRun}
+          onAbort={requestCancel}
           aborting={abortingId === selectedRun.id}
+          onCheckin={checkinStep}
+          checkingIn={checkingIn}
           addToast={addToast}
         />
       ) : null}
@@ -950,8 +1150,10 @@ function PipelinesTab({
               skillTitleMap={skillTitleMap}
               onClose={() => setSelectedRun(null)}
               onOpenSkill={onOpenSkill}
-              onAbort={abortRun}
+              onAbort={requestCancel}
               aborting={abortingId === selectedRun.id}
+              onCheckin={checkinStep}
+              checkingIn={checkingIn}
               addToast={addToast}
               embedded
             />
@@ -969,6 +1171,8 @@ function RunDetail({
   onOpenSkill,
   onAbort,
   aborting,
+  onCheckin,
+  checkingIn,
   addToast,
   embedded = false,
 }: {
@@ -978,10 +1182,14 @@ function RunDetail({
   onOpenSkill: (slug: string) => void
   onAbort: (runId: string) => void
   aborting: boolean
+  onCheckin: (runId: string, stepIndex: number, status: 'passed' | 'failed' | 'skipped') => void
+  checkingIn: boolean
   addToast: (t: { type: string; message: string }) => void
   embedded?: boolean
 }) {
   const steps: PipelineStep[] = run.steps ?? run.skill_pipeline_step_runs ?? []
+  const runOpen = ['pending', 'running'].includes(run.status)
+  const checkinTarget = runOpen ? nextCheckinStep(steps) : null
 
   // Memoised so the title lookup is stable until the run or catalog changes;
   // included in the flow effect deps so nodes re-label once the catalog loads.
@@ -1122,6 +1330,50 @@ function RunDetail({
         ) : null}
       </div>
 
+      {checkinTarget ? (
+        <div className="border-t border-edge-subtle px-4 py-3 flex flex-col gap-2" data-testid="pipeline-step-checkin">
+          <p className="text-xs text-fg">
+            Step {checkinTarget.step_index + 1}:{' '}
+            <span className="font-semibold">
+              {skillTitleMap.get(checkinTarget.skill_slug) ?? checkinTarget.skill_slug}
+            </span>{' '}
+            {run.mode === 'cloud'
+              ? 'is with the Cursor Cloud agent. It checks in by itself; mark it here only if it is stuck.'
+              : 'is waiting for you. When your local agent finishes it, mark the result here.'}
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            <Btn
+              type="button"
+              size="sm"
+              variant="primary"
+              disabled={checkingIn}
+              onClick={() => onCheckin(run.id, checkinTarget.step_index, 'passed')}
+            >
+              Mark done
+            </Btn>
+            <Btn
+              type="button"
+              size="sm"
+              variant="ghost"
+              disabled={checkingIn}
+              onClick={() => onCheckin(run.id, checkinTarget.step_index, 'skipped')}
+            >
+              Skip step
+            </Btn>
+            <Btn
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="text-danger"
+              disabled={checkingIn}
+              onClick={() => onCheckin(run.id, checkinTarget.step_index, 'failed')}
+            >
+              Mark failed
+            </Btn>
+          </div>
+        </div>
+      ) : null}
+
       {/* CLI handoff hint */}
       {run.mode === 'handoff' ? (
         <div className="border-t border-edge-subtle px-4 py-2 bg-surface-overlay text-2xs text-fg-muted">
@@ -1171,6 +1423,8 @@ function SourcesTab({
   const [adding, setAdding] = useState(false)
   const [syncingId, setSyncingId] = useState<string | null>(null)
   const [forceSyncingId, setForceSyncingId] = useState<string | null>(null)
+  const [removeTarget, setRemoveTarget] = useState<SkillSource | null>(null)
+  const [removing, setRemoving] = useState(false)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const { data: sourcesRaw, loading, error, reload } = usePageData<SkillSource[]>(
@@ -1248,11 +1502,40 @@ function SourcesTab({
     }
   }
 
+  const removeSource = async (src: SkillSource) => {
+    setRemoving(true)
+    try {
+      const res = await apiFetch(`/v1/admin/skills/sources/${src.id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        addToast({ type: 'error', message: res.error?.message ?? "Couldn't remove that source — try again" })
+        return
+      }
+      addToast({ type: 'success', message: `Removed ${src.repo_slug}. Its skills left the catalog.` })
+      reload()
+    } finally {
+      setRemoving(false)
+      setRemoveTarget(null)
+    }
+  }
+
   if (loading) return <SkeletonRows count={3} />
-  if (error) return <ErrorState message={error} />
+  if (error) return <PageLoadError error={error} resource="skill sources" onRetry={reload} />
 
   return (
     <div className="flex flex-col gap-4 min-w-0">
+      {removeTarget ? (
+        <ConfirmDialog
+          title={`Remove ${removeTarget.repo_slug}?`}
+          body={`Mushi stops syncing this repo and takes its ${removeTarget.catalog_count ?? 0} skills out of the catalog. Pipeline runs that already used them keep their history. You can add the repo again later.`}
+          confirmLabel="Remove source"
+          tone="danger"
+          loading={removing}
+          onConfirm={() => removeSource(removeTarget)}
+          onCancel={() => {
+            if (!removing) setRemoveTarget(null)
+          }}
+        />
+      ) : null}
       {showEndpointReadout ? (
         <SkillsEndpointReadout
           stats={stats}
@@ -1266,7 +1549,7 @@ function SourcesTab({
         <div className="flex gap-2">
           <input
             type="text"
-            placeholder="owner/repo (e.g. kensaurus/cursor-kenji)"
+            placeholder="owner/repo (e.g. kensaurus/skills)"
             value={repoSlug}
             onChange={(e) => setRepoSlug(e.target.value)}
             className="input flex-1 text-sm"
@@ -1289,7 +1572,7 @@ function SourcesTab({
         <div className="text-sm text-fg-muted flex flex-col gap-2">
           <p>No skill sources yet.</p>
           <p className="text-xs">
-            Add <code className="font-mono text-brand">kensaurus/cursor-kenji</code> above, then sync to load 70+ agent skills into the catalog.
+            Add <code className="font-mono text-brand">kensaurus/skills</code> above, then sync to load 70+ agent skills into the catalog.
           </p>
         </div>
       ) : (
@@ -1329,6 +1612,17 @@ function SourcesTab({
               >
                 {forceSyncingId === src.id ? 'Re-syncing…' : 'Full re-sync'}
               </Btn>
+              <Btn
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setRemoveTarget(src)}
+                disabled={removing || syncingId === src.id || forceSyncingId === src.id}
+                className="text-fg-muted hover:text-danger"
+                title="Stop syncing this repo and take its skills out of the catalog"
+              >
+                Remove
+              </Btn>
             </div>
           </SurfacePanel>
         ))
@@ -1362,17 +1656,17 @@ function SkillCategoryHeader({
   count: number
 }) {
   return (
-    <div className="flex items-center gap-2.5 mb-3">
+    <span className="flex items-center gap-2.5">
       <span className={`flex items-center justify-center w-8 h-8 rounded-lg flex-shrink-0 ${meta.badgeClass}`}>
         <meta.Icon size={15} />
       </span>
-      <div className="min-w-0">
-        <h3 className="text-sm font-semibold text-fg">{meta.label}</h3>
-        <p className="text-2xs text-fg-muted">
+      <span className="block min-w-0">
+        <span className="block text-sm font-semibold text-fg">{meta.label}</span>
+        <span className="block text-2xs font-normal text-fg-muted">
           {count} skill{count === 1 ? '' : 's'} · {meta.hint}
-        </p>
-      </div>
-    </div>
+        </span>
+      </span>
+    </span>
   )
 }
 
@@ -1398,10 +1692,6 @@ function SkeletonRows({ count }: { count: number }) {
   )
 }
 
-function ErrorState({ message }: { message: string }) {
-  return <p className="text-sm text-danger py-4">{message}</p>
-}
-
 function EmptySearchResults({ query, onClear }: { query: string; onClear: () => void }) {
   return (
     <div className="text-center py-16 flex flex-col items-center gap-3">
@@ -1422,7 +1712,7 @@ function EmptySkills({ onGoToSources }: { onGoToSources: () => void }) {
       <p className="text-sm text-fg-muted">Your skill catalog is empty.</p>
       <p className="text-xs text-fg-muted max-w-sm">
         Add a GitHub source and sync it to load skills.{' '}
-        <code className="font-mono text-brand">kensaurus/cursor-kenji</code> brings in 70+ workflows instantly.
+        <code className="font-mono text-brand">kensaurus/skills</code> brings in 70+ workflows instantly.
       </p>
       <Btn type="button" variant="primary" size="sm" onClick={onGoToSources}>
         Go to Sources

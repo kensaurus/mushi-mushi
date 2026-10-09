@@ -8,7 +8,17 @@
 
 /** USD per 1M tokens. Add new models here; the SQL backfill must mirror. */
 export const LLM_PRICING_PER_M_TOKENS: Record<string, { in: number; out: number }> = {
-  // Anthropic — current generation (2026-Q1/Q2)
+  // Anthropic — 5.x generation (Claude API list prices, 2026-09-25). A
+  // server-side refusal fallback from Sonnet 5.5 is served (and billed) as
+  // `claude-sonnet-5`, so that row must exist too.
+  'claude-sonnet-5-5':           { in: 2.00, out: 10.00 },
+  'claude-sonnet-5':             { in: 2.00, out: 10.00 },
+  'claude-opus-5-5':             { in: 4.00, out: 20.00 },
+  'claude-opus-5':               { in: 5.00, out: 25.00 },
+  // Haiku 5.5: base rate up to 100K prompt tokens; LONG_PROMPT_PRICING
+  // below prices longer prompts (a Stage 2 prompt with code context can be).
+  'claude-haiku-5-5':            { in: 0.10, out: 0.50 },
+  // Anthropic — 4.x generation
   'claude-haiku-4-5':            { in: 1.00, out: 5.00 },
   'claude-haiku-4-5-20251001':   { in: 1.00, out: 5.00 },
   'claude-haiku-4-6':            { in: 0.25, out: 1.25 },
@@ -16,8 +26,10 @@ export const LLM_PRICING_PER_M_TOKENS: Record<string, { in: number; out: number 
   'claude-sonnet-4-5-20250929':  { in: 3.00, out: 15.00 },
   'claude-sonnet-4-6':           { in: 3.00, out: 15.00 },
   'claude-sonnet-3-7':           { in: 3.00, out: 15.00 },
-  'claude-opus-4-6':             { in: 15.00, out: 75.00 },
-  'claude-opus-4-7':             { in: 15.00, out: 75.00 },
+  // Opus 4.6 / 4.7 list at $5/$25 (the old 15/75 was the Opus 4.0/4.1 price,
+  // which tripled the cost shown for every judge run on the Opus 4.7 default).
+  'claude-opus-4-6':             { in: 5.00,  out: 25.00 },
+  'claude-opus-4-7':             { in: 5.00,  out: 25.00 },
   'claude-opus-4-8':             { in: 5.00,  out: 25.00 },
   // OpenAI — current generation (GPT-5 family, released 2026)
   'gpt-4.1':                     { in: 2.00, out: 8.00 },
@@ -45,6 +57,15 @@ export const LLM_PRICING_FALLBACK = { in: 3.00, out: 15.00 }
  * Returns 0 when both token counts are 0 — caller should still write the row
  * for latency/error tracking, just with cost_usd = 0.
  */
+/**
+ * Models whose whole call is billed at a higher rate once the prompt passes a
+ * token threshold (Claude API pricing, read 2026-10-09: Haiku 5.5 is $0.10 /
+ * $0.50 up to 100K prompt tokens and $0.50 / $2.50 above).
+ */
+export const LONG_PROMPT_PRICING: Record<string, { overInputTokens: number; in: number; out: number }> = {
+  'claude-haiku-5-5': { overInputTokens: 100_000, in: 0.50, out: 2.50 },
+}
+
 export function estimateCallCostUsd(
   model: string | null | undefined,
   inputTokens: number,
@@ -52,6 +73,46 @@ export function estimateCallCostUsd(
 ): number {
   const key = (model ?? '').toLowerCase()
   const stripped = key.includes('/') ? key.split('/').slice(-1)[0] : key
-  const price = LLM_PRICING_PER_M_TOKENS[stripped] ?? LLM_PRICING_FALLBACK
+  const long = LONG_PROMPT_PRICING[stripped]
+  const price = long && inputTokens > long.overInputTokens
+    ? long
+    : LLM_PRICING_PER_M_TOKENS[stripped] ?? LLM_PRICING_FALLBACK
   return (inputTokens * price.in + outputTokens * price.out) / 1_000_000
+}
+
+/** Tokens and cost of one model's calls within one run. */
+export interface ModelUsageRow {
+  model: string
+  inputTokens: number
+  outputTokens: number
+  costUsd: number
+}
+
+/**
+ * Usage of a run that can call more than one model (a Claude call with an
+ * OpenAI fallback), kept per model. Write one `llm_cost_usd` row per model:
+ * a compound id such as `claude-sonnet-5-5+gpt-5.4-mini` would be a cost
+ * bucket of its own and would never match a model filter.
+ */
+export class UsageByModel {
+  private readonly totals = new Map<string, ModelUsageRow>()
+
+  record(model: string, inputTokens: number, outputTokens: number): void {
+    const row = this.totals.get(model) ?? { model, inputTokens: 0, outputTokens: 0, costUsd: 0 }
+    row.inputTokens += inputTokens
+    row.outputTokens += outputTokens
+    row.costUsd += estimateCallCostUsd(model, inputTokens, outputTokens)
+    this.totals.set(model, row)
+  }
+
+  /** One row per model used, in the order each was first used. */
+  rows(): ModelUsageRow[] {
+    return [...this.totals.values()].map((r) => ({ ...r }))
+  }
+
+  get totalCostUsd(): number {
+    let sum = 0
+    for (const r of this.totals.values()) sum += r.costUsd
+    return sum
+  }
 }

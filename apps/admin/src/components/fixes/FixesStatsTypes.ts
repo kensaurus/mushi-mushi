@@ -3,8 +3,6 @@
  * PURPOSE: Fixes shell stats — banner + FIXES SNAPSHOT strip.
  */
 
-export type FixesTabId = 'overview' | 'pipeline' | 'attempts'
-
 export type FixesTopPriority =
   | 'no_project'
   | 'no_github'

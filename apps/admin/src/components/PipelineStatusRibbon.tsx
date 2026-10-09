@@ -13,7 +13,7 @@
  *          - Tiles link directly to the relevant page so "huh, Plan is
  *            red" becomes "let me click it and see" in one motion.
  *          - Hidden in beginner / quickstart modes because those users
- *            already have the global NextBestAction strip; stacking two
+ *            already have the global NextStep banner; stacking two
  *            status bars would be noisy.
  *
  *          Data source:
@@ -39,6 +39,7 @@ import { hasPageOwnedHero } from '../lib/pageHeroOwnership'
 import { shouldDefaultCollapsePipelineRibbon } from '../lib/chromeLayers'
 import { shouldShowPipelineRibbon } from '../lib/pipelineRibbonVisibility'
 import type { PdcaStageId } from '../lib/pdca'
+import { repoLinks } from '../lib/statCardLinks'
 
 type Tone = 'ok' | 'warn' | 'danger' | 'idle'
 
@@ -259,7 +260,7 @@ export function PipelineStatusRibbon({ embedded = false }: { embedded?: boolean 
   }, [collapsed, pathname])
 
   // Only Advanced mode surfaces the ribbon — beginners and quickstart
-  // users have the NextBestAction strip which is higher signal for their
+  // users have the NextStep banner which is higher signal for their
   // level of context.
   if (!isAdvanced) return null
 
@@ -331,9 +332,11 @@ export function PipelineStatusRibbon({ embedded = false }: { embedded?: boolean 
       !nav.ready
         ? 'Loading…'
         : nav.prsOpen === 0
-          ? 'No PRs awaiting review'
-          : `${nav.prsOpen} PR${nav.prsOpen === 1 ? '' : 's'} awaiting review`,
-    to: '/repo?tab=prs',
+          // Fix PRs only: other open PRs are on Pull requests, which this tile links to.
+          ? 'No fix PRs awaiting review'
+          : `${nav.prsOpen} fix PR${nav.prsOpen === 1 ? '' : 's'} awaiting review`,
+    // Open PRs are listed on the Branches tab (there is no `prs` tab).
+    to: repoLinks.prOpen,
   }
 
   const tiles: RibbonTile[] = [plan, doTile, check, act]

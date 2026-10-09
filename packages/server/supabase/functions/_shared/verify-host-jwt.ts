@@ -193,6 +193,13 @@ export async function verifyHostJwt(opts: {
   token: string;
   projectId: string;
   endUserId: string;
+  /**
+   * The end user's external id. The token's `sub` must equal it before the
+   * end user is marked verified: without this, any valid host JWT (for any
+   * user) set jwt_verified_at on whichever end user the request named, which
+   * is the gate for payout onboarding.
+   */
+  expectedSub: string;
 }): Promise<JwtVerificationResult> {
   const db = getServiceClient();
 
@@ -242,6 +249,9 @@ export async function verifyHostJwt(opts: {
   }
   if (!payload.sub) {
     throw new Error("JWT missing sub claim");
+  }
+  if (payload.sub !== opts.expectedSub) {
+    throw new Error("JWT subject does not match the end user");
   }
 
   // Persist jwt_verified_at on end_users

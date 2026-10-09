@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/setup-copilot
 
 ---
 title: Setup Copilot
+description: Setup Copilot is a guided checklist that verifies SDK ingest and fix dispatch for a project, with copy-paste CLI commands for each step.
 ---
 
 # Setup Copilot

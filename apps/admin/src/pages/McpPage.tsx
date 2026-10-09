@@ -6,7 +6,7 @@
 
 import { useSearchParams } from 'react-router-dom'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Section,
   Badge,
   Btn,
@@ -20,8 +20,9 @@ import { apiFetch } from '../lib/supabase'
 import { useRealtimeReload } from '../lib/realtime'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useSetupStatus } from '../lib/useSetupStatus'
-import { SetupNudge } from '../components/SetupNudge'
+import { NextStep } from '../components/NextStep'
 import { useToast } from '../lib/toast'
+import { describeActionError } from '../lib/actionError'
 import { usePageCopy } from '../lib/copy'
 import { useMcpUx, resolveQuickMcpTab } from '../lib/mcpModeUx'
 import { McpStatusBanner } from '../components/mcp/McpStatusBanner'
@@ -44,6 +45,7 @@ import {
   buildEnvBlock,
   buildHttpCursorJson,
   isCatalogTabId,
+  mcpTestFailureMessage,
   resolveMcpTab,
   validateMcpJsonSyntax,
 } from '../lib/mcpPageHelpers'
@@ -73,7 +75,9 @@ export function McpPage() {
   const [detectOpen, setDetectOpen] = useState(false)
   const [detectText, setDetectText] = useState('')
   const [mintingKey, setMintingKey] = useState(false)
-  const [revealedMcpKey, setRevealedMcpKey] = useState<string | null>(null)
+  // Kept with its scopes so the setup tab can show the key itself, not only
+  // a clipboard toast (QA bug 127).
+  const [revealedMcpKey, setRevealedMcpKey] = useState<{ key: string; scopes: string[] } | null>(null)
   const [sdkSnippetLang, setSdkSnippetLang] = useState<'npm' | 'yarn' | 'pnpm'>('npm')
   const [mcpJsonDraft, setMcpJsonDraft] = useState('')
 
@@ -113,11 +117,18 @@ export function McpPage() {
     [searchParams, setSearchParams],
   )
 
+  // Quick mode opens on the tab that fits the project's MCP state, once per
+  // visit, and only when the URL didn't ask for one. Re-running it on every
+  // change sent deep links like "Fix snippet" (/mcp?tab=setup) to Catalog
+  // and undid the user's own tab clicks.
+  const quickTabPicked = useRef(false)
   useEffect(() => {
-    if (!ux.isQuickstart || !activeProjectId || loading) return
+    if (quickTabPicked.current || !ux.isQuickstart || !activeProjectId || loading) return
+    quickTabPicked.current = true
+    if (param) return
     const quickTab = resolveQuickMcpTab(stats)
     if (activeTab !== quickTab) setTab(quickTab)
-  }, [ux.isQuickstart, activeProjectId, loading, stats, activeTab, setTab])
+  }, [ux.isQuickstart, activeProjectId, loading, stats, activeTab, setTab, param])
 
   const setCatalogTab = useCallback(
     (tab: CatalogTabId) => {
@@ -153,7 +164,7 @@ export function McpPage() {
       },
     )
     if (!res.ok || !res.data?.key) {
-      toast.error('Could not mint MCP key', res.error?.message ?? 'Unknown error')
+      toast.error('Could not mint MCP key', describeActionError(res.error, 'Try again in a moment.'))
       return null
     }
     if (!targetProjectId || targetProjectId === activeProjectId) reloadAll()
@@ -166,30 +177,13 @@ export function McpPage() {
     try {
       const key = await mintMcpKey(['mcp:read'])
       if (!key) return
-      setRevealedMcpKey(key)
+      setRevealedMcpKey({ key, scopes: ['mcp:read'] })
+      if (activeTab !== 'setup') setTab('setup')
       try {
         await navigator.clipboard.writeText(key)
-        toast.success('mcp:read key copied', 'Paste into your MCP snippet — it will not be shown again.')
+        toast.success('mcp:read key copied', 'It is also shown on the Setup tab until you hide it.')
       } catch {
-        toast.success('mcp:read key minted', 'Copy it now — it will not be shown again.')
-      }
-    } finally {
-      setMintingKey(false)
-    }
-  }
-
-  async function mintMcpWriteKey() {
-    if (!activeProjectId) return
-    setMintingKey(true)
-    try {
-      const key = await mintMcpKey(['mcp:write'])
-      if (!key) return
-      setRevealedMcpKey(key)
-      try {
-        await navigator.clipboard.writeText(key)
-        toast.success('mcp:write key copied', 'Paste into your MCP snippet — it will not be shown again.')
-      } catch {
-        toast.success('mcp:write key minted', 'Copy it now — it will not be shown again.')
+        toast.success('mcp:read key minted', 'Copy it from the Setup tab — it will not be shown again after you leave.')
       }
     } finally {
       setMintingKey(false)
@@ -218,13 +212,9 @@ export function McpPage() {
         '/v1/admin/mcp/test-connection',
       )
       if (!res.ok || !res.data) {
-        const raw = res.error?.message ?? ''
-        const friendly = raw.includes('NO_PROJECT')
-          ? 'Select a project first.'
-          : raw.includes('MCP_PROBE_FAILED')
-            ? 'Hosted MCP did not respond — the function may be deploying. Wait 30 s and try again.'
-            : raw || 'Connection probe failed — check your API key is active.'
-        setConnectionTestResult({ ok: false, message: friendly, testedAt: Date.now() })
+        // Match on the code, not the message: the message never contained
+        // the code, so every failure showed raw text (QA bug 266).
+        setConnectionTestResult({ ok: false, message: mcpTestFailureMessage(res.error), testedAt: Date.now() })
         return
       }
       const { tool_count: count, expected, healthy } = res.data
@@ -284,9 +274,9 @@ export function McpPage() {
     return (
       <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-mcp">
         <PageHeaderBar
-          title={copy?.title ?? 'MCP'}
+          title={copy?.title ?? 'Editor agents'}
 
-          helpTitle={copy?.help?.title ?? 'About MCP'}
+          helpTitle={copy?.help?.title ?? 'About editor agents'}
           helpWhatIsIt={
             copy?.help?.whatIsIt ??
             'MCP lets your coding assistant call Mushi tools during a chat — read reports, dispatch fixes, and query production data without copy-pasting IDs.'
@@ -300,11 +290,12 @@ export function McpPage() {
           }
           helpHowToUse={
             copy?.help?.howToUse ??
-            '1. On /projects, pick MCP read-only or read + write scope. 2. Copy the snippet on Setup. 3. Restart your IDE. 4. Ask "list mushi tools".'
+            '1. On Connect, pick your editor and click Connect (it mints the key). 2. Or copy the snippet on Setup. 3. Restart your IDE. 4. Ask "list mushi tools".'
           }
         />
 
-        <SetupNudge
+        <NextStep
+          variant="inline"
           requires={['project']}
           emptyTitle="Select a project"
           emptyDescription="MCP keys and snippets are scoped to the active project in the header."
@@ -345,10 +336,10 @@ export function McpPage() {
   return (
     <div className="space-y-4" data-testid="mushi-page-mcp">
       <PageHeaderBar
-        title={copy?.title ?? 'MCP'}
+        title={copy?.title ?? 'Editor agents'}
         projectScope={displayName}
 
-        helpTitle={copy?.help?.title ?? 'About MCP'}
+        helpTitle={copy?.help?.title ?? 'About editor agents'}
         helpWhatIsIt={
           copy?.help?.whatIsIt ??
           'MCP lets your coding assistant call Mushi tools during a chat — read reports, dispatch fixes, and query production data without copy-pasting IDs.'
@@ -362,7 +353,7 @@ export function McpPage() {
         }
         helpHowToUse={
           copy?.help?.howToUse ??
-          '1. On /projects, pick MCP read-only or read + write scope. 2. Copy the snippet on Setup. 3. Restart your IDE. 4. Ask "list mushi tools".'
+          '1. On Connect, pick your editor and click Connect (it mints the key). 2. Or copy the snippet on Setup. 3. Restart your IDE. 4. Ask "list mushi tools".'
         }
       >
         {!ux.hideOverviewChrome && (
@@ -386,25 +377,9 @@ export function McpPage() {
         <Btn size="sm" variant="ghost" onClick={reloadAll} loading={isValidating}>
           Refresh
         </Btn>
-        <Btn
-          size="sm"
-          variant="ghost"
-          data-testid="mcp-mint-key-link"
-          loading={mintingKey}
-          disabled={!activeProjectId}
-          onClick={() => void mintMcpReadKey()}
-        >
-          Mint mcp:read key
-        </Btn>
-        <Btn
-          size="sm"
-          variant="ghost"
-          data-testid="mcp-mint-write-key-link"
-          loading={mintingKey}
-          disabled={!activeProjectId}
-          onClick={() => void mintMcpWriteKey()}
-        >
-          Mint mcp:write key
+        {/* /connect mints a key and installs it in the editor in one click. */}
+        <Btn size="sm" variant="ghost" to="/connect" data-testid="mcp-connect-editor-link">
+          Connect an editor
         </Btn>
       </PageHeaderBar>
 
@@ -416,8 +391,6 @@ export function McpPage() {
               <McpStatusBanner
                 stats={stats}
                 onTab={setTab}
-                onRefresh={reloadAll}
-                refreshing={isValidating}
                 plainBanner={ux.plainBanner}
               />
             ),
@@ -438,7 +411,7 @@ export function McpPage() {
           },
           {
             priority: POSTURE_PRIORITY.guide,
-            show: stats.topPriority === 'healthy',
+            show: stats.topPriority !== 'healthy',
             children: <McpConnectGuide topPriority={stats.topPriority} toolCount={stats.toolCount} />,
           },
         ]}
@@ -459,9 +432,7 @@ export function McpPage() {
           stats={stats}
           lastFetchedAt={lastFetchedAt}
           isValidating={isValidating}
-          hideOverviewChrome={ux.hideOverviewChrome}
           onOpenExamples={() => setTab('examples')}
-          onCopySnippet={copySnippet}
         />
       )}
 
@@ -503,6 +474,7 @@ export function McpPage() {
             onDetectTextChange={setDetectText}
             mintingKey={mintingKey}
             revealedMcpKey={revealedMcpKey}
+            onDismissRevealedKey={() => setRevealedMcpKey(null)}
             onMintMcpReadKey={() => void mintMcpReadKey()}
             sdkSnippetLang={sdkSnippetLang}
             onSdkSnippetLangChange={setSdkSnippetLang}
@@ -530,3 +502,4 @@ export function McpPage() {
     </div>
   )
 }
+

@@ -2,6 +2,7 @@ import { defineConfig, searchForWorkspaceRoot } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { sentryVitePlugin } from '@sentry/vite-plugin'
+import { VitePWA } from 'vite-plugin-pwa'
 import path from 'node:path'
 import { readFileSync } from 'node:fs'
 import { execSync } from 'node:child_process'
@@ -130,6 +131,65 @@ export default defineConfig({
     react(),
     tailwindcss(),
     invalidateWebWorkspaceDep(),
+    // Installable PWA (plan docs/execplans/dead-code-voice-agent-loop.md, C1
+    // "PWA" + C5 "Developer Web Push"). `injectManifest` compiles src/sw.ts
+    // as-is and only injects the precache list; the SW itself handles the
+    // Web Share Target POST, push, and a minimal app-shell cache. The glob is
+    // deliberately tiny — the lazy route chunks are never precached, so
+    // installing on a phone downloads a few KB, not the whole console.
+    VitePWA({
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.ts',
+      // Bundled as a classic script so it works everywhere Web Push does
+      // (Safari's module-worker support lags the rest).
+      injectRegister: false, // registration lives in src/lib/pwaRegister.ts
+      registerType: 'autoUpdate',
+      injectManifest: {
+        // The plugin appends the manifest icons + manifest.webmanifest itself.
+        globPatterns: ['index.html', 'favicon.svg'],
+        rollupFormat: 'iife',
+      },
+      manifest: {
+        id: `${basePath}?source=pwa`,
+        name: 'Mushi Mushi',
+        short_name: 'Mushi',
+        description: 'Talk a bug or a fix request; confirm the transcript; the draft PR comes back to your phone.',
+        start_url: `${basePath}voice?source=pwa`,
+        scope: basePath,
+        display: 'standalone',
+        orientation: 'portrait',
+        // Matches --color-surface (#09090b) in src/index.css / index.html theme-color.
+        theme_color: '#09090b',
+        background_color: '#09090b',
+        lang: 'en',
+        icons: [
+          { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+          // The brand mark is opaque with its own background, so the same
+          // 512 render is safe for maskable crops.
+          { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+        ],
+        // Android Chrome: "Share" an audio file (Google Recorder .m4a, a voice
+        // memo) straight into the console. iOS has no share_target.
+        share_target: {
+          action: `${basePath}voice/share`,
+          method: 'POST',
+          enctype: 'multipart/form-data',
+          params: {
+            title: 'title',
+            text: 'text',
+            files: [{ name: 'audio', accept: ['audio/*', '.m4a', '.ogg', '.mp3', '.wav', '.webm'] }],
+          },
+        },
+      },
+      // Dev serves no SW unless explicitly asked — the fetch handler would
+      // otherwise sit between Vite HMR and the page.
+      devOptions: {
+        enabled: process.env.VITE_PWA_DEV === '1',
+        type: 'classic',
+      },
+    }),
     ...(sentryEnabled
       ? [
           sentryVitePlugin({

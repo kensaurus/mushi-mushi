@@ -29,7 +29,6 @@ export default [
           pagePattern: 'Page\\.tsx$',
           allowlist: [
             'PageHero.tsx',
-            'QuickstartMegaCta.tsx',
             'OnboardingModeIntroCard.tsx',
             'BetaBanner.tsx',
             '/illustrations/',
@@ -56,11 +55,15 @@ export default [
             'CliAuthPage.tsx',
             'ContentQualityDetailPage.tsx',
             'DocsBridgePage.tsx',
+            // Page hubs (lib/pageHubs.ts): each view is a page with its own posture.
+            'HomePage.tsx',
+            'TeamPage.tsx',
             'IntegrationsRouteGate.tsx',
             'LoginPage.tsx',
             'PublicHomePage.tsx',
             'PublicIntegrationsPage.tsx',
             'ReportDetailPage.tsx',
+            'ReporterEmailLinkPage.tsx',
             'ResetPasswordPage.tsx',
             'SetupGatePage.tsx',
             'TesterSubmissionsReviewPage.tsx',

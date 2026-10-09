@@ -84,11 +84,25 @@ async function loadWebhookSecret(
   return Deno.env.get(envKey) ?? null
 }
 
+/** What one endpoint answered. `status` 0 means no HTTP response (timeout, DNS, TLS). */
+export interface RewardWebhookDelivery {
+  webhookId: string
+  url: string
+  status: number
+  /** Set when the delivery was not attempted. */
+  skipped?: 'no_secret'
+}
+
+/**
+ * Deliver one event to every matching enabled webhook of the organization.
+ * Resolves with one entry per endpoint so callers that need the outcome (the
+ * console's "Send test event") can report it; fire-and-forget callers ignore it.
+ */
 export async function dispatchRewardWebhook(
   db: SupabaseClient,
   organizationId: string,
   payload: RewardEventPayload,
-): Promise<void> {
+): Promise<RewardWebhookDelivery[]> {
   const { data: rows, error } = await db
     .from('reward_webhooks')
     .select('id, url, events')
@@ -97,28 +111,33 @@ export async function dispatchRewardWebhook(
 
   if (error) {
     wlog.warn('load_webhooks_failed', { organizationId, error: error.message })
-    return
+    return []
   }
 
-  if (!rows?.length) return
+  if (!rows?.length) return []
 
   const matching = (rows as Array<{ id: string; url: string; events: string[] }>).filter(
     (r) => r.events.length === 0 || r.events.includes('*') || r.events.includes(payload.event),
   )
 
-  await Promise.allSettled(matching.map((w) => deliverOne(db, w, payload)))
+  const settled = await Promise.allSettled(matching.map((w) => deliverOne(db, w, payload)))
+  return settled.map((r, i) =>
+    r.status === 'fulfilled'
+      ? r.value
+      : { webhookId: matching[i]!.id, url: matching[i]!.url, status: 0 },
+  )
 }
 
 async function deliverOne(
   db: SupabaseClient,
   webhook: { id: string; url: string },
   payload: RewardEventPayload,
-): Promise<void> {
+): Promise<RewardWebhookDelivery> {
   const body = JSON.stringify({ ...payload, webhookId: webhook.id })
   const secret = await loadWebhookSecret(db, webhook.id)
   if (!secret) {
     wlog.warn('delivery_skipped_no_secret', { webhookId: webhook.id, url: webhook.url })
-    return
+    return { webhookId: webhook.id, url: webhook.url, status: 0, skipped: 'no_secret' }
   }
   const signature = `sha256=${await sha256Hmac(secret, body)}`
 
@@ -154,4 +173,5 @@ async function deliverOne(
       updated_at: new Date().toISOString(),
     })
     .eq('id', webhook.id)
+  return { webhookId: webhook.id, url: webhook.url, status }
 }

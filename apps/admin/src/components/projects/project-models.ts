@@ -5,7 +5,7 @@
 import { CHIP_TONE } from '../../lib/chipTone'
 import type { SdkStatus } from '../SdkVersionBadge'
 
-export type ScopePresetId = 'sdk' | 'mcp-read' | 'mcp-write'
+export type ScopePresetId = 'sdk' | 'mcp-read' | 'mcp-write' | 'voice'
 
 export const SCOPE_PRESETS: Array<{ id: ScopePresetId; label: string; scopes: string[]; hint: string }> = [
   {
@@ -26,11 +26,22 @@ export const SCOPE_PRESETS: Array<{ id: ScopePresetId; label: string; scopes: st
     scopes: ['mcp:write'],
     hint: 'Coding agent can dispatch fixes, run judge, transition status.',
   },
+  {
+    id: 'voice',
+    label: 'Voice intake',
+    scopes: ['voice:write'],
+    hint: 'For a phone (iPhone Shortcut) — submit voice transcripts and confirm them, nothing else.',
+  },
 ]
+
+export function isScopePresetId(value: string | null | undefined): value is ScopePresetId {
+  return SCOPE_PRESETS.some((p) => p.id === value)
+}
 
 export function scopeBadgeTone(scope: string): string {
   if (scope === 'mcp:write') return CHIP_TONE.dangerSubtle
   if (scope === 'mcp:read') return CHIP_TONE.infoSubtle
+  if (scope === 'voice:write') return CHIP_TONE.warnSubtle
   return CHIP_TONE.neutral
 }
 
@@ -48,6 +59,19 @@ export interface ApiKey {
   last_seen_endpoint_host?: string | null
 }
 
+/**
+ * Active / never-used key counts for ONE project. The setup readout used the
+ * workspace-wide totals from /projects/stats next to one project's name and
+ * key prefixes, so the two disagreed (QA bug 135).
+ */
+export function projectKeyCounts(keys: readonly Pick<ApiKey, 'is_active' | 'last_seen_at'>[]): {
+  active: number
+  neverSeen: number
+} {
+  const active = keys.filter((k) => k.is_active)
+  return { active: active.length, neverSeen: active.filter((k) => !k.last_seen_at).length }
+}
+
 type PdcaStageId = 'plan' | 'do' | 'check' | 'act'
 
 export type OrgRole = 'owner' | 'admin' | 'member' | 'viewer' | null
@@ -63,6 +87,12 @@ export interface ProjectRepoLite {
   last_index_attempt_at: string | null
   last_index_error: string | null
   github_app_connected: boolean
+  /** Last sweep, complete or partial (older servers omit it). */
+  index_swept_at?: string | null
+  /** complete | filling | capped | stalled */
+  index_coverage_state?: string | null
+  index_files_indexed?: number | null
+  index_files_eligible?: number | null
 }
 
 interface SeverityBreakdown {
@@ -81,6 +111,12 @@ export interface Project {
   created_at: string
   organization_id: string | null
   organization_role: OrgRole
+  /** Server-computed (api/_shared/project-capabilities.ts). Absent on older servers. */
+  my_role?: 'owner' | 'admin' | 'member' | 'viewer' | null
+  /** May mint/rotate/revoke keys and change SDK, assistant and identity settings. */
+  can_manage?: boolean
+  /** May rename and delete the project. */
+  can_delete?: boolean
   api_keys: ApiKey[]
   active_key_count: number
   member_count: number
@@ -117,8 +153,24 @@ export interface Project {
   }
 }
 
+/**
+ * Rename / Delete. Uses the server's `can_delete`. The old guess read a null
+ * `organization_role` as "owner", but it is null for anyone who reaches the
+ * project through a project_members row or a legacy owner_id, so those
+ * users saw Rename and Delete and always got a 403 (QA bug 129).
+ */
 export function canDeleteProject(project: Project): boolean {
-  if (project.organization_role === null) return true
+  if (typeof project.can_delete === 'boolean') return project.can_delete
+  return project.organization_role === 'owner' || project.organization_role === 'admin'
+}
+
+/**
+ * Keys, SDK config, assistant and signed identity: owner/admin only on the
+ * server. Members saw these controls and got 403s, "Project not found" or a
+ * spinner that never ended (QA bug 128).
+ */
+export function canManageProject(project: Project): boolean {
+  if (typeof project.can_manage === 'boolean') return project.can_manage
   return project.organization_role === 'owner' || project.organization_role === 'admin'
 }
 
@@ -149,22 +201,48 @@ export function shortRepoLabel(url: string | null | undefined): string | null {
   }
 }
 
-export type IndexHealth = 'ok' | 'stale' | 'failed' | 'off' | 'never'
+export type IndexHealth = 'ok' | 'partial' | 'stale' | 'failed' | 'off' | 'never'
+
+/**
+ * The last successful sweep: `last_indexed_at` moves only when the whole repo
+ * was covered, `index_swept_at` on every sweep, so take the later one.
+ */
+export function lastIndexSweepAt(repo: Pick<ProjectRepoLite, 'last_indexed_at' | 'index_swept_at'>): string | null {
+  const a = repo.last_indexed_at
+  const b = repo.index_swept_at ?? null
+  if (!a) return b
+  if (!b) return a
+  return new Date(b) > new Date(a) ? b : a
+}
 
 export function indexHealth(repo: ProjectRepoLite): IndexHealth {
   if (!repo.indexing_enabled) return 'off'
+  const swept = lastIndexSweepAt(repo)
   if (
     repo.last_index_error &&
-    (!repo.last_indexed_at ||
+    (!swept ||
       (repo.last_index_attempt_at &&
-        new Date(repo.last_index_attempt_at) > new Date(repo.last_indexed_at)))
+        new Date(repo.last_index_attempt_at) > new Date(swept)))
   ) {
     return 'failed'
   }
-  if (!repo.last_indexed_at) return 'never'
-  const ageMs = Date.now() - new Date(repo.last_indexed_at).getTime()
+  if (!swept) return 'never'
+  const ageMs = Date.now() - new Date(swept).getTime()
   if (ageMs > 7 * 86_400_000) return 'stale'
+  if (
+    repo.index_coverage_state === 'filling' ||
+    repo.index_coverage_state === 'capped' ||
+    repo.index_coverage_state === 'stalled'
+  ) {
+    return 'partial'
+  }
   return 'ok'
+}
+
+/** "1,500 of 4,700 files" when the last sweep measured coverage. */
+export function indexCoverageText(repo: Pick<ProjectRepoLite, 'index_files_indexed' | 'index_files_eligible'>): string | null {
+  if (repo.index_files_indexed == null || repo.index_files_eligible == null) return null
+  return `${repo.index_files_indexed.toLocaleString('en-US')} of ${repo.index_files_eligible.toLocaleString('en-US')} files`
 }
 
 export const INDEX_HEALTH_LABEL: Record<IndexHealth, string> = {
@@ -173,6 +251,7 @@ export const INDEX_HEALTH_LABEL: Record<IndexHealth, string> = {
   failed: 'Failed',
   off: 'Off',
   never: 'Pending',
+  partial: 'Partial',
 }
 
 export const INDEX_HEALTH_CHIP_TONE: Record<IndexHealth, 'ok' | 'warn' | 'danger' | 'neutral'> = {
@@ -181,4 +260,5 @@ export const INDEX_HEALTH_CHIP_TONE: Record<IndexHealth, 'ok' | 'warn' | 'danger
   failed: 'danger',
   off: 'neutral',
   never: 'neutral',
+  partial: 'warn',
 }

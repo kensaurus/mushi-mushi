@@ -10,6 +10,8 @@ import '@xyflow/react/dist/style.css'
 
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
+import { graphCanvasProof } from '../lib/graphCanvasCounts'
+import { PageLoadError } from '../components/PageLoadError'
 import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { useToast } from '../lib/toast'
 import { usePageCopy } from '../lib/copy'
@@ -17,15 +19,11 @@ import { usePublishPageContext } from '../lib/pageContext'
 import { useRealtimeReload } from '../lib/realtime'
 import { SnapshotSectionHint,
   SegmentedControl,
-  ErrorAlert,
   Section,
   StatCard,
-  FreshnessPill,
-  Badge,
-  Btn,
-  Card, } from '../components/ui'
+  FreshnessPill, } from '../components/ui'
 import { GraphSkeleton } from '../components/skeletons/GraphSkeleton'
-import { SetupNudge } from '../components/SetupNudge'
+import { NextStep } from '../components/NextStep'
 import { HeroGraphNodes } from '../components/illustrations/HeroIllustrations'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
@@ -79,6 +77,7 @@ import {
   type GraphTabId,
 } from '../components/graph/GraphStatsTypes'
 import { useGraphUx, resolveQuickGraphTab } from '../lib/graphModeUx'
+import { useQuickstartLandingTab } from '../lib/useQuickstartTab'
 import {
   edgesDetail,
   edgesTooltip,
@@ -90,7 +89,6 @@ import {
   nodesTooltip,
 } from '../lib/statTooltips/graph'
 import { graphLinks } from '../lib/statCardLinks'
-import { CHIP_TONE } from '../lib/chipTone'
 
 const GRAPH_TABS: Array<{ id: GraphTabId; label: string; description: string }> = [
   {
@@ -159,14 +157,18 @@ export function GraphPage() {
     [searchParams, setSearchParams],
   )
 
-  useEffect(() => {
-    if (!ux.isQuickstart || statsLoading) return
-    const quickTab = resolveQuickGraphTab(stats)
-    if (activeTab !== quickTab) setActiveTab(quickTab)
-  }, [ux.isQuickstart, statsLoading, stats, activeTab, setActiveTab])
+  // Quick mode opens the posture tab once; links and clicks then win.
+  useQuickstartLandingTab({
+    enabled: ux.isQuickstart,
+    ready: !statsLoading,
+    tabParam: tabParam,
+    activeTab: activeTab,
+    quickTab: resolveQuickGraphTab(stats),
+    setActiveTab: setActiveTab,
+  })
 
-  const nodesQuery = usePageData<{ nodes: GraphNode[] }>('/v1/admin/graph/nodes')
-  const edgesQuery = usePageData<{ edges: GraphEdge[] }>('/v1/admin/graph/edges')
+  const nodesQuery = usePageData<{ nodes: GraphNode[]; total?: number }>('/v1/admin/graph/nodes')
+  const edgesQuery = usePageData<{ edges: GraphEdge[]; total?: number }>('/v1/admin/graph/edges')
 
   const rawNodes = nodesQuery.data?.nodes ?? []
   const rawEdges = edgesQuery.data?.edges ?? []
@@ -190,7 +192,9 @@ export function GraphPage() {
   const [search, setSearch] = useState('')
   const [enabledNodeTypes, setEnabledNodeTypes] = useState<Set<NodeType>>(new Set(NODE_TYPES))
   const [enabledEdgeTypes, setEnabledEdgeTypes] = useState<Set<EdgeType>>(new Set(EDGE_TYPES))
-  const [view, setView] = useState<ViewMode>('graph')
+  // Table first: with a few hundred nodes the canvas is a hairball, while the
+  // table ranks clusters by size.
+  const [view, setView] = useState<ViewMode>('table')
   const surfaceFiltersApplied = useRef(false)
   const [hideSingletons, setHideSingletons] = useState(true)
   const [layoutSeed, setLayoutSeed] = useState(0)
@@ -443,19 +447,6 @@ export function GraphPage() {
     filteredNodes.length > 0 &&
     filteredNodes.length < STORYBOARD_THRESHOLD
 
-  const bannerSeverity: 'ok' | 'warn' | 'danger' | 'brand' | 'info' | 'neutral' =
-    !stats.hasAnyProject
-      ? 'neutral'
-      : !stats.hasIngest
-        ? 'brand'
-        : stats.topPriority === 'fragile'
-          ? 'danger'
-          : stats.topPriority === 'regressions' || stats.topPriority === 'empty'
-            ? 'warn'
-            : stats.topPriority === 'clear'
-              ? 'ok'
-              : 'brand'
-
   const tabOptions = useMemo(
     () => [
       { id: 'overview' as const, label: copy?.tabLabels?.overview ?? 'Overview' },
@@ -471,7 +462,7 @@ export function GraphPage() {
 
   usePublishPageContext({
     route: '/graph',
-    title: 'Knowledge graph',
+    title: 'Bug clusters',
     summary: `${activeTabMeta.label} · ${stats.nodeCount} nodes · ${stats.fragileComponents} fragile`,
     filters: { tab: activeTab, view: view },
     criticalCount: stats.fragileComponents,
@@ -492,13 +483,13 @@ export function GraphPage() {
     )
   }
   if (statsError) {
-    return <ErrorAlert message={`Failed to load graph stats: ${statsError}`} onRetry={reloadGraph} />
+    return <PageLoadError error={statsError} onRetry={reloadGraph} resource="graph stats" endpoint="/v1/admin/graph/stats" />
   }
 
   const explorePanel = loading ? (
     <GraphSkeleton />
   ) : error ? (
-    <ErrorAlert message={`Failed to load knowledge graph: ${error}`} onRetry={reloadGraph} />
+    <PageLoadError error={error} onRetry={reloadGraph} resource="the knowledge graph" />
   ) : (
     <>
       <div className="flex flex-wrap items-center gap-2">
@@ -508,7 +499,9 @@ export function GraphPage() {
           </SignalChip>
         )}
         <InlineProof className="font-mono tabular-nums border-0 bg-transparent px-0 py-0">
-          {filteredNodes.length}/{rawNodes.length} nodes · {filteredEdges.length}/{rawEdges.length} edges
+          {graphCanvasProof('nodes', filteredNodes.length, rawNodes.length, nodesQuery.data?.total)}
+          {singletonCount > 0 ? ` (${singletonCount} isolated hidden)` : ''} ·{' '}
+          {graphCanvasProof('edges', filteredEdges.length, rawEdges.length, edgesQuery.data?.total)}
         </InlineProof>
         <SegmentedControl<ViewMode>
           size="sm"
@@ -530,7 +523,8 @@ export function GraphPage() {
       </div>
 
       {rawNodes.length === 0 ? (
-        <SetupNudge
+        <NextStep
+          variant="inline"
           requires={['first_report_received']}
           emptyTitle="The graph is empty"
           emptyDescription="Nodes and edges populate automatically as the LLM pipeline classifies reports. Submit a report from the dashboard to seed the graph."
@@ -634,10 +628,10 @@ export function GraphPage() {
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-graph">
       <PageHeaderBar
-        title={copy?.title ?? 'Knowledge Graph'}
+        title={copy?.title ?? 'Bug clusters'}
         projectScope={stats.projectName ?? projectName ?? undefined}
 
-        helpTitle={copy?.help?.title ?? 'About the Knowledge Graph'}
+        helpTitle={copy?.help?.title ?? 'About Bug clusters'}
         helpWhatIsIt={
           copy?.help?.whatIsIt ??
           'A live map of the relationships your bug reports create — components affected, pages broken, regressions, duplicates, and fix attempts.'
@@ -654,41 +648,10 @@ export function GraphPage() {
           'Overview for posture. Explore for canvas/table/surface. Backend tab shows AGE sync and ontology debug info.'
         }
       >
-        <Badge
-          className={
-            bannerSeverity === 'ok'
-              ? CHIP_TONE.okSubtle
-              : bannerSeverity === 'danger'
-                ? CHIP_TONE.dangerSubtle
-                : bannerSeverity === 'warn'
-                  ? CHIP_TONE.warnSubtle
-                  : bannerSeverity === 'brand'
-                    ? 'bg-chrome text-fg-secondary'
-                    : 'bg-surface-overlay text-fg-muted'
-          }
-        >
-          {!stats.hasIngest
-            ? 'WAITING'
-            : stats.nodeCount === 0
-              ? 'EMPTY'
-              : stats.fragileComponents > 0
-                ? `${stats.fragileComponents} FRAGILE`
-                : stats.regressionEdges > 0
-                  ? `${stats.regressionEdges} REGR`
-                  : 'CURRENT'}
-        </Badge>
         <FreshnessPill
           at={statsFetchedAt ?? nodesQuery.lastFetchedAt}
           isValidating={statsValidating || nodesQuery.isValidating || edgesQuery.isValidating}
         />
-        <Btn
-          size="sm"
-          variant="ghost"
-          onClick={reloadGraph}
-          loading={statsValidating || nodesQuery.isValidating}
-        >
-          Refresh
-        </Btn>
       </PageHeaderBar>
 
       <PagePosture
@@ -730,14 +693,16 @@ export function GraphPage() {
         />
       )}
 
-      {!ux.hideGraphSnapshot && (
+      {!ux.hideGraphSnapshot && activeTab === 'overview' && (
       <Section title={copy?.sections?.snapshot ?? 'GRAPH SNAPSHOT'} freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
         <SnapshotSectionHint text={activeTabMeta.description} />
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {/* Leads with clusters (report groups): the node total mixes every
+              node type, so "192" under a "report groups" caption misled. */}
           <StatCard
-            label={copy?.statLabels?.nodes ?? 'Nodes'}
-            value={stats.nodeCount}
-            accent={stats.nodeCount > 0 ? 'text-fg' : undefined}
+            label="Clusters"
+            value={stats.reportNodes}
+            accent={stats.reportNodes > 0 ? 'text-fg' : undefined}
             tooltip={nodesTooltip(stats)}
             detail={nodesDetail(stats)}
             to={graphLinks.nodes}
@@ -772,46 +737,6 @@ export function GraphPage() {
 
       {activeTab === 'overview' && (
         <>
-          {stats.topPriorityTo && stats.topPriority !== 'clear' ? (
-            <Card
-              className={`space-y-3 p-4 ${
-                stats.topPriority === 'fragile'
-                  ? 'border-danger/40 bg-surface-raised'
-                  : stats.topPriority === 'regressions' || stats.topPriority === 'empty'
-                    ? 'border-warn/40 bg-surface-raised'
-                    : 'border-brand/40 bg-surface-raised'
-              }`}
-            >
-              <SignalChip
-                tone={
-                  stats.topPriority === 'fragile'
-                    ? 'danger'
-                    : stats.topPriority === 'regressions' || stats.topPriority === 'empty'
-                      ? 'warn'
-                      : 'brand'
-                }
-              >
-                Top priority
-              </SignalChip>
-              <ContainedBlock
-                tone={
-                  stats.topPriority === 'fragile' ? 'warn' : stats.topPriority === 'regressions' ? 'warn' : 'info'
-                }
-                label="Graph"
-              >
-                <p className="text-sm font-medium leading-snug text-fg">{stats.topPriorityLabel}</p>
-              </ContainedBlock>
-              <ActionPillRow>
-                <ActionPill to={stats.topPriorityTo} tone="brand">
-                  Take action →
-                </ActionPill>
-                <ActionPill tone="neutral" onClick={() => setActiveTab('explore')}>
-                  Open map
-                </ActionPill>
-              </ActionPillRow>
-            </Card>
-          ) : null}
-
           {!ux.hideOverviewChrome && (
           <ActionPillRow>
             <ActionPill tone="brand" onClick={() => setActiveTab('explore')}>

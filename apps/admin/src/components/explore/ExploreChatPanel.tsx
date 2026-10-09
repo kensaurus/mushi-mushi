@@ -22,6 +22,10 @@ import { apiFetch } from '../../lib/supabase'
 import { formatLlmCost } from '../../lib/format'
 import { useTheme } from '../../lib/useTheme'
 import { openCodebaseChatStream, type CodebaseChatMessage } from '../../lib/exploreCodebaseStream'
+import { applyAskError, askErrorMessage } from '../../lib/exploreChatErrors'
+import { apiErrorMessage } from '../../lib/humanizeApiError'
+import { useToast } from '../../lib/toast'
+import { ConfirmDialog } from '../ConfirmDialog'
 import { ExploreUnderstandEmpty } from './ExploreUnderstandEmpty'
 import type { AskSeed, CodebaseCitation, CodebaseUnderstandError } from './exploreUnderstandTypes'
 
@@ -44,6 +48,8 @@ interface ChatTurn {
   costUsd?: number | null
   latencyMs?: number | null
   keySource?: 'byok' | 'env' | null
+  /** Plain-English failure, shown under (or instead of) the answer. */
+  error?: string
 }
 
 interface ChatThreadRow {
@@ -67,6 +73,7 @@ export function ExploreChatPanel({
   onSeedConsumed,
   onCitationClick,
 }: Props) {
+  const toast = useToast()
   const [threadId, setThreadId] = useState<string | undefined>()
   const [threads, setThreads] = useState<ChatThreadRow[]>([])
   const [threadsLoading, setThreadsLoading] = useState(false)
@@ -132,18 +139,26 @@ export function ExploreChatPanel({
     setRenamingId(null)
   }, [])
 
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
+
   const deleteThread = useCallback(
     async (id: string) => {
       if (!projectId) return
-      if (!window.confirm('Delete this chat thread? This cannot be undone.')) return
+      setDeleting(true)
       const res = await apiFetch(`/v1/admin/projects/${projectId}/codebase/chat/threads/${id}`, {
         method: 'DELETE',
       })
-      if (!res.ok) return
+      setDeleting(false)
+      setConfirmDeleteId(null)
+      if (!res.ok) {
+        toast.error('Could not delete the thread', apiErrorMessage(res.error, 'Try again in a moment.'))
+        return
+      }
       setThreads((prev) => prev.filter((t) => t.id !== id))
       if (threadId === id) startNewThread()
     },
-    [projectId, threadId, startNewThread],
+    [projectId, threadId, startNewThread, toast],
   )
 
   const saveThreadRename = useCallback(
@@ -160,12 +175,12 @@ export function ExploreChatPanel({
       )
       setRenamingId(null)
       if (res.ok && res.data) {
-        setThreads((prev) =>
-          prev.map((t) => (t.id === id ? { ...t, title: res.data!.title, preview: res.data!.title } : t)),
-        )
+        setThreads((prev) => prev.map((t) => (t.id === id ? { ...t, title: res.data!.title } : t)))
+      } else {
+        toast.error('Could not rename the thread', apiErrorMessage(res.error, 'Try again in a moment.'))
       }
     },
-    [projectId, renameDraft],
+    [projectId, renameDraft, toast],
   )
 
   useEffect(() => {
@@ -244,12 +259,8 @@ export function ExploreChatPanel({
             if (err.code === 'NO_LLM_KEY' || err.code === 'INDEX_DISABLED') {
               setFatalError({ code: err.code, message: err.message })
             }
-            setTurns((prev) => {
-              const withoutEmpty = prev.filter(
-                (t, i) => !(i === prev.length - 1 && t.streaming && !t.content),
-              )
-              return withoutEmpty
-            })
+            // Every other failure stays visible on the bubble it interrupted.
+            setTurns((prev) => applyAskError(prev, askErrorMessage(err)))
             setLoading(false)
           },
         },
@@ -338,7 +349,7 @@ export function ExploreChatPanel({
               <ChatThreadItem
                 key={t.id}
                 active={threadId === t.id}
-                title={t.preview ?? t.title ?? 'Untitled chat'}
+                title={t.title ?? t.preview ?? 'Untitled chat'}
                 meta={new Date(t.updated_at).toLocaleDateString()}
                 onClick={() => void loadThreadMessages(t.id)}
                 actions={
@@ -363,7 +374,7 @@ export function ExploreChatPanel({
                         aria-label="Delete thread"
                         onClick={(e) => {
                           e.stopPropagation()
-                          void deleteThread(t.id)
+                          setConfirmDeleteId(t.id)
                         }}
                         className="inline-flex h-7 w-7 items-center justify-center rounded-sm text-fg-muted hover:text-danger hover:bg-danger/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger/40"
                       >
@@ -386,7 +397,7 @@ export function ExploreChatPanel({
             </p>
             <p className="text-2xs text-fg-muted">
               Requires an Anthropic or OpenAI key in{' '}
-              <Link to="/settings#byok" className="text-accent underline hover:no-underline">
+              <Link to="/settings?tab=byok" className="text-accent underline hover:no-underline">
                 Settings → API Keys
               </Link>
               . Usage (model · tokens · cost) appears under each answer.
@@ -424,7 +435,7 @@ export function ExploreChatPanel({
             Thread total: {threadTotals.input.toLocaleString()} → {threadTotals.output.toLocaleString()} tok
             {threadTotals.cost > 0 ? ` · ${formatLlmCost(threadTotals.cost)}` : ''}
             {' · '}
-            <Link to="/settings#byok" className="text-info hover:underline">
+            <Link to="/settings?tab=byok" className="text-info hover:underline">
               BYOK usage
             </Link>
           </p>
@@ -458,6 +469,17 @@ export function ExploreChatPanel({
           </form>
         </ChatComposer>
       </div>
+      {confirmDeleteId ? (
+        <ConfirmDialog
+          title="Delete this chat thread?"
+          body="The questions and answers in it are removed. This cannot be undone."
+          confirmLabel="Delete thread"
+          tone="danger"
+          loading={deleting}
+          onCancel={() => setConfirmDeleteId(null)}
+          onConfirm={() => deleteThread(confirmDeleteId)}
+        />
+      ) : null}
     </WorkbenchSplit>
   )
 }
@@ -546,6 +568,11 @@ function ChatTurnCard({
           {turn.content || (turn.streaming ? '…' : '')}
         </Streamdown>
       )}
+      {turn.error ? (
+        <p className="mt-1 text-2xs text-danger" role="alert">
+          {turn.error}
+        </p>
+      ) : null}
     </ChatTurnShell>
   )
 }
@@ -574,7 +601,7 @@ function MessageTelemetryStrip({ turn }: { turn: ChatTurn }) {
       {turn.model ? <CodeChip maxWidthClass="max-w-56">{turn.model}</CodeChip> : null}
       {meta.length > 0 ? <span>{meta.join(' · ')}</span> : null}
       <Link
-        to="/settings#byok"
+        to="/settings?tab=byok"
         className="text-info hover:underline font-sans normal-case tracking-normal"
         title="Manage API keys and BYOK usage"
       >

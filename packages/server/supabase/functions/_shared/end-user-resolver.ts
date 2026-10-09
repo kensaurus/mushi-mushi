@@ -35,6 +35,13 @@ export interface ResolveEndUserOptions {
   reporterTokenHash?: string | null
   /** Whether the host SDK has the user opted in to rewards tracking. */
   optedInToRewards?: boolean
+  /**
+   * True only when the caller verified this identity (host JWT or a signed
+   * X-Mushi-User-Token). Unverified calls may create a person but never
+   * rewrite an existing person's name, email hash or provider (audit #31:
+   * any public SDK key could otherwise rename users across the org).
+   */
+  identityVerified?: boolean
 }
 
 export interface ResolvedEndUser {
@@ -60,37 +67,49 @@ export async function resolveEndUser(
   db: SupabaseClient,
   opts: ResolveEndUserOptions,
 ): Promise<ResolvedEndUser | null> {
-  const { organizationId, externalUserId, traits, reporterTokenHash, optedInToRewards } = opts
+  const { organizationId, externalUserId, traits, reporterTokenHash, optedInToRewards, identityVerified } = opts
 
   const emailHash = traits?.email
     ? await sha256Hex(traits.email.toLowerCase().trim())
     : null
 
-  // Upsert end_users row. ON CONFLICT (organization_id, external_user_id)
-  // updates presentation fields but never overwrites jwt_verified_at (P2).
-  const upsertData: Record<string, unknown> = {
-    organization_id: organizationId,
-    external_user_id: externalUserId,
-    last_seen_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  }
-  if (emailHash) upsertData.email_hash = emailHash
-  if (traits?.name) upsertData.display_name = traits.name.slice(0, 120)
-  if (traits?.provider) upsertData.jwt_provider = traits.provider
-  if (typeof optedInToRewards === 'boolean') upsertData.opted_in_to_rewards = optedInToRewards
+  const nowIso = new Date().toISOString()
+  const presentation: Record<string, unknown> = {}
+  if (emailHash) presentation.email_hash = emailHash
+  if (traits?.name) presentation.display_name = traits.name.slice(0, 120)
+  if (traits?.provider) presentation.jwt_provider = traits.provider
+  const activity: Record<string, unknown> = { last_seen_at: nowIso, updated_at: nowIso }
+  if (typeof optedInToRewards === 'boolean') activity.opted_in_to_rewards = optedInToRewards
 
-  const { data: row, error } = await db
+  // A new person may be created with the traits the host supplied. An existing
+  // person's presentation fields change only for a verified identity; otherwise
+  // only activity fields move. Never touches jwt_verified_at (P2).
+  const { data: inserted, error: insertError } = await db
     .from('end_users')
-    .upsert(upsertData, {
-      onConflict: 'organization_id,external_user_id',
-      ignoreDuplicates: false,
-    })
+    .upsert(
+      { organization_id: organizationId, external_user_id: externalUserId, ...presentation, ...activity },
+      { onConflict: 'organization_id,external_user_id', ignoreDuplicates: true },
+    )
     .select('id, opted_in_to_rewards, anti_fraud_flags')
-    .single()
-
-  if (error || !row) {
-    rlog.error('upsert_failed', { organizationId, error: error?.message })
+  if (insertError) {
+    rlog.error('upsert_failed', { organizationId, error: insertError.message })
     return null
+  }
+
+  let row = (inserted as Array<{ id: string; opted_in_to_rewards: boolean | null; anti_fraud_flags: string[] | null }> | null)?.[0] ?? null
+  if (!row) {
+    const { data: updated, error } = await db
+      .from('end_users')
+      .update(identityVerified ? { ...presentation, ...activity } : activity)
+      .eq('organization_id', organizationId)
+      .eq('external_user_id', externalUserId)
+      .select('id, opted_in_to_rewards, anti_fraud_flags')
+      .single()
+    if (error || !updated) {
+      rlog.error('update_failed', { organizationId, error: error?.message })
+      return null
+    }
+    row = updated
   }
 
   // Carry forward anti-fraud flags from reporter_devices if a token hash

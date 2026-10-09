@@ -5,11 +5,14 @@
  *          devices, plus filter the audit-grade event log.
  */
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { refreshNavCounts } from '../lib/useNavCounts'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { apiFetch } from '../lib/supabase'
 import { useRealtime } from '../lib/realtime'
 import { usePageData } from '../lib/usePageData'
+import { useEntitlements } from '../lib/useEntitlements'
 import { useToast } from '../lib/toast'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { PageHeaderBar } from '../components/PageHeaderBar'
@@ -18,6 +21,7 @@ import { AntiGamingStatusBanner } from '../components/anti-gaming/AntiGamingStat
 import {
   EMPTY_ANTI_GAMING_STATS,
   type AntiGamingStats,
+  type AntiGamingTabId,
 } from '../components/anti-gaming/AntiGamingStatsTypes'
 import {
   Card,
@@ -31,22 +35,22 @@ import {
   Tooltip,
 } from '../components/ui'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
-import { KpiTile, type KpiDelta } from '../components/charts'
-import { SetupNudge } from '../components/SetupNudge'
+import { KpiTile } from '../components/charts'
+import { NextStep } from '../components/NextStep'
 import { ConfigHelp } from '../components/ConfigHelp'
-import { PromptDialog } from '../components/ConfirmDialog'
+import { ConfirmDialog, PromptDialog } from '../components/ConfirmDialog'
+import { plainApiError } from '../lib/humanizeApiError'
 import { useMergedErrors } from '../lib/useMergedErrors'
 import { pluralizeWithCount } from '../lib/format'
-import { IconEye, IconChevronUp, IconFlag, IconFlagOff } from '../components/icons'
+import { IconEye, IconChevronUp, IconFlag, IconFlagOff, IconRewards } from '../components/icons'
 import {
-  ActionPill,
-  ActionPillRow,
   ContainedBlock,
   InlineProof,
   SignalChip,
 } from '../components/report-detail/ReportSurface'
 import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
 import { CHIP_TONE } from '../lib/chipTone'
+import { shortReporterKey } from '../lib/reporterKey'
 
 interface ReporterDevice {
   id: string
@@ -85,11 +89,12 @@ const EVENT_BADGE: Record<AntiGamingEvent['event_type'], string> = {
 const EVENT_TYPE_OPTIONS = ['', 'multi_account', 'velocity_anomaly', 'manual_flag', 'unflag']
 
 interface EventGroup {
-  /** Tuple key: `${event_type}|${reason ?? ''}|${reporter_token_hash}|${ip_address ?? ''}` */
+  /** Tuple key: `${event_type}|${reason ?? ''}|${ip_address ?? ''}|${day}` */
   key: string
   event_type: AntiGamingEvent['event_type']
   reason: string | null
-  reporter_token_hash: string
+  /** Distinct reporter token hashes behind the group's events. */
+  tokens: string[]
   ip_address: string | null
   count: number
   first_at: string
@@ -100,11 +105,10 @@ interface EventGroup {
 
 /**
  * Collapse identical events into one row keyed by the (event_type, reason,
- * reporter_token_hash, ip_address) tuple. The detector fires once per
- * threshold breach so a single misbehaving device can spam dozens of
- * identical lines per hour — this aggregation makes the audit feed
- * actually skimmable while preserving every individual event id for
- * SOC-2 traceability.
+ * ip_address, UTC day) tuple. The detector fires once per threshold breach,
+ * and a multi-account burst carries a different token on every event, so a
+ * key that included the token left dozens of identical rows. Each group keeps
+ * its distinct tokens and every event id for SOC-2 traceability.
  *
  * Events are returned newest-first by their last occurrence so the most
  * active groups bubble to the top.
@@ -112,11 +116,12 @@ interface EventGroup {
 function groupEvents(events: AntiGamingEvent[]): EventGroup[] {
   const map = new Map<string, EventGroup>()
   for (const e of events) {
-    const key = `${e.event_type}|${e.reason ?? ''}|${e.reporter_token_hash}|${e.ip_address ?? ''}`
+    const key = `${e.event_type}|${e.reason ?? ''}|${e.ip_address ?? ''}|${e.created_at.slice(0, 10)}`
     const existing = map.get(key)
     if (existing) {
       existing.count += 1
       existing.ids.push(e.id)
+      if (!existing.tokens.includes(e.reporter_token_hash)) existing.tokens.push(e.reporter_token_hash)
       if (e.created_at < existing.first_at) existing.first_at = e.created_at
       if (e.created_at > existing.last_at) existing.last_at = e.created_at
     } else {
@@ -124,7 +129,7 @@ function groupEvents(events: AntiGamingEvent[]): EventGroup[] {
         key,
         event_type: e.event_type,
         reason: e.reason,
-        reporter_token_hash: e.reporter_token_hash,
+        tokens: [e.reporter_token_hash],
         ip_address: e.ip_address,
         count: 1,
         first_at: e.created_at,
@@ -138,6 +143,9 @@ function groupEvents(events: AntiGamingEvent[]): EventGroup[] {
 
 type DeviceGroupBy = 'flat' | 'ip' | 'date' | 'status'
 
+/** Event rows shown before "Show all". */
+const EVENT_PREVIEW_ROWS = 10
+
 export function AntiGamingPage() {
   const toast = useToast()
   const projectId = useActiveProjectId()
@@ -150,7 +158,25 @@ export function AntiGamingPage() {
     { deps: [projectId] },
   )
   const shellStats = shellStatsData ?? EMPTY_ANTI_GAMING_STATS
-  const [filter, setFilter] = useState<'flagged' | 'all'>('flagged')
+  // The device filter lives in the URL so the status banner's links
+  // (?filter=flagged, ?tab=events) and shared links actually do something.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const filter: 'flagged' | 'all' = searchParams.get('filter') === 'all' ? 'all' : 'flagged'
+  const setFilter = useCallback(
+    (next: 'flagged' | 'all') => {
+      setSearchParams(
+        (prev) => {
+          const qs = new URLSearchParams(prev)
+          qs.set('filter', next)
+          return qs
+        },
+        { replace: true, preventScrollReset: true },
+      )
+    },
+    [setSearchParams],
+  )
+  const tabParam = searchParams.get('tab')
+  const [unflagTarget, setUnflagTarget] = useState<string | null>(null)
   const [eventFilter, setEventFilter] = useState('')
   const [search, setSearch] = useState('')
   const [expanded, setExpanded] = useState<string | null>(null)
@@ -158,6 +184,7 @@ export function AntiGamingPage() {
   const [flagTarget, setFlagTarget] = useState<string | null>(null)
   const [aggregateEvents, setAggregateEvents] = useState(true)
   const [expandedEventGroup, setExpandedEventGroup] = useState<string | null>(null)
+  const [showAllEvents, setShowAllEvents] = useState(false)
   // 2026-05-07 enhancement — when 50 devices land in the flagged lane the
   // flat list is unscannable; an operator can't tell whether they're staring
   // at one rogue datacenter spamming 30 tokens or a coordinated campaign
@@ -181,11 +208,20 @@ export function AntiGamingPage() {
   // though it represents a different bucket.
   const resetCollapsed = useCallback(() => setCollapsedGroups(new Set()), [])
 
-  const devicesPath = `/v1/admin/anti-gaming/devices${filter === 'flagged' ? '?flagged=true' : ''}`
-  const devicesQuery = usePageData<{ devices: ReporterDevice[] }>(devicesPath, { deps: [filter] })
+  // Scoped to the active project so the list matches the KPI tiles above.
+  const deviceParams = new URLSearchParams()
+  if (filter === 'flagged') deviceParams.set('flagged', 'true')
+  if (projectId) deviceParams.set('project_id', projectId)
+  const devicesQs = deviceParams.toString()
+  const devicesPath = `/v1/admin/anti-gaming/devices${devicesQs ? `?${devicesQs}` : ''}`
+  const devicesQuery = usePageData<{ devices: ReporterDevice[] }>(devicesPath, { deps: [filter, projectId] })
+  const eventParams = new URLSearchParams()
+  if (eventFilter) eventParams.set('event_type', eventFilter)
+  if (projectId) eventParams.set('project_id', projectId)
+  const eventsQs = eventParams.toString()
   const eventsQuery = usePageData<{ events: AntiGamingEvent[] }>(
-    `/v1/admin/anti-gaming/events${eventFilter ? `?event_type=${eventFilter}` : ''}`,
-    { deps: [eventFilter] },
+    `/v1/admin/anti-gaming/events${eventsQs ? `?${eventsQs}` : ''}`,
+    { deps: [eventFilter, projectId] },
   )
 
   const allDevices = devicesQuery.data?.devices ?? []
@@ -206,6 +242,9 @@ export function AntiGamingPage() {
   }, [devicesQuery, eventsQuery, reloadShellStats])
 
   // Mushi Bounties: fetch withheld tester redemptions for the 3rd KPI tile.
+  // The route is platform-wide and super-admin only (404 for everyone else),
+  // so project owners skip the call and the tile instead of logging a 404.
+  const { isSuperAdmin } = useEntitlements()
   const withheldRedemptionsQuery = usePageData<{ count: number; items: Array<{
     id: string
     tester_id: string
@@ -214,7 +253,7 @@ export function AntiGamingPage() {
     face_value_usd: number | null
     requested_at: string
     mushi_testers?: { public_handle: string | null } | null
-  }> }>('/v1/admin/tester-redemptions/withheld')
+  }> }>(isSuperAdmin ? '/v1/admin/tester-redemptions/withheld' : null)
   const withheldRedemptions = withheldRedemptionsQuery.data?.items ?? []
   const withheldCount = withheldRedemptionsQuery.data?.count ?? 0
 
@@ -325,29 +364,68 @@ export function AntiGamingPage() {
 
   const eventGroups = useMemo(() => groupEvents(events), [events])
   const collapsedCount = events.length - eventGroups.length
+  const eventRowCount = aggregateEvents ? eventGroups.length : events.length
+  const visibleEventGroups = showAllEvents ? eventGroups : eventGroups.slice(0, EVENT_PREVIEW_ROWS)
+  const visibleEvents = showAllEvents ? events : events.slice(0, EVENT_PREVIEW_ROWS)
 
-  const stats = useMemo(() => {
-    const flagged = allDevices.filter((d) => d.flagged_as_suspicious).length
-    const crossAccount = allDevices.filter((d) => d.cross_account_flagged).length
-    const totalReports = allDevices.reduce((sum, d) => sum + d.report_count, 0)
-    return { total: allDevices.length, flagged, crossAccount, totalReports }
-  }, [allDevices])
+  // Counts come from the same project-scoped stats as the status banner. The
+  // device list spans every owned project and, under the default "flagged"
+  // filter, holds only flagged devices, so counting it showed "16 flagged"
+  // under a banner saying "4 flagged" and made Tracked equal Flagged. Its
+  // per-period deltas came from that population too, so they are gone.
+  const stats = {
+    total: shellStats.trackedDevices,
+    flagged: shellStats.flaggedDevices,
+    crossAccount: shellStats.crossAccountDevices,
+    totalReports: shellStats.totalReports,
+  }
 
-  const deltas = useMemo(() => buildDeltas(allDevices, events), [allDevices, events])
+  // Unflag also clears the cross-account flag, so it is confirmed first.
+  function unflag(deviceId: string) {
+    setUnflagTarget(deviceId)
+  }
 
-  async function unflag(deviceId: string) {
+  async function commitUnflag() {
+    const deviceId = unflagTarget
+    if (!deviceId) return
     setBusy(deviceId)
     try {
       const res = await apiFetch(`/v1/admin/anti-gaming/devices/${deviceId}/unflag`, { method: 'POST' })
-      if (!res.ok) throw new Error(res.error?.message ?? 'Unflag failed')
+      if (!res.ok) {
+        toast.error('Could not unflag device', plainApiError(res.error, 'Try again in a moment.'))
+        return
+      }
       toast.success('Device unflagged')
       reloadAll()
+      refreshNavCounts()
     } catch (err) {
       toast.error('Could not unflag device', err instanceof Error ? err.message : String(err))
     } finally {
       setBusy(null)
+      setUnflagTarget(null)
     }
   }
+
+  // Banner buttons act on this page instead of only changing the URL.
+  const goToSection = useCallback(
+    (tab: AntiGamingTabId) => {
+      if (tab === 'events') {
+        document.getElementById('anti-gaming-events')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        return
+      }
+      const showFlagged = shellStats.topPriority === 'cross_account' || shellStats.topPriority === 'flagged'
+      setFilter(showFlagged ? 'flagged' : 'all')
+      setSearch('')
+      document.getElementById('anti-gaming-devices')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    },
+    [setFilter, shellStats.topPriority],
+  )
+
+  // Deep link: /anti-gaming?tab=events lands on the event log.
+  useEffect(() => {
+    if (tabParam !== 'events' || loading) return
+    document.getElementById('anti-gaming-events')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [tabParam, loading])
 
   function flag(deviceId: string) {
     setFlagTarget(deviceId)
@@ -376,9 +454,9 @@ export function AntiGamingPage() {
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-anti-gaming">
       <PageHeaderBar
-        title="Anti-Gaming"
+        title="Spam & abuse"
 
-        helpTitle="About Anti-Gaming"
+        helpTitle="About Spam & abuse"
         helpWhatIsIt="Detects abusive reporters: the same device fingerprint registering many distinct reporter tokens (multi-account), or a single token submitting too many reports in a short window (velocity anomaly). Device fingerprint is derived server-side from IP + User-Agent and supplemented by an SDK-supplied stable hash."
         helpUseCases={[
           'Block reward farming on gamified deployments',
@@ -394,7 +472,6 @@ export function AntiGamingPage() {
           onChange={(e) => setFilter(e.currentTarget.value as 'flagged' | 'all')}
         />
         <ConfigHelp helpId="anti-gaming.flagged_filter" />
-        <Btn variant="ghost" size="sm" onClick={reloadAll}>Refresh</Btn>
       </PageHeaderBar>
 
       <PagePosture
@@ -404,6 +481,7 @@ export function AntiGamingPage() {
             children: (
               <AntiGamingStatusBanner
                 stats={shellStats}
+                onTab={goToSection}
                 onRefresh={reloadAll}
                 refreshing={loading || shellValidating}
               />
@@ -412,58 +490,22 @@ export function AntiGamingPage() {
         ]}
       />
 
-      {(stats.crossAccount > 0 || stats.flagged > 0) && (
-        <Card
-          className={`space-y-3 border p-4 bg-surface-raised ${
-            stats.crossAccount > 0 ? 'border-danger/40' : 'border-warn/40'
-          }`}
-        >
-          <SignalChip tone={stats.crossAccount > 0 ? 'danger' : 'warn'}>
-            Needs attention
-          </SignalChip>
-          <ContainedBlock tone="warn">
-            <p className="text-xs font-medium leading-snug text-fg">
-              {stats.crossAccount > 0
-                ? `${stats.crossAccount} cross-account fingerprint${stats.crossAccount === 1 ? '' : 's'} — review and quarantine reward farming.`
-                : `${stats.flagged} flagged device${stats.flagged === 1 ? '' : 's'} need review.`}
-            </p>
-          </ContainedBlock>
-          <ActionPillRow>
-            <ActionPill
-              onClick={() => {
-                setFilter('flagged')
-                setSearch('')
-              }}
-              tone="brand"
-            >
-              Review flagged →
-            </ActionPill>
-            <ActionPill to="/audit?source=anti-gaming" tone="neutral">
-              Audit log
-            </ActionPill>
-          </ActionPillRow>
-        </Card>
-      )}
-
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2" data-dav-anchor="anti-gaming:decide">
         <KpiTile
           label="Tracked devices"
           value={stats.total}
-          delta={deltas.tracked}
           meaning="Distinct device fingerprints the SDK has seen submitting reports. A growing number means broader reach; a flat one means the SDK isn't installed widely."
         />
         <KpiTile
           label="Flagged"
           value={stats.flagged}
           accent={stats.flagged > 0 ? 'danger' : undefined}
-          delta={deltas.flagged}
           meaning="Devices our heuristics or you have marked as abusive. Their reports still ingest but won't dispatch fixes automatically."
         />
         <KpiTile
           label="Cross-account"
           value={stats.crossAccount}
           accent={stats.crossAccount > 0 ? 'warn' : undefined}
-          delta={deltas.crossAccount}
           meaning="Devices that have submitted reports under more than one reporter token in the same window. A common abuse signal — but also fires for shared NAT."
         />
         <KpiTile
@@ -471,21 +513,15 @@ export function AntiGamingPage() {
           value={stats.totalReports}
           meaning="Cumulative reports ingested from any tracked device. Compare against the dashboard's 14d intake to see if abuse is inflating volume."
         />
-        {/* Mushi Bounties: 3rd KPI — tester redemptions awaiting manual review */}
-        <KpiTile
-          label="Tester redemptions withheld"
-          value={withheldCount}
-          accent={withheldCount > 0 ? 'warn' : undefined}
-          meaning="Mushi Bounties gift-card redemptions paused for manual review (velocity cap exceeded or anti-fraud flag). Approve or deny below."
-        />
       </div>
 
-      {/* Mushi Bounties: withheld tester redemptions review section */}
+      {/* Mushi Bounties (super-admin only): withheld tester redemptions. The
+          count lives here rather than as a fifth tile that wrapped alone. */}
       {withheldCount > 0 && (
-        <Section title={`🪲 Withheld tester redemptions (${withheldCount})`} icon={undefined}>
+        <Section title={`Withheld tester redemptions (${withheldCount})`} icon={<IconRewards />}>
           <p className="text-2xs text-fg-muted mb-3">
-            These gift-card redemptions were paused by the anti-fraud engine.
-            Review each one and approve or deny.
+            Mushi Bounties gift-card redemptions paused by the anti-fraud engine (velocity cap
+            exceeded or an anti-fraud flag). Review each one and approve or deny.
           </p>
           <div className="space-y-2">
             {withheldRedemptions.map((r) => (
@@ -499,6 +535,7 @@ export function AntiGamingPage() {
         </Section>
       )}
 
+      <div id="anti-gaming-devices" className="scroll-mt-4">
       <Section
         title={
           (filter === 'flagged' ? 'Flagged devices' : 'All tracked devices') +
@@ -545,7 +582,8 @@ export function AntiGamingPage() {
               hint="Switch to All to inspect every tracked device, or wait for the detector to fire."
             />
           ) : (
-            <SetupNudge
+            <NextStep
+              variant="inline"
               requires={['first_report_received']}
               emptyTitle="No tracked devices yet"
               emptyDescription="Devices appear here once a reporter submits at least one report from them."
@@ -604,8 +642,9 @@ export function AntiGamingPage() {
           </div>
         )}
       </Section>
+      </div>
 
-      <div data-dav-anchor="anti-gaming:verify">
+      <div data-dav-anchor="anti-gaming:verify" id="anti-gaming-events" className="scroll-mt-4">
       <Section
         title={
           aggregateEvents && collapsedCount > 0
@@ -614,18 +653,16 @@ export function AntiGamingPage() {
         }
         action={
           <div className="flex items-center gap-2">
-            <ContainedBlock tone="muted" className="inline-flex items-center gap-1.5 py-1 px-2">
-              <label className="inline-flex items-center gap-1.5 text-2xs text-fg-muted cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={aggregateEvents}
-                  onChange={(e) => setAggregateEvents(e.target.checked)}
-                  className="h-3 w-3 accent-brand"
-                />
-                Group identical
-                <ConfigHelp helpId="anti-gaming.aggregate_identical" />
-              </label>
-            </ContainedBlock>
+            <label className="inline-flex items-center gap-1.5 text-2xs text-fg-muted cursor-pointer">
+              <input
+                type="checkbox"
+                checked={aggregateEvents}
+                onChange={(e) => setAggregateEvents(e.target.checked)}
+                className="h-3 w-3 accent-brand"
+              />
+              Group identical
+              <ConfigHelp helpId="anti-gaming.aggregate_identical" />
+            </label>
             <FilterSelect
               label="Type"
               value={eventFilter}
@@ -642,10 +679,10 @@ export function AntiGamingPage() {
           />
         ) : aggregateEvents ? (
           <div className="space-y-0.5 font-mono text-2xs">
-            {eventGroups.map((g) => {
+            {visibleEventGroups.map((g) => {
               const isOpen = expandedEventGroup === g.key
               const isRecurring = g.count > 1
-              const tokTip = `Reporter token hash ${g.reporter_token_hash}`
+              const tokTip = `Reporter token hash${g.tokens.length === 1 ? '' : 'es'} ${g.tokens.join(', ')}`
               return (
                 <div key={g.key} className="rounded-sm hover:bg-surface-overlay/40">
                   <Btn
@@ -670,7 +707,9 @@ export function AntiGamingPage() {
                     <span className="text-fg-secondary truncate flex-1">{g.reason ?? '—'}</span>
                     <span title={tokTip}>
                       <SignalChip tone="neutral" className="shrink-0 max-w-32 truncate font-mono">
-                        tok:{g.reporter_token_hash.slice(0, 8)}…
+                        {g.tokens.length === 1
+                          ? `tok:${shortReporterKey(g.tokens[0])}…`
+                          : `${g.tokens.length} tokens`}
                       </SignalChip>
                     </span>
                     {g.ip_address && (
@@ -700,7 +739,7 @@ export function AntiGamingPage() {
           </div>
         ) : (
           <div className="space-y-0.5 font-mono text-2xs">
-            {events.map(e => (
+            {visibleEvents.map(e => (
               <div key={e.id} className="flex items-center gap-2 px-2 py-1 rounded-sm hover:bg-surface-overlay/40">
                 <SignalChip tone="neutral" className="w-32 truncate font-mono tabular-nums">
                   {new Date(e.created_at).toLocaleString()}
@@ -708,7 +747,7 @@ export function AntiGamingPage() {
                 <Badge className={EVENT_BADGE[e.event_type]}>{e.event_type}</Badge>
                 <span className="text-fg-secondary truncate flex-1">{e.reason ?? '—'}</span>
                 <SignalChip tone="neutral" className="shrink-0 max-w-32 truncate font-mono">
-                  tok:{e.reporter_token_hash.slice(0, 8)}…
+                  tok:{shortReporterKey(e.reporter_token_hash)}…
                 </SignalChip>
                 {e.ip_address && (
                   <SignalChip tone="neutral" className="shrink-0 font-mono">
@@ -719,8 +758,27 @@ export function AntiGamingPage() {
             ))}
           </div>
         )}
+        {eventRowCount > EVENT_PREVIEW_ROWS ? (
+          <div className="mt-2">
+            <Btn variant="ghost" size="sm" onClick={() => setShowAllEvents((v) => !v)}>
+              {showAllEvents ? `Show first ${EVENT_PREVIEW_ROWS}` : `Show all ${eventRowCount}`}
+            </Btn>
+          </div>
+        ) : null}
       </Section>
       </div>
+
+      {unflagTarget && (
+        <ConfirmDialog
+          title="Unflag this device?"
+          body="Its reports will count normally again and it can earn rewards. This also clears its cross-account flag. Only unflag after checking it was a false alarm (shared office network, a test account)."
+          confirmLabel="Unflag device"
+          tone="danger"
+          loading={busy === unflagTarget}
+          onConfirm={commitUnflag}
+          onCancel={() => setUnflagTarget(null)}
+        />
+      )}
 
       {flagTarget && (
         <PromptDialog
@@ -878,63 +936,6 @@ function DeviceCard({ device: d, isExpanded, isBusy, onToggleExpand, onFlag, onU
   )
 }
 
-interface AntiGamingDeltas {
-  tracked: KpiDelta | null
-  flagged: KpiDelta | null
-  crossAccount: KpiDelta | null
-}
-
-const DAY_MS = 24 * 60 * 60 * 1000
-
-function buildDeltas(devices: ReporterDevice[], events: AntiGamingEvent[]): AntiGamingDeltas {
-  return {
-    tracked: deltaFromTimestamps(devices.map((d) => d.created_at)),
-    flagged: deltaFromTimestamps(
-      events
-        .filter((e) => e.event_type === 'multi_account' || e.event_type === 'manual_flag')
-        .map((e) => e.created_at),
-      { invertTone: true },
-    ),
-    crossAccount: deltaFromTimestamps(
-      events.filter((e) => e.event_type === 'multi_account').map((e) => e.created_at),
-      { invertTone: true },
-    ),
-  }
-}
-
-function deltaFromTimestamps(
-  timestamps: string[],
-  opts: { invertTone?: boolean } = {},
-): KpiDelta | null {
-  if (timestamps.length === 0) return null
-  const now = Date.now()
-  const todayCutoff = now - DAY_MS
-  const sevenDayCutoff = now - 7 * DAY_MS
-  let today = 0
-  let priorWindow = 0
-  for (const ts of timestamps) {
-    const t = new Date(ts).getTime()
-    if (Number.isNaN(t)) continue
-    if (t >= todayCutoff) today += 1
-    else if (t >= sevenDayCutoff) priorWindow += 1
-  }
-  if (today === 0 && priorWindow === 0) return null
-  const sevenDayAvg = priorWindow / 6
-  const diff = today - sevenDayAvg
-  const direction: KpiDelta['direction'] = diff > 0.5 ? 'up' : diff < -0.5 ? 'down' : 'flat'
-  // For abuse counters, "up" is bad, "down" is good. Plain counters keep the
-  // natural read.
-  const tone: KpiDelta['tone'] = opts.invertTone
-    ? direction === 'up' ? 'danger' : direction === 'down' ? 'ok' : 'muted'
-    : direction === 'up' ? 'ok' : direction === 'down' ? 'warn' : 'muted'
-  const formattedDiff = Math.abs(diff) >= 1 ? Math.round(Math.abs(diff)).toString() : Math.abs(diff).toFixed(1)
-  return {
-    value: direction === 'flat' ? 'flat vs 7d avg' : `${formattedDiff} vs 7d avg`,
-    direction,
-    tone,
-  }
-}
-
 // ─── Withheld tester redemption row ──────────────────────────────────────────
 // Displayed in AntiGamingPage when a Mushi Bounties gift-card redemption was
 // held for manual review. Reviewer can approve (→ pending, picked up by cron)
@@ -957,13 +958,16 @@ function WithheldRedemptionRow({
 }) {
   const toast = useToast()
   const [acting, setActing] = useState<'approve' | 'deny' | null>(null)
+  // Approve releases a real gift card; deny refunds the points. Both are
+  // confirmed so a mis-click cannot pay out or reverse a payout.
+  const [confirming, setConfirming] = useState<'approve' | 'deny' | null>(null)
 
   const act = async (action: 'approve' | 'deny') => {
     setActing(action)
     try {
       const res = await apiFetch(`/v1/admin/tester-redemptions/${redemption.id}/${action}`, { method: 'POST' })
       if (!res.ok) {
-        toast.error(res.error?.message ?? 'Action failed')
+        toast.error(plainApiError(res.error, action === 'approve' ? 'Could not approve the redemption.' : 'Could not deny the redemption.'))
         return
       }
       toast.success(action === 'approve' ? 'Redemption approved' : 'Redemption denied — points refunded')
@@ -972,10 +976,12 @@ function WithheldRedemptionRow({
       toast.error(err instanceof Error ? err.message : 'Action failed')
     } finally {
       setActing(null)
+      setConfirming(null)
     }
   }
 
-  const handle = redemption.mushi_testers?.public_handle ?? redemption.tester_id.slice(0, 8)
+  const handle = redemption.mushi_testers?.public_handle ?? 'unknown tester'
+  const value = redemption.face_value_usd ? `$${redemption.face_value_usd} ` : ''
 
   return (
     <Card  className="flex items-center justify-between gap-3 px-3 py-2">
@@ -993,13 +999,28 @@ function WithheldRedemptionRow({
         </p>
       </div>
       <div className="flex gap-1.5 flex-shrink-0">
-        <Btn size="sm" variant="primary" disabled={!!acting} onClick={() => act('approve')}>
+        <Btn size="sm" variant="primary" disabled={!!acting} onClick={() => setConfirming('approve')}>
           {acting === 'approve' ? '…' : 'Approve'}
         </Btn>
-        <Btn size="sm" variant="ghost" disabled={!!acting} onClick={() => act('deny')}>
+        <Btn size="sm" variant="ghost" disabled={!!acting} onClick={() => setConfirming('deny')}>
           {acting === 'deny' ? '…' : 'Deny'}
         </Btn>
       </div>
+      {confirming && (
+        <ConfirmDialog
+          title={confirming === 'approve' ? `Release this ${value}redemption?` : 'Deny this redemption?'}
+          body={
+            confirming === 'approve'
+              ? `@${handle} will receive it. A gift card is ordered for real and cannot be taken back.`
+              : `@${handle} gets their ${redemption.points_spent.toLocaleString()} points back and the redemption is cancelled.`
+          }
+          confirmLabel={confirming === 'approve' ? 'Release redemption' : 'Deny and refund'}
+          tone={confirming === 'approve' ? 'default' : 'danger'}
+          loading={acting === confirming}
+          onConfirm={() => act(confirming)}
+          onCancel={() => setConfirming(null)}
+        />
+      )}
     </Card>
   )
 }

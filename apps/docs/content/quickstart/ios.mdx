@@ -1,65 +1,92 @@
 ---
 title: iOS (Swift) quickstart
+description: Add Mushi's native Swift SDK to an iOS app with Swift Package Manager — shake-to-report, offline queue and device context. Preview build, not on CocoaPods yet.
 ---
+
+import { Callout } from 'nextra/components'
 
 # iOS quickstart
 
-The `MushiMushi` Swift package ships shake-to-report, an SQLite-backed
-offline queue, automatic device-context capture, and an optional Sentry
-breadcrumb bridge.
+The `MushiMushi` Swift package ships shake-to-report, a file-backed offline
+queue, automatic device context, a breadcrumb ring buffer and PII scrubbing.
 
-## Install
+<Callout type="warning">
+  **Preview.** The Swift SDK is not published to CocoaPods and has no release
+  tag yet, so a version rule like `from: "0.4.0"` cannot resolve. Install it
+  from the repository's `master` branch as shown below. `npx mushi-mushi` does
+  not set up native iOS projects.
+</Callout>
 
-### Swift Package Manager
+## Install (Swift Package Manager)
 
-In Xcode → File → Add Package Dependencies → enter:
+In Xcode → **File → Add Package Dependencies**, enter the URL below and set the
+dependency rule to **Branch → `master`**, then add the `MushiMushi` library to
+your app target.
 
 ```
 https://github.com/kensaurus/mushi-mushi
 ```
 
-Pick the `MushiMushi` target.
+Or in a `Package.swift`:
 
-### CocoaPods
-
-```ruby filename="Podfile"
-pod 'MushiMushi', '~> 0.4'
+```swift filename="Package.swift"
+dependencies: [
+  .package(url: "https://github.com/kensaurus/mushi-mushi.git", branch: "master"),
+],
+targets: [
+  .target(name: "MyApp", dependencies: [
+    .product(name: "MushiMushi", package: "mushi-mushi"),
+  ]),
+]
 ```
+
+SwiftPM clones the whole monorepo the first time, so the initial resolve is
+slower than a single-package repo. CocoaPods is not supported yet.
 
 ## Initialize
 
-```swift filename="AppDelegate.swift"
+`endpoint` is required: use the hosted API below, or your own if you self-host.
+
+```swift filename="MyApp.swift"
+import SwiftUI
 import MushiMushi
 
 @main
-class AppDelegate: UIResponder, UIApplicationDelegate {
-  func application(_ app: UIApplication, didFinishLaunchingWithOptions options: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-    Mushi.shared.configure(
+struct MyApp: App {
+  init() {
+    Mushi.shared.configure(with: MushiConfig(
       projectId: "YOUR_PROJECT_ID",
-      apiKey: "YOUR_PUBLIC_API_KEY",
-      enableShakeToReport: true
-    )
-    return true
+      apiKey: "mushi_...",
+      endpoint: "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api",
+      triggerMode: .both // .shake | .button | .both | .none
+    ))
+  }
+
+  var body: some Scene {
+    WindowGroup { ContentView() }
   }
 }
 ```
 
-## Submit a report programmatically
+## Open the widget or submit a report
 
 ```swift
-Mushi.shared.submitReport(
+// Present the bottom-sheet widget
+Button("Report a bug") { Mushi.shared.showWidget() }
+
+// File a report from code, no UI
+Mushi.shared.report(
   description: "Pull-to-refresh spinner never stops on Wi-Fi switch.",
-  severity: .high
+  category: "bug"
 )
+
+// Forward a caught error
+do { try riskyOperation() } catch { Mushi.shared.captureError(error) }
 ```
 
-## Sentry bridge (optional)
+## Sentry
 
-```swift
-import Sentry
+The Swift package has no Sentry bridge. Keep initialising Sentry in your app
+and attach context to Mushi reports with `Mushi.shared.setMetadata(_:value:)`.
 
-SentrySDK.start { options in
-  options.dsn = "YOUR_SENTRY_DSN"
-  Mushi.shared.attachSentryBridge(options) // forwards Mushi reports as Sentry breadcrumbs
-}
-```
+Full API: [`MushiMushi` (iOS)](/sdks/ios).

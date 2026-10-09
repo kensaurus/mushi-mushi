@@ -70,7 +70,6 @@ export function LessonsSnapshotStrip({
         <StatCard
           label={statLabels?.promoted ?? 'Promoted clusters'}
           value={stats.promotedClusters}
-          accent={stats.promotedClusters > 0 ? 'text-brand' : undefined}
           tooltip={promotedClustersTooltip(stats)}
           detail={promotedClustersDetail()}
           to={lessonsLinks.promoted}
@@ -78,7 +77,6 @@ export function LessonsSnapshotStrip({
         <StatCard
           label={statLabels?.reportsClustered ?? 'Reports clustered'}
           value={stats.totalClusterReports}
-          accent={stats.totalClusterReports > 0 ? 'text-brand' : undefined}
           tooltip={reportsClusteredTooltip(stats)}
           detail={reportsClusteredDetail()}
           to={lessonsLinks.reportsClustered}

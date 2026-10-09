@@ -24,16 +24,21 @@
  *          will fail before any user does.
  */
 
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_SDK_CONFIG,
   FRAMEWORKS,
   installCommand,
   isMobileFramework,
+  LOADER_CDN_URL,
   MOBILE_FRAMEWORKS,
   renderSnippet,
   type SdkPreviewConfig,
 } from './sdkSnippets'
+
+const WEB_PACKAGE_DIR = join(__dirname, '../../../../packages/web')
 
 const PROJECT = 'proj_abc'
 const KEY = 'mushi_secret_xyz'
@@ -289,6 +294,60 @@ describe('renderSnippet — mobile / hybrid frameworks', () => {
   it('isMobileFramework() agrees with the MOBILE_FRAMEWORKS set', () => {
     for (const fw of FRAMEWORKS) {
       expect(isMobileFramework(fw)).toBe((MOBILE_FRAMEWORKS as readonly string[]).includes(fw))
+    }
+  })
+})
+
+/**
+ * The "Script tag" tab is the no-build install path. It once pointed at a
+ * CDN host that never resolved, so a pasted tag loaded nothing and showed no
+ * error. These tests pin the URL to the file @mushi-mushi/web actually
+ * publishes, and the tag's data-* attributes to what the loader reads.
+ */
+describe('renderSnippet — Script tag loader', () => {
+  const webPackage = JSON.parse(readFileSync(join(WEB_PACKAGE_DIR, 'package.json'), 'utf8')) as {
+    version: string
+    files: string[]
+  }
+
+  it('points at the published IIFE on jsDelivr, pinned to the current major', () => {
+    const major = webPackage.version.split('.')[0]
+    expect(LOADER_CDN_URL).toBe(
+      `https://cdn.jsdelivr.net/npm/@mushi-mushi/web@${major}/dist/mushi.loader.global.js`,
+    )
+    // The file ships because `dist` is published and tsup names an IIFE
+    // entry `<entry>.global.js`.
+    expect(webPackage.files).toContain('dist')
+    const tsup = readFileSync(join(WEB_PACKAGE_DIR, 'tsup.config.ts'), 'utf8')
+    expect(tsup).toMatch(/entry:\s*\{\s*'mushi\.loader':\s*'src\/loader\.ts'\s*\}/)
+    expect(tsup).toMatch(/format:\s*\['iife'\]/)
+  })
+
+  it('renders that URL and never the unresolvable cdn.mushi.dev host', () => {
+    const out = renderSnippet('loader', PROJECT, KEY)
+    expect(out).toContain(`src="${LOADER_CDN_URL}"`)
+    expect(out).toContain(`data-project="${PROJECT}"`)
+    expect(out).toContain(`data-key="${KEY}"`)
+    expect(out).not.toContain('cdn.mushi.dev')
+  })
+
+  it('emits only data-* attributes that packages/web/src/loader.ts reads', () => {
+    const loaderSource = readFileSync(join(WEB_PACKAGE_DIR, 'src/loader.ts'), 'utf8')
+    const everyOption: SdkPreviewConfig = {
+      ...DEFAULT_SDK_CONFIG,
+      trigger: 'banner',
+      theme: 'dark',
+      position: 'top-left',
+      bannerVariant: 'neon',
+      bannerPosition: 'bottom',
+    }
+    const out = renderSnippet('loader', PROJECT, KEY, everyOption)
+    const attrs = [...out.matchAll(/\bdata-([a-z-]+)="/g)].map((m) => m[1])
+    expect(attrs).toEqual(['project', 'key', 'trigger', 'theme', 'position', 'banner-variant', 'banner-position'])
+    for (const attr of attrs) {
+      // data-banner-variant → dataset.bannerVariant, read as `ds.bannerVariant`.
+      const prop = attr.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase())
+      expect(loaderSource).toMatch(new RegExp(`\\bds\\.${prop}\\b`))
     }
   })
 })

@@ -1,5 +1,5 @@
 /**
- * Visual + copy metadata for cursor-kenji skill categories.
+ * Visual + copy metadata for kenji skills (kensaurus/skills) categories.
  * Used by SkillPipelinesPage catalog headers and skill cards.
  *
  * Badge/accent classes use admin @theme semantic tokens only (no raw Tailwind
@@ -70,6 +70,13 @@ export const SKILL_CATEGORY_META: Record<string, SkillCategoryMeta> = {
     Icon: IconSliders,
     badgeClass: 'bg-rose-muted text-rose',
     accentClass: 'border-l-rose/50',
+  },
+  iterate: {
+    label: 'Iterate',
+    hint: 'Ranked fix loops on a live app and agent-harness guards',
+    Icon: IconBolt,
+    badgeClass: 'bg-info-muted text-info-foreground',
+    accentClass: 'border-l-info/50',
   },
   backend: {
     label: 'Backend',

@@ -52,9 +52,11 @@ export function IntegrationStatusBanner({
               tone="danger"
             />
           ) : (
+            // Probe history lives on these cards, not on /health: the old
+            // /health?fn=integration-probe link landed on an empty filter.
             <StatusBannerAction
-              label={actions.health ?? 'Run health probe'}
-              to={scopedHref('/health?fn=integration-probe', pid)}
+              label={actions.platform ?? 'Fix connections'}
+              to={`${scopedHref('/integrations/config', pid)}#integrations-required`}
               tone="danger"
             />
           )
@@ -98,6 +100,25 @@ export function IntegrationStatusBanner({
     )
   }
 
+  // Connected but not proven: never tested, last check over a week old, or
+  // (Sentry) no inbound event yet. The cards say which; the banner must not
+  // say "healthy" over them.
+  if (priority === 'attention' || (stats.platformAttention ?? 0) > 0) {
+    const n = stats.platformAttention ?? 0
+    return (
+      <StatusBannerShell
+        tone="warn"
+        title={`${n} connection${n === 1 ? '' : 's'} need${n === 1 ? 's' : ''} attention on ${label}`}
+        subtitle={stats.topPriorityLabel ?? 'Each card below says what is missing and has the fix next to it.'}
+        action={
+          stats.topPriorityTo ? (
+            <StatusBannerAction label="Show me" to={stats.topPriorityTo} tone="warn" />
+          ) : null
+        }
+      />
+    )
+  }
+
   if (priority === 'empty' || (stats.platformConnected === 0 && stats.routingActive === 0)) {
     return (
       <StatusBannerShell
@@ -129,7 +150,7 @@ export function IntegrationStatusBanner({
   return (
     <StatusBannerShell
       tone="ok"
-      title={plainBanner ? `Tools connected on ${label}` : 'Integrations healthy'}
+      title={plainBanner ? `Tools working on ${label}` : 'Integrations working'}
       subtitle={
         stats.topPriorityLabel ??
         `${stats.platformConnected}/${stats.platformTotal} platform tools connected · ${stats.routingActive} routing rule${stats.routingActive === 1 ? '' : 's'} active`

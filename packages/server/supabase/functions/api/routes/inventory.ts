@@ -10,7 +10,7 @@
  *   GET    /v1/admin/inventory/:projectId/diff              — between two SHAs
  *   POST   /v1/admin/inventory/:projectId/reconcile         — trigger crawler
  *   GET    /v1/admin/inventory/:projectId/user-stories      — denorm tree
- *   GET    /v1/admin/inventory/:projectId/findings          — gate findings
+ *   GET    /v1/admin/inventory/:projectId/findings          — gate findings (every plan, ADR 0018)
  *   POST   /v1/admin/inventory/:projectId/gates/run         — run gates
  *   GET    /v1/admin/inventory/:projectId/synthetic/:id     — synth history
  *   POST   /v1/admin/inventory/:projectId/test-gen/...      — test generator
@@ -41,6 +41,8 @@ import {
 } from '../../_shared/inventory.ts'
 import { logAudit } from '../../_shared/audit.ts'
 import { dbError } from '../shared.ts'
+import { GATE_IDS } from '../../_shared/gate-ids.ts'
+import { loadLatestGateRuns } from './recipe-compose.ts'
 import {
   assertProjectScope,
   assertSafeOutboundUrl,
@@ -50,7 +52,8 @@ import {
   type RateLimiter,
   type RateLimitVerdict,
 } from '../../_shared/inventory-guards.ts'
-import { ownedProjectIds, callerProjectIds, resolveOwnedProject } from '../shared.ts'
+import { ownedProjectIds, callerProjectIds, resolveOwnedProject, userCanAccessProject } from '../shared.ts'
+import { denyViewerWrite } from '../viewer-gate.ts'
 
 interface IngestBody {
   yaml?: string
@@ -94,6 +97,52 @@ function rateLimitResponse(
     },
     429,
   )
+}
+
+/**
+ * `assertProjectScope` for writes: any team role may read inventory, but
+ * viewers are read-only. A project-bound API key passed the scope check and
+ * acts as its project's owner.
+ */
+async function assertProjectWriteScope(
+  c: Context<{ Variables: Variables }>,
+  projectId: string,
+  db: ReturnType<typeof getServiceClient>,
+  action: string,
+): ReturnType<typeof assertProjectScope> {
+  const scope = await assertProjectScope(c, projectId, db)
+  if (!scope.ok || scope.authMethod !== 'jwt') return scope
+  const access = await userCanAccessProject(db, scope.userId, projectId)
+  const denied = denyViewerWrite(c, access.role, action)
+  return denied ? { ok: false, response: denied } : scope
+}
+
+/**
+ * Open (not allowlisted) findings of the newest finished run of each gate,
+ * the same runs the findings route and the Full-stack audit read. Counting
+ * every finding ever recorded showed glot.it 747 findings across 18 runs
+ * when its latest runs held about 105 (2026-10-07). All severities count, as
+ * before. A failed read is an error, never 0.
+ */
+async function countLatestOpenFindings(
+  db: ReturnType<typeof getServiceClient>,
+  projectId: string,
+): Promise<{ count: number } | { error: string }> {
+  let runIds: string[]
+  try {
+    runIds = (await loadLatestGateRuns(db, projectId, GATE_IDS)).map((r) => r.id)
+  } catch (err) {
+    return { error: (err as Error).message }
+  }
+  if (runIds.length === 0) return { count: 0 }
+  const { count, error } = await db
+    .from('gate_findings')
+    .select('id', { count: 'exact', head: true })
+    .in('gate_run_id', runIds)
+    .eq('allowlisted', false)
+  if (error) return { error: `gate_findings: ${error.message}` }
+  if (typeof count !== 'number') return { error: 'gate_findings: no count returned' }
+  return { count }
 }
 
 export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): void {
@@ -157,7 +206,7 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
       summaryRpc,
       discoveryRes,
       proposalsRes,
-      findingsRes,
+      openFindingsRead,
       gateRunRes,
       projectRes,
     ] = await Promise.all([
@@ -177,11 +226,7 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
         .select('id', { count: 'exact', head: true })
         .eq('project_id', activeProject.id)
         .eq('status', 'draft'),
-      db
-        .from('gate_findings')
-        .select('id', { count: 'exact', head: true })
-        .eq('project_id', activeProject.id)
-        .eq('allowlisted', false),
+      countLatestOpenFindings(db, activeProject.id),
       db
         .from('gate_runs')
         .select('started_at')
@@ -216,7 +261,9 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
     const hasInventory = Boolean(snapshot)
     const discoveryEvents = discoveryRes.count ?? 0
     const draftProposals = proposalsRes.count ?? 0
-    const openFindings = findingsRes.count ?? 0
+    // A failed count must not read as "no open findings" (topPriority 'clear').
+    if ('error' in openFindingsRead) return dbError(c, { message: openFindingsRead.error })
+    const openFindings = openFindingsRead.count
     const hasGithub = Boolean(projectRes.data?.github_app_installation_id)
 
     let topPriority: typeof empty.topPriority = 'no_inventory'
@@ -295,7 +342,7 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
     async (c) => {
       const projectId = c.req.param('projectId')!
       const db = getServiceClient()
-      const scope = await assertProjectScope(c, projectId, db)
+      const scope = await assertProjectWriteScope(c, projectId, db, 'upload inventory')
       if (!scope.ok) return scope.response
       const userId = scope.userId
 
@@ -663,8 +710,11 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
 
   // ============================================================
   // GET /v1/admin/inventory/:projectId/findings
+  // Read-only, on every plan (ADR 0018): the findings Mushi already wrote —
+  // setup checks, drift, hole checks — are never behind inventory_v2. The
+  // write and run routes of this prefix keep the gate.
   // ============================================================
-  app.get('/v1/admin/inventory/:projectId/findings', adminOrApiKey(), inventoryV2, async (c) => {
+  app.get('/v1/admin/inventory/:projectId/findings', adminOrApiKey(), async (c) => {
     const projectId = c.req.param('projectId')!
     const gate = c.req.query('gate')
     const severity = c.req.query('severity')
@@ -681,10 +731,28 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
       .order('started_at', { ascending: false })
       .limit(50)
     if (gate) runsQuery = runsQuery.eq('gate', gate)
-    const { data: runs, error: runsErr } = await runsQuery
+    const { data: recent, error: runsErr } = await runsQuery
     if (runsErr) return dbError(c, runsErr)
 
-    const runIds = (runs ?? []).map((r) => r.id)
+    // The newest finished run of EVERY check, read per check: a check that
+    // runs often (the schema scanner) filled the newest 50 on its own and hid
+    // design drift's 82 findings from the Full-stack audit (glot.it, 2026-10-07).
+    let latest: Array<{ id: string }> = []
+    if (!gate) {
+      try {
+        latest = await loadLatestGateRuns(db, projectId, GATE_IDS)
+      } catch (err) {
+        return dbError(c, { message: (err as Error).message })
+      }
+    }
+    const recentRows = (recent ?? []) as Array<{ id: string; started_at?: string | null }>
+    const seen = new Set(recentRows.map((r) => r.id))
+    const runs = [...recentRows, ...(latest as typeof recentRows).filter((r) => !seen.has(r.id))]
+      .sort((a, b) => (b.started_at ?? '').localeCompare(a.started_at ?? ''))
+
+    // Findings of each check's newest run first, so the 500 cap is never
+    // spent on runs a newer one replaced.
+    const runIds = gate ? runs.map((r) => r.id) : latest.map((r) => r.id)
     let findings: unknown[] = []
     if (runIds.length > 0) {
       let findingsQuery = db
@@ -745,7 +813,7 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
     async (c) => {
       const projectId = c.req.param('projectId')!
       const db = getServiceClient()
-      const scope = await assertProjectScope(c, projectId, db)
+      const scope = await assertProjectWriteScope(c, projectId, db, 'propose inventory changes')
       if (!scope.ok) return scope.response
 
       const verdict = applyRateLimit(proposeRateLimiter, projectId, 'propose')
@@ -855,7 +923,7 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
       const projectId = c.req.param('projectId')!
       const proposalId = c.req.param('id')!
       const db = getServiceClient()
-      const scope = await assertProjectScope(c, projectId, db)
+      const scope = await assertProjectWriteScope(c, projectId, db, 'edit inventory proposals')
       if (!scope.ok) return scope.response
 
       let body: { yaml?: string }
@@ -870,7 +938,7 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
       const parsed = parseInventoryYaml(body.yaml)
       if (!parsed.ok || !parsed.inventory) {
         return c.json(
-          { ok: false, error: { code: 'VALIDATION_FAILED', issues: parsed.issues } },
+          { ok: false, error: { code: 'VALIDATION_FAILED', message: 'The YAML has problems. Fix the listed lines and save again.', issues: parsed.issues } },
           422,
         )
       }
@@ -911,7 +979,7 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
       const projectId = c.req.param('projectId')!
       const proposalId = c.req.param('id')!
       const db = getServiceClient()
-      const scope = await assertProjectScope(c, projectId, db)
+      const scope = await assertProjectWriteScope(c, projectId, db, 'accept inventory proposals')
       if (!scope.ok) return scope.response
 
       const { data: prop, error: propErr } = await db
@@ -931,7 +999,7 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
       const parsed = parseInventoryYaml(prop.proposed_yaml as string)
       if (!parsed.ok || !parsed.inventory) {
         return c.json(
-          { ok: false, error: { code: 'VALIDATION_FAILED', issues: parsed.issues } },
+          { ok: false, error: { code: 'VALIDATION_FAILED', message: 'This draft has problems. Fix the listed lines on the YAML tab, save, then accept.', issues: parsed.issues } },
           422,
         )
       }
@@ -995,7 +1063,7 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
       const projectId = c.req.param('projectId')!
       const proposalId = c.req.param('id')!
       const db = getServiceClient()
-      const scope = await assertProjectScope(c, projectId, db)
+      const scope = await assertProjectWriteScope(c, projectId, db, 'discard inventory proposals')
       if (!scope.ok) return scope.response
 
       const { error } = await db
@@ -1141,7 +1209,7 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
     async (c) => {
       const projectId = c.req.param('projectId')!
       const db = getServiceClient()
-      const scope = await assertProjectScope(c, projectId, db)
+      const scope = await assertProjectWriteScope(c, projectId, db, 'change inventory settings')
       if (!scope.ok) return scope.response
 
       let body: {
@@ -1281,7 +1349,7 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
     async (c) => {
       const projectId = c.req.param('projectId')!
       const db = getServiceClient()
-      const scope = await assertProjectScope(c, projectId, db)
+      const scope = await assertProjectWriteScope(c, projectId, db, 'reconcile inventory')
       if (!scope.ok) return scope.response
 
       let body: { story_node_id?: string | null } = {}
@@ -1352,7 +1420,7 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
     async (c) => {
       const projectId = c.req.param('projectId')!
       const db = getServiceClient()
-      const scope = await assertProjectScope(c, projectId, db)
+      const scope = await assertProjectWriteScope(c, projectId, db, 'run inventory gates')
       if (!scope.ok) return scope.response
 
       const verdict = applyRateLimit(gatesRunRateLimiter, projectId, 'gates.run')
@@ -1411,7 +1479,7 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
       const projectId = c.req.param('projectId')!
       const reportId = c.req.param('reportId')!
       const db = getServiceClient()
-      const scope = await assertProjectScope(c, projectId, db)
+      const scope = await assertProjectWriteScope(c, projectId, db, 'generate tests')
       if (!scope.ok) return scope.response
 
       const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
@@ -1434,8 +1502,29 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
           triggered_by: scope.userId,
         }),
       })
-      const json = await resp.json().catch(() => ({}))
-      return c.json({ ok: resp.ok, data: json })
+      // test-gen-from-report answers with its own { ok, data | error }
+      // envelope. Pass it through flat: on success the caller reads
+      // { prUrl, prNumber, branch, path } directly, on failure it gets the
+      // worker's error and status. Wrapping it (data: { ok, data }) at 200 hid
+      // the PR link and turned every failure into "Request failed".
+      const json = (await resp.json().catch(() => null)) as
+        | { ok?: boolean; data?: unknown; error?: string | { code?: string; message?: string } }
+        | null
+      if (resp.ok && json?.ok !== false) {
+        return c.json({ ok: true, data: json?.data ?? null })
+      }
+      const workerError = typeof json?.error === 'string' ? { message: json.error } : json?.error
+      const status = (resp.status >= 400 && resp.status <= 599 ? resp.status : 502) as 400 | 404 | 422 | 500 | 502
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: (workerError as { code?: string } | undefined)?.code ?? 'TEST_GEN_FAILED',
+            message: workerError?.message ?? 'Test generation failed. Try again in a moment.',
+          },
+        },
+        status,
+      )
     },
   )
 
@@ -1480,7 +1569,7 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
       const projectId = c.req.param('projectId')!
       const userId = c.get('userId') as string | undefined
       const db = getServiceClient()
-      const scope = await assertProjectScope(c, projectId, db)
+      const scope = await assertProjectWriteScope(c, projectId, db, 'map stories from the live app')
       if (!scope.ok) return scope.response
 
       const body = await c.req.json().catch(() => ({})) as {
@@ -1689,7 +1778,7 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
       const projectId = c.req.param('projectId')!
       const storyNodeId = c.req.param('storyNodeId')!
       const db = getServiceClient()
-      const scope = await assertProjectScope(c, projectId, db)
+      const scope = await assertProjectWriteScope(c, projectId, db, 'generate tests')
       if (!scope.ok) return scope.response
 
       const body = await c.req.json().catch(() => ({})) as {
@@ -1778,7 +1867,7 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
       const projectId = c.req.param('projectId')!
       const qaStoryId = c.req.param('qaStoryId')!
       const db = getServiceClient()
-      const scope = await assertProjectScope(c, projectId, db)
+      const scope = await assertProjectWriteScope(c, projectId, db, 'approve or reject generated tests')
       if (!scope.ok) return scope.response
 
       const body = await c.req.json().catch(() => ({})) as { status: 'approved' | 'rejected' }

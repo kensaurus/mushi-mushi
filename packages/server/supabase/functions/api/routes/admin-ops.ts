@@ -1,4 +1,5 @@
-import type { Hono } from 'npm:hono@4';
+import { storeStorageSecrets } from '../../_shared/storage-secrets.ts';
+import type { Context, Hono } from 'npm:hono@4';
 import type { Variables } from '../types.ts'
 
 import { getServiceClient } from '../../_shared/db.ts';
@@ -21,9 +22,20 @@ import { getPlan } from '../../_shared/plans.ts';
 import { withIdempotency } from '../../_shared/idempotency.ts';
 import { notifyOperator } from '../../_shared/operator-notify.ts';
 import { SUPPORT_EMAIL, SUPPORT_URL } from '../../_shared/support.ts';
-import { dbError, ownedProjectIds, resolveOwnedProject } from '../shared.ts';
+import {
+  callerCanAccessProject,
+  dbError,
+  ownedProjectIds,
+  requireProjectAdmin,
+  resolveOwnedProject,
+} from '../shared.ts';
+import { isProjectStorageSecretRef, storageSecretPrefix } from '../../_shared/vault-ref.ts';
+import { assertSafeOutboundUrl } from '../../_shared/inventory-guards.ts';
 import { requireSuperAdmin } from '../../_shared/super-admin.ts';
 import { resolveActiveEntitlement } from '../../_shared/entitlements.ts';
+import { resolveProjectRetention } from '../../_shared/retention-policy.ts';
+import { antiGamingListScope, requestedOwnedProject } from '../../_shared/anti-gaming-scope.ts';
+import { canManageDataGovernance, manageableProjectIds } from '../../_shared/data-governance-role.ts';
 
 const SUPPORT_CATEGORIES = ['billing', 'bug', 'feature', 'other'] as const;
 type SupportCategory = (typeof SUPPORT_CATEGORIES)[number];
@@ -36,6 +48,36 @@ interface ContactBody {
 }
 
 const RATE_LIMIT_PER_HOUR = 5;
+
+/**
+ * Retention windows, legal hold and residency pins decide what the nightly
+ * sweep deletes and where data lives, so only org owners and admins (or a
+ * project's direct owner) may change them. Members and viewers keep read
+ * access. Returns the 403 to send, or null when the caller may write.
+ */
+async function requireDataGovernanceRole(
+  c: Context,
+  db: ReturnType<typeof getServiceClient>,
+  userId: string,
+  projectId: string,
+  what: string,
+): Promise<Response | null> {
+  const access = await callerCanAccessProject(c, db, userId, projectId);
+  if (!access.allowed) {
+    return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Not your project' } }, 403);
+  }
+  if (canManageDataGovernance(access.role)) return null;
+  return c.json(
+    {
+      ok: false,
+      error: {
+        code: 'FORBIDDEN',
+        message: `Only team owners and admins can change ${what}. Ask one of them to make this change.`,
+      },
+    },
+    403,
+  );
+}
 
 export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): void {
   // GET /v1/admin/anti-gaming/stats — AntiGamingStatusBanner posture data.
@@ -67,16 +109,24 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
     const projectIds = await ownedProjectIds(db, userId)
     if (projectIds.length === 0) return c.json({ ok: true, data: empty })
 
-    // Use the first owned project as the active context.
-    const projectRes = await db
-      .from('projects')
-      .select('id, project_name')
-      .in('id', projectIds)
-      .order('created_at', { ascending: true })
-      .limit(1)
-      .maybeSingle()
+    // Describe the project the console has active. Falling back to the oldest
+    // owned project only when none was sent (or it is not the caller's) — it
+    // used to be the oldest always, so tiles disagreed with the device list.
+    const requestedPid = requestedOwnedProject(
+      projectIds,
+      c.req.query('project_id'),
+      c.req.header('x-mushi-project-id'),
+    )
+    const projectQuery = db.from('projects').select('id, name')
+    const projectRes = requestedPid
+      ? await projectQuery.eq('id', requestedPid).maybeSingle()
+      : await projectQuery
+          .in('id', projectIds)
+          .order('created_at', { ascending: true })
+          .limit(1)
+          .maybeSingle()
     const pid = projectRes.data?.id ?? projectIds[0]
-    const projectName = projectRes.data?.project_name ?? null
+    const projectName = projectRes.data?.name ?? null
 
     const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
 
@@ -176,21 +226,30 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
         : c.json({ ok: true, data: { devices: [] } });
     }
 
+    // The active project only, the same scope as the page's list and tiles.
+    // nav-meta sends it in the X-Mushi-Project-Id header, not the query.
+    const scope = antiGamingListScope(
+      projectIds,
+      c.req.query('project_id'),
+      c.req.header('x-mushi-project-id'),
+    );
+
     if (countOnly) {
       let cq = db
         .from('reporter_devices')
         .select('id', { count: 'exact', head: true })
-        .in('project_id', projectIds);
+        .in('project_id', scope);
       if (flagged) cq = cq.eq('flagged_as_suspicious', true);
       const { count, error: countErr } = await cq;
       if (countErr) return dbError(c, countErr);
       return c.json({ ok: true, data: { count: count ?? 0 } });
     }
 
+    // The page sends the active project so the list matches the KPI tiles.
     let q = db
       .from('reporter_devices')
       .select('*')
-      .in('project_id', projectIds)
+      .in('project_id', scope)
       .order('updated_at', { ascending: false })
       .limit(200);
     if (flagged) q = q.eq('flagged_as_suspicious', true);
@@ -211,7 +270,7 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
     let query = db
       .from('anti_gaming_events')
       .select('*')
-      .in('project_id', projectIds)
+      .in('project_id', antiGamingListScope(projectIds, c.req.query('project_id'), c.req.header('x-mushi-project-id')))
       .order('created_at', { ascending: false })
       .limit(limit);
     if (eventType) query = query.eq('event_type', eventType);
@@ -275,7 +334,14 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
 
     const { error } = await db
       .from('reporter_devices')
-      .update({ flagged_as_suspicious: false, flag_reason: null, cross_account_flagged: false })
+      // The tokens seen so far are reviewed: only new ones count toward the
+      // next flag, so the device is not re-flagged by its very next report.
+      .update({
+        flagged_as_suspicious: false,
+        flag_reason: null,
+        cross_account_flagged: false,
+        reviewed_token_count: (device.reporter_tokens ?? []).length,
+      })
       .eq('id', id);
     if (error) return dbError(c, error);
 
@@ -330,7 +396,7 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
         .maybeSingle(),
       db
         .from('reporter_notifications')
-        .select('notification_type, read_at, created_at')
+        .select('notification_type, read_at, created_at, status')
         .eq('project_id', project.id)
         .order('created_at', { ascending: false })
         .limit(500),
@@ -341,13 +407,17 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
     const list = rows ?? [];
     const byType: Record<string, number> = {};
     let unread = 0;
+    let held = 0;
     let last24h = 0;
     let fixFailedCount = 0;
     for (const row of list) {
       const t = row.notification_type as string;
       byType[t] = (byType[t] ?? 0) + 1;
       if (t === 'fix_failed') fixFailedCount += 1;
-      if (!row.read_at) unread += 1;
+      // Held Outbox rows have not reached the reporter, so they are not an
+      // unread backlog (which would wrongly suggest the SDK stopped polling).
+      if (row.status === 'held') held += 1;
+      else if (row.status !== 'discarded' && !row.read_at) unread += 1;
       if ((row.created_at as string) >= since24h) last24h += 1;
     }
 
@@ -365,8 +435,8 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
     if (!notificationsEnabled) {
       topPriority = 'disabled';
       topPriorityLabel =
-        'reporter_notifications_enabled is off — the SDK widget will not poll outbound messages until you turn it on in Settings.';
-      topPriorityTo = '/settings';
+        'Reporter updates are off, so people who report a bug never hear back in the widget. Turn them on in Setup.';
+      topPriorityTo = '/notifications?tab=setup';
     } else if (unread > 0) {
       topPriority = 'unread_backlog';
       topPriorityLabel = `${unread} unread message${unread === 1 ? '' : 's'} — expand payloads in Inbox to debug whether the reporter SDK stopped polling.`;
@@ -374,7 +444,7 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
     } else if (list.length === 0) {
       topPriority = 'no_messages';
       topPriorityLabel =
-        'No outbound messages yet — classify or fix a report; a message should land here when reporter_notifications_enabled is on.';
+        'No messages to reporters yet. One lands here when a reported bug is triaged or fixed.';
       topPriorityTo = '/notifications?tab=setup';
     } else {
       topPriority = 'healthy';
@@ -390,6 +460,7 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
         projectName: (project.name as string | null) ?? null,
         total: list.length,
         unread,
+        held,
         last24h,
         lastNotificationAt,
         daysSinceLastNotification,
@@ -426,7 +497,7 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
         .select('id', { count: 'exact', head: true })
         .eq('project_id', project.id);
       if (type) countQuery = countQuery.eq('notification_type', type);
-      if (onlyUnread) countQuery = countQuery.is('read_at', null);
+      if (onlyUnread) countQuery = countQuery.is('read_at', null).eq('status', 'sent');
       const { count, error } = await countQuery;
       if (error) return dbError(c, error);
       return c.json({ ok: true, data: { unread_count: count ?? 0 } });
@@ -440,7 +511,9 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
       .order('created_at', { ascending: false })
       .limit(limit);
     if (type) query = query.eq('notification_type', type);
-    if (onlyUnread) query = query.is('read_at', null);
+    // Unread = sent and not read, the same rule as the stats badge: held
+    // Outbox rows have not reached the reporter, discarded ones never will.
+    if (onlyUnread) query = query.is('read_at', null).eq('status', 'sent');
 
     const { data, error } = await query;
     if (error) return dbError(c, error);
@@ -475,7 +548,10 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
       .from('reporter_notifications')
       .update({ read_at: new Date().toISOString() }, { count: 'exact' })
       .eq('project_id', project.id)
-      .is('read_at', null);
+      .is('read_at', null)
+      // Only sent rows: a held Outbox row must not be stamped read before it
+      // is released, and the count must match the badge.
+      .eq('status', 'sent');
     if (error) return dbError(c, error);
     await logAudit(db, project.id, userId, 'settings.updated', 'notifications', undefined, {
       marked_read: count ?? 0,
@@ -669,22 +745,24 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
     const projectIds = await ownedProjectIds(db, userId);
     if (projectIds.length === 0) return c.json({ ok: true, data: { policies: [] } });
 
-    const { data, error } = await db
-      .from('project_retention_policies')
-      .select('*')
-      .in('project_id', projectIds);
+    const [{ data, error }, manageable] = await Promise.all([
+      db.from('project_retention_policies').select('*').in('project_id', projectIds),
+      manageableProjectIds(db, userId, projectIds),
+    ]);
     if (error) return dbError(c, error);
-    return c.json({ ok: true, data: { policies: data ?? [] } });
+    const policies = (data ?? []).map((row) => ({
+      ...row,
+      can_manage: manageable.has(row.project_id as string),
+    }));
+    return c.json({ ok: true, data: { policies } });
   });
 
   app.put('/v1/admin/compliance/retention/:projectId', jwtAuth, requireEeLicense('retention'), async (c) => {
     const userId = c.get('userId') as string;
     const projectId = c.req.param('projectId')!;
     const db = getServiceClient();
-    const projectIds = await ownedProjectIds(db, userId);
-    if (!projectIds.includes(projectId)) {
-      return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Not your project' } }, 403);
-    }
+    const denied = await requireDataGovernanceRole(c, db, userId, projectId, 'retention or legal hold');
+    if (denied) return denied;
 
     const body = await c.req.json().catch(() => ({}));
     const updates: Record<string, unknown> = { project_id: projectId };
@@ -746,78 +824,21 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
       return c.json({ ok: true, data: { projects: [], next_sweep_at: null, last_run: null } });
     }
 
-    const [{ data: policies }, { data: subs }, { data: plansList }, { data: lastRun }] =
-      await Promise.all([
-        db
-          .from('project_retention_policies')
-          .select('project_id, reports_retention_days, legal_hold, legal_hold_reason')
-          .in('project_id', projectIds),
-        db
-          .from('billing_subscriptions')
-          .select('project_id, status, plan_id, current_period_end')
-          .in('project_id', projectIds)
-          .in('status', ['active', 'trialing', 'past_due']),
-        db.from('pricing_plans').select('id, display_name, retention_days'),
-        db
-          .from('cron_runs')
-          .select('id, started_at, finished_at, status, rows_affected, metadata')
-          .eq('job_name', 'retention-sweep')
-          .order('started_at', { ascending: false })
-          .limit(1)
-          .maybeSingle(),
-      ]);
-
-    const planById = new Map<
-      string,
-      { id: string; display_name: string; retention_days: number }
-    >();
-    for (const p of plansList ?? []) {
-      planById.set(p.id, p as { id: string; display_name: string; retention_days: number });
-    }
-    const policyByProject = new Map<
-      string,
-      { reports_retention_days: number; legal_hold: boolean }
-    >();
-    for (const r of policies ?? []) {
-      policyByProject.set(r.project_id, {
-        reports_retention_days: r.reports_retention_days,
-        legal_hold: r.legal_hold,
-      });
-    }
-    const subByProject = new Map<string, { plan_id: string | null }>();
-    for (const s of subs ?? []) {
-      if (!subByProject.has(s.project_id)) {
-        subByProject.set(s.project_id, { plan_id: s.plan_id });
-      }
-    }
-
-    const HOBBY_FALLBACK_DAYS = planById.get('hobby')?.retention_days ?? 7;
+    const { data: lastRun } = await db
+      .from('cron_runs')
+      .select('id, started_at, finished_at, status, rows_affected, metadata')
+      .eq('job_name', 'retention-sweep')
+      .order('started_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
     const now = Date.now();
     const result = await Promise.all(
       projectIds.map(async (pid) => {
-        const policy = policyByProject.get(pid);
-        const sub = subByProject.get(pid);
-        const plan = planById.get(sub?.plan_id ?? 'hobby');
-
-        let retention_days = HOBBY_FALLBACK_DAYS;
-        let plan_id: string = 'hobby';
-        let source: 'override' | 'plan' | 'fallback' = 'fallback';
-        const legal_hold = policy?.legal_hold === true;
-
-        if (legal_hold) {
-          retention_days = policy!.reports_retention_days ?? HOBBY_FALLBACK_DAYS;
-          plan_id = 'legal_hold';
-          source = 'override';
-        } else if (policy && policy.reports_retention_days) {
-          retention_days = policy.reports_retention_days;
-          plan_id = 'override';
-          source = 'override';
-        } else if (sub && plan) {
-          retention_days = plan.retention_days ?? HOBBY_FALLBACK_DAYS;
-          plan_id = plan.id;
-          source = 'plan';
-        }
+        // The same resolver the sweep uses, so this page can never show a
+        // window the sweep does not honour (it showed 7 days for the pro org
+        // while the sweep deleted on that 7-day window — both were wrong).
+        const { retention_days, plan_id, source, legal_hold } = await resolveProjectRetention(db, pid);
 
         const cutoffIso = new Date(now - retention_days * 24 * 60 * 60 * 1000).toISOString();
 
@@ -1058,17 +1079,21 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
       });
     }
 
-    const { data, error } = await db
-      .from('projects')
-      .select('id, name, slug, data_residency_region, created_at')
-      .in('id', projectIds);
+    const [{ data, error }, manageable] = await Promise.all([
+      db
+        .from('projects')
+        .select('id, name, slug, data_residency_region, created_at')
+        .in('id', projectIds),
+      manageableProjectIds(db, userId, projectIds),
+    ]);
 
     if (error) return dbError(c, error);
+    const projects = (data ?? []).map((row) => ({ ...row, can_manage: manageable.has(row.id as string) }));
     return c.json({
       ok: true,
-      projects: data ?? [],
+      projects,
       currentRegion: currentRegion(),
-      data: { projects: data ?? [], currentRegion: currentRegion() },
+      data: { projects, currentRegion: currentRegion() },
     });
   });
 
@@ -1079,10 +1104,8 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
     const userId = c.get('userId') as string;
     const projectId = c.req.param('projectId')!;
     const db = getServiceClient();
-    const projectIds = await ownedProjectIds(db, userId);
-    if (!projectIds.includes(projectId)) {
-      return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
-    }
+    const denied = await requireDataGovernanceRole(c, db, userId, projectId, 'data residency');
+    if (denied) return denied;
     const body = await c.req.json().catch(() => ({}));
     const region = body.region as string | undefined;
     if (!region || !['us', 'eu', 'jp', 'self'].includes(region)) {
@@ -1324,10 +1347,39 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
     const userId = c.get('userId') as string;
     const projectId = c.req.param('projectId')!;
     const db = getServiceClient();
-    const projectIds = await ownedProjectIds(db, userId);
-    if (!projectIds.includes(projectId))
-      return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
-    const body = await c.req.json().catch(() => ({}));
+    const resolved = await resolveOwnedProject(c, db, userId, { overrideProjectId: projectId });
+    if ('response' in resolved) return resolved.response;
+    const forbidden = requireProjectAdmin(c, resolved.project);
+    if (forbidden) return forbidden;
+    const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+
+    // Secret references are read by name with the service role, so they must
+    // name this project's own secrets. The endpoint receives SigV4-signed
+    // requests carrying those keys, so it must be public https unless the
+    // operator of a self-hosted install opts in.
+    for (const k of ['access_key_vault_ref', 'secret_key_vault_ref', 'service_account_vault_ref']) {
+      const v = body[k];
+      if (v == null || v === '') continue;
+      if (typeof v !== 'string' || !isProjectStorageSecretRef(v, projectId)) {
+        return c.json({
+          ok: false,
+          error: {
+            code: 'VAULT_REF_NOT_ALLOWED',
+            message: `Paste the key itself, not a Vault name: Mushi stores it in Vault under ${storageSecretPrefix(projectId)}.`,
+          },
+        }, 400);
+      }
+    }
+    if (typeof body.endpoint === 'string' && body.endpoint.trim() !== '') {
+      const allowPrivate = Deno.env.get('MUSHI_ALLOW_PRIVATE_STORAGE_ENDPOINT') === '1';
+      const safe = assertSafeOutboundUrl(body.endpoint.trim(), { allowHttp: allowPrivate, allowPrivateHosts: allowPrivate });
+      if (!safe.ok) {
+        return c.json({
+          ok: false,
+          error: { code: 'UNSAFE_URL', message: `endpoint must be a public https URL (${safe.reason}).` },
+        }, 400);
+      }
+    }
 
     const allowed = [
       'provider',
@@ -1345,6 +1397,13 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
     ];
     const patch: Record<string, unknown> = { project_id: projectId };
     for (const k of allowed) if (k in body) patch[k] = body[k];
+    // Raw keys (access_key / secret_key / service_account_json) are stored in
+    // Vault here; only the minted names reach the settings row.
+    const stored = await storeStorageSecrets(db, projectId, body);
+    if (!stored.ok) {
+      return c.json({ ok: false, error: { code: stored.code, message: stored.message } }, stored.status);
+    }
+    Object.assign(patch, stored.refs);
 
     const { error } = await db
       .from('project_storage_settings')
@@ -1428,12 +1487,12 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
       billing_interval?: 'monthly' | 'annual';
     } | null;
     if (!body?.project_id || !body?.email) {
-      return c.json({ ok: false, error: { code: 'INVALID_BODY' } }, 400);
+      return c.json({ ok: false, error: { code: 'INVALID_BODY', message: 'Checkout needs the project and your email. Reload the page and try again.' } }, 400);
     }
     const db = getServiceClient();
     const owned = await ownedProjectIds(db, userId);
     if (!owned.includes(body.project_id))
-      return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
+      return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Only the people who own this project can change its plan.' } }, 403);
     const { data: projectRef } = await db
       .from('projects')
       .select('id, organization_id')
@@ -1468,7 +1527,7 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
 
     const cfg = stripeFromEnv();
     if (!cfg.secretKey) {
-      return c.json({ ok: false, error: { code: 'STRIPE_NOT_CONFIGURED' } }, 503);
+      return c.json({ ok: false, error: { code: 'STRIPE_NOT_CONFIGURED', message: 'Payments are not set up on this Mushi server yet, so plans cannot be bought here.' } }, 503);
     }
 
     const planId = body.plan_id ?? 'indie';
@@ -1641,11 +1700,11 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
     return withIdempotency(c, async () => {
     const userId = c.get('userId') as string;
     const body = (await c.req.json().catch(() => null)) as { project_id?: string } | null;
-    if (!body?.project_id) return c.json({ ok: false, error: { code: 'INVALID_BODY' } }, 400);
+    if (!body?.project_id) return c.json({ ok: false, error: { code: 'INVALID_BODY', message: 'The request was missing the project. Reload the page and try again.' } }, 400);
     const db = getServiceClient();
     const owned = await ownedProjectIds(db, userId);
     if (!owned.includes(body.project_id))
-      return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
+      return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Only the people who own this project can manage its billing.' } }, 403);
 
     const { data: customer } = await db
       .from('billing_customers')
@@ -1653,7 +1712,7 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
       .eq('project_id', body.project_id)
       .maybeSingle();
     if (!customer?.stripe_customer_id) {
-      return c.json({ ok: false, error: { code: 'NO_STRIPE_CUSTOMER' } }, 404);
+      return c.json({ ok: false, error: { code: 'NO_STRIPE_CUSTOMER', message: 'This project has no billing account yet, so there is nothing to manage. Pick a plan to start one.' } }, 404);
     }
 
     const cfg = stripeFromEnv();
@@ -2159,18 +2218,25 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
   app.get('/v1/admin/support/tickets', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const limit = Math.min(50, Math.max(1, Number(c.req.query('limit') ?? '20')));
+    const limit = Math.min(50, Math.max(1, Number(c.req.query('limit') ?? '20') || 20));
+    // Paged so a user with more than one page of tickets can reach them all;
+    // the tab badges count up to 200 rows (feedback/stats).
+    const page = Math.max(0, Math.floor(Number(c.req.query('page') ?? '0') || 0));
     const category = (c.req.query('category') ?? '').trim();
     const shippedOnly = c.req.query('shipped') === '1';
+    // `active` = open or in progress, filtered here rather than on one page
+    // in the browser, which hid older open tickets.
+    const activeOnly = c.req.query('status') === 'active';
 
     let query = db
       .from('support_tickets')
       .select(
         'id, project_id, subject, body, category, status, plan_id, admin_response, admin_responded_at, created_at, updated_at, resolved_at, cancelled_at, shipped_in_release_id, shipped_at, shipped_note, release:releases!support_tickets_shipped_in_release_id_fkey(id, version, title, status, published_at)',
+        { count: 'exact' },
       )
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
-      .limit(limit);
+      .range(page * limit, page * limit + limit - 1);
 
     if (SUPPORT_CATEGORIES.includes(category as SupportCategory)) {
       query = query.eq('category', category);
@@ -2178,13 +2244,16 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
     if (shippedOnly) {
       query = query.not('shipped_in_release_id', 'is', null);
     }
+    if (activeOnly) {
+      query = query.in('status', ['open', 'in_progress']);
+    }
 
-    const { data, error } = await query;
+    const { data, error, count } = await query;
 
     if (error) {
       return dbError(c, error);
     }
-    return c.json({ ok: true, data: { tickets: data ?? [] } });
+    return c.json({ ok: true, data: { tickets: data ?? [], total: count ?? (data ?? []).length, page, limit } });
   });
 
   // Detail fetch — used as a defensive fallback if a ticket id is opened

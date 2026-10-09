@@ -11,6 +11,7 @@ import { CodeInline } from './CodePanel'
 import { apiFetch } from '../lib/supabase'
 import { useSetupStatus, SETUP_STEPS } from '../lib/useSetupStatus'
 import { IconCheck, IconTerminal, IconCopy } from './icons'
+import { DOCTOR_DISPATCH_ONLY, DOCTOR_INGEST_ONLY } from '../lib/cliSetupCommands'
 
 interface PreflightCheck {
   key: string
@@ -55,7 +56,9 @@ export function VerifySetupPanel({
   embedded = false,
 }: VerifySetupPanelProps) {
   const location = useLocation()
-  const onCopilotPage = location.pathname.startsWith('/setup-copilot')
+  const onCopilotPage =
+    location.pathname.startsWith('/setup-copilot') ||
+    (location.pathname.startsWith('/onboarding') && new URLSearchParams(location.search).get('tab') === 'copilot')
   const setup = useSetupStatus(projectId)
   const project = setup.data?.projects.find((p) => p.project_id === projectId)
   const [dispatchLoading, setDispatchLoading] = useState(false)
@@ -121,8 +124,8 @@ export function VerifySetupPanel({
     } catch { /* ignore */ }
   }
 
-  const cliIngest = 'mushi doctor --ingest'
-  const cliDispatch = 'mushi doctor --server'
+  const cliIngest = DOCTOR_INGEST_ONLY
+  const cliDispatch = DOCTOR_DISPATCH_ONLY
   const mcpIngest = 'diagnose_setup (mode=ingest)'
   const mcpDispatch = 'diagnose_setup (mode=dispatch)'
 
@@ -147,7 +150,7 @@ export function VerifySetupPanel({
           </p>
         </div>
         {!onCopilotPage && (
-          <Link to={`/setup-copilot?project=${projectId}`} className="text-xs text-accent hover:underline">
+          <Link to={`/onboarding?tab=copilot&project=${projectId}`} className="text-xs text-accent hover:underline">
             Open Setup Copilot →
           </Link>
         )}

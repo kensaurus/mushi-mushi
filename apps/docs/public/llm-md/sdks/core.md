@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/core
 
 ---
 title: '@mushi-mushi/core'
+description: Reference for @mushi-mushi/core — the MushiConfig shape, widget options, PII scrubbing helpers and region resolution shared by every Mushi JavaScript SDK.
 ---
 
 # `@mushi-mushi/core`
@@ -31,7 +32,7 @@ interface MushiConfig {
   /** Session-replay sampling (0–1). Decision at init. Default 1. */
   replaySampleRate?: number
   /** Drop or mutate any report after PII scrub. Prefer over beforeSendFeedback. */
-  beforeSend?: (report: MushiReport) => MushiReport | null | Promise
+  beforeSend?: (report: MushiReport) => MushiReport | null | Promise<MushiReport | null>
 }
 ```
 
@@ -75,11 +76,87 @@ Force any queued reports out before page unload or app suspend. The web,
 React-Native, iOS, Android, Flutter, and Capacitor SDKs all wire this into
 the appropriate lifecycle hook automatically.
 
+### PII scrubbing utilities (1.27+)
+
+The redactor that every SDK uses at capture time is exported so you can reuse
+it in your own `beforeSend` hook, server code, or logs. It runs entirely in
+your process — scrubbed values never leave the client.
+
+```ts
+import { scrubPii, scrubUrl, createPiiScrubber } from '@mushi-mushi/core'
+
+// Free text → typed placeholders
+scrubPii('email jake@x.com or call +1 415 555 0100')
+// → 'email [REDACTED_EMAIL] or call [REDACTED_PHONE]'
+
+// URL query values → redacted; keys and path preserved for debuggability
+scrubUrl('/articles?tag=dragons&token=eyJhbGciOiJIUzI1NiJ9.payload.sig')
+// → '/articles?tag=dragons&token=[Scrubbed]'
+```
+
+**`scrubPii(text, config?)`** replaces sensitive substrings anywhere in free
+text. **`scrubUrl(url, config?)`** redacts only query-string *values* — both the
+standard `?…` part and any `?…` inside a hash-router fragment (`#/path?…`) — and
+leaves keys and path segments intact. `scrubUrl` redacts values under
+known-sensitive keys (`token`, `password`, `api_key`, `secret`, `auth`,
+`session`, `email`, `phone`, `ssn`, and the exact keys `key` / `code` / `sig`)
+to `[Scrubbed]`, then pattern-scrubs the remaining values so a JWT hiding under
+an innocent key (`?next=eyJ…`) is still caught. Both accept absolute or relative
+URLs and never throw.
+
+Patterns and their placeholders (all matched case-sensitively unless noted):
+
+| Data | Placeholder | Default |
+|------|-------------|:-------:|
+| Email | `[REDACTED_EMAIL]` | on |
+| Phone number | `[REDACTED_PHONE]` | on |
+| US SSN | `[REDACTED_SSN]` | on |
+| Credit-card PAN | `[REDACTED_CC]` | on |
+| JWT (`eyJ….….…`) | `[REDACTED_JWT]` | on |
+| AWS / Stripe / Slack / GitHub / OpenAI / Anthropic / Google keys | `[REDACTED_*_KEY]` (per vendor) | on |
+| IPv4 address | `[REDACTED_IP]` | **off** |
+| IPv6 address | `[REDACTED_IPV6]` | **off** |
+
+IP scrubbing is off by default because IPs are frequently load-bearing for
+debugging (rate-limit keys, geo). Toggle any pattern via `PiiScrubberConfig`:
+
+```ts
+interface PiiScrubberConfig {
+  emails?: boolean       // default true
+  phones?: boolean       // default true
+  creditCards?: boolean  // default true
+  ssns?: boolean         // default true
+  secretTokens?: boolean // default true — JWTs + vendor API keys
+  ipAddresses?: boolean  // default false — IPv4
+  ipv6?: boolean         // default false
+}
+
+// e.g. also redact IPs, keep everything else on
+scrubPii(text, { ipAddresses: true })
+```
+
+`createPiiScrubber(config)` returns `{ scrub, scrubObject }` when you want to
+build the scrubber once and reuse it across many strings or object fields:
+
+```ts
+const { scrub, scrubObject } = createPiiScrubber({ ipAddresses: true })
+scrub(logLine)
+scrubObject(record, ['description', 'url']) // scrubs only those string keys
+```
+
+The pattern set is the single source of truth shared with the Flutter SDK's
+generated copy, so the two scrubbers can't drift.
+
 ### Region resolution
 
 ```ts
+import { resolveRegionEndpoint, REGION_ENDPOINTS } from '@mushi-mushi/core'
 
-const url = await resolveRegionEndpoint({ projectId: 'p_…', region: 'eu' })
+const url = await resolveRegionEndpoint({
+  projectId: 'YOUR_PROJECT_ID',
+  apiEndpoint: REGION_ENDPOINTS.us,
+  region: 'eu',
+})
 ```
 
 `REGION_ENDPOINTS` contains the canonical URLs:

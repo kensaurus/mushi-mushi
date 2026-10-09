@@ -1,5 +1,4 @@
-import { createAnthropic } from 'npm:@ai-sdk/anthropic@1';
-import { createOpenAI } from 'npm:@ai-sdk/openai@1';
+import { openAiProvider } from '../_shared/openai-compat.ts';
 import { generateText } from 'npm:ai@4';
 import { getServiceClient } from '../_shared/db.ts';
 import { sendSlackNotification } from '../_shared/slack.ts';
@@ -15,7 +14,8 @@ import {
 import { withSentry } from '../_shared/sentry.ts';
 import { requireServiceRoleAuth } from '../_shared/auth.ts';
 import { mapWithConcurrency } from '../_shared/concurrency.ts';
-import { INTELLIGENCE_FALLBACK, INTELLIGENCE_MODEL } from '../_shared/models.ts';
+import { INTELLIGENCE_EFFORT, INTELLIGENCE_FALLBACK, INTELLIGENCE_MODEL } from '../_shared/models.ts';
+import { claudeGenerateText } from '../_shared/claude-messages.ts';
 import { getPromptForStage } from '../_shared/prompt-ab.ts';
 import {
   LlmFailoverError,
@@ -102,14 +102,18 @@ Cross-customer benchmarks available: ${benchmarks.optedIn ? 'yes' : 'no (project
         let usage: { promptTokens?: number; completionTokens?: number } | undefined;
         let usedModel = INTELLIGENCE_MODEL;
         let fallbackUsed = false;
+        // Source of the key behind the last attempt (the one that answered).
+        let keySource: 'byok' | 'env' | null = null;
         try {
           const generation = await withAnthropicOrOpenAi(
             db,
             project.id,
             async (resolved) => {
-              const anthropic = createAnthropic({ apiKey: resolved.key });
-              return generateText({
-                model: anthropic(INTELLIGENCE_MODEL),
+              keySource = resolved.source;
+              const { text, usage } = await claudeGenerateText({
+                apiKey: resolved.key,
+                model: INTELLIGENCE_MODEL,
+                effort: INTELLIGENCE_EFFORT,
                 messages: [
                   {
                     role: 'system',
@@ -121,17 +125,20 @@ Cross-customer benchmarks available: ${benchmarks.optedIn ? 'yes' : 'no (project
                   { role: 'user', content: statsContext },
                 ],
               });
+              return { text, usage };
             },
             async (resolved) => {
-              const openai = createOpenAI({
+              keySource = resolved.source;
+              const openai = openAiProvider({
                 apiKey: resolved.key,
                 ...(resolved.baseUrl ? { baseURL: resolved.baseUrl } : {}),
               });
-              return generateText({
+              const { text, usage } = await generateText({
                 model: openai(INTELLIGENCE_FALLBACK),
                 system: intelSystemPrompt,
                 prompt: statsContext,
               });
+              return { text, usage };
             },
           );
           digest = generation.result.text;
@@ -182,6 +189,9 @@ Cross-customer benchmarks available: ${benchmarks.optedIn ? 'yes' : 'no (project
             latencyMs: Date.now() - digestStart,
             errorMessage: diagnostic,
             langfuseTraceId: trace.id,
+            keySource,
+            // A weekly report nobody asked for this time: recorded, never billed.
+            skipHostedBilling: true,
           }).catch((telemetryError) => {
             intelLog.warn('Failed to record intelligence LLM error telemetry', {
               projectId: project.id,
@@ -210,6 +220,9 @@ Cross-customer benchmarks available: ${benchmarks.optedIn ? 'yes' : 'no (project
           inputTokens: usage?.promptTokens ?? null,
           outputTokens: usage?.completionTokens ?? null,
           langfuseTraceId: trace.id,
+          keySource,
+          // A weekly report nobody asked for this time: recorded, never billed.
+          skipHostedBilling: true,
         });
 
         const renderedHtml = renderIntelligenceHtml({

@@ -29,6 +29,9 @@ const SLUG_DOMAIN_HINTS: Record<string, string> = {
   glotit: 'glot.it',
   'solo-boss-cloud': 'solo-boss.kensaur.us',
   'mushi-mushi': 'kensaur.us',
+  'how-to-talk-to-girls': 'talk.kensaur.us',
+  htttg: 'talk.kensaur.us',
+  tsumagoi: 'tsumagoi.kensaur.us',
 };
 
 /**
@@ -40,6 +43,12 @@ const SLUG_ICON_URL_HINTS: Record<string, string> = {
   'solo-boss-cloud': 'https://solo-boss.kensaur.us/favicon.svg',
   'glot-it': 'https://kensaur.us/glot-it/apple-touch-icon.png',
   glotit: 'https://kensaur.us/glot-it/apple-touch-icon.png',
+  'the-wanting-mind': 'https://kensaur.us/the-wanting-mind/pwa-512x512.png',
+  'how-to-talk-to-girls': 'https://talk.kensaur.us/pwa-192.png',
+  htttg: 'https://talk.kensaur.us/pwa-192.png',
+  tsumagoi: 'https://tsumagoi.kensaur.us/apple-touch-icon.png',
+  'help-her-take-photo': 'https://kensaur.us/help-her-take-photo/assets/apple-touch-icon.png',
+  'yen-yen': 'https://kensaur.us/yen-yen/icon.svg',
 };
 
 /** Third-party favicon CDNs — return HTTP 200 generic globes; never use as fallbacks. */

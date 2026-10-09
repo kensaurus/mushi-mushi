@@ -1,5 +1,6 @@
 import { compressScreenshotDataUrl } from './capture/compress-screenshot';
 import type { WidgetSubmitOutcome } from './widget-helpers';
+import { shouldShowSdkFreshness } from './widget-helpers';
 import {
   type MushiConfig,
   type MushiReport,
@@ -43,6 +44,8 @@ import {
 } from '@mushi-mushi/core';
 
 import { MushiWidget } from './widget';
+import { deviceHasReports, markDeviceHasReports, recordToastShown, toastAllowed } from './reporter-inbox';
+import { reporterChannels, subscribeBrowserPush, type MushiReporterUpdates } from '@mushi-mushi/core/reporter-channels';
 import { mergeRuntimeConfig } from './runtime-merge';
 import { exposeMarketingRecorder } from './marketing-recorder';
 import {
@@ -64,11 +67,11 @@ import {
   type DiscoveryCapture,
 } from './capture';
 import { createReplayCapture, type ReplayCapture } from './capture/replay';
-import {
-  createScreenshotAnnotation,
-  type AnnotationSession,
-  type AnnotationTool,
-} from './capture/screenshot-annotation';
+import { ALWAYS_REDACT_SELECTORS, type ScreenshotFailureReason } from './capture/screenshot';
+// Rare paths load on demand (code-split in the ESM build): markup and tab
+// share only cost bytes for reporters who use them. Compression stays static —
+// it runs at submit, where an offline chunk fetch would drop the screenshot.
+import type { AnnotationSession, AnnotationTool } from './capture/screenshot-annotation';
 import { captureSentryContext, tagSentryScope } from './sentry';
 import { setupProactiveTriggers, type ProactiveTriggerCleanup } from './proactive-triggers';
 import { createProactiveManager, type ProactiveManager } from './proactive-manager';
@@ -78,6 +81,15 @@ import {
   initSessionTracker,
   updateSessionIdentity,
   destroySessionTracker,
+  trackPageView,
+  initEventTracker,
+  trackEvent,
+  setEventConsent,
+  updateEventIdentity,
+  destroyEventTracker,
+  getEventAnonymousId,
+  flushEvents,
+  sha256Hex,
 } from '@mushi-mushi/core';
 
 /** Resolve `reports.app_version` from SDK config and captured environment. */
@@ -182,19 +194,54 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     sdkVersion: MUSHI_SDK_VERSION,
   });
 
-  // Session tracking — opt-out via trackSessions:false in MushiConfig
-  if ((bootstrapConfig as unknown as Record<string, unknown>)['trackSessions'] !== false) {
+  // Session tracking — opt-out via trackSessions:false in MushiConfig. It
+  // passes the same analytics gate as Mushi.track() (enabled, DNT / GPC,
+  // bots, consent), so under consent:'required' nothing is sent until
+  // setConsent('granted'), whichever tracker initialises first.
+  let unsubPageViewHistory: (() => void) | null = null;
+  if (bootstrapConfig.trackSessions !== false) {
     initSessionTracker({
       client: apiClient,
       sdkVersion: MUSHI_SDK_VERSION,
-      reporterTokenHash: getReporterToken(bootstrapConfig.projectId) ?? null,
+      reporterToken: getReporterToken(bootstrapConfig.projectId) ?? null,
+      projectId: bootstrapConfig.projectId,
+      analytics: bootstrapConfig.analytics,
+      // This package owns the history patch (history-patch.ts):
+      // installAutoBreadcrumbs() captures History.prototype.pushState (the
+      // native) and assigns its own wrapper to history.pushState, which
+      // silently discarded core's page-view wrapper — so no SPA page view
+      // was ever recorded from this SDK. Report views through the shared
+      // patch instead of stacking a second wrapper.
+      patchHistory: false,
     });
+    try {
+      unsubPageViewHistory = subscribeHistory({
+        onPush: () => trackPageView(),
+        onPop: () => trackPageView(),
+      });
+    } catch {
+      // History API unavailable (sandboxed iframe) — heartbeats still flow.
+    }
   }
 
   const preFilter = createPreFilter(bootstrapConfig.preFilter);
   const offlineQueue = createOfflineQueue(bootstrapConfig.offline);
   const rateLimiter = createRateLimiter({ maxBurst: 10, refillRate: 1, refillIntervalMs: 5_000 });
   const piiScrubber = createPiiScrubber();
+
+  // Product analytics (Mushi.track()) — keyed on the tracker's own random
+  // per-project id, not the reporter token (a credential for the end user's
+  // report threads). DNT/GPC and consent are handled inside the tracker.
+  // Opt-out via analytics.enabled:false. Reserved UTM/referrer props are
+  // attached by the tracker's caller (landing/docs) via trackEvent opts.
+  initEventTracker({
+    client: apiClient,
+    projectId: bootstrapConfig.projectId,
+    sdkVersion: MUSHI_SDK_VERSION,
+    config: bootstrapConfig.analytics,
+    scrub: (s) => piiScrubber.scrub(s),
+    getSessionId,
+  });
 
   // Apply the same scrubber that runs over `description` to the
   // observability surfaces (breadcrumbs, tags, sentry context) right
@@ -345,7 +392,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
         privacy: activeConfig.privacy,
         // Surface capture failures (canvas taint, CSP) in the widget UI —
         // an invisible failure looks identical to a broken button.
-        onFailed: () => widget.setScreenshotError(true),
+        onFailed: (reason: ScreenshotFailureReason) => widget.setScreenshotError(true, reason),
       };
       if (activeConfig.capture?.screenshotProvider) {
         // When a custom provider is set the built-in DOM capturer is bypassed
@@ -447,8 +494,12 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       !replaySampled && onErrorReplayRate > 0 && Math.random() < onErrorReplayRate;
     if ((replayMode === 'rrweb' || replayMode === 'lite') && (replaySampled || replayOnErrorSampled)) {
       const generation = ++replayGeneration;
+      // `loadRrweb` is read from the host's own init config only: a loader is
+      // code, and the console's runtime config must never be able to supply one.
       void createReplayCapture({
         enabled: true,
+        mode: replayMode,
+        loadRrweb: bootstrapConfig.capture?.rrweb,
         redactSelectors: activeConfig.privacy?.redactSelectors,
       }).then((cap) => {
         // A newer sync (config change / flip to 'off') superseded this create
@@ -519,9 +570,22 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
   // Reentrance guard: prevents a user tapping the camera icon while
   // autoCaptureScreenshot is already mid-capture from double-hiding the panel.
   let screenshotCaptureInFlight = false;
+  /** Set when the host screenshotProvider was refused permission this attempt. */
+  let screenshotProviderDenied = false;
+
+  // onReporterUpdate: the v2 feed on the inbox-refresh cadence; no listener, no request.
+  const reporterUpdateListeners = new Set<(u: MushiReporterUpdates) => void>();
+  const rc = reporterChannels(apiClient);
+  async function emitReporterUpdates(): Promise<MushiReporterUpdates | null> {
+    const res = await rc.getUpdates(reporterTokenForProject());
+    const updates = res.ok ? res.data ?? null : null;
+    if (updates) for (const cb of reporterUpdateListeners) try { cb(updates); } catch { /* host bug */ }
+    return updates;
+  }
 
   function syncReporterInboxQuiet(): void {
     void widget.refreshReporterInboxQuiet();
+    if (reporterUpdateListeners.size) void emitReporterUpdates();
   }
 
   function stopReporterInboxPolling(): void {
@@ -533,22 +597,96 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     reporterPollVisibleHandler = null;
   }
 
+  /**
+   * Plan 018 §4.4: every 5 minutes while the page is visible, plus once when
+   * it becomes visible — and never from a device that has not filed a report.
+   */
   function startReporterInboxPolling(): void {
     stopReporterInboxPolling();
     if (!reporterNotificationsEnabled) return;
-    const POLL_MS = 60_000;
+    const POLL_MS = 5 * 60_000;
     const tick = () => {
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      if (!deviceHasReports(projectId)) return;
       syncReporterInboxQuiet();
     };
     reporterPollTimer = setInterval(tick, POLL_MS);
     if (typeof document !== 'undefined') {
       reporterPollVisibleHandler = () => {
-        if (document.visibilityState === 'visible') syncReporterInboxQuiet();
+        if (document.visibilityState === 'visible') tick();
       };
       document.addEventListener('visibilitychange', reporterPollVisibleHandler);
     }
-    syncReporterInboxQuiet();
+    tick();
+  }
+
+  /** What the project offers (`/v1/sdk/config` → `reporter`); null until known. */
+  let reporterOffer: MushiRuntimeSdkConfig['reporter'] | null = null;
+
+  /**
+   * Opt-ins appear only for a channel the project offers AND the host allows:
+   * email unless `notifications.email: false`, push only with a service worker
+   * (`notifications.webPush`). The address is prefilled from identify() only
+   * with `emailFromIdentity`, and the box is never pre-ticked.
+   */
+  function syncReporterChannels(): void {
+    const n = activeConfig.notifications ?? bootstrapConfig.notifications;
+    widget.setReporterChannels({
+      email: Boolean(reporterOffer?.emailEnabled) && n?.email !== false,
+      push: Boolean(reporterOffer?.pushEnabled && reporterOffer.vapidPublicKey) && Boolean(n?.webPush),
+      emailPrefill: n?.emailFromIdentity ? userInfo?.email ?? '' : '',
+    });
+  }
+
+  /** Latest "Your reports" rows, for the next-visit toast. */
+  let lastReporterReports: MushiReporterReport[] = [];
+
+  /**
+   * Plan 018 §4.2: once, at first idle after init, a toast near the launcher
+   * when this device's reports have unread updates. At most one per session
+   * and one per 24 hours; hosts turn it off with `notifications.toast: false`.
+   */
+  function scheduleUpdateToast(): void {
+    if (!deviceHasReports(projectId)) return;
+    // This device has reports: warm the Your reports chunk at idle.
+    const idleWarm = (globalThis as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => void }).requestIdleCallback;
+    if (idleWarm) idleWarm(() => void widget.preloadViews(), { timeout: 8000 });
+    else setTimeout(() => void widget.preloadViews(), 3000);
+    if (bootstrapConfig.notifications?.toast === false || !toastAllowed(projectId)) return;
+    const run = async () => {
+      // A malformed feed counts as no feed: fall back to the list.
+      const feed = await emitReporterUpdates();
+      const updates = feed && typeof feed.unread_total === 'number' && Array.isArray(feed.latest) ? feed : null;
+      if (updates && !updates.unread_total) return;
+      // Titles and statuses come from the list; it also lights the header badge.
+      await widget.refreshReporterInboxQuiet();
+      const shown = updates
+        ? widget.showUpdatesFeedToast(updates, lastReporterReports)
+        : await widget.showUpdatesToast(lastReporterReports);
+      if (shown) recordToastShown(projectId);
+    };
+    const idle = (globalThis as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => void }).requestIdleCallback;
+    if (idle) idle(() => void run(), { timeout: 5000 });
+    else setTimeout(() => void run(), 2000);
+  }
+
+  /**
+   * Mark a report's updates read (§2.3) with POST /v1/reporter/reports/:id/read.
+   * A server without that route gets the old path: match the in-app rows on
+   * `payload.reportId` and mark each one read.
+   */
+  async function markReporterReportRead(reportId: string): Promise<number | null> {
+    const token = getReporterToken(projectId);
+    const v2 = await rc.markReportRead(reportId, token);
+    if (v2.ok) return v2.data?.unread_total ?? null;
+    const list = await apiClient.listNotifications(token, { limit: 50 });
+    if (!list.ok) return null;
+    const rows = (list.data?.notifications ?? []).filter((n) => {
+      const payload = (n.payload ?? {}) as Record<string, unknown>;
+      return !n.read_at && (payload.reportId === reportId || n.report_id === reportId);
+    });
+    await Promise.all(rows.map((n) => apiClient.markNotificationRead(String(n.id), token)));
+    return null;
   }
 
   function wireRewardsForIdentifiedUser(
@@ -590,6 +728,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
 
   async function takeScreenshotWithoutChrome(): Promise<string | null> {
     if (screenshotCaptureInFlight) return null;
+    screenshotProviderDenied = false;
     const provider = activeConfig.capture?.screenshotProvider;
     // Native / custom provider path — called before hiding panel so the host
     // has full control over timing (e.g. a Capacitor plugin that captures
@@ -609,6 +748,10 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
         log.warn('screenshotProvider threw, falling back to built-in capturer', {
           error: err instanceof Error ? err.message : String(err),
         });
+        // getDisplayMedia / native plugins reject with NotAllowedError when
+        // the user or OS refuses — the one failure the reporter can fix.
+        screenshotProviderDenied = err instanceof Error
+          && (err.name === 'NotAllowedError' || err.name === 'SecurityError' || /permission|denied/i.test(err.message));
         // Fall through to built-in DOM capturer below.
       } finally {
         screenshotCaptureInFlight = false;
@@ -645,6 +788,11 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     widget.setScreenshotPreview(pendingScreenshot);
   }
 
+  // Brand-mark ref: SHA-256 prefix of the project id, never the id itself.
+  const brandRefReady: Promise<string | null> = sha256Hex(projectId)
+    .then((hex) => hex.slice(0, 12))
+    .catch(() => null);
+
   widget = new MushiWidget(bootstrapConfig.widget, {
     onSubmit: async ({ category, userCategory, description, intent }) => {
       log.info('Report submitted', { category, userCategory, intent });
@@ -667,6 +815,18 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       replayCap?.start();
       emit('widget:opened');
     },
+    // Growth loop (plan-gtm C §5); the tracker already honours DNT/consent/enabled.
+    onBrandFooterImpression: () => {
+      void brandRefReady.then((ref) => {
+        trackEvent('loop_impression', { placement: 'widget' }, ref ? { reserved: { $ref: ref } } : undefined);
+      });
+    },
+    onBrandFooterClick: () => {
+      void brandRefReady.then((ref) => {
+        trackEvent('loop_click', { placement: 'widget' }, ref ? { reserved: { $ref: ref } } : undefined);
+        return flushEvents();
+      });
+    },
     onClose: () => {
       log.debug('Widget closed');
       // Deliberately do NOT stop the rolling buffer here — it must keep
@@ -687,9 +847,11 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
         // The button should be hidden in this state (setCaptureAvailability),
         // but if a stale render still shows it, fail visibly rather than no-op.
         log.warn('Screenshot requested but capture is disabled');
-        widget.setScreenshotError(true);
+        widget.setScreenshotError(true, 'unsupported');
         return;
       }
+      // A second click while a capture runs is not a failure — ignore it.
+      if (screenshotCaptureInFlight) return;
       log.debug('Taking screenshot');
       widget.setScreenshotCapturing(true);
       try {
@@ -702,8 +864,57 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       }
       widget.setScreenshotAttached(pendingScreenshot !== null);
       widget.setScreenshotPreview(pendingScreenshot);
-      if (pendingScreenshot === null) widget.setScreenshotError(true);
+      // Keeps a reason the capture module already reported (taint, timeout…).
+      if (pendingScreenshot === null) widget.setScreenshotError(true, screenshotProviderDenied ? 'permission' : undefined);
     },
+    onScreenshotShareTabRequest: typeof navigator !== 'undefined' && typeof navigator.mediaDevices?.getDisplayMedia === 'function'
+      ? () => {
+          // getDisplayMedia is called synchronously in the click — the picker
+          // needs its user activation, which awaiting the lazy module would
+          // lose. The panel hides so it isn't in the frame.
+          const stream = navigator.mediaDevices.getDisplayMedia({
+            video: { displaySurface: 'browser' },
+            audio: false,
+            preferCurrentTab: true,
+            selfBrowserSurface: 'include',
+          } as DisplayMediaStreamOptions);
+          // An instant rejection (cancel, iframe without display-capture) would
+          // otherwise surface as an unhandled rejection before the chunk loads;
+          // grabMaskedTabFrame still awaits the original and maps the reason.
+          stream.catch(() => {});
+          widget.setScreenshotCapturing(true);
+          const host = document.getElementById('mushi-mushi-widget');
+          if (host) host.style.visibility = 'hidden';
+          const p = activeConfig.privacy;
+          import('./capture/display-capture')
+            .then(
+              (m) => m.grabMaskedTabFrame(stream, [
+                ALWAYS_REDACT_SELECTORS,
+                '[data-mushi-redact]',
+                ...(p?.redactSelectors ?? []),
+                ...(p?.maskSelectors ?? []),
+                ...(p?.blockSelectors ?? []),
+              ]),
+              (err: unknown) => {
+                // Module failed to load: never leave a granted share running.
+                void stream.then((s) => s.getTracks().forEach((t) => t.stop()), () => {});
+                throw err;
+              },
+            )
+            .then((dataUrl) => {
+              pendingScreenshot = dataUrl;
+              widget.setScreenshotAttached(true);
+              widget.setScreenshotPreview(dataUrl);
+            })
+            .catch((err: unknown) => {
+              log.warn('Tab capture failed', { error: err instanceof Error ? err.name : String(err) });
+              widget.setScreenshotError(true, err instanceof Error && err.name === 'NotAllowedError' ? 'permission' : 'error');
+            })
+            .finally(() => {
+              if (host) host.style.visibility = '';
+            });
+        }
+      : undefined,
     onScreenshotRemove: () => {
       log.debug('Screenshot attachment removed');
       pendingScreenshot = null;
@@ -716,6 +927,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       if (container.childElementCount > 0) return;
       let session: AnnotationSession;
       try {
+        const { createScreenshotAnnotation } = await import('./capture/screenshot-annotation');
         session = await createScreenshotAnnotation(pendingScreenshot, container);
       } catch (err) {
         log.warn('Screenshot annotation failed', {
@@ -809,7 +1021,23 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     async onReporterReportsRequest() {
       const result = await apiClient.listReporterReports(getReporterToken(projectId));
       if (!result.ok) throw new Error(result.error?.message ?? 'Could not load reports');
-      return result.data?.reports ?? [];
+      lastReporterReports = result.data?.reports ?? [];
+      if (lastReporterReports.length) markDeviceHasReports(projectId);
+      return lastReporterReports;
+    },
+    onReporterMarkRead: (reportId) => markReporterReportRead(reportId),
+    async onReporterReportRequest(reportId) {
+      const res = await rc.getReport(reportId, getReporterToken(projectId));
+      // null → the widget falls back to the comments call (servers before Plan 018 Phase 2).
+      return res.ok && res.data ? { report: res.data.report as Partial<MushiReporterReport>, timeline: res.data.timeline } : null;
+    },
+    async onReporterEmailOptIn(email) {
+      const res = await rc.setPrefs(getReporterToken(projectId), { email, channels: { email: true } });
+      if (!res.ok) throw new Error(res.error?.code ?? 'EMAIL_OPT_IN_FAILED');
+    },
+    async onReporterPushSubscribe() {
+      const res = await sdk.subscribeReporterPush();
+      if (!res.ok) throw new Error(res.reason);
     },
     async onReporterCommentsRequest(reportId) {
       const result = await apiClient.listReporterComments(reportId, getReporterToken(projectId));
@@ -915,7 +1143,8 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       });
       return res.ok ? (res.data ?? null) : null;
     },
-  }, MUSHI_SDK_VERSION);
+  });
+  void brandRefReady.then((ref) => widget.setBrandRef(ref));
   syncCaptureModules();
 
   if (typeof document !== 'undefined') {
@@ -1009,6 +1238,8 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
   function applyRuntimeConfig(runtime: MushiRuntimeSdkConfig) {
     runtimeConfigLoaded = true;
     reporterNotificationsEnabled = runtime.reporterNotificationsEnabled !== false;
+    reporterOffer = runtime.enabled === false ? null : runtime.reporter ?? null;
+    syncReporterChannels();
     if (runtime.enabled === false) {
       activeConfig = bootstrapConfig;
       clearCachedRuntimeConfig(config.projectId);
@@ -1018,7 +1249,8 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       log.debug('Runtime SDK config disabled; using bootstrap config', { version: runtime.version });
       return;
     }
-    activeConfig = mergeRuntimeConfig(activeConfig, runtime);
+    // Host (MIT) config beats remote for host-wins keys even on the second merge.
+    activeConfig = mergeRuntimeConfig(activeConfig, runtime, bootstrapConfig);
     syncCaptureModules();
     if (runtime.widget) widget.updateConfig(activeConfig.widget);
     if (reporterNotificationsEnabled) startReporterInboxPolling();
@@ -1048,6 +1280,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
 
   void checkSdkFreshness();
   startReporterInboxPolling();
+  scheduleUpdateToast();
 
   log.info('Initialized', { projectId: config.projectId });
 
@@ -1073,7 +1306,13 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       deprecated: info.deprecated,
       message,
     });
-    if (activeConfig.widget?.outdatedBanner !== 'console-only') {
+    // A developer instruction: never shown to an app's end users (see
+    // shouldShowSdkFreshness). The console warning above always fires.
+    if (shouldShowSdkFreshness(
+      activeConfig.widget?.outdatedBanner,
+      Boolean(activeConfig.debug),
+      typeof location === 'undefined' ? undefined : location,
+    )) {
       widget.setSdkFreshness({
         latest,
         current: MUSHI_SDK_VERSION,
@@ -1313,6 +1552,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     if (result.ok) {
       log.info('Report sent', { reportId: result.data?.reportId });
       emit('report:sent', { reportId: result.data?.reportId });
+      markDeviceHasReports(projectId);
       syncReporterInboxQuiet();
       // If the server response includes a Cursor agent dispatch (classify-report
       // triggered a cursor_cloud fix via the autofix_agent setting), emit
@@ -1502,6 +1742,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     destroy() {
       proactiveTriggers?.destroy();
       proactiveManager?.reset();
+      destroyEventTracker();
       widget.destroy();
       consoleCap?.destroy();
       networkCap?.destroy();
@@ -1523,6 +1764,8 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       replayCap = null;
       offlineQueue.stopAutoSync();
       stopReporterInboxPolling();
+      unsubPageViewHistory?.();
+      unsubPageViewHistory = null;
       destroySessionTracker();
       breadcrumbs.clear();
       listeners.clear();
@@ -1693,6 +1936,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       widget.setIdentifiedUser(
         (userInfo.name || userInfo.email) ? { name: userInfo.name, email: userInfo.email } : null,
       );
+      syncReporterChannels();
       if (traits) {
         for (const [k, v] of Object.entries(traits)) {
           if (k !== 'email' && k !== 'name') customMetadata[`user.${k}`] = v;
@@ -1703,6 +1947,8 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
         level: 'info',
         message: `Mushi.identify(${userId})`,
       });
+      // Stitch anonymous analytics history to the person (Users & Funnels).
+      updateEventIdentity(userId, traits ?? null);
 
       // Wire rewards program when enabled
       wireRewardsForIdentifiedUser(
@@ -1824,6 +2070,20 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       enqueueActivity({ action, metadata });
     },
 
+    // ─── Product analytics (Users & Funnels) ──────────────────────────
+
+    track(event, properties) {
+      return trackEvent(event, properties);
+    },
+
+    setConsent(state) {
+      setEventConsent(state);
+    },
+
+    getAnonymousId() {
+      return getEventAnonymousId();
+    },
+
     pulseTrigger() {
       widget.pulseTrigger?.();
     },
@@ -1862,6 +2122,38 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
 
     openMyReports() {
       widget.recorderOpenMyReports();
+    },
+
+    getReporterUpdates: emitReporterUpdates,
+
+    async markReportRead(reportId: string) {
+      const res = await rc.markReportRead(reportId, reporterTokenForProject());
+      return res.ok ? res.data?.unread_total ?? 0 : null;
+    },
+
+    onReporterUpdate(cb) {
+      reporterUpdateListeners.add(cb);
+      void emitReporterUpdates();
+      return () => void reporterUpdateListeners.delete(cb);
+    },
+
+    async getNotificationPrefs() {
+      const res = await rc.getPrefs(reporterTokenForProject());
+      return res.ok ? res.data ?? null : null;
+    },
+
+    setNotificationPrefs: (update) => rc.setPrefs(reporterTokenForProject(), update),
+
+    async subscribeReporterPush() {
+      const sw = activeConfig.notifications?.webPush;
+      // The permission prompt needs the click's user activation, so use the
+      // key runtime config already delivered; fetch only as a last resort.
+      let key = reporterOffer?.vapidPublicKey ?? null;
+      if (sw && !key) {
+        const cfg = await apiClient.getSdkConfig();
+        key = cfg.ok ? cfg.data?.reporter?.vapidPublicKey ?? null : null;
+      }
+      return subscribeBrowserPush(rc, reporterTokenForProject(), sw ? sw.serviceWorkerPath : null, key);
     },
 
     async getHallOfFame(limit = 20): Promise<MushiHallOfFameEntry[]> {
@@ -1928,8 +2220,11 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
   // is logged + breadcrumbed and swallowed, returning a type-safe fallback.
   // Non-void methods need a real fallback so the host doesn't choke on
   // `undefined` (e.g. `.map` over a list); everything else returns void.
+  // The reporter-channel calls never reject (they resolve { ok: false } / null).
   const PUBLIC_API_FALLBACKS: Record<string, unknown> = {
     on: () => {}, // returns a no-op unsubscribe
+    // mushi-mushi-allowlist: no-op unsubscribe
+    onReporterUpdate: () => {},
     isOpen: false,
     getBreadcrumbs: [],
     captureEvent: null,
@@ -2191,6 +2486,9 @@ function createNoopInstance(): MushiSDKInstance {
     getReputation: async () => null,
     getTier: async () => null,
     recordActivity: () => {},
+    track: () => false,
+    setConsent: () => {},
+    getAnonymousId: () => null,
     pulseTrigger: () => {},
     listMyReports: async () => [],
     listMyComments: async () => [],
@@ -2199,6 +2497,12 @@ function createNoopInstance(): MushiSDKInstance {
     reopenReport: async () => null,
     openMyReports: () => {},
     getHallOfFame: async () => [],
+    getReporterUpdates: async () => null,
+    markReportRead: async () => null,
+    onReporterUpdate: () => () => {},
+    getNotificationPrefs: async () => null,
+    setNotificationPrefs: async () => ({ ok: false }),
+    subscribeReporterPush: async () => ({ ok: false, reason: 'off' }),
   };
 }
 

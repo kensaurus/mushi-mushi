@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/query
 
 ---
 title: Natural-language query
+description: Ask questions about your Mushi project's bug data in plain English — the Query page writes the SQL and draws the chart for you.
 ---
 
 # Natural-language query

@@ -3,7 +3,9 @@ import type { Variables } from '../types.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { jwtAuth, adminOrApiKey } from '../../_shared/auth.ts';
 import { estimateCallCostUsd } from '../../_shared/pricing.ts';
-import { dbError, callerProjectIds, resolveOwnedProject } from '../shared.ts';
+import { dbError, callerProjectIds, isProjectAdmin, requireProjectAdmin, resolveOwnedProject } from '../shared.ts';
+import { loadLlmWindowStats } from '../../_shared/llm-window-stats.ts';
+import { log } from '../../_shared/logger.ts';
 
 export function registerHealthRoutes(app: Hono<{ Variables: Variables }>): void {
   // ============================================================
@@ -166,25 +168,27 @@ export function registerHealthRoutes(app: Hono<{ Variables: Variables }>): void 
 
     const since = new Date(Date.now() - ms).toISOString();
     const KNOWN_JOBS = ['judge-batch', 'intelligence-report', 'data-retention'] as const;
+    // Minutes between runs, matching cron.job. judge-batch runs nightly (14 3 * * *);
+    // at 60 it read as overdue every day from 06:14 UTC.
     const EXPECTED_CADENCE_MIN: Record<string, number> = {
-      'judge-batch': 60,
+      'judge-batch': 60 * 24,
       'intelligence-report': 60 * 24 * 7,
       'data-retention': 60 * 24,
     };
 
-    const [invRes, cronRes, lastCallRes] = await Promise.all([
+    const [llmStats, cronRes, lastCallRes] = await Promise.all([
+      // Exact window totals (was: newest 500 rows, counted as the total).
+      loadLlmWindowStats(db, [pid], since).catch((err: unknown) => err as Error),
+      // Latest row per job (migration 20260923000000). The previous read —
+      // the 100 most recent rows overall — spans ~40 minutes because three
+      // jobs run every minute, so judge-batch, intelligence-report and
+      // data-retention never appeared and were counted as stale: a false
+      // "3 scheduled jobs missed their expected run time" warning on the
+      // dashboard while all three ran on schedule.
       db
-        .from('llm_invocations')
-        .select('fallback_used, status, latency_ms, created_at')
-        .eq('project_id', pid)
-        .gte('created_at', since)
-        .order('created_at', { ascending: false })
-        .limit(500),
-      db
-        .from('cron_runs')
+        .from('cron_runs_latest')
         .select('job_name, status, started_at')
-        .order('started_at', { ascending: false })
-        .limit(100),
+        .in('job_name', [...KNOWN_JOBS]),
       db
         .from('llm_invocations')
         .select('created_at')
@@ -194,21 +198,14 @@ export function registerHealthRoutes(app: Hono<{ Variables: Variables }>): void 
         .maybeSingle(),
     ]);
 
-    const rows = invRes.data ?? [];
-    const totalCalls = rows.length;
-    const fallbacks = rows.filter((r) => r.fallback_used).length;
-    const errors = rows.filter((r) => r.status !== 'success').length;
-    const errorRatePct = totalCalls > 0 ? Math.round((errors / totalCalls) * 1000) / 10 : 0;
-    const fallbackRatePct = totalCalls > 0 ? Math.round((fallbacks / totalCalls) * 1000) / 10 : 0;
-    const latencies = rows.map((r) => r.latency_ms ?? 0).sort((a, b) => a - b);
-    const avgLatencyMs =
-      latencies.length > 0
-        ? Math.round(latencies.reduce((a, b) => a + b, 0) / latencies.length)
-        : 0;
-    const p95LatencyMs =
-      latencies.length > 0
-        ? (latencies[Math.min(latencies.length - 1, Math.floor(latencies.length * 0.95))] ?? 0)
-        : 0;
+    if (llmStats instanceof Error) {
+      log.error('health/stats: llm totals failed', { projectId: pid, err: llmStats.message });
+      return c.json(
+        { ok: false, error: { code: 'DB_ERROR', message: 'Could not count AI calls for this project. Retry in a moment.' } },
+        500,
+      );
+    }
+    const { totalCalls, errorRatePct, fallbackRatePct, avgLatencyMs, p95LatencyMs, latencyExact } = llmStats;
 
     const cronRows = cronRes.data ?? [];
     const now = Date.now();
@@ -290,7 +287,7 @@ export function registerHealthRoutes(app: Hono<{ Variables: Variables }>): void 
       data: {
         hasAnyProject: true,
         projectId: pid,
-        projectName: activeProject.project_name ?? null,
+        projectName: activeProject.name ?? null,
         projectCount: projectIds.length,
         window: windowParam,
         totalCalls,
@@ -298,6 +295,8 @@ export function registerHealthRoutes(app: Hono<{ Variables: Variables }>): void 
         fallbackRatePct,
         avgLatencyMs,
         p95LatencyMs,
+        // False while latency is computed from the newest calls only.
+        latencyExact,
         cronJobCount: KNOWN_JOBS.length,
         cronHealthyCount,
         cronErrorCount,
@@ -306,6 +305,8 @@ export function registerHealthRoutes(app: Hono<{ Variables: Variables }>): void 
         redCount,
         amberCount,
         lastLlmCallAt: lastCallRes.data?.created_at ?? null,
+        // Trigger now (POST /health/cron/:job/trigger) is owner/admin only.
+        canRunJobs: isProjectAdmin(activeProject),
         topPriority,
         topPriorityLabel,
         topPriorityTo,
@@ -357,22 +358,23 @@ export function registerHealthRoutes(app: Hono<{ Variables: Variables }>): void 
       .limit(500);
 
     const rows = invocations ?? [];
-    const totalCalls = rows.length;
-    const fallbacks = rows.filter((r) => r.fallback_used).length;
-    const errors = rows.filter((r) => r.status !== 'success').length;
-    const avgLatency =
-      rows.length > 0
-        ? Math.round(rows.reduce((sum, r) => sum + (r.latency_ms ?? 0), 0) / rows.length)
-        : 0;
-
-    // Per-function p95 + a global p95. Sort once, slice index = floor(0.95 * len).
-    const sortedGlobal = rows.map((r) => r.latency_ms ?? 0).sort((a, b) => a - b);
-    const p95Latency =
-      sortedGlobal.length > 0
-        ? (sortedGlobal[
-            Math.min(sortedGlobal.length - 1, Math.floor(sortedGlobal.length * 0.95))
-          ] ?? 0)
-        : 0;
+    // Window totals are exact (same helper as /health/stats); the per-model
+    // and per-function breakdowns below cover the newest `rows.length` calls.
+    let totals;
+    try {
+      totals = await loadLlmWindowStats(db, projectIds, since);
+    } catch (err) {
+      log.error('health/llm: llm totals failed', { err: err instanceof Error ? err.message : String(err) });
+      return c.json(
+        { ok: false, error: { code: 'DB_ERROR', message: 'Could not count AI calls. Retry in a moment.' } },
+        500,
+      );
+    }
+    const totalCalls = totals.totalCalls;
+    const fallbacks = totals.fallbacks;
+    const errors = totals.errors;
+    const avgLatency = totals.avgLatencyMs;
+    const p95Latency = totals.p95LatencyMs;
 
     const byModel: Record<string, { calls: number; errors: number; tokens: number }> = {};
     const byFunction: Record<
@@ -445,8 +447,11 @@ export function registerHealthRoutes(app: Hono<{ Variables: Variables }>): void 
         errorRate: totalCalls > 0 ? errors / totalCalls : 0,
         avgLatencyMs: avgLatency,
         p95LatencyMs: p95Latency,
+        latencyExact: totals.latencyExact,
         byModel,
         byFunction,
+        // The breakdowns cover the newest `breakdownCalls` of `totalCalls`.
+        breakdownCalls: rows.length,
         recent: rows.slice(0, 100),
       },
     });
@@ -454,11 +459,18 @@ export function registerHealthRoutes(app: Hono<{ Variables: Variables }>): void 
 
   app.get('/v1/admin/health/cron', jwtAuth, async (c) => {
     const db = getServiceClient();
-    const { data: runs } = await db
-      .from('cron_runs')
-      .select('*')
-      .order('started_at', { ascending: false })
-      .limit(100);
+    // Two reads. `cron_runs_latest` (one row per job_name, migration
+    // 20260923000000) is the source of truth for lastRun / lastStatus /
+    // staleness. The 100 most recent rows overall feed the success-rate and
+    // duration aggregates plus the `recent` list. The latter alone used to
+    // drive everything, and because three jobs run every minute that window
+    // is ~40 minutes — judge-batch (nightly), intelligence-report (weekly)
+    // and data-retention (daily) never made it in and the console reported
+    // all three as "never run" while they ran on schedule.
+    const [{ data: latestRows }, { data: runs }] = await Promise.all([
+      db.from('cron_runs_latest').select('job_name, status, started_at'),
+      db.from('cron_runs').select('*').order('started_at', { ascending: false }).limit(100),
+    ]);
 
     const byJob: Record<
       string,
@@ -478,8 +490,9 @@ export function registerHealthRoutes(app: Hono<{ Variables: Variables }>): void 
 
     // Expected cadences in minutes. Any job we don't know about defaults to
     // 24h (day-scale), which keeps the probe conservative for new crons.
+    // Minutes between runs; judge-batch is nightly (see the stats route above).
     const EXPECTED_CADENCE_MIN: Record<string, number> = {
-      'judge-batch': 60,
+      'judge-batch': 60 * 24,
       'intelligence-report': 60 * 24 * 7,
       'data-retention': 60 * 24,
       'pipeline-recovery': 5,
@@ -489,6 +502,20 @@ export function registerHealthRoutes(app: Hono<{ Variables: Variables }>): void 
     };
     const now = Date.now();
     const rowsOrEmpty = runs ?? [];
+
+    // Seed every job from its latest row first, so a job absent from the
+    // recent window still reports its real lastRun instead of `never`.
+    for (const r of latestRows ?? []) {
+      byJob[r.job_name] = {
+        lastRun: r.started_at,
+        lastStatus: r.status,
+        successRate: r.status === 'success' ? 1 : 0,
+        avgDurationMs: 0,
+        runs: 0,
+        stalenessMinutes: null,
+        staleness: 'never',
+      };
+    }
 
     for (const r of rowsOrEmpty) {
       byJob[r.job_name] ??= {
@@ -510,7 +537,9 @@ export function registerHealthRoutes(app: Hono<{ Variables: Variables }>): void 
     for (const job of Object.keys(byJob)) {
       const jobRuns = rowsOrEmpty.filter((r) => r.job_name === job);
       const successes = jobRuns.filter((r) => r.status === 'success').length;
-      byJob[job].successRate = jobRuns.length > 0 ? successes / jobRuns.length : 0;
+      // A job outside the recent window only has its seeded latest-run
+      // status; keep that rather than reporting a 0% success rate.
+      if (jobRuns.length > 0) byJob[job].successRate = successes / jobRuns.length;
       const durations = jobRuns.map((r) => r.duration_ms ?? 0).filter((d) => d > 0);
       byJob[job].avgDurationMs =
         durations.length > 0
@@ -643,6 +672,9 @@ export function registerHealthRoutes(app: Hono<{ Variables: Variables }>): void 
     const resolvedProject = await resolveOwnedProject(c, db, userId);
     if ('response' in resolvedProject) return resolvedProject.response;
     const project = resolvedProject.project;
+    // These jobs spend LLM budget, so running one by hand is owner/admin work.
+    const forbidden = requireProjectAdmin(c, project, 'Only organization owners and admins can run jobs by hand.');
+    if (forbidden) return forbidden;
 
     const res = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/${job}`, {
       method: 'POST',
@@ -652,7 +684,31 @@ export function registerHealthRoutes(app: Hono<{ Variables: Variables }>): void 
       },
       body: JSON.stringify({ projectId: project.id, trigger: 'manual' }),
     });
-    const result = await res.json().catch(() => ({}));
-    return c.json({ ok: res.ok, data: result.data ?? result });
+    const result = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!res.ok) {
+      // This used to answer 200 `{ ok: false, data }` with no error, so the
+      // console could only say "Request failed". Say what the job said.
+      const upstream = result.error as { message?: unknown } | string | undefined;
+      const said =
+        typeof upstream === 'string'
+          ? upstream
+          : typeof upstream?.message === 'string'
+            ? upstream.message
+            : typeof result.message === 'string'
+              ? result.message
+              : '';
+      log.warn('manual cron trigger failed', { job, status: res.status, said: said.slice(0, 300) });
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'JOB_FAILED',
+            message: `${job} did not run (it answered HTTP ${res.status})${said ? `: ${said.slice(0, 200)}` : ''}. Retry in a minute; if it keeps failing, check the job's logs.`,
+          },
+        },
+        502,
+      );
+    }
+    return c.json({ ok: true, data: result.data ?? result });
   });
 }

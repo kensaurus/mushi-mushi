@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/research
 
 ---
 title: Research
+description: The Research page runs a Firecrawl web search scoped to your tech stack and returns summarised answers with links to their sources.
 ---
 
 # Research

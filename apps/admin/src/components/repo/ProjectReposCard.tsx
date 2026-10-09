@@ -2,7 +2,8 @@
  * FILE: apps/admin/src/components/repo/ProjectReposCard.tsx
  * PURPOSE: Multi-repo management card for the Repo page.
  *          Lists all project_repos rows, lets users add/edit/remove repos,
- *          and displays repo role + path_globs + GitHub App status.
+ *          and displays repo role, default branch, GitHub App and index
+ *          status, path_globs, and the Open / Install links per repo.
  *
  *          Data: GET /v1/admin/repo/repos?project_id=...
  *          Mutations: POST / PUT / DELETE /v1/admin/repo/repos
@@ -10,10 +11,14 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { apiFetch } from '../../lib/supabase'
-import { Badge, Btn, Card, CodeValue, ErrorAlert, RelativeTime, Tooltip } from '../ui'
+import { Badge, Btn, Card, CodeValue, ErrorAlert, Tooltip } from '../ui'
 import { ContainedBlock, SignalChip, ActionPill, ActionPillRow } from '../report-detail/ReportSurface'
+import { githubAppInstallUrl } from '../integrations/GitHubAppInstallButton'
 import { IconGit, IconPencil, IconTrash } from '../icons'
-import { CHIP_TONE } from '../../lib/chipTone'
+import { REPO_ROLES, repoRoleMeta, type RepoRole } from '../../lib/repoRoles'
+import { RepoIndexStatus } from './RepoIndexStatus'
+import { ConfirmDialog } from '../ConfirmDialog'
+import { repoActionErrorMessage } from '../../lib/repoBranches'
 
 interface ProjectRepo {
   id: string
@@ -22,21 +27,16 @@ interface ProjectRepo {
   github_app_installation_id: string | null
   indexing_enabled: boolean | null
   last_indexed_at: string | null
+  /** Last sweep, complete or partial (older servers omit it). */
+  index_swept_at?: string | null
+  index_coverage_state?: string | null
+  index_files_indexed?: number | null
+  index_files_eligible?: number | null
   role: string
   path_globs: string[] | null
   is_primary: boolean
   created_at: string
   updated_at: string | null
-}
-
-const ROLES = ['frontend', 'backend', 'monorepo', 'mobile', 'ai', 'infra', 'docs', 'other'] as const
-type RepoRole = (typeof ROLES)[number]
-
-const ROLE_BADGE_CLASS: Record<string, string> = {
-  frontend: 'bg-brand/12 text-brand border border-brand/28',
-  backend:  'bg-ok-muted/50 text-ok-foreground border border-ok/25',
-  monorepo: 'bg-info-muted/50 text-info-foreground border border-info/25',
-  mobile:   CHIP_TONE.accentSubtle,
 }
 
 interface Props {
@@ -47,6 +47,11 @@ export function ProjectReposCard({ projectId }: Props) {
   const [repos, setRepos] = useState<ProjectRepo[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  // A failed save or remove is shown next to the form and keeps the draft;
+  // only a failed load replaces the card (console QA 20: "[object Object]").
+  const [actionError, setActionError] = useState<string | null>(null)
+  const [removeTarget, setRemoveTarget] = useState<ProjectRepo | null>(null)
+  const [removing, setRemoving] = useState(false)
   const [adding, setAdding] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -73,19 +78,21 @@ export function ProjectReposCard({ projectId }: Props) {
       setRepos(res.data)
       setError(null)
     } else {
-      setError(String(res.error?.message ?? 'Failed to load repos'))
+      setError(res.error?.message ?? "Couldn't load the linked repos.")
     }
   }, [projectId])
 
   useEffect(() => { void load() }, [load])
 
   const openAdd = () => {
+    setActionError(null)
     setDraft(blankDraft())
     setAdding(true)
     setEditingId(null)
   }
 
   const openEdit = (repo: ProjectRepo) => {
+    setActionError(null)
     setDraft({
       repoUrl: repo.repo_url,
       role: repo.role as RepoRole,
@@ -97,7 +104,7 @@ export function ProjectReposCard({ projectId }: Props) {
     setAdding(false)
   }
 
-  const cancelForm = () => { setAdding(false); setEditingId(null) }
+  const cancelForm = () => { setAdding(false); setEditingId(null); setActionError(null) }
 
   const buildPayload = () => ({
     projectId,
@@ -118,8 +125,8 @@ export function ProjectReposCard({ projectId }: Props) {
       body: JSON.stringify(buildPayload()),
     })
     setSaving(false)
-    if (res.ok) { setAdding(false); void load() }
-    else setError(String(res.error ?? 'Save failed'))
+    if (res.ok) { setAdding(false); setActionError(null); void load() }
+    else setActionError(repoActionErrorMessage('add', res.error))
   }
 
   const saveEdit = async () => {
@@ -131,18 +138,20 @@ export function ProjectReposCard({ projectId }: Props) {
       body: JSON.stringify(buildPayload()),
     })
     setSaving(false)
-    if (res.ok) { setEditingId(null); void load() }
-    else setError(String(res.error ?? 'Save failed'))
+    if (res.ok) { setEditingId(null); setActionError(null); void load() }
+    else setActionError(repoActionErrorMessage('save', res.error))
   }
 
   const removeRepo = async (repoId: string) => {
-    if (!window.confirm('Remove this repo? Fix PRs already opened on it will not be affected.')) return
+    setRemoving(true)
     const res = await apiFetch(
       `/v1/admin/repo/repos/${repoId}?project_id=${projectId}`,
       { method: 'DELETE' },
     )
-    if (res.ok) void load()
-    else setError(String(res.error ?? 'Delete failed'))
+    setRemoving(false)
+    setRemoveTarget(null)
+    if (res.ok) { setActionError(null); void load() }
+    else setActionError(repoActionErrorMessage('remove', res.error))
   }
 
   if (loading) {
@@ -161,9 +170,12 @@ export function ProjectReposCard({ projectId }: Props) {
           <IconGit />
           Linked repos ({repos.length})
         </h3>
-        {!showForm && (
-          <Btn size="sm" variant="ghost" onClick={openAdd}>+ Add repo</Btn>
-        )}
+        <ActionPillRow className="shrink-0">
+          <ActionPill to="/integrations/config" tone="neutral">Manage</ActionPill>
+          {!showForm && (
+            <Btn size="sm" variant="ghost" onClick={openAdd}>+ Add repo</Btn>
+          )}
+        </ActionPillRow>
       </div>
 
       {repos.length === 0 && !showForm && (
@@ -178,21 +190,14 @@ export function ProjectReposCard({ projectId }: Props) {
             <div className="flex items-center gap-2 flex-wrap justify-between">
               <div className="flex items-center gap-2 min-w-0 flex-1">
                 {repo.is_primary && (
-                  <Badge className="text-3xs bg-brand/12 text-brand border border-brand/28">primary</Badge>
+                  <Badge tone="brandSubtle" className="text-3xs">primary</Badge>
                 )}
-                <Badge className={`text-3xs border ${ROLE_BADGE_CLASS[repo.role] ?? 'border-edge-subtle text-fg-muted'}`}>
-                  {repo.role}
-                </Badge>
+                <RepoRoleBadge role={repo.role} />
                 <div className="min-w-0 flex-1">
                   <CodeValue value={repo.repo_url} tone="url" />
                 </div>
               </div>
               <div className="flex items-center gap-1.5 shrink-0">
-                {repo.github_app_installation_id ? (
-                  <SignalChip tone="ok">App installed</SignalChip>
-                ) : (
-                  <SignalChip tone="warn">No GitHub App</SignalChip>
-                )}
                 {editingId !== repo.id && (
                   <>
                     <Tooltip content="Edit repo">
@@ -212,7 +217,7 @@ export function ProjectReposCard({ projectId }: Props) {
                         variant="ghost"
                         className="px-2"
                         aria-label={`Remove ${repo.repo_url}`}
-                        onClick={() => void removeRepo(repo.id)}
+                        onClick={() => setRemoveTarget(repo)}
                       >
                         <IconTrash />
                       </Btn>
@@ -221,13 +226,26 @@ export function ProjectReposCard({ projectId }: Props) {
                 )}
               </div>
             </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {repo.default_branch && <SignalChip tone="neutral">default: {repo.default_branch}</SignalChip>}
+              {repo.github_app_installation_id ? (
+                <SignalChip tone="ok">GitHub App installed</SignalChip>
+              ) : (
+                <SignalChip tone="warn">No GitHub App installation</SignalChip>
+              )}
+              <RepoIndexStatus repo={repo} variant="chip" />
+              <ActionPillRow className="ml-auto">
+                {/* Only when the App slug is configured: a hard-coded slug 404s on GitHub. */}
+                {!repo.github_app_installation_id && githubAppInstallUrl(projectId) && (
+                  <ActionPill href={githubAppInstallUrl(projectId)!} tone="brand">
+                    Install Mushi on GitHub ↗
+                  </ActionPill>
+                )}
+                <ActionPill href={repo.repo_url} tone="neutral">Open on GitHub ↗</ActionPill>
+              </ActionPillRow>
+            </div>
             {repo.path_globs && repo.path_globs.length > 0 && (
               <p className="text-2xs text-fg-faint font-mono">globs: {repo.path_globs.join(', ')}</p>
-            )}
-            {repo.last_indexed_at && (
-              <p className="text-2xs text-fg-faint">
-                Indexed <RelativeTime value={repo.last_indexed_at} />
-              </p>
             )}
 
             {editingId === repo.id && (
@@ -238,6 +256,8 @@ export function ProjectReposCard({ projectId }: Props) {
                 onCancel={cancelForm}
                 saving={saving}
                 isEdit
+                error={actionError}
+                currentPrimary={repos.find((r) => r.is_primary && r.id !== repo.id)?.repo_url ?? null}
               />
             )}
           </div>
@@ -252,15 +272,36 @@ export function ProjectReposCard({ projectId }: Props) {
             onSave={() => void saveAdd()}
             onCancel={cancelForm}
             saving={saving}
+            error={actionError}
+            currentPrimary={repos.find((r) => r.is_primary)?.repo_url ?? null}
           />
         </ContainedBlock>
       )}
+
+      {actionError && !showForm ? (
+        <p role="alert" className="text-2xs text-danger">{actionError}</p>
+      ) : null}
+
+      {removeTarget ? (
+        <ConfirmDialog
+          title="Remove this repo?"
+          body={`Mushi stops sending fixes to ${removeTarget.repo_url} and drops its index settings here. Pull requests already opened on it stay on GitHub.${removeTarget.is_primary ? ' It is the primary repo, so mark another one as primary afterwards.' : ''}`}
+          confirmLabel="Remove repo"
+          tone="danger"
+          loading={removing}
+          onConfirm={() => removeRepo(removeTarget.id)}
+          onCancel={() => {
+            if (!removing) setRemoveTarget(null)
+          }}
+        />
+      ) : null}
 
       {repos.length > 0 && !showForm && (
         <p className="text-2xs text-fg-faint leading-relaxed">
           <strong>Multi-repo tip:</strong> add a backend repo to fan out fix PRs across all
           codebases in one dispatch. Set <code>path_globs</code> (e.g.{' '}
-          <code>src/**,api/**</code>) so the fix worker targets the right files.
+          <code>src/**,api/**</code>) so the fix worker targets the right files. The same globs
+          also limit which files the codebase index holds.
         </p>
       )}
     </Card>
@@ -282,6 +323,8 @@ function RepoForm({
   onCancel,
   saving,
   isEdit = false,
+  error = null,
+  currentPrimary = null,
 }: {
   draft: FormDraft
   onChange: (d: FormDraft) => void
@@ -289,6 +332,10 @@ function RepoForm({
   onCancel: () => void
   saving: boolean
   isEdit?: boolean
+  /** Why the last save failed, shown here so the draft is not lost. */
+  error?: string | null
+  /** The repo that is primary now, if another one. */
+  currentPrimary?: string | null
 }) {
   const set = <K extends keyof FormDraft>(k: K, v: FormDraft[K]) => onChange({ ...draft, [k]: v })
 
@@ -312,7 +359,7 @@ function RepoForm({
             onChange={(e) => set('role', e.target.value as RepoRole)}
             className="w-full rounded-sm border border-edge bg-surface-raised text-xs px-2 py-1"
           >
-            {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+            {REPO_ROLES.map((r) => <option key={r} value={r}>{repoRoleMeta(r).label}</option>)}
           </select>
         </div>
         <div>
@@ -337,7 +384,7 @@ function RepoForm({
           placeholder="src/**, api/**"
           className="w-full rounded-sm border border-edge bg-surface-raised text-xs px-2 py-1"
         />
-        <p className="text-3xs text-fg-faint mt-0.5">Leave blank to match all files.</p>
+        <p className="text-3xs text-fg-faint mt-0.5">Leave blank to match all files. Also limits which files are indexed.</p>
       </div>
       <label className="flex items-center gap-2 cursor-pointer">
         <input
@@ -348,6 +395,14 @@ function RepoForm({
         />
         <span className="text-2xs text-fg-secondary">Mark as primary repo (fix worker defaults here)</span>
       </label>
+      {draft.isPrimary && currentPrimary ? (
+        <p className="text-3xs text-fg-faint">
+          Saving moves “primary” from {currentPrimary} to this repo.
+        </p>
+      ) : null}
+      {error ? (
+        <p role="alert" className="text-2xs text-danger">{error}</p>
+      ) : null}
       <ActionPillRow>
         <Btn
           size="sm"
@@ -361,5 +416,15 @@ function RepoForm({
         <ActionPill tone="neutral" onClick={onCancel}>Cancel</ActionPill>
       </ActionPillRow>
     </div>
+  )
+}
+
+function RepoRoleBadge({ role }: { role: string }) {
+  const { label, Icon, tone } = repoRoleMeta(role)
+  return (
+    <Badge tone={tone} className="text-3xs gap-1">
+      <Icon size={11} />
+      {label}
+    </Badge>
   )
 }

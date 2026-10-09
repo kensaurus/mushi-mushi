@@ -87,6 +87,17 @@ async function loadProjectRules(
   return m
 }
 
+/**
+ * Base points an action awards in this project, read the same way the award
+ * path reads it (the project's enabled rule, else the built-in table), so a
+ * "you earn N points" line matches what is actually credited.
+ */
+export async function basePointsFor(db: SupabaseClient, projectId: string, action: string): Promise<number | null> {
+  const rule = (await loadProjectRules(db, projectId)).get(action)
+  if (rule) return rule.base_points
+  return LEGACY_POINT_TABLE[action]?.base ?? null
+}
+
 function clamp(val: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, val))
 }
@@ -344,7 +355,7 @@ export async function awardPointsForEndUser(
   }
 
   // 9. Evaluate tier transition
-  const { tierChanged } = await evaluateTier(db, endUserId, organizationId)
+  const { tierChanged } = await evaluateTier(db, endUserId, organizationId, pointsAwarded)
 
   return { pointsAwarded, totalPoints, rejectedReason: null, tierChanged }
 }

@@ -9,14 +9,11 @@ import {
   fixesStageOverlay,
   healthProbeOverlay,
   inboxStageOverlay,
-  integrationsStepOverlay,
   judgeStageOverlay,
   onboardingStepOverlay,
   projectsHealthOverlay,
   promptLabStageOverlay,
   qaProviderOverlay,
-  reportsSeverityOverlay,
-  settingsTabOverlay,
   skillsModeOverlay,
 } from './guideLiveOverlay'
 
@@ -183,17 +180,6 @@ describe('guideLiveOverlay', () => {
     expect(overlay.metric).toBe('1 report')
   })
 
-  it('integrationsStepOverlay requires GitHub first', () => {
-    const overlay = integrationsStepOverlay(1, {
-      githubOk: false,
-      sentryOk: false,
-      langfuseOk: false,
-      slackOk: false,
-    })
-    expect(overlay.posture).toBe('open')
-    expect(overlay.metric).toBe('Not linked')
-  })
-
   it('qaProviderOverlay highlights failing stories on firecrawl', () => {
     const overlay = qaProviderOverlay('firecrawl_actions', {
       failingStories: 2,
@@ -235,23 +221,5 @@ describe('guideLiveOverlay', () => {
     })
     expect(overlay.posture).toBe('ok')
     expect(overlay.metric).toBe('42 examples')
-  })
-
-  it('reportsSeverityOverlay counts critical reports', () => {
-    const overlay = reportsSeverityOverlay('critical', {
-      critical14d: 3,
-      high14d: 1,
-      newUntriaged: 2,
-      openBacklog: 10,
-      topPriority: 'critical',
-    })
-    expect(overlay.posture).toBe('danger')
-    expect(overlay.metric).toBe('3 (14d)')
-  })
-
-  it('settingsTabOverlay shows missing BYOK key', () => {
-    const overlay = settingsTabOverlay('byok', { hasByokKey: false })
-    expect(overlay.posture).toBe('open')
-    expect(overlay.metric).toBe('No BYOK key')
   })
 })

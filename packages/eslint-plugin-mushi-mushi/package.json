@@ -1,6 +1,6 @@
 {
   "name": "eslint-plugin-mushi-mushi",
-  "version": "0.3.2",
+  "version": "0.3.4",
   "description": "ESLint rules that catch the dominant agentic-coding failure modes — empty handlers (Gate 1) and mock-data leaks into production paths (Gate 2). Designed to slot into the Mushi Mushi v2 CI Gate pipeline.",
   "license": "MIT",
   "type": "module",
@@ -50,7 +50,10 @@
     "agentic-coding",
     "vibe-coding",
     "dead-code",
-    "mocks"
+    "mocks",
+    "lint-rules",
+    "static-analysis",
+    "code-quality"
   ],
   "publishConfig": {
     "access": "public",
@@ -61,6 +64,7 @@
     "build": "tsup",
     "dev": "tsup --watch",
     "clean": "rm -rf dist .turbo",
+    "lint": "eslint src/",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
@@ -68,6 +72,7 @@
     "eslint": ">=8.0.0"
   },
   "devDependencies": {
+    "@mushi-mushi/eslint-config": "workspace:*",
     "@mushi-mushi/tsconfig": "workspace:*",
     "@types/eslint": "^9.6.1",
     "@types/estree": "^1.0.9",
@@ -78,12 +83,8 @@
     "typescript": "^6.0.3",
     "vitest": "^4.1.9"
   },
-  "author": "Kenji Sakuramoto (https://bsky.app/profile/mushimushi.dev)",
+  "author": "Kenji Sakuramoto <kensaurus@gmail.com> (https://github.com/kensaurus)",
   "engines": {
-    "node": ">=20"
-  },
-  "funding": {
-    "type": "github",
-    "url": "https://github.com/sponsors/kensaurus"
+    "node": ">=20.19.0"
   }
 }

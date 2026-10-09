@@ -3,7 +3,6 @@
  * PURPOSE: Lessons posture — no data, candidates ready, critical rules, healthy.
  */
 
-import { Link } from 'react-router-dom'
 import { Btn } from '../ui'
 import { usePageCopy } from '../../lib/copy'
 import { StatusBannerShell } from '../StatusBannerShell'
@@ -33,9 +32,7 @@ export function LessonsStatusBanner({ stats, onTab, onRefresh, refreshing, plain
             : 'Pick a project to view mistake clusters and promoted lessons.'
         }
         action={
-          <Link to="/onboarding">
-            <Btn size="sm" variant="ghost">{actions.setup ?? 'Go to Setup'}</Btn>
-          </Link>
+          <Btn to="/onboarding" size="sm" variant="ghost">{actions.setup ?? 'Go to Setup'}</Btn>
         }
       />
     )
@@ -44,14 +41,23 @@ export function LessonsStatusBanner({ stats, onTab, onRefresh, refreshing, plain
   if (stats.topPriority === 'no_data') {
     return (
       <StatusBannerShell
-        tone="brand"
+        tone="info"
         title={plainBanner ? 'No lesson memory yet' : `No lesson memory on ${projectLabel}`}
         subtitle={stats.topPriorityLabel}
         action={
-          <Link to="/reports">
-            <Btn size="sm" variant="ghost">{actions.reports ?? 'Open Reports'}</Btn>
-          </Link>
+          <Btn to="/reports" size="sm" variant="ghost">{actions.reports ?? 'Open Reports'}</Btn>
         }
+      />
+    )
+  }
+
+  // Clusters are forming but none qualifies yet: there is nothing to act on.
+  if (stats.topPriority === 'no_lessons' && stats.readyToPromote === 0) {
+    return (
+      <StatusBannerShell
+        tone="info"
+        title={`${stats.candidateClusters} cluster${stats.candidateClusters === 1 ? '' : 's'} forming, nothing to promote yet`}
+        subtitle="A cluster can be promoted once it has 3 or more reports and a coherence of 75% or higher."
       />
     )
   }
@@ -68,9 +74,7 @@ export function LessonsStatusBanner({ stats, onTab, onRefresh, refreshing, plain
         subtitle={stats.topPriorityLabel}
         action={
           stats.topPriorityTo ? (
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">{actions.clusters ?? 'Review clusters'}</Btn>
-            </Link>
+            <Btn to={stats.topPriorityTo} size="sm" variant="ghost">{actions.clusters ?? 'Review clusters'}</Btn>
           ) : onTab ? (
             <Btn size="sm" variant="ghost" onClick={() => onTab('clusters')}>{actions.clusters ?? 'Review clusters'}</Btn>
           ) : null
@@ -89,9 +93,7 @@ export function LessonsStatusBanner({ stats, onTab, onRefresh, refreshing, plain
           onTab ? (
             <Btn size="sm" variant="ghost" onClick={() => onTab('lessons')}>{actions.lessons ?? 'Review lessons'}</Btn>
           ) : (
-            <Link to="/lessons?tab=lessons">
-              <Btn size="sm" variant="ghost">{actions.lessons ?? 'Review lessons'}</Btn>
-            </Link>
+            <Btn to="/lessons?tab=lessons" size="sm" variant="ghost">{actions.lessons ?? 'Review lessons'}</Btn>
           )
         }
       />
@@ -109,9 +111,7 @@ export function LessonsStatusBanner({ stats, onTab, onRefresh, refreshing, plain
             {actions.refresh ?? 'Refresh'}
           </Btn>
         ) : stats.topPriorityTo ? (
-          <Link to={stats.topPriorityTo}>
-            <Btn size="sm" variant="ghost">{actions.query ?? 'Try query sim'}</Btn>
-          </Link>
+          <Btn to={stats.topPriorityTo} size="sm" variant="ghost">{actions.query ?? 'Try query sim'}</Btn>
         ) : null
       }
     />

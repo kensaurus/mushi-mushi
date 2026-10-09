@@ -4,20 +4,21 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/skill-pipelines
 
 ---
 title: Skill Pipelines
+description: Skill Pipelines recommend agent skills from the kenji skills and skills.sh ecosystem for each classified bug and run them during review in Mushi.
 ---
 
 # Skill Pipelines
 
 **Route:** `/skills`
 
-Skill Pipelines integrate the [cursor-kenji / skills.sh](https://github.com/kensaurus/cursor-kenji) agent-skill ecosystem directly into Mushi bug review. When a bug report is classified, Mushi recommends the most relevant Cursor agent skills — and you can attach a skill chain to any report, visualize it as a live React Flow pipeline, and execute it either as a handoff to your local Cursor agent or automatically via Cursor Cloud.
+Skill Pipelines integrate the [kenji skills / skills.sh](https://github.com/kensaurus/skills) agent-skill ecosystem directly into Mushi bug review. When a bug report is classified, Mushi recommends the most relevant Cursor agent skills — and you can attach a skill chain to any report, visualize it as a live React Flow pipeline, and execute it either as a handoff to your local Cursor agent or automatically via Cursor Cloud.
 
 ---
 
 ## How it works
 
 ```
-git repo skills/SKILL.md (cursor-kenji or any skills.sh-compatible repo)
+git repo skills/SKILL.md (kenji skills or any skills.sh-compatible repo)
   → skill-sync syncs SKILL.md files into the agent_skills catalog (daily cron)
   → classify-report Stage 2 recommends top 3 skills per report (pgvector similarity)
   → You start a pipeline run from the Report Detail page (or via CLI/MCP)
@@ -40,7 +41,7 @@ All pipeline runs for your project — past and active. Click a run to see the l
 
 ### Sources
 
-Manage the GitHub repos whose SKILL.md files are synced into your project's catalog. The default seed is `kensaurus/cursor-kenji`. Any [skills.sh](https://skills.sh)-compatible repo works.
+Manage the GitHub repos whose SKILL.md files are synced into your project's catalog. The default seed is `kensaurus/skills`. Any [skills.sh](https://skills.sh)-compatible repo works.
 
 ---
 
@@ -80,15 +81,15 @@ mushi skills show workflow-fix-and-ship
 mushi skills sync
 
 # Start a pipeline for a report
-mushi pipeline start  --skill workflow-fix-and-ship
-mushi pipeline start  --skill workflow-fix-and-ship --mode cloud
+mushi pipeline start <reportId> --skill workflow-fix-and-ship
+mushi pipeline start <reportId> --skill workflow-fix-and-ship --mode cloud
 
 # Watch a pipeline run and print the context packet
-mushi pipeline watch 
+mushi pipeline watch <runId>
 
 # Check in a step (report your progress back to Mushi)
-mushi pipeline checkin  --step 0 --status passed
-mushi pipeline checkin  --step 1 --status failed --notes "Build failed: missing dep"
+mushi pipeline checkin <runId> --step 0 --status passed
+mushi pipeline checkin <runId> --step 1 --status failed --notes "Build failed: missing dep"
 ```
 
 ---

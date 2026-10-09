@@ -2,9 +2,11 @@
 
 Source: https://kensaur.us/mushi-mushi/docs/admin
 
-# Admin console
+---
+description: Guide to the Mushi admin console — the reports inbox, fix drafts and PRs, plain-English queries, and a link to every deeper page of the console.
+---
 
-{ADMIN_INDEX_LEDE}
+# Admin console
 
 ## Day-to-day
 

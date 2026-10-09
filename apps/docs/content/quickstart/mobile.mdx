@@ -1,18 +1,25 @@
 ---
 title: Mobile (overview)
-description: Shake-to-report bug capture for React Native, Capacitor, Flutter, iOS, and Android — offline queue and Sentry bridge wired up by npx mushi-mushi.
+description: Shake-to-report bug capture for mobile apps — React Native and Capacitor from npm with npx mushi-mushi, plus preview native SDKs for iOS, Android and Flutter.
 ---
 
 # Mobile
 
-Pick the SDK that matches how you ship the app:
+Pick the SDK that matches how you ship the app. React Native and Capacitor are
+published on npm and set up by `npx mushi-mushi`.
 
 import { Cards } from 'nextra/components'
 
 <Cards>
   <Cards.Card title="React Native" href="/quickstart/react-native" arrow />
-  <Cards.Card title="iOS (Swift)" href="/quickstart/ios" arrow />
-  <Cards.Card title="Android (Kotlin)" href="/quickstart/android" arrow />
-  <Cards.Card title="Flutter" href="/quickstart/flutter" arrow />
   <Cards.Card title="Capacitor" href="/quickstart/capacitor" arrow />
+</Cards>
+
+The native SDKs are previews: they are not on CocoaPods, Maven Central or
+pub.dev yet, so each page shows how to install from the GitHub repository.
+
+<Cards>
+  <Cards.Card title="iOS (Swift) — preview" href="/quickstart/ios" arrow />
+  <Cards.Card title="Android (Kotlin) — preview" href="/quickstart/android" arrow />
+  <Cards.Card title="Flutter — preview" href="/quickstart/flutter" arrow />
 </Cards>

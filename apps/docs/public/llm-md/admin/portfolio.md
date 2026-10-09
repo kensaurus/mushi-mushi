@@ -1,0 +1,148 @@
+# Portfolio
+
+Source: https://kensaur.us/mushi-mushi/docs/admin/portfolio
+
+---
+title: Portfolio
+description: The Portfolio page shows every app in a team at once, with each app's worst recipe state, hole checks and SDK version, plus fixes that apply across apps.
+---
+
+# Portfolio
+
+**Route:** `/portfolio` (also from the team switcher: **All this team's apps**)
+
+> **Scenario:** You run five apps. One has an old Mushi SDK, two have the same
+> oversized-file finding, and one never got Sentry set up. You want to see all
+> of that in one place and fix each problem once, not five times.
+
+This page **reads only**. It builds on each app's [Recipe](/concepts/app-recipe).
+
+---
+
+## What you see
+
+| Section | What it means |
+|---------|---------------|
+| **Cards** | One per app: the worst recipe state, open reports, the latest release, the Mushi SDK against the latest version, and the hole checks. |
+| **Hole checks** | "Not checked yet" means Mushi has not looked. It is never a pass. The checks that read your repo come from one step in your existing CI job: see [One CI step for both checks](/sdks/cli#one-ci-step-for-both-checks). |
+| **Fix once** | A problem open in two or more apps. Copy the prompt into your editor to fix it in every repo. |
+| **Mushi SDK versions** | Apps behind the latest release of the same package, and apps that never reported. |
+| **Missing setups** | An integration most of your other apps have and this one does not. |
+
+In **Advanced** mode each card also shows Mushi's own AI spend for that app over 30 days and its monthly budget.
+
+### When something could not be read
+
+If Mushi cannot read part of the page (the AI spend, the caps, the releases,
+the SDK versions, which integrations each app has), a callout at the top names
+it and the affected cells read **Could not read**. They never fall back to
+`$0`, "Not set", "None yet" or "no missing setups". When there are more rows
+than Mushi reads in one go, the total is marked as a lower bound ("at least
+$12.40", "40+").
+
+Below the cards:
+
+| Section | What it means |
+|---------|---------------|
+| **Across your apps** | Problems only visible across apps: a deep link or "more apps" link that no longer opens, a shared login that does not allow one app's domain, apps sharing purchases on different Stripe accounts, many apps posting to one channel, CI cost in two repos. See [One login across your apps](../concepts/shared-login). |
+| **Funnel across apps** | One funnel run on every app: the same event names, in the same order, within the same window. Owners and admins pick the steps. An app with product events off, or with no events yet, says so instead of 0%. |
+| **Releases** | For each app: what is live and at what rollout, native changes waiting for a store build, and JS-only changes that can ship as an over-the-air update. It suggests one store release per app to save CI minutes. Your own CI builds and submits. |
+| **Spend per app** | What each app cost over 30 days, from every source Mushi can read. See [Spend per app](#spend-per-app). |
+| **Daily digest** | One message a day across all apps. Off until an owner picks where it goes: an app's Slack channel, Discord or Teams webhook, or Telegram chats, email, or push. Once a week (Monday by default) it adds each app's signups and activations. When there were more reports, AI calls or findings than it reads, it says which numbers are lower bounds. See [Daily digest](#daily-digest). |
+| **Shared between apps** | Domains, store apps, Supabase projects and channels two or more apps use. Owners and admins can import what no recipe or source declares from a CSV with the columns `kind, external_id, project` and an optional `role`; each refused row is listed with its line number, and a file is capped at 500 rows and 256 KB. |
+| **Accounts and resilience** | Every account your apps depend on (Apple, Google Play, AWS, Supabase, Vercel, your registrar, Stripe…): the owner email, whether 2FA is on, how many people can get in, a recovery contact, and auto-renew for the registrar and each domain. See below. |
+| **Connected sources** | App Store Connect, Google Play, AI spend, RevenueCat or your own endpoint. Read-only by default. |
+
+---
+
+## Spend per app
+
+One row per app, 30 days, one column per source:
+
+| Column | Where it comes from |
+|--------|---------------------|
+| **Mushi AI** | Mushi's own AI calls for that app (diagnoses, fixes, store review). |
+| **AI provider** | Your own OpenAI or Anthropic bill, from the **AI provider spend** source. An app counts only once it is bound to its OpenAI project or Anthropic workspace. |
+| **CI (est.)** | GitHub Actions minutes as money: estimated billable minutes × $0.006, GitHub's Linux price. macOS minutes count 10× and Windows 2×. Public repositories are free, so this is the list price, not your bill. |
+| **Supabase** | Supabase bills you import, with egress, invocations and other usage. Mushi reads Supabase read-only and cannot see billing. |
+| **Other bills** | Vercel, AWS and other bills you import. |
+
+A source that could not be read says **Couldn't read** and is left out of the
+total; the total then ends in `+` because it is a floor. **Not connected**
+means there is nothing to read yet. Neither one ever shows as $0.
+
+**Import a bill** (owners and admins) takes a CSV:
+
+- a **FOCUS** export, which both Vercel and AWS Data Exports offer;
+- an **AWS Cost and Usage Report** (legacy or 2.0 column names);
+- or any CSV with a `date` (YYYY-MM-DD), a `service` and a `cost` column, plus
+  optional `quantity`, `unit`, `currency` and `app` columns.
+
+Pick the app the bill belongs to, or let each row's `app` column (or an `app`
+or `project` tag) name the app by its name or slug. Rows in another currency
+than USD, with a date that is not YYYY-MM-DD, or naming no app of yours are
+skipped, and the first few are explained. Importing the same bill again
+replaces those days instead of adding to them: each day belongs to the newest
+import that has it. **Remove** takes an import out and gives its days back to
+the next newest import that has them, so removing a corrected bill brings the
+earlier figures back. It says how many rows left the ledger and how many went
+back. The file limit is 5 MB: export daily rather than hourly rows.
+
+The ledger shows each member only the apps they can see. An import for one app
+is listed to that app's members; an import matched by an `app` column is
+listed to the team.
+
+## Daily digest
+
+The digest goes to the places an owner or admin picks. Slack, Discord, Teams
+and Telegram each reuse one app's existing connection from
+[Integrations](./integrations): its Slack channel, its Discord or Teams
+webhook, or the Telegram chats bound to its bot. Nothing new to set up.
+
+On the weekday you pick (Monday by default, in UTC; or never), each app gets
+one more line: how many people did the first step of the
+[team funnel](#what-you-see) in the last 7 days, and how many of them reached
+its last step. An app with product events off gets no line; a funnel that
+could not be read says so instead of showing zero. Without a team funnel there
+are no weekly lines.
+
+## Accounts and resilience
+
+Losing the only login to your Apple, Google Play or registrar account can end
+every app on it. This register keeps, for each account, who owns it and who
+else can get in. It holds **names and contacts only**: never passwords, keys or
+recovery codes, and anything shaped like a key is refused. Everything in it is
+what you declare; Mushi cannot see a provider's own 2FA or renewal settings.
+
+Two checks run on it, and their findings also appear under **Across your apps**:
+
+| Check | When it fires |
+|-------|---------------|
+| `account_single_owner` | One person can sign in and no recovery contact is recorded. The fix names where that provider lets you add a second owner. |
+| `registrar_autorenew_off` | Auto-renew is declared off for a registrar account or a domain. |
+
+**Download as Markdown** saves the whole register as a file to keep offline or
+hand to someone you trust. Owners and admins can change the register; other
+members can read it.
+
+---
+
+## From your editor
+
+The MCP tools `get_portfolio` and `list_portfolio_findings` return the same
+data. They need an **account-level** key (Connect → MCP); a key bound to one
+project cannot read its sibling apps. Both return `readErrors`, and each card
+an `unreadable` list: a part named there is unknown, not empty.
+
+`get_release_calendar` returns the release calendar: what is live per app, the
+merged fixes waiting to ship, and a suggested batch to release now versus next.
+
+The same account-level key can also change the team's funnel definition
+(`PUT /v1/admin/orgs/:orgId/funnel`) and import shared resources from a CSV
+(`POST /v1/ingest/recipe/csv`), with the `mcp:write` scope. Both still need the
+key's owner to be a team owner or admin.
+
+## Who can see it
+
+Members of the team see the team's apps they can reach. A member of another
+team gets a 403.

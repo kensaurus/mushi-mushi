@@ -1,13 +1,20 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
-import { Link, useSearchParams } from 'react-router-dom'
-import { useActiveOrgId } from '../components/OrgSwitcher'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useActiveOrgId, type OrganizationSummary } from '../components/OrgSwitcher'
+import { useAuth } from '../lib/auth'
+import { apiErrorText } from '../lib/apiErrorText'
+import { authRedirectUrl } from '../lib/authRedirect'
+import { clearActiveOrg, setActiveOrgIdSnapshot } from '../lib/activeOrg'
+import { rosterRowPermissions, splitInvitations } from '../lib/orgMemberPolicy'
+import { resolveOrgSettingsLink } from '../lib/orgSettingsRoute'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageContext } from '../lib/pageContext'
 import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { useRealtimeReload } from '../lib/realtime'
 import { useToast } from '../lib/toast'
+import { trackSelf } from '../lib/track'
 import { Badge,
   Btn,
   Card,
@@ -45,8 +52,6 @@ import { CHIP_TONE } from '../lib/chipTone'
 // recognition errors), short enough that the user doesn't think the action
 // silently failed. Mirrors the project / key revoke windows so the rest of
 // the admin reads as one cohesive system.
-const UNDO_WINDOW_MS = 8000
-
 type OrgRole = 'owner' | 'admin' | 'member' | 'viewer'
 
 // How a teammate originally got into the workspace. Drives the
@@ -193,6 +198,24 @@ export function OrganizationSettingsPage() {
   const copy = usePageCopy('/organization/members')
   const activeOrgId = useActiveOrgId()
   const toast = useToast()
+  const navigate = useNavigate()
+  const { user } = useAuth()
+  const currentUserId = user?.id ?? null
+  // `/org/:slug/settings/*` names a team in the URL. Resolve it to the
+  // canonical members URL for THAT team instead of showing the header's.
+  const { slug, '*': slugSubPath } = useParams()
+  const slugOrgsQuery = usePageData<{ organizations: OrganizationSummary[] }>(slug ? '/v1/org' : null, {
+    scope: 'none',
+  })
+  const slugResolution =
+    slug && slugOrgsQuery.data ? resolveOrgSettingsLink(slug, slugSubPath, slugOrgsQuery.data.organizations) : null
+  const slugRedirectTo = slugResolution?.kind === 'redirect' ? slugResolution.to : null
+  const slugRedirectOrg = slugResolution?.kind === 'redirect' ? slugResolution.orgId : null
+  useEffect(() => {
+    if (!slugRedirectTo || !slugRedirectOrg) return
+    setActiveOrgIdSnapshot(slugRedirectOrg)
+    navigate(slugRedirectTo, { replace: true })
+  }, [slugRedirectTo, slugRedirectOrg, navigate])
   const entitlements = useEntitlements()
   const [searchParams, setSearchParams] = useSearchParams()
 
@@ -232,10 +255,14 @@ export function OrganizationSettingsPage() {
   // server returns the org's current name (see effect below) so admins
   // can edit in-place without losing the field on background refetch.
   const [orgNameDraft, setOrgNameDraft] = useState('')
-  // Pending-remove holds the member targeted by the Remove button. Replaces
-  // the previous one-click DELETE which fired without any confirmation —
-  // a single misclick could evict a teammate from every project in the org.
+  // Pending-remove holds the member targeted by Remove (or Leave on your own
+  // row). The DELETE is sent when the dialog is confirmed. It used to wait 8 s
+  // behind an Undo toast, and a refresh or tab close in that window dropped
+  // it while the toast said access was being removed.
   const [pendingRemove, setPendingRemove] = useState<Member | null>(null)
+  const [removing, setRemoving] = useState(false)
+  const [pendingCancel, setPendingCancel] = useState<Invitation | null>(null)
+  const [cancellingInvite, setCancellingInvite] = useState(false)
   const [roleChangeTarget, setRoleChangeTarget] = useState<{
     userId: string
     email: string
@@ -243,21 +270,6 @@ export function OrganizationSettingsPage() {
     toRole: OrgRole
   } | null>(null)
   const [roleChangeLoading, setRoleChangeLoading] = useState(false)
-  // Soft-delete state. The DELETE call is deferred for `UNDO_WINDOW_MS` so
-  // the user has a chance to back out from the toast. We optimistically
-  // hide the row in the meantime so the page reads as if the action
-  // already succeeded — matches Gmail's "Message sent / Undo" pattern.
-  // Two stores so concurrent removes don't race: the Set drives render
-  // filtering, the Map keeps each scheduled timeout addressable by id.
-  const [pendingRemovalIds, setPendingRemovalIds] = useState<Set<string>>(new Set())
-  const removeTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
-  // Same soft-delete pattern as members: cancelling an invite optimistically
-  // hides the row, the DELETE call is deferred for `UNDO_WINDOW_MS`, and the
-  // toast is the user's only affordance for backing out. Distinct from the
-  // member structures so a "cancel invite" toast can't undo a "remove
-  // teammate" action and vice versa.
-  const [pendingCancelIds, setPendingCancelIds] = useState<Set<string>>(new Set())
-  const cancelTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
   const path = activeOrgId ? `/v1/org/${activeOrgId}/members` : null
   const statsPath = activeOrgId ? `/v1/org/${activeOrgId}/members/stats` : null
   const { data, loading, error, reload, lastFetchedAt, isValidating } = usePageData<MembersResponse>(path)
@@ -349,11 +361,6 @@ export function OrganizationSettingsPage() {
   const sortedMembers = useMemo(() => {
     const now = Date.now()
     return [...(data?.members ?? [])]
-      // Hide rows that the user is currently undoing — they're already
-      // pretending to be deleted from the user's POV. If the timer fires
-      // and the DELETE succeeds, the next reload will drop them for real;
-      // if Undo runs, we restore them in `cancelScheduledRemove`.
-      .filter((m) => !pendingRemovalIds.has(m.user_id))
       .filter((m) => {
         if (!showInactiveOnly) return true
         // "Inactive" = no activity in 30d, OR never seen at all.
@@ -370,15 +377,16 @@ export function OrganizationSettingsPage() {
         if (roleDelta !== 0) return roleDelta
         return (a.email ?? '').localeCompare(b.email ?? '')
       })
-  }, [data?.members, pendingRemovalIds, showInactiveOnly, INACTIVE_THRESHOLD_MS])
+  }, [data?.members, showInactiveOnly, INACTIVE_THRESHOLD_MS])
 
   // Total count of members the org has *visible to this admin* before
   // the inactive filter narrows them down. Used for the "Showing 3 of
   // 14 members" line so toggling the filter feels reversible — the
   // user always knows how many rows the toggle is hiding.
-  const totalVisibleMembers = useMemo(
-    () => (data?.members ?? []).filter((m) => !pendingRemovalIds.has(m.user_id)).length,
-    [data?.members, pendingRemovalIds],
+  const totalVisibleMembers = data?.members?.length ?? 0
+  const ownerCount = useMemo(
+    () => (data?.members ?? []).filter((m) => m.role === 'owner').length,
+    [data?.members],
   )
 
   async function submitRenameOrg() {
@@ -392,7 +400,7 @@ export function OrganizationSettingsPage() {
     if (!activeOrgId) return
     setSubmitting(true)
     const trimmedNote = note.trim()
-    const res = await apiFetch<{ invitation: Invitation; acceptUrl: string }>(
+    const res = await apiFetch<{ invitation: Invitation; acceptUrl: string; emailSent?: boolean; emailError?: string | null }>(
       `/v1/org/${activeOrgId}/invitations`,
       {
         method: 'POST',
@@ -409,15 +417,27 @@ export function OrganizationSettingsPage() {
       // backend exposes. Generic toast for everything else.
       const code = res.error?.code
       if (code === 'SEAT_CAP_REACHED') {
-        toast.error('Seat cap reached', res.error?.message ?? 'Upgrade to add more teammates.')
+        toast.error('Seat cap reached', apiErrorText(res.error, 'Upgrade to add more teammates.'))
       } else if (code === 'RATE_LIMITED') {
-        toast.error('Too many invites', res.error?.message ?? 'Slow down — try again in a bit.')
+        toast.error('Too many invites', apiErrorText(res.error, 'Slow down and try again in a bit.'))
       } else {
-        toast.error('Invite failed', res.error?.message)
+        toast.error('Invite failed', apiErrorText(res.error, 'The invite could not be created. Try again in a moment.'))
       }
       return
     }
-    toast.success('Invite sent', `${email} can now join this organization.`)
+    const created = res.data
+    if (created && created.emailSent === false) {
+      // The invite exists and its link works; only the email did not go out.
+      toast.push({
+        tone: 'warning',
+        title: 'Invite created, but no email was sent',
+        description: created.emailError ?? 'Copy the invite link and send it to them.',
+        action: { label: 'Copy invite link', onClick: () => void copyInviteLink(created.invitation) },
+      })
+    } else {
+      toast.success('Invite sent', `${email} gets an email with a link to join.`)
+    }
+    trackSelf('invite_sent', { role })
     setEmail('')
     setNote('')
     setNoteOpen(false)
@@ -447,8 +467,15 @@ export function OrganizationSettingsPage() {
         toast.error('Already accepted', 'This invite has already been used.')
       } else if (code === 'ALREADY_REVOKED') {
         toast.error('Cancelled invite', 'This invitation was cancelled. Send a new one instead.')
+      } else if (code === 'EMAIL_NOT_SENT') {
+        toast.push({
+          tone: 'warning',
+          title: 'No email was sent',
+          description: apiErrorText(res.error, 'Copy the invite link and send it to them.'),
+          action: { label: 'Copy invite link', onClick: () => void copyInviteLink(inviteRow) },
+        })
       } else {
-        toast.error('Could not resend invite', res.error?.message)
+        toast.error('Could not resend invite', apiErrorText(res.error, 'Try again in a moment.'))
       }
       return
     }
@@ -456,7 +483,7 @@ export function OrganizationSettingsPage() {
     reloadAll()
   }
 
-  async function copyInviteLink(inviteRow: Invitation) {
+  async function copyInviteLink(inviteRow: Pick<Invitation, 'id' | 'token'>) {
     if (!inviteRow.token) {
       toast.error('Invite link unavailable', 'Reload the page and try again.')
       return
@@ -466,7 +493,8 @@ export function OrganizationSettingsPage() {
     // reached via the email. Useful when the email is in spam, the
     // invitee's domain blocks Supabase's mailer, or a manager wants to
     // DM the link in Slack.
-    const link = `${window.location.origin}/invite/accept?token=${encodeURIComponent(inviteRow.token)}`
+    // authRedirectUrl keeps the SPA base path (the console is served under one).
+    const link = authRedirectUrl(`/invite/accept?token=${encodeURIComponent(inviteRow.token)}`)
     try {
       await navigator.clipboard.writeText(link)
       setCopiedInviteId(inviteRow.id)
@@ -485,7 +513,7 @@ export function OrganizationSettingsPage() {
       body: JSON.stringify({ role: nextRole }),
     })
     if (!res.ok) {
-      toast.error('Could not update role', res.error?.message)
+      toast.error('Could not update role', apiErrorText(res.error, 'Try again in a moment.'))
       return false
     }
     toast.success('Role updated')
@@ -501,155 +529,91 @@ export function OrganizationSettingsPage() {
     if (ok) setRoleChangeTarget(null)
   }
 
-  // Cancel any in-flight remove timers when the page unmounts so the DELETE
-  // never lands after the user has navigated away (otherwise a user who
-  // hits Remove and then immediately leaves would still evict a teammate
-  // they meant to keep, with no toast left to undo from). Same logic applies
-  // to in-flight invite cancellations — we don't want a stranded timer to
-  // revoke an invitation seconds after the admin closes the tab.
-  useEffect(() => {
-    const memberTimers = removeTimers.current
-    const inviteTimers = cancelTimers.current
-    return () => {
-      memberTimers.forEach((t) => clearTimeout(t))
-      memberTimers.clear()
-      inviteTimers.forEach((t) => clearTimeout(t))
-      inviteTimers.clear()
-    }
-  }, [])
-
+  const { open: openInvitations, expired: expiredInvitations } = useMemo(
+    () => splitInvitations(data?.invitations ?? [], Date.now()),
+    [data?.invitations],
+  )
+  // Open first, then expired. Expired rows stay visible: an expired invite
+  // still blocks a new one to the same address until it is cancelled
+  // (inviting again retires it automatically).
   const visibleInvitations = useMemo(
-    () => (data?.invitations ?? []).filter((i) => !pendingCancelIds.has(i.id)),
-    [data?.invitations, pendingCancelIds],
+    () => [...openInvitations, ...expiredInvitations],
+    [openInvitations, expiredInvitations],
   )
 
-  function cancelScheduledRemove(userId: string) {
-    const timer = removeTimers.current.get(userId)
-    if (timer) clearTimeout(timer)
-    removeTimers.current.delete(userId)
-    setPendingRemovalIds((prev) => {
-      if (!prev.has(userId)) return prev
-      const next = new Set(prev)
-      next.delete(userId)
-      return next
-    })
-  }
-
-  function scheduleRemoveMember(member: Member) {
+  async function removeMember(member: Member) {
     if (!activeOrgId) return
     const orgId = activeOrgId
-    const id = member.user_id
-    const label = member.email ?? id
-
-    // Optimistically hide the row. The toast becomes the user's only
-    // affordance for the next 8 s — if they want this back, they have to
-    // use the Undo action.
-    setPendingRemovalIds((prev) => new Set(prev).add(id))
+    const isSelf = member.user_id === currentUserId
+    const label = member.email ?? 'This teammate'
+    setRemoving(true)
+    const res = await apiFetch<{ left?: boolean; alreadyRemoved?: boolean }>(`/v1/org/${orgId}/members/${member.user_id}`, {
+      method: 'DELETE',
+    })
+    setRemoving(false)
+    if (!res.ok) {
+      toast.error(isSelf ? 'Could not leave the team' : 'Could not remove member', apiErrorText(res.error, 'Try again in a moment.'))
+      return
+    }
     setPendingRemove(null)
-
-    const timer = setTimeout(async () => {
-      removeTimers.current.delete(id)
-      const res = await apiFetch(`/v1/org/${orgId}/members/${id}`, { method: 'DELETE' })
-      if (!res.ok) {
-        // Restore the row so the user can retry. Surface the server's
-        // message verbatim — most failures here are auth-shaped ("only
-        // owners can remove other admins") and benefit from the literal
-        // wording.
-        setPendingRemovalIds((prev) => {
-          const next = new Set(prev)
-          next.delete(id)
-          return next
-        })
-        toast.error('Could not remove member', res.error?.message)
-        return
-      }
-      // Successful DELETE — stop hiding the row optimistically and let the
-      // server-side reload truth-up the list.
-      setPendingRemovalIds((prev) => {
-        const next = new Set(prev)
-        next.delete(id)
-        return next
+    if (isSelf) {
+      // You are no longer in this org. Pick a team you are still in from a
+      // fresh list (the header's cached list still contains the old one and
+      // would fall back to it), then load the dashboard fresh so every view
+      // drops the old team. authRedirectUrl keeps the console base path.
+      toast.success(`You left ${orgName || 'the team'}`)
+      const remaining = await apiFetch<{ organizations: Array<{ id: string }> }>('/v1/org', {
+        scope: 'none',
+        cache: 'no-store',
       })
-      reloadAll()
-    }, UNDO_WINDOW_MS)
-
-    removeTimers.current.set(id, timer)
-
-    toast.push({
-      tone: 'success',
-      title: 'Member removed',
-      description: `${label} will lose access in a few seconds.`,
-      duration: UNDO_WINDOW_MS,
-      action: {
-        label: 'Undo',
-        onClick: () => cancelScheduledRemove(id),
-      },
-    })
+      const nextOrg = remaining.ok ? remaining.data?.organizations?.find((o) => o.id !== orgId) : undefined
+      if (nextOrg) setActiveOrgIdSnapshot(nextOrg.id)
+      else clearActiveOrg()
+      window.location.assign(authRedirectUrl('/dashboard'))
+      return
+    }
+    toast.success('Member removed', `${label} no longer has access to this team.`)
+    reloadAll()
   }
 
-  function cancelScheduledInviteCancel(invitationId: string) {
-    const timer = cancelTimers.current.get(invitationId)
-    if (timer) clearTimeout(timer)
-    cancelTimers.current.delete(invitationId)
-    setPendingCancelIds((prev) => {
-      if (!prev.has(invitationId)) return prev
-      const next = new Set(prev)
-      next.delete(invitationId)
-      return next
-    })
-  }
-
-  function scheduleCancelInvite(invite: Invitation) {
+  async function cancelInvite(invite: Invitation) {
     if (!activeOrgId) return
-    const orgId = activeOrgId
-    const id = invite.id
-    const label = invite.email
-
-    // Optimistically hide the invite row. The toast is the user's only
-    // affordance for the next 8 s — they can back out with Undo, otherwise
-    // the timer fires and we issue the DELETE for real.
-    setPendingCancelIds((prev) => new Set(prev).add(id))
-
-    const timer = setTimeout(async () => {
-      cancelTimers.current.delete(id)
-      const res = await apiFetch(`/v1/org/${orgId}/invitations/${id}`, { method: 'DELETE' })
-      if (!res.ok) {
-        // Restore the row so the admin can see the invite still exists
-        // and retry. The 'ALREADY_ACCEPTED' branch is benign — surface a
-        // gentle nudge so the operator knows why nothing happened.
-        setPendingCancelIds((prev) => {
-          const next = new Set(prev)
-          next.delete(id)
-          return next
-        })
-        const code = res.error?.code
-        if (code === 'ALREADY_ACCEPTED') {
-          toast.error('Invitation already accepted', `${label} is now a member — remove them from the roster instead.`)
-        } else {
-          toast.error('Could not cancel invitation', res.error?.message)
-        }
-        return
+    setCancellingInvite(true)
+    const res = await apiFetch(`/v1/org/${activeOrgId}/invitations/${invite.id}`, { method: 'DELETE' })
+    setCancellingInvite(false)
+    if (!res.ok) {
+      if (res.error?.code === 'ALREADY_ACCEPTED') {
+        toast.error('Invitation already accepted', `${invite.email} is now a member. Remove them from the roster instead.`)
+      } else {
+        toast.error('Could not cancel invitation', apiErrorText(res.error, 'Try again in a moment.'))
       }
-      setPendingCancelIds((prev) => {
-        const next = new Set(prev)
-        next.delete(id)
-        return next
-      })
+      setPendingCancel(null)
       reloadAll()
-    }, UNDO_WINDOW_MS)
+      return
+    }
+    setPendingCancel(null)
+    toast.success('Invitation cancelled', `${invite.email} can no longer use that link.`)
+    reloadAll()
+  }
 
-    cancelTimers.current.set(id, timer)
-
-    toast.push({
-      tone: 'success',
-      title: 'Invitation cancelled',
-      description: `${label} won't be able to join.`,
-      duration: UNDO_WINDOW_MS,
-      action: {
-        label: 'Undo',
-        onClick: () => cancelScheduledInviteCancel(id),
-      },
-    })
+  if (slug) {
+    if (slugResolution?.kind === 'unknown-team') {
+      return (
+        <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-organization-settings">
+          <EmptyState
+            title="You are not on that team"
+            description={`No team you belong to uses the link name “${slugResolution.slug}”. Ask its owner to invite you, or open your own team.`}
+            action={
+              <Btn to="/organization/members" size="sm">
+                Open my team
+              </Btn>
+            }
+          />
+        </div>
+      )
+    }
+    if (slugOrgsQuery.error) return <ErrorAlert message={slugOrgsQuery.error} onRetry={slugOrgsQuery.reload} />
+    return <PanelSkeleton rows={5} label="Opening team" />
   }
 
   if (!activeOrgId) {
@@ -839,6 +803,22 @@ export function OrganizationSettingsPage() {
         )}
       </Card>
 
+      {/* Hand-over and leaving. There is no one-click transfer: ownership
+          moves by promoting a teammate, then changing your own role. */}
+      <Card className="p-4">
+        <h2 className="text-sm font-semibold text-fg">Hand over or leave the team</h2>
+        <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-fg-muted">
+          <li>To hand the team to someone else, make them an Owner on the Roster tab, then change your own role or leave.</li>
+          <li>Anyone can leave from their own row on the Roster tab. The last owner has to hand over first.</li>
+          <li>Deleting a team is not available in the console. Contact support if you need a team removed.</li>
+        </ul>
+        <div className="mt-3">
+          <Btn size="sm" variant="ghost" onClick={() => setTab('roster')}>
+            Open roster
+          </Btn>
+        </div>
+      </Card>
+
         </>
       )}
 
@@ -871,7 +851,7 @@ export function OrganizationSettingsPage() {
             <Input
               label="Email"
               value={email}
-              placeholder="kensaurus@gmail.com"
+              placeholder="teammate@company.com"
               onChange={(e) => setEmail(e.target.value)}
               disabled={!teamsEnabled || !canManage}
             />
@@ -974,7 +954,10 @@ export function OrganizationSettingsPage() {
         <Card className="p-4">
           <div className="mb-2 flex items-baseline justify-between gap-2">
             <h2 className="text-sm font-semibold text-fg">Pending invitations</h2>
-            <span className="text-2xs text-fg-faint">{visibleInvitations.length} open</span>
+            <span className="text-2xs text-fg-faint">
+              {openInvitations.length} open
+              {expiredInvitations.length > 0 ? ` · ${expiredInvitations.length} expired` : ''}
+            </span>
           </div>
           <ul className="space-y-2">
             {visibleInvitations.map((invite) => {
@@ -1082,7 +1065,7 @@ export function OrganizationSettingsPage() {
                         <Btn
                           size="sm"
                           variant="ghost"
-                          onClick={() => scheduleCancelInvite(invite)}
+                          onClick={() => setPendingCancel(invite)}
                           aria-label={`Cancel invitation for ${invite.email}`}
                           title={`Cancel invitation for ${invite.email}`}
                           className="px-2 text-fg-secondary hover:text-danger hover:bg-danger-muted/15"
@@ -1171,11 +1154,20 @@ export function OrganizationSettingsPage() {
                 : null
               const isInactive = lastActiveMs !== null && lastActiveMs > INACTIVE_THRESHOLD_MS
               const isNeverActive = member.last_active_at === null
+              const isSelf = member.user_id === currentUserId
+              const perms = rosterRowPermissions({
+                actorRole: data?.currentUserRole,
+                targetRole: member.role,
+                isSelf,
+                ownerCount,
+              })
+              const memberLabel = member.email ?? 'this teammate'
               return (
                 <tr key={member.user_id}>
                   <td className="px-3 py-2">
                     <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="font-medium text-fg">{member.email ?? member.user_id}</span>
+                      <span className="font-medium text-fg">{member.email ?? 'Unknown email'}</span>
+                      {isSelf && <Badge className="bg-surface-overlay text-fg-muted text-2xs">you</Badge>}
                       {joinedMeta && (
                         <Tooltip content={joinedMeta.tooltip}>
                           <Badge className={`${joinedMeta.tone} text-2xs`}>{joinedMeta.label}</Badge>
@@ -1189,29 +1181,31 @@ export function OrganizationSettingsPage() {
                     )}
                   </td>
                   <td className="px-3 py-2">
-                    {canManage ? (
+                    {perms.roleOptions.length > 0 ? (
                       <select
                         value={member.role}
+                        aria-label={`Role for ${member.email ?? 'this teammate'}`}
                         title={orgRoleDefinition(member.role).tagline}
                         onChange={(e) => {
                           const next = e.target.value as OrgRole
                           if (next === member.role) return
                           setRoleChangeTarget({
                             userId: member.user_id,
-                            email: member.email ?? member.user_id,
+                            email: member.email ?? 'this teammate',
                             fromRole: member.role,
                             toRole: next,
                           })
                         }}
                         className="rounded border border-edge-subtle bg-surface-raised px-2 py-1 text-xs text-fg"
                       >
-                        <option value="owner" title={orgRoleDefinition('owner').tagline}>Owner</option>
-                        <option value="admin" title={orgRoleDefinition('admin').tagline}>Admin</option>
-                        <option value="member" title={orgRoleDefinition('member').tagline}>Member</option>
-                        <option value="viewer" title={orgRoleDefinition('viewer').tagline}>Viewer</option>
+                        {perms.roleOptions.map((r) => (
+                          <option key={r} value={r} title={orgRoleDefinition(r).tagline}>
+                            {r.charAt(0).toUpperCase() + r.slice(1)}
+                          </option>
+                        ))}
                       </select>
                     ) : (
-                      <Tooltip content={orgRoleDefinition(member.role).tagline}>
+                      <Tooltip content={canManage && perms.roleLockedReason ? perms.roleLockedReason : orgRoleDefinition(member.role).tagline}>
                         <Badge className={ROLE_TONE[member.role]}>{member.role}</Badge>
                       </Tooltip>
                     )}
@@ -1228,21 +1222,37 @@ export function OrganizationSettingsPage() {
                     )}
                   </td>
                   <td className="px-3 py-2 text-right">
-                    <Btn
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => setPendingRemove(member)}
-                      disabled={!canManage || member.role === 'owner'}
-                      aria-label={`Remove ${member.email ?? member.user_id}`}
-                      title={
-                        member.role === 'owner'
-                          ? 'Owners cannot be removed from the org'
-                          : `Remove ${member.email ?? member.user_id}`
-                      }
-                      className="px-2 text-fg-secondary hover:text-danger hover:bg-danger-muted/15"
-                    >
-                      <IconTrash />
-                    </Btn>
+                    {perms.removeAction === 'leave' ? (
+                      <Btn
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setPendingRemove(member)}
+                        aria-label="Leave this team"
+                        title="Leave this team"
+                        className="text-fg-secondary hover:text-danger"
+                      >
+                        Leave
+                      </Btn>
+                    ) : perms.removeAction === 'remove' ? (
+                      <Btn
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setPendingRemove(member)}
+                        aria-label={`Remove ${memberLabel}`}
+                        title={`Remove ${memberLabel}`}
+                        className="px-2 text-fg-secondary hover:text-danger hover:bg-danger-muted/15"
+                      >
+                        <IconTrash />
+                      </Btn>
+                    ) : (
+                      <Tooltip content={perms.removeLockedReason ?? 'You cannot remove this person.'}>
+                        <span className="inline-flex">
+                          <Btn size="sm" variant="ghost" disabled aria-label={`Remove ${memberLabel}`} className="px-2 text-fg-faint">
+                            <IconTrash />
+                          </Btn>
+                        </span>
+                      </Tooltip>
+                    )}
                   </td>
                 </tr>
               )
@@ -1254,14 +1264,47 @@ export function OrganizationSettingsPage() {
       )}
 
       {pendingRemove && (
+        pendingRemove.user_id === currentUserId ? (
+          <ConfirmDialog
+            title={`Leave ${data?.organization?.name ?? 'this team'}?`}
+            body="You lose access to every project in this team right away. An owner or admin can invite you back."
+            confirmLabel="Leave team"
+            cancelLabel="Stay"
+            tone="danger"
+            loading={removing}
+            onConfirm={() => void removeMember(pendingRemove)}
+            onCancel={() => {
+              if (!removing) setPendingRemove(null)
+            }}
+          />
+        ) : (
+          <ConfirmDialog
+            title="Remove this teammate?"
+            body={`${pendingRemove.email ?? 'This teammate'} loses access to every project in ${data?.organization?.name ?? 'this team'} right away. You can invite them again later.`}
+            confirmLabel="Remove member"
+            cancelLabel="Keep member"
+            tone="danger"
+            loading={removing}
+            onConfirm={() => void removeMember(pendingRemove)}
+            onCancel={() => {
+              if (!removing) setPendingRemove(null)
+            }}
+          />
+        )
+      )}
+
+      {pendingCancel && (
         <ConfirmDialog
-          title="Remove this teammate?"
-          body={`${pendingRemove.email ?? pendingRemove.user_id} will lose access to every project in ${data?.organization?.name ?? 'this organization'} after a short undo window. They can be re-invited later, but anything they had drafted in their own session will be gone.`}
-          confirmLabel="Remove member"
-          cancelLabel="Keep member"
+          title="Cancel this invitation?"
+          body={`${pendingCancel.email} will not be able to join with the link they were sent. You can invite them again later.`}
+          confirmLabel="Cancel invitation"
+          cancelLabel="Keep invitation"
           tone="danger"
-          onConfirm={() => scheduleRemoveMember(pendingRemove)}
-          onCancel={() => setPendingRemove(null)}
+          loading={cancellingInvite}
+          onConfirm={() => void cancelInvite(pendingCancel)}
+          onCancel={() => {
+            if (!cancellingInvite) setPendingCancel(null)
+          }}
         />
       )}
 

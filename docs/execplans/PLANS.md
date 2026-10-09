@@ -540,8 +540,108 @@ spec-conformance matrix, and burndown live in
       JWT pattern catches Conduit's non-Bearer scheme).
 - Verified: core 192 tests, web 225 tests, typecheck 47/47 green.
 
-### Phase 2 — Conduit fixture matrix + dogfood harness `PLANNED`
+### Phase 2 — Conduit fixture matrix + dogfood harness `COMPLETE` (except CI gate, 2026-09-12 audit)
+- [x] Vendored `examples/realworld/` + `conduit-journey.spec.ts` + `pnpm e2e:realworld` shipped in `76ec9325` (#340).
+- [ ] `MUSHI_REALWORLD=1` CI job never landed (no workflow references it) — tracked under Plan 017 P0.
 Vendored `examples/realworld/` (express backend + react-vite + hash-router
 frontends), non-interactive `mushi init` wiring, `conduit-journey.spec.ts`
 capture→ingest assertions, MCP fix-loop dogfood step, `MUSHI_REALWORLD=1`
 CI gate + `pnpm e2e:realworld`.
+
+---
+
+## Plan 017 — Dead Code, MCP 2026-07-28 Attunement, Voice Loop (2026-09-12) `BUILT — UNCOMMITTED`
+
+### Goal
+Turn the dead-code register into wired features, move the hosted MCP server to
+the published 2026-07-28 revision (dual-era), and ship the phone-voice to
+cloud-agent to draft-PR loop. Full audited plan, corrections ledger, decisions
+and sequencing live in
+[dead-code-voice-agent-loop.md](./dead-code-voice-agent-loop.md); decisions are
+recorded as ADRs 0007–0014. The unreachable-feature register is
+[plan-dead-code.md](./plan-dead-code.md); the running evidence log, including
+seven bugs found only by testing against production, is
+[plan-017-verification.md](./plan-017-verification.md).
+
+### Deliverables
+- [x] A: knip@6 config + baselines + CI ratchets (748 production / 587 default, measured after every workstream landed); tsconfig/lint enforcement gaps closed (24 tsconfigs re-based, 12 packages gained lint); tool-count drift fixed at 73 and gated; unreachable-feature register written
+- [x] B: hosted MCP dual-era (2024-11-05 … 2026-07-28) with `server/discover`, MRTR, tasks extension, verified live by 13 probes; `packages/mcp` on SDK v2 (ADR 0014)
+- [x] C: `POST /v1/intake/voice` + `voice:write` scope + STT + hardening; Slack events/commands, Telegram webhook, admin PWA (share_target, tap-to-talk, Web Push); Cursor v1 first-class + webhook + poller; GitHub Agent Tasks adapter; Linear-agent fix; A2A 1.0 wire format
+- [x] D: AgentInspect reply ([agentinspect-reply-2026-09-12.md](./agentinspect-reply-2026-09-12.md))
+- [x] Nine migrations applied to `dxptnwrhwsqckaftyymj` with the ledger reconciled to the on-disk filenames; edge functions deployed; prod verified end to end
+- [ ] **Not done — needs an owner:** nothing committed or pushed; no baseline was taken on clean master; `deadcode-execute` beyond three safe deletions is debt against the ratchet, not a bulk delete; no live cloud-agent dispatch (it would open a PR on this repository); the admin console is not deployed (CI ships it from master and the tree carries unreviewed work); the `001000` Sentry-source backfill is recorded as applied but was never run against production data; and `20260828100000_sdk_upgrade_jobs_stuck_reaper.sql` (another workstream's, untracked) is on disk but unapplied
+
+### Gates at hand-off
+`typecheck` 52/52 · `lint` 49/49 · `build` 44/44 · `check:drift` pass ·
+`check:design` pass · knip 748/587 pass · `changelog:check` pass ·
+`check:changeset-orphans` pass · Deno entrypoints 58/58. Every other step of the
+CI `build` job was run individually and passes.
+
+`pnpm test` was unreliable and the cause turned out to be a real defect, not
+host flakiness: `packages/web/src/capture/discovery.test.ts` slept a flat 150ms
+against a 100ms debounce and failed two isolated runs in three. Committed code
+predating this plan. Fixed by polling for the condition instead — no assertion
+changed — after which the web package went five for five and a full
+`turbo run test --force` came back 85/85. A second cause was then found the same way — `core/src/api-client.test.ts` timing
+out at vitest's 5s default while sleeping through a real retry backoff — so
+`core` and `server` now set a 30s `testTimeout`. The residual is the host: 6.1 GB
+free of 31.7 GB while turbo runs ten vitest instances, which is why the failing
+package moved every run. Detail as bug 11 in
+[plan-017-verification.md](./plan-017-verification.md).
+
+`pnpm install` was run and `pnpm-lock.yaml` is updated — CI's
+`--frozen-lockfile` needs it.
+
+## Plan 018 — Reporter Loop v2 (2026-10-02) `IN PROGRESS`
+
+One widget on web and RN, an end-user status vocabulary, two-way replies, opt-in notifications, and fix/release links back to the reporter. Spec and audit: [reporter-loop-v2.md](./reporter-loop-v2.md).
+
+- [ ] Phase 0: correctness hotfix (reporter request timeout and retry, thread error state, mark-read, core status table, no severity in reporter copy)
+- [ ] Phase 1: widget parity (one screen, host-adaptive theme, masking, accessibility)
+- [ ] Phase 2: loop wiring (migrations 1–4, fan-out, release linkage, duplicate follows, Waiting on you, outbox)
+- [ ] Phase 3: opt-in email and web push, caps, DPA / 委託 template
+
+Built on `ux/reporter-loop` (not applied or deployed; web widget and
+`core/src/api-client.ts` are a parallel workstream):
+- core `@mushi-mushi/core/reporter-ui` (status table, timeline templates, en/ja/es/th)
+- React Native: `widget.theme`, wrapping chips, accessibility roles, thread
+  loading / Retry, mark-read
+- server Phase 0 (CORS max-age, no severity/category to reporters, templates
+  rendered on read, mark-read routes) and Phase 2 (migrations
+  `20261002120000`–`120300`, `reporter-notify-fanout`, release linkage,
+  duplicate follows, request-info, reply signals, Outbox, `/updates`)
+- MCP `request_reporter_info`, `list_reporter_outbox`, `release_reporter_update`
+- console Outbox tab and `ReporterViewPanel`
+- DPA / 委託 template: [`docs/operators/reporter-data-processing.md`](../operators/reporter-data-processing.md)
+
+## Plan 019 — App Recipe Control Plane (2026-10-02) `IN PROGRESS (Phase 1/1b)`
+
+A per-project App Recipe on one visual console page, portfolio-native from day one: an organization's recipes roll up to a `/portfolio` view of shared resources and cross-project findings, and every source plugs in through one connector interface (snapshot, drift, propose, act with approval). It covers schema, DTCG design tokens, routes and stories, gates, CI/CD, build and deploy targets, env-var names and integrations. Each element has a source, drift findings in `gate_findings`, and a change path that is only ever a draft PR. The recipe also feeds the diagnosis and `get_fix_context`. Decision: [ADR 0016](../adr/0016-mushi-as-the-app-recipe-control-plane.md) (Accepted, owner-delegated, 2026-10-02; the sequencing gate was struck by the owner on 2026-10-02, [ADR 0017](../adr/0017-strike-the-plan-019-020-sequencing-gate.md)). Spec, audit and competitive scan: [app-recipe-control-plane.md](./app-recipe-control-plane.md). Pilot: glot.it.
+
+- [ ] Phase 1 (built on `ux/design-plane`; open item: the glot.it acceptance, all 8 cards on the live API, cannot run until the design-plane migrations and functions are deployed — the server side would read `not_connected` today): no migrations. `GET /v1/admin/projects/:id/recipe` composes existing data with five explicit states (unknown ≠ ok); `/recipe` page (React Flow plus list fallback); MCP `get_app_recipe`.
+- [ ] Phase 1b (outside the gate; the design plane built on `ux/design-plane`; `feat/recipe-portfolio-phases` added `POST /v1/ingest/recipe`, CLI `mushi recipe init|check|show` and the token block in the `fix-worker` prompt (`_shared/fix-recipe-block.ts`). glot.it pilot, read-only, 2026-10-02: glot's manifest is only on its `design/art-direction` branch (checked at 16335e6c1), not on `origin/main`. `mushi recipe check` on that tree: manifest valid, 501 tokens, 932 files scanned, 101 colour literals that match no token; `mushi radar scan`: 4 storage rows deleted with SQL (migrations 00116, 00137). Still open: merging the manifest and adding the `--push` step to glot's existing `ci.yml` job, in glot's own release batch): `mushi.recipe.json` plus DTCG 2025.10 normalizer; `app_recipe_snapshots` and the four new gate names; `recipe-collector` (manifest and tokens only); `POST /v1/ingest/recipe`; CLI `mushi recipe`; MCP `get_design_tokens`; token excerpt in `get_fix_context`; glot.it pilot.
+- [x] Phase P1 (outside the gate, no migrations; built 2026-10-02 on `feat/recipe-portfolio-phases`, not deployed): `GET /v1/admin/orgs/:orgId/portfolio`; repeated findings across projects, Mushi SDK skew, integration holes; account-level keys intersected with organization membership; `/portfolio` page; MCP `get_portfolio` and `list_portfolio_findings`.
+- [x] Phase 2 (gate struck, ADR 0017; built 2026-10-02 on `feat/recipe-portfolio-phases`, migrations `20261002180100`/`20261002180200` not yet applied; Vercel, EAS, Stripe and PostHog connectors stay planned until a pilot needs them): the `_shared/connectors/` interface and contract tests (GitHub, Supabase, Sentry, generic HTTP); `connector_instances` and `connector_bindings`; `ci_workflow_runs` and `deploy_observations`; legacy event ingest; `safe-fetch`; the collector widened to schema declared-vs-applied, CI rules, deploy probes, declared env and integrations; MCP `get_recipe_drift` and `list_connectors`.
+- [x] Phase P2 (gate struck, ADR 0017; built 2026-10-02, migration `20261002180300` not yet applied; shared-auth reads the login settings declared in the login project's own repo `supabase/config.toml`, never the live auth config; a group with no such repo is `unknown`): `projects.kind`, `portfolio_resources`, `portfolio_resource_uses`, `portfolio_findings`; rules for shared auth, billing and credits, deep links, shared channels, CI cost per repo, and holes.
+- [x] Phase 3 (gate struck, ADR 0017; built 2026-10-02, migration `20261002180400` not yet applied; jobs run inside the api function rather than a separate recipe-change-worker, like the design plane's draft PRs; the first act capability — Play `set_rollout` / `promote_track` — runs only through a JWT-only, hash-bound, single-use, one-hour approval): `recipe_change_jobs` plus `recipe-change-worker`. `createPrFromFiles` gains `markReady`, and recipe PRs stay in draft. Writes go only to allowlisted paths. Never secret values or live DDL. `.github/**` and migration-file PRs are later per-project opt-ins. MCP `propose_recipe_change`. Portfolio "fix once" batches (one draft PR per repo).
+
+## Plan 020 — Portfolio operator (2026-10-02) `IN PROGRESS`
+
+Mushi for one person running many apps, sites and services: a tech-debt radar of detectors for holes that never throw (orphaned storage, anon-callable secret RPCs, store-claim mismatches, dead webhooks, expiring domains), store ops with listings as code, spend across apps, cross-app funnels and one operator digest. Built on Plan 019's recipe, connectors and portfolio rollup; it redefines none of them. Spec: [portfolio-operator.md](./portfolio-operator.md). Positioning: [portfolio-positioning.md](../marketing/portfolio-positioning.md). Decisions: [ADR 0017](../adr/0017-strike-the-plan-019-020-sequencing-gate.md) (gate struck; §15 decisions taken; every live connector action needs a human approval).
+
+- [ ] Phase 0 (built; checked against the code 2026-10-03; one open item: the generated MCP docs (`apps/docs/content/sdks/mcp-tools.mdx`, `apps/docs/public/llm-md/sdks/mcp-tools.md`, `apps/docs/public/llms-full.txt`, the two `docs-index.ts` files) are regenerated at merge, see portfolio-operator.md §12.1): Mushi's own fail-open fixes P-1 (`byok_keys` probe, `byok_key_invalid`), P-2 (`_shared/llm-budget.ts` enforces `monthly_llm_budget_usd`), P-3 (`contract-graph-builder` / `drift-walker` rewritten over real sources, failed reads are 500s), P-4/P-5 routed to Plan 019 Phase 2 and §10.3, P-6 (default caps in `20261002140200`; `spend_cap_unset` flags a missing cap or AI budget with a one-click apply); the `radar` setup checks (`index_branch_mismatch`, `index_stale`, `webhook_never_delivered`); `get_repo_digest` with "Copy digest" on `/explore` and report detail; diagram v0 on `/explore`. Migrations `20261002140100`, `20261002140200` and `20261002150000` ship in the batch-2 release; their apply and deploy state is tracked in the batch handoff, not here. `mcp-discovery-tools.json` was regenerated on 2026-10-03 and `gate-ids-parity.test.ts` checks it.
+- [x] Phase 1 (built 2026-10-02 on `feat/recipe-portfolio-phases`; migration `20261002180000` and functions `radar-scan`, `operator-digest`, `api`, `mcp` not yet applied or deployed): radar and spend columns on `/portfolio`; `public_probe` detectors (`store_name_mismatch`, `listing_locale_missing`, `domain_expiring`, `tls_expiring`, `security_headers_missing`, `review_risk_privacy_url`); host-CI scan rules (`storage_sql_delete`, `play_target_sdk_behind`, `ios_sdk_behind`); the operator digest.
+- [ ] Phase 2 (partial, checked against the code 2026-10-03: seven §4.2 detectors are not built, `dead_app_live_spend`, `provider_key_invalid`, `store_credential_scope_missing`, `key_unused_90d`, `key_in_client_bundle`, `paid_feature_no_kill_switch` and `provider_limit_unset`. The rest was built 2026-10-02 on `feat/recipe-portfolio-phases`; no new migration, the `store_review` gate is in `20261002180000`; `api` and `mcp` redeploy owed): Supabase security and storage detectors (read-only MCP); spend ledger with `llm_usage`; listing as code (`store` manifest block, `mushi store pull` on the operator's machine with the operator's keys, `listing_drift`); claims vs code (LLM claim extraction on the project's AI key, `unknown` without one); screenshot shape and freshness; review-risk checklist; release calendar (read, `GET /v1/admin/orgs/:orgId/releases`, Portfolio → Releases). App Store Connect without an accepted agreement reads `blocked`.
+- [x] Phase 3 (built 2026-10-02 on `feat/recipe-portfolio-phases`; migration `20261002180500` not yet applied; `api` and `recipe-collector` redeploy owed): cross-app funnel rollup (`org_funnel_definitions`, one definition per org run per app over `product_funnel`, Portfolio → Funnel across apps); cross-promo checks (`links.crossPromo`: 404/410 is broken, a throttled store is unknown, a missing campaign tag is info); `revenuecat` connector; identity setup guide (`concepts/shared-login`); shared-auth rule from the login settings each repo declares in `supabase/config.toml` (the live auth config is never read: it returns provider secrets) and the billing rule (a mismatch only when both Stripe accounts are named). The org sweep now keeps a finding open when its check could not run, and resolves cross-app findings once an org has one app.
+- [x] Phase 4 (built 2026-10-02 with Plan 019 Phase 3 on `feat/recipe-portfolio-phases`; migration `20261002180400` not yet applied; tested against fakes only, no live store call made): listing PRs published by host CI (listing text under `store.listingDir` goes out as a draft PR; the host's fastlane / EAS publishes after merge); batched release proposals (read-only, `GET /v1/admin/orgs/:orgId/releases`); store act capabilities (Play `set_rollout`, `promote_track`), each through a hash-matched, single-use, one-hour `connector_actions` approval by a signed-in owner or admin, with a separate write credential. Nothing executes automatically.
+
+## Plan 021 — `mushi ux`: visual UX loop, repo and project groups, console IA (2026-10-06) `IN PROGRESS (Phases 0–4 built, Phase 5 outlined; ux package unpublished)`
+
+A local, npm-installed loop that maps a running app's pages, tabs and dialogs into a burndown, drives the owner's chosen coding agent and model one surface at a time against screenshot baselines, shows each iteration live with before/after diffs and a cross-page regression check, and ends with a pairwise judge on a different model grounded in the repo's design tokens. UX bugs it cannot fix land in the normal report queue (`source = 'ux_loop'`). Also: repos inside a project shown by role, project groups above projects, and one Home / one Next step / one setup path in the console. Spec, research and probe results: [ux-loop.md](./ux-loop.md). Owner decisions 2026-10-06 (act gate lifted for local and cloud runs within ADR 0017's "nothing acts on its own"; local dashboard plus console sync; both grouping levels; worktree edits).
+
+- [ ] Phase 0: probes; `sdk-upgrade-runner` reads `project_repos` (done); role chips with icons on `/repo` and every linked repo on `/connect` (done)
+- [x] Phase 1: `@mushi-mushi/ux` local MVP and ADR 0020 (built 2026-10-06 on `feat/ux-loop`, uncommitted; live judge call, Cursor/Codex adapters and an apps/admin run not yet verified)
+- [x] Phase 2: console sync (`ux_runs` / `ux_surfaces` / `ux_iterations`, `ux-captures`), project groups, `reports.source = 'ux_loop'` (migrations applied, `api` deployed)
+- [ ] Phase 3: Home / App health / Team page hubs with redirects and one setup path are built; the single `NextStep` component waits on an owner decision (see ux-loop.md)
+- [x] Phase 4: cloud mode on the host's GitHub Actions (`--agent cursor-cloud`, `.github/actions/ux-loop`, "Run in the cloud"); live dispatch and Cursor run owed
+- [x] Phase 5: A/B outline (in ux-loop.md; not built)

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-06-16T08:35:58.322Z",
+  "generatedAt": "2026-10-08T02:07:40.817Z",
   "docs": [
     {
       "doc_path": "recipes/connect-github-and-sdk.md",
@@ -42,10 +42,10 @@
       "doc_path": "recipes/triage-and-dispatch-a-fix.md",
       "section": "main",
       "title": "Triage and dispatch a fix",
-      "body": "# Triage and dispatch a fix\n\nUse this flow when a user reports a bug and you want Mushi to open a draft pull request.\n\n## Steps\n\n1. Open **Reports** (`/reports`) — the inbox of inbound bug reports from your app.\n2. Filter by **status=new** or **severity=critical** to find urgent items (or use Cmd+K → \"Open critical bugs\").\n3. Click a report to open **Report detail** (`/reports/:id`). Review the screenshot, console log, and classification.\n4. Set **status** and **severity** in the triage bar if the auto-classification needs correction.\n5. Click **Dispatch fix** to start the fix-worker agent. Watch the progress stream for branch + PR creation.\n6. Open **Fixes** (`/fixes`) to review drafted PRs, CI status, and merge when ready.\n7. Optionally open **Repo** (`/repo`) for a branch-level view across all auto-fix activity.\n\n## Tips\n\n- Use `@report:<id>` in Ask Mushi to ask questions about a specific report.\n- Skill Pipelines (`/skills`) can attach a cursor-kenji workflow to a report for guided handoff.",
+      "body": "# Triage and dispatch a fix\n\nUse this flow when a user reports a bug and you want Mushi to open a draft pull request.\n\n## Steps\n\n1. Open **Reports** (`/reports`) — the inbox of inbound bug reports from your app.\n2. Filter by **status=new** or **severity=critical** to find urgent items (or use Cmd+K → \"Open critical bugs\").\n3. Click a report to open **Report detail** (`/reports/:id`). Review the screenshot, console log, and classification.\n4. Set **status** and **severity** in the triage bar if the auto-classification needs correction.\n5. Click **Dispatch fix** to start the fix-worker agent. Watch the progress stream for branch + PR creation.\n6. Open **Fixes** (`/fixes`) to review drafted PRs, CI status, and merge when ready.\n7. Optionally open **Repo** (`/repo`) for a branch-level view across all auto-fix activity.\n\n## Tips\n\n- Use `@report:<id>` in Ask Mushi to ask questions about a specific report.\n- Skill Pipelines (`/skills`) can attach a kenji skills workflow to a report for guided handoff.",
       "route_path": null,
       "kind": "recipe",
-      "content_hash": "39bb9c0e3113935abcbee9d40e947907b13041de78a9d9de4c97df561e366a6e"
+      "content_hash": "cd6c22a9881d7847423d9cc777b98c727bf473ceaf74718ca59f2738f7172e50"
     },
     {
       "doc_path": "recipes/understand-your-codebase.md",
@@ -57,346 +57,238 @@
       "content_hash": "c7dec43ab0096d3dbb8ad06111882307e5a0861499d4d501334404ae50a880df"
     },
     {
-      "doc_path": "pages/dashboard.md",
-      "section": "main",
-      "title": "Dashboard",
-      "body": "# Dashboard\n\nLive PDCA loop — bugs in, fixes out, judge scores, shipped impact.\n\nRoute: /dashboard\nSection: Start\n\nKeywords: home, overview, kpi, metrics, loop, landing, summary\n\nUse this page when the user asks about: home, overview, kpi, metrics, loop, landing",
-      "route_path": "/dashboard",
-      "kind": "page",
-      "content_hash": "3e3defb693bc8a04385a882cd80019d727c1379defee94bff87fd22e395fe35f"
-    },
-    {
       "doc_path": "pages/onboarding.md",
       "section": "main",
-      "title": "Get started",
-      "body": "# Get started\n\nThree-step setup: create a project, install the widget, send a test bug.\n\nRoute: /onboarding\nSection: Start\n\nKeywords: setup, install, quickstart, first run, widget, snippet, project\n\nUse this page when the user asks about: setup, install, quickstart, first run, widget, snippet",
+      "title": "Set up",
+      "body": "# Set up\n\nThree-step setup: create a project, install the widget, send a test bug.\n\nRoute: /onboarding\nSection: Start\n\nKeywords: get started, setup, install, quickstart, first run, widget, snippet, project\n\nUse this page when the user asks about: get started, setup, install, quickstart, first run, widget",
       "route_path": "/onboarding",
       "kind": "page",
-      "content_hash": "5fe3766d92b4f10a5cf77ad46db85f5985d8cebe06be4e5a011511f92d0e49c7"
+      "content_hash": "db53f549ae07c79f25d774a97f9d46956f9099ac4b1a64c0db7dfde2cdb2d5b5"
     },
     {
-      "doc_path": "pages/connect.md",
+      "doc_path": "pages/dashboard.md",
       "section": "main",
-      "title": "Connect & Update",
-      "body": "# Connect & Update\n\nConnect GitHub, install SDK + MCP, and create upgrade PRs.\n\nRoute: /connect\nSection: Start\n\nKeywords: connect, install, sdk, upgrade, update, mcp, cursor, npm, package\n\nUse this page when the user asks about: connect, install, sdk, upgrade, update, mcp",
-      "route_path": "/connect",
+      "title": "Home",
+      "body": "# Home\n\nSummary for the selected app: open bugs, fixes in progress, setup and recent activity.\n\nRoute: /dashboard\nSection: Start\n\nKeywords: dashboard, home, overview, kpi, metrics, loop, landing, summary\n\nUse this page when the user asks about: dashboard, home, overview, kpi, metrics, loop",
+      "route_path": "/dashboard",
       "kind": "page",
-      "content_hash": "8cfbd23cc311f18abe68dcba655dee3f490b018ecacab4f52ba2f4e7f0d25009"
-    },
-    {
-      "doc_path": "pages/explore.md",
-      "section": "main",
-      "title": "Explore codebase",
-      "body": "# Explore codebase\n\nMap, chat with, and tour your indexed repository.\n\nRoute: /explore\nSection: Plan\n\nKeywords: codebase, atlas, understand, architecture, graph, ask, tour, domains\n\nUse this page when the user asks about: codebase, atlas, understand, architecture, graph, ask",
-      "route_path": "/explore",
-      "kind": "page",
-      "content_hash": "d9007aa309d6f33230f89d70ebe178feb288b1cb81f5eac003328bf7adeef3b2"
+      "content_hash": "cc0310e17eabc82720cca414a9f9406c12d77cadd3369417b1b29fa192a1d912"
     },
     {
       "doc_path": "pages/inbox.md",
       "section": "main",
-      "title": "Inbox",
-      "body": "# Inbox\n\nAction inbox — every event awaiting your decision in one place.\n\nRoute: /inbox\nSection: Plan\n\nKeywords: inbox, action, todo, queue, notifications, unread, pending\n\nUse this page when the user asks about: inbox, action, todo, queue, notifications, unread",
+      "title": "To-do",
+      "body": "# To-do\n\nOne card for each decision waiting on you — bugs to triage, fixes to review, setup to finish.\n\nRoute: /inbox\nSection: Start\n\nKeywords: action inbox, inbox, action, todo, to do, pending, decision, next\n\nUse this page when the user asks about: action inbox, inbox, action, todo, to do, pending",
       "route_path": "/inbox",
       "kind": "page",
-      "content_hash": "e22cb6f681540aee431ce2998be807adb1ab365e54cb4e401a5743c0043e1931"
+      "content_hash": "d6007107c4a057bb13c36f5e22dcae8df68e82fdbe4ed8c857504b985f9760bd"
+    },
+    {
+      "doc_path": "pages/portfolio.md",
+      "section": "main",
+      "title": "All apps",
+      "body": "# All apps\n\nEvery app in this team side by side: setup state, open bugs, SDK version and problems to fix once across apps.\n\nRoute: /portfolio\nSection: Start\n\nKeywords: portfolio, all apps, apps, fix once, sdk skew, sdk version, radar, holes, team, organization\n\nUse this page when the user asks about: portfolio, all apps, apps, fix once, sdk skew, sdk version",
+      "route_path": "/portfolio",
+      "kind": "page",
+      "content_hash": "54815373dacb65bdfcb1696e84e728487468f5663eb2cdd6346d9862a8dbfd82"
+    },
+    {
+      "doc_path": "pages/connect.md",
+      "section": "main",
+      "title": "Connect",
+      "body": "# Connect\n\nWire up your editor and app: SDK install, MCP for Cursor/Claude, upgrade PRs.\n\nRoute: /connect\nSection: Start\n\nKeywords: connect & update, install, sdk, upgrade, update, mcp, cursor, npm, package, editor\n\nUse this page when the user asks about: connect & update, install, sdk, upgrade, update, mcp",
+      "route_path": "/connect",
+      "kind": "page",
+      "content_hash": "ea8c5ffc5aea9b591c1bfde29dde2916881be474b0c27037d63b046f75613930"
+    },
+    {
+      "doc_path": "pages/feedback.md",
+      "section": "main",
+      "title": "Help & support",
+      "body": "# Help & support\n\nAsk the Mushi team for help and read their replies to feedback you sent.\n\nRoute: /feedback\nSection: Start\n\nKeywords: support, feedback, help, contact, bug, request\n\nUse this page when the user asks about: support, feedback, help, contact, bug, request",
+      "route_path": "/feedback",
+      "kind": "page",
+      "content_hash": "34a1a122ffbeed345f06f785886613e75cb827a4fdb0063262c62414082a5262"
+    },
+    {
+      "doc_path": "pages/feature-board.md",
+      "section": "main",
+      "title": "Feature requests",
+      "body": "# Feature requests\n\nCommunity feature requests and votes.\n\nRoute: /feature-board\nSection: Start\n\nKeywords: feature board, features, roadmap, votes, board\n\nUse this page when the user asks about: feature board, features, roadmap, votes, board",
+      "route_path": "/feature-board",
+      "kind": "page",
+      "content_hash": "f3cdb4d9b59848e0707cfc9120ca957eee4dbdd910604a3f74ba1857a2bcb783"
+    },
+    {
+      "doc_path": "pages/reports.md",
+      "section": "main",
+      "title": "Bugs",
+      "body": "# Bugs\n\nEvery bug report from your users — search, filter, sort and open one to fix it.\n\nRoute: /reports\nSection: Plan\n\nKeywords: reports, bugs to fix, bug reports, triage, complaints, issues, incidents, tickets\n\nUse this page when the user asks about: reports, bugs to fix, bug reports, triage, complaints, issues",
+      "route_path": "/reports",
+      "kind": "page",
+      "content_hash": "4090a293c7ad40907f72c7f856307f65dd34e6091e98060a3731a5fd30627906"
     },
     {
       "doc_path": "pages/graph.md",
       "section": "main",
-      "title": "Graph",
-      "body": "# Graph\n\nFingerprint graph — dedup clusters and shared root causes.\n\nRoute: /graph\nSection: Plan\n\nKeywords: cluster, dedup, fingerprint, similar bugs, network, visualisation, reactflow\n\nUse this page when the user asks about: cluster, dedup, fingerprint, similar bugs, network, visualisation",
+      "title": "Bug clusters",
+      "body": "# Bug clusters\n\nBugs grouped by shared cause, so one fix can close several reports.\n\nRoute: /graph\nSection: Plan\n\nKeywords: graph, cluster, dedup, duplicates, fingerprint, similar bugs, root cause, network\n\nUse this page when the user asks about: graph, cluster, dedup, duplicates, fingerprint, similar bugs",
       "route_path": "/graph",
       "kind": "page",
-      "content_hash": "1884ca2e0690e7f0ec17c32be512db169bb2eace5811eee10c56d1a036491e5b"
+      "content_hash": "46aacac210401d7a473c1e8fa815ac92173a9ca42c93e729c29cd650d0c25b0b"
+    },
+    {
+      "doc_path": "pages/voice.md",
+      "section": "main",
+      "title": "Voice reports",
+      "body": "# Voice reports\n\nTalk a bug or a fix request from your phone; confirm the transcript; the draft PR comes back as a push.\n\nRoute: /voice\nSection: Plan\n\nKeywords: voice, mic, microphone, record, dictate, phone, audio, telegram, push, notify, pwa\n\nUse this page when the user asks about: voice, mic, microphone, record, dictate, phone",
+      "route_path": "/voice",
+      "kind": "page",
+      "content_hash": "a30c3ec50ac0662fdf02aee5510f4998703891c23f6db60f7cd51a0d69f46c69"
     },
     {
       "doc_path": "pages/anti-gaming.md",
       "section": "main",
-      "title": "Anti-Gaming",
-      "body": "# Anti-Gaming\n\nSpam, collusion, and duplicate-submission defences.\n\nRoute: /anti-gaming\nSection: Plan\n\nKeywords: spam, abuse, collusion, rate limit, fraud, dupes\n\nUse this page when the user asks about: spam, abuse, collusion, rate limit, fraud, dupes",
+      "title": "Spam & abuse",
+      "body": "# Spam & abuse\n\nCatch spam, duplicate submissions and testers gaming the rewards.\n\nRoute: /anti-gaming\nSection: Plan\n\nKeywords: anti-gaming, anti gaming, spam, abuse, collusion, rate limit, fraud, dupes\n\nUse this page when the user asks about: anti-gaming, anti gaming, spam, abuse, collusion, rate limit",
       "route_path": "/anti-gaming",
       "kind": "page",
-      "content_hash": "3c56c49195146b86a523bd918b92cb0e57f40b29c7ce0f716c9aea2a78275227"
-    },
-    {
-      "doc_path": "pages/queue.md",
-      "section": "main",
-      "title": "Queue",
-      "body": "# Queue\n\nDead-letter queue for ingestion retries and poisoned events.\n\nRoute: /queue\nSection: Plan\n\nKeywords: dlq, dead letter, retry, failures, pipeline\n\nUse this page when the user asks about: dlq, dead letter, retry, failures, pipeline",
-      "route_path": "/queue",
-      "kind": "page",
-      "content_hash": "121a95e55c17b470b4aca5e75d6551abc98c1a2bf5bcb4e8f50e15553898fefd"
+      "content_hash": "35954ac7a9e43605284410556b764e3930c64e9fa6575cdfa4a1007a85bf062f"
     },
     {
       "doc_path": "pages/fixes.md",
       "section": "main",
       "title": "Fixes",
-      "body": "# Fixes\n\nDrafted pull requests from the auto-fix agent, ready to merge.\n\nRoute: /fixes\nSection: Do\n\nKeywords: pull request, pr, patch, diff, merge, codex, llm, agent, drafts\n\nUse this page when the user asks about: pull request, pr, patch, diff, merge, codex",
+      "body": "# Fixes\n\nDraft pull requests written by the fix agent, with their checks, ready to review and merge.\n\nRoute: /fixes\nSection: Do\n\nKeywords: fixes ready, pull request, pr, patch, diff, merge, codex, llm, agent, drafts\n\nUse this page when the user asks about: fixes ready, pull request, pr, patch, diff, merge",
       "route_path": "/fixes",
       "kind": "page",
-      "content_hash": "9d33f262b036f9434e7b1ffa481be3746d47e76300f61b2e6a18909b8a7ddd64"
+      "content_hash": "84ac51ce36cd397d4b9240f3e57f95eb468a052b2cb0b8a779ecf336d6a32046"
     },
     {
       "doc_path": "pages/repo.md",
       "section": "main",
-      "title": "Repo",
-      "body": "# Repo\n\nEvery auto-fix branch and PR across the connected GitHub repo, with CI status.\n\nRoute: /repo\nSection: Do\n\nKeywords: repo, repository, branch, branches, git, github, pr, pull request, ci, checks, merge, activity\n\nUse this page when the user asks about: repo, repository, branch, branches, git, github",
+      "title": "Pull requests",
+      "body": "# Pull requests\n\nEvery fix branch and pull request in your connected GitHub repo, with CI status.\n\nRoute: /repo\nSection: Do\n\nKeywords: repo, repository, branch, branches, git, github, pr, pull request, ci, checks, merge, activity\n\nUse this page when the user asks about: repo, repository, branch, branches, git, github",
       "route_path": "/repo",
       "kind": "page",
-      "content_hash": "d4ece0bd3d624a4ad426326e0c0d9f027c853074ccf2b1b2dd0003026424715b"
+      "content_hash": "6314f30b16c35f442daf206857d286df87ba1bd34ca95a75d7f495927d6cca90"
     },
     {
-      "doc_path": "pages/prompt-lab.md",
+      "doc_path": "pages/ux-runs.md",
       "section": "main",
-      "title": "Prompt Lab",
-      "body": "# Prompt Lab\n\nTune the prompts that turn reports into pull requests.\n\nRoute: /prompt-lab\nSection: Do\n\nKeywords: prompt, llm, model, ai, tuning, evals, template, system prompt\n\nUse this page when the user asks about: prompt, llm, model, ai, tuning, evals",
-      "route_path": "/prompt-lab",
+      "title": "UX runs",
+      "body": "# UX runs\n\nYour coding agent worked through every screen; see which were improved, rolled back or moved by another fix, with before/after screenshots.\n\nRoute: /ux-runs\nSection: Do\n\nKeywords: ux, ux runs, ui, screens, screenshots, before after, agent, mushi ux, visual, accessibility\n\nUse this page when the user asks about: ux, ux runs, ui, screens, screenshots, before after",
+      "route_path": "/ux-runs",
       "kind": "page",
-      "content_hash": "c4f7b9b1814fc12ee77b56ddc8248c27d4cb08488d15e81e2a2f7d5c2bf62f17"
+      "content_hash": "dd55f95acb2491084e08dbfe80d0bd727d99807de450998fad6c1aac41c50668"
+    },
+    {
+      "doc_path": "pages/iterate.md",
+      "section": "main",
+      "title": "Improvement runs",
+      "body": "# Improvement runs\n\nRuns where one AI drafts a change and a second AI critiques it until it passes — for fixes, prompts and tests.\n\nRoute: /iterate\nSection: Do\n\nKeywords: iterate, pdca, improve, loop, producer critic, runs\n\nUse this page when the user asks about: iterate, pdca, improve, loop, producer critic, runs",
+      "route_path": "/iterate",
+      "kind": "page",
+      "content_hash": "6d1b4fc202291a18b2e87f44e15e49f8bc0873a47d628a8d906ab2fd59e7514e"
+    },
+    {
+      "doc_path": "pages/explore.md",
+      "section": "main",
+      "title": "Code map",
+      "body": "# Code map\n\nMap, ask questions about, and tour your indexed repository.\n\nRoute: /explore\nSection: Do\n\nKeywords: explore, codebase, atlas, understand, architecture, ask, tour, domains, codebase map\n\nUse this page when the user asks about: explore, codebase, atlas, understand, architecture, ask",
+      "route_path": "/explore",
+      "kind": "page",
+      "content_hash": "c75d03b2ed69c69d29eb015150539797b87ac863e5d440129532a35d99f221ab"
     },
     {
       "doc_path": "pages/judge.md",
       "section": "main",
-      "title": "Judge",
-      "body": "# Judge\n\nIndependent quality grading for the auto-fix output.\n\nRoute: /judge\nSection: Check\n\nKeywords: score, eval, quality, grade, verification, llm-as-judge\n\nUse this page when the user asks about: score, eval, quality, grade, verification, llm-as-judge",
+      "title": "Triage grading",
+      "body": "# Triage grading\n\nA second AI grades each automatic fix and flags where it disagrees with the first.\n\nRoute: /judge\nSection: Check\n\nKeywords: fix grading, judge, score, eval, quality, grade, grading, verification, llm-as-judge\n\nUse this page when the user asks about: fix grading, judge, score, eval, quality, grade",
       "route_path": "/judge",
       "kind": "page",
-      "content_hash": "f43f52c568bb3208f83dd51a970de650709fb66694d3d8df447243c4c56be5c5"
-    },
-    {
-      "doc_path": "pages/health.md",
-      "section": "main",
-      "title": "Health",
-      "body": "# Health\n\nSystem health — uptime, error rates, queue depth, backpressure.\n\nRoute: /health\nSection: Check\n\nKeywords: status, uptime, availability, sentry, slo, monitoring, incidents\n\nUse this page when the user asks about: status, uptime, availability, sentry, slo, monitoring",
-      "route_path": "/health",
-      "kind": "page",
-      "content_hash": "0242d591c0b09c29530ce37792767cc719b8e2cd7b1685e60d67a1a3f1ce8164"
-    },
-    {
-      "doc_path": "pages/code-health.md",
-      "section": "main",
-      "title": "Code Health",
-      "body": "# Code Health\n\nBundle-size trends and god-file LOC findings pushed from host-repo CI.\n\nRoute: /code-health\nSection: Check\n\nKeywords: bundle, loc, god file, refactor, gzip, code health, ci, budget, file size\n\nUse this page when the user asks about: bundle, loc, god file, refactor, gzip, code health",
-      "route_path": "/code-health",
-      "kind": "page",
-      "content_hash": "72172d799e506bc1b12aa42c238f789ddbacbfb3d389d575ad0f7bab1805afbe"
-    },
-    {
-      "doc_path": "pages/intelligence.md",
-      "section": "main",
-      "title": "Intelligence",
-      "body": "# Intelligence\n\nCross-project insights: what fails most, who is impacted.\n\nRoute: /intelligence\nSection: Check\n\nKeywords: analytics, insights, trends, heatmap, cohort\n\nUse this page when the user asks about: analytics, insights, trends, heatmap, cohort",
-      "route_path": "/intelligence",
-      "kind": "page",
-      "content_hash": "02b8bb3ae2286450873d2d69205b73de8332c6aa80e95d097b2f0c8ec4b268cc"
-    },
-    {
-      "doc_path": "pages/research.md",
-      "section": "main",
-      "title": "Research",
-      "body": "# Research\n\nPull external context via Firecrawl to ground fixes in fresh docs.\n\nRoute: /research\nSection: Check\n\nKeywords: firecrawl, web search, docs, scrape, crawl, knowledge\n\nUse this page when the user asks about: firecrawl, web search, docs, scrape, crawl, knowledge",
-      "route_path": "/research",
-      "kind": "page",
-      "content_hash": "22bdd0f5d753e6fe18e1b8fca3d53a7ecefc47c988a307fa30e3601756f858c9"
-    },
-    {
-      "doc_path": "pages/skills.md",
-      "section": "main",
-      "title": "Skill Catalog",
-      "body": "# Skill Catalog\n\nBrowse 70+ cursor-kenji agent skills by category — audit, test, enhance, workflow.\n\nRoute: /skills?tab=catalog\nSection: Act\n\nKeywords: catalog, skill catalog, skills, skill pipelines, pipeline, pipelines, cursor-kenji, cursor, kenji, agent skills, workflow, audit, enhance, handoff, skill sync, sources, kenji skills\n\nUse this page when the user asks about: catalog, skill catalog, skills, skill pipelines, pipeline, pipelines",
-      "route_path": "/skills",
-      "kind": "page",
-      "content_hash": "8b9288a2c49c6cf99815e290bb16a3f7a06ddebb7b36a67973bce51091b24a16"
-    },
-    {
-      "doc_path": "pages/skills.md",
-      "section": "main",
-      "title": "Skill Pipelines",
-      "body": "# Skill Pipelines\n\nTrack live pipeline runs, copy handoff packets, and check in each step.\n\nRoute: /skills?tab=pipelines\nSection: Act\n\nKeywords: pipeline runs, skill pipeline, handoff, context packet, checkin, cursor agent, pipeline status, skills run\n\nUse this page when the user asks about: pipeline runs, skill pipeline, handoff, context packet, checkin, cursor agent",
-      "route_path": "/skills",
-      "kind": "page",
-      "content_hash": "51cc8b89bbe8469cff9161826f7b10d91efe8a5d29ae30810c293e9f7e4b1026"
-    },
-    {
-      "doc_path": "pages/skills.md",
-      "section": "main",
-      "title": "Skill Sources",
-      "body": "# Skill Sources\n\nAdd GitHub repos (e.g. kensaurus/cursor-kenji) and sync SKILL.md files.\n\nRoute: /skills?tab=sources\nSection: Act\n\nKeywords: skill sources, skill sync, cursor-kenji, github repo, skills.sh\n\nUse this page when the user asks about: skill sources, skill sync, cursor-kenji, github repo, skills.sh",
-      "route_path": "/skills",
-      "kind": "page",
-      "content_hash": "46bd86e2efb9d4b6689a54b81ba44d2e82f1b3e587862753717d5863d62d43b8"
-    },
-    {
-      "doc_path": "pages/integrations.md",
-      "section": "main",
-      "title": "Integrations",
-      "body": "# Integrations\n\nConnect Slack, Discord, GitHub, Sentry, Stripe, and more.\n\nRoute: /integrations\nSection: Act\n\nKeywords: slack, discord, github, sentry, stripe, webhook, connect, plug\n\nUse this page when the user asks about: slack, discord, github, sentry, stripe, webhook",
-      "route_path": "/integrations",
-      "kind": "page",
-      "content_hash": "d79b728a28d3937e70bb0c45c86cc48d2480ad5df63acdfaebe176251c33ad3f"
-    },
-    {
-      "doc_path": "pages/mcp.md",
-      "section": "main",
-      "title": "MCP",
-      "body": "# MCP\n\nConnect Cursor, Claude Desktop, and other MCP agents to this project.\n\nRoute: /mcp\nSection: Act\n\nKeywords: mcp, claude, cursor, agent, tools, context, protocol, windsurf\n\nUse this page when the user asks about: mcp, claude, cursor, agent, tools, context",
-      "route_path": "/mcp",
-      "kind": "page",
-      "content_hash": "ab8d33f8bc6f7a3225c952e9b34a08025fa07e442b4999dd86c6d846cb191d8e"
-    },
-    {
-      "doc_path": "pages/marketplace.md",
-      "section": "main",
-      "title": "Marketplace",
-      "body": "# Marketplace\n\nPre-built recipes and templates for common flows.\n\nRoute: /marketplace\nSection: Act\n\nKeywords: recipes, templates, install, plugins\n\nUse this page when the user asks about: recipes, templates, install, plugins",
-      "route_path": "/marketplace",
-      "kind": "page",
-      "content_hash": "e4c7d35ecad262ddf703d4694a95821b56dea4b35daa2c9f441fae36d138d1ec"
-    },
-    {
-      "doc_path": "pages/notifications.md",
-      "section": "main",
-      "title": "Notifications",
-      "body": "# Notifications\n\nRoute events to Slack, email, or Discord with per-stage rules.\n\nRoute: /notifications\nSection: Act\n\nKeywords: alerts, email, slack, discord, routing, rules, digest\n\nUse this page when the user asks about: alerts, email, slack, discord, routing, rules",
-      "route_path": "/notifications",
-      "kind": "page",
-      "content_hash": "04f0f0bd7f8b5ddf96eb3966be24e06f249a2f6c5dbd391607199f20d3275efa"
-    },
-    {
-      "doc_path": "pages/projects.md",
-      "section": "main",
-      "title": "Projects",
-      "body": "# Projects\n\nCreate, archive, and manage projects and members.\n\nRoute: /projects\nSection: Workspace\n\nKeywords: team, members, create project, organisation, workspace\n\nUse this page when the user asks about: team, members, create project, organisation, workspace",
-      "route_path": "/projects",
-      "kind": "page",
-      "content_hash": "5ca5566285764ce006f09b59bf672973035112abb62989ae0377405ea9ae8a13"
-    },
-    {
-      "doc_path": "pages/settings.md",
-      "section": "main",
-      "title": "Settings",
-      "body": "# Settings\n\nProject configuration, API keys, Firecrawl, theming.\n\nRoute: /settings\nSection: Workspace\n\nKeywords: config, api key, preferences, firecrawl, theme, branding\n\nUse this page when the user asks about: config, api key, preferences, firecrawl, theme, branding",
-      "route_path": "/settings",
-      "kind": "page",
-      "content_hash": "e4f8220fd933421fd62a747c2f3a277645d73852681030db9bedae118959a2b1"
-    },
-    {
-      "doc_path": "pages/sso.md",
-      "section": "main",
-      "title": "SSO",
-      "body": "# SSO\n\nSingle sign-on, SAML, and identity provider setup.\n\nRoute: /sso\nSection: Workspace\n\nKeywords: saml, oidc, identity, login, auth\n\nUse this page when the user asks about: saml, oidc, identity, login, auth",
-      "route_path": "/sso",
-      "kind": "page",
-      "content_hash": "d2c242795a135017a1fd7f9821ed75c47fa38d0d1196546f0b8f06fd9e54defe"
-    },
-    {
-      "doc_path": "pages/billing.md",
-      "section": "main",
-      "title": "Billing",
-      "body": "# Billing\n\nPlan, seats, invoices, and usage-based charges.\n\nRoute: /billing\nSection: Workspace\n\nKeywords: stripe, plan, invoice, seats, usage, subscription, upgrade\n\nUse this page when the user asks about: stripe, plan, invoice, seats, usage, subscription",
-      "route_path": "/billing",
-      "kind": "page",
-      "content_hash": "15b7f4cfe244a97165150cdbdfc35bba4cd257a73f143888332767fee3abc83a"
-    },
-    {
-      "doc_path": "pages/audit.md",
-      "section": "main",
-      "title": "Audit Log",
-      "body": "# Audit Log\n\nForensic trail of every admin action with actor + diff.\n\nRoute: /audit\nSection: Workspace\n\nKeywords: log, history, forensic, security, changes, who did what\n\nUse this page when the user asks about: log, history, forensic, security, changes, who did what",
-      "route_path": "/audit",
-      "kind": "page",
-      "content_hash": "b5e05c6f9e6b2ffee708a5de1eb8129ed9e4fcf7178075e250fe9e78b25de766"
-    },
-    {
-      "doc_path": "pages/compliance.md",
-      "section": "main",
-      "title": "Compliance",
-      "body": "# Compliance\n\nSOC 2, GDPR, and DSAR — evidence bundles and retention rules.\n\nRoute: /compliance\nSection: Workspace\n\nKeywords: soc2, gdpr, dsar, privacy, retention, evidence, regulator\n\nUse this page when the user asks about: soc2, gdpr, dsar, privacy, retention, evidence",
-      "route_path": "/compliance",
-      "kind": "page",
-      "content_hash": "cfd05d882d098b9a71c73e3d7dca0cbf2e12c28bb8205556a7f726f2406b6149"
-    },
-    {
-      "doc_path": "pages/storage.md",
-      "section": "main",
-      "title": "Storage",
-      "body": "# Storage\n\nBucket usage, screenshot retention, and data-lifecycle policies.\n\nRoute: /storage\nSection: Workspace\n\nKeywords: s3, bucket, screenshots, attachments, retention, lifecycle\n\nUse this page when the user asks about: s3, bucket, screenshots, attachments, retention, lifecycle",
-      "route_path": "/storage",
-      "kind": "page",
-      "content_hash": "494ae37747cd7f09dd98e57370b21f8ef3f06fe9bb2fab58d035307ace4ea0ba"
-    },
-    {
-      "doc_path": "pages/query.md",
-      "section": "main",
-      "title": "Query",
-      "body": "# Query\n\nRun read-only SQL against your project schema.\n\nRoute: /query\nSection: Workspace\n\nKeywords: sql, postgres, ad-hoc, data, explorer\n\nUse this page when the user asks about: sql, postgres, ad-hoc, data, explorer",
-      "route_path": "/query",
-      "kind": "page",
-      "content_hash": "76b66dde91a979408e8f9858d6208e243c6160694262ad8a9a7a700b1f080c08"
-    },
-    {
-      "doc_path": "pages/content.md",
-      "section": "main",
-      "title": "Content QA",
-      "body": "# Content QA\n\nReview AI-generated and user-submitted content quality.\n\nRoute: /content\nSection: Plan\n\nKeywords: content, qa, quality, moderation\n\nUse this page when the user asks about: content, qa, quality, moderation",
-      "route_path": "/content",
-      "kind": "page",
-      "content_hash": "a0c6ae0633894c695bf9aaf4ea39bfaa5ccc350cf71ac11d10db959c6efc19e6"
-    },
-    {
-      "doc_path": "pages/inventory.md",
-      "section": "main",
-      "title": "User stories",
-      "body": "# User stories\n\nUser-story inventory and live crawl proposals.\n\nRoute: /inventory\nSection: Plan\n\nKeywords: stories, inventory, discovery, crawl\n\nUse this page when the user asks about: stories, inventory, discovery, crawl",
-      "route_path": "/inventory",
-      "kind": "page",
-      "content_hash": "66d9adca265a1d1ebb93fe9d07ed01a207707e73603df6358bc91dde0198e291"
-    },
-    {
-      "doc_path": "pages/qa-coverage.md",
-      "section": "main",
-      "title": "QA Coverage",
-      "body": "# QA Coverage\n\nScheduled Playwright user-story tests.\n\nRoute: /qa-coverage\nSection: Check\n\nKeywords: qa, playwright, stories, coverage, test\n\nUse this page when the user asks about: qa, playwright, stories, coverage, test",
-      "route_path": "/qa-coverage",
-      "kind": "page",
-      "content_hash": "6bcf99fd944ba8460c978ca5439c378aaa80308d8ec5cb9346b9893acddf1ef2"
-    },
-    {
-      "doc_path": "pages/fullstack-audit.md",
-      "section": "main",
-      "title": "Full-Stack Audit",
-      "body": "# Full-Stack Audit\n\nEnd-to-end audit across frontend, API, and database.\n\nRoute: /fullstack-audit\nSection: Check\n\nKeywords: audit, fullstack, fe, be, schema\n\nUse this page when the user asks about: audit, fullstack, fe, be, schema",
-      "route_path": "/fullstack-audit",
-      "kind": "page",
-      "content_hash": "2103d8cafa859de8f9f867f1db6458e19f0d1218929c7e7088b75135b5296d1f"
+      "content_hash": "a12f8c310cb969a6d77ddb54a0517cb69e3a296b6b12635c017c6ef9052afa1f"
     },
     {
       "doc_path": "pages/lessons.md",
       "section": "main",
       "title": "Lessons",
-      "body": "# Lessons\n\nPatterns learned from past bugs and fixes.\n\nRoute: /lessons\nSection: Check\n\nKeywords: lessons, learned, patterns, pdca\n\nUse this page when the user asks about: lessons, learned, patterns, pdca",
+      "body": "# Lessons\n\nPatterns learned from past bugs and fixes.\n\nRoute: /lessons\nSection: Check\n\nKeywords: lessons, learned, patterns\n\nUse this page when the user asks about: lessons, learned, patterns",
       "route_path": "/lessons",
       "kind": "page",
-      "content_hash": "28eff109c5cf68cbf2d4680e01c0df53ca52e34f9f187ea796117ff13c428135"
+      "content_hash": "50faf0ac667822d22a2e3f2d8e34bab1193490ac406dfa5979593e47e309aa82"
     },
     {
-      "doc_path": "pages/drift.md",
+      "doc_path": "pages/prompt-lab.md",
       "section": "main",
-      "title": "Drift",
-      "body": "# Drift\n\nSchema and backend drift detection.\n\nRoute: /drift\nSection: Check\n\nKeywords: drift, schema, backend, migration\n\nUse this page when the user asks about: drift, schema, backend, migration",
-      "route_path": "/drift",
+      "title": "AI prompts",
+      "body": "# AI prompts\n\nEdit and compare the prompts that turn bug reports into pull requests.\n\nRoute: /prompt-lab\nSection: Check\n\nKeywords: prompt lab, prompt, llm, model, ai, tuning, evals, template, system prompt\n\nUse this page when the user asks about: prompt lab, prompt, llm, model, ai, tuning",
+      "route_path": "/prompt-lab",
       "kind": "page",
-      "content_hash": "7dfcc26fa2aea5f93bc9557d61d891a80e55842c74ee2f01810554b0720d3532"
+      "content_hash": "1c3c0457303a55d6642729b7286d9f22b5d2020868a37c145616c1956fe36259"
     },
     {
-      "doc_path": "pages/anomalies.md",
+      "doc_path": "pages/recipe.md",
       "section": "main",
-      "title": "Anomalies",
-      "body": "# Anomalies\n\nStatistical anomaly detection on metrics.\n\nRoute: /anomalies\nSection: Check\n\nKeywords: anomalies, spike, outlier, metrics\n\nUse this page when the user asks about: anomalies, spike, outlier, metrics",
-      "route_path": "/anomalies",
+      "title": "App blueprint",
+      "body": "# App blueprint\n\nWhat this app is built from — database, design system, routes, CI, deploy, env and integrations — and what changed.\n\nRoute: /recipe\nSection: Check\n\nKeywords: recipe, app recipe, blueprint, stack, design system, tokens, gates, ci, deploy, env, integrations, manifest, mushi.recipe.json\n\nUse this page when the user asks about: recipe, app recipe, blueprint, stack, design system, tokens",
+      "route_path": "/recipe",
       "kind": "page",
-      "content_hash": "706ad16438545ff6b58270819a97a9e1ae3b3bb81225936fe549833bc00eb39d"
+      "content_hash": "5dee8b49078a7d61b216d6bae02417d4235a5bd221562e85caff0648963e71b7"
+    },
+    {
+      "doc_path": "pages/fullstack-audit.md",
+      "section": "main",
+      "title": "Full-stack audit",
+      "body": "# Full-stack audit\n\nEnd-to-end audit across frontend, API, and database.\n\nRoute: /fullstack-audit\nSection: Check\n\nKeywords: full-stack audit, audit, fullstack, fe, be, schema\n\nUse this page when the user asks about: full-stack audit, audit, fullstack, fe, be, schema",
+      "route_path": "/fullstack-audit",
+      "kind": "page",
+      "content_hash": "0e3340444e0aa3a8182d98a272becef5471d876fdeffa1773ec4c16e22f44c9c"
+    },
+    {
+      "doc_path": "pages/qa-coverage.md",
+      "section": "main",
+      "title": "Scheduled tests",
+      "body": "# Scheduled tests\n\nBrowser tests of your user stories that run on a schedule and alert when one breaks.\n\nRoute: /qa-coverage\nSection: Check\n\nKeywords: qa coverage, qa, playwright, stories, coverage, test, tests\n\nUse this page when the user asks about: qa coverage, qa, playwright, stories, coverage, test",
+      "route_path": "/qa-coverage",
+      "kind": "page",
+      "content_hash": "c70185fe13ec3b658ed619e390391ea66a3a1c8e4954df58b10be7cae27552fe"
+    },
+    {
+      "doc_path": "pages/design.md",
+      "section": "main",
+      "title": "Design system",
+      "body": "# Design system\n\nDesign tokens, contrast pairs, type scale and the deviance score for off-token code; token and rule edits open a draft PR.\n\nRoute: /design\nSection: Check\n\nKeywords: design, design system, tokens, dtcg, colors, contrast, typography, spacing, radius, deviance, off-token, rules\n\nUse this page when the user asks about: design, design system, tokens, dtcg, colors, contrast",
+      "route_path": "/design",
+      "kind": "page",
+      "content_hash": "c51900efe324b6ef74d3ac48aa482e50d30e246b13bc17573046ec018511512f"
+    },
+    {
+      "doc_path": "pages/inventory.md",
+      "section": "main",
+      "title": "User stories",
+      "body": "# User stories\n\nThe things users can do in your app, found by crawling it, and which ones broke.\n\nRoute: /inventory\nSection: Check\n\nKeywords: stories, inventory, discovery, crawl, user stories\n\nUse this page when the user asks about: stories, inventory, discovery, crawl, user stories",
+      "route_path": "/inventory",
+      "kind": "page",
+      "content_hash": "218c8a602c212f9129e07c6287e956f18ec2ca6fd92b9135b9cf913539345506"
+    },
+    {
+      "doc_path": "pages/content.md",
+      "section": "main",
+      "title": "Content checks",
+      "body": "# Content checks\n\nReview AI-generated and user-submitted content flagged as wrong or low quality.\n\nRoute: /content\nSection: Check\n\nKeywords: content qa, content, qa, quality, moderation\n\nUse this page when the user asks about: content qa, content, qa, quality, moderation",
+      "route_path": "/content",
+      "kind": "page",
+      "content_hash": "bffe6ca5697c738f355c8fe161a8b1ba7ba75094ed7caa8ac2095e4fcfc0a03b"
+    },
+    {
+      "doc_path": "pages/health.md",
+      "section": "main",
+      "title": "App health",
+      "body": "# App health\n\nAre your integrations and background jobs working: uptime, errors and failed checks.\n\nRoute: /health\nSection: Check\n\nKeywords: health, status, uptime, availability, sentry, slo, monitoring, incidents, verification hub\n\nUse this page when the user asks about: health, status, uptime, availability, sentry, slo",
+      "route_path": "/health",
+      "kind": "page",
+      "content_hash": "c452db277a3118ed7c4b67710774cf3db930dfd86406918ec90fd23c16864db6"
     },
     {
       "doc_path": "pages/releases.md",
@@ -408,49 +300,319 @@
       "content_hash": "5d4c2294c564b2db8892c5e39fbe16d7338ef64525bb30d8e9f25be0b63a844b"
     },
     {
-      "doc_path": "pages/iterate.md",
+      "doc_path": "pages/experiments.md",
       "section": "main",
-      "title": "Iterate",
-      "body": "# Iterate\n\nPDCA producer–critic improvement loop.\n\nRoute: /iterate\nSection: Act\n\nKeywords: iterate, pdca, improve, loop\n\nUse this page when the user asks about: iterate, pdca, improve, loop",
-      "route_path": "/iterate",
+      "title": "Experiments",
+      "body": "# Experiments\n\nA/B experiments and feature flags.\n\nRoute: /experiments\nSection: Check\n\nKeywords: experiments, ab, a/b, flags, variants\n\nUse this page when the user asks about: experiments, ab, a/b, flags, variants",
+      "route_path": "/experiments",
       "kind": "page",
-      "content_hash": "f7c29fda3bf670087098b3de794b5cd936ea05284da70f97501172775734fd91"
+      "content_hash": "c661a6741aa89bdc699a3829585dc712d1040a1edc1b99dd5847ae5c656e66fc"
+    },
+    {
+      "doc_path": "pages/research.md",
+      "section": "main",
+      "title": "Research",
+      "body": "# Research\n\nPull web pages and docs (via Firecrawl) into a fix so it uses current information.\n\nRoute: /research\nSection: Check\n\nKeywords: research, firecrawl, web search, docs, scrape, crawl, knowledge\n\nUse this page when the user asks about: research, firecrawl, web search, docs, scrape, crawl",
+      "route_path": "/research",
+      "kind": "page",
+      "content_hash": "6bf19db6e13b914fc9e6699dee7e48cfd9eacc943f9f8d25fb5022b85a783991"
+    },
+    {
+      "doc_path": "pages/integrations/config.md",
+      "section": "main",
+      "title": "Integrations",
+      "body": "# Integrations\n\nConnect services: Slack, Sentry, GitHub, Linear, Discord — tokens, webhooks, health.\n\nRoute: /integrations/config\nSection: Act\n\nKeywords: slack, discord, github, sentry, linear, stripe, webhook, connect, plug, integrations, services\n\nUse this page when the user asks about: slack, discord, github, sentry, linear, stripe",
+      "route_path": "/integrations/config",
+      "kind": "page",
+      "content_hash": "846ab7b6b861fe6ab130f94eeaab743b78713cf77f5866a0aa6f75e6f68d5fd2"
+    },
+    {
+      "doc_path": "pages/mcp.md",
+      "section": "main",
+      "title": "Editor agents",
+      "body": "# Editor agents\n\nConnect Cursor, Claude and other coding agents to this app through MCP.\n\nRoute: /mcp\nSection: Act\n\nKeywords: mcp, agent help, claude, cursor, agent, tools, context, windsurf, editor\n\nUse this page when the user asks about: mcp, agent help, claude, cursor, agent, tools",
+      "route_path": "/mcp",
+      "kind": "page",
+      "content_hash": "fc2a39f75a0de57cdcbbfdb39bf53bb7ecbea3595d37a6fafea88b2f452a31aa"
+    },
+    {
+      "doc_path": "pages/skills.md",
+      "section": "main",
+      "title": "Agent skills",
+      "body": "# Agent skills\n\nBrowse agent skills, track the runs that use them, and sync skill sources.\n\nRoute: /skills\nSection: Act\n\nKeywords: skills, skill pipelines, skill catalog, kenji skills, handoff, catalog, cursor-kenji\n\nUse this page when the user asks about: skills, skill pipelines, skill catalog, kenji skills, handoff, catalog",
+      "route_path": "/skills",
+      "kind": "page",
+      "content_hash": "558bcb515cf8d0e68c52bee4402909152e5887791c916d0244856a83e95ce0cc"
+    },
+    {
+      "doc_path": "pages/notifications.md",
+      "section": "main",
+      "title": "Reporter updates",
+      "body": "# Reporter updates\n\nThe updates your bug reporters see in the widget: classified, fixed, replied.\n\nRoute: /notifications\nSection: Act\n\nKeywords: notifications, reporter notifications, reporter updates, widget messages, alert routing\n\nUse this page when the user asks about: notifications, reporter notifications, reporter updates, widget messages, alert routing",
+      "route_path": "/notifications",
+      "kind": "page",
+      "content_hash": "eaa5f5af2e3fc1496a0f667fd22f27b0d1e1cd79624861683b8ee3be3346e316"
+    },
+    {
+      "doc_path": "pages/marketplace.md",
+      "section": "main",
+      "title": "Plugins",
+      "body": "# Plugins\n\nInstall plugins and ready-made templates for common flows.\n\nRoute: /marketplace\nSection: Act\n\nKeywords: marketplace, recipes, templates, install, plugins\n\nUse this page when the user asks about: marketplace, recipes, templates, install, plugins",
+      "route_path": "/marketplace",
+      "kind": "page",
+      "content_hash": "3ffc2df8caa9cc2290e0804ba8523ae1ef9e667cb49fefeef73a511c8585ab05"
+    },
+    {
+      "doc_path": "pages/queue.md",
+      "section": "main",
+      "title": "Processing jobs",
+      "body": "# Processing jobs\n\nBackground jobs that read and sort new reports; retry the ones that failed.\n\nRoute: /queue\nSection: Workspace\n\nKeywords: failed events, queue, dlq, dead letter, retry, failures, pipeline, jobs\n\nUse this page when the user asks about: failed events, queue, dlq, dead letter, retry, failures",
+      "route_path": "/queue",
+      "kind": "page",
+      "content_hash": "f60d48d8001efc93f73539f0b89e00d7f367dc2216e25f3c0f8440612395dcb6"
+    },
+    {
+      "doc_path": "pages/projects.md",
+      "section": "main",
+      "title": "Manage apps",
+      "body": "# Manage apps\n\nCreate, rename and archive apps (projects), and see their keys and setup.\n\nRoute: /projects\nSection: Workspace\n\nKeywords: projects, apps, create project, new app, team, members, organisation, workspace\n\nUse this page when the user asks about: projects, apps, create project, new app, team, members",
+      "route_path": "/projects",
+      "kind": "page",
+      "content_hash": "be55bfedc0b374a86559a4949296836c4b869c4f48728d7c864978330ad0d52c"
+    },
+    {
+      "doc_path": "pages/team.md",
+      "section": "main",
+      "title": "Team",
+      "body": "# Team\n\nYour team in one place: members, billing, AI spend, audit log, single sign-on, compliance and storage.\n\nRoute: /team\nSection: Workspace\n\nKeywords: team, organization, members, billing, spend, cost, audit, sso, compliance, storage, workspace\n\nUse this page when the user asks about: team, organization, members, billing, spend, cost",
+      "route_path": "/team",
+      "kind": "page",
+      "content_hash": "aa3446cac4df6aa4db7052c188138f94729a26b44fcf9b4eb5f743e6d0f12133"
+    },
+    {
+      "doc_path": "pages/settings.md",
+      "section": "main",
+      "title": "Settings",
+      "body": "# Settings\n\nProject settings: your AI keys, alerts, web research, voice and health check.\n\nRoute: /settings\nSection: Workspace\n\nKeywords: settings, config, api key, api keys, ai keys, your ai keys, byok, bring your own key, anthropic, openai, keys, preferences, firecrawl, web tools, web research, browserbase, cloud browser, voice, voice reports, sdk, sdk & connection, install widget, test bug, debug logging, health check, theme, branding\n\nUse this page when the user asks about: settings, config, api key, api keys, ai keys, your ai keys",
+      "route_path": "/settings",
+      "kind": "page",
+      "content_hash": "65455aa46612ecc8a0c1633636b816f412bbafc057f6a1e0de8e6bc9de659442"
     },
     {
       "doc_path": "pages/rewards.md",
       "section": "main",
-      "title": "Rewards",
-      "body": "# Rewards\n\nTester rewards and redemption catalog.\n\nRoute: /rewards\nSection: Workspace\n\nKeywords: rewards, tester, bounty, wallet\n\nUse this page when the user asks about: rewards, tester, bounty, wallet",
+      "title": "Tester rewards",
+      "body": "# Tester rewards\n\nPoints, tiers and payouts for the people who report bugs.\n\nRoute: /rewards\nSection: Workspace\n\nKeywords: rewards, tester, bounty, wallet, points\n\nUse this page when the user asks about: rewards, tester, bounty, wallet, points",
       "route_path": "/rewards",
       "kind": "page",
-      "content_hash": "3bdd8d8f1df865aff818892f7b7269a638761519617bab29770361df36ea62d3"
+      "content_hash": "77c171c659b7d11ea7634c68ad4663420d690db0ed70b173c310e465c464a45b"
     },
     {
-      "doc_path": "pages/cost.md",
+      "doc_path": "pages/query.md",
       "section": "main",
-      "title": "LLM Cost",
-      "body": "# LLM Cost\n\nToken usage and LLM spend by stage.\n\nRoute: /cost\nSection: Workspace\n\nKeywords: cost, llm, tokens, billing, usage\n\nUse this page when the user asks about: cost, llm, tokens, billing, usage",
-      "route_path": "/cost",
+      "title": "SQL query",
+      "body": "# SQL query\n\nRun read-only SQL against your project schema.\n\nRoute: /query\nSection: Workspace\n\nKeywords: query, sql, postgres, ad-hoc, data, explorer\n\nUse this page when the user asks about: query, sql, postgres, ad-hoc, data, explorer",
+      "route_path": "/query",
       "kind": "page",
-      "content_hash": "f42290234202abd71f2d94e4cda85ab8d97ed77f27362c8b5431a058c35a94bc"
+      "content_hash": "62c62147e9c65091a8a68aafca5ab4316238e766cbd0bc4ec8d5be0fa506247b"
     },
     {
-      "doc_path": "pages/feedback.md",
+      "doc_path": "pages/users.md",
       "section": "main",
-      "title": "My feedback",
-      "body": "# My feedback\n\nFeedback you submitted to Mushi.\n\nRoute: /feedback\nSection: Start\n\nKeywords: feedback, feature, bug, request\n\nUse this page when the user asks about: feedback, feature, bug, request",
-      "route_path": "/feedback",
+      "title": "All users",
+      "body": "# All users\n\nOperator-only user directory.\n\nRoute: /users\nSection: Workspace\n\nKeywords: users, operators, directory\n\nUse this page when the user asks about: users, operators, directory",
+      "route_path": "/users",
       "kind": "page",
-      "content_hash": "e981f333ab5aa69080b09de136b05758065699ea41b72ddbec42061916ecb6a2"
+      "content_hash": "941377e9e8f7b41731820c86a7118e427798a36e85ed8fe90e23e12e6aa7cac4"
     },
     {
-      "doc_path": "pages/feature-board.md",
+      "doc_path": "pages/dashboard--view-apps.md",
       "section": "main",
-      "title": "Feature board",
-      "body": "# Feature board\n\nCommunity feature requests and votes.\n\nRoute: /feature-board\nSection: Start\n\nKeywords: features, roadmap, votes, board\n\nUse this page when the user asks about: features, roadmap, votes, board",
-      "route_path": "/feature-board",
+      "title": "App activity",
+      "body": "# App activity\n\nLast 7 days for every app in this team: sessions, users and open bugs, with links into each app.\n\nRoute: /dashboard?view=apps\nSection: Start\n\nKeywords: overview, portfolio view, all projects, activity, sessions, consolidated\n\nUse this page when the user asks about: overview, portfolio view, all projects, activity, sessions, consolidated",
+      "route_path": "/dashboard",
       "kind": "page",
-      "content_hash": "98bf20087329132ebc635b35af983d72db2ae271abe48956058736bcb8002513"
+      "content_hash": "e4181fd1ebb37af51714b73cc60c5ed87d8ff52e4f6c25b61725d69511827098"
+    },
+    {
+      "doc_path": "pages/health--view-code.md",
+      "section": "main",
+      "title": "Code size",
+      "body": "# Code size\n\nBundle-size trends and very large files, pushed from your repo’s CI.\n\nRoute: /health?view=code\nSection: Check\n\nKeywords: code health, bundle, loc, god file, refactor, gzip, ci, budget, file size\n\nUse this page when the user asks about: code health, bundle, loc, god file, refactor, gzip",
+      "route_path": "/health",
+      "kind": "page",
+      "content_hash": "8d96c1ca3c5c9c6198285a77d1602fba7e3f7f3fc46caf374dc3195f0775e761"
+    },
+    {
+      "doc_path": "pages/health--view-schema.md",
+      "section": "main",
+      "title": "Schema changes",
+      "body": "# Schema changes\n\nYour database schema compared with the last scan: dropped columns, missing access rules, unexpected changes.\n\nRoute: /health?view=schema\nSection: Check\n\nKeywords: drift, schema, backend, migration, database\n\nUse this page when the user asks about: drift, schema, backend, migration, database",
+      "route_path": "/health",
+      "kind": "page",
+      "content_hash": "f5e906f336080f85d312b0823589f841e8e74d9db3b19013b2ed731a5a7edb94"
+    },
+    {
+      "doc_path": "pages/health--view-spikes.md",
+      "section": "main",
+      "title": "Unusual spikes",
+      "body": "# Unusual spikes\n\nSudden jumps in errors or reports, including ones that started with a release.\n\nRoute: /health?view=spikes\nSection: Check\n\nKeywords: anomalies, anomaly, spike, outlier, metrics\n\nUse this page when the user asks about: anomalies, anomaly, spike, outlier, metrics",
+      "route_path": "/health",
+      "kind": "page",
+      "content_hash": "d051bd1e9f94313291adf248e27ae442e6042429ca85d66f4fd71801a133d614"
+    },
+    {
+      "doc_path": "pages/dashboard--view-users.md",
+      "section": "main",
+      "title": "User activity",
+      "body": "# User activity\n\nPer-app activity — sessions, page views, identified vs. anonymous users, top routes.\n\nRoute: /dashboard?view=users\nSection: Check\n\nKeywords: activity, sessions, users, page views, analytics, dau, engagement\n\nUse this page when the user asks about: activity, sessions, users, page views, analytics, dau",
+      "route_path": "/dashboard",
+      "kind": "page",
+      "content_hash": "6a3e30a894107bb0dc2aafce571077791539dde63af51c4a6f2c7134515971b8"
+    },
+    {
+      "doc_path": "pages/dashboard--view-funnels.md",
+      "section": "main",
+      "title": "Users & funnels",
+      "body": "# Users & funnels\n\nProduct analytics from Mushi.track() — event volume, funnels, next-step paths, people, and weekly retention.\n\nRoute: /dashboard?view=funnels\nSection: Check\n\nKeywords: users & funnels, funnel, funnels, events, track, analytics, retention, paths, people, conversion, cohort\n\nUse this page when the user asks about: users & funnels, funnel, funnels, events, track, analytics",
+      "route_path": "/dashboard",
+      "kind": "page",
+      "content_hash": "b1273e8203d1863f2e12a5189589c691c2ccf05a29ddbe0478fa9461ca802649"
+    },
+    {
+      "doc_path": "pages/dashboard--view-insights.md",
+      "section": "main",
+      "title": "Weekly insights",
+      "body": "# Weekly insights\n\nA weekly plain-English report across your apps: what breaks most and who it hits.\n\nRoute: /dashboard?view=insights\nSection: Check\n\nKeywords: intelligence, insights, analytics, trends, heatmap, cohort, weekly report\n\nUse this page when the user asks about: intelligence, insights, analytics, trends, heatmap, cohort",
+      "route_path": "/dashboard",
+      "kind": "page",
+      "content_hash": "93bf9a1fa574a51d88aa5e57ef904ac0dae60792780de819a7235cf50acedb3a"
+    },
+    {
+      "doc_path": "pages/dashboard--view-growth.md",
+      "section": "main",
+      "title": "Growth",
+      "body": "# Growth\n\nOperator-only company funnel — activated external projects per week, by signup source.\n\nRoute: /dashboard?view=growth\nSection: Check\n\nKeywords: growth, funnel, signups, activation, activated, paid, source, operator\n\nUse this page when the user asks about: growth, funnel, signups, activation, activated, paid",
+      "route_path": "/dashboard",
+      "kind": "page",
+      "content_hash": "5fad66e28d0a894790f549fafa5970e3b7ab73eef8c281b44289dd3633b25ba3"
+    },
+    {
+      "doc_path": "pages/team--view-members.md",
+      "section": "main",
+      "title": "Team members",
+      "body": "# Team members\n\nInvite teammates and manage their roles.\n\nRoute: /team?view=members\nSection: Workspace\n\nKeywords: members, invite, team, organization, roles\n\nUse this page when the user asks about: members, invite, team, organization, roles",
+      "route_path": "/team",
+      "kind": "page",
+      "content_hash": "3aa9fdae7c1e25a32191cbd2bffd031c7574a3db1d5fc32dd76b63daea83c0bf"
+    },
+    {
+      "doc_path": "pages/team--view-billing.md",
+      "section": "main",
+      "title": "Billing",
+      "body": "# Billing\n\nPlan, seats, invoices, and usage-based charges.\n\nRoute: /team?view=billing\nSection: Workspace\n\nKeywords: billing, stripe, plan, invoice, seats, usage, subscription, upgrade\n\nUse this page when the user asks about: billing, stripe, plan, invoice, seats, usage",
+      "route_path": "/team",
+      "kind": "page",
+      "content_hash": "993281151a8ed40416a065b2d274d91f9ada62676c19f6178966a85b026fc741"
+    },
+    {
+      "doc_path": "pages/team--view-spend.md",
+      "section": "main",
+      "title": "AI spend",
+      "body": "# AI spend\n\nWhat the AI behind diagnoses and fixes costs, by step and day.\n\nRoute: /team?view=spend\nSection: Workspace\n\nKeywords: llm cost, cost, llm, tokens, spend, usage\n\nUse this page when the user asks about: llm cost, cost, llm, tokens, spend, usage",
+      "route_path": "/team",
+      "kind": "page",
+      "content_hash": "97b13e77cbaf07e1e67a0e59d6f6d2027dc06bc2066207f666b520750f6800f8"
+    },
+    {
+      "doc_path": "pages/team--view-sso.md",
+      "section": "main",
+      "title": "Single sign-on",
+      "body": "# Single sign-on\n\nSingle sign-on, SAML, and identity provider setup.\n\nRoute: /team?view=sso\nSection: Workspace\n\nKeywords: sso, saml, oidc, identity, login, auth\n\nUse this page when the user asks about: sso, saml, oidc, identity, login, auth",
+      "route_path": "/team",
+      "kind": "page",
+      "content_hash": "bdd80ee723baae44015845d34f13b176c7d7eb67ec03a7df8d46501b9a8ecd89"
+    },
+    {
+      "doc_path": "pages/team--view-compliance.md",
+      "section": "main",
+      "title": "Compliance",
+      "body": "# Compliance\n\nSOC 2, GDPR, and DSAR — evidence bundles and retention rules.\n\nRoute: /team?view=compliance\nSection: Workspace\n\nKeywords: compliance, soc2, gdpr, dsar, privacy, retention, evidence, regulator\n\nUse this page when the user asks about: compliance, soc2, gdpr, dsar, privacy, retention",
+      "route_path": "/team",
+      "kind": "page",
+      "content_hash": "4d941fbebeb9fdc92a31a463558499adeb432bb7ec6707f758c0ff2017b985f6"
+    },
+    {
+      "doc_path": "pages/team--view-audit.md",
+      "section": "main",
+      "title": "Audit log",
+      "body": "# Audit log\n\nWho changed what in this console, and when.\n\nRoute: /team?view=audit\nSection: Workspace\n\nKeywords: audit log, log, history, forensic, security, changes, who did what\n\nUse this page when the user asks about: audit log, log, history, forensic, security, changes",
+      "route_path": "/team",
+      "kind": "page",
+      "content_hash": "04e7a67b2e8b96e7143af3ef5fe1ffbe9ad6c963d518195d5217316cee76c5f0"
+    },
+    {
+      "doc_path": "pages/team--view-storage.md",
+      "section": "main",
+      "title": "Storage",
+      "body": "# Storage\n\nBucket usage, screenshot retention, and data-lifecycle policies.\n\nRoute: /team?view=storage\nSection: Workspace\n\nKeywords: storage, s3, bucket, screenshots, attachments, retention, lifecycle\n\nUse this page when the user asks about: storage, s3, bucket, screenshots, attachments, retention",
+      "route_path": "/team",
+      "kind": "page",
+      "content_hash": "f18559112449ef1195aee279127a3cbc96c2afbd298b817cca45ddfb0c550c01"
+    },
+    {
+      "doc_path": "pages/setup-copilot.md",
+      "section": "main",
+      "title": "Setup copilot",
+      "body": "# Setup copilot\n\nDiagnose setup: SDK heartbeat, version and fix dispatch for one project, with copy-paste commands.\n\nRoute: /setup-copilot\nSection: Start\n\nKeywords: setup, copilot, verify, dispatch, guided, diagnose\n\nUse this page when the user asks about: setup, copilot, verify, dispatch, guided, diagnose",
+      "route_path": "/setup-copilot",
+      "kind": "page",
+      "content_hash": "58aad796278b0427135ffdf151342976e89555142e988e0f66469b33b31cbf46"
+    },
+    {
+      "doc_path": "pages/cli-auth.md",
+      "section": "main",
+      "title": "CLI sign-in",
+      "body": "# CLI sign-in\n\nApprove the Mushi CLI sign-in from your terminal.\n\nRoute: /cli-auth\nSection: Act\n\nKeywords: cli auth, cli, oauth, auth, terminal, login\n\nUse this page when the user asks about: cli auth, cli, oauth, auth, terminal, login",
+      "route_path": "/cli-auth",
+      "kind": "page",
+      "content_hash": "5f15f2ba79397a4a983a152f6809d3b02490743e49b9f66008f599ab9bf39061"
+    },
+    {
+      "doc_path": "pages/docs-bridge.md",
+      "section": "main",
+      "title": "Docs",
+      "body": "# Docs\n\nOpen the documentation, signed in, in a new tab.\n\nRoute: /docs-bridge\nSection: Workspace\n\nKeywords: docs bridge, docs, documentation, bridge, token\n\nUse this page when the user asks about: docs bridge, docs, documentation, bridge, token",
+      "route_path": "/docs-bridge",
+      "kind": "page",
+      "content_hash": "a5ace1989c14589c871d8af3e737d2a20886c283b9ecbf5e496d2e8eac506708"
+    },
+    {
+      "doc_path": "pages/skills--tab-catalog.md",
+      "section": "main",
+      "title": "Skill catalog",
+      "body": "# Skill catalog\n\nBrowse 70+ agent skills from kenji skills by category.\n\nRoute: /skills?tab=catalog\nSection: Act\n\nKeywords: catalog, skill catalog, cursor-kenji, kenji skills\n\nUse this page when the user asks about: catalog, skill catalog, cursor-kenji, kenji skills",
+      "route_path": "/skills",
+      "kind": "page",
+      "content_hash": "07cf211662629f339dbd725b09fa5d667b7e271f6920e8d24799c3bc79f8f09e"
+    },
+    {
+      "doc_path": "pages/skills--tab-pipelines.md",
+      "section": "main",
+      "title": "Skill runs",
+      "body": "# Skill runs\n\nTrack live skill pipeline runs and check in each step.\n\nRoute: /skills?tab=pipelines\nSection: Act\n\nKeywords: skill pipelines, pipeline runs, handoff, context packet, checkin\n\nUse this page when the user asks about: skill pipelines, pipeline runs, handoff, context packet, checkin",
+      "route_path": "/skills",
+      "kind": "page",
+      "content_hash": "3f643e7a3477b7547e25943cbfcbe88da8d7bb8373ad2a2e8dad5635b1282481"
+    },
+    {
+      "doc_path": "pages/skills--tab-sources.md",
+      "section": "main",
+      "title": "Skill sources",
+      "body": "# Skill sources\n\nAdd GitHub repos (e.g. kensaurus/skills) and sync SKILL.md files.\n\nRoute: /skills?tab=sources\nSection: Act\n\nKeywords: skill sources, skill sync, skills.sh, kenji skills, cursor-kenji\n\nUse this page when the user asks about: skill sources, skill sync, skills.sh, kenji skills, cursor-kenji",
+      "route_path": "/skills",
+      "kind": "page",
+      "content_hash": "2b4ad6ecca69e7f040abf83588f761b3b13225b380c43e64bf06ed560830d615"
     }
   ]
 }

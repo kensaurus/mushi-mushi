@@ -9,18 +9,28 @@ import { log as rootLog } from './logger.ts'
 import { resolveProjectGithubToken, parseGithubRepoUrl } from './github.ts'
 import {
   createPrFromFiles,
+  createBranchWithSingleCommit,
   ghFetchOptional,
   findOpenPrByHeadPrefix,
   commitFilesToBranch,
+  resolveBaseBranch,
   type FileChange,
 } from './github-pr.ts'
 import {
+  SDK_UPGRADE_PR_LABELS,
+  SDK_UPGRADE_PR_TITLE,
+  buildUpgradePrBody,
+  hasLockfileHelper,
+} from './sdk-upgrade-pr.ts'
+import {
+  archivedDirsFrom,
   computeBumpPlan,
+  isUnderArchivedDir,
   fetchAllLatestVersions,
   type BumpEntry,
 } from './sdk-upgrade-plan.ts'
-import { upsertProjectSdkObservationAsync } from './sdk-observation.ts'
-import { UPGRADE_BRANCH_PREFIX } from './sdk-upgrade-gates.ts'
+import { UPGRADE_BRANCH_PREFIX, completedJobCockpitFields } from './sdk-upgrade-gates.ts'
+import { pickSdkUpgradeRepo, type SdkUpgradeRepoRow } from './sdk-upgrade-repo.ts'
 import { SDK_UPGRADE_STALE_MS, shouldClaimSdkUpgradeJob } from './sdk-upgrade-reclaim.ts'
 
 const log = rootLog.child('sdk-upgrade-runner')
@@ -52,6 +62,7 @@ interface ScanResult {
 
 export type SdkUpgradeRunResult =
   | { ok: true; status: 'completed' | 'completed_no_pr'; prUrl?: string }
+  | { ok: true; status: 'awaiting_lockfile'; branch: string }
   | { ok: false; status: 'failed' | 'skipped'; error: string }
 
 export async function runSdkUpgradeJob(jobId: string): Promise<SdkUpgradeRunResult> {
@@ -113,40 +124,43 @@ export async function runSdkUpgradeJob(jobId: string): Promise<SdkUpgradeRunResu
     } = {},
   ) => {
     const finishedAt = new Date().toISOString()
+    const cockpit = completedJobCockpitFields(status, extra.pr_url)
     await db
       .from('sdk_upgrade_jobs')
-      .update({ status, finished_at: finishedAt, ...extra })
+      .update({ status, finished_at: finishedAt, ...cockpit, ...extra })
       .eq('id', jobId)
-
-    if (status === 'completed' && extra.plan?.length) {
-      const primaryBump = extra.plan[0]
-      upsertProjectSdkObservationAsync(db, {
-        projectId: job.project_id,
-        sdkPackage: primaryBump.package,
-        sdkVersion: primaryBump.to,
-        source: 'upgrade_verify',
-        observedAt: finishedAt,
-      })
-    }
+    // No SDK observation here: an opened PR is not an installed version.
+    // Recording plan[0].to made the Update center say the app ran the new
+    // version before the PR merged; heartbeats and reports record the truth.
   }
 
   try {
-    const token = await resolveProjectGithubToken(db, job.project_id)
-    if (!token) {
-      log.warn('sdk-upgrade-runner: no GitHub token', { projectId: job.project_id })
-      await finalize('completed_no_pr', { error: 'No GitHub token configured for this project.' })
+    const [{ data: repoRows }, { data: settings }] = await Promise.all([
+      db
+        .from('project_repos')
+        .select('repo_url, role, is_primary, default_branch, github_app_installation_id')
+        .eq('project_id', job.project_id),
+      db
+        .from('project_settings')
+        .select('github_repo_url')
+        .eq('project_id', job.project_id)
+        .maybeSingle(),
+    ])
+
+    const choice = pickSdkUpgradeRepo(
+      (repoRows ?? []) as SdkUpgradeRepoRow[],
+      settings?.github_repo_url ?? null,
+    )
+    const repoRef = parseGithubRepoUrl(choice?.repoUrl ?? null)
+    if (!choice || !repoRef) {
+      await finalize('completed_no_pr', { error: 'No linked GitHub repo, or its URL is invalid.' })
       return { ok: true, status: 'completed_no_pr' }
     }
 
-    const { data: settings } = await db
-      .from('project_settings')
-      .select('github_repo_url')
-      .eq('project_id', job.project_id)
-      .maybeSingle()
-
-    const repoRef = parseGithubRepoUrl(settings?.github_repo_url ?? null)
-    if (!repoRef) {
-      await finalize('completed_no_pr', { error: 'github_repo_url is missing or invalid.' })
+    const token = await resolveProjectGithubToken(db, job.project_id, choice.installationId)
+    if (!token) {
+      log.warn('sdk-upgrade-runner: no GitHub token', { projectId: job.project_id })
+      await finalize('completed_no_pr', { error: 'No GitHub token configured for this project.' })
       return { ok: true, status: 'completed_no_pr' }
     }
 
@@ -157,15 +171,19 @@ export async function runSdkUpgradeJob(jobId: string): Promise<SdkUpgradeRunResu
       'X-GitHub-Api-Version': '2022-11-28',
     }
 
+    // GitHub is the truth. project_repos.default_branch is NOT NULL DEFAULT
+    // 'main', so a row can say main for a master repo; trusting it first would
+    // scan a missing ref and finish "already up to date" with no PR.
     const repoInfoRes = await ghFetchOptional(
       `https://api.github.com/repos/${owner}/${repo}`,
       { headers: baseHeaders },
     )
-    const defaultBranch =
+    const githubDefault =
       repoInfoRes && typeof repoInfoRes === 'object' &&
-      'default_branch' in (repoInfoRes as Record<string, unknown>)
+      typeof (repoInfoRes as Record<string, unknown>).default_branch === 'string'
         ? ((repoInfoRes as Record<string, unknown>).default_branch as string)
-        : 'main'
+        : null
+    const defaultBranch = githubDefault ?? choice.defaultBranch ?? 'main'
 
     const latestVersions = await fetchAllLatestVersions()
 
@@ -174,18 +192,25 @@ export async function runSdkUpgradeJob(jobId: string): Promise<SdkUpgradeRunResu
     // candidates if the tree can't be fetched (huge/truncated tree, 409 empty
     // repo, permission edge cases) so discovery can only ever add coverage,
     // never remove it.
-    const discoverPackageJsonPaths = async (ref: string): Promise<string[]> => {
+    const discoverPackageJsonPaths = async (
+      ref: string,
+    ): Promise<{ paths: string[]; archived: Set<string> }> => {
+      const none = { paths: [] as string[], archived: new Set<string>() }
       const treeRes = await ghFetchOptional(
         `https://api.github.com/repos/${owner}/${repo}/git/trees/${encodeURIComponent(ref)}?recursive=1`,
         { headers: baseHeaders },
       )
-      if (!treeRes || typeof treeRes !== 'object') return []
+      if (!treeRes || typeof treeRes !== 'object') return none
       const tree = (treeRes as { tree?: Array<{ path?: string; type?: string }> }).tree
-      if (!Array.isArray(tree)) return []
-      return tree
+      if (!Array.isArray(tree)) return none
+      const blobs = tree
         .filter((e) => e?.type === 'blob' && typeof e.path === 'string')
         .map((e) => e.path as string)
+      const archived = archivedDirsFrom(blobs)
+      const paths = blobs
         .filter((p) => /(^|\/)package\.json$/.test(p) && !PKG_PATH_IGNORE_RE.test(p))
+        .filter((p) => !isUnderArchivedDir(p, archived))
+      return { paths, archived }
     }
 
     // Scan every candidate package.json on a given ref and compute the bumps
@@ -198,8 +223,10 @@ export async function runSdkUpgradeJob(jobId: string): Promise<SdkUpgradeRunResu
       const filesToCommit: FileChange[] = []
       const discovered = await discoverPackageJsonPaths(ref)
       const pkgPaths = Array.from(
-        new Set([...FIXED_PKG_PATH_CANDIDATES, ...discovered]),
-      ).slice(0, MAX_PKG_FILES)
+        new Set([...FIXED_PKG_PATH_CANDIDATES, ...discovered.paths]),
+      )
+        .filter((p) => !isUnderArchivedDir(p, discovered.archived))
+        .slice(0, MAX_PKG_FILES)
       for (const pkgPath of pkgPaths) {
         const fileRes = await ghFetchOptional(
           `https://api.github.com/repos/${owner}/${repo}/contents/${pkgPath}?ref=${encodeURIComponent(ref)}`,
@@ -213,7 +240,10 @@ export async function runSdkUpgradeJob(jobId: string): Promise<SdkUpgradeRunResu
 
         let pkgText: string
         try {
-          pkgText = atob(encoded.replace(/\s/g, ''))
+          // atob() yields one char per byte; decode UTF-8 or an em dash in a
+          // description is written back as mojibake (glot.it, tsumagoi PRs).
+          const bin = atob(encoded.replace(/\s/g, ''))
+          pkgText = new TextDecoder().decode(Uint8Array.from(bin, (ch) => ch.charCodeAt(0)))
         } catch {
           continue
         }
@@ -233,7 +263,7 @@ export async function runSdkUpgradeJob(jobId: string): Promise<SdkUpgradeRunResu
           contents: JSON.stringify(updatedPkg, null, 2) + '\n',
           reason: `bump ${bumps.map((b) => `${b.package} ${b.from} → ${b.to}`).join(', ')}`,
         })
-        allBumps.push(...bumps)
+        allBumps.push(...bumps.map((b) => ({ ...b, path: pkgPath })))
       }
       return { allBumps, filesToCommit }
     }
@@ -291,11 +321,43 @@ export async function runSdkUpgradeJob(jobId: string): Promise<SdkUpgradeRunResu
     }
 
     const branch = `${UPGRADE_BRANCH_PREFIX}-${Date.now().toString(36)}`
-    const bumpTable = allBumps
-      .map((b) => `| \`${b.package}\` | \`${b.from}\` | \`${b.to}\` |${b.migrateToWeb ? ' ⚠️ legacy → consider `@mushi-mushi/web`' : ''}`)
-      .join('\n')
+    const ghLog = {
+      info: (msg: string, ctx?: unknown) => log.info(msg, ctx as Record<string, unknown>),
+      warn: (msg: string, ctx?: unknown) => log.warn(msg, ctx as Record<string, unknown>),
+    }
 
-    const prBody = buildUpgradePrBody(bumpTable, filesToCommit.map((f) => f.path))
+    // ADR 0019: when the host has the lockfile helper workflow, push the bump
+    // as one commit and let that workflow refresh the lockfile. The PR opens
+    // later (sdk-release-sync) so its CI runs on the refreshed lockfile.
+    if (await hasLockfileHelper(owner, repo, defaultBranch, baseHeaders)) {
+      const base = await resolveBaseBranch(token, owner, repo, defaultBranch, ghLog)
+      const commitSha = await createBranchWithSingleCommit({
+        token,
+        owner,
+        repo,
+        branch,
+        baseSha: base.sha,
+        message: [
+          'chore(deps): bump @mushi-mushi/* SDK packages',
+          '',
+          ...filesToCommit.map((f) => `- ${f.path}: ${f.reason}`),
+        ].join('\n'),
+        files: filesToCommit,
+      })
+      // Not finalize(): the job is not finished, and finished_at stays empty
+      // until the PR opens. sdk-release-sync measures the wait from started_at.
+      await db
+        .from('sdk_upgrade_jobs')
+        .update({ status: 'awaiting_lockfile', branch, commit_sha: commitSha, plan: allBumps })
+        .eq('id', jobId)
+      log.info('sdk-upgrade-runner: bump pushed, waiting for the host lockfile workflow', {
+        projectId: job.project_id,
+        branch,
+      })
+      return { ok: true, status: 'awaiting_lockfile', branch }
+    }
+
+    const prBody = buildUpgradePrBody(allBumps, filesToCommit.map((f) => f.path), 'helper_missing')
 
     log.info('sdk-upgrade-runner: opening upgrade PR', {
       projectId: job.project_id,
@@ -310,15 +372,12 @@ export async function runSdkUpgradeJob(jobId: string): Promise<SdkUpgradeRunResu
         repo,
         defaultBranch,
         branch,
-        title: `chore: bump @mushi-mushi/* SDK packages`,
+        title: SDK_UPGRADE_PR_TITLE,
         body: prBody,
         files: filesToCommit,
-        labels: ['mushi-sdk-upgrade'],
+        labels: SDK_UPGRADE_PR_LABELS,
       },
-      {
-        info: (msg, ctx) => log.info(msg, ctx as Record<string, unknown>),
-        warn: (msg, ctx) => log.warn(msg, ctx as Record<string, unknown>),
-      },
+      ghLog,
     )
 
     await finalize('completed', {
@@ -337,49 +396,4 @@ export async function runSdkUpgradeJob(jobId: string): Promise<SdkUpgradeRunResu
     await finalize('failed', { error: message.slice(0, 500) })
     return { ok: false, status: 'failed', error: message }
   }
-}
-
-function buildUpgradePrBody(bumpTable: string, changedFiles: string[]): string {
-  const fileList = changedFiles.map((f) => `- \`${f}\``).join('\n')
-  return `## Mushi Mushi — SDK Upgrade
-
-This PR was generated by the **Mushi Console one-click upgrade** feature.
-It bumps all \`@mushi-mushi/*\` packages in your repository to their latest
-stable versions.
-
-### Packages bumped
-
-| Package | From | To |
-|---------|------|----|
-${bumpTable}
-
-### Files changed
-${fileList}
-
-### After merging
-
-Run your package manager to refresh the lockfile:
-
-\`\`\`sh
-# npm
-npm install
-
-# pnpm
-pnpm install
-
-# yarn
-yarn install
-\`\`\`
-
-**Capacitor / React Native projects:** After the lockfile is updated, run:
-
-\`\`\`sh
-npx cap sync       # Capacitor — sync JS bundle into native shells
-# or
-npx pod-install    # React Native iOS
-\`\`\`
-
----
-*Review every change before merging. This PR only modifies \`@mushi-mushi/*\`
-dependency version strings — no other files are touched.*`
 }

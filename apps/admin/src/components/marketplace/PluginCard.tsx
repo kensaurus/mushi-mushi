@@ -5,8 +5,10 @@
  *          and an Install/Uninstall action that bubbles up.
  */
 
+import { Link } from 'react-router-dom'
 import { Btn, Card } from '../ui'
 import { CHIP_TONE } from '../../lib/chipTone'
+import { ADMIN_ONLY_HINT } from '../../lib/orgPermissions'
 import {
   CATEGORY_LABEL,
   type InstalledPlugin,
@@ -21,9 +23,30 @@ interface Props {
   busy: boolean
   onInstall: () => void
   onUninstall: () => void
+  /** False for members and viewers: plugin writes are owner/admin only. */
+  canManage?: boolean
+  /** False when the plan has no `plugins` entitlement: Install would only end in a 402. */
+  pluginsUnlocked?: boolean
+  /** Set when Integrations already has a native card for this service. */
+  integrationsHref?: string
 }
 
-export function PluginCard({ plugin: p, installed: inst, stats, busy, onInstall, onUninstall }: Props) {
+export function PluginCard({
+  plugin: p,
+  installed: inst,
+  stats,
+  busy,
+  onInstall,
+  onUninstall,
+  canManage = true,
+  pluginsUnlocked = true,
+  integrationsHref,
+}: Props) {
+  const blockedReason = !canManage
+    ? ADMIN_ONLY_HINT
+    : !pluginsUnlocked
+      ? 'Your plan does not include plugins. Upgrade to install one.'
+      : undefined
   return (
     <Card className="p-3 flex flex-col gap-2">
       <div className="flex items-start justify-between gap-2">
@@ -108,11 +131,25 @@ export function PluginCard({ plugin: p, installed: inst, stats, busy, onInstall,
           <span />
         )}
         {inst ? (
-          <Btn variant="danger" size="sm" onClick={onUninstall} disabled={busy} loading={busy}>
+          <Btn
+            variant="danger"
+            size="sm"
+            onClick={onUninstall}
+            disabled={busy || !canManage}
+            loading={busy}
+            title={canManage ? undefined : ADMIN_ONLY_HINT}
+          >
             Uninstall
           </Btn>
+        ) : integrationsHref ? (
+          <Link
+            to={integrationsHref}
+            className="text-2xs text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity"
+          >
+            Already on Integrations →
+          </Link>
         ) : (
-          <Btn size="sm" onClick={onInstall} disabled={busy}>
+          <Btn size="sm" onClick={onInstall} disabled={busy || Boolean(blockedReason)} title={blockedReason}>
             Install
           </Btn>
         )}

@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/inbox
 
 ---
 title: Action inbox
+description: The Action inbox gathers everything in Mushi that needs a human decision — reports, queue failures, health and drift alerts — in one list.
 ---
 
 # Action inbox

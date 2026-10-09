@@ -536,7 +536,6 @@
   position: relative;
   isolation: isolate;
   overflow: hidden;
-  cursor: pointer;
   transition: opacity var(--duration-fast) var(--ease-stamp), transform var(--duration-fast) var(--ease-stamp);
 }
 

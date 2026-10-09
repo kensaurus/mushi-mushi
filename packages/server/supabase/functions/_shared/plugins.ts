@@ -1,6 +1,14 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { log } from './logger.ts'
 import { assertSafeOutboundUrl } from './inventory-guards.ts'
+import {
+  CURSOR_DEFAULT_MODEL,
+  CursorApiError,
+  cancelCursorRun,
+  createCursorAgentV1,
+  deterministicCursorAgentId,
+  extractCursorPrUrl,
+} from './cursor-cloud.ts'
 
 const pluginLog = log.child('plugins')
 
@@ -86,12 +94,32 @@ function resolveBuiltinHook(
 // keeps the request path latency-bounded.
 // ============================================================
 
+/**
+ * Server-side plugin bus event names. Keep in sync with the public union in
+ * `packages/plugin-sdk/src/types.ts` and `KNOWN_EVENTS` in its
+ * `event-schema.ts` — a contract test (`plugin-event-union.test.ts`) pins the
+ * two together.
+ *
+ * `reward.*` events are listed here for the SDK's benefit, but they do NOT
+ * travel through `dispatchPluginEvent`: the rewards program delivers them
+ * through its own host-webhook channel (`_shared/reward-webhooks.ts`
+ * `dispatchRewardWebhook`, configured per project under Rewards → Webhook).
+ * A marketplace plugin subscribed to `reward.*` receives nothing; that is a
+ * documented decision, not a gap to "fix" by wiring them into this bus.
+ *
+ * `report.commented`, `report.dedup_grouped` and `sla.breached` currently have
+ * no emitter either (seeded into marketplace `subscribes` lists only).
+ */
 export type MushiEventName =
   | 'report.created'
   | 'report.classified'
   | 'report.status_changed'
   | 'report.commented'
   | 'report.dedup_grouped'
+  // Fix lifecycle. `fix.requested` fires when the fix-worker hands a report to
+  // a CLOUD agent (cursor_cloud / github_cloud_agent); the payload carries the
+  // vendor ids so a subscriber can track the run without re-dispatching it.
+  | 'fix.requested'
   | 'fix.proposed'
   | 'fix.applied'
   | 'fix.failed'
@@ -100,13 +128,16 @@ export type MushiEventName =
   // QA Coverage (story monitoring)
   | 'qa_story.failed'
   | 'qa_story.recovered'
-  // Rewards program (P1+)
+  // Rewards program (P1+) — see the note above: delivered via reward-webhooks.ts
   | 'reward.points_awarded'
   | 'reward.tier_changed'
   | 'reward.payout_requested'
   | 'reward.payout_paid'
   // Skill pipelines (cloud mode step dispatch)
   | 'skill_pipeline.step.dispatched'
+  // Linear issue sync (webhooks-linear): fired for every Issue create/update
+  // so plugin-sdk subscribers can mirror tracker state.
+  | 'linear.issue.updated'
 
 /** Plugins that deliver human notifications (vs automation). Only these are
  *  gated by the console's per-event notification toggles. */
@@ -324,14 +355,14 @@ async function deliverCursorAgent(
   data: unknown,
   plugin: CursorPluginRow,
 ): Promise<void> {
-  const { apiKeyRef, model, autoCreatePR, maxIterations } = await resolveCursorCredentials(
+  const { apiKeyRef, model, autoCreatePR } = await resolveCursorCredentials(
     db,
     projectId,
     plugin.config,
   )
-  const workspaceId = typeof plugin.config?.workspace_id === 'string' ? plugin.config.workspace_id : ''
 
-  // Skill pipeline steps use Cursor v0 API (source.repository) — workspace_id optional.
+  // Skill pipeline steps carry their own payload shape; everything else is a
+  // report-shaped event. Both go through the v1 client (_shared/cursor-cloud.ts).
   if (event === 'skill_pipeline.step.dispatched') {
     const resolvedApiKey = await resolveVaultRef(db, apiKeyRef)
     await deliverSkillPipelineStep(db, projectId, data, {
@@ -344,13 +375,26 @@ async function deliverCursorAgent(
 
   const apiKey = apiKeyRef
 
-  if (!apiKey || !workspaceId) {
-    pluginLog.warn('Cursor plugin skipped: missing api_key_ref or workspace_id', { projectId })
+  if (!apiKey) {
+    pluginLog.warn('Cursor plugin skipped: missing api_key_ref', { projectId })
+    return
+  }
+
+  // `fix.requested` emitted by the fix-worker's first-class cursor_cloud path
+  // already carries the vendor agent id — that agent exists; never start a
+  // second one for the same fix. (plugin-cursor-cloud applies the same guard.)
+  const maybeDispatched = data as { fix?: { externalAgentId?: unknown }; externalAgentId?: unknown } | null
+  if (
+    event === 'fix.requested' &&
+    (typeof maybeDispatched?.fix?.externalAgentId === 'string' ||
+      typeof maybeDispatched?.externalAgentId === 'string')
+  ) {
+    pluginLog.info('Cursor plugin: fix.requested already dispatched by fix-worker — skipping', { projectId })
     return
   }
 
   // Fetch the project's GitHub repo URL so the Cursor REST API knows which
-  // codebase to work in (required: cloud.repos[].url).
+  // codebase to work in (required: repos[].url).
   const { data: projSettings } = await db
     .from('project_settings')
     .select('github_repo_url')
@@ -392,7 +436,8 @@ async function deliverCursorAgent(
   const prompt = [
     `Mushi Mushi dispatched a ${event} event for project ${projectId}.`,
     `Report ID: ${reportId}`,
-    `Please investigate and open a draft PR with a fix. Do not refactor unrelated code.`,
+    `Please investigate the reported issue, identify the root cause in this repository, and open the pull request as a DRAFT with a minimal fix.`,
+    `Title the PR "fix: <short summary> (MUSHI-${reportId})" and include "Mushi report: ${reportId}" in the description. Do not refactor unrelated code and never merge.`,
   ].join('\n')
 
   const deliveryId = crypto.randomUUID()
@@ -403,40 +448,41 @@ async function deliverCursorAgent(
   let excerpt = ''
 
   try {
-    const res = await fetch('https://api.cursor.com/v0/agents', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${resolvedApiKey}`,
-      },
-      // 30 s timeout: consistent with deliverOne; prevents a slow Cursor API
-      // response from blocking the entire plugin fanout Promise.all.
-      signal: AbortSignal.timeout(30_000),
-      body: JSON.stringify({
-        model: { id: model },
-        cloud: {
-          workspaceId,
-          repos: [{ url: repoUrl }],
-          autoCreatePR,
-          maxIterations,
-          envVars: {
-            MUSHI_PROJECT_ID: projectId,
-            MUSHI_REPORT_ID: reportId,
-            MUSHI_EVENT: event,
-          },
-        },
+    // Idempotent per (project, event, report): a retried delivery of the same
+    // event re-uses the agent id and gets Cursor's 409 agent_id_conflict
+    // instead of a second agent burning credit.
+    const agentIdSeed = `plugin:${projectId}:${event}:${reportId}`
+    const created = await createCursorAgentV1(
+      { apiKey: resolvedApiKey },
+      {
         prompt,
-      }),
-    })
-    httpStatus = res.status
-    const text = await res.text().catch(() => '')
-    excerpt = text.slice(0, 512)
-    if (res.ok) {
-      const body = JSON.parse(text) as { agentId?: string; id?: string }
-      agentId = body.agentId ?? body.id ?? null
-      dispatchStatus = 'ok'
-    }
+        repoUrl,
+        agentId: await deterministicCursorAgentId(agentIdSeed),
+        name: `Mushi ${event} ${reportId.slice(0, 8)}`,
+        model,
+        autoCreatePR,
+        skipReviewerRequest: true,
+        envVars: {
+          MUSHI_PROJECT_ID: projectId,
+          MUSHI_REPORT_ID: reportId,
+          MUSHI_EVENT: event,
+        },
+      },
+    )
+    httpStatus = 200
+    agentId = created.agent.id
+    dispatchStatus = 'ok'
+    const prUrl = extractCursorPrUrl(created.run)
+    excerpt = prUrl ? `prUrl=${prUrl}` : ''
   } catch (err) {
+    if (err instanceof CursorApiError) {
+      httpStatus = err.status
+      if (err.status === 409 && err.code === 'agent_id_conflict') {
+        // Already dispatched for this exact event — treat as success.
+        agentId = await deterministicCursorAgentId(`plugin:${projectId}:${event}:${reportId}`)
+        dispatchStatus = 'ok'
+      }
+    }
     excerpt = String(err).slice(0, 512)
   }
 
@@ -514,52 +560,66 @@ async function deliverSkillPipelineStep(
     `Pipeline run: ${d.runId}`,
     ``,
     `You are executing step ${d.stepIndex + 1} of a Mushi skill pipeline.`,
-    `When done, call the Mushi MCP tool \`checkin_pipeline_step\` with run_id, step_index, and status.`,
+    `When done, call the Mushi MCP tool \`checkin_pipeline_step\` with runId, stepIndex, and status.`,
     ``,
     `─── Context Packet ────────────────────────────────────────────────────`,
     ``,
     (d.contextPacket ?? '').slice(0, 32_000),
   ].join('\n')
 
-  const deliveryId = crypto.randomUUID()
-  const start = Date.now()
-  let agentId: string | null = null
-  let excerpt = ''
-
-  try {
-    const res = await fetch('https://api.cursor.com/v0/agents', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${resolvedApiKey}`,
-      },
-      signal: AbortSignal.timeout(30_000),
-      body: JSON.stringify({
-        prompt: { text: prompt },
-        model: opts.model || 'default',
-        source: { repository: repoUrl, ref: 'main' },
-        target: {
-          autoCreatePr: opts.autoCreatePR,
-          branchName: `mushi/skill-${d.skillSlug.slice(0, 24)}-${Date.now()}`,
-          skipReviewerRequest: true,
-        },
-      }),
-    })
-    const text = await res.text().catch(() => '')
-    excerpt = text.slice(0, 512)
-    if (res.ok) {
-      const body = JSON.parse(text) as { agentId?: string; id?: string }
-      agentId = body.agentId ?? body.id ?? null
-    } else {
-      await failSkillPipelineStep(db, d, `Cursor API ${res.status}: ${excerpt}`)
-      return
-    }
-  } catch (err) {
-    await failSkillPipelineStep(db, d, String(err).slice(0, 500))
+  // A run cancelled from the console must not start (or keep) an agent
+  // (console QA #24): check before creating one, and again after.
+  if (!(await skillRunIsOpen(db, d.runId))) {
+    pluginLog.info('Skill pipeline step not dispatched: run is closed', { runId: d.runId, stepIndex: d.stepIndex })
     return
   }
 
+  const deliveryId = crypto.randomUUID()
+  const start = Date.now()
+  let agentId: string | null = null
+  let runId: string | null = null
+  let excerpt = ''
+
+  // v1 has no `target.branchName`; the prompt asks for the branch instead.
+  const branchHint = `mushi/skill-${d.skillSlug.slice(0, 24)}-${d.runId.slice(0, 8)}`
+  const promptWithBranch = `${prompt}\n\nPush your work to a branch named \`${branchHint}\` and open the pull request as a DRAFT.`
+  const agentIdSeed = `skill-pipeline:${d.runId}:${d.stepIndex}`
+  try {
+    const created = await createCursorAgentV1(
+      { apiKey: resolvedApiKey },
+      {
+        prompt: promptWithBranch,
+        repoUrl,
+        agentId: await deterministicCursorAgentId(agentIdSeed),
+        name: `Mushi skill ${d.skillSlug.slice(0, 40)} #${d.stepIndex + 1}`,
+        model: opts.model || CURSOR_DEFAULT_MODEL,
+        autoCreatePR: opts.autoCreatePR,
+        skipReviewerRequest: true,
+      },
+    )
+    agentId = created.agent.id
+    runId = created.run?.id ?? null
+  } catch (err) {
+    if (err instanceof CursorApiError && err.status === 409 && err.code === 'agent_id_conflict') {
+      // Retried delivery for a step that is already running — idempotent.
+      agentId = await deterministicCursorAgentId(agentIdSeed)
+    } else {
+      excerpt = String(err).slice(0, 512)
+      await failSkillPipelineStep(db, d, excerpt.slice(0, 500))
+      return
+    }
+  }
+
   const now = new Date().toISOString()
+  if (agentId && runId && !(await skillRunIsOpen(db, d.runId))) {
+    // Cancelled while the agent was being created: stop it right away.
+    try {
+      await cancelCursorRun({ apiKey: resolvedApiKey }, agentId, runId)
+    } catch (err) {
+      pluginLog.warn('Cursor run cancel after pipeline abort failed', { runId: d.runId, err: String(err).slice(0, 200) })
+    }
+    return
+  }
   if (agentId) {
     await db
       .from('skill_pipeline_step_runs')
@@ -571,6 +631,8 @@ async function deliverSkillPipelineStep(
       })
       .eq('run_id', d.runId)
       .eq('step_index', d.stepIndex)
+      // A cancel closes open steps as skipped; never reopen one.
+      .in('status', ['pending', 'running'])
   }
 
   try {
@@ -597,6 +659,12 @@ async function deliverSkillPipelineStep(
       agentId,
     })
   }
+}
+
+async function skillRunIsOpen(db: SupabaseClient, runId: string): Promise<boolean> {
+  const { data } = await db.from('skill_pipeline_runs').select('status').eq('id', runId).maybeSingle()
+  const status = (data as { status?: string } | null)?.status
+  return status === 'pending' || status === 'running'
 }
 
 async function failSkillPipelineStep(
@@ -720,6 +788,9 @@ export async function postSignedWebhook(req: SignedWebhookRequest): Promise<Sign
       headers,
       body: req.rawBody,
       signal: controller.signal,
+      // The host check above covers this URL only; a 3xx to an internal
+      // address must not be followed (it would also carry the signature).
+      redirect: 'manual',
     })
     clearTimeout(tm)
     httpStatus = res.status
@@ -920,6 +991,13 @@ export async function sendTestDelivery(
     rawBody,
   })
 
+  // Same outbound guard as a real dispatch (postSignedWebhook): the test
+  // delivery used to fetch any stored URL and echo the response body back.
+  const safeUrl = assertSafeOutboundUrl(row.webhook_url, {})
+  if (!safeUrl.ok) {
+    return { ok: false, httpStatus: null, durationMs: 0, excerpt: `blocked: ${safeUrl.reason}` }
+  }
+
   const start = Date.now()
   let status: 'ok' | 'error' | 'timeout' = 'error'
   let httpStatus: number | null = null
@@ -933,6 +1011,7 @@ export async function sendTestDelivery(
       headers,
       body: rawBody,
       signal: controller.signal,
+      redirect: 'manual',
     })
     clearTimeout(tm)
     httpStatus = res.status

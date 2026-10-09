@@ -58,6 +58,7 @@ import {
 } from '../icons'
 import {
   canDeleteProject,
+  canManageProject,
   LINK_CHIP_CLASS,
   relativeTime,
   scopeBadgeTone,
@@ -66,6 +67,8 @@ import {
   indexHealth,
   INDEX_HEALTH_LABEL,
   INDEX_HEALTH_CHIP_TONE,
+  indexCoverageText,
+  lastIndexSweepAt,
   type Project,
   type ScopePresetId,
 } from './project-models'
@@ -79,6 +82,8 @@ export interface ProjectsListPanelProps {
   revealedKeys: Record<string, { key: string; scopes: string[] }>
   sdkOpenOverride: Record<string, boolean>
   keyScopePreset: Record<string, ScopePresetId>
+  /** Preset shown when the user has not picked one for a row (deep-linkable via ?keyScope=). */
+  defaultKeyScopePreset?: ScopePresetId
   renamingId: string | null
   renameDraft: string
   renamingProject: boolean
@@ -108,6 +113,7 @@ export function ProjectsListPanel({
   revealedKeys,
   sdkOpenOverride,
   keyScopePreset,
+  defaultKeyScopePreset = 'sdk',
   renamingId,
   renameDraft,
   renamingProject,
@@ -321,6 +327,7 @@ export function ProjectsListPanel({
                   <IconSend />
                 </Btn>
               </Tooltip>
+              {canManageProject(project) && (
               <div className="flex items-center gap-1" data-testid={`mint-key-${project.id}`}>
                 <label htmlFor={`key-scope-${project.id}`} className="sr-only">
                   API key scope for {project.name}
@@ -330,13 +337,13 @@ export function ProjectsListPanel({
                   id={`key-scope-${project.id}`}
                   data-testid={`key-scope-${project.id}`}
                   className="text-2xs bg-surface-raised border border-edge rounded-sm px-2 py-1 text-fg-secondary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand"
-                  value={keyScopePreset[project.id] ?? 'sdk'}
+                  value={keyScopePreset[project.id] ?? defaultKeyScopePreset}
                   onChange={(e) =>
                     onKeyScopePresetChange(project.id, e.target.value as ScopePresetId)
                   }
                   disabled={isBusy}
                   title={
-                    SCOPE_PRESETS.find((p) => p.id === (keyScopePreset[project.id] ?? 'sdk'))
+                    SCOPE_PRESETS.find((p) => p.id === (keyScopePreset[project.id] ?? defaultKeyScopePreset))
                       ?.hint
                   }
                 >
@@ -361,6 +368,7 @@ export function ProjectsListPanel({
                   </Btn>
                 </Tooltip>
               </div>
+              )}
               {/* Destructive last in tab order on purpose. Gated to
                   org owner/admin (or legacy direct owner). Members and
                   viewers don't see the button at all so they can't
@@ -501,7 +509,7 @@ export function ProjectsListPanel({
                           <Badge className="bg-surface-overlay text-fg-faint">revoked</Badge>
                         )}
                       </div>
-                      {!key.revoked && (
+                      {!key.revoked && canManageProject(project) && (
                         <Btn
                           variant="ghost"
                           size="sm"
@@ -562,6 +570,13 @@ export function ProjectsListPanel({
                 ›
               </span>
             </summary>
+            {!canManageProject(project) ? (
+              <p className="mt-3 rounded-sm border border-edge-subtle bg-surface-raised px-3 py-2 text-xs text-fg-muted" data-testid={`sdk-config-locked-${project.id}`}>
+                Only project owners and admins can change SDK settings, keys, the assistant or signed identity for{' '}
+                <span className="font-medium text-fg-secondary">{project.name}</span>. Ask an owner or admin of this
+                project to make changes or to give you the admin role.
+              </p>
+            ) : (
             <div className="mt-3">
               {/* Pass `revealed?.key` so the snippet shows the real,
                   just-minted plaintext key instead of the `mushi_xxx`
@@ -581,6 +596,7 @@ export function ProjectsListPanel({
                 <IdentitySecretCard projectId={project.id} projectSlug={project.slug} />
               </div>
             </div>
+            )}
           </details>
         </Card>
       )
@@ -779,7 +795,7 @@ function ProjectContextRail({ project }: { project: Project }) {
   const health = repo ? indexHealth(repo) : null
   const indexHint = (() => {
     if (!repo) return undefined
-    const lastIso = repo.last_indexed_at
+    const lastIso = lastIndexSweepAt(repo)
     const attemptIso = repo.last_index_attempt_at
     if (health === 'failed') {
       const trimmed = (repo.last_index_error ?? '').slice(0, 220)
@@ -790,6 +806,18 @@ function ProjectContextRail({ project }: { project: Project }) {
     if (health === 'off') return 'Indexing is disabled for this repo. Enable it in Settings to power codebase-aware triage and fix suggestions.'
     if (health === 'never') return 'Repo connected but no successful index pass yet. The first index runs in the background.'
     if (health === 'stale') return `Last successful index ${relativeTime(lastIso)}. Codebase-aware features may be using stale context.`
+    if (health === 'partial') {
+      const of = indexCoverageText(repo)
+      if (repo.index_coverage_state === 'capped') {
+        return `Indexed ${of ?? 'part of the repo'}: the plan's file limit is reached. Diagnoses only see indexed files.`
+      }
+      if (repo.index_coverage_state === 'stalled') {
+        return `Indexed ${of ?? 'part of the repo'}; the last sweep (${relativeTime(lastIso)}) added no file.${
+          repo.last_index_error ? `\n\n${repo.last_index_error.slice(0, 220)}` : ''
+        }`
+      }
+      return `Indexed ${of ?? 'part of the repo'} so far (${relativeTime(lastIso)}); the hourly sweep adds more.`
+    }
     return `Indexed ${relativeTime(lastIso)}.`
   })()
 
@@ -827,8 +855,8 @@ function ProjectContextRail({ project }: { project: Project }) {
                 <ContextDivider />
                 <span
                   title={
-                    health === 'ok' && repo.last_indexed_at
-                      ? `${indexHint ?? ''} · ${relativeTime(repo.last_indexed_at)}`
+                    health === 'ok' && lastIndexSweepAt(repo)
+                      ? `${indexHint ?? ''} · ${relativeTime(lastIndexSweepAt(repo))}`
                       : indexHint
                   }
                 >

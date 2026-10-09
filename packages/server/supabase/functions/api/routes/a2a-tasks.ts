@@ -45,13 +45,17 @@
  *
  * Push notifications
  * ──────────────────
- * Clients pass `body.configuration.pushNotificationConfig = { url, token? }`
- * on POST. We persist it on the dispatch row; an AFTER-UPDATE trigger on
- * `fix_dispatch_jobs.status` invokes the `a2a-push-notify` edge function
- * which signs the Task envelope with Standard Webhooks headers
- * (`webhook-id` / `webhook-timestamp` / `webhook-signature`) and POSTs it
- * to the configured URL. Pull subscribers can still use the SSE stream;
- * pull and push are both supported simultaneously.
+ * Clients pass an A2A 1.0 `body.configuration.taskPushNotificationConfig =
+ * { id?, url, token?, authentication?: { scheme, credentials? } }` on POST
+ * (`configuration.pushNotificationConfig` and `authentication.schemes[]`
+ * are still accepted as the deprecated 0.3 spellings). We persist it on the
+ * dispatch row; an AFTER-UPDATE trigger on `fix_dispatch_jobs.status`
+ * invokes the `a2a-push-notify` edge function which POSTs a 1.0
+ * `StreamResponse { statusUpdate }` body (`Content-Type:
+ * application/a2a+json`, `Authorization: {scheme} {credentials}` when
+ * configured) signed with Standard Webhooks headers (`webhook-id` /
+ * `webhook-timestamp` / `webhook-signature`). Pull subscribers can still use
+ * the SSE stream; pull and push are both supported simultaneously.
  *
  * Auth
  * ────
@@ -66,12 +70,13 @@ import { streamSSE } from 'npm:hono@4/streaming';
 import { adminOrApiKey } from '../../_shared/auth.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { invokeFixWorker } from '../helpers.ts';
-import { userCanAccessProject } from '../shared.ts';
+import { callerCanAccessProject } from '../shared.ts';
 import { sanitizeSseString, toSseEvent, sseHeartbeat } from '../../_shared/sse.ts';
 import { withIdempotency } from '../../_shared/idempotency.ts';
 import { childTraceparent, extractInboundTraceparent } from '../../_shared/trace.ts';
 import { log } from '../../_shared/logger.ts';
-import { assertSafeOutboundUrl } from '../../_shared/inventory-guards.ts';
+import { parsePushNotificationConfig } from '../../_shared/a2a-push-config.ts';
+import { fixDispatchResolvedBlock } from '../../_shared/fix-report-truth.ts';
 
 interface FixDispatchRow {
   id: string;
@@ -167,64 +172,23 @@ export function registerA2ATaskRoutes(app: Hono<{ Variables: Variables }>): void
       const body = (await c.req.json().catch(() => ({}))) as {
         skill?: string;
         input?: Record<string, unknown>;
-        configuration?: {
-          pushNotificationConfig?: {
-            url?: string;
-            token?: string;
-          };
-        };
+        configuration?: unknown;
       };
 
-      // A2A v1.0.0 PushNotificationConfig (optional). When provided we persist
-      // it on the dispatch row; the `trg_fix_dispatch_jobs_a2a_push` trigger
-      // then invokes `a2a-push-notify` for every status transition.
-      const pushConfigRaw = body.configuration?.pushNotificationConfig;
-      let pushConfig: { url: string; token?: string } | null = null;
-      if (pushConfigRaw && typeof pushConfigRaw.url === 'string') {
-        let parsed: URL | null = null;
-        try {
-          parsed = new URL(pushConfigRaw.url);
-        } catch {
-          parsed = null;
-        }
-        if (!parsed || parsed.protocol !== 'https:') {
-          return c.json(
-            {
-              error: {
-                code: 'INVALID_PUSH_URL',
-                message: 'configuration.pushNotificationConfig.url must be a valid https:// URL',
-              },
-            },
-            400,
-          );
-        }
-        const safePushUrl = assertSafeOutboundUrl(parsed.toString(), {});
-        if (!safePushUrl.ok) {
-          return c.json(
-            {
-              error: {
-                code: 'UNSAFE_PUSH_URL',
-                message: safePushUrl.reason ?? 'Push notification URL is not allowed',
-              },
-            },
-            400,
-          );
-        }
-        pushConfig = { url: parsed.toString() };
-        if (typeof pushConfigRaw.token === 'string' && pushConfigRaw.token.length > 0) {
-          if (pushConfigRaw.token.length > 4096) {
-            return c.json(
-              {
-                error: {
-                  code: 'INVALID_PUSH_TOKEN',
-                  message: 'configuration.pushNotificationConfig.token exceeds 4096 chars',
-                },
-              },
-              400,
-            );
-          }
-          pushConfig.token = pushConfigRaw.token;
-        }
+      // A2A 1.0 taskPushNotificationConfig (optional; 0.3 pushNotificationConfig
+      // accepted as a deprecated alias). When provided we persist it on the
+      // dispatch row; the `trg_fix_dispatch_jobs_a2a_push` trigger then
+      // invokes `a2a-push-notify` for every status transition.
+      const pushParse = parsePushNotificationConfig(body.configuration);
+      if (!pushParse.ok) {
+        return c.json({ error: { code: pushParse.code, message: pushParse.message } }, 400);
+      }
+      const pushConfig = pushParse.config;
+      if (pushParse.deprecatedAlias) {
+        log.info('A2A client used deprecated configuration.pushNotificationConfig (0.3 name)', {
+          scope: 'a2a-tasks',
+          a2aVersion: c.req.header('A2A-Version') ?? null,
+        });
       }
 
       const skill = body.skill ?? 'dispatch_fix';
@@ -274,7 +238,7 @@ export function registerA2ATaskRoutes(app: Hono<{ Variables: Variables }>): void
       }
 
       const db = getServiceClient();
-      const access = await userCanAccessProject(db, userId, projectId);
+      const access = await callerCanAccessProject(c, db, userId, projectId);
       if (!access.allowed) {
         return c.json(
           { error: { code: 'FORBIDDEN', message: 'Not a member of this project' } },
@@ -410,6 +374,21 @@ export function registerA2ATaskRoutes(app: Hono<{ Variables: Variables }>): void
         return c.json(rowToA2ATask(job as FixDispatchRow), 201);
       }
 
+      // Same resolved-report guard as POST /v1/admin/fixes/dispatch: a report
+      // a merged PR fixed, or a human dismissed, is not dispatched again.
+      const [{ data: reportRow }, { data: mergedAttempts }] = await Promise.all([
+        db.from('reports').select('id, status').eq('id', reportId).eq('project_id', projectId).maybeSingle(),
+        db
+          .from('fix_attempts')
+          .select('id, report_id, pr_number, pr_state, merged_at, created_at')
+          .eq('report_id', reportId)
+          .limit(50),
+      ]);
+      const resolvedBlock = reportRow ? fixDispatchResolvedBlock(reportRow, mergedAttempts ?? []) : null;
+      if (resolvedBlock) {
+        return c.json({ error: resolvedBlock }, 409);
+      }
+
       // Same in-flight guard as POST /v1/admin/fixes/dispatch — we don't
       // want two A2A clients (or one A2A client + the admin UI) racing.
       const { data: existing } = await db
@@ -470,7 +449,7 @@ export function registerA2ATaskRoutes(app: Hono<{ Variables: Variables }>): void
     const db = getServiceClient();
     const { data: row } = await db.from('fix_dispatch_jobs').select('*').eq('id', id).single();
     if (!row) return c.json({ error: { code: 'NOT_FOUND' } }, 404);
-    const access = await userCanAccessProject(db, userId, row.project_id);
+    const access = await callerCanAccessProject(c, db, userId, row.project_id);
     if (!access.allowed) return c.json({ error: { code: 'FORBIDDEN' } }, 403);
     return c.json(rowToA2ATask(row as FixDispatchRow));
   });
@@ -494,7 +473,7 @@ export function registerA2ATaskRoutes(app: Hono<{ Variables: Variables }>): void
       .eq('id', id)
       .single();
     if (!job) return c.json({ error: { code: 'NOT_FOUND' } }, 404);
-    const access = await userCanAccessProject(db, userId, job.project_id);
+    const access = await callerCanAccessProject(c, db, userId, job.project_id);
     if (!access.allowed) return c.json({ error: { code: 'FORBIDDEN' } }, 403);
     if (job.status !== 'queued' && job.status !== 'running') {
       return c.json(
@@ -544,7 +523,7 @@ export function registerA2ATaskRoutes(app: Hono<{ Variables: Variables }>): void
     const db = getServiceClient();
     const { data: row } = await db.from('fix_dispatch_jobs').select('*').eq('id', id).single();
     if (!row) return c.json({ error: { code: 'NOT_FOUND' } }, 404);
-    const access = await userCanAccessProject(db, userId, row.project_id);
+    const access = await callerCanAccessProject(c, db, userId, row.project_id);
     if (!access.allowed) return c.json({ error: { code: 'FORBIDDEN' } }, 403);
 
     const lastEventId = c.req.header('last-event-id') ?? c.req.header('Last-Event-ID') ?? null;

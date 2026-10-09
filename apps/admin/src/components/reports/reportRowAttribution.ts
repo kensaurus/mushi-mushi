@@ -2,6 +2,7 @@
  * Pure helpers for compact triage-row attribution — layer, path, who, capture.
  */
 
+import { shortReporterKey } from '../../lib/reporterKey'
 import type { ReportRow } from './types'
 
 export type ReportLayer = 'frontend' | 'backend' | 'server' | 'mobile'
@@ -76,7 +77,35 @@ export function resolveReportPath(row: ReportRow): { path: string | null; fullTi
 
 export type CaptureMode = { label: string; tone: string; tooltip: string }
 
-export function captureMode(trigger: string | null | undefined): CaptureMode {
+/** What a scheduled Mushi job that files its own reports does, in plain words. */
+const MUSHI_JOBS: Record<string, string> = {
+  'library-modernizer': 'dependency check',
+  'status-reconciler': 'regression check',
+}
+
+/**
+ * The Mushi job that filed this report itself (`reporter_token_hash`
+ * `cron:<job>`), or null for a report from a person or an SDK. Such rows used
+ * to read "user · anon·cron:l".
+ */
+function mushiJobFiler(row: Pick<ReportRow, 'reporter_token_hash'>): { job: string; label: string } | null {
+  const m = /^cron:([a-z0-9-]+)$/.exec(row.reporter_token_hash ?? '')
+  if (!m) return null
+  return { job: m[1], label: MUSHI_JOBS[m[1]] ?? m[1] }
+}
+
+export function captureMode(
+  trigger: string | null | undefined,
+  row?: Pick<ReportRow, 'reporter_token_hash'>,
+): CaptureMode {
+  const job = row ? mushiJobFiler(row) : null
+  if (job) {
+    return {
+      label: 'mushi',
+      tone: 'bg-surface-overlay text-fg-muted border border-edge-subtle',
+      tooltip: `Filed by Mushi's scheduled ${job.label} (${job.job}), not by a user.`,
+    }
+  }
   if (!trigger) {
     return {
       label: 'user',
@@ -113,6 +142,8 @@ export function captureMode(trigger: string | null | undefined): CaptureMode {
 }
 
 export function reporterWho(row: ReportRow): { label: string; tooltip: string; verified?: boolean } {
+  const job = mushiJobFiler(row)
+  if (job) return { label: job.label, tooltip: `Mushi's ${job.label} (${job.job}) filed this report.` }
   if (row.reporter_display_name) {
     return {
       label: row.reporter_display_name,
@@ -128,7 +159,7 @@ export function reporterWho(row: ReportRow): { label: string; tooltip: string; v
     return { label: short, tooltip: `Identified user: ${id}` }
   }
   if (row.reporter_token_hash) {
-    const hex = row.reporter_token_hash.slice(0, 6)
+    const hex = shortReporterKey(row.reporter_token_hash, 6)
     return {
       label: `anon·${hex}`,
       tooltip: `Anonymous device fingerprint ·${hex}`,

@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { apiFetch } from '../../lib/supabase'
-import { Card, Btn, Badge, RelativeTime, EmptyState, ErrorAlert } from '../ui'
+import { Card, Btn, Badge, RelativeTime, EmptyState } from '../ui'
+import { PageLoadError } from '../PageLoadError'
+import { describeApiError } from '../../lib/humanizeApiError'
 import { TableSkeleton } from '../skeletons/TableSkeleton'
 import { useToast } from '../../lib/toast'
 import { usePageData } from '../../lib/usePageData'
@@ -16,28 +18,39 @@ interface SyntheticPayload {
 
 export function SyntheticReportsCard() {
   const toast = useToast()
-  const { data, loading, error, reload } = usePageData<SyntheticPayload>('/v1/admin/synthetic')
+  const { data, loading, error, errorCode, reload } = usePageData<SyntheticPayload>('/v1/admin/synthetic')
   const [generating, setGenerating] = useState(false)
   const [askingCount, setAskingCount] = useState(false)
 
   async function commitGenerate(raw: string) {
     const count = Math.max(1, Math.min(50, Math.round(Number(raw))))
     setGenerating(true)
-    const res = await apiFetch<{ generated?: number }>('/v1/admin/synthetic', {
+    const res = await apiFetch<{ generated: number; evaluated: number; requested: number }>('/v1/admin/synthetic', {
       method: 'POST',
       body: JSON.stringify({ count }),
     })
     setGenerating(false)
     setAskingCount(false)
-    if (res.ok) {
+    if (!res.ok || !res.data) {
+      const e = describeApiError(res.error, 'No synthetic reports were generated')
+      toast.error(e.title, e.hint)
+      return
+    }
+    // Report what the generator actually produced, never the requested count.
+    const { generated } = res.data
+    const noun = `synthetic report${generated === 1 ? '' : 's'}`
+    if (generated < count) {
+      toast.push({
+        tone: 'warn',
+        message: `Generated ${generated} of ${count} ${noun}. Some LLM calls failed; try again for the rest.`,
+      })
+    } else {
       toast.push({
         tone: 'success',
-        message: `Generated ${res.data?.generated ?? count} synthetic reports. They'll flow through Stage 1 → Stage 2 like real ones.`,
+        message: `Generated ${generated} ${noun}. They'll flow through Stage 1 → Stage 2 like real ones.`,
       })
-      reload()
-    } else {
-      toast.push({ tone: 'error', message: res.error?.message ?? 'Generation failed' })
     }
+    reload()
   }
 
   const reports = data?.reports ?? []
@@ -69,7 +82,7 @@ export function SyntheticReportsCard() {
       {loading ? (
         <TableSkeleton rows={4} columns={4} showFilters={false} label="Loading synthetic reports" />
       ) : error ? (
-        <ErrorAlert message={error} onRetry={reload} />
+        <PageLoadError error={error} code={errorCode} resource="synthetic reports" onRetry={reload} />
       ) : reports.length === 0 ? (
         <EmptyState
           title="No synthetic reports yet"

@@ -14,9 +14,8 @@
  * - Mount on AuditPage with stats from GET /v1/admin/audit/stats
  */
 
-import { Section } from '../ui'
 import { DetailRows, type DetailRowItem } from '../ui/fields'
-import { EndpointCodeRow, ReadoutSection } from '../readout'
+import { EndpointCodeRow, ReadoutSection, ReadoutPanel } from '../readout'
 import { RESOLVED_EXTERNAL_API_URL } from '../../lib/env'
 import type { AuditStats } from './types'
 import { IconGlobe, IconHealth } from '../icons'
@@ -72,7 +71,7 @@ export function AuditReadout({ stats, fetchedAt, isValidating }: Props) {
   ]
 
   return (
-    <Section title="Audit readout" freshness={{ at: fetchedAt, isValidating }}>
+    <ReadoutPanel title="Audit readout" freshness={{ at: fetchedAt, isValidating }}>
       <div className="grid gap-4 lg:grid-cols-2">
         <ReadoutSection title="Endpoints" icon={<IconGlobe size={14} aria-hidden />}>
           <EndpointCodeRow label="Audit stats API" url={statsApi} />
@@ -84,6 +83,6 @@ export function AuditReadout({ stats, fetchedAt, isValidating }: Props) {
           <DetailRows items={rows} dense />
         </ReadoutSection>
       </div>
-    </Section>
+    </ReadoutPanel>
   )
 }

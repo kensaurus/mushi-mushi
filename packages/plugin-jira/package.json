@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/plugin-jira",
-  "version": "0.2.5",
+  "version": "0.2.8",
   "license": "MIT",
   "description": "First-party Jira plugin for Mushi Mushi — OAuth 2.0 (3LO) connect flow, bidirectional sync (create issues from reports, mirror status changes back), and Jira webhook handler.",
   "type": "module",
@@ -18,10 +18,7 @@
     "dist",
     "README.md",
     "LICENSE",
-    "plugin.json",
-    "CONTRIBUTING.md",
-    "CODE_OF_CONDUCT.md",
-    "SECURITY.md"
+    "plugin.json"
   ],
   "scripts": {
     "build": "tsup",
@@ -46,7 +43,7 @@
     "url": "https://github.com/kensaurus/mushi-mushi.git",
     "directory": "packages/plugin-jira"
   },
-  "author": "Kenji Sakuramoto (https://bsky.app/profile/mushimushi.dev)",
+  "author": "Kenji Sakuramoto <kensaurus@gmail.com> (https://github.com/kensaurus)",
   "homepage": "https://kensaur.us/mushi-mushi",
   "bugs": {
     "url": "https://github.com/kensaurus/mushi-mushi/issues"
@@ -63,13 +60,12 @@
     "bug-tracking",
     "atlassian",
     "oauth",
-    "bidirectional-sync"
+    "bidirectional-sync",
+    "integration",
+    "issue-tracker",
+    "issue-sync"
   ],
   "engines": {
-    "node": ">=20"
-  },
-  "funding": {
-    "type": "github",
-    "url": "https://github.com/sponsors/kensaurus"
+    "node": ">=20.19.0"
   }
 }

@@ -5,6 +5,8 @@ import {
   heartbeatStateFromKeys,
   heartbeatStateFromTimestamp,
   isLiveKey,
+  freshestHeartbeatKey,
+  latestHeartbeatAt,
 } from './heartbeat'
 
 const NOW = Date.parse('2026-08-16T12:00:00.000Z')
@@ -88,5 +90,43 @@ describe('heartbeatStateFromKeys', () => {
 
   it('reports never when live keys exist but none has ever authenticated', () => {
     expect(heartbeatStateFromKeys([{ last_seen_at: null }, {}], NOW)).toBe('never')
+  })
+})
+
+describe('latestHeartbeatAt / freshestHeartbeatKey', () => {
+  it('returns the most recent check-in, not the first key that has one', () => {
+    // glot.it on 2026-10-04: 13 keys; the first key with a timestamp was 108
+    // days old while another key checked in 50 minutes earlier.
+    const keys = [
+      { id: 'old', is_active: true, last_seen_at: ago(108 * 24 * 3_600_000) },
+      { id: 'never', is_active: true, last_seen_at: null },
+      { id: 'recent', is_active: true, last_seen_at: ago(50 * 60_000) },
+      { id: 'mid', is_active: true, last_seen_at: ago(3 * 24 * 3_600_000) },
+    ]
+    expect(latestHeartbeatAt(keys)).toBe(ago(50 * 60_000))
+    expect(freshestHeartbeatKey(keys)?.id).toBe('recent')
+  })
+
+  it('compares instants, not strings, across timestamp formats', () => {
+    const keys = [
+      { last_seen_at: '2026-10-03T23:27:23.973+00:00' },
+      { last_seen_at: '2026-10-03 22:00:00+00' },
+    ]
+    expect(latestHeartbeatAt(keys)).toBe('2026-10-03T23:27:23.973+00:00')
+  })
+
+  it('ignores revoked or inactive keys and unparseable timestamps', () => {
+    expect(
+      latestHeartbeatAt([
+        { last_seen_at: ago(60_000), is_active: false },
+        { last_seen_at: ago(60_000), revoked: true },
+        { last_seen_at: 'garbage' },
+      ]),
+    ).toBeNull()
+  })
+
+  it('returns null for no keys', () => {
+    expect(latestHeartbeatAt(undefined)).toBeNull()
+    expect(latestHeartbeatAt([])).toBeNull()
   })
 })

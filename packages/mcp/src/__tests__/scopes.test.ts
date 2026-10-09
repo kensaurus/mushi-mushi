@@ -154,14 +154,16 @@ describe('per-scope tool filtering', () => {
     }
   })
 
-  it('calling a filtered-out tool returns an isError result without hitting the API', async () => {
+  it('calling a filtered-out tool is rejected by the server without hitting the API', async () => {
     const { client } = await connectClient(fetchStub.stub, ['mcp:read'])
     try {
-      // dispatch_fix is mcp:write — must not be registered.
-      const res = await client.callTool({ name: 'dispatch_fix', arguments: { reportId: 'r1' } })
-      expect(res.isError).toBe(true)
-      const content = res.content as Array<{ type: string; text: string }>
-      expect(content[0].text).toMatch(/dispatch_fix not found/)
+      // dispatch_fix is mcp:write — must not be registered. The v2 SDK
+      // answers an unknown tool with a JSON-RPC -32602 (Invalid params)
+      // error, where v1 returned an isError tool result; either way the
+      // client surfaces "<tool> not found".
+      await expect(
+        client.callTool({ name: 'dispatch_fix', arguments: { reportId: 'r1' } }),
+      ).rejects.toThrow(/dispatch_fix not found/)
       // Critically: no fetch was made — the LLM didn't burn a round-trip
       // on an INSUFFICIENT_SCOPE response from the API.
       expect(fetchStub.calls).toHaveLength(0)
@@ -202,9 +204,16 @@ describe('structured tool output (MCP 2025-06-18)', () => {
       reports: [{ id: 'r1', status: 'classified' }],
       total: 42,
     })
-    // Text content is still present for older clients.
+    // Text content is still present for older clients — wrapped as untrusted
+    // data, because report rows carry reporter-authored text. Strip the
+    // envelope and parse it: a `toContain('"total": 42')` would pass even if
+    // the rows themselves went missing from this channel.
     const content = res.content as Array<{ type: string; text: string }>
-    expect(JSON.parse(content[0].text)).toEqual({
+    expect(content[0].text).toMatch(/^<mushi-data role="get_recent_reports">/)
+    // Non-greedy: report bodies are reporter-authored and can contain a
+    // literal </content>, which a greedy match would swallow past.
+    const payload = content[0].text.match(/<content>\n([\s\S]*?)\n<\/content>/)?.[1] ?? ''
+    expect(JSON.parse(payload)).toEqual({
       reports: [{ id: 'r1', status: 'classified' }],
       total: 42,
     })

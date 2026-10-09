@@ -212,6 +212,16 @@ export function IconBell(p: IconProps) {
   </>)
 }
 
+/** Microphone — Voice intake page (tap-to-talk). */
+export function IconMic(p: IconProps) {
+  return wrap(p, <>
+    <rect x="5.5" y="2" width="5" height="7.5" rx="2.5" />
+    <path d="M3.5 7.5a4.5 4.5 0 0 0 9 0" />
+    <path d="M8 12v2" />
+    <path d="M6 14h4" />
+  </>)
+}
+
 export function IconIntelligence(p: IconProps) {
   return wrap(p, <>
     <rect x="2.5" y="2.5" width="11" height="11" rx="1" />
@@ -264,6 +274,13 @@ export function IconGlobe(p: IconProps) {
     <circle cx="8" cy="8" r="6" />
     <path d="M2 8h12" />
     <path d="M8 2c2 2 2.5 3.8 2.5 6S10 12 8 14c-2-2-2.5-3.8-2.5-6S6 4 8 2z" />
+  </>)
+}
+
+export function IconMobile(p: IconProps) {
+  return wrap(p, <>
+    <rect x="4.5" y="1.5" width="7" height="13" rx="1.5" />
+    <path d="M7 12.5h2" strokeLinecap="round" />
   </>)
 }
 
@@ -788,16 +805,6 @@ export function IconJira(p: IconProps) {
   return wrap(p, <>
     <path d="M8 2L14 8L8 14L2 8Z" />
     <path d="M8 5L11 8L8 11L5 8Z" fill="currentColor" stroke="none" />
-  </>)
-}
-
-// Linear: three stacked horizontal bars with decreasing left indentation —
-// evokes the Linear wordmark's "L" and the issue-list metaphor.
-export function IconLinear(p: IconProps) {
-  return wrap(p, <>
-    <circle cx="8" cy="8" r="5.5" />
-    <path d="M5.5 10.5 L10.5 5.5" strokeLinecap="round" />
-    <path d="M5.5 10.5 L8.5 10.5" strokeLinecap="round" />
   </>)
 }
 

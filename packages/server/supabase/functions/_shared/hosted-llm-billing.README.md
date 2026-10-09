@@ -44,45 +44,45 @@ failure** — otherwise it retries against the bridge and stringifies `reason`
 and `balanceMicro` away, leaving the UI nothing to prompt a top-up with.
 `inventory-propose` and `story-mapper` both do this explicitly.
 
-`withLlmFailover` also takes an optional `meter` argument for callers that
-write no `llm_invocations` row (`inventory-propose`, `story-mapper`). **Do not
-pass `meter` from a path that also calls `logLlmInvocation`** — that charges
-the same call twice.
+`withLlmFailover` also takes an optional `meter` argument for a caller that
+writes no `llm_invocations` row. Since 2026-10-04 no caller passes it: every
+generation writes a row through `_shared/llm-usage.ts` (`recordLlmUsage` /
+`withLlmUsage`). **Do not pass `meter` from a path that also writes a row** —
+that charges the same call twice.
 
 ## Coverage — read this before quoting revenue
 
 This is a first cut. It bills the paths that were already instrumented, not
 every path that can burn a platform key.
 
-**Debited today** — verified by grepping for `keySource:` at each
-`logLlmInvocation` site, since a row that omits it stores `key_source = null`
-and silently misses the gate:
+**Policy (owner, 2026-10-04): bill what a user asked for, never background
+maintenance.** Customers do not expect to pay for processes they did not start
+(Sentry moved Seer from per-scan billing to a flat per-contributor price). A
+platform-key call is debited only when its row has `keySource: 'env'` and its
+path opts in; `_shared/llm-usage.ts` writes rows with `skipHostedBilling`
+unless the site passes `billHosted: true`. A test pins the opt-in list, and
+every opted-in path checks the wallet before calling the provider.
 
-| Function | Why it qualifies |
-| -------- | ---------------- |
-| `classify-report` (stage 2 + OpenAI fallback) | sets `keySource` |
-| `fast-filter` | sets `keySource` |
-| `sentinel-audit` | sets `keySource` |
-| `ask-mushi` | sets `keySource` |
-| `codebase-understand` | sets `keySource` from `key.source` |
-| `inventory-propose`, `story-mapper` | via the `meter` option |
+**Debited (user-requested):** triage and fixes (classify-report, fast-filter,
+fix-worker), ask-mushi, codebase-understand, repo-diagram, voice, the in-widget
+assistant (`sdk-assistant`, a feature the customer turns on), `nl-query`
+(console questions; preflight added 2026-10-04), `test-gen-from-report`,
+`test-gen-from-story`, `inventory-propose` and `story-mapper`.
 
-**Not debited yet:**
+**Recorded, never debited (background):** `judge-batch`,
+`generate-synthetic`, `mistake-clusterer`, `mistake-summarizer`,
+`release-builder`, `pdca-runner`, `library-modernizer`,
+`prompt-auto-tune`, `intelligence-report`, the `classify-report` vision
+call, and embeddings. They show on Costs and count toward the monthly budget.
 
-- Writes an `llm_invocations` row but never sets `keySource`, so the gate never
-  fires: `sdk-assistant`, `intelligence-report`. These are the cheapest to fix
-  — one field at the existing telemetry call.
-- Resolves a key but writes no telemetry row at all: `judge-batch`,
-  `fix-worker`, `library-modernizer`, `prompt-auto-tune`, `qa-story-runner`,
-  and the `classify-report` vision call.
-- Reads `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` straight from the environment,
-  bypassing BYOK resolution entirely: `generate-synthetic`,
-  `mistake-clusterer`, `mistake-summarizer`, `release-builder`. These never
-  honour a customer's BYOK key either, which is a separate bug.
+**Keys:** every one of these uses the project's own key first
+(`resolveLlmKey`, or `_shared/project-llm-key.ts` for batch jobs, which skips
+a project over its budget) and the platform key otherwise, and records which.
+Until 2026-10-04 generate-synthetic, mistake-* and release-builder read the
+platform key straight from the environment.
 
-Closing the gap means giving those call sites a `logLlmInvocation` write with
-`keySource` (which they should have anyway for cost telemetry), not adding more
-billing seams.
+- `fine-tune-vendor` predictions (an `ft:` model has no price row) and the
+  `integration-probes` key checks write no row.
 
 `activation.ts` and `project-integrations.ts` call `resolveLlmKey` as key
 *validation probes*, not billable generations. They write no telemetry row and
@@ -90,16 +90,12 @@ are correctly excluded.
 
 ### Preflight is broader than the debit
 
-The `on`-mode preflight lives in `withLlmFailover`, so it also covers every
-`withAnthropicOrOpenAi` caller — including `fix-worker`, `pdca-runner`,
-`test-gen-from-report`, and `test-gen-from-story`, which are in the not-debited
-list above. Those calls are **gated but free**: an empty wallet refuses them,
-a funded wallet runs them without a ledger row.
-
-That asymmetry is deliberate. It errs toward never overcharging, and it keeps
-the paywall uniform across hosted LLM rather than leaving some paths open when
-the wallet is empty. It is still revenue leakage, and it closes the same way
-the rest of the gap does — by adding the missing telemetry writes.
+The `on`-mode preflight lives in `withLlmFailover`, so it covers every
+`withAnthropicOrOpenAi` caller. Paths that call the provider directly
+(`judge-batch`, `generate-synthetic`, `mistake-*`, `release-builder`,
+`library-modernizer`, `prompt-auto-tune`, the vision call) are
+neither gated nor debited. `nl-query` calls `hostedLlmPreflight` itself. If
+another one is opted into billing, give it the same preflight first.
 
 One softness worth knowing: `keySource` is what the caller *inferred*, not what
 `resolveLlmKey` returned. `classify-report` does

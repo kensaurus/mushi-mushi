@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/mcp-ci
 
 ---
 title: '@mushi-mushi/mcp-ci'
+description: "@mushi-mushi/mcp-ci is Mushi's GitHub Action — run the five-gate composite check on pull requests, draft inventory entries, and bootstrap crawler auth."
 ---
 
 # `@mushi-mushi/mcp-ci`

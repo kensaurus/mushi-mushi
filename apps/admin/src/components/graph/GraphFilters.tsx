@@ -5,7 +5,7 @@
  *          dispatches setter callbacks.
  */
 
-import { Input } from '../ui'
+import { DisclosurePanel, Input } from '../ui'
 import { NODE_COLORS } from '../../lib/tokens'
 import {
   EDGE_LABELS,
@@ -96,19 +96,24 @@ export function GraphFilterChips({
   const allEdges = enabledEdgeTypes.size === EDGE_TYPES.length
   return (
     <div className="rounded-md border border-edge-subtle bg-surface-raised/30 p-2.5 space-y-2.5">
-      <div className="flex flex-wrap items-center gap-2">
-        <Input
-          placeholder="Search node label…"
-          value={search}
-          onChange={(e) => onSearchChange(e.target.value)}
-          className="w-64"
-        />
-        <span className="text-2xs text-fg-faint ml-auto">
-          {NODE_TYPES.filter((t) => enabledNodeTypes.has(t)).length}/{NODE_TYPES.length} node types ·{' '}
-          {EDGE_TYPES.filter((t) => enabledEdgeTypes.has(t)).length}/{EDGE_TYPES.length} edge types
-        </span>
-      </div>
+      <Input
+        placeholder="Search node label…"
+        value={search}
+        onChange={(e) => onSearchChange(e.target.value)}
+        className="w-64"
+      />
 
+      {/* 12 node and 19 edge chips are rarely touched; closed by default. */}
+      <DisclosurePanel
+        title="Node and edge types"
+        trailing={
+          <span className="text-2xs font-normal text-fg-faint">
+            {NODE_TYPES.filter((t) => enabledNodeTypes.has(t)).length}/{NODE_TYPES.length} node ·{' '}
+            {EDGE_TYPES.filter((t) => enabledEdgeTypes.has(t)).length}/{EDGE_TYPES.length} edge
+          </span>
+        }
+      >
+      <div className="space-y-2.5">
       <FilterChipGroup label="Show node types" allActive={allNodes}>
         {NODE_TYPES.map((nt) => {
           const active = enabledNodeTypes.has(nt)
@@ -154,6 +159,8 @@ export function GraphFilterChips({
           )
         })}
       </FilterChipGroup>
+      </div>
+      </DisclosurePanel>
     </div>
   )
 }

@@ -2,6 +2,7 @@ import { severityLabel } from '../../lib/tokens'
 import type { DispatchState } from '../../lib/dispatchFix'
 import type { ReportDetail, ReportFixAttempt } from './types'
 import { pickPrimaryFixAttempt } from '../../lib/mergeFix'
+import { isReportClassified } from '../../lib/reportDiagnosis'
 
 export interface RecommendationMeta {
   label: string
@@ -16,6 +17,8 @@ export interface RecommendationAction {
   href?: string
   onClick?: () => void
   tone?: 'primary' | 'ghost' | 'danger'
+  /** Set on "Retry dispatch" while the dispatch gate blocks it. */
+  disabled?: boolean
 }
 
 export interface Recommendation {
@@ -117,12 +120,42 @@ function mergeReadyRecommendation(
   }
 }
 
+/**
+ * The recommendation card for a report. `onRequestDispatch` must be the
+ * page's confirm-and-preflight path (useConfirmedDispatch().request), never
+ * a raw dispatch: every "Dispatch fix" / "Retry dispatch" here goes through
+ * it. `block` is the same gate the triage bar uses; while it blocks, those
+ * controls render disabled and the reason shows as a chip.
+ */
 export function deriveRecommendation(
   report: ReportDetail,
   dispatchState: DispatchState,
   commentCount: number,
-  onDispatch: () => void | Promise<void>,
+  onRequestDispatch: () => void,
   nowMs: number = Date.now(),
+  block: { blocked: boolean; reason: string | null } = { blocked: false, reason: null },
+): Recommendation {
+  const rec = recommendationFor(report, dispatchState, commentCount, onRequestDispatch, nowMs)
+  if (!block.blocked) return rec
+  const isDispatch = (onClick: (() => void) | undefined) => onClick === onRequestDispatch
+  const touchesDispatch = isDispatch(rec.cta?.onClick) || (rec.actions ?? []).some((a) => isDispatch(a.onClick))
+  if (!touchesDispatch) return rec
+  return {
+    ...rec,
+    cta: rec.cta && isDispatch(rec.cta.onClick) ? { ...rec.cta, disabled: true } : rec.cta,
+    actions: rec.actions?.map((a) => (isDispatch(a.onClick) ? { ...a, disabled: true } : a)),
+    meta: block.reason
+      ? [...(rec.meta ?? []), { label: 'Cannot dispatch', value: block.reason, tone: 'warn' as const }]
+      : rec.meta,
+  }
+}
+
+function recommendationFor(
+  report: ReportDetail,
+  dispatchState: DispatchState,
+  commentCount: number,
+  onDispatch: () => void,
+  nowMs: number,
 ): Recommendation {
   if (dispatchState.status === 'completed' && dispatchState.prUrl) {
     return mergeReadyRecommendation(report, dispatchState.prUrl, pickPrimaryFixAttempt(report.fix_attempts))
@@ -214,6 +247,27 @@ export function deriveRecommendation(
         ]
       : []
 
+    // context_assembly_failed: RAG embedding / retrieval pipeline error.
+    // Checked BEFORE the skipped_no_context branch: the worker skips these
+    // attempts with status skipped_no_context too, and a category is more
+    // specific than a status. Ordered the other way, a revoked embedding key
+    // read as "no relevant code found in the index" and sent the user to
+    // re-index a repo whose index was fine (glot.it, 2026-09-23).
+    if (latest.failure_category === 'context_assembly_failed') {
+      return {
+        title: 'Fix skipped \u2014 context assembly failed',
+        description:
+          'The agent could not build a code context: the RAG embedding or retrieval call failed. If the attempt mentions a 401 from the embedding provider, the BYOK OpenAI key is invalid or revoked \u2014 rotate it under Settings \u2192 BYOK. Otherwise this is usually transient; retry, and check the Fixes pipeline logs if it keeps failing.',
+        tone: 'urgent',
+        meta: lastAttemptMeta,
+        actions: [
+          { label: 'Check BYOK keys \u2192', to: '/settings?tab=byok', tone: 'primary' },
+          { label: 'Open Fixes pipeline \u2192', to: '/fixes', tone: 'ghost' },
+          { label: 'Retry dispatch', onClick: onDispatch, tone: 'ghost' },
+        ],
+      }
+    }
+
     // skipped_no_context | no_relevant_code: no matching files in codebase index
     if (
       latest.status === 'skipped_no_context' ||
@@ -226,23 +280,8 @@ export function deriveRecommendation(
         tone: 'urgent',
         meta: lastAttemptMeta,
         actions: [
-          { label: 'Configure codebase indexing \u2192', to: '/integrations', tone: 'primary' },
-          { label: 'Retry dispatch', onClick: () => onDispatch(), tone: 'ghost' },
-        ],
-      }
-    }
-
-    // context_assembly_failed: RAG embedding / retrieval pipeline error
-    if (latest.failure_category === 'context_assembly_failed') {
-      return {
-        title: 'Fix skipped — context assembly failed',
-        description:
-          'The agent could not build a code context (RAG embedding or retrieval error). This is usually transient. Retry the dispatch; if it keeps failing, check the Fixes pipeline logs.',
-        tone: 'urgent',
-        meta: lastAttemptMeta,
-        actions: [
-          { label: 'Open Fixes pipeline \u2192', to: '/fixes', tone: 'ghost' },
-          { label: 'Retry dispatch', onClick: () => onDispatch(), tone: 'primary' },
+          { label: 'Configure codebase indexing \u2192', to: '/integrations/config#integrations-codebase', tone: 'primary' },
+          { label: 'Retry dispatch', onClick: onDispatch, tone: 'ghost' },
         ],
       }
     }
@@ -273,7 +312,7 @@ export function deriveRecommendation(
           'The configured agent type cannot handle this report. Switch to the default Claude agent in project settings.',
         tone: 'urgent',
         meta: lastAttemptMeta,
-        actions: [{ label: 'View project settings \u2192', to: '/integrations', tone: 'primary' }],
+        actions: [{ label: 'View project settings \u2192', to: '/integrations/config', tone: 'primary' }],
       }
     }
 
@@ -293,7 +332,7 @@ export function deriveRecommendation(
         tone: 'urgent',
         meta: lastAttemptMeta,
         actions: [
-          { label: 'Retry dispatch', onClick: () => onDispatch(), tone: 'primary' },
+          { label: 'Retry dispatch', onClick: onDispatch, tone: 'primary' },
           {
             label: 'Check Anthropic dashboard \u2192',
             href: 'https://console.anthropic.com',
@@ -322,7 +361,7 @@ export function deriveRecommendation(
         tone: 'urgent',
         meta: lastAttemptMeta,
         actions: [
-          { label: 'Re-connect GitHub \u2192', to: '/integrations', tone: 'primary' },
+          { label: 'Re-connect GitHub \u2192', to: '/integrations/config#platform-card-github', tone: 'primary' },
           { label: 'View pipeline log \u2192', to: '/fixes', tone: 'ghost' },
         ],
       }
@@ -345,7 +384,7 @@ export function deriveRecommendation(
         meta: lastAttemptMeta,
         actions: [
           { label: 'View pipeline log \u2192', to: '/fixes', tone: 'ghost' },
-          { label: 'Retry dispatch', onClick: () => onDispatch(), tone: 'primary' },
+          { label: 'Retry dispatch', onClick: onDispatch, tone: 'primary' },
         ],
       }
     }
@@ -360,13 +399,18 @@ export function deriveRecommendation(
         meta: lastAttemptMeta,
         actions: [
           { label: 'View pipeline log \u2192', to: '/fixes', tone: 'ghost' },
-          { label: 'Retry dispatch', onClick: () => onDispatch(), tone: 'primary' },
+          { label: 'Retry dispatch', onClick: onDispatch, tone: 'primary' },
         ],
       }
     }
   }
 
-  if (!report.stage1_classification && !report.processing_error) {
+  // One "classified?" answer for the whole page (lib/reportDiagnosis.ts): a
+  // report with status 'classified' and a Stage-2 diagnosis but no Stage-1
+  // object used to read "Classification pending" here (REPORT A2).
+  const classified = isReportClassified(report)
+
+  if (!classified && !report.processing_error) {
     return {
       title: 'Classification pending',
       description: 'The LLM pipeline is still processing this report. Refresh in a few seconds.',
@@ -374,7 +418,7 @@ export function deriveRecommendation(
     }
   }
 
-  if (report.processing_error) {
+  if (report.processing_error && !classified) {
     return {
       title: 'Classification failed — triage manually',
       description:
@@ -387,7 +431,7 @@ export function deriveRecommendation(
     return {
       title: `Confirm priority for this ${severityLabel(report.severity).toLowerCase()} bug`,
       description: 'Set the status to Classified, then dispatch a fix or hand off to engineering.',
-      cta: { label: 'Dispatch fix', onClick: () => onDispatch() },
+      cta: { label: 'Dispatch fix', onClick: onDispatch },
       tone: 'urgent',
     }
   }
@@ -396,7 +440,7 @@ export function deriveRecommendation(
     return {
       title: 'Triage this report',
       description: 'Add a triage note for context, or dispatch an autofix attempt.',
-      cta: { label: 'Dispatch fix', onClick: () => onDispatch() },
+      cta: { label: 'Dispatch fix', onClick: onDispatch },
       tone: 'info',
     }
   }
@@ -405,7 +449,7 @@ export function deriveRecommendation(
     return {
       title: 'Start triage',
       description: 'Set the severity and update status, or dispatch a fix if confidence is high.',
-      cta: { label: 'Dispatch fix', onClick: () => onDispatch() },
+      cta: { label: 'Dispatch fix', onClick: onDispatch },
       tone: 'info',
     }
   }

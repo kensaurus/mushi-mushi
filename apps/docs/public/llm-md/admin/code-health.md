@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/code-health
 
 ---
 title: Code health
+description: The Code health page charts bundle size and oversized files from your CI over time, so you notice an app getting heavier before your users do.
 ---
 
 # Code health
@@ -51,9 +52,14 @@ Reference implementation: `kensaurus/yen-yen` — `.github/workflows/bundle-budg
 ## API
 
 ```bash
-GET /v1/admin/code-health?project_id=
+GET /v1/admin/code-health?project_id=<uuid>
 POST /v1/ingest/metrics   # CI push — apiKeyAuth, prefix allow-list bundle.* / code_health.*
 ```
+
+From your editor, the MCP tool `get_code_health` returns the same data
+(trends default to the last 30 days; pass `days` for more). Pass a god file's
+`id` to `explain_finding` for its fix in one sentence. A project key reads its
+own project; an account-level key needs `projectId` (`project_id` on the API).
 
 ---
 

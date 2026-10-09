@@ -4,17 +4,17 @@
  *          endpoint, project ref, and key prefix stack (Connect-style readout).
  */
 
-import { Section } from '../ui'
 import { DetailRows, type DetailRowItem } from '../ui/fields'
-import { EndpointCodeRow, ReadoutSection } from '../readout'
+import { EndpointCodeRow, ReadoutSection, ReadoutPanel } from '../readout'
 import { RESOLVED_EXTERNAL_API_URL } from '../../lib/env'
 import { IconGlobe, IconHealth, IconKey } from '../icons'
 
 export interface ProjectsSetupReadoutProps {
   activeProjectId: string | null
   activeProjectName: string | null
-  activeKeyCount: number
-  staleKeyCount: number
+  /** The active project's own key counts; null until its row has loaded. */
+  activeKeyCount: number | null
+  staleKeyCount: number | null
   activeProjectSdkConnected: boolean
   keyPrefixes?: string[]
   fetchedAt: string | null
@@ -53,13 +53,23 @@ export function ProjectsSetupReadout({
     },
     {
       label: 'API keys',
-      value: `${activeKeyCount} active · ${staleKeyCount} never seen`,
-      tone: staleKeyCount > 0 ? 'warn' : activeKeyCount > 0 ? 'ok' : 'muted',
+      value:
+        activeKeyCount === null || staleKeyCount === null
+          ? 'Not checked yet'
+          : `${activeKeyCount} active · ${staleKeyCount} never seen`,
+      tone:
+        activeKeyCount === null || staleKeyCount === null
+          ? 'muted'
+          : staleKeyCount > 0
+            ? 'warn'
+            : activeKeyCount > 0
+              ? 'ok'
+              : 'muted',
     },
   ]
 
   return (
-    <Section title="Project setup readout" freshness={{ at: fetchedAt, isValidating: validating }}>
+    <ReadoutPanel title="Project setup readout" freshness={{ at: fetchedAt, isValidating: validating }}>
       <p className="mb-4 text-xs leading-relaxed text-fg-muted">
         Copy the ingest endpoint and project ref into your host app env. Key prefixes help match
         heartbeats to the console.
@@ -90,6 +100,6 @@ export function ProjectsSetupReadout({
           ) : null}
         </ReadoutSection>
       </div>
-    </Section>
+    </ReadoutPanel>
   )
 }

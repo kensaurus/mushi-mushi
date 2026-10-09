@@ -23,7 +23,7 @@ helm install mushi ./deploy/helm \
 | Resource                         | Purpose                                                         |
 | -------------------------------- | --------------------------------------------------------------- |
 | `Job/<release>-migrate`          | Pre-install / pre-upgrade hook that applies every SQL migration |
-| `ConfigMap/<release>-migrations` | Bundles all `*.sql` from `packages/server/supabase/migrations/` |
+| `ConfigMap/<release>-migrations-YYYYMM` | One per month: the `*.sql` from `packages/server/supabase/migrations/` |
 | `Deployment/<release>-api`       | Public Edge-style HTTP surface                                  |
 | `Deployment/<release>-admin`     | Admin SPA + static assets                                       |
 | `Service` + `Ingress`            | TLS-terminated routing                                          |
@@ -31,11 +31,11 @@ helm install mushi ./deploy/helm \
 
 ## Migrations stay in sync automatically
 
-The chart's migration ConfigMap is rendered from `deploy/helm/migrations/`. That folder is a **mirror** of `packages/server/supabase/migrations/` produced by `scripts/sync-helm-migrations.mjs` — never edit it by hand.
+The chart's migration ConfigMaps are rendered from `deploy/helm/migrations/`. That folder is a **mirror** of `packages/server/supabase/migrations/` produced by `scripts/sync-helm-migrations.mjs` — never edit it by hand.
 
 CI runs `pnpm check:helm-migrations` on every PR; a stale chart fails the build with a clear diff message instead of silently shipping a partial schema.
 
-If the chart ever exceeds the 1 MiB ConfigMap budget the sync script warns at ~900 KiB. Current footprint is synced from `packages/server/supabase/migrations/` via `pnpm sync:helm-migrations` (247 mirrored files at last sync — run `pnpm check:helm-migrations` for the live count).
+The Kubernetes API caps one ConfigMap at 1 MiB, and the full migration set is larger than that, so the chart writes one ConfigMap per calendar month (`<release>-migrations-YYYYMM`, from the first six digits of each migration timestamp) and the migrate Job mounts them all into one `/migrations` directory through a projected volume. `pnpm check:helm-migrations` fails if any single month passes 900 KiB; split that month further in `templates/_helpers.tpl` if it ever does. Run it for the live file count and the largest shard.
 
 ## Multi-region deployment
 

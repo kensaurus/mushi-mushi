@@ -11,11 +11,15 @@
   },
   {
     "scheduled_for": "2026-04-24T15:00:00Z",
-    "text": "the gap nobody talks about:\n\nSentry sees what your code throws.\nMushi sees what your users feel.\n\nLogin button does nothing on iPad Safari? No exception fires. No 5xx. Sentry green. User gone.\n\nThat's the bug we built Mushi for.\n\nhttps://github.com/kensaurus/mushi-mushi"
+    "text": "the gap nobody talks about:\n\nSentry sees what your code throws.\nMushi sees what your users feel.\n\nLogin button does nothing on iPad Safari? No exception fires. No 5xx. Sentry green. User gone.\n\nThat's the bug we built Mushi for.\n\nhttps://github.com/kensaurus/mushi-mushi",
+    "disabled": true,
+    "disabled_reason": "Retired 2026-09-21 without posting. Written for the April soft launch; 'Sentry sees what your code throws' is the v1 line that VOICE.md now keeps to comparison tables, and it implies Sentry only sees thrown errors. Rewrite to the ADR 0004 positioning before re-enabling."
   },
   {
     "scheduled_for": "2026-04-25T15:00:00Z",
-    "text": "today's tiny win 🌱\n\nshipped a `/repo` page that shows one node per branch the auto-fix agent has opened, grouped by CI status, with a live event stream on the right.\n\nyou can leave it open on a second monitor and watch the loop close in real time.\n\nhttps://kensaur.us/mushi-mushi/repo"
+    "text": "today's tiny win 🌱\n\nshipped a `/repo` page that shows one node per branch the auto-fix agent has opened, grouped by CI status, with a live event stream on the right.\n\nyou can leave it open on a second monitor and watch the loop close in real time.\n\nhttps://kensaur.us/mushi-mushi/repo",
+    "disabled": true,
+    "disabled_reason": "Retired 2026-09-21 without posting. 'Today's tiny win' from April is no longer today, the link opens the console sign-in rather than the page it describes, and the emoji-led voice is out of line with VOICE.md."
   },
   {
     "scheduled_for": "2026-04-27T15:00:00Z",
@@ -23,10 +27,14 @@
     "image": {
       "path": "docs/marketing/social/images/launch-card.jpg",
       "alt": "Same hand-illustrated Mushi-chan launch card showing the install command `$ npx mushi-mushi`."
-    }
+    },
+    "disabled": true,
+    "disabled_reason": "Retired 2026-09-21 without posting. It promises a seeded, clickable live demo at kensaur.us/mushi-mushi/, but the console needs a sign-in; the no-signup demo is /docs/connect. The Mushi-chan launch card is also out of line with VOICE.md."
   },
   {
     "scheduled_for": "2026-04-30T15:00:00Z",
-    "text": "the backend is AGPLv3 open-core because:\n\n→ self-hosting: free, forever\n→ fork it and modify it for your org: allowed\n→ your team's internal install: free, no asterisks\n\nthe only paid boundary is a tiny enterprise edition (SSO, audit export) a solo dev never needs.\n\nif you've been bitten by a license bait-and-switch before, that's why.\n\nhttps://github.com/kensaurus/mushi-mushi"
+    "text": "the backend is AGPLv3 open-core because:\n\n→ self-hosting: free, forever\n→ fork it and modify it for your org: allowed\n→ your team's internal install: free, no asterisks\n\nthe only paid boundary is a tiny enterprise edition (SSO, audit export) a solo dev never needs.\n\nif you've been bitten by a license bait-and-switch before, that's why.\n\nhttps://github.com/kensaurus/mushi-mushi",
+    "disabled": true,
+    "disabled_reason": "Retired 2026-09-21 without posting. The licensing points still hold, but the April date passed and the launch plan is now one post per release (launch-week.md). Reschedule deliberately, after R1, if the open-core angle is wanted."
   }
 ]

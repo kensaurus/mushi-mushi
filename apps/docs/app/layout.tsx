@@ -1,17 +1,21 @@
-import { Footer, Layout, Navbar } from 'nextra-theme-docs'
+import { Layout, Navbar } from 'nextra-theme-docs'
 import { Banner, Head } from 'nextra/components'
 import { getPageMap } from 'nextra/page-map'
 import Link from 'next/link'
 import { NavbarAuthChrome } from '../components/NavbarAuthChrome'
+import { MushiSiteAnalytics } from '../components/MushiSiteAnalytics'
+import { SiteFooter } from '../components/SiteFooter'
 /* globals.css imports both `tailwindcss` AND `nextra-theme-docs/style.css`,
  * so we only import the one entry file to keep the cascade ordering stable
  * (Tailwind base layer before Nextra theme styles). */
 import './globals.css'
 import changelog from '../data/changelog.json'
+import { MUSHI_TAGLINE_V2 } from '@mushi-mushi/brand'
 import { JsonLd } from '../components/JsonLd'
+import { releaseHeadline } from '../lib/release-headline'
 import {
   DOCS_SITE,
-  OG_CARD_URL,
+  OG_CARD_IMAGE,
   ORGANIZATION_JSONLD,
   WEBSITE_JSONLD,
 } from '../lib/structured-data'
@@ -25,15 +29,16 @@ export const metadata: Metadata = {
     default: 'Mushi Mushi — know why your AI-built app broke, with the fix ready',
     template: '%s · Mushi Mushi',
   },
-  description:
-    'Know why your AI-built app broke — plain-English diagnosis + ready fix, in your editor. Open source. Sentry optional.',
+  // Fallback for pages without their own `description:` (the admin-console
+  // manual). The brand pitch, not a hand-typed second one.
+  description: MUSHI_TAGLINE_V2.pitch,
   openGraph: {
     siteName: 'Mushi Mushi',
     type: 'website',
     // OG_CARD_URL is fully absolute — a root-relative URL here gets
     // metadataBase.pathname joined on and double-prefixes /mushi-mushi
     // (GSC-visible 404 on every docs page's social preview).
-    images: [{ url: OG_CARD_URL, width: 1200, height: 630 }],
+    images: [OG_CARD_IMAGE],
   },
   robots: { index: true, follow: true },
   // Fully-absolute asset URLs: Next joins metadataBase.pathname onto
@@ -47,9 +52,12 @@ export const metadata: Metadata = {
     ],
     apple: `${DOCS_SITE}/apple-touch-icon.png`,
   },
+  // No `site`: the @mushimushi_dev handle was never registered (see the
+  // sameAs note in lib/structured-data.ts), and naming an account someone
+  // else can claim is worse than naming none.
   twitter: {
     card: 'summary_large_image',
-    site: '@mushimushi_dev',
+    images: [OG_CARD_IMAGE.url],
   },
 }
 
@@ -80,13 +88,7 @@ export const metadata: Metadata = {
  */
 const latestRelease = changelog[0]
 const latestVersion = latestRelease.versions?.[0] ?? latestRelease.majorMinor
-const latestHeadline =
-  latestRelease.headline ??
-  latestRelease.highlights
-    ?.slice(0, 2)
-    .map((h) => h.title.replace(/:$/, ''))
-    .join(', ') ??
-  'See what shipped.'
+const latestHeadline = releaseHeadline(latestRelease)
 
 const banner = (
   <Banner storageKey={`v${latestRelease.majorMinor.replace(/\./g, '-')}-release`}>
@@ -118,12 +120,10 @@ const navbar = (
   </Navbar>
 )
 
-const footer = (
-  <Footer>
-    MIT (SDKs) · AGPLv3 (server) · commercial (enterprise edition) — ©{' '}
-    {new Date().getFullYear()} Mushi Mushi. Built with Nextra.
-  </Footer>
-)
+/* Footer lives in components/SiteFooter.tsx (client) so it can read the
+ * pathname: legal/security/status/contact links on every page, the
+ * kensaurus portfolio table only off the conversion surfaces. */
+const footer = <SiteFooter />
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
   return (
@@ -145,6 +145,9 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
         >
           {children}
         </Layout>
+        {/* Mushi measuring its own funnel with its own SDK — client-only,
+            consent-gated, no-op unless NEXT_PUBLIC_MUSHI_SELF_* are set. */}
+        <MushiSiteAnalytics />
       </body>
     </html>
   )

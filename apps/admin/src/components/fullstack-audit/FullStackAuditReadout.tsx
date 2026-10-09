@@ -13,9 +13,8 @@
  * - Mount on FullStackAuditPage with stats from GET /v1/admin/fullstack-audit/stats
  */
 
-import { Section } from '../ui'
 import { DetailRows, type DetailRowItem } from '../ui/fields'
-import { EndpointCodeRow, ReadoutSection } from '../readout'
+import { EndpointCodeRow, ReadoutSection, ReadoutPanel } from '../readout'
 import { RESOLVED_EXTERNAL_API_URL } from '../../lib/env'
 import type { FullstackAuditStats } from './FullstackAuditStatsTypes'
 import { IconGlobe, IconHealth } from '../icons'
@@ -31,26 +30,19 @@ export function FullStackAuditReadout({ stats, fetchedAt, isValidating }: Props)
 
   const statsApi = `${RESOLVED_EXTERNAL_API_URL}/v1/admin/fullstack-audit/stats`
 
+  // A failed read leaves the counts unknown: never show them as a green 0.
+  const unknown = stats.topPriority === 'unknown'
+  const count = (n: number, bad: 'danger' | 'warn'): Pick<DetailRowItem, 'value' | 'tone'> =>
+    unknown ? { value: '—', tone: 'warn' } : { value: String(n), tone: n > 0 ? bad : 'ok' }
   const rows: DetailRowItem[] = [
-    {
-      label: 'Errors',
-      value: String(stats.errorCount),
-      tone: stats.errorCount > 0 ? 'danger' : 'ok',
-    },
-    {
-      label: 'Warnings',
-      value: String(stats.warnCount),
-      tone: stats.warnCount > 0 ? 'warn' : 'ok',
-    },
-    {
-      label: 'Failed gates',
-      value: String(stats.failedGateCount),
-      tone: stats.failedGateCount > 0 ? 'danger' : 'ok',
-    },
+    { label: 'Errors', ...count(stats.errorCount, 'danger') },
+    { label: 'Warnings', ...count(stats.warnCount, 'warn') },
+    { label: 'Failed gates', ...count(stats.failedGateCount, 'danger') },
     {
       label: 'Priority',
-      value: stats.topPriority,
+      value: unknown ? `unknown: ${stats.readError ?? 'a read failed'}` : stats.topPriority,
       tone: stats.topPriority === 'healthy' ? 'ok' : stats.topPriority === 'failures' ? 'danger' : 'warn',
+      wrap: unknown,
     },
     {
       label: 'Project ref',
@@ -62,7 +54,7 @@ export function FullStackAuditReadout({ stats, fetchedAt, isValidating }: Props)
   ]
 
   return (
-    <Section title="Full-stack audit readout" freshness={{ at: fetchedAt, isValidating }}>
+    <ReadoutPanel title="Full-stack audit readout" freshness={{ at: fetchedAt, isValidating }}>
       <div className="grid gap-4 lg:grid-cols-2">
         <ReadoutSection title="Endpoints" icon={<IconGlobe size={14} aria-hidden />}>
           <EndpointCodeRow label="Full-stack audit stats API" url={statsApi} />
@@ -74,6 +66,6 @@ export function FullStackAuditReadout({ stats, fetchedAt, isValidating }: Props)
           <DetailRows items={rows} dense />
         </ReadoutSection>
       </div>
-    </Section>
+    </ReadoutPanel>
   )
 }

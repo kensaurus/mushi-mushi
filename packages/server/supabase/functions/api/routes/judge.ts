@@ -3,6 +3,14 @@ import type { Variables } from '../types.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { jwtAuth, adminOrApiKey } from '../../_shared/auth.ts';
 import { dbError, callerProjectIds, resolveOwnedProject } from '../shared.ts';
+import { JUDGE_ELIGIBLE_STATUSES, judgeEmptyResult, judgeWeekLabel, onlyJudgeable } from '../../_shared/judge-eligibility.ts';
+
+/** A valid ISO instant from a query value, or null (never a raw filter string). */
+function isoOrNull(raw: string | undefined): string | null {
+  if (!raw) return null;
+  const t = Date.parse(raw);
+  return Number.isFinite(t) ? new Date(t).toISOString() : null;
+}
 
 export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
   // GET /v1/admin/judge/stats — posture banner + JUDGE SNAPSHOT.
@@ -17,11 +25,13 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
       projectCount: 0,
       totalEvaluations: 0,
       latestWeekScore: null as number | null,
+      latestWeekLabel: null as string | null,
       latestWeekEvalCount: 0,
       weekOverWeekDriftPct: null as number | null,
       disagreementCount: 0,
       disagreementRatePct: null as number | null,
       classifiedReports: 0,
+      ungradedReports: 0,
       promptVersionCount: 0,
       activePromptCount: 0,
       lastEvalAt: null as string | null,
@@ -54,7 +64,7 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
     const activeProject = resolvedProject.project;
     const pid = activeProject.id;
 
-    const [weekRes, evalCountRes, disagreeRes, lastEvalRes, classifiedRes, promptsRes] =
+    const [weekRes, evalCountRes, disagreeRes, lastEvalRes, classifiedRes, promptCountRes, activePromptRes, ungradedRes] =
       await Promise.all([
         db.rpc('weekly_judge_scores', { p_project_id: pid, p_weeks: 2 }),
         db
@@ -78,11 +88,26 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
           .select('id', { count: 'exact', head: true })
           .eq('project_id', pid)
           .in('status', ['classified', 'triaged', 'grouped', 'dispatched']),
+        // Counts only: the old read pulled up to 200 prompt rows to count them.
         db
           .from('prompt_versions')
-          .select('id, is_active')
+          .select('id', { count: 'exact', head: true })
+          .or(`project_id.is.null,project_id.eq.${pid}`),
+        db
+          .from('prompt_versions')
+          .select('id', { count: 'exact', head: true })
           .or(`project_id.is.null,project_id.eq.${pid}`)
-          .limit(200),
+          .eq('is_active', true),
+        // Exactly what judge-batch would pick up — the stale nudge only makes
+        // sense while this is > 0, otherwise a re-run grades nothing.
+        onlyJudgeable(
+          db
+            .from('reports')
+            .select('id', { count: 'exact', head: true })
+            .eq('project_id', pid)
+            .in('status', [...JUDGE_ELIGIBLE_STATUSES])
+            .is('judge_evaluated_at', null),
+        ),
       ]);
 
     const weeks = (weekRes.data ?? []) as Array<{
@@ -97,11 +122,13 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
     const totalEvaluations = evalCountRes.count ?? 0;
     const disagreementCount = disagreeRes.count ?? 0;
     const classifiedReports = classifiedRes.count ?? 0;
-    const prompts = promptsRes.data ?? [];
-    const activePromptCount = prompts.filter((p) => p.is_active).length;
+    const ungradedReports = ungradedRes.count ?? 0;
+    const promptVersionCount = promptCountRes.count ?? 0;
+    const activePromptCount = activePromptRes.count ?? 0;
 
     const latestWeekScore = latest?.avg_score != null ? Number(latest.avg_score) : null;
     const latestWeekEvalCount = latest?.eval_count ?? 0;
+    const latestWeekLabel = latest?.week_start ? judgeWeekLabel(latest.week_start) : null;
 
     let weekOverWeekDriftPct: number | null = null;
     if (latest && previous && previous.avg_score > 0) {
@@ -132,14 +159,15 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
     if (totalEvaluations === 0) {
       topPriority = 'no_evals';
       topPriorityLabel =
-        classifiedReports > 0
-          ? `No judge scores yet — ${classifiedReports} classified report${classifiedReports === 1 ? '' : 's'} ready to grade.`
+        ungradedReports > 0
+          ? `No judge scores yet — ${ungradedReports} classified report${ungradedReports === 1 ? '' : 's'} ready to grade.`
           : 'Classify a few bugs in Reports first — then run the judge.';
-      topPriorityTo = classifiedReports > 0 ? scoped('/judge?action=run') : scoped('/reports?tab=queue');
+      topPriorityTo = ungradedReports > 0 ? scoped('/judge?action=run') : scoped('/reports?tab=queue');
     } else if (latestWeekScore != null && latestWeekScore < 0.6) {
       topPriority = 'low_score';
-      topPriorityLabel = `Classifier scores are ${Math.round(latestWeekScore * 100)}% — triage quality may be wrong. Review recent evaluations or Prompt Lab.`;
-      topPriorityTo = scoped('/prompt-lab?tab=prompts');
+      topPriorityLabel = `Classifier scores are ${Math.round(latestWeekScore * 100)}% — triage quality may be wrong. Review the lowest-scored evaluations, then tune the prompt in Prompt Lab.`;
+      // The banner button reads "Review evaluations" (console QA #248).
+      topPriorityTo = scoped('/judge?tab=evaluations&sort=score_asc');
     } else if (weekOverWeekDriftPct != null && weekOverWeekDriftPct >= 5) {
       topPriority = 'drifting';
       topPriorityLabel = `Scores dropped ${weekOverWeekDriftPct}% week-over-week — review mismatches before merging fixes.`;
@@ -148,15 +176,15 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
       topPriority = 'disagreements';
       topPriorityLabel = `The judge disagreed with the classifier on ${disagreementRatePct}% of recent grades. Review mismatches before merging fixes.`;
       topPriorityTo = scoped('/judge?tab=evaluations&filter=disagreement');
-    } else if (staleHours != null && staleHours > 72) {
+    } else if (staleHours != null && staleHours > 72 && ungradedReports > 0) {
       topPriority = 'stale';
-      topPriorityLabel = `Last judge run was ${staleHours}h ago — run again so you know triage quality still holds.`;
+      topPriorityLabel = `Last judge run was ${staleHours}h ago and ${ungradedReports} report${ungradedReports === 1 ? ' is' : 's are'} waiting — run again so you know triage quality still holds.`;
       topPriorityTo = scoped('/judge?action=run');
     } else {
       topPriority = 'healthy';
       topPriorityLabel =
         latestWeekScore != null
-          ? `${Math.round(latestWeekScore * 100)}% this week · ${latestWeekEvalCount} evals`
+          ? `${Math.round(latestWeekScore * 100)}% ${latestWeekLabel ?? 'this week'} · ${latestWeekEvalCount} evals`
           : `${totalEvaluations} total evaluations`;
       topPriorityTo = scoped('/judge?tab=trend');
     }
@@ -170,12 +198,14 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
         projectCount: projectIds.length,
         totalEvaluations,
         latestWeekScore,
+        latestWeekLabel,
         latestWeekEvalCount,
         weekOverWeekDriftPct,
         disagreementCount,
         disagreementRatePct,
         classifiedReports,
-        promptVersionCount: prompts.length,
+        ungradedReports,
+        promptVersionCount,
         activePromptCount,
         lastEvalAt,
         staleHours,
@@ -255,6 +285,7 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
     if (projectIds.length === 0) return c.json({ ok: true, data: { evaluations: [] } });
 
     const limit = Math.min(Math.max(Number(c.req.query('limit') ?? 50), 1), 200);
+    const page = Math.max(Math.floor(Number(c.req.query('page') ?? 1)) || 1, 1);
     const sort =
       c.req.query('sort') === 'score_asc'
         ? { col: 'judge_score', asc: true }
@@ -265,23 +296,52 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
     // but rows were inert. Filter is a string match on the stored prompt
     // version label (e.g. "v3-active", "v4-cand").
     const promptVersion = c.req.query('prompt_version')?.trim() || null;
+    // The leaderboard ranks a (stage, version) pair: judge-batch credits a
+    // report's score to its stage1 AND stage2 prompt versions. So a stage
+    // drill-down matches reports that ran that version AT that stage, not the
+    // single prompt_version string stored on the evaluation (console QA #247).
+    const promptStage = c.req.query('prompt_stage')?.trim() || null;
+    // Disagreements are filtered here, over every evaluation, so the list
+    // agrees with the "N disagree" badge instead of the latest 50 (QA #247).
+    const disagreementOnly = c.req.query('disagreement') === '1';
+    // Trend brush range (QA #107): ISO instants, validated.
+    const fromIso = isoOrNull(c.req.query('from'));
+    const toIso = isoOrNull(c.req.query('to'));
 
+    // Stage drill-down: an inner join on the report's own stage version, so
+    // the filter covers every matching evaluation in one query.
+    const stageColumn =
+      promptVersion && promptStage === 'stage1'
+        ? 'stage1_prompt_version'
+        : promptVersion && promptStage === 'stage2'
+          ? 'stage2_prompt_version'
+          : null;
+
+    const evalColumns =
+      'id, report_id, project_id, judge_model, judge_score, accuracy_score, severity_score, component_score, repro_score, classification_agreed, judge_reasoning, prompt_version, created_at, judge_fallback_used';
     let q = db
       .from('classification_evaluations')
-      .select(
-        'id, report_id, project_id, judge_model, judge_score, accuracy_score, severity_score, component_score, repro_score, classification_agreed, judge_reasoning, prompt_version, created_at, judge_fallback_used',
-      )
+      .select(stageColumn ? `${evalColumns}, reports!inner(${stageColumn})` : evalColumns, { count: 'exact' })
       .in('project_id', projectIds);
-    if (promptVersion) q = q.eq('prompt_version', promptVersion);
-    const { data, error } = await q.order(sort.col, { ascending: sort.asc }).limit(limit);
+    if (stageColumn) q = q.eq(`reports.${stageColumn}`, promptVersion);
+    else if (promptVersion) q = q.eq('prompt_version', promptVersion);
+    if (disagreementOnly) q = q.eq('classification_agreed', false);
+    if (fromIso) q = q.gte('created_at', fromIso);
+    if (toIso) q = q.lte('created_at', toIso);
+    const { data, error, count } = await q
+      .order(sort.col, { ascending: sort.asc })
+      .range((page - 1) * limit, page * limit - 1);
     if (error) return dbError(c, error);
+    // The select string is computed (stage join), so the typed parser cannot
+    // read it: name the row shape here.
+    const evalRows = (data ?? []) as unknown as Array<Record<string, unknown> & { reports?: unknown }>;
 
     // Hydrate each row with the underlying report's human summary so the
     // Judge table can display "Submit button on /checkout has wrong size"
     // instead of "f9b3c2…" — the original UX audit called the hash-only
     // column literally unreadable for triage decisions.
     const reportIds = Array.from(
-      new Set((data ?? []).map((r) => r.report_id as string).filter(Boolean)),
+      new Set(evalRows.map((r) => r.report_id as string).filter(Boolean)),
     );
     const summaryMap = new Map<
       string,
@@ -306,7 +366,9 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
         });
       }
     }
-    const enriched = (data ?? []).map((row) => {
+    const enriched = evalRows.map((joined) => {
+      // Drop the join column; the row keeps its own fields only.
+      const { reports: _join, ...row } = joined;
       const meta = summaryMap.get(row.report_id as string);
       return {
         ...row,
@@ -315,7 +377,7 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
         report_status: meta?.status ?? null,
       };
     });
-    return c.json({ ok: true, data: { evaluations: enriched } });
+    return c.json({ ok: true, data: { evaluations: enriched, total: count ?? enriched.length, page, limit } });
   });
 
   // Score distribution histogram (bucketed into 10 deciles).
@@ -349,6 +411,45 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
     if (projectIds.length === 0) {
       return c.json({ ok: false, error: { code: 'NO_PROJECT', message: 'No project found' } }, 404);
     }
+    // Pre-flight with judge-batch's own eligibility rule. judge-batch is
+    // fire-and-forget, so its answer never reaches the caller: without this a
+    // project with nothing ungraded got "dispatched" and a silent 0-eval run.
+    const { data: settingsRows, error: settingsErr } = await db
+      .from('project_settings')
+      .select('project_id, judge_enabled')
+      .in('project_id', projectIds);
+    if (settingsErr) return dbError(c, settingsErr);
+    const enabledIds = (settingsRows ?? [])
+      .filter((s) => s.judge_enabled)
+      .map((s) => s.project_id as string);
+
+    const runnable: string[] = [];
+    let eligibleReports = 0;
+    for (const pid of enabledIds) {
+      const { count, error: countErr } = await onlyJudgeable(
+        db
+          .from('reports')
+          .select('id', { count: 'exact', head: true })
+          .eq('project_id', pid)
+          .in('status', [...JUDGE_ELIGIBLE_STATUSES])
+          .is('judge_evaluated_at', null),
+      );
+      if (countErr) return dbError(c, countErr);
+      if ((count ?? 0) > 0) {
+        runnable.push(pid);
+        eligibleReports += count ?? 0;
+      }
+    }
+
+    const empty = judgeEmptyResult({
+      projectsChecked: projectIds.length,
+      judgeEnabledProjects: enabledIds.length,
+      eligibleReports,
+    });
+    if (empty) {
+      return c.json({ ok: true, data: { dispatched: 0, ...empty } });
+    }
+
     // Fire-and-forget per project; we don't await — the page polls or uses
     // realtime to pick up new evaluations.
     const url = `${Deno.env.get('SUPABASE_URL')}/functions/v1/judge-batch`;
@@ -356,7 +457,7 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
       Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
       'Content-Type': 'application/json',
     };
-    for (const pid of projectIds) {
+    for (const pid of runnable) {
       fetch(url, {
         method: 'POST',
         headers,
@@ -365,7 +466,7 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
         /* best-effort */
       });
     }
-    return c.json({ ok: true, data: { dispatched: projectIds.length } });
+    return c.json({ ok: true, data: { dispatched: runnable.length, eligible: eligibleReports } });
   });
 
   // Prompt-version leaderboard — joins prompt_versions with eval counts.

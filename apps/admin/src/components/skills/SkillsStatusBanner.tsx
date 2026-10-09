@@ -2,6 +2,7 @@
  * Skill pipeline posture banner — failed runs, awaiting check-in, catalog empty.
  */
 
+import { formatRelative } from '../ui'
 import { usePageCopy } from '../../lib/copy'
 import { scopedHref } from '../../lib/humanPageHints'
 import { StatusBannerShell } from '../StatusBannerShell'
@@ -39,7 +40,7 @@ export function SkillsStatusBanner({ stats, onTab, plainBanner = false }: Props)
         title={plainBanner ? 'Skill catalog is empty' : 'No skills synced yet'}
         subtitle={
           stats.topPriorityLabel ??
-          'Add a GitHub source (e.g. kensaurus/cursor-kenji) and sync to load 70+ workflows.'
+          'Add a GitHub source (e.g. kensaurus/skills) and sync to load 70+ workflows.'
         }
         action={
           stats.topPriorityTo ? (
@@ -82,10 +83,11 @@ export function SkillsStatusBanner({ stats, onTab, plainBanner = false }: Props)
             ? `${stats.awaitingCheckin} step${stats.awaitingCheckin === 1 ? '' : 's'} waiting for you`
             : `${stats.awaitingCheckin} pipeline step${stats.awaitingCheckin === 1 ? '' : 's'} awaiting check-in`
         }
-        subtitle={
+        subtitle={[
           stats.topPriorityLabel ??
-          'Handoff mode pauses until you mark each step passed or failed in the IDE.'
-        }
+            'Handoff mode pauses until you mark each step passed or failed in the IDE.',
+          stats.oldestAwaitingCheckinAt ? `The oldest is from ${formatRelative(stats.oldestAwaitingCheckinAt)}.` : null,
+        ].filter(Boolean).join(' ')}
         action={
           stats.topPriorityTo ? (
             <StatusBannerAction label={actions.pipelines ?? 'Open runs'} to={stats.topPriorityTo} tone="warn" />

@@ -4,26 +4,26 @@ import { z } from 'npm:zod@3'
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { createTrace } from './observability.ts'
 import { resolveLlmKey } from './byok.ts'
+import { LlmBudgetExceededError } from './llm-budget.ts'
 import { detectGraphQuery, executeGraphQuery } from './graph-nl.ts'
-import { NL_QUERY_PLANNER_MODEL, NL_QUERY_SUMMARY_MODEL } from './models.ts'
+import { NL_QUERY_PLANNER_EFFORT, NL_QUERY_PLANNER_MODEL, NL_QUERY_SUMMARY_MODEL } from './models.ts'
+import { claudeGenerateObject } from './claude-messages.ts'
+import { withLlmUsage } from './llm-usage.ts'
 import { getPromptForStage } from './prompt-ab.ts'
-import { generateValidatedObject } from './structured-output.ts'
 
-// SEC (Wave S1 / D-12): widen the blocklist. The original regex missed
-// administrative and filesystem-style verbs that happen to be valid Postgres
-// statements or extensions — e.g. `COPY ... TO PROGRAM`, `LOCK TABLE`,
-// `REFRESH MATERIALIZED VIEW`, `SET ROLE`, `SELECT pg_read_server_files(...)`.
-// None of these belong in a self-serve NL-to-SQL flow. The RPC is also
-// recommended to run as SECURITY INVOKER under a dedicated `nl_query_reader`
-// role (see migration 20260421_nl_query_reader_role.sql) so even if this
-// guard were bypassed the role has no rights on system catalogs.
-const DANGEROUS_PATTERNS = /\b(insert|update|delete|drop|truncate|alter|create|grant|revoke|exec|execute|copy|lock|refresh|reindex|vacuum|analyze|cluster|listen|notify|set\s+role|reset\s+role|pg_read_server_files|pg_write_server_files|pg_ls_dir|dblink|current_setting\s*\(\s*'pgrst|pg_sleep|pg_terminate_backend|pg_cancel_backend)\b/i
+// These text checks are defence in depth, not the tenant boundary. The boundary
+// is in the database (migration 20260923000003_nl_query_role_containment):
+// execute_readonly_query runs the SQL as `mushi_nl_reader`, which can SELECT
+// only the analytics tables below and only the one project's rows, and it
+// blanks PostgREST's request.* settings first. Keep this list in step with the
+// one in that function.
+const DANGEROUS_PATTERNS = /\b(insert|update|delete|merge|drop|truncate|alter|create|grant|revoke|exec|execute|copy|lock|refresh|reindex|vacuum|analyze|cluster|listen|notify|prepare|deallocate|discard|reset|set\s+role|pg_read_server_files|pg_write_server_files|pg_read_file|pg_read_binary_file|pg_ls_dir|dblink|set_config|current_setting|pg_notify|pg_settings|pg_show_all_settings|pg_db_role_setting|pg_stat_activity|pg_sleep|pg_terminate_backend|pg_cancel_backend|pg_advisory_lock|pg_advisory_xact_lock|lo_import|lo_export|lo_create|lo_from_bytea|lo_put|query_to_xml|query_to_xml_and_xmlschema|cursor_to_xml|table_to_xml|schema_to_xml|database_to_xml|nl_query_scope)\b/i
 
 // Catch queries that try to reach beyond the approved read schema. We only
 // bless `public` + curated views. Any reference to `pg_catalog`, `information_schema`,
 // `auth`, `storage`, etc. gets rejected regardless of SELECT semantics — those
 // schemas either hold secrets (auth.users) or administrative surface area.
-const FORBIDDEN_SCHEMAS = /\b(pg_catalog|information_schema|auth|storage|realtime|supabase_functions|vault|pgsodium|extensions)\s*\./i
+const FORBIDDEN_SCHEMAS = /\b(pg_catalog|information_schema|pg_temp|pg_toast|auth|storage|realtime|supabase_functions|supabase_migrations|vault|pgsodium|extensions|net|cron|graphql|graphql_public|pgbouncer|pgmq|mushi_nl)\s*\./i
 
 // Approved table allowlist for raw SQL mode (defense-in-depth: prevents
 // UNION SELECT from nl_query_history, audit_logs, byok_audit_log, etc.).
@@ -77,6 +77,11 @@ export function sanitizeSql(
   }
   if (!/^\s*(with\s|select\s)/i.test(sql.trim())) {
     throw new Error('Only SELECT / WITH queries are permitted.')
+  }
+  // A quoted name ("vault"."decrypted_secrets") slips past the \b…\s*\. schema
+  // check above, so quoted identifiers are refused outright.
+  if (sql.includes('"')) {
+    throw new Error('Quoted identifiers are not allowed. Use unquoted snake_case names and aliases.')
   }
 
   // Strip inline SQL comments — they can hide injection payloads from the
@@ -150,6 +155,7 @@ const SCHEMA_CONTEXT = `Available tables and columns:
 
 Severity mapping: severity = 'critical' means P0, severity = 'high' means P1, severity = 'medium' means P2, severity = 'low' means P3.
 Always filter by project_id = $1. Always LIMIT to 100 rows max.
+Never use double quotes; write aliases in unquoted snake_case (e.g. AS bug_count).
 Date functions: use date_trunc('week', now()) for current week start, (now() - INTERVAL '7 days') for last 7 days.`
 
 export async function executeNaturalLanguageQuery(
@@ -186,10 +192,26 @@ export async function executeNaturalLanguageQuery(
   // owns. Falls back to the env key if the project hasn't configured BYOK.
   // Resolution failures are non-fatal — `resolved` is null and we use env.
   const resolved = projectIds.length > 0
-    ? await resolveLlmKey(db, projectIds[0], 'anthropic').catch(() => null)
+    ? await resolveLlmKey(db, projectIds[0], 'anthropic').catch((err) => {
+        // Over budget rethrows: the env-key fallback below would bypass it.
+        if (err instanceof LlmBudgetExceededError) throw err
+        return null
+      })
     : null
   const apiKey = resolved?.key ?? Deno.env.get('ANTHROPIC_API_KEY')
   if (!apiKey) throw new Error('No Anthropic key available (BYOK or env)')
+  // On the platform key the query is billed, so check the wallet first, as
+  // withLlmFailover does for every other billed path.
+  const onPlatformKey = !resolved?.key
+  if (onPlatformKey && projectIds.length > 0) {
+    // Imported lazily: the billing module reads Deno env at load, which the
+    // permission-less Deno unit tests that import this file cannot do.
+    const { hostedLlmPreflight, WalletDeniedError } = await import('./hosted-llm-billing.ts')
+    const preflight = await hostedLlmPreflight({ db, projectId: projectIds[0] })
+    if (!preflight.allowed) throw new WalletDeniedError(preflight.reason ?? 'insufficient', preflight.balanceMicro)
+  }
+  // The Sonnet planner goes through claude-messages.ts (Sonnet 5.5 rejects the
+  // AI SDK v4 call shape); the Haiku summariser stays on the AI SDK.
   const anthropic = createAnthropic({ apiKey })
   const trace = createTrace('nl-query', {
     question: question.slice(0, 100),
@@ -203,11 +225,28 @@ export async function executeNaturalLanguageQuery(
     : { promptTemplate: null, promptVersion: null, isCandidate: false }
   const nlPlanBasePrompt = nlPlanSelection.promptTemplate
     ?? `You are a SQL query generator. Generate a single SELECT query that answers the user's question about their bug reports.`
-  const { object: queryPlan, usage: planUsage } = await generateValidatedObject(sqlSchema, {
-    model: anthropic(NL_QUERY_PLANNER_MODEL),
-    system: `${nlPlanBasePrompt}\n\n${SCHEMA_CONTEXT}`,
-    prompt: question,
-  })
+  // claudeGenerateObject validates the reply against sqlSchema before returning.
+  // One key for both calls: the project's BYOK key, else the platform key.
+  const usageCtx = {
+    functionName: 'nl-query',
+    projectId: projectIds[0] ?? null,
+    keySource: resolved?.key ? resolved.source : 'env',
+    langfuseTraceId: trace.id,
+    // A question the user asked in the console: billed on the platform key.
+    billHosted: true,
+  } as const
+  const { object: queryPlan, usage: planUsage } = await withLlmUsage(
+    db,
+    { ...usageCtx, stage: 'plan', model: NL_QUERY_PLANNER_MODEL, promptVersion: nlPlanSelection.promptVersion ?? null },
+    () => claudeGenerateObject({
+      apiKey,
+      model: NL_QUERY_PLANNER_MODEL,
+      effort: NL_QUERY_PLANNER_EFFORT,
+      schema: sqlSchema,
+      system: `${nlPlanBasePrompt}\n\n${SCHEMA_CONTEXT}`,
+      prompt: question,
+    }),
+  )
   planSpan.end({ model: NL_QUERY_PLANNER_MODEL, inputTokens: planUsage?.promptTokens, outputTokens: planUsage?.completionTokens })
 
   const cleanedSql = sanitizeSql(queryPlan.sql, { requireProjectIdParam: true })
@@ -233,11 +272,15 @@ export async function executeNaturalLanguageQuery(
     : { promptTemplate: null, promptVersion: null, isCandidate: false }
   const summarySystem = nlSummarySelection.promptTemplate
     ?? 'Summarize these query results in 2-3 sentences for a developer. Never invent numbers not in the input.'
-  const { text: summary, usage: summaryUsage } = await generateText({
-    model: anthropic(NL_QUERY_SUMMARY_MODEL),
-    system: summarySystem,
-    prompt: `Question: ${question}\nResults (${results.length} rows): ${JSON.stringify(results.slice(0, 20))}`,
-  })
+  const { text: summary, usage: summaryUsage } = await withLlmUsage(
+    db,
+    { ...usageCtx, stage: 'summary', model: NL_QUERY_SUMMARY_MODEL, promptVersion: nlSummarySelection.promptVersion ?? null },
+    () => generateText({
+      model: anthropic(NL_QUERY_SUMMARY_MODEL),
+      system: summarySystem,
+      prompt: `Question: ${question}\nResults (${results.length} rows): ${JSON.stringify(results.slice(0, 20))}`,
+    }),
+  )
   summarySpan.end({ model: NL_QUERY_SUMMARY_MODEL, inputTokens: summaryUsage?.promptTokens, outputTokens: summaryUsage?.completionTokens })
   await trace.end()
 

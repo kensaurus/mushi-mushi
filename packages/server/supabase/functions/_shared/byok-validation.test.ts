@@ -5,6 +5,7 @@ import {
   isRunnableByokPoolState,
   patchByokKeySchema,
   probeByokKey,
+  SUPABASE_PAT_PREFIX,
   validateOpenAiBaseUrl,
 } from './byok-validation.ts';
 
@@ -24,11 +25,11 @@ Deno.test(
     const parsed = createByokKeySchema.parse({
       projectId: '3a1763bf-5a64-4e42-abde-85dc0219787d',
       provider: 'anthropic',
-      apiKey: '  vendor_key-with.unusual=characters  ',
+      apiKey: '  vendor_key-with.unusual=characters  ', // gitleaks:allow
       priority: 0,
     });
 
-    assertEquals(parsed.apiKey, 'vendor_key-with.unusual=characters');
+    assertEquals(parsed.apiKey, 'vendor_key-with.unusual=characters'); // gitleaks:allow
     assert(
       !createByokKeySchema.safeParse({
         projectId: 'not-a-uuid',
@@ -145,5 +146,82 @@ Deno.test(
     assertEquals(transport.status, 'error_network');
     assertMatch(transport.detail, /could not be completed/);
     assert(!JSON.stringify(transport).includes('secret-that-must-not-leak'));
+  },
+);
+
+const SUPABASE_REF = 'abcdefghijklmnopqrst';
+
+Deno.test(
+  'createByokKeySchema accepts Supabase access tokens and rejects other Supabase keys',
+  () => {
+    const projectId = '3a1763bf-5a64-4e42-abde-85dc0219787d';
+    // Classic and scoped (`sbp_fc…`) PATs share the prefix.
+    for (const apiKey of [`${SUPABASE_PAT_PREFIX}0123456789abcdef`, 'sbp_fc0123456789abcdef']) {
+      assert(createByokKeySchema.safeParse({ projectId, provider: 'supabase', apiKey }).success);
+    }
+    // A service_role JWT or a project secret key is far more powerful than a
+    // read-only PAT and is not what the link needs: refuse to store it.
+    for (const apiKey of ['eyJhbGciOiJIUzI1NiJ9.fixture.sig', 'sb_secret_0123456789abcdef']) {
+      const parsed = createByokKeySchema.safeParse({ projectId, provider: 'supabase', apiKey });
+      assert(!parsed.success);
+      assertMatch(parsed.error.issues[0].message, /starts with "sbp_"/);
+    }
+    // The prefix rule is Supabase-only.
+    assert(
+      createByokKeySchema.safeParse({ projectId, provider: 'anthropic', apiKey: 'no_prefix_key' })
+        .success,
+    );
+  },
+);
+
+Deno.test('probeByokKey makes no Supabase request until the project ref is linked', async () => {
+  let calls = 0;
+  const counting = mockFetch(201, () => calls++);
+  for (const ref of [undefined, null, '', 'ABCDEFGHIJKLMNOPQRST', 'short', 'abcdefghijklmnopqrs/']) {
+    const result = await probeByokKey('supabase', 'sbp_test', undefined, counting, {
+      supabaseProjectRef: ref,
+    });
+    assertEquals(result.keyStatus, 'pending_validation');
+    assertMatch(result.detail, /Settings → General/);
+  }
+  assertEquals(calls, 0);
+});
+
+Deno.test(
+  'probeByokKey checks a Supabase token with a read-only query on the linked project',
+  async () => {
+    const ok = await probeByokKey(
+      'supabase',
+      'sbp_test-secret-never-returned',
+      undefined,
+      mockFetch(201, (input, init) => {
+        assertEquals(
+          String(input),
+          `https://api.supabase.com/v1/projects/${SUPABASE_REF}/database/query/read-only`,
+        );
+        assertEquals(init?.method, 'POST');
+        assertEquals(JSON.parse(String(init?.body)), { query: 'select 1' });
+        assertEquals(
+          (init?.headers as Record<string, string>).Authorization,
+          'Bearer sbp_test-secret-never-returned',
+        );
+      }),
+      { supabaseProjectRef: SUPABASE_REF },
+    );
+    assertEquals(ok.status, 'ok');
+    assertEquals(ok.keyStatus, 'active');
+    assert(!JSON.stringify(ok).includes('sbp_test-secret-never-returned'));
+
+    const opts = { supabaseProjectRef: SUPABASE_REF };
+    const forbidden = await probeByokKey('supabase', 'sbp_x', undefined, mockFetch(403), opts);
+    assertEquals(forbidden.keyStatus, 'auth_failed');
+    assertMatch(forbidden.detail, /Database Read/);
+
+    const missing = await probeByokKey('supabase', 'sbp_x', undefined, mockFetch(404), opts);
+    assertEquals(missing.keyStatus, 'pending_validation');
+    assertMatch(missing.detail, /no project with this ref/);
+
+    const revoked = await probeByokKey('supabase', 'sbp_x', undefined, mockFetch(401), opts);
+    assertEquals(revoked.keyStatus, 'auth_failed');
   },
 );

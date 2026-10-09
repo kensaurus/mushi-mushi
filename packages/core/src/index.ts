@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024–2026 Kenji Sakuramoto (kensaurus) — Mushi Mushi
+/** @public */
 export type {
   MushiConfig,
   MushiPreset,
   MushiSentryConfig,
   MushiWidgetConfig,
+  MushiNotificationsConfig,
   MushiWidgetAnchor,
   MushiCaptureConfig,
   MushiDiscoverInventoryConfig,
@@ -64,8 +66,12 @@ export type {
   MushiAssistantConfig,
   MushiAssistantStep,
   MushiAssistantReply,
+  MushiAnalyticsConfig,
+  MushiProductEventPayload,
+  MushiPropertyValue,
 } from './types';
 
+/** @public */
 export {
   createApiClient,
   buildSdkIngestHeaders,
@@ -85,11 +91,13 @@ export {
   type ApiClientOptions,
   type MushiInternalRequestKind,
 } from './api-client';
+/** @public */
 export {
   shouldDropCapturedError,
   matchesErrorFilter,
   type MushiErrorFilter,
 } from './error-filters';
+/** @public */
 export {
   sendOnUnload,
   markPageUnloading,
@@ -101,7 +109,9 @@ export {
   MUSHI_BEACON_MAX_BYTES,
   type MushiBeaconEnvelope,
 } from './unload-transport';
+/** @public */
 export { resolveRegionEndpoint, REGION_ENDPOINTS, type MushiRegion } from './region';
+/** @public */
 export {
   resolveEnvConfig,
   diagnoseEnvConfig,
@@ -109,15 +119,25 @@ export {
   type EnvConfigDiagnostics,
   type EnvNearMiss,
 } from './env-config';
+/** @public */
 export { expandPreset, validateConfig } from './presets';
+/** @public */
 export { createPreFilter, type PreFilterResult } from './pre-filter';
+/** @public */
 export { createOfflineQueue, type OfflineQueue } from './queue';
+/** @public */
 export { captureEnvironment } from './environment';
+/** @public */
 export { getReporterToken } from './reporter-token';
+/** @public */
 export { sha256Hex, hmacSha256Hex } from './digest';
+/** @public */
 export { newUuid } from './uuid';
+/** @public */
 export { getDeviceFingerprintHash } from './fingerprint';
+/** @public */
 export { getSessionId } from './session';
+/** @public */
 export {
   initSessionTracker,
   trackPageView,
@@ -125,13 +145,56 @@ export {
   destroySessionTracker,
   type SessionTrackerOptions,
 } from './session-tracker';
+/** @public — product analytics (Mushi.track()) */
+export {
+  initEventTracker,
+  trackEvent,
+  setEventConsent,
+  updateEventIdentity,
+  flushEvents,
+  destroyEventTracker,
+  getEventAnonymousId,
+  isEventTrackingActive,
+  type EventTrackerOptions,
+} from './event-tracker';
+/** @public — the privacy gate shared by product events and session tracking */
+export {
+  dntActive,
+  isAutomatedBrowser,
+  analyticsBlockReason,
+  resolveAnalyticsConsent,
+  setAnalyticsConsent,
+  onAnalyticsConsentChange,
+  type AnalyticsConsentState,
+  type AnalyticsBlockReason,
+} from './analytics-gate';
+/** @public — analytics vocabulary shared by SDKs, console, docs and server */
+export {
+  MUSHI_EVENTS,
+  MUSHI_EVENT_NAMES,
+  MUSHI_SURFACES,
+  ACTIVATION_EVENT,
+  HABIT_EVENTS,
+  EVENT_NAME_RE,
+  EVENT_PROPERTY_LIMITS,
+  isValidEventName,
+  sanitizeEventProperties,
+  propertiesWithinByteLimit,
+  type MushiEventName,
+  type MushiSurface,
+  type MushiEventProperties,
+} from './analytics-taxonomy';
+/** @public */
 export { createRateLimiter, type RateLimiter, type RateLimiterConfig } from './rate-limiter';
+/** @public */
 export { createPiiScrubber, scrubPii, scrubUrl, type PiiScrubberConfig } from './pii-scrubber';
+/** @public */
 export {
   createBreadcrumbBuffer,
   type BreadcrumbBuffer,
   type BreadcrumbBufferOptions,
 } from './breadcrumbs';
+/** @public */
 export {
   checkReportPayloadSize,
   estimateJsonBytes,
@@ -140,10 +203,12 @@ export {
   MAX_SCREENSHOT_DATA_URL_BYTES,
   type PayloadGuardResult,
 } from './payload-guard';
+/** @public */
 export {
   normaliseThrown,
   type NormalisedException,
 } from './exception-normaliser';
+/** @public */
 export {
   createLogger,
   noopLogger,
@@ -153,6 +218,7 @@ export {
   type LoggerOptions,
   type LogEntry,
 } from './logger';
+/** @public */
 export {
   MUSHI_COLORS_LIGHT,
   MUSHI_COLORS_DARK,
@@ -184,12 +250,14 @@ export {
   type MushiColorPalette,
   type MushiTokenSnapshot,
 } from './design-tokens';
+/** @public */
 export {
   buildIdentityClaims,
   parseIdentityToken,
   MUSHI_IDENTITY_TOKEN_PREFIX,
   type MushiIdentityClaims,
 } from './identity';
+/** @public */
 export {
   faviconUrlCandidates,
   originToDomain,
@@ -204,3 +272,14 @@ export {
   readPageFaviconHref,
   type ProjectFaviconSource,
 } from './favicon';
+// Types only: the calls themselves live in the `@mushi-mushi/core/reporter-channels`
+// subpath so this entry stays inside its size budget.
+export type {
+  MushiReporterUpdates,
+  MushiReporterNotificationPrefs,
+  MushiReporterPrefsUpdate,
+  MushiReporterChannelUnavailable,
+  MushiPushSubscriptionJSON,
+  MushiReporterTimelineItem,
+  MushiReporterReportDetail,
+} from './reporter-channels';

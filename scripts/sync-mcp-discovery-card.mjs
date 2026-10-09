@@ -1,24 +1,24 @@
 #!/usr/bin/env node
 /**
  * FILE: scripts/sync-mcp-discovery-card.mjs
- * PURPOSE: Regenerates mcp-discovery-tools.json — the tool list served by the
- *          static, unauthenticated MCP server-card
- *          (.well-known/mcp/server-card.json) that directory scanners like
- *          Smithery read *before* a client ever authenticates.
+ * PURPOSE: Regenerates mcp-discovery-tools.json — the hosted MCP's copy of
+ *          the canonical tool metadata. The stdio server (packages/mcp) is
+ *          the source: its catalog.ts plus the zod schemas it registers. The
+ *          Deno edge function cannot import that package, so this file
+ *          carries what it needs:
  *
- *          Root cause this fixes: the server-card used to read directly from
- *          mcp-hosted-tool-manifest.json (51 entries), which under-represents
- *          the real hosted MCP because most tools (get_fix_context,
- *          dispatch_fix, etc.) are hand-coded in mcp/index.ts's BASE_TOOLS and
- *          never appear in that file. mcp-hosted-tool-manifest.json can't
- *          simply be widened to include them: it *also* feeds
- *          buildManifestTools() at runtime, and adding an entry with a name
- *          that collides with a BASE_TOOLS handler would silently shadow the
- *          real implementation (buildManifestTools() output is spread after
- *          BASE_TOOLS). mcp-discovery-tools.json is a separate, card-only
- *          artifact generated from the canonical catalog
- *          (packages/mcp/src/catalog.ts) so the public listing can never omit
- *          a real tool again, without touching the runtime tool-routing file.
+ *            - the static server card (.well-known/mcp/server-card.json)
+ *              that directory scanners like Smithery read before a client
+ *              ever authenticates: titles, annotations, input and output
+ *              schemas, resources, prompts, and the package version;
+ *            - the hosted tools/list, which overlays each tool's title,
+ *              description and annotations from here, and gives manifest
+ *              tools their real input schema instead of an empty object.
+ *
+ *          The server card used to read mcp-hosted-tool-manifest.json, which
+ *          omits every tool hand-coded in mcp/index.ts's BASE_TOOLS, and then
+ *          a names-and-descriptions-only file, so every tool was advertised
+ *          with an empty input schema and no annotations.
  *
  *          Run: pnpm --filter @mushi-mushi/mcp build && node scripts/sync-mcp-discovery-card.mjs
  *          --check mode: exits 1 if the file is out of sync (used in CI)
@@ -32,48 +32,93 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = resolve(__dirname, '..')
 const CHECK_MODE = process.argv.includes('--check')
 
-const catalogDistPath = resolve(ROOT, 'packages/mcp/dist/catalog.js')
-if (!existsSync(catalogDistPath)) {
-  console.error(`✗ ${catalogDistPath} not found — run "pnpm --filter @mushi-mushi/mcp build" first.`)
-  process.exit(1)
+const distDir = resolve(ROOT, 'packages/mcp/dist')
+for (const file of ['catalog.js', 'server.js']) {
+  if (!existsSync(resolve(distDir, file))) {
+    console.error(`✗ packages/mcp/dist/${file} not found — run "pnpm --filter @mushi-mushi/mcp build" first.`)
+    process.exit(1)
+  }
 }
 
 // pathToFileURL: a bare absolute path is not a valid ESM specifier on
 // Windows (the drive letter parses as a URL scheme).
-const { TOOL_CATALOG, TDD_TOOL_CATALOG, CODEBASE_TOOL_CATALOG } = await import(pathToFileURL(catalogDistPath).href)
-const canonicalTools = [...TOOL_CATALOG, ...TDD_TOOL_CATALOG, ...CODEBASE_TOOL_CATALOG]
-
-const manifestPath = resolve(
-  ROOT,
-  'packages/server/supabase/functions/_shared/mcp-hosted-tool-manifest.json',
+const { TOOL_CATALOG, TDD_TOOL_CATALOG, CODEBASE_TOOL_CATALOG, RESOURCE_CATALOG, PROMPT_CATALOG } = await import(
+  pathToFileURL(resolve(distDir, 'catalog.js')).href
 )
-const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
+const { createMushiServer } = await import(pathToFileURL(resolve(distDir, 'server.js')).href)
+const canonicalTools = [...TOOL_CATALOG, ...TDD_TOOL_CATALOG, ...CODEBASE_TOOL_CATALOG]
+const packageVersion = JSON.parse(readFileSync(resolve(ROOT, 'packages/mcp/package.json'), 'utf8')).version
 
-const outPath = resolve(ROOT, 'packages/server/supabase/functions/_shared/mcp-discovery-tools.json')
-
-const discoveryTools = {}
-for (const tool of [...canonicalTools].sort((a, b) => a.name.localeCompare(b.name))) {
-  const entry = { description: tool.description, scope: tool.scope }
-  // Reuse the manifest's `required` list where one already exists — gives
-  // Smithery's quality scorer real inputSchema depth for those tools instead
-  // of an empty properties object, with zero risk to the runtime tool router.
-  const required = manifest[tool.name]?.required
-  if (required?.length) entry.required = required
-  discoveryTools[tool.name] = entry
+/**
+ * The JSON schemas the stdio server actually advertises, read from its own
+ * tools/list handler so the zod → JSON Schema conversion is the SDK's.
+ * No transport, no network: the server never calls the API to list tools.
+ */
+async function listStdioTools() {
+  const server = createMushiServer({
+    version: packageVersion,
+    apiEndpoint: 'https://sync-mcp-discovery-card.invalid',
+    apiKey: 'sync-mcp-discovery-card',
+    features: 'all',
+  })
+  const handler = server.server._requestHandlers.get('tools/list')
+  if (typeof handler !== 'function') throw new Error('stdio server exposes no tools/list handler')
+  const res = await handler(
+    { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} },
+    { signal: new AbortController().signal, requestId: 1, sendNotification: async () => {}, sendRequest: async () => {} },
+  )
+  return new Map(res.tools.map((t) => [t.name, t]))
 }
 
-const generated = `${JSON.stringify(discoveryTools, null, 2)}\n`
+/** Drop the per-schema `$schema` marker: it repeats on every tool and the card is served uncompressed. */
+function compactSchema(schema) {
+  if (!schema || typeof schema !== 'object') return schema
+  const { $schema: _ignored, ...rest } = schema
+  return rest
+}
 
-if (CHECK_MODE) {
-  const current = existsSync(outPath) ? readFileSync(outPath, 'utf8') : null
-  if (current !== generated) {
-    console.error(`\n✗ mcp-discovery-tools.json is out of sync with the canonical catalog.`)
-    console.error(`  Run: node scripts/sync-mcp-discovery-card.mjs\n`)
+const stdioTools = await listStdioTools()
+const tools = {}
+for (const spec of [...canonicalTools].sort((a, b) => a.name.localeCompare(b.name))) {
+  const listed = stdioTools.get(spec.name)
+  if (!listed) {
+    console.error(`✗ catalog tool "${spec.name}" is not registered by createMushiServer — fix server.ts first.`)
     process.exit(1)
   }
-  console.log(`✓ mcp-discovery-tools.json in sync: ${Object.keys(discoveryTools).length} tools`)
+  tools[spec.name] = {
+    title: spec.title,
+    description: spec.description,
+    scope: spec.scope,
+    annotations: listed.annotations,
+    inputSchema: compactSchema(listed.inputSchema),
+    ...(listed.outputSchema ? { outputSchema: compactSchema(listed.outputSchema) } : {}),
+    ...(spec.returnsUntrusted ? { returnsUntrusted: true } : {}),
+  }
+}
+
+const discovery = {
+  // A pin literal, so scripts/sync-mcp-pin.mjs keeps it current on every
+  // changeset version bump without rebuilding packages/mcp.
+  packagePin: `@mushi-mushi/mcp@${packageVersion}`,
+  tools,
+  resources: RESOURCE_CATALOG.map(({ name, uri, title, description }) => ({ name, uri, title, description })),
+  prompts: PROMPT_CATALOG.map(({ name, description }) => ({ name, description })),
+}
+
+const outPath = resolve(ROOT, 'packages/server/supabase/functions/_shared/mcp-discovery-tools.json')
+const generated = `${JSON.stringify(discovery, null, 2)}\n`
+const summary = `${Object.keys(tools).length} tools, ${discovery.resources.length} resources, ${discovery.prompts.length} prompts`
+
+if (CHECK_MODE) {
+  const current = existsSync(outPath) ? readFileSync(outPath, 'utf8').replace(/\r\n/g, '\n') : null
+  if (current !== generated) {
+    console.error(`\n✗ mcp-discovery-tools.json is out of sync with the canonical catalog.`)
+    console.error(`  Run: pnpm --filter @mushi-mushi/mcp build && node scripts/sync-mcp-discovery-card.mjs\n`)
+    process.exit(1)
+  }
+  console.log(`✓ mcp-discovery-tools.json in sync: ${summary}`)
   process.exit(0)
 }
 
 writeFileSync(outPath, generated, 'utf8')
-console.log(`✓ Wrote mcp-discovery-tools.json: ${Object.keys(discoveryTools).length} tools`)
+console.log(`✓ Wrote mcp-discovery-tools.json: ${summary}`)

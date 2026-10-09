@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/migrations/cra-to-vite
 
 ---
 title: 'Create React App → Vite'
+description: Migrate a Create React App project to Vite — run the codemod, rename REACT_APP_ env vars to VITE_, and keep your Mushi React setup working.
 ---
 
 # Create React App → Vite
@@ -40,9 +41,9 @@ The codemod rewrites package.json, the entry HTML, and config files. Branch firs
     { id: 'review-diff', label: 'Review the diff carefully', content: <>The codemod handles index.html relocation, package.json scripts, and most env-var rewrites. Read every changed file before committing.</> },
     { id: 'env-prefix', label: 'Rename env vars: REACT_APP_* → VITE_*', content: {`# .env.local
 - REACT_APP_MUSHI_PROJECT_ID=proj_xxx
-- REACT_APP_MUSHI_API_KEY=mushi_pk_xxx
+- REACT_APP_MUSHI_API_KEY=mushi_xxx
 + VITE_MUSHI_PROJECT_ID=proj_xxx
-+ VITE_MUSHI_API_KEY=mushi_pk_xxx
++ VITE_MUSHI_API_KEY=mushi_xxx
 
 # In code
 - process.env.REACT_APP_MUSHI_PROJECT_ID
@@ -59,7 +60,7 @@ The codemod rewrites package.json, the entry HTML, and config files. Branch firs
 createRoot(document.getElementById('root')!).render(
   
     
-  ,
+
 )`} },
     { id: 'remove-cra', label: 'Remove CRA dependencies', content: {`npm uninstall react-scripts
 # Also remove any @craco/craco or react-app-rewired hold-overs`} },
@@ -70,7 +71,7 @@ createRoot(document.getElementById('root')!).render(
 npm run build  # Production build into dist/
 npm run preview`} },
     { id: 'test-report', label: 'Submit a test Mushi report', content: <>Open the dev server, click the floating bug icon (or trigger your custom CTA), submit a report, and confirm it appears in Project → Reports within ~5s.</> },
-  ]}
+
 />
 
 ## Common gotchas

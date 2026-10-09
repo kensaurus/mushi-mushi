@@ -8,6 +8,12 @@ import type { ReactNode, RefObject } from 'react'
 import { FilterSelect, Input, FILTER_SELECT_CLASS } from '../ui'
 import { ActiveFiltersRail, type ActiveFilter } from '../ActiveFiltersRail'
 import { FILTER_OPTIONS, severityLabel } from '../../lib/tokens'
+import {
+  PLATFORM_FILTER_OPTIONS,
+  SDK_FILTER_OPTIONS,
+  optionLabel,
+  statusFilterLabel,
+} from '../../lib/reportsListFilters'
 
 export interface ContextChip {
   key: string
@@ -22,10 +28,12 @@ interface Props {
   status: string
   category: string
   severity: string
-  /** Filter by `environment->>platform`, e.g. `ios | android | web`. */
+  /** Platform filter (server maps it onto `environment->>platform`). */
   platform?: string
   /** Filter by `sdk_package`, e.g. `@mushi-mushi/react-native`. */
   sdkPackage?: string
+  /** Created in the last N days (`days` param), e.g. from a KPI tile. */
+  days?: string
   contextChips: ContextChip[]
   hasFilters: boolean
   onSetFilter: (key: string, value: string) => void
@@ -43,6 +51,7 @@ export function ReportsFilterBar({
   severity,
   platform = '',
   sdkPackage = '',
+  days = '',
   contextChips,
   hasFilters,
   onSetFilter,
@@ -57,7 +66,7 @@ export function ReportsFilterBar({
     status && {
       key: 'status',
       label: 'Status',
-      value: status,
+      value: statusFilterLabel(status),
       onClear: () => onSetFilter('status', ''),
       tone: 'info' as const,
     },
@@ -78,15 +87,22 @@ export function ReportsFilterBar({
     platform && {
       key: 'platform',
       label: 'Platform',
-      value: platform,
+      value: optionLabel(PLATFORM_FILTER_OPTIONS, platform),
       onClear: () => onSetFilter('platform', ''),
       tone: 'brand' as const,
     },
     sdkPackage && {
       key: 'sdkPackage',
       label: 'SDK',
-      value: sdkPackage,
+      value: optionLabel(SDK_FILTER_OPTIONS, sdkPackage),
       onClear: () => onSetFilter('sdkPackage', ''),
+      tone: 'neutral' as const,
+    },
+    days && {
+      key: 'days',
+      label: 'Created',
+      value: `last ${days} day${days === '1' ? '' : 's'}`,
+      onClear: () => onSetFilter('days', ''),
       tone: 'neutral' as const,
     },
     ...contextChips.map((chip) => ({
@@ -115,23 +131,12 @@ export function ReportsFilterBar({
           aria-label="Search reports"
           className="w-64"
         />
-        <FilterSelect
-          label="Status"
-          value={status}
-          options={FILTER_OPTIONS.statuses}
-          onChange={(e) => onSetFilter('status', e.currentTarget.value)}
-        />
+        {/* Status and severity are filtered by the quick-filter chips above. */}
         <FilterSelect
           label="Category"
           value={category}
           options={FILTER_OPTIONS.categories}
           onChange={(e) => onSetFilter('category', e.currentTarget.value)}
-        />
-        <FilterSelect
-          label="Severity"
-          value={severity}
-          options={FILTER_OPTIONS.severities}
-          onChange={(e) => onSetFilter('severity', e.currentTarget.value)}
         />
         <label className="inline-flex flex-col gap-0.5">
           <span className="sr-only">Platform</span>
@@ -142,11 +147,9 @@ export function ReportsFilterBar({
             className={FILTER_SELECT_CLASS}
           >
             <option value="">All platforms</option>
-            <option value="ios">iOS</option>
-            <option value="android">Android</option>
-            <option value="web">Web</option>
-            <option value="macos">macOS</option>
-            <option value="windows">Windows</option>
+            {PLATFORM_FILTER_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
           </select>
         </label>
         <label className="inline-flex flex-col gap-0.5">
@@ -158,10 +161,9 @@ export function ReportsFilterBar({
             className={FILTER_SELECT_CLASS}
           >
             <option value="">All SDKs</option>
-            <option value="@mushi-mushi/web">Web</option>
-            <option value="@mushi-mushi/react">React</option>
-            <option value="@mushi-mushi/react-native">React Native</option>
-            <option value="@mushi-mushi/capacitor">Capacitor</option>
+            {SDK_FILTER_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
           </select>
         </label>
         {savedViews ? (

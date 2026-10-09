@@ -1,0 +1,163 @@
+import { assertEquals } from 'https://deno.land/std@0.224.0/assert/mod.ts'
+
+import {
+  bindFindingsToRegistry,
+  compareSemver,
+  npmLatestStable,
+  npmLatestStableInfo,
+  splitPeerBlocked,
+  expoBundledModules,
+  splitExpoPinned,
+  parseSemver,
+  upgradeCandidates,
+  upgradeTarget,
+} from '../_shared/modernizer-versions.ts'
+
+const v = (s: string) => parseSemver(s)!
+
+Deno.test('tsumagoi 2026-10-02: the model proposed downgrades; the registry check files nothing', () => {
+  // What the model stored: @sentry/react ^10.45.0 → 8.55.0, @stripe/react-stripe-js ^6.2.0 → 3.5.0.
+  // Even if a stale or broken registry answered the same, no proposal is filed.
+  assertEquals(upgradeTarget('^10.45.0', '8.55.0'), null)
+  assertEquals(upgradeTarget('^6.2.0', '3.5.0'), null)
+  // And with npm's real latest inside the declared range, nothing either.
+  assertEquals(upgradeTarget('^10.45.0', '10.52.0'), null)
+  assertEquals(upgradeTarget('^6.2.0', '6.2.0'), null)
+})
+
+Deno.test('the model\'s versions are replaced by the manifest and the registry', () => {
+  const candidates = upgradeCandidates(
+    [
+      { name: '@sentry/react', version: '^10.45.0' },
+      { name: '@stripe/react-stripe-js', version: '^6.2.0' },
+      { name: 'next', version: '^14.2.3' },
+    ],
+    new Map([
+      ['@sentry/react', '10.52.0'],
+      ['@stripe/react-stripe-js', '6.4.0'],
+      ['next', '15.1.0'],
+    ]),
+  )
+  assertEquals(candidates, [{ name: 'next', installed: '^14.2.3', latest: '15.1.0' }])
+  const bound = bindFindingsToRegistry(
+    [
+      { name: '@sentry/react', currentVersion: '^10.45.0', suggestedVersion: '8.55.0', severity: 'major' },
+      { name: 'next', currentVersion: '14', suggestedVersion: '15.x latest', severity: 'major' },
+      { name: 'next', currentVersion: '14', suggestedVersion: 'dup', severity: 'minor' },
+    ],
+    candidates,
+  )
+  assertEquals(bound, [{ name: 'next', currentVersion: '^14.2.3', suggestedVersion: '15.1.0', severity: 'major' }])
+})
+
+Deno.test('a strictly newer stable release outside the range is proposed', () => {
+  assertEquals(upgradeTarget('^10.45.0', '11.0.0'), '11.0.0')
+  assertEquals(upgradeTarget('~6.2.0', '6.3.0'), '6.3.0')
+  assertEquals(upgradeTarget('6.2.0', '6.2.1'), '6.2.1')
+  // 0.x caret ranges stop at the minor.
+  assertEquals(upgradeTarget('^0.99.0', '1.0.0'), '1.0.0')
+  assertEquals(upgradeTarget('^0.99.0', '0.99.4'), null)
+  // >= ranges admit anything newer: a fresh install already gets it.
+  assertEquals(upgradeTarget('>=2.0.0', '3.0.0'), null)
+})
+
+Deno.test('prereleases and unparseable ranges are never proposed', () => {
+  assertEquals(upgradeTarget('^1.0.0', '2.0.0-beta.1'), null)
+  assertEquals(upgradeTarget('workspace:*', '9.9.9'), null)
+  assertEquals(upgradeTarget('latest', '9.9.9'), null)
+  assertEquals(upgradeTarget('github:org/repo#main', '9.9.9'), null)
+  assertEquals(upgradeTarget('^1.2.3 || ^2.0.0', '3.0.0'), null)
+  assertEquals(upgradeTarget('^1.0.0', null), null)
+  // A prerelease install is behind its own release.
+  assertEquals(upgradeTarget('1.0.0-rc.2', '1.0.0'), '1.0.0')
+})
+
+Deno.test('semver precedence', () => {
+  assertEquals(compareSemver(v('10.45.0'), v('8.55.0')), 1)
+  assertEquals(compareSemver(v('1.0.0-rc.2'), v('1.0.0')), -1)
+  assertEquals(compareSemver(v('1.0.0-alpha.10'), v('1.0.0-alpha.9')), 1)
+  assertEquals(compareSemver(v('1.0.0-alpha'), v('1.0.0-alpha.1')), -1)
+  assertEquals(compareSemver(v('2.0.0'), v('2.0.0')), 0)
+})
+
+Deno.test('npm latest stable: dist-tags.latest, or the highest release when latest is a prerelease', async () => {
+  const registry = (body: unknown, status = 200): typeof fetch =>
+    (() => Promise.resolve(new Response(JSON.stringify(body), { status }))) as typeof fetch
+  assertEquals(await npmLatestStable('@sentry/react', registry({ 'dist-tags': { latest: '10.52.0' } })), '10.52.0')
+  assertEquals(
+    await npmLatestStable('pkg', registry({ 'dist-tags': { latest: '3.0.0-beta.2' }, versions: { '2.9.0': {}, '2.10.1': {}, '3.0.0-beta.2': {} } })),
+    '2.10.1',
+  )
+  assertEquals(await npmLatestStable('missing', registry({}, 404)), null)
+  assertEquals(await npmLatestStable('../etc/passwd', registry({ 'dist-tags': { latest: '1.0.0' } })), null)
+  const down: typeof fetch = (() => Promise.reject(new TypeError('fetch failed'))) as typeof fetch
+  assertEquals(await npmLatestStable('pkg', down), null)
+})
+
+Deno.test('npm latest stable: a scoped name is one registry path segment, and an extra slash is refused', async () => {
+  const urls: string[] = []
+  const recording: typeof fetch = ((url: string | URL | Request) => {
+    urls.push(String(url))
+    return Promise.resolve(new Response(JSON.stringify({ 'dist-tags': { latest: '1.0.0' } })))
+  }) as typeof fetch
+  assertEquals(await npmLatestStable('@sentry/react', recording), '1.0.0')
+  assertEquals(urls, ['https://registry.npmjs.org/@sentry%2freact'])
+  assertEquals(await npmLatestStable('@a/b/c', recording), null)
+  assertEquals(urls.length, 1)
+})
+
+Deno.test('splitPeerBlocked holds an upgrade another package still pins', () => {
+  const candidates = [
+    { name: '@sentry/react', installed: '10.69.0', latest: '11.4.0' },
+    { name: 'motion', installed: '^12.43.0', latest: '14.0.0' },
+  ]
+  const peers = new Map<string, Record<string, string>>([
+    ['@sentry/capacitor', { '@sentry/react': '10.69.0', '@capacitor/core': '>=3.0.0' }],
+    ['motion', { react: '^18.0.0 || ^19.0.0' }],
+  ])
+  const { ready, blocked } = splitPeerBlocked(candidates, peers)
+  assertEquals(ready.map((c) => c.name), ['motion'])
+  assertEquals(blocked.map((b) => [b.name, b.blockedBy, b.requires]), [['@sentry/react', '@sentry/capacitor', '10.69.0']])
+})
+
+Deno.test('splitPeerBlocked keeps an upgrade any || part admits, and ignores unparseable ranges', () => {
+  const candidates = [{ name: 'react', installed: '~18.3.0', latest: '19.2.8' }]
+  assertEquals(splitPeerBlocked(candidates, new Map([['motion', { react: '^18.0.0 || ^19.0.0' }]])).ready.length, 1)
+  assertEquals(splitPeerBlocked(candidates, new Map([['x', { react: '18.x' }]])).ready.length, 1)
+})
+
+Deno.test('npmLatestStableInfo returns the latest release and its peers', async () => {
+  const fake = (async () =>
+    new Response(JSON.stringify({
+      'dist-tags': { latest: '4.4.0' },
+      versions: { '4.4.0': { peerDependencies: { '@sentry/react': '10.69.0' } } },
+    }))) as unknown as typeof fetch
+  assertEquals(await npmLatestStableInfo('@sentry/capacitor', fake), { version: '4.4.0', peers: { '@sentry/react': '10.69.0' } })
+})
+
+Deno.test('HHTP 2026-10-09: an Expo SDK pin holds async-storage 3.x back', async () => {
+  let asked = ''
+  const fakeFetch = ((url: string) => {
+    asked = url
+    return Promise.resolve(new Response(JSON.stringify({ '@react-native-async-storage/async-storage': '2.2.0', 'expo-camera': '~57.0.3' })))
+  }) as unknown as typeof fetch
+  const pins = await expoBundledModules('~57.0.27', fakeFetch)
+  assertEquals(asked, 'https://cdn.jsdelivr.net/npm/expo@57.0.27/bundledNativeModules.json')
+  const { ready, pinned } = splitExpoPinned(
+    [
+      { name: '@react-native-async-storage/async-storage', installed: '2.2.0', latest: '3.1.1' },
+      { name: 'zustand', installed: '^4.5.0', latest: '5.0.8' },
+    ],
+    pins,
+  )
+  assertEquals(ready.map((c) => c.name), ['zustand'])
+  assertEquals(pinned.map((p) => [p.name, p.expoPin]), [['@react-native-async-storage/async-storage', '2.2.0']])
+})
+
+Deno.test('expoBundledModules: an unreadable pin list holds nothing', async () => {
+  const failing = (() => Promise.resolve(new Response('nope', { status: 404 }))) as unknown as typeof fetch
+  assertEquals(await expoBundledModules('~57.0.27', failing), null)
+  assertEquals(await expoBundledModules('workspace:*', failing), null)
+  const c = [{ name: 'a', installed: '^1.0.0', latest: '2.0.0' }]
+  assertEquals(splitExpoPinned(c, null), { ready: c, pinned: [] })
+})

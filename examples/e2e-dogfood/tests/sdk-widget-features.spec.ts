@@ -4,11 +4,9 @@
  * End-to-end test for all Mushi SDK widget features shipped in the
  * May 2026 Quality Pass:
  *  - Widget mounts and opens on glot.it (shadow DOM = open for QA pierce)
- *  - Category + intent steps navigate correctly
- *  - Example chips render on step 3 and paste text on click
- *  - Live char counter tracks input length
- *  - Locale-aware minLength validation (en=12, ja=6)
- *  - tooShort error message shows count/min instead of generic server error
+ *  - The one-screen report (Plan 018): optional type chips, free text first
+ *  - Send stays disabled with an inline "Add a few words" hint until the
+ *    minimum (8, halved for CJK) is met
  *  - Screenshot capture button shows loading state
  *  - Element selector hides panel and shows bottom hint toast
  *  - Successful submit → report confirmed in Supabase via API
@@ -17,7 +15,6 @@
 import { test, expect, type Page } from '@playwright/test'
 
 const DOGFOOD_URL = process.env.MUSHI_DOGFOOD_URL ?? 'http://localhost:3000'
-const ADMIN_URL   = process.env.MUSHI_ADMIN_URL   ?? 'http://localhost:6464'
 const BASE_PATH   = '/glot-it'
 const WIDGET_TRIGGER = process.env.MUSHI_WIDGET_TRIGGER ?? 'fab'
 
@@ -76,11 +73,11 @@ async function shadowWaitFor(page: Page, sel: string, timeout = 8000) {
   )
 }
 
-// ── Navigation helper: open widget + walk to details step ───────────────────
+// ── Navigation helper: open widget on the one-screen report ─────────────────
 
 /**
- * Open the widget, click through category (bug) → intent (first available)
- * to reach the details step with textarea + example chips.
+ * Open the widget and pick the optional Bug type chip; the description
+ * textarea is already on screen (Plan 018 one-screen report).
  *
  * Adds a 2.5s wait after navigation so the SDK's async runtime config fetch
  * completes before we try features that depend on it (elementSelector).
@@ -97,15 +94,11 @@ async function openToDetailsStep(page: Page) {
   await openMushiWidget(page)
   await shadowWaitFor(page, '.mushi-panel.open')
 
-  // Step 2: click the "bug" category option
+  // Step 2: pick the optional "Bug" type chip
   await shadowWaitFor(page, '[data-category="bug"]')
   await shadowClick(page, '[data-category="bug"]')
 
-  // Step 3: click the first intent option
-  await shadowWaitFor(page, '.mushi-intent-btn')
-  await shadowClick(page, '.mushi-intent-btn')
-
-  // Confirm details step is visible (textarea present)
+  // The textarea is on the same screen
   await shadowWaitFor(page, '.mushi-textarea', 8000)
 }
 
@@ -156,7 +149,7 @@ test.describe('Mushi SDK widget — May 2026 Quality Pass', () => {
   })
 
   // ── 2. Panel opens ────────────────────────────────────────────────────────
-  test('2. Clicking launcher opens the panel showing the category step', async ({ page }) => {
+  test('2. Clicking launcher opens the one-screen report with type chips', async ({ page }) => {
     await openMushiWidget(page)
     await shadowWaitFor(page, '.mushi-panel.open')
     await shadowWaitFor(page, '[data-category]')
@@ -174,42 +167,35 @@ test.describe('Mushi SDK widget — May 2026 Quality Pass', () => {
     expect(info.categoryButtons, 'bug category present').toContain('bug')
   })
 
-  // ── 3. Example chips ──────────────────────────────────────────────────────
-  test('3. Example chips appear on step 3 and paste text on click', async ({ page }) => {
+  // ── 3. Type chips ─────────────────────────────────────────────────────────
+  test('3. Type chips are an optional single-select radio group', async ({ page }) => {
     await openToDetailsStep(page)
-
-    // Find chips
-    const chips = await page.evaluate(() => {
+    const checked = await page.evaluate(() => {
       const host = document.querySelector('#mushi-mushi-widget') as HTMLElement & { shadowRoot: ShadowRoot }
-      return Array.from(host?.shadowRoot?.querySelectorAll('.mushi-example-chip') ?? []).map(c => c.textContent?.trim() ?? '')
+      return Array.from(host?.shadowRoot?.querySelectorAll('[role="radio"][data-category]') ?? [])
+        .filter((c) => c.getAttribute('aria-checked') === 'true')
+        .map((c) => c.getAttribute('data-category'))
     })
-    expect(chips.length, 'example chips present').toBeGreaterThan(0)
-    expect(chips[0], 'first chip has text').toBeTruthy()
-
-    // Click first chip — should paste text into textarea
-    await shadowClick(page, '.mushi-example-chip')
-    await page.waitForTimeout(300)
-
-    const taValue = await page.evaluate(() => {
-      const host = document.querySelector('#mushi-mushi-widget') as HTMLElement & { shadowRoot: ShadowRoot }
-      return (host?.shadowRoot?.querySelector('.mushi-textarea') as HTMLTextAreaElement | null)?.value ?? ''
-    })
-    expect(taValue, 'chip text pasted into textarea').toBe(chips[0])
+    expect(checked, 'exactly the Bug chip is selected').toEqual(['bug'])
   })
 
-  // ── 4. Live char counter ──────────────────────────────────────────────────
-  test('4. Char counter updates as user types', async ({ page }) => {
+  // ── 4. Send hint ──────────────────────────────────────────────────────────
+  test('4. Send stays disabled with an inline hint until the minimum is met', async ({ page }) => {
     await openToDetailsStep(page)
 
     await shadowFill(page, '.mushi-textarea', 'Hello')
     await page.waitForTimeout(400)
-
-    const counterText = await shadowText(page, '[data-role="char-counter"]')
-    expect(counterText, 'char counter shows 5/N').toMatch(/5\/\d+/)
+    const state = await page.evaluate(() => {
+      const host = document.querySelector('#mushi-mushi-widget') as HTMLElement & { shadowRoot: ShadowRoot }
+      const shadow = host?.shadowRoot
+      return shadow?.querySelector('[data-action="submit"]')?.getAttribute('aria-disabled')
+    })
+    expect(state, 'Send disabled under the minimum').toBe('true')
+    expect((await shadowText(page, '[data-role="hint"]')).length, 'hint explains why').toBeGreaterThan(0)
   })
 
-  // ── 5. tooShort validation ────────────────────────────────────────────────
-  test('5. Submitting too-short text shows char count hint not generic error', async ({ page }) => {
+  // ── 5. Too-short text is never sent ───────────────────────────────────────
+  test('5. Submitting too-short text keeps the panel on the report screen', async ({ page }) => {
     await openToDetailsStep(page)
 
     await shadowFill(page, '.mushi-textarea', 'Bug')
@@ -217,34 +203,12 @@ test.describe('Mushi SDK widget — May 2026 Quality Pass', () => {
     await shadowClick(page, '[data-action="submit"]')
     await page.waitForTimeout(600)
 
-    // Should show a message containing char counts (e.g. "3/12")
-    const errorText = await page.evaluate(() => {
+    const stillOnReport = await page.evaluate(() => {
       const host = document.querySelector('#mushi-mushi-widget') as HTMLElement & { shadowRoot: ShadowRoot }
       const shadow = host?.shadowRoot
-      // Check all possible error display locations
-      const selectors = [
-        '.mushi-validation-error',
-        '[data-role="validation-msg"]',
-        '[data-role="error-msg"]',
-        '.mushi-error-text',
-        '.mushi-too-short',
-      ]
-      for (const sel of selectors) {
-        const el = shadow?.querySelector(sel) as HTMLElement | null
-        if (el?.textContent?.trim()) return el.textContent.trim()
-      }
-      // Fallback: check the full panel text for error patterns
-      return shadow?.querySelector('.mushi-panel')?.textContent?.substring(0, 500) ?? ''
+      return !!shadow?.querySelector('.mushi-textarea') && !shadow?.querySelector('.mushi-success')
     })
-
-    // Must show char-count pattern (e.g. "3/12") not generic "Something went wrong"
-    const hasCharCount = /\d+\/\d+/.test(errorText)
-    const hasNudgeText = /more detail|tooShort|もう少し|detail|short/i.test(errorText)
-    expect(
-      hasCharCount || hasNudgeText,
-      `Expected char count or nudge text, got: "${errorText.substring(0, 100)}"`,
-    ).toBe(true)
-    expect(errorText.toLowerCase(), 'should not show generic server error').not.toContain('something went wrong')
+    expect(stillOnReport, 'no receipt for a too-short report').toBe(true)
   })
 
   // ── 6. Screenshot button loading state ────────────────────────────────────
@@ -380,8 +344,8 @@ test.describe('Mushi SDK widget — May 2026 Quality Pass', () => {
     }
   })
 
-  // ── 10. Category step IA (Jun 2026 UX unification) ───────────────────────
-  test('10. Category step shows report section label and More nav toggle', async ({ page }) => {
+  // ── 10. Report screen IA (Plan 018) ───────────────────────────────────────
+  test('10. Report screen shows its title, the overflow menu and no step counter', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 })
     await openMushiWidget(page)
     await shadowWaitFor(page, '.mushi-panel.open')
@@ -402,15 +366,15 @@ test.describe('Mushi SDK widget — May 2026 Quality Pass', () => {
       const host = document.querySelector('#mushi-mushi-widget') as HTMLElement & { shadowRoot: ShadowRoot }
       const shadow = host?.shadowRoot
       return {
-        sectionLabel: shadow?.querySelector('.mushi-section-label')?.textContent?.trim() ?? '',
+        sectionLabel: shadow?.querySelector('#mushi-title')?.textContent?.trim() ?? '',
         moreToggle: !!shadow?.querySelector('[data-action="toggle-more-nav"]'),
         footerStepIndicators: shadow?.querySelectorAll('.mushi-step-indicator').length ?? 0,
       }
     })
 
-    expect(ia.sectionLabel.length, 'report section label visible').toBeGreaterThan(0)
-    expect(ia.moreToggle, 'More nav toggle present').toBe(true)
-    expect(ia.footerStepIndicators, 'no duplicate footer step indicators on category step').toBe(0)
+    expect(ia.sectionLabel.length, 'report title visible').toBeGreaterThan(0)
+    expect(ia.moreToggle, 'overflow menu present (the feature board is always wired)').toBe(true)
+    expect(ia.footerStepIndicators, 'no step counter on the one-screen report').toBe(0)
   })
 
 })

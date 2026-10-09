@@ -3,7 +3,7 @@
  * chrome lives in FixDetailPanel (progressive disclosure, NN/g #6).
  */
 
-import { memo, useCallback } from 'react'
+import { memo, useCallback, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Badge, RelativeTime, Tooltip, PipelineStrip, Btn } from '../ui'
 import { PIPELINE_STATUS, pipelineStatusLabel } from '../../lib/tokens'
@@ -14,9 +14,10 @@ import { CursorAgentBadge } from './CursorAgentBadge'
 import { ClaudeAgentBadge } from './ClaudeAgentBadge'
 import { buildFixPipelineStages, fixStatusStripeClass } from './fixPipelineStages'
 import { ciBadge, type FixAttempt } from './types'
-import { humanizeFixError } from '../../lib/humanizeFixError'
+import { credentialAdvice, failureHeadline, fixReportLabel, isSuperseded, needsAttention, supersededLabel } from '../../lib/fixReportTruth'
 import { IconChevronDown, IconChevronUp } from '../icons'
 import { FIXES_TABLE_COL, TABLE_CELL } from './fixesTableLayout'
+import { fixRowDomId } from '../../lib/fixDeepLink'
 
 const AGENT_LABEL: Record<string, string> = {
   cursor_cloud: 'Cursor',
@@ -31,6 +32,9 @@ interface Props {
   onToggle: () => void
   onRetry: () => void
   compactTable?: boolean
+  /** Bulk selection (console QA 92): shown when the page passes a handler. */
+  selected?: boolean
+  onSelectChange?: (selected: boolean) => void
   actionLabels?: {
     openPr?: string
     retry?: string
@@ -47,13 +51,22 @@ function FixRowViewInner({
   onToggle,
   onRetry,
   compactTable = false,
+  selected = false,
+  onSelectChange,
   actionLabels,
 }: Props) {
   const ci = ciBadge(fix)
   const stages = buildFixPipelineStages(fix)
   const stripe = fixStatusStripeClass(fix)
   const agentShort = AGENT_LABEL[fix.agent] ?? fix.agent
-  const humanized = fix.error ? humanizeFixError(fix.error, { agent: fix.agent, category: fix.failure_category }) : null
+  // Read against the report's current state: an attempt whose report a later
+  // PR fixed is neutral history, the latest stopped attempt shows its real
+  // reason inline (A12, glot.it 2026-10-04).
+  const superseded = isSuperseded(fix)
+  const stopped = needsAttention(fix)
+  const headline = stopped || (!superseded && fix.error) ? failureHeadline(fix) : null
+  const keyAdvice = stopped ? credentialAdvice(fix) : null
+  const [detailsOpen, setDetailsOpen] = useState(false)
 
   const flashToneFor = useCallback((s: FixAttempt['status']) => {
     switch (s) {
@@ -90,6 +103,7 @@ function FixRowViewInner({
   return (
     <>
       <tr
+        id={fixRowDomId(fix.id)}
         className={`group border-t border-edge-subtle hover:bg-surface-overlay/50 motion-safe:transition-opacity cursor-pointer motion-safe:animate-mushi-fade-in ${flash.className}`}
         style={{ ...stagger(index), ...flash.style }}
         onAnimationEnd={flash.onAnimationEnd}
@@ -103,9 +117,30 @@ function FixRowViewInner({
         </td>
         <td className={`${FIXES_TABLE_COL.status} ${TABLE_CELL.pxMeta} py-2 align-middle whitespace-nowrap`}>
           <div className="flex flex-col gap-0.5 min-w-0">
-            <Badge className={`w-fit max-w-full min-w-0 truncate text-2xs ${PIPELINE_STATUS[fix.status] ?? 'bg-surface-overlay text-fg-muted'}`}>
-              {pipelineStatusLabel(fix.status)}
-            </Badge>
+            {onSelectChange ? (
+              <label
+                className="inline-flex items-center gap-1 text-2xs text-fg-faint cursor-pointer w-fit"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <input
+                  type="checkbox"
+                  checked={selected}
+                  onChange={(e) => onSelectChange(e.target.checked)}
+                  aria-label={`Select the fix for ${fixReportLabel(fix)}`}
+                  className="h-3.5 w-3.5 rounded-sm border-edge accent-brand"
+                />
+                <span className="sr-only">Select</span>
+              </label>
+            ) : null}
+            {superseded ? (
+              <Badge className="w-fit max-w-full min-w-0 truncate text-2xs bg-surface-overlay text-fg-muted">
+                Superseded
+              </Badge>
+            ) : (
+              <Badge className={`w-fit max-w-full min-w-0 truncate text-2xs ${PIPELINE_STATUS[fix.status] ?? 'bg-surface-overlay text-fg-muted'}`}>
+                {pipelineStatusLabel(fix.status)}
+              </Badge>
+            )}
             <span className="text-2xs text-fg-faint font-mono truncate">{agentShort}</span>
           </div>
         </td>
@@ -115,14 +150,51 @@ function FixRowViewInner({
               to={`/reports/${fix.report_id}`}
               onClick={(e) => e.stopPropagation()}
               className="text-xs text-fg-secondary hover:text-fg font-medium truncate block"
+              title={fix.report_title ?? undefined}
             >
-              Report {fix.report_id.slice(0, 8)}…
+              {fixReportLabel(fix)}
             </Link>
-            {(fix.summary || humanized?.title) && (
-              <p className="text-2xs text-fg-muted truncate" title={fix.summary ?? humanized?.title}>
-                {humanized?.title ?? fix.summary}
+            {superseded ? (
+              <p className="text-2xs text-fg-muted truncate" data-testid="fix-row-superseded">
+                {supersededLabel(fix)}
               </p>
-            )}
+            ) : headline ? (
+              <div className="min-w-0" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+                <p
+                  className={`text-2xs truncate ${stopped ? 'text-danger' : 'text-fg-muted'}`}
+                  title={headline.title}
+                  data-testid="fix-row-reason"
+                >
+                  {keyAdvice?.message ?? headline.title}
+                </p>
+                <div className="flex flex-wrap items-center gap-x-2">
+                  {keyAdvice?.to && keyAdvice.linkLabel ? (
+                    <Link to={keyAdvice.to} className="text-2xs text-accent hover:underline">
+                      {keyAdvice.linkLabel}
+                    </Link>
+                  ) : null}
+                  {headline.firstLine ? (
+                    <button
+                      type="button"
+                      className="text-2xs text-fg-faint underline underline-offset-2 hover:text-fg-muted"
+                      aria-expanded={detailsOpen}
+                      onClick={() => setDetailsOpen((o) => !o)}
+                    >
+                      {detailsOpen ? 'Hide details' : 'Details'}
+                    </button>
+                  ) : null}
+                </div>
+                {detailsOpen && headline.firstLine ? (
+                  <p className="mt-0.5 text-2xs font-mono text-fg-faint whitespace-pre-wrap break-all">
+                    {headline.firstLine}
+                  </p>
+                ) : null}
+              </div>
+            ) : fix.summary ? (
+              <p className="text-2xs text-fg-muted truncate" title={fix.summary}>
+                {fix.summary}
+              </p>
+            ) : null}
           </div>
         </td>
         {!compactTable ? (
@@ -159,7 +231,7 @@ function FixRowViewInner({
             onClick={(e) => e.stopPropagation()}
             onKeyDown={(e) => e.stopPropagation()}
           >
-            {fix.status === 'failed' && (
+            {fix.retryable === true && (
               isInFlight ? (
                 <Tooltip content="A fix for this report is already in-flight.">
                   <span className="text-3xs text-fg-faint px-1">{labels.retry}</span>
@@ -171,7 +243,7 @@ function FixRowViewInner({
                   className="text-warn hover:text-warn/90 !px-1.5 !py-0.5 text-2xs"
                   onClick={() => onRetry()}
                 >
-                  {labels.retry}
+                  {keyAdvice?.retryNow ? 'Retry fix' : labels.retry}
                 </Btn>
               )
             )}

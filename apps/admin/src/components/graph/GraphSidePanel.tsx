@@ -33,12 +33,11 @@ export function GraphSidePanel({ node, blastRadius, blastLoading, onClear }: Pro
     )
   }
   const occ = nodeMetadataValue(node, 'occurrence_count')
+  // Only components have a Reports filter. Page nodes used to link to
+  // `/reports?url=`, which the Reports page ignores, so the link opened
+  // every report while promising the related ones.
   const reportLink =
-    node.node_type === 'component'
-      ? `/reports?component=${encodeURIComponent(node.label)}`
-      : node.node_type === 'page'
-        ? `/reports?url=${encodeURIComponent(node.label)}`
-        : null
+    node.node_type === 'component' ? `/reports?component=${encodeURIComponent(node.label)}` : null
 
   return (
     <Card className="p-3 self-start space-y-3">

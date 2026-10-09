@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/mcp-auth
 
 ---
 title: MCP OAuth consent
+description: The consent page the hosted Mushi MCP server opens when your editor signs in over OAuth — what you approve and how the authorization flow works.
 ---
 
 # MCP OAuth consent

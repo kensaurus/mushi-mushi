@@ -3,16 +3,17 @@
  * PURPOSE: Inventory atlas readout — proposal API and project ref for QA inventory tab.
  */
 
-import { Section } from '../ui'
 import { DetailRows, type DetailRowItem } from '../ui/fields'
-import { EndpointCodeRow, ReadoutSection } from '../readout'
+import { EndpointCodeRow, ReadoutSection, ReadoutPanel } from '../readout'
 import { RESOLVED_EXTERNAL_API_URL } from '../../lib/env'
 import { IconGlobe, IconHealth } from '../icons'
 
 export interface InventoryWorkspaceReadoutProps {
   projectId: string | null
-  nodeCount?: number
-  storyCount?: number
+  /** Tracked actions (inventory_status_summary.total). */
+  nodeCount?: number | null
+  /** User stories in the active inventory; null while they load. */
+  storyCount?: number | null
 }
 
 export function InventoryWorkspaceReadout({
@@ -33,19 +34,19 @@ export function InventoryWorkspaceReadout({
       wrap: true,
     },
     {
-      label: 'Inventory nodes',
-      value: nodeCount != null ? String(nodeCount) : '—',
+      label: 'Actions tracked',
+      value: nodeCount != null ? String(nodeCount) : 'Not loaded yet',
       tone: nodeCount != null && nodeCount > 0 ? 'info' : 'muted',
     },
     {
       label: 'User stories',
-      value: storyCount != null ? String(storyCount) : '—',
+      value: storyCount != null ? String(storyCount) : 'Not loaded yet',
       tone: storyCount != null && storyCount > 0 ? 'ok' : 'muted',
     },
   ]
 
   return (
-    <Section title="Inventory readout">
+    <ReadoutPanel title="Inventory readout">
       <div className="grid gap-4 lg:grid-cols-2">
         <ReadoutSection title="Endpoints" icon={<IconGlobe size={14} aria-hidden />}>
           <EndpointCodeRow label="Inventory API" url={inventoryUrl} />
@@ -54,6 +55,6 @@ export function InventoryWorkspaceReadout({
           <DetailRows items={rows} dense />
         </ReadoutSection>
       </div>
-    </Section>
+    </ReadoutPanel>
   )
 }

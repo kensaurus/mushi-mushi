@@ -10,6 +10,7 @@ export type ExploreGuideTabId =
   | 'knowledge'
   | 'graph'
   | 'layers'
+  | 'diagram'
   | 'search'
   | 'index'
 
@@ -62,6 +63,12 @@ export const EXPLORE_ATLAS_TABS: ExploreTabDefinition[] = [
     label: 'Layers',
     plain: 'Sankey view of UI → lib → backend → test file distribution.',
     whenToUse: 'Checking whether new code landed in the right architectural lane.',
+  },
+  {
+    id: 'diagram',
+    label: 'Diagram',
+    plain: 'An AI drawing of the main parts of your app and how they connect, with every path checked against the repo.',
+    whenToUse: 'Getting the big picture of an app you did not write by hand. Needs a connected repo, not indexing.',
   },
   {
     id: 'search',

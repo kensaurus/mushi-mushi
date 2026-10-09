@@ -50,7 +50,6 @@ export function IterateSnapshotStrip({
         <StatCard
           label={statLabels?.total ?? 'Total runs'}
           value={stats.total}
-          accent={stats.total > 0 ? 'text-brand' : undefined}
           tooltip={totalRunsTooltip(stats, plainOpts)}
           detail={totalRunsDetail(plainOpts)}
           to={iterateLinks.total}

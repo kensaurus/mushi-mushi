@@ -1,5 +1,6 @@
 ---
 title: 'Sentry + Mushi (enrich or standalone)'
+description: Add Mushi alongside Sentry or run it on its own — three setups, the Sentry webhook for errors, and user bug reports with plain-English diagnoses.
 ---
 
 # Sentry + Mushi (enrich or standalone)
@@ -15,13 +16,14 @@ import { Callout } from 'nextra/components'
 
 <Callout type="info">
   **Three ways to run Mushi with Sentry:**
-  1. **Route errors in (recommended)** — point a Sentry issue-alert webhook at
-     `<api>/v1/webhooks/sentry?projectId=<your-project>` and Sentry errors land
+  1. **Route errors in (recommended)** — point a Sentry internal integration's
+     webhook at `<api>/v1/webhooks/sentry?projectId=<your-project>` (and import
+     the issues you already have) and Sentry errors land
      in the same Mushi queue as user reports: deduped per issue, diagnosed in
      plain English, fix-dispatchable. Merging the fix resolves the Sentry issue;
      resolving in Sentry resolves the report; a repeat alert on a fixed report
      reopens it as a regression. See [the Sentry plugin page](/plugins/sentry)
-     for the 3-step setup.
+     for the setup.
   2. **Enrich** — keep Sentry as-is; Mushi captures user bug reports and links
      each one to the matching Sentry event via `@mushi-mushi/plugin-sentry`.
   3. **Standalone** — use Mushi on its own for capture + diagnosis + fix. You
@@ -35,8 +37,8 @@ import { Callout } from 'nextra/components'
 | Unhandled exception capture | ✅ best-in-class | ✅ (basic) |
 | Performance / tracing / release health | ✅ | ❌ — keep Sentry |
 | User-triggered bug reports (widget, shake) | ✅ (User Feedback) | ✅ feedback-first |
-| Plain-English AI diagnosis per report | Seer ($40/contributor add-on) | ✅ included, BYOK on self-host |
-| Paste-ready fix prompt via MCP | read-only MCP | ✅ full fix-dispatch loop |
+| Plain-English AI diagnosis per report | Seer (add-on, $40 per active contributor/mo; not in self-hosted) | ✅ included, BYOK on self-host |
+| Paste-ready fix prompt via MCP | Sentry MCP: issue lookup, status updates, and Seer root cause + suggested fix (Seer add-on) | ✅ full fix-dispatch loop |
 | Self-host | complex (Sentry self-hosted) | ✅ Supabase / Docker / Helm |
 | Open source | FSL | MIT SDKs / AGPLv3 server |
 

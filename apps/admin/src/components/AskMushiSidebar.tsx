@@ -21,6 +21,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Streamdown } from 'streamdown'
 import {
   STREAMDOWN_LINK_SAFETY,
@@ -52,6 +53,8 @@ import type {
   AskMushiIntent,
 } from '../lib/askMushiTypes'
 import { useTheme } from '../lib/useTheme'
+import { reportDetailPath } from '../lib/reportUrl'
+import { fixDeepLinkPath } from '../lib/fixDeepLink'
 import { askMushiShikiThemes, formatAssistantMarkdown, formatThreadTitle } from '../lib/askMushiTerminalTheme'
 
 interface Props {
@@ -96,7 +99,6 @@ export function AskMushiSidebar({ open, onClose, route, seedMessage, seedThreadI
   const [pending, setPending] = useState(false)
   const [threadId, setThreadId] = useState<string>(() => uuid())
   const [intentOverride, setIntentOverride] = useState<AskMushiIntent | null>(null)
-  const [modelOverride, setModelOverride] = useState<'sonnet' | 'haiku' | 'gpt' | null>(null)
   const [historyOpen, setHistoryOpen] = useState(false)
 
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
@@ -182,10 +184,9 @@ export function AskMushiSidebar({ open, onClose, route, seedMessage, seedThreadI
       // Streaming path. Falls back to non-stream POST on any error so the
       // UX is identical when the SSE flag is off or the backend isn't
       // ready yet — only the typewriter effect drops.
-      const useStream = isAskMushiStreamingEnabled() && !modelOverride
+      const useStream = isAskMushiStreamingEnabled()
       debugLog('ask-mushi', `Sending turn (${useStream ? 'stream' : 'POST'})`, {
         endpoint: `${RESOLVED_API_URL}/v1/admin/ask-mushi/messages${useStream ? '/stream' : ''}`,
-        model: modelOverride ?? 'server-default',
         intent: intentOverride ?? intent,
         route,
         threadId,
@@ -252,7 +253,6 @@ export function AskMushiSidebar({ open, onClose, route, seedMessage, seedThreadI
           if (inflightRef.current === ctrl) inflightRef.current = null
           setPending(false)
           setIntentOverride(null)
-          setModelOverride(null)
         }
       }
 
@@ -306,7 +306,6 @@ export function AskMushiSidebar({ open, onClose, route, seedMessage, seedThreadI
               // command (e.g. `/tldr`) would silently apply to every
               // subsequent turn until the user reloaded.
               setIntentOverride(null)
-              setModelOverride(null)
             },
             onError: (err) => {
               debugError('ask-mushi:stream', 'Stream failed — falling back to POST', err)
@@ -334,11 +333,11 @@ export function AskMushiSidebar({ open, onClose, route, seedMessage, seedThreadI
       // Non-stream path — single round-trip POST.
       await runPostTurn()
     },
-    [messages, pending, route, activeCtx, threadId, intentOverride, modelOverride],
+    [messages, pending, route, activeCtx, threadId, intentOverride],
   )
 
-  // Slash-command handler. Three shapes: prepend (rewrite + send),
-  // local (clear / help), and model-override (annotate next turn).
+  // Slash-command handler. Two shapes: prepend (rewrite + send) and local
+  // (clear / help). There is no model override: the server picks the model.
   //
   // `strippedInput` is the textarea value with the slash token already
   // removed, supplied by the composer. We must use it instead of the
@@ -365,20 +364,6 @@ export function AskMushiSidebar({ open, onClose, route, seedMessage, seedThreadI
             },
           ])
         }
-        return
-      }
-      if (eff.kind === 'model-override') {
-        setModelOverride(eff.model)
-        // Surface the override as a system note so the user knows the
-        // next turn will use a different model.
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: uuid(),
-            role: 'system',
-            content: `Next turn will use \`${eff.model}\`.`,
-          },
-        ])
         return
       }
       if (eff.kind === 'prepend') {
@@ -599,9 +584,6 @@ export function AskMushiSidebar({ open, onClose, route, seedMessage, seedThreadI
               <textarea ref={inputRef} data-ask-mushi-textarea readOnly />
             </div>
             <div className="flex justify-end gap-2 px-3 pb-2">
-              {modelOverride && (
-                <span className="text-2xs text-brand">model: {modelOverride}</span>
-              )}
               {intentOverride && intentOverride !== 'default' && (
                 <span className="text-2xs text-brand">intent: {intentOverride}</span>
               )}
@@ -994,6 +976,13 @@ function MessageMetaStrip({ message }: { message: AskMushiMessage }) {
   )
 }
 
+/** In-app destination for an answer citation, or null when it has none. */
+function citationPath(c: { kind: string; id: string }): string | null {
+  if (c.kind === 'report') return reportDetailPath(c.id)
+  if (c.kind === 'fix') return fixDeepLinkPath(c.id)
+  return null
+}
+
 function MessageActions({ message, onCopy }: { message: AskMushiMessage; onCopy: () => void }) {
   return (
     <div className="ask-mushi-msg-actions flex items-center gap-1.5">
@@ -1006,15 +995,21 @@ function MessageActions({ message, onCopy }: { message: AskMushiMessage; onCopy:
       >
         Copy
       </Btn>
-      {message.citations?.map((c) => (
-        <a
-          key={`${c.kind}:${c.id}`}
-          href={c.kind === 'report' ? `/reports/${c.id}` : c.kind === 'fix' ? `/fixes` : '#'}
-          className="text-2xs text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity"
-        >
-          Open {c.kind} ↗
-        </a>
-      ))}
+      {message.citations?.map((c) => {
+        const to = citationPath(c)
+        if (!to) return null
+        // <Link>, not <a>: a bare /reports/<id> href skips the router basename
+        // and opens outside the console in production.
+        return (
+          <Link
+            key={`${c.kind}:${c.id}`}
+            to={to}
+            className="text-2xs text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity"
+          >
+            Open {c.kind} ↗
+          </Link>
+        )
+      })}
     </div>
   )
 }

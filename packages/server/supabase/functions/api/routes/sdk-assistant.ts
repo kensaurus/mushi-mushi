@@ -23,23 +23,29 @@
 import type { Hono } from 'npm:hono@4'
 import type { Variables } from '../types.ts'
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
-import { createAnthropic } from 'npm:@ai-sdk/anthropic@1'
-import { createOpenAI } from 'npm:@ai-sdk/openai@1'
+import { openAiProvider } from '../../_shared/openai-compat.ts'
 import { z } from 'npm:zod@3'
 
 import { getServiceClient } from '../../_shared/db.ts'
 import { log as rootLog } from '../../_shared/logger.ts'
 import { apiKeyAuth, jwtAuth } from '../../_shared/auth.ts'
 import { estimateCallCostUsd } from '../../_shared/pricing.ts'
-import { ASSIST_MODEL, ASSIST_FALLBACK } from '../../_shared/models.ts'
+import {
+  ASSIST_EFFORT,
+  ASSIST_FALLBACK,
+  ASSIST_MODEL,
+  THINKING_HEADROOM_TOKENS,
+} from '../../_shared/models.ts'
+import { claudeGenerateObject } from '../../_shared/claude-messages.ts'
 import { logLlmInvocation } from '../../_shared/telemetry.ts'
 import { createTrace } from '../../_shared/observability.ts'
 import { tagLangfuseTrace } from '../../_shared/sentry.ts'
 import { withAnthropicOrOpenAi } from '../../_shared/llm-failover.ts'
 import { generateValidatedObject } from '../../_shared/structured-output.ts'
 import { verifyEndUserToken, MUSHI_USER_TOKEN_HEADER } from '../../_shared/end-user-identity.ts'
-import { canManageProjectSdkConfig } from '../helpers.ts'
+import { projectConfigDenied } from '../helpers.ts'
 import { logAudit } from '../../_shared/audit.ts'
+import { scanForSecrets } from '../../_shared/secret-scan.ts'
 
 const log = rootLog.child('sdk-assistant')
 
@@ -128,30 +134,6 @@ function normalizeReply(raw: z.infer<typeof ReplyLlmSchema>): Record<string, unk
   return { kind: 'answer', text, ...(steps.length ? { steps } : {}) }
 }
 
-/**
- * Scan an operator-authored knowledge corpus for leaked secrets before it is
- * persisted. The corpus is fed verbatim into the LLM system prompt, so a stray
- * key here would be a real exposure. Pattern set mirrors _shared/skill-packet
- * style guards (API keys, private keys, connection strings, JWTs).
- */
-const SECRET_PATTERNS: Array<{ re: RegExp; label: string }> = [
-  { re: /-----BEGIN [A-Z ]*PRIVATE KEY-----/, label: 'private key' },
-  { re: /sk-[a-zA-Z0-9]{20,}/, label: 'OpenAI-style key' },
-  { re: /sk-ant-[a-zA-Z0-9_-]{20,}/, label: 'Anthropic key' },
-  { re: /AKIA[0-9A-Z]{16}/, label: 'AWS access key id' },
-  { re: /gh[pousr]_[A-Za-z0-9]{20,}/, label: 'GitHub token' },
-  { re: /eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/, label: 'JWT' },
-  { re: /postgres(?:ql)?:\/\/[^:\s]+:[^@\s]+@/, label: 'database connection string' },
-  { re: /xox[baprs]-[A-Za-z0-9-]{10,}/, label: 'Slack token' },
-]
-
-function scanForSecrets(text: string): string | null {
-  for (const { re, label } of SECRET_PATTERNS) {
-    if (re.test(text)) return label
-  }
-  return null
-}
-
 /** Per-project hourly cap. Reuses scoped_rate_limit_claim with the project id. */
 async function claimRateLimit(db: SupabaseClient, projectId: string): Promise<boolean> {
   const { error } = await db.rpc('scoped_rate_limit_claim', {
@@ -237,6 +219,9 @@ export function registerSdkAssistantRoutes(app: Hono<{ Variables: Variables }>):
 
     let usedModel = ASSIST_MODEL
     let fallbackUsed = false
+    // The source of the key that made the last attempt, which is the one that
+    // answered. logLlmInvocation bills a platform-key turn only when it is set.
+    let keySource: 'byok' | 'env' | null = null
 
     const trace = createTrace('sdk-assistant', { projectId, threadId, route })
     tagLangfuseTrace(trace.id)
@@ -247,20 +232,22 @@ export function registerSdkAssistantRoutes(app: Hono<{ Variables: Variables }>):
         db,
         projectId,
         (key) => {
-          const anthropic = createAnthropic({ apiKey: key.key })
-          return generateValidatedObject(ReplyLlmSchema, {
-            model: anthropic(ASSIST_MODEL),
-            messages: [
-              { role: 'system', content: systemPrompt },
-              { role: 'user', content: message },
-            ],
-            maxTokens,
+          keySource = key.source
+          return claudeGenerateObject({
+            apiKey: key.key,
+            model: ASSIST_MODEL,
+            schema: ReplyLlmSchema,
+            effort: ASSIST_EFFORT,
+            system: systemPrompt,
+            messages: [{ role: 'user', content: message }],
+            maxTokens: maxTokens + THINKING_HEADROOM_TOKENS,
           })
         },
         (key) => {
+          keySource = key.source
           usedModel = ASSIST_FALLBACK
           fallbackUsed = true
-          const openai = createOpenAI({ apiKey: key.key, baseURL: key.baseUrl })
+          const openai = openAiProvider({ apiKey: key.key, baseURL: key.baseUrl })
           return generateValidatedObject(ReplyLlmSchema, {
             model: openai(ASSIST_FALLBACK),
             system: systemPrompt,
@@ -298,6 +285,7 @@ export function registerSdkAssistantRoutes(app: Hono<{ Variables: Variables }>):
         inputTokens,
         outputTokens,
         langfuseTraceId: trace.id,
+        keySource,
       })
 
       const assistantContent = reply.kind === 'answer' ? String(reply.text ?? '') : String(reply.question ?? '')
@@ -336,6 +324,7 @@ export function registerSdkAssistantRoutes(app: Hono<{ Variables: Variables }>):
         errorMessage: msg,
         latencyMs,
         langfuseTraceId: trace.id,
+        keySource,
       })
       log.error('sdk_assistant_llm_error', { projectId, error: msg })
       return c.json({ ok: false, error: { code: 'ASSISTANT_ERROR', message: 'The assistant is temporarily unavailable.' } }, 502)
@@ -350,9 +339,8 @@ export function registerSdkAssistantRoutes(app: Hono<{ Variables: Variables }>):
     const projectId = c.req.param('id')!
     const userId = c.get('userId') as string
     const db = getServiceClient()
-    if (!(await canManageProjectSdkConfig(db, projectId, userId))) {
-      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404)
-    }
+    const denied = await projectConfigDenied(c, db, projectId, userId, 'view the assistant settings')
+    if (denied) return denied
     const { data, error } = await db
       .from('project_settings')
       .select('assistant_enabled, assistant_label, assistant_greeting, assistant_suggestions, assistant_knowledge')
@@ -383,9 +371,8 @@ export function registerSdkAssistantRoutes(app: Hono<{ Variables: Variables }>):
     const projectId = c.req.param('id')!
     const userId = c.get('userId') as string
     const db = getServiceClient()
-    if (!(await canManageProjectSdkConfig(db, projectId, userId))) {
-      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404)
-    }
+    const denied = await projectConfigDenied(c, db, projectId, userId, 'change the assistant settings')
+    if (denied) return denied
     const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
     const updates: Record<string, unknown> = {}
 
@@ -439,9 +426,8 @@ export function registerSdkAssistantRoutes(app: Hono<{ Variables: Variables }>):
     const projectId = c.req.param('id')!
     const userId = c.get('userId') as string
     const db = getServiceClient()
-    if (!(await canManageProjectSdkConfig(db, projectId, userId))) {
-      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404)
-    }
+    const denied = await projectConfigDenied(c, db, projectId, userId, 'view assistant logs')
+    if (denied) return denied
     const limit = Math.min(Math.max(Number(c.req.query('limit') ?? 50), 1), 200)
     const { data, error } = await db
       .from('sdk_assistant_messages')

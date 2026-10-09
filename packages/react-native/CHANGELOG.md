@@ -1,5 +1,72 @@
 # @mushi-mushi/react-native
 
+## 0.24.0
+
+### Minor Changes
+
+- 5ad0800: `useMushi()` gains `getReporterUpdates()`, `onReporterUpdate(cb)` (refreshed when the app returns to the foreground, so a host feedback band or tab dot can show unread updates) and `getNotificationPrefs()` / `setNotificationPrefs({ email })` for email updates with double opt-in. `markReportRead(id)` is now one request to the v2 mark-read route, falling back to the per-notification routes on an older server.
+
+  The report sheet reaches web parity:
+  - **Free text first.** Type chips are optional. "Idea" files a feature request.
+  - **Easier to send.** Send enables after a few words (`widget.minDescriptionLength`, default 8), or right away when a screenshot is attached.
+  - **Timeline thread.** The thread shows the report's timeline: what happened and when, in the reporter's language, with the developer's replies.
+  - **Reduce Motion.** The sheet opens and closes instantly when Reduce Motion is on.
+  - **Receipt.** After sending, the form becomes a receipt with "Track it" and "Done".
+  - **Email opt-in.** When the app offers email updates, the receipt asks for an address. It is never pre-ticked, and a confirmation email goes out first.
+  - **Return toast.** A short "The developer replied" / "Your bug is fixed" toast appears when the app returns to the foreground: once per session, once a day, and only on devices that sent a report. Turn it off with `notifications: { toast: false }`.
+
+  Bundle budget: the RN size limit moves from 22 kB to 23.5 kB brotli (measured 22.95 kB) for this parity work. It is one-time weight inside a Metro app bundle; the shared rules live in `@mushi-mushi/core/reporter-ui`.
+
+### Patch Changes
+
+- 5ad0800: Fix: optional native modules no longer crash Metro apps. Versions 0.21–0.23 loaded `@react-native-community/netinfo`, `react-native-view-shot` and `expo-sensors` through an esbuild `__require()` shim that Metro can not resolve. The app crashed even though the SDK caught errors, so dogfood apps needed a postinstall patch. The built files now hold literal `require("<module>")` calls inside `try/catch`, and the build fails if any shim call is left. You can also pass the modules in: `<MushiProvider netInfo={NetInfo} viewShot={ViewShot} expoSensors={ExpoSensors}>`, which skips loading entirely. Drop any `__require` → `require` patch when you upgrade.
+- Updated dependencies [5ad0800]
+- Updated dependencies [5ad0800]
+- Updated dependencies [5ad0800]
+- Updated dependencies [5ad0800]
+- Updated dependencies [5ad0800]
+  - @mushi-mushi/core@1.31.0
+  - @mushi-mushi/web@1.31.0
+
+## 0.23.0
+
+### Minor Changes
+
+- f48d15b: The report sheet now looks like part of the host app: a new `widget.theme` prop (bg, fg, muted, surface, border, accent, accentFg, success, error, fontFamily, radius) replaces the hard-coded neon header and the "MUSHI · BETA" strip, with neutral ink-accent defaults. Category chips wrap at their natural width instead of squeezing five into one row ("Confus-ing"). "Your reports" uses the shared status vocabulary from `@mushi-mushi/core/reporter-ui`, so RN and web show the same labels. Threads show a skeleton while loading and Retry when a load fails or does not answer in 12 s, replies keep their text and offer Retry on failure, and opening a thread marks its updates read. Chips, Submit, tabs and the drag handle carry accessibility roles and states, and the sheet is modal to VoiceOver. New instance methods: `loadMyThread(reportId)` (null on failure) and `markReportRead(reportId)`.
+
+### Patch Changes
+
+- Updated dependencies [f48d15b]
+- Updated dependencies [f48d15b]
+- Updated dependencies [f48d15b]
+- Updated dependencies [f48d15b]
+  - @mushi-mushi/core@1.30.0
+  - @mushi-mushi/web@1.30.0
+
+## 0.22.0
+
+### Minor Changes
+
+- f5e94ce: Add product analytics: `Mushi.track(event, properties)`, `setConsent()`, `getAnonymousId()` and the `analytics` config block (consent mode, per-person sampling, DNT/GPC, PII key filter). Events batch to the new `POST /v1/sdk/events` route and back the console's Users & Funnels page. `@mushi-mushi/react` gains `useMushiTrack()`; `@mushi-mushi/react-native` gains `useMushi().track()` / `setConsent()` (batched, AsyncStorage spill, flush on app background) and `@mushi-mushi/node` gains `client.track(event, { distinctId, properties })` (one `POST /v1/sdk/events` per call, `surface: 'server'`). The shared vocabulary lives in `@mushi-mushi/core` (`MUSHI_EVENTS`, `sanitizeEventProperties`).
+
+  The web widget's `brandFooter` becomes the "Bug reports by Mushi" mark: a new-tab link to the Mushi site carrying `utm_source=widget&utm_medium=powered-by&ref=<hashed project id>` that emits `loop_impression` (once per page) and `loop_click` through the tracker. It is on by default only for Free Cloud projects via the runtime config; an explicit `widget.brandFooter: false` in `Mushi.init` always wins over the remote value.
+
+### Patch Changes
+
+- f5e94ce: npm metadata. Each entry package's description is now a short role followed by one shared pitch — "The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor." — so the `mushi-mushi` card no longer stops mid-word at npm's 255-character cut. The author link points at the maintainer's GitHub account (the Bluesky handle it used to name was never registered), the Node floor is `>=20.19.0` everywhere to match `@mushi-mushi/core`, and the `sentry-alternative` keyword is gone (Mushi runs alongside Sentry). The `funding` field is gone too, because it pointed at a GitHub Sponsors page that is not enabled. `@mushi-mushi/react-native` no longer packs its 60 KB CHANGELOG.
+- f5e94ce: Smaller install. The package no longer ships the repository's `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md` and `SECURITY.md` — 32 KB in every tarball, more than the code in some packages. They are still in the GitHub repository the npm page links to.
+- Updated dependencies [f5e94ce]
+- Updated dependencies [f5e94ce]
+- Updated dependencies [f5e94ce]
+- Updated dependencies [f5e94ce]
+- Updated dependencies [b1f5b88]
+- Updated dependencies [f5e94ce]
+- Updated dependencies [f5e94ce]
+- Updated dependencies [f5e94ce]
+- Updated dependencies [f5e94ce]
+  - @mushi-mushi/core@1.29.0
+  - @mushi-mushi/web@1.29.0
+
 ## 0.21.0
 
 ### Minor Changes

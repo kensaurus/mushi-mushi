@@ -3,7 +3,6 @@
  * PURPOSE: Stats-driven reporter notification health for the active project.
  */
 
-import { Link } from 'react-router-dom'
 import { Btn } from '../ui'
 import { usePageCopy } from '../../lib/copy'
 import { StatusBannerShell } from '../StatusBannerShell'
@@ -12,8 +11,6 @@ import type { NotificationStats, NotificationTabId } from './types'
 interface Props {
   stats: NotificationStats
   onTab?: (tab: NotificationTabId) => void
-  onRefresh?: () => void
-  refreshing?: boolean
   plainBanner?: boolean
 }
 
@@ -27,8 +24,6 @@ function tabFromPath(path: string | null): NotificationTabId | null {
 export function NotificationsStatusBanner({
   stats,
   onTab,
-  onRefresh,
-  refreshing,
   plainBanner = false,
 }: Props) {
   const copy = usePageCopy('/notifications')
@@ -60,31 +55,30 @@ export function NotificationsStatusBanner({
         title={plainBanner ? 'Reporter updates are turned off' : 'Reporter notifications disabled'}
         subtitle={label}
         action={
-          <Link to="/settings">
-            <Btn size="sm" variant="primary">{actions.settings ?? 'Open Settings'}</Btn>
-          </Link>
+          // The switch is on the Setup tab; Settings has no such control.
+          onTab ? (
+            <Btn size="sm" variant="primary" onClick={() => onTab('setup')}>Turn on reporter updates</Btn>
+          ) : (
+            <Btn to="/notifications?tab=setup" size="sm" variant="primary">Turn on reporter updates</Btn>
+          )
         }
       />
     )
   }
 
+  // read_at is set when the reporter opens the update in the widget (or an
+  // admin marks it read). Unread is normal, not a fault, so no warn tone.
   if (priority === 'unread_backlog') {
     return (
       <StatusBannerShell
-        tone="warn"
-        title={
-          plainBanner
-            ? `${stats.unread} unread update${stats.unread === 1 ? '' : 's'} for reporters`
-            : `${stats.unread} unread message${stats.unread === 1 ? '' : 's'}`
-        }
-        subtitle={label}
+        tone="info"
+        title={`${stats.unread} update${stats.unread === 1 ? '' : 's'} not opened by reporters yet`}
+        subtitle="Reporters see them the next time they open the widget."
         action={
           onTab ? (
             <Btn size="sm" variant="ghost" onClick={() => onTab('inbox')}>{actions.inbox ?? 'Review inbox'}</Btn>
           ) : actionTab ? (
-            <Link to={stats.topPriorityTo ?? '/notifications?tab=inbox'}>
-              <Btn size="sm" variant="ghost">{actions.inbox ?? 'Review inbox'}</Btn>
-            </Link>
+            <Btn to={stats.topPriorityTo ?? '/notifications?tab=inbox'} size="sm" variant="ghost">{actions.inbox ?? 'Review inbox'}</Btn>
           ) : null
         }
       />
@@ -101,9 +95,7 @@ export function NotificationsStatusBanner({
           onTab ? (
             <Btn size="sm" variant="primary" onClick={() => onTab('setup')}>{actions.setup ?? 'Open Setup'}</Btn>
           ) : (
-            <Link to="/notifications?tab=setup">
-              <Btn size="sm" variant="primary">{actions.setup ?? 'Open Setup'}</Btn>
-            </Link>
+            <Btn to="/notifications?tab=setup" size="sm" variant="primary">{actions.setup ?? 'Open Setup'}</Btn>
           )
         }
       />
@@ -116,11 +108,7 @@ export function NotificationsStatusBanner({
       title={plainBanner ? 'Reporter updates are working' : `Reporter loop active on ${projectLabel}`}
       subtitle={label}
       action={
-        onRefresh ? (
-          <Btn size="sm" variant="ghost" onClick={onRefresh} loading={refreshing} disabled={refreshing}>
-            {actions.refresh ?? 'Refresh'}
-          </Btn>
-        ) : onTab ? (
+        onTab ? (
           <Btn size="sm" variant="ghost" onClick={() => onTab('inbox')}>{actions.viewInbox ?? 'View inbox'}</Btn>
         ) : null
       }

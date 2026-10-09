@@ -26,6 +26,12 @@ import { useState, useEffect } from 'react'
 import { Btn, Input } from '../ui'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
+import { isNotificationWebhookHost } from '../../lib/notificationWebhookHosts'
+import { describeApiFailure } from '../../lib/humanizeApiError'
+import { ConfirmDialog } from '../ConfirmDialog'
+import type { HealthRow } from './types'
+import { ConnectionStatus } from '../ui/ConnectionStatus'
+import { connectionFromProbe, newestProbe, probeFromTestSend, type ProbeLike } from '../../lib/integrationConnection'
 
 // ─── Teams brand SVG ──────────────────────────────────────────────────────────
 // mushi-mushi-allowlist: Microsoft Teams trademark SVG uses exact brand purple hex.
@@ -55,13 +61,17 @@ function TeamsIcon({ size = 20 }: { size?: number }) {
 
 // ─── Simple HTTPS URL validator ───────────────────────────────────────────────
 
+// Same host list the settings PATCH enforces, so a wrong URL is refused here
+// with a reason instead of failing the save with a server error.
 function validateTeamsUrl(url: string): string | null {
   const trimmed = url.trim()
   if (!trimmed) return null
   try {
     const u = new URL(trimmed)
     if (u.protocol !== 'https:') return 'URL must start with https://'
-    if (!u.hostname.includes('.')) return 'Enter a valid webhook URL'
+    if (!isNotificationWebhookHost('teams_webhook_url', u.hostname)) {
+      return 'That is not a Teams webhook URL. Use the Power Automate or Incoming Webhook URL (on office.com, logic.azure.com or powerplatform.com).'
+    }
     return null
   } catch {
     return 'Enter a valid HTTPS webhook URL'
@@ -84,12 +94,16 @@ function translateTeamsTestError(raw: string): string {
 
 interface Props {
   projectId: string | null
+  /** Re-read the settings stats after a save or remove so every card agrees. */
+  onChanged?: () => void
   teamsConfigured: boolean
+  /** Latest health row for kind `teams` (test sends are recorded there). */
+  latestProbe?: HealthRow
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function TeamsIntegrationCard({ projectId, teamsConfigured }: Props) {
+export function TeamsIntegrationCard({ projectId, teamsConfigured, latestProbe, onChanged }: Props) {
   const toast = useToast()
 
   const [connected, setConnected] = useState(teamsConfigured)
@@ -98,6 +112,8 @@ export function TeamsIntegrationCard({ projectId, teamsConfigured }: Props) {
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
   const [clearing, setClearing] = useState(false)
+  const [confirmRemove, setConfirmRemove] = useState(false)
+  const [localProbe, setLocalProbe] = useState<ProbeLike | undefined>(undefined)
   const [showGuide, setShowGuide] = useState(false)
 
   // Sync if parent re-fetches and the prop changes
@@ -129,8 +145,10 @@ export function TeamsIntegrationCard({ projectId, teamsConfigured }: Props) {
         toast.success('Teams webhook saved — test it below.')
         setWebhookUrl('')
         setUrlError(null)
+        onChanged?.()
       } else {
-        toast.error(res.error?.message ?? 'Could not save Teams webhook URL.')
+        const t = describeApiFailure(res.error, 'Could not save the Teams webhook')
+        toast.error(t.title, t.description)
       }
     } finally {
       setSaving(false)
@@ -148,9 +166,15 @@ export function TeamsIntegrationCard({ projectId, teamsConfigured }: Props) {
         { method: 'POST' },
       )
       if (res.ok) {
+        setLocalProbe(probeFromTestSend(true, null))
         toast.success('Test message sent to Microsoft Teams!')
       } else {
-        toast.error(translateTeamsTestError(res.error?.message ?? ''))
+        const reason =
+          res.error?.code === 'NO_WEBHOOK_CONFIGURED'
+            ? describeApiFailure(res.error, '').description
+            : translateTeamsTestError(res.error?.message ?? '')
+        setLocalProbe(probeFromTestSend(false, reason))
+        toast.error('Teams test failed', reason)
       }
     } catch {
       toast.error('Could not reach the Teams test endpoint — check your connection.')
@@ -171,9 +195,12 @@ export function TeamsIntegrationCard({ projectId, teamsConfigured }: Props) {
       })
       if (res.ok) {
         setConnected(false)
+        setConfirmRemove(false)
         toast.success('Teams webhook removed.')
+        onChanged?.()
       } else {
-        toast.error('Could not remove Teams webhook.')
+        const t = describeApiFailure(res.error, 'Could not remove the Teams webhook')
+        toast.error(t.title, t.description)
       }
     } finally {
       setClearing(false)
@@ -182,29 +209,40 @@ export function TeamsIntegrationCard({ projectId, teamsConfigured }: Props) {
 
   // ── Render ────────────────────────────────────────────────────────────────
 
+  // Webhook channels are only verified by a test send: a check holds 30 days.
+  const probe = newestProbe(latestProbe, localProbe)
+  const probed = connectionFromProbe({ configured: connected, probe, staleAfterMs: 30 * 24 * 60 * 60 * 1000 })
+  const connection =
+    probed.state === 'checking' ? { ...probed, detail: 'Webhook saved, but no test message sent yet.' } : probed
+  const connectionAction =
+    connection.state === 'not_connected'
+      ? { label: 'Add webhook URL', onClick: () => document.getElementById('teams-webhook-url')?.focus() }
+      : connection.state === 'working'
+        ? undefined
+        : probe?.status === 'down' || probe?.status === 'degraded'
+          ? { label: 'Replace webhook URL', onClick: () => document.getElementById('teams-webhook-url')?.focus() }
+          : { label: 'Send test', onClick: () => void handleTest() }
+
   return (
-    <div className="rounded-xl border border-edge-subtle bg-surface p-5 space-y-4">
+    <div
+      id="integrations-teams"
+      // mushi-mushi-allowlist: anchored card (#integrations-teams links land here); Card takes no id
+      className="rounded-xl border border-edge-subtle bg-surface-raised p-5 space-y-4 scroll-mt-chrome"
+    >
       {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex items-center gap-3 min-w-0">
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+        <div className="flex min-w-0 flex-1 basis-40 items-center gap-3">
           {/* mushi-mushi-allowlist: Teams brand purple tint behind the trademark icon chip. */}
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-teams-accent/10">
             <TeamsIcon size={20} />
           </div>
           <div className="min-w-0">
             <h3 className="text-sm font-semibold text-fg">Microsoft Teams</h3>
-            {connected ? (
-              <p className="text-xs text-ok truncate">Webhook connected — receiving report alerts</p>
-            ) : (
-              <p className="text-xs text-fg-muted truncate">
-                Not connected — paste an incoming webhook URL to enable alerts
-              </p>
-            )}
           </div>
         </div>
 
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-          {connected && (
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {connected && connectionAction?.label !== 'Send test' && (
             <Btn
               type="button"
               variant="ghost"
@@ -219,22 +257,27 @@ export function TeamsIntegrationCard({ projectId, teamsConfigured }: Props) {
         </div>
       </div>
 
-      {/* Connected state — show clear control */}
+      <div title={probed.raw && probed.raw !== connection.detail ? probed.raw : undefined}>
+        <ConnectionStatus
+          state={testing ? 'checking' : connection.state}
+          label={testing ? 'Sending a test…' : undefined}
+          detail={testing ? undefined : connection.detail}
+          action={testing ? undefined : connectionAction}
+        />
+      </div>
+
+      {/* Saved webhook — remove control */}
       {connected && (
-        <div className="flex items-center justify-between gap-3 rounded-lg border border-ok/30 bg-ok-muted/50 px-3 py-2">
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="shrink-0 text-ok-foreground text-sm" aria-hidden>✓</span>
-            <p className="text-xs font-medium text-ok-foreground">Teams webhook active</p>
-          </div>
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-edge-subtle px-3 py-2">
+          <p className="text-xs text-fg-secondary min-w-0">An incoming webhook URL is saved.</p>
           <Btn
             type="button"
             variant="danger"
             size="sm"
-            onClick={() => void handleClear()}
-            loading={clearing}
+            onClick={() => setConfirmRemove(true)}
             className="shrink-0"
           >
-            {clearing ? 'Removing…' : 'Remove'}
+            Remove
           </Btn>
         </div>
       )}
@@ -305,16 +348,19 @@ export function TeamsIntegrationCard({ projectId, teamsConfigured }: Props) {
         </div>
       </details>
 
-      {/* What you'll receive */}
-      {!connected && (
-        <div className="rounded-lg border border-edge-subtle bg-surface-hover/40 px-3 py-2.5 text-xs text-fg-muted space-y-1">
-          <p className="font-medium text-fg">What you&apos;ll receive</p>
-          <ul className="list-inside list-disc space-y-0.5">
-            <li>New report triaged (severity + category + direct link)</li>
-            <li>QA story failures with run details</li>
-            <li>Fix merged / deployed events (when plugins enabled)</li>
-          </ul>
-        </div>
+      {confirmRemove && (
+        <ConfirmDialog
+          title="Remove the Teams webhook?"
+          body="Mushi stops posting to this Teams channel. The URL can't be shown again, so you'll need to copy it from Teams to reconnect."
+          confirmLabel="Remove webhook"
+          cancelLabel="Keep it"
+          tone="danger"
+          loading={clearing}
+          onConfirm={() => void handleClear()}
+          onCancel={() => {
+            if (!clearing) setConfirmRemove(false)
+          }}
+        />
       )}
     </div>
   )

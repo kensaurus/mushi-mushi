@@ -13,6 +13,11 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 
 import { HEALTH_PROBE_ANTHROPIC_MODEL, HEALTH_PROBE_OPENAI_MODEL } from './models.ts'
+import { isOperatorProject } from './operator-gate.ts'
+import { resolveRoutingSecrets } from './routing-secrets.ts'
+import { safeFetch } from './inventory-guards.ts'
+import { isCodebaseIndexFailing } from './sweep-error-classifier.ts'
+import { dereferenceMaybeVault } from './settings-secrets.ts'
 
 // Deno global — declared only where consumed (edge functions).
 declare const Deno: { env: { get(name: string): string | undefined } }
@@ -35,6 +40,7 @@ export type IntegrationKind =
   | 'claude_code_agent'
   | 'cursor_cloud'
   | 'slack'
+  | 'vercel'
 
 export const PLATFORM_KINDS: IntegrationKind[] = ['sentry', 'langfuse', 'github', 'anthropic', 'openai']
 /** Fix-agent integrations stored in project_settings (Integrations → Cursor Cloud / Claude Code). */
@@ -42,10 +48,22 @@ export const FIX_AGENT_KINDS: IntegrationKind[] = ['cursor_cloud', 'claude_code_
 /** Ticket/project-management integrations with vault-backed credentials in project_settings. */
 export const TICKET_INTEGRATION_KINDS: IntegrationKind[] = ['linear']
 export const ROUTING_KINDS: IntegrationKind[] = ['jira', 'github_issues', 'pagerduty', 'reward_webhook']
+/** Deploy-preview integrations stored as project_integrations rows (Vercel). */
+export const DEPLOY_KINDS: IntegrationKind[] = ['vercel']
+/** Notification channels with a read-only probe (Slack: auth.test, posts nothing). */
+export const NOTIFICATION_PROBE_KINDS: IntegrationKind[] = ['slack']
+/**
+ * Every kind POST /v1/admin/health/integration/:kind can probe. Linear and
+ * Vercel were missing, so their cards' Test button always got a bare
+ * BAD_KIND and no health row was ever written for them.
+ */
 export const ALL_INTEGRATION_KINDS: IntegrationKind[] = [
   ...PLATFORM_KINDS,
   ...FIX_AGENT_KINDS,
+  ...TICKET_INTEGRATION_KINDS,
   ...ROUTING_KINDS,
+  ...DEPLOY_KINDS,
+  ...NOTIFICATION_PROBE_KINDS,
 ]
 
 export interface ProbeResult {
@@ -53,6 +71,15 @@ export interface ProbeResult {
   detail: string
   httpStatus: number
   latencyMs: number
+}
+
+/**
+ * `integration_health_history.http_status` for a probe: the vendor's status,
+ * or null when no response came back (0). The radar's provider_key_invalid
+ * reads it to tell a rejected key (401) from an outage.
+ */
+export function historyHttpStatus(probe: Pick<ProbeResult, 'httpStatus'>): number | null {
+  return Number.isInteger(probe.httpStatus) && probe.httpStatus >= 100 && probe.httpStatus <= 599 ? probe.httpStatus : null
 }
 
 /** Subset of project_settings used for platform probes. */
@@ -90,22 +117,9 @@ export interface PlatformSettings {
 // Vault helper
 // ──────────────────────────────────────────────────────────────────────────
 
-/**
- * Resolve a `vault://<uuid>` reference to its plaintext secret.
- * Non-vault strings are returned as-is (raw values stored in settings).
- * Returns null if the vault lookup fails or the ref is empty.
- */
-export async function dereferenceMaybeVault(
-  db: SupabaseClient,
-  ref: string | null,
-): Promise<string | null> {
-  if (!ref) return null
-  if (!ref.startsWith('vault://')) return ref
-  const id = ref.slice('vault://'.length)
-  const { data, error } = await db.rpc('vault_get_secret', { secret_id: id })
-  if (error) return null
-  return typeof data === 'string' ? data : null
-}
+// Resolves `vault://<name>` refs (and legacy raw values); one implementation
+// shared with the webhook and settings routes.
+export { dereferenceMaybeVault }
 
 // ──────────────────────────────────────────────────────────────────────────
 // Main probe dispatcher
@@ -130,6 +144,8 @@ export async function probeIntegration(
   let status: ProbeResult['status'] = 'unknown'
   let detail = ''
   let httpStatus = 0
+  // Routing tokens live in Vault as `vault://` refs; probe with the value.
+  routingConfig = await resolveRoutingSecrets(db, routingConfig)
 
   try {
     if (kind === 'sentry') {
@@ -152,23 +168,35 @@ export async function probeIntegration(
       }
 
     } else if (kind === 'langfuse') {
-      const host = settings.langfuse_host || Deno.env.get('LANGFUSE_BASE_URL') || 'https://cloud.langfuse.com'
-      const pub =
-        (await dereferenceMaybeVault(db, settings.langfuse_public_key_ref ?? null)) ||
-        Deno.env.get('LANGFUSE_PUBLIC_KEY') ||
-        ''
-      const sec =
-        (await dereferenceMaybeVault(db, settings.langfuse_secret_key_ref ?? null)) ||
-        Deno.env.get('LANGFUSE_SECRET_KEY') ||
-        ''
+      // The platform's env keys only ever go to the platform's own host. A
+      // tenant-set langfuse_host gets the tenant's own keys or nothing, and is
+      // called through safeFetch (public https, redirects re-checked).
+      const platformHost = Deno.env.get('LANGFUSE_BASE_URL') || 'https://cloud.langfuse.com'
+      const tenantHost = settings.langfuse_host?.trim() || null
+      const tenantPub = await dereferenceMaybeVault(db, settings.langfuse_public_key_ref ?? null)
+      const tenantSec = await dereferenceMaybeVault(db, settings.langfuse_secret_key_ref ?? null)
+      let host = platformHost
+      let pub = ''
+      let sec = ''
+      if (tenantPub && tenantSec) {
+        host = tenantHost ?? platformHost
+        pub = tenantPub
+        sec = tenantSec
+      } else if (!tenantHost) {
+        pub = Deno.env.get('LANGFUSE_PUBLIC_KEY') ?? ''
+        sec = Deno.env.get('LANGFUSE_SECRET_KEY') ?? ''
+      }
       if (!pub || !sec) {
-        detail = 'Add Langfuse public + secret keys (or set env vars on the host).'
+        detail = tenantHost
+          ? 'Add Langfuse public + secret keys for your Langfuse host.'
+          : 'Add Langfuse public + secret keys (or set env vars on the host).'
       } else {
         const auth = btoa(`${pub}:${sec}`)
-        const res = await fetch(`${host.replace(/\/$/, '')}/api/public/health`, {
-          headers: { Authorization: `Basic ${auth}` },
-          signal: AbortSignal.timeout(8_000),
-        })
+        const url = `${host.replace(/\/$/, '')}/api/public/health`
+        const init = { headers: { Authorization: `Basic ${auth}` } }
+        const res = host === platformHost
+          ? await fetch(url, { ...init, signal: AbortSignal.timeout(8_000) })
+          : await safeFetch(url, init, { timeoutMs: 8_000, maxRedirects: 2, url: {} })
         httpStatus = res.status
         status = res.ok ? 'ok' : res.status === 401 ? 'down' : 'degraded'
         if (!res.ok) detail = `HTTP ${res.status}`
@@ -207,22 +235,15 @@ export async function probeIntegration(
       }
 
     } else if (kind === 'openai') {
-      // 1-token probe via cheapest current-gen model.
+      // Reads the probe model: checks the key and its access to the model, costs
+      // nothing. A 1-token chat call sent max_tokens, which current models refuse
+      // with HTTP 400, so every probe read "degraded" (2026-10-08).
       const key = Deno.env.get('OPENAI_API_KEY') ?? ''
       if (!key) {
         detail = 'OPENAI_API_KEY is not set on the server.'
       } else {
-        const res = await fetch('https://api.openai.com/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${key}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            model: HEALTH_PROBE_OPENAI_MODEL,
-            max_tokens: 1,
-            messages: [{ role: 'user', content: 'ping' }],
-          }),
+        const res = await fetch(`https://api.openai.com/v1/models/${encodeURIComponent(HEALTH_PROBE_OPENAI_MODEL)}`, {
+          headers: { Authorization: `Bearer ${key}` },
           signal: AbortSignal.timeout(5_000),
         })
         httpStatus = res.status
@@ -265,6 +286,31 @@ export async function probeIntegration(
             ? 'down'
             : 'degraded'
         if (!res.ok) detail = `HTTP ${res.status}`
+        // Repo access alone said "ok" for 3 months while every index sweep
+        // failed "tree fetch 404" (wrong default branch). A dead index starves
+        // the fix-worker of code context, so it degrades this card.
+        if (res.ok && projectId) {
+          const { data: repos } = await db
+            .from('project_repos')
+            .select('repo_url, default_branch, last_index_error, last_indexed_at, last_index_attempt_at, index_swept_at')
+            .eq('project_id', projectId)
+            .eq('indexing_enabled', true)
+          const failing = ((repos ?? []) as Array<{
+            repo_url: string
+            default_branch: string | null
+            last_index_error: string | null
+            last_indexed_at: string | null
+            last_index_attempt_at: string | null
+            index_swept_at: string | null
+          }>).filter((r) => isCodebaseIndexFailing(r))
+          if (failing.length > 0) {
+            status = 'degraded'
+            detail = failing
+              .map((r) => `Codebase index failing for ${r.repo_url}@${r.default_branch ?? 'main'}: ${r.last_index_error}`)
+              .join(' · ')
+              .slice(0, 480)
+          }
+        }
       }
 
     } else if (kind === 'jira') {
@@ -389,6 +435,28 @@ export async function probeIntegration(
         status = res.status === 202 ? 'ok' : res.status === 400 ? 'down' : 'degraded'
         if (status !== 'ok') detail = `HTTP ${res.status}`
       }
+
+    } else if (kind === 'vercel') {
+      // The token is optional on the card (it only powers this check), so a
+      // card without one is "not checked", not failing.
+      const token = String(routingConfig.access_token ?? '')
+      const projectSlug = String(routingConfig.project_slug ?? '')
+      const teamSlug = String(routingConfig.team_slug ?? '')
+      if (!projectSlug) {
+        detail = 'Add the Vercel project slug to enable health checks.'
+      } else if (!token) {
+        detail = 'Add a Vercel access token to test this connection.'
+      } else {
+        const qs = teamSlug ? `?slug=${encodeURIComponent(teamSlug)}` : ''
+        const res = await fetch(`https://api.vercel.com/v9/projects/${encodeURIComponent(projectSlug)}${qs}`, {
+          headers: { Authorization: `Bearer ${token}` },
+          signal: AbortSignal.timeout(8_000),
+        })
+        httpStatus = res.status
+        status = res.ok ? 'ok' : res.status === 401 || res.status === 403 ? 'down' : 'degraded'
+        if (res.status === 404) detail = `Vercel has no project "${projectSlug}" for this token. Check the project and team slugs.`
+        else if (!res.ok) detail = `HTTP ${res.status}`
+      }
     }
   } catch (err) {
     status = 'down'
@@ -428,9 +496,9 @@ export async function probeIntegration(
           status = 'ok'
           detail = `Endpoint reachable — ${res.status}`
         } else if (res.status === 401 || res.status === 403) {
-          // Signature mismatch is expected since we don't have the plaintext secret;
-          // treat a 4xx as "reachable but signature rejected" → degraded, not down.
-          status = 'degraded'
+          // The probe is unsigned, so a receiver that checks signatures must refuse
+          // it: that is the healthy answer, not a degraded one.
+          status = 'ok'
           detail = `Endpoint reachable but rejected probe (${res.status}). Signature verification working.`
         } else if (res.status >= 500) {
           status = 'down'
@@ -457,15 +525,18 @@ export async function probeIntegration(
       detail = 'No Cursor API key configured. Paste your crsr_… key under Integrations → Cursor Cloud.'
     } else {
       try {
-        const res = await fetch('https://api.cursor.com/v0/me', {
+        // v1 key probe — same endpoint byok-validation.ts uses, so the
+        // Integrations page and the BYOK validator can never disagree.
+        // Response is ApiKeyInfo { apiKeyName, createdAt, userEmail?, … }.
+        const res = await fetch('https://api.cursor.com/v1/me', {
           headers: { Authorization: `Bearer ${apiKey}`, 'User-Agent': 'mushi-mushi-health-probe/1.0' },
           signal: AbortSignal.timeout(8_000),
         })
         httpStatus = res.status
         if (res.ok) {
-          const data = await res.json() as { email?: string; username?: string; user?: { email?: string } }
+          const data = await res.json() as { apiKeyName?: string; userEmail?: string; email?: string }
           status = 'ok'
-          detail = `Connected as ${data.email ?? data.user?.email ?? data.username ?? 'Cursor account'}`
+          detail = `Connected as ${data.userEmail ?? data.email ?? data.apiKeyName ?? 'Cursor account'}`
         } else if (res.status === 401 || res.status === 403) {
           status = 'down'
           detail = 'API key invalid or revoked. Regenerate at cursor.com/dashboard/integrations.'
@@ -520,12 +591,16 @@ export async function probeIntegration(
 
   // ── slack ─────────────────────────────────────────────────────────────────
   if (kind === 'slack') {
-    // Try per-project vaulted token (from settings), then env fallback
+    // Per-project vaulted token first. The env token is the operator
+    // workspace's bot: only operator-owned projects may fall back to it, or
+    // every tenant's health card would report the operator's workspace name.
     const ref = settings.slack_bot_token_ref
       ? `vault://${settings.slack_bot_token_ref}`
       : null
     let botToken: string | null = await dereferenceMaybeVault(db, ref)
-    if (!botToken) botToken = Deno.env.get('SLACK_BOT_TOKEN') ?? null
+    if (!botToken && (await isOperatorProject(db, projectId))) {
+      botToken = Deno.env.get('SLACK_BOT_TOKEN') ?? null
+    }
 
     if (!botToken) {
       status = 'unknown'

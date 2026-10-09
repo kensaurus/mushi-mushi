@@ -59,4 +59,19 @@ describe('shell chrome static contract', () => {
     expect(posture.match(/\/settings\?tab=byok/g)).toHaveLength(2)
     expect(posture).not.toContain('/settings?panel=byok')
   })
+
+  // QA item 228: a <button> inside an <a> is invalid HTML and two tab stops.
+  // Btn takes `to=` and renders a single styled link instead.
+  it('chrome CTAs never nest a Btn inside a Link', () => {
+    for (const file of ['components/FeedbackModal.tsx', 'components/hero-flow/HeroDetailPanel.tsx']) {
+      const text = readFileSync(resolve(root, file), 'utf8')
+      expect(text, file).not.toMatch(/<Link\b[^>]*>\s*<Btn\b/)
+    }
+  })
+
+  // QA item 227: the DAV evidence note linked a repo and section that do not exist.
+  it('hero detail panel links no unknown GitHub org', () => {
+    const panel = readFileSync(resolve(root, 'components/hero-flow/HeroDetailPanel.tsx'), 'utf8')
+    expect(panel).not.toContain('github.com/kensa-dev')
+  })
 })

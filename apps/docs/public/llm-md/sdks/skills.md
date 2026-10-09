@@ -16,7 +16,7 @@ description: Install Mushi playbooks into Cursor and Claude Code, sync them into
 From the public [Connect page](/connect), pick **Skills** and run:
 
 ```bash
-npx skills add kensaurus/cursor-kenji
+npx skills add kensaurus/mushi-mushi
 ```
 
 That adds playbooks such as `mushi-health`, `mushi-integration`, and `workflow-fix-and-ship` to your local agent.
@@ -42,5 +42,5 @@ GitHub repo (SKILL.md files)
 ## Related
 
 - [Skill Pipelines operator guide](/admin/skill-pipelines) — handoff vs cloud execution
-- [MCP tools reference](/sdks/mcp-tools.generated) — full tool catalog
+- [MCP tools reference](/sdks/mcp-tools) — full tool catalog
 - [Incident loop](/quickstart/incident-loop) — start here if prod is broken right now

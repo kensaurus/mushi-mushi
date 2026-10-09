@@ -1,0 +1,26 @@
+# OSV-Scanner exceptions for the root pnpm-lock.yaml.
+#
+# OpenSSF Scorecard's Vulnerabilities check runs OSV-Scanner against this
+# repository and reads this file (it must sit next to the lockfile it covers).
+# Each entry mirrors an `auditConfig.ignoreGhsas` entry in pnpm-workspace.yaml,
+# where the full reasoning lives, so `pnpm audit` and Scorecard ignore the same
+# advisories for the same reasons. Keep the two lists identical.
+#
+# Every exception expires. On the date below the finding reopens and someone
+# has to look at it again: either the fix has shipped (drop the entry) or the
+# reasoning still holds (move the date, say why in the commit).
+
+[[IgnoredVulns]]
+id = "GHSA-qwww-vcr4-c8h2"
+ignoreUntil = 2026-12-31
+reason = "react-router RSC CSRF, fixed only in react-router >= 8.3.0; react-router-dom has no 8.x release yet. The admin console uses BrowserRouter, not React Server Components, so the vulnerable path is not reachable."
+
+[[IgnoredVulns]]
+id = "GHSA-w3rx-r6r6-pgpr"
+ignoreUntil = 2026-12-31
+reason = "image-size ICNS parser infinite loop; no fixed release exists. Only reachable through the docs site's build-time Metro bundler measuring images committed to this repository. No untrusted image reaches it and nothing in the server or published SDKs depends on it."
+
+[[IgnoredVulns]]
+id = "GHSA-5p2g-fcmc-qvqq"
+ignoreUntil = 2026-12-31
+reason = "image-size JXL/HEIF parser infinite loop; no fixed release exists. Same build-time-only path as GHSA-w3rx-r6r6-pgpr."

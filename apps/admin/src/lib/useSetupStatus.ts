@@ -3,15 +3,16 @@
  * PURPOSE: Single-source-of-truth hook for the DB-backed onboarding checklist.
  *          Wraps `usePageData('/v1/admin/setup')` and exposes typed selectors
  *          consumed by:
- *            - DashboardPage (banner mode SetupChecklist + redirect logic)
+ *            - DashboardPage (redirect logic) and the setup checklists
  *            - OnboardingPage (wizard mode)
  *            - per-page EmptyState nudges (e.g. "you need to install the SDK
  *              before reports show up here")
  */
 
-import { useMemo } from 'react'
+import { useMemo, useSyncExternalStore } from 'react'
 import type { ZodType, ZodTypeDef } from 'zod'
 import { usePageData } from './usePageData'
+import { invalidateApiCache } from './supabase'
 import { SetupResponseSchema } from './apiSchemas'
 
 export type SetupStepId =
@@ -137,6 +138,52 @@ const EMPTY_SELECTORS: SetupSelectors = {
   done: false,
 }
 
+/**
+ * Step CTAs the server points at a page root whose default tab is the wrong
+ * one. "Add API key" sent people to Settings → General, not the BYOK keys.
+ * The server string (activation-setup-builder.ts) should change too; until
+ * that deploys, the console sends the step to the right tab.
+ */
+const STEP_CTA_TAB: Partial<Record<SetupStepId, { from: string; to: string }>> = {
+  byok_anthropic: { from: '/settings', to: '/settings?tab=byok' },
+}
+
+function withTabbedCtas(project: SetupProject): SetupProject {
+  if (!project.steps.some((s) => STEP_CTA_TAB[s.id]?.from === s.cta_to)) return project
+  return {
+    ...project,
+    steps: project.steps.map((s) => {
+      const fix = STEP_CTA_TAB[s.id]
+      return fix && fix.from === s.cta_to ? { ...s, cta_to: fix.to } : s
+    }),
+  }
+}
+
+let setupGeneration = 0
+const setupGenerationListeners = new Set<() => void>()
+
+function subscribeSetupGeneration(listener: () => void): () => void {
+  setupGenerationListeners.add(listener)
+  return () => setupGenerationListeners.delete(listener)
+}
+
+/**
+ * Tell every mounted `useSetupStatus` to refetch. Each instance owns its own
+ * fetch state, so a reload in one (say, the dashboard) left the setup guide
+ * saying "Receive your first bug report — Do this next" after the report had
+ * landed. Call this when something the checklist reads has just changed.
+ *
+ * It drops the cached response and bumps a shared generation that every
+ * instance passes as a `usePageData` dep, so the ~17 mounted instances share
+ * ONE deduplicated request. Calling each instance's `reload()` would bypass
+ * the dedup (`no-store`) and fire one request per instance.
+ */
+export function invalidateSetupStatus(): void {
+  invalidateApiCache('/v1/admin/setup')
+  setupGeneration += 1
+  for (const listener of setupGenerationListeners) listener()
+}
+
 export function useSetupStatus(activeProjectId?: string | null): UseSetupStatusResult {
   // FE-API-1: Zod-validate the response. Setup drives the onboarding gate,
   // the banner, and every per-page "finish setup first" nudge — silent
@@ -145,13 +192,15 @@ export function useSetupStatus(activeProjectId?: string | null): UseSetupStatusR
   // break Zod validation. The cast below bridges the Zod-inferred type (where
   // step.id is `string`) back to the SetupResponse interface (where step.id is
   // the narrower `SetupStepId` union). Runtime shape is unchanged.
+  const generation = useSyncExternalStore(subscribeSetupGeneration, () => setupGeneration, () => 0)
   const { data, loading, error, reload } = usePageData<SetupResponse>('/v1/admin/setup', {
     schema: SetupResponseSchema as unknown as ZodType<SetupResponse, ZodTypeDef, SetupResponse>,
     scope: 'enumeration',
+    deps: [generation],
   })
 
   return useMemo(() => {
-    const projects = data?.projects ?? []
+    const projects = (data?.projects ?? []).map(withTabbedCtas)
     const explicit = activeProjectId
       ? projects.find(p => p.project_id === activeProjectId) ?? null
       : null

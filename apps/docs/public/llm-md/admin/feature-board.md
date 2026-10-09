@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/feature-board
 
 ---
 title: Feature board
+description: The Feature board collects feature requests from support tickets so members can upvote them and you can mark them as shipped.
 ---
 
 # Feature board

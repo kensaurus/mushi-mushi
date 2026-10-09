@@ -4,6 +4,7 @@
  *          pipeline. Pure presentation — accepts a pre-computed FixSummary.
  */
 
+import { fixCauseLabel } from '../../lib/fixReportTruth'
 import { useMemo } from 'react';
 import { KpiRow, KpiTile, type KpiDelta, type Tone } from '../charts';
 import type { FixSummary } from './types';
@@ -18,8 +19,8 @@ function pctDelta(values: number[], opts: { invert?: boolean } = {}): KpiDelta |
   const half = Math.floor(values.length / 2);
   const last = values.slice(-half).reduce((a, n) => a + n, 0);
   const prev = values.slice(0, values.length - half).reduce((a, n) => a + n, 0);
-  if (last === 0 && prev === 0) return null;
-  if (prev === 0) return { value: 'new', direction: 'up', tone: opts.invert ? 'warn' : 'ok' };
+  // Under 5 in the earlier half, a percentage is noise ("↑1500%" on 1 → 16).
+  if (prev < 5) return null;
   const pct = Math.round(((last - prev) / prev) * 100);
   if (pct === 0) return { value: '0%', direction: 'flat', tone: 'muted' };
   return {
@@ -55,7 +56,7 @@ export function FixSummaryRow({ summary, successRate }: Props) {
   const cols = (5 + (showSpec ? 1 : 0) + (showBreakdown ? 1 : 0)) as 5 | 6 | 7;
   const topFailure = breakdown[0];
   const breakdownTitle = breakdown
-    .map((b) => `${b.count}× ${b.category}`)
+    .map((b) => `${b.count}× ${fixCauseLabel(b.category)}`)
     .join('\n');
 
   return (
@@ -70,7 +71,7 @@ export function FixSummaryRow({ summary, successRate }: Props) {
         meaning="Every time Mushi handed a report to the auto-fix agent. Includes successes, failures, and runs still in flight."
       />
       <KpiTile
-        label="Completed"
+        label="Reports fixed"
         value={summary.completed}
         accent={summary.completed > 0 ? 'ok' : 'muted'}
         sublabel={
@@ -78,18 +79,18 @@ export function FixSummaryRow({ summary, successRate }: Props) {
         }
         series={completed}
         delta={pctDelta(completed)}
-        seriesAriaLabel="Daily completed fixes, last 30 days"
-        meaning="Runs that produced a merged or merge-ready PR. The success-rate figure compares completed vs failed only — in-flight runs don't count yet."
+        seriesAriaLabel="Daily completed fix attempts, last 30 days"
+        meaning="Reports that are fixed now (a fix PR merged, or the report was marked fixed), each counted once. The success rate compares fixed vs still-unfixed reports; the sparkline shows completed attempts per day."
       />
       <KpiTile
-        label="Failed"
+        label="Auto-fix stopped"
         value={summary.failed}
         accent={summary.failed > 0 ? 'danger' : 'muted'}
-        sublabel="needs prompt or scope tuning"
+        sublabel={summary.failed > 0 ? 'reports still unfixed' : 'nothing waiting'}
         series={failed}
         delta={pctDelta(failed, { invert: true })}
-        seriesAriaLabel="Daily failed fixes, last 30 days"
-        meaning="Runs that hit a non-recoverable error: agent crash, CI failure, or scope rejection. Investigate before retrying."
+        seriesAriaLabel="Daily stopped fix attempts, last 30 days"
+        meaning="Reports still unfixed whose latest attempt failed, was skipped, or whose PR closed or went red — each counted once. A report a later PR fixed is never counted. The sparkline shows stopped attempts per day."
       />
       <KpiTile
         label="In flight"
@@ -102,8 +103,8 @@ export function FixSummaryRow({ summary, successRate }: Props) {
         label="PRs open"
         value={summary.prsOpen}
         accent={(summary.prsOpen > 0 ? 'brand' : 'muted') as Tone}
-        sublabel={summary.prsOpen > 0 ? 'awaiting review or merge' : 'no open PRs'}
-        meaning="GitHub PRs Mushi has opened that haven't been merged or closed yet. Each one is a closable PDCA loop waiting for a human reviewer."
+        sublabel={summary.prsOpen > 0 ? 'fix attempts with an open PR' : 'no open PRs'}
+        meaning="Fix attempts whose GitHub PR is still open, whatever CI says: the same count as Pull requests. A red-CI PR also counts as auto-fix stopped."
       />
       {showSpec && (
         <KpiTile
@@ -116,11 +117,14 @@ export function FixSummaryRow({ summary, successRate }: Props) {
       )}
       {showBreakdown && topFailure && (
         <KpiTile
-          label="Why fixes failed"
+          label="Why auto-fix stopped"
           value={topFailure.count}
           accent="danger"
-          sublabel={`top: ${topFailure.category}`}
-          meaning={`30d failure breakdown by category, dominant cause first.\n${breakdownTitle}\n\nCategories come from categorizeFailure() in fix-worker. "unknown" means the categorizer didn't match any pattern — investigate and extend the enum if a new failure mode is emerging.`}
+          sublabel={fixCauseLabel(topFailure.category)}
+          meaning={`Why the last attempt stopped on each still-unfixed report, most common first.
+${breakdownTitle}
+
+A rejected AI key is listed by provider; otherwise the cause comes from the fix worker. "Unrecognised error" means no rule matched — open the attempt to read it.`}
         />
       )}
     </KpiRow>

@@ -102,11 +102,13 @@ export const SetupGuidePanel = forwardRef<HTMLHeadingElement, SetupGuidePanelPro
               aria-expanded={false}
               aria-controls={SETUP_GUIDE_PANEL_ID}
               data-setup-guide-launcher="true"
-              className="group inline-flex items-center gap-2 rounded-full border border-edge bg-surface-raised py-1.5 pl-2 pr-3 shadow-raised motion-safe:transition-transform motion-safe:duration-fast motion-safe:hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+              className="group inline-flex min-h-8 items-center gap-2 rounded-full border border-edge bg-surface-raised py-1.5 px-2 sm:pr-3 shadow-raised motion-safe:transition-transform motion-safe:duration-fast motion-safe:hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
             >
               <ProgressDial percent={model.percent} done={model.allRequiredDone} />
-              <span className="text-2xs font-medium text-fg-secondary">{summary}</span>
-              <IconChevronDown className="h-3 w-3 rotate-180 text-fg-faint" />
+              {/* Phones get the dial only (B26): the full "Setup done · 5/6
+                  extras" pill covered the content it floats over. */}
+              <span className="sr-only sm:not-sr-only text-2xs font-medium text-fg-secondary">{summary}</span>
+              <IconChevronDown className="hidden sm:block h-3 w-3 rotate-180 text-fg-faint" />
             </button>
             <button
               type="button"
@@ -228,7 +230,9 @@ function SetupGuideRow({ step, onNavigate }: { step: SetupGuideStep; onNavigate?
               <span className={`rounded-full px-1.5 py-px text-3xs font-medium ${style.chip}`}>
                 {step.stateLabel}
               </span>
-              {!step.required && step.state !== 'done' && (
+              {/* Skip when the state chip already says it, or the row's
+                  accessible name reads "Optional optional". */}
+              {!step.required && step.state !== 'done' && step.stateLabel !== 'Optional' && (
                 <span className="text-3xs text-fg-faint">optional</span>
               )}
             </span>

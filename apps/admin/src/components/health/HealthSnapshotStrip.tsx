@@ -46,7 +46,6 @@ export function HealthSnapshotStrip({
         <StatCard
           label={statLabels?.calls ?? 'LLM calls'}
           value={stats.totalCalls}
-          accent={stats.totalCalls > 0 ? 'text-brand' : undefined}
           tooltip={totalCallsTooltip(stats)}
           detail={totalCallsDetail(stats)}
           to={healthLinks.totalCalls}
@@ -68,7 +67,7 @@ export function HealthSnapshotStrip({
           to={healthLinks.fallbackRate}
         />
         <StatCard
-          label={statLabels?.latency ?? 'Latency p50 / p95'}
+          label={statLabels?.latency ?? 'Latency avg / p95'}
           value={`${stats.avgLatencyMs} / ${stats.p95LatencyMs}ms`}
           tooltip={latencyTooltip(stats)}
           detail={latencyDetail()}
@@ -85,7 +84,6 @@ export function HealthSnapshotStrip({
         <StatCard
           label={statLabels?.lastCall ?? 'Last LLM call'}
           value={stats.lastLlmCallAt ? 'Recent' : '—'}
-          accent={stats.lastLlmCallAt ? 'text-ok' : stats.hasAnyProject ? 'text-brand' : undefined}
           tooltip={lastCallTooltip(stats)}
           detail={lastCallDetail(stats)}
           to={healthLinks.lastCall}

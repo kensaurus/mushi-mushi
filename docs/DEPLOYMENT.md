@@ -72,8 +72,9 @@ packages (see §1.3).
   `check:migration-catalog` → `changeset publish`.
 - **Post-publish:** `verify-published-tarballs.mjs` (no `workspace:*` leaked),
   `npm audit signatures` (with CDN-propagation retry), `changelog:aggregate`
-  commit, and `sync-sdk-versions.mjs` (upserts versions into the `sdk_versions`
-  table powering console freshness chips).
+  commit, and the `catalog-sync` job, which calls the `sdk-versions-cron` edge
+  function with a GitHub OIDC token (no Supabase key in the workflow) so the
+  `sdk_versions` table powering console freshness chips re-reads npm.
 - **Signature audit flake:** if the job fails on `npm audit signatures` with
   `ETARGET` / "No matching version" immediately after publish, confirm packages
   are live (`npm view @mushi-mushi/cli version`) and GitHub releases exist — the

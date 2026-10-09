@@ -10,9 +10,11 @@
  *          for the user, not just emit a green status pill.
  */
 
+import { Link } from 'react-router-dom'
 import { PDCA_ORDER, PDCA_STAGES, type PdcaStageId } from '../../lib/pdca'
 import { isFixMerged } from '../../lib/mergeFix'
 import { STAMP_VISUAL, type StageStamp } from '../../lib/pdcaStamp'
+import { ACT_BLOCKER_COPY, ACT_BLOCKER_LINK_LABEL, ACT_BLOCKER_STAMP, actBlocker } from '../../lib/pdcaAct'
 import type { FixAttempt } from './types'
 import type { FixTimelineEvent } from '../FixGitGraph'
 
@@ -55,14 +57,25 @@ export function PdcaReceipt({ fix, timeline, className = '' }: PdcaReceiptProps)
             </div>
             <p className={`mt-1 text-2xs leading-snug line-clamp-2 ${r.stamp === 'idle' ? 'text-fg-faint' : 'text-fg-secondary'}`}>{r.proof}</p>
             {r.link && (
-              <a
-                href={r.link.href}
-                target={r.link.href.startsWith('http') ? '_blank' : undefined}
-                rel={r.link.href.startsWith('http') ? 'noopener noreferrer' : undefined}
-                className="mt-1 inline-block text-2xs text-accent hover:text-accent-hover underline-offset-2 hover:underline"
-              >
-                {r.link.label}
-              </a>
+              r.link.href.startsWith('http') ? (
+                <a
+                  href={r.link.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-1 inline-block text-2xs text-accent hover:text-accent-hover underline-offset-2 hover:underline"
+                >
+                  {r.link.label}
+                </a>
+              ) : (
+                // In-app paths go through the router so they keep the
+                // console's base path (/mushi-mushi/admin/ in production).
+                <Link
+                  to={r.link.href}
+                  className="mt-1 inline-block text-2xs text-accent hover:text-accent-hover underline-offset-2 hover:underline"
+                >
+                  {r.link.label}
+                </Link>
+              )
             )}
           </li>
         )
@@ -159,13 +172,13 @@ function buildReceipts(
   const check: StageReceipt = { id: 'check', stamp: checkStamp, proof: checkProof }
 
   // ACT — merged + report closed. A merged PR closes the loop unconditionally.
-  // A hard CI failure (red CHECK) blocks the loop, so ACT must not read
-  // "Awaiting merge" — that contradicts the failed CHECK + pipeline Ship stage.
-  const ciHardFailed = ciConclusion === 'failure' || ciConclusion === 'timed_out'
+  // A closed PR, red CI or an agent review flag blocks it: none of those may
+  // read "Awaiting merge" (see lib/pdcaAct.ts).
+  const blocker = actBlocker({ ...fix, pr_url: fix.pr_url ?? prOpened?.detail ?? null })
   let actStamp: StageStamp = 'idle'
   if (shippedOnGithub) actStamp = 'done'
   else if (isFailed) actStamp = 'failed'
-  else if (ciHardFailed) actStamp = 'failed'
+  else if (blocker) actStamp = ACT_BLOCKER_STAMP[blocker]
   else if (ciConclusion === 'success' || hasPr) actStamp = 'pending'
   const actProof = shippedOnGithub
     ? fix.merged_at
@@ -173,8 +186,8 @@ function buildReceipts(
       : 'Merged on GitHub — loop closed for this PR'
     : isFailed
       ? `Loop blocked — ${fix.error ?? 'fix attempt failed'}`
-      : ciHardFailed
-        ? 'CI failed on the PR — review before merging'
+      : blocker
+        ? ACT_BLOCKER_COPY[blocker]
         : actStamp === 'pending'
           ? ciConclusion === 'success'
             ? 'CI passed — awaiting merge from console or GitHub'
@@ -185,8 +198,8 @@ function buildReceipts(
     stamp: actStamp,
     proof: actProof,
     link:
-      fix.pr_url && actStamp === 'pending' && !shippedOnGithub
-        ? { href: fix.pr_url, label: 'Review & merge' }
+      fix.pr_url && !shippedOnGithub && (actStamp === 'pending' || blocker)
+        ? { href: fix.pr_url, label: blocker ? ACT_BLOCKER_LINK_LABEL[blocker] : 'Review & merge' }
         : undefined,
   }
 

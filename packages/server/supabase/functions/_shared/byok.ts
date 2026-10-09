@@ -19,11 +19,15 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { log as rootLog } from './logger.ts';
 import { isRunnableByokPoolState, validateOpenAiBaseUrl } from './byok-validation.ts';
+import { assertLlmBudget, isBudgetedProvider, LlmBudgetUnavailableError } from './llm-budget.ts';
 
 const log = rootLog.child('byok');
 
 /** All provider slugs supported by BYOK (Phase 0 adds 'cursor'). */
-export type LlmProvider = 'anthropic' | 'openai' | 'firecrawl' | 'browserbase' | 'cursor';
+export type LlmProvider = 'anthropic' | 'openai' | 'openrouter' | 'firecrawl' | 'browserbase' | 'cursor';
+
+/** OpenRouter's OpenAI-compatible API root. Model ids there carry a vendor prefix (`openai/gpt-5.4`). */
+export const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
 
 export type KeyStatus =
   | 'pending_validation'
@@ -40,10 +44,12 @@ export interface ResolvedKey {
   /** Last 4 chars of the key — safe to log. */
   hint: string;
   /**
-   * Optional base URL for OpenAI-compatible providers (OpenRouter, Together,
-   * Fireworks). Only set for `openai` when `byok_openai_base_url` is configured.
+   * Base URL for OpenAI-compatible calls: the key's own (Together, Azure, …),
+   * OpenRouter's for an `openrouter` key, or OpenAI's.
    */
   baseUrl?: string;
+  /** The provider the key belongs to when it differs from the one asked for (an OpenRouter key serving an OpenAI-compatible call). */
+  provider?: LlmProvider;
   /** Human label if set on the key row */
   label?: string;
 }
@@ -51,18 +57,33 @@ export interface ResolvedKey {
 const ENV_VAR: Record<LlmProvider, string> = {
   anthropic: 'ANTHROPIC_API_KEY',
   openai: 'OPENAI_API_KEY',
+  openrouter: 'OPENROUTER_API_KEY',
   firecrawl: 'FIRECRAWL_API_KEY',
   browserbase: 'BROWSERBASE_API_KEY',
   cursor: 'CURSOR_API_KEY',
 };
 
 /** Legacy project_settings column names (backward-compat fallback). */
-const LEGACY_REF_COL: Partial<Record<LlmProvider, string>> = {
+const LEGACY_REF_COL = {
   anthropic: 'byok_anthropic_key_ref',
   openai: 'byok_openai_key_ref',
   firecrawl: 'byok_firecrawl_key_ref',
   browserbase: 'byok_browserbase_key_ref',
-};
+} as const satisfies Partial<Record<LlmProvider, string>>;
+
+/** Providers with a single-key slot in project_settings (`byok_<provider>_*`). */
+export type LegacyByokProvider = keyof typeof LEGACY_REF_COL;
+
+/**
+ * Every provider the legacy single-key routes (`/v1/admin/byok/:provider`)
+ * manage. The console lists a legacy row for each one that has a stored ref,
+ * so those routes must accept exactly this list.
+ */
+export const LEGACY_BYOK_PROVIDERS = Object.keys(LEGACY_REF_COL) as LegacyByokProvider[];
+
+export function isLegacyByokProvider(value: string): value is LegacyByokProvider {
+  return Object.prototype.hasOwnProperty.call(LEGACY_REF_COL, value);
+}
 
 const LEGACY_TEST_STATUS_COL: Partial<Record<LlmProvider, string>> = {
   anthropic: 'byok_anthropic_test_status',
@@ -89,17 +110,76 @@ export async function resolveLlmKey(
   db: SupabaseClient,
   projectId: string,
   provider: LlmProvider,
+  opts: {
+    /**
+     * 'generation' (default): an LLM call follows, so the monthly budget is
+     * enforced (throws LlmBudgetExceededError). 'probe' / 'embedding': a key
+     * check or an embedding, which the budget does not cover.
+     */
+    purpose?: 'generation' | 'probe' | 'embedding';
+    /** See resolveLlmKeys: true for calls only OpenAI itself serves (speech-to-text, fine-tuning). */
+    openAiOnly?: boolean;
+  } = {},
 ): Promise<ResolvedKey | null> {
-  const candidates = await resolveLlmKeys(db, projectId, provider);
+  if ((opts.purpose ?? 'generation') === 'generation') {
+    await enforceLlmBudget(db, projectId, provider);
+  }
+  const candidates = await resolveLlmKeys(db, projectId, provider, { openAiOnly: opts.openAiOnly });
   return candidates[0] ?? null;
 }
+
+/**
+ * Enforce the project's monthly LLM budget before any provider call
+ * (_shared/llm-budget.ts). Over budget throws LlmBudgetExceededError. A
+ * failed budget read is logged to Sentry and the call proceeds: one failed
+ * read must not stop triage, and it must not pass unnoticed either.
+ */
+export async function enforceLlmBudget(
+  db: SupabaseClient,
+  projectId: string,
+  provider: LlmProvider,
+): Promise<void> {
+  if (!isBudgetedProvider(provider)) return;
+  try {
+    await assertLlmBudget(db, projectId);
+  } catch (err) {
+    if (err instanceof LlmBudgetUnavailableError) {
+      log.error('LLM budget check failed; call proceeds unchecked', { projectId, provider, err: err.message });
+      return;
+    }
+    throw err;
+  }
+}
+
 
 /**
  * Resolve ALL active candidate keys for a provider, ordered by priority ASC.
  * Used by withLlmFailover() to iterate through keys on quota/auth failure.
  * Skips keys that are cooled down or in non-active states.
+ *
+ * For 'openai', the project's OpenRouter keys follow its OpenAI keys: they
+ * serve the same OpenAI-compatible chat and embedding calls (callers qualify
+ * model ids through _shared/openai-compat.ts). Pass `openAiOnly` for calls
+ * OpenRouter cannot serve, such as speech-to-text and fine-tuning.
  */
 export async function resolveLlmKeys(
+  db: SupabaseClient,
+  projectId: string,
+  provider: LlmProvider,
+  opts: { openAiOnly?: boolean } = {},
+): Promise<ResolvedKey[]> {
+  const candidates = await byokPoolCandidates(db, projectId, provider);
+  if (provider === 'openai' && !opts.openAiOnly) {
+    for (const c of await byokPoolCandidates(db, projectId, 'openrouter')) {
+      candidates.push({ ...c, provider: 'openrouter' });
+    }
+  }
+  if (candidates.length > 0) return candidates;
+  return await legacyOrEnvCandidates(db, projectId, provider);
+}
+
+/** Step 1: the project's byok_keys rows for one provider, ordered by priority. */
+async function byokPoolCandidates(
   db: SupabaseClient,
   projectId: string,
   provider: LlmProvider,
@@ -156,6 +236,8 @@ export async function resolveLlmKeys(
           } else {
             baseUrl = validatedPlatformOpenAiBaseUrl(projectId);
           }
+        } else if (provider === 'openrouter') {
+          baseUrl = OPENROUTER_BASE_URL;
         }
         candidates.push({
           keyId: row.id,
@@ -169,10 +251,17 @@ export async function resolveLlmKeys(
     }
   }
 
-  if (candidates.length > 0) return candidates;
+  return candidates;
+}
 
+/** Steps 2 and 3: the legacy single-key column, then the platform key. */
+async function legacyOrEnvCandidates(
+  db: SupabaseClient,
+  projectId: string,
+  provider: LlmProvider,
+): Promise<ResolvedKey[]> {
   // Step 2: Legacy project_settings columns (back-compat).
-  const refCol = LEGACY_REF_COL[provider];
+  const refCol = isLegacyByokProvider(provider) ? LEGACY_REF_COL[provider] : undefined;
   if (refCol) {
     const testStatusCol = LEGACY_TEST_STATUS_COL[provider];
     const selectCols = [
@@ -239,7 +328,9 @@ export async function resolveLlmKeys(
       provider,
       hint: hint(env),
     });
-    const baseUrl = provider === 'openai' ? validatedPlatformOpenAiBaseUrl(projectId) : undefined;
+    const baseUrl = provider === 'openai'
+      ? validatedPlatformOpenAiBaseUrl(projectId)
+      : provider === 'openrouter' ? OPENROUTER_BASE_URL : undefined;
     return [{ key: env, source: 'env', hint: hint(env), baseUrl }];
   }
 

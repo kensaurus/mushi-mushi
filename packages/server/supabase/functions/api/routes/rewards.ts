@@ -31,11 +31,16 @@ import type { Variables } from '../types.ts'
 import { z } from 'npm:zod@3'
 import { getServiceClient } from '../../_shared/db.ts'
 import { apiKeyAuth, jwtAuth, adminOrApiKey } from '../../_shared/auth.ts'
-import { resolveAccessibleOrg } from '../shared.ts'
+import { jsonError, resolveAccessibleOrg } from '../shared.ts'
+import { canManageProjectSdkConfig } from '../helpers.ts'
+import { organizationHasPlanFeature } from '../../_shared/entitlements.ts'
+import { leaderboardSearchTerm, plainIssues, rewardsWriteDenial } from '../../_shared/rewards-admin.ts'
 import { resolveEndUser } from '../../_shared/end-user-resolver.ts'
-import { awardPointsForEndUser, invalidateRuleCache } from '../../_shared/reputation.ts'
+import { awardPointsForEndUser, basePointsFor, invalidateRuleCache } from '../../_shared/reputation.ts'
 import { dispatchRewardWebhook } from '../../_shared/reward-webhooks.ts'
 import { verifyHostJwt } from '../../_shared/verify-host-jwt.ts'
+import { MUSHI_USER_TOKEN_HEADER, verifyEndUserToken } from '../../_shared/end-user-identity.ts'
+import { reporterKeyOrNull } from '../../_shared/reporter-token.ts'
 import {
   stripeFromEnv,
   createConnectAccount,
@@ -133,6 +138,173 @@ async function getOrgIdForProject(db: ReturnType<typeof getServiceClient>, proje
   return data?.organization_id ?? null
 }
 
+// ─── Guard: privacy routes that act on an end user by host-asserted id ──
+//
+// GET /v1/sdk/me/export and DELETE /v1/sdk/me take the end user's id from the
+// caller and run under apiKeyAuth, which accepts the PUBLIC SDK key shipped
+// in every browser bundle. end_users are organization-scoped, so before
+// 2026-09-21 any project's public key could export or erase (with cascades to
+// points, payouts and disputes) an end user of ANY project in the same org
+// given only their external id. Now:
+//   - per-project rate limit on the privacy routes;
+//   - when the project has a host identity provider, a verified host JWT
+//     (X-Mushi-Host-Jwt) whose `sub` is that user is required;
+//   - otherwise the end user must have a footprint in THIS key's project, so
+//     one app's key cannot reach users only another app has seen. Callers
+//     outside that scope get the same answer as for an unknown user.
+const PRIVACY_ROUTE_MAX_PER_MINUTE = 30
+const END_USER_FOOTPRINT_TABLES = [
+  'reports',
+  'end_user_activity',
+  'end_user_sessions',
+  'product_events',
+  'sdk_assistant_messages',
+] as const
+
+type EndUserAccess =
+  | { ok: true; endUserId: string | null }
+  | { ok: false; status: 401 | 403 | 429; code: string; message: string }
+
+/** @internal Exported for tests (rewards-privacy-proof.test.ts). */
+export async function authorizeEndUserPrivacyAccess(
+  c: Context,
+  db: ReturnType<typeof getServiceClient>,
+  projectId: string,
+  organizationId: string,
+  externalUserId: string,
+): Promise<EndUserAccess> {
+  const { error: rateErr } = await db.rpc('scoped_rate_limit_claim', {
+    p_user_id: projectId,
+    p_scope: 'sdk_me_privacy',
+    p_max_per_window: PRIVACY_ROUTE_MAX_PER_MINUTE,
+    p_window: '1 minute',
+  })
+  if (rateErr) {
+    return { ok: false, status: 429, code: 'RATE_LIMITED', message: 'Too many privacy requests. Retry in 60 seconds.' }
+  }
+
+  const { data: eu } = await db
+    .from('end_users')
+    .select('id')
+    .eq('organization_id', organizationId)
+    .eq('external_user_id', externalUserId)
+    .maybeSingle()
+  if (!eu) return { ok: true, endUserId: null }
+
+  const { count: providerCount } = await db
+    .from('host_auth_providers')
+    .select('project_id', { count: 'exact', head: true })
+    .eq('project_id', projectId)
+    .eq('enabled', true)
+
+  if ((providerCount ?? 0) > 0) {
+    const token = c.req.header('x-mushi-host-jwt')
+    if (!token) {
+      return {
+        ok: false,
+        status: 401,
+        code: 'HOST_JWT_REQUIRED',
+        message: 'This project verifies end users: send the host JWT for this user in X-Mushi-Host-Jwt.',
+      }
+    }
+    try {
+      const verified = await verifyHostJwt({ token, projectId, endUserId: eu.id, expectedSub: externalUserId })
+      if (verified.sub !== externalUserId) {
+        return { ok: false, status: 403, code: 'HOST_JWT_SUBJECT_MISMATCH', message: 'Host JWT subject does not match userId.' }
+      }
+    } catch {
+      return { ok: false, status: 403, code: 'HOST_JWT_INVALID', message: 'Host JWT failed verification.' }
+    }
+    return { ok: true, endUserId: eu.id }
+  }
+
+  // No host provider: the request must carry the host backend's signature for
+  // this user (X-Mushi-User-Token, HS256 with the project's identity secret).
+  // A public SDK key alone is not proof — it is in every visitor's browser, so
+  // until 2026-09-22 anyone could export or erase any end user who had used
+  // the project, given only their external id (audit #31).
+  const verified = await verifyEndUserToken(db, projectId, c.req.header(MUSHI_USER_TOKEN_HEADER))
+  if (!verified) {
+    return {
+      ok: false,
+      status: 401,
+      code: 'IDENTITY_PROOF_REQUIRED',
+      message:
+        'Export and erasure need proof that the request is for this user: send X-Mushi-User-Token signed with the ' +
+        "project's identity secret, or configure a host auth provider and send X-Mushi-Host-Jwt.",
+    }
+  }
+  if (verified.externalUserId !== externalUserId) {
+    return { ok: false, status: 403, code: 'IDENTITY_SUBJECT_MISMATCH', message: 'X-Mushi-User-Token subject does not match userId.' }
+  }
+
+  for (const table of END_USER_FOOTPRINT_TABLES) {
+    const { count } = await db
+      .from(table)
+      .select('end_user_id', { count: 'exact', head: true })
+      .eq('project_id', projectId)
+      .eq('end_user_id', eu.id)
+      .limit(1)
+    if ((count ?? 0) > 0) return { ok: true, endUserId: eu.id }
+  }
+  // Seen only by other projects in the org: indistinguishable from unknown.
+  return { ok: true, endUserId: null }
+}
+
+const SDK_ME_READ_MAX_PER_MINUTE = 300
+
+/**
+ * End user for the /v1/sdk/me/{points,tier,history} reads. These run on the
+ * public SDK key, which is in every visitor's browser, and end_users are
+ * org-wide — so the lookup only resolves users this project has seen, a
+ * presented X-Mushi-User-Token must name the requested user, and the routes
+ * share a per-project rate limit (security pass 2026-09-23).
+ */
+async function resolveEndUserForSdkRead(
+  c: Context,
+  db: ReturnType<typeof getServiceClient>,
+  projectId: string,
+  organizationId: string,
+  externalUserId: string,
+): Promise<EndUserAccess> {
+  const { error: rateErr } = await db.rpc('scoped_rate_limit_claim', {
+    p_user_id: projectId,
+    p_scope: 'sdk_me_read',
+    p_max_per_window: SDK_ME_READ_MAX_PER_MINUTE,
+    p_window: '1 minute',
+  })
+  if (rateErr) {
+    return { ok: false, status: 429, code: 'RATE_LIMITED', message: 'Too many requests. Retry in 60 seconds.' }
+  }
+
+  const presented = c.req.header(MUSHI_USER_TOKEN_HEADER)
+  if (presented) {
+    const verified = await verifyEndUserToken(db, projectId, presented)
+    if (!verified || verified.externalUserId !== externalUserId) {
+      return { ok: false, status: 403, code: 'IDENTITY_SUBJECT_MISMATCH', message: 'X-Mushi-User-Token does not match userId.' }
+    }
+  }
+
+  const { data: eu } = await db
+    .from('end_users')
+    .select('id')
+    .eq('organization_id', organizationId)
+    .eq('external_user_id', externalUserId)
+    .maybeSingle()
+  if (!eu) return { ok: true, endUserId: null }
+
+  for (const table of END_USER_FOOTPRINT_TABLES) {
+    const { count } = await db
+      .from(table)
+      .select('end_user_id', { count: 'exact', head: true })
+      .eq('project_id', projectId)
+      .eq('end_user_id', eu.id)
+      .limit(1)
+    if ((count ?? 0) > 0) return { ok: true, endUserId: eu.id }
+  }
+  return { ok: true, endUserId: null }
+}
+
 // ─── Helper: resolve validated org for admin reward routes ───
 async function requireRewardsOrg(
   c: Context,
@@ -141,6 +313,26 @@ async function requireRewardsOrg(
   const db = getServiceClient()
   const resolved = await resolveAccessibleOrg(c, db, userId)
   if (!resolved.ok) return { ok: false, response: resolved.response }
+  return { ok: true, orgId: resolved.organizationId }
+}
+
+/**
+ * Org gate for every rewards WRITE: membership plus an owner or admin role (rules, tiers, webhooks,
+ * quests, awards and disputes change the program for every reporter) plus a
+ * plan with `rewards_program` (rewardsWriteDenial). Reads keep requireRewardsOrg.
+ */
+async function requireRewardsWriter(
+  c: Context,
+  userId: string,
+): Promise<{ ok: true; orgId: string } | { ok: false; response: Response }> {
+  const db = getServiceClient()
+  const resolved = await resolveAccessibleOrg(c, db, userId)
+  if (!resolved.ok) return { ok: false, response: resolved.response }
+  const planHasRewards = resolved.role !== 'owner' && resolved.role !== 'admin'
+    ? false
+    : await organizationHasPlanFeature(db, resolved.organizationId, 'rewards_program')
+  const denial = rewardsWriteDenial(resolved.role, planHasRewards)
+  if (denial) return { ok: false, response: jsonError(c, denial.code, denial.message, denial.status) }
   return { ok: true, orgId: resolved.organizationId }
 }
 
@@ -199,12 +391,16 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
       return c.json({ ok: false, error: { code: 'PROJECT_NO_ORG', message: 'Project has no organization' } }, 422)
     }
 
-    // Resolve / upsert end_user
+    // Resolve / upsert end_user. The SDK sends the raw reporter token under
+    // this name. Every table stores the one-way reporter key, so derive it
+    // once here: the anti-fraud join and the reputation row both need it, and
+    // the raw value must never reach storage.
+    const reporterKey = await reporterKeyOrNull(reporter_token_hash)
     const endUser = await resolveEndUser(db, {
       organizationId,
       externalUserId: user_id,
       traits: user_traits,
-      reporterTokenHash: reporter_token_hash,
+      reporterTokenHash: reporterKey,
       optedInToRewards: opted_in,
     })
 
@@ -224,6 +420,7 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
           token: host_jwt,
           projectId,
           endUserId: endUser.id,
+          expectedSub: user_id,
         })
       } catch (jwtErr) {
         // Non-fatal — activity is still accepted; jwt_verified_at remains null.
@@ -242,7 +439,7 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
           endUserId: endUser.id,
           action: event.action,
           metadata: event.metadata as Record<string, unknown>,
-          reporterTokenHash: reporter_token_hash,
+          reporterTokenHash: reporterKey,
         })
         accepted++
       } catch (err) {
@@ -273,7 +470,7 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
     const projectId = c.get('projectId') as string
     let raw: unknown
     try { raw = await c.req.json() } catch {
-      return c.json({ ok: false, error: { code: 'INVALID_JSON' } }, 400)
+      return c.json({ ok: false, error: { code: 'INVALID_JSON', message: 'The request body was not valid JSON.' } }, 400)
     }
     const s = z.object({ user_id: z.string(), opted_in: z.boolean() }).safeParse(raw)
     if (!s.success) return c.json({ ok: false, error: { code: 'INVALID_BODY' } }, 422)
@@ -303,39 +500,37 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
     const organizationId = await getOrgIdForProject(db, projectId)
     if (!organizationId) return c.json({ ok: false, error: { code: 'NO_ORG' } }, 422)
 
-    const { data: eu } = await db
-      .from('end_users')
-      .select('id')
-      .eq('organization_id', organizationId)
-      .eq('external_user_id', userId)
-      .single()
+    const access = await resolveEndUserForSdkRead(c, db, projectId, organizationId, userId)
+    if (!access.ok) return c.json({ ok: false, error: { code: access.code, message: access.message } }, access.status)
+    const eu = access.endUserId ? { id: access.endUserId } : null
 
-    if (!eu) return c.json({ ok: true, data: { total_points: 0, points_30d: 0, points_lifetime: 0, tier: null, next_tier: null, report_submit_pts: 50 } })
+    // Ingest awards `report.submitted`; read its points the way the award path
+    // does. This used to read a `report_submit` org rule and fall back to 50,
+    // while 10 was credited.
+    const reportSubmitPts = (await basePointsFor(db, projectId, 'report.submitted')) ?? 10
+
+    if (!eu) return c.json({ ok: true, data: { total_points: 0, points_30d: 0, points_lifetime: 0, tier: null, next_tier: null, report_submit_pts: reportSubmitPts } })
 
     // Fetch point totals and all tiers in one pass so we can compute
     // current tier, next tier, and progress bar data in a single round-trip.
-    const [ptsRes, tiersRes, ruleRes] = await Promise.all([
+    const [ptsRes, tiersRes] = await Promise.all([
       db.from('end_user_points')
         .select('total_points, points_30d, points_lifetime')
         .eq('end_user_id', eu.id)
         .single(),
       db.from('reward_tiers')
-        .select('slug, display_name, points_threshold, perks, multiplier')
+        // reward_tiers has no multiplier column; selecting one made every call
+        // error and the widget showed no tier at all.
+        .select('slug, display_name, points_threshold, perks')
         .eq('organization_id', organizationId)
         .order('points_threshold', { ascending: true }),
-      db.from('reward_rules')
-        .select('base_points')
-        .eq('organization_id', organizationId)
-        .eq('action', 'report_submit')
-        .eq('enabled', true)
-        .single(),
     ])
 
+    if (tiersRes.error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: 'Could not read reward tiers' } }, 500)
     const totalPoints = ptsRes.data?.total_points ?? 0
     const sortedTiers = tiersRes.data ?? []
     const currentTier = [...sortedTiers].reverse().find(t => t.points_threshold <= totalPoints) ?? null
     const nextTier = sortedTiers.find(t => t.points_threshold > totalPoints) ?? null
-    const reportSubmitPts = ruleRes.data?.base_points ?? 50
 
     return c.json({
       ok: true,
@@ -362,12 +557,9 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
     const organizationId = await getOrgIdForProject(db, projectId)
     if (!organizationId) return c.json({ ok: false, error: { code: 'NO_ORG' } }, 422)
 
-    const { data: eu } = await db
-      .from('end_users')
-      .select('id')
-      .eq('organization_id', organizationId)
-      .eq('external_user_id', userId)
-      .single()
+    const access = await resolveEndUserForSdkRead(c, db, projectId, organizationId, userId)
+    if (!access.ok) return c.json({ ok: false, error: { code: access.code, message: access.message } }, access.status)
+    const eu = access.endUserId ? { id: access.endUserId } : null
 
     if (!eu) return c.json({ ok: true, data: null })
 
@@ -393,12 +585,9 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
     const organizationId = await getOrgIdForProject(db, projectId)
     if (!organizationId) return c.json({ ok: false, error: { code: 'NO_ORG' } }, 422)
 
-    const { data: eu } = await db
-      .from('end_users')
-      .select('id')
-      .eq('organization_id', organizationId)
-      .eq('external_user_id', userId)
-      .single()
+    const access = await resolveEndUserForSdkRead(c, db, projectId, organizationId, userId)
+    if (!access.ok) return c.json({ ok: false, error: { code: access.code, message: access.message } }, access.status)
+    const eu = access.endUserId ? { id: access.endUserId } : null
 
     if (!eu) return c.json({ ok: true, data: { items: [], total: 0 } })
 
@@ -424,16 +613,11 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
     const organizationId = await getOrgIdForProject(db, projectId)
     if (!organizationId) return c.json({ ok: false, error: { code: 'NO_ORG' } }, 422)
 
-    const { data: eu } = await db
-      .from('end_users')
-      .select('id')
-      .eq('organization_id', organizationId)
-      .eq('external_user_id', userId)
-      .single()
+    const access = await authorizeEndUserPrivacyAccess(c, db, projectId, organizationId, userId)
+    if (!access.ok) return c.json({ ok: false, error: { code: access.code, message: access.message } }, access.status)
+    if (!access.endUserId) return c.json({ ok: true, data: null })
 
-    if (!eu) return c.json({ ok: true, data: null })
-
-    const { data } = await db.rpc('export_end_user_data', { p_end_user_id: eu.id })
+    const { data } = await db.rpc('export_end_user_data', { p_end_user_id: access.endUserId })
     return c.json({ ok: true, data })
   })
 
@@ -449,14 +633,18 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
     const organizationId = await getOrgIdForProject(db, projectId)
     if (!organizationId) return c.json({ ok: false, error: { code: 'NO_ORG' } }, 422)
 
-    const { error } = await db
-      .from('end_users')
-      .delete()
-      .eq('organization_id', organizationId)
-      .eq('external_user_id', userId)
+    const access = await authorizeEndUserPrivacyAccess(c, db, projectId, organizationId, userId)
+    if (!access.ok) return c.json({ ok: false, error: { code: access.code, message: access.message } }, access.status)
+    // Unknown (or out of this project's reach): nothing to erase. Idempotent.
+    if (!access.endUserId) return c.json({ ok: true, data: { deleted: false } })
+
+    // One transaction: the person's sessions, page views and analytics events
+    // (by end_user_id and by their devices' reporter-token digests) go with
+    // them; payout and dispute records stay for audit, unlinked.
+    const { data: erased, error } = await db.rpc('erase_end_user', { p_end_user_id: access.endUserId })
 
     if (error) return c.json({ ok: false, error: { code: 'DELETE_FAILED', message: error.message } }, 500)
-    return c.json({ ok: true, data: { deleted: true } })
+    return c.json({ ok: true, data: { deleted: true, erased } })
   })
 
   // ===========================================================
@@ -793,8 +981,8 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
 
     if (!projectRewardsEnabled) {
       topPriority = 'project_disabled'
-      topPriorityLabel = `rewards_enabled is off for ${projectName ?? 'active project'} — SDK activity ingest returns early without awarding points.`
-      topPriorityTo = '/settings?tab=dev'
+      topPriorityLabel = `Rewards are off for ${projectName ?? 'this project'}, so activity from your app earns no points yet. Turn them on to start awarding points.`
+      topPriorityTo = '/rewards?tab=settings'
     } else if (webhooksFailing > 0) {
       topPriority = 'webhooks_failing'
       topPriorityLabel = `${webhooksFailing} webhook${webhooksFailing === 1 ? '' : 's'} returned HTTP ≥400 on last delivery — tier-change events may not reach your host app.`
@@ -849,6 +1037,50 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
         topPriorityTo,
       },
     })
+  })
+
+  // ===========================================================
+  // ADMIN: PUT /v1/admin/rewards/project-status
+  // The only writer of project_settings.rewards_enabled. Without it the
+  // "Rewards are off" banner had no fix and SDK activity never earned points.
+  // ===========================================================
+  app.put('/v1/admin/rewards/project-status', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string
+    const orgGate = await requireRewardsWriter(c, userId)
+    if (!orgGate.ok) return orgGate.response
+    const orgId = orgGate.orgId
+
+    let raw: unknown
+    try { raw = await c.req.json() } catch {
+      return c.json({ ok: false, error: { code: 'INVALID_JSON', message: 'The request body was not valid JSON.' } }, 400)
+    }
+    const parsed = z.object({ project_id: z.string().uuid(), enabled: z.boolean() }).safeParse(raw)
+    if (!parsed.success) {
+      return jsonError(c, 'VALIDATION_ERROR', 'Send a project_id and enabled: true or false.', 422)
+    }
+    const { project_id: projectId, enabled } = parsed.data
+
+    const db = getServiceClient()
+    const { data: project } = await db
+      .from('projects')
+      .select('id, name')
+      .eq('id', projectId)
+      .eq('organization_id', orgId)
+      .maybeSingle()
+    if (!project) {
+      return jsonError(c, 'PROJECT_NOT_FOUND', 'That project is not in this team. Pick one of this team’s projects.', 404)
+    }
+    if (!(await canManageProjectSdkConfig(db, projectId, userId))) {
+      return jsonError(c, 'FORBIDDEN', 'Only a team owner or admin can turn rewards on or off for a project.', 403)
+    }
+
+    const { error } = await db
+      .from('project_settings')
+      .upsert({ project_id: projectId, rewards_enabled: enabled }, { onConflict: 'project_id' })
+    if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+
+    rlog.info('rewards_project_status_changed', { orgId, projectId, enabled })
+    return c.json({ ok: true, data: { project_id: projectId, project_name: project.name, enabled } })
   })
 
   // ===========================================================
@@ -921,6 +1153,8 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
     if (!orgGate.ok) return orgGate.response
     const orgId = orgGate.orgId
 
+    // Disabled rules are listed too: the console's Enabled checkbox is the only
+    // way to turn a rule back on (presets skip actions that already exist).
     // Prefer explicit ?projectId query param, then X-Mushi-Project-Id header
     const projectId = c.req.query('projectId')
       ?? c.req.header('x-mushi-project-id')
@@ -935,7 +1169,6 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
         .select('*')
         .eq('organization_id', orgId)
         .eq('project_id', projectId)
-        .eq('enabled', true)
         .order('action', { ascending: true })
 
       if (e1) return c.json({ ok: false, error: { code: 'DB_ERROR', message: e1.message } }, 500)
@@ -948,7 +1181,6 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
       .select('*')
       .eq('organization_id', orgId)
       .is('project_id', null)
-      .eq('enabled', true)
       .order('action', { ascending: true })
 
     if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
@@ -957,18 +1189,18 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
 
   app.put('/v1/admin/rewards/rules', jwtAuth, async (c) => {
     const userId = c.get('userId') as string
-    const orgGate = await requireRewardsOrg(c, userId)
+    const orgGate = await requireRewardsWriter(c, userId)
     if (!orgGate.ok) return orgGate.response
     const orgId = orgGate.orgId
 
     let raw: unknown
     try { raw = await c.req.json() } catch {
-      return c.json({ ok: false, error: { code: 'INVALID_JSON' } }, 400)
+      return c.json({ ok: false, error: { code: 'INVALID_JSON', message: 'The request body was not valid JSON.' } }, 400)
     }
 
     const parsed = z.array(rewardRuleUpsertSchema).safeParse(raw)
     if (!parsed.success) {
-      return c.json({ ok: false, error: { code: 'INVALID_RULES', issues: parsed.error.issues } }, 422)
+      return c.json({ ok: false, error: { code: 'INVALID_RULES', message: plainIssues('Check the rules:', parsed.error.issues), issues: parsed.error.issues } }, 422)
     }
 
     const db = getServiceClient()
@@ -1011,13 +1243,13 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
 
   app.put('/v1/admin/rewards/tiers', jwtAuth, async (c) => {
     const userId = c.get('userId') as string
-    const orgGate = await requireRewardsOrg(c, userId)
+    const orgGate = await requireRewardsWriter(c, userId)
     if (!orgGate.ok) return orgGate.response
     const orgId = orgGate.orgId
 
     let raw: unknown
     try { raw = await c.req.json() } catch {
-      return c.json({ ok: false, error: { code: 'INVALID_JSON' } }, 400)
+      return c.json({ ok: false, error: { code: 'INVALID_JSON', message: 'The request body was not valid JSON.' } }, 400)
     }
 
     const parsed = z.array(rewardTierUpsertSchema).safeParse(raw)
@@ -1046,7 +1278,7 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   // ===========================================================
   app.post('/v1/admin/rewards/presets/apply', jwtAuth, async (c) => {
     const userId = c.get('userId') as string
-    const orgGate = await requireRewardsOrg(c, userId)
+    const orgGate = await requireRewardsWriter(c, userId)
     if (!orgGate.ok) return orgGate.response
     const orgId = orgGate.orgId
     const db = getServiceClient()
@@ -1234,7 +1466,8 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
     const range = c.req.query('range') === 'all' ? 'all' : '30d'
     const limit = Math.min(parseInt(c.req.query('limit') ?? '50', 10), 200)
     const offset = Math.max(parseInt(c.req.query('offset') ?? '0', 10), 0)
-    const search = (c.req.query('search') ?? '').trim().toLowerCase()
+    // Sanitised: `,` `(` `)` in raw input broke the PostgREST .or() filter (DB_ERROR).
+    const search = leaderboardSearchTerm(c.req.query('search'))
     const tierSlug = c.req.query('tier') ?? ''
     const db = getServiceClient()
 
@@ -1342,16 +1575,24 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   // ===========================================================
   app.post('/v1/admin/rewards/webhooks', jwtAuth, async (c) => {
     const userId = c.get('userId') as string
-    const orgGate = await requireRewardsOrg(c, userId)
+    const orgGate = await requireRewardsWriter(c, userId)
     if (!orgGate.ok) return orgGate.response
     const orgId = orgGate.orgId
 
     let raw: unknown
     try { raw = await c.req.json() } catch {
-      return c.json({ ok: false, error: { code: 'INVALID_JSON' } }, 400)
+      return c.json({ ok: false, error: { code: 'INVALID_JSON', message: 'The request body was not valid JSON.' } }, 400)
     }
     const parsed = webhookCreateSchema.safeParse(raw)
-    if (!parsed.success) return c.json({ ok: false, error: { code: 'INVALID_WEBHOOK' } }, 422)
+    if (!parsed.success) {
+      return c.json({
+        ok: false,
+        error: {
+          code: 'INVALID_WEBHOOK',
+          message: 'Check the webhook: the URL must start with https:// and a custom signing secret must be at least 16 characters.',
+        },
+      }, 422)
+    }
 
     const db = getServiceClient()
     const webhookId = crypto.randomUUID()
@@ -1412,7 +1653,7 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   // ===========================================================
   app.delete('/v1/admin/rewards/webhooks/:id', jwtAuth, async (c) => {
     const userId = c.get('userId') as string
-    const orgGate = await requireRewardsOrg(c, userId)
+    const orgGate = await requireRewardsWriter(c, userId)
     if (!orgGate.ok) return orgGate.response
     const orgId = orgGate.orgId
 
@@ -1434,12 +1675,12 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   // ===========================================================
   app.post('/v1/admin/rewards/webhooks/test', jwtAuth, async (c) => {
     const userId = c.get('userId') as string
-    const orgGate = await requireRewardsOrg(c, userId)
+    const orgGate = await requireRewardsWriter(c, userId)
     if (!orgGate.ok) return orgGate.response
     const orgId = orgGate.orgId
 
     const db = getServiceClient()
-    await dispatchRewardWebhook(db, orgId, {
+    const deliveries = await dispatchRewardWebhook(db, orgId, {
       event: 'reward.tier_changed',
       end_user_id: 'test-user',
       tier_before: null,
@@ -1448,7 +1689,20 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
       occurred_at: new Date().toISOString(),
     })
 
-    return c.json({ ok: true, data: { message: 'Test webhook delivered (see last_status on each row for result)' } })
+    // Report what each endpoint answered instead of a blanket "delivered":
+    // a 500 or a timeout must read as a failure.
+    const results = deliveries.map((d) => ({
+      webhook_id: d.webhookId,
+      url: d.url,
+      status: d.status,
+      ok: d.status >= 200 && d.status < 300,
+      ...(d.skipped ? { skipped: d.skipped } : {}),
+    }))
+    const failed = results.filter((r) => !r.ok).length
+    return c.json({
+      ok: true,
+      data: { attempted: results.length, delivered: results.length - failed, failed, results },
+    })
   })
 
   // ===========================================================
@@ -1494,17 +1748,17 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
 
   app.post('/v1/admin/rewards/quests', jwtAuth, async (c) => {
     const userId = c.get('userId') as string
-    const orgGate = await requireRewardsOrg(c, userId)
+    const orgGate = await requireRewardsWriter(c, userId)
     if (!orgGate.ok) return orgGate.response
     const orgId = orgGate.orgId
 
     let raw: unknown
     try { raw = await c.req.json() } catch {
-      return c.json({ ok: false, error: { code: 'INVALID_JSON' } }, 400)
+      return c.json({ ok: false, error: { code: 'INVALID_JSON', message: 'The request body was not valid JSON.' } }, 400)
     }
     const parsed = questUpsertSchema.safeParse(raw)
     if (!parsed.success) {
-      return c.json({ ok: false, error: { code: 'INVALID_QUEST', issues: parsed.error.issues } }, 422)
+      return c.json({ ok: false, error: { code: 'INVALID_QUEST', message: plainIssues('Check the quest:', parsed.error.issues), issues: parsed.error.issues } }, 422)
     }
 
     const db = getServiceClient()
@@ -1536,7 +1790,7 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   // ===========================================================
   app.delete('/v1/admin/rewards/quests/:id', jwtAuth, async (c) => {
     const userId = c.get('userId') as string
-    const orgGate = await requireRewardsOrg(c, userId)
+    const orgGate = await requireRewardsWriter(c, userId)
     if (!orgGate.ok) return orgGate.response
     const orgId = orgGate.orgId
 
@@ -1615,13 +1869,13 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
 
   app.post('/v1/admin/rewards/identity-providers', jwtAuth, async (c) => {
     const userId = c.get('userId') as string
-    const orgGate = await requireRewardsOrg(c, userId)
+    const orgGate = await requireRewardsWriter(c, userId)
     if (!orgGate.ok) return orgGate.response
     const orgId = orgGate.orgId
 
     let raw: unknown
     try { raw = await c.req.json() } catch {
-      return c.json({ ok: false, error: { code: 'INVALID_JSON' } }, 400)
+      return c.json({ ok: false, error: { code: 'INVALID_JSON', message: 'The request body was not valid JSON.' } }, 400)
     }
     const parsed = identityProviderCreateSchema.safeParse(raw)
     if (!parsed.success) {
@@ -1663,14 +1917,14 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   // ===========================================================
   app.patch('/v1/admin/rewards/identity-providers/:id', jwtAuth, async (c) => {
     const userId = c.get('userId') as string
-    const orgGate = await requireRewardsOrg(c, userId)
+    const orgGate = await requireRewardsWriter(c, userId)
     if (!orgGate.ok) return orgGate.response
     const orgId = orgGate.orgId
 
     const id = c.req.param('id')!
     let raw: unknown
     try { raw = await c.req.json() } catch {
-      return c.json({ ok: false, error: { code: 'INVALID_JSON' } }, 400)
+      return c.json({ ok: false, error: { code: 'INVALID_JSON', message: 'The request body was not valid JSON.' } }, 400)
     }
 
     const patchSchema = z.object({
@@ -1718,13 +1972,13 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   // Award ad-hoc bonus points to a contributor (MCP write surface).
   // ===========================================================
   app.post('/v1/admin/rewards/bonus-points', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {
-    const orgResolved = await resolveRewardsOrgId(c)
+    const orgResolved = await requireRewardsWriter(c, (c.get('userId') as string | undefined) ?? '')
     if (!orgResolved.ok) return orgResolved.response
     const orgId = orgResolved.orgId
 
     let raw: unknown
     try { raw = await c.req.json() } catch {
-      return c.json({ ok: false, error: { code: 'INVALID_JSON' } }, 400)
+      return c.json({ ok: false, error: { code: 'INVALID_JSON', message: 'The request body was not valid JSON.' } }, 400)
     }
     const schema = z.object({
       // Accept either the internal UUID or the external string ID
@@ -1783,13 +2037,13 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   // Manually override a contributor's tier (MCP write surface).
   // ===========================================================
   app.post('/v1/admin/rewards/set-tier', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {
-    const orgResolved = await resolveRewardsOrgId(c)
+    const orgResolved = await requireRewardsWriter(c, (c.get('userId') as string | undefined) ?? '')
     if (!orgResolved.ok) return orgResolved.response
     const orgId = orgResolved.orgId
 
     let raw: unknown
     try { raw = await c.req.json() } catch {
-      return c.json({ ok: false, error: { code: 'INVALID_JSON' } }, 400)
+      return c.json({ ok: false, error: { code: 'INVALID_JSON', message: 'The request body was not valid JSON.' } }, 400)
     }
     const schema = z.object({
       end_user_id: z.string().uuid().optional(),
@@ -1929,7 +2183,7 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
 
     let raw: unknown
     try { raw = await c.req.json() } catch {
-      return c.json({ ok: false, error: { code: 'INVALID_JSON' } }, 400)
+      return c.json({ ok: false, error: { code: 'INVALID_JSON', message: 'The request body was not valid JSON.' } }, 400)
     }
     const schema = z.object({
       events: z.array(z.object({
@@ -2013,14 +2267,14 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   // ===========================================================
   app.post('/v1/admin/rewards/disputes/:id/resolve', jwtAuth, async (c) => {
     const userId = c.get('userId') as string
-    const orgGate = await requireRewardsOrg(c, userId)
+    const orgGate = await requireRewardsWriter(c, userId)
     if (!orgGate.ok) return orgGate.response
     const orgId = orgGate.orgId
 
     const id = c.req.param('id')!
     let raw: unknown
     try { raw = await c.req.json() } catch {
-      return c.json({ ok: false, error: { code: 'INVALID_JSON' } }, 400)
+      return c.json({ ok: false, error: { code: 'INVALID_JSON', message: 'The request body was not valid JSON.' } }, 400)
     }
 
     const resolveSchema = z.object({
@@ -2068,7 +2322,7 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   // ===========================================================
   app.delete('/v1/admin/rewards/identity-providers/:id', jwtAuth, async (c) => {
     const userId = c.get('userId') as string
-    const orgGate = await requireRewardsOrg(c, userId)
+    const orgGate = await requireRewardsWriter(c, userId)
     if (!orgGate.ok) return orgGate.response
     const orgId = orgGate.orgId
 

@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/self-hosting/observability
 
 ---
 title: Langfuse + Sentry
+description: Wire Langfuse LLM tracing and Sentry error tracking into a self-hosted Mushi server — the Edge Function secrets and what each trace records.
 ---
 
 # Observability
@@ -72,7 +73,7 @@ Spans include `report_id`, `attempt_id`, and `stage` tags so you can join OTel t
 
 ## Health dashboard
 
-After deploying, check **Settings → Health** in the admin console. It shows:
+After deploying, check **Settings → SDK & connection** in the admin console. It shows:
 - Provider probe status (Anthropic, OpenAI, Langfuse, Sentry, GitHub)
 - Recent LLM call latency and cost
 - Cron job last-run timestamps

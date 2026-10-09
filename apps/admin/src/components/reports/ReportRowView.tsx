@@ -15,9 +15,10 @@
 import { memo, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { Tooltip } from '../ui'
+import { closedRowAction } from './reportRowAction'
 import { useRowFlash } from '../../lib/useRowFlash'
 import { useStaggeredAppear } from '../../lib/useStaggeredAppear'
-import { reportDetailPath } from '../../lib/reportUrl'
+import { reportDetailPath, reportPermalink } from '../../lib/reportUrl'
 import { useActiveProjectId } from '../ProjectSwitcher'
 import { StatusStepper } from './StatusStepper'
 import { BreadcrumbPeek } from './BreadcrumbPeek'
@@ -25,9 +26,12 @@ import { ReportRowMeta, ReportRowLayerPill, ReportTagChips } from './ReportRowSu
 import { DispatchFixPreflight } from './DispatchFixPreflight'
 import type { PreflightState } from '../../lib/useDispatchPreflight'
 import { IconShare, IconExternalLink, IconClose } from '../icons'
+import { CHIP_TONE } from '../../lib/chipTone'
+import { isSampleReport } from '../../lib/diagnosisViewed'
 import {
   DISPATCH_ELIGIBLE_STATUSES,
   formatRelative,
+  hasUnseenReporterReply,
   severityStripeClass,
   type ReportRow,
 } from './types'
@@ -91,6 +95,9 @@ function ReportRowViewInner({
   const activeProjectId = useActiveProjectId()
   const stagger = useStaggeredAppear({ stepMs: 18, max: 12 })
   const detailPath = reportDetailPath(row.id, activeProjectId)
+  // A plain <a target=_blank> skips the router, so it needs the deploy base
+  // path (/mushi-mushi/admin/ in production); detailPath alone 404'd there.
+  const newTabHref = reportPermalink(row.id, activeProjectId)
   // Friendly title (non-engineer headline) falls back to technical summary
   // then raw description so old rows still render.
   const displayTitle = row.title ?? row.summary ?? row.description
@@ -102,21 +109,15 @@ function ReportRowViewInner({
   const uniqueUsers = row.unique_users ?? 0
   const blastRadius = uniqueUsers > 0 ? uniqueUsers : dedupCount
   const canDispatch = DISPATCH_ELIGIBLE_STATUSES.has(row.status)
-  const reporterReplied = Boolean(
-    row.last_reporter_reply_at
-      && (!row.last_admin_reply_at || new Date(row.last_reporter_reply_at) > new Date(row.last_admin_reply_at)),
-  )
+  const closedAction = closedRowAction(row.status)
+  const reporterReplied = hasUnseenReporterReply(row)
 
-  // "Loud" rows = critical OR significant blast (>=3 distinct users felt it).
-  // These get a slightly tinted background so triagers can scan the page and
-  // see immediately where the real fires are without parsing severity badges.
-  const isLoud = row.severity === 'critical' || blastRadius >= 3
-
+  // No row background tints: the sticky and trailing cells paint their own
+  // background, so a row tint stopped short of the right edge. The severity
+  // stripe marks the row; the cursor is an outline; selection is the checkbox.
   const baseRowCls =
     'group border-t border-edge-subtle hover:bg-surface-overlay/60 motion-safe:transition-opacity cursor-pointer relative motion-safe:animate-mushi-fade-in'
-  const cursorCls = isCursor ? 'bg-surface-overlay/40 outline outline-1 outline-brand/40' : ''
-  const variantBgCls = isVariant ? 'bg-surface-overlay/30' : ''
-  const selectedCls = isSelected ? 'bg-brand/5' : isLoud ? 'bg-danger/5' : variantBgCls
+  const cursorCls = isCursor ? 'outline outline-1 -outline-offset-1 outline-brand/40' : ''
 
   // Wave T.2.5 single-shot background wash when a realtime update flips
   // the status — e.g. triager sees the row go `new → classified` in place.
@@ -157,7 +158,7 @@ function ReportRowViewInner({
       }}
       onMouseEnter={onFocus}
       onAnimationEnd={statusFlash.onAnimationEnd}
-      className={`${baseRowCls} ${cursorCls} ${selectedCls} ${statusFlash.className}`}
+      className={`${baseRowCls} ${cursorCls} ${statusFlash.className}`}
     >
       <td className={`${REPORTS_TABLE_COL.stripe} p-0 align-stretch`}>
         {/* Severity stripe — uses a ::before-style absolute fill so it spans
@@ -213,6 +214,13 @@ function ReportRowViewInner({
                   className="truncate text-sm font-medium leading-snug text-fg"
                   title={typeof displayTitle === 'string' ? displayTitle : undefined}
                 >
+                  {isSampleReport({ source: row.metadata_source }) && (
+                    <Tooltip content={'A sample report from "Send a test report", not from a user. Dismiss it when you\'re done.'}>
+                      <span className={`mr-1.5 inline-flex items-center rounded-sm px-1.5 py-px align-middle text-2xs font-medium ${CHIP_TONE.neutral}`}>
+                        Test report
+                      </span>
+                    </Tooltip>
+                  )}
                   {displayTitle}
                 </div>
                 {/* Subtext: technical summary, only when title differs (i.e. title exists) */}
@@ -283,7 +291,7 @@ function ReportRowViewInner({
         <div className={`reports-action-stack ${REPORTS_ACTION_STACK_MAX} ml-auto w-full min-w-0`}>
           <div className="reports-action-top ml-auto w-full min-w-0">
             <span className="row-kebab-reveal pointer-events-none group-hover:pointer-events-auto group-focus-within:pointer-events-auto inline-flex shrink-0 items-center gap-0">
-              <RowKebab detailPath={detailPath} onCopyLink={onCopyLink} onDismiss={onDismiss} />
+              <RowKebab newTabHref={newTabHref} onCopyLink={onCopyLink} onDismiss={onDismiss} />
             </span>
             {canDispatch ? (
               <span
@@ -297,11 +305,23 @@ function ReportRowViewInner({
                   blastRadius={blastRadius}
                   confidence={row.confidence}
                   onConfirm={onDispatchFix}
+                  blockReason={row.dispatch_block ?? null}
                   onOpenDetail={onOpen}
                   preflight={preflight}
                   repoUrl={preflight?.repoUrl ?? null}
                 />
               </span>
+            ) : closedAction ? (
+              // A fixed or dismissed report has nothing left to triage: a red
+              // "Triage →" there read as an alarm on finished work.
+              <Link
+                to={detailPath}
+                onClick={(e) => e.stopPropagation()}
+                className={`inline-flex h-5 shrink-0 items-center justify-center truncate px-1.5 text-3xs font-medium leading-none rounded-sm ${closedAction.className}`}
+                data-testid="report-row-closed-action"
+              >
+                {closedAction.label}
+              </Link>
             ) : (
               <Link
                 to={detailPath}
@@ -327,12 +347,13 @@ function ReportRowViewInner({
 }
 
 interface KebabProps {
-  detailPath: string
+  /** Absolute, base-path-aware URL for "Open in new tab". */
+  newTabHref: string
   onCopyLink: () => void
   onDismiss: () => void
 }
 
-function RowKebab({ detailPath, onCopyLink, onDismiss }: KebabProps) {
+function RowKebab({ newTabHref, onCopyLink, onDismiss }: KebabProps) {
   return (
     <>
       <Tooltip portal content="Copy share link">
@@ -350,7 +371,7 @@ function RowKebab({ detailPath, onCopyLink, onDismiss }: KebabProps) {
       </Tooltip>
       <Tooltip portal content="Open in new tab">
         <a
-          href={detailPath}
+          href={newTabHref}
           target="_blank"
           rel="noopener noreferrer"
           onClick={(e) => e.stopPropagation()}

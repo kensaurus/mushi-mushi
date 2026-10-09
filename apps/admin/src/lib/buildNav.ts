@@ -16,12 +16,15 @@ import {
 } from './navRegistry'
 import {
   IconDashboard,
+  IconMic,
   IconReports,
   IconStory,
   IconGraph,
   IconJudge,
   IconQuery,
-  IconFixes,
+  IconSliders,
+  IconCamera,
+  IconDiff,
   IconProjects,
   IconIntegrations,
   IconQueue,
@@ -77,10 +80,8 @@ export interface BuiltNavItem {
    *  flyout shows it under the label so an icon-only rail still explains
    *  itself. Required on every registry entry, so never empty. */
   description: string
-  quickstartLabel?: string
-  beginner?: boolean
-  checkBeginnerCore?: boolean
   superAdmin?: boolean
+  operatorOnly?: boolean
   requiresFeature?: FeatureFlag
   requiresAdvancedMode?: boolean
   checkSubGroup?: CheckSubGroupId
@@ -111,7 +112,8 @@ const ICON_MAP: Record<NavIconKey, ComponentType<{ className?: string }>> = {
   queue: IconQueue,
   shield: IconShield,
   'shield-check': IconShieldCheck,
-  fixes: IconFixes,
+  // A diff, not IconFixes' pencil, which reads as "edit".
+  fixes: IconDiff,
   git: IconGit,
   'fine-tuning': IconFineTuning,
   judge: IconJudge,
@@ -149,7 +151,10 @@ const ICON_MAP: Record<NavIconKey, ComponentType<{ className?: string }>> = {
   query: IconQuery,
   user: IconUser,
   activity: IconHealth,
+  sliders: IconSliders,
+  camera: IconCamera,
   overview: IconGauge,
+  mic: IconMic,
 }
 
 function entryToNavItem(entry: NavRegistryEntry): BuiltNavItem {
@@ -158,10 +163,8 @@ function entryToNavItem(entry: NavRegistryEntry): BuiltNavItem {
     path: entry.path,
     icon: ICON_MAP[entry.iconKey],
     description: entry.paletteDescription,
-    quickstartLabel: entry.quickstartLabel,
-    beginner: entry.beginner,
-    checkBeginnerCore: entry.checkBeginnerCore,
     superAdmin: entry.superAdmin,
+    operatorOnly: entry.operatorOnly,
     requiresFeature: entry.requiresFeature,
     requiresAdvancedMode: entry.requiresAdvancedMode,
     checkSubGroup: entry.checkSubGroup,

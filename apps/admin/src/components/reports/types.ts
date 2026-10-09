@@ -9,6 +9,8 @@ import { severityLabel } from '../../lib/tokens'
 
 export interface ReportRow {
   id: string
+  /** custom_metadata.source; 'admin_test_report' marks a sample from "Send a test report". */
+  metadata_source?: string | null
   project_id: string
   description: string
   category: string
@@ -23,6 +25,9 @@ export interface ReportRow {
   status: string
   created_at: string
   user_category: string
+  /** Why "Fix →" cannot queue this report (a feature request not yet
+   *  re-categorized), computed by the list route with the dispatch rule. */
+  dispatch_block?: string | null
   confidence: number | null
   component: string | null
   /** Total reports filed against the same fingerprint (>=1). Lets the table
@@ -40,6 +45,10 @@ export interface ReportRow {
   report_group_id?: string | null
   last_reporter_reply_at?: string | null
   last_admin_reply_at?: string | null
+  /** When a person last opened this report in the console (stamped by
+   *  GET /v1/admin/reports/:id on a JWT read) or replied to the reporter
+   *  (the report_comments trigger). Drives the unread "reply" dot. */
+  admin_seen_at?: string | null
   // 2026-05-07 SDK observability boost — surfaced on the row so the
   // hover popover ("breadcrumb peek") and the inline tag chips can
   // render without a second round-trip when the user mouses over a row.
@@ -161,6 +170,49 @@ export function severityLabelShort(s: string | null): string {
     case 'low':      return 'Low'
     default:         return severityLabel(s)
   }
+}
+
+function parseTime(iso: string | null | undefined): number | null {
+  if (!iso) return null
+  const t = Date.parse(iso)
+  return Number.isNaN(t) ? null : t
+}
+
+/**
+ * The reporter wrote after anyone on the team last looked (Plan 018
+ * decision 10: `last_reporter_reply_at > admin_seen_at`, or never seen) —
+ * the same rule as MCP `triage_next_steps` and the reporter view API.
+ * Opening the report in the console stamps `admin_seen_at`, and so does an
+ * admin reply (the report_comments trigger), so the dot clears either way.
+ */
+export function hasUnseenReporterReply(
+  row: Pick<ReportRow, 'last_reporter_reply_at' | 'admin_seen_at'>,
+): boolean {
+  const replied = parseTime(row.last_reporter_reply_at)
+  if (replied === null) return false
+  const seen = parseTime(row.admin_seen_at)
+  return seen === null || replied > seen
+}
+
+/**
+ * Rows opened in the preview drawer this session. The server stamps
+ * `admin_seen_at` on that read (GET /v1/admin/reports/:id), but the list was
+ * fetched before it, so the row would keep its reply dot until the next
+ * refetch. The newer of the server value and the local open wins.
+ */
+export function withLocallySeen<T extends Pick<ReportRow, 'id' | 'admin_seen_at'>>(
+  rows: readonly T[],
+  seenAt: ReadonlyMap<string, string>,
+): T[] {
+  if (seenAt.size === 0) return rows as T[]
+  return rows.map((row) => {
+    const local = seenAt.get(row.id)
+    if (!local) return row
+    const server = parseTime(row.admin_seen_at)
+    const opened = parseTime(local)
+    if (opened === null || (server !== null && server >= opened)) return row
+    return { ...row, admin_seen_at: local }
+  })
 }
 
 export function formatRelative(iso: string): string {

@@ -36,6 +36,13 @@ spec:
             - name: migrations
               mountPath: /migrations
       volumes:
+        # One ConfigMap per month (1 MiB API cap per ConfigMap); a projected
+        # volume merges them into one /migrations directory, so the loop above
+        # still applies every file in alphabetical (timestamp) order.
         - name: migrations
-          configMap:
-            name: {{ .Release.Name }}-migrations
+          projected:
+            sources:
+            {{- range $shard := splitList "," (include "mushi.migrationShards" .) }}
+              - configMap:
+                  name: {{ $.Release.Name }}-migrations-{{ $shard }}
+            {{- end }}

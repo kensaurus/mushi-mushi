@@ -31,6 +31,7 @@ import { log } from '../_shared/logger.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { collectDescendantActionIds } from '../_shared/inventory-story-scope.ts'
+import { withFindingsNotStored } from '../_shared/finding-explain.ts'
 
 declare const Deno: {
   serve(handler: (req: Request) => Response | Promise<Response>): void
@@ -38,6 +39,74 @@ declare const Deno: {
 }
 
 const rlog = log.child('inventory-gates')
+
+/**
+ * The api_dep nodes the CURRENT inventory declares. Graph nodes outlive the
+ * snapshot that created them (an ingest finds or creates, never prunes), so
+ * reading every api_dep node kept a superseded draft's APIs in the contract
+ * check forever: glot.it's showed 13 APIs its inventory no longer lists
+ * (2026-10-08). When the current inventory cannot be read, every node is used.
+ *
+ * @internal Exported for inventory-gates-api-deps.test.ts.
+ */
+export async function readDeclaredApiDeps(
+  db: SupabaseClient,
+  projectId: string,
+): Promise<Array<{ id: string; label: string }>> {
+  const [{ data: nodes }, { data: current }] = await Promise.all([
+    db
+      .from('graph_nodes')
+      .select('id, label')
+      .eq('project_id', projectId)
+      .eq('node_type', 'api_dep')
+      .returns<Array<{ id: string; label: string }>>(),
+    db
+      .from('inventories')
+      .select('parsed')
+      .eq('project_id', projectId)
+      .eq('is_current', true)
+      .maybeSingle(),
+  ])
+  const pages = (current?.parsed as { pages?: Array<{ elements?: Array<{ backend?: Array<{ method: string; path: string }> }> }> } | null)?.pages
+  if (!Array.isArray(pages)) return nodes ?? []
+  const declared = new Set<string>()
+  for (const p of pages) for (const el of p.elements ?? []) for (const a of el.backend ?? []) declared.add(`${a.method}:${a.path}`)
+  return (nodes ?? []).filter((n) => declared.has(n.label))
+}
+
+/**
+ * Edge functions the linked Supabase project has deployed, from the current
+ * Supabase connector snapshot. A crawl reads HTML and never sees a client's
+ * call to `/functions/v1/<slug>`, so without this every declared edge
+ * function failed the API contract. Empty when Supabase is not connected.
+ */
+async function readDeployedEdgeFunctions(db: SupabaseClient, projectId: string): Promise<Set<string>> {
+  const { data } = await db
+    .from('connector_snapshots')
+    .select('snapshot')
+    .eq('project_id', projectId)
+    .eq('kind', 'supabase')
+    .eq('is_current', true)
+    .eq('ok', true)
+    .order('observed_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  const fns = (data?.snapshot as { facts?: { functions?: Array<{ slug?: string }> | null } } | null)?.facts?.functions
+  return new Set((fns ?? []).map((f) => f.slug ?? '').filter(Boolean))
+}
+
+/**
+ * Whether a declared API dep is served: discovered by the crawl, or a call to
+ * an edge function the linked Supabase project has deployed (any method).
+ *
+ * @internal Exported for inventory-gates-api-deps.test.ts.
+ */
+export function apiDepServed(label: string, discovered: ReadonlySet<string>, edgeFunctions: ReadonlySet<string>): boolean {
+  if (discovered.has(label)) return true
+  const path = label.slice(label.indexOf(':') + 1)
+  const m = /^\/functions\/v1\/([A-Za-z0-9_-]+)(?:\/|\?|$)/.exec(path)
+  return Boolean(m && edgeFunctions.has(m[1]!))
+}
 
 type GateName =
   | 'dead_handler'
@@ -122,18 +191,25 @@ async function startGateRun(
   return data.id as string
 }
 
+/**
+ * Close a gate run. `findingsCount` is what landed in gate_findings; `found`
+ * (when larger) is how many the gate tried to store, and the difference is
+ * written down as summary.findings_not_stored so a reader never takes a
+ * finding that failed to insert for one the gate no longer sees.
+ */
 async function finishGateRun(
   db: SupabaseClient,
   runId: string,
   status: GateStatus,
   summary: Record<string, unknown>,
   findingsCount: number,
+  found = findingsCount,
 ): Promise<void> {
   await db
     .from('gate_runs')
     .update({
       status,
-      summary,
+      summary: withFindingsNotStored(summary, findingsCount, found),
       findings_count: findingsCount,
       completed_at: new Date().toISOString(),
     })
@@ -204,7 +280,7 @@ async function runStatusClaimGate(
     sample: violations.slice(0, 5),
     ...(body.story_node_id ? { story_node_id: body.story_node_id } : {}),
   }
-  await finishGateRun(db, runId, status, summary, inserted)
+  await finishGateRun(db, runId, status, summary, inserted, violations.length)
   return { gate: 'status_claim', status, summary, findings_count: inserted, run_id: runId }
 }
 
@@ -228,12 +304,7 @@ async function runApiContractGate(
 ): Promise<GateOutcome> {
   const runId = await startGateRun(db, body, 'api_contract')
 
-  const { data: apiDeps } = await db
-    .from('graph_nodes')
-    .select('id, label, metadata')
-    .eq('project_id', body.project_id!)
-    .eq('node_type', 'api_dep')
-    .returns<Array<{ id: string; label: string; metadata: Record<string, unknown> | null }>>()
+  const apiDeps = await readDeclaredApiDeps(db, body.project_id!)
 
   // Prefer caller-supplied discovered_apis (the mcp-ci `discover-api`
   // helper walks Next.js + OpenAPI + Supabase for the customer in CI
@@ -267,10 +338,11 @@ async function runApiContractGate(
   }
 
   const discoveredSet = new Set(discovered)
+  const edgeFunctions = await readDeployedEdgeFunctions(db, body.project_id!)
   let inserted = 0
   const missing: string[] = []
   for (const dep of apiDeps ?? []) {
-    if (!discoveredSet.has(dep.label)) {
+    if (!apiDepServed(dep.label, discoveredSet, edgeFunctions)) {
       missing.push(dep.label)
       const { error } = await db.from('gate_findings').insert({
         gate_run_id: runId,
@@ -285,7 +357,7 @@ async function runApiContractGate(
   }
 
   const status: GateStatus = missing.length === 0 ? 'pass' : 'fail'
-  await finishGateRun(db, runId, status, { missing_count: missing.length, sample: missing.slice(0, 5) }, inserted)
+  await finishGateRun(db, runId, status, { missing_count: missing.length, sample: missing.slice(0, 5) }, inserted, missing.length)
   return {
     gate: 'api_contract',
     status,
@@ -318,14 +390,7 @@ async function runOrphanEndpointGate(
   // Collect discovered routes from the latest crawl + declared api_deps.
   const discovered: Set<string> = new Set(body.discovered_apis ?? [])
 
-  const { data: apiDeps } = await db
-    .from('graph_nodes')
-    .select('label')
-    .eq('project_id', body.project_id!)
-    .eq('node_type', 'api_dep')
-    .returns<Array<{ label: string }>>()
-
-  for (const dep of apiDeps ?? []) discovered.add(dep.label)
+  for (const dep of await readDeclaredApiDeps(db, body.project_id!)) discovered.add(dep.label)
 
   if (discovered.size === 0) {
     await finishGateRun(db, runId, 'skipped', { reason: 'no discovered routes' }, 0)
@@ -360,9 +425,11 @@ async function runOrphanEndpointGate(
 
   let inserted = 0
   const orphans: string[] = []
+  const supabaseObservable = [...observedSet].some((o) => SUPABASE_PATH.test(o))
   for (const route of discovered) {
-    // Normalise the declared route for comparison.
-    const normRoute = route.split('?')[0]?.replace(/\/$/, '') ?? route
+    // Normalise the declared route for comparison; declared deps carry a method (POST:/x).
+    const normRoute = declaredPath(route).split('?')[0]?.replace(/\/$/, '') ?? route
+    if (!supabaseObservable && SUPABASE_PATH.test(normRoute)) continue
     // Check for fuzzy path match (allow for route params like /api/users/:id).
     const isObserved = [...observedSet].some((obs) => {
       if (obs === normRoute) return true
@@ -395,7 +462,7 @@ async function runOrphanEndpointGate(
     observed_routes: discovered.size - orphans.length,
     orphan_count: orphans.length,
     sample: orphans.slice(0, 5),
-  }, inserted)
+  }, inserted, orphans.length)
 
   return {
     gate: 'orphan_endpoint',
@@ -416,6 +483,42 @@ async function runOrphanEndpointGate(
  * Finding severity: error when the path looks like a new/undeployed API
  * (e.g. /api/v2/*), warn for paths that may be third-party services.
  */
+/**
+ * Whether an SDK-observed network path is an API call at all. The SDK sees
+ * every fetch, so a Next.js app's router prefetches of its own pages
+ * (`/glot-it/chat/`), its RSC payloads (`__next._tree.txt`, `_next/…`) and
+ * static assets were reported as unknown API calls: 34 on glot.it, none of
+ * them an API (2026-10-08).
+ *
+ * @internal Exported for inventory-gates-api-deps.test.ts.
+ */
+export function isApiCallPath(path: string): boolean {
+  const p = path.split('?')[0] ?? path
+  const lower = p.toLowerCase()
+  if (lower.startsWith('_next/') || lower.includes('/_next/') || lower.includes('__next.') || lower.includes('/__nextjs') || lower.endsWith('.rsc')) return false
+  if (/\.(?:js|mjs|css|map|png|jpe?g|gif|webp|avif|svg|ico|woff2?|ttf|otf|mp3|mp4|webm|wasm|txt|xml|webmanifest)$/i.test(p)) return false
+  // A .json file outside an API path is a static file (version.json, manifest.json).
+  if (/\.json$/i.test(p) && !API_PATH.test(p)) return false
+  // A trailing slash is a page in a static export (a prefetch of the document), not an endpoint.
+  if (p.length > 1 && p.endsWith('/') && !API_PATH.test(p)) return false
+  return true
+}
+
+const API_PATH = /\/(?:api|functions\/v1|rest\/v1|rpc)\//i
+
+/**
+ * Supabase serves these from its own origin, and the SDK records same-origin
+ * paths only (packages/web/src/mushi.ts), so a call to one is never observed
+ * unless the app proxies it through its own host.
+ */
+const SUPABASE_PATH = /^\/(?:functions|rest|auth|storage|realtime)\/v1\//
+
+/** `POST:/functions/v1/x` → `/functions/v1/x`: declared deps carry a method, observed paths do not. */
+function declaredPath(label: string): string {
+  const i = label.indexOf(':')
+  return i > 0 && /^[A-Z]+$/.test(label.slice(0, i)) ? label.slice(i + 1) : label
+}
+
 async function runUnknownCallGate(
   db: SupabaseClient,
   body: RequestBody,
@@ -423,14 +526,8 @@ async function runUnknownCallGate(
   const runId = await startGateRun(db, body, 'unknown_call')
 
   // Known-good: declared api_deps + discovered routes from latest crawl.
-  const known = new Set<string>(body.discovered_apis ?? [])
-  const { data: apiDeps } = await db
-    .from('graph_nodes')
-    .select('label')
-    .eq('project_id', body.project_id!)
-    .eq('node_type', 'api_dep')
-    .returns<Array<{ label: string }>>()
-  for (const dep of apiDeps ?? []) known.add(dep.label)
+  const known = new Set<string>((body.discovered_apis ?? []).map(declaredPath))
+  for (const dep of await readDeclaredApiDeps(db, body.project_id!)) known.add(declaredPath(dep.label))
 
   // Get project base URL to filter out third-party calls.
   const { data: settings } = await db
@@ -464,6 +561,7 @@ async function runUnknownCallGate(
   const unknowns: string[] = []
 
   for (const path of allObserved) {
+    if (!isApiCallPath(path)) continue
     // Skip third-party calls (different origin from base URL).
     if (baseUrl) {
       try {
@@ -507,7 +605,7 @@ async function runUnknownCallGate(
     known_paths: known.size,
     unknown_count: unknowns.length,
     sample: unknowns.slice(0, 5),
-  }, inserted)
+  }, inserted, unknowns.length)
 
   return {
     gate: 'unknown_call',
@@ -550,7 +648,7 @@ async function recordSpecDriftGate(
     findings.length === 0 ? 'pass'
     : findings.some((f) => f.severity === 'error') ? 'fail'
     : 'warn'
-  await finishGateRun(db, runId, status, { provided_findings: findings.length }, inserted)
+  await finishGateRun(db, runId, status, { provided_findings: findings.length }, inserted, findings.length)
   return { gate: 'spec_drift', status, summary: { provided_findings: findings.length }, findings_count: inserted, run_id: runId }
 }
 
@@ -584,7 +682,7 @@ async function recordLintGate(
   }
   const status: GateStatus =
     findings.length === 0 ? 'pass' : findings.some((f) => f.severity === 'error') ? 'fail' : 'warn'
-  await finishGateRun(db, runId, status, { provided_findings: findings.length }, inserted)
+  await finishGateRun(db, runId, status, { provided_findings: findings.length }, inserted, findings.length)
   return {
     gate,
     status,

@@ -3,18 +3,20 @@
  * PURPOSE: The persistent, dismissible setup guide docked into the app shell.
  *
  *          WHY THIS EXISTS. Every setup surface in the console was route-gated:
- *          <SetupChecklist mode="banner"> only renders on /dashboard,
- *          mode="wizard" only on /onboarding, the four components/onboarding/*
- *          panels only on /onboarding, and <NextBestAction> returns null unless
- *          the user is in beginner/quickstart mode (and null again on / and
- *          /onboarding). <FirstRunTour> is a one-shot product tour, not a
- *          tracker. So the moment a user navigated away from those two routes,
- *          nothing in the console told them what was still missing or what was
- *          already connected. This mounts once in the shell and follows them.
+ *          <SetupChecklist> only renders on the empty dashboard and
+ *          /onboarding, the components/onboarding/* panels only on
+ *          /onboarding, and the <NextStep> banner names one step at a time
+ *          and only in Quick/Beginner mode. <FirstRunTour> is a one-shot
+ *          product tour, not a tracker. So the moment a user navigated away
+ *          from those routes, nothing in the console told them what was still
+ *          missing or what was already connected. This mounts once in the
+ *          shell and follows them.
  *
- *          It is a surfacing layer, not a fourth checklist: the steps, labels,
+ *          It is a surfacing layer, not another checklist: the steps, labels,
  *          required flags and CTAs are the server-built ones from
- *          /v1/admin/setup (activation-setup-builder.ts).
+ *          /v1/admin/setup (activation-setup-builder.ts), and its "Do this
+ *          next" step is nextSetupStepId, the rule every setup list shares.
+ *          While it is open the NextStep banner names real work only.
  *
  *          Self-contained by design — it reads its own hooks exactly like
  *          <FirstRunTour> does, so the mount in Layout.tsx is a bare element
@@ -24,7 +26,8 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useAuth } from '../../lib/auth'
-import { useSetupStatus } from '../../lib/useSetupStatus'
+import { invalidateSetupStatus, SETUP_STEPS, useSetupStatus } from '../../lib/useSetupStatus'
+import { useRealtimeReload } from '../../lib/realtime'
 import { useProjectSnapshots } from '../../lib/useProjectSnapshots'
 import { useActiveProjectId } from '../ProjectSwitcher'
 import { buildSetupGuideModel } from '../../lib/setupGuideSteps'
@@ -37,6 +40,9 @@ import { SetupGuidePanel } from './SetupGuidePanel'
 
 /** Auth-shell routes where chrome is deliberately absent. */
 const HIDDEN_PREFIXES = ['/login', '/signup', '/reset-password', '/invite', '/cli-auth', '/mcp-auth']
+
+/** Fallback setup polls per awaiting project (30s apart = 5 minutes). */
+const SETUP_POLL_MAX = 10
 
 export function SetupGuide() {
   const { user } = useAuth()
@@ -65,6 +71,35 @@ export function SetupGuide() {
     requiredComplete: model.allRequiredDone,
     suppressAutoExpand: shouldSuppressAutoExpand(pathname),
   })
+
+  // While the guide is on screen and the first report is still outstanding,
+  // watch for it to land so the guide (and every other setup surface) moves
+  // on without a page reload. Off once the step completes or the guide is
+  // hidden, so steady-state sessions hold no channel.
+  const guideOnScreen = !!user && view !== 'dismissed' && !HIDDEN_PREFIXES.some((p) => pathname.startsWith(p))
+  const awaitingProjectId =
+    guideOnScreen && setup.activeProject && setup.isStepIncomplete(SETUP_STEPS.firstReportReceived)
+      ? setup.activeProject.project_id
+      : null
+  const { channelState } = useRealtimeReload(
+    [{ table: 'reports', event: 'INSERT', filter: `project_id=eq.${awaitingProjectId ?? ''}` }],
+    invalidateSetupStatus,
+    { debounceMs: 1000, enabled: !!awaitingProjectId },
+  )
+  // Realtime can be blocked (proxy, extension). Fall back to a slow, bounded
+  // poll: SETUP_POLL_MAX checks (5 minutes) per project per mount, which
+  // covers "just sent a test report" without polling a never-connected
+  // project from every open tab forever.
+  useEffect(() => {
+    if (!awaitingProjectId || channelState === 'live') return
+    let left = SETUP_POLL_MAX
+    const t = setInterval(() => {
+      if (document.hidden) return
+      invalidateSetupStatus()
+      if (--left <= 0) clearInterval(t)
+    }, 30_000)
+    return () => clearInterval(t)
+  }, [awaitingProjectId, channelState])
 
   const expand = useCallback(() => setStoredView('expanded'), [setStoredView])
   const minimize = useCallback(() => setStoredView('minimized'), [setStoredView])

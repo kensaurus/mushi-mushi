@@ -26,7 +26,7 @@ const SDK_WIDGET_POSITIONS = ['top-left', 'top-right', 'bottom-left', 'bottom-ri
 const SDK_WIDGET_THEMES = ['auto', 'light', 'dark'] as const;
 const SDK_SCREENSHOT_MODES = ['on-report', 'auto', 'off'] as const;
 const SDK_NATIVE_TRIGGER_MODES = ['shake', 'button', 'both', 'none'] as const;
-const SDK_WIDGET_LAUNCHERS = ['auto', 'banner', 'edge-tab', 'manual', 'hidden'] as const;
+const SDK_WIDGET_LAUNCHERS = ['auto', 'banner', 'edge-tab', 'attach', 'manual', 'hidden'] as const;
 const SDK_BANNER_VARIANTS = ['neon', 'brand', 'subtle'] as const;
 const SDK_BANNER_POSITIONS = ['top', 'bottom'] as const;
 
@@ -36,8 +36,10 @@ export interface SdkConfigRow {
   sdk_widget_position?: string | null;
   sdk_widget_theme?: string | null;
   sdk_widget_trigger_text?: string | null;
-  /** Launcher mode: 'auto' (FAB), 'banner', 'edge-tab', 'manual', 'hidden'. */
+  /** Launcher mode: 'auto' (FAB), 'banner', 'edge-tab', 'attach', 'manual', 'hidden'. */
   sdk_widget_launcher?: string | null;
+  /** CSS selector of the host button when the launcher is 'attach' (20261004120000). */
+  sdk_widget_attach_selector?: string | null;
   /** Banner strip variant when launcher is 'banner'. */
   sdk_banner_variant?: string | null;
   /** Banner strip position. */
@@ -65,12 +67,58 @@ export interface SdkConfigRow {
   sdk_min_description_length?: number | null;
   sdk_config_updated_at?: string | null;
   reporter_notifications_enabled?: boolean | null;
+  /**
+   * "Bug reports by Mushi" footer override (20260921000006). NULL = plan
+   * default, resolved by the caller (_shared/brand-footer.ts) and passed in
+   * as `brandFooterDefault` — this module stays pure.
+   */
+  widget_brand_footer?: boolean | null;
   // Workstream E — page-aware assistant.
   assistant_enabled?: boolean | null;
   assistant_label?: string | null;
   assistant_greeting?: string | null;
   assistant_suggestions?: unknown;
+  reporter_email_enabled?: boolean | null;
+  reporter_push_enabled?: boolean | null;
 }
+
+/**
+ * Every `project_settings` column the console's GET/PUT
+ * `/v1/admin/projects/:id/sdk-config` reads back through normalizeSdkConfig.
+ * One list for both routes: the PUT used to `.select()` a hand-written list
+ * that omitted `sdk_screenshot_sensitive_hint`, so a saved privacy caption
+ * never read back and the next save of any other field wiped it (QA #29).
+ * sdk-config-columns.test.ts fails if a widget/capture/native column that
+ * normalizeSdkConfig reads is missing here.
+ */
+export const SDK_CONFIG_CONSOLE_COLUMNS = [
+  'project_id',
+  'sdk_config_enabled',
+  'sdk_widget_position',
+  'sdk_widget_theme',
+  'sdk_widget_trigger_text',
+  'sdk_widget_launcher',
+  'sdk_widget_attach_selector',
+  'sdk_banner_variant',
+  'sdk_banner_position',
+  'sdk_banner_bug_cta',
+  'sdk_banner_feature_cta',
+  'sdk_banner_message',
+  'sdk_banner_label',
+  'sdk_screenshot_sensitive_hint',
+  'sdk_capture_console',
+  'sdk_capture_network',
+  'sdk_capture_performance',
+  'sdk_capture_screenshot',
+  'sdk_capture_element_selector',
+  'sdk_native_trigger_mode',
+  'sdk_min_description_length',
+  'sdk_config_updated_at',
+  'widget_brand_footer',
+] as const;
+
+/** {@link SDK_CONFIG_CONSOLE_COLUMNS} as a PostgREST `select` string. */
+export const SDK_CONFIG_CONSOLE_SELECT = SDK_CONFIG_CONSOLE_COLUMNS.join(', ');
 
 function oneOf<T extends readonly string[]>(
   value: unknown,
@@ -100,11 +148,31 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * field as optional (`remote.widget?.x ?? DEFAULT_SDK_CONFIG.x`), so this is
  * safe for both consumers.
  */
-export function normalizeSdkConfig(row?: SdkConfigRow | null) {
+export interface NormalizeSdkConfigOptions {
+  /**
+   * Plan-derived default for the brand footer (true for free cloud tiers).
+   * Emitted as `widget.brandFooter` when the column is NULL; omitted when
+   * the caller does not know the plan (pure unit tests, older callers).
+   */
+  brandFooterDefault?: boolean | null;
+  /** RESEND_API_KEY and RESEND_FROM_EMAIL are set (the caller checks env). */
+  emailProviderConfigured?: boolean;
+  /** VAPID public key when Web Push is configured, else null. */
+  vapidPublicKey?: string | null;
+}
+
+export function normalizeSdkConfig(row?: SdkConfigRow | null, opts: NormalizeSdkConfigOptions = {}) {
   return {
     enabled: row?.sdk_config_enabled ?? true,
     version: row?.sdk_config_updated_at ?? null,
     widget: {
+      // Growth loop footer: explicit column wins, then the plan default. The
+      // host's MIT `brandFooter` config is a hard override on the client.
+      ...(typeof row?.widget_brand_footer === 'boolean'
+        ? { brandFooter: row.widget_brand_footer }
+        : typeof opts.brandFooterDefault === 'boolean'
+          ? { brandFooter: opts.brandFooterDefault }
+          : {}),
       ...(isOneOf(row?.sdk_widget_position, SDK_WIDGET_POSITIONS) &&
       row?.sdk_widget_position !== 'bottom-right'
         ? { position: row.sdk_widget_position }
@@ -117,6 +185,8 @@ export function normalizeSdkConfig(row?: SdkConfigRow | null) {
       row?.sdk_widget_launcher !== 'auto'
         ? { launcher: row.sdk_widget_launcher }
         : {}),
+      // QA bug 121: 'attach' and its selector used to be dropped on save.
+      ...(row?.sdk_widget_attach_selector ? { attachToSelector: row.sdk_widget_attach_selector } : {}),
       ...(isOneOf(row?.sdk_banner_variant, SDK_BANNER_VARIANTS) && row?.sdk_banner_variant !== 'brand'
         ? { bannerVariant: row.sdk_banner_variant }
         : {}),
@@ -161,6 +231,14 @@ export function normalizeSdkConfig(row?: SdkConfigRow | null) {
       minDescriptionLength: Math.max(0, Math.min(1000, row?.sdk_min_description_length ?? 20)),
     },
     reporterNotificationsEnabled: row?.reporter_notifications_enabled !== false,
+    // Plan 018 §4.1 opt-in channels. A channel is offered to reporters only
+    // when the project turned it on AND the server can actually send it, so
+    // the widget never shows a checkbox that leads nowhere.
+    reporter: {
+      emailEnabled: row?.reporter_email_enabled === true && opts.emailProviderConfigured === true,
+      pushEnabled: row?.reporter_push_enabled === true && Boolean(opts.vapidPublicKey),
+      vapidPublicKey: row?.reporter_push_enabled === true && opts.vapidPublicKey ? opts.vapidPublicKey : null,
+    },
     // Workstream E — page-aware assistant. `enabled` gates the "Ask" tab in
     // the widget; greeting/suggestions are display-only. The knowledge
     // corpus and LLM keys never leave the server (POST /v1/sdk/assistant).
@@ -197,13 +275,26 @@ export function coerceSdkConfigUpdate(body: Record<string, unknown>): Record<str
     updates.sdk_widget_trigger_text = null;
   }
   if (isOneOf(widget.launcher, SDK_WIDGET_LAUNCHERS)) updates.sdk_widget_launcher = widget.launcher;
+  if (typeof widget.attachToSelector === 'string') {
+    const trimmed = widget.attachToSelector.trim();
+    updates.sdk_widget_attach_selector = trimmed ? trimmed.slice(0, 200) : null;
+  } else if (widget.attachToSelector === null) {
+    updates.sdk_widget_attach_selector = null;
+  }
   if (isOneOf(widget.bannerVariant, SDK_BANNER_VARIANTS)) updates.sdk_banner_variant = widget.bannerVariant;
   if (isOneOf(widget.bannerPosition, SDK_BANNER_POSITIONS)) updates.sdk_banner_position = widget.bannerPosition;
   if (typeof widget.bannerBugCta === 'string') {
     const trimmed = widget.bannerBugCta.trim();
     updates.sdk_banner_bug_cta = trimmed ? widget.bannerBugCta.slice(0, 60) : null;
+  } else if (widget.bannerBugCta === null) {
+    // The console sends null when the field is cleared; without this branch
+    // the old custom label survived every save (QA #259).
+    updates.sdk_banner_bug_cta = null;
   }
   if (typeof widget.bannerFeatureCta === 'boolean') updates.sdk_banner_feature_cta = widget.bannerFeatureCta;
+  // brandFooter: true/false = explicit override, null = back to the plan default.
+  if (typeof widget.brandFooter === 'boolean') updates.widget_brand_footer = widget.brandFooter;
+  else if (widget.brandFooter === null) updates.widget_brand_footer = null;
   if (typeof widget.bannerMessage === 'string') {
     const trimmed = widget.bannerMessage.trim();
     updates.sdk_banner_message = trimmed ? trimmed.slice(0, 240) : null;

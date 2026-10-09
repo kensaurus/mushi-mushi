@@ -1,5 +1,81 @@
 # @mushi-mushi/cli
 
+## 0.30.1
+
+### Patch Changes
+
+- 3417560: `mushi skills sync` says a long sync is still running in the background instead of reporting "0 synced".
+
+## 0.30.0
+
+### Minor Changes
+
+- 2b66be6: New `@mushi-mushi/ux` (`mushi-ux`, or `mushi ux` through the CLI): maps every page, tab and dialog of a running app, runs your coding agent (Claude Code, Cursor, Codex) on one screen at a time in a separate git worktree, keeps an edit only when accessibility, layout and console measurements do not get worse, flags screens a shared change moved, and shows it all in a local dashboard. Exploring the app never sends a write request. `--agent cursor-cloud` runs each edit in a Cursor Cloud agent, and the public `ux-loop` GitHub Action plus the `mushi-ux.yml` workflow template run the pass on your repo's CI and open one draft PR. `--sync` mirrors runs to the console's UX runs page; `mushi ux-runs` and `mushi portfolio groups` read them and group projects from the terminal. `mushi-ux ui` opens a local studio: pick the agent, a model from your own account's live list (Cursor, Cursor Cloud, Anthropic, OpenAI), a skill by name from kensaurus/skills, the pages and the ref to branch from, then watch the phase, progress and every attempt's screenshot. `--sync` refuses to mirror a run to a project other than the one the app reports to. A run first checks, in about a minute, that the agent can read a file, and names the fix when it cannot (signed out; a Claude Code hook blocking the Cursor CLI under Git Bash). Screenshots and checks skip dev overlays, build stamps, screen-reader-only links and anything passed with `--ignore` or marked `data-mushi-ux-ignore`. The studio and the console show the agent's live steps, the files changed so far, the time used out of the time box, and a warning when a run stops checking in. Agent output stays local: the console gets only the files each attempt read and edited. Page names drop the site name the titles share. Every run can be resumed with only its id (studio **Resume**, or `mushi-ux run --resume <runId>`): its settings and skill are saved when it starts, the branch returns to its last kept commit, a half-finished attempt or install runs again, and a run still checking in elsewhere is never resumed twice. Layout shift counts against an edit only past the 0.1 "good" threshold, and a rollback names what got worse ("tap targets under 24 px 0 → 2"). The agent's brief lists the files that render the screen (Next.js page, layout and co-located components) and asks for a first edit within a third of the time box; an attempt that runs out of time gets one more try with that note, and a screen whose agent never finishes shows as "Not finished", not "No change needed". Console messages from the framework's own dev tooling (React's key warning from Next's `OuterLayoutRouter`, Fast Refresh) are no longer reported as the app's problems, and the agent is told to stay out of `node_modules`. Captures wait for skeleton placeholders (by class or by a running skeleton/shimmer animation), and a screen is flagged as moved by another change only when a second screenshot confirms it. When an edit's only new problem is layout shift past 0.1, the screen is shot once more and the steadier reading counts, so a hot-reload blip does not roll back a good edit. New small-steps mode (`--steps`, on by default in the studio): the agent plans each screen as 2–5 small, separate improvements without editing, then makes one per attempt; each step is measured, committed or rolled back on its own (a step over 6 files is rolled back as too big), and the studio shows the plan as a checklist. When an agent that can resume its session (Cursor) runs out of time with nothing to show, the loop continues that same session once with "time is up, write it now" (2 minutes for a plan, 3 for an edit), keeping everything it read. The console's UX runs page shows each screen's plan as a checklist ("Plan: 2 of 4 steps kept"), names attempts by their step, counts kept edits rather than improved screens, folds repeated searches in the agent's step list, puts the plan beside the phone screenshot on wide screens (attempts stay full width below), offers "File as bug" only for screens with something wrong, and lists the start-a-run form after the results. A long plan step is shortened at a word, never inside a `code` span, and file names in a step show as code. The studio launcher asks four questions in order (what to improve: the whole app or pages you pick, and a skill; who does the work: agent, model, and the account and plan it spends, with published token prices and a link to the usage page, since no agent reports remaining credit; how much: a worst-case time; your app: the dev command, with the one that last mapped screens in this repo first). The skill list comes from the skill folders, so a skill the repo index misses can still be picked. A run whose mapping finds no screen fails and says why ("every page returned HTTP 500, so the app's dev server is failing", with the dev server's first error) instead of finishing as done, and the studio shows each mapping line as it happens. A page that changes while it is read (a client-side redirect) is skipped instead of failing the run, and redirect chains and page loads are capped. Each capture now runs in a fresh browser context seeded with the session's starting storage, so app state one screen writes no longer changes how another screen renders (it caused false "moved by another change" flags). Runs are faster: each step resumes the planning session instead of re-reading the files, regression re-shoots run once per screen, phone and desktop captures run side by side, and named pages are compiled together before mapping. An optional checker (`--checker claude-opus-5-5`, through Claude Code or the Anthropic API) reviews each kept step from crops of the changed area, twice in swapped order, and rolls it back only when both reviews prefer the original (ADR 0021); a change with nothing visible is kept and flagged for review. Skills come from the `@kensaurus/skills` npm package by default and several can be chained (`--skill a,b`); the studio suggests the next skill from each skill's Related list. The studio compares each attempt with the screen it started from in three views (Changes: zoomed crops of each changed area; Side by side; Slider), and the console opens on Side by side.
+
+### Patch Changes
+
+- 2b66be6: `mushi audit` now lists which inventory gates (crawl, status claims, API contract, orphan endpoints, unknown calls) the audit started again, and for each gate it did not re-run, why: it ran in the last day, there is no current inventory, no crawlable URL, the plan does not include it, or a rate limit.
+- 2b66be6: `mushi login` (and other commands that open the browser) no longer stop silently with exit code 0 right after the banner on Windows. The CLI waited for the browser opener to exit while letting Node forget it, so Node ended the process before the sign-in URL was shown; it now continues as soon as the opener starts.
+- 6f389a3: `add_byok_key` and `mushi keys add --provider` accept `openrouter`: OpenRouter keys are their own BYOK provider instead of an OpenAI key with an openrouter.ai base URL.
+
+## 0.29.2
+
+### Patch Changes
+
+- 56ec263: `add_byok_key` and `mushi keys add --provider` accept `supabase`: a scoped, read-only Supabase access token (`sbp_…`) for the project's linked Supabase project. The server checks it with a read-only query against `supabase_project_ref`, so set the ref first (console Settings → General → Supabase project). `mushi audit` and `run_fullstack_audit` now name the real console paths for both steps.
+
+## 0.29.1
+
+### Patch Changes
+
+- 90d0603: `mushi fix <reportId> --repo <repoId|owner/name>` sends the fix to one of the project's linked repos instead of the primary one, for example the backend repo of a project whose frontend is primary. A GitHub `owner/name` is looked up among the project's linked repos (needs a project id); a name that is not linked is refused before anything is dispatched, with the linked repos listed.
+- 90d0603: `mushi recipe init` now reads the whole repo. It lists the files git tracks, as `mushi recipe check` does, instead of stopping after the first 5,000, so token files and Supabase migrations deep in a large repo are found. The design scan covers the workspaces in `package.json` or `pnpm-workspace.yaml` and, for an app at the repo root, folders such as `app/`, `components/` and `lib/`; any folder with an `ARCHIVED.md` is skipped. A token file that a script generates is marked `role: "export"`, with the script that writes it as its `generator`, and is left out of `change.allowPaths`. A workflow that uploads to a store, deploys a site or edge functions, ships an OTA bundle or publishes a package is tagged `deploy` whatever its name. `.env.local.example`, `.env.sample` and `.env.template` count as the env template, as well as `.env.example`.
+
+## 0.29.0
+
+### Minor Changes
+
+- 5ad0800: Bring the console's newer pages to the terminal.
+
+  - `mushi portfolio show|findings|resources`: every app in your team on one screen, the problems repeated across them, and the domains, accounts and buckets they share.
+  - `mushi audit findings` and `mushi audit explain <id>`: each gate finding with file and line, and why one fired and how to fix it. `--gate` passes any gate name to the server, so a new server-side gate works before a CLI release. Plain `mushi audit` still runs the summary audit, now prints the server's error message whatever its shape, and ends by pointing at `mushi audit findings`.
+  - `mushi repo digest`: one token-budgeted text of the connected repo for an LLM, optionally starting from a report's files. `mushi repo diagram show|generate|publish|unpublish` manages the architecture diagram; publishing shows the preview first and needs `--yes`.
+  - `mushi connectors list|status|actions`: the team's connectors with their status and last error, and the actions requested on them. This is read-only; connectors are still added in the console.
+  - `mushi funnel show|set|growth`: one funnel across every app, and the operator growth funnel.
+  - `mushi code-health show|stats`: oversized files and bundle size from your CI.
+  - `mushi releases list|stats|show|draft|edit|delete|publish|calendar`: release notes that credit reporters. `publish` messages them, so it needs `--yes`.
+  - `mushi sentry import`: pull Sentry issues that are already open into the queue, by id or by search, with paging.
+  - `mushi outbox list|edit|release|discard`: reporter updates held for review. Release and discard need `--yes`.
+  - `mushi budgets show|autofix`: the monthly AI budget, the auto-fix caps, the plan spend cap and the auto-fix switch in one view.
+
+  Team-wide commands need an account-level key. When you belong to several organizations, the error lists them with the `--org` value to pass. Slow routes (diagram, release draft, Sentry import, digest) now get a longer timeout. Older routes that answered a bare error string now print that message instead of `undefined`.
+
+- 5ad0800: Add `mushi radar scan` and `mushi radar show`. `scan` finds storage rows deleted with SQL (the files stay in the bucket and keep billing) and, with `--push`, sends Mushi the build settings it checks against the current Google Play and App Store rules. Run it as one extra step in your existing CI job; Mushi never clones your repo. `show` lists every hole check for the project and what it found; a check that never ran says so and is never shown as passing.
+
+  Add `mushi recipe init`, `mushi recipe check [--push]` and `mushi recipe show`. `init` writes a starter `mushi.recipe.json` from what the repo shows. `check` validates it and its token files and lists colours that match no design token; `--push` sends the recipe to Mushi from your existing CI job, for repos Mushi has no token for. A rejected push fails the step.
+
+  Add `mushi store pull`. It copies the live App Store and Google Play listings into the repo in fastlane's metadata layout, once, using your own store keys on your machine. Nothing is sent to Mushi, and Mushi never holds a key that can publish. After that the listing is changed in a pull request and your own CI publishes it.
+
+- 5ad0800: `mushi recipe check` now runs Mushi's own design deviance rules (`off_token_color`, `off_token_font`, `off_scale_spacing`, `off_scale_radius`, `contrast_below_aa`, `raw_interactive_element`) over your tracked files and prints the same findings and 0–100 score the console shows. Add `--max-score <n>` to fail the step above a fixed score. With `--push`, Mushi scores the scan itself and the step fails when the project has turned on "fail the CI check" and the score is above its threshold, or when that check is on and Mushi could not store the scan.
+
+### Patch Changes
+
+- 5ad0800: `mushi recipe init` reads monorepos properly: it ignores token files in tests, fixtures and examples, scans `apps/*/src` and `packages/*/src`, finds a nested `supabase/migrations`, takes the default branch from `origin/HEAD` instead of assuming `main`, and tags deploy, publish and release workflows as `deploy`.
+
+## 0.28.0
+
+### Minor Changes
+
+- f5e94ce: `mushi status` prints an `Activation:` line with the project's phase (ingest, dispatch or loop) and the date of its first report, read from `GET /v1/admin/activation`. Keys without the `mcp:read` scope get a hint to run `mushi login --upgrade-scope` instead of a failed status command.
+
+  This release also ships `mushi upgrade --check` (exit 0 when current, 1 when outdated, 2 when the registry is unreachable), which merged after 0.27.1 and has not been on npm until now. The package's root export now declares its (empty) types, so TypeScript no longer reports missing declarations for `@mushi-mushi/cli`.
+
+### Patch Changes
+
+- f5e94ce: The CLI runs on the Node it claims. Its `commander` dependency had moved to 15, which requires Node ≥22.12, while the CLI (and every Mushi SDK) supports Node ≥20.19 — so `npm install -g mushi-mushi` on Node 20 warned, and with `engine-strict` it failed. Pinned back to commander 14, which supports Node ≥20.
+- f5e94ce: npm metadata. Each entry package's description is now a short role followed by one shared pitch — "The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor." — so the `mushi-mushi` card no longer stops mid-word at npm's 255-character cut. The author link points at the maintainer's GitHub account (the Bluesky handle it used to name was never registered), the Node floor is `>=20.19.0` everywhere to match `@mushi-mushi/core`, and the `sentry-alternative` keyword is gone (Mushi runs alongside Sentry). The `funding` field is gone too, because it pointed at a GitHub Sponsors page that is not enabled. `@mushi-mushi/react-native` no longer packs its 60 KB CHANGELOG.
+- f5e94ce: Smaller install. The package no longer ships the repository's `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md` and `SECURITY.md` — 32 KB in every tarball, more than the code in some packages. They are still in the GitHub repository the npm page links to.
+
 ## 0.27.1
 
 ### Patch Changes

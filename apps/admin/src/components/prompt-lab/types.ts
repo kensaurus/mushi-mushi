@@ -1,3 +1,5 @@
+import type { PromptLabStats } from './PromptLabStatsTypes'
+
 export interface AutoGenerationMetadata {
   parentVersion?: string
   failureCount?: number
@@ -84,4 +86,43 @@ export interface PromptLabData {
 export const STAGE_LABELS: Record<string, string> = {
   stage1: 'Stage 1 · Fast filter',
   stage2: 'Stage 2 · Classify',
+  judge: 'Judge',
+  fix: 'Fix-worker',
+  intelligence: 'Intelligence digest',
+  nl_plan: 'NL → SQL planner',
+  nl_summary: 'NL → summary',
+  synthetic: 'Synthetic generator',
+  modernizer: 'Dep modernizer',
+  prompt_tune: 'Prompt auto-tune',
+  'inventory-propose': 'Inventory proposer',
+  sentinel: 'Sentinel audit',
+}
+
+/** "stage1/v3", or the stage's name when the version is unknown. */
+export function bestScoreSource(stats: Pick<PromptLabStats, 'bestStage' | 'bestVersion'>): string | null {
+  if (!stats.bestStage) return null
+  if (stats.bestVersion) return `${stats.bestStage}/${stats.bestVersion}`
+  return STAGE_LABELS[stats.bestStage] ?? stats.bestStage
+}
+
+/**
+ * Stages a project may clone and customise: exactly the ones a worker reads
+ * through getPromptForStage. Mirrors CUSTOMIZABLE_PROMPT_STAGES in
+ * packages/server/supabase/functions/_shared/prompt-stages.ts.
+ */
+const CUSTOMIZABLE_PROMPT_STAGES: readonly string[] = [
+  'stage1',
+  'stage2',
+  'judge',
+  'fix',
+  'intelligence',
+  'nl_plan',
+  'nl_summary',
+  'synthetic',
+  'inventory-propose',
+  'sentinel',
+]
+
+export function isCustomizablePromptStage(stage: string): boolean {
+  return CUSTOMIZABLE_PROMPT_STAGES.includes(stage)
 }

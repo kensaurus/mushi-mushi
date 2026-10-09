@@ -26,6 +26,7 @@ const npmStubResolver = {
     if (!id.startsWith('npm:')) return null
     if (id === 'npm:zod@3') return null // handled by alias below
     if (id === 'npm:yaml@2') return null // handled by alias below
+    if (id === 'npm:hono@4') return null // handled by alias below
     return STUB
   },
 }
@@ -36,12 +37,28 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     include: ['src/**/*.test.ts'],
+    // Vitest defaults to 5s per test. Every test in this package is a pure
+    // unit test against stubs — 45 of them run in 3.7s when the package runs
+    // alone, about 80ms each. But `turbo run test` starts a vitest instance
+    // per workspace, and on a loaded machine individual tests were measured at
+    // 6–8s of wall clock purely from CPU starvation, tripping the 5s default:
+    // agent-status-poll, dispatch-fix, linear-agent-dispatch and web-push all
+    // failed that way while passing in isolation. 30s is far above anything
+    // this suite legitimately needs, so a genuinely hung test still fails —
+    // it just stops reporting scheduler contention as a test failure.
+    testTimeout: 30_000,
+    hookTimeout: 30_000,
     alias: {
       'npm:zod@3': 'zod',
       // The inventory v2 helper uses `npm:yaml@2` to parse customer
       // inventory.yaml. The Node-side test runs against the actually
       // installed `yaml` package so the parser behaves identically.
       'npm:yaml@2': 'yaml',
+      // Route modules build sub-routers with `new Hono()`. Route tests mount
+      // them on a real app and send requests, so the bare specifier maps to
+      // the installed `hono` (a dev dependency); sub-paths such as
+      // `npm:hono@4/cors` resolve inside the same package.
+      'npm:hono@4': 'hono',
     },
   },
 })

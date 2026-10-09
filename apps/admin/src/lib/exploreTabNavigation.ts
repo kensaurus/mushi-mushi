@@ -1,6 +1,6 @@
 /**
  * Grouped navigation for /explore — reduces 8 flat tabs to 5 primary groups
- * with optional secondary segments (Understand: Ask/Tour/Domains, Map: Graph/Layers).
+ * with optional secondary segments (Understand: Ask/Tour/Domains, Map: Graph/Layers/Diagram).
  * URL params stay backward-compatible (`?tab=ask` still works).
  */
 
@@ -9,15 +9,16 @@ import type { ExploreTabId } from '../components/explore/ExploreStatsTypes'
 export type ExplorePrimaryTabId = 'overview' | 'understand' | 'map' | 'search' | 'index'
 
 export type ExploreUnderstandView = 'ask' | 'tour' | 'domains' | 'knowledge'
-export type ExploreMapView = 'graph' | 'layers'
+export type ExploreMapView = 'graph' | 'layers' | 'diagram'
 
 const UNDERSTAND_VIEWS: ExploreUnderstandView[] = ['ask', 'tour', 'domains', 'knowledge']
-const MAP_VIEWS: ExploreMapView[] = ['graph', 'layers']
+const MAP_VIEWS: ExploreMapView[] = ['graph', 'layers', 'diagram']
 
 export function resolveExploreTab(value: string | null): ExploreTabId {
   if (
     value === 'overview' ||
-    value === 'layers' ||
+    value === 'graph' ||
+    value === 'diagram' ||
     value === 'search' ||
     value === 'index' ||
     value === 'ask' ||
@@ -27,7 +28,43 @@ export function resolveExploreTab(value: string | null): ExploreTabId {
   ) {
     return value
   }
-  return 'graph'
+  // Layers is the default map: hundreds of files drawn as a graph and fit to
+  // the canvas render as a thin strip with an empty minimap.
+  return 'layers'
+}
+
+/**
+ * The URL for switching to `tab`. Always writes `tab` explicitly, Graph
+ * included: a bare `/explore` lets Beginner and Quickstart modes pick a
+ * starting tab, so deleting the param for Graph made every "show in graph"
+ * action (Map tab, citations, tour stops, domain files) bounce straight back.
+ */
+export function exploreTabSearchParams(prev: URLSearchParams, tab: ExploreTabId): URLSearchParams {
+  const next = new URLSearchParams(prev)
+  next.set('tab', tab)
+  return next
+}
+
+const TAB_ACTION_LABELS: Partial<Record<ExploreTabId, string>> = {
+  index: 'Open Index',
+  ask: 'Open Ask',
+  graph: 'Open Graph',
+  layers: 'Open Layers',
+  overview: 'Open Summary',
+  search: 'Open Search',
+}
+
+/**
+ * Button text for a banner link, named after where it goes. The stale and
+ * ready banners said "Open Graph" while linking to the Index or Ask tab.
+ */
+export function exploreActionLabelFor(to: string | null | undefined): string {
+  if (!to) return 'Open Graph'
+  if (to.startsWith('/connect')) return 'Open Connect'
+  if (!to.startsWith('/explore')) return 'Open'
+  const query = to.includes('?') ? to.slice(to.indexOf('?') + 1) : ''
+  const tab = resolveExploreTab(new URLSearchParams(query).get('tab'))
+  return TAB_ACTION_LABELS[tab] ?? 'Open'
 }
 
 export function primaryTabOf(tab: ExploreTabId): ExplorePrimaryTabId {
@@ -45,7 +82,7 @@ export function defaultTabForPrimary(primary: ExplorePrimaryTabId): ExploreTabId
     case 'understand':
       return 'ask'
     case 'map':
-      return 'graph'
+      return 'layers'
     case 'search':
       return 'search'
     case 'index':
@@ -79,7 +116,7 @@ export const EXPLORE_PRIMARY_TABS: Array<{
   {
     id: 'map',
     label: 'Map',
-    description: 'Interactive graph or layer lane — click nodes for plain-English summaries.',
+    description: 'Interactive graph, layer lane, or an AI architecture diagram — click nodes for plain-English summaries.',
   },
   {
     id: 'search',
@@ -101,6 +138,7 @@ export const EXPLORE_UNDERSTAND_VIEWS: Array<{ id: ExploreUnderstandView; label:
 ]
 
 export const EXPLORE_MAP_VIEWS: Array<{ id: ExploreMapView; label: string }> = [
-  { id: 'graph', label: 'Graph' },
   { id: 'layers', label: 'Layers' },
+  { id: 'graph', label: 'Graph' },
+  { id: 'diagram', label: 'Diagram' },
 ]

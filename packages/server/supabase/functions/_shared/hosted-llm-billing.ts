@@ -31,14 +31,15 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { getServiceClient } from './db.ts';
 import { log as rootLog } from './logger.ts';
 import {
-  computeProviderCostMicro,
   getModelPrice,
   makeRemoteBackend,
   setWalletDeadLetterSink,
   WalletDeniedError,
   type Usage,
   type WalletBackend,
+  type WalletDebitDeadLetter,
 } from './kensaurus-wallet.ts';
+import { decideHostedLlmCharge } from './hosted-llm-charge.ts';
 import { reportError } from './sentry.ts';
 
 const log = rootLog.child('hosted-llm-billing');
@@ -53,7 +54,19 @@ export { WalletDeniedError };
 // failed after both attempts used to be a console.error and gone — silent
 // revenue loss. Persist it (unique on request_id so the debit RPC's own
 // dedupe makes replay safe) and page via Sentry.
-setWalletDeadLetterSink(async (entry) => {
+/**
+ * Persist one unit of lost revenue and page Sentry.
+ *
+ * Shared by BOTH ways money goes missing, so neither can decay into a log
+ * line: a debit that failed after a paid call (the original C3 sink), and a
+ * call we could not price at all (2026-09-20, MUSHI-MUSHI-SERVER-1Z).
+ * `provider_cost_micro` is NOT NULL DEFAULT 0, so an unpriced row storing 0
+ * is legal — the replayable amount lives in `payload`.
+ */
+async function recordLostRevenue(
+  entry: WalletDebitDeadLetter,
+  sentryMessage: string,
+): Promise<void> {
   const db = getServiceClient();
   const { error } = await db.from('wallet_debit_dead_letters').upsert(
     {
@@ -70,11 +83,15 @@ setWalletDeadLetterSink(async (entry) => {
   if (error) {
     log.error('wallet dead-letter persist failed', { requestId: entry.requestId, error: error.message });
   }
-  reportError(new Error(`wallet debit lost after retry: ${entry.error.slice(0, 200)}`), {
+  reportError(new Error(sentryMessage), {
     tags: { area: 'wallet', feature: entry.feature },
     extra: { requestId: entry.requestId, providerCostMicro: entry.providerCostMicro, model: entry.model },
   });
-});
+}
+
+setWalletDeadLetterSink((entry) =>
+  recordLostRevenue(entry, `wallet debit lost after retry: ${entry.error.slice(0, 200)}`),
+);
 
 export type HostedLlmBillingMode = 'off' | 'shadow' | 'on';
 
@@ -401,8 +418,17 @@ export interface ChargeHostedLlmArgs {
  *
  * Deliberately does not use `meteredCall`: that refuses unpriced models by
  * throwing, which would take triage dark the moment mushi ships a model kenji
- * has no `kensaurus_model_prices` row for. Here an unpriced model logs loudly
- * and skips the debit.
+ * has no `kensaurus_model_prices` row for. Failing closed is not even
+ * available here — by the time this runs the provider call has completed and
+ * the user has their answer; there is nothing left to reject.
+ *
+ * So the money is made RECOVERABLE instead of refused: any call that cannot
+ * be priced to a non-zero cost (no row, or a row plus usage that computes to
+ * zero) is written to `wallet_debit_dead_letters` with its full usage and
+ * paged via Sentry, exactly like a debit that failed after a paid call. It is
+ * never a guessed price — `kensaurus_model_prices` stays the single source of
+ * truth for money movement, and a replay can recompute the real amount once
+ * the gap is closed. See `_shared/hosted-llm-charge.ts` for the invariant.
  */
 export async function chargeHostedLlm(args: ChargeHostedLlmArgs): Promise<void> {
   const mode = hostedLlmBillingMode();
@@ -416,19 +442,54 @@ export async function chargeHostedLlm(args: ChargeHostedLlmArgs): Promise<void> 
 
     const backend = makeMushiWalletBackend(identity);
     const price = await getModelPrice(backend, args.provider, args.model);
-    if (!price) {
-      // Named loudly: an unpriced model is hosted spend nobody is paying for.
-      log.error('No wallet price for hosted model — call not charged', {
+
+    const decision = decideHostedLlmCharge({
+      price,
+      usage: args.usage,
+      provider: args.provider,
+      model: args.model,
+    });
+    const requestId = crypto.randomUUID();
+
+    if (decision.kind === 'skip') {
+      // A hosted call we cannot price is revenue nobody is collecting. It used
+      // to be a log line that vanished; now it lands in the same dead-letter
+      // table as a lost debit, carrying the full usage so the amount can be
+      // recomputed and replayed once the gap is closed.
+      log.error('Hosted model call could not be priced — not charged', {
         projectId: args.projectId,
         provider: args.provider,
         model: args.model,
         feature: args.feature,
+        reason: decision.reason,
+        detail: decision.detail,
       });
+      await recordLostRevenue(
+        {
+          requestId,
+          app: APP,
+          feature: args.feature,
+          model: args.model,
+          providerCostMicro: 0,
+          error: `${decision.reason}: ${decision.detail}`,
+          payload: {
+            reason: decision.reason,
+            provider: args.provider,
+            usage: args.usage,
+            unitKind: price?.unit_kind ?? null,
+            traceId: args.traceId ?? null,
+            shadow,
+            mushi_project_id: args.projectId,
+            mushi_owner_id: identity.userId,
+            metadata: args.metadata ?? {},
+          },
+        },
+        `hosted LLM call not charged (${decision.reason}): ${args.provider}:${args.model}`,
+      );
       return;
     }
 
-    const providerCostMicro = computeProviderCostMicro(price, args.usage);
-    const requestId = crypto.randomUUID();
+    const { providerCostMicro } = decision;
     const planId = await resolvePlanId(args.projectId);
 
     const debitArgs = {

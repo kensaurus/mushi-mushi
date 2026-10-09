@@ -1,5 +1,5 @@
-name: 'Mushi Mushi Sourcemaps Upload'
-description: 'Upload source maps (Debug-ID ready) to Mushi from CI — one composite step for your release job. For report-coverage gating, pair with the mushi-ci action.'
+name: 'Mushi Mushi CI Step'
+description: 'One step for your existing CI job: upload source maps, and optionally send the portfolio checks (radar scan, recipe check) to Mushi.'
 author: 'Kenji Sakuramoto'
 branding:
   icon: upload-cloud
@@ -7,18 +7,40 @@ branding:
 
 # Composite action (as opposed to the node action in packages/mcp-ci) so it can
 # drive the published `mushi` CLI over npx with plain shell — no bundled runtime.
+#
+# Every input reaches the shell through `env:`, never as `${{ inputs.* }}`
+# inside `run:`, so an input value can't inject shell.
+#
+# Source-map upload stays on by default, so existing users keep the same
+# behaviour. The portfolio checks are opt-in:
+#
+#   - uses: actions/checkout@v4          # radar/recipe read the repo
+#   - uses: kensaurus/mushi-mushi/packages/cli@<ref>
+#     with:
+#       api-key: ${{ secrets.MUSHI_INGEST_KEY }}
+#       upload-sourcemaps: 'false'
+#       radar-scan: 'true'
+#       recipe-check: 'true'
 inputs:
   api-key:
-    description: 'Mushi project API key (store as a repo secret: MUSHI_API_KEY).'
+    description: 'Mushi project API key (store as a repo secret). Any active project-scoped key works, including the SDK ingest key; an org-scoped key does not.'
     required: true
   api-endpoint:
     description: 'Override API endpoint for self-hosted instances.'
     required: false
     default: 'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api'
   cli-version:
-    description: 'Version of @mushi-mushi/cli to run (default: latest).'
+    description: 'Version of @mushi-mushi/cli to run (default: latest). radar-scan and recipe-check need 0.29.0 or later; the step checks and fails with that message on an older CLI.'
     required: false
     default: 'latest'
+  working-directory:
+    description: 'Repo root the radar scan and recipe check read (relative to the workspace).'
+    required: false
+    default: '.'
+  upload-sourcemaps:
+    description: 'Upload source maps (the original behaviour of this action). Set to false for a checks-only step.'
+    required: false
+    default: 'true'
   release:
     description: 'Release identifier the source maps belong to (e.g. the git SHA or a semver tag). Must match the `release` your SDK reports at runtime.'
     required: false
@@ -28,14 +50,32 @@ inputs:
     required: false
     default: './dist'
   dry-run:
-    description: 'List the files that would be uploaded without uploading them.'
+    description: 'List the source-map files that would be uploaded without uploading them.'
     required: false
     default: 'false'
+  radar-scan:
+    description: 'Run `mushi radar scan --push` (needs @mushi-mushi/cli 0.29.0 or later): storage deletes done in SQL, plus the build files the store rules read, sent to Mushi (portfolio_radar_ci gate).'
+    required: false
+    default: 'false'
+  recipe-check:
+    description: 'Run `mushi recipe check --push` (needs @mushi-mushi/cli 0.29.0 or later): validate mushi.recipe.json and its token files and send the recipe and colour findings to Mushi. Fails the step when the manifest is invalid.'
+    required: false
+    default: 'false'
+  fail-on-error:
+    description: 'When false, a radar or recipe step that fails (an invalid manifest, Mushi unreachable) prints a warning instead of failing the job.'
+    required: false
+    default: 'true'
 
 outputs:
   uploaded:
     description: 'true when the sourcemaps upload step completed.'
     value: ${{ steps.upload.outputs.uploaded }}
+  radar-pushed:
+    description: 'true when the radar scan results reached Mushi.'
+    value: ${{ steps.radar.outputs.pushed }}
+  recipe-pushed:
+    description: 'true when the recipe check results reached Mushi.'
+    value: ${{ steps.recipe.outputs.pushed }}
 
 runs:
   using: 'composite'
@@ -47,23 +87,88 @@ runs:
 
     - name: Upload source maps
       id: upload
+      if: inputs.upload-sourcemaps == 'true'
       shell: bash
       env:
         MUSHI_API_KEY: ${{ inputs.api-key }}
         MUSHI_API_ENDPOINT: ${{ inputs.api-endpoint }}
+        MUSHI_CLI_VERSION: ${{ inputs.cli-version }}
+        MUSHI_RELEASE: ${{ inputs.release }}
+        MUSHI_SOURCEMAPS_DIR: ${{ inputs.sourcemaps-dir }}
+        MUSHI_DRY_RUN: ${{ inputs.dry-run }}
       run: |
         set -euo pipefail
-        DRY=""
-        if [ "${{ inputs.dry-run }}" = "true" ]; then DRY="--dry-run"; fi
-        npx --yes @mushi-mushi/cli@"${{ inputs.cli-version }}" sourcemaps upload \
-          --release "${{ inputs.release }}" \
-          --dir "${{ inputs.sourcemaps-dir }}" \
-          $DRY
+        args=(sourcemaps upload --release "$MUSHI_RELEASE" --dir "$MUSHI_SOURCEMAPS_DIR")
+        if [ "$MUSHI_DRY_RUN" = "true" ]; then args+=(--dry-run); fi
+        npx --yes "@mushi-mushi/cli@${MUSHI_CLI_VERSION}" "${args[@]}"
         echo "uploaded=true" >> "$GITHUB_OUTPUT"
 
+    - name: Mushi radar scan
+      id: radar
+      if: inputs.radar-scan == 'true'
+      shell: bash
+      env:
+        MUSHI_API_KEY: ${{ inputs.api-key }}
+        MUSHI_API_ENDPOINT: ${{ inputs.api-endpoint }}
+        MUSHI_CLI_VERSION: ${{ inputs.cli-version }}
+        MUSHI_WORKDIR: ${{ inputs.working-directory }}
+        MUSHI_FAIL_ON_ERROR: ${{ inputs.fail-on-error }}
+        MUSHI_CLI_MIN_PORTFOLIO: '0.29.0'
+      run: |
+        set -uo pipefail
+        # `radar scan` first shipped in @mushi-mushi/cli 0.29.0; an older CLI
+        # would fail with "unknown command", so say what to change instead.
+        cli_version="$(npx --yes "@mushi-mushi/cli@${MUSHI_CLI_VERSION}" --version 2>/dev/null | tail -n 1 | tr -d '[:space:]')"
+        if [ -n "$cli_version" ] && [ "$(printf '%s\n%s\n' "$MUSHI_CLI_MIN_PORTFOLIO" "$cli_version" | sort -V | head -n 1)" = "$MUSHI_CLI_MIN_PORTFOLIO" ]; then
+          cli_ok=true
+        else
+          cli_ok=false
+          echo "::error title=Mushi radar scan::radar scan needs @mushi-mushi/cli >= $MUSHI_CLI_MIN_PORTFOLIO, but cli-version '$MUSHI_CLI_VERSION' resolved to '${cli_version:-nothing}'. Set cli-version to $MUSHI_CLI_MIN_PORTFOLIO or later."
+        fi
+        if [ "$cli_ok" = "true" ] && npx --yes "@mushi-mushi/cli@${MUSHI_CLI_VERSION}" radar scan --push --dir "$MUSHI_WORKDIR"; then
+          echo "pushed=true" >> "$GITHUB_OUTPUT"
+        elif [ "$MUSHI_FAIL_ON_ERROR" = "true" ]; then
+          exit 1
+        else
+          echo "::warning title=Mushi radar scan::radar scan --push failed; continuing because fail-on-error is false."
+          echo "pushed=false" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Mushi recipe check
+      id: recipe
+      if: inputs.recipe-check == 'true'
+      shell: bash
+      env:
+        MUSHI_API_KEY: ${{ inputs.api-key }}
+        MUSHI_API_ENDPOINT: ${{ inputs.api-endpoint }}
+        MUSHI_CLI_VERSION: ${{ inputs.cli-version }}
+        MUSHI_WORKDIR: ${{ inputs.working-directory }}
+        MUSHI_FAIL_ON_ERROR: ${{ inputs.fail-on-error }}
+        MUSHI_CLI_MIN_PORTFOLIO: '0.29.0'
+      run: |
+        set -uo pipefail
+        # `recipe check` first shipped in @mushi-mushi/cli 0.29.0; an older CLI
+        # would fail with "unknown command", so say what to change instead.
+        cli_version="$(npx --yes "@mushi-mushi/cli@${MUSHI_CLI_VERSION}" --version 2>/dev/null | tail -n 1 | tr -d '[:space:]')"
+        if [ -n "$cli_version" ] && [ "$(printf '%s\n%s\n' "$MUSHI_CLI_MIN_PORTFOLIO" "$cli_version" | sort -V | head -n 1)" = "$MUSHI_CLI_MIN_PORTFOLIO" ]; then
+          cli_ok=true
+        else
+          cli_ok=false
+          echo "::error title=Mushi recipe check::recipe check needs @mushi-mushi/cli >= $MUSHI_CLI_MIN_PORTFOLIO, but cli-version '$MUSHI_CLI_VERSION' resolved to '${cli_version:-nothing}'. Set cli-version to $MUSHI_CLI_MIN_PORTFOLIO or later."
+        fi
+        if [ "$cli_ok" = "true" ] && npx --yes "@mushi-mushi/cli@${MUSHI_CLI_VERSION}" recipe check --push --dir "$MUSHI_WORKDIR"; then
+          echo "pushed=true" >> "$GITHUB_OUTPUT"
+        elif [ "$MUSHI_FAIL_ON_ERROR" = "true" ]; then
+          exit 1
+        else
+          echo "::warning title=Mushi recipe check::recipe check --push failed; continuing because fail-on-error is false."
+          echo "pushed=false" >> "$GITHUB_OUTPUT"
+        fi
+
 # ── Pair with report-coverage gating ────────────────────────────────────────────
-# This action only uploads source maps. To also gate a merge on Mushi report
-# classification coverage, add the node action in the same job:
+# This action uploads source maps and sends the portfolio checks. To also gate a
+# merge on Mushi report classification coverage, add the node action in the
+# same job:
 #
 #   - uses: kensaurus/mushi-mushi/packages/mcp-ci@<ref>
 #     with:

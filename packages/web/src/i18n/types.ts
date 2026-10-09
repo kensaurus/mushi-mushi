@@ -12,39 +12,74 @@ export interface MushiLocale {
     error: string;
   };
   step1: {
-    heading: string;
-    /** Section label above the primary report categories. */
-    reportSectionLabel: string;
-    /** Collapsible overflow nav for inbox, assistant, community, etc. */
-    moreNavLabel: string;
+    /** @deprecated The 3-step flow is retired (Plan 018); unused since 1.30. */
+    heading?: string;
+    /** @deprecated Unused since 1.30. */
+    reportSectionLabel?: string;
+    /** @deprecated Unused since 1.30. */
+    moreNavLabel?: string;
+    /** Labels of the header overflow menu. */
     moreNav: {
-      yourReports: string;
-      yourReportsDesc: string;
-      unreadNew: string;
+      /** @deprecated Unused since 1.30 — see `panel.yourReports`. */
+      yourReports?: string;
+      /** @deprecated Unused since 1.30. */
+      yourReportsDesc?: string;
+      /** @deprecated Unused since 1.30. */
+      unreadNew?: string;
       communityIdeas: string;
-      communityIdeasDesc: string;
+      /** @deprecated Unused since 1.30. */
+      communityIdeasDesc?: string;
       leaderboard: string;
       joinCommunity: string;
       myAccount: string;
     };
     categories: Record<MushiReportCategory, string>;
-    categoryDescriptions: Record<MushiReportCategory, string>;
-    /** Progressive-disclosure toggle under the primary category card. */
-    moreCategoriesLabel: string;
-    /** Hidden-category count on the toggle; `{n}` placeholder. */
-    moreCategoriesCount: string;
+    /** @deprecated Unused since 1.30. */
+    categoryDescriptions?: Record<MushiReportCategory, string>;
+    /** @deprecated Unused since 1.30. */
+    moreCategoriesLabel?: string;
+    /** @deprecated Unused since 1.30. */
+    moreCategoriesCount?: string;
   };
   step2: {
-    heading: string;
+    /** @deprecated Unused since 1.30. */
+    heading?: string;
+    /** Optional sub-chips shown after a type is picked (the first four, minus "Other"). */
     intents: Record<MushiReportCategory, string[]>;
   };
   step3: {
-    heading: string;
+    /** @deprecated Unused since 1.30. */
+    heading?: string;
+    /** Placeholder of the one-screen report textarea. */
     descriptionPlaceholder: string;
+    /** Placeholder when the Idea chip is picked. */
+    featurePlaceholder: string;
+    /** @deprecated Unused since 1.30. */
+    featureExamples?: string[];
+    /** @deprecated Unused since 1.30. */
+    otherPlaceholder?: string;
+    /** Footer shortcut hint; `{key}` is ⌘ on Apple platforms, Ctrl elsewhere. */
+    submitHint: string;
+    /** @deprecated Unused since 1.30 — the hint is "Add a few words". */
+    charsNeeded?: string;
     screenshotButton: string;
     screenshotAttached: string;
     screenshotCapturing: string;
-    screenshotFailed: string;
+    /** @deprecated The web widget now shows `screenshotRetry` + `screenshotErrors`; kept for type compatibility. */
+    screenshotFailed?: string;
+    /** Screenshot button label after a failed capture. */
+    screenshotRetry: string;
+    /** Offered after a failed capture: user-consented tab share (getDisplayMedia). */
+    screenshotShareTab: string;
+    /** Why the last capture failed, shown under the attachment row. */
+    screenshotErrors: {
+      permission: string;
+      unsupported: string;
+      taint: string;
+      timeout: string;
+      csp: string;
+      error: string;
+    };
     /** Alt text for the attached-screenshot preview image. */
     screenshotPreviewAlt: string;
     /** Default privacy caption shown beside the screenshot preview. */
@@ -54,11 +89,37 @@ export interface MushiLocale {
     elementCapturing: string;
     elementFailed: string;
     elementSelectorHint: string;
-    optional: string;
-    /** Inline validation: description is below the minimum length. */
-    tooShort: string;
-    /** Example starter chips rendered above the textarea to lower the barrier. */
-    examplePrompts: string[];
+    /** @deprecated Unused since 1.30. */
+    optional?: string;
+    /** @deprecated Unused since 1.30 — core `reporterCopy().ui.addWords`. */
+    tooShort?: string;
+    /** @deprecated Unused since 1.30. */
+    examplePrompts?: string[];
+  };
+  /** One-screen report, header and notification copy (Plan 018 §1). */
+  panel: {
+    /** Report screen title. */
+    title: string;
+    /** "More…" chip: reveals the host's own categories. */
+    more: string;
+    /** Element picker button. */
+    pointAt: string;
+    remove: string;
+    markUp: string;
+    /** Privacy line under the attachments. */
+    privacy: string;
+    send: string;
+    /** Header pill that opens "Your reports". */
+    yourReports: string;
+    /** Badge text on the pill; `{n}` placeholder. */
+    newCount: string;
+    /** Header overflow menu button label. */
+    moreOptions: string;
+    /** Title of the report detail view. */
+    reportTitle: string;
+    /** Web push opt-in button. */
+    notifyMe: string;
+    notifyOn: string;
   };
   assistant: {
     defaultLabel: string;
@@ -77,7 +138,8 @@ export interface MushiLocale {
     };
   };
   flows: {
-    eyebrows: {
+    /** @deprecated Unused since 1.30 (no brand eyebrow in the header). */
+    eyebrows?: {
       inbox: string;
       roadmap: string;
       community: string;
@@ -90,8 +152,10 @@ export interface MushiLocale {
     reports: {
       title: string;
       loading: string;
-      empty: string;
-      leaderboardLink: string;
+      /** @deprecated Unused since 1.30 — core `ui.empty`. */
+      empty?: string;
+      /** @deprecated Unused since 1.30. */
+      leaderboardLink?: string;
     };
     roadmap: {
       title: string;
@@ -135,15 +199,28 @@ export interface MushiLocale {
       unknownApp: string;
     };
     thread: {
-      title: string;
+      /** @deprecated Unused since 1.30 — see `panel.reportTitle`. */
+      title?: string;
       loading: string;
-      empty: string;
-      confirmFixed: string;
-      notFixed: string;
+      /** @deprecated Unused since 1.30 — core `ui.noReplies`. */
+      empty?: string;
+      /** @deprecated Unused since 1.30 — core `ui.yes`. */
+      confirmFixed?: string;
+      /** @deprecated Unused since 1.30 — core `ui.notYet`. */
+      notFixed?: string;
       replyPlaceholder: string;
-      send: string;
+      /** @deprecated Unused since 1.30 — see `panel.send`. */
+      send?: string;
+      /** @deprecated Unused since 1.30 — core `ui.loadError`. */
+      loadFailed?: string;
+      /** @deprecated Unused since 1.30 — core `ui.retry`. */
+      retry?: string;
     };
     success: {
+      /** @deprecated Unused since 1.30 — the receipt title is core `ui.sent`. */
+      title?: string;
+      /** Closes the panel from the success step. */
+      done: string;
       trackReport: string;
       receipt: string;
       delivering: string;
@@ -163,14 +240,19 @@ export interface MushiLocale {
     };
     featureRequest: {
       label: string;
-      description: string;
+      /** @deprecated Unused since 1.30. */
+      description?: string;
     };
     /** Beta-mode strip on the category step. */
     betaStrip: {
       /** Default status line when the host sets no message; `{appName}` placeholder. */
       defaultMessage: string;
-      /** Where reports land; `{email}` placeholder. */
+      /** Optional contact line, rendered as a mailto link; `{email}` placeholder. Nothing is emailed. */
       contactHint: string;
+      /** Who sees the report; `{appName}` placeholder. */
+      teamSees: string;
+      /** Same, when the host gave no app name. */
+      teamSeesGeneric: string;
       /** aria-label for the strip. */
       ariaLabel: string;
     };
@@ -179,6 +261,7 @@ export interface MushiLocale {
       /** `{version}` placeholder. */
       whatsNew: string;
     };
+    /** Link text of the "Bug reports by Mushi" mark (widget.brandFooter). No placeholders. */
     poweredBy: string;
   };
 }

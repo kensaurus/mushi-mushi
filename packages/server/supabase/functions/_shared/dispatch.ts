@@ -18,13 +18,23 @@
 import { getServiceClient } from './db.ts'
 import { log } from './logger.ts'
 import { notifyTeamFixEvent } from './team-notify.ts'
+import { featureRequestDispatchBlock } from './report-category.ts'
+import { fixDispatchResolvedBlock } from './fix-report-truth.ts'
+import type { DispatchTrigger } from './autofix-budget.ts'
 
 export interface DispatchResult {
   ok: boolean
   dispatchId?: string
   status?: string
   createdAt?: string
-  code?: 'AUTOFIX_DISABLED' | 'ALREADY_DISPATCHED' | 'DISPATCH_FAILED' | 'FORBIDDEN'
+  code?:
+    | 'AUTOFIX_DISABLED'
+    | 'ALREADY_DISPATCHED'
+    | 'DISPATCH_FAILED'
+    | 'FORBIDDEN'
+    | 'FEATURE_REQUEST'
+    | 'ALREADY_FIXED'
+    | 'REPORT_DISMISSED'
   message?: string
 }
 
@@ -48,6 +58,12 @@ interface DispatchInput {
   userId?: string
   /** Extra context stored in dispatch_metadata (e.g. { source: 'slack', slackUser: 'U...' }). */
   metadata?: Record<string, unknown>
+  /**
+   * 'manual' when a person asked for this fix (Slack button, voice
+   * confirmation, Linear delegation). The auto-fix caps apply only to
+   * 'automatic' dispatches — see _shared/autofix-budget.ts.
+   */
+  trigger: DispatchTrigger
 }
 
 export async function dispatchFixForReport(input: DispatchInput): Promise<DispatchResult> {
@@ -98,6 +114,34 @@ export async function dispatchFixForReport(input: DispatchInput): Promise<Dispat
     }
   }
 
+  // A reporter's feature request is not a defect to auto-fix until a human
+  // re-categorizes it (Slack card, Linear agent, modernizer all land here).
+  const { data: report } = await db
+    .from('reports')
+    .select('status, user_category, user_intent, category, category_confirmed_at, stage1_classification, stage2_analysis')
+    .eq('id', input.reportId)
+    .eq('project_id', input.projectId)
+    .maybeSingle()
+  const featureBlock = report ? featureRequestDispatchBlock(report) : null
+  if (featureBlock) {
+    return { ok: false, code: 'FEATURE_REQUEST', message: featureBlock }
+  }
+
+  // Same guard as POST /v1/admin/fixes/dispatch: a report a merged PR fixed,
+  // or a human dismissed, is not dispatched again until it is reopened.
+  if (report) {
+    const { data: mergedAttempts } = await db
+      .from('fix_attempts')
+      .select('id, report_id, pr_number, pr_state, merged_at, created_at')
+      .eq('report_id', input.reportId)
+      .limit(50)
+    const resolvedBlock = fixDispatchResolvedBlock(
+      { id: input.reportId, status: (report as { status?: string | null }).status },
+      mergedAttempts ?? [],
+    )
+    if (resolvedBlock) return { ok: false, ...resolvedBlock }
+  }
+
   const { data: existing } = await db
     .from('fix_dispatch_jobs')
     .select('id, status')
@@ -121,7 +165,7 @@ export async function dispatchFixForReport(input: DispatchInput): Promise<Dispat
       report_id: input.reportId,
       ...(input.requestedBy ? { requested_by: input.requestedBy } : {}),
       status: 'queued',
-      ...(input.metadata ? { dispatch_metadata: input.metadata } : {}),
+      dispatch_metadata: { ...(input.metadata ?? {}), trigger: input.trigger },
     })
     .select('id, status, created_at')
     .single()

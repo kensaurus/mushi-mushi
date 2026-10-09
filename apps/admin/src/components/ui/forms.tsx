@@ -1,5 +1,6 @@
 import React, { useState, useEffect, forwardRef } from 'react';
 import type { ReactNode, SelectHTMLAttributes, ButtonHTMLAttributes, TextareaHTMLAttributes } from 'react';
+import { Link } from 'react-router-dom';
 import { Card, LabelHelp } from './layout';
 import { CHIP_TONE } from '../../lib/chipTone'
 
@@ -11,13 +12,15 @@ interface FilterSelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   options: readonly string[]
   /** Override auto-generated id; defaults to filter-{slugified-label}. */
   id?: string
+  /** Human label for an option value; the raw value shows when omitted. */
+  optionLabel?: (value: string) => string
 }
 
 /** Compact filter-bar select chrome — matches FilterSelect. */
 export const FILTER_SELECT_CLASS =
   'bg-surface-raised border border-edge-subtle rounded-sm px-2 py-1 text-xs text-fg-secondary hover:border-edge focus-visible:outline-none focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand/40 motion-safe:transition-opacity motion-safe:duration-150'
 
-export function FilterSelect({ label, options, id, className = '', ...rest }: FilterSelectProps) {
+export function FilterSelect({ label, options, id, className = '', optionLabel, ...rest }: FilterSelectProps) {
   const selectId = id ?? `filter-${label.toLowerCase().replace(/\s+/g, '-')}`
   return (
     <label className="inline-flex flex-col gap-0.5">
@@ -30,7 +33,7 @@ export function FilterSelect({ label, options, id, className = '', ...rest }: Fi
       >
         <option value="">All {label}</option>
         {options.filter(Boolean).map((opt) => (
-          <option key={opt} value={opt}>{opt}</option>
+          <option key={opt} value={opt}>{optionLabel ? optionLabel(opt) : opt}</option>
         ))}
       </select>
     </label>
@@ -60,9 +63,11 @@ interface SegmentedControlProps<T extends string> {
   className?: string
 }
 
+// Hit-area floor (WCAG 2.5.8): 24px on mouse layouts, 32px where the
+// primary pointer is coarse. min-height keeps dense desktop chrome compact.
 const SEGMENT_SIZE = {
-  sm: 'px-1.5 py-0.5 text-2xs',
-  md: 'px-2 py-1 text-2xs font-medium',
+  sm: 'px-1.5 py-0.5 text-2xs min-h-6 pointer-coarse:min-h-8',
+  md: 'px-2 py-1 text-2xs font-medium min-h-6 pointer-coarse:min-h-8',
 } as const
 
 export function SegmentedControl<T extends string>({
@@ -91,15 +96,19 @@ export function SegmentedControl<T extends string>({
             role="radio"
             aria-checked={active}
             onClick={() => onChange(opt.id)}
+            // Selected = the soft SELECTED_TONE wash, not the filled brand
+            // action colour. A filled tab competed with the page's one
+            // primary button (Connect: "Studio" tab vs "Add to Cursor").
+            // Inset ring instead of a border so the segment doesn't grow.
             className={`${SEGMENT_SIZE[size]} rounded-sm motion-safe:transition-[transform,opacity] motion-safe:duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 motion-safe:active:scale-[0.97] ${
               active
-                ? 'bg-brand text-brand-fg shadow-brand-raised'
+                ? 'bg-brand-subtle text-brand-foreground font-medium ring-1 ring-inset ring-brand/40'
                 : 'text-fg-secondary hover:text-fg hover:bg-surface-overlay/50 hover:-translate-y-px'
             }`}
           >
             {opt.label}
             {opt.count !== undefined && (
-              <span className={`ml-1 font-mono ${active ? 'text-brand-fg/80' : 'text-fg-faint'}`}>
+              <span className={`ml-1 font-mono ${active ? 'text-brand-foreground/80' : 'text-fg-faint'}`}>
                 {opt.count}
               </span>
             )}
@@ -154,6 +163,18 @@ interface BtnProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   loading?: boolean
   /** Optional icon rendered before children. Sized to match the variant. */
   leadingIcon?: ReactNode
+  /**
+   * In-app route. Renders the button as a router link, so a navigation CTA
+   * is one Tab stop. `<Link><Btn/></Link>` nests a button in a link: two
+   * stops for one action, and invalid HTML. A disabled or loading Btn stays
+   * a button, since a link cannot be disabled.
+   */
+  to?: string
+  /**
+   * External URL, opened in a new tab. Same reason as `to`: `<a><Btn/></a>`
+   * nests a button in a link (two Tab stops, invalid HTML).
+   */
+  href?: string
 }
 
 const BTN_BASE =
@@ -162,9 +183,10 @@ const BTN_BASE =
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-surface ' +
   'motion-safe:transition-[transform,opacity] motion-safe:duration-150 motion-safe:active:scale-[0.97]'
 
+// Same hit-area floor as SEGMENT_SIZE: sm reached ~22px at compact density.
 const BTN_SIZES = {
-  sm: 'px-2 py-1 text-xs gap-1.5',
-  md: 'px-3 py-1.5 text-sm gap-2',
+  sm: 'px-2 py-1 text-xs gap-1.5 min-h-6 pointer-coarse:min-h-8',
+  md: 'px-3 py-1.5 text-sm gap-2 min-h-8',
 } as const
 
 // Expressive control set (2026-07 expressive pass): the primary action is a
@@ -205,9 +227,40 @@ export function Btn({
   loading,
   leadingIcon,
   disabled,
+  to,
+  href,
   ...rest
 }: BtnProps) {
   const isDisabled = disabled || loading
+  if (href && !isDisabled) {
+    const { type: _type, form: _form, formAction: _formAction, ...anchorRest } = rest
+    return (
+      <a
+        {...(anchorRest as unknown as React.AnchorHTMLAttributes<HTMLAnchorElement>)}
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={`${BTN_BASE} ${BTN_SIZES[size]} ${BTN_VARIANTS[variant]} ${className}`}
+      >
+        {leadingIcon}
+        {children}
+      </a>
+    )
+  }
+  if (to && !isDisabled) {
+    // Button-only attributes (type, form*) have no meaning on a link.
+    const { type: _type, form: _form, formAction: _formAction, ...anchorRest } = rest
+    return (
+      <Link
+        {...(anchorRest as unknown as React.AnchorHTMLAttributes<HTMLAnchorElement>)}
+        to={to}
+        className={`${BTN_BASE} ${BTN_SIZES[size]} ${BTN_VARIANTS[variant]} ${className}`}
+      >
+        {leadingIcon}
+        {children}
+      </Link>
+    )
+  }
   return (
     <button
       className={`${BTN_BASE} ${BTN_SIZES[size]} ${BTN_VARIANTS[variant]} ${className}`}
@@ -330,10 +383,32 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
    *  callers can use it for server-side validation that happens after
    *  Save and shouldn't be silently overwritten. */
   validate?: (value: string) => { message: string; severity?: 'error' | 'warn' } | null
+  /** Internal: render as a secret field. Use `<SecretInput>` instead. */
+  secret?: boolean
 }
 
+/**
+ * Attributes that keep browsers and password managers away from a field that
+ * holds an API key, token or webhook secret. A `type="password"` field makes
+ * Chrome, 1Password, LastPass and Bitwarden offer to save the value as the
+ * site login ("Update login details?"), so secrets use `type="text"` masked
+ * with CSS instead. `data-mushi-mask` keeps the value redacted in the
+ * console's own screenshot capture, which used to rely on type="password".
+ */
+const SECRET_FIELD_ATTRS = {
+  autoComplete: 'off',
+  'data-mushi-mask': '',
+  spellCheck: false,
+  autoCapitalize: 'off',
+  autoCorrect: 'off',
+  'data-1p-ignore': '',
+  'data-lpignore': 'true',
+  'data-bwignore': '',
+  'data-form-type': 'other',
+} as const
+
 export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
-  { label, className = '', id, error, tooltip, helpId, validate, onBlur, onChange, type, ...rest },
+  { label, className = '', id, error, tooltip, helpId, validate, onBlur, onChange, type, secret, ...rest },
   ref,
 ) {
   const inputId = id ?? label?.toLowerCase().replace(/\s+/g, '-')
@@ -360,8 +435,12 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   // the DOM node directly so React's controlled-input bookkeeping stays
   // happy. Right-padded so the eye button never overlaps the value.
   const isPassword = type === 'password'
-  const renderedType = isPassword && reveal ? 'text' : type
-  const inputClassName = `${FIELD_BASE} ${isPassword ? 'pr-9' : ''} ${className}`
+  // Secret fields stay `type="text"` and are masked with CSS, so no password
+  // manager treats them as a login.
+  const hasRevealToggle = isPassword || secret === true
+  const renderedType = secret ? 'text' : isPassword && reveal ? 'text' : type
+  const maskClass = secret && !reveal ? '[-webkit-text-security:disc]' : ''
+  const inputClassName = `${FIELD_BASE} ${hasRevealToggle ? 'pr-9' : ''} ${secret ? 'font-mono' : ''} ${maskClass} ${className}`
 
   return (
     <label className="block">
@@ -371,13 +450,14 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
           <LabelHelp helpId={helpId} tooltip={tooltip} />
         </span>
       )}
-      <span className={isPassword ? 'relative block' : undefined}>
+      <span className={hasRevealToggle ? 'relative block' : undefined}>
         <input
           ref={ref}
           id={inputId}
           type={renderedType}
           aria-invalid={visibleError ? true : undefined}
           className={inputClassName}
+          {...(secret ? SECRET_FIELD_ATTRS : {})}
           {...rest}
           onBlur={(e) => {
             if (!touched) setTouched(true)
@@ -388,7 +468,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
             onChange?.(e)
           }}
         />
-        {isPassword && (
+        {hasRevealToggle && (
           <button
             type="button"
             onClick={(e) => {
@@ -401,7 +481,9 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
               setReveal((v) => !v)
             }}
             onMouseDown={(e) => e.preventDefault()}
-            aria-label={reveal ? 'Hide password' : 'Show password'}
+            aria-label={
+              secret ? (reveal ? 'Hide value' : 'Show value') : reveal ? 'Hide password' : 'Show password'
+            }
             aria-pressed={reveal}
             className="absolute inset-y-0 right-0 flex w-9 items-center justify-center text-fg-faint hover:text-fg-muted focus-visible:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 rounded-sm motion-safe:transition-opacity"
           >
@@ -423,6 +505,20 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
       {visibleWarn && <p className={FIELD_WARN}>{visibleWarn}</p>}
     </label>
   )
+})
+
+type SecretInputProps = Omit<InputProps, 'type' | 'secret' | 'autoComplete'>
+
+/**
+ * The one field for API keys, tokens and webhook secrets: masked text with a
+ * Show toggle, autocomplete, spellcheck and every password manager turned
+ * off. Real account passwords (sign-in, reset) keep `<Input type="password">`.
+ */
+export const SecretInput = forwardRef<HTMLInputElement, SecretInputProps>(function SecretInput(
+  props,
+  ref,
+) {
+  return <Input ref={ref} {...props} secret />
 })
 
 interface SelectFieldProps extends SelectHTMLAttributes<HTMLSelectElement> {
@@ -517,7 +613,9 @@ export function Toggle({ label, ariaLabel, checked, onChange, disabled, tooltip,
         className={`relative inline-flex h-5 w-9 shrink-0 rounded-full border motion-safe:transition-[transform,opacity] motion-safe:duration-[var(--duration-fast)] motion-safe:ease-[var(--ease-stamp)] motion-safe:active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 focus-visible:ring-offset-2 focus-visible:ring-offset-surface ${checked ? 'bg-brand border-brand/60 shadow-brand-glow-sm' : 'bg-surface-raised border-edge hover:border-edge'}`}
       >
         <span
-          className={`pointer-events-none inline-flex items-center justify-center h-4 w-4 rounded-full bg-fg shadow-card motion-safe:transition-transform motion-safe:duration-[var(--duration-fast)] motion-safe:ease-[var(--ease-stamp)] ${checked ? 'translate-x-4' : 'translate-x-0.5'}`}
+          // On: the brand's own foreground on the brand track. A dark knob on
+          // brand red read as an error state rather than "on" (2026-10-06).
+          className={`pointer-events-none inline-flex items-center justify-center h-4 w-4 rounded-full shadow-card motion-safe:transition-transform motion-safe:duration-[var(--duration-fast)] motion-safe:ease-[var(--ease-stamp)] ${checked ? 'translate-x-4 bg-brand-fg' : 'translate-x-0.5 bg-fg'}`}
           aria-hidden="true"
         />
       </button>

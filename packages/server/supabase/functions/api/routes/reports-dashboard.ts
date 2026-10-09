@@ -19,12 +19,16 @@ import type { Hono } from 'npm:hono@4';
 import type { Variables } from '../types.ts';
 
 import { registerReportsRoutes } from './reports.ts';
+import { registerReportAgentContextRoutes } from './report-agent-context.ts';
 import { registerDashboardRoutes } from './dashboard.ts';
 import { registerJudgeRoutes } from './judge.ts';
 import { registerPromptLabRoutes } from './prompt-lab.ts';
 
 export function registerReportsDashboardRoutes(app: Hono<{ Variables: Variables }>): void {
   registerReportsRoutes(app);
+  // Added 2026-09-21 (fix-context, blast-radius, repo bootstrap); paths do not
+  // overlap anything registered before or after, so order is irrelevant here.
+  registerReportAgentContextRoutes(app);
   registerDashboardRoutes(app);
   registerJudgeRoutes(app);
   registerPromptLabRoutes(app);

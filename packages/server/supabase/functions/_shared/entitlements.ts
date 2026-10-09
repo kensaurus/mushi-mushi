@@ -61,6 +61,54 @@ export interface ResolvedEntitlement {
 }
 
 /**
+ * The plan in force for an organization (or, for a legacy project with no
+ * organization, for that project): the newest live subscription, else the
+ * organization's `plan_id`, else Hobby. Shared by `resolveActiveEntitlement`
+ * and org-scoped gates so the console's `has(flag)` and the server agree.
+ */
+export async function resolvePlanForScope(
+  db: ReturnType<typeof getServiceClient>,
+  scope: { organizationId: string | null; projectId?: string | null },
+): Promise<PricingPlan> {
+  const { organizationId, projectId } = scope
+
+  const { data: org } = organizationId
+    ? await db.from('organizations').select('plan_id').eq('id', organizationId).maybeSingle()
+    : { data: null }
+
+  const subQuery = db
+    .from('billing_subscriptions')
+    .select('status, plan_id')
+  const { data: sub } = organizationId
+    ? await subQuery
+        .eq('organization_id', organizationId)
+        .in('status', ['active', 'trialing', 'past_due'])
+        .order('current_period_end', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+    : projectId
+      ? await subQuery
+          .eq('project_id', projectId)
+          .in('status', ['active', 'trialing', 'past_due'])
+          .order('current_period_end', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+      : { data: null }
+
+  return sub ? await resolvePlanFromSubscription(sub) : await getPlan(org?.plan_id ?? 'hobby')
+}
+
+/** True when the organization's plan sets `feature_flags[flag] === true`. */
+export async function organizationHasPlanFeature(
+  db: ReturnType<typeof getServiceClient>,
+  organizationId: string,
+  flag: string,
+): Promise<boolean> {
+  const plan = await resolvePlanForScope(db, { organizationId })
+  return (plan.feature_flags as Record<string, unknown> | undefined)?.[flag] === true
+}
+
+/**
  * Resolve the caller's active project + plan in one round trip.
  *
  * Reads `userId` (always set by `jwtAuth` / `adminOrApiKey`) and
@@ -111,29 +159,7 @@ export async function resolveActiveEntitlement(
     organizationId = (project?.organization_id as string | null) ?? undefined
   }
 
-  const { data: org } = organizationId
-    ? await db.from('organizations').select('plan_id').eq('id', organizationId).maybeSingle()
-    : { data: null }
-
-  const { data: sub } = organizationId
-    ? await db
-        .from('billing_subscriptions')
-        .select('status, plan_id')
-        .eq('organization_id', organizationId)
-        .in('status', ['active', 'trialing', 'past_due'])
-        .order('current_period_end', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-    : await db
-        .from('billing_subscriptions')
-        .select('status, plan_id')
-        .eq('project_id', projectId)
-        .in('status', ['active', 'trialing', 'past_due'])
-        .order('current_period_end', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-
-  const plan = sub ? await resolvePlanFromSubscription(sub) : await getPlan(org?.plan_id ?? 'hobby')
+  const plan = await resolvePlanForScope(db, { organizationId: organizationId ?? null, projectId })
 
   return {
     projectId,
@@ -264,13 +290,16 @@ export function requireFeature(flag: FeatureFlag) {
 export const GATED_ROUTES: ReadonlyArray<{
   prefix: string
   flag: FeatureFlag
+  /** Routes under the prefix that are NOT gated (route patterns, `:param` style). */
+  except?: readonly string[]
 }> = [
   { prefix: '/v1/admin/sso', flag: 'sso' },
   { prefix: '/v1/admin/byok', flag: 'byok' },
   { prefix: '/v1/admin/plugins', flag: 'plugins' },
   { prefix: '/v1/admin/intelligence', flag: 'intelligence_reports' },
   { prefix: '/v1/org', flag: 'teams' },
-  { prefix: '/v1/admin/inventory', flag: 'inventory_v2' },
+  // ADR 0018: reading gate findings is free on every plan.
+  { prefix: '/v1/admin/inventory', flag: 'inventory_v2', except: ['/v1/admin/inventory/:projectId/findings'] },
 ]
 
 /** Primary dogfood account — Pro-shaped inventory API before tier rollout. */

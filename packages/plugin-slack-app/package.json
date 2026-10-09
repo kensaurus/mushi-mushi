@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/plugin-slack-app",
-  "version": "0.2.6",
+  "version": "0.2.10",
   "license": "MIT",
   "description": "First-party Slack App plugin (not an Incoming Webhook) for Mushi Mushi — OAuth install, Slash commands (/mushi), interactive buttons, and real-time event subscriptions.",
   "type": "module",
@@ -19,10 +19,7 @@
     "README.md",
     "LICENSE",
     "plugin.json",
-    "manifest.json",
-    "CONTRIBUTING.md",
-    "CODE_OF_CONDUCT.md",
-    "SECURITY.md"
+    "manifest.json"
   ],
   "scripts": {
     "build": "tsup",
@@ -47,7 +44,7 @@
     "url": "https://github.com/kensaurus/mushi-mushi.git",
     "directory": "packages/plugin-slack-app"
   },
-  "author": "Kenji Sakuramoto (https://bsky.app/profile/mushimushi.dev)",
+  "author": "Kenji Sakuramoto <kensaurus@gmail.com> (https://github.com/kensaurus)",
   "homepage": "https://kensaur.us/mushi-mushi",
   "bugs": {
     "url": "https://github.com/kensaurus/mushi-mushi/issues"
@@ -64,13 +61,13 @@
     "slack-app",
     "oauth",
     "slash-commands",
-    "interactive"
+    "interactive",
+    "bug-reporting",
+    "integration",
+    "chatops",
+    "notifications"
   ],
   "engines": {
-    "node": ">=20"
-  },
-  "funding": {
-    "type": "github",
-    "url": "https://github.com/sponsors/kensaurus"
+    "node": ">=20.19.0"
   }
 }

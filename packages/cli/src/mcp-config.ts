@@ -9,24 +9,52 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
+import { CONFIG_PATH } from './config.js'
 import { MUSHI_MCP_PIN_SPEC } from './version.js'
 
 /** Lean default — mirrors DEFAULT_FEATURE_GROUPS in @mushi-mushi/mcp/feature-groups */
 const DEFAULT_MUSHI_FEATURES = 'triage,fixes,inventory,setup,docs'
 
-export type McpServerEntry =
-  | {
-      command: string
-      args: string[]
-      env: Record<string, string>
-    }
-  /**
-   * Hosted Streamable HTTP entry. Deliberately URL-only: adding a static
-   * `Authorization` header tells MCP clients OAuth isn't needed and disables
-   * the browser login flow. The client mints and stores its own revocable
-   * key via the consent page.
-   */
-  | { url: string }
+/** MCP clients the CLI writes config for. Each expands env references differently. */
+export const MCP_CLIENTS = ['cursor', 'claude', 'continue', 'zed'] as const
+export type McpClient = (typeof MCP_CLIENTS)[number]
+
+export function isMcpClient(value: unknown): value is McpClient {
+  return typeof value === 'string' && (MCP_CLIENTS as readonly string[]).includes(value)
+}
+
+/** Human name for messages ("Restart Claude Code…"). */
+export const MCP_CLIENT_LABEL: Record<McpClient, string> = {
+  cursor: 'Cursor',
+  claude: 'Claude Code',
+  continue: 'Continue',
+  zed: 'Zed',
+}
+
+/** Local subprocess entry: `npx @mushi-mushi/mcp` with its env block. */
+export interface StdioMcpServerEntry {
+  command: string
+  args: string[]
+  env: Record<string, string>
+}
+
+/**
+ * Hosted Streamable HTTP entry. `type` is required: Claude Code reads an entry
+ * without it as a stdio server and skips it ("has a url but no type"); Cursor
+ * accepts the field. Deliberately URL-only: adding a static `Authorization`
+ * header tells MCP clients OAuth isn't needed and disables the browser login
+ * flow. The client mints and stores its own revocable key via the consent page.
+ */
+export interface HostedMcpServerEntry {
+  type: 'http'
+  url: string
+}
+
+export type McpServerEntry = StdioMcpServerEntry | HostedMcpServerEntry
+
+export function buildHostedMcpServerBlock(url: string): HostedMcpServerEntry {
+  return { type: 'http', url }
+}
 
 export interface WriteMcpOptions {
   /** Absolute path to the IDE config file, e.g. `/repo/.cursor/mcp.json` */
@@ -44,9 +72,17 @@ export interface WriteMcpResult {
   path: string
 }
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
 /**
  * Reads the existing mcp-json file (if present), merges the new server entry,
- * and writes the result back. Preserves all other `mcpServers` entries.
+ * and writes the result back. Preserves every other key and `mcpServers` entry.
+ *
+ * A file that exists but does not parse is an error, not a blank slate: the
+ * Claude Code target is the repo-root `.mcp.json` the whole team shares, and
+ * silently replacing a file with a stray comma would delete everyone's servers.
  */
 export async function writeMcpServerEntry(opts: WriteMcpOptions): Promise<WriteMcpResult> {
   const { configPath, serverName, serverBlock, dryRun = false } = opts
@@ -54,23 +90,32 @@ export async function writeMcpServerEntry(opts: WriteMcpOptions): Promise<WriteM
   // Read the existing config directly and treat a missing file as "created".
   // Deriving `created` from the read result (rather than a separate existsSync
   // pre-check) avoids a check-then-use file-system race (js/file-system-race).
-  let merged: Record<string, unknown> = { mcpServers: {} }
-  let created = false
+  let existing: string | null = null
   try {
-    const existing = await readFile(configPath, 'utf8')
-    try {
-      merged = JSON.parse(existing) as Record<string, unknown>
-    } catch {
-      merged = { mcpServers: {} }
-    }
+    existing = await readFile(configPath, 'utf8')
   } catch {
-    created = true
-    merged = { mcpServers: {} }
+    existing = null
   }
 
-  const servers = (merged.mcpServers as Record<string, unknown>) ?? {}
-  servers[serverName] = serverBlock
-  merged.mcpServers = servers
+  let merged: Record<string, unknown> = {}
+  if (existing !== null && existing.trim() !== '') {
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(existing)
+    } catch {
+      throw new Error(`${configPath} is not valid JSON — fix or remove it, then re-run (nothing was written).`)
+    }
+    if (!isPlainObject(parsed)) {
+      throw new Error(`${configPath} is not a JSON object — fix or remove it, then re-run (nothing was written).`)
+    }
+    merged = parsed
+  }
+
+  const currentServers = merged.mcpServers
+  if (currentServers !== undefined && !isPlainObject(currentServers)) {
+    throw new Error(`${configPath} has an "mcpServers" field that is not an object — fix it, then re-run (nothing was written).`)
+  }
+  merged.mcpServers = { ...(currentServers ?? {}), [serverName]: serverBlock }
 
   const output = JSON.stringify(merged, null, 2) + '\n'
   if (!dryRun) {
@@ -78,51 +123,79 @@ export async function writeMcpServerEntry(opts: WriteMcpOptions): Promise<WriteM
     await writeFile(configPath, output, 'utf8')
   }
 
-  return { created, path: configPath }
+  return { created: existing === null, path: configPath }
 }
 
 /**
- * Build a canonical `mcpServers` block for the Mushi MCP server.
+ * The `MUSHI_API_KEY` env value to write for a client when the literal key is
+ * kept out of the file, or `null` to leave the variable out entirely.
  *
+ * - cursor: `${env:MUSHI_API_KEY}` — the only env interpolation form Cursor
+ *   documents. A bare `${MUSHI_API_KEY}` is not in that list, so the literal
+ *   text could reach the server as the key.
+ * - claude: `${MUSHI_API_KEY:-}` — Claude Code keeps an unset `${VAR}` as
+ *   literal text; the empty default expands to "" instead, and
+ *   @mushi-mushi/mcp treats an empty key as unset and reads the CLI config.
+ * - continue / zed: no documented expansion, so any placeholder would be sent
+ *   verbatim. Omit the variable; the server falls back to the key `mushi
+ *   login` saved in the CLI config.
+  * @internal Exported for tests only.
+  */
+export function apiKeyPlaceholderFor(client: McpClient): string | null {
+  switch (client) {
+    case 'cursor':
+      return '${env:MUSHI_API_KEY}'
+    case 'claude':
+      return '${MUSHI_API_KEY:-}'
+    case 'continue':
+    case 'zed':
+      return null
+  }
+}
+
+/**
+ * Build a canonical stdio `mcpServers` block for the Mushi MCP server.
+ *
+ * @param opts.client - The MCP client that will read the file; picks the env
+ *   placeholder syntax (see {@link apiKeyPlaceholderFor}).
  * @param opts.inlineKey - When true, the literal API key is written into the
- *   env block. When false (default) the placeholder `${MUSHI_API_KEY}` is
- *   written instead. Most editors (Cursor, Claude Code) support `${VAR}`
- *   expansion in mcp.json env blocks, so the placeholder is safe for
- *   project-tracked files. Pass `inlineKey: true` for headless/CI
- *   environments that do not perform substitution, and ensure the file is
- *   listed in `.gitignore`.
+ *   env block (headless/CI clients that do no substitution — keep the file out
+ *   of git). By default no secret is written and the file is safe to commit.
  */
 export function buildMcpServerBlock(opts: {
   endpoint: string
   projectId: string
   apiKey: string
-  /** Write the literal key into env (default false → uses `${MUSHI_API_KEY}` placeholder). */
+  client: McpClient
+  /** Write the literal key into env (default false → client placeholder or none). */
   inlineKey?: boolean
-}): McpServerEntry {
+}): StdioMcpServerEntry {
+  const keyValue = opts.inlineKey ? opts.apiKey : apiKeyPlaceholderFor(opts.client)
   return {
     command: 'npx',
     args: ['-y', MUSHI_MCP_PIN_SPEC],
     env: {
       MUSHI_API_ENDPOINT: opts.endpoint,
       MUSHI_PROJECT_ID: opts.projectId,
-      MUSHI_API_KEY: opts.inlineKey ? opts.apiKey : '${MUSHI_API_KEY}',
+      ...(keyValue !== null ? { MUSHI_API_KEY: keyValue } : {}),
       MUSHI_FEATURES: DEFAULT_MUSHI_FEATURES,
     },
   }
 }
 
 /**
- * Print the export instruction a user needs when `inlineKey` is false.
- * Call this after writing the mcp.json entry.
+ * Explain where the MCP server gets its key when `inlineKey` is false. The
+ * key itself is never printed: the server already falls back to the CLI
+ * config, so exporting it is an optional override, not a required step.
  */
-export function printKeyExportHint(apiKey: string): void {
+export function printKeyExportHint(client: McpClient, configPath: string = CONFIG_PATH): void {
   console.log('')
-  console.log('  Your API key was NOT written into the config file (prevents git leaks).')
-  console.log('  Add it to your shell profile or .env.local:')
-  console.log('')
-  console.log(`    export MUSHI_API_KEY="${apiKey}"`)
-  console.log('')
-  console.log('  Then restart your IDE. To write the key inline instead, re-run with --inline-key.')
+  console.log('  No API key was written into the MCP config (safe to commit).')
+  console.log(`  The MCP server uses the key \`mushi login\` saved in ${configPath}.`)
+  if (apiKeyPlaceholderFor(client) !== null) {
+    console.log(`  To use a different key, export MUSHI_API_KEY in the environment ${MCP_CLIENT_LABEL[client]} is launched from.`)
+  }
+  console.log('  To write the key into the file instead (keep it out of git), re-run with --inline-key.')
 }
 
 /**

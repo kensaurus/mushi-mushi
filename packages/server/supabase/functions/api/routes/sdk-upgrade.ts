@@ -18,7 +18,11 @@
  *   (`useSdkUpgrade`) can be a thin wrapper around the same SSE client.
  *
  * DELETE /v1/admin/projects/:pid/sdk-upgrade/:id
- *   Cancel a queued or running job (CAS guard).
+ *   Cancel a queued, running or awaiting_lockfile job (CAS guard).
+ *
+ * awaiting_lockfile (ADR 0019): the bump is pushed and the host's lockfile
+ * workflow is running; sdk-release-sync opens the PR. It holds the project's
+ * upgrade slot like queued/running but is never handed back to the runner.
  */
 
 import type { Hono } from 'npm:hono@4'
@@ -27,13 +31,16 @@ import type { Variables } from '../types.ts'
 import { getServiceClient } from '../../_shared/db.ts'
 import { adminOrApiKey, jwtAuth } from '../../_shared/auth.ts'
 import { toSseEvent, sanitizeSseString, sseHeartbeat } from '../../_shared/sse.ts'
-import { dbError, userCanAccessProject } from '../shared.ts'
+import { dbError, callerCanAccessProject } from '../shared.ts'
 import { runSdkUpgradeJob } from '../../_shared/sdk-upgrade-runner.ts'
 import { log } from '../../_shared/logger.ts'
 import { findOpenPrByHeadPrefix } from '../../_shared/github-pr.ts'
 import {
   evaluateSdkUpgradePostGate,
+  isUpgradePrStillRelevant,
   type SdkUpgradePostBody,
+  SDK_UPGRADE_ACTIVE_STATUSES,
+  SDK_UPGRADE_SETTLED_STATUSES,
   UPGRADE_BRANCH_PREFIX,
 } from '../../_shared/sdk-upgrade-gates.ts'
 import { parseGithubRepoUrl } from '../../_shared/github.ts'
@@ -70,7 +77,7 @@ export function registerSdkUpgradeRoutes(app: Hono<{ Variables: Variables }>): v
 
     const body = await c.req.json().catch(() => ({} as SdkUpgradePostBody)) as SdkUpgradePostBody
 
-    const access = await userCanAccessProject(db, userId, projectId)
+    const access = await callerCanAccessProject(c, db, userId, projectId)
     if (!access.allowed) {
       return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Not a member of this project' } }, 403)
     }
@@ -88,7 +95,7 @@ export function registerSdkUpgradeRoutes(app: Hono<{ Variables: Variables }>): v
       .from('sdk_upgrade_jobs')
       .select('id, status')
       .eq('project_id', projectId)
-      .in('status', ['queued', 'running'])
+      .in('status', [...SDK_UPGRADE_ACTIVE_STATUSES])
       .limit(1)
 
     // Open-PR reuse guard — skip when operator explicitly asked to refresh.
@@ -107,9 +114,14 @@ export function registerSdkUpgradeRoutes(app: Hono<{ Variables: Variables }>): v
     )
 
     if (decision.action === 'reject') {
-      if (decision.code === 'ALREADY_IN_PROGRESS' && decision.jobId) {
+      // Kick a queued/running job; an awaiting_lockfile one belongs to sdk-release-sync.
+      const blocking = existing?.find((j) => j.id === decision.jobId)
+      if (decision.code === 'ALREADY_IN_PROGRESS' && decision.jobId && blocking?.status !== 'awaiting_lockfile') {
         void scheduleSdkUpgradeRun(decision.jobId)
       }
+      // `data.jobId` too: the console's envelope keeps `data` on an error but
+      // drops extra error fields, so the client could not follow the running
+      // job and showed a raw "ALREADY_IN_PROGRESS" failure (QA #124).
       return c.json({
         ok: false,
         error: {
@@ -117,6 +129,7 @@ export function registerSdkUpgradeRoutes(app: Hono<{ Variables: Variables }>): v
           message: decision.message,
           ...(decision.jobId ? { jobId: decision.jobId } : {}),
         },
+        ...(decision.jobId ? { data: { jobId: decision.jobId } } : {}),
       }, decision.status as 400 | 409)
     }
 
@@ -158,11 +171,11 @@ export function registerSdkUpgradeRoutes(app: Hono<{ Variables: Variables }>): v
           .from('sdk_upgrade_jobs')
           .select('id, status')
           .eq('project_id', projectId)
-          .in('status', ['queued', 'running'])
+          .in('status', [...SDK_UPGRADE_ACTIVE_STATUSES])
           .limit(1)
           .maybeSingle()
         if (raced?.id) {
-          void scheduleSdkUpgradeRun(raced.id)
+          if (raced.status !== 'awaiting_lockfile') void scheduleSdkUpgradeRun(raced.id)
           return c.json({
             ok: false,
             error: {
@@ -170,6 +183,7 @@ export function registerSdkUpgradeRoutes(app: Hono<{ Variables: Variables }>): v
               message: 'An SDK upgrade is already in progress for this project.',
               jobId: raced.id,
             },
+            data: { jobId: raced.id },
           }, 409)
         }
       }
@@ -190,14 +204,14 @@ export function registerSdkUpgradeRoutes(app: Hono<{ Variables: Variables }>): v
     const projectId = c.req.param('pid')!
     const db = getServiceClient()
 
-    const access = await userCanAccessProject(db, userId, projectId)
+    const access = await callerCanAccessProject(c, db, userId, projectId)
     if (!access.allowed) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403)
 
     const { data: active } = await db
       .from('sdk_upgrade_jobs')
       .select('id, status, pr_url, plan, error, created_at, pr_state, release_status, check_run_status, check_run_conclusion, deploy_status, deploy_url, merged_at')
       .eq('project_id', projectId)
-      .in('status', ['queued', 'running'])
+      .in('status', [...SDK_UPGRADE_ACTIVE_STATUSES])
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle()
@@ -222,7 +236,24 @@ export function registerSdkUpgradeRoutes(app: Hono<{ Variables: Variables }>): v
       .limit(1)
       .maybeSingle()
 
-    return c.json({ ok: true, data: recent ?? null })
+    if (recent) return c.json({ ok: true, data: recent })
+
+    // The last upgrade PR, however old, so the Update center can show it (open
+    // with its CI state, or merged and waiting for the new version in
+    // production) instead of offering a duplicate "Create Upgrade PR".
+    // Closed-unmerged PRs are history, not state.
+    const { data: lastPr } = await db
+      .from('sdk_upgrade_jobs')
+      .select('id, status, pr_url, plan, error, created_at, pr_state, release_status, check_run_status, check_run_conclusion, deploy_status, deploy_url, merged_at')
+      .eq('project_id', projectId)
+      .eq('status', 'completed')
+      .not('pr_url', 'is', null)
+      .gte('finished_at', new Date(Date.now() - 30 * 24 * 60 * 60_000).toISOString())
+      .order('finished_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    return c.json({ ok: true, data: lastPr && isUpgradePrStillRelevant(lastPr) ? lastPr : null })
   })
 
   // -------------------------------------------------------------------------
@@ -234,7 +265,7 @@ export function registerSdkUpgradeRoutes(app: Hono<{ Variables: Variables }>): v
     const jobId = c.req.param('id')!
     const db = getServiceClient()
 
-    const access = await userCanAccessProject(db, userId, projectId)
+    const access = await callerCanAccessProject(c, db, userId, projectId)
     if (!access.allowed) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403)
 
     const { data: job } = await db
@@ -260,7 +291,7 @@ export function registerSdkUpgradeRoutes(app: Hono<{ Variables: Variables }>): v
       const jobId = c.req.param('id')!
       const db = getServiceClient()
 
-      const access = await userCanAccessProject(db, userId, projectId)
+      const access = await callerCanAccessProject(c, db, userId, projectId)
       if (!access.allowed) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403)
 
       const { data: job } = await db
@@ -315,7 +346,9 @@ export function registerSdkUpgradeRoutes(app: Hono<{ Variables: Variables }>): v
             )
           }
 
-          if (['completed', 'completed_no_pr', 'failed', 'cancelled'].includes(latest.status)) {
+          // awaiting_lockfile settles the stream too: the PR opens minutes
+          // later from sdk-release-sync, and the console polls slowly for it.
+          if ((SDK_UPGRADE_SETTLED_STATUSES as readonly string[]).includes(latest.status)) {
             await stream.write(toSseEvent({ done: true }, { event: 'done' }))
             break
           }
@@ -349,7 +382,7 @@ export function registerSdkUpgradeRoutes(app: Hono<{ Variables: Variables }>): v
     const jobId = c.req.param('id')!
     const db = getServiceClient()
 
-    const access = await userCanAccessProject(db, userId, projectId)
+    const access = await callerCanAccessProject(c, db, userId, projectId)
     if (!access.allowed) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403)
 
     const { data: job } = await db
@@ -360,7 +393,7 @@ export function registerSdkUpgradeRoutes(app: Hono<{ Variables: Variables }>): v
       .single()
     if (!job) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404)
 
-    if (job.status !== 'queued' && job.status !== 'running') {
+    if (!(SDK_UPGRADE_ACTIVE_STATUSES as readonly string[]).includes(job.status)) {
       return c.json({
         ok: false,
         error: { code: 'INVALID_STATE', message: `Job is already ${job.status}; cannot cancel.` },
@@ -371,7 +404,7 @@ export function registerSdkUpgradeRoutes(app: Hono<{ Variables: Variables }>): v
       .from('sdk_upgrade_jobs')
       .update({ status: 'cancelled', finished_at: new Date().toISOString(), error: 'Cancelled by operator.' })
       .eq('id', jobId)
-      .in('status', ['queued', 'running'])
+      .in('status', [...SDK_UPGRADE_ACTIVE_STATUSES])
       .select('id, status')
       .single()
 
@@ -391,7 +424,7 @@ export function registerSdkUpgradeRoutes(app: Hono<{ Variables: Variables }>): v
     const jobId = c.req.param('id')!
     const db = getServiceClient()
 
-    const access = await userCanAccessProject(db, userId, projectId)
+    const access = await callerCanAccessProject(c, db, userId, projectId)
     if (!access.allowed) return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Not a member of this project' } }, 403)
 
     const body = await c.req.json().catch(() => ({} as Record<string, unknown>))
@@ -463,7 +496,7 @@ export function registerSdkUpgradeRoutes(app: Hono<{ Variables: Variables }>): v
     const jobId = c.req.param('id')!
     const db = getServiceClient()
 
-    const access = await userCanAccessProject(db, userId, projectId)
+    const access = await callerCanAccessProject(c, db, userId, projectId)
     if (!access.allowed) return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Not a member of this project' } }, 403)
 
     const { data: rawJob, error: jobErr } = await db

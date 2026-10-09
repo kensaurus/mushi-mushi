@@ -9,7 +9,7 @@ Every admin / SDK / webhook failure should return:
 { "ok": false, "error": { "code": "<CODE>", "message": "<safe text>", "requestId": "<optional>" } }
 ```
 
-## Codes (58)
+## Codes (62)
 
 | Code | Group |
 | --- | --- |
@@ -20,6 +20,7 @@ Every admin / SDK / webhook failure should return:
 | `INSUFFICIENT_SCOPE` | Auth / identity |
 | `KEY_NOT_MIGRATED` | Auth / identity |
 | `ORG_KEY_NOT_ALLOWED` | Auth / identity |
+| `KEY_EXPOSED_IN_BROWSER` | Transport |
 | `UNAUTHORIZED` | Auth / identity |
 | `FORBIDDEN` | Auth / identity |
 | `SERVER_MISCONFIGURED` | Auth / identity |
@@ -49,6 +50,8 @@ Every admin / SDK / webhook failure should return:
 | `DUPLICATE` | Validation |
 | `RATE_LIMITED` | Validation |
 | `EXPIRED` | Validation |
+| `INVALID_CONFIRM_TOKEN` | Auth / identity |
+| `UNSUPPORTED_STORAGE_PROVIDER` | Transport |
 | `DB_ERROR` | Persistence |
 | `RPC_ERROR` | Persistence |
 | `INSERT_FAILED` | Persistence |
@@ -67,6 +70,7 @@ Every admin / SDK / webhook failure should return:
 | `FEATURE_NOT_IN_PLAN` | Entitlement |
 | `PLAN_UPGRADE_REQUIRED` | Entitlement |
 | `QUOTA_EXCEEDED` | Entitlement |
+| `VOICE_INTAKE_DISABLED` | Transport |
 | `CLIENT_CLOSED_REQUEST` | Transport |
 | `INTERNAL` | Transport |
 | `INTERNAL_ERROR` | Transport |

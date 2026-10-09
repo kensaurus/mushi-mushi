@@ -13,7 +13,7 @@ import type { SetupResponse } from './useSetupStatus'
 
 export type ActivationPhase = 'ingest' | 'dispatch' | 'loop'
 
-export interface ActivationTopPriority {
+interface ActivationTopPriority {
   label: string
   to: string
   tone: 'plan' | 'do' | 'idle'

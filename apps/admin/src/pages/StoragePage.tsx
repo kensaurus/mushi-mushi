@@ -23,7 +23,8 @@ import { StorageStatusBanner, isStorageStatusBannerCritical } from '../component
 import { StorageSnapshotStrip } from '../components/storage/StorageSnapshotStrip'
 import { StorageReadout } from '../components/storage/StorageReadout'
 import { EMPTY_STORAGE_STATS, type StorageStats, type StorageTabId } from '../components/storage/types'
-import { Card, Btn, Badge, ErrorAlert, Input, SelectField, SegmentedControl } from '../components/ui'
+import { Card, Btn, Badge, ErrorAlert, Input, SecretInput, SelectField, SegmentedControl } from '../components/ui'
+import { describeApiFailure } from '../lib/humanizeApiError'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import {
@@ -32,7 +33,7 @@ import {
   SignalChip,
 } from '../components/report-detail/ReportSurface'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
-import { SetupNudge } from '../components/SetupNudge'
+import { NextStep } from '../components/NextStep'
 import { useToast } from '../lib/toast'
 import { CHIP_TONE, runStatusChipTone } from '../lib/chipTone'
 
@@ -107,28 +108,42 @@ function defaultsFor(projectId: string): StorageSetting {
   }
 }
 
+/**
+ * Raw keys typed on the form. They are sent once on Save; the server stores
+ * them in Vault and keeps only the name (the `*_vault_ref` columns).
+ */
+interface StorageSecretDraft {
+  access_key?: string
+  secret_key?: string
+  service_account_json?: string
+}
+
+type StorageDraft = Partial<StorageSetting> & StorageSecretDraft
+
 interface ValidationHint {
   field: string
   message: string
   blocking: boolean
 }
 
-function validateProvider(m: StorageSetting): ValidationHint[] {
+function validateProvider(m: StorageSetting & StorageSecretDraft): ValidationHint[] {
   const hints: ValidationHint[] = []
   const p = m.provider
+  // A key counts once it is saved (a ref exists) or typed on this form.
+  const has = (ref: string | null, typed: string | undefined) => Boolean(ref) || Boolean(typed?.trim())
 
   if (p === 'minio' && !m.endpoint) {
     hints.push({ field: 'endpoint', message: 'MinIO requires an explicit endpoint URL.', blocking: true })
   }
-  if (p === 'gcs' && !m.service_account_vault_ref) {
-    hints.push({ field: 'service_account_vault_ref', message: 'GCS requires a service-account Vault reference.', blocking: true })
+  if (p === 'gcs' && !has(m.service_account_vault_ref, m.service_account_json)) {
+    hints.push({ field: 'service_account_json', message: 'GCS needs the service-account key (JSON).', blocking: true })
   }
   if (['s3', 'r2', 'minio'].includes(p)) {
-    if (!m.access_key_vault_ref) {
-      hints.push({ field: 'access_key_vault_ref', message: `${p.toUpperCase()} requires an Access key Vault reference.`, blocking: true })
+    if (!has(m.access_key_vault_ref, m.access_key)) {
+      hints.push({ field: 'access_key', message: `${p.toUpperCase()} needs an access key ID.`, blocking: true })
     }
-    if (!m.secret_key_vault_ref) {
-      hints.push({ field: 'secret_key_vault_ref', message: `${p.toUpperCase()} requires a Secret key Vault reference.`, blocking: true })
+    if (!has(m.secret_key_vault_ref, m.secret_key)) {
+      hints.push({ field: 'secret_key', message: `${p.toUpperCase()} needs a secret access key.`, blocking: true })
     }
   }
   if (p === 's3' && !m.region) {
@@ -149,7 +164,7 @@ const STORAGE_TABS: Array<{ id: StorageTabId; label: string; description: string
   {
     id: 'configure',
     label: 'Configure',
-    description: 'Per-project provider, bucket, Vault refs, and health-probe debug log.',
+    description: 'Per-project provider, bucket, access keys (stored in Vault), and health-probe debug log.',
   },
   {
     id: 'usage',
@@ -223,7 +238,7 @@ export function StoragePage() {
 
   // Drafts only carry fields the user has touched. We merge them on top of the
   // existing setting (or the defaults for un-configured projects) at render.
-  const [drafts, setDrafts] = useState<Record<string, Partial<StorageSetting>>>({})
+  const [drafts, setDrafts] = useState<Record<string, StorageDraft>>({})
   const [savingId, setSavingId] = useState<string | null>(null)
   const [checkingId, setCheckingId] = useState<string | null>(null)
   // Live debug steps from the most recent health probe (not yet persisted to DB)
@@ -245,10 +260,10 @@ export function StoragePage() {
     })
   }, [settings, projects])
 
-  const draftFor = (projectId: string): Partial<StorageSetting> => drafts[projectId] ?? {}
-  const merged = (s: StorageSetting): StorageSetting => ({ ...s, ...draftFor(s.project_id) })
+  const draftFor = (projectId: string): StorageDraft => drafts[projectId] ?? {}
+  const merged = (s: StorageSetting): StorageSetting & StorageSecretDraft => ({ ...s, ...draftFor(s.project_id) })
 
-  const updateDraft = (projectId: string, patch: Partial<StorageSetting>) => {
+  const updateDraft = (projectId: string, patch: StorageDraft) => {
     setDrafts((prev) => ({ ...prev, [projectId]: { ...(prev[projectId] ?? {}), ...patch } }))
   }
 
@@ -265,7 +280,8 @@ export function StoragePage() {
     })
     setSavingId(null)
     if (!res.ok) {
-      toast.error('Save failed', res.error?.message)
+      const t = describeApiFailure(res.error, 'Could not save storage settings')
+      toast.error(t.title, t.description)
       return
     }
     toast.success(isFirstSave ? 'Storage configured' : 'Storage settings saved')
@@ -290,7 +306,7 @@ export function StoragePage() {
     if (res.data?.healthy) {
       toast.success('Health check passed', 'Bucket is reachable and accepts writes.')
     } else {
-      const errMsg = res.data?.error ?? res.error?.message
+      const errMsg = res.data?.error ?? describeApiFailure(res.error, 'Health check failed').description
       toast.error('Health check failed', errMsg)
     }
     reloadAll()
@@ -468,26 +484,28 @@ export function StoragePage() {
                 value={String(m.signed_url_ttl_secs)}
                 onChange={(e) => updateDraft(s.project_id, { signed_url_ttl_secs: parseInt(e.target.value, 10) || 3600 })}
               />
-              <Input
-                label="Access key Vault ref"
+              {/* Raw keys: the server stores them in Vault and keeps only the
+                  name. These fields never show a saved key back. */}
+              <SecretInput
+                label="Access key ID"
                 helpId="storage.access_key_ref"
-                value={m.access_key_vault_ref ?? ''}
-                placeholder="mushi_s3_access_key_<project>"
-                onChange={(e) => updateDraft(s.project_id, { access_key_vault_ref: e.target.value || null as unknown as string })}
+                value={m.access_key ?? ''}
+                placeholder={m.access_key_vault_ref ? 'Saved — paste a new key to replace it' : 'AKIA…'}
+                onChange={(e) => updateDraft(s.project_id, { access_key: e.target.value })}
               />
-              <Input
-                label="Secret key Vault ref"
+              <SecretInput
+                label="Secret access key"
                 helpId="storage.secret_key_ref"
-                value={m.secret_key_vault_ref ?? ''}
-                placeholder="mushi_s3_secret_key_<project>"
-                onChange={(e) => updateDraft(s.project_id, { secret_key_vault_ref: e.target.value || null as unknown as string })}
+                value={m.secret_key ?? ''}
+                placeholder={m.secret_key_vault_ref ? 'Saved — paste a new key to replace it' : 'Your secret access key'}
+                onChange={(e) => updateDraft(s.project_id, { secret_key: e.target.value })}
               />
               {m.provider === 'gcs' ? (
-                <Input
-                  label="GCS service-account Vault ref"
-                  value={m.service_account_vault_ref ?? ''}
-                  placeholder="mushi_gcs_sa_<project>"
-                  onChange={(e) => updateDraft(s.project_id, { service_account_vault_ref: e.target.value || null as unknown as string })}
+                <SecretInput
+                  label="GCS service-account key (JSON)"
+                  value={m.service_account_json ?? ''}
+                  placeholder={m.service_account_vault_ref ? 'Saved — paste a new key to replace it' : '{"type": "service_account", …}'}
+                  onChange={(e) => updateDraft(s.project_id, { service_account_json: e.target.value })}
                 />
               ) : null}
               <Input
@@ -635,7 +653,8 @@ export function StoragePage() {
             'Configure tab saves provider + bucket. Health check runs a write probe and shows step-by-step debug output.'
           }
         />
-        <SetupNudge
+        <NextStep
+          variant="inline"
           requires={['project']}
           emptyTitle="Select a project"
           emptyDescription="Storage backends are scoped per project — pick mushi-mushi (or your app) first."
@@ -677,8 +696,22 @@ export function StoragePage() {
           'Configure tab saves provider + bucket. Health check runs a write probe and shows step-by-step debug output.'
         }
       >
-        <Badge className={stats.activeProjectHealthStatus === 'healthy' ? CHIP_TONE.okSubtle : stats.activeProjectHealthStatus === 'failing' ? CHIP_TONE.dangerSubtle : CHIP_TONE.warnSubtle}>
-          {stats.activeProjectHealthStatus.toUpperCase()}
+        {/* Scoped to the active project in words: next to the team-wide
+            "Healthy buckets" count, a bare "UNKNOWN" read as a contradiction. */}
+        <Badge
+          className={
+            stats.activeProjectHealthStatus === 'healthy'
+              ? CHIP_TONE.okSubtle
+              : stats.activeProjectHealthStatus === 'failing'
+                ? CHIP_TONE.dangerSubtle
+                : stats.activeProjectHealthStatus === 'degraded'
+                  ? CHIP_TONE.warnSubtle
+                  : CHIP_TONE.neutral
+          }
+        >
+          {stats.activeProjectHealthStatus === 'unknown'
+            ? 'This project: not checked yet'
+            : `This project: ${stats.activeProjectHealthStatus}`}
         </Badge>
       </PageHeaderBar>
 
@@ -732,7 +765,8 @@ export function StoragePage() {
           {activeCard ? (
             <div data-dav-anchor="storage:decide">{renderProjectCard(activeCard)}</div>
           ) : cards.length === 0 ? (
-            <SetupNudge
+            <NextStep
+              variant="inline"
               requires={['project_created']}
               emptyTitle="No projects yet"
               emptyDescription="Create a project first — every project gets its own storage backend."
@@ -744,7 +778,8 @@ export function StoragePage() {
       {activeTab === 'configure' && (
         <>
           {cards.length === 0 ? (
-            <SetupNudge
+            <NextStep
+              variant="inline"
               requires={['project_created']}
               emptyTitle="No projects yet"
               emptyDescription="Create a project first — every project gets its own storage backend."

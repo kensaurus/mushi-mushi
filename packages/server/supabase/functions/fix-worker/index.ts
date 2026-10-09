@@ -37,32 +37,74 @@
  *     project owner's vault-stored installation token (or env GITHUB_TOKEN
  *     for self-hosted/dev).
  *   - The LLM is sandboxed by structured output: it can only emit file
- *     paths + content + rationale, never tool calls or shell commands.
+ *     paths + find/replace edits (or a new file's contents) + rationale,
+ *     never tool calls or shell commands.
+ *
+ * Context (2026-10-03): the model sees whole files read from the target
+ * repo at the commit the PR branches from (_shared/fix-context.ts), found
+ * via report literals, stack frames and RAG; its edits are applied to those
+ * same bytes (_shared/fix-edits.ts).
  *
  * Cost guard:
- *   - circuit_breaker: aborts if any single file would exceed
- *     project_settings.autofix_max_lines (default 200).
+ *   - circuit_breaker: aborts if any single file's diff (changed lines)
+ *     would exceed project_settings.autofix_max_lines (default 200).
  *   - token cap: passes maxTokens to limit blast radius even if the model
  *     misbehaves.
- *   - One LLM call per dispatch — no agentic loop in M5; SEP-1686 Tasks +
- * multi-turn lands in a release.
+ *   - At most two fix generations per dispatch: one, plus one retry with
+ *     the exact error when its edits do not apply. No agentic loop.
  */
 
 import { generateObject, NoObjectGeneratedError } from 'npm:ai@4';
-import { createAnthropic } from 'npm:@ai-sdk/anthropic@1';
-import { createOpenAI } from 'npm:@ai-sdk/openai@1';
+import { openAiProvider } from '../_shared/openai-compat.ts';
 import { z } from 'npm:zod@3';
 import { getServiceClient } from '../_shared/db.ts';
-import { withSentry, tagLangfuseTrace } from '../_shared/sentry.ts';
+import { reportError, withSentry, tagLangfuseTrace } from '../_shared/sentry.ts';
 import { safeErrorResponse } from '../_shared/safe-error.ts';
 import { resolveLlmKey } from '../_shared/byok.ts';
-import { withAnthropicOrOpenAi, LlmFailoverError } from '../_shared/llm-failover.ts';
+import { withAnthropicOrOpenAi, LlmBudgetExceededError, LlmFailoverError } from '../_shared/llm-failover.ts';
 import {
   getRelevantCodeWithReason,
   formatCodeContext,
+  type CodeContext,
   type RagSkipReason,
 } from '../_shared/rag.ts';
-import { createPrFromFiles, generateFixBranchName } from '../_shared/github-pr.ts';
+import {
+  createPrFromFiles,
+  fetchBaseFileState,
+  generateFixBranchName,
+  resolveBaseBranch,
+  searchRepoCode,
+} from '../_shared/github-pr.ts';
+import {
+  assessFixFiles,
+  diffLineCount,
+  fixDiffLineCount,
+  fixReviewPassed,
+  reportRequestsRewrite,
+  type BaseFileState,
+  type ProposedFile,
+} from '../_shared/fix-file-guard.ts';
+import {
+  attributeIndexPath,
+  buildFullFileContext,
+  extractReportLiterals,
+  isLocaleFile,
+  literalSearchTerms,
+  localeKeysForText,
+  rankContextCandidates,
+  underRepoGlobs,
+  FULL_CONTEXT_LIMITS,
+  type FullFileContext,
+  type LinkedRepoScope,
+} from '../_shared/fix-context.ts';
+import {
+  editRetryPrompt,
+  introducedText,
+  isCommentOnlyFix,
+  materializeFixFiles,
+} from '../_shared/fix-edits.ts';
+import { matchFramePathsToTree } from '../_shared/sentry-frames.ts';
+import { featureRequestDispatchBlock } from '../_shared/report-category.ts';
 
 function ragSkipReasonMessage(reason: RagSkipReason | 'ok', detail: string | undefined): string {
   switch (reason) {
@@ -84,12 +126,24 @@ import { firecrawlSearch, type FirecrawlSearchResult } from '../_shared/firecraw
 import { createTrace } from '../_shared/observability.ts';
 import { log as rootLog, type Logger } from '../_shared/logger.ts';
 import { requireServiceRoleAuth } from '../_shared/auth.ts';
-import { FIX_MODEL, FIX_FALLBACK } from '../_shared/models.ts';
+import { FIX_EFFORT, FIX_FALLBACK } from '../_shared/models.ts';
+import { fixModelFor } from '../_shared/project-models.ts';
+import { claudeGenerateObject } from '../_shared/claude-messages.ts';
 import { getPromptForStage } from '../_shared/prompt-ab.ts'
-import { checkAutofixBudget } from '../_shared/autofix-budget.ts';
+import { budgetSnapshot, checkAutofixBudget, dispatchTrigger, isSiblingDispatch } from '../_shared/autofix-budget.ts';
+import { logLlmInvocation } from '../_shared/telemetry.ts';
+import { siblingDispatchRow } from '../_shared/sibling-dispatch.ts';
 import { dispatchPluginEventDetached } from '../_shared/plugins.ts';
 import { notifyTeamFixEvent } from '../_shared/team-notify.ts';
 import { notifyReportStatusTransition } from '../_shared/report-status-notify.ts';
+import {
+  applyCloudAgentOutcome,
+  buildCloudAgentPrompt,
+  cloudAgentBranchName,
+  getCloudAgentAdapter,
+  isDispatchableCloudAgent,
+  recordCloudAgentDispatched,
+} from '../_shared/agent-adapters.ts';
 
 // ----------------------------------------------------------------------------
 // Structured fix output lives in `_shared/fix-schema.ts` so the regression
@@ -98,8 +152,10 @@ import { notifyReportStatusTransition } from '../_shared/report-status-notify.ts
 // rationale.
 // ----------------------------------------------------------------------------
 
-import { fixSchema, type FixOutput } from '../_shared/fix-schema.ts';
+import { FIX_OUTPUT_CONTRACT, fixSchema, isEditEntry, type FixOutput } from '../_shared/fix-schema.ts';
+import { sentryFixesTrailers, sentryShortIdsForReport } from '../_shared/sentry-resolve-back.ts';
 import { validateEdgeSpec, renderSpecContextEdge } from '../_shared/spec-validation.ts';
+import { loadFixRecipeBlock } from '../_shared/fix-recipe-block.ts';
 
 const SYSTEM_PROMPT = `You are a senior staff engineer fixing one specific bug report.
 
@@ -109,16 +165,16 @@ Rules:
 1. Make the smallest change that resolves the bug. Do not refactor unrelated code.
 2. Preserve the existing file's style, imports, and formatting.
 3. If you change behavior, add or update a test in the same PR.
-4. Only emit files you have actually modified. Do not regenerate untouched files.
+4. Only emit files you have actually modified. Change an existing file with find/replace edits, never by regenerating it.
 5. If you are not confident the fix is correct, set needsHumanReview=true and explain in the rationale.
 6. Never invent file paths. Use ONLY paths that appear in the "Relevant code" context. If the right file isn't there, set needsHumanReview=true and propose what to look at instead.
 7. Never include secrets, credentials, or hardcoded API keys in your output.
 8. Stay within the configured scope directory unless adding tests.
 
-NEVER emit placeholder output. The strings "placeholder", "TODO", "lorem ipsum", "FIXME", "...", or any stub stand-in for real content are FORBIDDEN as the value of \`summary\`, \`rationale\`, \`files[].contents\`, or \`files[].reason\`. The schema will reject them and you will be retried. If you do not have enough context to write a real fix:
+NEVER emit placeholder output. The strings "placeholder", "TODO", "lorem ipsum", "FIXME", "...", or any stub stand-in for real content are FORBIDDEN as the value of \`summary\`, \`rationale\`, \`files[].edits[].find\`/\`replace\`, \`files[].contents\`, or \`files[].reason\`. The schema will reject them and you will be retried. If you do not have enough context to write a real fix:
   - set \`needsHumanReview: true\`
   - in \`rationale\`, explain exactly which file or snippet you would need to see
-  - in \`files\`, you MUST include at least one file — emit the SMALLEST plausible defensive change you can justify (e.g. an explicit error message at the crash site, a null-guard, or a TODO comment that references the specific line that needs investigation). A \`NEEDS_INVESTIGATION.md\` with a concrete analysis of what you found and what needs to change is acceptable.
+  - in \`files\`, you MUST include at least one file — emit the SMALLEST plausible defensive code change you can justify (e.g. an explicit error message at the crash site or a null-guard). A file that only adds notes, markdown or TODO comments is not a fix; with needsHumanReview set, the review gate stops this attempt before any PR is opened.
   - \`files\` can NEVER be an empty array — the schema requires at least one entry
   - never emit a draft PR full of stub files just to satisfy the schema`;
 
@@ -131,6 +187,8 @@ interface ResolvedRepo {
   repo: string;
   defaultBranch: string;
   scopeDirectory?: string;
+  /** All of the repo's project_repos.path_globs; null = the whole repo. */
+  pathGlobs: string[] | null;
 }
 
 /**
@@ -250,10 +308,18 @@ Deno.serve(
     // migration default and maps to the LLM path (Anthropic primary, OpenAI
     // fallback) — the MCP-hosted Claude Code shell lives in @mushi-mushi/agents
     // and isn't reachable from Deno edge yet. 'rest_fix_worker' is the
-    // explicit opt-in for this same path. Anything else is the Node-only
-    // orchestrator territory and must be rejected rather than silently
-    // falling through.
-    const SUPPORTED_AGENTS = new Set(['claude_code', 'rest_fix_worker', 'llm']);
+    // explicit opt-in for this same path. 'cursor_cloud' and
+    // 'github_cloud_agent' hand the report to a vendor-hosted repo agent via
+    // _shared/agent-adapters.ts (step 2b below) and finish asynchronously.
+    // Anything else is the Node-only orchestrator territory and must be
+    // rejected rather than silently falling through.
+    const SUPPORTED_AGENTS = new Set([
+      'claude_code',
+      'rest_fix_worker',
+      'llm',
+      'cursor_cloud',
+      'github_cloud_agent',
+    ]);
 
     // Spec-traceability (whitepaper §2.10): recover the inventory anchor.
     // classify-report writes a `reports_against` graph edge from the report
@@ -324,18 +390,21 @@ Deno.serve(
         db
           .from('reports')
           .select(
-            'id, description, summary, category, severity, component, confidence, user_intent, status, reporter_token_hash, ' +
-              'stage2_analysis, reproduction_steps, environment, console_logs, network_logs, ' +
-              'judge_score',
+            'id, description, summary, category, category_confirmed_at, severity, component, confidence, user_intent, user_category, status, reporter_token_hash, ' +
+              'stage1_classification, stage2_analysis, reproduction_steps, environment, console_logs, network_logs, ' +
+              'judge_score, custom_metadata',
           )
           .eq('id', dispatch.report_id)
+          // Defence in depth: the dispatch route checks this too.
+          .eq('project_id', dispatch.project_id)
           .single(),
         db
           .from('project_settings')
           .select(
             'project_id, autofix_agent, autofix_max_lines, sandbox_provider, ' +
-              'github_repo_url, codebase_repo_url, fix_branch_template, ' +
-              'autofix_max_spend_usd, autofix_max_dispatches_per_day, autofix_approval_cost_threshold_usd',
+              'github_repo_url, github_default_branch, codebase_repo_url, fix_branch_template, ' +
+              'autofix_max_spend_usd, autofix_max_dispatches_per_day, autofix_approval_cost_threshold_usd, ' +
+              'cursor_default_model, claude_default_model',
           )
           .eq('project_id', dispatch.project_id)
           .single(),
@@ -347,12 +416,42 @@ Deno.serve(
       if (!report) throw new Error(`Report ${dispatch.report_id} not found`);
       if (!project) throw new Error(`Project ${dispatch.project_id} not found`);
 
+      // Defence in depth for every dispatch path: a reporter's feature
+      // request never reaches the LLM or GitHub until a human re-categorizes
+      // it (report 469f6962 was a feature request and became PR 424).
+      const featureBlock = featureRequestDispatchBlock(report);
+      if (featureBlock) {
+        return await blockFixAttempt(db, trace, dispatch, fixAttemptId, featureBlock, { files_changed: [] });
+      }
+
+      // The caps bound what Mushi spends on its own. A manual dispatch (console,
+      // CLI, MCP, Slack, voice, Linear delegation) proceeds past them, and the
+      // 30-day spend is stamped on the dispatch row so the timeline shows it.
+      // A failed budget read throws into the catch below (attempt + job fail
+      // with the reason) instead of being read as "$0 spent".
       const budget = await checkAutofixBudget(db, dispatch.project_id, {
         autofix_max_spend_usd: (settings?.autofix_max_spend_usd as number | null) ?? null,
         autofix_max_dispatches_per_day: (settings?.autofix_max_dispatches_per_day as number | null) ?? null,
         autofix_approval_cost_threshold_usd:
           (settings?.autofix_approval_cost_threshold_usd as number | null) ?? null,
-      }, { severity: report.severity as string | null, estimatedCostUsd: 0.25 });
+      }, {
+        severity: report.severity as string | null,
+        estimatedCostUsd: 0.25,
+        trigger: dispatchTrigger(dispatch.dispatch_metadata),
+        excludeDispatchId: dispatch.id,
+      });
+      {
+        const { error: snapErr } = await db
+          .from('fix_dispatch_jobs')
+          .update({
+            dispatch_metadata: {
+              ...((dispatch.dispatch_metadata as Record<string, unknown> | null) ?? {}),
+              autofix_budget: budgetSnapshot(budget),
+            },
+          })
+          .eq('id', dispatch.id);
+        if (snapErr) log.warn('autofix budget snapshot not stored', { dispatchId: dispatch.id, err: snapErr.message });
+      }
 
       if (!budget.allowed) {
         await completeAttempt(db, fixAttemptId, {
@@ -399,6 +498,31 @@ Deno.serve(
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         });
+      }
+
+      // ---- 2b. Cloud agent hand-off (cursor_cloud / github_cloud_agent) ------
+      // Repo-level agents run in the vendor's sandbox against the full
+      // checkout, so the local sandbox policy, the RAG context floor and the
+      // structured-output LLM call below do not apply. We build the SAME user
+      // prompt the LLM path gets (report, inventory anchor, whatever RAG
+      // context exists), hand it to the adapter, stamp the vendor ids on the
+      // attempt and return. The dispatch row stays 'running' — the sweeper
+      // only re-queues 'queued' rows — until cursor-webhook,
+      // agent-status-poll or webhooks-github-indexer closes it through
+      // applyCloudAgentOutcome. Failures throw into the catch below, which
+      // already fails the attempt + job and notifies the team.
+      if (isDispatchableCloudAgent(requestedAgent)) {
+        const cloudResponse = await dispatchToCloudAgent(db, log, {
+          dispatch,
+          settings,
+          report,
+          requestedAgent,
+          fixAttemptId,
+          inventoryAnchor,
+          trace,
+        });
+        await trace.end();
+        return cloudResponse;
       }
 
       // Agent pre-flight: fix-worker can only run the LLM path today. Any
@@ -528,7 +652,38 @@ Deno.serve(
         });
       }
 
-      const codeContext = formatCodeContext(codeFiles);
+      // ---- 3a. Full-file context ---------------------------------------------
+      // The GitHub token and the base commit are resolved BEFORE the model
+      // runs: the model sees whole files read at that commit, the edits are
+      // applied to those same bytes, and the PR branches from that commit.
+      const ghToken = await resolveGithubToken(db, project.owner_id ?? null, dispatch.project_id);
+      let base: { branch: string; sha: string } | null = null;
+      if (ghToken) {
+        try {
+          base = await resolveBaseBranch(ghToken, repo.owner, repo.repo, repo.defaultBranch, {
+            info: (msg, ctx) => log.info(msg, ctx as Record<string, unknown>),
+            warn: (msg, ctx) => log.warn(msg, ctx as Record<string, unknown>),
+          });
+        } catch (err) {
+          throw new Error(
+            `GitHub base branch for ${repo.owner}/${repo.repo} could not be resolved: ${err instanceof Error ? err.message : String(err)}`.slice(0, 400),
+          );
+        }
+      }
+      const fullSpan = trace.span('context.full-files');
+      const fullContext = await assembleFullFileContext(db, log, {
+        projectId: dispatch.project_id,
+        report,
+        repo,
+        ghToken,
+        baseSha: base?.sha ?? null,
+        ragFiles: codeFiles,
+      });
+      const codeContext = fullContext.text;
+      fullSpan.end({
+        literals: fullContext.literals,
+        shown: fullContext.outcomes.map((o) => `${o.shown}:${o.path}${o.reason ? ` (${o.reason})` : ''}`).slice(0, 20),
+      });
 
       // Loop-closure: pull "past similar merged fixes" via the fix_corpus
       // RPC. This is the second retrieval signal — `match_codebase_files`
@@ -554,6 +709,8 @@ Deno.serve(
           const { createEmbedding } = await import('../_shared/embeddings.ts');
           const queryEmbedding = await createEmbedding(queryText, {
             projectId: dispatch.project_id,
+            functionName: 'fix-worker',
+            reportId: dispatch.report_id,
           });
           const { data: pastFixes } = await db.rpc('match_fix_corpus', {
             query_embedding: queryEmbedding,
@@ -600,7 +757,11 @@ ${
         pastFixesSpan.end({ error: String(err).slice(0, 200) });
       }
 
-      ctxSpan.end({ codeFileCount: codeFiles.length, repo: `${repo.owner}/${repo.repo}` });
+      ctxSpan.end({
+        codeFileCount: codeFiles.length,
+        contextFilesShown: fullContext.shownCount,
+        repo: `${repo.owner}/${repo.repo}`,
+      });
 
       // ---- 3b. Firecrawl auto-augment when local RAG is sparse OR
       //          the report has a poor prior judge score (a "stubborn" report).
@@ -610,7 +771,7 @@ ${
       //          fix_attempts so the Fixes page shows what the agent saw.
       const judgeScore = typeof report.judge_score === 'number' ? report.judge_score : null;
       const augmentReason: 'rag_sparse' | 'low_judge_score' | null =
-        codeFiles.length < 3
+        fullContext.shownCount < 3
           ? 'rag_sparse'
           : judgeScore !== null && judgeScore < 0.6
             ? 'low_judge_score'
@@ -662,21 +823,41 @@ ${
       // "INVESTIGATION_NEEDED.md" stub PR (exactly what landed on glot.it
       // PRs #3/#4/#5). Short-circuit instead of burning a model call, and
       // surface the reason on the PDCA receipt so the user can act.
-      if (codeFiles.length < MIN_RAG_CHUNKS && webSnippets.length === 0) {
-        const reason = ragSkipReasonMessage(ragResult.reason, ragResult.detail);
+      // Gate on the files the model would actually see: a Sentry report whose
+      // literal search found the emitting file is grounded even when RAG
+      // returned nothing (indexing off, embedding key revoked).
+      if (fullContext.shownCount < MIN_RAG_CHUNKS && webSnippets.length === 0) {
+        const reason =
+          codeFiles.length > 0
+            ? `None of the ${codeFiles.length} indexed file(s) matching this report could be read from ${repo.owner}/${repo.repo}` +
+              `${base ? `@${base.branch}` : ''} (${fullContext.outcomes.map((o) => `${o.path}: ${o.reason ?? o.shown}`).join('; ').slice(0, 240)}). Re-index the repo, then retry.`
+            : ragSkipReasonMessage(ragResult.reason, ragResult.detail);
         log.warn('Fix skipped: no grounding context available', {
           reportId: dispatch.report_id,
           codeFiles: codeFiles.length,
+          contextFilesShown: fullContext.shownCount,
           webSnippets: webSnippets.length,
           minRagChunks: MIN_RAG_CHUNKS,
           ragReason: ragResult.reason,
           ragDetail: ragResult.detail ?? null,
         });
+        // `embedding_failed` / `rpc_failed` are pipeline faults — a revoked
+        // BYOK key, a missing migration — not "the codebase had nothing
+        // relevant". Filing them as no_relevant_code (an EXPECTED category,
+        // see EXPECTED_FAILURE_CATEGORIES) also kept them out of Sentry:
+        // glot.it's embedding key 401'd for two months and every dispatch was
+        // silently skipped with "couldn't find relevant code". The console
+        // already renders context_assembly_failed as a retrieval-pipeline
+        // error (deriveRecommendation.ts, dispatch-prerequisites.mdx).
+        const failureCategory =
+          ragResult.reason === 'embedding_failed' || ragResult.reason === 'rpc_failed'
+            ? 'context_assembly_failed'
+            : 'no_relevant_code';
         await completeAttempt(db, fixAttemptId, {
           status: 'skipped_no_context',
           error: reason,
           files_changed: [],
-          failure_category: 'no_relevant_code',
+          failure_category: failureCategory,
         });
         await db
           .from('fix_dispatch_jobs')
@@ -707,143 +888,286 @@ ${
         webSnippets,
         inventoryAnchor,
         pastFixesContext,
+        // Tokens plus the fixer context: tables the stack trace names, the
+        // last fix's deploy state and open radar findings (≤ 4 KB in all).
+        await loadFixRecipeBlock(db, dispatch.project_id, report),
+        base ? { branch: base.branch, sha: base.sha } : null,
       );
 
       // Resolve the fix-worker system prompt from `prompt_versions` (stage='fix').
       // Falls back to the hardcoded SYSTEM_PROMPT when no global or project row
       // exists (first boot before migration 20260422110000 runs, or when the
       // operator has deleted every fix-stage row). Wired here so operators can
-      // A/B rewrite the senior-engineer rubric without redeploying.
+      // A/B rewrite the senior-engineer rubric without redeploying. The output
+      // contract (find/replace edits) belongs to the worker, not the A/B
+      // prompt, so it is appended to whichever prompt is active.
       const fixPromptSelection = await getPromptForStage(db, dispatch.project_id, 'fix');
-      const activeFixSystemPrompt = fixPromptSelection.promptTemplate ?? SYSTEM_PROMPT;
+      const activeFixSystemPrompt = `${fixPromptSelection.promptTemplate ?? SYSTEM_PROMPT}\n\n${FIX_OUTPUT_CONTRACT}`;
       const fixPromptVersion = fixPromptSelection.promptVersion;
 
       // ---- 5. Call LLM with structured output (multi-key failover) ----------
       const llmSpan = trace.span('llm.fix');
       const llmStart = Date.now();
-      let fix: FixOutput | undefined;
       let usedModel = '';
       let inputTokens = 0;
       let outputTokens = 0;
+      let usedKeySource: 'byok' | 'env' | null = null;
 
-      const DEFAULT_ANTHROPIC_MODEL = FIX_MODEL;
+      // The Claude Code agent card's "Default model" (claude_default_model).
+      // Retired ids (the column default claude-opus-4-1 included) resolve to
+      // FIX_MODEL, so only a project that picked a current model changes;
+      // a non-Claude id is ignored, the Anthropic call is first.
+      const DEFAULT_ANTHROPIC_MODEL = fixModelFor(settings?.claude_default_model);
       const DEFAULT_OPENAI_MODEL = `openai/${FIX_FALLBACK}`;
-
       const MAX_OUTPUT_RETRIES = 2;
-      let lastLlmErr: unknown = null;
-      for (let attempt = 0; attempt <= MAX_OUTPUT_RETRIES; attempt++) {
-        try {
-          const { result, usedProvider } = await withAnthropicOrOpenAi(
-          db,
-          dispatch.project_id,
-          async (anthropicResolved) => {
-            usedModel = DEFAULT_ANTHROPIC_MODEL;
-            const anthropic = createAnthropic({ apiKey: anthropicResolved.key });
-            const { object, usage } = await generateObject({
-              model: anthropic(usedModel),
-              schema: fixSchema,
-              temperature: 0,
-              messages: [
-                {
-                  role: 'system',
-                  content: activeFixSystemPrompt,
-                  experimental_providerMetadata: {
-                    anthropic: { cacheControl: { type: 'ephemeral' } },
-                  },
-                },
-                { role: 'user', content: userPrompt },
-              ],
-              maxTokens: 8_000,
+
+      /**
+       * One structured fix generation, with the schema-violation retries.
+       * `followUp` continues the conversation (the previous output as the
+       * assistant turn, the feedback as a new user turn): the one retry after
+       * edits failed to apply. Returns a Response when the attempt was blocked.
+       * Tokens accumulate across calls and every successful call is logged, so
+       * the auto-fix spend cap sees the retry too.
+       */
+      const generateFix = async (
+        followUp: { previous: FixOutput; feedback: string } | null,
+      ): Promise<FixOutput | Response> => {
+        const turns: Array<{ role: 'user' | 'assistant'; content: string }> = [
+          { role: 'user', content: userPrompt },
+          ...(followUp
+            ? [
+                { role: 'assistant' as const, content: JSON.stringify(followUp.previous) },
+                { role: 'user' as const, content: followUp.feedback },
+              ]
+            : []),
+        ];
+        let lastLlmErr: unknown = null;
+        for (let attempt = 0; attempt <= MAX_OUTPUT_RETRIES; attempt++) {
+          const callStart = Date.now();
+          let callInputTokens = 0;
+          let callOutputTokens = 0;
+          try {
+            const { result, usedProvider } = await withAnthropicOrOpenAi(
+              db,
+              dispatch.project_id,
+              async (anthropicResolved) => {
+                usedModel = DEFAULT_ANTHROPIC_MODEL;
+                usedKeySource = anthropicResolved.source;
+                const { object, usage } = await claudeGenerateObject({
+                  apiKey: anthropicResolved.key,
+                  model: usedModel,
+                  schema: fixSchema,
+                  effort: FIX_EFFORT,
+                  // Whole files in, edits out; at medium effort a long
+                  // generation needs more than the default per-call timeout.
+                  timeoutMs: 300_000,
+                  messages: [
+                    {
+                      role: 'system',
+                      content: activeFixSystemPrompt,
+                      experimental_providerMetadata: {
+                        anthropic: { cacheControl: { type: 'ephemeral' } },
+                      },
+                    },
+                    ...turns,
+                  ],
+                  // 8K of fix output plus room for adaptive thinking, which
+                  // counts toward max_tokens on Sonnet 5.5.
+                  maxTokens: 16_000,
+                });
+                callInputTokens = usage?.promptTokens ?? 0;
+                callOutputTokens = usage?.completionTokens ?? 0;
+                return object;
+              },
+              async (openaiResolved) => {
+                const openaiKey = openaiResolved.key;
+                const openaiBaseUrl = openaiResolved.baseUrl;
+                const isOpenRouter = openaiBaseUrl?.includes('openrouter.ai') ?? false;
+                usedModel = isOpenRouter ? DEFAULT_OPENAI_MODEL : FIX_FALLBACK;
+                usedKeySource = openaiResolved.source;
+                const openai = openAiProvider({
+                  apiKey: openaiKey,
+                  ...(openaiBaseUrl ? { baseURL: openaiBaseUrl } : {}),
+                });
+                const { object, usage } = await generateObject({
+                  model: openai(usedModel),
+                  schema: fixSchema,
+                  temperature: 0,
+                  system: activeFixSystemPrompt,
+                  messages: turns,
+                  maxTokens: 8_000,
+                });
+                callInputTokens = usage?.promptTokens ?? 0;
+                callOutputTokens = usage?.completionTokens ?? 0;
+                return object;
+              },
+            );
+            inputTokens += callInputTokens;
+            outputTokens += callOutputTokens;
+            // The auto-fix spend cap sums llm_invocations rows for fix-worker.
+            void logLlmInvocation(db, {
+              projectId: dispatch.project_id,
+              reportId: dispatch.report_id,
+              functionName: 'fix-worker',
+              stage: 'fix',
+              primaryModel: DEFAULT_ANTHROPIC_MODEL,
+              usedModel,
+              fallbackUsed: usedProvider !== 'anthropic',
+              fallbackReason: usedProvider !== 'anthropic' ? 'anthropic_unavailable' : null,
+              status: 'success',
+              latencyMs: Date.now() - callStart,
+              inputTokens: callInputTokens,
+              outputTokens: callOutputTokens,
+              promptVersion: fixPromptVersion ?? null,
+              keySource: usedKeySource,
+              langfuseTraceId: trace.id,
             });
-            inputTokens = usage?.promptTokens ?? 0;
-            outputTokens = usage?.completionTokens ?? 0;
-            return object;
-          },
-          async (openaiResolved) => {
-            const openaiKey = openaiResolved.key;
-            const openaiBaseUrl = openaiResolved.baseUrl;
-            const isOpenRouter = openaiBaseUrl?.includes('openrouter.ai') ?? false;
-            usedModel = isOpenRouter ? DEFAULT_OPENAI_MODEL : FIX_FALLBACK;
-            const openai = createOpenAI({
-              apiKey: openaiKey,
-              ...(openaiBaseUrl ? { baseURL: openaiBaseUrl } : {}),
-            });
-            const { object, usage } = await generateObject({
-              model: openai(usedModel),
-              schema: fixSchema,
-              temperature: 0,
-              system: activeFixSystemPrompt,
-              prompt: userPrompt,
-              maxTokens: 8_000,
-            });
-            inputTokens = usage?.promptTokens ?? 0;
-            outputTokens = usage?.completionTokens ?? 0;
-            return object;
-          },
+            return result;
+          } catch (llmErr) {
+            lastLlmErr = llmErr;
+            if (NoObjectGeneratedError.isInstance(llmErr) && attempt < MAX_OUTPUT_RETRIES) {
+              log.warn('Fix worker output validation failed — retrying', { attempt: attempt + 1 });
+              continue;
+            }
+            // Over the monthly LLM budget: a state the owner set, not a crash.
+            // Block the attempt with the reason (report shows autofix_blocked)
+            // instead of the failure path that notifies the team.
+            if (llmErr instanceof LlmBudgetExceededError) {
+              llmSpan.end({ error: 'llm_budget_exceeded' });
+              return await blockFixAttempt(db, trace, dispatch, fixAttemptId, llmErr.message, { files_changed: [] });
+            }
+            if (llmErr instanceof LlmFailoverError) {
+              llmSpan.end({ error: llmErr.message });
+              throw new Error(`LLM call failed: ${llmErr.message}`);
+            }
+            if (NoObjectGeneratedError.isInstance(llmErr)) {
+              const cause = llmErr.cause as
+                | { issues?: Array<{ path: (string | number)[]; message: string; code?: string }> }
+                | undefined;
+              log.warn('Fix worker structured-output schema violation', {
+                dispatchId: dispatch.id,
+                model: usedModel,
+                modelResponse: (llmErr as { text?: string }).text?.slice(0, 800) ?? null,
+                zodIssues:
+                  cause?.issues?.slice(0, 5).map((i) => ({
+                    path: i.path.join('.'),
+                    code: i.code,
+                    message: i.message,
+                  })) ?? null,
+              });
+            }
+            llmSpan.end({ error: String(llmErr).slice(0, 500) });
+            throw new Error(`LLM call failed: ${String(llmErr).slice(0, 300)}`);
+          }
+        }
+        throw new Error(
+          `LLM call failed after ${MAX_OUTPUT_RETRIES + 1} attempts: ${String(lastLlmErr).slice(0, 200)}`,
         );
-        fix = result;
-        void usedProvider; // logged via usedModel
-        lastLlmErr = null;
-        break;
-        } catch (llmErr) {
-          lastLlmErr = llmErr;
-          if (NoObjectGeneratedError.isInstance(llmErr) && attempt < MAX_OUTPUT_RETRIES) {
-            log.warn('Fix worker output validation failed — retrying', { attempt: attempt + 1 });
-            continue;
-          }
-          if (llmErr instanceof LlmFailoverError) {
-            llmSpan.end({ error: llmErr.message });
-            throw new Error(`LLM call failed: ${llmErr.message}`);
-          }
-          if (NoObjectGeneratedError.isInstance(llmErr)) {
-            const cause = llmErr.cause as
-              | { issues?: Array<{ path: (string | number)[]; message: string; code?: string }> }
-              | undefined;
-            log.warn('Fix worker structured-output schema violation', {
-              dispatchId: dispatch.id,
-              model: usedModel,
-              modelResponse: (llmErr as { text?: string }).text?.slice(0, 800) ?? null,
-              zodIssues:
-                cause?.issues?.slice(0, 5).map((i) => ({
-                  path: i.path.join('.'),
-                  code: i.code,
-                  message: i.message,
-                })) ?? null,
-            });
-          }
-          llmSpan.end({ error: String(llmErr).slice(0, 500) });
-          throw new Error(`LLM call failed: ${String(llmErr).slice(0, 300)}`);
-        }
-      }
-      if (lastLlmErr || !fix) {
-        throw new Error(`LLM call failed after ${MAX_OUTPUT_RETRIES + 1} attempts`);
-      }
-      const llmLatencyMs = Date.now() - llmStart;
-      llmSpan.end({ model: usedModel, inputTokens, outputTokens, latencyMs: llmLatencyMs });
+      };
 
-      // ---- 6. Validate scope + circuit breaker ------------------------------
-      const validationErrors: string[] = [];
+      const firstFix = await generateFix(null);
+      if (firstFix instanceof Response) return firstFix;
+      let fix: FixOutput = firstFix;
+
+      // ---- 6. Validate scope + secrets, then the review gate -----------------
+      // Scope and the token scan read what the model proposed; the secret scan
+      // covers only text the model wrote (replace strings, new files), so a
+      // token-shaped string already in a file never blocks an unrelated fix.
+      validateFixProposal(fix, repo.pathGlobs);
+
+      // The model flags its own low-confidence output with needsHumanReview.
+      // PR #424 was a blind whole-file rewrite opened anyway. Fixes are now
+      // find/replace edits anchored to the real file, so a flagged fix whose
+      // edits apply cleanly opens as a DRAFT PR (never marked ready, labelled
+      // needs-review, banner in the body) for a person to judge. A flagged fix
+      // that cannot be applied to the real files is still stopped here.
+      const reviewBlock = (f: FixOutput, reason: string) =>
+        blockFixAttempt(db, trace, dispatch, fixAttemptId, reason.slice(0, 450), {
+          files_changed: f.files.map((x) => x.path),
+          lines_changed: proposalLineCount(f),
+          summary: f.summary,
+          rationale: f.rationale,
+          llm_model: usedModel,
+          llm_input_tokens: inputTokens,
+          llm_output_tokens: outputTokens,
+          review_passed: false,
+        });
+      const reviewFailedReason = (f: FixOutput) =>
+        `review_failed: the fix model flagged its own change for human review. ${f.rationale}`;
+      if (!fixReviewPassed(fix) && !(ghToken && base)) {
+        llmSpan.end({ model: usedModel, inputTokens, outputTokens, latencyMs: Date.now() - llmStart });
+        return await reviewBlock(fix, reviewFailedReason(fix));
+      }
+
+      // ---- 6a. Apply the edits to the files read at the base commit --------
+      // Every path the fix touches is read at `base.sha` (context files were
+      // already read there). Edits that do not match exactly once go back to
+      // the model once with the precise error; a second failure stops the
+      // attempt. A guess is never written.
+      const baseStates = new Map<string, BaseFileState>(fullContext.states);
+      let materialized: ProposedFile[] | null = null;
+      if (ghToken && base) {
+        const readMissing = async (f: FixOutput) => {
+          for (const entry of f.files) {
+            if (!baseStates.has(entry.path)) {
+              baseStates.set(entry.path, await fetchBaseFileState(ghToken, repo.owner, repo.repo, base.sha, entry.path));
+            }
+          }
+        };
+        await readMissing(fix);
+        let applied = materializeFixFiles(fix.files, baseStates);
+        if (applied.errors.length > 0) {
+          log.warn('Fix edits did not apply — retrying once with the errors', {
+            dispatchId: dispatch.id,
+            errors: applied.errors.slice(0, 5),
+          });
+          const retried = await generateFix({ previous: fix, feedback: editRetryPrompt(applied.errors) });
+          if (retried instanceof Response) return retried;
+          fix = retried;
+          validateFixProposal(fix, repo.pathGlobs);
+          await readMissing(fix);
+          applied = materializeFixFiles(fix.files, baseStates);
+          if (applied.errors.length > 0) {
+            llmSpan.end({ model: usedModel, inputTokens, outputTokens, latencyMs: Date.now() - llmStart });
+            return await reviewBlock(
+              fix,
+              `review_failed: the fix's edits could not be applied to ${repo.owner}/${repo.repo}@${base.sha.slice(0, 7)} after one retry: ${applied.errors.join('; ')}`,
+            );
+          }
+        }
+        materialized = applied.files;
+      }
+      llmSpan.end({ model: usedModel, inputTokens, outputTokens, latencyMs: Date.now() - llmStart });
+
+      // A comment is not a fix: stop any proposal whose every changed line is
+      // a comment or blank, flagged or not, before anything reaches GitHub.
+      if (isCommentOnlyFix(fix.files)) {
+        return await reviewBlock(
+          fix,
+          `review_failed: the proposed change only adds or removes comments, which is not a fix. ${fix.rationale}`,
+        );
+      }
+
+      // ---- 6b. Circuit breaker on changed lines ----------------------------
+      // Counted on the diff, not the file length: a two-line fix in a
+      // 600-line file is two lines. Without a base (no GitHub access) the
+      // proposal's own size stands in.
       const maxLines = (settings?.autofix_max_lines as number | undefined) ?? 200;
-      let totalLines = 0;
-      for (const f of fix.files) {
-        const lines = f.contents.split('\n').length;
-        totalLines += lines;
-        if (lines > maxLines) {
-          validationErrors.push(`${f.path}: ${lines} lines exceeds circuit breaker (${maxLines}).`);
-        }
-        if (repo.scopeDirectory && !isFileInScope(f.path, repo.scopeDirectory)) {
-          validationErrors.push(`${f.path}: outside scope ${repo.scopeDirectory}.`);
-        }
-        if (containsObviousSecret(f.contents)) {
-          validationErrors.push(`${f.path}: contains a token-shaped string. Refusing to commit.`);
-        }
+      const perFileLines = materialized
+        ? materialized.map((f) => {
+            const before = baseStates.get(f.path);
+            return { path: f.path, lines: diffLineCount(before?.kind === 'exists' ? before.contents : null, f.contents) };
+          })
+        : fix.files.map((f) => ({ path: f.path, lines: entryLineCount(f) }));
+      const totalLines = perFileLines.reduce((n, f) => n + f.lines, 0);
+      const overCap = perFileLines.filter((f) => f.lines > maxLines);
+      if (overCap.length > 0) {
+        throw new Error(
+          `Validation failed: ${overCap.map((f) => `${f.path}: ${f.lines} changed lines exceeds circuit breaker (${maxLines}).`).join(' ')}`,
+        );
       }
 
-      if (validationErrors.length > 0) {
-        throw new Error(`Validation failed: ${validationErrors.join(' ')}`);
-      }
-
-      // ---- 6b. Spec-traceability gate (pre-PR) --------------------------------
+      // ---- 6c. Spec-traceability gate (pre-PR) --------------------------------
       // Run the deterministic inventory contract checks before we open a PR.
       // Hard violations (JSON path deletion, etc.) surface as errors on the
       // fix_attempt so reviewers see them inline — they do NOT abort the PR
@@ -852,8 +1176,9 @@ ${
       // amber "Spec N" badge in FixCard.
       let specValidationWarnings: Array<{ code: string; message: string; hint?: string }> = [];
       if (inventoryAnchor) {
+        const specFiles = materialized ?? fix.files.map((f) => ({ path: f.path, contents: introducedText(f) }));
         const diffText: string | undefined = undefined; // edge runtime: no diff yet at this stage
-        const specResult = validateEdgeSpec(inventoryAnchor as unknown as Parameters<typeof validateEdgeSpec>[0], fix.files, diffText);
+        const specResult = validateEdgeSpec(inventoryAnchor as unknown as Parameters<typeof validateEdgeSpec>[0], specFiles, diffText);
         if (specResult.errors.length > 0) {
           // Hard violations — the generated fix demonstrably regresses the contract.
           // Persist them as warnings with an ERR_ prefix so reviewers know these
@@ -874,9 +1199,8 @@ ${
         }
       }
 
-      // ---- 7. Get GitHub token + open draft PR ------------------------------
-      const ghToken = await resolveGithubToken(db, project.owner_id ?? null, dispatch.project_id);
-      if (!ghToken) {
+      // ---- 7. No GitHub access: keep the proposal, open nothing ------------
+      if (!ghToken || !base || !materialized) {
         // Still record the LLM output so the user can copy/paste even without GH.
         const branch = generateFixBranchName(
           dispatch.report_id,
@@ -893,7 +1217,7 @@ ${
           llm_model: usedModel,
           llm_input_tokens: inputTokens,
           llm_output_tokens: outputTokens,
-          review_passed: !fix.needsHumanReview,
+          review_passed: fixReviewPassed(fix),
         });
         await db
           .from('fix_dispatch_jobs')
@@ -919,6 +1243,41 @@ ${
         });
       }
 
+      // ---- 7b. Blind-write guard ---------------------------------------------
+      // The patched files are full contents built from what the base commit
+      // holds. A file we could not read never got this far; a patch that
+      // deletes most of a file is still a rewrite and is dropped unless the
+      // report asked for one.
+      const fileAssessment = assessFixFiles(materialized, baseStates, {
+        allowRewrite: reportRequestsRewrite([
+          report.description as string | undefined,
+          report.summary as string | undefined,
+          report.user_intent as string | undefined,
+        ]),
+      });
+      if (fileAssessment.blockReason) {
+        return await blockFixAttempt(db, trace, dispatch, fixAttemptId, fileAssessment.blockReason, {
+          files_changed: fix.files.map((f) => f.path),
+          lines_changed: totalLines,
+          summary: fix.summary,
+          rationale: fix.rationale,
+          llm_model: usedModel,
+          llm_input_tokens: inputTokens,
+          llm_output_tokens: outputTokens,
+          review_passed: fixReviewPassed(fix),
+        });
+      }
+      const prFiles = fileAssessment.kept;
+      // Real diff size (+added −deleted) against the base we just read, not the
+      // new file's length — matches the "+a −d" GitHub shows on the PR.
+      const prLines = fixDiffLineCount(prFiles, baseStates);
+      for (const d of fileAssessment.dropped) {
+        specValidationWarnings.push({
+          code: 'FILE_DROPPED',
+          message: `${d.path} was not written: ${d.reason}.`,
+        });
+      }
+
       const prSpan = trace.span('github.pr');
       const prBranch = generateFixBranchName(
         dispatch.report_id,
@@ -930,12 +1289,20 @@ ${
           token: ghToken,
           owner: repo.owner,
           repo: repo.repo,
-          defaultBranch: repo.defaultBranch,
+          defaultBranch: base.branch,
+          // Branch from the exact commit the edits were applied to.
+          baseSha: base.sha,
           branch: prBranch,
           title: fix.summary,
-          body: buildPrBody(fix, dispatch.report_id),
-          files: fix.files,
-          labels: ['mushi-autofix'],
+          body: buildPrBody({ ...fix, files: prFiles }, dispatch.report_id),
+          files: prFiles,
+          labels: fixReviewPassed(fix) ? ['mushi-autofix'] : ['mushi-autofix', 'needs-review'],
+          // A fix the model flagged stays a draft: CI and merge wait for a person.
+          markReady: fixReviewPassed(fix),
+          // `Fixes <SHORT-ID>` for Sentry-linked reports (sentry-resolve-back.ts).
+          commitTrailers: sentryFixesTrailers(
+            await sentryShortIdsForReport(db, dispatch.project_id, dispatch.report_id),
+          ),
         },
         {
           info: (msg, ctx) => log.info(msg, ctx as Record<string, unknown>),
@@ -951,14 +1318,14 @@ ${
         pr_url: prResult.url,
         pr_number: prResult.number,
         commit_sha: prResult.commitSha,
-        files_changed: fix.files.map((f) => f.path),
-        lines_changed: totalLines,
+        files_changed: prFiles.map((f) => f.path),
+        lines_changed: prLines,
         summary: fix.summary,
         rationale: fix.rationale,
         llm_model: usedModel,
         llm_input_tokens: inputTokens,
         llm_output_tokens: outputTokens,
-        review_passed: !fix.needsHumanReview,
+        review_passed: fixReviewPassed(fix),
         ...(specValidationWarnings.length > 0
           ? { spec_validation_warnings: specValidationWarnings }
           : {}),
@@ -983,7 +1350,8 @@ ${
           // attempt — this attempt made it through.
           processing_error: null,
         })
-        .eq('id', dispatch.report_id);
+        .eq('id', dispatch.report_id)
+        .eq('project_id', dispatch.project_id);
 
       const previousReportStatus =
         typeof (report as Record<string, unknown> | null)?.status === 'string'
@@ -1050,8 +1418,13 @@ ${
       // groundwork here makes that fan-out a *new fix_dispatch_jobs row
       // per matched repo* away. Best-effort — never blocks the success
       // path.
+      // Only a primary dispatch fans out. A sibling job (it carries the
+      // parent's coordination_id) fanning out again would queue a job for
+      // the original repo, which fans out again — an endless ping-pong.
       try {
-        await markCrossRepoSpan(db, ghToken, log, {
+        if (isSiblingDispatch(dispatch)) {
+          log.info('sibling dispatch: cross-repo fan-out skipped', { dispatchId: dispatch.id });
+        } else await markCrossRepoSpan(db, ghToken, log, {
           projectId: dispatch.project_id,
           reportId: dispatch.report_id,
           fixAttemptId,
@@ -1270,6 +1643,14 @@ function categorizeFailure(err: unknown, msg: string): string {
   // Sandbox lifecycle — these can come from agents/sandbox or claude code adapters.
   if (m.includes('sandbox') && m.includes('timeout')) return 'sandbox_timeout';
   if (m.includes('sandbox')) return 'sandbox_error';
+  // Cursor Cloud (agent-adapters.ts / cursor-cloud.ts). CursorApiError
+  // messages start with "Cursor API <status> <code>:"; the key-missing
+  // pre-flight says "Cursor API key not configured".
+  if (m.includes('cursor api') || m.includes('cursor run') || m.includes('cursor agent')) {
+    if (m.includes('invalid_model') || m.includes('invalid model')) return 'cursor_invalid_model';
+    if (m.includes('validation_error')) return 'cursor_validation_error';
+    return 'cursor_api_error';
+  }
   // GitHub REST surface — every PR-creation path goes through Octokit and
   // throws a `Request failed with status code 4xx` Error.
   if (m.includes('github') || m.includes('octokit') || m.includes('pull_request')) {
@@ -1419,26 +1800,34 @@ async function markCrossRepoSpan(
   // coordination_id so the multi-repo worker (or a future fan-out
   // sweeper) groups them; `target_repo_id` is a metadata hint stored
   // in `dispatch_metadata` JSONB so the column doesn't need to exist.
+  // `skill` used to be 'fix', which fix_dispatch_jobs_skill_check rejects: no
+  // sibling dispatch was ever created, and the failure was logged as
+  // non-fatal. Sibling dispatches are started by Mushi, not a person, so they
+  // carry no 'manual' trigger and stay under the auto-fix caps.
+  const siblingFailures: string[] = [];
   for (const sib of siblings) {
-    const { error: dispatchErr } = await db.from('fix_dispatch_jobs').insert({
-      project_id: projectId,
-      report_id: reportId,
-      coordination_id: coord.id,
-      skill: 'fix',
-      status: 'queued',
-      dispatch_metadata: {
-        target_repo_id: sib.id,
-        target_repo_url: sib.repo_url,
-        coordinated_with_pr: prUrl,
-        sibling_count: siblings.length,
-      },
-    });
+    const { error: dispatchErr } = await db.from('fix_dispatch_jobs').insert(
+      siblingDispatchRow({
+        projectId,
+        reportId,
+        coordinationId: coord.id,
+        sibling: sib,
+        prUrl,
+        siblingCount: siblings.length,
+      }),
+    );
     if (dispatchErr) {
-      log.warn('sibling dispatch insert failed (non-fatal)', {
+      siblingFailures.push(`${sib.repo_url}: ${dispatchErr.message}`);
+      log.error('sibling dispatch insert failed', {
         siblingRepoId: sib.id,
         err: dispatchErr.message,
       });
     }
+  }
+  if (siblingFailures.length > 0) {
+    reportError(new Error(`cross-repo sibling dispatch failed: ${siblingFailures.join('; ')}`), {
+      tags: { function: 'fix-worker', stage: 'sibling_dispatch' },
+    });
   }
 
   // Post a cross-link comment on the primary PR — the reviewer needs to
@@ -1488,6 +1877,245 @@ async function markCrossRepoSpan(
   });
 }
 
+interface CloudDispatchContext {
+  dispatch: {
+    id: string;
+    project_id: string;
+    report_id: string;
+    dispatch_metadata: unknown;
+  };
+  settings: Record<string, unknown> | null;
+  report: Record<string, unknown>;
+  requestedAgent: 'cursor_cloud' | 'github_cloud_agent';
+  fixAttemptId: string;
+  inventoryAnchor: InventoryAnchor | null;
+  trace: ReturnType<typeof createTrace>;
+}
+
+/**
+ * Step 2b: hand the report to a vendor-hosted repo agent (Cursor Cloud v1 or
+ * GitHub Copilot Agent Tasks) through `_shared/agent-adapters.ts` and return
+ * immediately. Writes, in order:
+ *   1. fix_attempts.branch_name (BEFORE the vendor call, so a pull_request
+ *      webhook that beats our own bookkeeping can still be matched by head
+ *      ref in webhooks-github-indexer);
+ *   2. the vendor ids (cursor_agent_id / cursor_run_id or github_task_id /
+ *      github_task_url) + external_agent_ref on the attempt, status 'running';
+ *   3. a `dispatched` fix_events breadcrumb;
+ *   4. the `fix.requested` plugin event (carries externalAgentId so the Cursor
+ *      marketplace plugin does not start a second agent);
+ *   5. the team 'fix_dispatched' card for dispatches that did NOT come through
+ *      dispatchFixForReport (those already posted one).
+ * Any thrown error lands in the caller's catch, which fails the attempt +
+ * job, stamps the report and notifies — same as the LLM path.
+ */
+async function dispatchToCloudAgent(
+  db: ReturnType<typeof getServiceClient>,
+  log: Logger,
+  ctx: CloudDispatchContext,
+): Promise<Response> {
+  const { dispatch, settings, report, requestedAgent, fixAttemptId, inventoryAnchor, trace } = ctx;
+  const dispatchMeta = (dispatch.dispatch_metadata as Record<string, unknown> | null) ?? {};
+  const targetRepoId = typeof dispatchMeta.target_repo_id === 'string' ? dispatchMeta.target_repo_id : null;
+  const repo = await resolveRepo(db, dispatch.project_id, settings, targetRepoId);
+  if (!repo) {
+    throw new Error(
+      'No GitHub repo configured for this project. Set Settings → Integrations → GitHub repo.',
+    );
+  }
+
+  // RAG is a hint for a repo-level agent, never a gate — it has the whole
+  // checkout. Best-effort, and an indexing failure must not block dispatch.
+  let codeContext = '';
+  try {
+    const ragSpan = trace.span('context.rag');
+    const ragResult = await getRelevantCodeWithReason(db, dispatch.project_id, {
+      symptom:
+        (report.summary as string | undefined) ??
+        (report.description as string | undefined)?.slice(0, 200) ??
+        '',
+      action: (report.user_intent as string | undefined) ?? '',
+      component: (report.component as string | undefined) ?? '',
+    });
+    // The index is project-wide: hint only files attributable to the
+    // target repo (a sibling repo's preview would point the agent astray).
+    const scope = await loadLinkedRepoScope(db, dispatch.project_id, repo);
+    const ownFiles = ragResult.files.filter((f) => attributeIndexPath(f.filePath, scope) === 'target');
+    codeContext = formatCodeContext(ownFiles);
+    ragSpan.end({ fileCount: ownFiles.length, droppedOtherRepo: ragResult.files.length - ownFiles.length, reason: ragResult.reason });
+  } catch (err) {
+    log.warn('RAG context unavailable for cloud agent (non-fatal)', {
+      reportId: dispatch.report_id,
+      err: err instanceof Error ? err.message : String(err),
+    });
+  }
+
+  const branchName = cloudAgentBranchName(
+    requestedAgent,
+    dispatch.report_id,
+    (report.category as string | null | undefined) ?? null,
+  );
+  const basePrompt = buildUserPrompt(report, settings, codeContext, repo, [], inventoryAnchor, '');
+  const prompt = buildCloudAgentPrompt(basePrompt, {
+    reportId: dispatch.report_id,
+    repoOwner: repo.owner,
+    repoName: repo.repo,
+    baseRef: repo.defaultBranch,
+    branchName,
+    kind: requestedAgent,
+  });
+  const repoUrl = `https://github.com/${repo.owner}/${repo.repo}`;
+  const model =
+    requestedAgent === 'cursor_cloud' && typeof settings?.cursor_default_model === 'string'
+      ? settings.cursor_default_model
+      : undefined;
+  const now = new Date().toISOString();
+
+  await db
+    .from('fix_attempts')
+    .update({ branch_name: branchName, started_at: now })
+    .eq('id', fixAttemptId);
+
+  const adapter = getCloudAgentAdapter(requestedAgent);
+  const dispatchSpan = trace.span('cloud.dispatch');
+  const result = await adapter.dispatch({
+    db,
+    projectId: dispatch.project_id,
+    reportId: dispatch.report_id,
+    dispatchId: dispatch.id,
+    attemptId: fixAttemptId,
+    repoUrl,
+    baseRef: repo.defaultBranch,
+    prompt,
+    branchName,
+    model,
+    name: `Mushi fix ${dispatch.report_id.slice(0, 8)}`,
+  });
+  dispatchSpan.end({
+    agent: requestedAgent,
+    externalAgentId: result.externalAgentId,
+    externalRunId: result.externalRunId ?? null,
+  });
+
+  const attemptUpdate: Record<string, unknown> = {
+    status: 'running',
+    branch_name: branchName,
+    external_agent_ref: {
+      ...(result.ref ?? {}),
+      kind: requestedAgent,
+      external_agent_id: result.externalAgentId,
+      external_run_id: result.externalRunId ?? null,
+      status_url: result.statusUrl ?? null,
+      branch_name: branchName,
+      dispatched_at: now,
+    },
+  };
+  // The model the agent was asked to run (Cursor model id plus params), so
+  // the Fix card says what ran instead of leaving it blank.
+  if (model) attemptUpdate.llm_model = model.slice(0, 200);
+  if (requestedAgent === 'cursor_cloud') {
+    attemptUpdate.cursor_agent_id = result.externalAgentId;
+    if (result.externalRunId) attemptUpdate.cursor_run_id = result.externalRunId;
+  } else {
+    attemptUpdate.github_task_id = result.externalAgentId;
+    attemptUpdate.github_task_url = result.statusUrl ?? null;
+  }
+  const { error: attemptUpdateErr } = await db
+    .from('fix_attempts')
+    .update(attemptUpdate)
+    .eq('id', fixAttemptId);
+  if (attemptUpdateErr) {
+    // The vendor agent is already running; losing its id would orphan it.
+    throw new Error(`Cloud agent dispatched (${result.externalAgentId}) but fix_attempts update failed: ${attemptUpdateErr.message}`);
+  }
+
+  // Keep the job 'running' (sweeper-safe) and expose the vendor pointer to
+  // the console / A2A GET without a join.
+  await db
+    .from('fix_dispatch_jobs')
+    .update({
+      dispatch_metadata: {
+        ...dispatchMeta,
+        cloud_agent: {
+          kind: requestedAgent,
+          externalAgentId: result.externalAgentId,
+          externalRunId: result.externalRunId ?? null,
+          statusUrl: result.statusUrl ?? null,
+          branchName,
+        },
+      },
+    })
+    .eq('id', dispatch.id);
+
+  const target = {
+    attemptId: fixAttemptId,
+    projectId: dispatch.project_id,
+    reportId: dispatch.report_id,
+    agent: requestedAgent,
+  };
+  await recordCloudAgentDispatched(db, target, result);
+
+  dispatchPluginEventDetached(db, dispatch.project_id, 'fix.requested', {
+    report: {
+      id: dispatch.report_id,
+      status: typeof report.status === 'string' ? report.status : 'classified',
+    },
+    fix: {
+      id: fixAttemptId,
+      status: 'requested',
+      agent: requestedAgent,
+      externalAgentId: result.externalAgentId,
+      externalRunId: result.externalRunId ?? null,
+      statusUrl: result.statusUrl ?? null,
+      branch: branchName,
+      pullRequestUrl: result.prUrl ?? undefined,
+    },
+    reportId: dispatch.report_id,
+    dispatchId: dispatch.id,
+    attemptId: fixAttemptId,
+    agent: requestedAgent,
+    externalAgentId: result.externalAgentId,
+    prUrl: result.prUrl ?? null,
+  }).catch((e) => log.warn('Plugin dispatch failed', { event: 'fix.requested', err: String(e) }));
+
+  if (typeof dispatchMeta.source !== 'string') {
+    void notifyTeamFixEvent(db, dispatch.project_id, dispatch.report_id, 'fix_dispatched', {
+      branch: branchName,
+    }).catch((e) =>
+      log.warn('Team fix notification failed', { event: 'fix_dispatched', err: String(e) }),
+    );
+  }
+
+  // Rare: the vendor already reports a PR (an agent_id_conflict reuse of a
+  // run that finished between invokes). Close the loop right away.
+  if (result.prUrl) {
+    await applyCloudAgentOutcome(db, target, { kind: 'pr_opened', prUrl: result.prUrl, branch: branchName });
+  }
+
+  log.info('cloud.dispatched', {
+    dispatchId: dispatch.id,
+    fixAttemptId,
+    agent: requestedAgent,
+    externalAgentId: result.externalAgentId,
+    externalRunId: result.externalRunId ?? null,
+    branchName,
+  });
+
+  return new Response(
+    JSON.stringify({
+      ok: true,
+      dispatched: true,
+      agent: requestedAgent,
+      fixAttemptId,
+      externalAgentId: result.externalAgentId,
+      externalRunId: result.externalRunId ?? null,
+      statusUrl: result.statusUrl ?? null,
+      prUrl: result.prUrl ?? null,
+    }),
+    { status: 200, headers: { 'Content-Type': 'application/json' } },
+  );
+}
+
 async function failDispatch(
   db: ReturnType<typeof getServiceClient>,
   dispatchId: string,
@@ -1532,6 +2160,41 @@ async function stampReportAutofixBlocked(
       error: error.message,
     });
   }
+}
+
+/**
+ * Stop an attempt at a pre-PR guard (review gate, blind-write guard). Same
+ * shape as the context-floor gate: the attempt keeps what the model proposed
+ * so a human can read it, the dispatch and report say why, nothing touches
+ * GitHub, and the response is a 200 because the guard did its job.
+ * `validation_rejected` is in the fix_attempts.failure_category CHECK and in
+ * EXPECTED_FAILURE_CATEGORIES, so this never pages Sentry.
+ */
+async function blockFixAttempt(
+  db: ReturnType<typeof getServiceClient>,
+  trace: { end: () => Promise<unknown> },
+  dispatch: { id: string; report_id: string },
+  fixAttemptId: string,
+  reason: string,
+  fields: Record<string, unknown>,
+): Promise<Response> {
+  rootLog.child('fix-worker').warn('Fix blocked before PR', { dispatchId: dispatch.id, reason });
+  await completeAttempt(db, fixAttemptId, {
+    ...fields,
+    status: 'failed',
+    error: reason,
+    failure_category: 'validation_rejected',
+  });
+  await db
+    .from('fix_dispatch_jobs')
+    .update({ status: 'failed', error: reason.slice(0, 500), finished_at: new Date().toISOString() })
+    .eq('id', dispatch.id);
+  await stampReportAutofixBlocked(db, dispatch.report_id, reason);
+  await trace.end();
+  return new Response(JSON.stringify({ ok: true, blocked: true, reason, fixAttemptId }), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  });
 }
 
 async function completeAttempt(
@@ -1601,9 +2264,20 @@ async function resolveRepo(
   return {
     owner: parsed.owner,
     repo: parsed.repo,
-    defaultBranch: primaryRepo?.default_branch ?? 'main',
+    // The connected repo's branch, then the branch saved on the GitHub card,
+    // then main. The card's branch used to be saved but never read.
+    defaultBranch: primaryRepo?.default_branch || savedBranch(settings) || 'main',
     scopeDirectory,
+    pathGlobs: globs && globs.length > 0 ? globs.filter((g) => typeof g === 'string') : null,
   };
+}
+
+/** project_settings.github_default_branch when it is a plausible ref name. */
+export function savedBranch(settings: Record<string, unknown> | null): string | null {
+  const b = settings?.github_default_branch
+  if (typeof b !== 'string') return null
+  const t = b.trim()
+  return t && /^[A-Za-z0-9._/-]{1,200}$/.test(t) && !t.includes('..') ? t : null
 }
 
 function parseGithubUrl(url: string): { owner: string; repo: string } | null {
@@ -1613,10 +2287,14 @@ function parseGithubUrl(url: string): { owner: string; repo: string } | null {
   return { owner: match[1], repo: match[2] };
 }
 
-function isFileInScope(filePath: string, scopeDir: string): boolean {
+/**
+ * Every path glob of the target repo counts (it used to be only the first),
+ * matched on whole path segments. Test files stay allowed anywhere.
+ */
+function isFileInScope(filePath: string, pathGlobs: readonly string[]): boolean {
   const normalized = filePath.replace(/\\/g, '/');
   if (TEST_PATTERNS.some((p) => p.test(normalized))) return true;
-  return normalized.startsWith(scopeDir.replace(/\\/g, '/'));
+  return underRepoGlobs(normalized, pathGlobs);
 }
 
 const TEST_PATTERNS = [/__tests__\//, /\.test\./, /\.spec\./, /^test\//, /^tests\//];
@@ -1631,6 +2309,274 @@ const SECRET_PATTERNS = [
 ];
 function containsObviousSecret(content: string): boolean {
   return SECRET_PATTERNS.some((p) => p.test(content));
+}
+
+/**
+ * Scope and secret checks on what the model proposed. Throws
+ * `Validation failed: …` (categorized as scope_blocked / spec_violation).
+ * The secret scan reads only text the model wrote: `replace` strings and new
+ * files. Scanning whole patched files would block a fix for a token-shaped
+ * string (e.g. a long kebab-case class name) that was already in the file.
+ */
+function validateFixProposal(fix: FixOutput, pathGlobs: readonly string[] | null): void {
+  const errors: string[] = [];
+  for (const f of fix.files) {
+    if (pathGlobs && pathGlobs.length > 0 && !isFileInScope(f.path, pathGlobs)) {
+      errors.push(`${f.path}: outside scope ${pathGlobs.join(', ')}.`);
+    }
+    if (containsObviousSecret(introducedText(f))) {
+      errors.push(`${f.path}: contains a token-shaped string. Refusing to commit.`);
+    }
+  }
+  if (errors.length > 0) throw new Error(`Validation failed: ${errors.join(' ')}`);
+}
+
+const lineCount = (s: string): number => (s.length === 0 ? 0 : s.split('\n').length);
+
+/** Lines one proposed entry touches before it is applied: removed + added for edits. */
+function entryLineCount(entry: FixOutput['files'][number]): number {
+  return isEditEntry(entry)
+    ? entry.edits.reduce((n, e) => n + lineCount(e.find) + lineCount(e.replace), 0)
+    : lineCount(entry.contents);
+}
+
+function proposalLineCount(fix: FixOutput): number {
+  return fix.files.reduce((n, f) => n + entryLineCount(f), 0);
+}
+
+/** GitHub code-search calls per dispatch (the endpoint allows ~10 a minute). */
+const MAX_CODE_SEARCH_CALLS = 6;
+/** A literal found in more files than this is not distinctive; its hits are ignored. */
+const MAX_LITERAL_FILES = 15;
+/** Files kept per literal. */
+const FILES_PER_LITERAL = 5;
+
+/** Escape LIKE wildcards (`%`, `_`) and the escape character itself. */
+function escapeLike(s: string): string {
+  return s.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+
+/**
+ * Index fallback for the literal search: files whose indexed text contains
+ * the literal. Index previews are partial, so a miss proves nothing; a hit
+ * is re-checked against the full file once it is read.
+ */
+async function indexFilesContaining(
+  db: ReturnType<typeof getServiceClient>,
+  projectId: string,
+  literal: string,
+): Promise<string[]> {
+  const { data, error } = await db
+    .from('project_codebase_files')
+    .select('file_path')
+    .eq('project_id', projectId)
+    .is('tombstoned_at', null)
+    .ilike('content_preview', `%${escapeLike(literal)}%`)
+    .limit(60);
+  if (error || !data) return [];
+  const paths = [...new Set((data as Array<{ file_path: string }>).map((r) => r.file_path))];
+  return paths.length > MAX_LITERAL_FILES ? [] : paths;
+}
+
+/** Index paths matching stack-frame paths by whole-segment suffix. */
+async function indexPathsForFrames(
+  db: ReturnType<typeof getServiceClient>,
+  projectId: string,
+  framePaths: readonly string[],
+): Promise<string[]> {
+  const out: string[] = [];
+  for (const frame of framePaths.slice(0, 5)) {
+    const { data, error } = await db
+      .from('project_codebase_files')
+      .select('file_path')
+      .eq('project_id', projectId)
+      .is('tombstoned_at', null)
+      .ilike('file_path', `%${escapeLike(frame)}`)
+      .limit(20);
+    if (error || !data) continue;
+    const paths = [...new Set((data as Array<{ file_path: string }>).map((r) => r.file_path))];
+    for (const p of matchFramePathsToTree([frame], paths)) if (!out.includes(p)) out.push(p);
+  }
+  return out;
+}
+
+/**
+ * The target repo's path globs and every other linked repo's, for
+ * attributing project-wide index paths (see attributeIndexPath). The target
+ * is the repo resolveRepo picked (target_repo_id hint, else the primary).
+ * If project_repos cannot be read, every index path is treated as possibly
+ * another repo's: it is used only after a read from the target repo finds
+ * it, and its index preview is never shown.
+ */
+async function loadLinkedRepoScope(
+  db: ReturnType<typeof getServiceClient>,
+  projectId: string,
+  repo: ResolvedRepo,
+): Promise<LinkedRepoScope> {
+  const { data, error } = await db
+    .from('project_repos')
+    .select('repo_url, path_globs')
+    .eq('project_id', projectId);
+  if (error || !data) return { targetGlobs: repo.pathGlobs, otherRepoGlobs: [null] };
+  const isTarget = (url: string) => {
+    const parsed = parseGithubUrl(url);
+    return (
+      parsed?.owner.toLowerCase() === repo.owner.toLowerCase() &&
+      parsed?.repo.toLowerCase() === repo.repo.toLowerCase()
+    );
+  };
+  const others = (data as Array<{ repo_url: string; path_globs: string[] | null }>)
+    .filter((r) => !isTarget(r.repo_url))
+    .map((r) => (r.path_globs && r.path_globs.length > 0 ? r.path_globs : null));
+  return { targetGlobs: repo.pathGlobs, otherRepoGlobs: others };
+}
+
+/**
+ * Step 3a: pick the files the model sees and read them whole at the base
+ * commit. Candidates, strongest first: files containing a distinctive literal
+ * from the report (GitHub code search, else the index), stack-frame files,
+ * then RAG hits. See _shared/fix-context.ts for the caps and labels.
+ */
+async function assembleFullFileContext(
+  db: ReturnType<typeof getServiceClient>,
+  log: Logger,
+  args: {
+    projectId: string;
+    report: Record<string, unknown>;
+    repo: ResolvedRepo;
+    ghToken: string | null;
+    baseSha: string | null;
+    ragFiles: CodeContext[];
+  },
+): Promise<FullFileContext & { literals: string[] }> {
+  const { projectId, report, repo, ghToken, baseSha, ragFiles } = args;
+  const { literals, framePaths } = extractReportLiterals(report);
+
+  // The index is project-wide; in a multi-repo project its paths may belong
+  // to a sibling repo (frontend and backend both owning `src/**`). Only the
+  // target repo's files may be read or edited.
+  const scope = await loadLinkedRepoScope(db, projectId, repo);
+  const attribute = (path: string) => attributeIndexPath(path, scope);
+
+  const literalHits = new Map<string, string[]>(); // code search on the target repo
+  const indexLiteralHits = new Map<string, string[]>(); // project-wide index
+  const addHit = (into: Map<string, string[]>, path: string, literal: string) => {
+    const hits = into.get(path) ?? [];
+    if (!hits.includes(literal)) hits.push(literal);
+    into.set(path, hits);
+  };
+  let searchCalls = 0;
+  let codeSearchUsable = Boolean(ghToken);
+  // Each literal is tried as-is, then as stems for runtime-built strings
+  // (`ota:manifest-504` → `manifest-`); the first term that finds files wins
+  // and is the one verified against the full text.
+  for (const literal of literals) {
+    for (const term of literalSearchTerms(literal)) {
+      let searched: string[] | null = null;
+      if (ghToken && codeSearchUsable && searchCalls < MAX_CODE_SEARCH_CALLS) {
+        searchCalls++;
+        const found = await searchRepoCode(ghToken, repo.owner, repo.repo, term);
+        if (found === null) codeSearchUsable = false; // rate limited / no access: stop asking
+        else searched = found.totalCount > MAX_LITERAL_FILES ? [] : found.paths;
+      }
+      if (searched && searched.length > 0) {
+        for (const p of searched.slice(0, FILES_PER_LITERAL)) addHit(literalHits, p, term);
+        break;
+      }
+      let indexed: string[] = [];
+      try {
+        indexed = await indexFilesContaining(db, projectId, term);
+      } catch {
+        indexed = [];
+      }
+      if (indexed.length > 0) {
+        for (const p of indexed.slice(0, FILES_PER_LITERAL)) addHit(indexLiteralHits, p, term);
+        break;
+      }
+    }
+  }
+
+  // i18n hop: a literal found only in a translation file names a key; the
+  // code that renders it uses the key, not the text (AppNudge.tsx says
+  // t("readOnApp"), en/common.json holds "Read on the app").
+  const localeHits = [...literalHits.entries(), ...indexLiteralHits.entries()]
+    .filter(([path]) => isLocaleFile(path))
+    .slice(0, 2);
+  const keysSearched: string[] = [];
+  if (ghToken && baseSha) {
+    for (const [path, lits] of localeHits) {
+      const state = await fetchBaseFileState(ghToken, repo.owner, repo.repo, baseSha, path);
+      if (state.kind !== 'exists') continue;
+      for (const lit of lits.slice(0, 2)) {
+        for (const key of localeKeysForText(state.contents, lit, 2)) {
+          if (keysSearched.includes(key)) continue;
+          keysSearched.push(key);
+          let users: string[] = [];
+          if (codeSearchUsable && searchCalls < MAX_CODE_SEARCH_CALLS) {
+            searchCalls++;
+            const found = await searchRepoCode(ghToken, repo.owner, repo.repo, key);
+            if (found === null) codeSearchUsable = false;
+            else users = found.totalCount > MAX_LITERAL_FILES ? [] : found.paths;
+          }
+          if (users.length === 0) {
+            try {
+              users = await indexFilesContaining(db, projectId, key);
+            } catch {
+              users = [];
+            }
+          }
+          for (const p of users.filter((u) => !isLocaleFile(u)).slice(0, FILES_PER_LITERAL)) {
+            addHit(literalHits, p, key);
+          }
+        }
+      }
+    }
+  }
+
+  let frameRepoPaths: string[] = [];
+  try {
+    frameRepoPaths = await indexPathsForFrames(db, projectId, framePaths);
+  } catch {
+    frameRepoPaths = [];
+  }
+  // A frame path the index does not know may still be the repo path as-is
+  // (bundlers that keep source paths); a guess that is absent is dropped.
+  const unmatchedFrames = framePaths
+    .filter((fp) => !frameRepoPaths.some((p) => p === fp || p.endsWith(`/${fp}`)))
+    .filter((fp) => fp.includes('/'))
+    .slice(0, 3);
+
+  const candidates = rankContextCandidates({
+    literalHits,
+    indexLiteralHits,
+    framePaths: unmatchedFrames.filter((p) => underRepoGlobs(p, scope.targetGlobs)),
+    indexFramePaths: frameRepoPaths,
+    rag: ragFiles,
+    attribute,
+  });
+  const otherRepoPaths = [
+    ...new Set([...ragFiles.map((f) => f.filePath), ...indexLiteralHits.keys(), ...frameRepoPaths]),
+  ].filter((p) => attribute(p) === 'other');
+  const readFile =
+    ghToken && baseSha
+      ? (path: string) => fetchBaseFileState(ghToken, repo.owner, repo.repo, baseSha, path)
+      : null;
+  const built = await buildFullFileContext(candidates, readFile, FULL_CONTEXT_LIMITS);
+
+  log.info('fix context assembled', {
+    literals,
+    localeKeys: keysSearched,
+    framePaths,
+    codeSearchCalls: searchCalls,
+    codeSearchUsable,
+    candidates: candidates.length,
+    linkedRepos: scope.otherRepoGlobs.length + 1,
+    otherRepoPathsDropped: otherRepoPaths.slice(0, 10),
+    shown: built.outcomes.filter((o) => o.shown === 'full').length,
+    partial: built.outcomes.filter((o) => o.shown === 'preview' || o.shown === 'excerpt').length,
+    omitted: built.outcomes.filter((o) => o.shown === 'omitted').map((o) => `${o.path}: ${o.reason}`).slice(0, 10),
+  });
+  return { ...built, literals };
 }
 
 async function resolveGithubToken(
@@ -1826,6 +2772,9 @@ function buildUserPrompt(
   webSnippets: FirecrawlSearchResult[] = [],
   inventoryAnchor: InventoryAnchor | null = null,
   pastFixesContext = '',
+  recipeBlock = '',
+  /** Set when "Relevant code" holds whole files read at this commit (LLM path). */
+  baseRef: { branch: string; sha: string } | null = null,
 ): string {
   const env = (report.environment ?? {}) as Record<string, unknown>;
   const consoleErrors = ((report.console_logs ?? []) as Array<{ level: string; message: string }>)
@@ -1874,8 +2823,15 @@ ${failedRequests ? `## Failed network requests\n${failedRequests}\n` : ''}
 - ${repo.owner}/${repo.repo} (default branch: ${repo.defaultBranch})
 - Max lines per file: ${settings?.autofix_max_lines ?? 200}
 
-## Relevant Code (RAG-retrieved)
-${codeContext || '(No code context retrieved — propose what files to look at and set needsHumanReview=true.)'}
+${
+  baseRef
+    ? `## Relevant Code
+Read from ${repo.owner}/${repo.repo}@${baseRef.branch} (${baseRef.sha.slice(0, 7)}), the commit the PR branches from. A "(full file …)" block is the complete current file; the "  12 | " gutter is not part of it. "(preview only …)" and "(excerpt only …)" blocks are partial.
+
+${codeContext || '(No code could be read — name the files you would need and set needsHumanReview=true.)'}`
+    : `## Relevant Code (RAG-retrieved)
+${codeContext || '(No code context retrieved — propose what files to look at and set needsHumanReview=true.)'}`
+}
 
 ${
   pastFixesContext
@@ -1893,9 +2849,14 @@ The local RAG was sparse OR this report has been judged "stubborn" in the past, 
 ${webSnippets.map((s, i) => `### [${i + 1}] ${s.title}\n<${s.url}>\n${s.snippet}`).join('\n\n')}
 `
     : ''
-}
+}${recipeBlock ? `\n${recipeBlock}` : ''}
 ## Your Task
-Output a structured fix plan. Touch the minimum number of files. Match the existing code style. If you change behavior, add or update a test. If you are not confident, set needsHumanReview=true.`;
+Output a structured fix plan. Touch the minimum number of files. Match the existing code style. If you change behavior, add or update a test. If you are not confident, set needsHumanReview=true.${
+  baseRef
+    ? `
+You have the full file: change only what is needed via find/replace edits, each \`find\` copied verbatim (no gutter) and unique in its file. Use \`contents\` only for a new file. Never rewrite a file you were not shown in full.`
+    : ''
+}`;
 }
 
 // ----------------------------------------------------------------------------
@@ -1904,7 +2865,10 @@ Output a structured fix plan. Touch the minimum number of files. Match the exist
 // ----------------------------------------------------------------------------
 
 
-function buildPrBody(fix: FixOutput, reportId: string): string {
+function buildPrBody(
+  fix: { rationale: string; needsHumanReview: boolean; files: ReadonlyArray<{ path: string; reason: string }> },
+  reportId: string,
+): string {
   const fileList = fix.files.map((f) => `- \`${f.path}\` — ${f.reason}`).join('\n');
   const reviewBanner = fix.needsHumanReview
     ? '> ⚠️ **The agent flagged this fix as needing extra human review.** Read the rationale carefully before approving.\n\n'
@@ -1922,6 +2886,16 @@ ${fileList}
 ---
 *This PR was generated by Mushi Mushi using your project's BYOK LLM key. The agent operates within a circuit-breaker (max lines per file) and a structured-output schema — it cannot run shell commands or call arbitrary tools. Review every line before merging.*
 
-[Open report in admin console](mushi://reports/${reportId})`;
+${reportConsoleLink(reportId)}`;
+}
+
+/**
+ * GitHub only links http(s) URLs, so the old custom-scheme report link was
+ * dead text. ADMIN_BASE_URL is the console origin (team-notify uses the same
+ * var); without it the line is left out rather than shipped broken.
+ */
+function reportConsoleLink(reportId: string): string {
+  const adminBase = Deno.env.get('ADMIN_BASE_URL')?.replace(/\/$/, '') ?? null;
+  return adminBase ? `[Open report in the Mushi console](${adminBase}/reports/${encodeURIComponent(reportId)})` : '';
 }
 

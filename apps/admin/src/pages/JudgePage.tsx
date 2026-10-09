@@ -15,7 +15,7 @@ import { ErrorAlert,
   Tooltip,
   ResultChip,
   type ResultChipTone,
-  FreshnessPill,
+  DisclosurePanel,
   SegmentedControl, } from '../components/ui'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
@@ -38,25 +38,27 @@ import {
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { ResponsiveTable } from '../components/ResponsiveTable'
 import {
-  KpiTile,
-  KpiRow,
   LineSparkline,
   Histogram,
-  formatPct,
 } from '../components/charts'
 import { SCORE_COLORS } from '../lib/tokens'
 import { useToast } from '../lib/toast'
+import { describeJudgeRun, useJudgeRunPrefill, type JudgeRunResponse } from '../lib/judgeRun'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageCopy } from '../lib/copy'
 import { useJudgeUx, resolveQuickJudgeTab } from '../lib/judgeModeUx'
+import { useQuickstartLandingTab } from '../lib/useQuickstartTab'
 import { HeroJudgeScale } from '../components/illustrations/HeroIllustrations'
 import { PageHero } from '../components/PageHero'
 import { useNextBestAction } from '../lib/useNextBestAction'
 import { ChartActionsMenu } from '../components/ChartActionsMenu'
 import { ChartAnnotations } from '../components/charts/ChartAnnotations'
 import type { ChartEvent } from '../lib/apiSchemas'
-import { CHIP_TONE } from '../lib/chipTone'
+import { CHIP_TONE, LINK_ACCENT } from '../lib/chipTone'
+import { ConfirmDialog } from '../components/ConfirmDialog'
+import { ListPager } from '../components/ListPager'
+import { judgeEvaluationsPath, judgeRunConfirmBody } from '../lib/judgeFilters'
 
 interface WeekData {
   week_start: string
@@ -270,12 +272,21 @@ function ScorePill({ value }: { value: number | null }) {
   )
 }
 
+const JUDGE_RUN_BUTTON_ID = 'judge-run-now'
+/** Evaluations per page on the Evaluations tab. */
+const EVAL_PAGE_SIZE = 50
+
 export function JudgePage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const tabParam = searchParams.get('tab')
   const activeTab = resolveJudgeTab(tabParam)
   const activeTabMeta = JUDGE_TABS.find((t) => t.id === activeTab) ?? JUDGE_TABS[0]
   const disagreementOnly = searchParams.get('filter') === 'disagreement'
+  // Trend brush range (QA 107) and sort live in the URL so a banner or tile
+  // link can open the exact view it names (QA 248: "Review evaluations").
+  const rangeFrom = searchParams.get('from')
+  const rangeTo = searchParams.get('to')
+  const sort: 'recent' | 'score_asc' = searchParams.get('sort') === 'score_asc' ? 'score_asc' : 'recent'
   const toast = useToast()
 
   const {
@@ -306,14 +317,38 @@ export function JudgePage() {
   const copy = usePageCopy('/judge')
   const ux = useJudgeUx()
 
-  useEffect(() => {
-    if (!ux.isQuickstart || statsLoading) return
-    const quickTab = resolveQuickJudgeTab(stats)
-    if (activeTab !== quickTab) setActiveTab(quickTab)
-  }, [ux.isQuickstart, statsLoading, stats, activeTab, setActiveTab])
-  const [sort, setSort] = useState<'recent' | 'score_asc'>('recent')
+  // Quick mode opens the posture tab once; links and clicks then win.
+  useQuickstartLandingTab({
+    enabled: ux.isQuickstart,
+    ready: !statsLoading,
+    tabParam: tabParam,
+    activeTab: activeTab,
+    quickTab: resolveQuickJudgeTab(stats),
+    setActiveTab: setActiveTab,
+  })
+  const setSort = useCallback(
+    (next: 'recent' | 'score_asc') => {
+      setSearchParams((prev) => {
+        const params = new URLSearchParams(prev)
+        if (next === 'recent') params.delete('sort')
+        else params.set('sort', next)
+        return params
+      }, { replace: true })
+    },
+    [setSearchParams],
+  )
+  const clearRange = useCallback(() => {
+    setSearchParams((prev) => {
+      const params = new URLSearchParams(prev)
+      params.delete('from')
+      params.delete('to')
+      return params
+    }, { replace: true })
+  }, [setSearchParams])
+  const [evalPage, setEvalPage] = useState(1)
+  // Run judge spends LLM budget: it goes through a confirm (QA 248).
+  const [runConfirmOpen, setRunConfirmOpen] = useState(false)
   const [running, setRunning] = useState(false)
-  const [heroCollapsed, setHeroCollapsed] = useState(true)
   // Sticky inline receipt for "Run judge now" — toast disappears, this stays
   // on screen until the next run so the user can see the pending refresh
   // countdown and the dispatched count without scrolling back up.
@@ -335,21 +370,29 @@ export function JudgePage() {
     '/v1/admin/chart-events?kinds=deploy,cron,byok',
   )
   const chartEvents = chartEventsQuery.data?.events ?? []
-  const evalsQuery = usePageData<{ evaluations: EvalRow[] }>(
-    `/v1/admin/judge/evaluations?limit=50&sort=${sort === 'score_asc' ? 'score_asc' : 'recent'}${promptFilter ? `&prompt_version=${encodeURIComponent(promptFilter.version)}` : ''}`,
+  const evalFilterKey = [sort, disagreementOnly, promptFilter?.version, promptFilter?.stage, rangeFrom, rangeTo].join('|')
+  useEffect(() => {
+    setEvalPage(1)
+  }, [evalFilterKey])
+  // Every filter runs on the server over all evaluations, so the list agrees
+  // with the "N disagree" badge and a prompt row's stage (QA 247).
+  const evalsQuery = usePageData<{ evaluations: EvalRow[]; total?: number }>(
+    judgeEvaluationsPath({
+      sort,
+      page: evalPage,
+      pageSize: EVAL_PAGE_SIZE,
+      disagreementOnly,
+      prompt: promptFilter,
+      from: rangeFrom,
+      to: rangeTo,
+    }),
   )
   const promptsQuery = usePageData<{ prompts: PromptRow[] }>('/v1/admin/judge/prompts')
   const distQuery = usePageData<Distribution>('/v1/admin/judge/distribution')
 
   const weeks = weeksQuery.data?.weeks ?? []
-  const evalsRaw = evalsQuery.data?.evaluations ?? []
-  const evals = useMemo(
-    () =>
-      disagreementOnly
-        ? evalsRaw.filter((e) => e.classification_agreed === false)
-        : evalsRaw,
-    [evalsRaw, disagreementOnly],
-  )
+  const evals = evalsQuery.data?.evaluations ?? []
+  const evalsTotal = evalsQuery.data?.total ?? evals.length
   const prompts = promptsQuery.data?.prompts ?? []
 
   const dist = distQuery.data ?? null
@@ -386,14 +429,21 @@ export function JudgePage() {
   async function runNow() {
     setRunning(true)
     setRunResult({ tone: 'running', message: 'Dispatching judge batch…', at: null })
-    const res = await apiFetch<{ dispatched: number }>('/v1/admin/judge/run', { method: 'POST' })
+    const res = await apiFetch<JudgeRunResponse>('/v1/admin/judge/run', { method: 'POST' })
     setRunning(false)
     const at = new Date().toISOString()
     if (res.ok) {
-      const count = res.data?.dispatched ?? 0
-      const message = `Dispatched ${count} project${count === 1 ? '' : 's'} — refreshing in ~30s`
-      toast.success('Judge batch dispatched', `${count} project(s). Refreshing in ~30s.`)
-      setRunResult({ tone: 'success', message, at })
+      const outcome = describeJudgeRun(res.data)
+      if (outcome.kind === 'nothing') {
+        // Nothing eligible: the server skipped the paid batch. Say so instead
+        // of a green "dispatched" that silently grades 0 reports.
+        toast.info(outcome.title, outcome.description)
+        setRunResult({ tone: 'info', message: outcome.receipt, at })
+        reloadStats()
+        return
+      }
+      toast.success(outcome.title, outcome.description)
+      setRunResult({ tone: 'success', message: outcome.receipt, at })
       if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current)
       refreshTimerRef.current = setTimeout(loadAll, 30_000)
     } else {
@@ -403,18 +453,9 @@ export function JudgePage() {
     }
   }
 
-  const runAction = searchParams.get('action')
-  // Ref guard, not `running` state: setRunning(true) hasn't committed when
-  // StrictMode re-invokes the effect, so state alone double-dispatches.
-  const autoRunFiredRef = useRef(false)
-  useEffect(() => {
-    if (runAction !== 'run' || autoRunFiredRef.current) return
-    autoRunFiredRef.current = true
-    void runNow()
-    const next = new URLSearchParams(searchParams)
-    next.delete('action')
-    setSearchParams(next, { replace: true })
-  }, [runAction, searchParams, setSearchParams])
+  // `/judge?action=run` (inbox, banners, Prompt Lab) used to POST the paid
+  // judge batch on page load. It now only points at the Run button.
+  const runPrefilled = useJudgeRunPrefill(JUDGE_RUN_BUTTON_ID)
 
   // Publish page context so the browser tab reflects the latest judge
   // week score (e.g. "Judge · 65% this week — Mushi Mushi") and the
@@ -427,7 +468,7 @@ export function JudgePage() {
     summary: loading
       ? 'Loading judge scores…'
       : latestWeek
-        ? `${Math.round((latestWeek.avg_score ?? 0) * 100)}% this week · ${latestWeek.eval_count} evals`
+        ? `${Math.round((latestWeek.avg_score ?? 0) * 100)}% ${stats.latestWeekLabel ?? 'this week'} · ${latestWeek.eval_count} evals`
         : 'No evaluations yet',
     questions: latestWeek
       ? [
@@ -441,16 +482,16 @@ export function JudgePage() {
         ],
   })
 
-  const disagreementRate = evalsRaw.length > 0
-    ? evalsRaw.filter((e) => e.classification_agreed === false).length / evalsRaw.length
-    : null
-  const staleHoursAgo = evalsRaw[0]?.created_at
-    ? Math.floor((Date.now() - new Date(evalsRaw[0].created_at).getTime()) / 3_600_000)
-    : null
+  // From the stats route, over every evaluation: the list below is filtered
+  // and paged, so it is not a sample of anything.
+  const disagreementRate = stats.disagreementRatePct != null ? stats.disagreementRatePct / 100 : null
+  // Age only matters while something is waiting to be graded; otherwise the
+  // "re-check" nudge asks for a run that evaluates nothing.
+  const staleHoursAgo = stats.ungradedReports > 0 ? stats.staleHours : null
   const heroAction = useNextBestAction({
     scope: 'judge',
     disagreementRate,
-    sampledCount: evalsRaw.length,
+    sampledCount: stats.totalEvaluations,
     staleHoursAgo,
   })
 
@@ -515,19 +556,6 @@ export function JudgePage() {
           : 'crit'
   const lastEval = evals[0]
 
-  const bannerSeverity: 'ok' | 'warn' | 'danger' | 'brand' | 'info' | 'neutral' =
-    !stats.hasAnyProject
-      ? 'neutral'
-      : stats.topPriority === 'no_evals'
-        ? 'brand'
-        : stats.topPriority === 'low_score' || stats.topPriority === 'drifting'
-          ? 'danger'
-          : stats.topPriority === 'disagreements' || stats.topPriority === 'stale'
-            ? 'warn'
-            : stats.topPriority === 'healthy'
-              ? 'ok'
-              : 'info'
-
   const trendPanel = (
     <>
       {/* mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas) */}
@@ -569,10 +597,15 @@ export function JudgePage() {
                   onRangeSelect={
                     trendTimestamps.every(Boolean)
                       ? ({ fromIso, toIso }) => {
-                          const next = new URLSearchParams(window.location.search)
-                          next.set('from', fromIso)
-                          next.set('to', toIso)
-                          window.history.pushState(null, '', `${window.location.pathname}?${next.toString()}`)
+                          // Drill into the evaluations graded in the selected
+                          // weeks, through the router (QA 107).
+                          setSearchParams((prev) => {
+                            const next = new URLSearchParams(prev)
+                            next.set('tab', 'evaluations')
+                            next.set('from', fromIso)
+                            next.set('to', toIso)
+                            return next
+                          })
                         }
                       : undefined
                   }
@@ -675,11 +708,11 @@ export function JudgePage() {
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-judge">
       <PageHeaderBar
-        title={copy?.title ?? 'Judge'}
+        title={copy?.title ?? 'Triage grading'}
         projectScope={stats.projectName ?? projectName ?? undefined}
         withPageHero={!ux.hideOverviewChrome}
 
-        helpTitle={copy?.help?.title ?? 'About the Judge'}
+        helpTitle={copy?.help?.title ?? 'About Fix grading'}
         helpWhatIsIt={copy?.help?.whatIsIt ?? "A second LLM that grades the classifier's output on every report — accuracy, severity, component, and reproduction quality. Scores feed both the weekly aggregate and the per-prompt leaderboard."}
         helpUseCases={copy?.help?.useCases ?? [
           'Detect when the classifier silently degrades after a model or prompt change',
@@ -688,46 +721,19 @@ export function JudgePage() {
         ]}
         helpHowToUse={copy?.help?.howToUse ?? 'Click "Run judge now" to score recent unjudged reports immediately. The leaderboard ranks prompt versions by mean judge score; click a row to see the evaluations that drove it.'}
       >
-        <Badge
-          className={
-            bannerSeverity === 'ok'
-              ? CHIP_TONE.okSubtle
-              : bannerSeverity === 'danger'
-                ? CHIP_TONE.dangerSubtle
-                : bannerSeverity === 'warn'
-                  ? CHIP_TONE.warnSubtle
-                  : bannerSeverity === 'brand'
-                    ? 'bg-brand/12 text-brand border border-brand/28'
-                    : 'bg-surface-overlay text-fg-muted'
-          }
-        >
-          {!stats.hasAnyProject
-            ? 'NO PROJECT'
-            : stats.totalEvaluations === 0
-              ? 'NO EVALS'
-              : stats.topPriority === 'low_score' || stats.topPriority === 'drifting'
-                ? 'DRIFT'
-                : stats.disagreementCount > 0
-                  ? `${stats.disagreementCount} DISAGREE`
-                  : stats.latestWeekScore != null
-                    ? `${Math.round(stats.latestWeekScore * 100)}%`
-                    : 'OK'}
-        </Badge>
-        <FreshnessPill
-          at={statsFetchedAt ?? evalsQuery.lastFetchedAt ?? weeksQuery.lastFetchedAt}
-          isValidating={statsValidating || evalsQuery.isValidating || weeksQuery.isValidating || promptsQuery.isValidating || distQuery.isValidating}
-        />
         <Btn size="sm" variant="ghost" onClick={loadAll} loading={statsValidating || evalsQuery.isValidating || weeksQuery.isValidating}>
           Refresh
         </Btn>
         <Btn
           size="sm"
           variant="primary"
-          onClick={runNow}
+          id={JUDGE_RUN_BUTTON_ID}
+          onClick={() => setRunConfirmOpen(true)}
           disabled={running}
           loading={running}
           leadingIcon={<PlayIcon />}
           data-dav-anchor="judge:act"
+          className={runPrefilled ? 'ring-2 ring-brand ring-offset-2 ring-offset-surface' : ''}
         >
           Run judge now
         </Btn>
@@ -749,7 +755,7 @@ export function JudgePage() {
                   onTab={setActiveTab}
                   onRefresh={loadAll}
                   refreshing={statsValidating || evalsQuery.isValidating || weeksQuery.isValidating}
-                  onRunJudge={runNow}
+                  onRunJudge={() => setRunConfirmOpen(true)}
                   running={running}
                   plainBanner={ux.plainBanner}
                 />
@@ -801,13 +807,13 @@ export function JudgePage() {
       />
       )}
 
+      {/* The score summary repeats the banner and snapshot, so it stays closed until asked for. */}
       {activeTab === 'overview' && !ux.hideOverviewChrome && (
-        <>
+        <DisclosurePanel title="Score summary: decide, act, verify">
       <PageHero
         scope="judge"
-        title={copy?.title ?? 'Judge'}
+        title={copy?.title ?? 'Triage grading'}
         kicker="Independent grading"
-        onCollapsedChange={setHeroCollapsed}
         decide={{
           label: overallScore == null ? 'No evaluations yet' : `Overall score ${Math.round(overallScore * 100)}%`,
           metric: overallScore == null ? '—' : `${Math.round(overallScore * 100)}%`,
@@ -849,67 +855,13 @@ export function JudgePage() {
           } : undefined,
         }}
       />
-        </>
+        </DisclosurePanel>
       )}
 
-      {activeTab === 'overview' && !ux.hideOverviewChrome && heroCollapsed && ux.hideJudgeSnapshot && (
-        <>
-      <div data-dav-anchor="judge:decide">
-      <KpiRow cols={4}>
-        <KpiTile
-          label="Latest week"
-          value={latest ? formatPct(latest.avg_score) : '—'}
-          sublabel={latest ? `${latest.eval_count} evals` : 'No evals yet'}
-          accent={latest && latest.avg_score >= 0.8 ? 'ok' : latest && latest.avg_score >= 0.6 ? 'warn' : 'danger'}
-          meaning="Mean judge score this week. ≥80% is healthy; <60% means the classifier is drifting and the prompt likely needs a tune."
-          delta={
-            previous
-              ? {
-                  value: `${(Math.abs(drift) * 100).toFixed(1)}%`,
-                  direction: drift > 0.01 ? 'down' : drift < -0.01 ? 'up' : 'flat',
-                  tone: drift > 0.10 ? 'danger' : drift > 0.01 ? 'warn' : drift < -0.01 ? 'ok' : 'muted',
-                }
-              : null
-          }
-        />
-        <KpiTile
-          label="Total evaluations"
-          value={totalEvals}
-          sublabel="Last 12 weeks"
-          meaning="How many fix attempts the independent LLM judge has graded over the last 12 weeks. More evals = more confidence in the trend."
-        />
-        <KpiTile
-          label="Prompt versions"
-          value={prompts.length}
-          sublabel={`${prompts.filter((p) => p.is_active).length} active · ${prompts.filter((p) => p.is_candidate).length} candidate`}
-          meaning="Distinct classifier prompts in your library. Candidates are A/B'd against the active prompt; promote a winner from the leaderboard."
-        />
-        <KpiTile
-          label="Mean score (overall)"
-          value={
-            dist && dist.total > 0
-              ? formatPct(
-                  dist.buckets.reduce((s, n, i) => s + n * (i + 0.5) * 0.1, 0) /
-                    dist.total,
-                )
-              : '—'
-          }
-          sublabel={dist ? `${dist.total} scored evals` : ''}
-          meaning="All-time mean judge score across every evaluation. Useful as a long-term health signal — a sliding 12w mean is on the chart to its right."
-        />
-      </KpiRow>
-      </div>
-
-      {weeks.length === 0 && evals.length === 0 && prompts.length === 0 && (
-        <ContainedBlock tone="info">
-          <InlineProof>
-            Tip: judge runs nightly via cron. Use <strong>Run judge now</strong> to seed
-            evaluations immediately on a fresh project.
-          </InlineProof>
-        </ContainedBlock>
-      )}
-        </>
-      )}
+      <p className="text-xs text-fg-muted">
+        Grading scores one report at a time. A bug pattern that keeps coming back across reports becomes a rule under{' '}
+        <Link to="/lessons" className={LINK_ACCENT}>Lessons</Link>.
+      </p>
 
       {activeTab === 'trend' && trendPanel}
 
@@ -1022,6 +974,20 @@ export function JudgePage() {
                 <span aria-hidden="true">×</span>
               </Btn>
             )}
+            {rangeFrom && rangeTo && (
+              <Btn
+                variant="ghost"
+                size="sm"
+                onClick={clearRange}
+                className="inline-flex items-center gap-1 px-2 py-0.5 text-2xs bg-brand/12 text-brand border border-brand/28 hover:bg-brand/20 focus-visible:ring-1 focus-visible:ring-brand/60"
+                aria-label="Clear the date range"
+              >
+                <span>
+                  {new Date(rangeFrom).toLocaleDateString()} – {new Date(rangeTo).toLocaleDateString()}
+                </span>
+                <span aria-hidden="true">×</span>
+              </Btn>
+            )}
             {promptFilter && (
               <Btn
                 variant="ghost"
@@ -1031,7 +997,7 @@ export function JudgePage() {
                 aria-label={`Clear filter on prompt ${promptFilter.version}`}
                 title="Clear prompt filter"
               >
-                <span>Filtered: {promptFilter.version}</span>
+                <span>Filtered: {promptFilter.version} ({promptFilter.stage})</span>
                 <span aria-hidden="true">×</span>
               </Btn>
             )}
@@ -1058,7 +1024,7 @@ export function JudgePage() {
           <EmptySectionMessage
             text="No evaluations match."
             hint={
-              disagreementOnly || promptFilter
+              disagreementOnly || promptFilter || (rangeFrom && rangeTo)
                 ? 'Clear the active filter or run judge now to seed fresh evaluations.'
                 : 'Run judge now or wait for the nightly cron to score classified reports.'
             }
@@ -1176,9 +1142,30 @@ export function JudgePage() {
             </table>
           </ResponsiveTable>
         )}
+        <ListPager
+          page={evalPage}
+          pageSize={EVAL_PAGE_SIZE}
+          total={evalsTotal}
+          noun="evaluations"
+          onPage={setEvalPage}
+          busy={evalsQuery.isValidating}
+        />
       </Section>
       )}
 
+      {runConfirmOpen && (
+        <ConfirmDialog
+          title="Run the judge now?"
+          body={judgeRunConfirmBody(stats.ungradedReports)}
+          confirmLabel="Run judge"
+          loading={running}
+          onConfirm={() => {
+            setRunConfirmOpen(false)
+            void runNow()
+          }}
+          onCancel={() => setRunConfirmOpen(false)}
+        />
+      )}
     </div>
   )
 }

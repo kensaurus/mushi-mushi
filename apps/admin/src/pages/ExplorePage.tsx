@@ -5,9 +5,9 @@
  * Graph/Layers/Search reuse the ReactFlow canvas, Sankey lane, and semantic search.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { type Edge, type Node } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 
@@ -15,6 +15,7 @@ import { usePageData } from '../lib/usePageData'
 import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { usePageCopy } from '../lib/copy'
 import { useExploreUx, resolveBeginnerExploreTab, resolveQuickExploreTab } from '../lib/exploreModeUx'
+import { useQuickstartLandingTab } from '../lib/useQuickstartTab'
 import {
   resolveExploreTab,
   primaryTabOf,
@@ -24,6 +25,7 @@ import {
   EXPLORE_MAP_VIEWS,
   isUnderstandView,
   isMapView,
+  exploreTabSearchParams,
   type ExplorePrimaryTabId,
   type ExploreUnderstandView,
   type ExploreMapView,
@@ -34,7 +36,6 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useTheme } from '../lib/useTheme'
 import { SnapshotSectionHint,
   SegmentedControl,
-  ErrorAlert,
   Section,
   StatCard,
   StatGrid,
@@ -43,16 +44,17 @@ import { SnapshotSectionHint,
   Btn,
   Card,
   DetailRows,
+  DisclosurePanel,
   type DetailRowItem, } from '../components/ui'
 import { GraphSkeleton } from '../components/skeletons/GraphSkeleton'
 import { exploreGridLayout, EXPLORE_HEADER_H } from '../components/explore/exploreLayout'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { shouldHideGuideWhenBannerActive, COMMON_HEALTHY_PRIORITIES } from '../lib/pagePostureHelpers'
-import { PageHero } from '../components/PageHero'
-import type { PageAction } from '../components/PageActionBar'
 import { ExploreCanvas } from '../components/explore/ExploreCanvas'
 import { ExploreLayerLane } from '../components/explore/ExploreLayerLane'
+import { ExploreDiagramPanel } from '../components/explore/ExploreDiagramPanel'
+import { CopyRepoDigestButton } from '../components/explore/CopyRepoDigestButton'
 import { ExploreSymbolPanel } from '../components/explore/ExploreSymbolPanel'
 import { ExploreChatPanel } from '../components/explore/ExploreChatPanel'
 import { ExploreTourPanel } from '../components/explore/ExploreTourPanel'
@@ -66,6 +68,10 @@ import { ExploreSearchBar } from '../components/explore/ExploreSearchBar'
 import { LAYER_COLORS, LAYER_LABELS, LAYER_ORDER } from '../components/explore/exploreLayers'
 import { ExploreStatusBanner } from '../components/explore/ExploreStatusBanner'
 import { ExploreAtlasGuide } from '../components/explore/ExploreAtlasGuide'
+import { PageLoadError } from '../components/PageLoadError'
+import { apiFetch } from '../lib/supabase'
+import { useToast } from '../lib/toast'
+import { describeApiFailure } from '../lib/humanizeApiError'
 import {
   ActionPill,
   ActionPillRow,
@@ -92,7 +98,6 @@ import {
   uiLayerTooltip,
 } from '../lib/statTooltips/explore'
 import { exploreLinks } from '../lib/statCardLinks'
-import { CHIP_TONE, HEADER_BADGE_TONE } from '../lib/chipTone'
 
 type DensityMode = 'files' | 'symbols'
 
@@ -107,20 +112,13 @@ const EXPLORE_TAB_META: Record<ExploreTabId, { label: string; description: strin
   knowledge: { label: 'Knowledge', description: 'Wiki and docs knowledge graph — entities merged into Ask answers.' },
   graph: { label: 'Graph', description: 'ReactFlow canvas — nodes coloured by architectural layer.' },
   layers: { label: 'Layers', description: 'Horizontal Sankey lane (UI → Library → Backend → …).' },
+  diagram: { label: 'Diagram', description: 'AI architecture diagram of the connected repo, every path checked against GitHub.' },
   search: { label: 'Search', description: 'Semantic search via embeddings — plain English queries.' },
   index: { label: 'Index', description: 'Indexer debug — repo, webhook, last error, embedding coverage.' },
 }
 
 function resolveExploreTabFromParams(value: string | null): ExploreTabId {
   return resolveExploreTab(value)
-}
-
-function exploreErrorMessage(raw: string | null): string | null {
-  if (!raw) return null
-  if (raw.includes('404')) {
-    return 'Codebase explorer API is unavailable. If you just deployed, wait a minute and refresh — otherwise contact support.'
-  }
-  return raw
 }
 
 function buildIndexRows(stats: ExploreStats): DetailRowItem[] {
@@ -155,11 +153,11 @@ function buildIndexRows(stats: ExploreStats): DetailRowItem[] {
       hint: 'Symbol rows when density = Symbols on Graph tab.',
     },
     {
-      label: 'Embeddings',
+      label: 'Embedded chunks',
       value: stats.withEmbeddings.toLocaleString(),
       mono: true,
       tone: stats.withEmbeddings > 0 ? 'ok' : 'warn',
-      hint: 'Files with vectors for semantic search.',
+      hint: 'Search chunks with vectors (whole files and symbols), so it can exceed Files.',
     },
     {
       label: 'Last indexed',
@@ -220,6 +218,9 @@ export function ExplorePage() {
   const [askSeed, setAskSeed] = useState<AskSeed | null>(null)
   const [tourStopOrder, setTourStopOrder] = useState<number | null>(null)
   const [impactActive, setImpactActive] = useState(false)
+  // Saved index scope, reported by the scope panel so the readout above it
+  // shows the same thing (null until loaded).
+  const [indexScope, setIndexScope] = useState<string[] | null>(null)
   const densityRef = useRef(density)
   densityRef.current = density
 
@@ -238,6 +239,23 @@ export function ExplorePage() {
     void exploreQuery.reload()
   }, [reloadStats, exploreQuery])
 
+  // A failed sweep otherwise waits for the daily retry.
+  const toast = useToast()
+  const [retryingIndex, setRetryingIndex] = useState(false)
+  const retryIndexing = useCallback(async () => {
+    if (!projectId) return
+    setRetryingIndex(true)
+    const res = await apiFetch(`/v1/admin/projects/${projectId}/codebase/sweep`, { method: 'POST' })
+    setRetryingIndex(false)
+    if (!res.ok) {
+      const t = describeApiFailure(res.error, 'Could not start indexing')
+      toast.error(t.title, t.description)
+      return
+    }
+    toast.success('Indexing started', 'Files and errors update here as the sweep runs.')
+    void reloadStats()
+  }, [projectId, toast, reloadStats])
+
   useRealtimeReload(
     ['project_codebase_files', 'project_repos', 'project_settings'],
     reloadAll,
@@ -246,12 +264,7 @@ export function ExplorePage() {
 
   const setActiveTab = useCallback(
     (tab: ExploreTabId) => {
-      setSearchParams((prev) => {
-        const next = new URLSearchParams(prev)
-        if (tab === 'graph') next.delete('tab')
-        else next.set('tab', tab)
-        return next
-      })
+      setSearchParams((prev) => exploreTabSearchParams(prev, tab))
     },
     [setSearchParams],
   )
@@ -263,19 +276,17 @@ export function ExplorePage() {
     [setActiveTab],
   )
 
-  useEffect(() => {
-    if (statsLoading) return
-    if (tabParam != null) return
-    if (ux.isQuickstart) {
-      const quickTab = resolveQuickExploreTab(stats)
-      if (activeTab !== quickTab) setActiveTab(quickTab)
-      return
-    }
-    if (ux.isBeginner) {
-      const beginnerTab = resolveBeginnerExploreTab(stats)
-      if (activeTab !== beginnerTab) setActiveTab(beginnerTab)
-    }
-  }, [ux.isQuickstart, ux.isBeginner, statsLoading, stats, activeTab, tabParam, setActiveTab])
+  // Quick and Beginner modes open a posture tab once. The default tab (graph)
+  // has no `?tab`, so re-checking on every render bounced every "show in
+  // graph" action straight back to Ask/Summary/Search.
+  useQuickstartLandingTab({
+    enabled: ux.isQuickstart || ux.isBeginner,
+    ready: !statsLoading,
+    tabParam,
+    activeTab,
+    quickTab: ux.isQuickstart ? resolveQuickExploreTab(stats) : resolveBeginnerExploreTab(stats),
+    setActiveTab,
+  })
 
   const allNodes: ExploreNode[] = payload?.nodes ?? []
   const allEdges: ExploreEdge[] = payload?.edges ?? []
@@ -486,42 +497,6 @@ export function ExplorePage() {
     setHighlightIds(new Set())
   }, [])
 
-  const bannerSeverity: 'ok' | 'warn' | 'danger' | 'brand' | 'info' | 'neutral' =
-    !stats.hasAnyProject
-      ? 'neutral'
-      : stats.topPriority === 'error'
-        ? 'danger'
-        : stats.topPriority === 'empty' || stats.topPriority === 'stale'
-          ? 'warn'
-          : stats.topPriority === 'not_enabled' || stats.topPriority === 'indexing'
-            ? 'brand'
-            : stats.topPriority === 'ready'
-              ? 'ok'
-              : 'info'
-
-  const exploreHeroSeverity =
-    bannerSeverity === 'danger' ? 'crit' : bannerSeverity === 'brand' ? 'info' : bannerSeverity
-
-  const exploreAct = useMemo((): PageAction | null => {
-    if (stats.topPriority === 'ready') return null
-    if (stats.topPriorityTo && stats.topPriorityLabel) {
-      const tone =
-        stats.topPriority === 'error'
-          ? 'act'
-          : stats.topPriority === 'empty' || stats.topPriority === 'stale'
-            ? 'check'
-            : 'do'
-      return {
-        tone,
-        title: stats.topPriorityLabel,
-        reason: stats.lastIndexError ?? undefined,
-        primary: { kind: 'link', to: stats.topPriorityTo, label: 'Take action →' },
-        secondary: [{ kind: 'button', label: 'Index debug', onClick: () => setActiveTab('index') }],
-      }
-    }
-    return null
-  }, [stats.topPriority, stats.topPriorityTo, stats.topPriorityLabel, stats.lastIndexError, setActiveTab])
-
   const primaryTabOptions = useMemo(
     () =>
       EXPLORE_PRIMARY_TABS.filter((t) => !(ux.hideIndexTab && t.id === 'index')).map((t) => ({
@@ -562,11 +537,12 @@ export function ExplorePage() {
     activeTab === 'knowledge' ||
     activeTab === 'graph' ||
     activeTab === 'layers' ||
+    activeTab === 'diagram' ||
     activeTab === 'search'
 
   usePublishPageContext({
     route: '/explore',
-    title: 'Codebase atlas',
+    title: 'Code map',
     summary: `${activeTabMeta.label} · ${stats.indexedFiles} files · ${stats.withEmbeddings} embedded`,
     filters: { tab: activeTab, density },
     criticalCount: stats.topPriority === 'error' ? 1 : 0,
@@ -598,7 +574,14 @@ export function ExplorePage() {
   }
 
   if (statsError) {
-    return <ErrorAlert message={`Failed to load explore stats: ${statsError}`} onRetry={reloadStats} />
+    return (
+      <PageLoadError
+        error={statsError}
+        onRetry={reloadStats}
+        resource="the codebase atlas"
+        endpoint="/v1/admin/explore/stats"
+      />
+    )
   }
 
   if (!projectId) {
@@ -747,20 +730,33 @@ export function ExplorePage() {
         )}
 
         {projectId && stats.codebaseIndexEnabled && (
-          <ExploreImpactControl
-            projectId={projectId}
-            active={impactActive}
-            onImpact={(ids) => handleImpact(ids)}
-            onClear={clearImpact}
-          />
+          <DisclosurePanel
+            title="Diff impact"
+            defaultOpen={impactActive}
+            trailing={impactActive ? <SignalChip tone="brand">on</SignalChip> : undefined}
+          >
+            <ExploreImpactControl
+              projectId={projectId}
+              active={impactActive}
+              onImpact={(ids) => handleImpact(ids)}
+              onClear={clearImpact}
+            />
+          </DisclosurePanel>
         )}
       </div>
     ) : null
 
-  const mapContent = loading ? (
+  // The diagram reads GitHub directly, so it works before (or without) codebase indexing.
+  const mapContent = activeTab === 'diagram' ? (
+    projectId ? (
+      <ExploreDiagramPanel projectId={projectId} />
+    ) : (
+      <EmptySectionMessage text="Pick a project first" hint="The diagram is drawn from the project's connected GitHub repo." />
+    )
+  ) : loading ? (
     <GraphSkeleton />
   ) : error ? (
-    <ErrorAlert message={exploreErrorMessage(error) ?? error} onRetry={reloadAll} />
+    <PageLoadError error={error} onRetry={reloadAll} resource="the code map" endpoint={exploreUrl} />
   ) : notIndexed ? (
     <div className="space-y-3">
       <EmptySectionMessage
@@ -826,11 +822,10 @@ export function ExplorePage() {
   return (
     <div className="space-y-3 sm:space-y-4 min-w-0" data-testid="mushi-page-explore">
       <PageHeaderBar
-        title={copy?.title ?? 'Explore'}
+        title={copy?.title ?? 'Code map'}
         projectScope={stats.projectName ?? undefined}
-        withPageHero={!ux.hideOverviewChrome}
 
-        helpTitle={copy?.help?.title ?? 'Codebase Atlas'}
+        helpTitle={copy?.help?.title ?? 'About Code map'}
         helpWhatIsIt={
           copy?.help?.whatIsIt ??
           'Visual map of indexed source files grouped by architectural layer.'
@@ -848,103 +843,13 @@ export function ExplorePage() {
         }
       >
         {!ux.hideOverviewChrome && (
-          <>
-            <Badge
-              className={
-                bannerSeverity === 'ok'
-                  ? CHIP_TONE.okSubtle
-                  : bannerSeverity === 'danger'
-                    ? CHIP_TONE.dangerSubtle
-                    : bannerSeverity === 'warn'
-                      ? CHIP_TONE.warnSubtle
-                      : bannerSeverity === 'brand'
-                        ? HEADER_BADGE_TONE.brand
-                        : HEADER_BADGE_TONE.neutral
-              }
-            >
-              {!stats.hasAnyProject
-                ? 'NO PROJECT'
-                : stats.topPriority === 'error'
-                  ? 'ERROR'
-                  : stats.topPriority === 'indexing'
-                    ? 'INDEXING'
-                    : stats.topPriority === 'empty' || stats.topPriority === 'not_enabled'
-                      ? 'EMPTY'
-                      : stats.topPriority === 'stale'
-                        ? 'STALE'
-                        : 'READY'}
-            </Badge>
-            <FreshnessPill
-              at={statsFetchedAt ?? exploreQuery.lastFetchedAt}
-              isValidating={statsValidating || exploreQuery.isValidating}
-            />
-            <Btn size="sm" variant="ghost" onClick={reloadAll} loading={statsValidating || loading}>
-              Refresh
-            </Btn>
-          </>
+          <FreshnessPill
+            at={statsFetchedAt ?? exploreQuery.lastFetchedAt}
+            isValidating={statsValidating || exploreQuery.isValidating}
+          />
         )}
+        {projectId && <CopyRepoDigestButton projectId={projectId} />}
       </PageHeaderBar>
-
-      {!ux.hideOverviewChrome ? (
-        <PageHero
-          scope="explore"
-          title={copy?.title ?? 'Codebase atlas'}
-          kicker="Index posture"
-          decide={{
-            label: stats.topPriority === 'ready' ? 'Atlas ready' : stats.topPriorityLabel ?? 'Index posture',
-            metric: `${stats.indexedFiles.toLocaleString()} files · ${stats.withEmbeddings.toLocaleString()} embedded`,
-            summary:
-              stats.topPriority === 'ready'
-                ? `${stats.symbolCount.toLocaleString()} symbols indexed — ask, tour, or search the repo.`
-                : stats.topPriorityLabel ?? 'Connect a repo and enable codebase indexing.',
-            severity: exploreHeroSeverity,
-            anchor: 'explore:decide',
-            evidence: {
-              kind: 'metric-breakdown',
-              whyNow:
-                stats.topPriority === 'error' && stats.lastIndexError
-                  ? stats.lastIndexError
-                  : stats.topPriority === 'ready'
-                    ? `${stats.indexedFiles} files indexed with ${stats.withEmbeddings} embedding vectors for semantic search.`
-                    : stats.topPriorityLabel ?? 'Indexing posture drives whether Ask, Tour, and Search can answer grounded questions.',
-              items: [
-                { label: 'Indexed files', value: stats.indexedFiles, tone: stats.indexedFiles > 0 ? 'ok' : 'warn' },
-                { label: 'Embeddings', value: stats.withEmbeddings, tone: stats.withEmbeddings > 0 ? 'ok' : 'warn' },
-                { label: 'Symbols', value: stats.symbolCount, tone: 'neutral' },
-                {
-                  label: 'Index enabled',
-                  value: stats.codebaseIndexEnabled ? 'Yes' : 'No',
-                  tone: stats.codebaseIndexEnabled ? 'ok' : 'warn',
-                },
-              ],
-            },
-          }}
-          act={exploreAct}
-          actAnchor="explore:act"
-          actEvidence={
-            exploreAct
-              ? { kind: 'rule-trace', why: exploreAct.reason ?? exploreAct.title, threshold: stats.topPriority ?? undefined }
-              : undefined
-          }
-          verify={{
-            label: stats.lastIndexedAt ? 'Last indexed' : 'Awaiting first index',
-            detail: stats.lastIndexedAt ?? stats.lastIndexAttemptAt ?? '—',
-            to: '/explore?tab=index',
-            secondaryTo: '/connect',
-            secondaryLabel: 'Connect repo',
-            anchor: 'explore:verify',
-            evidence: stats.lastIndexedAt
-              ? {
-                  kind: 'last-event',
-                  at: stats.lastIndexedAt,
-                  by: 'codebase indexer',
-                  payloadSummary: `${stats.indexedFiles} files`,
-                  status: stats.topPriority === 'error' ? 'warn' : 'ok',
-                }
-              : undefined,
-          }}
-        />
-      ) : null}
 
       <PagePosture
         slots={[
@@ -1008,7 +913,7 @@ export function ExplorePage() {
         </div>
       )}
 
-      {!ux.hideExploreSnapshot && (
+      {!ux.hideExploreSnapshot && activeTab === 'overview' && (
       <Section
         title={copy?.sections?.snapshot ?? (isWorkbenchTab ? 'At a glance' : 'EXPLORE SNAPSHOT')}
         freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
@@ -1056,29 +961,6 @@ export function ExplorePage() {
         <>
           {!ux.hideOverviewChrome && (
           <>
-          {stats.topPriorityTo && stats.topPriority !== 'ready' ? (
-            <Card
-              className={`p-4 ${
-                stats.topPriority === 'error'
-                  ? 'border-danger/40 bg-surface-raised'
-                  : stats.topPriority === 'empty' || stats.topPriority === 'stale'
-                    ? 'border-warn/40 bg-surface-raised'
-                    : 'border-brand/40 bg-surface-raised'
-              }`}
-            >
-              <p className="text-2xs font-semibold uppercase tracking-wider text-fg-muted">Top priority</p>
-              <p className="mt-1 text-sm font-medium text-fg">{stats.topPriorityLabel}</p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Link to={stats.topPriorityTo}>
-                  <Btn size="sm" variant="primary">Take action →</Btn>
-                </Link>
-                <Btn size="sm" variant="ghost" onClick={() => setActiveTab('index')}>
-                  Index debug
-                </Btn>
-              </div>
-            </Card>
-          ) : null}
-
           {stats.topPriority === 'ready' && stats.indexedFiles > 0 && (
             <Card className="p-4 flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -1180,8 +1062,8 @@ export function ExplorePage() {
 
       {activeTab === 'index' && (
         <div className="space-y-4">
-          <ExploreWorkspaceReadout projectId={projectId} />
-          <ExploreIndexScopePanel projectId={projectId} />
+          <ExploreWorkspaceReadout projectId={projectId} scopePaths={indexScope} />
+          <ExploreIndexScopePanel projectId={projectId} onScopeChange={setIndexScope} />
           <Card className="p-4 space-y-3">
             <p className="text-sm font-medium text-fg">Indexer debug</p>
             <ContainedBlock tone="muted">
@@ -1194,9 +1076,14 @@ export function ExplorePage() {
             <DetailRows items={buildIndexRows(stats)} />
           </Card>
           <div className="flex flex-wrap gap-2">
-            <Link to="/settings">
-              <Btn size="sm">Open indexing settings</Btn>
-            </Link>
+            {stats.lastIndexError && (
+              <Btn size="sm" onClick={() => void retryIndexing()} loading={retryingIndex}>
+                Retry indexing now
+              </Btn>
+            )}
+            <Btn to="/settings" size="sm" variant={stats.lastIndexError ? 'ghost' : undefined}>
+              Open indexing settings
+            </Btn>
             <Btn size="sm" variant="ghost" onClick={reloadAll} loading={statsValidating}>
               Re-fetch stats
             </Btn>

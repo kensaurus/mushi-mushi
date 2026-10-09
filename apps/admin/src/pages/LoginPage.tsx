@@ -5,12 +5,19 @@
  *   - Self-hosted mode: connection context, health indicator, diagnostics
  */
 
-import { useState, useEffect, type FormEvent } from 'react'
+import { useState, useEffect, useMemo, type FormEvent } from 'react'
 import { useAuth } from '../lib/auth'
 import { Navigate, useLocation, useSearchParams } from 'react-router-dom'
-import { Input, Btn, Tooltip, HelpBanner } from '../components/ui'
+import { Input, SelectField, Btn, Tooltip, HelpBanner } from '../components/ui'
 import { isCloudMode, RESOLVED_SUPABASE_URL } from '../lib/env'
 import { nextPathFromLoginState } from '../lib/authRedirect'
+import {
+  classifyAuthError as classifyAuthErrorText,
+  loginActionFor,
+  NO_ACCOUNT_FOR_EMAIL_LINK,
+  type LoginFormMode,
+  type LoginTrack,
+} from '../lib/loginSubmit'
 import {
   forgetRememberedLoginEmail,
   readRememberedLoginEmail,
@@ -20,12 +27,16 @@ import { LOGIN_HERO } from '../lib/public-copy-shared'
 import { canUsePasskeys } from '../lib/passkeys'
 import { useEnabledAuthProviders } from '../lib/authProviders'
 import { CHIP_TONE, LINK_ACCENT } from '../lib/chipTone'
+import {
+  SIGNUP_SOURCE_OPTIONS,
+  readSignupMetaFromSearch,
+  type SignupMeta,
+  type SignupSource,
+} from '../lib/signupAttribution'
 
 type HealthStatus = 'checking' | 'ok' | 'error' | 'unknown'
-type FormMode = 'login' | 'magic' | 'signup' | 'forgot'
+type FormMode = LoginFormMode
 type SuccessState = null | 'signup-confirm' | 'reset-sent' | 'magic-sent'
-/** Which portal flow led the user to this login page. */
-type LoginTrack = 'tester' | 'console'
 
 const cloud = isCloudMode()
 
@@ -35,24 +46,11 @@ function getSupabaseHost(): string {
 }
 
 function classifyAuthError(raw: string): string {
-  const lower = raw.toLowerCase()
-  if (lower.includes('invalid login') || lower.includes('invalid_credentials'))
-    return 'Invalid email or password. Check your credentials and try again.'
-  if (lower.includes('email not confirmed'))
-    return 'Please confirm your email address first. Check your inbox for a verification link.'
-  if (lower.includes('rate limit') || lower.includes('too many'))
-    return 'Too many attempts. Wait a moment and try again.'
-  if (lower.includes('fetch') || lower.includes('network') || lower.includes('failed'))
-    return cloud
-      ? 'Cannot reach the server. Please check your network connection and try again.'
-      : 'Cannot reach the Supabase server. Check your .env configuration and network connection.'
-  if (lower.includes('user already registered'))
-    return 'An account with this email already exists. Try signing in instead.'
-  return raw
+  return classifyAuthErrorText(raw, { cloud })
 }
 
 export function LoginPage() {
-  const { session, signIn, signInWithMagicLink, signInWithGitHub, signInWithGoogle, signInWithPasskey, signUp, resetPassword } = useAuth()
+  const { session, signIn, signInWithMagicLink, signInAsTester, signInWithGitHub, signInWithGoogle, signInWithPasskey, signUp, resetPassword } = useAuth()
   const location = useLocation()
   const [searchParams] = useSearchParams()
   const initialRememberedEmail = readRememberedLoginEmail()
@@ -71,6 +69,19 @@ export function LoginPage() {
   const [rememberEmail, setRememberEmail] = useState(!isSignupRoute)
   const [health, setHealth] = useState<HealthStatus>(cloud ? 'ok' : 'checking')
   const [passkeyAvailable, setPasskeyAvailable] = useState(false)
+  // Signup attribution — optional self-reported source plus `?src=` / `?ref=`
+  // campaign / growth-loop tags carried on the URL. Persisted on the auth
+  // user (see lib/signupAttribution.ts) so /growth can split the funnel.
+  const [signupSource, setSignupSource] = useState<SignupSource | ''>('')
+  const [signupSourceDetail, setSignupSourceDetail] = useState('')
+  const urlAttribution = useMemo(() => readSignupMetaFromSearch(searchParams), [searchParams])
+  const buildSignupMeta = (): SignupMeta => ({
+    ...urlAttribution,
+    ...(signupSource ? { signup_source: signupSource } : {}),
+    ...(signupSource === 'other' && signupSourceDetail.trim()
+      ? { signup_source_detail: signupSourceDetail.trim() }
+      : {}),
+  })
   // Only offer providers the backend has actually enabled. Prevents the raw
   // GoTrue "provider is not enabled" JSON page (supabase-js hard-redirects to
   // /authorize before any client-side error can fire). See authProviders.ts.
@@ -79,7 +90,10 @@ export function LoginPage() {
   const [track] = useState<LoginTrack>(initialTrack)
 
   const supabaseHost = getSupabaseHost()
-  const defaultNextPath = track === 'tester' ? '/tester' : '/dashboard'
+  // Fresh signups land on the wizard (first action = send a test report);
+  // returning users go to the dashboard. An explicit `?next=` / router
+  // state still wins for both.
+  const defaultNextPath = track === 'tester' ? '/tester' : mode === 'signup' ? '/onboarding' : '/dashboard'
   const nextPath = nextPathFromLoginState(location.state, searchParams.get('next'), defaultNextPath)
 
   useEffect(() => {
@@ -138,7 +152,8 @@ export function LoginPage() {
     setLoading(true)
 
     try {
-      if (mode === 'forgot') {
+      const action = loginActionFor(mode, track)
+      if (action === 'reset') {
         const result = await resetPassword(email)
         if (result.error) {
           setError(classifyAuthError(result.error))
@@ -146,18 +161,24 @@ export function LoginPage() {
           persistEmailChoice()
           setSuccess('reset-sent')
         }
-      } else if (mode === 'magic' || track === 'tester') {
-        // Both tracks use magic-link; the post-auth redirect is driven by `nextPath`.
-        const magicFn = signInWithMagicLink
-        const result = await magicFn(email)
+      } else if (action === 'email-link' || action === 'tester-email-link') {
+        // The link returns to `nextPath` (an invite, a deep link, /tester…).
+        // Only the tester link may create an account; see authRequestOptions.
+        const result =
+          action === 'tester-email-link'
+            ? await signInAsTester(email, { next: nextPath })
+            : await signInWithMagicLink(email, { next: nextPath })
         if (result.error) {
           setError(classifyAuthError(result.error))
         } else {
           persistEmailChoice()
           setSuccess('magic-sent')
         }
-      } else if (mode === 'signup') {
-        const result = await signUp(email, password)
+      } else if (action === 'signup' || action === 'tester-signup') {
+        const result = await signUp(email, password, buildSignupMeta(), {
+          next: nextPath,
+          ...(action === 'tester-signup' ? { intent: 'tester' as const } : {}),
+        })
         if (result.error) {
           setError(classifyAuthError(result.error))
         } else if (result.needsConfirmation) {
@@ -368,7 +389,10 @@ export function LoginPage() {
 
             {/* OAuth sign-in — only render providers the backend has enabled
                 (fetched from GoTrue /settings). While that resolves we withhold
-                the buttons so we never flash a provider we're about to hide. */}
+                the buttons so we never flash a provider we're about to hide.
+                In signup mode GitHub is the primary CTA (our users have a
+                GitHub account by definition); email/password sits under the
+                "or" divider. */}
             {(mode === 'login' || mode === 'signup') &&
               !authProvidersLoading &&
               (authProviders.github || authProviders.google) && (
@@ -376,11 +400,15 @@ export function LoginPage() {
                 {authProviders.github && (
                   <Btn
                     type="button"
-                    variant="ghost"
+                    variant={mode === 'signup' ? 'primary' : 'ghost'}
                     size="sm"
                     disabled={loading}
-                    onClick={() => void signInWithGitHub()}
-                    className="w-full justify-center gap-2 rounded-md bg-surface px-3 py-2.5 text-xs font-medium text-fg hover:bg-surface-raised"
+                    onClick={() => void signInWithGitHub(buildSignupMeta(), { next: nextPath })}
+                    className={
+                      mode === 'signup'
+                        ? 'w-full justify-center gap-2 rounded-md px-3 py-2.5 text-xs font-semibold'
+                        : 'w-full justify-center gap-2 rounded-md bg-surface px-3 py-2.5 text-xs font-medium text-fg hover:bg-surface-raised'
+                    }
                   >
                     <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                       <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" />
@@ -394,7 +422,7 @@ export function LoginPage() {
                     variant="ghost"
                     size="sm"
                     disabled={loading}
-                    onClick={() => void signInWithGoogle()}
+                    onClick={() => void signInWithGoogle(buildSignupMeta(), { next: nextPath })}
                     className="w-full justify-center gap-2 rounded-md bg-surface px-3 py-2.5 text-xs font-medium text-fg hover:bg-surface-raised"
                   >
                     {/* mushi-mushi-allowlist: Google "G" logo official brand colors (#4285F4/#34A853/#FBBC05/#EA4335) — mandated by Google branding guidelines, cannot be tokenized */}
@@ -495,6 +523,38 @@ export function LoginPage() {
               />
             )}
 
+            {mode === 'signup' && (
+              <>
+                <SelectField
+                  label="How did you hear about us? (optional)"
+                  id="signup-source"
+                  name="signup_source"
+                  value={signupSource}
+                  onChange={(e) => setSignupSource(e.target.value as SignupSource | '')}
+                  autoComplete="off"
+                >
+                  <option value="">Skip this</option>
+                  {SIGNUP_SOURCE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </SelectField>
+                {signupSource === 'other' && (
+                  <Input
+                    label="Where was that?"
+                    id="signup-source-detail"
+                    type="text"
+                    value={signupSourceDetail}
+                    onChange={(e) => setSignupSourceDetail(e.target.value)}
+                    maxLength={120}
+                    placeholder="A newsletter, a talk, a Discord…"
+                    autoComplete="off"
+                  />
+                )}
+              </>
+            )}
+
             {mode !== 'signup' && (
               <label className="inline-flex items-center gap-2 text-2xs text-fg-muted">
                 <input
@@ -510,6 +570,17 @@ export function LoginPage() {
             {error && (
               <div className="rounded-sm border border-danger/30 bg-danger-muted/10 px-3 py-2">
                 <p className="text-xs text-danger">{error}</p>
+                {error === NO_ACCOUNT_FOR_EMAIL_LINK && (
+                  <Btn
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => switchMode('signup')}
+                    className="mt-2"
+                  >
+                    Create an account
+                  </Btn>
+                )}
               </div>
             )}
 
@@ -534,6 +605,25 @@ export function LoginPage() {
                     ? 'Create account'
                     : 'Sign in'}
             </Btn>
+
+            {/* Informational notice only. The Terms are still a draft (governing
+                law unconfirmed), so the form must not claim the user agrees to
+                them. Once the founder finalises docs/legal/terms, restore
+                "By creating an account you agree to the Terms and Privacy Policy." */}
+            {mode === 'signup' && (
+              <p className="text-center text-2xs text-fg-faint leading-relaxed">
+                How we handle your data:{' '}
+                <a
+                  href="https://kensaur.us/mushi-mushi/docs/legal/privacy"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline underline-offset-2 hover:text-fg"
+                >
+                  Privacy Policy
+                </a>
+                .
+              </p>
+            )}
 
             {mode === 'login' && (
               <Btn

@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/billing
 
 ---
 title: Billing
+description: The Billing page shows your diagnosis quota, usage alerts at 50% and 80%, your projected bill, and spend caps for your Mushi plan.
 ---
 
 # Billing
@@ -11,8 +12,6 @@ title: Billing
 **Route:** `/billing`
 
 > **Scenario:** It's the 20th of the month. You get an email at 50% of your diagnosis quota, then again at 80%. You want to know when you'll hit the wall, what your projected bill is, and how to cap spend — without logging into Stripe.
-
-{DIAGNOSIS_PLAIN}
 
 Everything you need to manage your subscription is on this page: live usage with forecast and projected cost, plan comparison, invoices, spend caps, and in-console support.
 

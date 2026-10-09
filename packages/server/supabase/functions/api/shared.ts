@@ -13,6 +13,9 @@ import {
   ownedProjectIds as _ownedProjectIds,
 } from '../_shared/project-access.ts';
 import { isUuid } from './ids.ts';
+import { fanoutMemo } from '../_shared/request-memo.ts';
+import { NEW_BUCKET_STATUSES } from '../_shared/report-list-filters.ts';
+import { boundKeyTargetsOtherProject } from '../_shared/bound-key.ts';
 import {
   type ApiErrorCode,
   SAFE_DB_MESSAGE,
@@ -180,6 +183,34 @@ export const accessibleProjectIds = _accessibleProjectIds;
 export const ownedProjectIds = _ownedProjectIds;
 
 /**
+ * Report statuses that still wait on a decision (dispatch, dismiss, fix). The
+ * dashboard's triage queue and `GET /v1/admin/reports?status=open` share it so
+ * the "View backlog" link opens the list the panel previewed. Includes the
+ * legacy `pending` / `submitted` spellings that `status=new` already folds in;
+ * excludes `dispatched`, which has a fix in flight rather than a decision owed.
+ */
+export const OPEN_REPORT_STATUSES = [
+  'new',
+  'queued',
+  'pending',
+  'submitted',
+  'classified',
+  'triaged',
+  'grouped',
+  'reopened',
+] as const;
+
+/**
+ * Report statuses that still wait for triage — the `new` bucket. The reports
+ * list's `status=new` filter, the dashboard's triage backlog KPI and the
+ * inbox Plan flag all use it, so each count equals the list its link opens
+ * (before 2026-10-04 the KPI counted new|queued older than 1h in a 14-day
+ * window while its link listed every new|queued|pending|submitted report).
+ */
+// One list: the reports filter's `status=new` bucket (report-list-filters.ts).
+export const TRIAGE_BACKLOG_STATUSES = NEW_BUCKET_STATUSES;
+
+/**
  * Full accessible project set for enumeration endpoints (project list,
  * setup/switcher, org-wide stats).
  *
@@ -269,10 +300,27 @@ export async function userCanAccessProject(
   return { allowed: false, role: null };
 }
 
+/**
+ * {@link userCanAccessProject} for the current request. API keys authenticate
+ * as their owner, so a project-bound key must also be aimed at its own
+ * project (_shared/bound-key.ts). Use this in routes; use
+ * userCanAccessProject only where there is no request context.
+ */
+export async function callerCanAccessProject(
+  c: Context,
+  db: ReturnType<typeof getServiceClient>,
+  userId: string,
+  projectId: string,
+): ReturnType<typeof userCanAccessProject> {
+  if (boundKeyTargetsOtherProject(c.get('authMethod'), c.get('projectId'), projectId)) {
+    return { allowed: false, role: null };
+  }
+  return userCanAccessProject(db, userId, projectId);
+}
+
 export interface OwnedProjectRef {
   id: string;
   name?: string | null;
-  project_name?: string | null;
   organization_id?: string | null;
   organization_role?: string | null;
 }
@@ -315,6 +363,69 @@ function requestedOrganizationId(c: Context): string | null {
 }
 
 /**
+ * An account-level (org-scoped) API key: no bound project, reaches every
+ * project its owner can reach (callerProjectIds lists them all). Decided from
+ * the key alone, never from `projectId`: resolving a project pins
+ * `projectId` on the request, and the key must not then read as a
+ * project-bound key, which is treated as the project's owner.
+ */
+function isAccountKey(c: Context): boolean {
+  return c.get('authMethod') === 'apiKey' && Boolean(c.get('isOrgScopedKey'));
+}
+
+/**
+ * {@link resolveOwnedProject} for an account-level key. The project must be
+ * named (project_id / X-Mushi-Project-Id, or the route's URL id) or already
+ * pinned earlier in the request: there is no "first project" fallback for a key,
+ * and no route's empty no-project payload either (always 400 PROJECT_REQUIRED). The key acts with its owner's real role
+ * on that project (never a blanket 'owner', so requireProjectAdmin still
+ * refuses a member's key), and a project the owner cannot reach is a 404.
+ */
+async function resolveAccountKeyProject(
+  c: Context,
+  db: ReturnType<typeof getServiceClient>,
+  userId: string,
+  options: ResolveOwnedProjectOptions,
+): Promise<OwnedProjectResolution> {
+  // The project named on this request, else the one an earlier check pinned.
+  const requested =
+    (options.overrideProjectId ?? requestedProjectId(c)) || (c.get('projectId') as string | null | undefined) || null;
+  // Never the route's noProjectResponse: those empty payloads mean "this user
+  // has no project yet", which is false for a key that simply named none.
+  if (!requested) {
+    return {
+      response: jsonError(
+        c,
+        'PROJECT_REQUIRED',
+        'This account-level API key reaches several projects: name one with project_id (or the X-Mushi-Project-Id header).',
+        400,
+      ),
+    };
+  }
+  if (!UUID_RE.test(requested)) {
+    return { response: jsonError(c, 'INVALID_PROJECT_ID', 'project_id must be a UUID', 400) };
+  }
+  const notFound = (): OwnedProjectResolution => ({
+    response: jsonError(c, 'PROJECT_NOT_FOUND', 'Project not found', 404),
+  });
+  const access = await userCanAccessProject(db, userId, requested);
+  if (!access.allowed || !access.role) return notFound();
+  const { data: row } = await db
+    .from('projects')
+    .select('id, name, organization_id')
+    .eq('id', requested)
+    .maybeSingle();
+  if (!row) return notFound();
+  const requestedOrg = requestedOrganizationId(c);
+  if (requestedOrg && requestedOrg !== row.organization_id) {
+    return { response: jsonForbidden(c, 'Project is not in the active organization') };
+  }
+  if (row.organization_id) c.set('organizationId', row.organization_id);
+  c.set('projectId', row.id);
+  return { project: { ...row, organization_role: access.role }, explicit: true };
+}
+
+/**
  * Resolve the admin's active project consistently across route modules.
  *
  * New admin builds send `X-Mushi-Project-Id` based on ProjectSwitcher. Older
@@ -328,6 +439,7 @@ export async function resolveOwnedProject(
   options: ResolveOwnedProjectOptions = {},
 ): Promise<OwnedProjectResolution> {
   // API-key callers are pinned to the key's project — never elevated via owner_id.
+  if (isAccountKey(c)) return resolveAccountKeyProject(c, db, userId, options);
   if (c.get('authMethod') === 'apiKey') {
     const bound = c.get('projectId') as string | undefined;
     if (!bound) {
@@ -379,10 +491,10 @@ export async function resolveOwnedProject(
     };
   }
 
-  const { data: memberships } = await db
-    .from('organization_members')
-    .select('organization_id, role')
-    .eq('user_id', userId);
+  // Shared across the slices of one nav-meta fan-out (see request-memo.ts).
+  const { data: memberships } = await fanoutMemo(userId, 'organizationMemberRoles', async () =>
+    await db.from('organization_members').select('organization_id, role').eq('user_id', userId),
+  );
   const rolesByOrg = new Map<string, string>();
   for (const m of memberships ?? []) rolesByOrg.set(m.organization_id, m.role);
   const orgIds = Array.from(rolesByOrg.keys());
@@ -533,6 +645,32 @@ export async function scopedOwnedProjectIds(
 
 export const resolveAccessibleProject = resolveOwnedProject;
 
+/**
+ * Credential writes (integration tokens, storage keys, bot tokens) and other
+ * owner-level actions are for org owners and admins; members and viewers keep
+ * read access and ordinary settings. API keys resolve as 'owner' in
+ * {@link resolveOwnedProject}. Pass `message` when the action is not a
+ * credential change, so the refusal names what was refused.
+ */
+/**
+ * Whether the caller may make {@link requireProjectAdmin} writes on this
+ * project. GET routes return it so the console can disable owner-only
+ * controls with a reason instead of letting every click end in a 403.
+ */
+export function isProjectAdmin(project: Pick<OwnedProjectRef, 'organization_role'>): boolean {
+  const role = project.organization_role;
+  return role === 'owner' || role === 'admin';
+}
+
+export function requireProjectAdmin(
+  c: Context,
+  project: Pick<OwnedProjectRef, 'organization_role'>,
+  message = 'Only organization owners and admins can change credentials.',
+): Response | null {
+  if (isProjectAdmin(project)) return null;
+  return jsonForbidden(c, message);
+}
+
 export type OrgRole = 'owner' | 'admin' | 'member' | 'viewer';
 
 export type AccessibleOrgResolution =
@@ -540,8 +678,67 @@ export type AccessibleOrgResolution =
   | { ok: false; response: Response };
 
 /**
+ * {@link resolveAccessibleOrg} for an account-level key. The organization is
+ * the one named on the request, else the org of the project an earlier check
+ * pinned; the two must agree. The key acts with its owner's real membership
+ * role there, never the bound-key 'owner' shortcut, so a member's account key
+ * stays a member after a project resolver has set `projectId`.
+ */
+async function resolveAccountKeyOrg(
+  c: Context,
+  db: ReturnType<typeof getServiceClient>,
+  userId: string,
+  requested: string | null,
+): Promise<AccessibleOrgResolution> {
+  if (requested && !UUID_RE.test(requested)) {
+    return { ok: false, response: jsonValidationError(c, 'organization_id must be a UUID') };
+  }
+  const pinnedProjectId = (c.get('projectId') as string | null | undefined) || null;
+  let pinnedOrg: string | null = null;
+  if (pinnedProjectId) {
+    const { data: project, error } = await db
+      .from('projects')
+      .select('organization_id')
+      .eq('id', pinnedProjectId)
+      .maybeSingle();
+    if (error) return { ok: false, response: jsonError(c, 'DB_ERROR', 'Could not read the project', 500) };
+    pinnedOrg = (project?.organization_id as string | null | undefined) ?? null;
+    if (requested && pinnedOrg && requested !== pinnedOrg) {
+      return { ok: false, response: jsonForbidden(c, 'Project is not in the active organization') };
+    }
+  }
+  const organizationId = requested ?? pinnedOrg;
+  if (!organizationId) {
+    return {
+      ok: false,
+      response: jsonError(
+        c,
+        'ORG_REQUIRED',
+        'This account-level API key reaches several organizations: name one with organization_id (or the X-Mushi-Org-Id header).',
+        400,
+      ),
+    };
+  }
+  const { data: membership, error: memberErr } = await db
+    .from('organization_members')
+    .select('role')
+    .eq('organization_id', organizationId)
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (memberErr) return { ok: false, response: jsonError(c, 'DB_ERROR', 'Could not read the organization membership', 500) };
+  const role = (membership?.role as OrgRole | undefined) ?? null;
+  if (!role) {
+    return { ok: false, response: jsonForbidden(c, 'Access to this organization is not allowed') };
+  }
+  c.set('organizationId', organizationId);
+  return { ok: true, organizationId, role };
+}
+
+/**
  * Validates `X-Mushi-Org-Id` for JWT callers (membership gate, fail closed).
- * API-key callers resolve org from the bound project and reject header mismatches.
+ * Project-bound keys resolve the org from the bound project and reject header
+ * mismatches; account-level keys use their owner's membership
+ * ({@link resolveAccountKeyOrg}).
  */
 export async function resolveAccessibleOrg(
   c: Context,
@@ -550,6 +747,7 @@ export async function resolveAccessibleOrg(
 ): Promise<AccessibleOrgResolution> {
   const requested = requestedOrganizationId(c);
 
+  if (isAccountKey(c)) return resolveAccountKeyOrg(c, db, userId, requested);
   if (c.get('authMethod') === 'apiKey') {
     const boundProjectId = c.get('projectId') as string | undefined;
     if (!boundProjectId) {
@@ -607,7 +805,9 @@ export type TargetProjectAccessResult =
 
 /**
  * Fail-closed access check for a specific project id (body, query, header, or URL).
- * API-key callers stay bound to the key project; JWT callers use org/project membership.
+ * Project-bound API keys stay bound to the key project; JWT callers and
+ * account-level (org-scoped) keys use the caller's org/project membership,
+ * so an account key acts with its owner's real role.
  */
 export async function assertTargetProjectAccess(
   c: Context,
@@ -622,10 +822,11 @@ export async function assertTargetProjectAccess(
     };
   }
 
-  const scopeErr = assertCallerProjectScope(c, projectId);
+  const accountKey = isAccountKey(c);
+  const scopeErr = accountKey ? null : assertCallerProjectScope(c, projectId);
   if (scopeErr) return { ok: false, response: scopeErr };
 
-  if (c.get('authMethod') === 'apiKey') {
+  if (c.get('authMethod') === 'apiKey' && !accountKey) {
     const { data: row } = await db
       .from('projects')
       .select('id, organization_id')

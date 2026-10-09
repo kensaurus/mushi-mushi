@@ -9,21 +9,22 @@ description: Run npx mushi-mushi, ship, and turn your first user-reported bug in
 
 # Incident loop
 
-{INCIDENT_LOOP_LEDE}
+  **Today:** classification in seconds; a paste-ready fix prompt on the report page, or the fix brief via MCP tools. **Target:** sub-10-second end-to-end diagnosis. MCP needs a Mushi account + project key — not a separate OpenAI/Anthropic key.
 
-{/* TODO(loop-video): drop the recorded asset in and uncomment. Path is the
-    canonical slot shared with the README hero + Launch Week thumbnail.
-    Storyboard + capture recipe: docs/marketing/STOREFRONTS.md ("Incident loop GIF").
+## No MCP? Copy the fix prompt
 
-*/}
-
-  **Today:** classification in seconds; fix brief via MCP tools. **Target:** sub-10-second end-to-end diagnosis. MCP needs a Mushi account + project key — not a separate OpenAI/Anthropic key.
+Open the report in the console and click **Copy fix prompt** under **Fix it with
+your coding agent**. You get one self-contained prompt (diagnosis, suggested fix,
+repro steps, page and browser, the key console lines, likely files, and what
+"done" means), ready to paste into Claude Code, Cursor, Codex or Windsurf. No
+MCP or editor setup is needed. The steps below are the MCP route, which lets
+the agent pull context and close the report itself.
 
 ## Prerequisites
 
 1. A Mushi project + API key ([credentials](/concepts/credentials))
 2. At least one report (SDK capture, test report from `npx mushi-mushi`, or Sentry inbound)
-3. MCP wired into Cursor — [MCP quickstart](/quickstart/mcp) or **Connect & Update → Add to Cursor**
+3. MCP wired into Cursor — [MCP quickstart](/quickstart/mcp) or **Connect & Update → Add to Cursor**. The key it creates can read and write by default; the agent needs write access to mark the report fixed.
 
 ## Step 1 — Capture or pick a report
 

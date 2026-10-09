@@ -3,9 +3,8 @@
  * PURPOSE: Repo hub provenance — primary GitHub URL and branch/PR signals.
  */
 
-import { Section } from '../ui'
 import { DetailRows, type DetailRowItem } from '../ui/fields'
-import { EndpointCodeRow, ReadoutSection } from '../readout'
+import { EndpointCodeRow, ReadoutSection, ReadoutPanel } from '../readout'
 import type { RepoStats } from './RepoStatsTypes'
 import { IconGit, IconGlobe, IconHealth } from '../icons'
 
@@ -55,7 +54,7 @@ export function RepoProvenanceReadout({
   ]
 
   return (
-    <Section title="Repo readout" freshness={{ at: fetchedAt, isValidating: validating }}>
+    <ReadoutPanel title="Repo readout" freshness={{ at: fetchedAt, isValidating: validating }}>
       <p className="mb-4 text-xs leading-relaxed text-fg-muted">
         Primary connected repository and fix-worker branch posture — copy the repo URL for support tickets or CI wiring.
       </p>
@@ -73,6 +72,6 @@ export function RepoProvenanceReadout({
           </div>
         </ReadoutSection>
       </div>
-    </Section>
+    </ReadoutPanel>
   )
 }

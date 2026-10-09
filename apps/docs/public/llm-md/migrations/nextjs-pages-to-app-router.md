@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/migrations/nextjs-pages-to-app-route
 
 ---
 title: 'Next.js Pages → App Router'
+description: Move a Next.js app from the Pages Router to the App Router step by step — where to mount Mushi, CSP for static export, and client component boundaries.
 ---
 
 # Next.js Pages → App Router
@@ -46,16 +47,16 @@ Most major libraries (Next-Auth, SWR, react-query, framer-motion) are App Router
         {children}
       
     
-  )
+
 }`} },
     { id: 'mushi-provider', label: 'Create app/providers.tsx with the Mushi provider', content: {`// app/providers.tsx
 'use client'   // <-- REQUIRED — MushiProvider uses React state
 
   return (
     
-      {children}
+
     
-  )
+
 }`} },
     { id: 'remove-old-app', label: 'Delete pages/_app.tsx (only AFTER you have an app/layout.tsx)', content: <>Once app/layout.tsx exists, Next.js routes through it. Leaving pages/_app.tsx in place causes confusing dual-mounts of the Mushi provider.</> },
     { id: 'port-routes', label: 'Port routes one at a time', content: <>For each route under pages/, create the equivalent under app/ (e.g. pages/about.tsx → app/about/page.tsx). Delete the pages/ file only after the app/ version is verified.</> },
@@ -63,7 +64,7 @@ Most major libraries (Next-Auth, SWR, react-query, framer-motion) are App Router
     { id: 'csp', label: 'Update CSP for App Router', content: <>If you ship a strict CSP, App Router uses different chunk URLs than Pages. See the Next.js App Router CSP integration for the Mushi-specific connect-src and script-src rules.</> },
     { id: 'static-export', label: 'Re-test static export (if applicable)', content: <>App Router supports output: 'export' as of Next 14, but with constraints (no Server Actions, no dynamic routes without generateStaticParams). See Next.js static export.</> },
     { id: 'verify', label: 'Smoke-test on every primary route', content: <>Open the floating Mushi widget, submit a test report from each major page; confirm metadata.url on the report shows the correct App Router path.</> },
-  ]}
+
 />
 
 ## Where to put `` (the most asked question)
@@ -95,14 +96,15 @@ call Mushi:
 // app/articles/[slug]/page.tsx (Server Component)
 export default async function Page({ params }: { params: { slug: string } }) {
   const article = await fetchArticle(params.slug)
-  return 
+  return <ArticleReportButton articleId={article.id} />
 }
 
 // app/articles/[slug]/ArticleReportButton.tsx (Client Component)
 'use client'
-
-  const { submit } = useMushiReport()
-  return  submit({ description: 'Article issue', metadata: { articleId } })}>Report
+import { useMushiSdk } from '@mushi-mushi/react'
+export function ArticleReportButton({ articleId }: { articleId: string }) {
+  const mushi = useMushiSdk()
+  return <button onClick={() => void mushi?.captureEvent({ description: 'Article issue', metadata: { articleId } })}>Report</button>
 }
 ```
 

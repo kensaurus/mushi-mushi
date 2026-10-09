@@ -58,6 +58,8 @@ export interface ReportFixAttempt {
    *  Only populated when status = 'failed'. */
   failure_category: FixAttemptFailureCategory | null
   error: string | null
+  /** Set once the PR landed (webhook, console merge, or ci-sync poll). */
+  merged_at?: string | null
   started_at: string | null
   completed_at: string | null
   created_at: string
@@ -153,9 +155,27 @@ export interface ReportJudgeEval {
   created_at: string
 }
 
+/**
+ * A merged fix joined to the project's deploy truth: each deploy target's
+ * newest commit placed before or after the merge (deploy_drift run heads and
+ * earlier deploy_observations). `unknown` covers no check since the merge, a
+ * commit that cannot be placed, and a failed read.
+ */
+export interface ReportDeployLive {
+  state: 'live' | 'not_live' | 'unknown'
+  merged_at: string
+  /** The commit the deciding deploy target runs, when it reported one. */
+  prod_commit: string | null
+  target_id: string | null
+  checked_at: string | null
+  reason: string
+}
+
 export interface ReportDetail {
   id: string
   project_id: string
+  /** projects.name, joined server-side for the header chip. */
+  project_name?: string | null
   description: string
   user_category: string
   user_intent: string | null
@@ -168,7 +188,15 @@ export interface ReportDetail {
   stage1_classification: Record<string, unknown> | null
   stage1_model: string | null
   stage1_latency_ms: number | null
+  /** Model that wrote `stage2_analysis`; null when Stage 2 never ran. */
+  stage2_model?: string | null
+  /** Stage-2 object while it is still streaming; null once the final row lands. */
+  stage2_partial?: Record<string, unknown> | null
+  /** Column copy of the Stage-2 reproduction steps. */
+  reproduction_steps?: unknown
   category: string
+  /** When a console user set the category in triage; unblocks a feature request for dispatch. */
+  category_confirmed_at?: string | null
   severity: string | null
   summary: string | null
   /** Friendly, non-engineer headline from Stage 2 (falls back to summary). */
@@ -179,6 +207,10 @@ export interface ReportDetail {
   confidence: number | null
   status: string
   reporter_token_hash: string
+  /** Set when grouped under a canonical report; required to close as a duplicate. */
+  report_group_id?: string | null
+  /** Why a dismissed report was closed; the reporter sees matching copy (Plan 018 §2.1). */
+  closed_reason?: string | null
   /** Parent report when this row is a regression reopen. */
   parent_report_id?: string | null
   verified_at?: string | null
@@ -213,6 +245,9 @@ export interface ReportDetail {
   } | null
   /** Linked agentic fix attempts for this report. Most recent first. */
   fix_attempts?: ReportFixAttempt[]
+  /** Whether the merged fix runs in production; null when no fix merged.
+   *  Server: `_shared/report-deploy-live.ts`. */
+  deploy_live?: ReportDeployLive | null
   /** Latest classification judge evaluation, if the judge has run. */
   judge_eval?: ReportJudgeEval | null
   // 2026-05-07 SDK observability boost — these populate from the
@@ -250,7 +285,8 @@ export interface ReportDetail {
   tester_submission_id?: string | null
   tester_submission?: {
     id: string
-    status: 'pending' | 'accepted' | 'informative' | 'duplicate' | 'spam'
+    /** tester_submissions CHECK: also 'triaged' and 'withdrawn'. */
+    status: 'pending' | 'triaged' | 'accepted' | 'informative' | 'duplicate' | 'spam' | 'withdrawn'
     points_awarded: number
     tester_handle: string | null
     app_name: string | null

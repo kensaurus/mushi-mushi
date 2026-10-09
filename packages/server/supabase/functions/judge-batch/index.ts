@@ -1,5 +1,4 @@
-import { createAnthropic } from 'npm:@ai-sdk/anthropic@1'
-import { createOpenAI } from 'npm:@ai-sdk/openai@1'
+import { openAiProvider } from '../_shared/openai-compat.ts'
 import { generateObject } from 'npm:ai@4'
 import { z } from 'npm:zod@3'
 import { getServiceClient } from '../_shared/db.ts'
@@ -8,13 +7,17 @@ import { sendSlackNotification } from '../_shared/slack.ts'
 import { log as rootLog } from '../_shared/logger.ts'
 import { recordPromptResult, checkPromotionEligibility, promoteCandidate, getPromptForStage, resolveJudgeWeights } from '../_shared/prompt-ab.ts'
 import { startCronRun } from '../_shared/telemetry.ts'
+import { recordLlmUsage } from '../_shared/llm-usage.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { resolveLlmKey } from '../_shared/byok.ts'
 import { dispatchPluginEventDetached } from '../_shared/plugins.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { mapWithConcurrency } from '../_shared/concurrency.ts'
-import { JUDGE_MODEL, JUDGE_FALLBACK } from '../_shared/models.ts'
+import { JUDGE_EFFORT, JUDGE_MODEL, JUDGE_FALLBACK } from '../_shared/models.ts'
+import { claudeGenerateObject } from '../_shared/claude-messages.ts'
+import { resolveClaudeModel } from '../_shared/claude-request.ts'
 import { safeErrorResponse } from '../_shared/safe-error.ts'
+import { JUDGE_ELIGIBLE_STATUSES, judgeEmptyResult, onlyJudgeable } from '../_shared/judge-eligibility.ts'
 
 /**
  * OpenRouter / Together / Fireworks expect `vendor/model` slugs. Operators
@@ -111,11 +114,19 @@ Deno.serve(withSentry('judge-batch', async (req) => {
 
     const { data: projects } = await projectFilter
     if (!projects?.length) {
-      await cronRun.finish({ rowsAffected: 0, metadata: { reason: 'no projects' } })
-      return new Response(JSON.stringify({ ok: true, message: 'No projects' }), { status: 200 })
+      const empty = judgeEmptyResult({ projectsChecked: 0, judgeEnabledProjects: 0, eligibleReports: 0 })
+      await cronRun.finish({ rowsAffected: 0, metadata: { reason: empty?.reason ?? 'no_projects' } })
+      return new Response(JSON.stringify({ ok: true, data: { totalEvaluated: 0, driftAlerts: [], ...empty } }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
     }
 
     let totalEvaluated = 0
+    // Counted so a 0-eval run can say WHY (judge off vs nothing new to grade)
+    // instead of returning a bare 200 the console renders as success.
+    let judgeEnabledProjects = 0
+    let eligibleReports = 0
     const driftAlerts: string[] = []
     // Capture per-report failures so the operator can see WHY rows_affected=0
     // without fishing through edge-function stdout. Surfaced on cron_runs.metadata.
@@ -154,29 +165,29 @@ Deno.serve(withSentry('judge-batch', async (req) => {
       const settings = settingsByProject.get(project.id)
 
       if (!settings?.judge_enabled) continue
+      judgeEnabledProjects++
 
       const sampleSize = settings.judge_sample_size ?? 50
-      // Wave R (audit 2026-04-22): judge upgraded from claude-sonnet-4-6 to
-      // claude-opus-4-7 (released 2026-04-16). The prior Sonnet-on-Sonnet
-      // baseline saved cost but capped disagreement detection at the
-      // classifier's own ceiling. Opus-4-7 brings frontier reasoning to
-      // self-critique and is used only on the sampled batch (default 50
-      // reports / project / night) so cost stays bounded. Operators can still
-      // override back to Sonnet via `project_settings.judge_model`.
-      const modelId = settings.judge_model ?? JUDGE_MODEL
+      // `project_settings.judge_model` overrides the default; retired ids map
+      // to the default (see `resolveClaudeModel`). Every Claude judge call goes
+      // through `claude-messages.ts`, so Opus 4.7+ / Sonnet 5.5 overrides work.
+      const modelId = resolveClaudeModel(settings.judge_model, JUDGE_MODEL)
       const fallbackProvider = (settings.judge_fallback_provider ?? 'openai') as 'openai' | 'none'
       const fallbackModelId = settings.judge_fallback_model ?? JUDGE_FALLBACK
 
-      const { data: reports } = await db
-        .from('reports')
-        .select('id, description, user_category, category, severity, summary, component, confidence, stage1_classification, stage2_analysis, reproduction_steps, environment, console_logs, stage1_prompt_version, stage2_prompt_version')
-        .eq('project_id', project.id)
-        .in('status', ['classified', 'grouped', 'fixing', 'fixed'])
-        .is('judge_evaluated_at', null)
+      const { data: reports } = await onlyJudgeable(
+        db
+          .from('reports')
+          .select('id, description, user_category, category, severity, summary, component, confidence, stage1_classification, stage2_analysis, reproduction_steps, environment, console_logs, stage1_prompt_version, stage2_prompt_version')
+          .eq('project_id', project.id)
+          .in('status', [...JUDGE_ELIGIBLE_STATUSES])
+          .is('judge_evaluated_at', null),
+      )
         .order('created_at', { ascending: false })
         .limit(sampleSize)
 
       if (!reports?.length) continue
+      eligibleReports += reports.length
 
       const trace = createTrace('judge-batch', { projectId: project.id, reportCount: reports.length })
 
@@ -236,30 +247,41 @@ Score each dimension 0-1. Be critical of vague components, miscalibrated severit
           // V5.3 §2.7 + §2.18: BYOK-only deployments commonly run on a single
           // OpenAI-compatible gateway (OpenRouter, Together, …) instead of a
           // direct Anthropic key. If we have no Anthropic key at all, skip the
-          // primary path entirely — going through `createAnthropic` without a
+          // primary path entirely — calling the Anthropic API without a
           // key throws a noisy 401 that pollutes the judge log and wastes a
           // round-trip on every report.
           const tryAnthropic = !!(anthropicResolved?.key ?? Deno.env.get('ANTHROPIC_API_KEY'))
           let primaryErr: unknown = tryAnthropic ? null : new Error('No Anthropic key — skipping primary path')
 
+          const judgeUsageCtx = {
+            functionName: 'judge-batch',
+            stage: 'judge',
+            projectId: project.id,
+            reportId: report.id,
+            primaryModel: modelId,
+            promptVersion: judgePromptSelection.promptVersion ?? null,
+            langfuseTraceId: trace.id,
+          }
+
           if (tryAnthropic) {
+            const anthropicStart = Date.now()
+            const anthropicUsage = {
+              ...judgeUsageCtx,
+              model: modelId,
+              keySource: anthropicResolved?.source ?? 'env',
+              startedAt: anthropicStart,
+            } as const
             try {
-              const anthropic = createAnthropic({ apiKey: anthropicResolved?.key ?? Deno.env.get('ANTHROPIC_API_KEY') })
-              // Sentry MUSHI-MUSHI-SERVER-9 (2026-04-23, then 2026-04-24
-              // 03:00 UTC): the Wave-R upgrade to Opus 4.7 + the `e218bbf`
-              // thinking-mode workaround both 400. Opus 4.7 deprecated
-              // `temperature`, AI SDK v4 hardcodes it, enabling thinking
-              // strips it BUT Anthropic forbids "thinking + tool_choice
-              // forces tool use" which `generateObject` always sets for
-              // Anthropic. See `_shared/models.ts` `acceptsSamplingKnobs`
-              // for the full migration note plus vercel/ai#7220 / #9351.
-              // Until vercel/ai ships native middleware OR we move to AI
-              // SDK v5, JUDGE_MODEL stays on Sonnet 4.6 — which accepts
-              // `temperature: 0` and works with `generateObject` directly.
-              const result = await generateObject({
-                model: anthropic(modelId),
+              // Sentry MUSHI-MUSHI-SERVER-9 (2026-04-23/24): AI SDK v4 sends
+              // `temperature` and forces `tool_choice` for JSON; Opus 4.7+ and
+              // Sonnet 5.5 reject both. `claudeGenerateObject` uses native
+              // structured outputs, sends no thinking config, and keeps
+              // `temperature: 0` only on models that still accept it.
+              const result = await claudeGenerateObject({
+                apiKey: (anthropicResolved?.key ?? Deno.env.get('ANTHROPIC_API_KEY'))!,
+                model: modelId,
                 schema: judgeSchema,
-                temperature: 0,
+                effort: JUDGE_EFFORT,
                 messages: [
                   {
                     role: 'system',
@@ -273,18 +295,20 @@ Score each dimension 0-1. Be critical of vague components, miscalibrated severit
               })
               evaluation = result.object
               usage = result.usage
+              void recordLlmUsage(db, anthropicUsage, { result })
             } catch (err) {
-              // Preserve diagnostic fidelity on the first failure — AI SDK
-              // wraps provider errors in AI_APICallError which hides the
-              // status code unless inspected. Without this log the audit
+              void recordLlmUsage(db, anthropicUsage, { error: err })
+              // Preserve diagnostic fidelity on the first failure — the
+              // Anthropic SDK puts the HTTP status on `status` (AI SDK used
+              // `statusCode`), which a plain message log would hide. Without this log the audit
               // (LLM-1) couldn't distinguish "529 overloaded" (ok, retry)
               // from "invalid_request_error" (config bug) or "401 auth"
               // (missing BYOK key) — all 3 appeared as "100% fallback".
-              const e = err as { statusCode?: number; responseBody?: string; message?: string }
+              const e = err as { status?: number; statusCode?: number; responseBody?: string; message?: string }
               rootLog.child('judge').warn('Primary judge call failed — falling through to fallback', {
                 reportId: report.id,
                 model: modelId,
-                statusCode: e.statusCode ?? null,
+                statusCode: e.status ?? e.statusCode ?? null,
                 detail: (e.responseBody ?? e.message ?? String(err)).slice(0, 200),
               })
               primaryErr = err
@@ -315,16 +339,28 @@ Score each dimension 0-1. Be critical of vague components, miscalibrated severit
               model: normalizedModel,
               skippedPrimary: !tryAnthropic,
             })
-            const openai = createOpenAI({
+            const openai = openAiProvider({
               apiKey: openaiKey,
               ...(openaiResolved?.baseUrl ? { baseURL: openaiResolved.baseUrl } : {}),
             })
+            const openaiUsage = {
+              ...judgeUsageCtx,
+              model: normalizedModel,
+              keySource: openaiResolved?.key ? openaiResolved.source : 'env',
+              startedAt: Date.now(),
+              fallbackUsed: tryAnthropic,
+              fallbackReason: tryAnthropic ? 'anthropic_failed' : 'no_anthropic_key',
+            } as const
             const result = await generateObject({
               model: openai(normalizedModel),
               schema: judgeSchema,
               system: SYSTEM_PROMPT,
               prompt: USER_PROMPT,
+            }).catch((err: unknown) => {
+              void recordLlmUsage(db, openaiUsage, { error: err })
+              throw err
             })
+            void recordLlmUsage(db, openaiUsage, { result })
             evaluation = result.object
             usage = result.usage
             usedJudgeModel = normalizedModel
@@ -507,9 +543,14 @@ Score each dimension 0-1. Be critical of vague components, miscalibrated severit
       trace.end()
     }
 
+    const empty = totalEvaluated === 0
+      ? judgeEmptyResult({ projectsChecked: projects.length, judgeEnabledProjects, eligibleReports })
+      : null
+
     await cronRun.finish({
       rowsAffected: totalEvaluated,
       metadata: {
+        ...(empty ? { reason: empty.reason } : {}),
         driftAlerts,
         projectsChecked: projects.length,
         // Trim to first few — we only need a fingerprint, not 50 copies of the
@@ -521,7 +562,7 @@ Score each dimension 0-1. Be critical of vague components, miscalibrated severit
 
     return new Response(JSON.stringify({
       ok: true,
-      data: { totalEvaluated, driftAlerts },
+      data: { totalEvaluated, driftAlerts, ...(empty ? empty : {}) },
     }), { status: 200, headers: { 'Content-Type': 'application/json' } })
   } catch (err) {
     rootLog.child('judge-batch').fatal('Unhandled error', { err: String(err) })

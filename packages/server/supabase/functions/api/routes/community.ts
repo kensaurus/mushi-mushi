@@ -54,9 +54,11 @@ export function registerCommunityRoutes(app: Hono<{ Variables: Variables }>) {
   })
 
   // ── POST /v1/tester/link-reporter ──────────────────────────────────────────
-  // Links an anonymous reporter_token_hash to the caller's mushi_testers row.
+  // Links an anonymous reporter's reports to the caller's mushi_testers row.
   // The SDK calls this once on every in-widget sign-in, passing the SHA-256 hash
-  // of the local reporter_token (never the raw token).
+  // of the local reporter_token (never the raw token). The RPC derives the
+  // stored reporter key from it (public.mushi_reporter_key), so a stored key
+  // copied from the console claims nothing.
   app.post('/v1/tester/link-reporter', jwtAuth, async (c) => {
     const schema = z.object({ reporter_token_hash: z.string().min(1).max(128) })
     let body: z.infer<typeof schema>

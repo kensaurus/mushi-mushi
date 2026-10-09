@@ -14,6 +14,8 @@ import { QueryReadout } from '../components/query/QueryReadout'
 import { QueryCopyButton } from '../components/query/QueryCopyButton'
 import { QueryResultsTable } from '../components/query/QueryResultsTable'
 import { HistoryItem, TeamItem } from '../components/query/QueryHistoryPanel'
+import { PageLoadError } from '../components/PageLoadError'
+import { describeApiError } from '../lib/humanizeApiError'
 import { QueryPromptLibrary, PROMPT_CATEGORIES } from '../components/query/QueryPromptLibrary'
 import {
   EMPTY_QUERY_STATS,
@@ -23,7 +25,7 @@ import {
   type QueryTabId,
   type TeamRow,
 } from '../components/query/types'
-import { SetupNudge } from '../components/SetupNudge'
+import { NextStep } from '../components/NextStep'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import {
@@ -31,7 +33,6 @@ import {
   Btn,
   Loading,
   Skeleton,
-  ErrorAlert,
   SegmentedControl,
   Kbd,
   Tooltip,
@@ -165,6 +166,7 @@ export function QueryPage() {
     data: statsData,
     loading: statsLoading,
     error: statsError,
+    errorCode: statsErrorCode,
     reload: reloadStats,
     lastFetchedAt: statsFetchedAt,
     isValidating: statsValidating,
@@ -188,6 +190,7 @@ export function QueryPage() {
     loading: historyLoading,
     reload: loadHistory,
     error: historyError,
+    errorCode: historyErrorCode,
   } = usePageData<{ history: HistoryRow[] }>(
     activeProjectId ? '/v1/admin/query/history?limit=25' : null,
   )
@@ -198,6 +201,7 @@ export function QueryPage() {
     loading: teamLoading,
     reload: loadTeam,
     error: teamError,
+    errorCode: teamErrorCode,
   } = usePageData<{ team: TeamRow[] }>(
     activeProjectId ? '/v1/admin/query/team?limit=25' : null,
   )
@@ -220,6 +224,16 @@ export function QueryPage() {
     },
     [searchParams, setSearchParams],
   )
+
+  // The Library sidebar also shows on the History tab, but run results only
+  // render on Ask: switch there first so a rerun (an LLM call) is visible.
+  function rerunFromLibrary(prompt: string, mode: QueryMode) {
+    if (activeTab !== 'ask') setActiveTab('ask')
+    setQueryMode(mode)
+    if (mode === 'raw') setRawSql(prompt)
+    else setQuestion(prompt)
+    void handleSubmit(prompt, mode)
+  }
 
   async function handleSubmit(q?: string, overrideMode?: QueryMode) {
     const mode = overrideMode ?? queryMode
@@ -253,9 +267,9 @@ export function QueryPage() {
         ),
       )
     } else {
-      const err = res.error?.message ?? 'Query failed'
-      setRuns((prev) => prev.map((r) => (r.id === id ? { ...r, error: err } : r)))
-      toast.error(mode === 'raw' ? 'SQL error' : 'Query failed', err)
+      const e = describeApiError(res.error, mode === 'raw' ? 'SQL error' : 'Query failed')
+      setRuns((prev) => prev.map((r) => (r.id === id ? { ...r, error: e.hint } : r)))
+      toast.error(e.title, e.hint)
     }
     loadHistory()
     loadTeam()
@@ -274,7 +288,8 @@ export function QueryPage() {
       toast.success('Query removed from history')
       loadHistory()
     } else {
-      toast.error('Failed to delete', res.error?.message)
+      const e = describeApiError(res.error, 'Could not delete the query')
+      toast.error(e.title, e.hint)
     }
   }
 
@@ -289,7 +304,8 @@ export function QueryPage() {
       loadHistory()
       loadTeam()
     } else {
-      toast.error('Could not update', res.error?.message)
+      const e = describeApiError(res.error, 'Could not update the query')
+      toast.error(e.title, e.hint)
     }
   }
 
@@ -360,7 +376,8 @@ export function QueryPage() {
           helpUseCases={copy?.help?.useCases ?? []}
           helpHowToUse={copy?.help?.howToUse ?? 'Use the Ask tab to run queries. History pins favorites. Schema lists approved tables.'}
         />
-        <SetupNudge
+        <NextStep
+          variant="inline"
           requires={['project']}
           emptyTitle="Select a project"
           emptyDescription="Queries are scoped per project — pick mushi-mushi (or your app) first."
@@ -373,7 +390,7 @@ export function QueryPage() {
     return <TableSkeleton rows={5} columns={4} showFilters label="Loading query stats" />
   }
   if (statsError) {
-    return <ErrorAlert message={`Failed to load query stats: ${statsError}`} onRetry={reloadAll} />
+    return <PageLoadError error={statsError} code={statsErrorCode} onRetry={reloadAll} />
   }
 
   return (
@@ -808,7 +825,7 @@ export function QueryPage() {
                   ) : (
                     <ul className="space-y-1.5" data-dav-anchor="query:decide">
                       {saved.map((h) => (
-                        <HistoryItem key={h.id} row={h} onRerun={() => handleSubmit(h.prompt, h.mode ?? 'nl')} onToggleSave={() => toggleSaved(h)} onDelete={() => setPendingDeleteHistory(h)} />
+                        <HistoryItem key={h.id} row={h} onRerun={() => rerunFromLibrary(h.prompt, h.mode ?? 'nl')} onToggleSave={() => toggleSaved(h)} onDelete={() => setPendingDeleteHistory(h)} />
                       ))}
                     </ul>
                   )}
@@ -826,7 +843,7 @@ export function QueryPage() {
                       ))}
                     </ul>
                   ) : historyError ? (
-                    <ErrorAlert message={`Could not load history: ${historyError}`} onRetry={loadHistory} />
+                    <PageLoadError error={historyError} code={historyErrorCode} resource="query history" onRetry={loadHistory} />
                   ) : recent.length === 0 ? (
                     <EmptySectionMessage
                       text="No recent queries"
@@ -836,7 +853,7 @@ export function QueryPage() {
                     // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
                     <ul className="space-y-1.5 max-h-[28rem] overflow-y-auto -mr-1 pr-1" data-dav-anchor="query:verify">
                       {recent.map((h) => (
-                        <HistoryItem key={h.id} row={h} onRerun={() => handleSubmit(h.prompt, h.mode ?? 'nl')} onToggleSave={() => toggleSaved(h)} onDelete={() => setPendingDeleteHistory(h)} />
+                        <HistoryItem key={h.id} row={h} onRerun={() => rerunFromLibrary(h.prompt, h.mode ?? 'nl')} onToggleSave={() => toggleSaved(h)} onDelete={() => setPendingDeleteHistory(h)} />
                       ))}
                     </ul>
                   )}
@@ -854,7 +871,7 @@ export function QueryPage() {
                       ))}
                     </ul>
                   ) : teamError ? (
-                    <ErrorAlert message={`Could not load team queries: ${teamError}`} onRetry={loadTeam} />
+                    <PageLoadError error={teamError} code={teamErrorCode} resource="team queries" onRetry={loadTeam} />
                   ) : team.length === 0 ? (
                     <EmptySectionMessage
                       text="No team queries shared"
@@ -864,7 +881,7 @@ export function QueryPage() {
                     // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
                     <ul className="space-y-1.5 max-h-[28rem] overflow-y-auto -mr-1 pr-1">
                       {team.map((row) => (
-                        <TeamItem key={row.id} row={row} onRerun={() => handleSubmit(row.prompt, row.mode ?? 'nl')} />
+                        <TeamItem key={row.id} row={row} onRerun={() => rerunFromLibrary(row.prompt, row.mode ?? 'nl')} />
                       ))}
                     </ul>
                   )}

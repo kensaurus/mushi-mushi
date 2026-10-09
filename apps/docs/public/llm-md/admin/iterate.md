@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/iterate
 
 ---
 title: Iterate
+description: The Iterate page queues improvement runs on a user flow — an agent tests the screens, finds friction and proposes changes for you to review.
 ---
 
 # Iterate
@@ -88,8 +89,8 @@ run is active. The drawer doesn't auto-poll to avoid hammering the API during a 
 | **Goal / instructions** | Be specific: *"Improve the onboarding flow for first-time mobile users — focus on step clarity and reducing friction"* is better than *"improve UX"* |
 | **Max iterations** | 3–5 is typical. More iterations = more cost, diminishing returns |
 | **Target score** | 0.8–0.9 is a good range. 1.0 is rarely achievable and will exhaust iterations |
-| **Producer model** | The model generating improvements — use a strong model (claude-4) for best results |
-| **Judge model** | The model scoring results — can be a lighter model to save cost |
+| **Producer model** | The model generating improvements. Default Claude Sonnet 5.5; Opus 5.5 for the hardest pages, Haiku 4.5 for speed. If Anthropic is down the runner falls back to OpenAI on its own |
+| **Judge model** | The model scoring results. Same choices; Haiku 4.5 is a cheaper judge. Only Claude ids are accepted (`claude-…`) |
 | **Critic persona** | The evaluation lens — "UX expert" vs "accessibility auditor" changes what the judge prioritises |
 
 3. Click **Queue run**. The run starts immediately if no other run is active.
@@ -123,13 +124,13 @@ run is active. The drawer doesn't auto-poll to avoid hammering the API during a 
 ## API
 
 ```bash
-GET    /v1/admin/pdca?project_id=&limit=50
-GET    /v1/admin/pdca/
+GET    /v1/admin/pdca?project_id=<pid>&limit=50
+GET    /v1/admin/pdca/<id>
 POST   /v1/admin/pdca   { "target_url": "...", "goal": "...", "iterations_target": 5,
-                          "target_score": 0.85, "primary_model": "claude-4-sonnet",
-                          "judge_model": "claude-3-haiku", "project_id": "" }
-DELETE /v1/admin/pdca/         (abort)
-POST   /v1/admin/pdca//trigger (manually trigger queued run)
+                          "target_score": 0.85, "primary_model": "claude-sonnet-5-5",
+                          "judge_model": "claude-haiku-4-5", "project_id": "<pid>" }
+DELETE /v1/admin/pdca/<id>         (abort)
+POST   /v1/admin/pdca/<id>/trigger (manually trigger queued run)
 ```
 
 ---

@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/self-hosting/edge-functions
 
 ---
 title: Edge Functions deploy
+description: Deploy Mushi's Supabase Edge Functions for a self-hosted install — the minimal ingest and classification set, the full list, and the secrets they need.
 ---
 
 # Edge Functions deploy
@@ -29,6 +30,22 @@ npx supabase functions deploy healthz --no-verify-jwt
 
   Run every deploy command from `packages/server/` — the Supabase CLI looks for `supabase/functions/` relative to the current directory. Running from the repo root will fail with "entrypoint path does not exist".
 
+## Checking what is deployed
+
+`api` answers `GET /health` and `GET /v1/health` without a key, with the
+commit it was built from:
+
+```bash
+curl -s "$SUPABASE_URL/functions/v1/api/v1/health"
+# {"status":"ok","version":"<commit sha>","deployed_at":"...","region":"us","hosting_region":"ap-northeast-1"}
+```
+
+`version` is the sha stamped at deploy time, so it answers "did my deploy
+land?" without reading logs — compare it with `git rev-parse HEAD`.
+`hosting_region` is where the function actually runs, which matters when the
+database lives elsewhere. The standalone `healthz` function reports the same
+sha for uptime monitors that should not depend on the API router.
+
 ## Common optional functions
 
 ```bash
@@ -45,6 +62,13 @@ npx supabase functions deploy drift-walker --no-verify-jwt
 npx supabase functions deploy contract-graph-builder --no-verify-jwt
 npx supabase functions deploy a2a-push-notify --no-verify-jwt
 npx supabase functions deploy test-gen-from-report --no-verify-jwt
+npx supabase functions deploy telegram-webhook --no-verify-jwt
+npx supabase functions deploy cursor-webhook --no-verify-jwt
+npx supabase functions deploy agent-status-poll --no-verify-jwt
+npx supabase functions deploy recipe-collector --no-verify-jwt
+npx supabase functions deploy radar-scan --no-verify-jwt
+npx supabase functions deploy operator-digest --no-verify-jwt
+npx supabase functions deploy store-review-intake --no-verify-jwt
 ```
 
 For closed-loop evolution workers (`mistake-clusterer`, `mistake-summarizer`, `release-builder`, `experiment-analyzer`, `anomaly-detector`, …) and cron setup, follow [`SELF_HOSTED.md`](https://github.com/kensaurus/mushi-mushi/blob/master/SELF_HOSTED.md).
@@ -70,6 +94,9 @@ For closed-loop evolution workers (`mistake-clusterer`, `mistake-summarizer`, `r
 | `inventory-gates` | manual | Runs gate checks (dead handlers, mock leaks) |
 | `a2a-push-notify` | manual / agents | Sends A2A protocol notifications to connected agents |
 | `test-gen-from-report` | manual | Generates a Playwright test from a report, opens draft PR |
+| `telegram-webhook` | Telegram Bot API | Voice-note inbox: secret-token auth, `/start ` project binding, transcript + inline-keyboard confirmation |
+| `cursor-webhook` | Cursor Cloud Agent (v0 callback) | Receives `statusChange` callbacks, writes `fix_attempts.pr_url`, notifies |
+| `agent-status-poll` | cron (`5-55/5`) | Polls open Cursor / GitHub cloud-agent runs and closes them (PR URL, failure) |
 
 The remaining workers (billing, retention, SDK upgrade, skill-sync, rewards payout, …) live alongside these. Full list: `ls packages/server/supabase/functions/` or `pnpm docs-stats`.
 

@@ -1,4 +1,6 @@
-import { Badge, Breadcrumbs, RelativeTime } from '../ui'
+import { useState } from 'react'
+import { Badge, Breadcrumbs, Btn, RelativeTime } from '../ui'
+import { DEPLOY_LIVE_TONE, deployLiveLabel, deployLiveTitle } from './deployLive'
 import { ContainedBlock, MetaChip } from './ReportSurface'
 import {
   STATUS,
@@ -10,18 +12,24 @@ import {
   severityGlowClass,
 } from '../../lib/tokens'
 import { useReportPresence } from '../../lib/reportPresence'
-import type { ReportDetail } from './types'
+import { reportHeading } from '../../lib/clipText'
+import { reporterLabel } from '../../lib/reporterLabel'
+import { reporterReportsHref } from '../../lib/reportsListFilters'
+import type { ReportDeployLive, ReportDetail } from './types'
 
 export function ReportDetailHeader({ report, reporterShort }: { report: ReportDetail; reporterShort: string }) {
   // Friendly display title: prefer the Stage-2 generated `title` (non-engineer
-  // headline), fall back to technical summary, then raw description.
-  const displayTitle = (report.title ?? report.summary ?? report.description ?? 'Untitled report').trim() || 'Untitled report'
+  // headline), fall back to technical summary, then raw description. Never
+  // cut mid-word; the full text is on hover and behind "Show full".
+  const heading = reportHeading(report)
+  const [headingExpanded, setHeadingExpanded] = useState(false)
   // Breadcrumb still uses a compact technical summary (shorter context)
   const breadcrumbLabel = (report.summary ?? report.title ?? report.description ?? 'Untitled report').trim() || 'Untitled report'
   // Provenance: page route where the bug was felt
   const pageRoute = (report.environment as { route?: string } | null)?.route
     ?? (report.environment as { url?: string } | null)?.url
   const glow = severityGlowClass(report.severity)
+  const reporter = reporterLabel(report, reporterShort)
   return (
     <div
       // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
@@ -49,6 +57,7 @@ export function ReportDetailHeader({ report, reporterShort }: { report: ReportDe
               {CATEGORY_LABELS[report.category] ?? report.category}
             </Badge>
           )}
+          {report.deploy_live && <DeployLiveBadge deployLive={report.deploy_live} />}
           {(report.custom_metadata as { source?: string } | null)?.source === 'sentry_webhook' && (
             <Badge className="bg-surface-overlay text-fg-secondary border border-edge-subtle" title="Ingested from a Sentry webhook — errors and user feedback routed into Mushi">
               via Sentry
@@ -56,9 +65,23 @@ export function ReportDetailHeader({ report, reporterShort }: { report: ReportDe
           )}
         </div>
         <ContainedBlock tone="info" className="mt-2">
-          <h2 className="text-lg font-semibold leading-snug text-balance text-fg wrap-break-word max-w-4xl">
-            {displayTitle}
+          <h2
+            className="text-lg font-semibold leading-snug text-balance text-fg wrap-break-word max-w-4xl"
+            title={heading.truncated ? heading.full : undefined}
+          >
+            {headingExpanded ? heading.full : heading.text}
           </h2>
+          {heading.truncated && (
+            <Btn
+              variant="ghost"
+              size="sm"
+              className="mt-1"
+              aria-expanded={headingExpanded}
+              onClick={() => setHeadingExpanded((v) => !v)}
+            >
+              {headingExpanded ? 'Show less' : 'Show full'}
+            </Btn>
+          )}
         </ContainedBlock>
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           <MetaChip label="Reported">
@@ -67,9 +90,13 @@ export function ReportDetailHeader({ report, reporterShort }: { report: ReportDe
           <MetaChip
             label="Project"
             to={`/projects?project=${encodeURIComponent(report.project_id)}`}
-            title={report.project_id}
+            title={report.project_name ? `${report.project_name} (${report.project_id})` : report.project_id}
           >
-            <span className="font-mono">{report.project_id.slice(0, 8)}</span>
+            {report.project_name ? (
+              <span>{report.project_name}</span>
+            ) : (
+              <span className="font-mono">{report.project_id.slice(0, 8)}</span>
+            )}
           </MetaChip>
           <MetaChip
             label="Reporter"
@@ -81,19 +108,14 @@ export function ReportDetailHeader({ report, reporterShort }: { report: ReportDe
             // Identified users filter by the durable end_users FK (stable
             // across devices); anonymous reporters fall back to the
             // per-device token hash.
-            to={
-              report.end_user_id
-                ? `/reports?end_user=${encodeURIComponent(report.end_user_id)}`
-                : `/reports?reporter=${encodeURIComponent(report.reporter_token_hash)}`
-            }
+            // No reporter (integration / Sentry import): no link. It used
+            // to open /reports?reporter=null, an empty list.
+            to={reporterReportsHref(report) ?? undefined}
           >
-            {report.reporter_identity?.display_name ?? report.reporter_display_name ? (
-              <span className="max-w-48 truncate">
-                {report.reporter_identity?.display_name ?? report.reporter_display_name}
-              </span>
-            ) : (
-              <span className="font-mono">{reporterShort}</span>
-            )}
+            <span className="max-w-48 truncate" title={reporter.title ?? undefined}>
+              {reporter.text}
+            </span>
+            {reporter.shortId ? <span className="font-mono text-3xs text-fg-faint">{reporter.shortId}</span> : null}
             {(report.reporter_identity?.jwt_verified_at || report.reporter_jwt_verified) && (
               <span
                 className="text-3xs text-ok font-semibold uppercase tracking-wide"
@@ -102,7 +124,7 @@ export function ReportDetailHeader({ report, reporterShort }: { report: ReportDe
                 ✓ verified
               </span>
             )}
-            <span className="text-fg-faint">· view all</span>
+            {reporterReportsHref(report) ? <span className="text-fg-faint">· view all</span> : null}
           </MetaChip>
           {report.session_id && (
             <MetaChip
@@ -147,6 +169,15 @@ export function ReportDetailHeader({ report, reporterShort }: { report: ReportDe
       <PresenceBadges reportId={report.id} projectId={report.project_id} />
       </div>
     </div>
+  )
+}
+
+/** The merged fix vs what production runs; the reason is on hover. */
+function DeployLiveBadge({ deployLive }: { deployLive: ReportDeployLive }) {
+  return (
+    <Badge tone={DEPLOY_LIVE_TONE[deployLive.state]} title={deployLiveTitle(deployLive)}>
+      <span data-testid="deploy-live">{deployLiveLabel(deployLive)}</span>
+    </Badge>
   )
 }
 

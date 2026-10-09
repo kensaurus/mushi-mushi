@@ -23,6 +23,13 @@ const ROUTES_ROOT = resolve(__dirname, '../../supabase/functions/api/routes');
 const PUBLIC_ROUTES: Record<string, string> = {
   'openapi.ts': 'GET /openapi.json — public OpenAPI 3.1 spec, advertised via the A2A agent card',
   'schemas.ts': 'GET /v1/schemas/:name — public hand-authored JSON Schemas for agent contracts',
+  'slack-events-core.ts':
+    'POST /v1/webhooks/slack/events + /commands — Slack Events API / slash commands cannot carry a Supabase credential; ' +
+    'every request is authenticated by the Slack v0 HMAC signature over the raw body (_shared/slack-verify.ts) before parsing',
+  'erase-subject.ts':
+    'POST /v1/sdk/erase-subject — called by a host app backend, which holds no Mushi API key; every request is ' +
+    'authenticated by an HS256 erase token signed with the project identity secret, purpose "erase-subject", ' +
+    '≤5 min (_shared/subject-erasure.ts), before any subject lookup (ADR 0022)',
 };
 
 /**

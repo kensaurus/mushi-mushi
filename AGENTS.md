@@ -20,7 +20,15 @@ can execute without additional context.
 
 **Category we own.** The bug mediator for AI-built apps — one queue between your users, your monitoring (Sentry/Crashlytics/Rollbar), your tracker (Linear/Jira/GitHub), your chat (Slack/Discord/Teams), and your coding agents, where every bug gets a plain-English diagnosis and a ready fix. (Not "error monitoring", not "observability" — those are someone else's ops-coded words.)
 
+**The app recipe** (ADR 0016) is diagnosis context, not a new category: every
+recipe element is optional, renders "not connected" when empty, and changes
+ship only as reviewed draft PRs. It never leads a public surface.
+
 **Primary buyer.** The solo / indie **vibe coder** who builds fast with AI (Cursor, Claude Code, Lovable, Bolt), ships to real users, then loses afternoons when something breaks because they don't fully grasp the generated code. Small teams and agencies are secondary; the enterprise SRE running Sentry + Datadog + Firebase is explicitly *not* who we lead with.
+
+**Portfolio operator** (ADR 0017) is the same vibe coder with several apps.
+Portfolio and radar features never lead a public surface; the claim is
+"nobody bundles this for a solo operator", never "nobody does this".
 
 **The three things we will not do** (drift tripwires):
 
@@ -41,10 +49,10 @@ The "is this drift?" test for any feature you build or surface you write: *"Does
 | Agent | Location | Trigger | Description |
 |-------|----------|---------|-------------|
 | `classify-report` | `supabase/functions/classify-report/` | `reports` INSERT | LLM triage: severity, category, blast-radius |
-| `fix-worker` | `supabase/functions/fix-worker/` | manual / classify result | Opens a draft GitHub PR for a fix; auto-readies PR via GraphQL `markPullRequestAsReady`. Refactored to import branch/commit/PR helpers from `_shared/github-pr.ts`. |
-| `sdk-upgrade-worker` | `supabase/functions/sdk-upgrade-worker/` | POST from `sdk-upgrade` route | **NEW** Reads the connected repo's `package.json`(s), bumps `@mushi-mushi/*` to latest npm versions, opens a draft PR + marks ready. Writes result to `sdk_upgrade_jobs`. Guards: allow-listed paths, semver-only bumps, vault token resolution, `requireServiceRoleAuth`. |
-| `sdk-versions-cron` | `supabase/functions/sdk-versions-cron/` | pg_cron daily 02:30 UTC + release.yml | **NEW** Fetches latest stable version for every `@mushi-mushi/*` package from the npm registry and upserts into `sdk_versions` so freshness chips are accurate between hand-authored migrations. `requireServiceRoleAuth`. |
-| `sdk-release-sync` | `supabase/functions/sdk-release-sync/` | pg_cron every 5 min | **NEW** Polls GitHub for active SDK upgrade jobs (`pr_opened \| ready_to_merge \| blocked \| merged \| deploying`): fetches PR detail, latest check-run, and deployment status (normalized via `normalizeDeployStatus`), then upserts CI/deploy/release status into `sdk_upgrade_jobs` to drive the release-cockpit chips. `requireServiceRoleAuth`. |
+| `fix-worker` | `supabase/functions/fix-worker/` | manual / classify result | Opens a draft GitHub PR for a fix; auto-readies PR via GraphQL `markPullRequestReadyForReview`. Refactored to import branch/commit/PR helpers from `_shared/github-pr.ts`. |
+| `sdk-upgrade-worker` | `supabase/functions/sdk-upgrade-worker/` | POST from `sdk-upgrade` route | **NEW** Reads the connected repo's `package.json`(s), bumps `@mushi-mushi/*` to latest npm versions, opens a draft PR + marks ready. Writes result to `sdk_upgrade_jobs`. When the host has `.github/workflows/mushi-sdk-lockfile.yml` (ADR 0019) it pushes the bump as one commit and parks the job in `awaiting_lockfile` instead of opening the PR. Guards: allow-listed paths, semver-only bumps, vault token resolution, `requireServiceRoleAuth`. |
+| `sdk-versions-cron` | `supabase/functions/sdk-versions-cron/` | pg_cron daily 02:30 UTC + release.yml | **NEW** Fetches latest stable version for every `@mushi-mushi/*` package from the npm registry and upserts into `sdk_versions` so freshness chips are accurate between hand-authored migrations. Service-role bearer (pg_cron) or a GitHub OIDC token from `release.yml` (`_shared/github-oidc.ts`). |
+| `sdk-release-sync` | `supabase/functions/sdk-release-sync/` | pg_cron every 5 min | **NEW** Polls GitHub for active SDK upgrade jobs (`pr_opened \| ready_to_merge \| blocked \| merged \| deploying`): fetches PR detail, latest check-run, and deployment status (normalized via `normalizeDeployStatus`), then upserts CI/deploy/release status into `sdk_upgrade_jobs` to drive the release-cockpit chips. First opens the PR for `awaiting_lockfile` jobs once the host lockfile workflow pushed (or after 30 min, with a note). `requireServiceRoleAuth`. |
 | `inventory-propose` | `supabase/functions/inventory-propose/` | manual / cron | Proposes user-story inventory from SDK observation data |
 | `story-mapper` | `supabase/functions/story-mapper/` | POST /map-from-live | Crawls live app URL (Firecrawl/Browserbase) → Claude drafts `inventory.yaml` → `inventory_proposals` (source=live_crawl); opt-in Cursor Cloud PR |
 | `test-gen-from-story` | `supabase/functions/test-gen-from-story/` | POST /stories/:id/generate-test | User story → Playwright TypeScript test + Firecrawl YAML + draft GitHub PR + `qa_stories` row; gated by `automation_mode` |
@@ -58,7 +66,7 @@ The "is this drift?" test for any feature you build or surface you write: *"Does
 | `intelligence-report` | `supabase/functions/intelligence-report/` | cron | Weekly LLM narrative from KPI trends |
 | `a2a-push-notify` | `supabase/functions/a2a-push-notify/` | manual / other agents | Sends A2A protocol notifications to connected agents |
 | `backend-drift-scanner` | `supabase/functions/backend-drift-scanner/` | cron daily 03:05 UTC | Snapshots each linked project's Supabase schema via read-only MCP, diffs vs previous snapshot, writes `gate_findings` of type `schema_drift` for dropped columns / missing RLS / unexpected table changes |
-| `skill-sync` | `supabase/functions/skill-sync/` | cron daily + POST /v1/admin/skills/sources/:id/sync | Fetches SKILL.md files from allowlisted GitHub repos (any skills.sh-compatible repo, default: kensaurus/cursor-kenji), parses frontmatter + chain_slugs, embeds descriptions (pgvector), upserts `agent_skills` catalog; secret-pattern scan guard; drives `classify-report` Stage 2 skill recommendation |
+| `skill-sync` | `supabase/functions/skill-sync/` | cron daily + POST /v1/admin/skills/sources/:id/sync | Fetches SKILL.md files from allowlisted GitHub repos (any skills.sh-compatible repo, default: kensaurus/skills), parses frontmatter + chain_slugs, embeds descriptions (pgvector), upserts `agent_skills` catalog; secret-pattern scan guard; drives `classify-report` Stage 2 skill recommendation |
 
 ### Infrastructure worker edge functions (not pipeline agents)
 
@@ -95,10 +103,15 @@ Cron, billing, retention, and platform hygiene workers live alongside the 19 pip
 | `invitation-reminders` | Pending invite reminder cron |
 | `recompute-tester-reputation` | Tester marketplace reputation recompute |
 | `reward-payout-aggregator` | Aggregates reward payout batches |
+| `recipe-collector` | Daily (03:35 UTC) refresh of each project's `mushi.recipe.json` + DTCG tokens into `app_recipe_snapshots`, then the `design_drift` deviance scan (Plan 019 Phase 1b) |
+| `radar-scan` | Daily (04:05 UTC) hole checks per project (Plan 020): public probes (store names, listing locales, domain and certificate expiry, security headers, privacy link) and store-policy rules read from the repo → `gate_runs` gate `portfolio_radar`. Host CI pushes `portfolio_radar_ci` via `POST /v1/ingest/radar` (`mushi radar scan --push`) |
+| `operator-digest` | Hourly at :20; sends each organization's opt-in daily digest (new reports, holes, releases, AI spend jump; weekly signups/activations per app on `gtm_weekday`) once a day at its `send_hour_utc` to Slack, Discord, Teams, Telegram (each through one project's existing connection), email or push (Plan 020 §9; `operator_digest_settings`, off by default) |
+| `store-review-intake` | Every 6 hours at :45; per-project opt-in (`project_settings.store_review_intake_enabled`): reads App Store / Google Play reviews through the project's bound store connectors, dedupes in `store_review_items`, files reviews at or under `store_review_max_rating` (default 2) as reports with `source = 'store_review'` |
 | `healthz` | Unauthenticated liveness + cheap DB probe (`{status, db, version}`); `verify_jwt = false` |
 | `linear-oauth-callback` | Completes Linear OAuth; vaults tokens; registers inbound webhook |
 | `webhooks-linear` | Linear issue push webhooks (HMAC); resolves linked reports on completed/cancelled |
 | `webhooks-linear-agent` | Linear AgentSessionEvent webhooks (acknowledge within 10s; may dispatch fix-worker) |
+| `reporter-notify-fanout` | Email / push for a developer reply to a reporter; enqueued by the `report_comments` trigger, which stays the in-app writer (Plan 018) |
 
 Also: **`api`** (Hono REST router) and **`mcp`** (Streamable HTTP MCP transport) — infrastructure, not agents.
 
@@ -115,7 +128,7 @@ Playwright scripts, schedule them via cron, and run them on three providers:
 | Provider | Where it runs | When to use |
 |----------|---------------|-------------|
 | `firecrawl_actions` | Firecrawl cloud (Deno-compatible, HTTP) | Default. No setup. Works for content verification and basic navigation. |
-| `browserbase` | Browserbase cloud Chromium | Complex UI interactions. Requires a Browserbase API key — configure via **Settings → Browserbase** in the admin console (stored in Supabase Vault; see [BYOK Providers](#byok-bring-your-own-key-providers)). |
+| `browserbase` | Browserbase cloud Chromium | Complex UI interactions. Requires a Browserbase API key — configure via **Settings → AI keys** in the admin console (stored in Supabase Vault; see [BYOK Providers](#byok-bring-your-own-key-providers)). |
 | `local` | Operator's machine via CLI | Full Playwright access. Not schedulable via edge function. Use `mushi qa run <story-id>`. |
 
 ### Story lifecycle
@@ -181,7 +194,7 @@ Supabase Vault (`vault_store_secret` / `vault_get_secret` helpers). The unified
 `byok_keys` first, falls back to legacy `project_settings.byok_<provider>_key_ref`
 columns for backwards compatibility, then falls back to the environment variable.
 
-Keys are managed self-service via **Settings → API Keys** in the admin console
+Keys are managed self-service via **Settings → AI keys** in the admin console
 (a single table listing all four providers). Set via Settings UI, rotated by
 calling `PUT /v1/admin/byok/:provider` with a new key value.
 
@@ -246,10 +259,10 @@ Live App URL
 | Group | Commands |
 | --- | --- |
 | **Setup & account** | `mushi init`, `mushi setup`, `mushi connect`, `mushi login`, `mushi upgrade`, `mushi reset`, `mushi whoami`, `mushi doctor`, `mushi ping`, `mushi completion`, `mushi nudge` |
-| **Project & deploy** | `mushi project`, `mushi config`, `mushi deploy check`, `mushi selfhost up/doctor`, `mushi index`, `mushi sourcemaps upload`, `mushi audit` |
+| **Project & deploy** | `mushi project`, `mushi config`, `mushi deploy check`, `mushi selfhost up/doctor`, `mushi index`, `mushi sourcemaps upload`, `mushi audit`, `mushi radar scan/show`, `mushi recipe init/check/show`, `mushi store pull` |
 | **Reports & lessons** | `mushi reports list/show/search/triage/…`, `mushi lessons list/show`, `mushi sync-lessons`, `mushi feedback board` |
 | **Fixes** | `mushi fix`, `mushi fixes tail/refresh-ci/merge`, `mushi console watch <reportId>` |
-| **QA / TDD** | `mushi qa stories/runs/run`, `mushi tdd gen/pending/approve/improve/run`, `mushi stories map` |
+| **QA / TDD** | `mushi qa stories/runs/run`, `mushi tdd gen/pending/approve/improve/run`, `mushi stories map`, `mushi ux discover/login/run/open` (local UX loop, `@mushi-mushi/ux`, ADR 0020) |
 | **Skills / pipeline** | `mushi skills list/show/sync`, `mushi pipeline start/watch/checkin` |
 | **Integrations** | `mushi integrations list/test`, `mushi slack status/test`, `mushi keys list/add` |
 | **Billing** | `mushi usage`, `mushi billing status/cap` |
@@ -283,7 +296,7 @@ mushi qa run <story-id>
 
 # ── Doctor checks ─────────────────────────────────────────────────────────
 # Full pre-flight + server + QA story health check
-mushi doctor --server --qa-stories
+mushi doctor --qa-stories
 
 # ── TDD / Story mapping ───────────────────────────────────────────────────
 # Map user stories from live app
@@ -322,7 +335,7 @@ mushi billing cap 0                    # clear spend cap
 
 ### MCP Tools
 
-Full catalog: **72 tools** in [`packages/mcp/src/catalog.ts`](packages/mcp/src/catalog.ts) — generated docs at [`apps/docs/content/sdks/mcp-tools.generated.mdx`](apps/docs/content/sdks/mcp-tools.generated.mdx). Vibe-coder incident loop: [`apps/docs/content/quickstart/incident-loop.mdx`](apps/docs/content/quickstart/incident-loop.mdx) (`get_fix_context` → prompt `summarize_report_for_fix`).
+Full catalog: **117 tools** in [`packages/mcp/src/catalog.ts`](packages/mcp/src/catalog.ts) — generated docs at [`apps/docs/content/sdks/mcp-tools.mdx`](apps/docs/content/sdks/mcp-tools.mdx). Vibe-coder incident loop: [`apps/docs/content/quickstart/incident-loop.mdx`](apps/docs/content/quickstart/incident-loop.mdx) (`get_fix_context` → prompt `summarize_report_for_fix`).
 
 Core MCP tools (`mcp:read` scope): `get_recent_reports`, `get_report_detail`, `get_fix_context`, `query_lessons`, `list_lessons`, `list_qa_story_runs`, `get_qa_story_run`
 
@@ -342,7 +355,7 @@ TDD MCP tools: `map_user_stories`, `get_map_run_status`, `generate_tdd_from_stor
 
 ## Skill-Driven Triage Pipelines
 
-The Skill Pipeline feature (Jun 2026) integrates the [cursor-kenji / skills.sh](https://github.com/kensaurus/cursor-kenji) agent-skill ecosystem into Mushi as a first-class pipeline concept.
+The Skill Pipeline feature (Jun 2026) integrates the [kenji skills / skills.sh](https://github.com/kensaurus/skills) agent-skill ecosystem into Mushi as a first-class pipeline concept.
 
 ### Architecture
 
@@ -499,11 +512,17 @@ Console "Create Upgrade PR" button
 ### sdk_versions catalog sync
 
 The `sdk_versions` catalog is kept fresh via two paths:
-1. **publish-time** — `release.yml` runs `scripts/sync-sdk-versions.mjs` after
-   Changesets publish, posting the exact published versions via Supabase REST.
-2. **daily cron** — `sdk-versions-cron` edge function (02:30 UTC) queries the
-   npm registry for every `@mushi-mushi/*` package and upserts the latest stable
-   version. Backstop for publish-time sync failures.
+1. **publish-time** — `release.yml`'s `catalog-sync` job calls
+   `sdk-versions-cron` after Changesets publishes, authenticated by a GitHub
+   Actions OIDC token (audience `mushi-sdk-catalog`) that
+   `_shared/github-oidc.ts` pins to `release.yml` on `master` in this repo by
+   numeric repository and owner id. No Supabase key is in the workflow. The
+   published list rides along as a compare-only `expected` hint: the function
+   still reads npm itself (with its major-jump quarantine) and answers 202
+   while npm `latest` lags, so the job retries, then only warns.
+2. **daily cron** — `sdk-versions-cron` edge function (02:30 UTC, service-role
+   bearer) queries the npm registry for every `@mushi-mushi/*` package and
+   upserts the latest stable version. Backstop for publish-time sync failures.
 
 ---
 
@@ -610,7 +629,7 @@ Server-hosted **Codebase Understand** surface in the admin console — parity wi
 | `project_codebase_wiki_sources` / `…_knowledge_*` | Wiki ingest + RAG merge via `match_knowledge_chunks` |
 | `project_settings.codebase_index_scope_paths` | Scoped subdirectory indexing |
 
-**MCP tools:** `ask_codebase`, `get_file_summary`, `get_codebase_tour`, `search_codebase`, `get_codebase_domains`, `analyze_codebase_impact`, `analyze_wiki_knowledge`.
+**MCP tools:** `ask_codebase`, `get_file_summary`, `get_codebase_tour`, `search_codebase`, `get_codebase_domains`, `analyze_codebase_impact`, `analyze_wiki_knowledge`, `get_repo_digest` (on the default feature set; needs no index).
 
 Graph builder concepts attributed to **Understand-Anything (MIT)** — see `packages/codebase-graph/README.md` and `_shared/codebase-graph-build.ts`.
 
@@ -762,7 +781,7 @@ Reporter opens widget (capture.screenshot on-report/auto)
 | SdkInstallCard | `apps/admin/src/components/SdkInstallCard.tsx` | Checkbox + optional custom text for screenshot privacy caption |
 | ConfigHelp | `sdk-install.screenshot_sensitive_hint` in `configDocs.ts` | Operator docs + link to deep-dive |
 
-**Introduced in:** `@mushi-mushi/core` / `@mushi-mushi/web` **1.19.0** (current: **1.27.0** — see root `CHANGELOG.md`).
+**Introduced in:** `@mushi-mushi/core` / `@mushi-mushi/web` **1.19.0** (current: **1.32.0** — see root `CHANGELOG.md`).
 `@mushi-mushi/react-native` **0.19.0** (current: **0.21.0**). Full doc:
 [`docs/SDK_SCREENSHOT_PREVIEW.md`](docs/SDK_SCREENSHOT_PREVIEW.md).
 
@@ -832,6 +851,12 @@ Generated manifest: [`docs/API_ROUTE_MANIFEST.generated.md`](docs/API_ROUTE_MANI
 | `GET /v1/reports/:id/status` | Report status poll |
 | `/v1/sdk/me/*` | Cross-app reporter rewards surface (`rewards.ts`) |
 
+### Host-backend erasure (erase token, no API key)
+
+| Route | Role |
+| --- | --- |
+| `POST /v1/sdk/erase-subject` | Account deletion: deletes one end user's reports (screenshots first) and reporter data in the project; org identity too with `erase_identity`. `X-Mushi-Erase-Token` = HS256 with the project identity secret, `purpose: "erase-subject"`, ≤5 min. ADR 0022, `erase-subject.ts`. |
+
 ### MCP / CLI sync mirror (`adminOrApiKey` or scoped JWT)
 
 Prefix **`/v1/sync/*`** — reports, lessons, ingest-setup mirrors for MCP and CLI offline sync. See `api/routes/sync.ts`.
@@ -841,6 +866,17 @@ Prefix **`/v1/sync/*`** — reports, lessons, ingest-setup mirrors for MCP and C
 Under **`/v1/admin/skills/*`**: catalog (`GET /`, `GET /:slug`), sources CRUD + `POST /sources/:id/sync`, pipeline runs + checkin, `GET /cloud-readiness`. See `api/routes/skills.ts`.
 
 ---
+
+## Voice loop, cloud agents, MCP 2026-07-28 (Sep 12 2026)
+
+Plan 017 (`docs/execplans/dead-code-voice-agent-loop.md`, ADRs 0007–0013).
+
+- **Hosted MCP is dual-era**: legacy clients (2024-11-05 … 2025-11-25) keep `initialize`; 2026-07-28 clients use `server/discover`, per-request `_meta`, `Mcp-Method`/`Mcp-Name` headers, MRTR `input_required`, and the `io.modelcontextprotocol/tasks` extension (`tasks/get|update|cancel` over `fix_dispatch_jobs`). Modules: `_shared/mcp-protocol.ts`, `mcp-mrtr.ts`, `mcp-tasks.ts`.
+- **Voice intake**: `api/routes/intake-voice.ts` (`POST /v1/intake/voice`, scope `voice:write`), `_shared/voice-intake.ts` / `voice-intent.ts` / `stt.ts` / `voice-return.ts`; inboxes: iOS Shortcut (text), Slack (`api/routes/slack-events.ts`: Events API + `/mushi` commands), Telegram (`telegram-webhook` function + `api/routes/telegram-admin.ts`), installed console PWA (`apps/admin` share_target + tap-to-talk). Tables: `voice_intake_sessions`, `telegram_chat_bindings`, `telegram_bind_codes`, `user_push_subscriptions`; bucket `voice-intake`; `reports.source`.
+- **Cloud agents**: `_shared/agent-adapters.ts` (`cursor_cloud` via `_shared/cursor-cloud.ts` v1 API, `github_cloud_agent` via `_shared/github-agent-tasks.ts`, `anthropic_managed` stub); `fix-worker` dispatches and writes `fix_attempts` up front; completion via `cursor-webhook` (v0 callback) or `agent-status-poll` (cron `5-55/5`); unknown agents are a 400 at `POST /v1/admin/fixes/dispatch`.
+- **A2A 1.0 wire format** (`taskPushNotificationConfig`, StreamResponse callbacks, `/.well-known/agent-card.json`) with 0.3 aliases.
+- **Web Push**: `_shared/web-push.ts` (`@pushforge/builder`, host allowlist), `api/routes/push.ts`; secrets `VAPID_*`.
+- **Dead-code gate**: knip@6 baselines in `docs/execplans/knip-baseline/`, ratchets in the `build` job (`check:residue`, `check:env-source-parity`).
 
 ## ExecPlans
 

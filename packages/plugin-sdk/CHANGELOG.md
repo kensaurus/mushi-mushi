@@ -1,5 +1,24 @@
 # @mushi-mushi/plugin-sdk
 
+## 0.9.0
+
+### Minor Changes
+
+- f48d15b: Add the `report.reporter_replied` event: the person who filed a report answered in its thread. `data.comment.body` is their text, which comes from a public widget, so treat it as untrusted input.
+
+## 0.8.1
+
+### Patch Changes
+
+- f5e94ce: npm metadata. The author link on the npm page now points at an account that exists: the maintainer's GitHub profile, instead of a Bluesky handle that was never registered. The Node floor is `>=20.19.0`, the same as `@mushi-mushi/core`. The `funding` field is gone, because it pointed at a GitHub Sponsors page that is not enabled and `npm fund` listed a dead link.
+- f5e94ce: Smaller install. The package no longer ships the repository's `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md` and `SECURITY.md` — 32 KB in every tarball, more than the code in some packages. They are still in the GitHub repository the npm page links to.
+
+## 0.8.0
+
+### Minor Changes
+
+- 4af54f0: Sync the public event taxonomy with the server: `MushiEventName` gains `qa_story.recovered` and `linear.issue.updated`, and `KNOWN_EVENTS` (now exported) lists every union member — including `fix.requested`, `qa_story.failed`, `qa_story.passed` and `qa_story.recovered`, which `isKnownEvent()` previously rejected although the type allowed them. `fix.requested` is documented as the event the Mushi fix-worker emits when it hands a report to a cloud agent (`data.fix.externalAgentId` set), and the `reward.*` members are documented as delivered through the Rewards host webhook rather than the marketplace plugin bus. No runtime behaviour changes for existing handlers.
+
 ## 0.7.0
 
 ### Minor Changes

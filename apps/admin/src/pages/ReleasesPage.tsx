@@ -1,20 +1,24 @@
 /**
  * FILE: apps/admin/src/pages/ReleasesPage.tsx
  * PURPOSE: Release management — banner + RELEASES SNAPSHOT + tabs:
- *          Overview | Drafts | Published | Draft.
+ *          Drafts | Published | New draft | App stores, readout at the foot.
  */
 
-import { useState, useCallback, useMemo, useEffect } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
+import { apiErrorText } from '../lib/apiErrorText'
+import { publishReleaseRequest } from '../lib/releasePublish'
+import { useEntitlements } from '../lib/useEntitlements'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { useRealtimeReload } from '../lib/realtime'
 import { useToast } from '../lib/toast'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
-import { SetupNudge } from '../components/SetupNudge'
+import { NextStep } from '../components/NextStep'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { usePageCopy } from '../lib/copy'
 import { useReleasesUx, resolveQuickReleasesTab } from '../lib/releasesModeUx'
@@ -27,12 +31,11 @@ import {
   ErrorAlert,
   RelativeTime,
   SegmentedControl,
-  FreshnessPill,
-  RecommendedAction,
 } from '../components/ui'
 import { ReleasesStatusBanner } from '../components/releases/ReleasesStatusBanner'
 import { ReleasesSnapshotStrip } from '../components/releases/ReleasesSnapshotStrip'
 import { ReleasesProvenanceReadout } from '../components/releases/ReleasesProvenanceReadout'
+import { AutoReleaseCard } from '../components/releases/AutoReleaseCard'
 import {
   InlineProof,
   SignalChip,
@@ -49,7 +52,9 @@ import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { ResponsiveTable } from '../components/ResponsiveTable'
 import { FulfilledTicketsPicker } from '../components/support/FulfilledTicketsPicker'
-import { CHIP_TONE, runStatusChipTone, HEADER_BADGE_TONE } from '../lib/chipTone'
+import { LINK_ACCENT, runStatusChipTone } from '../lib/chipTone'
+import { StorePanel } from '../components/portfolio/StorePanel'
+import { StoreReviewsPanel } from '../components/portfolio/StoreReviewsPanel'
 
 function listRows<T>(payload: T[] | { data: T[] } | null | undefined): T[] {
   if (!payload) return []
@@ -95,19 +100,21 @@ function statusBadge(status: Release['status']) {
   return <Badge className={STATUS_CLS[status]}>{STATUS_LABEL[status]}</Badge>
 }
 
+// No Overview tab: the banner states the posture and the readout sits at the page foot.
 const TABS: Array<{ id: ReleasesTabId; label: string; description: string }> = [
-  { id: 'overview', label: 'Overview', description: 'Posture banner and how AI drafting, reporter credits, and publish notifications work.' },
   { id: 'drafts', label: 'Drafts', description: 'Edit changelog Markdown, link feedback tickets, then publish to notify credited reporters.' },
   { id: 'published', label: 'Published', description: 'Shipped changelogs with fix counts, contributor credits, and notification stamps.' },
   { id: 'draft', label: 'Draft', description: 'Generate a new AI changelog from fixed reports in a time window.' },
+  { id: 'store', label: 'App stores', description: 'Store listing checks, the pre-submission checklist, and store reviews filed as reports.' },
 ]
 
-function resolveReleasesTab(value: string | null): ReleasesTabId {
-  if (value === 'drafts' || value === 'published' || value === 'draft') return value
-  return 'overview'
+/** The tab named in the URL, or null so the posture picks one. */
+function explicitReleasesTab(value: string | null): ReleasesTabId | null {
+  if (value === 'drafts' || value === 'published' || value === 'draft' || value === 'store') return value
+  return null
 }
 
-function DraftForm({ onCreated, projectName }: { onCreated: () => void; projectName: string | null }) {
+function DraftForm({ onCreated, projectName, canEdit }: { onCreated: () => void; projectName: string | null; canEdit: boolean }) {
   const [version, setVersion] = useState('')
   const [title, setTitle] = useState('')
   const [windowDays, setWindowDays] = useState(30)
@@ -131,14 +138,17 @@ function DraftForm({ onCreated, projectName }: { onCreated: () => void; projectN
           window_start: windowStart.toISOString(),
           window_end: windowEnd.toISOString(),
         }),
-      }) as { ok: boolean; error?: string }
-      if (!res.ok) throw new Error(res.error ?? 'Draft failed')
+      })
+      if (!res.ok) {
+        toast.error('Could not draft the release', apiErrorText(res.error, 'Try again in a minute.'))
+        return
+      }
       toast.success('Release draft created')
       setVersion('')
       setTitle('')
       onCreated()
-    } catch (err) {
-      toast.error((err as Error).message)
+    } catch {
+      toast.error('Could not draft the release', 'Check your connection and try again.')
     } finally {
       setLoading(false)
     }
@@ -165,6 +175,8 @@ function DraftForm({ onCreated, projectName }: { onCreated: () => void; projectN
             variant="primary"
             loading={loading}
             onClick={handleDraft}
+            disabled={!canEdit}
+            title={canEdit ? undefined : 'Viewers have read-only access and cannot draft releases.'}
             leadingIcon={<IconReleases className="h-3.5 w-3.5" aria-hidden="true" />}
           >
             Generate draft with AI
@@ -179,11 +191,24 @@ function DraftForm({ onCreated, projectName }: { onCreated: () => void; projectN
   )
 }
 
-function ReleaseDrawer({ release, onClose, onPublished }: { release: Release; onClose: () => void; onPublished: () => void }) {
+function ReleaseDrawer({
+  release,
+  onClose,
+  onPublished,
+  canEdit,
+}: {
+  release: Release
+  onClose: () => void
+  onPublished: () => void
+  canEdit: boolean
+}) {
   const [body, setBody] = useState(release.body_md)
   const [fulfilledTicketIds, setFulfilledTicketIds] = useState<string[]>(release.fulfilled_ticket_ids ?? [])
   const [saving, setSaving] = useState(false)
   const [publishing, setPublishing] = useState(false)
+  const [confirmPublish, setConfirmPublish] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const toast = useToast()
 
   const { data: detailData } = usePageData<Release>(`/v1/admin/releases/${release.id}`)
@@ -191,44 +216,75 @@ function ReleaseDrawer({ release, onClose, onPublished }: { release: Release; on
   const detailRelease = detailData ?? release
   const ticketCount = fulfilledTicketIds.length
 
-  const persistDraft = useCallback(async (patch: { body_md?: string; fulfilled_ticket_ids?: string[] }) => {
-    const res = await apiFetch(`/v1/admin/releases/${release.id}`, {
-      method: 'PATCH',
-      body: JSON.stringify(patch),
-    }) as { ok: boolean; error?: string }
-    if (!res.ok) throw new Error(res.error ?? 'Save failed')
+  /** Returns null on success, or a plain-English reason. */
+  const persistDraft = useCallback(async (patch: { body_md?: string; fulfilled_ticket_ids?: string[] }): Promise<string | null> => {
+    try {
+      const res = await apiFetch(`/v1/admin/releases/${release.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(patch),
+      })
+      return res.ok ? null : apiErrorText(res.error, 'The draft could not be saved. Try again in a moment.')
+    } catch {
+      return 'Could not reach the server. Check your connection and try again.'
+    }
   }, [release.id])
 
   const handleSave = useCallback(async () => {
     setSaving(true)
-    try {
-      await persistDraft({ body_md: body, fulfilled_ticket_ids: fulfilledTicketIds })
-      toast.success('Draft saved')
-    } catch (err) {
-      toast.error((err as Error).message)
-    } finally {
-      setSaving(false)
-    }
+    const problem = await persistDraft({ body_md: body, fulfilled_ticket_ids: fulfilledTicketIds })
+    setSaving(false)
+    if (problem) toast.error('Draft not saved', problem)
+    else toast.success('Draft saved')
   }, [body, fulfilledTicketIds, persistDraft, toast])
+
+  const handleDelete = useCallback(async () => {
+    setDeleting(true)
+    try {
+      const res = await apiFetch(`/v1/admin/releases/${release.id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        toast.error('Draft not deleted', apiErrorText(res.error, 'Try again in a moment.'))
+        return
+      }
+      toast.success('Draft deleted', 'Auto-release can draft the next build again.')
+      setConfirmDelete(false)
+      onPublished()
+      onClose()
+    } catch {
+      toast.error('Draft not deleted', 'Check your connection and try again.')
+    } finally {
+      setDeleting(false)
+    }
+  }, [release.id, onPublished, onClose, toast])
 
   const handlePublish = useCallback(async () => {
     setPublishing(true)
     try {
-      await persistDraft({ body_md: body, fulfilled_ticket_ids: fulfilledTicketIds })
-      const res = await apiFetch(`/v1/admin/releases/${release.id}/publish`, { method: 'POST' }) as {
-        ok: boolean
-        data?: Release
-        notified?: number
-        error?: string
+      const saveProblem = await persistDraft({ body_md: body, fulfilled_ticket_ids: fulfilledTicketIds })
+      if (saveProblem) {
+        toast.error('Not published', `The latest edits could not be saved first. ${saveProblem}`)
+        return
       }
-      if (!res.ok) throw new Error(res.error ?? 'Publish failed')
-      const credited = res.notified ?? 0
-      const ticketMsg = ticketCount > 0 ? ` · ${ticketCount} feedback ticket${ticketCount === 1 ? '' : 's'} marked shipped` : ''
-      toast.success(`Published! ${credited} reporter${credited === 1 ? '' : 's'} credited${ticketMsg}.`)
+      const outcome = await publishReleaseRequest(release.id)
+      if (outcome.kind === 'failed') {
+        toast.error('Not published', outcome.message)
+        return
+      }
+      setConfirmPublish(false)
+      if (outcome.kind === 'published-with-errors') {
+        // It is live: close and refresh so the list stops showing a draft.
+        toast.push({ tone: 'warning', title: 'Published, with problems', description: outcome.message })
+      } else {
+        const { told, held, failed, alreadyShipped } = outcome
+        const ticketMsg = ticketCount > 0 ? ` · ${ticketCount} feedback ticket${ticketCount === 1 ? '' : 's'} marked shipped` : ''
+        const heldMsg = held > 0 ? ` · ${held} waiting in the Outbox` : ''
+        const shippedMsg = alreadyShipped > 0
+          ? ` · ${alreadyShipped} fix${alreadyShipped === 1 ? '' : 'es'} already shipped in an earlier release (not messaged again)`
+          : ''
+        toast.success(`Published! ${told} reporter${told === 1 ? '' : 's'} told it shipped${heldMsg}${shippedMsg}${ticketMsg}.`)
+        if (failed > 0) toast.error(`${failed} reporter message${failed === 1 ? '' : 's'} could not be delivered`, 'See Notifications for the failed messages.')
+      }
       onPublished()
       onClose()
-    } catch (err) {
-      toast.error((err as Error).message)
     } finally {
       setPublishing(false)
     }
@@ -251,6 +307,19 @@ function ReleaseDrawer({ release, onClose, onPublished }: { release: Release; on
             )}
           </span>
         </div>
+
+        {release.fixed_report_ids.length > 0 && (
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-fg-muted">
+            <span>Fixed reports:</span>
+            {release.fixed_report_ids.slice(0, 12).map((id) => (
+              <Link key={id} to={`/reports/${id}`} className={`font-mono ${LINK_ACCENT}`}>
+                {id.slice(0, 8)}
+              </Link>
+            ))}
+            {release.fixed_report_ids.length > 12 && <span>+{release.fixed_report_ids.length - 12} more</span>}
+            <Link to="/fixes" className={LINK_ACCENT}>Open Fixes →</Link>
+          </div>
+        )}
 
         {release.status === 'draft' && release.project_id && (
           <FulfilledTicketsPicker
@@ -316,10 +385,56 @@ function ReleaseDrawer({ release, onClose, onPublished }: { release: Release; on
         )}
 
         {release.status === 'draft' && (
-          <div className="flex gap-2 pt-2">
-            <Btn loading={saving} variant="ghost" onClick={handleSave}>Save draft</Btn>
-            <Btn loading={publishing} variant="primary" onClick={handlePublish}>Publish + notify</Btn>
+          <div className="flex flex-wrap items-center gap-2 pt-2">
+            <Btn loading={saving} variant="ghost" onClick={handleSave} disabled={!canEdit || publishing}>Save draft</Btn>
+            <Btn
+              loading={publishing}
+              variant="primary"
+              onClick={() => setConfirmPublish(true)}
+              disabled={!canEdit || saving}
+              title={canEdit ? undefined : 'Viewers have read-only access and cannot publish.'}
+            >
+              Publish + notify
+            </Btn>
+            <Btn
+              variant="ghost"
+              className="ml-auto text-danger"
+              onClick={() => setConfirmDelete(true)}
+              disabled={!canEdit || saving || publishing}
+              title={canEdit ? 'Delete this draft. Nothing is sent to reporters.' : 'Viewers have read-only access and cannot delete drafts.'}
+            >
+              Delete draft
+            </Btn>
           </div>
+        )}
+
+        {confirmPublish && (
+          <ConfirmDialog
+            title={`Publish v${release.version}?`}
+            body={`This publishes the changelog, marks ${pluralizeWithCount(release.fixed_report_ids.length, 'fix', 'fixes')} as shipped${ticketCount > 0 ? ` and ${pluralizeWithCount(ticketCount, 'feedback ticket', 'feedback tickets')} as shipped` : ''}, and messages ${pluralizeWithCount(release.credited_reporter_ids.length, 'credited reporter', 'credited reporters')}. A published release cannot be unpublished.`}
+            confirmLabel="Publish + notify"
+            cancelLabel="Not yet"
+            loading={publishing}
+            onConfirm={() => void handlePublish()}
+            onCancel={() => {
+              if (!publishing) setConfirmPublish(false)
+            }}
+          />
+        )}
+
+        {confirmDelete && (
+          <ConfirmDialog
+            title={`Delete draft v${release.version}?`}
+            body="The draft and its changelog text are removed. No reporter is messaged, and auto-release can draft the next build again."
+            confirmLabel="Delete draft"
+            cancelLabel="Keep draft"
+            tone="danger"
+            loading={deleting}
+            onConfirm={() => void handleDelete()}
+            onCancel={() => {
+              if (!deleting) setConfirmDelete(false)
+            }}
+          />
         )}
       </div>
     </Drawer>
@@ -333,6 +448,7 @@ function ReleasesList({
   error,
   projectName,
   onReload,
+  canEdit,
 }: {
   status: 'draft' | 'published'
   releases: Release[]
@@ -340,6 +456,7 @@ function ReleasesList({
   error: string | null
   projectName: string | null
   onReload: () => void
+  canEdit: boolean
 }) {
   const [selected, setSelected] = useState<Release | null>(null)
 
@@ -348,7 +465,8 @@ function ReleasesList({
 
   if (releases.length === 0) {
     return (
-      <SetupNudge
+      <NextStep
+        variant="inline"
         requires={['project']}
         emptyTitle={status === 'draft' ? 'No draft releases' : 'No published releases'}
         emptyDescription={
@@ -396,8 +514,8 @@ function ReleasesList({
                 <td className="max-w-48 truncate px-3 py-2.5 text-fg-secondary">{r.title}</td>
                 <td className="px-3 py-2.5">{statusBadge(r.status)}</td>
                 <td className="hidden px-3 py-2.5 sm:table-cell">
-                  <SignalChip tone={r.fixed_report_ids.length > 0 ? 'brand' : 'neutral'}>
-                    {r.fixed_report_ids.length} fixes
+                  <SignalChip tone={r.fixed_report_ids.length > 0 ? 'info' : 'neutral'}>
+                    {r.fixed_report_ids.length} fix{r.fixed_report_ids.length === 1 ? '' : 'es'}
                   </SignalChip>
                 </td>
                 <td className="hidden px-3 py-2.5 md:table-cell">
@@ -432,7 +550,7 @@ function ReleasesList({
       </Card>
 
       {selected && (
-        <ReleaseDrawer release={selected} onClose={() => setSelected(null)} onPublished={onReload} />
+        <ReleaseDrawer release={selected} onClose={() => setSelected(null)} onPublished={onReload} canEdit={canEdit} />
       )}
     </>
   )
@@ -441,10 +559,8 @@ function ReleasesList({
 export function ReleasesPage() {
   const copy = usePageCopy('/releases')
   const ux = useReleasesUx()
+  const { canEditProject } = useEntitlements()
   const [searchParams, setSearchParams] = useSearchParams()
-  const activeTab = resolveReleasesTab(searchParams.get('tab'))
-  const activeTabMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
-
   const activeProjectId = useActiveProjectId()
   const setup = useSetupStatus(activeProjectId)
   const projectName = setup.activeProject?.project_name ?? null
@@ -459,6 +575,10 @@ export function ReleasesPage() {
   } = usePageData<ReleasesStats>('/v1/admin/releases/stats')
   usePublishPageHeroStats('/releases', statsData)
   const stats = { ...EMPTY_RELEASES_STATS, ...statsData }
+  // Every mode lands on the work tab that matches the posture; the URL wins.
+  const postureTab = resolveQuickReleasesTab(stats)
+  const activeTab: ReleasesTabId = explicitReleasesTab(searchParams.get('tab')) ?? (postureTab === 'overview' ? 'drafts' : postureTab)
+  const activeTabMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
 
   const listPath = activeProjectId && (activeTab === 'drafts' || activeTab === 'published')
     ? `/v1/admin/releases?limit=100`
@@ -486,19 +606,13 @@ export function ReleasesPage() {
     (tab: ReleasesTabId) => {
       setSearchParams((prev) => {
         const next = new URLSearchParams(prev)
-        if (tab === 'overview') next.delete('tab')
-        else next.set('tab', tab)
+        // Always explicit: with no ?tab= the page shows the posture tab.
+        next.set('tab', tab)
         return next
       })
     },
     [setSearchParams],
   )
-
-  useEffect(() => {
-    if (!ux.isQuickstart || statsLoading) return
-    const quickTab = resolveQuickReleasesTab(stats)
-    if (activeTab !== quickTab) setActiveTab(quickTab)
-  }, [ux.isQuickstart, statsLoading, stats, activeTab, setActiveTab])
 
   const reloadAll = useCallback(() => {
     reloadStats()
@@ -510,8 +624,8 @@ export function ReleasesPage() {
       TABS.map((t) => ({
         id: t.id,
         label:
-          t.id === 'overview'
-            ? copy?.tabLabels?.overview ?? t.label
+          t.id === 'store'
+            ? t.label
             : t.id === 'drafts'
               ? copy?.tabLabels?.drafts ?? t.label
               : t.id === 'published'
@@ -556,17 +670,6 @@ export function ReleasesPage() {
     return <ErrorAlert message={`Failed to load release stats: ${statsError}`} onRetry={reloadStats} />
   }
 
-  const bannerSeverity: 'ok' | 'warn' | 'danger' | 'brand' | 'info' | 'neutral' =
-    !stats.hasAnyProject
-      ? 'neutral'
-      : stats.topPriority === 'drafts_pending'
-        ? 'warn'
-        : stats.topPriority === 'ready_to_draft' || stats.topPriority === 'no_releases'
-          ? 'brand'
-          : stats.topPriority === 'no_fixes'
-            ? 'brand'
-            : 'ok'
-
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-releases">
       <PageHeaderBar
@@ -582,26 +685,6 @@ export function ReleasesPage() {
         ]}
         helpHowToUse={copy?.help?.howToUse ?? 'Summary for posture. Drafts to review pending changelogs. Published for shipped releases. New draft to generate from fixed bugs.'}
       >
-        <Badge
-          className={
-            bannerSeverity === 'ok'
-              ? CHIP_TONE.okSubtle
-              : bannerSeverity === 'warn'
-                ? CHIP_TONE.warnSubtle
-                : bannerSeverity === 'brand'
-                  ? HEADER_BADGE_TONE.brand
-                  : HEADER_BADGE_TONE.neutral
-          }
-        >
-          {!stats.hasAnyProject
-            ? 'NO PROJECT'
-            : stats.draftCount > 0
-              ? `${stats.draftCount} DRAFT`
-              : stats.totalReleases === 0
-                ? 'EMPTY'
-                : `${stats.publishedCount} SHIPPED`}
-        </Badge>
-        <FreshnessPill at={statsFetchedAt} isValidating={statsValidating} />
         <Btn size="sm" variant="ghost" onClick={reloadAll} loading={statsValidating || listValidating}>
           Refresh
         </Btn>
@@ -652,65 +735,23 @@ export function ReleasesPage() {
       />
       )}
 
-      {activeTab === 'overview' && stats.projectId ? (
-        <ReleasesProvenanceReadout stats={stats} fetchedAt={statsFetchedAt} validating={statsValidating} />
-      ) : null}
-
-      {activeTab === 'overview' && (
-        <>
-          {!ux.hideOverviewChrome && (
-          <>
-          {stats.topPriority === 'healthy' && (
-            <RecommendedAction
-              tone="success"
-              title="Release pipeline healthy"
-              description={stats.topPriorityLabel ?? `${stats.publishedCount} published releases with reporter credits.`}
-            />
-          )}
-          {stats.topPriority === 'drafts_pending' && (
-            <RecommendedAction
-              tone="info"
-              title="Drafts waiting to publish"
-              description={stats.topPriorityLabel ?? 'Review changelog Markdown and publish to notify reporters.'}
-              cta={{ label: 'Open Drafts', to: '/releases?tab=drafts' }}
-            />
-          )}
-          {(stats.topPriority === 'ready_to_draft' || stats.topPriority === 'no_releases') && (
-            <RecommendedAction
-              tone="info"
-              title="Generate a changelog draft"
-              description={stats.topPriorityLabel ?? 'Fixed reports are ready — AI will credit reporters automatically.'}
-              cta={{ label: 'Open Draft tab', to: '/releases?tab=draft' }}
-            />
-          )}
-          {stats.topPriority === 'no_fixes' && (
-            <RecommendedAction
-              tone="info"
-              title="No fixed reports yet"
-              description="Mark bug reports as fixed in Reports before generating a release draft."
-              cta={{ label: 'View fixed reports', to: '/reports?status=fixed' }}
-            />
-          )}
-          </>
-          )}
-        </>
-      )}
-
       {activeTab === 'draft' && (
         !activeProjectId ? (
-          <SetupNudge
+          <NextStep
+            variant="inline"
             requires={['project']}
             emptyTitle="Select a project"
             emptyDescription="Releases are scoped to the active project. Pick one in the header to generate a draft."
           />
         ) : (
-          <DraftForm onCreated={reloadAll} projectName={projectName} />
+          <DraftForm onCreated={reloadAll} projectName={projectName} canEdit={canEditProject} />
         )
       )}
 
       {(activeTab === 'drafts' || activeTab === 'published') && (
         !activeProjectId ? (
-          <SetupNudge
+          <NextStep
+            variant="inline"
             requires={['project']}
             emptyTitle="Select a project"
             emptyDescription="Releases are scoped to the active project. Pick one in the header to view drafts and published changelogs."
@@ -723,9 +764,32 @@ export function ReleasesPage() {
             error={listError}
             projectName={projectName}
             onReload={reloadAll}
+            canEdit={canEditProject}
           />
         )
       )}
+
+      {activeTab === 'drafts' && activeProjectId ? <AutoReleaseCard projectId={activeProjectId} /> : null}
+
+      {activeTab === 'store' && (
+        !activeProjectId ? (
+          <NextStep
+            variant="inline"
+            requires={['project']}
+            emptyTitle="Select a project"
+            emptyDescription="Store checks are per app. Pick one in the header."
+          />
+        ) : (
+          <>
+            <StorePanel projectId={activeProjectId} />
+            <StoreReviewsPanel projectId={activeProjectId} />
+          </>
+        )
+      )}
+
+      {stats.projectId ? (
+        <ReleasesProvenanceReadout stats={stats} fetchedAt={statsFetchedAt} validating={statsValidating} />
+      ) : null}
     </div>
   )
 }

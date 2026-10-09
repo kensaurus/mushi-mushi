@@ -1,6 +1,7 @@
 'use client'
 
 import { useMarketing } from './context'
+import { KensaurusPortfolioTable } from './KensaurusPortfolioTable'
 import { StatusPill } from './StatusPill'
 
 interface MarketingFooterProps {
@@ -50,6 +51,8 @@ export function MarketingFooter({ apiBaseUrl }: MarketingFooterProps) {
           <Link href={urls.contact('Mushi Mushi inquiry')} className="transition hover:text-[var(--mushi-vermillion)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mushi-vermillion)] rounded-sm">Contact</Link>
         </nav>
       </div>
+
+      <KensaurusPortfolioTable utmSource="mushi-mushi" />
 
       <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--mushi-rule)] pt-4 font-mono text-[11px] uppercase tracking-[0.22em]">
         <p>© Mushi Mushi · Cloud runs the same OSS code, hosted by us.</p>

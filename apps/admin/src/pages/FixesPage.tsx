@@ -9,7 +9,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { useRealtimeReload } from '../lib/realtime'
 import { usePublishPageContext } from '../lib/pageContext'
@@ -22,7 +22,7 @@ import { EmptySectionMessage } from '../components/report-detail/ReportClassific
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { ActiveFiltersRail, type ActiveFilter } from '../components/ActiveFiltersRail'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
-import { SetupNudge } from '../components/SetupNudge'
+import { NextStep } from '../components/NextStep'
 import { HeroFixWrench } from '../components/illustrations/HeroIllustrations'
 import { useToast } from '../lib/toast'
 import { useSetupStatus } from '../lib/useSetupStatus'
@@ -34,16 +34,27 @@ import { InflightDispatches } from '../components/fixes/InflightDispatches'
 import { FixesTable } from '../components/fixes/FixesTable'
 import { FixBulkActionBar } from '../components/fixes/FixBulkActionBar'
 import { canMergeFix, isFixMerged, mergeFixAttempt } from '../lib/mergeFix'
+import { failureCause, fixCauseLabel, fixReportLabel, needsAttention, retryCandidates } from '../lib/fixReportTruth'
+import {
+  RETRY_AGENT_OPTIONS,
+  commonRetryAgent,
+  retryAgentFor,
+  retryDispatchBody,
+  type RetryAgent,
+} from '../lib/fixRetry'
 import type { FixAttempt, DispatchJob, FixSummary } from '../components/fixes/types'
 import { FixesStatusBanner } from '../components/fixes/FixesStatusBanner'
 import { FixesPipelineGuide } from '../components/fixes/FixesPipelineGuide'
 import { FixesSnapshotStrip } from '../components/fixes/FixesSnapshotStrip'
 import { FixesFailedSummary } from '../components/fixes/FixesFailedSummary'
-import { EMPTY_FIXES_STATS, type FixesStats, type FixesTabId } from '../components/fixes/FixesStatsTypes'
+import { EMPTY_FIXES_STATS, type FixesStats } from '../components/fixes/FixesStatsTypes'
 import { usePageCopy } from '../lib/copy'
-import { useFixesUx, resolveQuickFixesTab } from '../lib/fixesModeUx'
+import { useFixesUx } from '../lib/fixesModeUx'
+import { countRepoFilters, matchesRepoFilter } from '../lib/repoBranches'
+import { fixRowDomId, readFixDeepLinkId } from '../lib/fixDeepLink'
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageHeroStats } from '../lib/heroSnapshots'
+import { trackSelf } from '../lib/track'
 interface InventoryActionNode {
   actionNodeId?: string
   id?: string
@@ -67,41 +78,47 @@ const STATUS_BUCKETS: { id: StatusBucket; label: string }[] = [
   { id: 'failed', label: 'Failed / skipped' },
 ]
 
-const FIXES_TABS: Array<{ id: FixesTabId; label: string; description: string }> = [
-  {
-    id: 'overview',
-    label: 'Overview',
-    description: 'Pipeline posture, summary KPIs, and the next recommended action.',
-  },
-  {
-    id: 'pipeline',
-    label: 'Pipeline',
-    description: 'In-flight dispatches and failure categories before PRs land.',
-  },
-  {
-    id: 'attempts',
-    label: 'Attempts',
-    description: 'Every draft PR — expand a card for rationale, CI status, and retry.',
-  },
-]
+const SNAPSHOT_HINT =
+  'Completed, failed and in flight count reports. Attempts, PRs open and CI passing count fix attempts; the PR counts use the same rule as Pull requests.'
 
-function resolveFixesTab(value: string | null): FixesTabId {
-  if (value === 'pipeline' || value === 'attempts') return value
-  return 'overview'
+/** Attempts per request; the list route allows up to 200. */
+const FIXES_PAGE_SIZE = 200
+
+type RetryRequest =
+  | { kind: 'one'; reportId: string; agent: RetryAgent }
+  | { kind: 'all'; agent: RetryAgent }
+  | { kind: 'selected'; agent: RetryAgent }
+
+/**
+ * The filter a URL asks for. `?tab=pipeline` (the server's in-flight link and
+ * old bookmarks, from before the tabs were removed) opens In flight.
+ */
+function bucketFromUrl(status: string | null, tab: string | null): StatusBucket {
+  if (status === 'failed' || status === 'inflight' || status === 'pr_open' || status === 'merged') return status
+  if (!status && tab === 'pipeline') return 'inflight'
+  return 'all'
 }
 
+/** The one exclusive bucket of an attempt; PR open is matched separately. */
 function bucketize(fix: FixAttempt): StatusBucket {
   const status = fix.status?.toLowerCase()
   if (status === 'queued' || status === 'running') return 'inflight'
-  // skipped_* (unsupported agent, sandbox policy, no context, awaiting
-  // approval) needs the same "look at me" treatment as failed — the old
-  // bucketing dropped them into 'all' where they were invisible
-  // (2026-08-16 audit P1-4).
-  if (status === 'failed' || status?.startsWith('skipped')) return 'failed'
+  // "Failed / skipped" holds the latest attempt of each report that is
+  // still unfixed after it failed, was skipped (2026-08-16 audit P1-4), or
+  // its PR went red / closed unmerged (2026-10-02). Earlier attempts on a
+  // report a later PR fixed are history, not failures (glot.it 2026-10-04),
+  // so the filter count equals the banner's per-report count.
+  if (needsAttention(fix)) return 'failed'
   if (isFixMerged(fix)) return 'merged'
-  // Open PRs (including CI-green) stay in pr_open — "Shipped" is merged-only.
-  if (fix.pr_url) return 'pr_open'
   return 'all'
+}
+
+function inStatusBucket(fix: FixAttempt, bucket: StatusBucket): boolean {
+  if (bucket === 'all') return true
+  // Every attempt with an open PR, whatever CI says: the rule /repo counts by,
+  // so "PR open" is the same number on both pages. A red-CI PR is also in Failed.
+  if (bucket === 'pr_open') return matchesRepoFilter(fix, 'open')
+  return bucketize(fix) === bucket
 }
 
 interface CodebaseStats {
@@ -118,12 +135,13 @@ export function FixesPage() {
   const ux = useFixesUx()
 
   const tabParam = searchParams.get('tab')
-  const activeTab = resolveFixesTab(tabParam)
-  const activeTabMeta = FIXES_TABS.find((t) => t.id === activeTab) ?? FIXES_TABS[0]
+  const causeFilter = searchParams.get('cause')
+  // `?report=<id>` (Voice reports, fixesForReportPath) narrows to one report's attempts.
+  const reportFilter = searchParams.get('report')
+  const location = useLocation()
 
   const {
     data: statsData,
-    loading: statsLoading,
     reload: reloadStats,
     lastFetchedAt: statsFetchedAt,
     isValidating: statsValidating,
@@ -133,26 +151,22 @@ export function FixesPage() {
   usePublishPageHeroStats('/fixes', statsData)
   const fixesStats = statsData ?? EMPTY_FIXES_STATS
 
-  const setActiveTab = useCallback(
-    (id: FixesTabId) => {
-      const next = new URLSearchParams(searchParams)
-      if (id === 'overview') next.delete('tab')
-      else next.set('tab', id)
-      setSearchParams(next, { replace: true, preventScrollReset: true })
-    },
-    [searchParams, setSearchParams],
-  )
-
-  useEffect(() => {
-    if (!ux.isQuickstart || !activeProjectId || statsLoading) return
-    const quickTab = resolveQuickFixesTab(fixesStats)
-    if (activeTab !== quickTab) setActiveTab(quickTab)
-  }, [ux.isQuickstart, activeProjectId, statsLoading, fixesStats, activeTab, setActiveTab])
-  const [fixes, setFixes] = useState<FixAttempt[]>([])
+  // Latest page (refreshed by realtime) plus older pages loaded on request,
+  // so every attempt is reachable instead of the first 50 (console QA 91).
+  const [latestFixes, setLatestFixes] = useState<FixAttempt[]>([])
+  const [olderFixes, setOlderFixes] = useState<FixAttempt[]>([])
+  const [fixesTotal, setFixesTotal] = useState<number | null>(null)
+  const [loadingOlder, setLoadingOlder] = useState(false)
+  const fixes = useMemo(() => {
+    if (olderFixes.length === 0) return latestFixes
+    const seen = new Set(latestFixes.map((f) => f.id))
+    return [...latestFixes, ...olderFixes.filter((f) => !seen.has(f.id))]
+  }, [latestFixes, olderFixes])
   const [codebaseStats, setCodebaseStats] = useState<CodebaseStats | null>(null)
   const [dispatches, setDispatches] = useState<DispatchJob[]>([])
   const [summary, setSummary] = useState<FixSummary | null>(null)
   const [timelines, setTimelines] = useState<Record<string, FixTimelineEvent[]>>({})
+  const [baseBranches, setBaseBranches] = useState<Record<string, string | null>>({})
   const [inventoryActions, setInventoryActions] = useState<Record<string, InventoryActionNode | null>>({})
   const [loading, setLoading] = useState(true)
   const [isValidating, setIsValidating] = useState(true)
@@ -160,30 +174,22 @@ export function FixesPage() {
   const [error, setError] = useState(false)
   const [expanded, setExpanded] = useState<string | null>(null)
   const [retryingAll, setRetryingAll] = useState(false)
-  const [retryAllConfirm, setRetryAllConfirm] = useState(false)
+  // Every retry spends LLM budget, so each one goes through a confirm that
+  // also picks the agent (console QA 96, 241).
+  const [retryRequest, setRetryRequest] = useState<RetryRequest | null>(null)
   // Bulk selection on the Attempts tab. Set of fix_attempt ids.
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [bulkBusy, setBulkBusy] = useState(false)
   const [bulkProgress, setBulkProgress] = useState<string | null>(null)
   const [bulkMergeConfirm, setBulkMergeConfirm] = useState(false)
-  const [bulkRetryConfirm, setBulkRetryConfirm] = useState(false)
   const urlStatus = searchParams.get('status')
-  const initialBucket: StatusBucket =
-    urlStatus === 'failed' ? 'failed' :
-    urlStatus === 'inflight' ? 'inflight' :
-    urlStatus === 'pr_open' ? 'pr_open' :
-    urlStatus === 'merged' ? 'merged' :
-    'all'
-  const [statusBucket, setStatusBucket] = useState<StatusBucket>(initialBucket)
+  const urlBucket = bucketFromUrl(urlStatus, tabParam)
+  const [statusBucket, setStatusBucket] = useState<StatusBucket>(urlBucket)
   const toast = useToast()
 
   useEffect(() => {
-    if (urlStatus === 'failed') setStatusBucket('failed')
-    else if (urlStatus === 'inflight') setStatusBucket('inflight')
-    else if (urlStatus === 'pr_open') setStatusBucket('pr_open')
-    else if (urlStatus === 'merged') setStatusBucket('merged')
-    else if (!urlStatus) setStatusBucket('all')
-  }, [urlStatus])
+    setStatusBucket(urlBucket)
+  }, [urlBucket])
   // Guard refs prevent overlapping polls and post-unmount state writes —
   // both happen often in StrictMode dev because effects mount twice.
   const inFlightRef = useRef(false)
@@ -196,13 +202,15 @@ export function FixesPage() {
     setIsValidating(true)
     try {
       const [fixRes, dispRes, sumRes] = await Promise.all([
-        apiFetch<{ fixes: FixAttempt[] }>('/v1/admin/fixes'),
+        apiFetch<{ fixes: FixAttempt[]; total?: number }>(`/v1/admin/fixes?limit=${FIXES_PAGE_SIZE}`),
         apiFetch<{ dispatches: DispatchJob[] }>('/v1/admin/fixes/dispatches'),
         apiFetch<FixSummary>('/v1/admin/fixes/summary'),
       ])
       if (cancelledRef.current) return
-      if (fixRes.ok && fixRes.data) setFixes(fixRes.data.fixes)
-      else setError(true)
+      if (fixRes.ok && fixRes.data) {
+        setLatestFixes(fixRes.data.fixes)
+        setFixesTotal(typeof fixRes.data.total === 'number' ? fixRes.data.total : null)
+      } else setError(true)
       if (dispRes.ok && dispRes.data) setDispatches(dispRes.data.dispatches)
       if (sumRes.ok && sumRes.data) setSummary(sumRes.data)
       if (!cancelledRef.current) setLastFetchedAt(new Date().toISOString())
@@ -216,6 +224,27 @@ export function FixesPage() {
       }
     }
   }, [])
+
+  const loadOlderFixes = useCallback(async () => {
+    setLoadingOlder(true)
+    try {
+      const res = await apiFetch<{ fixes: FixAttempt[]; total?: number }>(
+        `/v1/admin/fixes?limit=${FIXES_PAGE_SIZE}&offset=${fixes.length}`,
+      )
+      if (res.ok && res.data) {
+        const page = res.data.fixes
+        setOlderFixes((prev) => {
+          const seen = new Set(prev.map((f) => f.id))
+          return [...prev, ...page.filter((f) => !seen.has(f.id))]
+        })
+        if (typeof res.data.total === 'number') setFixesTotal(res.data.total)
+      } else {
+        toast.push({ tone: 'error', message: res.error?.message ?? "Couldn't load older attempts. Try again." })
+      }
+    } finally {
+      setLoadingOlder(false)
+    }
+  }, [fixes.length, toast])
 
   // Codebase-index state drives the "you'll get stub PRs" banner. Loaded
   // once per project switch; cheap single-row + count read on the backend.
@@ -259,11 +288,13 @@ export function FixesPage() {
   useEffect(() => {
     if (!expanded) return
     let cancelled = false
-    apiFetch<{ events: FixTimelineEvent[] }>(`/v1/admin/fixes/${expanded}/timeline`)
+    apiFetch<{ events: FixTimelineEvent[]; base_branch?: string | null }>(`/v1/admin/fixes/${expanded}/timeline`)
       .then((res) => {
         if (cancelled) return
         if (res.ok && res.data) {
-          setTimelines((prev) => ({ ...prev, [expanded]: res.data!.events }))
+          const data = res.data
+          setTimelines((prev) => ({ ...prev, [expanded]: data.events }))
+          setBaseBranches((prev) => ({ ...prev, [expanded]: data.base_branch ?? null }))
         }
       })
       .catch(() => {
@@ -310,25 +341,109 @@ export function FixesPage() {
     return summary.completed / finished
   }, [summary])
 
-  const failedFixes = useMemo(() => fixes.filter((f) => f.status === 'failed'), [fixes])
+  // One entry per still-unfixed report a retry can clear now — never an
+  // attempt on a report a merged PR already fixed (server-derived flag).
+  const failedFixes = useMemo(() => retryCandidates(fixes), [fixes])
 
   // Pre-bucket every fix once so the segmented filter and the per-bucket
   // counts in the segmented control stay in sync without re-scanning the
   // list per render. closes the missing FixesPage status
   // filter finding.
+  // The list's scope: every loaded attempt, or one report's (`?report=`), so
+  // the filter counts always count the rows the list can show.
+  const scopedFixes = useMemo(
+    () => (reportFilter ? fixes.filter((f) => f.report_id === reportFilter) : fixes),
+    [fixes, reportFilter],
+  )
   const bucketCounts = useMemo(() => {
-    const counts: Record<StatusBucket, number> = { all: fixes.length, inflight: 0, pr_open: 0, merged: 0, failed: 0 }
-    for (const f of fixes) {
-      const b = bucketize(f)
-      if (b !== 'all') counts[b] += 1
+    const counts: Record<StatusBucket, number> = { all: 0, inflight: 0, pr_open: 0, merged: 0, failed: 0 }
+    for (const f of scopedFixes) {
+      for (const b of STATUS_BUCKETS) if (inStatusBucket(f, b.id)) counts[b.id] += 1
     }
     return counts
+  }, [scopedFixes])
+
+  // Open PRs and green CI per attempt, by the rule /repo uses, so the snapshot
+  // tiles show the same numbers as Pull requests.
+  const prCounts = useMemo(() => countRepoFilters(fixes), [fixes])
+  const snapshotStats = useMemo(
+    () => ({ ...fixesStats, prsOpen: prCounts.open, prsCiPassing: prCounts.ci_passing }),
+    [fixesStats, prCounts],
+  )
+
+  // "Most common: …" for the failed banner, from the same per-report rows.
+  const causeSummary = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const f of fixes) {
+      if (!needsAttention(f)) continue
+      const cause = failureCause(f)
+      counts.set(cause, (counts.get(cause) ?? 0) + 1)
+    }
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([cause, n]) => `${fixCauseLabel(cause)} (${n})`)
+      .join(', ')
   }, [fixes])
 
+  // "Common causes" chips narrow the failed list to one cause (console QA 93).
   const visibleFixes = useMemo(() => {
-    if (statusBucket === 'all') return fixes
-    return fixes.filter((f) => bucketize(f) === statusBucket)
-  }, [fixes, statusBucket])
+    const inBucket = statusBucket === 'all' ? scopedFixes : scopedFixes.filter((f) => inStatusBucket(f, statusBucket))
+    if (!causeFilter || statusBucket !== 'failed') return inBucket
+    return inBucket.filter((f) => failureCause(f) === causeFilter)
+  }, [scopedFixes, statusBucket, causeFilter])
+
+  const reviewFailedCause = useCallback(
+    (category: string) => {
+      const next = new URLSearchParams(searchParams)
+      next.delete('tab')
+      next.set('status', 'failed')
+      if (category) next.set('cause', category)
+      else next.delete('cause')
+      setSearchParams(next, { replace: true, preventScrollReset: true })
+      setStatusBucket('failed')
+    },
+    [searchParams, setSearchParams],
+  )
+  const clearCause = useCallback(() => {
+    const next = new URLSearchParams(searchParams)
+    next.delete('cause')
+    setSearchParams(next, { replace: true, preventScrollReset: true })
+  }, [searchParams, setSearchParams])
+  const clearReport = useCallback(() => {
+    const next = new URLSearchParams(searchParams)
+    next.delete('report')
+    setSearchParams(next, { replace: true, preventScrollReset: true })
+  }, [searchParams, setSearchParams])
+
+  // A link to one fix (command palette, Activity drawer, Ask Mushi, Slack):
+  // make sure the fix is in the visible filter, expand it and
+  // scroll to it. Once per id, so the user can collapse it afterwards. The
+  // hash form `#fix-<id>` (failed-alert previews) lands here too.
+  const deepLinkFixId = readFixDeepLinkId(searchParams, location.hash)
+  const handledDeepLinkRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!deepLinkFixId || loading || error) return
+    if (handledDeepLinkRef.current === deepLinkFixId) return
+    handledDeepLinkRef.current = deepLinkFixId
+    const target = fixes.find((f) => f.id === deepLinkFixId)
+    if (!target) {
+      toast.info(
+        "That fix is not in this project's recent fixes.",
+        'It may belong to another project. Switch project in the top bar, or open it from its report.',
+      )
+      return
+    }
+    if (!inStatusBucket(target, statusBucket)) setStatusBucket('all')
+    setExpanded(target.id)
+    let tries = 0
+    const scroll = () => {
+      const row = document.getElementById(fixRowDomId(target.id))
+      if (row) row.scrollIntoView?.({ behavior: 'smooth', block: 'center' })
+      else if (++tries < 10) window.setTimeout(scroll, 50)
+    }
+    window.setTimeout(scroll, 0)
+  }, [deepLinkFixId, loading, error, fixes, statusBucket, toast])
 
   // (Page context publish moved below retryAllFailed so the action
   // closures bind to the live function reference without TDZ issues.)
@@ -378,13 +493,14 @@ export function FixesPage() {
   }, [])
 
   const retryOne = useCallback(
-    async (reportId: string) => {
+    async (reportId: string, agent: RetryAgent) => {
       const optimisticId = pushOptimistic(reportId)
       const res = await apiFetch('/v1/admin/fixes/dispatch', {
         method: 'POST',
-        body: JSON.stringify({ reportId, projectId: activeProjectId }),
+        body: retryDispatchBody(reportId, activeProjectId, agent),
       })
       if (res.ok) {
+        trackSelf('fix_dispatched', { report_id: reportId, agent: agent === 'auto' ? 'default' : agent })
         toast.push({ tone: 'success', message: 'Fix re-dispatched' })
         settleOptimistic(optimisticId, 'ok')
         void loadFixes()
@@ -396,7 +512,16 @@ export function FixesPage() {
     [activeProjectId, loadFixes, pushOptimistic, settleOptimistic, toast],
   )
 
-  const retryAllFailed = useCallback(async () => {
+  /** Open the retry confirm for one report, defaulting to its last agent. */
+  const requestRetryOne = useCallback(
+    (reportId: string) => {
+      const last = fixes.find((f) => f.report_id === reportId && f.is_latest_attempt) ?? fixes.find((f) => f.report_id === reportId)
+      setRetryRequest({ kind: 'one', reportId, agent: retryAgentFor(last?.agent) })
+    },
+    [fixes],
+  )
+
+  const retryAllFailed = useCallback(async (agent: RetryAgent) => {
     if (failedFixes.length === 0) return
     setRetryingAll(true)
     const optimisticIds = failedFixes.map((f) => ({ reportId: f.report_id, id: pushOptimistic(f.report_id) }))
@@ -404,21 +529,22 @@ export function FixesPage() {
       optimisticIds.map(({ reportId }) =>
         apiFetch('/v1/admin/fixes/dispatch', {
           method: 'POST',
-          body: JSON.stringify({ reportId, projectId: activeProjectId }),
+          body: retryDispatchBody(reportId, activeProjectId, agent),
         }),
       ),
     )
     setRetryingAll(false)
     results.forEach((r, idx) => {
-      const { id } = optimisticIds[idx]
+      const { id, reportId } = optimisticIds[idx]
       const ok = r.status === 'fulfilled' && (r.value as { ok: boolean }).ok
       const msg = r.status === 'fulfilled' ? (r.value as { error?: { message?: string } }).error?.message : 'Request failed'
+      if (ok) trackSelf('fix_dispatched', { report_id: reportId, agent: agent === 'auto' ? 'default' : agent })
       settleOptimistic(id, ok ? 'ok' : 'error', msg)
     })
     const ok = results.filter((r) => r.status === 'fulfilled' && (r.value as { ok: boolean }).ok).length
     const failed = results.length - ok
     if (failed === 0) {
-      toast.push({ tone: 'success', message: `Re-dispatched ${ok} failed ${pluralize(ok, 'fix', 'fixes')}` })
+      toast.push({ tone: 'success', message: `Re-dispatched ${ok} ${pluralize(ok, 'fix', 'fixes')}` })
     } else {
       toast.push({ tone: 'warning', message: `Re-dispatched ${ok} \u00b7 ${failed} failed` })
     }
@@ -452,6 +578,14 @@ export function FixesPage() {
   )
 
   const clearSelection = useCallback(() => setSelectedIds(new Set()), [])
+  const toggleSelectFix = useCallback((fixId: string, on: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (on) next.add(fixId)
+      else next.delete(fixId)
+      return next
+    })
+  }, [])
 
   // Select-all operates on the *current view* (the active status bucket), and
   // the label communicates that scope explicitly — NN/g guideline for select-all.
@@ -486,10 +620,7 @@ export function FixesPage() {
     () => selectedFixes.filter((f) => canMergeFix(f) && f.pr_url),
     [selectedFixes],
   )
-  const selectedFailed = useMemo(
-    () => selectedFixes.filter((f) => f.status === 'failed'),
-    [selectedFixes],
-  )
+  const selectedFailed = useMemo(() => retryCandidates(selectedFixes), [selectedFixes])
   const selectedMerged = useMemo(
     () => selectedFixes.filter((f) => isFixMerged(f)),
     [selectedFixes],
@@ -528,7 +659,7 @@ export function FixesPage() {
     void loadFixes()
   }, [selectedMergeable, loadFixes, toast])
 
-  const retrySelected = useCallback(async () => {
+  const retrySelected = useCallback(async (agent: RetryAgent) => {
     if (selectedFailed.length === 0) return
     setBulkBusy(true)
     setBulkProgress(`Re-dispatching ${selectedFailed.length}…`)
@@ -537,14 +668,15 @@ export function FixesPage() {
       optimisticIds.map(({ reportId }) =>
         apiFetch('/v1/admin/fixes/dispatch', {
           method: 'POST',
-          body: JSON.stringify({ reportId, projectId: activeProjectId }),
+          body: retryDispatchBody(reportId, activeProjectId, agent),
         }),
       ),
     )
     results.forEach((r, idx) => {
-      const { id } = optimisticIds[idx]
+      const { id, reportId } = optimisticIds[idx]
       const okRes = r.status === 'fulfilled' && (r.value as { ok: boolean }).ok
       const msg = r.status === 'fulfilled' ? (r.value as { error?: { message?: string } }).error?.message : 'Request failed'
+      if (okRes) trackSelf('fix_dispatched', { report_id: reportId, agent: agent === 'auto' ? 'default' : agent })
       settleOptimistic(id, okRes ? 'ok' : 'error', msg)
     })
     const ok = results.filter((r) => r.status === 'fulfilled' && (r.value as { ok: boolean }).ok).length
@@ -573,7 +705,7 @@ export function FixesPage() {
       bucket: statusBucket,
     },
     selection: expanded
-      ? { kind: 'fix', id: expanded, label: fixes.find((f) => f.id === expanded)?.report_id ?? expanded.slice(0, 8) }
+      ? { kind: 'fix', id: expanded, label: (() => { const f = fixes.find((x) => x.id === expanded); return f ? fixReportLabel(f) : 'Fix' })() }
       : undefined,
     questions: [
       bucketCounts.failed > 0
@@ -585,12 +717,14 @@ export function FixesPage() {
       'Which fixes are waiting on a human review?',
     ],
     actions: [
-      ...(bucketCounts.failed > 0
+      // Retry re-dispatches retry candidates only (one per still-unfixed
+      // report), so the label counts those, not the wider "Failed / skipped" bucket.
+      ...(failedFixes.length > 0
         ? [{
             id: 'retry-all-failed',
-            label: `Retry all ${pluralizeWithCount(bucketCounts.failed, 'failed fix', 'failed fixes')}`,
-            hint: 'Re-dispatches every failed fix in the current view',
-            run: () => { void retryAllFailed() },
+            label: `Retry ${pluralizeWithCount(failedFixes.length, 'unfixed report', 'unfixed reports')}`,
+            hint: 'Re-dispatches each still-unfixed report whose last attempt failed',
+            run: () => setRetryRequest({ kind: 'all', agent: commonRetryAgent(failedFixes.map((f) => f.agent)) }),
           }]
         : []),
       ...(statusBucket !== 'all'
@@ -611,7 +745,7 @@ export function FixesPage() {
     mentionables: fixes.slice(0, 10).map((f) => ({
       kind: 'fix' as const,
       id: f.id,
-      label: f.report_id ? `Fix on report ${f.report_id.slice(0, 8)}` : `Fix ${f.id.slice(0, 8)}`,
+      label: `Fix on ${fixReportLabel(f)}`,
       sublabel: `status: ${f.status ?? 'unknown'}`,
     })),
   })
@@ -639,26 +773,6 @@ export function FixesPage() {
     return ids
   }, [fixes, mergedDispatches])
 
-  const tabOptions = useMemo(
-    () => [
-      { id: 'overview' as const, label: copy?.tabLabels?.overview ?? 'Overview' },
-      {
-        id: 'pipeline' as const,
-        label: copy?.tabLabels?.pipeline ?? 'Pipeline',
-        count:
-          fixesStats.inflightDispatches + fixesStats.inProgress > 0
-            ? fixesStats.inflightDispatches + fixesStats.inProgress
-            : undefined,
-      },
-      {
-        id: 'attempts' as const,
-        label: copy?.tabLabels?.attempts ?? 'Attempts',
-        count: fixesStats.failed > 0 ? fixesStats.failed : fixes.length > 0 ? fixes.length : undefined,
-      },
-    ],
-    [copy?.tabLabels, fixesStats, fixes.length],
-  )
-
   const reloadAll = useCallback(() => {
     reloadStats()
     void loadFixes()
@@ -670,7 +784,7 @@ export function FixesPage() {
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-fixes">
       <PageHeaderBar
-        title={copy?.title ?? 'Fix drafts & PRs'}
+        title={copy?.title ?? 'Fixes'}
         projectScope={projectName}
 
         helpTitle={copy?.help?.title ?? 'About drafted fixes'}
@@ -680,22 +794,24 @@ export function FixesPage() {
           'See model used, token spend, and trace link per attempt',
           'Spot failure patterns before retrying',
         ]}
-        helpHowToUse={copy?.help?.howToUse ?? 'Summary for posture. Pipeline shows runs in flight. Attempts lists every draft PR.'}
+        helpHowToUse={copy?.help?.howToUse ?? 'The list shows every attempt. Filter by status; In flight shows runs still going.'}
       >
         <FreshnessPill at={lastFetchedAt ?? statsFetchedAt} isValidating={isValidating || statsValidating} channel={channelState} />
         <span className="inline-flex items-center rounded-sm border border-edge-subtle bg-surface-overlay/40 px-2 py-0.5 font-mono text-2xs tabular-nums text-fg-muted">
-          {pluralizeWithCount(fixes.length, 'attempt')}
+          {fixesTotal != null && fixesTotal > fixes.length
+            ? `${fixes.length} of ${pluralizeWithCount(fixesTotal, 'attempt')}`
+            : pluralizeWithCount(fixes.length, 'attempt')}
         </span>
         {failedFixes.length > 0 && (
           <Btn
             type="button"
             variant="ghost"
             size="sm"
-            onClick={() => setRetryAllConfirm(true)}
+            onClick={() => setRetryRequest({ kind: 'all', agent: commonRetryAgent(failedFixes.map((f) => f.agent)) })}
             loading={retryingAll}
-            title={`Re-dispatch every fix attempt currently in failed state (${pluralizeWithCount(failedFixes.length, 'job')}).`}
+            title={`Re-dispatch ${pluralizeWithCount(failedFixes.length, 'report')} still unfixed after a failed attempt. Reports fixed by a later PR are never retried.`}
           >
-            {retryingAll ? 'Retrying\u2026' : `Retry ${failedFixes.length} failed`}
+            {retryingAll ? 'Retrying\u2026' : `Retry ${failedFixes.length} unfixed`}
           </Btn>
         )}
       </PageHeaderBar>
@@ -707,7 +823,7 @@ export function FixesPage() {
             children: (
               <FixesStatusBanner
                 stats={fixesStats}
-                onTab={setActiveTab}
+                causeSummary={causeSummary}
                 onRefresh={reloadAll}
                 refreshing={isValidating || statsValidating}
                 plainBanner={ux.plainBanner}
@@ -719,10 +835,10 @@ export function FixesPage() {
             show: !ux.hideFixesSnapshot,
             children: (
               <FixesSnapshotStrip
-                stats={fixesStats}
+                stats={snapshotStats}
                 statsFetchedAt={statsFetchedAt}
                 statsValidating={statsValidating}
-                description={activeTabMeta.description}
+                description={SNAPSHOT_HINT}
                 sectionTitle={copy?.sections?.snapshot ?? 'FIXES SNAPSHOT'}
                 statLabels={copy?.statLabels}
                 hideLinks={ux.hideSnapshotLinks}
@@ -732,7 +848,9 @@ export function FixesPage() {
           },
           {
             priority: POSTURE_PRIORITY.guide,
-            show: activeTab === 'overview',
+            // A third explainer next to the help row and the banner; only
+            // worth its space before the first attempt.
+            show: fixes.length === 0,
             children: (
               <FixesPipelineGuide
                 topPriority={fixesStats.topPriority}
@@ -743,57 +861,39 @@ export function FixesPage() {
         ]}
       />
 
-      {!ux.hideTabs && (
-      <SegmentedControl<FixesTabId>
-        ariaLabel="Fix sections"
-        value={activeTab}
-        options={tabOptions}
-        onChange={setActiveTab}
-        size="sm"
-      />
+      {codebaseStats &&
+        (!codebaseStats.codebase_index_enabled || codebaseStats.indexed_files === 0) &&
+        fixesStats.topPriority !== 'no_index' &&
+        fixesStats.topPriority !== 'no_github' && (
+          <HelpBanner
+            tone="warn"
+            role="status"
+            data-testid="fixes-codebase-unindexed-banner"
+            icon={<span aria-hidden="true">⚠</span>}
+          >
+            <strong className="font-semibold">Auto-fix will produce stub PRs</strong> —{' '}
+            {codebaseStats.codebase_index_enabled
+              ? 'your codebase index is empty, so the LLM has nothing to read.'
+              : 'codebase indexing is off, so the LLM has nothing to read.'}{' '}
+            <Link to="/integrations/config" className="underline hover:no-underline">Enable it now →</Link>
+          </HelpBanner>
+        )}
+
+      {/* Quick mode has no snapshot strip, so the KPI row stands in for it. */}
+      {summary && ux.hideFixesSnapshot && (
+        <FixSummaryRow summary={{ ...summary, prsOpen: prCounts.open }} successRate={successRate} />
       )}
 
-      {activeTab === 'overview' && (
-        <>
-          {codebaseStats && (!codebaseStats.codebase_index_enabled || codebaseStats.indexed_files === 0) && (
-            <HelpBanner
-              tone="warn"
-              role="status"
-              data-testid="fixes-codebase-unindexed-banner"
-              icon={<span aria-hidden="true">⚠</span>}
-            >
-              <strong className="font-semibold">Auto-fix will produce stub PRs</strong> —{' '}
-              {codebaseStats.codebase_index_enabled
-                ? 'your codebase index is empty, so the LLM has nothing to read.'
-                : 'codebase indexing is off, so the LLM has nothing to read.'}{' '}
-              <Link to="/integrations/config" className="underline hover:no-underline">Enable it now →</Link>
-            </HelpBanner>
-          )}
-
-          {summary && (ux.isAdvanced || ux.hideFixesSnapshot) && (
-            <FixSummaryRow summary={summary} successRate={successRate} />
-          )}
-
-          <FixRecommendation fixes={fixes} dispatches={mergedDispatches} />
-        </>
+      {/* The failed and in-flight banners already say what this would. */}
+      {fixesStats.topPriority !== 'failed' && fixesStats.topPriority !== 'inflight' && (
+        <FixRecommendation fixes={fixes} dispatches={mergedDispatches} />
       )}
 
-      {activeTab === 'pipeline' && (
-        <>
-          {!ux.hideFailureCategories && (
-            <FixesFailedSummary
-              fixes={fixes}
-              projectId={activeProjectId}
-              onReviewCategory={() => setStatusBucket('failed')}
-            />
-          )}
-          <InflightDispatches dispatches={mergedDispatches} />
-        </>
-      )}
+      <InflightDispatches dispatches={mergedDispatches} />
 
-      {activeTab === 'attempts' && (
-        fixes.length === 0 ? (
-        <SetupNudge
+      {fixes.length === 0 ? (
+        <NextStep
+          variant="inline"
           requires={['github_connected', 'first_report_received', 'byok_anthropic']}
           emptyTitle="No fix attempts yet"
           emptyDescription="Open a classified report and click “Dispatch fix” to start the auto-fix loop. Mushi opens a draft PR you review and merge — nothing ships without you."
@@ -806,12 +906,24 @@ export function FixesPage() {
         />
       ) : (
         <>
-          <SegmentedControl<StatusBucket>
-            ariaLabel="Filter fixes by status"
-            value={statusBucket}
-            options={STATUS_BUCKETS.map((b) => ({ id: b.id, label: b.label, count: bucketCounts[b.id] }))}
-            onChange={setStatusBucket}
-          />
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+            <SegmentedControl<StatusBucket>
+              ariaLabel="Filter fix attempts by status"
+              value={statusBucket}
+              options={STATUS_BUCKETS.map((b) => ({ id: b.id, label: b.label, count: bucketCounts[b.id] }))}
+              onChange={setStatusBucket}
+            />
+            <Link
+              to="/repo"
+              className="text-2xs text-fg-muted underline-offset-2 hover:text-fg hover:underline"
+              title="Counts here are fix attempts. PR open counts every attempt with an open PR, as Pull requests does."
+            >
+              See pull requests →
+            </Link>
+          </div>
+          {statusBucket === 'failed' && !ux.hideFailureCategories && (
+            <FixesFailedSummary fixes={scopedFixes} onReviewCategory={reviewFailedCause} />
+          )}
           {(() => {
             const activeFilters: ActiveFilter[] = statusBucket !== 'all'
               ? [{
@@ -822,10 +934,32 @@ export function FixesPage() {
                   tone: 'info' as const,
                 }]
               : []
+            if (causeFilter && statusBucket === 'failed') {
+              activeFilters.push({
+                key: 'cause',
+                label: 'Cause',
+                value: fixCauseLabel(causeFilter),
+                onClear: clearCause,
+                tone: 'info' as const,
+              })
+            }
+            if (reportFilter) {
+              const target = fixes.find((f) => f.report_id === reportFilter)
+              activeFilters.push({
+                key: 'report',
+                label: 'Report',
+                value: target ? fixReportLabel(target) : reportFilter.slice(0, 8),
+                onClear: clearReport,
+                tone: 'info' as const,
+              })
+            }
             return (
               <ActiveFiltersRail
                 filters={activeFilters}
-                onClearAll={() => setStatusBucket('all')}
+                onClearAll={() => {
+                  setStatusBucket('all')
+                  if (reportFilter) clearReport()
+                }}
                 ariaLabel="Active fix filters"
               />
             )
@@ -850,63 +984,88 @@ export function FixesPage() {
                 busy={bulkBusy}
                 progressLabel={bulkProgress}
                 onMergeSelected={() => setBulkMergeConfirm(true)}
-                onRetrySelected={() => setBulkRetryConfirm(true)}
+                onRetrySelected={() =>
+                  setRetryRequest({ kind: 'selected', agent: commonRetryAgent(selectedFailed.map((f) => f.agent)) })
+                }
                 onClear={clearSelection}
               />
               <FixesTable
                 fixes={visibleFixes}
                 expandedId={expanded}
                 timelines={timelines}
+                baseBranches={baseBranches}
                 traceUrlFor={(traceId) => platform.traceUrl(traceId)}
                 inFlightReportIds={inFlightReportIds}
                 inventoryActions={inventoryActions}
                 onToggle={(fixId) => setExpanded(expanded === fixId ? null : fixId)}
-                onRetry={retryOne}
+                onRetry={requestRetryOne}
                 onRefreshed={loadFixes}
+                selectedIds={selectedIds}
+                onSelectFix={toggleSelectFix}
                 compactTable={ux.compactTable}
                 hideTableChrome={ux.hideTableChrome}
               />
+              {fixesTotal != null && fixesTotal > fixes.length ? (
+                <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-2xs text-fg-muted">
+                  <span>
+                    Showing the latest {fixes.length} of {pluralizeWithCount(fixesTotal, 'attempt')}. Filter counts cover the loaded ones.
+                  </span>
+                  <Btn size="sm" variant="ghost" onClick={() => void loadOlderFixes()} loading={loadingOlder}>
+                    Load {Math.min(FIXES_PAGE_SIZE, fixesTotal - fixes.length)} older
+                  </Btn>
+                </div>
+              ) : null}
             </>
           )}
         </>
-      )
       )}
 
-      {retryAllConfirm && failedFixes.length > 0 ? (
-        <ConfirmDialog
-          title={`Retry ${failedFixes.length} failed ${pluralize(failedFixes.length, 'fix', 'fixes')}?`}
-          body="Each retry runs the auto-fix agent again and spends LLM tokens. Failed attempts stay in history — you can review them on this page."
-          confirmLabel="Retry all"
-          cancelLabel="Cancel"
-          tone="danger"
-          loading={retryingAll}
-          onConfirm={() => {
-            setRetryAllConfirm(false)
-            void retryAllFailed()
-          }}
-          onCancel={() => {
-            if (!retryingAll) setRetryAllConfirm(false)
-          }}
-        />
-      ) : null}
-
-      {bulkRetryConfirm && selectedFailed.length > 0 ? (
-        <ConfirmDialog
-          title={`Retry ${selectedFailed.length} ${pluralize(selectedFailed.length, 'fix', 'fixes')}?`}
-          body="Each retry runs the auto-fix agent again and spends LLM tokens. Failed attempts stay in history — you can review them on this page."
-          confirmLabel={`Retry ${selectedFailed.length}`}
-          cancelLabel="Cancel"
-          tone="danger"
-          loading={bulkBusy}
-          onConfirm={() => {
-            setBulkRetryConfirm(false)
-            void retrySelected()
-          }}
-          onCancel={() => {
-            if (!bulkBusy) setBulkRetryConfirm(false)
-          }}
-        />
-      ) : null}
+      {retryRequest ? (() => {
+        const count =
+          retryRequest.kind === 'one' ? 1 : retryRequest.kind === 'all' ? failedFixes.length : selectedFailed.length
+        const busy = retryRequest.kind === 'all' ? retryingAll : retryRequest.kind === 'selected' ? bulkBusy : false
+        if (count === 0) return null
+        const title =
+          retryRequest.kind === 'one'
+            ? 'Retry this fix?'
+            : retryRequest.kind === 'all'
+              ? `Retry ${pluralizeWithCount(count, 'unfixed report')}?`
+              : `Retry ${count} ${pluralize(count, 'fix', 'fixes')}?`
+        return (
+          <ConfirmDialog
+            title={title}
+            body="Each retry runs a coding agent again and spends LLM tokens. Failed attempts stay in history on this page."
+            confirmLabel={count === 1 ? 'Retry' : `Retry ${count}`}
+            cancelLabel="Cancel"
+            tone="danger"
+            loading={busy}
+            onConfirm={() => {
+              const req = retryRequest
+              setRetryRequest(null)
+              if (req.kind === 'one') void retryOne(req.reportId, req.agent)
+              else if (req.kind === 'all') void retryAllFailed(req.agent)
+              else void retrySelected(req.agent)
+            }}
+            onCancel={() => {
+              if (!busy) setRetryRequest(null)
+            }}
+          >
+            <label className="flex flex-col gap-1 text-2xs text-fg-secondary">
+              <span className="font-medium">Run it with</span>
+              <select
+                value={retryRequest.agent}
+                onChange={(e) => setRetryRequest({ ...retryRequest, agent: e.target.value as RetryAgent })}
+                className="input text-xs"
+                aria-label="Agent for the retry"
+              >
+                {RETRY_AGENT_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </label>
+          </ConfirmDialog>
+        )
+      })() : null}
 
       {bulkMergeConfirm && selectedMergeable.length > 0 ? (
         <ConfirmDialog

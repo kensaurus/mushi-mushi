@@ -11,12 +11,14 @@ import { PdcaReceipt } from './PdcaReceipt'
 import { FixAttemptFlow } from './FixAttemptFlow'
 import { CursorArtifactsGallery } from './CursorArtifactsGallery'
 import { FixErrorPanel } from './FixErrorPanel'
+import { isSuperseded, supersededLabel } from '../../lib/fixReportTruth'
 import { pluralizeWithCount } from '../../lib/format'
 import { formatTokens } from '../charts'
 import type { FixAttempt } from './types'
 import { RelativeTime } from '../ui'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
+import { describeCiRefresh, type CiRefreshResult } from '../../lib/fixRetry'
 import * as Sentry from '@sentry/react'
 
 interface InventoryActionSummary {
@@ -32,6 +34,8 @@ interface InventoryActionSummary {
 interface Props {
   fix: FixAttempt
   timeline: FixTimelineEvent[] | undefined
+  /** `base_branch` from the timeline endpoint (project_repos.default_branch). */
+  baseBranch?: string | null
   traceUrl: string | null
   onRetry: () => Promise<void>
   onRefreshed?: () => void
@@ -42,6 +46,7 @@ interface Props {
 export function FixDetailPanel({
   fix,
   timeline,
+  baseBranch,
   traceUrl,
   onRetry,
   onRefreshed,
@@ -57,10 +62,23 @@ export function FixDetailPanel({
     if (ciRefreshing) return
     setCiRefreshing(true)
     try {
-      await apiFetch(`/v1/admin/fixes/${fix.id}/refresh-ci`, { method: 'POST' })
+      // apiFetch returns { ok:false } for HTTP errors instead of throwing, so
+      // the result is read here: a failed sync used to look like a success
+      // (console QA 88).
+      const res = await apiFetch<CiRefreshResult>(`/v1/admin/fixes/${fix.id}/refresh-ci`, { method: 'POST' })
+      const outcome = describeCiRefresh(res)
+      if (res.ok) {
+        toast.success(outcome.title, outcome.description)
+      } else {
+        toast.error(outcome.title, outcome.description)
+        Sentry.captureMessage('fix refresh-ci failed', {
+          level: 'warning',
+          extra: { fixId: fix.id, code: res.error?.code ?? null },
+        })
+      }
       onRefreshed?.()
     } catch (err) {
-      toast.error('Could not refresh CI status from GitHub')
+      toast.error("Couldn't read CI from GitHub", 'Check your connection and try again.')
       Sentry.captureMessage('fix refresh-ci failed', {
         level: 'warning',
         extra: { fixId: fix.id, error: err instanceof Error ? err.message : String(err) },
@@ -153,6 +171,7 @@ export function FixDetailPanel({
             prNumber={fix.pr_number}
             prState={fix.pr_state}
             branchName={fix.branch}
+            baseBranch={baseBranch}
             commitSha={fix.commit_sha}
             agentModel={fix.llm_model ?? fix.agent}
             filesChanged={fix.files_changed}
@@ -242,7 +261,8 @@ export function FixDetailPanel({
         error={fix.error}
         agent={fix.agent}
         category={fix.failure_category}
-        onRetry={isInFlight ? undefined : () => void onRetry()}
+        onRetry={isInFlight || fix.retryable !== true ? undefined : () => void onRetry()}
+        supersededNote={isSuperseded(fix) ? supersededLabel(fix) : null}
       />
     </div>
   )

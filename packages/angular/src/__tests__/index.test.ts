@@ -48,6 +48,7 @@ vi.mock('@mushi-mushi/web', () => ({
   },
 }))
 
+import { ErrorHandler, Injector, createEnvironmentInjector, type EnvironmentInjector } from '@angular/core'
 import { MushiService, MushiErrorHandler, provideMushi, provideMushiAngular, MUSHI_CONFIG } from '../index'
 
 const testConfig = {
@@ -198,14 +199,74 @@ describe('provideMushi', () => {
   })
 })
 
+// AOT-compiled apps never load @angular/compiler, and neither does this test
+// file. A decorated class whose factory Angular has to compile at runtime
+// throws "needs to be compiled using the JIT compiler" the moment DI touches
+// it, so resolving through a real injector here is the regression test.
+describe('real Angular DI without @angular/compiler', () => {
+  const root = (): EnvironmentInjector => Injector.create({ providers: [] }) as unknown as EnvironmentInjector
+
+  it('provideMushi() works inside providers: [] and initialises Mushi eagerly, once', () => {
+    const injector = createEnvironmentInjector([provideMushi(testConfig)], root())
+    expect(mockInit).toHaveBeenCalledTimes(1)
+    expect(mockInit).toHaveBeenCalledWith(testConfig)
+
+    const service = injector.get(MushiService)
+    expect(service).toBeInstanceOf(MushiService)
+    expect(injector.get(MushiService)).toBe(service)
+    expect(mockInit).toHaveBeenCalledTimes(1)
+  })
+
+  it('installs MushiErrorHandler as the ErrorHandler and still logs like the default one', () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const injector = createEnvironmentInjector([provideMushi(testConfig)], root())
+      const handler = injector.get(ErrorHandler)
+      expect(handler).toBeInstanceOf(MushiErrorHandler)
+      const err = new Error('boom')
+      handler.handleError(err)
+      expect(mockCaptureException).toHaveBeenCalledWith(err, expect.objectContaining({}))
+      expect(consoleError).toHaveBeenCalledWith('ERROR', err)
+    } finally {
+      consoleError.mockRestore()
+    }
+  })
+
+  it('provideMushiAngular() spreads into a plain Injector.create providers list', () => {
+    const injector = Injector.create({ providers: [...provideMushiAngular(testConfig)] })
+    expect(mockInit).toHaveBeenCalledTimes(1)
+    expect(injector.get(MushiService)).toBeInstanceOf(MushiService)
+    expect(injector.get(ErrorHandler)).toBeInstanceOf(MushiErrorHandler)
+    expect(injector.get(MUSHI_CONFIG)).toEqual(testConfig)
+  })
+
+  it('keeps the legacy { service, errorHandler } shape on the same single instance', () => {
+    const legacy = provideMushi(testConfig)
+    const injector = createEnvironmentInjector([legacy], root())
+    expect(injector.get(MushiService)).toBe(legacy.service)
+    expect(legacy.errorHandler).toBeInstanceOf(MushiErrorHandler)
+    expect(mockInit).toHaveBeenCalledTimes(1)
+  })
+
+  it('identify() forwards to the web SDK', () => {
+    const mockIdentify = vi.fn()
+    mockGetInstance.mockReturnValue({ ...mockSdkInstance, identify: mockIdentify })
+    const injector = createEnvironmentInjector([provideMushi(testConfig)], root())
+    injector.get(MushiService).identify('user-1', { email: 'person@example.com' })
+    expect(mockIdentify).toHaveBeenCalledWith('user-1', { email: 'person@example.com' })
+  })
+})
+
 describe('provideMushiAngular (Angular 16+ DI providers)', () => {
-  it('returns a Provider[] including MUSHI_CONFIG and MushiService', () => {
-    const providers = provideMushiAngular(testConfig)
-    // Three entries: MUSHI_CONFIG value, MushiService class, and MushiErrorHandler factory.
-    expect(providers).toHaveLength(3)
-    const configProvider = providers[0] as { provide: unknown; useValue: unknown }
-    expect(configProvider.provide).toBe(MUSHI_CONFIG)
-    expect(configProvider.useValue).toEqual(testConfig)
+  it('returns a Provider[] of explicit factories: config, service, handler, ErrorHandler, initializer', () => {
+    const providers = provideMushiAngular(testConfig) as unknown as Array<Record<string, unknown>>
+    expect(providers).toHaveLength(5)
+    expect(providers[0]).toMatchObject({ provide: MUSHI_CONFIG, useValue: testConfig })
+    // No bare class providers: those need a compiled factory (see the DI suite above).
+    expect(providers[1]).toMatchObject({ provide: MushiService, deps: [MUSHI_CONFIG] })
+    expect(typeof providers[1].useFactory).toBe('function')
+    expect(providers[3]).toMatchObject({ provide: ErrorHandler, useExisting: MushiErrorHandler })
+    expect(providers[4]).toMatchObject({ multi: true })
   })
 
   it('errorHandler factory wires through to the constructed service', () => {

@@ -1,18 +1,16 @@
 /**
  * FILE: apps/admin/src/pages/InboxPage.tsx
- * PURPOSE: Global Action Inbox — tab shell (Overview | Actions | Stages | Activity)
- *          with stats banner, KPI strip, and PDCA action cards from dashboard data.
+ * PURPOSE: Global Action Inbox — tab shell (Overview | Stages | Activity). Overview
+ *          is the ordered action list, under one status banner.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { Link, useSearchParams } from 'react-router-dom'
-import { ErrorAlert,
-  Btn,
+import {
   FreshnessPill,
   AgeChip,
   SegmentedControl,
-  Badge,
   FilterChip,
   type FilterChipTone, } from '../components/ui'
 import { usePageData } from '../lib/usePageData'
@@ -24,7 +22,6 @@ import { reportDetailPath } from '../lib/reportUrl'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { InboxStatusBanner, isInboxStatusBannerCritical } from '../components/inbox/InboxStatusBanner'
-import { InboxSnapshotStrip } from '../components/inbox/InboxSnapshotStrip'
 import { InboxPdcaGuide } from '../components/inbox/InboxPdcaGuide'
 import { InboxOverviewBody } from '../components/inbox/InboxOverviewBody'
 import {
@@ -37,16 +34,15 @@ import { EMPTY_INBOX_STATS, type InboxStats, type InboxTabId } from '../componen
 import type { ActivityItem, DashboardData } from '../components/dashboard/types'
 import { buildInboxCards, type InboxCardGroup } from '../lib/actionInboxFromDashboard'
 import { useInboxUx, resolveQuickInboxTab } from '../lib/inboxModeUx'
+import { useQuickstartLandingTab } from '../lib/useQuickstartTab'
 import {
   ActionPill,
   ActionPillRow,
-  ContainedBlock,
   MetaChip,
   SignalChip,
-  InlineProof,
 } from '../components/report-detail/ReportSurface'
 import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
-import { CHIP_TONE } from '../lib/chipTone'
+import { PageLoadError } from '../components/PageLoadError'
 
 type Group = InboxCardGroup
 
@@ -54,11 +50,6 @@ const INBOX_TABS: Array<{ id: InboxTabId; label: string; description: string }> 
   {
     id: 'overview',
     label: 'Overview',
-    description: 'Posture banner, top priority, and how to read open vs clear stages.',
-  },
-  {
-    id: 'actions',
-    label: 'Actions',
     description: 'Priority worklist — every open card with a primary CTA, top to bottom.',
   },
   {
@@ -136,11 +127,15 @@ export function InboxPage() {
     [searchParams, setSearchParams],
   )
 
-  useEffect(() => {
-    if (!ux.isQuickstart || statsLoading) return
-    const quickTab = resolveQuickInboxTab(stats)
-    if (activeTab !== quickTab) setActiveTab(quickTab)
-  }, [ux.isQuickstart, statsLoading, stats.openActions, activeTab, setActiveTab, stats])
+  // Quick mode opens the posture tab once; links and clicks then win.
+  useQuickstartLandingTab({
+    enabled: ux.isQuickstart,
+    ready: !statsLoading,
+    tabParam: tabParam,
+    activeTab: activeTab,
+    quickTab: resolveQuickInboxTab(activeTab),
+    setActiveTab: setActiveTab,
+  })
 
   const openCards = cards.filter((c) => c.action !== null)
   const clearCards = cards.filter((c) => c.action === null)
@@ -170,15 +165,6 @@ export function InboxPage() {
 
   const pdcaGroups: Group[] = ['plan', 'do', 'check', 'act', 'ops']
 
-  const bannerSeverity: 'ok' | 'warn' | 'danger' | 'info' | 'neutral' =
-    !stats.hasAnyProject
-      ? 'neutral'
-      : !stats.setupDone
-        ? 'warn'
-        : stats.openActions > 0
-          ? 'danger'
-          : 'ok'
-
   usePublishPageContext({
     route: '/inbox',
     title: 'Action inbox',
@@ -200,16 +186,10 @@ export function InboxPage() {
   })
 
   const openStages = Math.max(0, stats.totalSurfaces - stats.clearStages)
-  const openActionCount = openCards.length
 
   const tabOptions = useMemo(
     () => [
       { id: 'overview' as const, label: copy?.tabLabels?.overview ?? 'Overview' },
-      {
-        id: 'actions' as const,
-        label: copy?.tabLabels?.actions ?? 'Actions',
-        count: openActionCount > 0 ? openActionCount : undefined,
-      },
       {
         id: 'stages' as const,
         label: copy?.tabLabels?.stages ?? 'Stages',
@@ -217,7 +197,7 @@ export function InboxPage() {
       },
       { id: 'activity' as const, label: copy?.tabLabels?.activity ?? 'Activity' },
     ],
-    [copy?.tabLabels, openActionCount, openStages],
+    [copy?.tabLabels, openStages],
   )
 
   if ((loading && !data) || (statsLoading && !statsData)) {
@@ -233,8 +213,8 @@ export function InboxPage() {
       </div>
     )
   }
-  if (error) return <ErrorAlert message={error} onRetry={reloadAll} />
-  if (statsError) return <ErrorAlert message={`Failed to load inbox stats: ${statsError}`} onRetry={reloadAll} />
+  if (error) return <PageLoadError error={error} resource="the inbox" onRetry={reloadAll} />
+  if (statsError) return <PageLoadError error={statsError} resource="the inbox counts" onRetry={reloadAll} />
 
   return (
     <div data-inbox-root className={PAGE_CONTENT_STACK} data-testid="mushi-page-inbox">
@@ -249,7 +229,7 @@ export function InboxPage() {
         }
         helpUseCases={
           copy?.help?.useCases ?? [
-            'Start every morning on Overview — read the banner, then switch to Actions',
+            'Start every morning on Overview — read the banner, then work the list top to bottom',
             'Use Stages tab to filter by Plan / Do / Check / Act / Ops',
             'Activity tab shows the events that triggered open cards',
           ]
@@ -259,32 +239,10 @@ export function InboxPage() {
           'Red banner = open work. Green banner = inbox zero. Every card has a primary CTA — no dead buttons.'
         }
       >
-        <Badge
-          className={
-            bannerSeverity === 'ok'
-              ? CHIP_TONE.okSubtle
-              : bannerSeverity === 'danger'
-                ? CHIP_TONE.dangerSubtle
-                : bannerSeverity === 'warn'
-                  ? CHIP_TONE.warnSubtle
-                  : CHIP_TONE.infoSubtle
-          }
-        >
-          {bannerSeverity === 'ok'
-            ? 'CLEAR'
-            : bannerSeverity === 'danger'
-              ? `${stats.openActions} OPEN`
-              : bannerSeverity === 'warn'
-                ? 'SETUP'
-                : 'START'}
-        </Badge>
         <FreshnessPill
           at={statsFetchedAt ?? lastFetchedAt}
           isValidating={statsValidating || isValidating}
         />
-        <Btn size="sm" variant="ghost" onClick={reloadAll} loading={statsValidating || isValidating}>
-          Refresh
-        </Btn>
       </PageHeaderBar>
 
       <PagePosture
@@ -299,20 +257,6 @@ export function InboxPage() {
                 onRefresh={reloadAll}
                 refreshing={statsValidating || isValidating}
                 plainBanner={ux.plainBanner}
-              />
-            ),
-          },
-          {
-            priority: POSTURE_PRIORITY.heroOrSnapshot,
-            show: !ux.hideInboxSnapshot,
-            children: (
-              <InboxSnapshotStrip
-                stats={stats}
-                statsFetchedAt={statsFetchedAt}
-                statsValidating={statsValidating}
-                sectionTitle={copy?.sections?.snapshot ?? 'INBOX SNAPSHOT'}
-                hint={activeTabMeta.description}
-                plainStageLabels={ux.plainStageLabels}
               />
             ),
           },
@@ -339,57 +283,10 @@ export function InboxPage() {
           stats={stats}
           openCards={openCards}
           clearCards={clearCards}
-          hideOverviewChrome={ux.hideOverviewChrome}
-          snapshotVisible={!ux.hideInboxSnapshot}
           onTab={setActiveTab}
           copy={copy ?? undefined}
           activityAtByGroup={activityAtByGroup}
         />
-      )}
-
-      {activeTab === 'actions' && (
-        <>
-          {visibleOpen.length > 0 ? (
-            <section aria-labelledby="inbox-open">
-              <header className="mb-2 flex items-center gap-2">
-                <h2 id="inbox-open" className="text-sm font-semibold text-fg">
-                  Awaiting action
-                </h2>
-                <SignalChip tone="neutral" className="tabular-nums">
-                  {visibleOpen.length} card{visibleOpen.length === 1 ? '' : 's'}
-                </SignalChip>
-                {visibleOpen.length > 1 ? (
-                  <InlineProof className="ml-auto border-0 bg-transparent px-0 py-0">
-                    Work top-to-bottom
-                  </InlineProof>
-                ) : null}
-              </header>
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                {visibleOpen.map((card, index) => (
-                  <OpenInboxCard
-                    key={card.id}
-                    card={card}
-                    priority={index + 1}
-                    isFirst={index === 0}
-                    activityAt={activityAtByGroup[card.group]}
-                  />
-                ))}
-              </div>
-            </section>
-          ) : (
-            <div className="space-y-3">
-              <EmptySectionMessage
-                text="Inbox zero"
-                hint="No open actions — switch to Stages to confirm cleared surfaces or Activity for recent events."
-              />
-              <ActionPillRow>
-                <ActionPill tone="neutral" onClick={() => setActiveTab('stages')}>
-                  View stages
-                </ActionPill>
-              </ActionPillRow>
-            </div>
-          )}
-        </>
       )}
 
       {activeTab === 'stages' && (
@@ -499,6 +396,15 @@ export function InboxPage() {
 
       {activeTab === 'activity' && (
         <>
+          {/* Quick mode hides the tab bar, so the Activity view (opened from
+              "View activity") needs its own way back. */}
+          {ux.hideTabs ? (
+            <ActionPillRow>
+              <ActionPill tone="neutral" onClick={() => setActiveTab('overview')}>
+                ← Back to inbox
+              </ActionPill>
+            </ActionPillRow>
+          ) : null}
           {activity.length > 0 ? (
             <section aria-labelledby="inbox-activity">
               <header className="mb-2 flex items-center gap-2">
@@ -544,9 +450,7 @@ function ActivityFeedRow({ item }: { item: ActivityItem }) {
         className="flex items-center gap-2 px-3 py-2 text-xs hover:bg-surface-overlay motion-safe:transition-opacity"
       >
         <SignalChip tone={item.kind === 'report' ? 'info' : 'brand'}>{item.kind}</SignalChip>
-        <ContainedBlock tone="neutral" className="min-w-0 flex-1 px-2 py-1">
-          <span className="block truncate text-fg-secondary">{item.label}</span>
-        </ContainedBlock>
+        <span className="min-w-0 flex-1 truncate text-fg-secondary">{item.label}</span>
         {item.meta ? (
           <MetaChip label="Meta">{item.meta}</MetaChip>
         ) : null}

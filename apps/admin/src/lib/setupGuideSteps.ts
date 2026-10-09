@@ -25,6 +25,7 @@
 
 import type { SetupProject, SetupStep } from './useSetupStatus'
 import type { ProjectSnapshot } from './projectSnapshotTypes'
+import { latestHeartbeatAt } from './heartbeat'
 
 export type SetupGuideStepState = 'done' | 'next' | 'blocked' | 'available'
 
@@ -70,12 +71,14 @@ export interface SetupGuideModel {
 
 /**
  * The required chain the backend models: you cannot install the SDK without a
- * key, and a report cannot arrive before the SDK is running. Nothing else is
- * asserted — see the module header.
+ * key, and a report needs a key to exist (the onboarding "send a test report"
+ * button is JWT-authed, so `sdk_installed` is *not* a prerequisite — since
+ * 2026-09 it is an optional step and the first report may be the fixture).
+ * Nothing else is asserted — see the module header.
  */
 const REQUIRED_PREREQUISITE: Record<string, string> = {
   sdk_installed: 'api_key_generated',
-  first_report_received: 'sdk_installed',
+  first_report_received: 'api_key_generated',
 }
 
 /**
@@ -91,7 +94,7 @@ const DONE_DESTINATION: Record<string, { to: string; label: string }> = {
   first_report_received: { to: '/reports', label: 'View reports' },
   github_connected: { to: '/integrations/config', label: 'View repo link' },
   sentry_connected: { to: '/integrations/config', label: 'View Sentry link' },
-  byok_anthropic: { to: '/settings', label: 'View key settings' },
+  byok_anthropic: { to: '/settings?tab=byok', label: 'View key settings' },
   first_fix_dispatched: { to: '/fixes', label: 'View fixes' },
   slack_connected: { to: '/integrations/config', label: 'View Slack link' },
   first_qa_story_passing: { to: '/qa-coverage', label: 'View QA stories' },
@@ -164,11 +167,7 @@ function factsForStep(step: SetupStep, ctx: FactContext): SetupGuideFact[] {
 
     case 'api_key_generated': {
       const keys = (snapshot?.api_keys ?? []).filter((k) => k.is_active !== false && !k.revoked)
-      const lastSeen = keys
-        .map((k) => k.last_seen_at ?? null)
-        .filter((v): v is string => Boolean(v))
-        .sort()
-        .pop()
+      const lastSeen = latestHeartbeatAt(keys)
       return compact([
         keys.length > 0 ? fact('Active keys', String(keys.length), 'ok') : null,
         fact('Last used', relativeTime(lastSeen, now) ?? (keys.length ? 'Not used yet' : null), lastSeen ? 'ok' : 'warn'),
@@ -262,6 +261,24 @@ export const NO_PROJECT_MODEL: SetupGuideModel = {
   nextStepId: 'project_created',
 }
 
+/**
+ * The one setup step to do now: the first incomplete required step whose
+ * prerequisite chain is satisfied. Every "do this next" marker on a setup
+ * list (the docked guide, the checklists, the onboarding lanes) reads this,
+ * via useNextStep, so they never point at different steps.
+ */
+export function nextSetupStepId(project: Pick<SetupProject, 'steps'> | null | undefined): string | null {
+  if (!project) return null
+  const completeById = new Map<string, boolean>(project.steps.map((s) => [s.id, s.complete]))
+  return (
+    project.steps.find((s) => {
+      if (!s.required || s.complete) return false
+      const prereq = REQUIRED_PREREQUISITE[s.id]
+      return !prereq || completeById.get(prereq) === true
+    })?.id ?? null
+  )
+}
+
 export function buildSetupGuideModel(
   project: SetupProject | null,
   options: {
@@ -283,13 +300,7 @@ export function buildSetupGuideModel(
   const completeById = new Map<string, boolean>(project.steps.map((s) => [s.id, s.complete]))
   const labelById = new Map<string, string>(project.steps.map((s) => [s.id, s.label]))
 
-  /** First incomplete required step whose prerequisite chain is satisfied. */
-  const nextStepId =
-    project.steps.find((s) => {
-      if (!s.required || s.complete) return false
-      const prereq = REQUIRED_PREREQUISITE[s.id]
-      return !prereq || completeById.get(prereq) === true
-    })?.id ?? null
+  const nextStepId = nextSetupStepId(project)
 
   const steps: SetupGuideStep[] = project.steps.map((step) => {
     const prereq = REQUIRED_PREREQUISITE[step.id]

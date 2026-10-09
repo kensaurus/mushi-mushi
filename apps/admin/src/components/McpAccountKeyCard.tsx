@@ -8,12 +8,13 @@
  *   <McpAccountKeyCard accountLabel="my-org" />
  */
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Btn, Tooltip } from './ui'
 import { apiFetch } from '../lib/supabase'
 import { useToast } from '../lib/toast'
 import { buildCursorOrgDeeplink, buildVsCodeOrgDeeplink } from '../lib/cursorDeeplink'
 import { RESOLVED_EXTERNAL_API_URL } from '../lib/env'
+import { describeActionError } from '../lib/actionError'
 
 interface Props {
   /** A short label for the MCP server name — appears as `mushi-{label}` in Cursor's server list. */
@@ -28,25 +29,34 @@ type Ide = 'cursor' | 'vscode'
 export function McpAccountKeyCard({ accountLabel = 'account', compact = false }: Props) {
   const toast = useToast()
   const [minting, setMinting] = useState<Ide | null>(null)
+  // One account key per page visit, shared by both buttons: each click used
+  // to mint another key while the tooltip said "Same key" (QA bug 126).
+  const mintedKey = useRef<string | null>(null)
 
   async function openOrgDeeplink(ide: Ide, writeScope: boolean) {
     setMinting(ide)
     try {
-      const res = await apiFetch<{ key: string }>('/v1/admin/mcp/mint-org-key', {
-        method: 'POST',
-        body: JSON.stringify({
-          scopes: writeScope ? ['mcp:write'] : ['mcp:read'],
-          label: `${accountLabel}-org-mcp`,
-        }),
-      })
-      if (!res.ok || !res.data?.key) {
-        toast.error('Key mint failed', 'Could not mint an account key. Check your plan limits.')
-        return
+      if (!mintedKey.current) {
+        const res = await apiFetch<{ key: string }>('/v1/admin/mcp/mint-org-key', {
+          method: 'POST',
+          body: JSON.stringify({
+            scopes: writeScope ? ['mcp:write'] : ['mcp:read'],
+            label: `${accountLabel}-org-mcp`,
+          }),
+          idempotencyKey: crypto.randomUUID(),
+        })
+        if (!res.ok || !res.data?.key) {
+          // The real reason (e.g. "Create a project before minting an account key."), not "plan limits".
+          toast.error('Could not create an account key', describeActionError(res.error, 'Try again in a moment.'))
+          return
+        }
+        mintedKey.current = res.data.key
       }
+      const key = mintedKey.current
       const deeplink =
         ide === 'cursor'
-          ? buildCursorOrgDeeplink(accountLabel, res.data.key, RESOLVED_EXTERNAL_API_URL)
-          : buildVsCodeOrgDeeplink(accountLabel, res.data.key, RESOLVED_EXTERNAL_API_URL)
+          ? buildCursorOrgDeeplink(accountLabel, key, RESOLVED_EXTERNAL_API_URL)
+          : buildVsCodeOrgDeeplink(accountLabel, key, RESOLVED_EXTERNAL_API_URL)
       window.open(deeplink, '_self')
       toast.success(
         `${ide === 'cursor' ? 'Cursor' : 'VS Code'} install launched`,
@@ -64,14 +74,14 @@ export function McpAccountKeyCard({ accountLabel = 'account', compact = false }:
       <div>
         <p className="text-sm font-medium text-fg">Account key (all projects)</p>
         <p className="text-xs text-fg-muted mt-0.5">
-          One server entry that covers every project you own. Use this when you work across multiple apps.
+          One server entry that covers every project you can open. Use this when you work across multiple apps.
           Run{' '}
           <code className="font-mono bg-surface-raised text-fg px-1 rounded">get_account_overview</code>
           {' '}in the MCP chat to see all projects at a glance.
         </p>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <Tooltip content="Mint an org-scoped mcp:read key — no MUSHI_PROJECT_ID, accesses all your projects" side="top">
+        <Tooltip content="Creates one read-only account key (no MUSHI_PROJECT_ID) that reaches every project you can open" side="top">
           <Btn
             size={size}
             variant="primary"
@@ -83,7 +93,7 @@ export function McpAccountKeyCard({ accountLabel = 'account', compact = false }:
             ＋ Cursor (all projects)
           </Btn>
         </Tooltip>
-        <Tooltip content="Same key, VS Code install" side="top">
+        <Tooltip content="Same account key as the Cursor button, installed in VS Code" side="top">
           <Btn
             size={size}
             variant="ghost"

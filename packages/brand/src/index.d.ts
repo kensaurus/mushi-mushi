@@ -33,9 +33,13 @@ export declare const MUSHI_TAGLINE_V2: {
   readonly northStar: string
   /** Compressed north-star for fixed-width fields (GitHub/npm description, og). */
   readonly oneLiner: string
+  /** Per-bug promise shared by `oneLiner` and the npm package descriptions. */
+  readonly promise: string
   readonly hero: string
   readonly subHero: string
   readonly category: string
+  /** `category: promise.` — npm descriptions, docs JSON-LD, default meta description. */
+  readonly pitch: string
   readonly micro: string
   readonly mark: string
 }

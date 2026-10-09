@@ -16,12 +16,16 @@
  */
 
 import { createAnthropic } from 'npm:@ai-sdk/anthropic@1'
-import { createOpenAI } from 'npm:@ai-sdk/openai@1'
+import { openAiProvider } from '../_shared/openai-compat.ts'
 import { generateText } from 'npm:ai@4'
 import { getServiceClient } from '../_shared/db.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
-import { ANTHROPIC_SONNET, ANTHROPIC_HAIKU, OPENAI_MINI } from '../_shared/models.ts'
+import { ANTHROPIC_HAIKU, MISTAKE_EFFORT, MISTAKE_MODEL, OPENAI_MINI, THINKING_HEADROOM_TOKENS } from '../_shared/models.ts'
+import { claudeGenerateText } from '../_shared/claude-messages.ts'
+import { UsageByModel } from '../_shared/pricing.ts'
+import { recordLlmUsage } from '../_shared/llm-usage.ts'
+import { projectLlmKey } from '../_shared/project-llm-key.ts'
 
 Deno.serve(
   withSentry(async (req: Request) => {
@@ -30,7 +34,7 @@ Deno.serve(
     }
 
     const authErr = requireServiceRoleAuth(req)
-    if (authErr && req.headers.get('x-mushi-trigger') !== 'manual') return authErr
+    if (authErr) return authErr
 
     const db = getServiceClient()
     const body = await req.json().catch(() => ({}))
@@ -68,32 +72,83 @@ Severity: ${lesson.severity}
 Sample reports:
 ${reportContext || '(none available)'}`
 
-    const anthropicFast = createAnthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY') })
-    const anthropicSonnet = createAnthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY') })
-    const openaiMini = createOpenAI({ apiKey: Deno.env.get('OPENAI_API_KEY') })
+    // The project's own keys first, the platform keys otherwise.
+    const anthropicResolved = await projectLlmKey(db, lesson.project_id as string, 'anthropic')
+    const openaiResolved = await projectLlmKey(db, lesson.project_id as string, 'openai')
+    const anthropicKey = anthropicResolved?.key
+    // Haiku 4.5 still takes the AI SDK v4 call shape; Sonnet goes through
+    // claude-messages.ts (Sonnet 5.5 rejects temperature and forced tools).
+    const anthropicFast = createAnthropic({ apiKey: anthropicKey })
+    const openaiMini = openAiProvider({
+      apiKey: openaiResolved?.key,
+      ...(openaiResolved?.baseUrl ? { baseURL: openaiResolved.baseUrl } : {}),
+    })
 
     const updates: Record<string, string> = {}
-    let totalCostUsd = 0
+    // Per-model totals for the response; the spend itself is one
+    // llm_invocations row per call, with the source of the key it used.
+    const ledger = new UsageByModel()
+    const usageWrites: Array<Promise<{ error: string | null }>> = []
+    const record = (
+      model: string,
+      stage: string,
+      startedAt: number,
+      outcome: { result?: { usage: { promptTokens: number; completionTokens: number } }; error?: unknown },
+      primaryModel: string = model,
+      keySource: 'byok' | 'env' | null = null,
+    ) => {
+      if (outcome.result) ledger.record(model, outcome.result.usage.promptTokens, outcome.result.usage.completionTokens)
+      usageWrites.push(recordLlmUsage(db, {
+        functionName: 'mistake-summarizer',
+        stage,
+        projectId: lesson.project_id as string,
+        model,
+        primaryModel,
+        keySource,
+        startedAt,
+      }, outcome))
+    }
+
+    async function callClaude(model: 'fast' | 'sonnet', prompt: string) {
+      if (model === 'fast') {
+        return generateText({ model: anthropicFast(ANTHROPIC_HAIKU), prompt, maxTokens: 200 })
+      }
+      if (!anthropicKey) throw new Error('No Anthropic key for this project')
+      return claudeGenerateText({
+        apiKey: anthropicKey,
+        model: MISTAKE_MODEL,
+        effort: MISTAKE_EFFORT,
+        prompt,
+        // The essay is ~800 output tokens; adaptive thinking counts toward the cap.
+        maxTokens: 1200 + THINKING_HEADROOM_TOKENS,
+      })
+    }
 
     async function callLlm(model: 'fast' | 'sonnet', prompt: string): Promise<string> {
+      const claudeModel = model === 'fast' ? ANTHROPIC_HAIKU : MISTAKE_MODEL
+      const stage = model === 'fast' ? 'lesson-summarise' : 'lesson-essay'
+      const claudeStart = Date.now()
       try {
-        const { text, usage } = await generateText({
-          model: model === 'fast' ? anthropicFast(ANTHROPIC_HAIKU) : anthropicSonnet(ANTHROPIC_SONNET),
-          prompt,
-          maxTokens: model === 'fast' ? 200 : 1200,
-        })
-        const costPerInputM = model === 'fast' ? 0.8 : 3
-        const costPerOutputM = model === 'fast' ? 2.4 : 15
-        totalCostUsd += (usage.promptTokens / 1_000_000) * costPerInputM
-          + (usage.completionTokens / 1_000_000) * costPerOutputM
-        return text.trim()
-      } catch {
-        const { text } = await generateText({
-          model: openaiMini(OPENAI_MINI),
-          prompt,
-          maxTokens: model === 'fast' ? 200 : 1200,
-        })
-        return text.trim()
+        const result = await callClaude(model, prompt)
+        record(claudeModel, stage, claudeStart, { result }, claudeModel, anthropicResolved?.source ?? null)
+        return result.text.trim()
+      } catch (claudeErr) {
+        // No key means no paid call, so no row.
+        if (anthropicKey) record(claudeModel, stage, claudeStart, { error: claudeErr }, claudeModel, anthropicResolved?.source ?? null)
+        if (!openaiResolved) throw claudeErr
+        const openaiStart = Date.now()
+        try {
+          const result = await generateText({
+            model: openaiMini(OPENAI_MINI),
+            prompt,
+            maxTokens: model === 'fast' ? 200 : 1200,
+          })
+          record(OPENAI_MINI, stage, openaiStart, { result }, claudeModel, openaiResolved.source)
+          return result.text.trim()
+        } catch (openaiErr) {
+          record(OPENAI_MINI, stage, openaiStart, { error: openaiErr }, claudeModel, openaiResolved.source)
+          throw openaiErr
+        }
       }
     }
 
@@ -144,20 +199,26 @@ Use clear headings. Be opinionated and specific.`,
     }
 
     if (Object.keys(updates).length > 0) {
-      await db.from('lessons').update(updates).eq('id', lessonId)
+      const { error: updateErr } = await db.from('lessons').update(updates).eq('id', lessonId)
+      if (updateErr) {
+        return new Response(JSON.stringify({ error: `Could not save the lesson views: ${updateErr.message}` }), { status: 500 })
+      }
 
-      await db.from('llm_cost_usd').insert({
-        project_id: lesson.project_id,
-        operation: 'lesson-summarise',
-        model: ANTHROPIC_HAIKU,
-        input_tokens: 0,
-        output_tokens: 0,
-        cost_usd: totalCostUsd,
-      })
+      // One llm_invocations row per call (so a fallback run lands in each
+      // model's own cost bucket). These rows feed the per-project LLM budget.
+      const costErr = (await Promise.all(usageWrites)).find((w) => w.error)?.error ?? null
+      if (costErr) {
+        // The spend ledger feeds the per-project LLM budget; an unrecorded
+        // spend is a failure, not a success with a missing row.
+        return new Response(
+          JSON.stringify({ error: `Saved the lesson views but could not record their LLM cost: ${costErr}`, lessonId, updated: Object.keys(updates) }),
+          { status: 500 },
+        )
+      }
     }
 
     return new Response(
-      JSON.stringify({ ok: true, lessonId, updated: Object.keys(updates), costUsd: totalCostUsd }),
+      JSON.stringify({ ok: true, lessonId, updated: Object.keys(updates), costUsd: ledger.totalCostUsd }),
       { headers: { 'content-type': 'application/json' } },
     )
   }),

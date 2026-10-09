@@ -146,6 +146,31 @@ describe('apiCall timeout (C6)', () => {
     expect(text).toContain('MUSHI_MCP_TIMEOUT_MS')
   })
 
+  it('gives get_repo_digest a longer deadline than the global one, never a shorter one', async () => {
+    // The digest route reads files from GitHub for up to 60 s; the default
+    // 15 s budget would abort it while the server is still working.
+    // Answers after 150 ms unless the caller's signal aborts first.
+    const slow = vi.fn(async (_url: string, init?: RequestInit) => {
+      await new Promise<void>((resolve, reject) => {
+        const t = setTimeout(resolve, 150)
+        init?.signal?.addEventListener('abort', () => {
+          clearTimeout(t)
+          reject(init.signal!.reason as Error)
+        }, { once: true })
+      })
+      return new Response(JSON.stringify({ ok: true, data: { text: 'digest' } }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }) as unknown as typeof fetch
+    client = await connect({ fetch: slow, timeoutMs: 60 })
+    const digest = await client.callTool({ name: 'get_repo_digest', arguments: {} })
+    expect(digest.isError).toBeFalsy()
+    const other = await client.callTool({ name: 'get_recent_reports', arguments: {} })
+    expect(other.isError).toBe(true)
+    expect(firstText(other)).toContain('MUSHI_TIMEOUT')
+  })
+
   it('bounds the body read too — headers sent, body stalled', async () => {
     // undici keeps the abort signal attached to the response body, so a
     // server that answers with headers and then stalls the stream errors the

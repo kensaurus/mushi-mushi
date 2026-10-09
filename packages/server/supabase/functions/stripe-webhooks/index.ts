@@ -38,6 +38,7 @@ import { getPlan, getPlanByBaseLookupKey } from '../_shared/plans.ts'
 import { invalidateQuotaCache } from '../_shared/quota.ts'
 import { reportMessage, withSentry } from '../_shared/sentry.ts'
 import { notifyOperator, type NotifyField } from '../_shared/operator-notify.ts'
+import { emitProductEvent } from '../_shared/product-events.ts'
 
 const wlog = log.child('stripe-webhooks')
 
@@ -147,6 +148,17 @@ const upsertSubscription = async (db: Db, raw: Record<string, unknown>) => {
   )
   if (error) throw new Error(`subscription_upsert_failed: ${error.message}`)
   invalidateQuotaCache(projectId)
+
+  // Company funnel (mushi-self): a paid plan going active. Dedup on the Stripe
+  // subscription id so created/updated retries collapse to one row.
+  if (sub.status === 'active' && planId && planId !== 'free_cloud') {
+    void emitProductEvent(db, {
+      eventName: 'upgrade_completed',
+      surface: 'server',
+      properties: { project_id: projectId, plan: planId },
+      dedupKey: `upgrade_completed:${subId}`,
+    })
+  }
 }
 
 // `checkout.session.completed` doesn't necessarily mean the card is good —

@@ -50,8 +50,7 @@ import { Link } from 'react-router-dom'
 import { Card, Btn, Badge, DetailRows } from './ui'
 import { ContainedBlock, SignalChip } from './report-detail/ReportSurface'
 import { IconHealth, IconNetwork, IconGlobe, IconKey } from './icons'
-import { apiFetch } from '../lib/supabase'
-import { useToast } from '../lib/toast'
+import { useSendTestReport } from '../lib/useSendTestReport'
 import type { SetupStep } from '../lib/useSetupStatus'
 import {
   formatEnvVarPair,
@@ -62,6 +61,7 @@ import {
 } from '../lib/projectMushiEnv'
 import { sdkPlatformHintFromUserAgent, sdkOriginKind } from '../lib/sdkClientPlatform'
 import { CHIP_TONE } from '../lib/chipTone'
+import { freshestHeartbeatKey } from '../lib/heartbeat'
 
 // Heartbeat columns mirror the server-side select in
 // routes/billing-projects-queue-graph.ts on /v1/admin/projects.
@@ -69,6 +69,8 @@ export interface SdkHealthApiKey {
   id: string
   key_prefix: string
   label?: string | null
+  /** Present on rows from GET /v1/admin/projects. */
+  scopes?: string[] | null
   is_active: boolean
   created_at: string
   last_seen_at?: string | null
@@ -630,7 +632,7 @@ export function SdkHealthSummary({
   compact = false,
   onTestReportSent,
 }: SdkHealthSummaryProps) {
-  const toast = useToast()
+  const postTestReport = useSendTestReport()
   const [sending, setSending] = useState(false)
   // Diagnostic accordion auto-opens when the status is anything OTHER than
   // healthy — i.e. we expand it precisely when the user has come here to
@@ -656,25 +658,15 @@ export function SdkHealthSummary({
   const tone = STATUS_TONE[status]
   const playbook = buildPlaybook(envVars, projectSlug)[status]
   const activeKeys = apiKeys.filter((k) => k.is_active)
-  const freshest = activeKeys
-    .filter((k) => k.last_seen_at)
-    .sort((a, b) => (a.last_seen_at! < b.last_seen_at! ? 1 : -1))[0]
+  const freshest = freshestHeartbeatKey(activeKeys)
 
   async function sendTestReport() {
     setSending(true)
     try {
-      const res = await apiFetch<{ reportId: string; projectName: string }>(
-        `/v1/admin/projects/${projectId}/test-report`,
-        { method: 'POST' },
-      )
-      if (!res.ok) throw new Error(res.error?.message ?? 'Send failed')
-      toast.success(
-        'Test report sent',
-        'Ingest path verified — appears in /reports within seconds. SDK installed still needs a heartbeat from your app build.',
-      )
-      onTestReportSent?.()
-    } catch (err) {
-      toast.error('Test report failed', err instanceof Error ? err.message : String(err))
+      // Verifies the ingest path only; "SDK installed" still needs a
+      // heartbeat from the app build itself.
+      const res = await postTestReport(projectId)
+      if (res.ok) onTestReportSent?.()
     } finally {
       setSending(false)
     }
@@ -845,7 +837,7 @@ export function SdkHealthSummary({
           <span aria-hidden="true" className="ml-1.5">{open ? '▴' : '▾'}</span>
         </Btn>
         <Link
-          to={isExpoReporterProject(projectSlug) ? '/setup-copilot' : '/onboarding'}
+          to={isExpoReporterProject(projectSlug) ? '/onboarding?tab=copilot' : '/onboarding'}
           className="text-2xs text-fg-muted hover:text-fg underline-offset-2 hover:underline ml-auto"
         >
           {isExpoReporterProject(projectSlug) ? 'Setup Copilot →' : 'Setup guide →'}

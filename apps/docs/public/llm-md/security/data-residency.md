@@ -4,38 +4,45 @@ Source: https://kensaur.us/mushi-mushi/docs/security/data-residency
 
 ---
 title: Data residency
+description: Where Mushi Cloud stores data today (Tokyo, ap-northeast-1), how the region picked at project creation works, and what the SDK does about regions.
 ---
 
 # Data residency
 
 > **Scenario:** Your EU customers' data must stay in the EU to comply with GDPR. You need to ensure that report ingestion, embeddings, screenshots, and AI calls never leave your chosen region.
 
-Mushi Cloud is designed for regional isolation — separate Supabase projects per region with **no inter-region replication**. As of June 2026, all production traffic runs on a single Supabase project in `ap-northeast-1` (`dxptnwrhwsqckaftyymj`). EU and JP regional clusters are reserved; the SDK still accepts `region: 'eu' | 'jp'` and routes to the same origin until dedicated regional DNS ships.
+Mushi Cloud is designed for regional isolation — separate Supabase projects per region with **no inter-region replication**. Today all production traffic runs on a single Supabase project in `ap-northeast-1` (Tokyo, `dxptnwrhwsqckaftyymj`), whatever region a project picked. EU and US regional clusters are reserved, not live.
 
-## Available regions
+## Regions
 
-| Region | API endpoint (today) | Planned Supabase region |
+| Region picked at creation | Where the data lives today | Planned dedicated cluster |
 | --- | --- | --- |
-| **US** (default) | `https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api` | `us-east-1` (future dedicated cluster) |
-| **EU** | Same origin until EU cluster ships | `eu-central-1` |
-| **JP** | Same origin until JP cluster ships | `ap-northeast-1` |
+| **US** (default) | Tokyo (`ap-northeast-1`), the single hosted project | `us-east-1` |
+| **EU** | Tokyo, same project | `eu-central-1` |
+| **JP** | Tokyo, same project | `ap-northeast-1` |
 
   Region is **immutable** — it is set at project creation and cannot be changed. Create a new project to move regions.
 
 ## How the SDK routes
 
-The SDK reads `MushiOptions.region` (or auto-detects from the `reporterToken` prefix `us_`, `eu_`, `jp_`) and resolves the API endpoint via `resolveRegionEndpoint`:
+The browser SDK has no `region` option. It sends everything to `apiEndpoint`,
+which defaults to `https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api`,
+and every region resolves to that endpoint today. API keys use one `mushi_…`
+format in every region.
+
+`@mushi-mushi/core` also exports `resolveRegionEndpoint`, which asks the
+gateway which endpoint serves a project and caches the answer in
+`localStorage` for 24 hours. Until regional clusters ship it returns the same
+endpoint.
 
 ```ts
+import { resolveRegionEndpoint } from '@mushi-mushi/core'
 
-const mushi = init({
+const endpoint = await resolveRegionEndpoint({
   projectId: 'YOUR_PROJECT_ID',
-  apiKey: 'eu_pk_…',
-  region: 'eu',
+  apiEndpoint: 'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api',
 })
 ```
-
-If no region is set, the SDK defaults to the US Supabase endpoint above.
 
 ## Attestation
 

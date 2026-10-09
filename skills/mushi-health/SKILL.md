@@ -1,10 +1,6 @@
 ---
 name: mushi-health
-description: >-
-  Pass/fail health check across every Mushi Mushi pipeline component — CLI
-  credentials, API reachability, edge functions, BYOK key pool, QA cron.
-  Use when "is mushi working", "mushi health check", "check mushi pipeline",
-  "mushi deploy check", "pipeline not responding", or right after setup.
+description: "Pass/fail health check across a Mushi Mushi install: CLI credentials, API health, the report pipeline, the BYOK key pool and scheduled QA runs. Use when asked 'is mushi working', 'mushi health check', 'check mushi pipeline' or 'mushi deploy check', when the pipeline stops responding, or right after setup."
 triggers:
   - "is mushi working"
   - "mushi health check"
@@ -17,20 +13,22 @@ triggers:
 license: MIT
 ---
 
-# Mushi Health Check
+# Mushi health check
 
 Run these checks in order. Stop and fix at the first ❌ before continuing.
+Every step uses the CLI or the MCP server, so it works the same on Mushi Cloud
+and on a self-hosted install.
 
 ## Component map
 
 | # | Component | How to check |
 |---|-----------|-------------|
 | 1 | CLI credentials | `mushi doctor` |
-| 2 | API + edge functions | `mushi deploy check` |
-| 3 | Project overview | `mushi status` |
+| 2 | API health | `mushi deploy check` |
+| 3 | Project overview and plan | `mushi status`, `mushi billing status` |
 | 4 | BYOK key pool | `mushi keys list` or MCP `list_byok_keys` |
-| 5 | Supabase logs | Supabase MCP `get_logs` |
-| 6 | QA cron running | DB query on `qa_story_runs` |
+| 5 | Report pipeline | `mushi test`, then `mushi reports list --limit 1` |
+| 6 | Scheduled QA runs | `mushi qa stories`, then `mushi qa runs <story-id>` |
 
 ---
 
@@ -54,43 +52,44 @@ Exit codes: `0` all pass · `2` advisory warnings only · `1` any hard failure.
 Each `FAIL` line is followed by a `→ Fix:` hint; `mushi doctor --json` includes
 the same hints in a `hint` field.
 
-**Fix if FAIL:** follow the printed `→ Fix:` hint, or re-run
-`mushi login --api-key mushi_... --endpoint https://<ref>.supabase.co/functions/v1/api --project-id <pid>`.
+**Fix if FAIL:** follow the printed `→ Fix:` hint, or run `mushi login` again
+(it opens the browser; `mushi login --api-key mushi_... --project-id <uuid>` is
+the non-interactive form for CI).
 
 ---
 
-## Step 2 — API + edge functions
+## Step 2 — API health
 
 ```bash
 mushi deploy check
 ```
 
-Probes each edge function with a lightweight ping. Healthy output:
+Calls the API's `/health` endpoint once and prints the status and latency.
+Healthy output:
 
 ```
-✓  api
-✓  classify-report
-✓  fix-worker
-✓  story-mapper
-✓  test-gen-from-story
-✓  pdca-runner
-✓  qa-story-runner
+Health: OK (200) — 180ms
 ```
 
-A `✗` on any line means that function is down. Check its logs in Step 5.
+`FAIL`, or an error instead of a status line, means the API is down or the
+endpoint is wrong. On Mushi Cloud, open an issue with the output; if you
+self-host, read the `api` function's logs (see
+[`SELF_HOSTED.md`](https://github.com/kensaurus/mushi-mushi/blob/master/SELF_HOSTED.md)).
+This checks the API only; steps 5 and 6 exercise the classifier and the QA
+runner.
 
 ---
 
-## Step 3 — Project overview
+## Step 3 — Project overview and plan
 
 ```bash
-mushi status
+mushi status           # reports by status and severity, fixes, lessons
+mushi billing status   # plan, diagnoses used against the limit, spend cap
 ```
 
 Confirm:
-- Report count is non-zero (or expected zero for a brand-new project).
-- `autofix_agent` shows the expected agent (`cursor_cloud`, `mcp`, etc.).
-- No `billing: quota_exceeded` warning.
+- The report counts are what you expect (zero is fine for a brand-new project).
+- `Diagnoses` in `mushi billing status` is not at its limit.
 
 ---
 
@@ -102,80 +101,72 @@ Via CLI:
 mushi keys list
 ```
 
-Via MCP (if the Mushi MCP server is active in Cursor):
+Via MCP (if the Mushi MCP server is active in your editor):
 
 ```
 list_byok_keys(projectId)
 ```
 
-**Healthy:** at least one `anthropic` key with `status=active`, at least one `firecrawl` key with `status=active`.
+**Healthy:** at least one `anthropic` key with `status=active`, and at least
+one `firecrawl` key with `status=active` if you use story mapping.
 
-**Fix:** Add a missing or exhausted key:
-
-```bash
-mushi keys add --provider anthropic --key sk-ant-... --label "primary" --priority 100
-mushi keys add --provider firecrawl --key fc-...   --label "primary" --priority 100
-```
-
----
-
-## Step 5 — Supabase edge function logs
-
-Use the Supabase MCP (requires `SUPABASE_ACCESS_TOKEN` in MCP config):
-
-```
-get_logs(service: 'api')
-```
-
-Look for `ERROR` lines in the last 15 minutes, especially from:
-- `story-mapper` — Firecrawl timeout or Claude quota
-- `test-gen-from-story` — LLM key exhausted
-- `pdca-runner` — failed PDCA cycle
-- `qa-story-runner` — Browserbase quota or Firecrawl error
-
-If the Supabase MCP is not wired in Cursor, use the CLI:
+**Fix:** add a missing or exhausted key. Pass it through `MUSHI_BYOK_KEY` so it
+stays out of shell history and the process list:
 
 ```bash
-supabase functions logs story-mapper --project-ref <ref>
-supabase functions logs qa-story-runner --project-ref <ref>
+MUSHI_BYOK_KEY="$ANTHROPIC_API_KEY" mushi keys add --provider anthropic --label primary --priority 100
+MUSHI_BYOK_KEY="$FIRECRAWL_API_KEY" mushi keys add --provider firecrawl --label primary --priority 100
 ```
 
 ---
 
-## Step 6 — QA cron running
+## Step 5 — Report pipeline
 
-Verify scheduled tests are executing (requires Supabase MCP):
+Send a test report and watch it get classified:
 
-```sql
-SELECT status, COUNT(*) 
-FROM qa_story_runs 
-WHERE created_at > NOW() - INTERVAL '2 hours'
-GROUP BY status;
+```bash
+mushi test
+mushi reports list --limit 1
 ```
 
-**Healthy output:** at least one `completed` row in the last 2 hours (if you have enabled stories).
-
-If `qa_story_runs` is empty:
-1. Confirm at least one story has `enabled = true` and `approval_status = 'approved'`.
-2. Confirm the pg_cron job is registered: `SELECT jobname, schedule FROM cron.job WHERE jobname LIKE 'qa%';`
-3. Manually trigger: `mushi tdd run <qa-story-id>` and re-check.
+**Healthy:** the newest report's `STATUS` reaches `classified` and its `SEV`
+column is filled within about 30 seconds. Still `pending` after a minute means
+classification failed — continue with [`mushi-debug`](../mushi-debug/SKILL.md).
 
 ---
 
-## Pass/Fail Summary Template
+## Step 6 — Scheduled QA runs
+
+Skip this step if you have no enabled QA stories.
+
+```bash
+mushi qa stories              # last run per story; [disabled] marks paused ones
+mushi qa runs <story-id>      # recent runs for one story
+```
+
+**Healthy:** each enabled story shows a recent run.
+
+If nothing has run:
+1. Check the story is approved: `mushi tdd pending` lists stories still waiting.
+2. Check it is enabled in **QA Coverage → story detail**.
+3. Trigger one run by hand: `mushi qa run <story-id>`, then re-check.
+
+---
+
+## Pass/fail summary template
 
 After running all steps, record results:
 
 | Component | Status | Notes |
 |-----------|--------|-------|
 | CLI credentials | ✅ / ❌ | |
-| Edge functions | ✅ / ❌ | Which ones failed? |
-| Project overview | ✅ / ❌ | Billing ok? |
+| API health | ✅ / ❌ | Status and latency? |
+| Project overview and plan | ✅ / ❌ | Diagnoses under the limit? |
 | BYOK key pool | ✅ / ❌ | Missing providers? |
-| Supabase logs | ✅ / ❌ | Any ERRORs? |
-| QA cron | ✅ / ❌ | Last run at? |
+| Report pipeline | ✅ / ❌ | Classified within a minute? |
+| Scheduled QA runs | ✅ / ❌ | Last run at? |
 
-If all ✅ → pipeline is healthy.  
+If all ✅ → the pipeline is healthy.
 If any ❌ → use [`mushi-debug`](../mushi-debug/SKILL.md) for targeted diagnosis.
 
 ---
@@ -184,7 +175,6 @@ If any ❌ → use [`mushi-debug`](../mushi-debug/SKILL.md) for targeted diagnos
 
 | Symptom | Likely cause | Fix |
 |---------|-------------|-----|
-| `mushi doctor` can't reach endpoint | Wrong `MUSHI_API_ENDPOINT` in `~/.config/mushi/config.json` | Re-run `mushi login --endpoint https://...` |
-| All edge functions ❌ | Supabase project paused (free tier) | Restore the project in the Supabase dashboard |
-| BYOK keys all `quota_exhausted` | Rate limits hit on all keys | Add a backup key for each provider |
-| QA cron never fires | pg_cron job missing | Re-run migration `20260602000003_pdca_qa_improve_cron.sql` |
+| `mushi doctor` can't reach the endpoint | Wrong endpoint in `~/.config/mushi/config.json` | Run `mushi login` again (add `--endpoint https://...` if you self-host) |
+| `mushi deploy check` fails on a self-hosted install | Supabase project paused (free tier) | Restore the project in the Supabase dashboard |
+| BYOK keys all `quota_exhausted` | Rate limits hit on every key | Add a backup key for each provider |

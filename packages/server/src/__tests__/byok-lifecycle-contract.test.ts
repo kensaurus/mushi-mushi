@@ -101,14 +101,19 @@ describe('validated BYOK lifecycle contract', () => {
     expect(panel).toContain('Test first');
   });
 
-  it('keeps dedicated Firecrawl and Browserbase panels on the pooled lifecycle with legacy fallback', () => {
-    for (const source of [firecrawlPanel, browserbasePanel]) {
-      expect(source).toContain("'/v1/admin/byok/keys'");
-      expect(source).toContain('/v1/admin/byok/keys/${poolKey.id}/test');
-      expect(source).toContain('/v1/admin/byok/keys/${poolKey.id}');
-      expect(source).toContain('legacy BYOK');
+  // Since 2026-10-05 the Firecrawl and Browserbase keys have one editor, on
+  // AI keys (pooled lifecycle, legacy rows included); Web tools only shows
+  // their status and links to the row. Two editors for one key was the bug.
+  it('edits Firecrawl and Browserbase keys only in AI keys, on the pooled lifecycle', () => {
+    for (const [source, row] of [[firecrawlPanel, 'key-firecrawl'], [browserbasePanel, 'key-browserbase']] as const) {
+      expect(source).not.toContain("'/v1/admin/byok/keys'");
+      expect(source).not.toContain('/v1/admin/byok/keys/${poolKey.id}');
+      expect(source).toContain(`/settings?tab=byok#${row}`);
     }
     expect(panel).toContain("'firecrawl', 'browserbase'");
+    expect(panel).toContain("apiFetch('/v1/admin/byok/keys', {");
+    expect(panel).toContain('`/v1/admin/byok/keys/${key.id}/test`');
+    expect(panel).toContain('`/v1/admin/byok/${removeTarget.provider_slug}`');
   });
 
   it('surfaces legacy credential metadata wherever pooled keys are listed', () => {

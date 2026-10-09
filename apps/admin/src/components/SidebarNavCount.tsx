@@ -37,6 +37,7 @@ export function SidebarNavCount({ count, label, attention }: Props) {
   if (count <= 0) return null
   return (
     <span
+      role="img"
       aria-label={label}
       title={label}
       className="ml-auto text-2xs font-medium tabular-nums text-fg-muted"

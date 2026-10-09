@@ -326,27 +326,6 @@ export function qaProviderOverlay(
   return { posture: 'clear', metric: 'Available' }
 }
 
-/** Integrations setup step overlay (1-based step index strings). */
-export function integrationsStepOverlay(
-  stepIndex: number,
-  flags: { githubOk: boolean; sentryOk: boolean; langfuseOk: boolean; slackOk: boolean },
-): WorkflowStageOverlay {
-  switch (stepIndex) {
-    case 1:
-      return flags.githubOk
-        ? { posture: 'clear', metric: 'Connected' }
-        : { posture: 'open', metric: 'Not linked', actionLine: 'Required for auto-fix PRs.' }
-    case 2:
-      return flags.sentryOk ? { posture: 'clear', metric: 'Connected' } : { posture: 'info', metric: 'Optional' }
-    case 3:
-      return flags.langfuseOk ? { posture: 'clear', metric: 'Connected' } : { posture: 'info', metric: 'Optional' }
-    case 5:
-      return flags.slackOk ? { posture: 'clear', metric: 'Connected' } : { posture: 'info', metric: 'Optional' }
-    default:
-      return { posture: 'info', metric: 'Optional' }
-  }
-}
-
 /** Drift severity live counts overlay. */
 export function driftSeverityOverlay(
   severityId: string,
@@ -553,63 +532,3 @@ export function promptLabStageOverlay(
   return { posture: 'clear', metric: '—' }
 }
 
-/** Reports severity band overlay. */
-export function reportsSeverityOverlay(
-  bandId: string,
-  stats: {
-    critical14d: number
-    high14d: number
-    newUntriaged: number
-    openBacklog: number
-    topPriority: string
-  },
-): WorkflowStageOverlay {
-  if (bandId === 'critical') {
-    return stats.critical14d > 0
-      ? { posture: 'danger', metric: `${stats.critical14d} (14d)` }
-      : { posture: 'clear', metric: '0' }
-  }
-  if (bandId === 'high') {
-    return stats.high14d > 0
-      ? { posture: 'warn', metric: `${stats.high14d} (14d)` }
-      : { posture: 'clear', metric: '0' }
-  }
-  if (bandId === 'backlog') {
-    return stats.openBacklog > 0
-      ? { posture: 'open', metric: `${stats.openBacklog} open` }
-      : { posture: 'clear', metric: 'Clear' }
-  }
-  if (bandId === 'untriaged') {
-    return stats.newUntriaged > 0
-      ? { posture: 'open', metric: `${stats.newUntriaged} new` }
-      : { posture: 'clear', metric: 'Clear' }
-  }
-  return { posture: 'clear' }
-}
-
-/** Settings tab overlay from local probe flags. */
-export function settingsTabOverlay(
-  tabId: string,
-  flags: {
-    hasByokKey?: boolean
-    slackConfigured?: boolean
-    githubConfigured?: boolean
-  },
-): WorkflowStageOverlay {
-  if (tabId === 'byok') {
-    return flags.hasByokKey
-      ? { posture: 'clear', metric: 'Key saved' }
-      : { posture: 'open', metric: 'No BYOK key' }
-  }
-  if (tabId === 'slack') {
-    return flags.slackConfigured
-      ? { posture: 'clear', metric: 'Connected' }
-      : { posture: 'info', metric: 'Optional' }
-  }
-  if (tabId === 'github') {
-    return flags.githubConfigured
-      ? { posture: 'clear', metric: 'Connected' }
-      : { posture: 'open', metric: 'Not linked' }
-  }
-  return { posture: 'clear', metric: 'Ready' }
-}

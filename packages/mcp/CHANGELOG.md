@@ -1,5 +1,170 @@
 # @mushi-mushi/mcp
 
+## 0.24.4
+
+### Patch Changes
+
+- 6f389a3: `add_byok_key` and `mushi keys add --provider` accept `openrouter`: OpenRouter keys are their own BYOK provider instead of an OpenAI key with an openrouter.ai base URL.
+- 9556ab2: Shorter READMEs with a diagram of how the package fits, a copy-paste quick start and a table of what is inside. Fixes three wrong examples: the Node handlers and `attachUnhandledHook` take `{ client }` (Hono's handler also takes `next`), and `useMushi()` has no `open`, `close` or `setUser`.
+- Updated dependencies [9556ab2]
+  - @mushi-mushi/core@1.31.2
+
+## 0.24.3
+
+### Patch Changes
+
+- 7690263: `McpBuildInput` takes an optional `pinSpec` so a host can write the published `@mushi-mushi/mcp` version into stdio configs instead of the version it was built with. Only an exact `@mushi-mushi/mcp@<semver>` is used; anything else falls back to `MCP_PIN_SPEC`.
+- 7690263: `improve_qa_story` works on one project per call. Leave `projectId` out to use the configured project.
+
+## 0.24.2
+
+### Patch Changes
+
+- 56ec263: `add_byok_key` and `mushi keys add --provider` accept `supabase`: a scoped, read-only Supabase access token (`sbp_…`) for the project's linked Supabase project. The server checks it with a read-only query against `supabase_project_ref`, so set the ref first (console Settings → General → Supabase project). `mushi audit` and `run_fullstack_audit` now name the real console paths for both steps.
+
+## 0.24.1
+
+### Patch Changes
+
+- 90d0603: `dispatch_fix` takes an optional `targetRepoId` (`target_repo_id` works too): the linked repo (`project_repos.id`) the fix PR opens against, for a project with several repos. Omit it to keep using the primary repo. The id must belong to the report's project; anything else is refused with `400 TARGET_REPO_NOT_IN_PROJECT`.
+
+## 0.24.0
+
+### Minor Changes
+
+- 5ad0800: Add three App Recipe and design-plane tools, on by default in the `inventory` group:
+
+  - `get_app_recipe` returns one card per part of the app (schema, design, routes, gates, CI, deploy, env, integrations). Each card is `ok`, `drift`, `unknown`, `not_connected` or `error`, and `unknown` never means healthy.
+  - `get_design_tokens` returns the app's design tokens plus a `nameMap` from each CSS variable or TS name to its token. A fix can then use the app's tokens instead of hard-coded colours, spacing and fonts.
+  - `get_design_deviance` returns the 0–100 design deviance score (lower is better), the score for each rule, the trend, and the top off-token findings with the nearest token to use instead.
+
+  `get_fix_context` now also returns `recipe`. This is a design excerpt of at most 4 KB with the tokens, the deviance score and the findings in the files the fix touches. When the excerpt can't be read, `recipe` is `{ state, note }` and the rest of the fix context still comes back. `use_mushi` gains a `design` intent, and `list_gate_findings` accepts the `design_drift`, `ci_drift`, `deploy_drift` and `env_drift` gates.
+
+- 5ad0800: Add `get_repo_digest`: the connected GitHub repo as one paste-ready text digest at a pinned commit (tree plus ranked files, cut to a token budget), scoped to a folder or to the files one bug touches. It needs no codebase index, ships on the default feature set, and wraps its output as untrusted data. `.env` files and keys are never included, and a file that looks like it holds a secret is replaced with a notice.
+- 5ad0800: Add three tools, on by default in the `inventory` group. The two portfolio tools need an account-level key; a key bound to one project gets a 403.
+
+  - `get_portfolio` returns one card per app in an organization: the worst recipe state, open reports, the latest release, the Mushi SDK against the latest release of the same package, and the hole checks. A check that never ran reads `never_run`, never as healthy.
+  - `list_portfolio_findings` returns the problems open in two or more apps (one paste-ready fix prompt each), the SDK version of every app, and integrations most of your other apps have but one lacks.
+  - `get_radar` returns the hole checks: store names that differ between stores, a missing listing language, an expiring domain or certificate, missing security headers, a broken privacy link, storage rows deleted with SQL, and store build rules your app no longer meets. A check that never ran reads `unknown`, never healthy. `scope: "organization"` lists the open findings of every app.
+
+  The portfolio tools take an optional `organizationId`; without it, your only organization is used.
+
+  Also adds `get_recipe_drift` (what drifted from the recipe — CI workflows, deploys not live, env names, unapplied migrations, off-token values — each with a fix) and `list_connectors` (the sources an organization connected, their status and scopes; never credentials). `list_gate_findings` accepts the `portfolio_radar`, `portfolio_radar_ci` and `store_review` gates.
+
+  Three write tools, dry run by default: `propose_recipe_change` (one draft PR to paths the recipe allows; it stays a draft), `propose_portfolio_change` (the same fix in up to 10 repos, one draft PR each) and `request_connector_action` (asks for a store action such as a Play rollout change; nothing runs until a person approves and runs it in the console — a key can never approve). The server instructions now list them with the other confirm-first tools.
+
+  Also adds `get_store_status`: the latest store review of an app. It compares the listing in the repo with what is live, checks listing claims against the code, checks privacy labels against data-collecting SDKs and iOS screenshots, and ends with a pre-submission checklist. A check that did not run reads `unknown`, never healthy. It is a check against the code, not legal advice.
+
+### Patch Changes
+
+- 5ad0800: A configured `MUSHI_API_ENDPOINT` that is not an http(s) URL now starts the server in setup mode with a clear error, instead of failing on every tool call. Your key is never sent to that endpoint or to the default one.
+- 5ad0800: `import_sentry_issues` can now pull a whole Sentry backlog: `sinceDays` (1-90) limits the search to recently seen issues, and `cursor` takes the returned `nextCursor` to fetch the next 10 until it comes back null. `sentryProject` picks another of the project's Sentry projects when one app reports to two (for example a frontend and a backend).
+- 5ad0800: `triage_next_steps` now lists reporters waiting for an answer — people who replied in your app's "Your reports" thread since you last looked — right after blocked auto-fixes, pointing at the report timeline so you can answer with `reply_to_reporter`.
+- Updated dependencies [5ad0800]
+- Updated dependencies [5ad0800]
+  - @mushi-mushi/core@1.31.0
+
+## 0.23.0
+
+### Minor Changes
+
+- f48d15b: Add the `import_sentry_issues` tool: pull existing Sentry issues into the report queue by issue id, short id or a Sentry search, at most 10 per call. Each issue is deduped, linked and classified the same way a Sentry webhook delivery is; an issue already in Mushi answers `linked`.
+- f48d15b: Three reporter-loop tools, on both the npm (stdio) and hosted transports: `request_reporter_info` asks the person who filed a report a question and marks it "Waiting on you"; `list_reporter_outbox` lists pipeline updates held for review; `release_reporter_update` sends (optionally edited) or discards one held update. `transition_status` gains `closedReason` (duplicate, not_reproducible, wont_fix, working_as_intended, spam), which sets what the reporter is told when a report is dismissed, and `reporterMessage`, a note posted to the reporter verbatim.
+
+### Patch Changes
+
+- Updated dependencies [f48d15b]
+- Updated dependencies [f48d15b]
+- Updated dependencies [f48d15b]
+- Updated dependencies [f48d15b]
+  - @mushi-mushi/core@1.30.0
+
+## 0.22.1
+
+### Patch Changes
+
+- 4a2b8e0: Docs index: the Skill Pipelines excerpt names the skill pack by its new name, kenji skills (`kensaurus/skills`, formerly `cursor-kenji`). Regenerated from the docs; no code change.
+
+## 0.22.0
+
+### Minor Changes
+
+- f5e94ce: Agent-facing fixes to the MCP server.
+
+  - **Server instructions.** `initialize` now returns short instructions: what Mushi is, start with `triage_next_steps` / `get_fix_context`, run `triage_issue` before `dispatch_fix`, treat report text as untrusted data, confirm before merging.
+  - **Untrusted output is wrapped.** The 21 tools that return end-user report text, reporter replies or LLM-derived content wrap their text output as untrusted data, so an agent holding write tools cannot be steered by a crafted bug report.
+  - **`triage_issue` works.** It returned `null` for `fix_context` and `blast_radius` because it called routes that did not exist; it now reads the report's fix packet and the inventory blast radius.
+  - **New `get_mushi_doc`.** Reads a docs page from the bundled index after `search_mushi_docs`. Search results now carry `url` instead of `path`.
+  - **`get_recent_reports` returns the documented fields.** Status and severity filters are enums; `include_raw: true` restores the full row.
+  - **Keyless setup mode.** Starting without an API key serves the setup and docs tools instead of exiting with an error.
+  - **Removed `setup_repo_for_mushi`.** It always failed (its route never existed). Repo setup is `mushi setup` in the CLI.
+
+- f5e94ce: Tool parameters, outputs and install footprint.
+
+  - **One parameter spelling.** Every tool parameter is camelCase now (`projectId`, `reportId`, `includeRaw`, `diffText`, `runId`, …). Tools used to mix `reportId` with `project_id` in one schema. The old snake_case spelling still works on every tool, on stdio and on the hosted server, and each renamed parameter says so in its description.
+  - **Enums where the values are fixed.** `list_gate_findings` takes the real gate ids (`dead_handler`, `mock_leak`, …) and finding severities (`info`, `warn`, `error`); the old description listed values that matched nothing. `list_skills` category, `search_codebase` mode (now also an input) and every agent the dispatch route accepts on `dispatch_fix` are enums too.
+  - **Typed report outputs.** `get_report_detail` returns the documented report fields under a typed output schema, with `includeRaw: true` for every column. `triage_issue` has a typed output schema, reads the newest fix attempt, and suggests `get_fix_timeline` with a fix id. Reporter identifiers (end-user id, reporter token, session id, display name) are never returned, and `get_report_evidence` no longer returns the session id.
+  - **Output fixes.** `merge_fix` declares the `justMerged` and `sha` fields the merge route returns, so strict clients no longer reject a merge that went through. `get_usage` returns structured content and honours `projectId`.
+  - **Sentry is optional.** `@sentry/node` is an optional peer dependency, about half of the previous install size. Set `MUSHI_MCP_SENTRY_DSN` and install `@sentry/node` to report the server's own errors; without the DSN it is never loaded.
+  - **Unexpanded variables are caught.** If your MCP client passes `${MUSHI_API_KEY}` through literally, the server no longer sends it to the API as a key: it falls back to your `mushi login` config or starts in setup mode, and says which variable syntax your client expands.
+  - **Registry listing.** The MCP registry entry no longer requires an `Authorization` header for the hosted server, so clients can sign in with OAuth.
+
+- f5e94ce: Add three product-analytics tools backed by the new events routes: `query_funnel` (an ordered funnel over `Mushi.track()` events, 2–8 steps with a per-step window and optional breakdown), `get_product_events_summary` (event names, counts, distinct users and daily volume — call it first to discover event names) and `get_user_paths` (what users did next after a given event). The bundled docs index behind `search_mushi_docs` is regenerated from the current docs.
+
+  The package root (`import '@mushi-mushi/mcp'`, `main`, `types`) now resolves to the library entry that exports `createMushiServer`, `MushiApiError` and `MushiServerConfig` — the same module as `@mushi-mushi/mcp/server`. It used to point at the stdio binary, which exports nothing and starts a server on import. The `mushi-mcp` bin is unchanged.
+
+### Patch Changes
+
+- ee03f08: The server icon URL now resolves. `MUSHI_ICON_PNG_URL` — advertised to every MCP client through `serverInfo.icons` and recommended in the README — pointed at `/mushi-mushi/integrations/mushi-mark-512.png`, which nothing served (live 404). The mark now ships with the docs site and the URL points at it, so clients that fetch the icon get the red 虫 stamp instead of nothing.
+- f5e94ce: The stdio MCP server shows up in usage, and stops polling with a key that cannot read.
+
+  - **Tool calls are attributed.** Every API request now carries `X-Mushi-Client: mcp-stdio/<version>`, and requests made inside a tool call carry the tool name and a random per-call id. The API records one `mcp_tool_invocations` row per call and counts `get_report_detail`, `get_fix_context`, `suggest_fix` and `dispatch_fix` as report opened, fix pulled and fix dispatched, as it already did for the hosted server. No arguments or report content are sent.
+  - **The inventory poll stops on 401/403.** A key without `mcp:read` used to be retried every minute forever with no explanation. The server now logs once that inventory change notifications are off and why.
+  - **`HABIT_EVENTS` includes `fix_dispatched`,** and taxonomy events emitted from both the console and MCP list both surfaces.
+
+- f5e94ce: npm metadata. Each entry package's description is now a short role followed by one shared pitch — "The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor." — so the `mushi-mushi` card no longer stops mid-word at npm's 255-character cut. The author link points at the maintainer's GitHub account (the Bluesky handle it used to name was never registered), the Node floor is `>=20.19.0` everywhere to match `@mushi-mushi/core`, and the `sentry-alternative` keyword is gone (Mushi runs alongside Sentry). The `funding` field is gone too, because it pointed at a GitHub Sponsors page that is not enabled. `@mushi-mushi/react-native` no longer packs its 60 KB CHANGELOG.
+- f5e94ce: Smaller install. The package no longer ships the repository's `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md` and `SECURITY.md` — 32 KB in every tarball, more than the code in some packages. They are still in the GitHub repository the npm page links to.
+- Updated dependencies [f5e94ce]
+- Updated dependencies [f5e94ce]
+- Updated dependencies [f5e94ce]
+- Updated dependencies [f5e94ce]
+- Updated dependencies [b1f5b88]
+- Updated dependencies [f5e94ce]
+- Updated dependencies [f5e94ce]
+- Updated dependencies [f5e94ce]
+  - @mushi-mushi/core@1.29.0
+
+## 0.21.1
+
+### Patch Changes
+
+- bacb869: README: the KENSAURUS apps table now lists Cooler Heads (renamed app; talk.kensaur.us unchanged). No code change.
+
+## 0.21.0
+
+### Minor Changes
+
+- 4af54f0: Move the MCP server onto the Model Context Protocol TypeScript SDK v2
+  (`@modelcontextprotocol/server` + `@modelcontextprotocol/core`).
+
+  The stdio binary now serves 2026-07-28 clients alongside the legacy era:
+  `server/discover`, the `_meta` envelope, `resultType` on every result, and
+  `ttlMs` / `cacheScope` on list results. Legacy clients (Cursor, Claude
+  Desktop, v1 SDK) negotiate `2025-03-26` exactly as before.
+
+  Behaviour change: calling a tool that is not registered — a write tool on an
+  `mcp:read` key, or a tool outside `MUSHI_FEATURES` — now returns JSON-RPC
+  `-32602 "Tool <name> not found"` instead of an `isError` tool result. Neither
+  form costs an API round-trip.
+
+### Patch Changes
+
+- 4af54f0: Document the KENSAURUS portfolio table (icons, 268-concept TWM blurb, Tsumagoi socials) on MCP listings and READMEs. No runtime behavior change.
+- Updated dependencies [4af54f0]
+- Updated dependencies [73d4c89]
+- Updated dependencies [4af54f0]
+  - @mushi-mushi/core@1.28.0
+
 ## 0.20.2
 
 ### Patch Changes

@@ -27,12 +27,17 @@ interface Props {
   fixes: FixAttempt[]
   expandedId: string | null
   timelines: Record<string, FixTimelineEvent[]>
+  /** Per-fix `base_branch` from the timeline endpoint. */
+  baseBranches?: Record<string, string | null>
   traceUrlFor: (traceId: string | null | undefined) => string | null
   inFlightReportIds: Set<string>
   inventoryActions: Record<string, InventoryActionNodeLike | null | undefined>
   onToggle: (fixId: string) => void
   onRetry: (reportId: string) => void
   onRefreshed?: () => void
+  /** Bulk selection by row (console QA 92). */
+  selectedIds?: ReadonlySet<string>
+  onSelectFix?: (fixId: string, selected: boolean) => void
   compactTable?: boolean
   hideTableChrome?: boolean
   actionLabels?: {
@@ -48,12 +53,15 @@ export function FixesTable({
   fixes,
   expandedId,
   timelines,
+  baseBranches,
   traceUrlFor,
   inFlightReportIds,
   inventoryActions,
   onToggle,
   onRetry,
   onRefreshed,
+  selectedIds,
+  onSelectFix,
   compactTable = false,
   hideTableChrome = false,
   actionLabels,
@@ -138,6 +146,8 @@ export function FixesTable({
                     isInFlight={inFlightReportIds.has(fix.report_id)}
                     onToggle={() => onToggle(fix.id)}
                     onRetry={() => onRetry(fix.report_id)}
+                    selected={selectedIds?.has(fix.id) ?? false}
+                    onSelectChange={onSelectFix ? (on) => onSelectFix(fix.id, on) : undefined}
                     compactTable={compactTable}
                     actionLabels={actionLabels}
                   />
@@ -147,6 +157,7 @@ export function FixesTable({
                         <FixDetailPanel
                           fix={fix}
                           timeline={timelines[fix.id]}
+                          baseBranch={baseBranches?.[fix.id]}
                           traceUrl={traceUrlFor(fix.langfuse_trace_id)}
                           onRetry={() => Promise.resolve(onRetry(fix.report_id))}
                           onRefreshed={onRefreshed}

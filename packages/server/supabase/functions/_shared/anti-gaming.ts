@@ -16,6 +16,8 @@ export interface DeviceContext {
    * userId from the host app). Used to count distinct users per device.
    */
   reporterUserId?: string
+  /** The request's User-Agent, to say when a flag comes from a script, not a browser. */
+  userAgent?: string
 }
 
 export interface AntiGamingResult {
@@ -25,6 +27,38 @@ export interface AntiGamingResult {
 }
 
 const CROSS_ACCOUNT_THRESHOLD = 5
+/** More than this many reporter tokens on one IP + User-Agent flags the device. */
+const MULTI_ACCOUNT_THRESHOLD = 3
+
+/**
+ * Tokens that count toward a flag: those added since a person last reviewed
+ * (unflagged) the device. Without the baseline an unflag lasted one report.
+ */
+export function unreviewedTokenCount(tokenCount: number, reviewedTokenCount: number | null | undefined): number {
+  return Math.max(0, tokenCount - Math.max(0, reviewedTokenCount ?? 0))
+}
+
+/**
+ * The client name when the User-Agent is not a browser or a mobile app's
+ * HTTP stack: `node`, `curl/8.17.0`, `python-requests/2.32`. One server
+ * relaying many users' reports shares one IP + User-Agent, so the
+ * multi-account flag says so instead of implying one person with many
+ * accounts. It changes only the wording; the User-Agent is client-supplied,
+ * so it never exempts a device.
+ */
+export function scriptedClientName(userAgent: string | null | undefined): string | null {
+  const ua = userAgent?.trim()
+  if (!ua) return null
+  if (/Mozilla\/|okhttp|CFNetwork|Dalvik|Darwin\//i.test(ua)) return null
+  return ua.split(/[\/\s;(]/)[0].slice(0, 40) || null
+}
+
+export function multiAccountReason(tokens: number, userAgent: string | null | undefined): string {
+  const client = scriptedClientName(userAgent)
+  return client
+    ? `Multi-account: ${tokens} reporter tokens from one scripted client (${client}). A server sending reports for many users looks like this.`
+    : `Multi-account: ${tokens} reporter tokens from same device`
+}
 
 export async function checkAntiGaming(
   db: SupabaseClient,
@@ -59,7 +93,7 @@ async function runCrossAccountCheck(
 ): Promise<AntiGamingResult> {
   const { data: existing } = await db
     .from('reporter_devices')
-    .select('id, reporter_tokens, ip_addresses, report_count, distinct_user_count, cross_account_flagged, flag_reason')
+    .select('id, reporter_tokens, ip_addresses, report_count, distinct_user_count, cross_account_flagged, flag_reason, reviewed_token_count')
     .eq('project_id', projectId)
     .eq('fingerprint_hash', device.fingerprintHash!)
     .maybeSingle()
@@ -89,7 +123,7 @@ async function runCrossAccountCheck(
   const distinctUsers = Math.max(existing.distinct_user_count ?? 0, tokens.length)
   let crossFlagged = existing.cross_account_flagged ?? false
   let reason = existing.flag_reason ?? null
-  if (distinctUsers >= CROSS_ACCOUNT_THRESHOLD && !crossFlagged) {
+  if (unreviewedTokenCount(distinctUsers, existing.reviewed_token_count) >= CROSS_ACCOUNT_THRESHOLD && !crossFlagged) {
     crossFlagged = true
     reason = `Cross-account: ${distinctUsers} reporter identities share fingerprint hash`
   }
@@ -136,9 +170,9 @@ async function runMultiAccountCheck(
     let reason = existing.flag_reason
 
     // Multi-account detection
-    if (tokens.length > 3 && !flagged) {
+    if (unreviewedTokenCount(tokens.length, existing.reviewed_token_count) > MULTI_ACCOUNT_THRESHOLD && !flagged) {
       flagged = true
-      reason = `Multi-account: ${tokens.length} reporter tokens from same device`
+      reason = multiAccountReason(tokens.length, device.userAgent)
     }
 
     await db.from('reporter_devices').update({

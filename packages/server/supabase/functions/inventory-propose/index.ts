@@ -33,11 +33,23 @@
 // ────
 // Honours `project_settings.byok_anthropic_key_ref` via the existing
 // `resolveLlmKey` helper. Falls back to the host's `ANTHROPIC_API_KEY`.
+//
+// Run budget
+// ──────────
+// Every model call carries a deadline. Until 2026-09-22 it carried none:
+// the hourly `drift_watch` cron made up to three Sonnet calls per project
+// with no abort, so the run outlived the edge runtime's wall clock and was
+// killed before it could persist anything. The watchdog recorded 5 degraded
+// runs a day and the last proposal to reach the database was 2026-05-04 —
+// an LLM call an hour, every hour, for nothing.
+//
+// Now: the run stops work at MUSHI_INVENTORY_RUN_BUDGET_MS (default 110 s,
+// under the 150 s the cron waits), each attempt aborts at its share of what
+// is left, and drift_watch fires at most MUSHI_INVENTORY_DRIFT_MAX_PER_RUN
+// proposals (default 1) and reports the rest as `deferred` for the next run.
 // ============================================================
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
-import { createAnthropic } from 'npm:@ai-sdk/anthropic@1'
-import { generateText } from 'npm:ai@4'
 import { stringify as yamlStringify } from 'npm:yaml@2'
 
 import { getServiceClient } from '../_shared/db.ts'
@@ -47,12 +59,18 @@ import { safeErrorResponse } from '../_shared/safe-error.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { parseBody, InventoryProposeBodySchema } from '../_shared/validate.ts'
 import { withLlmFailover, WalletDeniedError } from '../_shared/llm-failover.ts'
-import { ANTHROPIC_SONNET } from '../_shared/models.ts'
+import { INVENTORY_PROPOSE_EFFORT, INVENTORY_PROPOSE_MODEL, THINKING_HEADROOM_TOKENS } from '../_shared/models.ts'
+import { claudeGenerateText } from '../_shared/claude-messages.ts'
+import { withLlmUsage, type LlmUsageContext } from '../_shared/llm-usage.ts'
+import { resolveClaudeModel } from '../_shared/claude-request.ts'
 import { getPromptForStage } from '../_shared/prompt-ab.ts'
 import {
   validateInventoryObject,
   type Inventory,
 } from '../_shared/inventory.ts'
+import { nextAttemptTimeoutMs, runBudgetMs } from './run-budget.ts'
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 /**
  * We use `generateText` rather than `generateObject` here because the
@@ -242,12 +260,15 @@ Produce a complete inventory.yaml object as JSON. Wrap the inventory under \`inv
  */
 async function runProposer(args: {
   apiKey: string
+  /** Writes the llm_invocations row for the provider call (and so its hosted-key debit). */
+  db: SupabaseClient
+  usage: LlmUsageContext
   modelId: string
   prompt: string
   previousIssues?: string
   systemPrompt?: string
+  timeoutMs: number
 }): Promise<{ inventory: Inventory; rationale: Record<string, string>; tokens: { in: number; out: number } }> {
-  const anthropic = createAnthropic({ apiKey: args.apiKey })
   const messages: Array<{ role: 'system' | 'user'; content: string }> = [
     { role: 'system', content: args.systemPrompt ?? SYSTEM_PROMPT },
     { role: 'user', content: args.prompt },
@@ -259,13 +280,21 @@ async function runProposer(args: {
     })
   }
 
-  // generateText + manual JSON parse. See `extractFencedJson` for the
-  // rationale on why we don't use generateObject here.
-  const result = await generateText({
-    model: anthropic(args.modelId),
+  // Plain text + manual JSON parse, then validateInventoryObject. See
+  // `extractFencedJson` for why this is not a structured-output call.
+  // Recorded at the provider call, so a reply that later fails JSON parsing
+  // or validation still counts: its tokens were spent.
+  const result = await withLlmUsage(args.db, args.usage, () => claudeGenerateText({
+    apiKey: args.apiKey,
+    model: args.modelId,
+    effort: INVENTORY_PROPOSE_EFFORT,
     messages,
-    maxTokens: 8192,
-  })
+    // 8k of inventory JSON plus room for adaptive thinking.
+    maxTokens: 8192 + THINKING_HEADROOM_TOKENS,
+    // Without this the call can outlive the edge runtime itself.
+    abortSignal: AbortSignal.timeout(args.timeoutMs),
+    timeoutMs: args.timeoutMs,
+  }))
 
   let out: ModelOutput
   try {
@@ -317,6 +346,7 @@ async function proposeAndPersist(
   projectId: string,
   triggeredBy: string | null,
   modelOverride?: string,
+  deadlineAt: number = Date.now() + runBudgetMs(),
 ): Promise<{
   proposalId: string
   routeCount: number
@@ -337,7 +367,8 @@ async function proposeAndPersist(
   // Defensive: if the project has no `slug`, force a schema-valid id.
   if (!/^[a-z0-9][a-z0-9-_]*$/i.test(app.id)) app.id = 'app'
 
-  const modelId = modelOverride ?? ANTHROPIC_SONNET
+  // A stored override from the Sonnet 4.5 era maps onto the current default.
+  const modelId = resolveClaudeModel(modelOverride, INVENTORY_PROPOSE_MODEL)
   const prompt = buildUserPrompt(observations, current, app)
 
   // Resolve the managed system prompt from prompt_versions (stage 'inventory-propose').
@@ -349,6 +380,11 @@ async function proposeAndPersist(
   let last: Awaited<ReturnType<typeof runProposer>> | null = null
   let lastError: { message: string; summary?: string } | null = null
   while (attempt < 3) {
+    const timeoutMs = nextAttemptTimeoutMs(deadlineAt - Date.now())
+    if (timeoutMs === null) {
+      rlog.warn('propose out of time — persisting what we have', { projectId, attempt })
+      break
+    }
     try {
       last = await withLlmFailover(
         db,
@@ -357,19 +393,26 @@ async function proposeAndPersist(
         async (resolved) => {
           return runProposer({
             apiKey: resolved.key,
+            db,
+            usage: {
+              functionName: 'inventory-propose',
+              stage: 'propose',
+              projectId,
+              model: modelId,
+              keySource: resolved.source,
+              // Billed before (withLlmFailover meter); keeps that debit.
+              billHosted: true,
+            },
             modelId,
             prompt,
             previousIssues,
             systemPrompt: managedSystemPrompt ?? undefined,
+            timeoutMs,
           })
         },
-        // This path writes no llm_invocations row, so the hosted-key debit is
-        // taken here rather than in logLlmInvocation.
-        {
-          feature: 'inventory-propose',
-          model: modelId,
-          extractUsage: (r) => ({ inputTokens: r.tokens.in, outputTokens: r.tokens.out }),
-        },
+        // No `meter`: runProposer writes an llm_invocations row, and
+        // logLlmInvocation takes the hosted-key debit. Passing both would
+        // charge the call twice.
       )
       break
     } catch (err) {
@@ -438,10 +481,20 @@ ${raw ? yamlStringify(raw) : '# (no model output captured)\n'}`
       status: 'draft',
       proposed_yaml: yamlText,
       proposed_parsed: parsedJson as unknown as Record<string, unknown>,
-      rationale_by_story: rationale as unknown as Record<string, unknown>,
+      rationale_by_story: {
+        ...(rationale as unknown as Record<string, unknown>),
+        // Meta keys are `__`-prefixed here (see __validation_errors above).
+        ...(triggeredBy ? { __triggered_by: triggeredBy } : {}),
+      },
       llm_model: modelId,
       observation_count: observations.length,
-      created_by: triggeredBy,
+      // created_by is a uuid, but a cron passes a label ('cron:drift-watch'),
+      // which Postgres refused — so every cron proposal was computed, paid
+      // for, and thrown away at the insert. `source` is a typed column about
+      // where the observations came from, not who asked, so the label goes
+      // to the rationale metadata and created_by takes a uuid or nothing.
+      created_by: UUID_RE.test(triggeredBy ?? '') ? triggeredBy : null,
+      source: 'passive_discovery',
     })
     .select('id')
     .single()
@@ -507,9 +560,16 @@ async function handler(req: Request): Promise<Response> {
  * draft younger than 7 days. Operators reviewing one draft don't need a
  * second one stacked on top before they've decided.
  */
-async function handleDriftWatch(db: SupabaseClient, body: ProposeBody): Promise<Response> {
+/** @internal exported for inventory-propose-deadline.test.ts */
+export async function handleDriftWatch(db: SupabaseClient, body: ProposeBody): Promise<Response> {
   const driftRouteThreshold = Number(Deno.env.get('MUSHI_INVENTORY_DRIFT_ROUTES') ?? '5')
   const driftCooldownDays = Number(Deno.env.get('MUSHI_INVENTORY_DRIFT_COOLDOWN_DAYS') ?? '7')
+  // One proposal per run by default: each is a Sonnet call, and the cron
+  // comes back every hour. The rest are reported as deferred, not dropped.
+  const maxPerRun = Number(Deno.env.get('MUSHI_INVENTORY_DRIFT_MAX_PER_RUN') ?? '1')
+  const deadlineAt = Date.now() + runBudgetMs()
+  let fired = 0
+  let deferred = 0
 
   // Find every project that HAS a current inventory.yaml. Projects
   // without one already get a different proposal flow (the bootstrap
@@ -574,13 +634,27 @@ async function handleDriftWatch(db: SupabaseClient, body: ProposeBody): Promise<
       continue
     }
 
+    // Out of budget, or this run has already fired its share.
+    if (fired >= maxPerRun || nextAttemptTimeoutMs(deadlineAt - Date.now()) === null) {
+      deferred += 1
+      results.push({ projectId, drifted: drifted.length, skipped: 'deferred_to_next_run' })
+      continue
+    }
+
     rlog.info('drift detected — re-firing proposer', {
       projectId,
       driftedCount: drifted.length,
       driftedSample: drifted.slice(0, 5),
     })
     try {
-      const result = await proposeAndPersist(db, projectId, body.triggered_by ?? 'cron:drift-watch', body.model)
+      const result = await proposeAndPersist(
+        db,
+        projectId,
+        body.triggered_by ?? 'cron:drift-watch',
+        body.model,
+        deadlineAt,
+      )
+      fired += 1
       results.push({ projectId, drifted: drifted.length, proposalId: result.proposalId })
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
@@ -589,9 +663,9 @@ async function handleDriftWatch(db: SupabaseClient, body: ProposeBody): Promise<
     }
   }
 
-  const fired = results.filter((r) => r.proposalId).length
   const skipped = results.filter((r) => r.skipped).length
   rlog.info('drift-watch sweep complete', {
+    deferred,
     candidates: candidates?.length ?? 0,
     fired,
     skipped,
@@ -605,6 +679,7 @@ async function handleDriftWatch(db: SupabaseClient, body: ProposeBody): Promise<
         candidatesChecked: candidates?.length ?? 0,
         fired,
         skipped,
+        deferred,
         results,
       },
     }),

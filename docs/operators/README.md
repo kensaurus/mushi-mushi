@@ -23,6 +23,11 @@
   at [`deploy/helm/`](../../deploy/helm/README.md).
 - [BYOK validation migration gate](#byok-validation-migration-gate) — inventory
   credentials that will be quarantined until they pass a provider probe.
+- [Reporter data processing](./reporter-data-processing.md) — the DPA / 委託
+  template for host apps whose end users file reports through the widget.
+- [Public architecture-diagram pages](./public-diagram-pages.md) — the
+  crawlable `/r/<owner>/<repo>` pages: S3 page store setup, who can publish,
+  takedowns, and why diagrams are not redrawn on push.
 
 ## BYOK validation migration gate
 
@@ -67,7 +72,7 @@ that story: the standards, the plumbing, and the enterprise controls.
 | **Regression auto-triage**                                                        | When the status reconciler flips an action `verified` → `regressed`, it pages the operator (Slack/Discord), opens a triage report, and fans `report.created` to plugins.    | A regressed action funnels back through the same PDCA loop as a real user report.                                                                                  |
 | **Webhook delivery exhaustion alerts**                                            | After 5 retries (30s + 2m + 10m + 1h + 6h backoff) `plugin-dispatch-retry` pages the operator with the dead webhook + last error, deduped per `(project, plugin)`.          | A plugin with a rotated token announces itself in chat instead of silently dropping notifications.                                                                 |
 | **OpenTelemetry GenAI semconv**                                                   | OTLP spans for `classify-report` carry `gen_ai.*` attributes plus a custom `gen_ai.usage.cost_usd`.                                                                         | Your APM graphs cost-per-report and tokens-per-model with no Mushi-specific dashboard.                                                                             |
-| **MCP Streamable HTTP** (2025-03-26)                                              | `/functions/v1/mcp`. Both stdio (local IDE) and HTTP (remote orchestrator) transports advertise the same tool catalog.                                                      | One MCP server, two transports, every modern AI client supported.                                                                                                  |
+| **MCP Streamable HTTP** (2024-11-05 … 2026-07-28, dual-era)                      | `/functions/v1/mcp`. Both stdio (local IDE) and HTTP (remote orchestrator) transports advertise the same tool catalog.                                                      | One MCP server, two transports, every modern AI client supported.                                                                                                  |
 | **Agent Card + OpenAPI 3.1 + JSON Schemas**                                       | `/.well-known/agent-card`, `/openapi.json`, `/v1/schemas/*`.                                                                                                                | Your orchestrator discovers Mushi the way it discovers anything else.                                                                                              |
 
 > **BYOK throughout.** Mushi never holds your Anthropic / OpenAI / Sentry / Slack
@@ -96,10 +101,10 @@ note. This is the **enrichment / upgrade path**, not the front door.
 | ---------------------------- | :-------------------------- | :------------------------ | :---------------------- | :-------------------------------------------- |
 | **Signal origin**            | Code throws                 | Infrastructure metrics    | User event streams      | User-felt friction, captured in the moment    |
 | **What lands in your queue** | Stack trace                 | Alert threshold breach    | Funnel drop-off         | User note + screenshot + device context       |
-| **Repeat signal**            | Same error = separate issue | Spike repeats → new alert | Conversion drops again  | Same broken button collapses to one row       |
+| **Repeat signal**            | Same error groups into one issue | Spike repeats → new alert | Conversion drops again  | Same broken button collapses to one row       |
 | **Closing the loop**         | Assign a ticket             | Write a runbook           | A/B test the conversion | Optional draft PR you merge, edit, or close   |
-| **From your IDE**            | Paste issue ID into Cursor  | —                         | —                       | Cursor reads the report and proposes the diff |
-| **Where it runs**            | Their cloud                 | Their cloud               | Google cloud            | Yours, ours, or both                          |
+| **From your IDE**            | Sentry MCP pulls the issue  | —                         | —                       | Cursor reads the report and proposes the diff |
+| **Where it runs**            | Their cloud or self-hosted  | Their cloud               | Google cloud            | Yours, ours, or both                          |
 
 Mushi is wired to send signals **back** to the tools you run — 13 outbound
 plugins (Sentry, Slack, Jira, Linear, PagerDuty, Discord, Microsoft Teams, GitHub

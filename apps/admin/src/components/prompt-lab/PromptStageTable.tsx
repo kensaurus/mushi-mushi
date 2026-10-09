@@ -8,7 +8,7 @@ import {
   IconTrash,
 } from '../icons'
 import type { PromptVersion } from './types'
-import { STAGE_LABELS } from './types'
+import { STAGE_LABELS, isCustomizablePromptStage } from './types'
 import { CHIP_TONE } from '../../lib/chipTone'
 
 // Icon-only Btn override for the dense action column.
@@ -44,7 +44,7 @@ function judgeScoreTone(score: number): string {
 }
 
 interface PromptStageTableProps {
-  stage: 'stage1' | 'stage2'
+  stage: string
   prompts: PromptVersion[]
   busy: string | null
   onClone: (p: PromptVersion) => void
@@ -70,7 +70,7 @@ export function PromptStageTable({
     <Card elevated className="p-3">
       <div className="flex items-center justify-between mb-2">
         <h3 className="text-xs font-semibold text-fg-secondary">
-          {STAGE_LABELS[stage]}
+          {STAGE_LABELS[stage] ?? stage}
         </h3>
         <span className="text-2xs text-fg-faint font-mono">
           {prompts.length} versions
@@ -159,17 +159,26 @@ export function PromptStageTable({
                       <RelativeTime value={p.updated_at} />
                     </td>
                     <td className="px-2 py-1.5 text-right space-x-1 whitespace-nowrap">
-                      <Btn
-                        size="sm"
-                        variant="ghost"
-                        className={ICON_BTN}
-                        disabled={busy === p.id}
-                        onClick={() => onClone(p)}
-                        title="Clone — create an editable copy"
-                        aria-label="Clone prompt"
-                      >
-                        <IconCopy />
-                      </Btn>
+                      {isCustomizablePromptStage(stage) ? (
+                        <Btn
+                          size="sm"
+                          variant="ghost"
+                          className={ICON_BTN}
+                          disabled={busy === p.id}
+                          onClick={() => onClone(p)}
+                          title="Clone — create an editable copy"
+                          aria-label={`Clone prompt ${p.version}`}
+                        >
+                          <IconCopy />
+                        </Btn>
+                      ) : (
+                        <span
+                          className="text-2xs text-fg-faint"
+                          title="No worker reads a project copy of this prompt yet, so it cannot be customised."
+                        >
+                          Built-in
+                        </span>
+                      )}
                       {!isGlobal && (
                         <>
                           <Btn
@@ -179,7 +188,7 @@ export function PromptStageTable({
                             disabled={busy === p.id}
                             onClick={() => onEdit(p)}
                             title="Edit prompt template"
-                            aria-label="Edit prompt"
+                            aria-label={`Edit prompt ${p.version}`}
                           >
                             <IconPencil />
                           </Btn>
@@ -191,7 +200,7 @@ export function PromptStageTable({
                               disabled={busy === p.id}
                               onClick={() => onDiff(p)}
                               title="Diff against parent prompt"
-                              aria-label="Diff against parent prompt"
+                              aria-label={`Diff prompt ${p.version} against its parent`}
                             >
                               <IconDiff />
                             </Btn>
@@ -219,7 +228,7 @@ export function PromptStageTable({
                               disabled={busy === p.id}
                               onClick={() => onTraffic(p)}
                               title="Set A/B traffic share"
-                              aria-label="Set A/B traffic share"
+                              aria-label={`Set A/B traffic share for ${p.version}`}
                             >
                               <IconSliders />
                             </Btn>
@@ -231,7 +240,7 @@ export function PromptStageTable({
                             disabled={busy === p.id || p.is_active}
                             onClick={() => onDelete(p)}
                             title="Delete prompt"
-                            aria-label="Delete prompt"
+                            aria-label={`Delete prompt ${p.version}`}
                           >
                             <IconTrash />
                           </Btn>

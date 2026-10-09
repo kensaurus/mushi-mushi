@@ -8,6 +8,7 @@ import {
   projectServerName,
 } from './cursorDeeplink'
 import { RESOLVED_EXTERNAL_API_URL, RESOLVED_MCP_HTTP_URL } from './env'
+import { describeActionError } from './actionError'
 import type { CatalogTabId, McpTabId } from '../components/mcp/types'
 
 export const MCP_PAGE_TABS: Array<{ id: McpTabId; label: string; description: string }> = [
@@ -76,7 +77,7 @@ export const MCP_USE_CASES: McpUseCase[] = [
   {
     title: 'Triage across all my apps',
     ask: 'What are my most urgent bugs across all my projects?',
-    calls: ['get_account_overview', 'get_recent_reports (project_id=X)', 'get_recent_reports (project_id=Y)'],
+    calls: ['get_account_overview', 'get_recent_reports (projectId=X)', 'get_recent_reports (projectId=Y)'],
   },
   {
     title: 'New project check-in',
@@ -293,7 +294,7 @@ export function validateMcpJsonSyntax(raw: string): McpJsonCheck {
       details.push(`${name}: MUSHI_API_KEY should start with mushi_.`)
     }
     if (!env.MUSHI_PROJECT_ID) {
-      details.push(`${name}: no MUSHI_PROJECT_ID means account mode; use an org-scoped key or pass project_id in tool calls.`)
+      details.push(`${name}: no MUSHI_PROJECT_ID means account mode; use an org-scoped key or pass projectId in tool calls.`)
     }
     if (Array.isArray(server.args) && server.args.includes('@mushi-mushi/mcp@latest')) {
       details.push(`${name}: uses npm @latest — re-pin it (run "npx mushi-mushi setup" or replace with ${MCP_PIN_SPEC}) to avoid supply-chain and cold-start surprises.`)
@@ -304,5 +305,19 @@ export function validateMcpJsonSyntax(raw: string): McpJsonCheck {
     ok,
     title: ok ? 'Syntax looks valid.' : 'Config needs changes.',
     details: details.length > 0 ? details : ['Restart Cursor MCP after saving the file, then run diagnose_setup.'],
+  }
+}
+
+/** Plain-English reason for a failed /v1/admin/mcp/test-connection. */
+export function mcpTestFailureMessage(error: { code?: string; message?: string } | null | undefined): string {
+  switch (error?.code) {
+    case 'NO_PROJECT':
+      return 'Select a project first.'
+    case 'MCP_PROBE_FAILED':
+      return 'The hosted MCP server did not answer the test. If it was just deployed, wait 30 seconds and test again.'
+    case 'MISCONFIGURED':
+      return 'This Mushi backend is missing its SUPABASE_URL setting, so the test cannot reach the MCP server.'
+    default:
+      return describeActionError(error, 'The connection test failed. Try again in a moment.')
   }
 }

@@ -21,17 +21,22 @@ import { log } from './logger.ts'
 import { sendBotMessage, sendSlackText } from './slack.ts'
 import { sendDiscordNotification } from './discord.ts'
 import { sendTeamsNotification } from './teams.ts'
+import { notifyVoiceSessionsForReport } from './voice-return.ts'
 
 const teamNotifyLog = log.child('team-notify')
 
 export type TeamFixEvent = 'fix_dispatched' | 'fix_pr_opened' | 'fix_failed' | 'fix_merged'
 
+/** Every event this module posts: the fix lifecycle plus a reporter's reply. */
+type TeamEvent = TeamFixEvent | 'reporter_replied'
+
 /** notification_prefs keys (NotificationPrefsMatrix): `false` suppresses, absent = enabled. */
-const EVENT_PREF_KEY: Record<TeamFixEvent, string> = {
+const EVENT_PREF_KEY: Record<TeamEvent, string> = {
   fix_dispatched: 'fix.dispatched',
   fix_pr_opened: 'fix.pr_opened',
   fix_failed: 'fix.failed',
   fix_merged: 'fix.merged',
+  reporter_replied: 'report.reporter_replied',
 }
 
 export interface TeamFixDetails {
@@ -40,13 +45,16 @@ export interface TeamFixDetails {
   branch?: string | null
   error?: string | null
   failureCategory?: string | null
+  /** The reporter's words, for `reporter_replied` (already clipped by the caller). */
+  replyText?: string | null
 }
 
-const EVENT_EMOJI: Record<TeamFixEvent, string> = {
+const EVENT_EMOJI: Record<TeamEvent, string> = {
   fix_dispatched: '\u{1F680}', // 🚀
   fix_pr_opened: '\u{1F527}', // 🔧
   fix_failed: '❌', // ❌
   fix_merged: '✅', // ✅
+  reporter_replied: '\u{1F4AC}', // 💬
 }
 
 /**
@@ -59,7 +67,7 @@ function escapeMrkdwn(text: string): string {
 }
 
 function eventText(
-  event: TeamFixEvent,
+  event: TeamEvent,
   reportSummary: string,
   details: TeamFixDetails,
   reportUrl: string | null,
@@ -80,6 +88,8 @@ function eventText(
       return `${emoji} Fix attempt failed for *${summary}*${details.failureCategory ? ` (${escapeMrkdwn(details.failureCategory)})` : ''}${details.error ? `\n\`\`\`${escapeMrkdwn(details.error.slice(0, 300))}\`\`\`` : ''}${reportUrl ? `\n<${reportUrl}|Open report>` : ''}`
     case 'fix_merged':
       return `${emoji} Fix merged for *${summary}*${pr ? ` — ${pr}` : ''}`
+    case 'reporter_replied':
+      return `${emoji} The reporter replied on *${summary}*${details.replyText ? `\n> ${escapeMrkdwn(details.replyText)}` : ''}${reportUrl ? `\n<${reportUrl}|Answer in console>` : ''}`
   }
 }
 
@@ -92,8 +102,11 @@ function toPlainText(slackText: string): string {
 
 /**
  * Post a fix-lifecycle update to every team channel the project has
- * configured. Threads onto the report's original Slack card when the bot
- * path stored a `slack_message_ts`.
+ * configured, then reply to any voice session that requested this fix
+ * (Slack thread / Telegram chat / web push — `_shared/voice-return.ts`).
+ * Threads onto the report's original Slack card when the bot path stored a
+ * `slack_message_ts`. Both halves are fail-soft; the voice reply runs even
+ * when the project has no team channel at all.
  */
 export async function notifyTeamFixEvent(
   db: SupabaseClient,
@@ -101,6 +114,43 @@ export async function notifyTeamFixEvent(
   reportId: string,
   event: TeamFixEvent,
   details: TeamFixDetails = {},
+): Promise<void> {
+  await notifyTeamChannels(db, projectId, reportId, event, details)
+  try {
+    await notifyVoiceSessionsForReport(db, projectId, reportId, event, {
+      prUrl: details.prUrl ?? undefined,
+      error: details.error ?? undefined,
+    })
+  } catch (err) {
+    teamNotifyLog.warn('voice return notification failed', {
+      projectId,
+      reportId,
+      event,
+      err: String(err),
+    })
+  }
+}
+
+/**
+ * Thread a reporter's reply onto the report's Slack card (and Discord /
+ * Teams), so the team hears back without opening the console. Muted per
+ * project by `notification_prefs['report.reporter_replied'] = false`.
+ */
+export async function notifyTeamReporterReply(
+  db: SupabaseClient,
+  projectId: string,
+  reportId: string,
+  replyText: string,
+): Promise<void> {
+  await notifyTeamChannels(db, projectId, reportId, 'reporter_replied', { replyText })
+}
+
+async function notifyTeamChannels(
+  db: SupabaseClient,
+  projectId: string,
+  reportId: string,
+  event: TeamEvent,
+  details: TeamFixDetails,
 ): Promise<void> {
   try {
     const [{ data: settings }, { data: report }, { data: project }] = await Promise.all([

@@ -1,9 +1,11 @@
 import { Hono } from 'npm:hono@4';
 import { cors } from 'npm:hono@4/cors';
+import { PUBLIC_CORS_MAX_AGE_SECONDS } from '../_shared/cors.ts';
 import type { Variables } from './types.ts';
 
 import { ensureSentry, sentryHonoErrorHandler } from '../_shared/sentry.ts';
 import { requestLoggingMiddleware } from '../_shared/request-logging.ts';
+import { stdioMcpUsage } from '../_shared/mcp-stdio-usage.ts';
 import { registerAskMushiRoutes } from './routes/ask-mushi.ts';
 import { registerSdkAssistantRoutes } from './routes/sdk-assistant.ts';
 import { registerConsoleKnowledgeRoutes } from './routes/console-knowledge.ts';
@@ -12,6 +14,8 @@ import { registerDoctorRoutes } from './routes/doctor.ts';
 import { registerBillingProjectsQueueGraphRoutes } from './routes/billing-projects-queue-graph.ts';
 import { registerCodebaseRoutes } from './routes/codebase.ts';
 import { registerCodebaseUnderstandRoutes } from './routes/codebase-understand.ts';
+import { registerRepoDigestRoutes } from './routes/repo-digest.ts';
+import { registerRepoDiagramRoutes } from './routes/repo-diagram.ts';
 import {
   registerPreRegionDiscoveryRoutes,
   registerPostRegionDiscoveryRoutes,
@@ -31,6 +35,7 @@ import { registerOpenApiRoute } from './routes/openapi.ts';
 import { registerSchemaRoutes } from './routes/schemas.ts';
 import { registerQaCoverageRoutes } from './routes/qa-coverage.ts';
 import { registerRewardsRoutes } from './routes/rewards.ts';
+import { registerEraseSubjectRoutes } from './routes/erase-subject.ts';
 import { registerCliAuthRoutes } from './routes/cli-auth.ts';
 import { registerMcpOauthRoutes } from './routes/mcp-oauth.ts';
 // ---------------------------------------------------------------------------
@@ -39,6 +44,7 @@ import { registerMcpOauthRoutes } from './routes/mcp-oauth.ts';
 import { registerLessonsRoutes } from './routes/lessons.ts';
 import { registerSyncRoutes } from './routes/sync.ts';
 import { registerReleasesRoutes } from './routes/releases.ts';
+import { registerReporterAdminRoutes } from './routes/reporter-admin.ts';
 import { registerPdcaRoutes } from './routes/pdca.ts';
 import { registerMcpAdminRoutes } from './routes/mcp-admin.ts';
 import { registerDriftRoutes } from './routes/drift.ts';
@@ -56,12 +62,39 @@ import { registerBackendRoutes } from './routes/backend.ts';
 import { registerFullstackAuditRoutes } from './routes/fullstack-audit.ts';
 import { registerSkillsRoutes } from './routes/skills.ts';
 import { registerCodeHealthRoutes } from './routes/code-health.ts';
+import { registerRecipeRoutes } from './routes/recipe.ts';
+import { registerPortfolioRoutes } from './routes/portfolio.ts';
+import { registerRadarRoutes } from './routes/radar.ts';
+import { registerDigestRoutes } from './routes/digest.ts';
+import { registerConnectorRoutes } from './routes/connectors.ts';
+import { registerRecipeIngestRoutes } from './routes/recipe-ingest.ts';
+import { registerAccountsRegisterRoutes } from './routes/accounts-register.ts';
+import { registerRecipeChangeRoutes } from './routes/recipe-changes.ts';
+import { registerStoreOpsRoutes } from './routes/store-ops.ts';
+import { registerFindingExplainRoutes } from './routes/finding-explain.ts';
+import { registerGateFindingDismissRoutes } from './routes/gate-finding-dismiss.ts';
+import { registerPortfolioFunnelRoutes } from './routes/portfolio-funnel.ts';
+import { registerSpendLedgerRoutes } from './routes/spend-ledger.ts';
+import { registerStoreReviewIntakeRoutes } from './routes/store-review-intake.ts';
 import { registerWorkspaceNavMetaRoutes } from './routes/workspace-nav-meta.ts';
 import { registerActivationRoutes } from './routes/activation.ts';
 import { registerSdkUpgradeRoutes } from './routes/sdk-upgrade.ts';
+import { registerUxRunsRoutes } from './routes/ux-runs.ts';
+import { registerPullRequestRoutes } from './routes/pull-requests.ts';
+import { registerUxCloudRoutes } from './routes/ux-cloud.ts';
+import { registerProjectGroupRoutes } from './routes/project-groups.ts';
 import { registerBootstrapRoutes } from './routes/bootstrap.ts';
 import { registerIdentitySecretRoutes } from './routes/identity-secret.ts';
 import { registerSessionRoutes } from './routes/sessions.ts';
+import { registerEventRoutes } from './routes/events.ts';
+import { registerGrowthRoutes } from './routes/growth.ts';
+import { registerEventsAdminRoutes } from './routes/events-admin.ts';
+import { registerLifecycleEmailRoutes } from './routes/lifecycle-emails.ts';
+import { registerSlackEventsRoutes } from './routes/slack-events.ts';
+import { registerTelegramAdminRoutes } from './routes/telegram-admin.ts';
+import { registerIntakeVoiceRoutes } from './routes/intake-voice.ts';
+import { registerPushRoutes } from './routes/push.ts';
+import { registerSentryImportRoutes } from './routes/sentry-import.ts';
 
 ensureSentry('api');
 
@@ -72,6 +105,9 @@ const app = new Hono<{ Variables: Variables }>().basePath('/api');
 app.onError(sentryHonoErrorHandler);
 
 app.use('*', requestLoggingMiddleware());
+// Records tool calls from the stdio MCP server (npx @mushi-mushi/mcp) after the
+// route's own auth has run; a no-op for every other caller.
+app.use('/v1/*', stdioMcpUsage());
 
 // SEC (Wave S1 / D-18 + S-5): split CORS policy.
 //
@@ -132,6 +168,9 @@ const SDK_OBSERVATION_HEADERS = [
   'X-Mushi-SDK-Version',
   'X-Mushi-SDK-Package',
   'X-Mushi-User-Token',
+  // Host JWT proving the end user's identity on the privacy routes
+  // (GET /v1/sdk/me/export, DELETE /v1/sdk/me) when the project verifies users.
+  'X-Mushi-Host-Jwt',
 ] as const;
 
 // The SDK does far more than GET here: the browser widget POSTs rewards
@@ -157,6 +196,7 @@ app.use(
       'sentry-trace',
     ],
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    maxAge: PUBLIC_CORS_MAX_AGE_SECONDS,
   }),
 );
 app.use(
@@ -175,6 +215,7 @@ app.use(
       'sentry-trace',
     ],
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    maxAge: PUBLIC_CORS_MAX_AGE_SECONDS,
   }),
 );
 app.use(
@@ -193,6 +234,7 @@ app.use(
       'sentry-trace',
     ],
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    maxAge: PUBLIC_CORS_MAX_AGE_SECONDS,
   }),
 );
 // Span ingest endpoint (OTel trace correlation). Accepts traceparent/tracestate
@@ -211,6 +253,7 @@ app.use(
       'tracestate',
     ],
     allowMethods: ['POST', 'OPTIONS'],
+    maxAge: PUBLIC_CORS_MAX_AGE_SECONDS,
   }),
 );
 app.use(
@@ -230,7 +273,9 @@ app.use(
       'baggage',
       'sentry-trace',
     ],
-    allowMethods: ['GET', 'POST', 'OPTIONS'],
+    // PUT / DELETE: notification prefs and push subscriptions (Plan 018 §4.1).
+    allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    maxAge: PUBLIC_CORS_MAX_AGE_SECONDS,
   }),
 );
 app.use(
@@ -251,6 +296,7 @@ app.use(
       'sentry-trace',
     ],
     allowMethods: ['GET', 'POST', 'OPTIONS'],
+    maxAge: PUBLIC_CORS_MAX_AGE_SECONDS,
   }),
 );
 app.use(
@@ -271,6 +317,7 @@ app.use(
       'sentry-trace',
     ],
     allowMethods: ['GET', 'POST', 'OPTIONS'],
+    maxAge: PUBLIC_CORS_MAX_AGE_SECONDS,
   }),
 );
 app.use(
@@ -295,14 +342,48 @@ app.use('/v1/public/*', cors({ origin: '*' }));
 app.use('/.well-known/*', cors({ origin: '*' }));
 app.use('/health', cors({ origin: '*' }));
 
+// Every header apps/admin's apiFetch stamps on EVERY request (supabase.ts):
+// the tenant scope pair, its legacy alias, the correlation id and the
+// idempotency key. Browsers name all of them in the preflight, so any cors()
+// entry a console page can reach must allow the whole set or the OPTIONS
+// fails with "Request header field x-request-id is not allowed" — which the
+// page only ever sees as `TypeError: Failed to fetch`, reading like an
+// outage. Centralised here, above the FIRST cors() that needs it (the tester
+// and /v1/me entries below are reached from the console's Tester portal), so
+// a new admin-side header is added in one place instead of drifting across
+// every entry.
+const ADMIN_ALLOWED_HEADERS = [
+  'Content-Type',
+  'Authorization',
+  'X-Mushi-Project-Id',
+  'X-Mushi-Org-Id',
+  // Legacy alias stamped alongside X-Mushi-Org-Id by apps/admin apiFetch.
+  // Omitting it fails the whole OPTIONS with "x-org-id is not allowed" —
+  // CLI device approve and every admin page went dark that way once.
+  'x-org-id',
+  'X-Request-Id',
+  'Idempotency-Key',
+];
+
+/** Browser-visible response headers for admin apiFetch correlation. */
+const ADMIN_EXPOSE_HEADERS = ['X-Request-Id'];
+
+/** Tracing headers the SDK widget adds on top of the console's set. */
+const WIDGET_TRACE_HEADERS = ['baggage', 'sentry-trace'];
+
 // Community tester endpoints: called directly from the SDK widget, which runs
-// on arbitrary host app domains. Must be CORS-open so preflight succeeds.
-// Auth is enforced per-route via jwtAuth middleware — CORS and auth are orthogonal.
+// on arbitrary host app domains, AND from the console's own Tester portal
+// (the Portal switch in the sidebar). Must be CORS-open so preflight
+// succeeds, and must allow the console's headers: with only the widget's
+// four listed, /v1/me/tester-status rejected the console's X-Request-Id
+// preflight and every Tester page rendered "Could not load your tester
+// profile — Failed to fetch". Auth is enforced per-route via jwtAuth
+// middleware — CORS and auth are orthogonal.
 app.use(
   '/v1/tester/*',
   cors({
     origin: '*',
-    allowHeaders: ['Content-Type', 'Authorization', 'baggage', 'sentry-trace'],
+    allowHeaders: [...ADMIN_ALLOWED_HEADERS, ...WIDGET_TRACE_HEADERS],
     allowMethods: ['GET', 'POST', 'OPTIONS'],
   }),
 );
@@ -310,7 +391,7 @@ app.use(
   '/v1/me/*',
   cors({
     origin: '*',
-    allowHeaders: ['Content-Type', 'Authorization', 'baggage', 'sentry-trace'],
+    allowHeaders: [...ADMIN_ALLOWED_HEADERS, ...WIDGET_TRACE_HEADERS],
     allowMethods: ['GET', 'OPTIONS'],
   }),
 );
@@ -351,30 +432,9 @@ const MIGRATIONS_PROGRESS_ORIGINS = Array.from(
   new Set([...ADMIN_ORIGIN_ALLOWLIST, ...DOCS_ORIGIN_ALLOWLIST]),
 );
 
-// Canonical header set for any admin-surfaced endpoint. Whenever apps/admin
-// calls apiFetch the browser's preflight asks for this exact set; missing one
-// here drops the preflight and the FE surfaces a "Failed to fetch" toast that
-// reads as a network outage but is really a CORS misconfig. Centralising the
-// list means a new admin-side header gets added in ONE place instead of
-// drifting across every cors() entry below. Declared here (above the first
-// cors() that uses it) to dodge any TDZ pitfall in the module-init path.
-const ADMIN_ALLOWED_HEADERS = [
-  'Content-Type',
-  'Authorization',
-  'X-Mushi-Project-Id',
-  'X-Mushi-Org-Id',
-  // Legacy alias stamped alongside X-Mushi-Org-Id by apps/admin apiFetch
-  // (supabase.ts). Browsers list every requested header in the preflight;
-  // omitting this alias fails the whole OPTIONS with
-  // "Request header field x-org-id is not allowed" — which surfaces as
-  // TypeError: Failed to fetch on CLI device approve + every admin page.
-  'x-org-id',
-  'X-Request-Id',
-  'Idempotency-Key',
-];
-
-/** Browser-visible response headers for admin apiFetch correlation. */
-const ADMIN_EXPOSE_HEADERS = ['X-Request-Id'];
+// ADMIN_ALLOWED_HEADERS / ADMIN_EXPOSE_HEADERS are declared further up, above
+// the /v1/tester and /v1/me entries — the first cors() entries the console's
+// apiFetch reaches — so the whole file shares one list (and no TDZ pitfall).
 
 app.use(
   '/v1/admin/migrations/*',
@@ -524,6 +584,10 @@ registerCodebaseRoutes(app);
 
 registerCodebaseUnderstandRoutes(app);
 
+registerRepoDigestRoutes(app);
+
+registerRepoDiagramRoutes(app);
+
 registerReportsDashboardRoutes(app);
 
 registerSettingsResearchRoutes(app);
@@ -556,6 +620,10 @@ registerQaCoverageRoutes(app);
 
 registerRewardsRoutes(app);
 
+// Host-backend account deletion: erase one end user's reports + reporter data.
+// Erase-token auth (identity secret), not the SDK key. Not CORS-exposed.
+registerEraseSubjectRoutes(app);
+
 // RFC 8628 device-auth (CLI login) + CLI-authenticated project endpoints.
 registerCliAuthRoutes(app);
 
@@ -568,6 +636,7 @@ registerMcpOauthRoutes(app);
 registerLessonsRoutes(app);
 registerSyncRoutes(app);
 registerReleasesRoutes(app);
+registerReporterAdminRoutes(app);
 registerPdcaRoutes(app);
 registerMcpAdminRoutes(app);
 registerDriftRoutes(app);
@@ -584,12 +653,39 @@ registerFeatureBoardRoutes(app);
 registerBackendRoutes(app);
 registerFullstackAuditRoutes(app);
 registerCodeHealthRoutes(app);
+registerRecipeRoutes(app);
+registerPortfolioRoutes(app);
+registerRadarRoutes(app);
+registerDigestRoutes(app);
+registerConnectorRoutes(app);
+registerRecipeIngestRoutes(app);
+registerAccountsRegisterRoutes(app);
+registerRecipeChangeRoutes(app);
+registerStoreOpsRoutes(app);
+registerFindingExplainRoutes(app);
+registerGateFindingDismissRoutes(app);
+registerPortfolioFunnelRoutes(app);
+registerSpendLedgerRoutes(app);
+registerStoreReviewIntakeRoutes(app);
 registerWorkspaceNavMetaRoutes(app);
 registerSkillsRoutes(app);
 registerSdkUpgradeRoutes(app);
+registerUxCloudRoutes(app);
+registerUxRunsRoutes(app);
+registerPullRequestRoutes(app);
+registerProjectGroupRoutes(app);
 registerBootstrapRoutes(app);
 registerIdentitySecretRoutes(app);
 registerSessionRoutes(app);
+registerEventRoutes(app);
+registerGrowthRoutes(app);
+registerEventsAdminRoutes(app);
+registerLifecycleEmailRoutes(app);
+registerSlackEventsRoutes(app);
+registerTelegramAdminRoutes(app);
+registerIntakeVoiceRoutes(app);
+registerPushRoutes(app);
+registerSentryImportRoutes(app);
 
 registerA2ATaskRoutes(app);
 

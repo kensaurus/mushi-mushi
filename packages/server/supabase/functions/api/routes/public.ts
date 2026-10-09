@@ -6,6 +6,8 @@ import { toSseEvent, sanitizeSseString, sseHeartbeat } from '../../_shared/sse.t
 import { AguiEmitter } from '../../_shared/agui.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { log } from '../../_shared/logger.ts';
+import { pickHighestVersion } from '../../_shared/sdk-version-compare.ts';
+import { unverifiedGithubInstallsAllowed } from '../../_shared/github-install-trust.ts';
 import { reportError } from '../../_shared/sentry.ts';
 import { apiKeyAuth, jwtAuth, adminOrApiKey } from '../../_shared/auth.ts';
 import {
@@ -45,7 +47,49 @@ import {
 } from '../helpers.ts';
 import { safeParse, ApiReportBodySchema } from '../../_shared/validate.ts';
 import { registerReporterFeatureBoardRoutes } from './reporter-feature-board.ts';
+import { registerReporterInboxRoutes } from './reporter-inbox.ts';
+import { registerReporterPrefsRoutes } from './reporter-prefs.ts';
+import { emailProviderConfigured } from '../../_shared/email.ts';
+import { getVapidConfig } from '../../_shared/web-push.ts';
+import { reporterSafePayload, type ReporterNotificationRow } from '../../_shared/reporter-copy.ts';
+import {
+  announceReporterReply,
+  claimReporterReplySlot,
+  REPORTER_REPLY_MAX_CHARS,
+} from '../../_shared/reporter-reply-signals.ts';
+import { runInBackground } from '../../_shared/background.ts';
+import {
+  createIndexerPushForwarder,
+  githubSignatureMatches,
+  routePatPushWebhook,
+} from '../../_shared/github-push-forward.ts';
+import { resolveReporterAuth } from './reporter-auth.ts';
+import { reporterKey } from '../../_shared/reporter-token.ts';
 import { claimIpRateLimit, extractClientIp } from './cli-auth.ts';
+import { unsubscribeSecret, verifyUnsubscribeToken } from '../../_shared/lifecycle-unsubscribe.ts';
+import { brandFooterDefaultForProject } from '../../_shared/brand-footer.ts';
+
+/**
+ * Reporter key for a Sentry user-feedback report.
+ *
+ * Until 2026-09-22 this column held the reporter's raw email address: PII in a
+ * column documented as a one-way key, shown in the console as the reporter's
+ * identity. Hashing it like an SDK token would be worse — an email is
+ * guessable, so it would become a credential for that person's threads.
+ * Instead: a `sentry:`-prefixed digest, which keeps one person's feedback
+ * grouped, matches no SDK-presented value (those resolve to `rk1_…`), and
+ * follows the sentinel convention (`tester:<id>`, `cron:<job>`). The address
+ * itself stays in custom_metadata.userEmail, where the console reads it.
+ */
+async function sentryReporterKey(email: unknown): Promise<string> {
+  if (typeof email !== 'string' || !email.trim()) return 'sentry-webhook';
+  const digest = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(email.trim().toLowerCase()),
+  );
+  const hex = Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
+  return `sentry:${hex}`;
+}
 
 // Upper bound for reporter-supplied notes that feed `mushi_apply_reporter_feedback`
 // (these can seed a reopened child report's description). Keeps a hostile or
@@ -147,6 +191,65 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
   // other route file (identity-secret.ts, sdk-assistant.ts,
   // settings-research.ts, etc.) does.
 
+  // ============================================================
+  // Lifecycle email unsubscribe — GET|POST /v1/public/email/unsubscribe?t=
+  //
+  // `t` = `<user_id>.<hmac>` signed by the lifecycle-emails cron with
+  // LIFECYCLE_UNSUB_SECRET (_shared/lifecycle-unsubscribe.ts). GET serves
+  // the link in the email footer and only CONFIRMS: it renders a one-button
+  // form and writes nothing, because mail scanners and link previewers fetch
+  // header and body URLs automatically (RFC 8058 §1), and a write on GET
+  // would unsubscribe people who never clicked. POST — the button, or the
+  // RFC 8058 one-click request mail clients send to the List-Unsubscribe URL —
+  // writes lifecycle_email_optout. Fails closed (400) when the secret is
+  // unset or the token does not verify — never a redirect, never a JSON blob
+  // a mail client would render.
+  // ============================================================
+  const unsubscribePage = (title: string, body: string, formHtml = '') =>
+    `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>${title}</title></head><body style="font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;max-width:480px;margin:64px auto;padding:0 16px;color:#18181b;line-height:1.5"><h1 style="font-size:20px">${title}</h1><p>${body}</p>${formHtml}</body></html>`;
+  const invalidUnsubscribeLink = (c: Context) =>
+    c.html(
+      unsubscribePage(
+        'This unsubscribe link is not valid',
+        'It may have been cut off by your mail client. You can also turn setup emails off in the Mushi console under Settings.',
+      ),
+      400,
+    );
+  app.get('/v1/public/email/unsubscribe', async (c) => {
+    const secret = unsubscribeSecret();
+    const token = c.req.query('t');
+    const userId = secret ? await verifyUnsubscribeToken(token, secret) : null;
+    if (!userId || !token) return invalidUnsubscribeLink(c);
+    const action = `?t=${encodeURIComponent(token)}`;
+    return c.html(
+      unsubscribePage(
+        'Unsubscribe from setup emails?',
+        'Mushi will stop sending setup tips. Account notices you asked for (usage alerts, team invites) still arrive.',
+        `<form method="post" action="${action}"><button type="submit" style="font:inherit;padding:8px 16px;border-radius:6px;border:1px solid #18181b;background:#18181b;color:#fff;cursor:pointer">Unsubscribe</button></form>`,
+      ),
+    );
+  });
+  const unsubscribeHandler = async (c: Context) => {
+    const secret = unsubscribeSecret();
+    const userId = secret ? await verifyUnsubscribeToken(c.req.query('t'), secret) : null;
+    if (!userId) return invalidUnsubscribeLink(c);
+    const db = getServiceClient();
+    const { error } = await db
+      .from('lifecycle_email_optout')
+      .upsert({ user_id: userId }, { onConflict: 'user_id', ignoreDuplicates: true });
+    if (error) {
+      log.warn('lifecycle unsubscribe write failed', { err: error.message });
+      return c.html(unsubscribePage('Something went wrong', 'Please try the link again in a minute.'), 500);
+    }
+    return c.html(
+      unsubscribePage(
+        "You're unsubscribed",
+        'No more setup emails from Mushi. Account notices you asked for (usage alerts, team invites) still arrive.',
+      ),
+    );
+  };
+  app.post('/v1/public/email/unsubscribe', unsubscribeHandler);
+
   app.get('/v1/sdk/latest-version', async (c) => {
     const packageName = c.req.query('package')?.trim();
     if (!packageName) {
@@ -157,15 +260,14 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
     }
 
     const db = getServiceClient();
-    const { data, error } = await db
+    const { data: rows, error } = await db
       .from('sdk_versions')
       .select('package, version, deprecated, deprecation_message, released_at')
       .eq('package', packageName)
-      .order('released_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .limit(500);
 
     if (error) return dbError(c, error);
+    const data = pickHighestVersion(rows ?? []);
     c.header('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400');
     return c.json({
       ok: true,
@@ -186,20 +288,33 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
       .from('project_settings')
       .select(
         'sdk_config_enabled, sdk_widget_position, sdk_widget_theme, sdk_widget_trigger_text, ' +
-          'sdk_widget_launcher, sdk_banner_variant, sdk_banner_position, sdk_banner_bug_cta, sdk_banner_feature_cta, sdk_banner_message, sdk_banner_label, ' +
+          'sdk_widget_launcher, sdk_widget_attach_selector, sdk_banner_variant, sdk_banner_position, sdk_banner_bug_cta, sdk_banner_feature_cta, sdk_banner_message, sdk_banner_label, ' +
           'sdk_screenshot_sensitive_hint, ' +
           'sdk_capture_console, sdk_capture_network, sdk_capture_performance, sdk_capture_screenshot, ' +
           'sdk_capture_element_selector, sdk_native_trigger_mode, sdk_min_description_length, sdk_config_updated_at, ' +
-          'reporter_notifications_enabled, ' +
-          'assistant_enabled, assistant_label, assistant_greeting, assistant_suggestions',
+          'reporter_notifications_enabled, widget_brand_footer, ' +
+          'assistant_enabled, assistant_label, assistant_greeting, assistant_suggestions, ' +
+          'reporter_email_enabled, reporter_push_enabled',
       )
       .eq('project_id', projectId)
       .maybeSingle();
 
     if (error) return dbError(c, error);
+    // "Powered by Mushi" footer (growth loop, docs/plan-gtm.md → Workstream
+    // C §6): project_settings.widget_brand_footer wins when set; otherwise
+    // the plan decides (on for Free Cloud, off for paid / self-host). The
+    // host's MIT `brandFooter` config remains a hard override on the client.
+    const brandFooterDefault = await brandFooterDefaultForProject(db, projectId);
     c.header('Cache-Control', 'private, max-age=60, stale-while-revalidate=300');
     c.header('Vary', 'Origin, X-Mushi-Project, X-Mushi-Api-Key');
-    return c.json({ ok: true, data: normalizeSdkConfig(data as SdkConfigRow | null) });
+    return c.json({
+      ok: true,
+      data: normalizeSdkConfig(data as SdkConfigRow | null, {
+        brandFooterDefault,
+        emailProviderConfigured: emailProviderConfigured(),
+        vapidPublicKey: getVapidConfig()?.publicKey ?? null,
+      }),
+    });
   });
 
   // ============================================================
@@ -473,24 +588,19 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
 
   app.post('/v1/webhooks/sentry', async (c) => {
     const t0 = Date.now();
-    const { audit, checkReplay, checkRateLimit } = createWebhookMiddleware('sentry');
-    const signature = c.req.header('X-Sentry-Hook-Signature');
+    const { audit, hasAcceptedDuplicate, checkRateLimit } = createWebhookMiddleware('sentry');
+    const { readSentryHookHeaders, verifySentryDelivery } = await import('../../_shared/sentry-webhook-verify.ts');
+    const hookHeaders = readSentryHookHeaders((name) => c.req.header(name));
     const body = await c.req.text();
-    const deliveryId = c.req.header('Sentry-Hook-Resource-Id') ?? null;
     const sourceIp = c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For')?.split(',')[0]?.trim() ?? null;
 
-    const auditRow = await audit(c as never, body, deliveryId);
+    const auditRow = await audit(c as never, body, hookHeaders.requestId);
     try {
       checkRateLimit(sourceIp);
-      await checkReplay(auditRow.id, deliveryId);
     } catch (err) {
       if (err instanceof RateLimitError) {
         await auditRow.resolve('rejected_rate_limit', 429, Date.now() - t0, err.message);
         return c.json({ ok: false, error: { code: 'RATE_LIMITED', message: err.message } }, 429);
-      }
-      if (err instanceof ReplayAttackError) {
-        await auditRow.resolve('rejected_replay', 409, Date.now() - t0, err.message);
-        return c.json({ ok: false, error: { code: 'DUPLICATE', message: 'Duplicate delivery' } }, 409);
       }
       throw err;
     }
@@ -528,45 +638,28 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
       .eq('project_id', projectId)
       .single();
 
-    if (!settings?.sentry_webhook_secret) {
-      // Resolve the audit row before bailing — otherwise this row is stuck in
-      // 'pending' forever, polluting webhook_audit_log dashboards. The outcome
-      // is 'error' (config), not 'rejected_signature' (which implies the
-      // request was signed but the secret didn't match).
-      await auditRow.resolve('error', 403, Date.now() - t0, 'Sentry webhook secret not configured');
-      return c.json(
-        { ok: false, error: { code: 'NO_SECRET', message: 'Sentry webhook secret not configured for this project' } },
-        403,
+    // The console stores the secret in Vault and keeps a `vault://` ref in the
+    // column; read the plaintext back. An unreadable ref yields null, which
+    // rejects like a missing secret.
+    const { dereferenceMaybeVault } = await import('../../_shared/integration-probes.ts');
+    const webhookSecret = await dereferenceMaybeVault(db, settings?.sentry_webhook_secret ?? null);
+
+    let verdict: Awaited<ReturnType<typeof verifySentryDelivery>>;
+    try {
+      verdict = await verifySentryDelivery(
+        { headers: hookHeaders, body, secret: webhookSecret, nowMs: Date.now() },
+        {
+          isReplay: ({ requestId, bodyHash }) =>
+            hasAcceptedDuplicate(auditRow.id, { deliveryId: requestId, bodyHash }),
+        },
       );
+    } catch (err) {
+      await auditRow.resolve('error', 500, Date.now() - t0, String(err).slice(0, 300));
+      return c.json({ ok: false, error: { code: 'VERIFY_FAILED', message: 'Could not verify delivery' } }, 500);
     }
-
-    if (!signature) {
-      await auditRow.resolve('rejected_signature', 401, Date.now() - t0, 'Missing signature');
-      return c.json({ ok: false, error: { code: 'MISSING_SIGNATURE', message: 'Missing signature' } }, 401);
-    }
-
-    const encoder = new TextEncoder();
-    const key = await crypto.subtle.importKey(
-      'raw',
-      encoder.encode(settings.sentry_webhook_secret),
-      { name: 'HMAC', hash: 'SHA-256' },
-      false,
-      ['sign'],
-    );
-    const sig = await crypto.subtle.sign('HMAC', key, encoder.encode(body));
-    const expected = Array.from(new Uint8Array(sig))
-      .map((b) => b.toString(16).padStart(2, '0'))
-      .join('');
-
-    // SEC (Wave S1 / D-19): constant-time compare to prevent timing side-channel.
-    // Same bookkeeping pattern as verifyGithubSignature below.
-    let diff = expected.length ^ signature.length;
-    for (let i = 0, n = Math.max(expected.length, signature.length); i < n; i++) {
-      diff |= (expected.charCodeAt(i) || 0) ^ (signature.charCodeAt(i) || 0);
-    }
-    if (diff !== 0) {
-      await auditRow.resolve('rejected_signature', 401, Date.now() - t0, 'HMAC mismatch');
-      return c.json({ ok: false, error: { code: 'INVALID_SIGNATURE', message: 'Invalid signature' } }, 401);
+    if (!verdict.ok) {
+      await auditRow.resolve(verdict.auditOutcome, verdict.status, Date.now() - t0, verdict.message);
+      return c.json({ ok: false, error: { code: verdict.code, message: verdict.message } }, verdict.status);
     }
 
     const action = payload?.action;
@@ -582,7 +675,7 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
         user_category: 'other',
         category: 'other',
         status: 'new',
-        reporter_token_hash: (feedback.email as string) ?? 'sentry-webhook',
+        reporter_token_hash: await sentryReporterKey(feedback.email),
         sentry_issue_url: (pd.issue as Record<string, unknown> | undefined)?.permalink as string | undefined,
         sentry_seer_analysis: pd.seer_analysis,
         custom_metadata: {
@@ -660,30 +753,50 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
   // because Sentry doesn't propagate custom headers to internal integrations.
 
   app.post('/v1/webhooks/sentry/seer', async (c) => {
-    const {
-      verifySentryHookSignature,
-      parseIssueWebhookBody,
-      parseSeerAutofixBody,
-      applySeerAnalysis,
-    } = await import('../_shared/seer.ts');
+    const t0 = Date.now();
+    const { parseIssueWebhookBody, parseSeerAutofixBody, applySeerAnalysis } = await import(
+      '../../_shared/seer.ts'
+    );
+    const { readSentryHookHeaders, verifySentryDelivery } = await import('../../_shared/sentry-webhook-verify.ts');
+    const { audit, hasAcceptedDuplicate, checkRateLimit } = createWebhookMiddleware('sentry_seer');
+    const hookHeaders = readSentryHookHeaders((name) => c.req.header(name));
+    const rawBody = await c.req.text();
+    const sourceIp = c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For')?.split(',')[0]?.trim() ?? null;
+
+    const auditRow = await audit(c as never, rawBody, hookHeaders.requestId);
+    // Every return after this point goes through `done` so the audit row is
+    // resolved (a 2xx is recorded as accepted, which feeds the replay check).
+    const done = async (res: Response, error?: string): Promise<Response> => {
+      await auditRow.resolve(res.status < 400 ? 'accepted' : 'error', res.status, Date.now() - t0, error);
+      return res;
+    };
+    try {
+      checkRateLimit(sourceIp);
+    } catch (err) {
+      if (err instanceof RateLimitError) {
+        await auditRow.resolve('rejected_rate_limit', 429, Date.now() - t0, err.message);
+        return c.json({ ok: false, error: { code: 'RATE_LIMITED', message: err.message } }, 429);
+      }
+      throw err;
+    }
 
     const projectId = c.req.query('projectId') ?? c.req.header('X-Mushi-Project') ?? '';
     if (!projectId) {
-      return c.json(
-        {
-          ok: false,
-          error: {
-            code: 'MISSING_PROJECT',
-            message: 'projectId query param or X-Mushi-Project header is required',
+      return done(
+        c.json(
+          {
+            ok: false,
+            error: {
+              code: 'MISSING_PROJECT',
+              message: 'projectId query param or X-Mushi-Project header is required',
+            },
           },
-        },
-        400,
+          400,
+        ),
+        'Cannot determine project',
       );
     }
-
-    const rawBody = await c.req.text();
-    const signature =
-      c.req.header('Sentry-Hook-Signature') ?? c.req.header('X-Sentry-Hook-Signature');
+    void auditRow.setProject(projectId).catch(() => {});
 
     const db = getServiceClient();
     const { data: settings } = await db
@@ -692,44 +805,41 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
       .eq('project_id', projectId)
       .maybeSingle();
 
-    if (!settings?.sentry_webhook_secret) {
-      return c.json(
+    // Same Vault-backed secret and the same checks as /v1/webhooks/sentry:
+    // signature, timestamp window, Request-ID + body replay.
+    const { dereferenceMaybeVault } = await import('../../_shared/integration-probes.ts');
+    const seerSecret = await dereferenceMaybeVault(db, settings?.sentry_webhook_secret ?? null);
+    let verdict: Awaited<ReturnType<typeof verifySentryDelivery>>;
+    try {
+      verdict = await verifySentryDelivery(
+        { headers: hookHeaders, body: rawBody, secret: seerSecret, nowMs: Date.now() },
         {
-          ok: false,
-          error: {
-            code: 'NO_SECRET',
-            message: 'Sentry webhook secret not configured for this project',
-          },
+          isReplay: ({ requestId, bodyHash }) =>
+            hasAcceptedDuplicate(auditRow.id, { deliveryId: requestId, bodyHash }),
         },
-        403,
       );
+    } catch (err) {
+      await auditRow.resolve('error', 500, Date.now() - t0, String(err).slice(0, 300));
+      return c.json({ ok: false, error: { code: 'VERIFY_FAILED', message: 'Could not verify delivery' } }, 500);
     }
-    if (!settings.sentry_seer_enabled) {
-      return c.json({ ok: true, data: { ignored: 'seer_disabled' } }, 202);
+    if (!verdict.ok) {
+      await auditRow.resolve(verdict.auditOutcome, verdict.status, Date.now() - t0, verdict.message);
+      return c.json({ ok: false, error: { code: verdict.code, message: verdict.message } }, verdict.status);
     }
-
-    const valid = await verifySentryHookSignature(
-      rawBody,
-      signature ?? null,
-      settings.sentry_webhook_secret,
-    );
-    if (!valid) {
-      return c.json(
-        { ok: false, error: { code: 'BAD_SIGNATURE', message: 'Invalid HMAC signature' } },
-        401,
-      );
+    if (!settings?.sentry_seer_enabled) {
+      return done(c.json({ ok: true, data: { ignored: 'seer_disabled' } }, 202));
     }
 
     let body: unknown;
     try {
       body = JSON.parse(rawBody);
     } catch {
-      return c.json({ ok: false, error: { code: 'BAD_JSON' } }, 400);
+      return done(c.json({ ok: false, error: { code: 'BAD_JSON' } }, 400), 'Invalid JSON body');
     }
 
     const issue = parseIssueWebhookBody(body);
     if (!issue) {
-      return c.json({ ok: true, data: { ignored: 'no_issue_in_payload' } }, 202);
+      return done(c.json({ ok: true, data: { ignored: 'no_issue_in_payload' } }, 202));
     }
 
     // Sentry sends two flavours of seer payload: (a) issue-event with the
@@ -764,7 +874,7 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
           /* best-effort */
         });
       }
-      return c.json({ ok: true, data: { issueId: issue.id, deferred: true } }, 202);
+      return done(c.json({ ok: true, data: { issueId: issue.id, deferred: true } }, 202));
     }
 
     const result = await applySeerAnalysis(db, projectId, {
@@ -778,17 +888,20 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
       source: 'webhook',
     });
 
-    return c.json({ ok: true, data: { issueId: issue.id, ...result } });
+    return done(c.json({ ok: true, data: { issueId: issue.id, ...result } }));
   });
 
   // ============================================================
-  // GITHUB CHECK-RUN WEBHOOK (V5.3 §2.10 — closes the PDCA loop)
+  // GITHUB REPO WEBHOOK: check runs (V5.3 §2.10, closes the PDCA loop)
+  // and pushes for PAT-connected repos (gap #16b, push indexing)
   // ============================================================
   // Configure in GitHub: Settings → Webhooks → Add webhook
   //   Payload URL: <api>/v1/webhooks/github
   //   Content type: application/json
-  //   Secret: same value as project_settings.github_webhook_secret
-  //   Events: "Check runs" + "Check suites"
+  //   Secret: the value project_settings.github_webhook_secret refers to in Vault
+  //   Events: "Check runs" + "Check suites" + "Pushes"
+  // A repo with the Mushi GitHub App installed gets pushes through the App
+  // instead; this route skips those repos so nothing is indexed twice.
 
   app.post('/v1/webhooks/github', async (c) => {
     const t0 = Date.now();
@@ -813,6 +926,38 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
         return c.json({ ok: false, error: { code: 'DUPLICATE', message: 'Duplicate delivery' } }, 409);
       }
       throw err;
+    }
+
+    if (event === 'push') {
+      let pushed;
+      try {
+        const db = getServiceClient();
+        // Hands a verified push to webhooks-github-indexer's internal
+        // `mode: 'push'` in the background (GitHub wants an answer in 10 s);
+        // a failed hand-off is written to the repo's last_index_error.
+        const forward = createIndexerPushForwarder({
+          db,
+          supabaseUrl: Deno.env.get('SUPABASE_URL'),
+          internalSecret: Deno.env.get('MUSHI_INTERNAL_CALLER_SECRET') ?? Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'),
+          background: runInBackground,
+          log,
+        });
+        pushed = await routePatPushWebhook({ body, signature: sig, deliveryId }, { db, forward, log });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        log.error('PAT push routing failed', { error: message });
+        await auditRow.resolve('error', 500, Date.now() - t0, message);
+        return c.json({ ok: false, error: { code: 'PUSH_FORWARD_FAILED', message: 'Could not hand the push to the indexer' } }, 500);
+      }
+      // Lets the radar count accepted deliveries per project (webhook_never_delivered).
+      if (pushed.projectIds[0]) await auditRow.setProject(pushed.projectIds[0]);
+      await auditRow.resolve(
+        pushed.outcome,
+        pushed.status,
+        Date.now() - t0,
+        pushed.auditNote,
+      );
+      return c.json(pushed.body, pushed.status);
     }
 
     if (event !== 'check_run' && event !== 'check_suite') {
@@ -864,6 +1009,9 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
     // posture is FAIL CLOSED: if we can't verify the signature, we refuse the
     // write entirely. Operators must either configure a github_webhook_secret
     // per project or stop sending the webhook.
+    // The column holds a `vault://` ref; an unreadable ref resolves to null
+    // and is skipped like a missing secret.
+    const { dereferenceMaybeVault } = await import('../../_shared/settings-secrets.ts');
     let verified = false;
     let verifiedProjectId: string | null = null;
     for (const cand of candidates) {
@@ -872,9 +1020,9 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
         .select('github_webhook_secret')
         .eq('project_id', cand.project_id)
         .single();
-      const secret = settings?.github_webhook_secret as string | undefined;
+      const secret = await dereferenceMaybeVault(db, (settings?.github_webhook_secret as string | null) ?? null);
       if (!secret) continue;
-      if (await verifyGithubSignature(sig, body, secret)) {
+      if (await githubSignatureMatches(sig, body, secret)) {
         verified = true;
         verifiedProjectId = cand.project_id;
         break;
@@ -911,32 +1059,6 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
     await auditRow.resolve('accepted', 200, Date.now() - t0);
     return c.json({ ok: true, data: { updated: targetIds.length, verified } });
   });
-
-  async function verifyGithubSignature(
-    headerSig: string,
-    body: string,
-    secret: string,
-  ): Promise<boolean> {
-    const expected = headerSig.startsWith('sha256=') ? headerSig.slice('sha256='.length) : '';
-    if (!expected) return false;
-    const enc = new TextEncoder();
-    const key = await crypto.subtle.importKey(
-      'raw',
-      enc.encode(secret),
-      { name: 'HMAC', hash: 'SHA-256' },
-      false,
-      ['sign'],
-    );
-    const sig = await crypto.subtle.sign('HMAC', key, enc.encode(body));
-    const computed = Array.from(new Uint8Array(sig))
-      .map((b) => b.toString(16).padStart(2, '0'))
-      .join('');
-    if (computed.length !== expected.length) return false;
-    let diff = 0;
-    for (let i = 0; i < computed.length; i++)
-      diff |= computed.charCodeAt(i) ^ expected.charCodeAt(i);
-    return diff === 0;
-  }
 
   // ============================================================
   // SDK STATUS
@@ -1025,177 +1147,23 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
         400,
       );
 
-    const encoder = new TextEncoder();
-    const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(reporterToken));
-    const tokenHash = Array.from(new Uint8Array(hashBuffer))
-      .map((b) => b.toString(16).padStart(2, '0'))
-      .join('');
-
     const db = getServiceClient();
-    const rep = await getReputation(db, projectId, tokenHash);
+    const rep = await getReputation(db, projectId, await reporterKey(reporterToken));
     return c.json({ ok: true, data: rep });
   });
 
   // Reporter notifications
   //
-  // Auth model: two flows are accepted, in priority order:
-  //
-  //   (A) HMAC-signed (preferred). The SDK proves possession of the reporter
-  //       token without sending it on the wire:
-  //
-  //         X-Reporter-Token-Hash: <sha256(token) hex>
-  //         X-Reporter-Ts:         <unix ms>
-  //         X-Reporter-Hmac:       hex(HMAC-SHA256(
-  //                                  secret = projectApiKey,
-  //                                  msg    = `${projectId}.${ts}.${tokenHash}`))
-  //
-  //       Server enforces `|now - ts| < 5 min` to defeat replay, then recomputes
-  //       the HMAC against the API key already validated by apiKeyAuth.
-  //
-  //   (B) Legacy raw-token. Accepted for backwards compatibility but logged as a
-  //       deprecation warning by the SDK. Token can be passed as
-  //       `X-Reporter-Token` header (preferred over query so it doesn't leak
-  //       into proxy logs) or `?reporterToken=...`.
-  //
-  // Both flows resolve to a stable `reporter_token_hash` for table lookup.
-  async function resolveReporterTokenHash(
-    c: Context,
-    projectId: string,
-  ): Promise<
-    { ok: true; tokenHash: string } | { ok: false; status: number; code: string; message: string }
-  > {
-    const headerHash = c.req.header('X-Reporter-Token-Hash');
-    const ts = c.req.header('X-Reporter-Ts');
-    const sig = c.req.header('X-Reporter-Hmac');
-    const apiKey = c.req.header('X-Mushi-Api-Key') || c.req.header('X-Mushi-Project');
+  // Auth: signed digest (X-Reporter-Token-Hash + X-Reporter-Ts + X-Reporter-Hmac)
+  // or the raw token for older SDKs; see reporter-auth.ts. Both resolve to the
+  // one-way key the reporter tables store.
+  const resolveReporterTokenHash = resolveReporterAuth;
 
-    if (headerHash && ts && sig && apiKey) {
-      // Belt-and-suspenders: even though the HMAC is computed over the lowercase
-      // hash and a tampered value would fail signature verification, we also
-      // refuse anything that doesn't look like a SHA-256 hex digest before it
-      // ever flows into PostgREST `or()` filter strings downstream.
-      if (!/^[0-9a-f]{64}$/i.test(headerHash)) {
-        return {
-          ok: false,
-          status: 400,
-          code: 'BAD_TOKEN_HASH',
-          message: 'X-Reporter-Token-Hash must be a 64-char hex SHA-256 digest',
-        };
-      }
-      const parsedTs = Number(ts);
-      if (!Number.isFinite(parsedTs)) {
-        return {
-          ok: false,
-          status: 400,
-          code: 'BAD_TIMESTAMP',
-          message: 'X-Reporter-Ts must be a unix-ms integer',
-        };
-      }
-      const skewMs = Math.abs(Date.now() - parsedTs);
-      if (skewMs > 5 * 60 * 1000) {
-        return {
-          ok: false,
-          status: 401,
-          code: 'STALE_REQUEST',
-          message: 'X-Reporter-Ts outside 5-minute window',
-        };
-      }
-      const enc = new TextEncoder();
-      const key = await crypto.subtle.importKey(
-        'raw',
-        enc.encode(apiKey),
-        { name: 'HMAC', hash: 'SHA-256' },
-        false,
-        ['sign'],
-      );
-      const expected = await crypto.subtle.sign(
-        'HMAC',
-        key,
-        enc.encode(`${projectId}.${parsedTs}.${headerHash.toLowerCase()}`),
-      );
-      const expectedHex = Array.from(new Uint8Array(expected))
-        .map((b) => b.toString(16).padStart(2, '0'))
-        .join('');
-      if (!constantTimeEqualHex(expectedHex, sig)) {
-        return {
-          ok: false,
-          status: 401,
-          code: 'INVALID_HMAC',
-          message: 'X-Reporter-Hmac signature mismatch',
-        };
-      }
-      return { ok: true, tokenHash: headerHash.toLowerCase() };
-    }
-
-    const rawToken = c.req.header('X-Reporter-Token') ?? c.req.query('reporterToken') ?? null;
-    if (!rawToken) {
-      return {
-        ok: false,
-        status: 400,
-        code: 'MISSING_TOKEN',
-        message:
-          'Pass X-Reporter-Token-Hash + X-Reporter-Hmac (preferred) or X-Reporter-Token / ?reporterToken=',
-      };
-    }
-    const enc = new TextEncoder();
-    const buf = await crypto.subtle.digest('SHA-256', enc.encode(rawToken));
-    const tokenHash = Array.from(new Uint8Array(buf))
-      .map((b) => b.toString(16).padStart(2, '0'))
-      .join('');
-    return { ok: true, tokenHash };
-  }
-
-  function constantTimeEqualHex(a: string, b: string): boolean {
-    if (a.length !== b.length) return false;
-    let diff = 0;
-    for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-    return diff === 0;
-  }
-
-  app.get('/v1/reporter/reports', apiKeyAuth, async (c) => {
-    const projectId = c.get('projectId') as string;
-    const auth = await resolveReporterTokenHash(c, projectId);
-    if (!auth.ok)
-      return c.json(
-        { ok: false, error: { code: auth.code, message: auth.message } },
-        auth.status as 400 | 401,
-      );
-
-    const db = getServiceClient();
-    const { data: reports, error } = await db
-      .from('reports')
-      .select('id, status, category, severity, summary, description, created_at, last_admin_reply_at, last_reporter_reply_at, parent_report_id, verified_at, reopened_at, regression_count')
-      .eq('project_id', projectId)
-      .eq('reporter_token_hash', auth.tokenHash)
-      .order('created_at', { ascending: false })
-      .limit(25);
-    if (error) return dbError(c, error);
-
-    const reportIds = (reports ?? []).map((r) => r.id);
-    const unreadByReport = new Map<string, number>();
-    if (reportIds.length > 0) {
-      const { data: unread } = await db
-        .from('reporter_notifications')
-        .select('report_id')
-        .eq('project_id', projectId)
-        .eq('reporter_token_hash', auth.tokenHash)
-        .is('read_at', null)
-        .in('report_id', reportIds);
-      for (const row of unread ?? []) {
-        unreadByReport.set(row.report_id, (unreadByReport.get(row.report_id) ?? 0) + 1);
-      }
-    }
-
-    return c.json({
-      ok: true,
-      data: {
-        reports: (reports ?? []).map((r) => ({
-          ...r,
-          unread_count: unreadByReport.get(r.id) ?? 0,
-        })),
-      },
-    });
-  });
+  // GET /v1/reporter/reports, GET /v1/reporter/reports/:id, mark-read and
+  // /v1/reporter/updates live in reporter-inbox.ts (Plan 018 §2.2–2.3).
+  registerReporterInboxRoutes(app, resolveReporterTokenHash);
+  // Email opt-in / unsubscribe and reporter Web Push (Plan 018 §4.1).
+  registerReporterPrefsRoutes(app, resolveReporterTokenHash);
 
   app.get('/v1/reporter/reports/:id/comments', apiKeyAuth, async (c) => {
     const projectId = c.get('projectId') as string;
@@ -1280,8 +1248,40 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
         400,
       );
     }
+    if (text.length > REPORTER_REPLY_MAX_CHARS) {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'REPLY_TOO_LONG',
+            message: `Reply must be at most ${REPORTER_REPLY_MAX_CHARS} characters.`,
+          },
+        },
+        400,
+      );
+    }
 
     const db = getServiceClient();
+    // 10 replies per hour per reporter per project. Fails closed (429) on an
+    // unexpected limiter error — see reporter-reply-signals.ts.
+    const slot = await claimReporterReplySlot(db, projectId, auth.tokenHash);
+    if (!slot.ok) {
+      c.header('Retry-After', String(slot.retryAfterSeconds));
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'RATE_LIMITED',
+            message:
+              slot.reason === 'limit'
+                ? 'Too many replies on this report thread — try again later.'
+                : 'Replies are briefly unavailable — try again in a moment.',
+          },
+        },
+        429,
+      );
+    }
+
     const { data: report, error: reportError } = await db
       .from('reports')
       .select('id')
@@ -1336,7 +1336,7 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
         // Chip-only replies still need a body for the audit trail —
         // synthesise a human-readable phrase from the signal so the
         // admin UI doesn't render an empty bubble.
-        body: (text || (rawSignal ? `[${rawSignal}]` : '')).slice(0, 10000),
+        body: text || (rawSignal ? `[${rawSignal}]` : ''),
         visible_to_reporter: true,
         feedback_signal: rawSignal,
       })
@@ -1345,6 +1345,19 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
       )
       .single();
     if (error) return dbError(c, error);
+
+    // The reporter answered: tell the people who can act on it (plugin event,
+    // Slack thread, console push) and reopen a "couldn't reproduce" close.
+    // The trigger already cleared awaiting_reporter_at.
+    runInBackground(
+      announceReporterReply(db, {
+        projectId,
+        reportId,
+        commentId: (comment as { id: number }).id,
+        body: (comment as { body: string }).body,
+      }),
+      'reporter_reply_signals',
+    );
 
     return c.json({ ok: true, data: { comment, feedback: feedbackOutcome } }, 201);
   });
@@ -1441,9 +1454,10 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
     const db = getServiceClient();
     let query = db
       .from('reporter_notifications')
-      .select('id, notification_type, payload, read_at, created_at')
+      .select('id, report_id, notification_type, payload, read_at, created_at, body_override')
       .eq('project_id', projectId)
       .eq('reporter_token_hash', auth.tokenHash)
+      .eq('status', 'sent')
       .order('created_at', { ascending: false })
       .limit(limit);
     if (!includeRead) query = query.is('read_at', null);
@@ -1458,7 +1472,17 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
     return c.json({
       ok: true,
       data: {
-        notifications: notifications ?? [],
+        // Payload text is re-rendered from templates on every read, so rows
+        // written before Plan 018 ("classified as bug/high") never reach a
+        // reporter, and category / severity are dropped.
+        notifications: ((notifications ?? []) as ReporterNotificationRow[]).map((n) => ({
+          id: n.id,
+          report_id: n.report_id ?? null,
+          notification_type: n.notification_type === 'classified' ? 'reviewing' : n.notification_type,
+          payload: reporterSafePayload(n),
+          read_at: n.read_at ?? null,
+          created_at: n.created_at,
+        })),
         server_time: new Date().toISOString(),
       },
     });
@@ -1500,6 +1524,18 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
         setupAction,
       })
       return c.redirect(`${adminBase}/?github_installed=1`, 302)
+    }
+
+    // Neither the installation id nor the state is authenticated here, so the
+    // binding is refused unless this is a single-tenant install that opted in
+    // (see _shared/github-install-trust.ts).
+    if (!unverifiedGithubInstallsAllowed()) {
+      log.warn('refused unverified GitHub App installation binding', {
+        scope: 'github-app-callback',
+        installationId,
+        setupAction,
+      })
+      return c.redirect(`${adminBase}/integrations/config?github_error=install_unverified`, 302)
     }
 
     const db = getServiceClient()
@@ -1600,7 +1636,8 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
       .update({ read_at: new Date().toISOString() })
       .eq('id', notifId)
       .eq('project_id', projectId)
-      .eq('reporter_token_hash', auth.tokenHash);
+      .eq('reporter_token_hash', auth.tokenHash)
+      .eq('status', 'sent');
     if (error) return dbError(c, error);
     return c.json({ ok: true });
   });

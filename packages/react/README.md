@@ -2,26 +2,19 @@
 
 > **Your AI wrote it. Mushi tells you why it broke.**
 
-React / Next.js SDK for [Mushi Mushi](https://www.npmjs.com/package/mushi-mushi) — the comprehension layer for AI-built apps. When your app breaks, Mushi tells you why in plain English, with the fix ready to paste, right inside your editor.
+The React and Next.js SDK for [Mushi Mushi](https://github.com/kensaurus/mushi-mushi). It adds a bug button to your app. When a user taps it, Mushi captures a screenshot, the route, their note and the recent console and network events, explains the cause in plain English, and hands your editor a fix to start from.
 
-> **One-command setup:** `npx mushi-mushi` auto-detects React / Next.js and installs this package with the right env vars and prefix (`NEXT_PUBLIC_`, `VITE_`, etc.).
->
-> **Other frameworks:** [`@mushi-mushi/vue`](https://npmjs.com/package/@mushi-mushi/vue) · [`@mushi-mushi/svelte`](https://npmjs.com/package/@mushi-mushi/svelte) · [`@mushi-mushi/angular`](https://npmjs.com/package/@mushi-mushi/angular) · [`@mushi-mushi/react-native`](https://npmjs.com/package/@mushi-mushi/react-native) · [`@mushi-mushi/capacitor`](https://npmjs.com/package/@mushi-mushi/capacitor) · [`@mushi-mushi/web`](https://npmjs.com/package/@mushi-mushi/web)
-
-## What this does
-
-Adds a floating 🐛 button (or your own button via `MushiTrigger`) to your React app. Users click it, scribble a note, and Mushi captures: a screenshot, the current route, the user's description, and the last few seconds of console and network activity. An AI classifies the report (severity, category, component) within seconds. Duplicate reports across users collapse to one row. Stable clusters are promoted to named learning rules that feed into your next PR review and your next AI agent run.
-
-See the [main README](https://www.npmjs.com/package/mushi-mushi) for the full before/after and pros/cons.
-
-## Install
-
-```bash
-npm install @mushi-mushi/react
-# or: npx mushi-mushi
+```mermaid
+flowchart LR
+    A["User taps the bug button"] --> B["Mushi diagnoses the bug"] --> C["Fix lands in your editor"]
 ```
 
 ## Quick start
+
+```bash
+npx mushi-mushi    # detects React or Next.js, installs this package, writes NEXT_PUBLIC_ / VITE_ env vars
+# or: npm install @mushi-mushi/react
+```
 
 ```tsx
 import { MushiProvider } from '@mushi-mushi/react';
@@ -29,8 +22,8 @@ import { MushiProvider } from '@mushi-mushi/react';
 function App() {
   return (
     <MushiProvider config={{
-      projectId: process.env.REACT_APP_MUSHI_PROJECT_ID!,  // UUID from Admin → Projects
-      apiKey: process.env.REACT_APP_MUSHI_API_KEY!,        // from Admin → Settings → API Keys
+      projectId: import.meta.env.VITE_MUSHI_PROJECT_ID, // from the console's Projects page
+      apiKey: import.meta.env.VITE_MUSHI_API_KEY,       // report:write key from Setup → Verify
     }}>
       <YourApp />
     </MushiProvider>
@@ -38,77 +31,80 @@ function App() {
 }
 ```
 
-**Next.js App Router** — put the provider in `app/layout.tsx`:
+### Next.js App Router
+
+The provider uses React context, so it lives in a client component:
 
 ```tsx
+// app/providers.tsx
+'use client';
 import { MushiProvider } from '@mushi-mushi/react';
+
+export function Providers({ children }: { children: React.ReactNode }) {
+  return (
+    <MushiProvider config={{
+      projectId: process.env.NEXT_PUBLIC_MUSHI_PROJECT_ID!,
+      apiKey: process.env.NEXT_PUBLIC_MUSHI_API_KEY!,
+    }}>
+      {children}
+    </MushiProvider>
+  );
+}
+```
+
+Wrap the tree in `app/layout.tsx`, which stays a Server Component. Keep callbacks such as `beforeSend` in `providers.tsx`, because functions cannot cross from a Server Component to a client one.
+
+```tsx
+// app/layout.tsx
+import { Providers } from './providers';
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html>
       <body>
-        <MushiProvider config={{
-          projectId: process.env.NEXT_PUBLIC_MUSHI_PROJECT_ID!,
-          apiKey: process.env.NEXT_PUBLIC_MUSHI_API_KEY!,
-        }}>
-          {children}
-        </MushiProvider>
+        <Providers>{children}</Providers>
       </body>
     </html>
   );
 }
 ```
 
-## Headless integration
-
-Attach the reporter to any element in your existing design system:
+## Use your own button
 
 ```tsx
 import { MushiTrigger, MushiAttach } from '@mushi-mushi/react'
 
-// Polymorphic wrapper — any element or component
+// Any element or component
 <MushiTrigger as="button" category="bug" className="my-feedback-btn">
   Report a bug
 </MushiTrigger>
 
-// With Radix / shadcn
+// Your design system's button (Radix, shadcn, …)
 <MushiTrigger as={Button} variant="ghost" size="sm">Feedback</MushiTrigger>
 
-// Attach to an element you can't wrap
+// An element you can't wrap
 <MushiAttach selector="#help-button" category="bug" />
 ```
 
-## API
+## What's inside
 
-```tsx
-import { MushiProvider, useMushi, useMushiReport, useMushiReady, MushiErrorBoundary } from '@mushi-mushi/react'
-```
+| Export | What it does |
+| --- | --- |
+| `<MushiProvider config>` | Starts the SDK once at your app root |
+| `<MushiTrigger>` / `<MushiAttach>` | Open the reporter from your own element or a CSS selector |
+| `<MushiErrorBoundary>` | Catches render errors and pre-fills a report with the stack |
+| `useMushiReport()` | Returns a function that opens the reporter, optionally with a category |
+| `useMushiTrack()` | Returns `track(event, properties)` for funnels and paths |
+| `useMushi()` | `report()`, `isReady`, and the reporter's replies and rewards |
+| `useMushiReady()` / `useMushiSdk()` | Ready flag / the underlying [`@mushi-mushi/web`](https://npmjs.com/package/@mushi-mushi/web) instance |
+| `MushiRewardsBadge`, `useReputation`, `useTier` | Reporter points and tiers |
 
-| Export | Purpose |
-|---|---|
-| `<MushiProvider>` | Context wrapper — initialize once at your app root |
-| `useMushi()` | SDK instance: `open()`, `close()`, `setUser()`, `setContext()` |
-| `useMushiReport()` | `submitReport({ description, category })` convenience hook |
-| `useMushiReady()` | `boolean` — true once the SDK has finished initializing |
-| `<MushiErrorBoundary>` | Catches React render errors and pre-fills a report with the stack |
-| `<MushiTrigger>` | Polymorphic headless trigger — wraps any element |
-| `<MushiAttach>` | Attaches reporter to a CSS selector without wrapping |
+Every option of `@mushi-mushi/web` (privacy masks, replay, triggers, analytics) works in `config`. Peer dependencies: `react` and `react-dom` 18 or 19. CI keeps this wrapper under 5 KB; `@mushi-mushi/web` and `@mushi-mushi/core` install with it.
 
-## Bundle size
+## Learn more
 
-~819 B brotli. Requires `@mushi-mushi/core` and `@mushi-mushi/web` (installed automatically — not bundled inline).
-
-## Peer dependencies
-
-- `react` ^18.0.0 || ^19.0.0
-- `react-dom` ^18.0.0 || ^19.0.0
+[React quickstart](https://kensaur.us/mushi-mushi/docs/quickstart/react) · [React SDK reference](https://kensaur.us/mushi-mushi/docs/sdks/react) · [Next.js and CSP](https://kensaur.us/mushi-mushi/docs/sdks/nextjs-app-router-csp) · Other frameworks: [`vue`](https://npmjs.com/package/@mushi-mushi/vue) · [`svelte`](https://npmjs.com/package/@mushi-mushi/svelte) · [`angular`](https://npmjs.com/package/@mushi-mushi/angular) · [`react-native`](https://npmjs.com/package/@mushi-mushi/react-native)
 
 ## License
 
 MIT
-
-
-<!-- mushi-readme-stats-footer -->
----
-
-<sub>Monorepo scale (July 2026): 55 edge functions · 337 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/plugins/building
 
 ---
 title: Building a plugin
+description: Build your own Mushi plugin — an HTTP endpoint that receives HMAC-signed webhook events, verified with @mushi-mushi/plugin-sdk in a few lines.
 ---
 
 # Building a plugin
@@ -17,6 +18,8 @@ npm install @mushi-mushi/plugin-sdk hono
 ## Minimal receiver
 
 ```ts
+import { Hono } from 'hono'
+import { verifyMushiSignature, type MushiEvent } from '@mushi-mushi/plugin-sdk'
 
 const app = new Hono()
 

@@ -187,7 +187,7 @@ export function registerKeysCommands(program: Command): void {
   keys
     .command('add')
     .description('Add a new API key to the pool')
-    .requiredOption('--provider <p>', 'Provider: anthropic, openai, firecrawl, browserbase, cursor')
+    .requiredOption('--provider <p>', 'Provider: anthropic, openai, openrouter, firecrawl, browserbase, cursor, supabase')
     .option(
       '--key <k>',
       'The API key value (prefer the MUSHI_BYOK_KEY env var to keep it out of shell history)',

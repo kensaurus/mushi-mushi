@@ -1,6 +1,6 @@
 /**
  * Pages publish when PagePosture renders a visible status slot (priority 0).
- * Layout uses this to skip duplicate PageHero / NextBestAction chrome.
+ * Layout uses this to skip duplicate PageHero / NextStep chrome.
  */
 
 import { useEffect, useSyncExternalStore } from 'react'

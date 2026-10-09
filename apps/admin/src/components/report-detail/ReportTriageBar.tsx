@@ -1,18 +1,44 @@
 import { useEffect, useState } from 'react'
 import { Card } from '../../components/ui'
 import { SelectField, Btn } from '../ui'
-import { STATUS_LABELS, SEVERITY_LABELS } from '../../lib/tokens'
+import { STATUS_LABELS, SEVERITY_LABELS, CATEGORY_LABELS } from '../../lib/tokens'
 import { IconArrowRight, IconExternalLink } from '../icons'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
 import { usePageData } from '../../lib/usePageData'
 import type { DispatchState } from '../../lib/dispatchFix'
-import type { PreflightState } from '../../lib/useDispatchPreflight'
 import type { ReportDetail } from './types'
 import { CHIP_TONE } from '../../lib/chipTone'
+import { featureRequestDispatchBlock, shortRepoName } from '../../lib/dispatchConfirm'
+import type { DispatchTargetRepo } from '../../lib/useDispatchTargetRepo'
 
-const STATUS_OPTS = ['new', 'classified', 'fixing', 'fixed', 'resolved', 'verified', 'reopened', 'dismissed']
+// One option per label: 'resolved' is the legacy spelling of 'fixed' (both
+// read "Fixed"), so listing both showed "Fixed" twice. A legacy row selects
+// the option that shares its label via selectableStatus().
+const STATUS_OPTS = ['new', 'classified', 'fixing', 'fixed', 'verified', 'reopened', 'dismissed']
+
+function selectableStatus(status: string): string {
+  if (STATUS_OPTS.includes(status)) return status
+  const label = STATUS_LABELS[status]
+  return STATUS_OPTS.find((s) => STATUS_LABELS[s] === label) ?? status
+}
 const SEV_OPTS = ['critical', 'high', 'medium', 'low']
+/** The classifier's categories; setting one here is a person's triage decision. */
+const CATEGORY_OPTS = ['bug', 'slow', 'visual', 'confusing', 'other']
+
+/**
+ * Why a report is closed. The reporter sees matching copy ("We couldn't
+ * reproduce it. Reply if it happens again."); spam closes silently. Values are
+ * `reports_closed_reason_check`. Missing info is not a close — use "Ask for
+ * more info" in the Reporter view instead.
+ */
+const CLOSE_REASONS: Array<{ value: string; label: string; needsGroup?: boolean }> = [
+  { value: 'not_reproducible', label: "Couldn't reproduce it" },
+  { value: 'wont_fix', label: "Won't fix" },
+  { value: 'working_as_intended', label: 'Works as intended' },
+  { value: 'duplicate', label: 'Same as another report', needsGroup: true },
+  { value: 'spam', label: 'Spam (reporter is not told)' },
+]
 
 interface RoutingIntegration {
   id: string
@@ -26,9 +52,14 @@ interface ReportTriageBarProps {
   saving: boolean
   savedAt: number | null
   dispatchState: DispatchState
-  onDispatch: () => void | Promise<void>
+  /** Opens the page's dispatch confirm (useConfirmedDispatch().request). */
+  onRequestDispatch: () => void
+  /** The page's dispatch gate (dispatchBlock()); disables the button. */
+  dispatchBlock: { blocked: boolean; reason: string | null }
   isDispatchBusy: boolean
-  preflight?: PreflightState
+  /** The project's linked repos and the one the fix goes to. The Repo
+   *  select shows only when there is more than one. */
+  repoChoice?: DispatchTargetRepo
 }
 
 const PROVIDER_LABEL: Record<string, string> = {
@@ -44,15 +75,25 @@ export function ReportTriageBar({
   saving,
   savedAt,
   dispatchState,
-  onDispatch,
+  onRequestDispatch,
+  dispatchBlock,
   isDispatchBusy,
-  preflight,
+  repoChoice,
 }: ReportTriageBarProps) {
   const [showSaved, setShowSaved] = useState(false)
   const [syncing, setSyncing] = useState(false)
+  const [closing, setClosing] = useState(false)
+  const [closeReason, setCloseReason] = useState('')
   const toast = useToast()
-  const { data: integrationsData } = usePageData<{ integrations: RoutingIntegration[] }>('/v1/admin/integrations')
-  const activeRoutes = (integrationsData?.integrations ?? []).filter((r) => r.is_active)
+  const { data: integrationsData } = usePageData<{ integrations: RoutingIntegration[]; syncDestinations?: string[] }>(
+    '/v1/admin/integrations',
+  )
+  // Where a sync really goes: the server's list, which includes Linear
+  // connected from the console (no project_integrations row). Counting only
+  // the rows read "Sync to 0 destinations" and never called the server.
+  const destinations =
+    integrationsData?.syncDestinations ??
+    (integrationsData?.integrations ?? []).filter((r) => r.is_active).map((r) => r.integration_type)
 
   useEffect(() => {
     if (!savedAt) return
@@ -61,15 +102,9 @@ export function ReportTriageBar({
     return () => clearTimeout(t)
   }, [savedAt])
 
-  const dispatchDisabled =
-    report.status === 'fixed' ||
-    report.status === 'dismissed' ||
-    isDispatchBusy ||
-    (preflight != null && !preflight.loading && !preflight.ready)
-  const dispatchBlockReason =
-    preflight != null && !preflight.loading && !preflight.ready
-      ? `Preflight: ${preflight.failing.map((c) => c.label).join(', ')}`
-      : undefined
+  // One gate for every dispatch control on the page (dispatchBlock()).
+  const dispatchDisabled = dispatchBlock.blocked
+  const dispatchBlockReason = dispatchBlock.reason ?? undefined
   const dispatchLabel =
     dispatchState.status === 'idle' ? 'Dispatch fix' :
     dispatchState.status === 'queueing' ? 'Dispatching…' :
@@ -84,7 +119,7 @@ export function ReportTriageBar({
     'Failed — retry'
 
   const syncToIntegrations = async () => {
-    if (activeRoutes.length === 0) {
+    if (destinations.length === 0) {
       toast.info('No routing destinations active', 'Connect Jira, Linear, GitHub Issues, or PagerDuty in Integrations.')
       return
     }
@@ -95,7 +130,7 @@ export function ReportTriageBar({
     )
     setSyncing(false)
     if (!res.ok) {
-      toast.error('Sync failed', res.error?.message ?? 'No external issues were created.')
+      toast.error('Sync failed', 'No external issues were created. Check Integrations for status and credentials.')
       return
     }
     const synced = res.data?.synced ?? []
@@ -103,10 +138,10 @@ export function ReportTriageBar({
       toast.error('Sync attempts failed', 'All routing destinations rejected the request. Check Integrations for status and credentials.')
       return
     }
-    if (synced.length < activeRoutes.length) {
+    if (synced.length < destinations.length) {
       toast.push({
         tone: 'warning',
-        message: `Synced to ${synced.length} of ${activeRoutes.length} destinations: ${synced.map((s) => PROVIDER_LABEL[s.provider] ?? s.provider).join(', ')}. Some destinations failed \u2014 check Integrations health.`,
+        message: `Synced to ${synced.length} of ${destinations.length} destinations: ${synced.map((s) => PROVIDER_LABEL[s.provider] ?? s.provider).join(', ')}. Some destinations failed \u2014 check Integrations health.`,
       })
       return
     }
@@ -120,13 +155,55 @@ export function ReportTriageBar({
     <Card  className="mb-3 flex flex-wrap items-end gap-3 p-3">
       <SelectField
         label="Status"
-        value={report.status}
-        onChange={(e) => onTriage({ status: e.currentTarget.value })}
+        value={selectableStatus(report.status)}
+        onChange={(e) => {
+          const next = e.currentTarget.value
+          // Closing asks why first: the reason decides what the reporter is told.
+          if (next === 'dismissed' && report.status !== 'dismissed') {
+            setCloseReason('')
+            setClosing(true)
+            return
+          }
+          void onTriage({ status: next })
+        }}
         disabled={saving}
         className="!w-auto"
       >
         {STATUS_OPTS.map((s) => <option key={s} value={s}>{STATUS_LABELS[s] ?? s}</option>)}
       </SelectField>
+
+      {closing && (
+        <div className="flex flex-wrap items-end gap-2" role="group" aria-label="Close this report">
+          <SelectField
+            label="Why close it?"
+            value={closeReason}
+            onChange={(e) => setCloseReason(e.currentTarget.value)}
+            disabled={saving}
+            className="!w-auto"
+          >
+            <option value="">No reason</option>
+            {CLOSE_REASONS.map((r) => (
+              <option key={r.value} value={r.value} disabled={r.needsGroup && !report.report_group_id}>
+                {r.label}
+                {r.needsGroup && !report.report_group_id ? ' (group it first)' : ''}
+              </option>
+            ))}
+          </SelectField>
+          <Btn
+            size="sm"
+            onClick={() => {
+              setClosing(false)
+              void onTriage(closeReason ? { status: 'dismissed', closed_reason: closeReason } : { status: 'dismissed' })
+            }}
+            disabled={saving}
+          >
+            Close report
+          </Btn>
+          <Btn size="sm" variant="ghost" onClick={() => setClosing(false)} disabled={saving}>
+            Cancel
+          </Btn>
+        </div>
+      )}
 
       <SelectField
         label="Severity"
@@ -138,6 +215,29 @@ export function ReportTriageBar({
         <option value="">Unset</option>
         {SEV_OPTS.map((s) => <option key={s} value={s}>{SEVERITY_LABELS[s] ?? s}</option>)}
       </SelectField>
+
+      <SelectField
+        label="Category"
+        value={report.category ?? 'other'}
+        onChange={(e) => onTriage({ category: e.currentTarget.value, category_confirmed_at: new Date().toISOString() })}
+        disabled={saving}
+        className="!w-auto"
+      >
+        {CATEGORY_OPTS.map((c) => <option key={c} value={c}>{CATEGORY_LABELS[c] ?? c}</option>)}
+      </SelectField>
+      {/* A select cannot "confirm" the value it already shows, so a feature
+          request the classifier already called a defect gets a button. */}
+      {featureRequestDispatchBlock(report) && report.category && report.category !== 'other' && (
+        <Btn
+          size="sm"
+          variant="ghost"
+          onClick={() => void onTriage({ category: report.category, category_confirmed_at: new Date().toISOString() })}
+          disabled={saving}
+          title="The reporter filed this as a feature request. Confirming the category sends it to auto-fix like any bug."
+        >
+          It&apos;s a bug: confirm {CATEGORY_LABELS[report.category] ?? report.category}
+        </Btn>
+      )}
 
       {/* mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas) */}
       <div className="flex items-center gap-1.5 text-2xs h-[26px]" aria-live="polite">
@@ -152,14 +252,32 @@ export function ReportTriageBar({
           onClick={syncToIntegrations}
           disabled={syncing}
           loading={syncing}
-          title={activeRoutes.length === 0 ? 'No routing destinations active' : `Push to: ${activeRoutes.map((r) => PROVIDER_LABEL[r.integration_type] ?? r.integration_type).join(', ')}`}
+          title={destinations.length === 0 ? 'No routing destinations active' : `Push to: ${destinations.map((t) => PROVIDER_LABEL[t] ?? t).join(', ')}`}
         >
-          {syncing ? 'Syncing\u2026' : `Sync to ${activeRoutes.length || 0} ${activeRoutes.length === 1 ? 'destination' : 'destinations'}`}
+          {syncing ? 'Syncing\u2026' : `Sync to ${destinations.length} ${destinations.length === 1 ? 'destination' : 'destinations'}`}
         </Btn>
+        {repoChoice && repoChoice.repos.length > 1 && (
+          <SelectField
+            label="Repo"
+            value={repoChoice.targetRepoId}
+            onChange={(e) => repoChoice.setTargetRepoId(e.currentTarget.value)}
+            disabled={isDispatchBusy}
+            className="!w-auto"
+            title="The linked repo the fix PR opens against"
+          >
+            {!repoChoice.repos.some((r) => r.is_primary) && <option value="">Project default</option>}
+            {repoChoice.repos.map((r) => (
+              <option key={r.id} value={r.id}>
+                {shortRepoName(r.repo_url)}
+                {r.is_primary ? ' (primary)' : ''}
+              </option>
+            ))}
+          </SelectField>
+        )}
         <div className="flex flex-col items-end gap-1">
           <Btn
             variant="primary"
-            onClick={onDispatch}
+            onClick={onRequestDispatch}
             disabled={dispatchDisabled}
             loading={isDispatchBusy && dispatchState.status !== 'completed' && dispatchState.status !== 'failed'}
             leadingIcon={<IconArrowRight />}

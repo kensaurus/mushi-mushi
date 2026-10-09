@@ -33,9 +33,11 @@ export const metadata: Metadata = {
     url: `${SITE}/`,
     images: [{ url: `${SITE}/og-card.png`, width: 1200, height: 630 }],
   },
+  // No `site`: the @mushimushi_dev handle was never registered, and naming
+  // an account someone else can claim is worse than naming none (same as
+  // apps/docs/app/layout.tsx).
   twitter: {
     card: 'summary_large_image',
-    site: '@mushimushi_dev',
   },
 }
 

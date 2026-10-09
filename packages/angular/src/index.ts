@@ -11,11 +11,24 @@
  *   - `MushiConfig` is now the canonical core type (no narrow re-shape).
  *   - SSR guard around `Mushi.init` so Angular Universal / @nguniversal
  *     prerender doesn't reach for `window` on the server.
- *   - `provideMushi` mirrors Angular DI conventions (returns providers,
- *     not a hand-built object).
+ *
+ * No decorators, on purpose. This package is built with tsup, not ng-packagr,
+ * so an `@Injectable()` class ships as a runtime decorator call whose factory
+ * Angular must compile with `@angular/compiler` — which AOT apps (every
+ * `ng build`) never load, so DI threw "needs to be compiled using the JIT
+ * compiler". Every provider below is an explicit factory with explicit
+ * `deps`, which Angular resolves without compiling anything.
  */
 
-import { InjectionToken, Injectable, Optional, Inject } from '@angular/core'
+import {
+  ENVIRONMENT_INITIALIZER,
+  ErrorHandler,
+  InjectionToken,
+  inject,
+  makeEnvironmentProviders,
+  type EnvironmentProviders,
+  type Provider,
+} from '@angular/core'
 import { Mushi } from '@mushi-mushi/web'
 import type { MushiConfig, MushiReportCategory } from '@mushi-mushi/core'
 
@@ -30,9 +43,13 @@ const isBrowser = (): boolean =>
   typeof (globalThis as { window?: unknown }).window !== 'undefined' &&
   typeof (globalThis as { document?: unknown }).document !== 'undefined'
 
-@Injectable()
+/**
+ * App-wide Mushi handle. Provided by `provideMushi()` / `provideMushiAngular()`
+ * and read with `inject(MushiService)`. Do not list the class itself in a
+ * `providers` array: it has no compiled factory, so use the provider functions.
+ */
 export class MushiService {
-  constructor(@Optional() @Inject(MUSHI_CONFIG) config?: MushiConfig) {
+  constructor(config?: MushiConfig) {
     // SSR guard: Angular Universal pre-renders on the server where
     // `window` / `document` / `localStorage` are absent. Skip init
     // there — the browser bundle re-runs the constructor on hydration.
@@ -54,60 +71,105 @@ export class MushiService {
     await this.report(data)
   }
 
+  /** Attach the signed-in user to reports and analytics (same as `Mushi.identify()`). */
+  identify(userId: string, traits?: { email?: string; name?: string; [k: string]: unknown }): void {
+    Mushi.getInstance()?.identify(userId, traits)
+  }
+
   captureError(error: unknown, context?: Record<string, unknown>): void {
     Mushi.getInstance()?.captureException(error, { metadata: context }).catch(() => {})
   }
 }
 
-export class MushiErrorHandler {
+/**
+ * Angular `ErrorHandler` that reports uncaught errors to Mushi, then logs them
+ * exactly like Angular's default handler so the console output does not change.
+ */
+export class MushiErrorHandler extends ErrorHandler {
   private service: MushiService
 
   constructor(service: MushiService) {
+    super()
     this.service = service
   }
 
-  handleError(error: unknown): void {
+  override handleError(error: unknown): void {
     this.service.captureError(error)
+    super.handleError(error)
   }
 }
 
 /**
- * Convenience builder that constructs a service + error handler pair
- * from a config. Kept for backwards compatibility — new Angular 16+
- * apps should prefer `provideMushiAngular` which returns DI providers
- * compatible with `bootstrapApplication`.
+ * The provider list both public functions share. `serviceFactory` lets the
+ * legacy `provideMushi(config).service` accessor and DI hand out one instance.
  */
-export function provideMushi(config: MushiConfig) {
-  const service = new MushiService(config)
-  return {
-    service,
-    errorHandler: new MushiErrorHandler(service),
-  }
+function mushiProviders(config: MushiConfig, serviceFactory: (config: MushiConfig) => MushiService): Provider[] {
+  return [
+    { provide: MUSHI_CONFIG, useValue: config },
+    { provide: MushiService, useFactory: serviceFactory, deps: [MUSHI_CONFIG] },
+    { provide: MushiErrorHandler, useFactory: (service: MushiService) => new MushiErrorHandler(service), deps: [MushiService] },
+    { provide: ErrorHandler, useExisting: MushiErrorHandler },
+    // Angular resolves ErrorHandler lazily, on the first error, so nothing
+    // would construct MushiService (and call Mushi.init) at startup. The
+    // environment initializer does. It is the v14+ token rather than
+    // provideEnvironmentInitializer() (v19+) so the >=17 peer range holds.
+    {
+      provide: ENVIRONMENT_INITIALIZER,
+      multi: true,
+      useValue: () => {
+        inject(MushiService)
+      },
+    },
+  ]
+}
+
+/** `provideMushi()`'s return value: environment providers, plus the original `{ service, errorHandler }` accessors. */
+export type MushiEnvironmentProviders = EnvironmentProviders & {
+  /** @deprecated Inject `MushiService` instead. Same instance DI hands out. */
+  readonly service: MushiService
+  /** @deprecated Provided as Angular's `ErrorHandler` automatically. */
+  readonly errorHandler: MushiErrorHandler
 }
 
 /**
- * Angular 16+ DI provider factory for `bootstrapApplication`:
+ * App-level setup for `bootstrapApplication` (or `NgModule.providers`):
  *
  * ```ts
  * bootstrapApplication(AppComponent, {
- *   providers: [
- *     ...provideMushiAngular({ projectId: '…', apiKey: '…' }),
- *   ],
+ *   providers: [provideMushi({ projectId: '…', apiKey: '…' })],
  * })
  * ```
  *
- * Returns the standard `Provider[]` shape Angular expects. The
- * `MushiService` constructor reads `MUSHI_CONFIG` via DI so SSR-aware
- * platforms (Angular Universal) can override it per-request.
+ * Provides `MushiService`, installs `MushiErrorHandler` as Angular's
+ * `ErrorHandler`, and initialises the SDK at startup (browser only).
  */
-export function provideMushiAngular(config: MushiConfig) {
-  return [
-    { provide: MUSHI_CONFIG, useValue: config },
-    MushiService,
-    {
-      provide: MushiErrorHandler,
-      useFactory: (service: MushiService) => new MushiErrorHandler(service),
-      deps: [MushiService],
-    },
-  ]
+export function provideMushi(config: MushiConfig): MushiEnvironmentProviders {
+  let shared: MushiService | null = null
+  const serviceFor = (cfg: MushiConfig): MushiService => (shared ??= new MushiService(cfg))
+  let legacyHandler: MushiErrorHandler | null = null
+  const providers = makeEnvironmentProviders(mushiProviders(config, serviceFor))
+  // The pre-DI API returned `{ service, errorHandler }`. Keep both readable,
+  // lazily and sharing DI's instance, so that code keeps working and
+  // Mushi.init still runs once.
+  Object.defineProperties(providers, {
+    service: { get: () => serviceFor(config) },
+    errorHandler: { get: () => (legacyHandler ??= new MushiErrorHandler(serviceFor(config))) },
+  })
+  return providers as MushiEnvironmentProviders
+}
+
+/**
+ * The same providers as a plain `Provider[]`, for spreading:
+ *
+ * ```ts
+ * bootstrapApplication(AppComponent, {
+ *   providers: [...provideMushiAngular({ projectId: '…', apiKey: '…' })],
+ * })
+ * ```
+ *
+ * `MushiService` reads `MUSHI_CONFIG` through DI, so SSR-aware platforms
+ * (Angular Universal) can override it per request.
+ */
+export function provideMushiAngular(config: MushiConfig): Provider[] {
+  return mushiProviders(config, (cfg) => new MushiService(cfg))
 }

@@ -34,10 +34,18 @@ import {
   Btn,
   ErrorAlert,
   EmptyState,
+  Input,
   RelativeTime,
 } from '../components/ui'
+import { ConfirmDialog } from '../components/ConfirmDialog'
+import { url as urlValidator } from '../lib/validators'
+import {
+  QA_COVERAGE_FILTERS,
+  matchesQaCoverageFilter,
+  resolveQaCoverageFilter,
+  type QaCoverageFilter,
+} from '../lib/qaCoverageFilter'
 import { useActivationStatus, isActivationCockpitV2Enabled } from '../lib/useActivationStatus'
-import { Link } from 'react-router-dom'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { Drawer } from '../components/Drawer'
@@ -90,6 +98,9 @@ interface QaStoryFull {
   schedule_cron: string | null
   enabled: boolean
   byok_provider: string | null
+  /** Page the runner opens. Null = falls back to a URL in the prompt or the project's crawler URL. */
+  target_url: string | null
+  approval_status?: string | null
   created_at: string
   updated_at: string
 }
@@ -167,7 +178,8 @@ function StoryCard({
 }: {
   coverage: QaStoryCoverage
   isQueued: boolean
-  onRunNow: (id: string) => void
+  /** Absent for viewers: the API refuses their runs. */
+  onRunNow?: (id: string) => void
   onSelect: (id: string) => void
   highlighted: boolean
 }) {
@@ -204,6 +216,7 @@ function StoryCard({
           </span>
         </div>
 
+        {onRunNow ? (
         <Btn
           size="sm"
           variant="ghost"
@@ -215,6 +228,7 @@ function StoryCard({
         >
           {!isQueued && <IconPlay className="h-3 w-3" />}
         </Btn>
+        ) : null}
       </div>
 
       {/* Pass rate bar + stats */}
@@ -490,6 +504,7 @@ function StoryDrawer({
   onRunNow,
   isQueued,
   initialRunId,
+  onStoryChanged,
 }: {
   storyId: string
   projectId: string
@@ -497,8 +512,13 @@ function StoryDrawer({
   onRunNow: (id: string) => void
   isQueued: boolean
   initialRunId?: string
+  /** Grid + stats reload after a toggle / edit / delete. */
+  onStoryChanged: () => void
 }) {
-  const { data: story } = usePageData<QaStoryFull>(
+  const { success: toastSuccess, error: toastError } = useToast()
+  // Viewers read runs; the API refuses their run, edit and delete.
+  const { canEditProject } = useEntitlements()
+  const { data: story, reload: reloadStory } = usePageData<QaStoryFull>(
     `/v1/admin/projects/${projectId}/qa-stories/${storyId}`,
     { deps: [storyId] },
   )
@@ -569,14 +589,56 @@ function StoryDrawer({
     </div>
   )
 
-  const drawerHeaderAction = story ? (
+  const [targetDraft, setTargetDraft] = useState<string | null>(null)
+  const [savingField, setSavingField] = useState<'target' | 'enabled' | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const targetValue = targetDraft ?? story?.target_url ?? ''
+  const targetDirty = targetDraft !== null && targetDraft.trim() !== (story?.target_url ?? '')
+  const targetError = targetDraft?.trim() ? urlValidator({ optional: true })(targetDraft.trim()) : null
+
+  const patchStory = useCallback(
+    async (patch: Record<string, unknown>, field: 'target' | 'enabled', okMessage: string) => {
+      setSavingField(field)
+      const res = await apiFetch(`/v1/admin/projects/${projectId}/qa-stories/${storyId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(patch),
+      })
+      setSavingField(null)
+      if (!res.ok) {
+        toastError(res.error?.message ?? 'Could not save the story. Try again.')
+        return
+      }
+      toastSuccess(okMessage)
+      setTargetDraft(null)
+      reloadStory()
+      onStoryChanged()
+    },
+    [projectId, storyId, toastError, toastSuccess, reloadStory, onStoryChanged],
+  )
+
+  const deleteStory = useCallback(async () => {
+    setDeleting(true)
+    const res = await apiFetch(`/v1/admin/projects/${projectId}/qa-stories/${storyId}`, { method: 'DELETE' })
+    setDeleting(false)
+    if (!res.ok) {
+      toastError(res.error?.message ?? 'Could not delete the story. Try again.')
+      return
+    }
+    setConfirmDelete(false)
+    toastSuccess('Story deleted')
+    onStoryChanged()
+    onClose()
+  }, [projectId, storyId, toastError, toastSuccess, onStoryChanged, onClose])
+
+  const drawerHeaderAction = story && canEditProject ? (
     <Btn
       size="sm"
       variant="ghost"
       loading={isQueued}
       disabled={isQueued || !story.enabled}
       onClick={() => onRunNow(storyId)}
-      title={isQueued ? 'Run already queued' : 'Trigger manual run'}
+      title={isQueued ? 'Run already queued' : story.enabled ? 'Trigger manual run' : 'Turn the story on first'}
     >
       {!isQueued && <IconPlay className="h-3 w-3 mr-1" />}
       {isQueued ? 'Queued…' : 'Run now'}
@@ -593,6 +655,69 @@ function StoryDrawer({
       width="lg"
     >
       <div className="px-5 py-4 space-y-5">
+          {story && canEditProject && (
+            <div className="space-y-3 rounded-sm border border-edge-subtle p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-2xs text-fg-secondary">
+                  {story.enabled
+                    ? 'On: runs on its schedule and from Run now.'
+                    : 'Off: it will not run until you turn it on.'}
+                </p>
+                <Btn
+                  size="sm"
+                  variant={story.enabled ? 'ghost' : 'primary'}
+                  loading={savingField === 'enabled'}
+                  onClick={() =>
+                    void patchStory(
+                      { enabled: !story.enabled },
+                      'enabled',
+                      story.enabled ? 'Story turned off' : 'Story turned on',
+                    )
+                  }
+                >
+                  {story.enabled ? 'Turn off' : 'Turn on'}
+                </Btn>
+              </div>
+              <div className="flex flex-wrap items-end gap-2">
+                <div className="min-w-0 flex-1">
+                  <Input
+                    label="Target URL"
+                    type="url"
+                    inputMode="url"
+                    value={targetValue}
+                    onChange={(e) => setTargetDraft(e.target.value)}
+                    placeholder="https://yourapp.com/pricing"
+                    name="qa-story-edit-target-url"
+                    autoComplete="off"
+                    className="font-mono"
+                  />
+                </div>
+                <Btn
+                  size="sm"
+                  disabled={!targetDirty || !!targetError}
+                  loading={savingField === 'target'}
+                  onClick={() =>
+                    void patchStory({ target_url: targetValue.trim() || null }, 'target', 'Target URL saved')
+                  }
+                >
+                  Save URL
+                </Btn>
+              </div>
+              <p className={`text-2xs ${targetError ? 'text-danger' : 'text-fg-faint'}`}>
+                {targetError
+                  ? targetError.message
+                  : story.target_url
+                    ? 'The runner opens this page before checking your prompt.'
+                    : 'No target URL set. The runner uses a URL in the prompt or the project crawler URL, and fails if neither exists.'}
+              </p>
+              <div className="flex justify-end">
+                <Btn size="sm" variant="ghost" onClick={() => setConfirmDelete(true)}>
+                  Delete story
+                </Btn>
+              </div>
+            </div>
+          )}
+
           {story?.prompt && (
             <div className="space-y-1">
               <span className="text-2xs font-semibold text-fg-muted uppercase tracking-wider">Prompt</span>
@@ -692,6 +817,17 @@ function StoryDrawer({
             </div>
         </div>
       </div>
+      {confirmDelete && story ? (
+        <ConfirmDialog
+          title={`Delete "${story.name}"?`}
+          body="The story, its schedule and its run history are removed. This cannot be undone. To pause it instead, use Turn off."
+          confirmLabel="Delete story"
+          tone="danger"
+          loading={deleting}
+          onCancel={() => setConfirmDelete(false)}
+          onConfirm={deleteStory}
+        />
+      ) : null}
     </Drawer>
   )
 }
@@ -713,7 +849,7 @@ interface PendingReviewStory {
 
 export function QaCoveragePage() {
   const projectId = useActiveProjectId()
-  const { has, loading: entLoading, planName } = useEntitlements()
+  const { has, canEditProject } = useEntitlements()
   const inventoryEnabled = has('inventory_v2')
   const qaUx = useQaCoverageUx()
   const activationEnabled = isActivationCockpitV2Enabled()
@@ -724,15 +860,35 @@ export function QaCoveragePage() {
   const highlightId = searchParams.get('highlight') ?? searchParams.get('story') ?? ''
   // ?story= opens the drawer directly (e.g. from Slack "View run" links).
   // ?run= can preselect a specific run inside the drawer (handled in StoryDrawer).
-  const initialStoryId = searchParams.get('story') ?? null
-  const [selectedStoryId, setSelectedStoryId] = useState<string | null>(initialStoryId)
+  const storyParam = searchParams.get('story')
+  const [selectedStoryId, setSelectedStoryId] = useState<string | null>(storyParam)
+  // In-app links (e.g. "Top failing story →") change ?story= on the mounted
+  // page; the useState initialiser alone only covered a fresh load.
+  useEffect(() => {
+    if (storyParam) setSelectedStoryId(storyParam)
+  }, [storyParam])
+  // ?tab= drives the grid filter (stat cards, banner CTAs, server topPriorityTo).
+  const filter = resolveQaCoverageFilter(searchParams)
+  const setFilter = useCallback(
+    (next: QaCoverageFilter) => {
+      setSearchParams((prev) => {
+        const p = new URLSearchParams(prev)
+        p.delete('status')
+        if (next === 'all') p.delete('tab')
+        else p.set('tab', next)
+        return p
+      }, { replace: true })
+    },
+    [setSearchParams],
+  )
   const [showCreate, setShowCreate] = useState(false)
   const [queuedIds, setQueuedIds] = useState<Set<string>>(new Set())
   const [approvingIds, setApprovingIds] = useState<Set<string>>(new Set())
   const [optimisticHiddenIds, setOptimisticHiddenIds] = useState<Set<string>>(new Set())
+  const [confirmReject, setConfirmReject] = useState<PendingReviewStory | null>(null)
 
   const { data, loading, error, reload } = usePageData<{ coverage: QaStoryCoverage[] }>(
-    `/v1/admin/projects/${projectId}/qa-coverage`,
+    projectId ? `/v1/admin/projects/${projectId}/qa-coverage` : null,
     { deps: [projectId] },
   )
 
@@ -765,6 +921,15 @@ export function QaCoveragePage() {
   const pendingReview = (pendingData?.stories ?? []).filter((s) => !optimisticHiddenIds.has(s.id))
 
   const coverage = data?.coverage ?? []
+  const visibleCoverage = coverage.filter((c) => matchesQaCoverageFilter(c, filter))
+
+  // A highlighted card (stat link, banner, dashboard tile) can be far below
+  // the fold; bring it into view once the grid has rendered.
+  useEffect(() => {
+    if (!highlightId || loading) return
+    const el = document.getElementById(`qa-story-${highlightId}`)
+    el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }, [highlightId, loading, filter])
 
   const handleRunNow = useCallback(async (storyId: string) => {
     if (queuedIds.has(storyId)) return // prevent double-click
@@ -781,7 +946,7 @@ export function QaCoveragePage() {
       }, 90_000)
       setTimeout(() => void reload(), 5000)
     } else if (res.error?.message?.includes('disabled') || (res as { error?: { code?: string } }).error?.code === 'Story is disabled') {
-      toastError('This story is disabled. Enable it before running.')
+      toastError('This story is turned off. Open it and choose Turn on, then run it.')
     } else {
       toastError(res.error?.message ?? 'Failed to queue run')
     }
@@ -801,7 +966,7 @@ export function QaCoveragePage() {
     })
     setApprovingIds((prev) => { const n = new Set(prev); n.delete(storyId); return n })
     if (res.ok) {
-      toastSuccess(status === 'approved' ? 'Test approved and enabled' : 'Test rejected')
+      toastSuccess(status === 'approved' ? 'Test approved and enabled' : 'Test rejected and turned off')
       reloadPending()
       reload()
     } else {
@@ -824,18 +989,16 @@ export function QaCoveragePage() {
                   : 'Write a plain-English test that runs on a schedule — optional but high leverage.'}
               </p>
             </div>
-            <Link to="/onboarding?tab=steps">
-              <Btn size="sm" variant="ghost">View setup receipt →</Btn>
-            </Link>
+            <Btn to="/onboarding?tab=steps" size="sm" variant="ghost">View setup receipt →</Btn>
           </div>
         </Card>
       ) : null}
       <PageHeaderBar
-        title="QA Coverage"
+        title="Scheduled tests"
         icon={<IconQaCoverage />}
         projectScope={null}
         withPageHero={false}
-        helpTitle="About QA Coverage"
+        helpTitle="About Scheduled tests"
         helpWhatIsIt="Automated user-story tests that run on a schedule via Playwright (local), Browserbase (cloud), or Firecrawl. Each story is a natural-language prompt or a full Playwright script. Results appear in the run history with screenshots and console logs."
         helpUseCases={[
           'Catch regressions in critical user flows before a release',
@@ -844,7 +1007,7 @@ export function QaCoveragePage() {
         ]}
         helpHowToUse="Click + New story to add a test. Click a story card to open the run history drawer. Click Run now to trigger an immediate run."
       >
-        <Btn size="sm" onClick={() => setShowCreate(true)}>
+        <Btn size="sm" disabled={!canEditProject} title={canEditProject ? undefined : 'Viewers have read-only access. Ask a team owner or admin.'} onClick={() => setShowCreate(true)}>
           + New story
         </Btn>
       </PageHeaderBar>
@@ -872,7 +1035,6 @@ export function QaCoveragePage() {
                   statsFetchedAt={qaStatsFetchedAt}
                   statsValidating={qaStatsValidating}
                   hideLinks={qaUx.hideSnapshotLinks}
-                  compact={qaUx.compactSnapshot}
                 />
               ),
             },
@@ -887,30 +1049,17 @@ export function QaCoveragePage() {
 
       {error && <ErrorAlert message={error} onRetry={reloadAll} />}
 
-      {/* Pending TDD review queue — always shown so users discover the feature */}
-      <Card className={`p-4 space-y-3 ring-1 ${pendingReview.length > 0 ? 'ring-warn/40 border-warn/30 bg-surface-raised' : 'ring-edge-subtle bg-surface-raised'}`}>
+      {/* Generated tests waiting for a person: shown only when there are some. */}
+      {pendingReview.length > 0 && (
+      <Card className="p-4 space-y-3 ring-1 ring-warn/40 border-warn/30 bg-surface-raised">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-fg">🧪 TDD Tests Pending Review</span>
-          {pendingReview.length > 0 && (
-            <span className={`text-2xs ${CHIP_TONE.warnSubtle} px-1.5 py-0.5 rounded-full`}>{pendingReview.length}</span>
-          )}
+          <IconQaCoverage className="h-4 w-4 text-warn" />
+          <span className="text-sm font-semibold text-fg">Generated tests to review</span>
+          <span className={`text-2xs ${CHIP_TONE.warnSubtle} px-1.5 py-0.5 rounded-full`}>{pendingReview.length}</span>
         </div>
         <p className="text-2xs text-fg-muted">
-          Tests generated from your user stories appear here. Approve to add them to your QA schedule, or reject to discard.
+          Mushi wrote these tests from your user stories or from a failing test. Approve to add one to the schedule, or reject to turn it off.
         </p>
-        {!entLoading && !inventoryEnabled ? (
-          <p className="text-2xs text-fg-muted py-1">
-            TDD review from user stories requires{' '}
-            <Link to="/billing" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
-              Bidirectional inventory
-            </Link>
-            {planName ? ` (not included on ${planName})` : '.'}
-          </p>
-        ) : pendingReview.length === 0 ? (
-          <p className="text-2xs text-fg-faint italic py-1">
-            No tests awaiting review — generate tests from User Stories → Discovery tab, or wait for the PDCA auto-improver to propose new ones.
-          </p>
-        ) : (
           <div className="space-y-2">
             {pendingReview.map((story) => (
               <div key={story.id} className="flex items-center gap-3 p-2.5 rounded-md bg-surface-overlay border border-edge-subtle text-2xs">
@@ -930,6 +1079,8 @@ export function QaCoveragePage() {
                   size="sm"
                   variant="ghost"
                   loading={approvingIds.has(story.id)}
+                  disabled={!canEditProject}
+                  title={canEditProject ? undefined : 'Viewers have read-only access. Ask a team owner or admin.'}
                   onClick={() => void handleApproval(story.id, 'approved')}
                 >
                   ✓ Approve
@@ -938,15 +1089,17 @@ export function QaCoveragePage() {
                   size="sm"
                   variant="ghost"
                   loading={approvingIds.has(story.id)}
-                  onClick={() => void handleApproval(story.id, 'rejected')}
+                  disabled={!canEditProject}
+                  title={canEditProject ? undefined : 'Viewers have read-only access. Ask a team owner or admin.'}
+                  onClick={() => setConfirmReject(story)}
                 >
                   ✕ Reject
                 </Btn>
               </div>
             ))}
           </div>
-        )}
       </Card>
+      )}
 
       {/* Story grid */}
       {loading && (
@@ -959,7 +1112,7 @@ export function QaCoveragePage() {
           title="No QA stories yet"
           description="Create your first automated user-story test. Start with a Firecrawl story — no setup needed."
           action={
-            <Btn size="sm" onClick={() => setShowCreate(true)}>
+            <Btn size="sm" disabled={!canEditProject} title={canEditProject ? undefined : 'Viewers have read-only access. Ask a team owner or admin.'} onClick={() => setShowCreate(true)}>
               + New story
             </Btn>
           }
@@ -967,16 +1120,46 @@ export function QaCoveragePage() {
       )}
 
       {!loading && coverage.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filter stories">
+          {QA_COVERAGE_FILTERS.map((f) => {
+            const count = coverage.filter((c) => matchesQaCoverageFilter(c, f.id)).length
+            const active = filter === f.id
+            return (
+              <Btn
+                key={f.id}
+                size="sm"
+                variant={active ? 'primary' : 'ghost'}
+                aria-pressed={active}
+                onClick={() => setFilter(f.id)}
+              >
+                {f.label} <span className="tabular-nums opacity-70">{count}</span>
+              </Btn>
+            )
+          })}
+        </div>
+      )}
+
+      {!loading && coverage.length > 0 && visibleCoverage.length === 0 && (
+        <p className="text-2xs text-fg-muted">
+          No stories match this filter.{' '}
+          <Btn size="sm" variant="ghost" onClick={() => setFilter('all')}>
+            Show all stories
+          </Btn>
+        </p>
+      )}
+
+      {!loading && visibleCoverage.length > 0 && (
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-          {coverage.map((c) => (
-            <StoryCard
-              key={c.story_id}
-              coverage={c}
-              isQueued={queuedIds.has(c.story_id)}
-              onRunNow={handleRunNow}
-              onSelect={setSelectedStoryId}
-              highlighted={c.story_id === highlightId}
-            />
+          {visibleCoverage.map((c) => (
+            <div key={c.story_id} id={`qa-story-${c.story_id}`} className="min-w-0">
+              <StoryCard
+                coverage={c}
+                isQueued={queuedIds.has(c.story_id)}
+                onRunNow={canEditProject ? handleRunNow : undefined}
+                onSelect={setSelectedStoryId}
+                highlighted={c.story_id === highlightId}
+              />
+            </div>
           ))}
         </div>
       )}
@@ -984,10 +1167,12 @@ export function QaCoveragePage() {
       {/* Story drawer */}
       {selectedStoryId && projectId && (
         <StoryDrawer
+          key={selectedStoryId}
           storyId={selectedStoryId}
           projectId={projectId}
           isQueued={queuedIds.has(selectedStoryId)}
           onRunNow={handleRunNow}
+          onStoryChanged={reloadAll}
           initialRunId={searchParams.get('run') ?? undefined}
           onClose={() => {
             handleClearQueued(selectedStoryId)
@@ -1002,6 +1187,22 @@ export function QaCoveragePage() {
           }}
         />
       )}
+
+      {confirmReject ? (
+        <ConfirmDialog
+          title={`Reject "${confirmReject.name}"?`}
+          body="The generated test is turned off and leaves this review queue. You can turn it back on later from its card in the story grid (Turned off filter)."
+          confirmLabel="Reject test"
+          tone="danger"
+          loading={approvingIds.has(confirmReject.id)}
+          onCancel={() => setConfirmReject(null)}
+          onConfirm={async () => {
+            const id = confirmReject.id
+            await handleApproval(id, 'rejected')
+            setConfirmReject(null)
+          }}
+        />
+      ) : null}
 
       {/* Create modal */}
       {showCreate && projectId && (

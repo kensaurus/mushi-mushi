@@ -24,6 +24,7 @@ export type {
 export { Hero } from './Hero'
 export { ClosingCta } from './ClosingCta'
 export { MarketingFooter } from './MarketingFooter'
+export { KensaurusPortfolioTable } from './KensaurusPortfolioTable'
 export { StatusPill } from './StatusPill'
 export type { StatusPillProps } from './StatusPill'
 export { SwitchingFromStrip } from './SwitchingFromStrip'

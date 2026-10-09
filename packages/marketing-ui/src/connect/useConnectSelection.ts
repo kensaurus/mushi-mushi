@@ -1,3 +1,5 @@
+'use client'
+
 /**
  * FILE: connect/useConnectSelection.ts
  * PURPOSE: Client + lane selection state with localStorage persistence.

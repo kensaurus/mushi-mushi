@@ -62,8 +62,9 @@ you have nothing real to say.
 - Use a real (or redacted demo-seeded) bug.
 - Never punch down at the user who reported it. Mushi-chan's tone is
   affectionate: *"this person was right and we were wrong"*.
-- Never punch at Sentry either. The gag is *"Sentry can't see this; that's
-  fine, it's not supposed to"* — never "Sentry is bad".
+- Never punch at Sentry either. The gag is *"this never threw an error;
+  that's fine, errors aren't the whole story"* — never "Sentry is bad", and
+  never "Sentry can't see this" (its Session Replay flags dead and rage clicks).
 - Rotate categories so readers see Mushi-chan catch performance, layout,
   auth, checkout, onboarding, empty-states, mobile-only — not just one type.
 

@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/plugins/linear
 
 ---
 title: Linear
+description: File a Linear issue automatically when Mushi classifies a bug report — create a Linear API key, install the plugin, and choose the team and filters.
 ---
 
 # Linear plugin

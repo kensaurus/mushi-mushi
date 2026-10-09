@@ -3,7 +3,7 @@
  * PURPOSE: Y-axis, horizontal grid, and sparse X-axis labels for admin charts.
  */
 
-import type { ReactNode } from 'react'
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { sparseXLabels } from './chartAxis'
 import { InlineProof } from '../report-detail/ReportSurface'
 import {
@@ -20,6 +20,8 @@ export interface ChartFrameProps {
   xLabels?: string[]
   /** When set, X ticks align to categorical bar/ bucket centers (not span endpoints). */
   xBucketCount?: number
+  /** Cap on X-axis labels; narrow tiles pass 2 (first and last). */
+  maxXTicks?: number
   yAxisCaption?: string
   xAxisCaption?: string
   className?: string
@@ -35,6 +37,7 @@ export function ChartFrame({
   yTickLabels,
   xLabels,
   xBucketCount,
+  maxXTicks,
   yAxisCaption,
   xAxisCaption,
   className = '',
@@ -42,8 +45,21 @@ export function ChartFrame({
   accessibleColumns,
   accessibleRows,
 }: ChartFrameProps) {
+  // role="img" makes everything inside presentational, so a chart whose plot
+  // holds focusable controls (annotation buttons, links) failed axe's
+  // nested-interactive rule and hid those controls from screen readers.
+  // Such charts become a labelled group instead; static charts stay an image.
+  const wrapperRef = useRef<HTMLDivElement | null>(null)
+  const [hasFocusable, setHasFocusable] = useState(false)
+  useLayoutEffect(() => {
+    const el = wrapperRef.current
+    if (!el) return
+    setHasFocusable(
+      el.querySelector('a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])') != null,
+    )
+  })
   const ticks = yTickLabels.length > 0 ? yTickLabels : ['0']
-  const xSparse = xLabels?.length ? sparseXLabels(xLabels) : []
+  const xSparse = xLabels?.length ? sparseXLabels(xLabels, maxXTicks) : []
   const xLast = xLabels ? xLabels.length - 1 : 0
 
   const chartVisual = (
@@ -144,7 +160,8 @@ export function ChartFrame({
     <div className={`flex w-full min-w-0 flex-col gap-1.5 ${className}`}>
       {accessibleCaption ? (
         <div
-          role="img"
+          ref={wrapperRef}
+          role={hasFocusable ? 'group' : 'img'}
           aria-label={accessibleCaption}
           className="flex flex-col gap-1.5"
         >

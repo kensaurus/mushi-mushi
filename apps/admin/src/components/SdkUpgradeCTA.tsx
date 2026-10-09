@@ -4,16 +4,23 @@
  * When `projectId` is supplied (GitHub connected), the primary action is
  * "Create Upgrade PR" (server opens a draft PR in the connected repo).
  * The copy-command fallback is always present as a secondary option.
+ *
+ * The "lockfile helper" disclosure hands out the host workflow from ADR 0019:
+ * with it in the repo, the upgrade PR arrives with a refreshed lockfile.
  */
 
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
 import { Btn, Tooltip } from './ui'
 import { JobStatusPill } from './ui/job-status-pill'
-import { CodeInline } from './CodePanel'
-import { IconCopy, IconTerminal, IconBolt, IconExternalLink } from './icons'
+import { CodeInline, CodePanel } from './CodePanel'
+import { IconCheck, IconCopy, IconTerminal, IconBolt, IconExternalLink } from './icons'
 import { resolveSdkDisplay } from '../lib/sdkVersionCompare'
 import { useSdkUpgrade } from '../lib/useSdkUpgrade'
+import {
+  SDK_LOCKFILE_DOCS_URL,
+  SDK_LOCKFILE_WORKFLOW_PATH,
+  SDK_LOCKFILE_WORKFLOW_YAML,
+} from '../lib/sdkLockfileHelper'
 import type { SdkStatus } from './SdkVersionBadge'
 
 interface SdkUpgradeCTAProps {
@@ -40,12 +47,10 @@ function UpgradePrButton({
   if (state.status === 'completed' && state.prUrl) {
     return (
       <span className="inline-flex items-center gap-1">
-        <a href={state.prUrl} target="_blank" rel="noopener noreferrer">
-          <Btn size="sm" variant="ghost" className={compact ? 'h-8 gap-1.5' : 'gap-1.5'}>
-            <IconExternalLink className="h-3.5 w-3.5" aria-hidden />
-            <span className={compact ? 'text-xs' : undefined}>View PR</span>
-          </Btn>
-        </a>
+        <Btn size="sm" variant="ghost" href={state.prUrl} className={compact ? 'h-8 gap-1.5' : 'gap-1.5'}>
+          <IconExternalLink className="h-3.5 w-3.5" aria-hidden />
+          <span className={compact ? 'text-xs' : undefined}>View PR</span>
+        </Btn>
         <Btn
           size="sm"
           variant="ghost"
@@ -74,6 +79,10 @@ function UpgradePrButton({
     )
   }
 
+  if (state.status === 'awaiting_lockfile') {
+    return <JobStatusPill status="awaiting_lockfile" />
+  }
+
   const busy =
     state.status === 'queueing' ||
     state.status === 'queued' ||
@@ -96,6 +105,44 @@ function UpgradePrButton({
   )
 }
 
+/** Copy block for the host workflow that refreshes the lockfile on upgrade branches. */
+export function LockfileHelperDisclosure() {
+  const [copied, setCopied] = useState(false)
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(SDK_LOCKFILE_WORKFLOW_YAML)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch { /* ignore */ }
+  }
+  return (
+    <details className="w-full text-2xs text-fg-muted">
+      <summary className="cursor-pointer select-none hover:text-fg">
+        Upgrade PRs fail <CodeInline>npm ci</CodeInline>? Add the lockfile helper
+      </summary>
+      <div className="mt-2 space-y-2">
+        <p>
+          Mushi edits only <CodeInline>package.json</CodeInline>. Save this workflow as{' '}
+          <CodeInline>{SDK_LOCKFILE_WORKFLOW_PATH}</CodeInline> on your default branch: Mushi then pushes the
+          bump first, your workflow regenerates the lockfile with your package manager, and the PR opens after
+          that, so a frozen install passes.{' '}
+          <a href={SDK_LOCKFILE_DOCS_URL} target="_blank" rel="noopener noreferrer" className="underline hover:text-fg">
+            Docs
+          </a>
+        </p>
+        <CodePanel
+          label="Lockfile helper"
+          language="yaml"
+          code={SDK_LOCKFILE_WORKFLOW_YAML}
+          onCopy={() => void copy()}
+          copied={copied}
+          maxHeight="max-h-64"
+        />
+      </div>
+    </details>
+  )
+}
+
 export function SdkUpgradeCTA({
   package_,
   observedVersion,
@@ -106,6 +153,7 @@ export function SdkUpgradeCTA({
   projectId,
 }: SdkUpgradeCTAProps) {
   const [copied, setCopied] = useState(false)
+  const [copyFailed, setCopyFailed] = useState(false)
   const resolution = resolveSdkDisplay({
     observedVersion,
     latestVersion,
@@ -125,9 +173,14 @@ export function SdkUpgradeCTA({
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(cmd)
+      setCopyFailed(false)
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
-    } catch { /* ignore */ }
+    } catch {
+      // Clipboard blocked: say so and show the command to copy by hand (QA bug 265).
+      setCopied(false)
+      setCopyFailed(true)
+    }
   }
 
   if (compact) {
@@ -136,10 +189,17 @@ export function SdkUpgradeCTA({
         {projectId && <UpgradePrButton projectId={projectId} compact />}
         <Tooltip content={detail} side="top">
           <Btn size="sm" variant="ghost" className="h-8 gap-1.5" onClick={() => void copy()} aria-label="Copy mushi upgrade command">
-            <IconTerminal className="h-3.5 w-3.5" aria-hidden />
-            <span className="text-xs">{projectId ? 'Copy cmd' : 'Upgrade'}</span>
+            {copied ? <IconCheck className="h-3.5 w-3.5" aria-hidden /> : <IconTerminal className="h-3.5 w-3.5" aria-hidden />}
+            <span className="text-xs" aria-live="polite">
+              {copied ? 'Copied' : projectId ? 'Copy cmd' : 'Upgrade'}
+            </span>
           </Btn>
         </Tooltip>
+        {copyFailed && (
+          <span className="text-2xs text-fg-muted" role="status">
+            Copy blocked. Run <CodeInline>{cmd}</CodeInline>
+          </span>
+        )}
       </span>
     )
   }
@@ -161,14 +221,13 @@ export function SdkUpgradeCTA({
           </Btn>
         </Tooltip>
         {!projectId && (
-          <Link to="/connect">
-            <Btn size="sm" variant="ghost" className="gap-1.5">
+          <Btn to="/connect" size="sm" variant="ghost" className="gap-1.5">
               <IconBolt className="h-3.5 w-3.5" aria-hidden />
               Connect GitHub
             </Btn>
-          </Link>
         )}
       </div>
+      {projectId && <LockfileHelperDisclosure />}
     </div>
   )
 }

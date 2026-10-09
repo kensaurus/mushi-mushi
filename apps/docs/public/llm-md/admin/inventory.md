@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/inventory
 
 ---
 title: 'User stories · Inventory'
+description: The User stories page manages your inventory.yaml — every page, action and story your app should have — and shows which of them the gates cover.
 ---
 
 # User stories · Inventory
@@ -25,21 +26,26 @@ Three nested layers:
 1. **Truth-layer summary** across the top — verified / unwired /
    regressed counts rolled up across every story in the project.
 2. **Story cards** — one per top-level user story (`signup`, `pricing`,
-   `dashboard`, …) with per-story counts and a *Run gates* / *Run crawler*
-   action on the row.
+   `dashboard`, …) with per-story counts and a **⋯** menu for runs scoped
+   to that story.
 3. **Action drawer** — click any element / action to inspect the
    `expected_outcome` block, the last walk, and the raw YAML.
 
-## Run gates / Run crawler from a row
+## Run gates / Run crawler
 
-Both buttons short-circuit to the same code path the GitHub Action uses
-([`@mushi-mushi/mcp-ci`](/sdks/mcp-ci)):
+The action row under the page header has one **Run gates** and one
+**Run crawler** for the whole project. Both short-circuit to the same code
+path the GitHub Action uses ([`@mushi-mushi/mcp-ci`](/sdks/mcp-ci)):
 
 - **Run gates** — runs all five gates against the current branch and
   posts the composite check back to your most recent open PR.
-- **Run crawler** — kicks the discovery crawler on staging. Newly
-  observed routes show up in the *Discovery* tab as candidates ready to
-  be promoted into `inventory.yaml`.
+- **Run crawler** — crawls every page in the inventory and reconciles it
+  with `inventory.yaml`. Differences land in the *Drift* tab.
+
+To run just one story, open the **⋯** menu on its card:
+
+- **Crawl this story's pages** — crawls only the pages linked to that story.
+- **Run gates on this story** — runs the gates on that story's actions only.
 
 ## SDK-driven discovery
 
@@ -47,9 +53,15 @@ Most teams will never hand-author `inventory.yaml`. Turn on
 `capture.discoverInventory` in the SDK config:
 
 ```ts
+import { MushiProvider } from '@mushi-mushi/react'
 
-  
-
+<MushiProvider config={{
+  projectId: '…',
+  apiKey: '…',
+  capture: { discoverInventory: true },
+}}>
+  <App />
+</MushiProvider>
 ```
 
 The SDK quietly observes routes, `data-testid`s, and outbound API paths

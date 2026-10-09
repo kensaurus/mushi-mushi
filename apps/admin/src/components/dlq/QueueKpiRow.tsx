@@ -1,16 +1,19 @@
 /**
  * FILE: apps/admin/src/components/dlq/QueueKpiRow.tsx
  * PURPOSE: 5-tile KPI strip: pending / running / completed / failed / DLQ.
- *          Pure presentation — accepts a pre-computed QueueSummary.
+ *          Pure presentation. The counts come from QueueStats, the same
+ *          source as the status banner, so the page never shows two numbers
+ *          for one lane ("Completed 0" next to "COMPLETED 2" until 2026-10-04).
  */
 
 import { useMemo } from 'react'
 import { KpiTile, type KpiDelta, type Tone } from '../charts'
 import { MetricStrip } from '../MetricStrip'
-import type { QueueSummary, ThroughputDay } from './types'
+import type { ThroughputDay } from './types'
+import type { QueueStats } from './QueueStatsTypes'
 
 interface Props {
-  summary: QueueSummary
+  stats: QueueStats
   throughput?: ThroughputDay[]
 }
 
@@ -30,21 +33,21 @@ function pctDelta(values: number[], opts: { invert?: boolean } = {}): KpiDelta |
   }
 }
 
-export function QueueKpiRow({ summary, throughput = [] }: Props) {
+export function QueueKpiRow({ stats, throughput = [] }: Props) {
   // Throughput data is per-day created/completed/failed. We project each KPI
   // to its matching daily series so the tile spark matches the row underneath.
   const createdSeries = useMemo(() => throughput.map((d) => d.created), [throughput])
   const completedSeries = useMemo(() => throughput.map((d) => d.completed), [throughput])
   const failedSeries = useMemo(() => throughput.map((d) => d.failed), [throughput])
 
-  const dlqCount = summary.byStatus.dead_letter ?? 0
+  const dlqCount = stats.deadLetter
 
   return (
     <MetricStrip cols={5} ariaLabel="Queue processing metrics" className="mb-3">
       <KpiTile
         label="Pending"
-        value={summary.byStatus.pending ?? 0}
-        accent={(summary.byStatus.pending ?? 0) > 0 ? 'info' : 'muted'}
+        value={stats.pending}
+        accent={stats.pending > 0 ? 'info' : 'muted'}
         sublabel="waiting for worker"
         series={createdSeries}
         delta={pctDelta(createdSeries, { invert: true })}
@@ -53,14 +56,14 @@ export function QueueKpiRow({ summary, throughput = [] }: Props) {
       />
       <KpiTile
         label="Running"
-        value={summary.byStatus.running ?? 0}
-        accent={(summary.byStatus.running ?? 0) > 0 ? 'brand' : 'muted'}
+        value={stats.running}
+        accent={stats.running > 0 ? 'brand' : 'muted'}
         sublabel="in flight now"
         meaning="Jobs currently being processed. Watch for ones stuck > 5 min — usually means a hang in the LLM call or downstream API."
       />
       <KpiTile
         label="Completed"
-        value={summary.byStatus.completed ?? 0}
+        value={stats.completed}
         accent={'ok' as Tone}
         sublabel="all-time success"
         series={completedSeries}
@@ -70,8 +73,8 @@ export function QueueKpiRow({ summary, throughput = [] }: Props) {
       />
       <KpiTile
         label="Failed"
-        value={summary.byStatus.failed ?? 0}
-        accent={(summary.byStatus.failed ?? 0) > 0 ? 'warn' : 'muted'}
+        value={stats.failed}
+        accent={stats.failed > 0 ? 'warn' : 'muted'}
         sublabel="still inside retry budget"
         series={failedSeries}
         delta={pctDelta(failedSeries, { invert: true })}

@@ -4,8 +4,9 @@
  *          MCP setup, CLI install, and SDK upgrade PRs.
  */
 
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { humanizeApiError } from '../lib/humanizeApiError'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import {
   ACTIVE_PROJECT_QUERY_PARAM,
@@ -41,6 +42,7 @@ import {
 } from '../components/icons'
 import type { SdkStatus } from '../components/SdkVersionBadge'
 import { isExpoReporterProject } from '../lib/projectMushiEnv'
+import { latestHeartbeatAt } from '../lib/heartbeat'
 
 interface ProjectRepoLite {
   repo_url: string | null
@@ -166,7 +168,6 @@ export function ConnectPage() {
   const copy = usePageCopy('/connect')
   const connectUx = useConnectUx()
   const showSectionDescriptions = connectUx.hideConnectSnapshot
-  const hideVersionInUpdate = !connectUx.hideConnectSnapshot
   usePublishPageContext({
     route: '/connect',
     title: 'Connect & Update',
@@ -201,14 +202,17 @@ export function ConnectPage() {
   const projectMissing =
     Boolean(activeProjectId) && !projectsFeed.loading && !projectsFeed.error && project == null
   const feedError = projectsFeed.error
+  // Plain English, never "Request failed (NETWORK_ERROR)" (QA bug 262).
+  const feedErrorText = useMemo(() => {
+    const h = humanizeApiError(feedError)
+    return h ? `${h.title} ${h.hint}` : null
+  }, [feedError])
 
   const fallbackGithubRepoUrl = project?.primary_repo?.repo_url ?? null
   const githubCheck = preflight.checks.find((c) => c.key === 'github')
   const githubRepoUrl = preflight.repoUrl ?? fallbackGithubRepoUrl
   const githubConnected = Boolean(githubRepoUrl) && (githubCheck?.ready ?? Boolean(githubRepoUrl))
-  const sdkConnected = Boolean(
-    project?.api_keys?.some((k) => k.is_active && k.last_seen_at),
-  )
+  const sdkConnected = latestHeartbeatAt(project?.api_keys) != null
   const setupStatus = useSetupStatus(activeProjectId)
   const nextSetupStep = nextRequiredSetupStep(
     setupStatus.activeProject ?? { steps: [], required_total: 0, required_complete: 0, total: 0, complete: 0, done: false, report_count: 0, fix_count: 0, merged_fix_count: 0, project_id: '', project_name: '', project_slug: '', created_at: '' },
@@ -232,9 +236,9 @@ export function ConnectPage() {
             Complete <strong>{nextSetupStep.label}</strong> in the setup wizard before
             wiring integrations here.
           </p>
-          <Link to={nextSetupStep.cta_to} className="mt-2 inline-block">
-            <Btn size="sm" variant="ghost">{nextSetupStep.cta_label} →</Btn>
-          </Link>
+          <Btn size="sm" variant="ghost" className="mt-2" to={nextSetupStep.cta_to}>
+            {nextSetupStep.cta_label} →
+          </Btn>
         </HelpBanner>
       )}
 
@@ -269,12 +273,7 @@ export function ConnectPage() {
             priority: POSTURE_PRIORITY.status,
             show: mcpStats.topPriority !== 'healthy' && mcpStats.topPriority !== 'no_project',
             children: (
-              <McpStatusBanner
-                stats={mcpStats}
-                onRefresh={() => { void mcpStatsQuery.reload() }}
-                refreshing={statsValidating}
-                plainBanner
-              />
+              <McpStatusBanner stats={mcpStats} plainBanner />
             ),
           },
           {
@@ -285,9 +284,7 @@ export function ConnectPage() {
                 githubConnected={githubConnected}
                 githubRepoUrl={githubRepoUrl}
                 sdkConnected={sdkConnected}
-                sdkLastSeenAt={
-                  project?.api_keys?.find((k) => k.is_active && k.last_seen_at)?.last_seen_at ?? null
-                }
+                sdkLastSeenAt={latestHeartbeatAt(project?.api_keys)}
                 sdkVersion={project?.sdk_version ?? null}
                 sdkLatestVersion={project?.sdk_latest_version ?? null}
                 sdkStatus={project?.sdk_status ?? null}
@@ -322,7 +319,7 @@ export function ConnectPage() {
           title="Couldn't load your projects"
           icon={<IconAlertTriangle className="h-4 w-4 text-danger-foreground" />}
         >
-          <p className="text-xs">{feedError}</p>
+          <p className="text-xs">{feedErrorText}</p>
           <Btn size="sm" variant="ghost" className="mt-2" onClick={() => projectsFeed.reload()}>
             Retry
           </Btn>
@@ -336,19 +333,18 @@ export function ConnectPage() {
             <Section
               title="GitHub"
               action={
-                <Link to="/integrations/config">
-                  <Btn size="sm" variant="ghost" className="gap-1.5">
+                <Btn to="/integrations/config" size="sm" variant="ghost" className="gap-1.5">
                     <IconIntegrations className="h-3.5 w-3.5" aria-hidden />
                     Manage
                     <IconArrowRight className="h-3.5 w-3.5" aria-hidden />
                   </Btn>
-                </Link>
               }
             >
               <SectionDescription when={showSectionDescriptions}>
                 Connect your repository to enable one-click upgrade PRs and autofix.
               </SectionDescription>
               <GithubConnectionCard
+                projectId={activeProjectId}
                 preflight={preflight}
                 fallbackRepoUrl={fallbackGithubRepoUrl}
               />
@@ -376,7 +372,7 @@ export function ConnectPage() {
                     Code Health only, not the in-app band.
                   </p>
                   <Link
-                    to={`/setup-copilot?project=${project.id}`}
+                    to={`/onboarding?tab=copilot&project=${project.id}`}
                     className={`mt-2 inline-block text-xs ${LINK_ACCENT}`}
                   >
                     Open Setup Copilot → CI &amp; store builds
@@ -420,7 +416,6 @@ export function ConnectPage() {
                 <UpdateCenter
                   project={project}
                   preflight={preflight}
-                  hideVersionBadge={hideVersionInUpdate}
                 />
               ) : (
                 <ProjectFallbackNote

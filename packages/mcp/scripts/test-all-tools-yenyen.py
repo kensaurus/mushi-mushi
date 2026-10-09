@@ -302,7 +302,6 @@ test("diff_inventory",     skip_reason="requires specific fromSha/toSha from CI"
 
 # ─── Phase 10: Setup (read probe only) ───────────────────────────────────────
 print(f"\n{BOLD}10. Setup & Docs{RESET}")
-test("setup_repo_for_mushi", skip_reason="would mutate repo settings -- manual step")
 
 
 # ─── Summary ─────────────────────────────────────────────────────────────────

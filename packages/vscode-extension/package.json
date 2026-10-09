@@ -71,7 +71,10 @@
       "properties": {
         "mushiMushi.transport": {
           "type": "string",
-          "enum": ["stdio", "http"],
+          "enum": [
+            "stdio",
+            "http"
+          ],
           "default": "stdio",
           "markdownDescription": "Which MCP transport to register. `stdio` runs `npx @mushi-mushi/mcp` locally; `http` connects to the hosted Streamable HTTP endpoint."
         },
@@ -112,14 +115,17 @@
     "vscode:prepublish": "tsc -p ./",
     "build": "tsc -p ./",
     "watch": "tsc -watch -p ./",
+    "lint": "eslint src/",
     "typecheck": "tsc --noEmit -p ./",
     "package": "tsc -p ./ && pnpm dlx @vscode/vsce@latest package --no-dependencies",
     "publish:vsce": "pnpm dlx @vscode/vsce@latest publish --no-dependencies",
     "publish:ovsx": "pnpm dlx ovsx@latest publish --no-dependencies"
   },
   "devDependencies": {
+    "@mushi-mushi/eslint-config": "workspace:*",
     "@types/node": "^22.20.0",
     "@types/vscode": "^1.101.0",
+    "eslint": "^10.6.0",
     "typescript": "^6.0.3"
   }
 }

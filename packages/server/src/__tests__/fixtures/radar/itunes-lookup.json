@@ -1,0 +1,16 @@
+{
+  "resultCount": 1,
+  "results": [
+    {
+      "trackId": 6761582648,
+      "trackName": "glot.it",
+      "bundleId": "com.glotit.app",
+      "sellerName": "Kensaurus Studio",
+      "artistName": "Kensaurus Studio",
+      "artworkUrl512": "https://is1-ssl.mzstatic.com/image/thumb/Purple/v4/ab/cd/ef/AppIcon.png/512x512bb.jpg",
+      "description": "Learn to read and speak Thai with short daily lessons.\n\nPractice the alphabet, tones and everyday phrases.",
+      "version": "1.102.0",
+      "primaryGenreName": "Education"
+    }
+  ]
+}

@@ -3,6 +3,7 @@
  */
 
 import { CHIP_TONE } from './chipTone'
+import { fixDeepLinkPath } from './fixDeepLink'
 
 export interface AuditResourceInfo {
   label: string
@@ -34,7 +35,7 @@ const RESOURCES: Record<string, AuditResourceInfo> = {
     label: 'Integration',
     description: 'GitHub, Sentry, Slack, or another connector.',
     className: 'border-brand/25 bg-brand/12 text-brand border border-brand/28 hover:bg-brand/15',
-    listPath: '/integrations',
+    listPath: '/integrations/config',
   },
   project: {
     label: 'Project',
@@ -80,6 +81,6 @@ export function auditResourcePath(resourceType: string, resourceId: string | nul
   const info = resolveAuditResource(resourceType)
   if (!resourceId) return info.listPath
   if (resourceType === 'report') return `/reports/${resourceId}`
-  if (resourceType === 'fix') return `/fixes?highlight=${resourceId}`
+  if (resourceType === 'fix') return fixDeepLinkPath(resourceId)
   return info.listPath
 }

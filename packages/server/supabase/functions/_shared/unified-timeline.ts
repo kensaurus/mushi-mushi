@@ -71,7 +71,7 @@ export async function buildUnifiedReportTimeline(
 
   const { data: comments } = await db
     .from('report_comments')
-    .select('id, body, author_kind, created_at')
+    .select('id, body, author_kind, created_at, visible_to_reporter')
     .eq('report_id', reportId)
     .eq('project_id', projectId)
     .order('created_at', { ascending: true })
@@ -82,7 +82,7 @@ export async function buildUnifiedReportTimeline(
       id: `comment-${c.id}`,
       lane: c.author_kind === 'admin' ? 'admin_comment' : 'reporter_comment',
       at: c.created_at,
-      title: c.author_kind === 'admin' ? 'Team reply' : 'Reporter reply',
+      title: commentTimelineTitle(c),
       body: c.body,
       actor: c.author_kind,
     })
@@ -209,7 +209,7 @@ export async function buildUnifiedReportTimeline(
     data?: Record<string, unknown>
   }> | null
   for (const b of breadcrumbs ?? []) {
-    const isoAt = new Date(b.timestamp).toISOString()
+    const isoAt = timelineIso(b.timestamp, report.created_at)
     // Sentry-forwarded crumbs (category starts with 'sentry') get sentry provenance.
     const isSentry = b.category?.startsWith('sentry')
     entries.push({
@@ -239,7 +239,7 @@ export async function buildUnifiedReportTimeline(
     entries.push({
       id: `console-${log.timestamp}-${log.level}`,
       lane: 'console',
-      at: new Date(log.timestamp).toISOString(),
+      at: timelineIso(log.timestamp, report.created_at),
       title: `console.${log.level}: ${String(log.message).slice(0, 120)}`,
       body: log.stack ?? null,
       status: log.level,
@@ -294,4 +294,25 @@ export async function buildUnifiedReportTimeline(
 
   entries.sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())
   return entries
+}
+
+/**
+ * An entry's time as ISO. Evidence from other sources (Sentry imports, older
+ * SDKs) can lack a timestamp or carry a bad one; that entry then sits at the
+ * report's own time instead of failing the whole timeline (`new Date(undefined)
+ * .toISOString()` throws RangeError).
+ * @internal Exported for unit tests only.
+ */
+/**
+ * A team comment is a reply only when the reporter can see it; the rest are
+ * internal triage notes, so the timeline must not call them replies.
+ */
+export function commentTimelineTitle(c: { author_kind: string | null; visible_to_reporter?: boolean | null }): string {
+  if (c.author_kind !== 'admin') return 'Reporter reply'
+  return c.visible_to_reporter ? 'Team reply' : 'Team note'
+}
+
+export function timelineIso(ts: unknown, fallbackIso: string): string {
+  const d = typeof ts === 'number' || typeof ts === 'string' ? new Date(ts) : null
+  return d && Number.isFinite(d.getTime()) ? d.toISOString() : fallbackIso
 }

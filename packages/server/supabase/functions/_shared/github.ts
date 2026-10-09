@@ -82,10 +82,53 @@ export async function mintInstallationToken(installationId: number): Promise<str
  * Returns null when nothing resolves — callers should surface a "connect
  * GitHub" error rather than proceed with an unauthenticated request.
  */
+/**
+ * The GitHub App installation that owns a fix attempt's repository. Attempts
+ * rarely carry repo_id, so without the PR-URL match every console merge fell
+ * back to the project's stored token, which cannot run the GraphQL
+ * markPullRequestReadyForReview mutation: a draft PR (glot.it #141) answered 409.
+ */
+export async function installationIdForAttempt(
+  db: ReturnType<typeof getServiceClient>,
+  attempt: { project_id: string; repo_id?: string | null; pr_url?: string | null },
+): Promise<number | null> {
+  const toId = (v: unknown) => (Number(v) > 0 ? Number(v) : null)
+  if (attempt.repo_id) {
+    const { data } = await db
+      .from('project_repos')
+      .select('github_app_installation_id')
+      .eq('id', attempt.repo_id)
+      .maybeSingle()
+    return toId(data?.github_app_installation_id)
+  }
+  const prRepo = attempt.pr_url ? parseGithubRepoUrl(attempt.pr_url.split('/pull/')[0]) : null
+  const { data: repos } = await db
+    .from('project_repos')
+    .select('repo_url, is_primary, github_app_installation_id')
+    .eq('project_id', attempt.project_id)
+  const rows = (repos ?? []) as Array<{ repo_url: string | null; is_primary: boolean | null; github_app_installation_id: unknown }>
+  const match = prRepo
+    ? rows.find((r) => {
+        const ref = parseGithubRepoUrl(r.repo_url ?? '')
+        return ref != null && ref.owner.toLowerCase() === prRepo.owner.toLowerCase() &&
+          ref.repo.toLowerCase() === prRepo.repo.toLowerCase()
+      })
+    : rows.find((r) => r.is_primary)
+  return toId(match?.github_app_installation_id)
+}
+
 export async function resolveProjectGithubToken(
   db: ReturnType<typeof getServiceClient>,
   projectId: string,
   installationId: number | null = null,
+  opts: {
+    /**
+     * false = never fall back to the platform `GITHUB_TOKEN`. Routes that hand
+     * repo contents to the caller (digest, diagram) pass false: otherwise any
+     * project could point repo_url at a repo only the platform token can read.
+     */
+    allowEnvFallback?: boolean
+  } = {},
 ): Promise<string | null> {
   if (installationId && installationId > 0) {
     try {
@@ -137,6 +180,7 @@ export async function resolveProjectGithubToken(
   }
 
   // Step 3: env fallback.
+  if (opts.allowEnvFallback === false) return null
   return Deno.env.get('GITHUB_TOKEN') ?? null
 }
 
@@ -160,6 +204,12 @@ export interface PullRequestSnapshot {
   state: string
   merged: boolean
   nodeId?: string | null
+  /** ISO time GitHub closed (or merged) the PR; null while open. */
+  closedAt?: string | null
+  /** ISO time GitHub merged the PR; null unless merged. */
+  mergedAt?: string | null
+  /** Current head commit; CI runs against this, not the first fix commit. */
+  headSha?: string | null
 }
 
 export interface PullRequestDetails extends PullRequestSnapshot {
@@ -180,6 +230,12 @@ function githubAuthHeaders(token: string): Record<string, string> {
 }
 
 /** Fetch minimal PR metadata — used before merge to detect draft state. */
+/** Cloud agents hand back only a PR URL; the console merge needs the number. */
+export function prNumberFromUrl(url: string): number | null {
+  const n = Number(url.match(/\/pull\/(\d+)/)?.[1])
+  return Number.isFinite(n) && n > 0 ? n : null
+}
+
 export async function fetchPullRequest(
   token: string,
   ref: GithubRepoRef,
@@ -197,6 +253,9 @@ export async function fetchPullRequest(
     state?: string
     merged?: boolean
     node_id?: string
+    closed_at?: string | null
+    merged_at?: string | null
+    head?: { sha?: string }
   }
   return {
     number: body.number ?? pullNumber,
@@ -204,6 +263,9 @@ export async function fetchPullRequest(
     state: body.state ?? 'open',
     merged: body.merged === true,
     nodeId: body.node_id ?? null,
+    closedAt: body.closed_at ?? null,
+    mergedAt: body.merged_at ?? null,
+    headSha: body.head?.sha ?? null,
   }
 }
 
@@ -245,6 +307,57 @@ export async function fetchPullRequestDetails(
   }
 }
 
+export interface PullRequestFile {
+  filename: string
+  status: string
+  additions: number
+  deletions: number
+  patch: string | null
+}
+
+/**
+ * List a PR's changed files (`GET /pulls/:n/files`, 100 per page). Stops at
+ * `maxPages`; `complete` is false when GitHub had more, so a caller never
+ * mistakes a truncated list for the whole change. Null when the PR is gone.
+ */
+export async function fetchPullRequestFiles(
+  token: string,
+  ref: GithubRepoRef,
+  pullNumber: number,
+  opts: { maxPages?: number } = {},
+): Promise<{ files: PullRequestFile[]; complete: boolean } | null> {
+  const maxPages = opts.maxPages ?? 3
+  const files: PullRequestFile[] = []
+  for (let page = 1; page <= maxPages; page++) {
+    const res = await fetchWithTimeout(
+      `https://api.github.com/repos/${ref.owner}/${ref.repo}/pulls/${pullNumber}/files?per_page=100&page=${page}`,
+      { headers: githubAuthHeaders(token) },
+    )
+    if (res.status === 404) return null
+    if (!res.ok) throw new Error(`pull files fetch ${res.status}`)
+    const body = await res.json() as Array<{
+      filename?: string
+      status?: string
+      additions?: number
+      deletions?: number
+      patch?: string
+    }>
+    if (!Array.isArray(body)) throw new Error('pull files fetch returned a non-array body')
+    for (const f of body) {
+      if (typeof f.filename !== 'string') continue
+      files.push({
+        filename: f.filename,
+        status: f.status ?? 'modified',
+        additions: f.additions ?? 0,
+        deletions: f.deletions ?? 0,
+        patch: typeof f.patch === 'string' ? f.patch : null,
+      })
+    }
+    if (body.length < 100) return { files, complete: true }
+  }
+  return { files, complete: false }
+}
+
 /**
  * Convert a draft PR to "ready for review" so CI can run and the merge API
  * accepts squash-merge. GitHub blocks merge on draft PRs even when checks pass.
@@ -272,14 +385,14 @@ export async function markPullRequestReady(
   }
 
   // REST PATCH { draft: false } does not reliably undraft on GitHub; the
-  // supported path is the GraphQL markPullRequestAsReady mutation (same as
+  // supported path is the GraphQL markPullRequestReadyForReview mutation (same as
   // `gh pr ready`).
   const gqlRes = await fetchWithTimeout('https://api.github.com/graphql', {
     method: 'POST',
     headers: { ...githubAuthHeaders(token), 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      query: `mutation MarkPullRequestReady($id: ID!) {
-        markPullRequestAsReady(input: { pullRequestId: $id }) {
+      query: `mutation MarkPullRequestReadyForReview($id: ID!) {
+        markPullRequestReadyForReview(input: { pullRequestId: $id }) {
           pullRequest { isDraft }
         }
       }`,
@@ -287,7 +400,7 @@ export async function markPullRequestReady(
     }),
   })
   const gqlBody = await gqlRes.json().catch(() => ({})) as {
-    data?: { markPullRequestAsReady?: { pullRequest?: { isDraft?: boolean } } }
+    data?: { markPullRequestReadyForReview?: { pullRequest?: { isDraft?: boolean } } }
     errors?: Array<{ message?: string }>
   }
   if (gqlBody.errors?.length) {
@@ -297,7 +410,7 @@ export async function markPullRequestReady(
       message: gqlBody.errors.map((e) => e.message).filter(Boolean).join('; ') || 'GraphQL ready failed',
     }
   }
-  const stillDraft = gqlBody.data?.markPullRequestAsReady?.pullRequest?.isDraft
+  const stillDraft = gqlBody.data?.markPullRequestReadyForReview?.pullRequest?.isDraft
   if (stillDraft === true) {
     return { ok: false, alreadyReady: false, message: 'Pull request is still a draft after ready mutation' }
   }
@@ -335,10 +448,31 @@ export async function fetchLatestCheckRun(
   )
   if (res.status === 404) return null
   if (!res.ok) throw new Error(`check-runs fetch ${res.status}`)
-  const body = await res.json() as {
-    check_runs?: Array<{ status: string | null; conclusion: string | null }>
-  }
-  const runs = body.check_runs ?? []
+  const body = await res.json() as { check_runs?: CheckRunLike[] }
+  return collapseCheckRuns(body.check_runs ?? [])
+}
+
+export interface CheckRunLike {
+  name?: string | null
+  status: string | null
+  conclusion: string | null
+}
+
+/**
+ * Check runs that review a PR instead of testing it. Copilot code review
+ * posts a `copilot-pull-request-reviewer` run that concludes `failure`
+ * whenever it leaves comments or runs out of quota; counting it made
+ * help-her-take-photo#65 read "CI failed" with its only CI job green, and
+ * the console hid the merge button.
+ */
+const ADVISORY_CHECK_RUN_NAMES = new Set(['copilot-pull-request-reviewer'])
+
+export function isAdvisoryCheckRun(run: { name?: string | null }): boolean {
+  return ADVISORY_CHECK_RUN_NAMES.has((run.name ?? '').toLowerCase())
+}
+
+export function collapseCheckRuns(all: CheckRunLike[]): CheckRunSnapshot {
+  const runs = all.filter((r) => !isAdvisoryCheckRun(r))
   if (runs.length === 0) return { status: null, conclusion: null }
 
   const pending = runs.some((r) => r.status === 'queued' || r.status === 'in_progress')

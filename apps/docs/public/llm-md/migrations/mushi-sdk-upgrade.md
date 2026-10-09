@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/migrations/mushi-sdk-upgrade
 
 ---
 title: '@mushi-mushi/* upgrades'
+description: Upgrade @mushi-mushi packages to the current 1.x releases — breaking changes by package, the codemod, and how to check which versions you run.
 ---
 
 # `@mushi-mushi/*` upgrades
@@ -46,7 +47,7 @@ Each package ships its own CHANGELOG.md in the GitHub repo (e.g. @mushi-mushi/we
     { id: 'rebuild', label: 'Rebuild + run your test suite', content: <>Type errors usually surface here. Most are easy one-line fixes.</> },
     { id: 'smoke-test', label: 'Smoke-test on a real device / browser', content: <>Submit a test report. Confirm console + network + screenshot capture still work and the report lands in the admin console.</> },
     { id: 'update-prod', label: 'Roll out to production behind a canary', content: <>Mushi is a passive SDK — it can only fail to capture (best case) or capture wrong things (worst case). Both are easy to roll back.</> },
-  ]}
+
 />
 
 ## Current package tracks (workspace snapshot)

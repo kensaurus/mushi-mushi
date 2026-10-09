@@ -4,6 +4,7 @@ import { getServiceClient } from '../../_shared/db.ts';
 import { jwtAuth } from '../../_shared/auth.ts';
 import { logAudit } from '../../_shared/audit.ts';
 import { callerProjectIds } from '../shared.ts';
+import { CUSTOMIZABLE_PROMPT_STAGES, isCustomizablePromptStage } from '../../_shared/prompt-stages.ts';
 
 export function registerPromptLabRoutes(app: Hono<{ Variables: Variables }>): void {
   // ============================================================
@@ -46,13 +47,13 @@ export function registerPromptLabRoutes(app: Hono<{ Variables: Variables }>): vo
 
     const projectRes = await db
       .from('projects')
-      .select('id, project_name')
+      .select('id, name')
       .in('id', projectIds)
       .order('created_at', { ascending: true })
       .limit(1)
       .maybeSingle()
     const pid = projectRes.data?.id ?? projectIds[0]
-    const projectName = projectRes.data?.project_name ?? null
+    const projectName = projectRes.data?.name ?? null
 
     const [promptsRes, evalRes] = await Promise.all([
       db.from('prompt_versions')
@@ -87,6 +88,12 @@ export function registerPromptLabRoutes(app: Hono<{ Variables: Variables }>): vo
     let topPriorityTo: string | null = null
     const scoped = (path: string) =>
       `${path}${path.includes('?') ? '&' : '?'}project=${encodeURIComponent(pid)}`
+    // Prompt Lab reads ?tab=prompts&stage=<stage>: it opens that stage's
+    // table and scrolls to it, so the banner CTA lands on the prompt to act on.
+    const promptsLink = (match: (p: (typeof prompts)[number]) => boolean) => {
+      const stage = prompts.find(match)?.stage
+      return scoped(stage ? `/prompt-lab?tab=prompts&stage=${encodeURIComponent(stage)}` : '/prompt-lab?tab=prompts')
+    }
 
     if (datasetTotal === 0) {
       topPriority = 'no_dataset'
@@ -95,19 +102,19 @@ export function registerPromptLabRoutes(app: Hono<{ Variables: Variables }>): vo
     } else if (untestedAbCount > 0) {
       topPriority = 'untested_ab'
       topPriorityLabel = `${untestedAbCount} candidate prompt${untestedAbCount === 1 ? '' : 's'} in A/B but not scored by the judge yet.`
-      topPriorityTo = scoped('/prompt-lab?tab=prompts')
+      topPriorityTo = promptsLink((p) => p.is_candidate && (p.avg_judge_score === null || p.avg_judge_score === 0))
     } else if (promoteReadyCount > 0) {
       topPriority = 'promote_ready'
       topPriorityLabel = `${promoteReadyCount} candidate${promoteReadyCount === 1 ? '' : 's'} scored ≥ 80% — review and promote to production traffic.`
-      topPriorityTo = scoped('/prompt-lab?tab=prompts')
+      topPriorityTo = promptsLink((p) => p.is_candidate && p.avg_judge_score !== null && p.avg_judge_score > 0.8)
     } else if (abTestingCount > 0) {
       topPriority = 'ab_running'
       topPriorityLabel = `${abTestingCount} prompt${abTestingCount === 1 ? '' : 's'} in A/B — waiting for more judge evaluations.`
-      topPriorityTo = scoped('/prompt-lab?tab=prompts')
+      topPriorityTo = promptsLink((p) => p.traffic_percentage !== null && p.traffic_percentage > 0 && p.traffic_percentage < 100)
     } else if (candidatePrompts > 0) {
       topPriority = 'candidates_idle'
       topPriorityLabel = `${candidatePrompts} candidate prompt${candidatePrompts === 1 ? '' : 's'} idle — set Traffic % to start an A/B test.`
-      topPriorityTo = scoped('/prompt-lab?tab=prompts')
+      topPriorityTo = promptsLink((p) => p.is_candidate)
     } else {
       topPriority = 'healthy'
       topPriorityLabel = `${activePrompts} active prompt${activePrompts === 1 ? '' : 's'} · clone a baseline to start iterating.`
@@ -281,10 +288,16 @@ export function registerPromptLabRoutes(app: Hono<{ Variables: Variables }>): vo
         400,
       );
     }
-    const stage = body.stage === 'stage1' || body.stage === 'stage2' ? body.stage : null;
+    const stage = isCustomizablePromptStage(body.stage) ? body.stage : null;
     if (!stage)
       return c.json(
-        { ok: false, error: { code: 'BAD_INPUT', message: 'stage must be stage1 or stage2' } },
+        {
+          ok: false,
+          error: {
+            code: 'BAD_INPUT',
+            message: `This prompt stage cannot be customised. Use one of: ${CUSTOMIZABLE_PROMPT_STAGES.join(', ')}.`,
+          },
+        },
         400,
       );
     const version = String(body.version ?? '').trim();

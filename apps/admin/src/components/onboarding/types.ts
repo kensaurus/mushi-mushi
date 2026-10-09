@@ -2,7 +2,9 @@
  * FILE: apps/admin/src/components/onboarding/types.ts
  */
 
-export type OnboardingTabId = 'overview' | 'steps' | 'verify' | 'sdk'
+/** @internal Exported for unit tests (stat-card link targets). */
+export const ONBOARDING_TAB_IDS = ['overview', 'steps', 'verify', 'sdk', 'copilot'] as const
+export type OnboardingTabId = (typeof ONBOARDING_TAB_IDS)[number]
 
 export interface OnboardingStats {
   hasAnyProject: boolean

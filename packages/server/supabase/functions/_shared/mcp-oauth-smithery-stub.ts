@@ -8,6 +8,8 @@
  * other MCP clients use.
  */
 
+import { mcpOAuthIssuerForResource } from './mcp-oauth-metadata.ts'
+
 const SMITHERY_REDIRECT_PREFIXES = ['https://smithery.run/', 'https://smithery.ai/']
 
 export function isSmitheryRedirectUri(uri: string): boolean {
@@ -32,6 +34,8 @@ export function buildSmitheryAuthorizeRedirect(url: URL): Response | null {
   const dest = new URL(redirectUri)
   dest.searchParams.set('code', `mushi-scan-${crypto.randomUUID().replace(/-/g, '')}`)
   if (state) dest.searchParams.set('state', state)
+  // RFC 9207 — the metadata advertises authorization_response_iss_parameter_supported.
+  dest.searchParams.set('iss', mcpOAuthIssuerForResource(url.searchParams.get('resource'), url.origin))
 
   return Response.redirect(dest.toString(), 302)
 }

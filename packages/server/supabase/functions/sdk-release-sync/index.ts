@@ -6,6 +6,9 @@
  * blocked | merged | deploying` states, polls GitHub for current check-run +
  * deployment status, and upserts results into sdk_upgrade_jobs.
  *
+ * Before that, jobs in status `awaiting_lockfile` (ADR 0019) get their PR
+ * opened once the host's lockfile workflow pushed, or after 30 minutes.
+ *
  * Auth: service-role only (requireServiceRoleAuth). Never callable by end users.
  */
 
@@ -22,6 +25,7 @@ import {
   fetchLatestDeploymentStatusForSha,
   normalizeDeployStatus,
 } from '../_shared/github.ts'
+import { syncAwaitingLockfileJobs } from '../_shared/sdk-upgrade-lockfile.ts'
 
 const log = rootLog.child('sdk-release-sync')
 
@@ -37,10 +41,14 @@ app.post('/sdk-release-sync', async (c) => {
 
   const db = getServiceClient()
 
+  const awaiting = await syncAwaitingLockfileJobs(db)
+
   const { data: jobs, error } = await db
     .from('sdk_upgrade_jobs')
     .select('id, project_id, pr_url, pr_state, release_status, merged_at, commit_sha')
-    .in('release_status', SYNC_STATUSES)
+    // Jobs that opened a PR before the runner stamped release_status (NULL)
+    // are picked up too, so a PR merged on GitHub stops reading as open.
+    .or(`release_status.in.(${SYNC_STATUSES.join(',')}),and(release_status.is.null,status.eq.completed)`)
     .not('pr_url', 'is', null)
     .order('created_at', { ascending: false })
     .limit(50)
@@ -151,8 +159,8 @@ app.post('/sdk-release-sync', async (c) => {
     }
   }
 
-  log.info('sync complete', { synced: results.length })
-  return c.json({ ok: true, data: { synced: results.length, results } })
+  log.info('sync complete', { synced: results.length, awaiting: awaiting.length })
+  return c.json({ ok: true, data: { synced: results.length, results, awaiting } })
 })
 
 Deno.serve(withSentry('sdk-release-sync', app.fetch))

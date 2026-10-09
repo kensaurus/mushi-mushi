@@ -3,8 +3,7 @@
  * PURPOSE: PDCA pipeline posture — active runs, queued waiting trigger, failures, healthy.
  */
 
-import { Link } from 'react-router-dom'
-import { Btn } from '../ui'
+import { Btn, RelativeTime } from '../ui'
 import { usePageCopy } from '../../lib/copy'
 import { StatusBannerShell } from '../StatusBannerShell'
 import type { IterateStats, IterateTabId } from './IterateStatsTypes'
@@ -33,9 +32,7 @@ export function IterateStatusBanner({ stats, onTab, onRefresh, refreshing, plain
             : 'Pick a project to queue producer/critic PDCA loops.'
         }
         action={
-          <Link to="/onboarding">
-            <Btn size="sm" variant="ghost">{actions.setup ?? 'Go to Setup'}</Btn>
-          </Link>
+          <Btn to="/onboarding" size="sm" variant="ghost">{actions.setup ?? 'Go to Setup'}</Btn>
         }
       />
     )
@@ -54,9 +51,7 @@ export function IterateStatusBanner({ stats, onTab, onRefresh, refreshing, plain
         subtitle={stats.topPriorityLabel}
         action={
           stats.topPriorityTo ? (
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">{actions.runs ?? 'View runs'}</Btn>
-            </Link>
+            <Btn to={stats.topPriorityTo} size="sm" variant="ghost">{actions.runs ?? 'View runs'}</Btn>
           ) : onTab ? (
             <Btn size="sm" variant="ghost" onClick={() => onTab('runs')}>{actions.runs ?? 'View runs'}</Btn>
           ) : null
@@ -75,9 +70,7 @@ export function IterateStatusBanner({ stats, onTab, onRefresh, refreshing, plain
           onTab ? (
             <Btn size="sm" variant="primary" onClick={() => onTab('runs')}>{actions.openRuns ?? 'Open runs'}</Btn>
           ) : (
-            <Link to="/iterate?tab=runs">
-              <Btn size="sm" variant="primary">{actions.openRuns ?? 'Open runs'}</Btn>
-            </Link>
+            <Btn to="/iterate?tab=runs" size="sm" variant="primary">{actions.openRuns ?? 'Open runs'}</Btn>
           )
         }
       />
@@ -98,9 +91,7 @@ export function IterateStatusBanner({ stats, onTab, onRefresh, refreshing, plain
           onTab ? (
             <Btn size="sm" variant="ghost" onClick={() => onTab('new')}>{actions.queue ?? 'Queue new run'}</Btn>
           ) : (
-            <Link to="/iterate?tab=new">
-              <Btn size="sm" variant="ghost">{actions.queue ?? 'Queue new run'}</Btn>
-            </Link>
+            <Btn to="/iterate?tab=new" size="sm" variant="ghost">{actions.queue ?? 'Queue new run'}</Btn>
           )
         }
       />
@@ -117,9 +108,7 @@ export function IterateStatusBanner({ stats, onTab, onRefresh, refreshing, plain
           onTab ? (
             <Btn size="sm" variant="primary" onClick={() => onTab('new')}>{actions.newRun ?? 'New run'}</Btn>
           ) : (
-            <Link to="/iterate?tab=new">
-              <Btn size="sm" variant="primary">{actions.newRun ?? 'New run'}</Btn>
-            </Link>
+            <Btn to="/iterate?tab=new" size="sm" variant="primary">{actions.newRun ?? 'New run'}</Btn>
           )
         }
       />
@@ -130,16 +119,23 @@ export function IterateStatusBanner({ stats, onTab, onRefresh, refreshing, plain
     <StatusBannerShell
       tone="ok"
       title={plainBanner ? 'Improvement pipeline idle' : `PDCA pipeline idle on ${projectLabel}`}
-      subtitle={stats.topPriorityLabel}
+      subtitle={
+        <>
+          {stats.topPriorityLabel}
+          {stats.lastRunAt ? (
+            <>
+              {stats.topPriorityLabel ? ' · ' : ''}Last run queued <RelativeTime value={stats.lastRunAt} />
+            </>
+          ) : null}
+        </>
+      }
       action={
         onRefresh ? (
           <Btn size="sm" variant="ghost" onClick={onRefresh} loading={refreshing} disabled={refreshing}>
             {actions.refresh ?? 'Refresh'}
           </Btn>
         ) : stats.topPriorityTo ? (
-          <Link to={stats.topPriorityTo}>
-            <Btn size="sm" variant="ghost">{actions.runs ?? 'View runs'}</Btn>
-          </Link>
+          <Btn to={stats.topPriorityTo} size="sm" variant="ghost">{actions.runs ?? 'View runs'}</Btn>
         ) : null
       }
     />

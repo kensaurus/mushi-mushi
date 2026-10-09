@@ -12,8 +12,7 @@
  */
 
 import { generateObject } from 'npm:ai@4'
-import { createAnthropic } from 'npm:@ai-sdk/anthropic@1'
-import { createOpenAI } from 'npm:@ai-sdk/openai@1'
+import { openAiProvider } from '../_shared/openai-compat.ts'
 import { z } from 'npm:zod@3'
 
 import { getServiceClient } from '../_shared/db.ts'
@@ -21,7 +20,9 @@ import { log as rootLog } from '../_shared/logger.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { withAnthropicOrOpenAi, LlmFailoverError } from '../_shared/llm-failover.ts'
-import { STAGE2_MODEL, STAGE2_FALLBACK } from '../_shared/models.ts'
+import { TEST_GEN_EFFORT, TEST_GEN_MODEL, STAGE2_FALLBACK, THINKING_HEADROOM_TOKENS } from '../_shared/models.ts'
+import { claudeGenerateObject } from '../_shared/claude-messages.ts'
+import { withLlmUsage } from '../_shared/llm-usage.ts'
 import { logAudit } from '../_shared/audit.ts'
 import { createTrace } from '../_shared/observability.ts'
 import { tagLangfuseTrace } from '../_shared/sentry.ts'
@@ -185,7 +186,7 @@ Deno.serve(
     if (req.method !== 'POST') return new Response('Method Not Allowed', { status: 405 })
 
     const authErr = requireServiceRoleAuth(req)
-    if (authErr && req.headers.get('x-mushi-admin') !== '1') return authErr
+    if (authErr) return authErr
 
     const db = getServiceClient()
     const body = await req.json().catch(() => ({})) as Partial<Body>
@@ -250,39 +251,51 @@ Write a comprehensive Playwright TDD test for this user story.`
     const trace = createTrace('test-gen-from-story', { project_id, storyId: story.id })
     tagLangfuseTrace(trace.id)
     const llmSpan = trace.span('generate-test')
+    const usageCtx = {
+      functionName: 'test-gen-from-story',
+      stage: 'generate-test',
+      projectId: project_id,
+      primaryModel: TEST_GEN_MODEL,
+      langfuseTraceId: trace.id,
+      // A test the user asked for; withAnthropicOrOpenAi checks the wallet first.
+      billHosted: true,
+    }
     try {
       // withAnthropicOrOpenAi takes TWO separate callbacks (anthropicFn,
       // openAiFn) and returns { result, usedProvider }. Each callback receives
       // exactly one ResolvedKey from its own provider pool.
-      const { result } = await withAnthropicOrOpenAi(
+      const { result, usedProvider } = await withAnthropicOrOpenAi(
         db,
         project_id,
         async (anthropicKey) => {
-          const { object } = await generateObject({
-            model: createAnthropic({ apiKey: anthropicKey.key })(STAGE2_MODEL),
+          const { object } = await withLlmUsage(db, { ...usageCtx, model: TEST_GEN_MODEL, keySource: anthropicKey.source }, () => claudeGenerateObject({
+            apiKey: anthropicKey.key,
+            model: TEST_GEN_MODEL,
+            effort: TEST_GEN_EFFORT,
             system: SYSTEM_PROMPT,
             prompt,
             schema: testGenSchema,
-            maxTokens: 8000,
-          })
+            // An 8k Playwright spec plus room for adaptive thinking.
+            maxTokens: 8000 + THINKING_HEADROOM_TOKENS,
+          }))
           return object
         },
         async (openaiKey) => {
-          const { object } = await generateObject({
-            model: createOpenAI({ apiKey: openaiKey.key })(STAGE2_FALLBACK, { structuredOutputs: false }),
+          const { object } = await withLlmUsage(db, { ...usageCtx, model: STAGE2_FALLBACK, keySource: openaiKey.source }, () => generateObject({
+            model: openAiProvider({ apiKey: openaiKey.key, baseURL: openaiKey.baseUrl })(STAGE2_FALLBACK, { structuredOutputs: false }),
             system: SYSTEM_PROMPT,
             prompt,
             schema: testGenSchema,
             maxTokens: 8000,
-          })
+          }))
           return object
         },
       )
       output = result
-      llmSpan.end({ model: STAGE2_MODEL })
+      llmSpan.end({ model: usedProvider === 'openai' ? STAGE2_FALLBACK : TEST_GEN_MODEL })
       await trace.end()
     } catch (err) {
-      llmSpan.end({ model: STAGE2_MODEL, error: err instanceof Error ? err.message : String(err) })
+      llmSpan.end({ model: TEST_GEN_MODEL, error: err instanceof Error ? err.message : String(err) })
       await trace.end().catch(() => {})
       // Log the raw error server-side, but never echo err.message to the
       // client — raw messages can leak internals (CodeQL js/stack-trace-exposure).
@@ -322,7 +335,7 @@ Write a comprehensive Playwright TDD test for this user story.`
         approval_status: approvalStatus,
         automation_mode,
         origin_story_node_id: story.id,
-        generation_model: STAGE2_MODEL,
+        generation_model: TEST_GEN_MODEL,
         enabled: automation_mode === 'auto',
       })
       .select('id')

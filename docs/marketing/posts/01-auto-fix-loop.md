@@ -2,7 +2,7 @@
 title: 60 seconds from "this is broken" to a draft PR — building Mushi Mushi
 tags: [opensource, ai, devtools, productivity]
 description: A walkthrough of how Mushi Mushi turns a one-sentence user complaint into a classified, deduped, AI-judged draft PR — and why we kept the human in the loop the whole way.
-canonical_url: https://github.com/kensaurus/mushi-mushi
+canonical_url: https://kensaur.us/mushi-mushi/docs/blog/auto-fix-loop
 cover_image: https://raw.githubusercontent.com/kensaurus/mushi-mushi/master/docs/social-preview/og-card.png
 ---
 

@@ -84,32 +84,39 @@ numbers are fresh), hold 7–9 for post-500-star traction.
 
 ---
 
-## Community Discords / Slacks
+## Community home: GitHub Discussions (the Monday ritual)
 
-One per week, in the right channel, on a topic the community genuinely cares
-about. Never cold. Never spammy. Always the voice from [VOICE.md](./VOICE.md).
+Decided 2026-09-20 (`docs/plan-gtm.md`, Workstream C §6): the community
+lives in [GitHub Discussions](https://github.com/kensaurus/mushi-mushi/discussions),
+not Discord. Discussions are indexed by Google and by the answer engines
+that developers now ask first, they work asynchronously for a solo
+JP-based maintainer, and Langfuse grew a 1,400-thread community the same
+way. The Discord server stays as an unpromoted link; nothing is scheduled
+there.
 
-| # | Community | Channel | Drop text template |
-| --- | --- | --- | --- |
-| 1 | [MCP Discord](https://discord.gg/model-context-protocol) | `#showcase` | See [snippets.md](./snippets.md) → "MCP / Claude Code Discord". |
-| 2 | [Claude Code Discord](https://www.anthropic.com/claude-code) | `#showcase` | Same template, tweak for Claude Code specifics. |
-| 3 | [Supabase Discord](https://discord.supabase.com/) | `#showcase` | See [snippets.md](./snippets.md) → "Supabase Discord". |
-| 4 | [Cursor Discord](https://discord.gg/cursor) | `#community-tools` | See [snippets.md](./snippets.md) → "Cursor". |
-| 5 | [Reactiflux](https://www.reactiflux.com/) | `#need-help` (helping others) + `#jobs-talk` | Never drop as a post — help people with their React questions, mention the tool only if on-topic. |
-| 6 | [Svelte Society Discord](https://discord.gg/svelte) | `#showcase` | Focus on the SvelteKit hook integration. |
-| 7 | [Vue Land Discord](https://chat.vuejs.org/) | `#showcase` | Focus on the composable API. |
-| 8 | [Langfuse Discord](https://discord.langfuse.com) | `#showcase` | The LLM-as-Judge story. |
-| 9 | [r/webdev Discord](https://discord.gg/webdev) | `#showcase` | Light drop, once. |
+**Every Monday, 20 minutes:**
 
-**Never-spam rules:**
+1. **Answer everything.** No thread older than a week without a reply from
+   the maintainer. A short "looking at this" is a reply.
+2. **Turn the week's support into Q&A.** Each support email or DM that had
+   a reusable answer becomes a Q&A thread, with the sender's permission and
+   their name removed. The answer is written once and linked forever.
+3. **Post "This week in Mushi" in Announcements.** Five lines: what shipped,
+   the activated-projects number from [`scorecard.md`](./scorecard.md), one
+   thing that broke, one thing coming, one thread worth reading.
+4. **Keep "Show and tell: your first report" pinned.** Ask new projects to
+   post a screenshot of their first diagnosis. That thread is the proof page
+   the landing does not have yet.
 
-- One drop per server per 90 days, max.
-- Always in the explicit `#showcase` / `#share-your-project` channel if it
-  exists. If it doesn't, DM a mod and ask where it'd fit.
-- After dropping, **stay in the server** for at least a week. Answer three
-  questions from other members before you leave.
-- Never start a drop with *"Hey everyone!"*. Start with the bug you were
-  trying to solve.
+**Links that point here:** README → Community, `CONTRIBUTING.md` → Questions,
+`.github/ISSUE_TEMPLATE/config.yml` contact link, the docs roadmap page.
+Issues stay for bugs; the SLA is a first reply within 24 hours on weekdays.
+
+**Other people's Discords** (MCP, Claude Code, Supabase, Cursor, Svelte, Vue,
+Langfuse): the drop templates in [snippets.md](./snippets.md) still exist,
+but nothing is scheduled. If you use one: once per server per 90 days, in
+the `#showcase` channel, start with the bug you were solving, and stay a
+week to answer other people's questions.
 
 ---
 
