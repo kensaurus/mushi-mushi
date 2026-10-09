@@ -338,3 +338,26 @@ describe('backlog paging helpers', () => {
     expect(imp.parseSentryImportRequest({ issueIds: ['A-1'], cursor: '0:10:0' }).ok).toBe(false)
   })
 })
+
+describe('sentryAutoImportQuery', () => {
+  const now = new Date('2026-10-09T12:00:00Z')
+
+  it('looks back from the last run plus a 15-minute overlap', () => {
+    expect(imp.sentryAutoImportQuery('2026-10-09T11:45:00Z', now)).toBe('is:unresolved firstSeen:-30m')
+  })
+
+  it('never looks back less than 15 minutes, nor more than a day', () => {
+    expect(imp.sentryAutoImportQuery('2026-10-09T12:00:00Z', now)).toBe('is:unresolved firstSeen:-15m')
+    expect(imp.sentryAutoImportQuery('2026-10-01T00:00:00Z', now)).toBe('is:unresolved firstSeen:-1440m')
+  })
+
+  it('a first run (or an unreadable timestamp) looks back a day', () => {
+    expect(imp.sentryAutoImportQuery(null, now)).toBe('is:unresolved firstSeen:-1440m')
+    expect(imp.sentryAutoImportQuery('not a date', now)).toBe('is:unresolved firstSeen:-1440m')
+  })
+
+  it('passes the search validation the import route applies', () => {
+    const q = imp.sentryAutoImportQuery(null, now)
+    expect(imp.parseSentryImportRequest({ query: q, limit: imp.SENTRY_IMPORT_MAX }).ok).toBe(true)
+  })
+})
