@@ -10,6 +10,13 @@ describe('matchesErrorFilter', () => {
     expect(matchesErrorFilter('Script error.', [/^Script error\.?$/])).toBe(true);
   });
 
+  it('matches a global or sticky RegExp on every call, not every other call', () => {
+    for (const filter of [/ResizeObserver/g, /ResizeObserver/y]) {
+      expect(matchesErrorFilter('ResizeObserver loop limit exceeded', [filter])).toBe(true);
+      expect(matchesErrorFilter('ResizeObserver loop limit exceeded', [filter])).toBe(true);
+    }
+  });
+
   it('returns false for empty value or filters', () => {
     expect(matchesErrorFilter('', ['x'])).toBe(false);
     expect(matchesErrorFilter('x', [])).toBe(false);

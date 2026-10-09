@@ -85,3 +85,10 @@ fe9eab0773f9f2d4e9ab1da178592d728b5e1680:packages/mcp/scripts/test-all-tools-yen
 780eee9fb519d3c148ffd566ac6a940f1fdc8b31:packages/server/src/__tests__/mcp-http-session.test.ts:generic-api-key:67
 780eee9fb519d3c148ffd566ac6a940f1fdc8b31:packages/server/src/__tests__/mcp-http-session.test.ts:generic-api-key:74
 780eee9fb519d3c148ffd566ac6a940f1fdc8b31:packages/server/src/__tests__/mcp-http-session.test.ts:generic-api-key:81
+
+# Unload-transport test fixture (PR #372): a placeholder apiKey used to assert
+# sendOnUnload forwards the `X-Mushi-Api-Key` header to a stubbed fetch. It never
+# authenticated against anything. Renamed in the working tree to
+# `TEST-FIXTURE-NOT-A-REAL-KEY`; this fingerprint pins the historical commit
+# c7aabee7 so PR-range scans stop flagging the already-audited finding.
+c7aabee71020ee3e873370e96a4649610036fef3:packages/core/src/unload-transport.test.ts:generic-api-key:58
