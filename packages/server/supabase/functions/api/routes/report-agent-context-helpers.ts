@@ -110,8 +110,9 @@ export interface RepoBootstrapFile {
 }
 
 /**
- * The three files `setup_repo_for_mushi` promises: `.cursorrules`,
- * `.mushi/lessons.json` and `MUSHI.md`. An edge function cannot write into the
+ * The three repo files an agent keeps next to the code: `.cursorrules`,
+ * `.mushi/lessons.json` and `MUSHI.md` (the files the retired
+ * `setup_repo_for_mushi` MCP tool promised). An edge function cannot write into the
  * caller's checkout, so the route returns them for the agent to write.
  * `.mushi/lessons.json` has the exact shape `mushi sync-lessons` writes
  * (packages/cli/src/commands/lessons.ts) so either tool can refresh it, and
@@ -189,7 +190,7 @@ export function buildRepoBootstrapFiles(input: {
     '## Keeping this current',
     '',
     '- `npx @mushi-mushi/cli sync-lessons` refreshes `.mushi/lessons.json` (run it in CI).',
-    '- Re-run `setup_repo_for_mushi` to regenerate all three files.',
+    '- `npx @mushi-mushi/cli setup --with-rules` rewrites the editor rules file.',
     '',
   ].join('\n');
 
