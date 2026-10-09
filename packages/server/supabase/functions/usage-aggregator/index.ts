@@ -5,9 +5,11 @@
 //   1. Reads unsynced rows grouped by (project_id, day_utc) via
 //      `billing_usage_unsynced_summary(event_name)`.
 //   2. Looks up each project's Stripe customer.
-//   3. POSTs ONE Stripe Meter Event per (event, project, day) — the
-//      `identifier` is `mushi:<event>:<project_id>:<day>` so retries are
-//      idempotent across this cron and Stripe's own dedup.
+//   3. POSTs ONE Stripe Meter Event per (event, project, completed UTC
+//      day) — the `identifier` is `mushi:<event>:<project_id>:<day>` so
+//      retries are idempotent across this cron and Stripe's own dedup.
+//      The current day waits until it closes; days past Stripe's 35-day
+//      window are marked skipped (see `meterDayDisposition`).
 //   4. Marks the underlying rows as synced.
 //
 // We map our internal `usage_events.event_name` → the Stripe meter event
@@ -32,6 +34,7 @@ import { startCronRun } from '../_shared/telemetry.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { recordMeterEvent, stripeFromEnv } from '../_shared/stripe.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
+import { meterDayDisposition } from '../_shared/billing-rules.ts'
 
 const ulog = log.child('usage-aggregator')
 
@@ -121,6 +124,30 @@ const handler = async (req: Request): Promise<Response> => {
         const customerId = customerByProject.get(row.project_id)
         if (!customerId) {
           ulog.warn('skipped_no_customer', { project_id: row.project_id, event: me.internal })
+          continue
+        }
+
+        const disposition = meterDayDisposition(row.day_utc, Date.now())
+        // Today's rows wait for the day to close: pushing now would stamp a
+        // future timestamp Stripe rejects, and later rows would reuse the
+        // day's identifier.
+        if (disposition === 'wait') continue
+        if (disposition === 'expired') {
+          // Stripe refuses events older than 35 days, so retrying every hour
+          // would fail forever. Mark them handled and say so in the row.
+          const { error: expErr } = await db
+            .from('usage_events')
+            .update({
+              meter_synced_at: new Date().toISOString(),
+              stripe_meter_event_id: `skipped:outside_meter_window:${row.day_utc}`,
+            })
+            .eq('project_id', row.project_id)
+            .eq('event_name', me.internal)
+            .is('meter_synced_at', null)
+            .gte('occurred_at', `${row.day_utc}T00:00:00Z`)
+            .lte('occurred_at', `${row.day_utc}T23:59:59Z`)
+          if (expErr) failed++
+          ulog.warn('meter_day_expired', { project_id: row.project_id, day_utc: row.day_utc, event: me.internal, units: row.total })
           continue
         }
 

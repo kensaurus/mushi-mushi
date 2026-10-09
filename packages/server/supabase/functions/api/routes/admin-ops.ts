@@ -22,7 +22,9 @@ import { getPlan } from '../../_shared/plans.ts';
 import { withIdempotency } from '../../_shared/idempotency.ts';
 import { notifyOperator } from '../../_shared/operator-notify.ts';
 import { SUPPORT_EMAIL, SUPPORT_URL } from '../../_shared/support.ts';
+import { blocksNewCheckout } from '../../_shared/billing-rules.ts';
 import {
+  assertTargetProjectAccess,
   callerCanAccessProject,
   dbError,
   ownedProjectIds,
@@ -1493,6 +1495,16 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
     const owned = await ownedProjectIds(db, userId);
     if (!owned.includes(body.project_id))
       return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Only the people who own this project can change its plan.' } }, 403);
+    // Buying a plan puts a card on file for the whole organization, so it
+    // takes the same owner/admin role as the spend cap.
+    const checkoutAccess = await assertTargetProjectAccess(c, db, userId, body.project_id);
+    if (!checkoutAccess.ok) return checkoutAccess.response;
+    const checkoutForbidden = requireProjectAdmin(
+      c,
+      { organization_role: checkoutAccess.role },
+      'Only organization owners and admins can change this project’s plan.',
+    );
+    if (checkoutForbidden) return checkoutForbidden;
     const { data: projectRef } = await db
       .from('projects')
       .select('id, organization_id')
@@ -1629,6 +1641,30 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
     const lineItems: CheckoutLineItem[] = [{ price: prices.base, quantity: 1 }];
     if (prices.overage) lineItems.push({ price: prices.overage });
 
+    // A second Checkout Session for a project that already pays would create
+    // a second Stripe subscription and bill both. The portal cannot switch
+    // plans either: Stripe only lets customers cancel, not update, a
+    // subscription with a metered price (docs.stripe.com/customer-management,
+    // "Limitations").
+    const { data: liveSubs, error: liveSubsErr } = await db
+      .from('billing_subscriptions')
+      .select('status, plan_id')
+      .eq('project_id', body.project_id);
+    if (liveSubsErr) return dbError(c, liveSubsErr);
+    const liveSub = (liveSubs ?? []).find((s) => blocksNewCheckout(s.status));
+    if (liveSub) {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'ALREADY_SUBSCRIBED',
+            message: `This project already has a ${liveSub.plan_id ?? 'paid'} plan (${liveSub.status}). To switch plans, cancel it in Manage billing and choose the new plan when it ends, or email ${SUPPORT_EMAIL} and we will switch it for you.`,
+          },
+        },
+        409,
+      );
+    }
+
     const { data: existing } = await db
       .from('billing_customers')
       .select('stripe_customer_id')
@@ -1665,12 +1701,34 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
       });
     }
 
-    const session = await createCheckoutSession(cfg, {
-      customer: customerId,
-      projectId: body.project_id,
-      planId: plan.id,
-      lineItems,
-    });
+    let session: Awaited<ReturnType<typeof createCheckoutSession>>;
+    try {
+      session = await createCheckoutSession(cfg, {
+        customer: customerId,
+        projectId: body.project_id,
+        planId: plan.id,
+        lineItems,
+      });
+    } catch (err) {
+      // stripeFetch already logged Stripe's error body. Answer with a 502 the
+      // console can show, instead of the generic 500 that hid the
+      // automatic_tax rejection from every buyer until 2026-10-09.
+      log.error('billing.checkout_session_failed', {
+        projectId: body.project_id,
+        planId: plan.id,
+        err: err instanceof Error ? err.message.slice(0, 300) : String(err),
+      });
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'CHECKOUT_UNAVAILABLE',
+            message: `Stripe could not open checkout for this plan. Nothing was charged. Try again in a minute, or email ${SUPPORT_EMAIL}.`,
+          },
+        },
+        502,
+      );
+    }
 
     await logAudit(
       db,
@@ -1705,6 +1763,16 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
     const owned = await ownedProjectIds(db, userId);
     if (!owned.includes(body.project_id))
       return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Only the people who own this project can manage its billing.' } }, 403);
+    // The portal can cancel the subscription and change the card, so it takes
+    // the owner/admin role, like checkout and the spend cap.
+    const portalAccess = await assertTargetProjectAccess(c, db, userId, body.project_id);
+    if (!portalAccess.ok) return portalAccess.response;
+    const portalForbidden = requireProjectAdmin(
+      c,
+      { organization_role: portalAccess.role },
+      'Only organization owners and admins can manage this project’s billing.',
+    );
+    if (portalForbidden) return portalForbidden;
 
     const { data: customer } = await db
       .from('billing_customers')

@@ -9,6 +9,10 @@
 //   * invoice.payment_failed   (flip status to past_due quickly)
 //   * invoice.payment_succeeded (flip past_due → active when retry recovers)
 //   * checkout.session.completed (link Stripe customer back to project)
+//   * checkout.session.async_payment_failed (Sentry alert only)
+//
+// The endpoint (STRIPE_WEBHOOK_ENDPOINT_ID) subscribes to exactly these ten
+// types. Add a type here and to the endpoint in the same change.
 //
 // Mirrors them into `billing_subscriptions` / `billing_customers`. The
 // gateway reads `billing_subscriptions.status` + `.plan_id` to drive quota.
@@ -35,6 +39,7 @@ import {
   type StripeSubscription,
 } from '../_shared/stripe.ts'
 import { getPlan, getPlanByBaseLookupKey } from '../_shared/plans.ts'
+import { customerPaymentMethodChanged, tierFromBasePrice } from '../_shared/billing-rules.ts'
 import { invalidateQuotaCache } from '../_shared/quota.ts'
 import { reportMessage, withSentry } from '../_shared/sentry.ts'
 import { notifyOperator, type NotifyField } from '../_shared/operator-notify.ts'
@@ -66,23 +71,28 @@ async function recordIfNew(db: Db, event: StripeEvent): Promise<boolean> {
 }
 
   // Resolve the pricing_plans.id for a subscription. Priority order:
-  //   1. `subscription.metadata.plan_id` (set by our Checkout Session)
-  //   2. Lookup the FIRST line item's `price.lookup_key` against pricing_plans.base_price_lookup_key
-  //   3. Default to null (caller logs the miss; billing.ts defaults to free_cloud quota).
+  //   1. The base price's `metadata.tier` — what the customer actually pays for
+  //   2. A line item's `price.lookup_key` against pricing_plans.base_price_lookup_key
+  //   3. `subscription.metadata.plan_id` (set by our Checkout Session)
+  //   4. Default to null (caller logs the miss; billing.ts defaults to free_cloud quota).
 async function resolvePlanId(
   db: Db,
   sub: StripeSubscription,
 ): Promise<string | null> {
-  const fromMetadata = sub.metadata?.plan_id
-  if (fromMetadata) return fromMetadata
-
   const items = sub.items?.data ?? []
+  const fromPrice = tierFromBasePrice(items)
+  if (fromPrice) return fromPrice
+
   for (const item of items) {
     const lookup = item.price?.lookup_key
     if (!lookup) continue
     const plan = await getPlanByBaseLookupKey(lookup)
     if (plan) return plan.id
   }
+
+  const fromMetadata = sub.metadata?.plan_id
+  if (fromMetadata) return fromMetadata
+
   wlog.warn('plan_resolution_failed', { sub_id: sub.id, item_count: items.length })
   return null
 }
@@ -233,9 +243,16 @@ const recoverFromDelinquent = async (db: Db, invoice: Record<string, unknown>): 
   return (data?.length ?? 0) > 0
 }
 
-const updateCustomerPaymentOk = async (db: Db, customer: Record<string, unknown>) => {
+const updateCustomerPaymentOk = async (
+  db: Db,
+  customer: Record<string, unknown>,
+  previousAttributes: Record<string, unknown> | undefined,
+) => {
   const customerId = customer.id as string | undefined
   if (!customerId) return
+  // An address or name change (Checkout saves both) must not reset the flag
+  // that checkout.session.completed set from the real payment status.
+  if (!customerPaymentMethodChanged(previousAttributes)) return
   const settings = customer.invoice_settings as { default_payment_method?: string | null } | undefined
   const ok = !!settings?.default_payment_method
   const { error } = await db
@@ -553,7 +570,11 @@ const handler = async (req: Request): Promise<Response> => {
         break
       }
       case 'customer.updated':
-        await updateCustomerPaymentOk(db, event.data.object)
+        await updateCustomerPaymentOk(
+          db,
+          event.data.object,
+          (event.data as { previous_attributes?: Record<string, unknown> }).previous_attributes,
+        )
         break
       default:
         wlog.debug('event_ignored', { type: event.type })
