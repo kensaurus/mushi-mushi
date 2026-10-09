@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { bannerRelease, releaseHeadline } from './release-headline'
+import { bannerRelease, type ChangelogRelease } from './release-headline'
+
+/** The headline the bar shows for one shipped release. */
+const releaseHeadline = (r: Pick<ChangelogRelease, 'headline' | 'highlights'>): string =>
+  bannerRelease([{ majorMinor: '1.0', pending: false, versions: ['1.0.0'], ...r }])!.headline
 
 describe('releaseHeadline', () => {
   it('drops each title closing punctuation and joins with a middle dot (report 469f6962)', () => {

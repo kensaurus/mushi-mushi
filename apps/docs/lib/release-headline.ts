@@ -15,7 +15,7 @@ export interface ChangelogRelease {
   highlights?: ReadonlyArray<{ title: string }> | null
 }
 
-export function releaseHeadline(release: Pick<ChangelogRelease, 'headline' | 'highlights'>): string {
+function releaseHeadline(release: Pick<ChangelogRelease, 'headline' | 'highlights'>): string {
   if (release.headline) return release.headline
   const titles = (release.highlights ?? [])
     .slice(0, 2)
