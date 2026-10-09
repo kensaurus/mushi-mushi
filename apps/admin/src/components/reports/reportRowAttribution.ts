@@ -88,7 +88,7 @@ const MUSHI_JOBS: Record<string, string> = {
  * `cron:<job>`), or null for a report from a person or an SDK. Such rows used
  * to read "user · anon·cron:l".
  */
-export function mushiJobFiler(row: Pick<ReportRow, 'reporter_token_hash'>): { job: string; label: string } | null {
+function mushiJobFiler(row: Pick<ReportRow, 'reporter_token_hash'>): { job: string; label: string } | null {
   const m = /^cron:([a-z0-9-]+)$/.exec(row.reporter_token_hash ?? '')
   if (!m) return null
   return { job: m[1], label: MUSHI_JOBS[m[1]] ?? m[1] }
