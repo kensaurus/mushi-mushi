@@ -54,7 +54,8 @@ export function shouldDropCapturedError(input: {
 }): boolean {
   if (matchesErrorFilter(input.message, input.ignoreErrors)) return true;
 
-  const filename = input.filename?.trim() || stackThrowSiteUrl(input.stack) || '';
+  // No filename: the URL of the stack's first frame, i.e. where it threw.
+  const filename = input.filename?.trim() || (input.stack && STACK_FRAME_URL.exec(input.stack)?.[1]) || '';
   if (filename && matchesErrorFilter(filename, input.denyUrls)) return true;
 
   if (input.allowUrls && input.allowUrls.length > 0) {
@@ -65,22 +66,7 @@ export function shouldDropCapturedError(input: {
   return false;
 }
 
-// The URL in `at fn (https://x/a.js:1:2)` (V8) or `fn@https://x/a.js:1:2`
-// (Gecko/WebKit), without the trailing :line:col.
-const STACK_FRAME_URL = /((?:blob:)?[a-z][a-z0-9+.-]*:\/\/[^\s()]+?)(?::\d+){1,2}\)?$/i;
-const STACK_HEADER = /^[\w$.]*:\s/;
-
-/** URL of the frame that threw (the first stack frame with a URL), or undefined. */
-function stackThrowSiteUrl(stack: string | undefined | null): string | undefined {
-  if (!stack) return undefined;
-  for (const raw of stack.split('\n')) {
-    const line = raw.trim();
-    // Frames only: skip V8's `TypeError: <message>` header, which may itself
-    // end in a URL (or contain an `@`).
-    if (STACK_HEADER.test(line)) continue;
-    if (!line.startsWith('at ') && !line.includes('@')) continue;
-    const match = STACK_FRAME_URL.exec(line);
-    if (match) return match[1];
-  }
-  return undefined;
-}
+// The URL in a frame line, `at fn (https://x/a.js:1:2)` (V8) or
+// `fn@https://x/a.js:1:2` (Gecko/WebKit), without the :line:col. Anchored to
+// the frame prefix so V8's `TypeError: <message>` header never matches.
+const STACK_FRAME_URL = /^\s*(?:at .*?\(?|\S*@)([^\s(]+?:\/\/[^\s()]+?)(?::\d+){1,2}\)?$/m;

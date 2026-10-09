@@ -28,10 +28,9 @@ let lastOutbound: Outbound | null = null;
 
 /** Replay the in-flight POST via keepalive/beacon during pagehide. */
 export function flushLastOutboundOnUnload(): boolean {
-  if (!lastOutbound) return false;
   const outbound = lastOutbound;
   lastOutbound = null;
-  return sendOnUnload(outbound);
+  return !!outbound && sendOnUnload(outbound);
 }
 
 // One-time credential-failure warning gate — emitted at most once per JS
@@ -317,7 +316,7 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
       };
     } finally {
       // A retry replaces lastOutbound with its own entry, so only clear ours.
-      if (outbound && lastOutbound === outbound) lastOutbound = null;
+      if (lastOutbound === outbound) lastOutbound = null;
     }
   }
 
