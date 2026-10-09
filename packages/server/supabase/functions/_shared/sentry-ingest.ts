@@ -25,6 +25,7 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { log as rootLog } from './logger.ts';
 import { applyReportStatusTransition } from './report-transition.ts';
 import { extractFramePaths } from './sentry-frames.ts';
+import { reopenSentryLinks } from './sentry-resolve-back.ts';
 
 const log = rootLog.child('sentry-ingest');
 
@@ -219,6 +220,11 @@ export async function ingestSentryError(
             regression_count: linked.regressionCount + 1,
           })
           .eq('id', linked.reportId);
+        // The issue is open in Sentry again: so is the link, so marking the
+        // report fixed later resolves it instead of skipping it.
+        await reopenSentryLinks(db, projectId, linked.reportId).catch((e: unknown) =>
+          log.error('Reopening Sentry links failed', { reportId: linked.reportId, err: String(e) }),
+        );
         log.info('Sentry alert reopened a fixed report', {
           reportId: linked.reportId,
           sentryIssueId,

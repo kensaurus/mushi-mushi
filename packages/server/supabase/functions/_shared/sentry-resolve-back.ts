@@ -284,6 +284,24 @@ export async function resolveLinkedSentryIssues(
   return result;
 }
 
+/**
+ * A reopened report's Sentry links count as open again. resolveLinkedSentryIssues
+ * only touches links with no resolved_at, and nothing cleared it on reopen:
+ * MUSHI-MUSHI-SERVER-2D regressed in Sentry, its report was reopened, and
+ * marking it fixed again skipped the link, so Sentry stayed unresolved
+ * (2026-10-09). Call this on every move from a done status back to open.
+ */
+export async function reopenSentryLinks(db: SupabaseClient, projectId: string, reportId: string): Promise<void> {
+  const { error } = await db
+    .from('report_external_issues')
+    .update({ resolved_at: null })
+    .eq('report_id', reportId)
+    .eq('project_id', projectId)
+    .eq('system', 'sentry')
+    .not('resolved_at', 'is', null);
+  if (error) throw new Error(`report_external_issues reopen failed: ${error.message}`);
+}
+
 /** Close reasons that mean "not a bug to fix", so Sentry should stop listing
  *  the issue. Others leave it open: "couldn't reproduce" may still be firing,
  *  a duplicate is handled through its group, spam has no Sentry issue. */
