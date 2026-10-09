@@ -5288,13 +5288,18 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
 /** Tools that work before an API key exists: they read only the public docs. */
 export const SETUP_MODE_TOOLS = ['search_mushi_docs', 'get_mushi_doc', 'diagnose_setup'] as const;
 
-const MUSHI_CONSOLE_URL = 'https://kensaur.us/mushi-mushi/admin';
+export const MUSHI_CONSOLE_URL = 'https://kensaur.us/mushi-mushi/admin';
 const MUSHI_MCP_QUICKSTART_URL = 'https://kensaur.us/mushi-mushi/docs/quickstart/mcp';
 
 export interface SetupModeServerConfig {
   version: string;
   /** Why there is no key, as printed to stderr (sources checked, config path). */
   missingKeyReport: string;
+  /**
+   * `missing-key` (default): no key reached the server. `sdk-key`: a valid
+   * key without mcp:read or mcp:write, such as the report:write SDK key.
+   */
+  reason?: 'missing-key' | 'sdk-key';
   fetch?: typeof fetch;
   timeoutMs?: number;
 }
@@ -5316,9 +5321,13 @@ export function createSetupModeServer(config: SetupModeServerConfig): McpServer 
     ...(config.fetch ? { fetch: config.fetch } : {}),
     ...(config.timeoutMs ? { timeoutMs: config.timeoutMs } : {}),
     instructions:
-      'Mushi is running in setup mode: no API key is configured, so only search_mushi_docs, get_mushi_doc and ' +
-      'diagnose_setup work. Call diagnose_setup for the exact steps to connect (run `npx mushi-mushi` or ' +
-      '`mushi login`, or put MUSHI_API_KEY in this server\'s env block), then restart the MCP server.',
+      config.reason === 'sdk-key'
+        ? 'Mushi is running in setup mode: the configured API key is an SDK key (report:write). It can send bug ' +
+          'reports but not read them, so only search_mushi_docs, get_mushi_doc and diagnose_setup work. Call ' +
+          'diagnose_setup for how to mint an MCP key (mcp:read), then restart the MCP server.'
+        : 'Mushi is running in setup mode: no API key is configured, so only search_mushi_docs, get_mushi_doc and ' +
+          'diagnose_setup work. Call diagnose_setup for the exact steps to connect (run `npx mushi-mushi` or ' +
+          '`mushi login`, or put MUSHI_API_KEY in this server\'s env block), then restart the MCP server.',
   });
 
   type Removable = { remove(): void };
@@ -5341,8 +5350,11 @@ export function createSetupModeServer(config: SetupModeServerConfig): McpServer 
 
   const spec = TOOL_CATALOG.find((t) => t.name === 'diagnose_setup');
   if (!spec) throw new Error('[mushi-mcp] diagnose_setup is missing from TOOL_CATALOG');
-  const nextAction =
-    'Run `npx mushi-mushi` in your project (signs you in and writes the key) or `mushi login`, then restart this MCP server.';
+  const sdkKey = config.reason === 'sdk-key';
+  const nextAction = sdkKey
+    ? `Mint an MCP key in the console (${MUSHI_CONSOLE_URL}/mcp → "Mint mcp:read key") or run \`mushi login\`, ` +
+      'put it in MUSHI_API_KEY for this server, then restart it.'
+    : 'Run `npx mushi-mushi` in your project (signs you in and writes the key) or `mushi login`, then restart this MCP server.';
   server.registerTool(
     'diagnose_setup',
     {
@@ -5364,15 +5376,24 @@ export function createSetupModeServer(config: SetupModeServerConfig): McpServer 
         ready: false,
         mode: 'setup',
         steps: [
-          {
-            label: 'MCP server has an API key',
-            complete: false,
-            required: true,
-            hint:
-              `${nextAction} Or mint a key in the console (${MUSHI_CONSOLE_URL} → Settings → API keys) and add ` +
-              'MUSHI_API_KEY (and MUSHI_PROJECT_ID) to the "env" block of this server in your MCP client config — ' +
-              'a key exported in your shell does not reach the server.',
-          },
+          sdkKey
+            ? {
+                label: 'MCP server key can read reports (mcp:read)',
+                complete: false,
+                required: true,
+                hint:
+                  `${nextAction} The SDK key (report:write) belongs in your app; MCP and the CLI need a key with ` +
+                  'mcp:read, or mcp:write to also triage and dispatch fixes.',
+              }
+            : {
+                label: 'MCP server has an API key',
+                complete: false,
+                required: true,
+                hint:
+                  `${nextAction} Or mint a key in the console (${MUSHI_CONSOLE_URL} → Settings → API keys) and add ` +
+                  'MUSHI_API_KEY (and MUSHI_PROJECT_ID) to the "env" block of this server in your MCP client config — ' +
+                  'a key exported in your shell does not reach the server.',
+              },
         ],
         nextAction,
         alternative: `No local key at all: connect the hosted server over OAuth instead — ${MUSHI_MCP_QUICKSTART_URL}`,
