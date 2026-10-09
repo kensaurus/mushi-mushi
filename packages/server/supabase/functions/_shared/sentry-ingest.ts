@@ -250,6 +250,9 @@ export async function ingestSentryError(
   const { error: insertError } = await db.from('reports').insert({
     id: reportId,
     project_id: projectId,
+    // Without it the column default 'widget' showed a Sentry error as a
+    // report someone filed from the in-app widget.
+    source: 'sentry',
     description,
     user_category: 'bug',
     category: 'bug',

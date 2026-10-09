@@ -10,6 +10,7 @@ import { useState } from 'react'
 import { ConfirmDialog } from '../ConfirmDialog'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
+import { CloseReasonSelect } from './CloseReasonSelect'
 
 interface Props {
   report: { id: string }
@@ -21,12 +22,13 @@ interface Props {
 export function DismissReportDialog({ report, onClose, onDismissed }: Props) {
   const toast = useToast()
   const [busy, setBusy] = useState(false)
+  const [reason, setReason] = useState('')
 
   const dismiss = async () => {
     setBusy(true)
     const res = await apiFetch(`/v1/admin/reports/${report.id}`, {
       method: 'PATCH',
-      body: JSON.stringify({ status: 'dismissed' }),
+      body: JSON.stringify({ status: 'dismissed', ...(reason ? { closed_reason: reason } : {}) }),
     })
     setBusy(false)
     onClose()
@@ -41,7 +43,7 @@ export function DismissReportDialog({ report, onClose, onDismissed }: Props) {
   return (
     <ConfirmDialog
       title="Dismiss this report?"
-      body="The reporter is told their report was closed, and that message cannot be taken back. To give a reason, open the report and use Status."
+      body="The reporter gets the message below, and it cannot be taken back."
       confirmLabel="Dismiss"
       tone="danger"
       loading={busy}
@@ -49,6 +51,8 @@ export function DismissReportDialog({ report, onClose, onDismissed }: Props) {
         if (!busy) onClose()
       }}
       onConfirm={dismiss}
-    />
+    >
+      <CloseReasonSelect value={reason} onChange={setReason} />
+    </ConfirmDialog>
   )
 }
