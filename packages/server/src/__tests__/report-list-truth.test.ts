@@ -73,7 +73,7 @@ describe('platform filter (#16)', () => {
   })
 
   it('every list row carries the dispatch rule the dispatch route enforces', () => {
-    const list = routeBody(REPORTS, "app.get('/v1/admin/reports', adminOrApiKey()", 12000)
+    const list = routeBody(REPORTS, "app.get('/v1/admin/reports', adminOrApiKey()", 14000)
     expect(list).toContain('stage1_category:stage1_classification->>category')
     expect(list).toContain('const dispatch_block = featureRequestDispatchBlock(')
   })

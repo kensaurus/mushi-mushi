@@ -11,6 +11,7 @@ import type { ReportDetail } from './types'
 import { CHIP_TONE } from '../../lib/chipTone'
 import { featureRequestDispatchBlock, shortRepoName } from '../../lib/dispatchConfirm'
 import type { DispatchTargetRepo } from '../../lib/useDispatchTargetRepo'
+import { CLOSE_REASONS } from '../../lib/closeReasons'
 
 // One option per label: 'resolved' is the legacy spelling of 'fixed' (both
 // read "Fixed"), so listing both showed "Fixed" twice. A legacy row selects
@@ -25,20 +26,6 @@ function selectableStatus(status: string): string {
 const SEV_OPTS = ['critical', 'high', 'medium', 'low']
 /** The classifier's categories; setting one here is a person's triage decision. */
 const CATEGORY_OPTS = ['bug', 'slow', 'visual', 'confusing', 'other']
-
-/**
- * Why a report is closed. The reporter sees matching copy ("We couldn't
- * reproduce it. Reply if it happens again."); spam closes silently. Values are
- * `reports_closed_reason_check`. Missing info is not a close — use "Ask for
- * more info" in the Reporter view instead.
- */
-const CLOSE_REASONS: Array<{ value: string; label: string; needsGroup?: boolean }> = [
-  { value: 'not_reproducible', label: "Couldn't reproduce it" },
-  { value: 'wont_fix', label: "Won't fix" },
-  { value: 'working_as_intended', label: 'Works as intended' },
-  { value: 'duplicate', label: 'Same as another report', needsGroup: true },
-  { value: 'spam', label: 'Spam (reporter is not told)' },
-]
 
 interface RoutingIntegration {
   id: string
