@@ -46,7 +46,9 @@ export type UnchargeableReason =
   /** No row in `kensaurus_model_prices` for this provider+model. */
   | 'no-price-row'
   /** A row exists, but the usage we captured prices out at zero. */
-  | 'zero-cost';
+  | 'zero-cost'
+  /** The usage or rates computed to NaN/Infinity — nothing a debit can carry. */
+  | 'non-finite-cost';
 
 export type HostedLlmChargeDecision =
   | { kind: 'charge'; providerCostMicro: number }
@@ -102,6 +104,15 @@ export function decideHostedLlmCharge(args: {
   }
 
   const providerCostMicro = computeCostMicro(price, usage);
+  // NaN slips past `<= 0` (every comparison with NaN is false), so a NaN
+  // duration or token count would otherwise reach the wallet as the amount.
+  if (!Number.isFinite(providerCostMicro)) {
+    return {
+      kind: 'skip',
+      reason: 'non-finite-cost',
+      detail: `${provider}:${model} priced to ${providerCostMicro} micro — ${describeUsage(price, usage)}`,
+    };
+  }
   if (providerCostMicro <= 0) {
     return {
       kind: 'skip',

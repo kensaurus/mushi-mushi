@@ -83,9 +83,19 @@ async function recordLostRevenue(
   if (error) {
     log.error('wallet dead-letter persist failed', { requestId: entry.requestId, error: error.message });
   }
+  // The full payload stays in the dead-letter row (keyed by requestId): its
+  // metadata is caller-shaped and carries owner ids, so Sentry gets only the
+  // fields needed to diagnose without opening the table.
   reportError(new Error(sentryMessage), {
     tags: { area: 'wallet', feature: entry.feature },
-    extra: { requestId: entry.requestId, providerCostMicro: entry.providerCostMicro, model: entry.model },
+    extra: {
+      requestId: entry.requestId,
+      providerCostMicro: entry.providerCostMicro,
+      model: entry.model,
+      error: entry.error.slice(0, 500),
+      reason: entry.payload.reason ?? null,
+      usage: entry.payload.usage ?? null,
+    },
   });
 }
 
@@ -456,7 +466,10 @@ export async function chargeHostedLlm(args: ChargeHostedLlmArgs): Promise<void> 
       // to be a log line that vanished; now it lands in the same dead-letter
       // table as a lost debit, carrying the full usage so the amount can be
       // recomputed and replayed once the gap is closed.
+      // sentry: false — recordLostRevenue below pages Sentry for this same
+      // call; forwarding this line too would open a second issue for it.
       log.error('Hosted model call could not be priced — not charged', {
+        sentry: false,
         projectId: args.projectId,
         provider: args.provider,
         model: args.model,

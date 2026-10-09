@@ -76,6 +76,43 @@ export function dispatchEventStatus(
 }
 
 /**
+ * The timeline for a dispatch job whose fix_attempt row does not exist yet
+ * (`dispatch_fix` hands out the job id; the worker creates the attempt
+ * seconds later). It used to know only `failed` and "queued", so a job the
+ * worker had already picked up still read "worker not started yet", and a
+ * cancelled or skipped job read as pending forever.
+ */
+export function pendingDispatchEvents(job: TimelineDispatchRow): FixTimelineEvent[] {
+  const detail = job.error ?? undefined
+  switch (job.status) {
+    case 'queued':
+      return [{ kind: 'dispatched', at: job.created_at, label: 'Dispatch queued — worker not started yet', status: 'pending' }]
+    case 'running':
+      return [
+        { kind: 'dispatched', at: job.created_at, label: 'Dispatch requested', status: 'ok' },
+        {
+          kind: 'started',
+          at: job.started_at ?? job.created_at,
+          label: 'Worker started — fix attempt not created yet',
+          status: 'pending',
+        },
+      ]
+    case 'failed':
+      return [{ kind: 'dispatched', at: job.created_at, label: 'Dispatch failed', detail, status: 'fail' }]
+    case 'cancelled':
+      return [{ kind: 'dispatched', at: job.created_at, label: 'Dispatch cancelled', detail, status: 'fail' }]
+    case 'skipped':
+    case 'skipped_no_sandbox':
+      return [{ kind: 'dispatched', at: job.created_at, label: 'Dispatch skipped — no fix attempt was made', detail, status: 'ok' }]
+    case 'completed':
+    case 'completed_no_pr':
+      return [{ kind: 'dispatched', at: job.created_at, label: 'Dispatch finished without a fix attempt', detail, status: 'ok' }]
+    default:
+      return [{ kind: 'dispatched', at: job.created_at, label: `Dispatch ${job.status}`, detail, status: 'pending' }]
+  }
+}
+
+/**
  * The "how we got here" head of every timeline: one dispatch event and at
  * most ONE start event. The attempt's own start (with the model) wins over
  * the job's worker start because it is the more specific of the two.

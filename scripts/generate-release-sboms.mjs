@@ -27,7 +27,7 @@
  * Exit 1 if any package's SBOM could not be produced (the others are still written).
  */
 
-import { execSync } from 'node:child_process'
+import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -46,16 +46,25 @@ if (!Array.isArray(published) || published.length === 0) {
   console.log('generate-release-sboms: nothing published; no SBOMs to write.')
   process.exit(0)
 }
+// Each entry becomes an npm argument and a file name, so it must be a package name and a version.
+const NPM_NAME = /^(@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/
+const SEMVER = /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$/
+const bad = published.filter((p) => !NPM_NAME.test(p?.name ?? '') || !SEMVER.test(p?.version ?? ''))
+if (bad.length) {
+  console.error(`generate-release-sboms: PUBLISHED has entries that are not { name, version }: ${JSON.stringify(bad)}`)
+  process.exit(2)
+}
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
-const run = (cmd, cwd) => execSync(cmd, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 * 1024 * 1024 })
+// argv, no shell: npm gets each value as one argument.
+const npm = (args, cwd) => execFileSync('npm', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 * 1024 * 1024 })
 
 /** `npm pack name@version`, retrying the post-publish propagation window. */
 async function packFromRegistry(spec, cwd) {
   let delay = 2000
   for (let attempt = 1; ; attempt++) {
     try {
-      return run(`npm pack "${spec}" --silent`, cwd).trim().split(/\r?\n/).pop()
+      return npm(['pack', spec, '--silent'], cwd).trim().split(/\r?\n/).pop()
     } catch (err) {
       const text = `${err.stdout ?? ''}${err.stderr ?? ''}`
       if (attempt >= 7 || !/ETARGET|E404|No matching version|404 Not Found/.test(text)) throw new Error(text.trim() || String(err))
@@ -90,8 +99,8 @@ for (const { name, version } of published) {
     const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
     delete manifest.devDependencies
     writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
-    run('npm install --omit=dev --ignore-scripts --no-audit --no-fund', pkgDir)
-    const sbom = JSON.parse(run('npm sbom --sbom-format cyclonedx --sbom-type library --omit dev', pkgDir))
+    npm(['install', '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund'], pkgDir)
+    const sbom = JSON.parse(npm(['sbom', '--sbom-format', 'cyclonedx', '--sbom-type', 'library', '--omit', 'dev'], pkgDir))
     // npm names the root component after the folder it ran in ("package").
     Object.assign(sbom.metadata.component, splitName(name))
     const file = `${name.replace(/^@/, '').replace(/\//g, '-')}-${version}.cdx.json`

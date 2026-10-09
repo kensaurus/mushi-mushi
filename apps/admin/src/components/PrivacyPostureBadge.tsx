@@ -10,7 +10,7 @@
  *          The popover CTA links to Settings → BYOK to resolve the issue.
  */
 
-import { useRef } from 'react';
+import { useId, useRef } from 'react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { usePageData } from '../lib/usePageData';
@@ -46,6 +46,9 @@ export function PrivacyPostureBadge({ compact = false }: Props) {
 
   const [popoverOpen, setPopoverOpen] = useState(false);
   const badgeRef = useRef<HTMLButtonElement>(null);
+  // Rail variant's screen-reader description; useId so it can never collide
+  // with a NavRailLink's `rail-desc-*` id.
+  const railDescId = useId();
 
   if (!activeProjectId || errorMessage === 'no_projects') return null;
   if (loading) return null;
@@ -81,6 +84,9 @@ export function PrivacyPostureBadge({ compact = false }: Props) {
     // control, and the same title/description/status flyout — a bare coloured
     // dot with no label is exactly the kind of thing an icon rail must explain
     // on hover.
+    const railDescription = error
+      ? postureExplanation
+      : `${postureExplanation} Opens BYOK settings.`;
     return (
       <Tooltip
         side="right"
@@ -88,11 +94,7 @@ export function PrivacyPostureBadge({ compact = false }: Props) {
         content={
           <NavRailFlyout
             title="Privacy posture"
-            description={
-              error
-                ? postureExplanation
-                : `${postureExplanation} Opens BYOK settings.`
-            }
+            description={railDescription}
             status={{
               tone: error ? 'danger' : isByok ? 'ok' : 'warn',
               label: labelLong,
@@ -104,8 +106,14 @@ export function PrivacyPostureBadge({ compact = false }: Props) {
           to="/settings?tab=byok"
           className="nav-rail-item"
           aria-label={`Privacy posture: ${label}`}
+          aria-describedby={railDescId}
         >
           <span className={`inline-block w-2 h-2 rounded-full ${dotClass}`} />
+          {/* The flyout is portaled and only exists while hovered, so the
+              explanation also lives here, in the DOM, as NavRailLink does. */}
+          <span id={railDescId} className="sr-only">
+            {railDescription} — {labelLong}
+          </span>
         </Link>
       </Tooltip>
     );

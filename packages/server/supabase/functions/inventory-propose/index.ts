@@ -559,8 +559,9 @@ async function handler(req: Request): Promise<Response> {
  * Cooldown: skip projects that already have an open `inventory_proposals`
  * draft younger than 7 days. Operators reviewing one draft don't need a
  * second one stacked on top before they've decided.
+ *
+ * @internal exported for inventory-propose-deadline.test.ts
  */
-/** @internal exported for inventory-propose-deadline.test.ts */
 export async function handleDriftWatch(db: SupabaseClient, body: ProposeBody): Promise<Response> {
   const driftRouteThreshold = Number(Deno.env.get('MUSHI_INVENTORY_DRIFT_ROUTES') ?? '5')
   const driftCooldownDays = Number(Deno.env.get('MUSHI_INVENTORY_DRIFT_COOLDOWN_DAYS') ?? '7')

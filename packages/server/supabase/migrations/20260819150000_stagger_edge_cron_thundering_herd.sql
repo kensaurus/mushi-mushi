@@ -12,9 +12,11 @@
 -- ingest routes (/v1/sdk/session, /v1/reporter/reports, …), every one of
 -- them timestamped at a :00/:05/:30 cron boundary (2026-08-18/19 logs).
 --
--- FIX: give every non-minutely edge-invoking job its own firing minute.
--- After this migration no two of them share a minute, and the :00 boundary
--- carries no recurring edge invocations at all. SQL-only jobs (matview
+-- FIX: give every sub-daily edge-invoking job below its own firing minute.
+-- After this migration no two of them share a minute, and none of them fires
+-- at :00. Weekly edge jobs still fire at :00 (library-modernizer 06:00 and
+-- prompt-auto-tune 07:00 on Sunday, intelligence-report 06:00 on Monday):
+-- once a week each, they are not the hourly herd. SQL-only jobs (matview
 -- refreshes, expiry UPDATEs) are untouched — they never hit the edge runtime.
 -- The every-minute jobs (qa-story-runner-tick, mushi-plugin-dispatch-retry)
 -- are the designed steady-state load and stay as-is.

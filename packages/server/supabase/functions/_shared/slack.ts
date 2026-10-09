@@ -780,9 +780,13 @@ export async function sendReportNotification(
  * Rewrite an already-posted report card in place (`chat.update`) so channel
  * state tracks reality: after Resolve/Dismiss/Dispatch the card shows the
  * outcome instead of offering the same buttons forever.
+ *
+ * `channel` is required and never defaulted: chat.update addresses a message
+ * by (channel, ts), so it must be the channel the card was actually posted
+ * in — the interaction payload's channel id — not SLACK_CHANNEL_ID.
  */
 export async function updateReportMessage(opts: {
-  channel?: string
+  channel: string
   ts: string
   attachments?: unknown[]
   blocks?: unknown[]
@@ -808,7 +812,7 @@ export async function updateReportMessage(opts: {
     } catch { /* fall through to env */ }
   }
   if (!token) token = Deno.env.get('SLACK_BOT_TOKEN') ?? null
-  const channel = opts.channel ?? Deno.env.get('SLACK_CHANNEL_ID')
+  const channel = opts.channel
   if (!token || !channel) return { ok: false, error: token ? 'no_channel' : 'no_bot_token' }
 
   const body: Record<string, unknown> = { channel, ts: opts.ts, text: opts.text }

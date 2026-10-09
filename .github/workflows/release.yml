@@ -289,9 +289,11 @@ jobs:
         # THIRD time and, because this step is a hard failure, it skipped every
         # post-publish step behind it — the changelog aggregate, the MCP
         # registry publish, and the sdk_versions catalog sync all silently did
-        # not run even though the packages were published and verified. The
-        # tarballs are already signature-verified by the previous step, so a
-        # propagation-flake here must not strand the follow-ups. It now runs
+        # not run even though the packages were published. The packages are
+        # already on npm (published with provenance), and the "Verify
+        # published tarballs" step above checked only that they carry no
+        # workspace:* specifiers — THIS step is the first signature check. A
+        # propagation flake here must not strand the follow-ups. It now runs
         # non-blocking and the job is failed at the very END instead (see
         # "Fail the release if the signature audit did not pass"), which keeps
         # the red signal without losing the work.
@@ -305,8 +307,9 @@ jobs:
         #   `ETARGET / No matching version found for <pkg>@<ver>` for up
         #   to ~30s (sometimes longer) after `changeset publish` succeeds,
         #   because npm's registry mirror takes time to propagate the new
-        #   manifest. The tarball is already signed and verified by the
-        #   previous step — this audit just needs the registry to catch up.
+        #   manifest. The tarball is already published (with provenance);
+        #   nothing has checked its signature yet — that is this audit's job,
+        #   and it just needs the registry to catch up first.
         #   Retry with exponential backoff (1, 2, 4, 8, 16, 32, 64, 128s =
         #   255s total wait across 9 attempts) before failing the release —
         #   widened from 7/63s after the race outlasted that window once.

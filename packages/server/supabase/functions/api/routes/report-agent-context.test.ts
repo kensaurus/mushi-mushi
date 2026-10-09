@@ -67,7 +67,7 @@ const LESSONS: LessonRow[] = [
   },
 ]
 
-Deno.test('repo bootstrap returns the three files setup_repo_for_mushi promises', () => {
+Deno.test('repo bootstrap returns the three repo files', () => {
   const files = buildRepoBootstrapFiles({
     projectId: '11111111-1111-4111-8111-111111111111',
     projectName: 'Demo\napp',
@@ -97,6 +97,8 @@ Deno.test('repo bootstrap returns the three files setup_repo_for_mushi promises'
   assertStringIncludes(files[0].content, '# Mushi Mushi — evolution-loop coding rules')
   assertStringIncludes(files[2].content, '# Demo app — Mushi Mushi')
   assertStringIncludes(files[2].content, '1 promoted, generated 2026-09-21')
+  // The MCP tool was removed; the file must not send people to it.
+  for (const file of files) assertEquals(file.content.includes('setup_repo_for_mushi'), false, file.path)
 })
 
 Deno.test('lesson text never reaches the files an editor loads as standing instructions', () => {

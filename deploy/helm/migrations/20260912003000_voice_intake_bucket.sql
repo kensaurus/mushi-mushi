@@ -15,7 +15,9 @@ OVERVIEW:
   objects are deleted right after transcription unless the project sets
   voice_audio_retention_days > 0.
 
-Idempotent: safe to re-run (the caps are refreshed on conflict).
+Idempotent: safe to re-run. On conflict the caps are refreshed and the bucket
+is forced private again, so a re-run (the Helm job re-applies every file on
+each deploy) also repairs a bucket someone flipped to public.
 */
 
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
@@ -36,5 +38,6 @@ VALUES (
   ]::text[]
 )
 ON CONFLICT (id) DO UPDATE
-  SET file_size_limit   = EXCLUDED.file_size_limit,
+  SET public            = false,
+      file_size_limit   = EXCLUDED.file_size_limit,
       allowed_mime_types = EXCLUDED.allowed_mime_types;

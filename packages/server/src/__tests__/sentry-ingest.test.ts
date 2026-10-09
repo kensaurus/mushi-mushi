@@ -57,15 +57,29 @@ function makeDbStub(state: {
   reports: Row[]
   inserted: { table: string; row: Row }[]
   updated: { table: string; row: Row; id: string }[]
+  deleted?: { table: string; id: string }[]
+  /** Simulates a concurrent delivery: the link insert hits the unique index
+   *  and this row becomes the link findLinkedReport sees. */
+  raceWinner?: Row
 }) {
   function table(name: string) {
     return {
       select: () => table(name),
       eq: () => table(name),
       insert: (row: Row) => {
+        if (name === 'report_external_issues' && state.raceWinner) {
+          state.links = [state.raceWinner]
+          return Promise.resolve({ error: { code: '23505', message: 'duplicate key value violates unique constraint' } })
+        }
         state.inserted.push({ table: name, row })
         return Promise.resolve({ error: null })
       },
+      delete: () => ({
+        eq: (_col: string, id: string) => {
+          ;(state.deleted ??= []).push({ table: name, id })
+          return Promise.resolve({ error: null })
+        },
+      }),
       update: (row: Row) => ({
         eq: (_col: string, id: string) => {
           state.updated.push({ table: name, row, id })
@@ -165,6 +179,22 @@ describe('ingestSentryError', () => {
     expect(upd.row.status).toBe('reopened')
     expect(upd.row.regression_count).toBe(2)
     expect(state.inserted).toHaveLength(0)
+  })
+
+  it('drops its own report when a concurrent delivery linked the issue first', async () => {
+    state.raceWinner = { report_id: 'r-win' }
+    state.reports = [{ id: 'r-win', status: 'new', regression_count: 0 }]
+    const result = await mod.ingestSentryError(makeDbStub(state), {
+      projectId: 'proj-1',
+      event: EVENT,
+      issue: null,
+      triggerClassification: (rid) => classified.push(rid),
+    })
+    expect(result).toEqual({ outcome: 'deduped', reportId: 'r-win' })
+    const ours = state.inserted.find((i) => i.table === 'reports')!.row.id as string
+    expect(state.deleted).toEqual([{ table: 'reports', id: ours }])
+    // The orphan is never classified.
+    expect(classified).toHaveLength(0)
   })
 
   it('ignores payloads with no title', async () => {

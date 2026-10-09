@@ -89,6 +89,17 @@ async function verifyHmac(body: string, header: string | null, secret: string): 
   return diff === 0
 }
 
+/**
+ * Only a NEW agent session (an assignment or an @-mention) starts a dispatch.
+ * Both fields must match: the old `type !== … && action !== …` test let any
+ * payload through when either one matched, so a `prompted` AgentSessionEvent
+ * (the user's follow-up message in an existing session) dispatched a second
+ * fix job for the same issue.
+ */
+export function isNewAgentSession(payload: { type?: string; action?: string }): boolean {
+  return payload.type === 'AgentSessionEvent' && payload.action === 'created'
+}
+
 // ── Linear issue → Mushi report ──────────────────────────────────────────────
 
 /** Linear priority (0 none, 1 urgent … 4 low) → Mushi severity. */
@@ -370,9 +381,9 @@ export async function handler(req: Request): Promise<Response> {
 
   log.info('Linear agent webhook received', { action: payload.action, type: payload.type, deliveryId })
 
-  // Only handle AgentSessionEvent
-  if (payload.type !== 'AgentSessionEvent' && payload.action !== 'created') {
-    await auditRow.resolve('accepted', 200, Date.now() - t0, 'Not an AgentSessionEvent')
+  // Only a newly created agent session dispatches (see isNewAgentSession).
+  if (!isNewAgentSession(payload)) {
+    await auditRow.resolve('accepted', 200, Date.now() - t0, 'Not a created AgentSessionEvent')
     return new Response('OK', { status: 200 })
   }
 

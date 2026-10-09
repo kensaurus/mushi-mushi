@@ -18,7 +18,7 @@ Gate 7/8 (orphan endpoint / unknown call) can enforce per-app boundaries.
 |---|---|---|---|
 | `hhtp_*` | **Help Her Take Photo** | `C:\Users\kensa\Documents\GitHub\help-her-take-photo` | _(create via mushi console)_ |
 | `twm_*` | **The Wanting Mind** | `C:\Users\kensa\Documents\GitHub\the-wanting-mind` | _(create via mushi console)_ |
-| `babuu_*` | **Babuu AI** | `C:\Users\kensa\Documents\GitHub\babuu-ai` | _(create via mushi console)_ |
+| `babuu_*` | **Konte** (formerly Babuu AI); archived 2026-10-09 to schema `babuu_archive`, not in `public` | `C:\Users\kensa\Documents\GitHub\babuu-ai` (kensaurus/konte) | n/a (no server path; konte ADR 0008) |
 | `pf_*` | **Project Flow** | `C:\Users\kensa\Documents\GitHub\project-flow` | _(create via mushi console)_ |
 | `skin_*` | **Skin Analysis** | `C:\Users\kensa\Documents\GitHub\skin-analysis` | _(create via mushi console)_ |
 | `wr_*` | **Wedding Reception** | `C:\Users\kensa\Documents\GitHub\wedding-reception-202511` | _(create via mushi console)_ |
@@ -77,7 +77,6 @@ _(Fill in after running db-advisors on the kenji project via Admin → DB Adviso
 
 - [ ] Verify all `hhtp_*` tables have RLS enabled
 - [ ] Verify all `twm_*` tables have RLS enabled
-- [ ] Verify all `babuu_*` tables have RLS enabled
 - [ ] Verify all `pf_*` tables have RLS enabled
 - [ ] Verify all `skin_*` tables have RLS enabled
 - [ ] Verify all `wr_*` tables have RLS enabled

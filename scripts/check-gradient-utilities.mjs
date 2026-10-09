@@ -50,7 +50,7 @@ const EXTS = /\.(tsx?|jsx?|css|mdx?)$/
 // named `*gradient*`. The airtight check is on compiled output — see
 // `assertNoGradientBackgroundColor` below, which runs when a built stylesheet
 // is present.
-const BROKEN = /(?:bg|border|from|via|to)-\[var\(\s*--[a-z0-9-]*gradient[a-z0-9-]*[^)]*\)\]/gi
+const BROKEN = /\b(?:bg|border|from|via|to)-\[var\(\s*--[a-z0-9-]*gradient[a-z0-9-]*[^)]*\)\]/gi
 
 /**
  * Compiled-output check: after a build, ANY `background-color:var(--*gradient*)`
@@ -90,6 +90,25 @@ function walk(dir, out = [], match = EXTS) {
     else if (match.test(entry)) out.push(full)
   }
   return out
+}
+
+/**
+ * The fix hint for one hit. Only `bg-` has a drop-in replacement (ADR 0003):
+ * `bg-(image:--x)`. That form takes a bare custom property, so a fallback
+ * (`var(--x, red)`) cannot be carried over — the ADR's flat `bg-brand` /
+ * `bg-accent` underneath is the fallback instead. `border-` / `from-` /
+ * `via-` / `to-` are color utilities with no gradient form at all.
+ */
+function suggest(text) {
+  const m = text.match(/^(bg|border|from|via|to)-\[var\(\s*(--[a-z0-9-]+)\s*(,[^)]*)?\)\]$/i)
+  if (!m) return 'use: bg-(image:--<gradient-token>) — see docs/adr/0003'
+  const [, prop, name, fallback] = m
+  if (prop.toLowerCase() === 'bg') {
+    return fallback
+      ? `use: bg-(image:${name}) plus a flat bg-* color underneath (the image form takes no fallback; see docs/adr/0003)`
+      : `use: bg-(image:${name})`
+  }
+  return `use: ${prop}-* takes a color, not a gradient — paint the gradient with bg-(image:${name}) on the element, or use a color token here`
 }
 
 const failures = []
@@ -139,7 +158,7 @@ console.error(
 for (const f of failures) {
   console.error(`FAIL  ${f.file}:${f.line}`)
   console.error(`        ${f.text}`)
-  console.error(`        use: ${f.text.replace(/bg-\[var\((--[a-z0-9-]+)\)\]/i, 'bg-(image:$1)')}\n`)
+  console.error(`        ${suggest(f.text)}\n`)
 }
 console.error(`${failures.length} broken gradient utility(ies).`)
 process.exit(1)

@@ -239,13 +239,14 @@ async function runDirectFetch(story: QaStory, targetUrl: string): Promise<RunRes
 
   try {
     // The target comes from a tenant-authored story (target_url or a URL in
-    // its prompt), so it goes through safeFetch: public hosts only, each
+    // its prompt), so it goes through safeFetch: public https hosts only, each
     // redirect re-checked. Without it the pass/fail result was an oracle for
-    // internal addresses.
+    // internal addresses. https-only like the crawler and synthetic monitor:
+    // a plain-http target answers with a clear outbound-blocked error.
     const res = await safeFetch(
       targetUrl,
       { headers: { 'User-Agent': 'MushiQARunner/1.0 (directFetch)' } },
-      { timeoutMs: 20_000, url: { allowHttp: true } },
+      { timeoutMs: 20_000, url: {} },
     )
 
     if (!res.ok) {

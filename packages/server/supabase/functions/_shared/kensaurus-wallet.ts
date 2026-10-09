@@ -288,6 +288,31 @@ export async function meteredCall<T>(
 
   const providerCostMicro = computeProviderCostMicro(price, usage)
   const requestId = crypto.randomUUID()
+  // A NaN or Infinity cost (a NaN duration or token count from the provider
+  // response) reaches the debit RPC as null: it fails there, is retried, and
+  // is reported as a lost debit with an opaque RPC error. Name the real cause
+  // and skip both debit attempts instead.
+  if (!opts.shadowMode && !Number.isFinite(providerCostMicro)) {
+    const error = `non-finite provider cost (${providerCostMicro}) for ${opts.provider}:${opts.model}`
+    console.error('[kensaurus-wallet] debit skipped:', error, { app: opts.app, feature: opts.feature, requestId })
+    if (walletDeadLetterSink) {
+      try {
+        await walletDeadLetterSink({
+          requestId,
+          app: opts.app,
+          feature: opts.feature,
+          model: opts.model,
+          providerCostMicro: 0,
+          error,
+          payload: { traceId: opts.traceId ?? null, usage, shadowMode: false, metadata: opts.metadata ?? {} },
+        })
+      } catch (sinkErr) {
+        console.error('[kensaurus-wallet] dead-letter sink failed:', (sinkErr as Error).message)
+      }
+    }
+    return { result, debitMicro: 0, balanceMicro: null }
+  }
+
   let debitMicro = 0
   let balanceMicro: number | null = null
   try {
