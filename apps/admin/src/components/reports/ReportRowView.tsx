@@ -28,6 +28,7 @@ import type { PreflightState } from '../../lib/useDispatchPreflight'
 import { IconShare, IconExternalLink, IconClose } from '../icons'
 import { CHIP_TONE } from '../../lib/chipTone'
 import { isSampleReport } from '../../lib/diagnosisViewed'
+import { isLocalDevUrl, LOCAL_DEV_TOOLTIP } from '../../lib/reportOrigin'
 import {
   DISPATCH_ELIGIBLE_STATUSES,
   formatRelative,
@@ -218,6 +219,13 @@ function ReportRowViewInner({
                     <Tooltip content={'A sample report from "Send a test report", not from a user. Dismiss it when you\'re done.'}>
                       <span className={`mr-1.5 inline-flex items-center rounded-sm px-1.5 py-px align-middle text-2xs font-medium ${CHIP_TONE.neutral}`}>
                         Test report
+                      </span>
+                    </Tooltip>
+                  )}
+                  {isLocalDevUrl(row.environment?.url) && (
+                    <Tooltip content={LOCAL_DEV_TOOLTIP}>
+                      <span className={`mr-1.5 inline-flex items-center rounded-sm px-1.5 py-px align-middle text-2xs font-medium ${CHIP_TONE.neutral}`}>
+                        Local dev
                       </span>
                     </Tooltip>
                   )}
