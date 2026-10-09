@@ -59,3 +59,16 @@ describe('bulk route wiring', () => {
     expect(undo).toContain('if (prev.closed_reason !== undefined) patch.closed_reason = prev.closed_reason;')
   })
 })
+
+describe('single-report reopen', () => {
+  // A report reopened by hand left reopened_at null, so the console's
+  // regression chain never showed it (2026-10-09).
+  it('choosing Reopened stamps reopened_at on the server, after the client whitelist', () => {
+    const patch = REPORTS.slice(REPORTS.indexOf("app.patch('/v1/admin/reports/:id'"))
+    const whitelist = patch.indexOf('allowedFields[key]')
+    const stamp = patch.indexOf("if (updates.status === 'reopened') {")
+    expect(whitelist).toBeGreaterThan(0)
+    expect(stamp).toBeGreaterThan(whitelist)
+    expect(patch.slice(stamp, stamp + 120)).toContain('updates.reopened_at = new Date().toISOString()')
+  })
+})

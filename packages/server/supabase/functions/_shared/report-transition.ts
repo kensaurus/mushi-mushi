@@ -17,7 +17,15 @@ import { log } from './logger.ts';
 import { normalizeAdminStatus, toStoredStatus } from './report-status.ts';
 import { notifyReportStatusTransition } from './report-status-notify.ts';
 import { resolveExternalIssue } from './integrations.ts';
-import { archiveLinkedSentryIssues, resolveLinkedSentryIssues, sentryCloseAction } from './sentry-resolve-back.ts';
+import { archiveLinkedSentryIssues, reopenSentryLinks, resolveLinkedSentryIssues, sentryCloseAction } from './sentry-resolve-back.ts';
+
+/** Statuses that close a report; leaving one reopens its Sentry links. */
+const DONE_STATUSES = new Set(['fixed', 'resolved', 'verified', 'dismissed']);
+
+/** True when a report leaves a done status for an open one. */
+export function reopensReport(previousStatus: string, newStatus: string): boolean {
+  return DONE_STATUSES.has(previousStatus) && !DONE_STATUSES.has(newStatus);
+}
 import { dispatchPluginEventDetached } from './plugins.ts';
 import { closeReportPipelines, closesPipelines } from './report-pipelines-close.ts';
 
@@ -49,6 +57,13 @@ export function runStatusTransitionSideEffects(
     notifyReporter?: boolean;
   },
 ): void {
+  // A reopened report's Sentry links count as open again, so a later "fixed"
+  // resolves the issue in Sentry instead of skipping an old resolved_at.
+  if (reopensReport(input.previousStatus, input.newStatus)) {
+    reopenSentryLinks(db, input.projectId, input.reportId).catch((e: unknown) =>
+      transitionLog.error('Reopening Sentry links failed', { reportId: input.reportId, err: String(e) }),
+    );
+  }
   try {
     dispatchPluginEventDetached(db, input.projectId, 'report.status_changed', {
       report: { id: input.reportId, status: input.newStatus },

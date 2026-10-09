@@ -303,3 +303,64 @@ describe('archive on close (not-a-bug reasons)', () => {
     expect(none.skipped).toBe('no_credentials')
   })
 })
+
+describe('reopening a report reopens its Sentry links (2D, 2026-10-09)', () => {
+  it('clears resolved_at only on resolved sentry links of that report and project', async () => {
+    const calls: Array<{ table: string; row: Row; filters: Array<[string, string, unknown]> }> = []
+    const db = {
+      from: (table: string) => ({
+        update: (row: Row) => {
+          const filters: Array<[string, string, unknown]> = []
+          const q = {
+            eq: (c: string, v: unknown) => (filters.push(['eq', c, v]), q),
+            not: (c: string, op: string, v: unknown) => (filters.push(['not', `${c} ${op}`, v]), q),
+            then: (resolve: (v: unknown) => void) => {
+              calls.push({ table, row, filters })
+              resolve({ error: null })
+            },
+          }
+          return q
+        },
+      }),
+    } as never
+    await rb.reopenSentryLinks(db, 'p1', 'r1')
+    expect(calls).toEqual([
+      {
+        table: 'report_external_issues',
+        row: { resolved_at: null },
+        filters: [
+          ['eq', 'report_id', 'r1'],
+          ['eq', 'project_id', 'p1'],
+          ['eq', 'system', 'sentry'],
+          ['not', 'resolved_at is', null],
+        ],
+      },
+    ])
+  })
+
+  it('throws when the update fails, so the caller can log it', async () => {
+    const q: Record<string, unknown> = {}
+    q.eq = () => q
+    q.not = () => q
+    q.then = (resolve: (v: unknown) => void) => resolve({ error: { message: 'boom' } })
+    const db = { from: () => ({ update: () => q }) } as never
+    await expect(rb.reopenSentryLinks(db, 'p1', 'r1')).rejects.toThrow('boom')
+  })
+
+  it('the transition reopens links on every move from a done status to an open one, and only then', async () => {
+    const rt = await import('../../supabase/functions/_shared/report-transition.ts')
+    for (const done of ['fixed', 'resolved', 'verified', 'dismissed']) {
+      expect(rt.reopensReport(done, 'reopened')).toBe(true)
+      expect(rt.reopensReport(done, 'classified')).toBe(true)
+      expect(rt.reopensReport(done, 'fixed')).toBe(false)
+    }
+    expect(rt.reopensReport('classified', 'fixed')).toBe(false)
+    expect(rt.reopensReport('new', 'reopened')).toBe(false)
+  })
+
+  it('a Sentry alert that reopens a fixed report also reopens its links', () => {
+    const ingest = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '../../supabase/functions/_shared/sentry-ingest.ts'), 'utf-8')
+    const reopenBlock = ingest.slice(ingest.indexOf("status: 'reopened'"), ingest.indexOf("outcome: 'reopened'"))
+    expect(reopenBlock).toContain('reopenSentryLinks(db, projectId, linked.reportId)')
+  })
+})
