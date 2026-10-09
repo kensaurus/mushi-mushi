@@ -106,6 +106,21 @@ function periodFromAny(
   return readSubscriptionPeriod(sub as unknown as StripeSubscription)
 }
 
+// `organization_id` is NOT NULL on billing_subscriptions and
+// billing_customers, and an upsert checks it even when the row already exists.
+// Without it every subscription and checkout event failed with 23502, so a
+// buyer was charged and never got the plan. Throwing makes Stripe retry.
+async function organizationIdForProject(db: Db, projectId: string): Promise<string> {
+  const { data, error } = await db
+    .from('projects')
+    .select('organization_id')
+    .eq('id', projectId)
+    .maybeSingle()
+  if (error) throw new Error(`project_lookup_failed: ${error.message}`)
+  if (!data?.organization_id) throw new Error(`project ${projectId} has no organization_id`)
+  return data.organization_id as string
+}
+
 const upsertSubscription = async (db: Db, raw: Record<string, unknown>) => {
   const subId = raw.id as string
   const projectId = (raw.metadata as Record<string, string> | undefined)?.['project_id']
@@ -140,9 +155,11 @@ const upsertSubscription = async (db: Db, raw: Record<string, unknown>) => {
     (i.price?.metadata?.kind ?? '') === 'overage',
   )
 
+  const organizationId = await organizationIdForProject(db, projectId)
   const { error } = await db.from('billing_subscriptions').upsert(
     {
       project_id: projectId,
+      organization_id: organizationId,
       stripe_subscription_id: subId,
       stripe_price_id: priceId,
       plan_id: planId,
@@ -190,9 +207,11 @@ const linkCustomerOnCheckout = async (db: Db, session: Record<string, unknown>) 
     return
   }
   const paymentOk = session.payment_status === 'paid' || session.payment_status === 'no_payment_required'
+  const organizationId = await organizationIdForProject(db, projectId)
   const { error } = await db.from('billing_customers').upsert(
     {
       project_id: projectId,
+      organization_id: organizationId,
       stripe_customer_id: customerId,
       email: email ?? '',
       default_payment_ok: paymentOk,
