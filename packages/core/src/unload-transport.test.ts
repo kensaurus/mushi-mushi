@@ -55,7 +55,7 @@ describe('sendOnUnload', () => {
     const sendBeacon = vi.fn();
     const ok = sendOnUnload({
       url: '/api/mushi-tunnel/v1/reports',
-      headers: { 'X-Mushi-Api-Key': 'mushi_test_key_1234567890' },
+      headers: { 'X-Mushi-Api-Key': 'TEST-FIXTURE-NOT-A-REAL-KEY' },
       body: JSON.stringify({ id: 'r1' }),
       fetchImpl: fetchImpl as unknown as typeof fetch,
       sendBeacon,

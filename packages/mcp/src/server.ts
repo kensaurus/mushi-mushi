@@ -2342,7 +2342,9 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       );
       const latest = data.latest ?? data.version;
       const current = args.current;
-      const outdated = current && latest ? current !== latest : undefined;
+      // package.json pins are usually ranges (^1.27.0); compare the version, not the operator.
+      const pinned = current?.trim().replace(/^[\^~>=<v\s]+/, '');
+      const outdated = pinned && latest ? pinned !== latest : undefined;
       return jsonResult({
         package: data.package ?? pkg,
         latest,
