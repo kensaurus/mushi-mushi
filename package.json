@@ -208,7 +208,11 @@
       "source-map-js@1": ">=1.2.2 <2",
       "compression@1": ">=1.8.2 <2",
       "vue@3": ">=3.5.42 <4",
-      "@modelcontextprotocol/sdk@1": ">=1.31.0 <2"
+      "@modelcontextprotocol/sdk@1": ">=1.31.0 <2",
+      "smol-toml@1": ">=1.9.0 <2",
+      "@ai-sdk/provider-utils@4": ">=4.0.33 <5",
+      "uuid@7": ">=11.1.1 <12",
+      "@react-navigation/core@7": ">=7.23.0 <8"
     }
   }
 }
