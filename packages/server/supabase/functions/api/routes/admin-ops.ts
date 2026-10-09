@@ -334,7 +334,14 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
 
     const { error } = await db
       .from('reporter_devices')
-      .update({ flagged_as_suspicious: false, flag_reason: null, cross_account_flagged: false })
+      // The tokens seen so far are reviewed: only new ones count toward the
+      // next flag, so the device is not re-flagged by its very next report.
+      .update({
+        flagged_as_suspicious: false,
+        flag_reason: null,
+        cross_account_flagged: false,
+        reviewed_token_count: (device.reporter_tokens ?? []).length,
+      })
       .eq('id', id);
     if (error) return dbError(c, error);
 

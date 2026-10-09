@@ -15,8 +15,8 @@ export const LLM_PRICING_PER_M_TOKENS: Record<string, { in: number; out: number 
   'claude-sonnet-5':             { in: 2.00, out: 10.00 },
   'claude-opus-5-5':             { in: 4.00, out: 20.00 },
   'claude-opus-5':               { in: 5.00, out: 25.00 },
-  // Haiku 5.5 bills $0.50 / $2.50 on prompts over 100K tokens; assistant
-  // prompts stay well under that, so the base rate is used.
+  // Haiku 5.5: base rate up to 100K prompt tokens; LONG_PROMPT_PRICING
+  // below prices longer prompts (a Stage 2 prompt with code context can be).
   'claude-haiku-5-5':            { in: 0.10, out: 0.50 },
   // Anthropic — 4.x generation
   'claude-haiku-4-5':            { in: 1.00, out: 5.00 },
@@ -57,6 +57,15 @@ export const LLM_PRICING_FALLBACK = { in: 3.00, out: 15.00 }
  * Returns 0 when both token counts are 0 — caller should still write the row
  * for latency/error tracking, just with cost_usd = 0.
  */
+/**
+ * Models whose whole call is billed at a higher rate once the prompt passes a
+ * token threshold (Claude API pricing, read 2026-10-09: Haiku 5.5 is $0.10 /
+ * $0.50 up to 100K prompt tokens and $0.50 / $2.50 above).
+ */
+export const LONG_PROMPT_PRICING: Record<string, { overInputTokens: number; in: number; out: number }> = {
+  'claude-haiku-5-5': { overInputTokens: 100_000, in: 0.50, out: 2.50 },
+}
+
 export function estimateCallCostUsd(
   model: string | null | undefined,
   inputTokens: number,
@@ -64,7 +73,10 @@ export function estimateCallCostUsd(
 ): number {
   const key = (model ?? '').toLowerCase()
   const stripped = key.includes('/') ? key.split('/').slice(-1)[0] : key
-  const price = LLM_PRICING_PER_M_TOKENS[stripped] ?? LLM_PRICING_FALLBACK
+  const long = LONG_PROMPT_PRICING[stripped]
+  const price = long && inputTokens > long.overInputTokens
+    ? long
+    : LLM_PRICING_PER_M_TOKENS[stripped] ?? LLM_PRICING_FALLBACK
   return (inputTokens * price.in + outputTokens * price.out) / 1_000_000
 }
 

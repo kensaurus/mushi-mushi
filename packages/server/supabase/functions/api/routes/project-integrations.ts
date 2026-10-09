@@ -341,6 +341,8 @@ export function registerProjectIntegrationsRoutes(app: Hono<{ Variables: Variabl
       ipAddress,
       userAgent,
       skipClassification: precomputed !== null,
+      // A console user's own test, from their browser: not a reporter to police.
+      skipAntiGaming: true,
     });
     if (!result.ok) {
       return c.json({ ok: false, error: { code: 'INGEST_ERROR', message: result.error } }, 400);

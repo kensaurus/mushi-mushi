@@ -245,3 +245,46 @@ export function bindFindingsToRegistry<F extends { name: string; currentVersion:
   }
   return out
 }
+
+/**
+ * Expo pins the versions of the native modules an SDK release supports, in
+ * `expo/bundledNativeModules.json`. Upgrading past the pin is a native change
+ * Expo has not shipped yet (async-storage 3.x on Expo 57, which pins 2.2.0),
+ * so `npx expo install` is the upgrade path, not a version bump.
+ * Returns null when the pin list cannot be read; nothing is held then.
+ */
+export async function expoBundledModules(
+  expoSpec: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<Record<string, string> | null> {
+  const range = parseInstalledRange(expoSpec)
+  if (!range) return null
+  const v = range.floor
+  const version = `${v.major}.${v.minor}.${v.patch}`
+  try {
+    const res = await fetchImpl(`https://cdn.jsdelivr.net/npm/expo@${version}/bundledNativeModules.json`, {
+      signal: AbortSignal.timeout(8_000),
+    })
+    if (!res.ok) return null
+    const body = (await res.json()) as unknown
+    return body && typeof body === 'object' && !Array.isArray(body) ? (body as Record<string, string>) : null
+  } catch {
+    return null
+  }
+}
+
+/** Hold back the candidates Expo's SDK pins; the rest can be proposed. */
+export function splitExpoPinned(
+  candidates: UpgradeCandidate[],
+  pins: Record<string, string> | null,
+): { ready: UpgradeCandidate[]; pinned: Array<UpgradeCandidate & { expoPin: string }> } {
+  if (!pins) return { ready: candidates, pinned: [] }
+  const ready: UpgradeCandidate[] = []
+  const pinned: Array<UpgradeCandidate & { expoPin: string }> = []
+  for (const c of candidates) {
+    const pin = pins[c.name]
+    if (typeof pin === 'string') pinned.push({ ...c, expoPin: pin })
+    else ready.push(c)
+  }
+  return { ready, pinned }
+}

@@ -468,7 +468,7 @@ export function JudgePage() {
     summary: loading
       ? 'Loading judge scores…'
       : latestWeek
-        ? `${Math.round((latestWeek.avg_score ?? 0) * 100)}% this week · ${latestWeek.eval_count} evals`
+        ? `${Math.round((latestWeek.avg_score ?? 0) * 100)}% ${stats.latestWeekLabel ?? 'this week'} · ${latestWeek.eval_count} evals`
         : 'No evaluations yet',
     questions: latestWeek
       ? [
