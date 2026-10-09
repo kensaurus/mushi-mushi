@@ -86,7 +86,8 @@ Implementation: `packages/web/src/runtime-merge.ts` (`mergeRuntimeConfig`)
 | Host `widget.trigger` | Runtime sends | Effective trigger |
 | --- | --- | --- |
 | `'banner'` | `launcher: 'auto'` | `'banner'` (runtime `auto` ignored) |
-| `'attach'` | any | host attach unchanged |
+| `'attach'` | any except `hidden` | host attach unchanged |
+| `'manual'` | any except `hidden` | `'manual'` (the app draws its own launcher; a console launcher would add a second one) |
 | unset | `launcher: 'banner'` | `'banner'` |
 | `'hidden'` | runtime not explicitly `hidden` | host non-hidden preserved |
 

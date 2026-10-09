@@ -26,6 +26,14 @@ export function mergeRuntimeCapture(
 /** Widget keys where an explicit host value beats the runtime one; pass the original init config as `host` when merging repeatedly. */
 const HOST_WINS_WIDGET_KEYS: readonly string[] = ['brandFooter'];
 
+/**
+ * Host triggers where the app draws its own launcher: `manual` (the app calls
+ * `open()`) and `attach` (the app's own element). A console launcher on top of
+ * them draws a second button (Help Her Take Photo's web build, 2026-10-09), so
+ * only an explicit console `hidden` still applies.
+ */
+const HOST_OWNED_TRIGGERS: readonly string[] = ['manual', 'attach'];
+
 export function mergeRuntimeConfig(
   config: MushiConfig,
   runtime: MushiRuntimeSdkConfig,
@@ -34,14 +42,18 @@ export function mergeRuntimeConfig(
   const nativeTrigger = runtime.native?.triggerMode;
   const runtimeLauncher = (runtime.widget as Record<string, unknown>)?.launcher as string | undefined;
   const hostTrigger = config.widget?.trigger;
+  const originalHostTrigger = host.widget?.trigger;
   const rawRuntimeTrigger = runtimeLauncher ?? runtime.widget?.trigger;
+  const hostOwnsLauncher =
+    (originalHostTrigger !== undefined && HOST_OWNED_TRIGGERS.includes(originalHostTrigger)) &&
+    rawRuntimeTrigger !== 'hidden';
   const runtimeTrigger =
-    rawRuntimeTrigger === 'auto' && hostTrigger && hostTrigger !== 'auto'
+    hostOwnsLauncher || (rawRuntimeTrigger === 'auto' && hostTrigger && hostTrigger !== 'auto')
       ? undefined
       : rawRuntimeTrigger;
-  const widgetTrigger =
-    runtimeTrigger ??
-    (nativeTrigger === 'none' || nativeTrigger === 'shake' ? 'manual' : undefined);
+  const widgetTrigger = hostOwnsLauncher
+    ? undefined
+    : runtimeTrigger ?? (nativeTrigger === 'none' || nativeTrigger === 'shake' ? 'manual' : undefined);
   const explicitHidden = runtimeLauncher === 'hidden' || runtime.widget?.trigger === 'hidden';
   const safeWidgetTrigger =
     widgetTrigger === 'hidden' && !explicitHidden && hostTrigger && hostTrigger !== 'hidden'
