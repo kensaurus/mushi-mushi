@@ -115,7 +115,16 @@ export async function eraseSubject(
     p_max_per_window: ERASE_MAX_PER_MINUTE,
     p_window: '1 minute',
   });
-  if (rateErr) return fail(429, 'RATE_LIMITED', 'Too many erase requests. Retry in 60 seconds.');
+  if (rateErr) {
+    // Only `rate_limit_exceeded` (P0001) is a breach. Any other error is a
+    // fault in the claim itself: fail closed, but say so and log it instead
+    // of reporting throttling.
+    if ((rateErr.message ?? '').includes('rate_limit_exceeded')) {
+      return fail(429, 'RATE_LIMITED', 'Too many erase requests. Retry in 60 seconds.');
+    }
+    log.error('erase_rate_limit_failed', { projectId, error: rateErr.message });
+    return fail(500, 'ERASE_FAILED', 'Could not check the erase rate limit. Retry shortly.');
+  }
 
   // Same answer for "no secret configured" and "bad signature".
   const secret = await deps.loadSecret(db, projectId);
