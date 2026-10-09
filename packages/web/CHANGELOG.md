@@ -1,5 +1,16 @@
 # @mushi-mushi/web
 
+## 1.32.0
+
+### Minor Changes
+
+- ead9f42: The bug widget and reporter updates now speak Simplified Chinese. `locale: 'zh'` (or a `zh-*` browser language) used to fall back to English, so a Chinese-language app showed English buttons around its own Chinese categories.
+
+### Patch Changes
+
+- Updated dependencies [ead9f42]
+  - @mushi-mushi/core@1.32.0
+
 ## 1.31.2
 
 ### Patch Changes
