@@ -253,6 +253,25 @@ const SETTINGS_GENERAL: ConfigDoc[] = [
     },
   },
   {
+    id: 'settings.general.fix_model',
+    label: 'Fix model',
+    summary: "Which Claude model Mushi's own fix agent writes code fixes with.",
+    howItWorks:
+      'When Mushi drafts a fix itself (agent claude_code), it sends the report, the relevant files and your repo context to this model and turns its edits into a draft pull request. Sonnet 5.5 is the default. Haiku 5.5 costs a twentieth as much and suits small, local fixes; Opus 5.5 costs twice as much and suits hard, cross-file bugs. Cursor Cloud and GitHub cloud agents use their own model settings.',
+    default: { value: 'claude-sonnet-5-5' },
+    backend: {
+      table: 'project_settings',
+      column: 'claude_default_model',
+      endpoint: 'PATCH /v1/admin/settings',
+      readBy: ['fix-worker edge function'],
+    },
+    whenToChange: 'Pick Haiku 5.5 when fixes are the bulk of your AI spend; review its draft pull requests a little more closely.',
+    learnMore: {
+      label: 'Architecture overview',
+      href: 'https://kensaur.us/mushi-mushi/docs/concepts/architecture',
+    },
+  },
+  {
     id: 'settings.general.stage1_confidence_threshold',
     label: 'Noise filter confidence',
     summary: 'How confident Mushi must be that a report is spam or test noise before dropping it.',

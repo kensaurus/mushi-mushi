@@ -3,13 +3,13 @@
 > Auto-generated from [`apps/admin/src/lib/configDocs.ts`](../apps/admin/src/lib/configDocs.ts).
 > Do not edit by hand — run `pnpm gen:config-docs` instead.
 
-_113 configuration knobs across 19 sections · last regenerated 2026-10-08._
+_114 configuration knobs across 19 sections · last regenerated 2026-10-08._
 
 Every knob in the admin console has an in-app `i` icon next to it that opens a longer-form explanation. The same content is mirrored here so you can search, link, and review configuration choices outside the app.
 
 ## Contents
 
-- [Settings → General](#settings-general) (12)
+- [Settings → General](#settings-general) (13)
 - [Settings → AI keys (BYOK)](#settings-ai-keys-byok-) (4)
 - [Settings → Web tools (Firecrawl)](#settings-web-tools-firecrawl-) (3)
 - [Settings → SDK & connection (debug logging)](#settings-sdk-connection-debug-logging-) (1)
@@ -166,6 +166,24 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 **When to change** — Pick Haiku 5.5 when cost matters more than an independent second opinion.
 
 **Learn more** — [About the AI judge](https://kensaur.us/mushi-mushi/docs/concepts/architecture)
+
+### Fix model
+
+<a id="settings-general-fix-model"></a>
+
+`settings.general.fix_model`
+
+**Summary** — Which Claude model Mushi's own fix agent writes code fixes with.
+
+**How it works** — When Mushi drafts a fix itself (agent claude_code), it sends the report, the relevant files and your repo context to this model and turns its edits into a draft pull request. Sonnet 5.5 is the default. Haiku 5.5 costs a twentieth as much and suits small, local fixes; Opus 5.5 costs twice as much and suits hard, cross-file bugs. Cursor Cloud and GitHub cloud agents use their own model settings.
+
+**Default** — `claude-sonnet-5-5`
+
+**Where it lives** — table `project_settings.claude_default_model` · endpoint `PATCH /v1/admin/settings` · read by `fix-worker edge function`
+
+**When to change** — Pick Haiku 5.5 when fixes are the bulk of your AI spend; review its draft pull requests a little more closely.
+
+**Learn more** — [Architecture overview](https://kensaur.us/mushi-mushi/docs/concepts/architecture)
 
 ### Noise filter confidence
 

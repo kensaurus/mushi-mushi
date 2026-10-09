@@ -10,7 +10,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { parseClaudeModelSetting, resolveStage1Model } from '../../supabase/functions/_shared/stage1-model.ts'
+import { fixModelFor, parseClaudeModelSetting, resolveStage1Model } from '../../supabase/functions/_shared/project-models.ts'
 import { estimateCallCostUsd } from '../../supabase/functions/_shared/pricing.ts'
 
 describe('resolveStage1Model', () => {
@@ -39,6 +39,25 @@ describe('parseClaudeModelSetting', () => {
     for (const bad of ['gpt-5.4', '', null, 42, 'claude', 'claude-haiku-5-5; drop', 'CLAUDE-HAIKU-5-5']) {
       expect(parseClaudeModelSetting(bad).ok).toBe(false)
     }
+  })
+})
+
+describe('fixModelFor (claude_default_model)', () => {
+  it('keeps Sonnet 5.5 for the column default and retired ids', () => {
+    for (const stored of ['claude-opus-4-1', null, undefined, '', 'claude-3-5-sonnet', 'gpt-5.4']) {
+      expect(fixModelFor(stored)).toBe('claude-sonnet-5-5')
+    }
+  })
+
+  it('uses a current Claude model a project picked', () => {
+    expect(fixModelFor('claude-haiku-5-5')).toBe('claude-haiku-5-5')
+    expect(fixModelFor('claude-opus-5-5')).toBe('claude-opus-5-5')
+  })
+
+  it('fix-worker reads it', () => {
+    const src = readFileSync(resolve(__dirname, '../../supabase/functions/fix-worker/index.ts'), 'utf8')
+    expect(src).toContain("'cursor_default_model, claude_default_model'")
+    expect(src).toContain('fixModelFor(settings?.claude_default_model)')
   })
 })
 

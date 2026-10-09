@@ -51,7 +51,7 @@ import { isOperatorProject } from '../../_shared/operator-gate.ts';
 import { fetchProviderCredits, isOpenRouterBaseUrl } from '../../_shared/provider-credits.ts';
 import { providerFromModel } from '../../_shared/hosted-llm-billing.ts';
 import { loadIntegrationSignals } from '../../_shared/setup-signals.ts';
-import { parseClaudeModelSetting } from '../../_shared/stage1-model.ts';
+import { parseClaudeModelSetting } from '../../_shared/project-models.ts';
 import {
   BYOK_PROVIDERS as POOLED_BYOK_PROVIDERS,
   byokKeyIdSchema,
@@ -472,6 +472,8 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       // The quick-check and judge models call Claude first: Claude ids only.
       'stage1_model',
       'judge_model',
+      // The model the built-in fix agent uses (fix-worker, agent claude_code).
+      'claude_default_model',
       'stage1_confidence_threshold',
       'dedup_threshold',
       'embedding_model',
@@ -620,7 +622,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         updates[key] = verdict.value;
         continue;
       }
-      if (key === 'stage1_model' || key === 'judge_model') {
+      if (key === 'stage1_model' || key === 'judge_model' || key === 'claude_default_model') {
         const verdict = parseClaudeModelSetting(value);
         if (!verdict.ok) {
           return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: verdict.message } }, 400);

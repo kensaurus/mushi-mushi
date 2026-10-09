@@ -1,6 +1,6 @@
 /**
- * FILE: packages/server/supabase/functions/_shared/stage1-model.ts
- * PURPOSE: Which Claude model fast-filter (Stage 1) calls for a project.
+ * FILE: packages/server/supabase/functions/_shared/project-models.ts
+ * PURPOSE: Which Claude model a project's quick check (Stage 1) and fixes call.
  *
  * `project_settings.stage1_model` was stored but never read: fast-filter
  * always called STAGE1_MODEL, so a project could not move its quick check to
@@ -13,7 +13,7 @@
  * primary path is Anthropic; OpenAI is only its fallback.
  */
 import { claudeModelTraits, resolveClaudeModel } from './claude-request.ts'
-import { STAGE1_MODEL } from './models.ts'
+import { FIX_MODEL, STAGE1_MODEL } from './models.ts'
 
 export interface Stage1ModelChoice {
   model: string
@@ -42,4 +42,14 @@ export function parseClaudeModelSetting(
     return { ok: false, message: 'Pick a Claude model, such as claude-haiku-5-5 or claude-sonnet-5-5.' }
   }
   return { ok: true, value: id }
+}
+
+/**
+ * fix-worker's Claude model: `project_settings.claude_default_model` (the
+ * Claude Code agent card), which nothing read before. Retired ids resolve to
+ * FIX_MODEL, so the column default (claude-opus-4-1) keeps today's model.
+ */
+export function fixModelFor(stored: unknown): string {
+  const raw = typeof stored === 'string' ? stored.trim() : ''
+  return /^claude-/.test(raw) ? resolveClaudeModel(raw, FIX_MODEL) : FIX_MODEL
 }

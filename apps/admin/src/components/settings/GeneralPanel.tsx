@@ -72,6 +72,8 @@ interface ProjectSettings {
   stage1_model?: string
   /** Model that grades the triage on /judge. Claude ids only. */
   judge_model?: string
+  /** Model Mushi's own fix agent writes fixes with. Claude ids only. */
+  claude_default_model?: string
   stage1_confidence_threshold?: number
   dedup_threshold?: number
   embedding_model?: string
@@ -93,6 +95,12 @@ const DEFAULT_BRANCH_TEMPLATE = 'bugfix/MUSHI-{reportId}-{category}'
 /** Column defaults of project_settings.stage1_model / judge_model. */
 const STAGE1_DEFAULT = 'claude-haiku-4-5-20251001'
 const JUDGE_DEFAULT = 'claude-sonnet-5-5'
+/** fix-worker resolves retired ids (the column default claude-opus-4-1) to Sonnet 5.5. */
+const FIX_DEFAULT = 'claude-sonnet-5-5'
+const FIX_CHOICES = ['claude-sonnet-5-5', 'claude-haiku-5-5', 'claude-opus-5-5']
+function fixModelChoice(stored: string | undefined): string {
+  return stored && FIX_CHOICES.includes(stored) ? stored : FIX_DEFAULT
+}
 
 export function GeneralPanel() {
   const toast = useToast()
@@ -134,6 +142,7 @@ export function GeneralPanel() {
         { current: settings.stage2_model ?? 'claude-sonnet-5-5', saved: saved.stage2_model ?? 'claude-sonnet-5-5' },
         { current: settings.stage1_model ?? STAGE1_DEFAULT, saved: saved.stage1_model ?? STAGE1_DEFAULT },
         { current: settings.judge_model ?? JUDGE_DEFAULT, saved: saved.judge_model ?? JUDGE_DEFAULT },
+        { current: fixModelChoice(settings.claude_default_model), saved: fixModelChoice(saved.claude_default_model) },
         { current: settings.stage1_confidence_threshold ?? 0.85, saved: saved.stage1_confidence_threshold ?? 0.85 },
         { current: settings.dedup_threshold ?? 0.82, saved: saved.dedup_threshold ?? 0.82 },
         { current: settings.crawl_max_pages_per_day ?? 150, saved: saved.crawl_max_pages_per_day ?? 150 },
@@ -429,6 +438,26 @@ export function GeneralPanel() {
             <option value="claude-haiku-5-5">Claude Haiku 5.5 — lowest cost</option>
           </SelectField>
           <SettingsChangeHint current={settings.judge_model ?? JUDGE_DEFAULT} saved={saved.judge_model ?? JUDGE_DEFAULT} />
+        </SettingsRow>
+        <SettingsRow
+          icon={<IconGit size={16} />}
+          title="Fix model"
+          purpose="The model Mushi's own fix agent writes fixes with. Fixes cost the most of any AI call."
+        >
+          <SelectField
+            label="Model"
+            helpId="settings.general.fix_model"
+            value={fixModelChoice(settings.claude_default_model)}
+            onChange={(e) => update({ claude_default_model: e.target.value })}
+          >
+            <option value="claude-sonnet-5-5">Claude Sonnet 5.5 — default</option>
+            <option value="claude-haiku-5-5">Claude Haiku 5.5 — lowest cost</option>
+            <option value="claude-opus-5-5">Claude Opus 5.5 — hardest bugs</option>
+          </SelectField>
+          <SettingsChangeHint
+            current={fixModelChoice(settings.claude_default_model)}
+            saved={fixModelChoice(saved.claude_default_model)}
+          />
         </SettingsRow>
         <SettingsRow
           icon={<IconGauge size={16} />}
