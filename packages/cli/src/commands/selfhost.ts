@@ -27,7 +27,7 @@
  */
 
 import type { Command } from 'commander'
-import { execSync, spawnSync } from 'node:child_process'
+import { spawnSync } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import { probeEndpointHealth, apiCall } from '../cli-shared.js'
 import { CONFIG_PATH, loadConfig } from '../config.js'
@@ -43,35 +43,48 @@ function hasSupabaseCli(): boolean {
   }
 }
 
+/** One `supabase` CLI invocation of `selfhost up`. */
+export interface SelfhostStep {
+  label: string
+  /** Arguments after `supabase`, passed as an argv array with no shell. */
+  args: string[]
+  critical?: boolean
+  /** A non-zero exit is fine (the bucket already exists). */
+  mayFail?: boolean
+}
+
+/** The copy-pasteable command line `--print-commands` shows for a step. */
+export function selfhostStepCommand(step: SelfhostStep): string {
+  return `supabase ${step.args.join(' ')}${step.mayFail ? ' || true' : ''}`
+}
+
 /**
- * Run a shell command and return { ok, stdout, stderr }.
- * When `printOnly` is true, prints the command instead of running it.
+ * Run `supabase <args>` without a shell and return { ok, stdout, stderr }.
+ * hasSupabaseCli() spawns the same way, so a CLI that only resolves through
+ * a shell (a Windows .cmd shim) already sent us to --print-commands instead.
  */
-function run(
-  cmd: string,
-  opts: { cwd?: string; printOnly?: boolean; label?: string },
+function runSupabase(
+  args: string[],
+  opts: { cwd?: string; label: string },
 ): { ok: boolean; stdout: string; stderr: string } {
-  if (opts.printOnly) {
-    console.log(`  $ ${cmd}`)
-    return { ok: true, stdout: '', stderr: '' }
-  }
-  const label = opts.label ?? cmd.slice(0, 60)
-  process.stdout.write(`  › ${label} … `)
-  try {
-    const out = execSync(cmd, {
-      cwd: opts.cwd,
-      encoding: 'utf8',
-      timeout: 300_000,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    })
-    process.stdout.write('✓\n')
-    return { ok: true, stdout: out, stderr: '' }
-  } catch (err: unknown) {
+  process.stdout.write(`  › ${opts.label} … `)
+  const r = spawnSync('supabase', args, {
+    cwd: opts.cwd,
+    encoding: 'utf8',
+    timeout: 300_000,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+  if (r.error || r.status !== 0) {
     process.stdout.write('✗\n')
-    const msg = (err instanceof Error ? err.message : String(err)).trim()
-    const stderr = (err as { stderr?: string }).stderr ?? ''
-    return { ok: false, stdout: '', stderr: stderr || msg }
+    const stderr = (r.stderr ?? '').trim()
+    return {
+      ok: false,
+      stdout: r.stdout ?? '',
+      stderr: stderr || r.error?.message || `exited with ${r.status ?? r.signal}`,
+    }
   }
+  process.stdout.write('✓\n')
+  return { ok: true, stdout: r.stdout, stderr: '' }
 }
 
 // The functions directory relative to packages/server/supabase
@@ -101,6 +114,112 @@ interface UpOptions {
   cwd?: string
 }
 
+/**
+ * The supabase CLI steps of `selfhost up`, or why the flags are refused.
+ * Each flag value travels as one argv element, so no value can change the
+ * command; the checks below reject values that are not what the flag means.
+ */
+export function buildSelfhostSteps(
+  opts: { projectRef?: string; anthropicKey?: string; adminBaseUrl?: string; skipDeploy?: boolean },
+  printOnly: boolean,
+  internalToken: string,
+): { ok: true; steps: SelfhostStep[] } | { ok: false; error: string } {
+  const steps: SelfhostStep[] = []
+
+  // Step 1 — link
+  if (opts.projectRef && !/^[a-z0-9-]+$/i.test(opts.projectRef)) {
+    return { ok: false, error: `--project-ref must be alphanumeric (got: ${opts.projectRef}).` }
+  }
+  if (opts.projectRef) {
+    steps.push({
+      label: `link to Supabase project ${opts.projectRef}`,
+      args: ['link', '--project-ref', opts.projectRef],
+      critical: true,
+    })
+  }
+
+  // Step 2 — db push
+  steps.push({
+    label: 'apply database migrations',
+    args: ['db', 'push'],
+    critical: true,
+  })
+
+  // Step 3 — secrets
+  if (opts.anthropicKey && printOnly) {
+    // Never echo a real key in --print-commands output.
+    steps.push({
+      label: 'set ANTHROPIC_API_KEY secret',
+      args: ['secrets', 'set', 'ANTHROPIC_API_KEY=sk-ant-...'],
+    })
+  } else if (opts.anthropicKey) {
+    if (!/^[A-Za-z0-9_-]+$/.test(opts.anthropicKey)) {
+      return {
+        ok: false,
+        error:
+          '--anthropic-key does not look like an API key (letters, digits, - and _ only).\n' +
+          '  Set it manually instead: supabase secrets set ANTHROPIC_API_KEY=<your key>',
+      }
+    }
+    steps.push({
+      label: 'set ANTHROPIC_API_KEY secret',
+      args: ['secrets', 'set', `ANTHROPIC_API_KEY=${opts.anthropicKey}`],
+    })
+  } else if (printOnly) {
+    steps.push({
+      label: 'set ANTHROPIC_API_KEY secret',
+      args: ['secrets', 'set', 'ANTHROPIC_API_KEY=sk-ant-...'],
+    })
+  }
+
+  if (opts.adminBaseUrl) {
+    let adminUrlOk = false
+    try {
+      const u = new URL(opts.adminBaseUrl)
+      adminUrlOk =
+        (u.protocol === 'https:' || u.protocol === 'http:') &&
+        /^[A-Za-z0-9:/._~-]+$/.test(opts.adminBaseUrl)
+    } catch {
+      adminUrlOk = false
+    }
+    if (!adminUrlOk) {
+      return { ok: false, error: `--admin-base-url must be a plain http(s) URL (got: ${opts.adminBaseUrl}).` }
+    }
+    steps.push({
+      label: 'set ADMIN_BASE_URL secret',
+      args: ['secrets', 'set', `ADMIN_BASE_URL=${opts.adminBaseUrl}`],
+    })
+  }
+
+  steps.push({
+    label: 'set MUSHI_INTERNAL_CALLER_SECRET (recovery cron auth)',
+    args: [
+      'secrets',
+      'set',
+      `MUSHI_INTERNAL_CALLER_SECRET=${printOnly ? '<openssl rand -hex 32>' : internalToken}`,
+    ],
+  })
+
+  // Step 4 — deploy functions
+  if (!opts.skipDeploy) {
+    for (const fn of REQUIRED_FUNCTIONS) {
+      steps.push({
+        label: `deploy edge function: ${fn}`,
+        args: ['functions', 'deploy', fn, '--no-verify-jwt'],
+      })
+    }
+  }
+
+  // Step 5 — storage bucket (via supabase CLI management API approach)
+  steps.push({
+    label: 'create screenshots storage bucket',
+    args: ['storage', 'create', 'screenshots', '--public'],
+    mayFail: true,
+  })
+
+  return { ok: true, steps }
+}
+
 async function runSelfhostUp(opts: UpOptions): Promise<void> {
   const supabaseDir = opts.cwd
     ? `${opts.cwd}/packages/server/supabase`
@@ -116,116 +235,26 @@ async function runSelfhostUp(opts: UpOptions): Promise<void> {
     console.log('mushi selfhost up — deploying self-hosted Mushi Mushi\n')
   }
 
-  const steps: Array<{ label: string; cmd: string; critical?: boolean }> = []
-
-  // Step 1 — link
-  //
-  // Flag values are interpolated into execSync shell strings, so each one is
-  // validated against a strict allowlist first: a metachar-bearing value
-  // would otherwise break (or subvert) the command. On rejection we fail
-  // loudly with the manual command instead of guessing at cross-platform
-  // shell quoting.
-  if (opts.projectRef && !/^[a-z0-9-]+$/i.test(opts.projectRef)) {
-    process.stderr.write(`✗ --project-ref must be alphanumeric (got: ${opts.projectRef}).\n`)
+  // Generate internal caller token
+  const built = buildSelfhostSteps(opts, printOnly, randomBytes(32).toString('hex'))
+  if (!built.ok) {
+    process.stderr.write(`✗ ${built.error}\n`)
     process.exit(1)
   }
-  if (opts.projectRef) {
-    steps.push({
-      label: `link to Supabase project ${opts.projectRef}`,
-      cmd: `supabase link --project-ref ${opts.projectRef}`,
-      critical: true,
-    })
-  }
-
-  // Step 2 — db push
-  steps.push({
-    label: 'apply database migrations',
-    cmd: 'supabase db push',
-    critical: true,
-  })
-
-  // Step 3 — secrets
-  if (opts.anthropicKey && printOnly) {
-    // Never echo a real key in --print-commands output.
-    steps.push({
-      label: 'set ANTHROPIC_API_KEY secret',
-      cmd: 'supabase secrets set ANTHROPIC_API_KEY=sk-ant-...',
-    })
-  } else if (opts.anthropicKey) {
-    if (!/^[A-Za-z0-9_-]+$/.test(opts.anthropicKey)) {
-      process.stderr.write(
-        '✗ --anthropic-key contains characters that cannot be passed through the shell safely.\n' +
-          '  Set it manually instead: supabase secrets set ANTHROPIC_API_KEY=<your key>\n',
-      )
-      process.exit(1)
-    }
-    steps.push({
-      label: 'set ANTHROPIC_API_KEY secret',
-      cmd: `supabase secrets set ANTHROPIC_API_KEY=${opts.anthropicKey}`,
-    })
-  } else if (printOnly) {
-    steps.push({
-      label: 'set ANTHROPIC_API_KEY secret',
-      cmd: 'supabase secrets set ANTHROPIC_API_KEY=sk-ant-...',
-    })
-  }
-
-  if (opts.adminBaseUrl) {
-    let adminUrlOk = false
-    try {
-      const u = new URL(opts.adminBaseUrl)
-      adminUrlOk =
-        (u.protocol === 'https:' || u.protocol === 'http:') &&
-        /^[A-Za-z0-9:/._~-]+$/.test(opts.adminBaseUrl)
-    } catch {
-      adminUrlOk = false
-    }
-    if (!adminUrlOk) {
-      process.stderr.write(
-        `✗ --admin-base-url must be a plain http(s) URL (got: ${opts.adminBaseUrl}).\n`,
-      )
-      process.exit(1)
-    }
-    steps.push({
-      label: 'set ADMIN_BASE_URL secret',
-      cmd: `supabase secrets set ADMIN_BASE_URL=${opts.adminBaseUrl}`,
-    })
-  }
-
-  // Generate internal caller token
-  const internalToken = randomBytes(32).toString('hex')
-  steps.push({
-    label: 'set MUSHI_INTERNAL_CALLER_SECRET (recovery cron auth)',
-    cmd: `supabase secrets set MUSHI_INTERNAL_CALLER_SECRET=${printOnly ? '<openssl rand -hex 32>' : internalToken}`,
-  })
-
-  // Step 4 — deploy functions
-  if (!opts.skipDeploy) {
-    for (const fn of REQUIRED_FUNCTIONS) {
-      steps.push({
-        label: `deploy edge function: ${fn}`,
-        cmd: `supabase functions deploy ${fn} --no-verify-jwt`,
-      })
-    }
-  }
-
-  // Step 5 — storage bucket (via supabase CLI management API approach)
-  steps.push({
-    label: 'create screenshots storage bucket',
-    cmd: "supabase storage create screenshots --public || true",
-  })
 
   // Run or print all steps
   let aborted = false
-  for (const step of steps) {
+  for (const step of built.steps) {
     if (printOnly) {
       // Always print
       console.log(`# ${step.label}`)
-      run(step.cmd, { printOnly: true })
+      console.log(`  $ ${selfhostStepCommand(step)}`)
       console.log('')
     } else {
-      const result = run(step.cmd, { label: step.label, cwd: supabaseDir })
-      if (!result.ok) {
+      const result = runSupabase(step.args, { label: step.label, cwd: supabaseDir })
+      if (!result.ok && step.mayFail) {
+        process.stdout.write(`    (fine if it already exists) ${result.stderr.split('\n')[0]}\n`)
+      } else if (!result.ok) {
         if (result.stderr) {
           process.stderr.write(`    ${result.stderr.split('\n')[0]}\n`)
         }
