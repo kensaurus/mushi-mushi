@@ -18,6 +18,9 @@ const BILLING_ERROR_TEXT: Record<string, string> = {
   PLAN_NOT_PURCHASABLE: 'That plan is free, so there is nothing to buy.',
   PLAN_SALES_LED: 'That plan is arranged with our team. Use "Email sales" on the Plans tab.',
   COMPLIMENTARY_ACCOUNT: 'This account is on a free complimentary plan, so there is nothing to pay.',
+  ALREADY_SUBSCRIBED:
+    'This project already has a paid plan. To switch plans, cancel it in Manage billing, or email support and we will switch it for you.',
+  CHECKOUT_UNAVAILABLE: 'Stripe could not open checkout. Nothing was charged. Try again in a minute, or email support.',
   NETWORK_ERROR: 'Mushi could not be reached. Check your connection and try again.',
 }
 
