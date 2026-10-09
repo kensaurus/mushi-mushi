@@ -12,7 +12,7 @@ import './globals.css'
 import changelog from '../data/changelog.json'
 import { MUSHI_TAGLINE_V2 } from '@mushi-mushi/brand'
 import { JsonLd } from '../components/JsonLd'
-import { releaseHeadline } from '../lib/release-headline'
+import { bannerRelease } from '../lib/release-headline'
 import {
   DOCS_SITE,
   OG_CARD_IMAGE,
@@ -86,21 +86,19 @@ export const metadata: Metadata = {
  * static-export `.txt` route-payload mirrors blocked at the CloudFront
  * edge by `scripts/cloudfront-mushi-docs-response.js`).
  */
-const latestRelease = changelog[0]
-const latestVersion = latestRelease.versions?.[0] ?? latestRelease.majorMinor
-const latestHeadline = releaseHeadline(latestRelease)
+// The newest SHIPPED release: the generator's pending "next" entry comes
+// first and the bar read "vnext · upcoming Unreleased" (2026-10-10).
+const latestRelease = bannerRelease(changelog)
 
-const banner = (
+const banner = latestRelease ? (
   <Banner storageKey={`v${latestRelease.majorMinor.replace(/\./g, '-')}-release`}>
-    <span className="docs-banner-eyebrow">
-      v{latestVersion} · {latestRelease.pending ? 'upcoming' : 'shipped'}
-    </span>{' '}
-    {latestHeadline}{' '}
+    <span className="docs-banner-eyebrow">v{latestRelease.version} · shipped</span>{' '}
+    {latestRelease.headline}{' '}
     <Link href="/changelog" className="underline underline-offset-2">
       Read the changelog →
     </Link>
   </Banner>
-)
+) : undefined
 
 const navbar = (
   <Navbar

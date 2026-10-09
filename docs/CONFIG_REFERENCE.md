@@ -561,7 +561,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Summary** — Every 15 minutes, new unresolved Sentry issues in this app’s Sentry projects become Mushi reports. No Sentry webhook needed.
 
-**How it works** — The Sentry poll searches each configured Sentry project for issues first seen since its last run (with a 15-minute overlap) and imports them through the same path as “Import existing Sentry issues”: one report per Sentry issue, already-imported issues are linked, not duplicated. Each new report is triaged like any other.
+**How it works** — The Sentry poll searches each configured Sentry project for unresolved issues seen since its last run (with a 15-minute overlap) and imports them through the same path as “Import existing Sentry issues”: one report per Sentry issue, already-imported issues are linked, not duplicated. A report marked fixed or closed whose issue fires again is reopened. Each new report is triaged like any other.
 
 **Default** — `off`
 
