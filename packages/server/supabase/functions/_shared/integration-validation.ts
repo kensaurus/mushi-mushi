@@ -69,6 +69,9 @@ export function validatePlatformBody(body: Record<string, unknown>): BodyError |
     }
     // The server forwards events to this DSN, so it gets the same check as
     // PATCH /v1/admin/settings: a Sentry host or an allowlisted self-hosted one.
+    if (k === 'sentry_auto_import' && v !== null && typeof v !== 'boolean') {
+      return { code: 'VALIDATION_ERROR', message: 'sentry_auto_import must be true or false.' }
+    }
     if (k === 'sentry_dsn') {
       const verdict = parseSentryDsnSetting(v, sentrySelfHostedHosts())
       if (!verdict.ok) return { code: 'VALIDATION_ERROR', message: verdict.message }
