@@ -29,6 +29,37 @@ describe('mergeRuntimeCapture', () => {
 });
 
 describe('mergeRuntimeConfig — launcher / trigger precedence', () => {
+  // Help Her Take Photo's web build (2026-10-09): host trigger 'manual' with its
+  // own banner, console launcher 'banner' — the SDK drew a second banner.
+  it('keeps a host manual trigger over any console launcher', () => {
+    const host: MushiConfig = { ...BASE, widget: { trigger: 'manual' } };
+    for (const launcher of ['banner', 'auto', 'edge-tab'] as const) {
+      const merged = mergeRuntimeConfig(host, { widget: { launcher } } as MushiRuntimeSdkConfig);
+      expect(merged.widget?.trigger, launcher).toBe('manual');
+    }
+  });
+
+  it('keeps a host attach trigger, as the runtime-config docs promise', () => {
+    const host: MushiConfig = { ...BASE, widget: { trigger: 'attach', attachToSelector: '#help' } };
+    const merged = mergeRuntimeConfig(host, { widget: { launcher: 'banner' } } as MushiRuntimeSdkConfig);
+    expect(merged.widget?.trigger).toBe('attach');
+    const nativeNone = mergeRuntimeConfig(host, { native: { triggerMode: 'none' } } as MushiRuntimeSdkConfig);
+    expect(nativeNone.widget?.trigger).toBe('attach');
+  });
+
+  it('still lets the console hide a host-owned launcher', () => {
+    const host: MushiConfig = { ...BASE, widget: { trigger: 'manual' } };
+    const merged = mergeRuntimeConfig(host, { widget: { launcher: 'hidden' } } as MushiRuntimeSdkConfig);
+    expect(merged.widget?.trigger).toBe('hidden');
+  });
+
+  it('judges by the original host trigger on a second merge', () => {
+    const host: MushiConfig = { ...BASE, widget: { trigger: 'manual' } };
+    const once = mergeRuntimeConfig(host, { widget: { launcher: 'banner' } } as MushiRuntimeSdkConfig, host);
+    const twice = mergeRuntimeConfig(once, { widget: { launcher: 'banner' } } as MushiRuntimeSdkConfig, host);
+    expect(twice.widget?.trigger).toBe('manual');
+  });
+
   it('keeps host banner when runtime sends unconfigured launcher:auto', () => {
     const runtime: MushiRuntimeSdkConfig = {
       widget: { launcher: 'auto' },
