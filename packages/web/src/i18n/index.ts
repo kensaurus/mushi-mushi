@@ -5,10 +5,11 @@ import { en } from './en';
 import { ja } from './ja';
 import { th } from './th';
 import { es } from './es';
+import { zh } from './zh';
 
 export type { MushiLocale } from './types';
 
-const locales: Record<string, MushiLocale> = { en, ja, th, es };
+const locales: Record<string, MushiLocale> = { en, ja, th, es, zh };
 
 export function getLocale(code?: string): MushiLocale {
   // `undefined` or the sentinel `'auto'` both fall through to navigator.language.
