@@ -26,23 +26,27 @@
  *     if: ${{ env.HAS_TOKEN == 'true' }}
  *
  * Usage: node scripts/check-workflow-expressions.mjs
+ * Tests: scripts/check-workflow-expressions.test.mjs
  */
 
-import { readFileSync, readdirSync } from 'node:fs'
+import { readFileSync, readdirSync, realpathSync } from 'node:fs'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '..')
 const DIR = path.join(ROOT, '.github/workflows')
 
-const files = readdirSync(DIR).filter((f) => f.endsWith('.yml') || f.endsWith('.yaml'))
+/**
+ * Any access to the `secrets` context — `secrets.NAME`, `secrets['NAME']`,
+ * `secrets[format(...)]` — is the same forbidden usage inside an `if:`.
+ */
+export const SECRETS_ACCESS_RE = /\bsecrets\s*[.[]/
 
-const problems = []
-
-for (const file of files) {
-  const full = path.join(DIR, file)
-  const lines = readFileSync(full, 'utf8').split(/\r?\n/)
+/** `if:` expressions in one workflow's text that touch `secrets`. */
+export function findSecretsInIf(text) {
+  const found = []
+  const lines = text.split(/\r?\n/)
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
@@ -65,17 +69,27 @@ for (const file of files) {
       expr += ` ${next.trim()}`
     }
 
-    if (/\bsecrets\s*\./.test(expr)) {
-      problems.push({
-        file,
-        line: i + 1,
-        expr: expr.slice(0, 120),
-      })
+    if (SECRETS_ACCESS_RE.test(expr)) {
+      found.push({ line: i + 1, expr: expr.slice(0, 120) })
     }
   }
+  return found
 }
 
-if (problems.length > 0) {
+function main() {
+  const files = readdirSync(DIR).filter((f) => f.endsWith('.yml') || f.endsWith('.yaml'))
+  const problems = files.flatMap((file) =>
+    findSecretsInIf(readFileSync(path.join(DIR, file), 'utf8')).map((p) => ({ file, ...p })),
+  )
+  report(problems, files.length)
+  return problems.length > 0 ? 1 : 0
+}
+
+function report(problems, fileCount) {
+  if (problems.length === 0) {
+    console.log(`✓  workflow expressions: ${fileCount} file(s), no \`secrets\` in an \`if:\`.`)
+    return
+  }
   console.error('✗  `secrets` used inside an `if:` condition — GitHub rejects the whole file:\n')
   for (const p of problems) {
     console.error(`   .github/workflows/${p.file}:${p.line}`)
@@ -90,7 +104,15 @@ if (problems.length > 0) {
       "         HAS_TOKEN: ${{ secrets.MY_TOKEN != '' }}\n" +
       "       if: ${{ env.HAS_TOKEN == 'true' }}\n",
   )
-  process.exit(1)
 }
 
-console.log(`✓  workflow expressions: ${files.length} file(s), no \`secrets\` in an \`if:\`.`)
+function isEntryScript() {
+  if (!process.argv[1]) return false
+  try {
+    return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))
+  } catch {
+    return import.meta.url === pathToFileURL(process.argv[1]).href
+  }
+}
+
+if (isEntryScript()) process.exitCode = main()

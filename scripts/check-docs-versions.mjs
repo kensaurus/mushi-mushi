@@ -25,12 +25,14 @@
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+import { checkAgentsClaims } from "./lib/agents-version-claims.mjs"
 
 /**
- * `--write` repairs the ONE claim here that mechanically follows a version
- * bump: AGENTS.md's "current: **x.y.z**" SDK line. `changeset version` moves
- * core/web, nothing moved that line, and the release PR failed this check
- * every time a minor landed — the same shape as server.json before
+ * `--write` repairs the ONE kind of claim here that mechanically follows a
+ * version bump: AGENTS.md's "current: **x.y.z**" SDK lines (core/web and
+ * react-native — scripts/lib/agents-version-claims.mjs). `changeset version`
+ * moves the packages, nothing moved those lines, and the release PR failed
+ * this check every time a minor landed — the same shape as server.json before
  * `sync:server-json`. Run from `version-packages`.
  *
  * Deliberately NOT applied to the docs install snippets: those pins are
@@ -172,36 +174,11 @@ for (const file of files) {
   const agentsPath = path.join(ROOT, "AGENTS.md")
   if (existsSync(agentsPath)) {
     const agents = readFileSync(agentsPath, "utf8")
-    const coreVer = npmVersions["@mushi-mushi/core"]
-    const webVer = npmVersions["@mushi-mushi/web"]
-    const m = agents.match(
-      /@mushi-mushi\/core`\s*\/\s*`@mushi-mushi\/web`\s*\*\*[0-9.]+\*\*\s*\(current:\s*\*\*([0-9]+\.[0-9]+\.[0-9]+)\*\*/
-    )
-    if (m && coreVer && webVer) {
-      const claimed = m[1]
-      // Accept either core or web version if they diverge mid-release; both
-      // should match claimed when CHANGELOG lists a joint bump.
-      if (
-        majorMinor(claimed) !== majorMinor(coreVer) &&
-        majorMinor(claimed) !== majorMinor(webVer)
-      ) {
-        if (WRITE) {
-          // Replace only the captured version inside the canon sentence, so
-          // the surrounding "Introduced in" text and formatting are untouched.
-          const updated = agents.replace(m[0], m[0].replace(claimed, coreVer))
-          if (updated === agents) {
-            findings.push(`AGENTS.md: could not rewrite the current SDK claim ${claimed}`)
-          } else {
-            writeFileSync(agentsPath, updated, "utf8")
-            console.log(`✓  AGENTS.md: current SDK claim ${claimed} → ${coreVer}`)
-          }
-        } else {
-          findings.push(
-            `AGENTS.md: current SDK claim ${claimed} matches neither core@${coreVer} nor web@${webVer}` +
-              ` — run \`pnpm sync:docs-versions\``
-          )
-        }
-      }
+    const result = checkAgentsClaims(agents, npmVersions, WRITE)
+    findings.push(...result.findings)
+    if (result.text !== agents) {
+      writeFileSync(agentsPath, result.text, "utf8")
+      for (const line of result.rewrites) console.log(`✓  AGENTS.md: ${line}`)
     }
   }
 
