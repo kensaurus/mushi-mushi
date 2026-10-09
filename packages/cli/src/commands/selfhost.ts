@@ -43,7 +43,7 @@ function hasSupabaseCli(): boolean {
   }
 }
 
-/** One `supabase` CLI invocation of `selfhost up`. */
+/** @internal Exported for tests only. One `supabase` CLI invocation of `selfhost up`. */
 export interface SelfhostStep {
   label: string
   /** Arguments after `supabase`, passed as an argv array with no shell. */
@@ -53,7 +53,7 @@ export interface SelfhostStep {
   mayFail?: boolean
 }
 
-/** The copy-pasteable command line `--print-commands` shows for a step. */
+/** @internal Exported for tests only. The copy-pasteable command line `--print-commands` shows for a step. */
 export function selfhostStepCommand(step: SelfhostStep): string {
   return `supabase ${step.args.join(' ')}${step.mayFail ? ' || true' : ''}`
 }
@@ -115,6 +115,7 @@ interface UpOptions {
 }
 
 /**
+ * @internal Exported for tests only.
  * The supabase CLI steps of `selfhost up`, or why the flags are refused.
  * Each flag value travels as one argv element, so no value can change the
  * command; the checks below reject values that are not what the flag means.

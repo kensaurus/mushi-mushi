@@ -15,7 +15,7 @@ function majorMinor(version) {
   return parts.length >= 2 ? `${parts[0]}.${parts[1]}` : parts[0]
 }
 
-export const AGENTS_CLAIMS = [
+const AGENTS_CLAIMS = [
   {
     label: "core/web SDK",
     // Either version is accepted while core and web diverge mid-release; a
